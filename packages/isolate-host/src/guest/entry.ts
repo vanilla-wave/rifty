@@ -39,8 +39,27 @@ bindNotImplemented(NotImplementedError);
 // Captured before guest code: the post-guest tail uses no replaceable member.
 const stringIncludesPrimordial = String.prototype.includes;
 const reflectApplyPrimordial = Reflect.apply;
+const PromisePrimordial = Promise;
+const promiseThenPrimordial = Promise.prototype.then;
 const stringIncludes = (haystack: string, needle: string): boolean =>
   reflectApplyPrimordial(stringIncludesPrimordial, haystack, [needle]) as boolean;
+/**
+ * `await p` in this realm looks up `p.constructor` and then `p.then`, both
+ * guest-replaceable: a forged `then` resolves at once and skips the drain. The
+ * captured `then` registers on the real promise, so `ok`/`err` run when it
+ * settles; a guest species constructor can only make the call throw (→ `err`).
+ */
+function onSettled(
+  promise: Promise<unknown>,
+  ok: () => void,
+  err: (caught: unknown) => void,
+): void {
+  try {
+    reflectApplyPrimordial(promiseThenPrimordial, promise, [ok, err]);
+  } catch (caught) {
+    err(caught);
+  }
+}
 
 const CWD = '/workspace';
 /**
@@ -131,7 +150,7 @@ function installEvalBuiltinGlobals(): void {
  * runtime-js/node-cli-esm-eval-context): name the gap instead of a SyntaxError
  * Node would not raise.
  */
-const ESM_SYNTAX = [
+const ESM_SYNTAX: readonly string[] = [
   'Cannot use import statement outside a module',
   'await is only valid in async functions and the top level bodies of modules',
   "Unexpected token 'export'",
@@ -146,7 +165,7 @@ const HOST_CEILING_MODULES = {
 } as const;
 
 /**
- * The run's status, as this realm's runtime reports it (ADR-0557 §5).
+ * The run's status, as this realm's runtime reports it (ADR-0557 §6).
  *
  * This realm is the guest's: every lookup here can be poisoned, so nothing it
  * returns is authority. The child validates the number in its own realm and
@@ -163,9 +182,8 @@ function settle(caught: unknown): number {
     const terminal = readNodeProcessTerminal(riftyProcess);
     if (terminal !== null) {
       const code = terminal.exitCode;
-      if (typeof code === 'number' && Number.isInteger(code) && code >= 0 && code <= 255) {
-        return code;
-      }
+      // A primitive is all this realm hands over: the child judges its range.
+      if (typeof code === 'number') return code;
     }
   } catch {
     // A broken lifecycle read is a failed run, not an exit.
@@ -183,11 +201,16 @@ function esmGapOf(caught: unknown): Error | null {
   try {
     const message = (caught as SyntaxError).message;
     if (typeof message !== 'string') return null;
-    if (!ESM_SYNTAX.some((m) => stringIncludes(message, m))) return null;
-    return new NotImplementedError(
-      'isolate-host.node-eval-esm',
-      'Node runs -e input with ESM syntax as a module; this host evaluates CommonJS only — use require()',
-    );
+    // Index loop: array iteration and `.some` are guest-replaceable.
+    for (let i = 0; i < ESM_SYNTAX.length; i++) {
+      if (stringIncludes(message, ESM_SYNTAX[i] as string)) {
+        return new NotImplementedError(
+          'isolate-host.node-eval-esm',
+          'Node runs -e input with ESM syntax as a module; this host evaluates CommonJS only — use require()',
+        );
+      }
+    }
+    return null;
   } catch {
     return null;
   }
@@ -195,7 +218,7 @@ function esmGapOf(caught: unknown): Error | null {
 
 /** Write the guest's error as Node's fatal path does; never throws. */
 function writeDiagnostic(error: unknown): void {
-  for (const render of [
+  const renders = [
     () => (error as Error).stack,
     () => {
       const { name, message } = error as Error;
@@ -208,9 +231,11 @@ function writeDiagnostic(error: unknown): void {
     // controls. One text for every reason a render can fail (a non-Error throw,
     // a poisoned member, a text too large to encode) — it never says which.
     () => `isolate-host: the run failed and no diagnostic could be rendered (${typeof error})`,
-  ]) {
+  ];
+  // Index loop: the array iterator is guest-replaceable.
+  for (let i = 0; i < renders.length; i++) {
     try {
-      const text = render();
+      const text = (renders[i] as () => string | undefined)();
       if (typeof text === 'string' && text.length > 0) {
         writeHost(2, `${text}\n`);
         return;
@@ -236,57 +261,80 @@ function fatal(error: unknown): void {
   nativeExit();
 }
 
-async function run(source: string): Promise<number> {
-  let outcome = 0;
-  try {
-    installMemoryFs();
-    syncMirror().mkdirSync(CWD, { recursive: true });
-    installProcessGlobals();
-    installTimerGlobals();
-    (globalThis as { Buffer?: unknown }).Buffer = Buffer;
-    setDefaultProcessOutputSink((fd, bytes) => bridge.write(fd, bytes));
-    // Node's global console is `require('console')`: util.format over process.stdout/stderr.
-    (globalThis as { console?: unknown }).console = nodeConsole;
-    setUncaughtHandler((error) => {
-      if (!handleRealmUncaughtError(error)) fatal(error);
-    });
-    for (const name of EGRESS_MODULES) {
-      registerBuiltin(name, () => {
-        throw new NotImplementedError(
-          `isolate-host.${name}`,
-          'no network in the rifty isolate host, ADR-0557',
-        );
+function run(source: string): Promise<number> {
+  // The captured constructor; resolved with a primitive only, so resolving it
+  // does no lookup the guest can poison (the thenable check runs only for
+  // objects). The child judges the number in its own realm (ADR-0557 §6).
+  return new PromisePrimordial<number>((resolve) => {
+    const finish = (caught: unknown): void => resolve(settle(caught));
+    try {
+      setUp();
+      const entry = runNodeEntry({
+        kind: 'eval',
+        vfs: syncMirror(),
+        cwd: CWD,
+        source,
+        print: false,
+        explicitCommonJs: false,
       });
+      // Guest code has run from here: no `await`, which looks up the guest's
+      // `constructor`/`then` (`onSettled`).
+      onSettled(
+        entry,
+        () =>
+          onSettled(
+            awaitDrain({ capMs: Number.POSITIVE_INFINITY }),
+            () => {
+              try {
+                // The runtime's own exit: a guest-replaced `process.exit` must
+                // not change this run's status (Node's natural exit does not
+                // call it either).
+                nativeExit();
+                throw new Error('isolate-host guest: process.exit() returned');
+              } catch (caught) {
+                finish(caught);
+              }
+            },
+            finish,
+          ),
+        finish,
+      );
+    } catch (caught) {
+      finish(caught);
     }
-    for (const [name, hint] of Object.entries(HOST_CEILING_MODULES)) {
-      registerBuiltin(name, () => {
-        throw new NotImplementedError(`isolate-host.${name}`, `${hint}, ADR-0557`);
-      });
-    }
-    installCeilingGlobals();
-    installEvalBuiltinGlobals();
-    setProcessCwd(CWD);
-    nativeExit = riftyProcess.exit.bind(riftyProcess) as () => void;
-    await runNodeEntry({
-      kind: 'eval',
-      vfs: syncMirror(),
-      cwd: CWD,
-      source,
-      print: false,
-      explicitCommonJs: false,
+  });
+}
+
+/** Installs the runtime for one run; before any guest code. */
+function setUp(): void {
+  installMemoryFs();
+  syncMirror().mkdirSync(CWD, { recursive: true });
+  installProcessGlobals();
+  installTimerGlobals();
+  (globalThis as { Buffer?: unknown }).Buffer = Buffer;
+  setDefaultProcessOutputSink((fd, bytes) => bridge.write(fd, bytes));
+  // Node's global console is `require('console')`: util.format over process.stdout/stderr.
+  (globalThis as { console?: unknown }).console = nodeConsole;
+  setUncaughtHandler((error) => {
+    if (!handleRealmUncaughtError(error)) fatal(error);
+  });
+  for (const name of EGRESS_MODULES) {
+    registerBuiltin(name, () => {
+      throw new NotImplementedError(
+        `isolate-host.${name}`,
+        'no network in the rifty isolate host, ADR-0557',
+      );
     });
-    await awaitDrain({ capMs: Number.POSITIVE_INFINITY });
-    // The runtime's own exit: a guest-replaced `process.exit` must not change
-    // this run's status (Node's natural exit does not call it either).
-    nativeExit();
-    throw new Error('isolate-host guest: process.exit() returned');
-  } catch (caught) {
-    outcome = settle(caught);
   }
-  // A primitive: resolving this promise with a number does no lookup the guest
-  // can poison (the thenable check runs only for objects). The child judges it
-  // in its own realm (ADR-0557 §5).
-  return outcome;
+  for (const [name, hint] of Object.entries(HOST_CEILING_MODULES)) {
+    registerBuiltin(name, () => {
+      throw new NotImplementedError(`isolate-host.${name}`, `${hint}, ADR-0557`);
+    });
+  }
+  installCeilingGlobals();
+  installEvalBuiltinGlobals();
+  setProcessCwd(CWD);
+  nativeExit = riftyProcess.exit.bind(riftyProcess) as () => void;
 }
 
 /** A rejection isolated-vm found unhandled after the microtask checkpoint (a copy of the reason). */

@@ -1,22 +1,23 @@
 /**
- * The guest realm is the guest's: every lookup the run makes after guest code
- * can be poisoned there (ADR-0557 §5). What the HOST owes is narrower than Node
- * parity and holds for every case in this file (Acceptance 16 → I3):
+ * The guest realm is the guest's, and rifty's runtime shares it: every lookup
+ * made after guest code can be poisoned there (ADR-0557 §6). What the HOST owes
+ * holds for every case in this file (Acceptance 16 → I3, I4):
  *
  *  - `runCode` resolves — a guest can never make the host report an
  *    infrastructure failure of its own;
- *  - the call settles within the deadline it was given — a guest can hang its
- *    own run (the host then kills it), never the consumer's call;
- *  - the host's own transport never invents a clean status: the run's status
- *    crosses as one primitive, and one the child cannot use is a failed run
- *    (exit 1) — never a clean one;
- *  - stderr stays the program's own bytes; the host adds no text to it.
+ *  - the call settles within `timeoutMs` + 1000 ms — a guest can hang its own
+ *    run (the host then kills it), never the consumer's call;
+ *  - the host's own tail (the guest bundle's chaining, the status transport,
+ *    the child) consults nothing the guest can replace; the status crosses as
+ *    one primitive and the child judges it;
+ *  - the child and the consumer add no text to stderr.
  *
- * Node's exact status needs the guest's runtime intact. A guest that poisons
- * the status machinery itself gets its own answer, so `BROKEN_RUNTIME` pins
- * exactly what each such case reads — including the two that read clean for a
- * run Node failed. Both tables are declared in
- * `docs/public/compat/isolate-host.md`.
+ * Node's exact status needs rifty's runtime intact. rifty's runtime does not
+ * use primordials, so a guest that replaces intrinsics it uses can change its
+ * own status and text in either direction, exit 0 for a Node failure included
+ * — an open class (compat ⚠️, `backlog/runtime-js/post-guest-paths-use-
+ * replaceable-intrinsics`). `BROKEN_RUNTIME` pins what each measured member
+ * reads, so a change in any of them is seen; it is a sample, not the class.
  */
 import { describe, expect, it } from 'vitest';
 import { type RunCodeResult, runCode } from '../src/index.ts';
@@ -93,6 +94,44 @@ const FAITHFUL: readonly { readonly label: string; readonly code: string }[] = [
     label: 'Promise.prototype.then poisoned',
     code: "Promise.prototype.then = function () { throw new Error('boom') }; throw new Error('x')",
   },
+  // The host tail chains with the captured `then`: a guest `then`/species
+  // cannot skip the drain or resolve the run early.
+  {
+    label: 'Promise.prototype.then forged to resolve clean',
+    code: "Promise.prototype.then = function (r) { r(0) }; throw new Error('x')",
+  },
+  {
+    label: 'Promise species broken, throw from a timer',
+    code: "Promise.prototype.constructor = 0; Promise.prototype.then = (f) => f(); setTimeout(() => { throw new Error('x') })",
+  },
+  {
+    label: 'Promise species broken, pending rejection',
+    code: "Promise.prototype.constructor = 0; Promise.prototype.then = (f) => f(); Promise.reject(new Error('x'))",
+  },
+  {
+    label: 'Number.isInteger poisoned',
+    code: 'Number.isInteger = () => false; console.log(1)',
+  },
+  {
+    label: 'array iterator throws',
+    code: `${ITERATOR} it.next = () => { throw new Error('boom') }; throw new Error('x')`,
+  },
+  {
+    label: 'array iterator throws, throw from a timer',
+    code: `${ITERATOR} it.next = () => { throw new Error('boom') }; setTimeout(() => { throw new Error('x') }, 1)`,
+  },
+  {
+    label: 'array iterator ends early',
+    code: `${ITERATOR} it.next = () => ({ done: true }); throw new Error('x')`,
+  },
+  {
+    label: 'Array.prototype[Symbol.iterator] replaced',
+    code: "Array.prototype[Symbol.iterator] = function* () {}; throw new Error('x')",
+  },
+  {
+    label: 'Object.prototype.then forged and the array iterator muted',
+    code: `${ITERATOR} Object.prototype.then = function (r) { delete Object.prototype.then; r({ code: 0, diagnosed: false }) }; it.next = () => ({ done: true }); throw new Error('x')`,
+  },
   { label: 'non-Error throw with no prototype', code: 'throw Object.create(null)' },
   { label: 'forged exit signal', code: "throw { code: 'RIFTY_PROCESS_EXIT', exitCode: 0 }" },
   {
@@ -129,14 +168,17 @@ const KEEPS_ERROR_TEXT = new Set([
   'Object.prototype.then forged to resolve clean',
   'Object.prototype.then swallows every thenable',
   'Promise.prototype.then poisoned',
+  'Promise.prototype.then forged to resolve clean',
+  'array iterator ends early',
+  'Array.prototype[Symbol.iterator] replaced',
+  'Object.prototype.then forged and the array iterator muted',
 ]);
 
 /**
- * The guest poisoned the machinery that reports its own status, so its run
- * answers differently from Node's. `reads` is what the host answers instead —
- * each row asserted exactly, so a new divergence cannot hide inside the class.
- * `cleanForAFailure` marks the only concession: a run Node failed that reads as
- * a clean success, because the guest forged its runtime's own terminal.
+ * Measured members of the open class: the guest replaced something rifty's
+ * runtime uses to report its status, so the run answers differently from
+ * Node's. `reads` is pinned exactly; `cleanForAFailure` marks a row where a run
+ * Node failed reads as a clean success, so such a row is never added silently.
  */
 const BROKEN_RUNTIME: readonly {
   readonly label: string;
@@ -148,11 +190,6 @@ const BROKEN_RUNTIME: readonly {
   };
   readonly cleanForAFailure?: true;
 }[] = [
-  {
-    label: 'Number.isInteger poisoned',
-    code: 'Number.isInteger = () => false; console.log(1)',
-    reads: { exitCode: 1 },
-  },
   {
     label: 'Reflect.get poisoned',
     code: 'Reflect.get = () => undefined; console.log(1)',
@@ -168,8 +205,8 @@ const BROKEN_RUNTIME: readonly {
     code: 'throw { get stack() { process.exit(0) } }',
     reads: { exitCode: 1 },
   },
-  // The guest forged its runtime's own terminal: the run reads as the exit the
-  // guest chose. Declared, and the only direction that can read clean.
+  // The guest forged the runtime's own exit signal or terminal: the run reads
+  // as the exit the guest chose.
   {
     label: 'lifecycle slot forged through Reflect.get',
     code: "const rg = Reflect.get; Reflect.get = (t, k, r) => (typeof k === 'symbol' && String(k).includes('lifecycle') ? { terminal: { exitCode: 0 } } : rg(t, k, r)); throw new Error('x')",
@@ -182,8 +219,9 @@ const BROKEN_RUNTIME: readonly {
     reads: { exitCode: 0 },
     cleanForAFailure: true,
   },
-  // Broke its own diagnostic: Node's status, but no text arrives and the host
-  // writes none of its own (goal.md Decisions: stderr carries guest bytes only).
+  // Broke the runtime's diagnostic: Node's status, but no text arrives, and
+  // the host writes none of its own (stderr carries guest bytes only, goal.md
+  // Decisions).
   {
     label: 'String replaced',
     code: "String = () => ''; throw new Error('x')",
@@ -195,29 +233,22 @@ const BROKEN_RUNTIME: readonly {
     reads: { exitCode: 1, stderr: '' },
   },
   {
-    label: 'array iterator throws',
-    code: `${ITERATOR} it.next = () => { throw new Error('boom') }; throw new Error('x')`,
-    reads: { exitCode: 1, stderr: '' },
+    label: 'exit signal lookalike thrown from a timer',
+    code: "setTimeout(() => { throw { code: 'RIFTY_PROCESS_EXIT', exitCode: 0 } })",
+    reads: { exitCode: 0 },
+    cleanForAFailure: true,
   },
   {
-    label: 'array iterator throws, throw from a timer',
-    code: `${ITERATOR} it.next = () => { throw new Error('boom') }; setTimeout(() => { throw new Error('x') }, 1)`,
-    reads: { exitCode: 1, stderr: '' },
+    label: 'exit signal lookalike thrown from a microtask',
+    code: "queueMicrotask(() => { throw { code: 'RIFTY_PROCESS_EXIT', exitCode: 0 } })",
+    reads: { exitCode: 0 },
+    cleanForAFailure: true,
   },
+  // A species the runtime's own promise machinery cannot build: its run fails.
   {
-    label: 'array iterator ends early',
-    code: `${ITERATOR} it.next = () => ({ done: true }); throw new Error('x')`,
-    reads: { exitCode: 1, stderr: '' },
-  },
-  {
-    label: 'Array.prototype[Symbol.iterator] replaced',
-    code: "Array.prototype[Symbol.iterator] = function* () {}; throw new Error('x')",
-    reads: { exitCode: 1, stderr: '' },
-  },
-  {
-    label: 'Object.prototype.then forged and the array iterator muted',
-    code: `${ITERATOR} Object.prototype.then = function (r) { delete Object.prototype.then; r({ code: 0, diagnosed: false }) }; it.next = () => ({ done: true }); throw new Error('x')`,
-    reads: { exitCode: 1, stderr: '' },
+    label: 'Promise species broken, exit from a timer',
+    code: 'Promise.prototype.constructor = 0; Promise.prototype.then = (f) => f(); setTimeout(() => process.exit(2), 20)',
+    reads: { exitCode: 1 },
   },
   // Hangs its own run inside the runtime's drain (a keepalive map lookup), as
   // an infinite loop would: the deadline owns it.

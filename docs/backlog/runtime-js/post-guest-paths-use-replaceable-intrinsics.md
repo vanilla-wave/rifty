@@ -18,13 +18,19 @@ run never drains (`termination: 'timeout'`), Node exits 0;
 → exit 1, Node 0; `process.emit` throwing → exit 1, Node 7. Also measured @ b9ff5be73:
 `Number.isInteger = () => false`, `Reflect.get = () => undefined` and
 `Object.assign = () => { throw … }` each turn a clean run into exit 1 (Node 0),
-and a `Reflect.get` that forges the lifecycle slot makes a throwing run exit 0. The isolate host's
-own tail is primordial-only (ADR-0557 §5), so these are the runtime's paths,
-shared with the browser realms. Parts of runtime-js already capture
-primordials (`reflectApplyPrimordial` in `module-loader`, `process.ts`); the
-lifecycle modules do not. A guest hanging its own run is accepted
-(`goal.md` Decisions: breaking its own rifty is the guest's business) — what is
-not is a wrong status where Node has a right one.
+and a `Reflect.get` that forges the lifecycle slot makes a throwing run exit 0.
+@ 1d3fc3c43: `Promise.prototype.constructor = 0; Promise.prototype.then = (f) => f(); setTimeout(() => process.exit(2), 20)`
+→ exit 1 (`TypeError: The .constructor property is not an object`), Node 2;
+`Reflect.get = () => undefined; console.log(1)` → exit 1 with the runtime's
+`Error: process.exit(0)` stack in stderr, Node 0 with empty stderr. Since the
+next commit the isolate host's own tail (bundle chaining, status transport,
+child) uses captured `then`, index loops and a primitive status (ADR-0557 §6),
+so what remains is the runtime's paths, shared with the browser realms. Parts of
+runtime-js already capture primordials (`reflectApplyPrimordial` in
+`module-loader`, `process.ts`); the lifecycle modules do not. A guest hanging
+its own run is bounded by the deadline (I4); what is not accepted is a wrong
+status where Node has a right one (ADR-0557 §Corrections 2026-11-18: an open,
+declared fidelity class until this lands).
 
 ## Challenge
 

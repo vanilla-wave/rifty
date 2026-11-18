@@ -79,11 +79,11 @@ blocks it.
    fd 1/2 bytes reach the host through the no-spec process's default output
    sink (`setDefaultProcessOutputSink`), never via `console`. ESM syntax in
    `-e` (Node's detect-module SyntaxErrors) → `NotImplementedError(
-   'isolate-host.node-eval-esm')`; `import()` rejects with a named error (no
-   child frames in its stack); whether an *unhandled* one fails the run is a
-   ceiling: isolated-vm serves the import after the importing task, so the
-   run may already have drained (exit 0; Node 1). No scenario row needs more;
-   ordering it took eight review rounds of machinery, removed (REV-7). `node -e`'s builtin-module globals are
+   'isolate-host.node-eval-esm')`; `import()` in any form ends the run where
+   the host sees the request: guest stderr `Error: Not implemented:
+   isolate-host.dynamic-import (…)`, exit 1 — a guest may never observe the
+   rejection, so a `.catch` fallback cannot keep the run alive (the honest
+   price; ordering machinery removed, REV-7). `node -e`'s builtin-module globals are
    lazy getters over the rifty loader (Node v24.16.0 list); a test asserts the
    guest has every global name live `node -e` defines.
    `zlib`, `child_process`, `worker_threads` register as loud modules naming
@@ -98,20 +98,20 @@ blocks it.
    (`src/child/bridge.ts`) with guest-safe `TypeError`s. What the run does
    after guest code — the fatal write, the natural exit — uses the host bridge
    and the captured `process.exit`. The guest realm is the guest's, so no
-   lookup there is authority: the run's status crosses the isolate boundary as
-   ONE PRIMITIVE (an integer — resolving a promise with a number does no
-   `then` lookup a guest can forge; an object did, 2026-11-18) and the CHILD
-   validates it in its own realm. A non-integer or out-of-range status, a
-   rejected tail or a throw becomes exit 1; the child adds no text (stderr is
-   guest bytes only, §1). So whatever a guest replaces, the host still resolves,
-   settles within `timeoutMs` + 1000 ms (a guest that hangs its own run — a
-   loop, a poisoned `Map.prototype.get` inside the drain — is killed as
-   `timeout`), and its transport never turns a failure into a clean status.
-   Node's exact status and text need the guest's own status path intact: a
-   guest that breaks its diagnostic gets exit 1 with no text; one that forges
-   its runtime's own terminal (or catches and rewrites its exit signal) reads
-   as the status it forged, exit 0 included — the only way a failed run reads
-   clean (compat ⚠️, two backlog items). No Node IPC: the request goes as one JSON line on the child's
+   lookup there is authority. The host's own tail consults nothing the guest
+   can replace: it chains on the runtime's promises with the captured
+   `Promise.prototype.then` (a native `await` looks up the guest's
+   `constructor`/`then`), iterates by index, and hands the status over as ONE
+   PRIMITIVE (resolving with a number does no `then` lookup); the CHILD
+   validates it in its own realm — a non-integer or out-of-range status, a
+   rejected tail or a throw is exit 1, and the child adds no text (stderr is
+   guest bytes only, §1). So whatever a guest replaces, `runCode` resolves and
+   settles within `timeoutMs` + 1000 ms (a guest that hangs its own run is
+   killed as `timeout`). Node's exact status and text need rifty's runtime
+   intact, and the runtime shares the guest's realm without primordials: a
+   guest that replaces intrinsics it uses, or forges its exit signal, can
+   change its own status and text either way, exit 0 for a Node failure
+   included — an open class, compat ⚠️, owned by the runtime backlog. No Node IPC: the request goes as one JSON line on the child's
    stdin (kept open; its end tells the child the consumer died → self-kill),
    results come back as length-framed binary frames on fd 3 that the
    consumer parses itself (`src/protocol.ts`). A header announcing more than
@@ -166,4 +166,5 @@ memory invariant — pending the user, not built.
 
 ## Corrections
 
-- 2026-11-18 — §5: the status crossed as `{code, diagnosed}`; a guest `Object.prototype.then` rewrote it (resolution looks up `then` on objects). Now one integer, and an unusable status is exit 1 with no child-written stderr line (that line broke §1 "stderr is guest bytes only"); `diagnosed` removed with it.
+- 2026-11-18 — §6: the status crossed as `{code, diagnosed}`; a guest `Object.prototype.then` rewrote it (resolution looks up `then` on objects). Now one integer, and an unusable status is exit 1 with no child-written stderr line (that line broke §1 "stderr is guest bytes only"); `diagnosed` removed with it.
+- 2026-11-18 — §6: the tail's native `await`s let a guest `Promise.prototype.constructor`/`then` skip the drain (a timer throw read clean 0); now captured-`then` chaining and index loops. The earlier claim "only N named routes read clean" is dropped: rifty's runtime, not the host, decides the status in a shared realm, so the class is open (agent decision: self-poisoning that changes the guest's own status is a declared fidelity gap, not a host safety fault — no host reach, I3; bounded, I4).

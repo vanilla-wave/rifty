@@ -41,22 +41,20 @@ challenge: 2026-11-18 — inherits the goal premise check (`goal.md` §Challenge
 15. A child whose consumer dies exits (no orphan); a child that cannot spawn rejects at once (`lifecycle.test.ts`) → I4
 16. Whatever guest code replaced or poisoned in its realm — `process`, its
     `stderr`/`exit`, `console`, `TextEncoder`, `Uint8Array`, `String`, the
-    array iterator, `Object.prototype.then`, `Promise.prototype.then`,
-    `Map.prototype.get`, or a forged `RIFTY_PROCESS_EXIT` lookalike — the host's
-    own promises hold for all 36 cases: `runCode` resolves (never an
+    array iterator, `Object.prototype.then`, `Promise.prototype.then` and its
+    species, `Map.prototype.get`, or a forged `RIFTY_PROCESS_EXIT` lookalike —
+    the host's own promises hold for all 42 cases: `runCode` resolves (never an
     infrastructure failure of the host's), settles within `timeoutMs` + 1000 ms,
-    and adds no text to stderr. For the 22 cases that leave the runtime's status
-    path intact the status is Node's, a failure is never silent, and where the
-    guest hid nothing its own `Error: x` is what the consumer reads. The 14 that
-    poison the status machinery itself each read exactly as declared: exit 1
-    (incl. exit 1 with empty stderr when the guest broke its own diagnostic), a
-    `timeout` when it hangs its own drain, and exit 0 for a run Node failed only
-    where the guest forged its runtime's terminal or rewrote its own caught exit
-    signal — no other row may read clean for a Node failure
+    and the child adds no stderr text. For the 31 cases that leave rifty's
+    runtime status path intact the status is Node's, a failure is never silent,
+    and where the guest hid nothing its own `Error: x` is what the consumer
+    reads. The 11 measured cases that replace what rifty's runtime itself uses
+    each read exactly as pinned (`BROKEN_RUNTIME`), the rows that read clean for
+    a Node failure flagged; the class is open and declared in compat
     (`guest-seam.test.ts`) → I3
 17. The child judges what the isolate hands it: a guest bundle whose `run`
-    yields a non-number, a negative, out-of-range, fractional or non-finite
-    status, `undefined`, `null`, an object, a thenable, a rejected promise or a
+    yields a non-number, a negative, out-of-range, fractional, `NaN` or
+    non-finite status, `undefined`, `null`, an object, a thenable, a rejected promise or a
     throw ends exit 1 with empty stderr; an accepted status is the run's; one
     that never settles ends as `timeout`; a bundle with no entry at all rejects
     as a child failure, not a clean run (`child-trust.test.ts`, stub guest
@@ -96,8 +94,8 @@ challenge: 2026-11-18 — inherits the goal premise check (`goal.md` §Challenge
 | guest bridge args × call | validated, guest-safe refusal | bridge: garbage matrix | → I3 |
 | child frames × fd 3 (escaped child) | kill + `protocol violation` rejection; trailing bytes ignored | protocol: hostile children | → I4 |
 | result channel closed × run | reject at once, not at the deadline | protocol: channel closed | → I4 |
-| guest replaces post-run objects × run | the host's promises hold; status stays Node's unless the guest broke its own status path | guest-seam: 30 replacements | → I3 |
-| isolate reports a bad status × run | child's own line + failed status | child-trust: stub guest bundles | → I3 |
+| guest replaces post-run objects × run | the host's promises hold; status Node's while rifty's runtime path is intact | guest-seam: 42 replacements | → I3 |
+| isolate reports a bad status × run | exit 1, no child-written stderr | child-trust: stub guest bundles | → I3 |
 | consumer death × run | child exits on disconnect | lifecycle: orphan | → I4 |
 
 ## Out of scope
@@ -130,3 +128,4 @@ ready-verdict: 2026-11-18 — Contract+RED @ 9e76eb622
 - re-cut: 2026-11-18 — manager amend (goal.md): I3 bridge-walk attack, I4 reasons `timeout`|`memory` + one memory knob + settle bound + child death, ESM and ceiling rows; ceiling rows run as expected failures — trace: I1, I3, I4
 - 2026-11-18 — the parity carrier lives with the package (it needs the package build) and imports the node-cli-eval projection rather than copying it.
 - re-cut: 2026-11-18 — own Final+GREEN @ c66155044 BLOCK: the `{code, diagnosed}` report was rewritable via `Object.prototype.then`; 16/17 restated (PR-4, old: "settles well inside the deadline", child-written "usable status"/"diagnostic was lost" lines, exit 1) — status crosses as one integer, no host stderr text (manager decision: stderr is guest bytes only), the hang path bound is I4's `timeoutMs` + 1000 ms, every poisoned-status row asserted exactly instead of host promises only.
+- re-cut: 2026-11-18 — own Final+GREEN @ 1d3fc3c43 BLOCK: the tail's native `await`s let a guest species/`then` skip the drain (clean 0 for a timer throw). 16 restated (PR-4, old: "no other row may read clean for a Node failure", 36 cases with 22 intact / 14 poisoned) — host tail on captured `then` + index loops; the poisoned-runtime class is open (rifty's runtime decides the status in a shared realm), its measured rows pinned, not a closed list. RDY-5: the dropped clause is not in I1–I6 (I3 = no host reach), it was this item's own over-promise.

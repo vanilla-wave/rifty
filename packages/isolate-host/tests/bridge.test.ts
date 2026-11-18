@@ -151,7 +151,7 @@ describe('host bridge reachability from the guest (I3)', () => {
     expect(JSON.parse(result.stdout)).toEqual({
       bridge: 'undefined',
       // `__rifty` is rifty's own runtime table: breaking its own rifty is the
-      // guest's business (goal Decisions), and it holds no host function.
+      // guest's business (ADR-0557 §Corrections 2026-11-18), and it holds no host function.
       extras: ['__rifty'],
       bad: [],
     });

@@ -1,5 +1,5 @@
 /**
- * The child does not trust the isolate (ADR-0557 §5). The guest realm is the
+ * The child does not trust the isolate (ADR-0557 §6). The guest realm is the
  * guest's, so the status crosses as ONE PRIMITIVE and the CHILD validates it: a
  * guest bundle that returns garbage, rejects, or throws must become a failed
  * run (exit 1) with no host text in stderr — never a forged clean run, never a
@@ -26,6 +26,9 @@ const STUBS: Readonly<Record<string, string>> = {
   'status out of range': '() => 256',
   'status negative': '() => -1',
   'status fractional': '() => 1.5',
+  // Both coerce to a clean 0 in a Uint8 frame if the integer check is gone.
+  'status fractional below 1': '() => 0.5',
+  'status NaN': '() => Number.NaN',
   'status not finite': '() => Number.POSITIVE_INFINITY',
   'no status at all': '() => undefined',
   'null instead of a status': '() => null',

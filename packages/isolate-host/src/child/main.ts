@@ -129,7 +129,7 @@ async function run(request: RunRequest): Promise<void> {
     // realm. A number resolves a promise with no lookup in the guest realm (the
     // thenable check runs only for objects), so a poisoned prototype there
     // cannot rewrite it; the guest can cost itself only its own status and
-    // text, never the consumer's view of this host (ADR-0557 §5).
+    // text, never the consumer's view of this host (ADR-0557 §6).
     const code: unknown = await start.apply(undefined, [request.code], {
       arguments: { copy: true },
       result: { promise: true, copy: true },

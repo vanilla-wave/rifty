@@ -112,8 +112,11 @@ Matrix: `docs/public/compat/isolate-host.md`.
 
 Tested:
 
-- a guest cannot make `runCode` report a failure of the host's own, cannot hang
-  the call, and cannot make a failed run read as a clean one;
+- a guest cannot make `runCode` report a failure of the host's own, and
+  cannot hang the call past `timeoutMs` + 1 s. A guest that replaces JS
+  intrinsics rifty's runtime uses can change its own reported status and text,
+  exit 0 for a failing program included (compat ⚠️): that is a fidelity gap
+  of its own run, not a way out of the isolate;
 
 - the guest sees none of your process's globals or env;
 - the guest gets no Node primitive or isolated-vm handle;

@@ -25,6 +25,11 @@ child                                              node v24.16.0                
 'exit' sets exitCode = 5; setTimeout throw (none)  ["exit 1"] code 5, stderr               ["exit 1"] code 1, stderr
 ```
 
+Isolate host (ADR-0557) @ 1d3fc3c43, `node -e` v24.16.0:
+`process.on('exit', () => { process.exitCode = 0 }); throw new Error('x')` →
+host exit 1, Node 0 (both print the error). Compat ⚠️
+`docs/public/compat/isolate-host.md`.
+
 Compat ⚠️ `docs/public/compat/process.md` "Throw from an `'exit'` listener"
 and "Fatal throw with an `'exit'` listener that sets `exitCode`" (a
 rejection already honours it).
