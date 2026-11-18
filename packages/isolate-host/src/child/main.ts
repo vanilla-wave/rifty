@@ -47,6 +47,10 @@ async function run(request: RunRequest): Promise<void> {
     // guest task that called import(); the guest's drain waits on `settle` for it.
     importModuleDynamically: () => {
       importRequested = true;
+      // isolated-vm flushes unhandled rejections only in a task epilogue; an empty
+      // task right after this request flushes before a later guest task can attach
+      // a handler (Node reports at the microtask checkpoint).
+      process.nextTick(() => context?.evalIgnored('0'));
       const message =
         'Not implemented: isolate-host.dynamic-import (import() is not available in the rifty isolate host; use require(), ADR-0557)';
       // No child frames: the stack crosses into the guest and must not reveal host paths.
@@ -58,6 +62,7 @@ async function run(request: RunRequest): Promise<void> {
   });
   let rejection: ivm.Reference<(reason: unknown) => void> | undefined;
   let importRequested = false;
+  let context: ivm.Context | undefined;
   const failed = (error: unknown): void => {
     if (isolate.isDisposed) {
       reportMemory();
@@ -69,7 +74,7 @@ async function run(request: RunRequest): Promise<void> {
     });
   };
   try {
-    const context = await isolate.createContext();
+    context = await isolate.createContext();
     const jail = context.global;
     const timers = new Map<number, NodeJS.Timeout>();
     let fire: ivm.Reference<(id: number) => void> | undefined;

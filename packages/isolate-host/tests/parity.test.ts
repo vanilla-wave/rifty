@@ -361,6 +361,20 @@ describe('declared ceilings fail loudly (I1 ceilings, scenario step 4)', () => {
     });
   }
 
+  // A handler attached in a later task: Node has already reported the import()
+  // rejection unhandled → status 1. (The late handler's own output still runs here:
+  // the declared rejection-timing ⚠️, compat isolate-host.md.)
+  for (const code of [
+    "const p = import('nonexistent-pkg'); setTimeout(() => p.catch(() => console.log('late')))",
+    "const p = import('nonexistent-pkg'); setTimeout(() => p.catch(() => console.log('late')), 2)",
+    "const p = import('nonexistent-pkg'); setImmediate(async () => { try { await p } catch { console.log('late') } })",
+  ]) {
+    it(`an import() rejection handled only in a later task still fails the run: ${code}`, async () => {
+      expect(nodeEval(code).code).toBe(1);
+      expect((await runCode(code)).exitCode).toBe(1);
+    });
+  }
+
   it('import() rejects with a named gap', async () => {
     const result = await runCode(
       "import('node:fs').then(() => console.log('LOADED'), (e) => console.log(e.message))",

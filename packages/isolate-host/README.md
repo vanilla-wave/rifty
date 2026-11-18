@@ -95,6 +95,8 @@ Known differences:
   prints without Node's `[eval]:1` source header.
 - An unhandled rejection fails at rifty's next event-loop check, not at once: a
   `.catch` attached from a later timer still runs first.
+- An `unref()`'d timer may still fire during the few ms the run takes to
+  confirm its loop is idle.
 - An `unhandledRejection` listener receives a copy of the reason, and
   `promise` is `undefined`. A non-`Error` reason arrives as a generic `Error`.
 - Identity is rifty's: `process.version`, `os.platform()`, `process.cwd()`,

@@ -84,11 +84,9 @@ blocks it.
    task that made it, so the guest's drain is one chokepoint: after the loop
    empties it waits two host timer turns and repeats while the child served an
    import() — the rejection lands in a live process (listeners, `'exit'`,
-   `process.exit` as in Node). Detection of an *unhandled* import() rejection
-   is isolated-vm's `onUnhandledRejection`: a handler attached in a later task
-   suppresses its report, so such a run exits 0 where Node exits 1 — declared
-   ⚠️ (compat; `distribution/isolate-host-import-late-handler`), not chased
-   further after three rounds on this boundary (REV-7, RDY-5 trim). `node -e`'s builtin-module globals are
+   `process.exit` as in Node). isolated-vm flushes unhandled rejections only in
+   a task epilogue, so the import request also queues one empty isolate task:
+   the report precedes any later guest task that could attach a handler. `node -e`'s builtin-module globals are
    lazy getters over the rifty loader (Node v24.16.0 list); a test asserts the
    guest has every global name live `node -e` defines.
 6. Egress: `fetch`/`WebSocket` loud (5); `node:http`, `https`, `net` register
