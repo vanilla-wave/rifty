@@ -136,6 +136,9 @@ your own, you must perform them yourself.
 | `random(byteLength)` | `byteLength`: guest | an integer in 0..65536; returns that many random bytes |
 | `timeOrigin` | you | a number: your `performance.timeOrigin` |
 
+The `write` and `fire` hooks must be synchronous: a promise they return is not
+awaited, and its rejection is yours.
+
 A refused call throws a `TypeError` starting `isolate-host bridge: `, with no
 host stack. A hook that throws reaches the guest as `isolate-host bridge: <name>
 failed`. A `fire` hook that throws ends that timer, and nothing reaches your
