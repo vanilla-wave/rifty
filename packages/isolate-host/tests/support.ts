@@ -51,3 +51,13 @@ export async function waitFor<T>(probe: () => T | undefined, ms: number): Promis
     await new Promise((r) => setTimeout(r, 20));
   }
 }
+
+/** Resident set size of a live process in KiB (`ps -o rss=`), or null once it is gone. */
+export function rssKb(pid: number): number | null {
+  try {
+    const out = execFileSync('ps', ['-o', 'rss=', '-p', String(pid)], { encoding: 'utf8' }).trim();
+    return out === '' ? null : Number(out);
+  } catch {
+    return null;
+  }
+}

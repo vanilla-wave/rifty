@@ -15,14 +15,20 @@ A Node service (the consumer) imports one public rifty package and calls
 disposable rifty runtime in a V8 isolate (isolated-vm) inside a disposable
 child process the package spawns. The result `{stdout, stderr, exitCode}` is
 Node's, minus declared ceilings. Runaway guests end with a distinguishable
-result; the consumer process stays healthy. The consumer's current
-`runCode(code)` interface is kept, so the switch is a replacement, not a rewrite.
+result; the consumer process stays healthy. The call shape is the consumer's
+`runCode(code)` and the result is a superset of `{stdout, stderr, exitCode}`
+(the consumer's own executor type is unread; no rewrite-free claim beyond
+that).
 Done = a Node host wires the package in dev by its documentation, installing
 the packed tarball; npm publication is confirm-first (`DEC-3`) and outside
 this goal.
 
-rifty guarantees the seam properties its tests prove (I3–I5) and requires an
-external boundary around the process; it does not promise hard containment.
+rifty guarantees the seam properties its tests prove (I3–I5): guest code in
+the isolate reaches no Node primitive, host value or network. It does not
+protect against an isolate escape: escaped code runs as the child's uid and
+can read the parent's `/proc/<ppid>/environ`, the filesystem and the network.
+An external boundary around the child (separate uid/sandbox/container) is the
+consumer's duty; no hard containment.
 No density or speed promise (tracer bullet).
 
 ## User scenario
@@ -34,14 +40,15 @@ No density or speed promise (tracer bullet).
    (console output, `process.stdout.write` without newline, `console.error`,
    uncaught throw and rejection, `process.exit`/`exitCode`, timers and
    promises, `fs` round-trip on the in-memory VFS, `Buffer`, `require` of
-   builtins). Each result `{stdout, stderr, exitCode}` equals `node -e <code>`
+   builtins, ESM syntax: top-level `await`, static and dynamic `import`). Each result `{stdout, stderr, exitCode}` equals `node -e <code>`
    run by the same Node executable.
 3. A second call does not see the first call's files, globals or timers.
 4. Guest code looking for host secrets (a host `globalThis` canary, a host env
-   canary) finds none; `fetch`/`http`/`https`/`net`/WebSocket fail loudly.
-5. A runaway guest — busy loop, heap blow-up, catastrophic allocation, RSS
-   growth — returns within its limit with `exitCode: null` and a distinct
-   reason; an output flood is truncated at the cap; the service's next
+   canary, the child realm through the bridge) finds none; declared ceilings
+   (`URL`, `structuredClone`, …) throw a `NotImplementedError` naming the API; `fetch`/`http`/`https`/`net`/WebSocket fail loudly.
+5. A runaway guest — busy loop, heap blow-up, catastrophic allocation —
+   returns within its limit with `exitCode: null` and reason `timeout` or
+   `memory`; an output flood is truncated at the cap; the service's next
    `runCode` works.
 
 ## Invariants
@@ -62,11 +69,17 @@ defined`, then ReadableStream/DOMException/atob; probe 3 in `## Evidence`). -->
   pending timer) is not observable in, and does not act during, the next call.
 - I3. No host reach: a host-process `globalThis` canary and an env canary are
   not observable from guest code; the guest realm holds no Node primitive
-  (indirect-eval `import('node:child_process')` reaches no real module); the
-  process hosting the isolate carries no inherited host environment.
-- I4. Limits: overrunning time, isolate heap, catastrophic OOM or process RSS
-  returns within a bounded time `{exitCode: null, termination: <reason>}` with
-  a distinct reason per limit; output past the cap is truncated (the run
+  (indirect-eval `import('node:child_process')` reaches no real module), and
+  no value reachable from the guest — host bridge functions included, through
+  `f.constructor` chains or intercepted calls — yields the child's realm
+  (real `process`: `dlopen`, `binding`, the child's pid) or an isolated-vm
+  handle; the process hosting the isolate carries no inherited host
+  environment.
+- I4. Limits: overrunning time returns `{exitCode: null, termination:
+  'timeout'}`; overrunning memory (isolate heap, catastrophic OOM, or the
+  child RSS derived from the memory limit) returns `{exitCode: null,
+  termination: 'memory'}`; every call settles within `timeoutMs` + 1000 ms;
+  a child that dies on its own rejects the call at once, naming the signal; output past the cap is truncated (the run
   continues, `truncated: true`) and discarded, not buffered, by the host.
   The consumer process stays alive and its next `runCode` succeeds.
 - I5. No network: guest egress (`fetch`, `node:http`/`https`/`net`,
@@ -78,8 +91,10 @@ defined`, then ReadableStream/DOMException/atob; probe 3 in `## Evidence`). -->
 ## Evidence
 
 Probes 2026-11-18, macOS 26.6.2 arm64 (M3 Pro), Node v24.16.0 (V8
-13.6.233.17-node.49), isolated-vm 6.2.0 and 7.0.2 (identical outcomes),
-`node --no-node-snapshot`. Harness: `new ivm.Isolate({memoryLimit: 64,
+13.6.233.17-node.49), `node --no-node-snapshot`; OOM and busy-loop probes on
+isolated-vm 6.2.0 and 7.0.2 (identical outcomes), the main-in-isolate probe on
+7.0.2 only. Memory probes ran on macOS only; the limit tests run in the Linux
+CI unit lane. Harness: `new ivm.Isolate({memoryLimit: 64,
 onCatastrophicError})`, `await ctx.eval(<guest>, {timeout})`, a 10 ms host
 `setInterval` counting ticks/lag, then a fresh isolate evaluating `6*7`;
 guests quoted below. The acceptance carrier re-runs them durably.
@@ -123,19 +138,21 @@ final-check: 2026-11-18 — PASS after one fix round, fresh read-only RDY-6/FIT 
 
 - 2026-11-17 — user (via thread manager): «Хочется завезти в rifty новый тир для исполнения песочницы на V8 isolates.»
 - 2026-11-18 — user (via thread manager): «Стартуй первый кусок. Выбери сам одна цель или несколько. Можешь мержить ПРы. Один ПР - одна цель.»; «ожидаю что user-fork не должно быть, если есть обязательно пиши в этот тред».
-- 2026-11-17 — manager, by the user's delegation («Выбери сам», on the four forks with recommendations shown on 2026-11-17): mission widens narrowly — a Node host executes a rifty guest in a V8 isolate; orchestration, pods, hypervisor, deploy stay outside rifty.
-- 2026-11-17 — manager, by delegation: safety promise = seam properties proven by tests (I3–I5, I4's kill) plus a stated requirement for an external boundary around the process; not hard containment.
-- 2026-11-17 — manager, by delegation: "cheaper than real Node" is unmeasured; tracer bullet, no density/speed promise.
-- 2026-11-17 — manager, by delegation: tier `works` — reachable faults return a distinct termination or loud throw, no crash/reload consistency; time and memory limits are invariants (I4).
-- 2026-11-18 — manager, by delegation (OOM probe fork, user not yet answered in the manager thread): option A — the isolate lives in a disposable child process per `runCode`; keeps the user's acceptance "code over the time or memory limit does not crash the host process" strict. A meets the user's acceptance literally; B (in-process, weaker memory clause) could only arrive as a user amendment (`RDY-6`).
+- 2026-11-18 — manager decision (the user saw the four forks with recommendations on 2026-11-17, raised no objection, and on 2026-11-18 said to start with «ожидаю что user-fork не должно быть, если есть обязательно пиши в этот тред»): mission widens narrowly — a Node host executes a rifty guest in a V8 isolate; orchestration, pods, hypervisor, deploy stay outside rifty.
+- 2026-11-18 — manager decision (same basis): safety promise = seam properties proven by tests (I3–I5, I4's kill) plus a stated requirement for an external boundary around the process; not hard containment.
+- 2026-11-18 — manager decision (same basis): "cheaper than real Node" is unmeasured; tracer bullet, no density/speed promise.
+- 2026-11-18 — manager decision (same basis): tier `works` — reachable faults return a distinct termination or loud throw, no crash/reload consistency; time and memory limits are invariants (I4).
+- 2026-11-18 — manager decision (OOM probe fork, user not yet answered in the manager thread): option A — the isolate lives in a disposable child process per `runCode`; keeps the user's acceptance "code over the time or memory limit does not crash the host process" strict. A meets the user's acceptance literally; B (in-process, weaker memory clause) could only arrive as a user amendment (`RDY-6`).
 - rejected route: isolate in the consumer process (in-process isolated-vm) — violates Outcome «the consumer process stays healthy» and I4 (catastrophic OOM leaves an unsettled call, ~1.26 GB never returned, a hung `process.exit`).
 - rejected route: guest in a `worker_threads` Worker or `node:vm` in the consumer process — violates I3 (same realm/process as the host's secrets once rifty is broken).
 - rejected route: rifty runtime directly in a clean-env child Node realm (or its `worker_threads`), no isolate — violates I3 (probe: there `(0,eval)("import('node:child_process')")` resolves the real module; in an isolated-vm isolate it rejects `Not supported`) and the user's «на V8 isolates».
 - 2026-11-18 — output cap reads the requirement «обрезка вывода (cap)» literally: truncate and continue, flagged `truncated: true`; not a termination.
-- 2026-11-18 — limits are `runCode` options with documented defaults (heap 256 MiB and time 30 000 ms from the bench harness; output 1 MiB and RSS 1024 MiB chosen by the agent); defaults, not promises.
+- 2026-11-18 — limits are `runCode` options `timeoutMs`, `memoryLimitMb`, `maxOutputBytes` with documented defaults (heap 256 MiB and time 30 000 ms from the bench harness; output 1 MiB chosen by the agent); child RSS ceiling derived = 256 MiB + 3 × `memoryLimitMb` (isolated-vm README: a hostile guest may use 2–3× the limit); defaults, not promises.
 - 2026-11-18 — manager: termination = `exitCode: null` + `termination` reason; references: Node `spawnSync().status === null` for a killed child, rifty `AgentCommandResult.exitCode: number | null` (`packages/agent/src/types.ts`). stderr carries guest bytes only — a host-appended line would misreport program output.
 - 2026-11-18 — manager: past the output cap the host discards (not buffers) further output; a flood until timeout does not grow host memory (I4 carrier).
 - 2026-11-18 — host needs no `--no-node-snapshot` (I6, scenario 1): with A the package starts its child with the flag itself, superseding the requirements' "flag in every host launch path" for this host (ADR-0557).
 - 2026-11-18 — binary file output (requirements «бинарный выход … с первого этапа») stays out: the user's first-increment decision «сначала дадим возможность просто исполнить кусок кода в чистом isolate» and «Файлов … в первом инкременте нет» settle it; host file ops are the successor goal.
 - 2026-11-18 — «настройка вкл/выкл» reads as the consumer's rollout flag (requirements: dev only, behind a flag, pinned per dialog) — consumer side, no package knob.
 - rejected route: consumer composes rifty internals (`vfs/internal`, `runNodeEntry`) itself — violates Outcome (public package API only; user decision in requirements).
+- amend: 2026-11-18 — manager (FIT audit of b005243bd/5f4a91dcf): I3 adds the bridge-walk/constructor-chain attack; I4 collapses reasons to `timeout` | `memory`, one public memory knob (RSS ceiling derived), bound `timeoutMs` + 1000 ms, unexpected child death rejects at once; Outcome narrows to call shape + result superset and to no protection after an isolate escape (external boundary around the child is the consumer's); scenario 2 adds ESM rows, step 4 adds ceiling rows.
+- 2026-11-18 — manager decision: requirements line 23 lists URL, structuredClone, web streams, AbortController/Signal, Event/EventTarget/CustomEvent for the shim; in this goal they are loud ceilings, the list is closed (ADR-0557 §5); the requirement moves to the successor goal named in `docs/ROADMAP.md`. A new ceiling found during implementation is a ledger `re-cut:` line; corpus rows are never edited or removed to pass.

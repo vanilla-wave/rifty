@@ -27,8 +27,11 @@ describe('runCode lifecycle faults', () => {
     const running = runCode("setTimeout(() => console.log('never'), 5000)");
     running.catch(() => {}); // asserted below; keeps an early failure from going unhandled
     const pid = await waitFor(() => childPids().find((p) => !before.has(p)), 1000);
+    const killedAt = Date.now();
     execFileSync('kill', ['-9', String(pid)]);
     await expect(running).rejects.toThrow(/isolate-host child .*SIGKILL/);
+    // At once — not at the 30 s default deadline.
+    expect(Date.now() - killedAt).toBeLessThan(1000);
     await expect(runCode('console.log(1)')).resolves.toEqual({
       stdout: '1\n',
       stderr: '',

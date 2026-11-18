@@ -14,6 +14,11 @@ interface Row {
   readonly code: string;
   /** Uncaught error: compare the canonical `[eval]` diagnostic, not internal frames. */
   readonly evalError?: true;
+  /**
+   * A declared ceiling this row hits (compat ❌, ledger `re-cut:`): the row stays
+   * literal and runs as an expected failure, so a fix turns it red until promoted.
+   */
+  readonly ceiling?: string;
 }
 
 const CORPUS: readonly Row[] = [
@@ -95,10 +100,27 @@ const CORPUS: readonly Row[] = [
   {
     label: 'text-codec',
     code: "const enc = new TextEncoder().encode('añ€😀'); console.log(enc, new TextDecoder().decode(enc), new TextDecoder().decode(new Uint8Array([0xff, 0x61])))",
+    ceiling:
+      'util.inspect: typed-array header and >6-element grouping (runtime-js/util-surface-completions)',
   },
   {
     label: 'base64-globals',
     code: "console.log(btoa('hello'), atob('aGVsbG8='))",
+  },
+  {
+    label: 'esm-top-level-await',
+    code: "await Promise.resolve(); console.log('tla', typeof require)",
+    ceiling: 'node -e ESM syntax detection (runtime-js/node-cli-esm-eval-context)',
+  },
+  {
+    label: 'esm-static-import',
+    code: "import fs from 'node:fs'; import { join } from 'node:path'; fs.writeFileSync('m.txt', 'esm'); console.log(fs.readFileSync(join('.', 'm.txt'), 'utf8'))",
+    ceiling: 'node -e ESM syntax detection (runtime-js/node-cli-esm-eval-context)',
+  },
+  {
+    label: 'dynamic-import',
+    code: "import('node:fs').then((m) => console.log(typeof m.readFileSync, typeof m.default.writeFileSync))",
+    ceiling: 'import() in the isolate (ADR-0557 §5)',
   },
   { label: 'throw-sync', code: "console.log('before'); throw new Error('boom')", evalError: true },
   { label: 'reject-unhandled', code: "Promise.reject(new Error('rej'))", evalError: true },
@@ -107,7 +129,13 @@ const CORPUS: readonly Row[] = [
     code: "setTimeout(() => { throw new Error('late') }, 1)",
     evalError: true,
   },
-  { label: 'type-error', code: 'const o = undefined; o.x', evalError: true },
+  {
+    label: 'type-error',
+    code: 'const o = undefined; o.x',
+    evalError: true,
+    ceiling:
+      'node -e diagnostic header for a non-throw error (runtime-js/node-eval-non-throw-diagnostic-header)',
+  },
   {
     label: 'uncaught-handler',
     code: "process.on('uncaughtException', (e) => { console.log('caught', e.message); process.exitCode = 4 }); setTimeout(() => { throw new Error('handled') }, 1)",
@@ -116,7 +144,10 @@ const CORPUS: readonly Row[] = [
 
 describe('runCode parity with node -e (I1)', () => {
   for (const row of CORPUS) {
-    it(row.label, async () => {
+    const test = row.ceiling === undefined ? it : it.fails;
+    test(row.ceiling === undefined
+      ? row.label
+      : `${row.label} — ceiling: ${row.ceiling}`, async () => {
       const invocation = {
         label: row.label,
         nodeArgv: ['-e', row.code],
@@ -141,4 +172,62 @@ describe('runCode parity with node -e (I1)', () => {
       });
     });
   }
+});
+
+/**
+ * Declared ceilings (ADR-0557 §5; goal scenario step 4): real Node runs these;
+ * the isolate host fails loudly with an error the model can act on.
+ */
+const CEILINGS: readonly { readonly api: string; readonly code: string }[] = [
+  { api: 'URL', code: "console.log(new URL('https://a.b/c?d=1').searchParams.get('d'))" },
+  { api: 'structuredClone', code: 'console.log(structuredClone({ a: [1] }))' },
+];
+
+describe('declared ceilings fail loudly (I1 ceilings, scenario step 4)', () => {
+  for (const row of CEILINGS) {
+    it(row.api, async () => {
+      expect(nodeEval(row.code).code, 'real Node supports it').toBe(0);
+      const result = await runCode(row.code);
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout).toBe('');
+      expect(result.stderr).toContain(
+        `NotImplementedError: Not implemented: isolate-host.${row.api} (not available in the rifty isolate host, ADR-0557)`,
+      );
+    });
+  }
+
+  for (const code of [
+    "await Promise.resolve(); console.log('tla')",
+    "import fs from 'node:fs'; console.log(typeof fs.readFileSync)",
+  ]) {
+    it(`ESM syntax in -e: ${code}`, async () => {
+      expect(nodeEval(code).code, 'real Node supports it').toBe(0);
+      const result = await runCode(code);
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain(
+        'NotImplementedError: Not implemented: isolate-host.node-eval-esm (Node runs -e input with ESM syntax as a module; this host evaluates CommonJS only — use require())',
+      );
+    });
+  }
+
+  it('import() rejects with a named gap', async () => {
+    const result = await runCode(
+      "import('node:fs').then(() => console.log('LOADED'), (e) => console.log(e.message))",
+    );
+    expect(result).toEqual({
+      stdout:
+        'Not implemented: isolate-host.dynamic-import (import() is not available in the rifty isolate host; use require(), ADR-0557)\n',
+      stderr: '',
+      exitCode: 0,
+    });
+  });
+
+  it('fetch', async () => {
+    const result = await runCode("fetch('http://example.com/').then((r) => console.log(r.status))");
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toContain(
+      'NotImplementedError: Not implemented: isolate-host.fetch (not available in the rifty isolate host, ADR-0557)',
+    );
+  });
 });

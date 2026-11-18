@@ -5,7 +5,7 @@
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { runCode } from '../src/index.ts';
-import { childPids } from './support.ts';
+import { childPids, rssKb, waitFor } from './support.ts';
 
 /** Max main-thread lag of this process while `work` runs. */
 async function withLag<T>(work: () => Promise<T>): Promise<{ value: T; maxLagMs: number }> {
@@ -41,11 +41,12 @@ describe('runCode limits (I4)', () => {
     );
     expect(value).toEqual({ stdout: 'spin\n', stderr: '', exitCode: null, termination: 'timeout' });
     expect(Date.now() - started).toBeGreaterThanOrEqual(1500);
-    expect(Date.now() - started).toBeLessThan(5000);
+    expect(Date.now() - started).toBeLessThanOrEqual(1500 + 1000);
     expect(maxLagMs).toBeLessThan(250);
   });
 
   it('a never-draining event loop is killed at the deadline', async () => {
+    const started = Date.now();
     const value = await runCode("setInterval(() => {}, 50); console.log('armed')", {
       timeoutMs: 1000,
     });
@@ -55,37 +56,42 @@ describe('runCode limits (I4)', () => {
       exitCode: null,
       termination: 'timeout',
     });
+    expect(Date.now() - started).toBeLessThanOrEqual(1000 + 1000);
   });
 
   it('isolate heap growth past memoryLimitMb ends with termination memory', async () => {
+    const started = Date.now();
     const value = await runCode(
       "console.log('grow'); const a = []; for (;;) a.push({ x: Math.random(), s: 'y'.repeat(100) })",
       { memoryLimitMb: 64, timeoutMs: 60_000 },
     );
     expect(value).toEqual({ stdout: 'grow\n', stderr: '', exitCode: null, termination: 'memory' });
+    expect(Date.now() - started).toBeLessThan(61_000);
   });
 
-  it('a catastrophic OOM ends with termination catastrophic-oom', async () => {
-    const value = await runCode("console.log('big'); new Array(2 ** 28).fill(0)", {
+  it('a catastrophic allocation ends with termination memory, child RSS held near 256 + 3 × limit', async () => {
+    const before = new Set(childPids());
+    const started = Date.now();
+    const running = runCode("console.log('big'); new Array(2 ** 28).fill(0)", {
       memoryLimitMb: 64,
-      maxRssMb: 8192,
-      timeoutMs: 90_000,
-    });
-    expect(value).toEqual({
-      stdout: 'big\n',
-      stderr: '',
-      exitCode: null,
-      termination: 'catastrophic-oom',
-    });
-  }, 120_000);
-
-  it('child RSS past maxRssMb ends with termination rss', async () => {
-    const value = await runCode("console.log('rss'); new Array(2 ** 28).fill(0)", {
-      memoryLimitMb: 64,
-      maxRssMb: 400,
       timeoutMs: 60_000,
     });
-    expect(value).toEqual({ stdout: 'rss\n', stderr: '', exitCode: null, termination: 'rss' });
+    running.catch(() => {}); // asserted below
+    // isolated-vm lets this guest grow far past memoryLimit (probe: ~1.26 GB before
+    // its fatal-OOM callback); the RSS watchdog (ceiling 448 MiB here) must stop it
+    // first. A sampled watchdog overshoots by one backing-store doubling (measured
+    // 661–808 MiB on macOS arm64), so the bound is 2 × the ceiling.
+    const pid = await waitFor(() => childPids().find((p) => !before.has(p)), 2000);
+    let peakMb = 0;
+    const sampler = setInterval(() => {
+      const kb = rssKb(pid);
+      if (kb !== null) peakMb = Math.max(peakMb, kb / 1024);
+    }, 20);
+    const value = await running.finally(() => clearInterval(sampler));
+    expect(value).toEqual({ stdout: 'big\n', stderr: '', exitCode: null, termination: 'memory' });
+    expect(Date.now() - started).toBeLessThan(61_000);
+    expect(peakMb).toBeGreaterThan(0);
+    expect(peakMb).toBeLessThan((256 + 3 * 64) * 2);
   }, 90_000);
 
   it('output past maxOutputBytes is truncated and the run continues to its own exit', async () => {

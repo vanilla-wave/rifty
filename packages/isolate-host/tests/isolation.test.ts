@@ -75,6 +75,89 @@ describe('no host reach (I3)', () => {
     );
   });
 
+  it('no reachable value or bridge function yields the child realm or an isolated-vm handle', async () => {
+    const before = new Set(childPids());
+    const running = runCode(String.raw`
+      const leaks = [];
+      // isolated-vm handle methods (Reference/ExternalCopy); not WeakRef's plain 'deref'.
+      const IVM = ['applySync', 'applyIgnored', 'applySyncPromise', 'derefInto', 'copySync', 'copyInto', 'getSync', 'setSync'];
+      const realmOf = (f) => {
+        try { return f.constructor.constructor('return this')(); } catch { return globalThis; }
+      };
+      const check = (v, path) => {
+        if (typeof v === 'function') {
+          const g = realmOf(v);
+          if (g !== globalThis) leaks.push('realm ' + path);
+          else {
+            try {
+              const p = g.process;
+              if (p !== process) leaks.push('process ' + path);
+            } catch {}
+          }
+        }
+        if ((typeof v === 'object' && v !== null) || typeof v === 'function') {
+          for (const m of IVM) {
+            try { if (m in v && typeof v[m] === 'function') leaks.push('ivm ' + m + ' ' + path); } catch {}
+          }
+        }
+      };
+      const seen = new Set();
+      const walk = (v, path, depth) => {
+        if (v === null || (typeof v !== 'object' && typeof v !== 'function') || seen.has(v) || depth > 7) return;
+        seen.add(v);
+        check(v, path);
+        let keys = [];
+        try { keys = Reflect.ownKeys(v); } catch {}
+        for (const k of keys) {
+          let d;
+          try { d = Reflect.getOwnPropertyDescriptor(v, k); } catch { continue; }
+          if (!d) continue;
+          const name = path + '.' + String(k);
+          if ('value' in d) walk(d.value, name, depth + 1);
+          if (d.get) walk(d.get, name + '<get>', depth + 1);
+          if (d.set) walk(d.set, name + '<set>', depth + 1);
+        }
+        try { walk(Object.getPrototypeOf(v), path + '.__proto__', depth + 1); } catch {}
+      };
+      // Intercept every function that flows through call/apply/bind/Reflect while
+      // the bridge is exercised (timers, stdio, crypto, performance, codec).
+      const flowed = new Set();
+      const FP = Function.prototype;
+      const { call, apply, bind } = FP;
+      const rApply = Reflect.apply;
+      const rConstruct = Reflect.construct;
+      FP.call = function (...a) { flowed.add(this); return rApply(call, this, a); };
+      FP.apply = function (...a) { flowed.add(this); return rApply(apply, this, a); };
+      FP.bind = function (...a) { flowed.add(this); return rApply(bind, this, a); };
+      Reflect.apply = (f, t, a) => { flowed.add(f); return rApply(f, t, a); };
+      Reflect.construct = (f, a, n) => { flowed.add(f); return rConstruct(f, a, n); };
+      process.stdout.write('');
+      process.stderr.write('');
+      crypto.getRandomValues(new Uint8Array(4));
+      performance.now();
+      new TextDecoder().decode(new TextEncoder().encode('x'));
+      setTimeout(() => {
+        clearTimeout(setTimeout(() => {}, 5));
+        setImmediate(() => {
+          FP.call = call; FP.apply = apply; FP.bind = bind; Reflect.apply = rApply; Reflect.construct = rConstruct;
+          walk(globalThis, 'globalThis', 0);
+          for (const f of flowed) check(f, 'flowed:' + (f && f.name));
+          console.log(JSON.stringify({ pid: process.pid, walked: seen.size, leaks }));
+          setTimeout(() => {}, 800);
+        });
+      }, 10);
+    `);
+    running.catch(() => {}); // asserted below; keeps an early failure from going unhandled
+    const childPid = await waitFor(() => childPids().find((p) => !before.has(p)), 1000);
+    const result = await running;
+    expect(result.exitCode).toBe(0);
+    expect(result.stderr).toBe('');
+    const report = JSON.parse(result.stdout) as { pid: number; walked: number; leaks: string[] };
+    expect(report.leaks).toEqual([]);
+    expect(report.pid).not.toBe(childPid);
+    expect(report.walked).toBeGreaterThan(500);
+  });
+
   it('the process hosting the isolate carries no inherited host environment', async () => {
     const before = new Set(childPids());
     const running = runCode("setTimeout(() => console.log('done'), 1500)");

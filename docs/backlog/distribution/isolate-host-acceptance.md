@@ -25,28 +25,43 @@ challenge: 2026-11-18 — inherits the goal premise check (`goal.md` §Challenge
 ## Acceptance
 
 1. `runCode` is the package root's only runtime export; options
-   `{timeoutMs, memoryLimitMb, maxRssMb, maxOutputBytes}`, result
-   `{stdout, stderr, exitCode, termination?, truncated?}` (ADR-0557 §1) → ADR-0557
-2. Corpus parity: every `parity.test.ts` row equals the live oracle → I1
-3. A file, a global and a pending timer of one call are absent from the next;
+   `{timeoutMs, memoryLimitMb, maxOutputBytes}`, result
+   `{stdout, stderr, exitCode, termination?: 'timeout' | 'memory', truncated?}`
+   (ADR-0557 §1) → ADR-0557
+2. Corpus parity: every `parity.test.ts` row without a `ceiling` equals the
+   live oracle; a `ceiling` row stays literal and runs as an expected failure
+   naming its compat/backlog owner → I1
+3. Declared ceilings (`URL`, `structuredClone`, `fetch`, ESM syntax, `import()`)
+   fail with a `NotImplementedError`/named message the model can act on, while
+   real Node runs the same code (`parity.test.ts` ceilings block) → scenario
+4. A file, a global and a pending timer of one call are absent from the next;
    no child outlives its result (`isolation.test.ts`) → I2
-4. Host `globalThis`/env canaries absent from the guest; indirect-eval
+5. Host `globalThis`/env canaries absent from the guest; indirect-eval
    `import`, `getBuiltinModule`, `require('fs')`, `process.binding`,
-   `Function` reach no host file; the child's environment block holds no
-   host variable (Linux: empty) and its command has `--no-node-snapshot`
-   (`isolation.test.ts`) → I3
-5. Sync busy loop and never-draining loop → `termination: 'timeout'` within
-   deadline + 3.5 s, consumer main-thread lag < 250 ms; heap growth →
-   `memory`; `new Array(2**28).fill(0)` → `catastrophic-oom` (RSS cap high)
-   and `rss` (cap 400 MiB); each followed by a working `runCode` and no
-   leftover child (`limits.test.ts`) → I4
-6. Output cap: truncated prefix, run continues to its own exit code,
+   `Function` reach no host file; a walk of every value reachable from
+   `globalThis` (symbols, getters, prototypes; host bridge included) plus every
+   function flowing through intercepted `call`/`apply`/`bind`/`Reflect` while
+   timers, stdio, crypto, performance and the codec run finds no foreign realm,
+   no foreign `process`, no isolated-vm handle method; the guest pid is not the
+   child's; the child's environment block holds no host variable (Linux:
+   empty) and its command has `--no-node-snapshot` (`isolation.test.ts`) → I3
+6. Sync busy loop and never-draining loop → `termination: 'timeout'`, settled
+   within `timeoutMs` + 1000 ms, consumer main-thread lag < 250 ms; heap
+   growth → `memory`; `new Array(2**28).fill(0)` → `memory` with the child's
+   sampled peak RSS < 2 × (256 + 3 × 64) MiB; each followed by a working
+   `runCode` and no leftover child (`limits.test.ts`) → I4
+7. Output cap: truncated prefix, run continues to its own exit code,
    `truncated: true`; a 256 MiB flood grows consumer RSS < 64 MiB
    (`limits.test.ts`) → I4
-7. `fetch`, `node:http` request, `https.get`, `net.connect`, `tls`, `dgram`,
+8. A child killed from outside (`kill -9`) rejects the call within 1000 ms
+   naming the signal; host keeps working (`lifecycle.test.ts`) → I4
+9. `fetch`, `node:http` request, `https.get`, `net.connect`, `tls`, `dgram`,
    `http2`, `WebSocket` → `NotImplementedError` (`egress.test.ts`) → I5
-8. `pnpm pack` tarball + `npm install` into a clean project; `runCode` under
-   plain `node` with only `PATH` (`packed-consumer.test.ts`) → I6
+10. `pnpm pack` tarball + `npm install` into a clean project; `runCode` under
+    plain `node` with only `PATH` (`packed-consumer.test.ts`) → I6
+11. The guest UTF-8 TextEncoder/TextDecoder equals Node's on randomized
+    one-shot, streamed, fatal, BOM and `encodeInto` inputs
+    (`text-codec.test.ts`) → ADR-0557
 
 ## Reference contract
 
@@ -60,11 +75,12 @@ challenge: 2026-11-18 — inherits the goal premise check (`goal.md` §Challenge
 
 ## Parity cases
 
-1. The 28 `parity.test.ts` rows (console values/format, byte `stdout.write`,
+1. The 31 `parity.test.ts` corpus rows (5 marked `ceiling`) (console values/format, byte `stdout.write`,
    UTF-8, stderr, interleaving, `exitCode`, `exit()`, `'exit'` event, event
    loop order, async/await, interval, fs sync/promises/ENOENT, Buffer,
    path/util, crypto hashes, events, CJS eval scope, compute, TextEncoder/
-   TextDecoder, atob/btoa, four uncaught-error diagnostics, uncaught handler).
+   TextDecoder, atob/btoa, ESM top-level await / static / dynamic import,
+   four uncaught-error diagnostics, uncaught handler).
    Oracle outputs dumped 2026-11-18, Node v24.16.0, all exit on their own,
    no absolute path in stdout → I1
 
@@ -74,10 +90,9 @@ challenge: 2026-11-18 — inherits the goal premise check (`goal.md` §Challenge
 |---|---|---|---|
 | guest CPU × run | SIGKILL at deadline, `timeout` | limits: busy loop, setInterval | → I4 |
 | guest heap × run | isolate disposed, `memory` | limits: heap growth | → I4 |
-| V8 fatal OOM × run | child reports, SIGKILL, `catastrophic-oom` | limits: `Array(2**28)` | → I4 |
-| child RSS × run | self-sample, SIGKILL, `rss` | limits: RSS cap 400 | → I4 |
+| V8 fatal OOM / child RSS × run | child reports or RSS watchdog, SIGKILL, `memory` | limits: `Array(2**28)` + peak RSS | → I4 |
 | guest output × run | discard past cap, `truncated` | limits: cap + 256 MiB flood | → I4 |
-| child killed externally × run | `runCode` rejects naming the signal | lifecycle: `kill -9` | → I4 |
+| child killed externally / crash × run | `runCode` rejects at once naming code/signal | lifecycle: `kill -9` | → I4 |
 | concurrent calls × run | independent instances | lifecycle: 3 parallel | → I2 |
 
 ## Out of scope
@@ -88,9 +103,12 @@ challenge: 2026-11-18 — inherits the goal premise check (`goal.md` §Challenge
   WebSocket, MessageChannel, `node:http`/`https`/`net`/`tls`/`dgram`/`http2`.
 - Identity ceilings (rifty's): `process.version`, `os.platform()`,
   `process.cwd()`, empty `process.env`, `process.argv`.
-- stdin, ESM input (`--input-type=module`), `-p`, TypeScript input.
+- ESM syntax in `-e` → `NotImplementedError('isolate-host.node-eval-esm')`;
+  `import()` → named rejection (unhandled: unreported).
+- stdin, `-p`, TypeScript input.
 
 ## Decisions
 
 - 2026-11-18 — stderr canonicalization only on uncaught-error rows; other rows exact.
+- re-cut: 2026-11-18 — manager amend (goal.md): I3 bridge-walk attack, I4 reasons `timeout`|`memory` + one memory knob + settle bound + child death, ESM and ceiling rows; ceiling rows run as expected failures — trace: I1, I3, I4
 - 2026-11-18 — the parity carrier lives with the package (it needs the package build) and imports the node-cli-eval projection rather than copying it.
