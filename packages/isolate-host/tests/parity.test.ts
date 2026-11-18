@@ -375,6 +375,35 @@ describe('declared ceilings fail loudly (I1 ceilings, scenario step 4)', () => {
     });
   }
 
+  // A rejection reason isolated-vm cannot copy out (function-bearing object, symbol)
+  // still fails the run, as Node does (stdout + status; Node's stderr wording differs).
+  for (const code of [
+    'Promise.reject({ f() {} })',
+    'Promise.reject(Symbol())',
+    'Promise.reject(1)',
+  ]) {
+    it(`uncopyable unhandled rejection reasons fail the run: ${code}`, async () => {
+      const oracle = nodeEval(code);
+      const result = await runCode(code);
+      expect({ stdout: result.stdout, exitCode: result.exitCode }).toEqual({
+        stdout: oracle.stdout,
+        exitCode: oracle.code,
+      });
+    });
+  }
+
+  for (const [api, code] of [
+    ['zlib', "require('zlib').gzip('x', () => {})"],
+    ['child_process', "require('child_process').execSync('ls')"],
+    ['worker_threads', "new (require('worker_threads').Worker)('1', { eval: true })"],
+  ] as const) {
+    it(`host-specific ceilings name their own API: ${api}`, async () => {
+      const result = await runCode(code);
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain(`NotImplementedError: Not implemented: isolate-host.${api} `);
+    });
+  }
+
   it('import() rejects with a named gap', async () => {
     const result = await runCode(
       "import('node:fs').then(() => console.log('LOADED'), (e) => console.log(e.message))",

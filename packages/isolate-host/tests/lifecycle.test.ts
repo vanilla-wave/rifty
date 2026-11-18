@@ -3,7 +3,7 @@
  * stay independent; a child killed from outside rejects loudly; the host
  * keeps working.
  */
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 import { runCode } from '../src/index.ts';
 import { childPids, waitFor } from './support.ts';
@@ -57,4 +57,33 @@ describe('runCode lifecycle faults', () => {
     expect(report.code).toBe('ENOENT');
     expect(report.ms).toBeLessThan(1000);
   });
+
+  it('a child whose consumer dies is not orphaned', async () => {
+    const dist = new URL('../dist/index.js', import.meta.url).href;
+    const consumer = spawn(
+      process.execPath,
+      [
+        '--input-type=module',
+        '-e',
+        `const { runCode } = await import(${JSON.stringify(dist)}); runCode('setTimeout(() => {}, 60000)', { timeoutMs: 60000 }); console.log('started');`,
+      ],
+      { stdio: ['ignore', 'pipe', 'ignore'] },
+    );
+    await new Promise((resolve) => consumer.stdout?.once('data', resolve));
+    const grandchild = await waitFor(() => childPids(consumer.pid)[0], 3000);
+    consumer.kill('SIGKILL');
+    await waitFor(
+      () => (childPids(1).includes(grandchild) || alive(grandchild) ? undefined : true),
+      3000,
+    );
+  });
 });
+
+function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}

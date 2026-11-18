@@ -78,6 +78,17 @@ describe('guest UTF-8 codec vs Node', () => {
     );
   });
 
+  it('a BOM after an invalid byte is kept, as Node (only a leading BOM is stripped)', () => {
+    for (const bytes of [
+      [255, 239, 187, 191, 97],
+      [0x61, 239, 187, 191],
+      [0xc2, 239, 187, 191],
+    ]) {
+      const input = Uint8Array.from(bytes);
+      expect(new GuestDecoder().decode(input)).toBe(new TextDecoder().decode(input));
+    }
+  });
+
   it('encode and encodeInto match, lone surrogates included', () => {
     const rand = prng(3);
     const units = [
