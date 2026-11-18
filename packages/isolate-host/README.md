@@ -119,8 +119,10 @@ Tested:
 
 The child starts with an empty environment. The child itself is treated as
 hostile: it reports through length-framed binary frames on a pipe that your
-process parses itself. Its memory is bounded by the output cap: about 2× the
-cap while a frame is in flight. A malformed or
+process parses itself. What your process keeps is bounded by the output cap
+(about 2× the cap while a frame is in flight). Transient RSS can reach several
+times the cap: ~6.5× for one cap-sized frame, ~100 MiB for a flood of tiny
+frames at the default 1 MiB cap. A malformed or
 out-of-protocol frame kills the child, and the call rejects with
 `isolate-host child protocol violation: …`.
 
