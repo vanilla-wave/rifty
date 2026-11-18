@@ -4,13 +4,13 @@ status: draft
 title: In the isolate host an uncaught throw from a queueMicrotask callback ends as a timeout, not exit 1
 created: 2026-11-18
 why: ADR-0557 §5 routes a throwing queueMicrotask callback to rifty's uncaught path; the run instead reports the error and then waits for the deadline. Present on main 4018de0fc and in the isolate-guest README embedder (hangs).
-sources: [docs/adr/distribution/0557-run-guest-code-in-a-disposable-child-process-holding-a-rifty-v8-isolate-isolated-vm.md, docs/backlog/epics/isolate-guest-embed/ledger.md]
+sources: [docs/adr/distribution/0557-run-guest-code-in-a-disposable-child-process-holding-a-rifty-v8-isolate-isolated-vm.md, docs/adr/distribution/0558-export-the-isolate-guest-bundle-and-bridge-contract-as-an-unstable-package.md]
 code: [packages/isolate-guest/src/guest/web-shim.ts, packages/isolate-guest/src/guest/entry.ts]
 ---
 
 ## Context
 
-Measured 2026-11-18 @ 2c80b0900 (found by the isolate-guest-embed Final+GREEN
+Measured 2026-11-18 @ 2c80b0900 (found by the goal isolate-guest-embed Final+GREEN
 reviewer, also at 4018de0fc), Node v24.16.0, `runCode(code, { timeoutMs: 3000 })`:
 
 - `queueMicrotask(()=>{throw 1})` → Node exit 1, stderr `1` diagnostic; host

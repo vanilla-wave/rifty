@@ -7,7 +7,7 @@ Date: 2026-11
 
 ## Context
 
-Goal `isolate-guest-embed`. User (2026-11-18, via the manager): «сразу сделаем
+Goal `isolate-guest-embed` (closed 2026-11-18, PR #411). User (2026-11-18, via the manager): «сразу сделаем
 экспорт чистого rifty для кастомных интегарций. Ничего страшного, что контракт
 будет меняться». A consumer embeds rifty in its own isolate (own isolated-vm,
 own topology) without ADR-0557's host. Before this ADR the bundle and the bridge
@@ -50,8 +50,7 @@ were internal to `@riftydev/isolate-host`, whose install pulls
    a mismatch (no version handshake — the contract does not need one).
 6. Proven on isolated-vm 7.0.2 / Node 24 (the README example over the
    isolate-host parity corpus). isolated-vm 6.2.0 has neither
-   `onUnhandledRejection` nor `importModuleDynamically` (probe 2026-11-18,
-   goal ledger): an unhandled rejection rejects the embedder's call instead of
+   `onUnhandledRejection` nor `importModuleDynamically` (probe below): an unhandled rejection rejects the embedder's call instead of
    failing the run, `import()` rejects `Not supported` in the guest and a
    `.catch` keeps the run alive — a declared ceiling, compat ⚠️. Other
    embedders: untested.
@@ -61,6 +60,15 @@ were internal to `@riftydev/isolate-host`, whose install pulls
 Not guaranteed to an embedder: ADR-0557's limits, kill, process boundary and
 isolate-escape posture; with its own embedder they are its duty (README §What
 you own).
+
+Probe (2026-11-18, Node v24.16.0): `new ivm.Isolate({memoryLimit: 32,
+onUnhandledRejection, importModuleDynamically})`; `ctx.evalClosure('globalThis.h
+= { a: $0 }; h.a(new Uint8Array([1,2]))', [new ivm.Callback(log)])`;
+`ctx.eval('Promise.reject(new Error("x")); import("x").then(()=>{}, (e) =>
+h.a("import rejected: " + e.message))')`. 7.0.2: `cb got Uint8Array(2) [ 1, 2 ]`
+/ `HOOK import` / `HOOK onUnhandledRejection x` / `cb got import rejected: no`.
+6.2.0: `cb got Uint8Array(2) [ 1, 2 ]` / `cb got import rejected: Not supported`
+/ the embedder's `eval` rejects `Error: x` — neither hook fires.
 
 ## Not the user's words
 
@@ -80,3 +88,5 @@ Manager decision 2026-11-18: isolated-vm 6.2.0 stays a declared ceiling.
 ## Decisions
 
 - 2026-11-18 — cross-review round 1: the guest clock starts at `createHostBridge` (`timeOrigin` returned by it, `now()` relative), not the embedder's process start — an in-process embedder leaked its uptime and linked calls; `runCode`'s guest clock now starts at the child's bridge setup. `guard` passes only refusals it created (by identity). The README example refuses isolated-vm < 7 and states it has no limits; the timer `fire` queue is unbounded embedder memory (compat ⚠️, backpressure owned by `backlog/distribution/isolate-host-timer-fire-backpressure`, due with the pool goal). The `isolate-host bridge:` prefix stays (one name with the other guest-visible `isolate-host.*` texts).
+- 2026-11-18 — CLOSE review: the README example's write hook keeps `ended ||` — without it guest output after the `import()` gap leaked into the result nondeterministically (34/40 runs); carriers pin the post-gap forms. Landing verdict: `docs/backlog/distribution/reference/isolate-guest-embed-final-green.json` (PASS @ a1bcea70a, goal complete).
+- 2026-11-18 — not the user's words (manager, cross-review round 1): `runCode`'s guest clock origin moved to the child's bridge setup — an observable `runCode` change outside the goal's "no change" line, declared in the isolate-host CHANGELOG; closer to `node -e`.
