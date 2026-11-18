@@ -21,7 +21,10 @@ are dropped too (`process.on('exit', () => Promise.reject(1).catch(() => console
 → Node prints `caught`, rifty does not). The late-catch evidence was collected
 in the isolate host, where isolated-vm adds ~10 ms before reporting a plain
 rejection (instrumented child: catch @268 ms, report @280 ms); reproduce on
-the browser `node -e` path before fixing here. Open: whether the rejection should
+the browser `node -e` path before fixing here. Also: a handler chained after a
+`fs.promises` call (`const p = Promise.reject(e); fs.promises.readFile('/nope').catch(() => {}).then(() => p.catch(…))`)
+attaches before the unhandled check because rifty's `fs.promises` settles in
+microtasks → exit 0, Node 1. Open: whether the rejection should
 terminate before the next macrotask in every realm (kernel child, no-COI,
 isolate) — `awaitDrain` owner.
 

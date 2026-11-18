@@ -94,7 +94,10 @@ Known differences:
 - An uncaught error that is not a `throw` statement (e.g. `undefined.x`)
   prints without Node's `[eval]:1` source header.
 - An unhandled rejection fails at rifty's next event-loop check, not at once: a
-  `.catch` attached from a later timer still runs first.
+  `.catch` attached from a later timer may still run first. A rejection whose
+  handler comes from a timer that expired while the rejecting task ran, or
+  that is chained after an `fs.promises` call, can go unreported (exit 0;
+  Node exits 1).
 - An `unref()`'d timer may still fire during the few ms the run takes to
   confirm its loop is idle.
 - An `unhandledRejection` listener receives a copy of the reason, and

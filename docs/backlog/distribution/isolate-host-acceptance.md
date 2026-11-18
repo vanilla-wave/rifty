@@ -77,7 +77,7 @@ challenge: 2026-11-18 — inherits the goal premise check (`goal.md` §Challenge
 - Identity ceilings (rifty's): `process.version`, `os.platform()`,
   `process.cwd()`, empty `process.env`, `process.argv`.
 - ESM syntax in `-e` → `NotImplementedError('isolate-host.node-eval-esm')`;
-  `import()` → named rejection (unhandled: exit 1 from any task, incl. a handler attached in a later task).
+  `import()` → named rejection (unhandled: exit 1 from any task, incl. a handler attached in a later task; except a handler from a timer that expired while the importing task ran — compat ⚠️).
 - stdin, `-p`, TypeScript input.
 
 ## Decisions
@@ -86,6 +86,7 @@ ready-verdict: 2026-11-18 — Contract+RED @ 9e76eb622
 
 - re-cut: 2026-11-18 — import() unhandled detection trimmed to isolated-vm's report after three Final+GREEN rounds on that boundary (late handler → exit 0, compat ⚠️, `distribution/isolate-host-import-late-handler`) — trace: ADR-0557
 - re-cut: 2026-11-18 — trim reverted: the late-handler case is fixed (empty isolate task after each import request flushes isolated-vm's unhandled report) and carried by a parity row — trace: ADR-0557
+- re-cut: 2026-11-18 — import() handler from a timer queued before the import request declared ⚠️ (REV-7, 5th instance; ordering needs a guest-owned import(), `distribution/isolate-host-import-before-queued-timer`) — trace: ADR-0557
 - 2026-11-18 — stderr canonicalization only on uncaught-error rows; stdout and every other stderr compared raw (no CRLF/ANSI normalization).
 - re-cut: 2026-11-18 — manager amend (goal.md): I3 bridge-walk attack, I4 reasons `timeout`|`memory` + one memory knob + settle bound + child death, ESM and ceiling rows; ceiling rows run as expected failures — trace: I1, I3, I4
 - 2026-11-18 — the parity carrier lives with the package (it needs the package build) and imports the node-cli-eval projection rather than copying it.

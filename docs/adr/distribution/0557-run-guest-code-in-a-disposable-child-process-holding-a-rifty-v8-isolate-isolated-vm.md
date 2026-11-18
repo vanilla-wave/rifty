@@ -86,7 +86,11 @@ blocks it.
    import() — the rejection lands in a live process (listeners, `'exit'`,
    `process.exit` as in Node). isolated-vm flushes unhandled rejections only in
    a task epilogue, so the import request also queues one empty isolate task:
-   the report precedes any later guest task that could attach a handler. `node -e`'s builtin-module globals are
+   the report precedes guest tasks queued after the import. Declared ⚠️: a
+   timer that expired while the importing task ran is already queued ahead of
+   the import request; its handler suppresses the report (exit 0; Node 1).
+   Ordering those needs the guest to own import() (source rewrite) — not
+   built here. `node -e`'s builtin-module globals are
    lazy getters over the rifty loader (Node v24.16.0 list); a test asserts the
    guest has every global name live `node -e` defines.
 6. Egress: `fetch`/`WebSocket` loud (5); `node:http`, `https`, `net` register
