@@ -12,9 +12,9 @@
  *  - the host writes no stderr text of its own (beyond the two declared
  *    diagnostics, ADR-0557 §6).
  *
- * The guest bundle's tail runs in the guest realm too; it avoids every lookup
- * measured to steer it (the hooks below fire only inside its helpers). That is
- * measured, not proven exhaustive — the promises above do not rest on it.
+ * The guest bundle's tail runs in the guest realm too. It keeps the few
+ * captures that hold measured cases (the hooks below fire only inside its
+ * helpers); the promises above do not rest on it (ADR-0557 §6).
  *
  * Node's exact status needs rifty's runtime intact. rifty's runtime does not
  * use primordials, so a guest that replaces intrinsics it uses can change its

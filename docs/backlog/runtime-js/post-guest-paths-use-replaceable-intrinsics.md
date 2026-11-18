@@ -29,8 +29,8 @@ and a `Reflect.get` that forges the lifecycle slot makes a throwing run exit 0.
 captured); `Function.prototype.bind = function () { throw new Error('b') }; console.log(1)`
 → exit 1 at `keepaliveState`, Node 0; `setTimeout((a) => { process.stdout.write(String(a) + '\n') }, 5, 'arg'); Array.prototype[Symbol.iterator] = function* () {}`
 → prints `undefined`, Node `arg` (the runtime timer wrapper spreads its
-arguments). The isolate host's own tail avoids every lookup measured to steer
-it (ADR-0557 §6, measured, not exhaustive); these are the runtime's paths,
+arguments). The isolate host's own tail keeps only the captures that hold
+measured cases (ADR-0557 §6); these are the runtime's paths,
 shared with the browser realms. Parts of
 runtime-js already capture primordials (`reflectApplyPrimordial` in
 `module-loader`, `process.ts`); the lifecycle modules do not. A guest hanging
