@@ -32,6 +32,9 @@ const HOSTILE: Readonly<Record<string, string>> = {
     "[{ type: 'output', chunks: [[1, new Uint8Array(1)], [2, new Uint8Array(0)]], truncated: false }]",
   'output with no new bytes': "[{ type: 'output', chunks: [], truncated: false }]",
   'repeated ready': "[{ type: 'ready' }]",
+  'output with an extra key (padding)':
+    "[{ type: 'output', chunks: [[1, new Uint8Array([65])]], truncated: false, pad: 'x'.repeat(1 << 20) }]",
+  'exit with an extra key': "[{ type: 'exit', exitCode: 0, truncated: false, extra: 1 }]",
   'exit code string': "[{ type: 'exit', exitCode: 'pwn', truncated: false }]",
   'exit code fraction': "[{ type: 'exit', exitCode: 1.5, truncated: false }]",
   'exit code out of range': "[{ type: 'exit', exitCode: 300, truncated: false }]",

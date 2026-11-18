@@ -54,6 +54,34 @@ function limit(
   return value;
 }
 
+const MESSAGE_KEYS: Readonly<Record<string, readonly string[]>> = {
+  ready: ['type'],
+  output: ['type', 'chunks', 'truncated'],
+  exit: ['type', 'exitCode', 'truncated'],
+  memory: ['type', 'truncated'],
+  error: ['type', 'message'],
+};
+
+/** Accepted output, copied into one growable buffer: never a view into an IPC message. */
+class FdBytes {
+  #buf = new Uint8Array(0);
+  #len = 0;
+  append(bytes: Uint8Array): void {
+    if (this.#len + bytes.byteLength > this.#buf.byteLength) {
+      const grown = new Uint8Array(
+        Math.max(this.#len + bytes.byteLength, this.#buf.byteLength * 2, 4096),
+      );
+      grown.set(this.#buf.subarray(0, this.#len));
+      this.#buf = grown;
+    }
+    this.#buf.set(bytes, this.#len);
+    this.#len += bytes.byteLength;
+  }
+  text(): string {
+    return Buffer.from(this.#buf.buffer, 0, this.#len).toString('utf8');
+  }
+}
+
 /** What the consumer has accepted so far: the protocol state a message is judged against. */
 interface ProtocolState {
   ready: boolean;
@@ -70,6 +98,11 @@ interface ProtocolState {
 function violation(message: unknown, cap: number, state: ProtocolState): string | null {
   if (typeof message !== 'object' || message === null) return 'non-object message';
   const m = message as Record<string, unknown>;
+  // Exact keys: an extra key is unvalidated padding riding on an accepted message.
+  const keys = MESSAGE_KEYS[m.type as string];
+  if (keys === undefined) return 'message type';
+  if (Object.keys(m).length !== keys.length || !keys.every((k) => Object.hasOwn(m, k)))
+    return `${String(m.type)} message keys`;
   if (m.type !== 'ready' && !state.ready) return 'message before ready';
   switch (m.type) {
     case 'ready':
@@ -134,18 +167,17 @@ export function runCode(code: string, options: RunCodeOptions = {}): Promise<Run
       stdio: ['ignore', 'ignore', 'pipe', 'ipc'],
       serialization: 'advanced',
     });
-    const out: Uint8Array[] = [];
-    const err: Uint8Array[] = [];
+    const out = new FdBytes();
+    const err = new FdBytes();
     const state: ProtocolState = { ready: false, kept: 0, truncated: false };
     let stderrTail = '';
     child.stderr?.on('data', (data: Buffer) => {
       stderrTail = (stderrTail + data.toString('utf8')).slice(-STDERR_TAIL_BYTES);
     });
     let outcome: { readonly result: RunCodeResult } | { readonly error: Error } | undefined;
-    const text = (chunks: Uint8Array[]): string => Buffer.concat(chunks).toString('utf8');
     const result = (exitCode: number | null, termination?: RunCodeTermination): RunCodeResult => ({
-      stdout: text(out),
-      stderr: text(err),
+      stdout: out.text(),
+      stderr: err.text(),
       exitCode,
       ...(termination === undefined ? {} : { termination }),
       ...(state.truncated ? { truncated: true as const } : {}),
@@ -177,7 +209,7 @@ export function runCode(code: string, options: RunCodeOptions = {}): Promise<Run
           state.truncated ||= m.truncated;
           for (const [fd, bytes] of m.chunks) {
             state.kept += bytes.byteLength;
-            (fd === 2 ? err : out).push(bytes);
+            (fd === 2 ? err : out).append(bytes);
           }
           return;
         case 'exit':

@@ -95,11 +95,13 @@ blocks it.
    `__riftyIsolateHost` — untrusted surface: every argument is validated in the
    child (`src/child/bridge.ts`), refusals are guest-safe `TypeError`s with no
    host frame. The consumer validates every child IPC message against the
-   protocol state (one `ready`; output only with new non-empty bytes or the one
+   protocol state (exact keys per type; one `ready`; output only with new
+   non-empty bytes or the one
    truncation flip, ≤ 2 chunks, total ≤ cap; integer exit code 0..255): a
    violation kills the child and rejects `isolate-host child protocol
    violation: …` (a child after an isolate escape is hostile). So a child can
-   make the consumer hold at most the cap in at most cap + 2 messages; one
+   make the consumer hold at most the cap (copied into one buffer per fd,
+   never a view into an IPC message) in at most cap + 2 messages; one
    oversized message still costs its size transiently, because Node IPC
    deserializes before validation (declared, README).
 7. Dependency: `isolated-vm@7.0.2` exact (ships prebuilds linux-x64/arm64,
