@@ -97,8 +97,14 @@ blocks it.
    the process lifecycle); its arguments are still validated in the child
    (`src/child/bridge.ts`) with guest-safe `TypeError`s. What the run does
    after guest code — the fatal write, the natural exit — uses the host bridge
-   and the captured `process.exit`, never an object the guest can replace, so a
-   guest can neither forge nor mute an infrastructure failure. No Node IPC: the request goes as one JSON line on the child's
+   and the captured `process.exit`, never an object the guest can replace: one
+   total chokepoint (`settle`) takes the status from the runtime's own recorded
+   terminal (the only way to one is the real `process.exit`, so a thrown
+   `{code:'RIFTY_PROCESS_EXIT'}` lookalike cannot pick a status), writes the
+   diagnostic through the bridge with primordial-only encoding, and cannot
+   throw — so a guest can neither forge, mute nor redirect a failure. What the
+   *runtime* does after guest code is not hardened: a lookalike it reads, or a
+   poisoned intrinsic it uses, still shows (compat ⚠️, two backlog items). No Node IPC: the request goes as one JSON line on the child's
    stdin (kept open; its end tells the child the consumer died → self-kill),
    results come back as length-framed binary frames on fd 3 that the
    consumer parses itself (`src/protocol.ts`). A header announcing more than

@@ -18,6 +18,7 @@ import { installTimerGlobals } from '@riftydev/runtime-js/builtins/timers';
 import {
   handleRealmUncaughtError,
   handleRealmUnhandledRejection,
+  readNodeProcessTerminal,
   setDefaultProcessOutputSink,
 } from '@riftydev/runtime-js/internal';
 import { createModuleLoader } from '@riftydev/runtime-js/loader';
@@ -34,6 +35,12 @@ import {
 } from './web-shim.ts';
 
 bindNotImplemented(NotImplementedError);
+
+// Captured before guest code: the post-guest tail uses no replaceable member.
+const stringIncludesPrimordial = String.prototype.includes;
+const reflectApplyPrimordial = Reflect.apply;
+const stringIncludes = (haystack: string, needle: string): boolean =>
+  reflectApplyPrimordial(stringIncludesPrimordial, haystack, [needle]) as boolean;
 
 const CWD = '/workspace';
 /**
@@ -138,18 +145,77 @@ const HOST_CEILING_MODULES = {
   worker_threads: 'no Workers in the rifty isolate host',
 } as const;
 
-function exitCodeOf(reason: unknown): number | null {
-  if (typeof reason !== 'object' || reason === null) return null;
-  const r = reason as { code?: unknown; exitCode?: unknown };
-  return r.code === 'RIFTY_PROCESS_EXIT' && typeof r.exitCode === 'number' ? r.exitCode : null;
+/**
+ * The run's terminal, decided by the runtime and the host alone (ADR-0557 §5).
+ *
+ * Everything here runs AFTER guest code, so it reads no value the guest can
+ * forge: the status is the runtime's own recorded terminal — the only way to
+ * one is the real `process.exit`, so a thrown
+ * `{code:'RIFTY_PROCESS_EXIT'}` lookalike cannot pick a status — the
+ * diagnostic goes straight to the host bridge, and every step is total, so a
+ * throw here still ends the run with a status instead of a host failure.
+ */
+function settle(caught: unknown): number {
+  // The runtime's own terminal for this process; its `exitCode` is already
+  // clamped by the runtime (`toUint8ExitCode`).
+  try {
+    const terminal = readNodeProcessTerminal(riftyProcess);
+    if (terminal !== null) {
+      const code = terminal.exitCode;
+      if (typeof code === 'number' && Number.isInteger(code) && code >= 0 && code <= 255) {
+        return code;
+      }
+    }
+  } catch {
+    // A broken lifecycle read is a failed run, not an exit.
+  }
+  writeDiagnostic(esmGapOf(caught) ?? caught);
+  return 1;
 }
 
-function writeFatal(error: unknown): void {
-  const text =
-    error instanceof Error ? (error.stack ?? `${error.name}: ${error.message}`) : String(error);
-  // Straight to the host, as Node's fatal path bypasses a replaced
-  // `process.stderr.write`: guest code must not forge or mute a failure.
-  writeHost(2, `${text}\n`);
+/**
+ * Node runs `-e` input with ESM syntax as a module; this host evaluates
+ * CommonJS, so V8's syntax error means the declared gap. Total: a poisoned
+ * `message` or `instanceof` leaves the original error.
+ */
+function esmGapOf(caught: unknown): Error | null {
+  try {
+    const message = (caught as SyntaxError).message;
+    if (typeof message !== 'string') return null;
+    if (!ESM_SYNTAX.some((m) => stringIncludes(message, m))) return null;
+    return new NotImplementedError(
+      'isolate-host.node-eval-esm',
+      'Node runs -e input with ESM syntax as a module; this host evaluates CommonJS only — use require()',
+    );
+  } catch {
+    return null;
+  }
+}
+
+/** Write the guest's error as Node's fatal path does; never throws. */
+function writeDiagnostic(error: unknown): void {
+  for (const render of [
+    () => (error as Error).stack,
+    () => {
+      const { name, message } = error as Error;
+      return typeof name === 'string' && typeof message === 'string'
+        ? `${name}: ${message}`
+        : undefined;
+    },
+    () => (error as Error).message,
+    // A non-Error throw: its type, never a coercion the guest controls.
+    () => `isolate-host: the run threw a non-Error value (${typeof error})`,
+  ]) {
+    try {
+      const text = render();
+      if (typeof text === 'string' && text.length > 0) {
+        writeHost(2, `${text}\n`);
+        return;
+      }
+    } catch {
+      // This rendering is poisoned; try the next one.
+    }
+  }
 }
 
 /** The runtime's own `process.exit`, captured before guest code can replace it. */
@@ -166,12 +232,12 @@ function finish(code: number): void {
 
 /** An uncaught error the runtime did not claim (no eval lifecycle): Node's fatal exit. */
 function fatal(error: unknown): void {
-  writeFatal(error);
+  writeDiagnostic(error);
   finish(1);
 }
 
 async function run(source: string): Promise<void> {
-  let code: number;
+  let code = 0;
   try {
     installMemoryFs();
     syncMirror().mkdirSync(CWD, { recursive: true });
@@ -215,17 +281,10 @@ async function run(source: string): Promise<void> {
     nativeExit();
     throw new Error('isolate-host guest: process.exit() returned');
   } catch (caught) {
-    const error =
-      caught instanceof SyntaxError && ESM_SYNTAX.some((m) => caught.message.includes(m))
-        ? new NotImplementedError(
-            'isolate-host.node-eval-esm',
-            'Node runs -e input with ESM syntax as a module; this host evaluates CommonJS only — use require()',
-          )
-        : caught;
-    const exited = exitCodeOf(error);
-    if (exited === null) writeFatal(error);
-    code = exited ?? 1;
+    code = settle(caught);
   }
+  // `settle` is total, so this is reached on every path: the child never
+  // reports a guest error as its own failure.
   finish(code);
 }
 

@@ -39,6 +39,8 @@ export interface RunCodeResult {
 // `src/` in the workspace and `dist/` when packed are both one level under the package root.
 const CHILD_ENTRY = fileURLToPath(new URL('../dist/child.js', import.meta.url));
 const STDERR_TAIL_BYTES = 4096;
+/** How long a closed result channel waits for the child's own exit to explain it. */
+const CHANNEL_END_GRACE_MS = 50;
 
 const MAX_TIMER_MS = 2 ** 31 - 1;
 
@@ -195,12 +197,14 @@ export function runCode(code: string, options: RunCodeOptions = {}): Promise<Run
     const frames = child.stdio[FRAME_CHANNEL_FD] as NodeJS.ReadableStream | null;
     frames?.on('error', () => {});
     // The channel ending with no result is its own outcome, not a wait for the
-    // deadline. A dying child closes it too, so give its 'exit' (code/signal,
-    // the more precise outcome) one turn first.
+    // deadline. A dying child closes it too, and its 'exit' (code/signal) is the
+    // more precise outcome, so this only speaks for a child that is still alive.
     frames?.on('end', () => {
+      // A dying child closes the channel too, and its code/signal is the more
+      // precise outcome, so it gets one grace window to arrive first.
       setTimeout(() => {
         end({ error: new Error('isolate-host child closed its result channel without a result') });
-      }, 50).unref();
+      }, CHANNEL_END_GRACE_MS).unref();
     });
     frames?.on('data', (chunk: Buffer) => {
       if (outcome !== undefined) return;

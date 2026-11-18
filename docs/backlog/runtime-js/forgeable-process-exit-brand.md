@@ -1,0 +1,27 @@
+---
+area: runtime-js
+status: draft
+title: The RIFTY_PROCESS_EXIT brand is a plain property, so guest code can forge an exit
+created: 2026-11-18
+why: Every host realm recognises the runtime's exit signal by `code === 'RIFTY_PROCESS_EXIT'` on the thrown value, so guest code can throw a lookalike and choose its own exit status.
+sources: [docs/public/compat/isolate-host.md]
+code: [packages/runtime-js/src/builtins/process-lifecycle-events.ts, packages/runtime-js/src/internal/event-loop-keepalive.ts, packages/kernel/src/worker-entry.ts]
+---
+
+## Context
+
+`isRiftyProcessExit` (`process-lifecycle-events.ts:50`) matches any value with
+`code === 'RIFTY_PROCESS_EXIT'` and a numeric `exitCode`; the keepalive
+(`handleRealmUncaughtError`) and the kernel worker entry use the same shape.
+Measured in the isolate host (ADR-0557) @ 2cbb37c50:
+`runCode("setTimeout(() => { throw { code: 'RIFTY_PROCESS_EXIT', exitCode: 0 } }, 1)")`
+→ exit 0 with no diagnostic; `node -e` exits 1. The host's own tail now reads
+the runtime's recorded terminal instead of the thrown value, so a top-level
+forgery no longer works there, but a throw the *runtime* interprets still does.
+Fix direction: a private brand (symbol or class identity) checked by the
+runtime, so only the runtime's own signal counts. Browser kernel children share
+the shape, so the same forgery should be probed there.
+
+## Challenge
+
+challenge: 2026-11-18 — finding capture; no premise critic (README §Challenge)

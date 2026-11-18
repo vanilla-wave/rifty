@@ -5,9 +5,22 @@
  */
 import { notImplemented } from './loud.ts';
 
-// Captured at load, before guest code: a guest replacing the global must not
-// break the runtime's own encode/decode (nor the host's fatal path).
+// Captured at load, before guest code: a guest replacing a global or a
+// prototype member must not break the runtime's own encode/decode, nor mute the
+// host's fatal diagnostic (ADR-0557 §5).
 const Uint8ArrayPrimordial = Uint8Array;
+const reflectApplyPrimordial = Reflect.apply;
+const charCodeAtPrimordial = String.prototype.charCodeAt;
+const typedArraySlicePrimordial = Uint8Array.prototype.slice;
+const typedArraySetPrimordial = Uint8Array.prototype.set;
+const charCodeAt = (s: string, at: number): number =>
+  reflectApplyPrimordial(charCodeAtPrimordial, s, [at]) as number;
+const sliceBytes = (bytes: Uint8Array, start: number, end?: number): Uint8Array =>
+  reflectApplyPrimordial(typedArraySlicePrimordial, bytes, [start, end]) as Uint8Array;
+const setBytes = (target: Uint8Array, source: Uint8Array, at: number): void => {
+  reflectApplyPrimordial(typedArraySetPrimordial, target, [source, at]);
+};
+
 const UTF8_LABELS = new Set(['utf-8', 'utf8', 'unicode-1-1-utf-8']);
 const REPLACEMENT = 0xfffd;
 
@@ -43,7 +56,7 @@ export class TextEncoder {
     const s = String(input);
     const out = new Uint8ArrayPrimordial(s.length * 3);
     const { written } = encodeInto(s, out);
-    return out.slice(0, written);
+    return sliceBytes(out, 0, written);
   }
 
   encodeInto(input: string, dest: Uint8Array): { read: number; written: number } {
@@ -55,10 +68,10 @@ function encodeInto(s: string, dest: Uint8Array): { read: number; written: numbe
   let read = 0;
   let written = 0;
   while (read < s.length) {
-    let cp = s.charCodeAt(read);
+    let cp = charCodeAt(s, read);
     let units = 1;
     if (cp >= 0xd800 && cp <= 0xdbff && read + 1 < s.length) {
-      const low = s.charCodeAt(read + 1);
+      const low = charCodeAt(s, read + 1);
       if (low >= 0xdc00 && low <= 0xdfff) {
         cp = 0x10000 + ((cp - 0xd800) << 10) + (low - 0xdc00);
         units = 2;
@@ -131,8 +144,8 @@ export class TextDecoder {
     let bytes = fresh;
     if (this.#pending.length > 0) {
       bytes = new Uint8ArrayPrimordial(this.#pending.length + fresh.length);
-      bytes.set(this.#pending);
-      bytes.set(fresh, this.#pending.length);
+      setBytes(bytes, this.#pending, 0);
+      setBytes(bytes, fresh, this.#pending.length);
     }
     this.#pending = new Uint8ArrayPrimordial(0);
     const units: number[] = [];
@@ -184,7 +197,7 @@ export class TextDecoder {
         push(cp);
         i += need + 1;
       } else if (i + k >= bytes.length && stream) {
-        this.#pending = bytes.slice(i);
+        this.#pending = sliceBytes(bytes, i);
         break;
       } else {
         fail();

@@ -50,7 +50,6 @@ export type ChildFrame =
 export class FrameReader {
   #buf = new Uint8Array(0);
   #len = 0;
-  #done = false;
   /** `maxPayload(kind)` → the largest payload this kind may legally have now, or -1 for an unknown kind. */
   constructor(private readonly maxPayload: (kind: number) => number) {}
 
@@ -60,7 +59,6 @@ export class FrameReader {
    * settled and every later byte is ignored. Returns a violation, or null.
    */
   push(chunk: Uint8Array, onFrame: (kind: number, payload: Uint8Array) => boolean): string | null {
-    if (this.#done) return null;
     if (this.#len + chunk.byteLength > this.#buf.byteLength) {
       const grown = new Uint8Array(
         Math.max(this.#len + chunk.byteLength, this.#buf.byteLength * 2, 64),
@@ -83,12 +81,9 @@ export class FrameReader {
       // Copy: nothing handed out aliases the reader's buffer.
       const payload = this.#buf.slice(at + HEADER, at + HEADER + length);
       at += HEADER + length;
-      if (!onFrame(kind, payload)) {
-        this.#done = true;
-        this.#buf = new Uint8Array(0);
-        this.#len = 0;
-        return null;
-      }
+      // The run is settled: this chunk's remaining bytes, and every later
+      // chunk (the reader is not fed again), are ignored.
+      if (!onFrame(kind, payload)) return null;
     }
     this.#buf.copyWithin(0, at, this.#len);
     this.#len -= at;

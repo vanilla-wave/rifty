@@ -149,6 +149,16 @@ describe('consumer treats the child channel as hostile', () => {
     }
   });
 
+  it('a child that closes the channel and exits is reported by its own exit code', () => {
+    // Both the closed channel and the exit describe this run; the exit is the
+    // precise one, so it must win over the channel-closed outcome.
+    const entry = hostilePackage('closed then exit', 'closeSync(3); process.exit(7)');
+    const report = consume(entry, '{ timeoutMs: 5000, maxOutputBytes: 1024 }') as {
+      rejected?: string;
+    };
+    expect(report.rejected).toBe('isolate-host child exited unexpectedly (code 7, signal null)');
+  });
+
   it('a channel closed without a result is its own outcome, not the deadline', () => {
     // The child closes fd 3 and lives on; the call must not wait for timeoutMs.
     const entry = hostilePackage('channel closed', 'closeSync(3)');

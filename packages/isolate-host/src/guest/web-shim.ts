@@ -32,7 +32,10 @@ delete g.__riftyIsolateHost;
 // allocates through a captured `Uint8Array` (text-codec.ts).
 const hostEncoder = new TextEncoder();
 
-/** UTF-8 bytes straight to the host, bypassing anything the guest can replace. */
+/**
+ * UTF-8 bytes straight to the host, bypassing anything the guest can replace
+ * (the encoder and its allocations are primordial — text-codec.ts).
+ */
 export function writeHost(fd: 1 | 2, text: string): void {
   bridge.write(fd, hostEncoder.encode(text));
 }

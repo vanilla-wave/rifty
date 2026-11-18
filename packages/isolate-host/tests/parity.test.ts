@@ -118,6 +118,12 @@ const CORPUS: readonly Row[] = [
     ceiling: 'node -e ESM syntax detection (runtime-js/node-cli-esm-eval-context)',
   },
   {
+    // Kept literal: Node loads the module; here `import()` ends the run (ADR-0557 §5).
+    label: 'dynamic-import',
+    code: "import('node:fs').then((m) => console.log(typeof m.readFileSync, typeof m.default.writeFileSync))",
+    ceiling: 'import() ends the run (ADR-0557 §5)',
+  },
+  {
     label: 'builtin-module-globals',
     code: "console.log(path.join('a', 'b'), typeof fs.readFileSync, util.format('%d', 1), path === require('path'), typeof crypto.createHash); path = 5; console.log(path)",
   },
