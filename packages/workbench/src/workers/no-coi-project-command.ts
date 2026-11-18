@@ -212,10 +212,11 @@ export async function runNoCoiProjectCommand(
     );
     const unrestored = requiresTermination ? null : restoreGlobals();
     if (unrestored !== null) {
-      // A guest made it non-configurable: only a new realm returns it.
+      // A non-configurable binding or non-extensible globalThis: only a new realm returns it.
       requiresTermination = true;
       failure = new Error(
-        `node left globalThis.${unrestored} unrestorable in the reused realm; the Worker is replaced`,
+        `cannot restore globalThis.${unrestored} after this node process; the Worker is replaced`,
+        settled.ok ? undefined : { cause: settled.error },
       );
       throw new ShellCommandLifecycleError('Node process globals not restored', { cause: failure });
     }

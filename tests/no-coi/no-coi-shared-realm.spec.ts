@@ -77,6 +77,8 @@ const getGuest = `for (const name of ${JSON.stringify(NAMES)}) {
 
 const files: Readonly<Record<string, string>> = {
   'later.mjs': typeofRows,
+  'sealed-global.mjs': 'Object.preventExtensions(globalThis);\n',
+  'claim-require.mjs': "globalThis.require = 'guest';\n",
   'frozen-guest.mjs':
     "Object.defineProperty(globalThis, '__dirname', { value: 'frozen', writable: false, configurable: false });\n",
   'later.cjs': typeofRows,
@@ -431,4 +433,78 @@ test('a non-configurable guest global under an [eval] name fails a later eval lo
       line.startsWith('L|__dirname ') ? 'L|__dirname string:' : line,
     ),
   );
+});
+
+// Any `node` that makes globalThis non-extensible: the console mirror cannot return.
+test('a node that makes globalThis non-extensible fails loudly and replaces the Worker', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const steps = [file('sealed-global.mjs'), file('later.mjs')];
+  const native = await nativeOracle(steps);
+  const rifty = await runRifty(page, steps);
+  const label = `vs Node ${process.version}\n${JSON.stringify({ native, rifty }, null, 2)}`;
+  expect(native[0]!.code, label).toBe(0);
+  const failed = rifty[0]!;
+  expect(
+    { status: failed.status, exitCode: failed.exitCode, worker: failed.worker },
+    label,
+  ).toEqual({ status: 'failed', exitCode: null, worker: 'replaced' });
+  expect(failed.error, label).toContain('globalThis.require');
+  expect(rifty[1]!.worker, label).toBe('retained');
+  expectSameStatus(rifty[1]!, native[1]!, steps[1]!, label);
+  expect(rows(rifty[1]!.stdout), label).toEqual(rows(native[1]!.stdout));
+});
+
+// Rifty's console eval (ADR-0418 §6) keeps its `require` between commands; a
+// guest that claimed the name keeps it (declared shared realm).
+test('console eval keeps its require around project-command node', async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.goto('/no-coi-harness.html');
+  const seen = await page.evaluate(
+    async ({ root, projectRoot, files }) => {
+      const { createSandbox } = await import(`/@fs${root}/packages/rifty/src/index.ts`);
+      const sandbox = await createSandbox({
+        requireCrossOriginIsolation: false,
+        skipServiceWorker: true,
+        toolchain: {
+          workerUrl: `/@fs${root}/packages/workbench/src/workers/no-coi-toolchain-worker.ts`,
+        },
+      });
+      try {
+        await sandbox.fs.writeFile(`${projectRoot}/.keep`, '');
+        for (const [path, content] of Object.entries(files)) {
+          await sandbox.fs.writeFile(`${projectRoot}/${path}`, content);
+        }
+        const project = sandbox.project({ root: projectRoot });
+        const probe = async (): Promise<string> => {
+          await sandbox.runtime.eval(
+            `__rifty.require('node:fs').writeFileSync('${projectRoot}/console.txt', typeof require === 'function' ? 'require ' + typeof require('node:fs').readFileSync : typeof require)`,
+          );
+          return await project.fs.readFile('console.txt', 'utf8');
+        };
+        const out = [await probe()];
+        for (const line of [
+          'node -e "1"',
+          'node later.mjs',
+          'node later.cjs',
+          'node claim-require.mjs',
+        ]) {
+          const done = await project.run(line).completion;
+          out.push(`${line} ${done.status} ${done.worker}: ${await probe()}`);
+        }
+        return out;
+      } finally {
+        sandbox.dispose();
+      }
+    },
+    { root: process.cwd().replaceAll('\\', '/'), projectRoot: ROOT, files },
+  );
+  expect(seen).toEqual([
+    'require function',
+    'node -e "1" exited retained: require function',
+    'node later.mjs exited retained: require function',
+    'node later.cjs exited retained: require function',
+    'node claim-require.mjs exited retained: string',
+  ]);
 });
