@@ -50,8 +50,9 @@ challenge: 2026-11-18 — inherits the goal premise check (`goal.md` §Challenge
    `timerClear`, `now`, `random`; each argument is accepted only when the
    contract allows it (24 hostile values per argument); a refusal is a
    `TypeError` starting `isolate-host bridge: ` with no host path in its
-   stack; only valid calls reach the embedder hook; `now()` tracks the host
-   clock (`host-bridge.test.ts`) → I5
+   stack and has no effect — no host timer armed or cleared (active `Timeout`
+   count), no hook reached; `now()` tracks the host clock
+   (`host-bridge.test.ts`) → I5
 5. A throwing `write` hook reaches the guest as
    `TypeError: isolate-host bridge: write failed`, no host path; a throwing
    `fire` hook (a disposed isolate) raises no uncaught host error and ends
@@ -77,8 +78,24 @@ challenge: 2026-11-18 — inherits the goal premise check (`goal.md` §Challenge
     without them; that time/heap/RSS/output limits, the kill, the process
     boundary and the isolate-escape posture are the embedder's; the tested
     isolated-vm 7.0.2 and the 6.2.0 / other-embedder ceilings; the unstable
-    status and what it means for versions. `embedder.test.ts` pins that each
-    name appears → I4, scenario
+    status and what it means for versions; that the export bounds neither the
+    number of host timers nor output bytes (embedder's limits); what a guest
+    loses on isolated-vm 6.2.0 (no `onUnhandledRejection`: an unhandled
+    rejection rejects the embedder's call instead of failing the run with
+    Node's diagnostic; no `importModuleDynamically`: `import()` rejects
+    `Not supported` in the guest and a `.catch` keeps the run alive).
+    `embedder.test.ts` pins that each name appears → I4, scenario
+
+11. Through the README embedder, `import()` in every form `runCode` parity
+    runs (top level, async `await`, `eval`, `new Function`, `.then` with a
+    handler, `.catch` + `exit(0)`, a timer, after output, `.catch` printing the
+    stack) and the three uncopyable/plain rejections give exactly `runCode`'s
+    `{stdout, stderr, exitCode}` (the gap line, exit 1, nothing after the gap,
+    the uncopyable diagnostic), with no host path (`embedder.test.ts`) → I1,
+    ADR-0557
+12. A guest interval still armed at `process.exit(0)`: the README embedder's
+    process exits on its own within 20 s, result `{stdout: 'x\n', stderr: '',
+    exitCode: 0}` (`embedder.test.ts`) → I5
 
 ## Reference contract
 
@@ -87,8 +104,20 @@ challenge: 2026-11-18 — inherits the goal premise check (`goal.md` §Challenge
 - Mechanism: `canonicalNodeCliEvalOutcome` (tools/node-parity-runner) for
   uncaught-error rows only, via `parityView` (`tests/corpus.ts`).
 
+## Fault matrix
+
+| axis × operation | honest outcome | artifact / fault target | trace |
+|---|---|---|---|
+| embedder `write` hook throws × guest write | guest sees `TypeError: isolate-host bridge: write failed`, no host path | acceptance 5 | I5 |
+| embedder `fire` hook throws (isolate disposed) × timer tick | no uncaught host error; that timer ends | acceptance 5 | I5 |
+| call ends with timers armed × `close()` | every bridge timer cleared; later `timerStart` a no-op | acceptance 6, 12 | I5 |
+| guest status not an integer 0..255 × `exitStatus` | exit 1 | acceptance 7 | I5 |
+| guest `import()` × embedder hook | run ends: gap line, exit 1, later guest output dropped | acceptance 11 | I1 |
+| uncopyable rejection reason × `onUnhandledRejection` | `UNCOPYABLE_REJECTION` sent, run fails as `runCode` | acceptance 3, 11 | I1 |
+
 ## Out of scope
 
 - isolated-vm 6.2.0 and other embedders (declared ceilings, goal §Outcome).
 
 ## Decisions
+- Contract+RED @ a871a712f: BLOCK — 2 blockers (no RED for the embedder's `import()` hook; a refused `timerStart` could still arm) fixed in rows 4, 11; concerns taken: rows 11 (uncopyable vs `runCode`), 12 (`close()` through the README embedder), README timer/output bounds, fault matrix, separate install dirs. Not taken: an embedder analog of `child-trust` (the real bundle hands back only numbers; `exitStatus` row 7 covers the judgement).

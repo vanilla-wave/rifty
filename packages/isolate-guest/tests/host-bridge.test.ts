@@ -68,6 +68,9 @@ const VALID: Readonly<Record<string, (v: unknown) => boolean>> = {
   'random(n)': (v) => Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 65536,
 };
 
+/** Live host timers of this process. */
+const timeouts = () => process.getActiveResourcesInfo().filter((r) => r === 'Timeout').length;
+
 const HOST_PATH = /file:|node:internal|\/node_modules\/|\.ts:|\.js:/;
 
 describe('createHostBridge argument validation (I5)', () => {
@@ -101,12 +104,16 @@ describe('createHostBridge argument validation (I5)', () => {
       for (const g of GARBAGE) {
         for (const [label, call] of calls) {
           let refused: unknown;
+          const armed = timeouts();
           try {
             call(g);
           } catch (error) {
             refused = error;
           }
           const allowed = (VALID[label] as (v: unknown) => boolean)(g);
+          // A refused call has no effect: no host timer armed (or cleared).
+          if (refused !== undefined && timeouts() !== armed)
+            bad.push(`${label} armed on ${String(g).slice(0, 20)}`);
           if (refused === undefined) {
             if (!allowed) bad.push(`${label} accepted ${String(g).slice(0, 20)}`);
             continue;
@@ -169,7 +176,6 @@ describe('createHostBridge argument validation (I5)', () => {
 
   carrier('timers fire by id; close() stops every timer and arms no new one', async () => {
     const { createHostBridge } = await load();
-    const timeouts = () => process.getActiveResourcesInfo().filter((r) => r === 'Timeout').length;
     const fired: number[] = [];
     const { functions, close } = createHostBridge({
       write: () => {},
