@@ -55,10 +55,10 @@ export class FrameReader {
 
   /**
    * Feed bytes, handing each complete frame to `onFrame` as it is parsed, so
-   * parsing and handling interleave: once `onFrame` returns false the run is
-   * settled and every later byte is ignored. Returns a violation, or null.
+   * parsing and handling interleave (the caller ignores frames once its run is
+   * settled). Returns a violation, or null.
    */
-  push(chunk: Uint8Array, onFrame: (kind: number, payload: Uint8Array) => boolean): string | null {
+  push(chunk: Uint8Array, onFrame: (kind: number, payload: Uint8Array) => void): string | null {
     if (this.#len + chunk.byteLength > this.#buf.byteLength) {
       const grown = new Uint8Array(
         Math.max(this.#len + chunk.byteLength, this.#buf.byteLength * 2, 64),
@@ -81,9 +81,7 @@ export class FrameReader {
       // Copy: nothing handed out aliases the reader's buffer.
       const payload = this.#buf.slice(at + HEADER, at + HEADER + length);
       at += HEADER + length;
-      // The run is settled: this chunk's remaining bytes, and every later
-      // chunk (the reader is not fed again), are ignored.
-      if (!onFrame(kind, payload)) return null;
+      onFrame(kind, payload);
     }
     this.#buf.copyWithin(0, at, this.#len);
     this.#len -= at;

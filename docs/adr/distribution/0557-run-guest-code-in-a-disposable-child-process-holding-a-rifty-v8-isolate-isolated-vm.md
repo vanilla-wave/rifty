@@ -99,13 +99,14 @@ blocks it.
    after guest code — the fatal write, the natural exit — uses the host bridge
    and the captured `process.exit`. The guest realm is the guest's, so no
    lookup there is authority, and the guest bundle's own tail runs there too.
-   It avoids every lookup measured to steer a run: it chains on the runtime's
-   promises through `onSettled` (captured `then`, an own `constructor:
-   undefined` so the species takes the default), keeps timers and encodes
-   through captured members, iterates by index, renders a fatal error with the
-   runtime's own `formatThrown`, and hands the status over as ONE PRIMITIVE
-   (resolving with a number does no `then` lookup). That is measured, not
-   proven exhaustive — the host's promises do not rest on it: the CHILD
+   It keeps the few captures that hold measured cases — `onSettled` (captured
+   `then`, an own `constructor: undefined` so the species takes the default),
+   captured `Map` members for its timer table, the captured `Promise` in
+   `queueMicrotask`, `writeHost` beside `process.stderr.write`, the captured
+   `process.exit` — renders a fatal error with the runtime's own
+   `formatThrown`, and hands the status over as ONE PRIMITIVE (resolving with
+   a number does no `then` lookup). No more than that: the host's promises do
+   not rest on the guest realm: the CHILD
    validates the primitive in its own realm (a non-integer or out-of-range
    status, a rejected tail or a throw is exit 1) and the consumer bounds the
    call, so whatever runs in the isolate, `runCode` resolves within
@@ -173,5 +174,6 @@ memory invariant — pending the user, not built.
 ## Corrections
 
 - 2026-11-18 — §6: the status crossed as `{code, diagnosed}`; a guest `Object.prototype.then` rewrote it (resolution looks up `then` on objects). Now one integer, and an unusable status is exit 1 with no child-written stderr line (that line broke §1 "stderr is guest bytes only"); `diagnosed` removed with it.
-- 2026-11-18 — §6: the tail's native `await`s let a guest `Promise.prototype.constructor`/`then` skip the drain (a timer throw read clean 0); now captured-`then` chaining and index loops. The earlier claim "only N named routes read clean" is dropped: rifty's runtime, not the host, decides the status in a shared realm, so the class is open (manager decision 2026-11-18, `goal.md` Decisions: the boundary is the child, not the guest realm; self-poisoning that changes the guest's own result is a declared fidelity gap, not fixed vector by vector).
-- 2026-11-18 — §6: verify @ 937595c70 hooked four host-owned lookups by frame name (the captured `then`'s species read, `TextEncoder.prototype.encode` in `writeHost`, `Map.prototype.get` and the spread in `fireTimer`, the live `Promise` in `queueMicrotask`) — all captured now; and the fatal fallback wrote host text for ordinary non-Error throws (`throw 'oops'`) — now the runtime's `formatThrown`, no fallback line. The tail is declared measured-not-exhaustive; the host's promises are the child's and the consumer's.
+- 2026-11-18 — §6: the tail's native `await`s let a guest `Promise.prototype.constructor`/`then` skip the drain (a timer throw read clean 0); now captured-`then` chaining. The earlier claim "only N named routes read clean" is dropped: rifty's runtime, not the host, decides the status in a shared realm, so the class is open (manager decision 2026-11-18, `goal.md` Decisions: the boundary is the child, not the guest realm; self-poisoning that changes the guest's own result is a declared fidelity gap, not fixed vector by vector).
+- 2026-11-18 — §6: verify @ 937595c70 hooked host-owned lookups by frame name (the captured `then`'s species read, `TextEncoder.prototype.encode` in `writeHost`, `Map.prototype.get` in `fireTimer`, the live `Promise` in `queueMicrotask`); they were captured before the manager bounded the class at the child, and stay because each holds a measured case (mutants killed) — not as a policy: under that bound no further in-realm vector is chased. The fatal fallback wrote host text for ordinary non-Error throws (`throw 'oops'`) — now the runtime's `formatThrown`, no fallback line.
+- 2026-11-18 — §6, cross-review 3 (REV-7): captures that served only the guest's own result went — the `writeDiagnostic` render cascade (one `formatThrown`, nothing written if it throws), the index loops and captured `includes` in `esmGapOf`, the captured `Promise` in `run`, the spread capture in `Timeout`, the child's dead `early` timer buffer, the `onFrame` bool (the consumer's `end` is idempotent).

@@ -124,6 +124,10 @@ const CORPUS: readonly Row[] = [
     ceiling: 'import() ends the run (ADR-0557 §5)',
   },
   {
+    label: 'timer-delay-coercion',
+    code: "for (const d of [1n, Symbol('s')]) { try { setTimeout(() => {}, d); console.log('ran') } catch (e) { console.log(e.name + ': ' + e.message) } } setTimeout(() => console.log('string delay'), '5')",
+  },
+  {
     // Kept literal: Node also prints a TimeoutOverflowWarning on stderr.
     label: 'timer-delay-out-of-range',
     code: "setTimeout(() => console.log('t'), 2 ** 31); const t = setInterval(() => { console.log('i'); clearInterval(t) }, 3e9)",

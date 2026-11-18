@@ -194,8 +194,8 @@ class Timeout {
     readonly repeat: boolean,
   ) {}
   _onTimeout(): void {
-    // No spread: it iterates through the guest-replaceable array iterator.
-    reflectApplyPrimordial(this.fn, undefined, this.args);
+    const fn = this.fn;
+    fn(...this.args);
   }
 }
 const timers = new Map<number, Timeout>();
@@ -210,7 +210,8 @@ function startTimer(repeat: boolean, fn: unknown, ms: unknown, args: unknown[]):
   ]);
   // Node's `Timeout`: a delay outside 1..2^31-1 (or NaN) runs after 1 ms. Its
   // `Timeout*Warning` is rifty's gap (`backlog/runtime-js/timeout-delay-warnings`).
-  const delay = Number(ms);
+  // Node's `after *= 1`: a BigInt or Symbol delay throws, as there.
+  const delay = (ms as number) * 1;
   bridge.timerStart(id, delay >= 1 && delay <= MAX_TIMER_MS ? delay : 1, repeat);
   return id;
 }

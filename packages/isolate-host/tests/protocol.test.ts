@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
+import { FrameReader, KIND, frame } from '../src/protocol.ts';
 
 const PACKAGE_DIR = fileURLToPath(new URL('..', import.meta.url));
 const work = mkdtempSync(join(tmpdir(), 'isolate-host-hostile-'));
@@ -170,5 +171,58 @@ describe('consumer treats the child channel as hostile', () => {
     expect(report.rejected).toBe('isolate-host child closed its result channel without a result');
     expect(Date.now() - started).toBeLessThan(5000);
     expect(report.ms).toBeLessThan(1000);
+  });
+});
+
+describe('FrameReader framing is independent of how the bytes are chunked', () => {
+  // Deterministic, unlike a pipe: every split point and one byte at a time.
+  const max = (kind: number): number => (kind === KIND.output ? 16 : kind === KIND.exit ? 1 : -1);
+  const stream = Uint8Array.from([
+    ...frame(KIND.output, Uint8Array.of(1, 0, 0x61, 0x62)),
+    ...frame(KIND.output, Uint8Array.of(2, 0, 0x63)),
+    ...frame(KIND.exit, Uint8Array.of(3)),
+  ]);
+  const feed = (chunks: Uint8Array[]) => {
+    const reader = new FrameReader(max);
+    const frames: [number, number[]][] = [];
+    const violations: string[] = [];
+    for (const chunk of chunks) {
+      const bad = reader.push(chunk, (kind, payload) => frames.push([kind, [...payload]]));
+      if (bad !== null) violations.push(bad);
+    }
+    return { frames, violations };
+  };
+  const whole = feed([stream]);
+
+  it('parses the stream whole', () => {
+    expect(whole).toEqual({
+      frames: [
+        [KIND.output, [1, 0, 0x61, 0x62]],
+        [KIND.output, [2, 0, 0x63]],
+        [KIND.exit, [3]],
+      ],
+      violations: [],
+    });
+  });
+
+  it('gives the same frames at every split point', () => {
+    for (let at = 1; at < stream.byteLength; at++) {
+      expect({ at, ...feed([stream.slice(0, at), stream.slice(at)]) }).toEqual({ at, ...whole });
+    }
+  });
+
+  it('gives the same frames one byte at a time', () => {
+    expect(feed([...stream].map((b) => Uint8Array.of(b)))).toEqual(whole);
+  });
+
+  it('refuses an over-long header however it is split, before its payload arrives', () => {
+    const hostile = frame(KIND.exit, Uint8Array.of(0, 0));
+    for (let at = 1; at < 5; at++) {
+      expect({ at, ...feed([hostile.slice(0, at), hostile.slice(at, 5)]) }).toEqual({
+        at,
+        frames: [],
+        violations: ['frame length 2 > 1'],
+      });
+    }
   });
 });

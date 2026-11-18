@@ -113,10 +113,15 @@ Matrix: `docs/public/compat/isolate-host.md`.
 Tested:
 
 - a guest cannot make `runCode` report a failure of the host's own, and
-  cannot hang the call past `timeoutMs` + 1 s. A guest that replaces JS
-  intrinsics rifty's runtime uses can change its own reported status and text,
-  exit 0 for a failing program included (compat ⚠️): that is a fidelity gap
-  of its own run, not a way out of the isolate;
+  cannot hang the call past `timeoutMs` + 1 s. One exception is outside the
+  isolate: if something kills the child, such as your cgroup's OOM-killer
+  (which a guest can provoke by allocating), the call rejects with
+  `isolate-host child exited unexpectedly (…, signal SIGKILL)`;
+- a guest can change its own result. It can forge its exit status (throw a
+  `RIFTY_PROCESS_EXIT` lookalike, rewrite a caught exit signal) or replace JS
+  intrinsics rifty's runtime uses. Either way its stdout, stderr and exit code
+  can differ from Node's, and a failing program can read as exit 0 (compat
+  ⚠️). That is a fidelity gap of its own run, not a way out of the isolate;
 
 - the guest sees none of your process's globals or env;
 - the guest gets no Node primitive or isolated-vm handle;

@@ -31,6 +31,17 @@ function guard<A extends unknown[], R>(name: string, fn: (...args: A) => R): (..
   };
 }
 
+export const IMPORT_GAP =
+  'Not implemented: isolate-host.dynamic-import (import() is not available in the rifty isolate host; use require(), ADR-0557)';
+
+/**
+ * The rejection a guest `import()` receives. isolated-vm copies a thrown host
+ * Error's stack into the isolate, so it carries none of the child's frames (I3).
+ */
+export function importGapError(): Error {
+  return Object.assign(new Error(IMPORT_GAP), { stack: `Error: ${IMPORT_GAP}` });
+}
+
 /** stdout/stderr bytes kept up to the cap, copied into one growable buffer per fd (memory ~ cap). */
 export class OutputBudget {
   #kept = 0;

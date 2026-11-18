@@ -208,28 +208,29 @@ export function runCode(code: string, options: RunCodeOptions = {}): Promise<Run
     });
     frames?.on('data', (chunk: Buffer) => {
       if (outcome !== undefined) return;
-      // `false` settles the run: every later byte, in this chunk or after it, is ignored.
+      // Once settled (`end` is idempotent), every later frame is ignored.
       const bad = reader.push(chunk, (kind, payload) => {
+        if (outcome !== undefined) return;
         const f = decode(kind, payload, state);
         if (typeof f === 'string') {
           violated(f);
-          return false;
+          return;
         }
         switch (f.kind) {
           case 'output':
             state.truncated ||= f.truncated;
             state.kept += f.bytes.byteLength;
             (f.fd === 2 ? err : out).append(f.bytes);
-            return true;
+            return;
           case 'exit':
             end({ result: result(f.exitCode) });
-            return false;
+            return;
           case 'memory':
             end({ result: result(null, 'memory') });
-            return false;
+            return;
           case 'error':
             end({ error: new Error(`isolate-host child failed: ${f.message}`) });
-            return false;
+            return;
         }
       });
       if (bad !== null) violated(bad);

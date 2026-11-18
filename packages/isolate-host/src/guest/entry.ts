@@ -38,13 +38,6 @@ import {
 
 bindNotImplemented(NotImplementedError);
 
-// Captured before guest code: the post-guest tail uses no replaceable member.
-const stringIncludesPrimordial = String.prototype.includes;
-const reflectApplyPrimordial = Reflect.apply;
-const PromisePrimordial = Promise;
-const stringIncludes = (haystack: string, needle: string): boolean =>
-  reflectApplyPrimordial(stringIncludesPrimordial, haystack, [needle]) as boolean;
-
 const CWD = '/workspace';
 /**
  * Builtin modules `node -e` exposes as lazy globals (Node v24.16.0
@@ -185,50 +178,22 @@ function esmGapOf(caught: unknown): Error | null {
   try {
     const message = (caught as SyntaxError).message;
     if (typeof message !== 'string') return null;
-    // Index loop: array iteration and `.some` are guest-replaceable.
-    for (let i = 0; i < ESM_SYNTAX.length; i++) {
-      if (stringIncludes(message, ESM_SYNTAX[i] as string)) {
-        return new NotImplementedError(
-          'isolate-host.node-eval-esm',
-          'Node runs -e input with ESM syntax as a module; this host evaluates CommonJS only — use require()',
-        );
-      }
-    }
-    return null;
+    if (!ESM_SYNTAX.some((m) => message.includes(m))) return null;
+    return new NotImplementedError(
+      'isolate-host.node-eval-esm',
+      'Node runs -e input with ESM syntax as a module; this host evaluates CommonJS only — use require()',
+    );
   } catch {
     return null;
   }
 }
 
-/**
- * Write the guest's error with the runtime's own fatal text (`formatThrown`,
- * as rifty's fatal exit prints it); never throws. Its member reads can be
- * poisoned, so narrower renders follow; when none renders, stderr gets nothing
- * — the host never writes text of its own (goal.md Decisions).
- */
+/** Write the guest's error with the runtime's own fatal text (`formatThrown`); never throws. */
 function writeDiagnostic(error: unknown): void {
-  const renders = [
-    () => formatThrown(error),
-    () => (error as Error).stack,
-    () => {
-      const { name, message } = error as Error;
-      return typeof name === 'string' && typeof message === 'string'
-        ? `${name}: ${message}`
-        : undefined;
-    },
-    () => (error as Error).message,
-  ];
-  // Index loop: the array iterator is guest-replaceable.
-  for (let i = 0; i < renders.length; i++) {
-    try {
-      const text = (renders[i] as () => string | undefined)();
-      if (typeof text === 'string' && text.length > 0) {
-        writeHost(2, `${text}\n`);
-        return;
-      }
-    } catch {
-      // This rendering is poisoned; try the next one.
-    }
+  try {
+    writeHost(2, `${formatThrown(error)}\n`);
+  } catch {
+    // The guest broke its own diagnostic: nothing is written, the status still crosses.
   }
 }
 
@@ -251,7 +216,7 @@ function run(source: string): Promise<number> {
   // The captured constructor; resolved with a primitive only, so resolving it
   // does no lookup the guest can poison (the thenable check runs only for
   // objects). The child judges the number in its own realm (ADR-0557 §6).
-  return new PromisePrimordial<number>((resolve) => {
+  return new Promise<number>((resolve) => {
     const finish = (caught: unknown): void => resolve(settle(caught));
     try {
       setUp();

@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import { Socket } from 'node:net';
 import ivm from 'isolated-vm';
 import { FRAME_CHANNEL_FD, KIND, MAX_ERROR_TEXT, type RunRequest, frame } from '../protocol.ts';
-import { OutputBudget, createBridge } from './bridge.ts';
+import { IMPORT_GAP, OutputBudget, createBridge, importGapError } from './bridge.ts';
 
 const channel = new Socket({ fd: FRAME_CHANNEL_FD, readable: false, writable: true });
 channel.on('error', () => process.kill(process.pid, 'SIGKILL'));
@@ -18,8 +18,6 @@ const send = (kind: number, payload: Uint8Array): void => {
 
 /** Unhandled rejection reasons isolated-vm cannot copy out arrive as this token. */
 const UNCOPYABLE_REASON = 'isolate-host:uncopyable-rejection-reason';
-const IMPORT_GAP =
-  'Not implemented: isolate-host.dynamic-import (import() is not available in the rifty isolate host; use require(), ADR-0557)';
 
 async function run(request: RunRequest): Promise<void> {
   // Before the guest's entry exists, a failure is this child's, not the guest's.
@@ -73,7 +71,7 @@ async function run(request: RunRequest): Promise<void> {
       // can drain first, or swallow it), so the gap cannot be left to it.
       output.write(2, new TextEncoder().encode(`Error: ${IMPORT_GAP}\n`));
       report(KIND.exit, Uint8Array.of(1));
-      throw Object.assign(new Error(IMPORT_GAP), { stack: `Error: ${IMPORT_GAP}` });
+      throw importGapError();
     },
     onUnhandledRejection: (reason: unknown) => {
       try {
@@ -87,8 +85,6 @@ async function run(request: RunRequest): Promise<void> {
     const context = await isolate.createContext();
     const jail = context.global;
     let fire: ivm.Reference<(id: number) => void> | undefined;
-    // Timers armed while the bundle loads can expire before `fire` is bound.
-    const early: number[] = [];
     const bridge = createBridge({
       output,
       outputPending: () => {
@@ -97,10 +93,7 @@ async function run(request: RunRequest): Promise<void> {
         // Batch: guest writes arrive as separate host tasks; one frame batch per 5 ms.
         setTimeout(flush, 5);
       },
-      fire: (id) => {
-        if (fire === undefined) early.push(id);
-        else fire.applyIgnored(undefined, [id]);
-      },
+      fire: (id) => fire?.applyIgnored(undefined, [id]),
     });
     const names = Object.keys(bridge);
     for (const [name, fn] of Object.entries(bridge)) {
@@ -119,7 +112,6 @@ async function run(request: RunRequest): Promise<void> {
     await script.run(context);
     const guest = await jail.get('__riftyGuest', { reference: true });
     fire = await guest.get('fire', { reference: true });
-    for (const id of early.splice(0)) fire.applyIgnored(undefined, [id]);
     rejection = await guest.get('rejection', { reference: true });
     const start = await guest.get('run', { reference: true });
     await jail.delete('__riftyGuest');
