@@ -21,6 +21,13 @@ earlier command's globals (an `-e` `var` too), builtin-module members added
 additions and `process` properties; `process.env`, `require.cache`, the ESM
 registry, process/stdio listeners and timers are per invocation. The `-e`/`-p`
 `[eval]` bindings are restored at invocation end (PR #408), not by a fresh realm.
+Residue a fresh realm would also remove (compat row): a non-configurable guest
+`__dirname` left by one command makes a later `-e` exit 1 (`Cannot redefine
+property`; the define-vs-assign difference itself is
+`runtime-js/node-eval-bindings-assign-not-define`); after a guest claimed
+`require`, a non-extensible `globalThis` stays and a later `-e` exits 1. The
+invocation scope does not retire the `diagnostics_channel` subscriber above
+(PR #408 outside finding 6).
 
 `executeNode` (`no-coi-project-command.ts`) and `runInstalledBin`
 (`no-coi-toolchain-owner.ts`) run `runNodeEntry` in place. COI runs each `node`
