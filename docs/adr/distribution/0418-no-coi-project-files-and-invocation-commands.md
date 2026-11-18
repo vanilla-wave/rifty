@@ -87,7 +87,8 @@ unacknowledged effects. Errors and completion expose this uncertainty.
   hidden from every project-command `node`; an eval's bindings are snapshotted
   and restored once the process ends, so a guest value under one survives; when
   the realm cannot be returned (a non-configurable binding, a non-extensible
-  `globalThis`) the command fails and the Worker is replaced. `runBin` still
-  exposes the console mirror. The rest of the realm stays shared and is
-  declared: compat process.md "Shared realm across no-COI `node` invocations". A
-  realm per invocation: draft `backlog/distribution/no-coi-node-process-realm`.
+  `globalThis` while the mirror is hidden) the command fails and the Worker is
+  replaced. `runBin` still exposes the console mirror. The rest of the realm
+  stays shared and is declared: compat process.md "Shared realm across no-COI
+  `node` invocations". A realm per invocation: draft
+  `backlog/distribution/no-coi-node-process-realm`.
