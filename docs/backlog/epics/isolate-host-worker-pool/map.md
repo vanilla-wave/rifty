@@ -4,7 +4,8 @@
 
 1. `distribution/isolate-host-pool-acceptance` — **acceptance carrier** — the
    `## User scenario` as tests over the real built package, real workers and
-   isolated-vm (I1–I7), plus `scripts/measure.mjs` for I9; committed RED.
+   isolated-vm (I1–I7, I10), committed RED (`it.fails`); I8 docs and I9
+   numbers (`scripts/measure.mjs`, README) are read at CLOSE.
 
 Wall hypotheses the carrier is expected to hit (units only when the run hits
 them): worker main hosting many isolates with call-addressed frames and a
@@ -16,9 +17,14 @@ compat rows (I8).
 
 ## Open questions
 
-- Worker RSS ceiling and recycle watermark with many calls per worker: after
-  `dispose()` RSS stays at its high-water mark (step 0 retention rows, macOS);
-  Linux unmeasured — owner: agent — probe both at PICKUP of the pool wall.
+- Worker RSS ceiling and recycle watermark (I10 ≤ 512 MiB) with many calls
+  per worker: after `dispose()` small-object heaps stay resident (step 0
+  retention rows, macOS); Linux unmeasured — owner: agent — probe both at
+  PICKUP of the pool wall.
+- A pool-initiated RSS kill with no certain culprit (I5): step 0's only
+  vector is the host-side timer fire queue — owner: agent — after the
+  timer-backpressure wall, re-run the step 0 RSS probes; a vector left
+  becomes a carrier row, none left → recorded unreachable.
 - Shard size 4 vs isolated-vm's pool of cores + 1 threads (CI runner cores) —
   owner: agent — probe 4 busy guests + 1 neighbour on the CI runner.
 - How many idle workers stay warm, and when an idle worker is reaped —
@@ -32,6 +38,6 @@ compat rows (I8).
 - Queue, priorities, prewarming, metrics, tenant affinity, a concurrency
   limit, an `AbortSignal` option, a process-per-call mode.
 - Hard containment of an isolate escape; side-channel mitigation inside a
-  shared worker (declared, I9).
+  shared worker (declared, I8).
 - Platforms beyond isolated-vm prebuilds (linux-x64/arm64, darwin-arm64,
   win32-x64); Windows is not tested.

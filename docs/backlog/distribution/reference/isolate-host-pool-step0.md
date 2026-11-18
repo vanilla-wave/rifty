@@ -94,6 +94,16 @@ produced by the first run; `oneshot.mjs` reports its RSS at the result):
 A + code cache: p50 74.5 ms, max 80.3 ms (10 sequential spawn→exit); child RSS at result 108 MiB max
 ```
 
+Retention after one big legit call — `node --no-node-snapshot probe-retain.mjs <pkg>` (memoryLimit 1536,
+RSS 1 s after `dispose()`; worker at rest 138 MiB): one 7e7-element array returns its memory, many small
+objects do not.
+
+```
+"70000000\n" 0 rss after dispose + 1 s: 141
+"8000000\n" 0 rss after dispose + 1 s: 651
+```
+(6e6 objects at limit 1024: 525 MiB; 3e6: 338 MiB.)
+
 ## Prototype sources
 
 ### `lib.mjs`
@@ -376,4 +386,19 @@ await once();
 const rs = []; for (let i = 0; i < 10; i++) rs.push(await once());
 const ms = rs.map((r) => r.ms).sort((a, b) => a - b);
 console.log(`A + code cache: p50 ${ms[4].toFixed(1)} ms, max ${ms.at(-1).toFixed(1)} ms (10 sequential spawn→exit); child RSS at result ${Math.round(Math.max(...rs.map((r) => r.rss)))} MiB max`);
+```
+
+### `probe-retain.mjs`
+
+```js
+// Usage: node --no-node-snapshot probe-retain.mjs <pkg> — RSS retained by a worker after one big legit call.
+import { runOne } from './lib.mjs';
+const mib = () => Math.round(process.memoryUsage.rss() / 1048576);
+await runOne('1', { cache: true });
+console.log('rest', mib());
+for (const code of ['const a = new Array(7e7).fill(1.5); console.log(a.length)', 'const a = []; for (let i = 0; i < 8e6; i++) a.push({ i, s: "k" + i }); console.log(a.length)']) {
+  const r = await runOne(code, { cache: true, memoryLimit: 1536 });
+  await new Promise((r) => setTimeout(r, 1000));
+  console.log(JSON.stringify(r.stdout), r.exitCode, 'rss after dispose + 1 s:', mib());
+}
 ```

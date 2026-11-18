@@ -49,9 +49,11 @@ challenge: 2026-11-18 — inherits the goal premise check (`goal.md` §Challenge
 6. Same neighbours + a culprit past `timeoutMs` 1500: busy loop,
    `Atomics.wait` forever, a default-comparator `sort` of 3e6 doubles in a
    loop: culprit `timeout` with its prior output, settled ≤ 1500 + 1000 ms
-   after its call; neighbours, at `timeoutMs` 4000, exact — a neighbour
-   rerun after the worker's loss could not finish inside 4000 ms, so this
-   discriminates "finish on the retiring worker" (`pool-faults.test.ts`) → I4
+   after its call; neighbours, at `timeoutMs` 4500, exact — a neighbour
+   rerun after the worker's loss (≥ 1.8 s) could not finish inside 4500 ms,
+   so this discriminates "finish where they are"; after the sort the shared
+   worker's pid is gone < 3 s after its last call settled (retired, not
+   reused) (`pool-faults.test.ts`) → I4
 7. Same neighbours + an output flood past a 1 KiB cap, 20000 ×
    `setInterval(f, 1)`: culprit `exitCode: null` with a `termination`;
    neighbours exact (`pool-faults.test.ts`) → I2
@@ -64,19 +66,34 @@ challenge: 2026-11-18 — inherits the goal premise check (`goal.md` §Challenge
    with that code at its deadline, never `timeout`; a fresh call started
    after a loss survives the kill of the reruns' worker, which rejects only
    the rerun call (`pool-faults.test.ts`) → I5
-9. Hostile worker (real process, call-addressed wire below): a frame for a
-   call id not in flight on that worker — an unknown id, ids of calls on the
-   other worker, a call already settled — rejects that worker's in-flight
-   calls with `isolate-host child protocol violation`; calls on the honest
-   path resolve with only their own bytes (`pool-protocol.test.ts`) → I7
+9. Hostile worker (real process, call-addressed wire below; hostile workers
+   share a ledger of the real call ids each received): frames for the ids of
+   calls on the other worker and for an unknown id reject the forging
+   worker's call with `isolate-host child protocol violation` and kill it
+   (pid gone < 3 s), while the other worker's calls resolve with only their
+   own bytes; a frame for a call already settled rejects the calls still in
+   flight on that worker; a worker that writes text to its stderr and dies,
+   twice, rejects `ERR_ISOLATE_HOST_WORKER_LOST` with none of that text
+   (`pool-protocol.test.ts`) → I7, I5
 10. Changed A criteria (PR-4, user decision): "no child process outlives its
     result" (`isolation.test.ts`, `bridge.test.ts`, `limits.test.ts`
     afterEach `childPids() == []`) is replaced by rows 1 and 4; "a child killed
     from outside rejects the call loudly" (`lifecycle.test.ts`) by row 8; the
     pid of "the process hosting this call" is the sole child, not a new one
-    (`isolation.test.ts`, `limits.test.ts`). At IMPLEMENT the
+    (`isolation.test.ts`, `limits.test.ts`); the per-child RSS bounds of
+    ADR-0557 §3 in `limits.test.ts` (catastrophic peak < 2 × (256 + 3 ×
+    limit), "child RSS ceiling 352 MiB" in the flood case) are re-derived from
+    the worker ceiling (`map.md` fog) at IMPLEMENT. At IMPLEMENT the
     `protocol.test.ts` hostile bodies move to the wire below, criteria
     unchanged. Everything else A proves stays as is → I1, I5, I6
+
+11. A warm worker serves a call that leaves ~650 MiB of small-object heap
+    resident on macOS (8e6 objects, `memoryLimitMb` 1536; step 0 retention
+    row): 1 s after it no child of the consumer holds > 512 MiB RSS; the next
+    call works (`pool-faults.test.ts`) → I10
+
+All carrier cases are committed as `it.fails` (`carrier`); the pool unit flips
+them to `it`.
 
 Wire (agent-owned, pinned for the hostile cases): consumer → worker stdin
 JSON lines `{"type":"run","call":<u32>,"code","memoryLimitMb","maxOutputBytes"}`
@@ -89,7 +106,7 @@ length, u8 kind, u32be call, payload`, kinds and payloads as ADR-0557 §6.
 |---|---|---|---|
 | guest heap limit × shared worker | culprit `memory`, neighbours exact | row 5 heap growth | → I3 |
 | V8 fatal OOM / worker RSS with the culprit's isolate disposed × shared worker | culprit `memory`, not rerun; neighbours rerun once, exact | row 5 `Array(2**28)` | → I3 |
-| worker RSS over ceiling, no certain culprit × in-flight calls | no blame; lost-worker path | row 7 intervals — step 0's only RSS crossing without a disposed culprit (host-side fire queue); the timer-backpressure wall must remove the growth, else neighbours rerun together with the culprit and row 7 fails | → I5 |
+| worker RSS over ceiling, no certain culprit × in-flight calls | no blame; lost-worker path | no reachable vector after the timer-backpressure wall is expected (step 0's only one is the host-side fire queue, row 7 → I2); `map.md` fog re-runs the probes then — a vector left becomes a row here, none → recorded unreachable | → I5 |
 | guest CPU, interruptible × shared worker | culprit `timeout`; neighbours exact | row 6 busy loop, `Atomics.wait` | → I4 |
 | guest CPU, termination ignored × shared worker | culprit `timeout` at deadline; worker retires after 1000 ms, neighbours finish there, exact | row 6 sort | → I4 |
 | host-side flood (output, intervals) × shared worker | culprit ends; neighbours exact | row 7 | → I2 |
@@ -98,6 +115,8 @@ length, u8 kind, u32be call, payload`, kinds and payloads as ADR-0557 §6.
 | reruns' worker killed × a fresh call started after the loss | fresh call unaffected (never placed with reruns) | row 8 quarantine case | → I5 |
 | worker frame misaddressed × in-flight calls | protocol violation, worker killed, its calls reject | row 9 | → I7 |
 | consumer exit / SIGKILL × idle worker | consumer exits; worker gone | row 4 | → I6 |
+| retained heap × idle worker | recycled above the watermark | row 11 | → I10 |
+| guest termination ignored × later calls | worker retired, never reused | row 6 sort | → I4 |
 | concurrent calls × one worker | independent state and output | row 3 | → I2 |
 
 ## Out of scope

@@ -6,10 +6,13 @@
 import { describe, expect, it } from 'vitest';
 import { alive, consumer, waitFor } from './support.ts';
 
+/** Committed RED (FIT §5): the pool unit flips `carrier` to `it`. */
+const carrier = it.fails;
+
 const ok = (stdout: string) => ({ stdout, stderr: '', exitCode: 0 });
 
 describe('shared warm workers (I1)', () => {
-  it('a worker outlives its call and serves the next sequential calls', async () => {
+  carrier('a worker outlives its call and serves the next sequential calls', async () => {
     const { value } = await consumer(`
       await runCode('1');
       const warm = children();
@@ -22,7 +25,7 @@ describe('shared warm workers (I1)', () => {
     expect(v.results).toEqual([0, 1, 2, 3, 4].map((i) => ok(`${i}\n`)));
   });
 
-  it.each([
+  carrier.each([
     [4, 1],
     [5, 2],
     [8, 2],
@@ -39,8 +42,10 @@ describe('shared warm workers (I1)', () => {
 });
 
 describe('freshness inside a worker (I2)', () => {
-  it('4 concurrent calls on one worker see only their own files, globals, timers and output', async () => {
-    const { value } = await consumer(`
+  carrier(
+    '4 concurrent calls on one worker see only their own files, globals, timers and output',
+    async () => {
+      const { value } = await consumer(`
       const sampler = sampleChildren();
       const code = (i) => [
         "const fs = require('fs');",
@@ -50,24 +55,27 @@ describe('freshness inside a worker (I2)', () => {
       ].join('\\n');
       const results = await Promise.all([0, 1, 2, 3].map((i) => runCode(code(i))));
       out({ peak: sampler.stop(), results });`);
-    const v = value as {
-      peak: number;
-      results: { stdout: string; stderr: string; exitCode: number }[];
-    };
-    expect(v.peak).toBe(1);
-    v.results.forEach((r, i) => {
-      const lines = r.stdout.trimEnd().split('\n');
-      expect(lines.at(-1)).toBe(`end ${i} ${i} f`);
-      expect(lines.slice(0, -1).sort()).toEqual(
-        Array.from({ length: 200 }, (_, k) => `t${i}-${k}`).sort(),
-      );
-      expect(r.stderr).toBe('');
-      expect(r.exitCode).toBe(0);
-    });
-  });
+      const v = value as {
+        peak: number;
+        results: { stdout: string; stderr: string; exitCode: number }[];
+      };
+      expect(v.peak).toBe(1);
+      v.results.forEach((r, i) => {
+        const lines = r.stdout.trimEnd().split('\n');
+        expect(lines.at(-1)).toBe(`end ${i} ${i} f`);
+        expect(lines.slice(0, -1).sort()).toEqual(
+          Array.from({ length: 200 }, (_, k) => `t${i}-${k}`).sort(),
+        );
+        expect(r.stderr).toBe('');
+        expect(r.exitCode).toBe(0);
+      });
+    },
+  );
 
-  it("a call's pending timer and unsettled promise neither act in nor show to the next call on the same worker", async () => {
-    const { value } = await consumer(`
+  carrier(
+    "a call's pending timer and unsettled promise neither act in nor show to the next call on the same worker",
+    async () => {
+      const { value } = await consumer(`
       const first = await runCode([
         "require('fs').writeFileSync('state.txt', 'x'); globalThis.leaked = 1;",
         "setTimeout(() => console.log('LATE-T'), 150);",
@@ -78,17 +86,18 @@ describe('freshness inside a worker (I2)', () => {
       const second = await runCode(
         "setTimeout(() => console.log(require('fs').existsSync('state.txt'), typeof globalThis.leaked), 600)");
       out({ first, second, pid, after: children() });`);
-    const v = value as { first: unknown; second: unknown; pid: number[]; after: number[] };
-    expect(v.first).toEqual(ok('first\n'));
-    expect(v.second).toEqual(ok('false undefined\n'));
-    // The same worker served both calls: the property is about a shared process.
-    expect(v.pid).toHaveLength(1);
-    expect(v.after).toEqual(v.pid);
-  });
+      const v = value as { first: unknown; second: unknown; pid: number[]; after: number[] };
+      expect(v.first).toEqual(ok('first\n'));
+      expect(v.second).toEqual(ok('false undefined\n'));
+      // The same worker served both calls: the property is about a shared process.
+      expect(v.pid).toHaveLength(1);
+      expect(v.after).toEqual(v.pid);
+    },
+  );
 });
 
 describe('worker lifecycle (I6)', () => {
-  it('an idle worker does not keep the consumer alive, and does not outlive it', async () => {
+  carrier('an idle worker does not keep the consumer alive, and does not outlive it', async () => {
     const { value, exitCode, signal, ms } = await consumer(
       `await runCode('console.log(1)'); out({ workers: children() });`,
       { naturalExit: true, timeoutMs: 20_000 },
@@ -100,7 +109,7 @@ describe('worker lifecycle (I6)', () => {
     await waitFor(() => (alive(workers[0] as number) ? undefined : true), 3000);
   });
 
-  it('a consumer SIGKILLed with an idle worker leaves no worker behind', async () => {
+  carrier('a consumer SIGKILLed with an idle worker leaves no worker behind', async () => {
     const running = consumer(
       `await runCode('console.log(1)'); await new Promise((r) => process.stdout.write('\\n' + JSON.stringify({ value: children() }) + '\\n', r)); kill(process.pid); await sleep(60000);`,
     );

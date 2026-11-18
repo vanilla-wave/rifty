@@ -36,7 +36,8 @@ worker hosts, now and later; cross-isolate side channels are an open class.
    growth, `new Array(2**28).fill(0)`) or hangs (busy loop, `Atomics.wait`,
    an uninterruptible builtin), or floods output or timers: that call gets
    `memory` / `timeout`; the 3 others get exactly their solo result; the next
-   call works.
+   call works. A call that legitimately filled a big heap leaves no worker
+   idling above its recycle watermark.
 4. An operator kills a worker (`kill -9`, OOM-killer): its calls rerun once
    on a fresh worker and resolve; killed again, they reject naming the signal.
 5. The service finishes its work and exits on its own; killed, it leaves no
@@ -54,7 +55,7 @@ p50 128 ms, 8 concurrent 1115 MiB; trust-model §Isolate host names only the
 child's uid as escape reach. I2, I4's stuck clause, I5 and I7 quantify over
 a worker hosting several calls, which main never has: each carrier row first
 asserts the calls share one pid, and that precondition is what fails on main
-(RED run 2026-11-18, 20/20 failing). Step 0 probes:
+(RED run 2026-11-18: every carrier case fails on main, marked `it.fails`). Step 0 probes:
 `docs/backlog/distribution/reference/isolate-host-pool-step0.md`. -->
 
 - I1. Shared warm workers: each call runs in a fresh isolate inside a
@@ -68,12 +69,14 @@ asserts the calls share one pid, and that precondition is what fails on main
   output or timers, spinning, waiting in `Atomics.wait` or growing its heap to
   its own limit leaves a concurrent neighbour's result equal to its solo
   result, given the neighbour's deadline covers the delay.
-- I3. Memory on a shared worker: a guest past its isolate heap limit or in a
-  V8 fatal OOM resolves `{exitCode: null, termination: 'memory'}` and is never
-  rerun; the consumer stays alive; every neighbour in flight on that worker
-  resolves its own solo result exactly once — no loss, hang, duplicated or
-  foreign output. Blame needs a certain signal from the culprit's own isolate;
-  a worker over its RSS ceiling with no such signal blames nobody (I5).
+- I3. Memory on a shared worker: a guest whose own isolate signals memory —
+  disposed by its heap limit, or its `onCatastrophicError` — resolves
+  `{exitCode: null, termination: 'memory'}` and is never rerun; the consumer
+  stays alive; every neighbour in flight on that worker resolves its own solo
+  result exactly once — no loss, hang, duplicated or foreign output. A
+  neighbour whose worker is lost meanwhile reruns by I5's placement and
+  deadline rule; that rerun is its one rerun. A worker lost with no such
+  signal (a fatal abort without one, an RSS ceiling) blames nobody (I5).
 - I4. Time on a shared worker: a call past `timeoutMs` resolves `{exitCode:
   null, termination: 'timeout'}` within `timeoutMs` + 1000 ms, a guest inside
   `Atomics.wait` or a builtin that ignores termination included. A guest still
@@ -105,6 +108,9 @@ asserts the calls share one pid, and that precondition is what fails on main
 - I9. Measured density: README §Cost records `scripts/measure.mjs` on the
   landed tree next to A on one machine; warm-call p50 and peak RSS of 8
   concurrent calls are each ≤ ½ of A's (A on M3 Pro: 137 ms, 1118 MiB).
+- I10. Bounded worker memory (the user's frame point 4): an idle worker never
+  stays warm above its recycle watermark (named in the ADR, ≤ 512 MiB); a
+  worker past it takes no new call and is killed once idle.
 
 ## Challenge
 
@@ -124,6 +130,7 @@ challenge: 2026-11-18 — 8 problems (fresh critic over request, goal, carrier, 
 - 2026-11-18 — user (via manager thread `31383f4b`, verbatim): «Давай пойдем в C и сразу сделаем экспорт чистого rifty для кастомных интегарций. Ничего страшного, что контракт будет меняться».
 - 2026-11-18 — manager interpretation, shown to the user, unanswered at FIT: «C» = option C of the A/B/C table (pool of worker processes, many isolates each); the export is a separate goal in another thread. The user saw this OOM frame before choosing: small shard of K isolates per worker; culprit known via `onCatastrophicError` of its isolate, on an RSS kill by per-isolate heap stats; culprit `memory`, neighbours rerun elsewhere (possible because `runCode` is pure — no network, no host files); worker restart at an RSS threshold before a catastrophe.
 - 2026-11-18 — frame point 2 refuted in part by step 0: in the catastrophic case ivm disposes the culprit's isolate for its memory limit (seen at the RSS crossing) while `onCatastrophicError` had not fired after 8 s; per-isolate heap stats separate a host-side timer flood by 4 MiB only. Blame = the culprit isolate's own disposal/fatal signal; no heap-stats guess (I3, I5).
+- 2026-11-18 — manager (hand-off authority): «Цель можно переводить в `ready`: до мержа оба решения обратимы, ответ пользователя придёт поправкой» — ready on delegated decisions; the C interpretation, F1 and F2 stay marked as not the user's words.
 - 2026-11-18 — manager decision by delegation (F1; both forks shown to the user, no answer yet; reversible until merge, a user answer lands as `amend:`): a rerun keeps the call's original deadline; out of budget it rejects `ERR_ISOLATE_HOST_WORKER_LOST`, never `timeout`, never a fresh `timeoutMs` — the consumer builds its own timeouts on `timeoutMs`, so a silent doubling is worse than a rare reject it can retry. Text and code carry no guest data.
 - 2026-11-18 — manager decision by delegation (F2): one rerun, a second loss rejects. Quarantine, minimal form: the calls of one lost worker rerun together on a worker of their own that takes no other call, so an unknown culprit's second kill reaches only calls lost once with it, never a fresh innocent call. Burst price: one extra process per lost worker. Rejected: rerun each suspect alone (names the culprit exactly, costs up to shard-size processes per loss).
 - 2026-11-18 — manager: blame only on a certain signal from the culprit's isolate accepted («угадывание по heap хуже честного "неизвестно"»).

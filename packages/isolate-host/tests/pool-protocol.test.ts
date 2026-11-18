@@ -6,18 +6,28 @@
  * replacing `dist/child.js` in a package copy; each call's `code` is the
  * hostile body it runs for that call (wire: acceptance item, "Wire").
  */
-import { cpSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
-import { consumer } from './support.ts';
+import { alive, consumer, waitFor } from './support.ts';
+
+/** Committed RED (FIT §5): the pool unit flips `carrier` to `it`. */
+const carrier = it.fails;
 
 const PACKAGE_DIR = fileURLToPath(new URL('..', import.meta.url));
 const work = mkdtempSync(join(tmpdir(), 'isolate-host-hostile-pool-'));
 afterAll(() => rmSync(work, { recursive: true, force: true }));
 
-/** A package copy whose worker runs each request's `code` with `call`, `f(kind, call, bytes)`, `text(s)`. */
+const LEDGER = join(work, 'calls.ledger');
+const FORGER_PID = join(work, 'forger.pid');
+
+/**
+ * A package copy whose worker runs each request's `code` with `call`,
+ * `f(kind, call, bytes)`, `text(s)` and `others()` — the call ids every other
+ * hostile worker of this consumer received (a shared ledger file).
+ */
 function hostileWorkerPackage(): string {
   const dir = join(work, 'pkg');
   cpSync(join(PACKAGE_DIR, 'dist'), join(dir, 'dist'), { recursive: true });
@@ -25,7 +35,10 @@ function hostileWorkerPackage(): string {
   symlinkSync(join(PACKAGE_DIR, 'node_modules'), join(dir, 'node_modules'));
   writeFileSync(
     join(dir, 'dist', 'child.js'),
-    `import { writeSync } from 'node:fs';
+    `import { appendFileSync, readFileSync, writeFileSync, writeSync } from 'node:fs';
+     const LEDGER = ${JSON.stringify(LEDGER)}, FORGER_PID = ${JSON.stringify(FORGER_PID)};
+     const others = () => readFileSync(LEDGER, 'utf8').trim().split('\\n').map((l) => l.split(' ').map(Number))
+       .filter(([pid]) => pid !== process.pid).map(([, call]) => call);
      const f = (kind, call, payload) => {
        const b = Uint8Array.from(payload);
        const h = new Uint8Array(9); const v = new DataView(h.buffer);
@@ -38,7 +51,9 @@ function hostileWorkerPackage(): string {
        pending += d;
        for (let nl; (nl = pending.indexOf('\\n')) >= 0; ) {
          const req = JSON.parse(pending.slice(0, nl)); pending = pending.slice(nl + 1);
-         if (req.type === 'run') new Function('call', 'f', 'text', req.code)(req.call, f, text);
+         if (req.type !== 'run') continue;
+         appendFileSync(LEDGER, process.pid + ' ' + req.call + '\\n');
+         new Function('call', 'f', 'text', 'others', 'writeFileSync', 'FORGER_PID', req.code)(req.call, f, text, others, writeFileSync, FORGER_PID);
        }
      });
      setInterval(() => {}, 1000);`,
@@ -47,37 +62,64 @@ function hostileWorkerPackage(): string {
 }
 
 const entry = hostileWorkerPackage();
-const HONEST = 'setTimeout(() => { f(1, call, [1, 0, ...text("own")]); f(2, call, [0]); }, 800)';
+const HONEST = 'setTimeout(() => { f(1, call, [1, 0, ...text("own")]); f(2, call, [0]); }, 1500)';
 const VIOLATION = /^isolate-host child protocol violation: /;
 
 describe('call-addressed frames from a hostile worker (I7)', () => {
-  it('frames for ids of calls on the other worker, or unknown ids, reject only the forging worker', async () => {
-    const { value } = await consumer(
-      `const honest = [0, 1, 2, 3].map(() => settle(runCode(${JSON.stringify(HONEST)}, { timeoutMs: 5000 })));
+  carrier(
+    'frames for ids of calls on the other worker, or unknown ids, kill only the forging worker',
+    async () => {
+      writeFileSync(LEDGER, '');
+      const { value } = await consumer(
+        `const honest = [0, 1, 2, 3].map(() => settle(runCode(${JSON.stringify(HONEST)}, { timeoutMs: 5000 })));
        await sleep(100);
        const forger = settle(runCode(${JSON.stringify(
-         'for (let d = 1; d <= 4; d++) f(1, call - d, [1, 0, ...text("FORGED")]); f(1, call + 1000, [1, 0, ...text("FORGED")]); setTimeout(() => f(2, call, [0]), 800)',
+         'writeFileSync(FORGER_PID, String(process.pid)); const t = setInterval(() => { const ids = others(); if (ids.length < 4) return; clearInterval(t); for (const id of [...ids, call + 1000]) f(1, id, [1, 0, ...text("FORGED")]); setTimeout(() => f(2, call, [0]), 800); }, 20)',
        )}, { timeoutMs: 5000 }));
        out({ honest: await Promise.all(honest), forger: await forger, workers: children().length });`,
-      { entry },
-    );
-    const v = value as { honest: unknown[]; forger: { rejected?: string } };
-    expect(v.honest).toEqual([0, 1, 2, 3].map(() => ({ stdout: 'own', stderr: '', exitCode: 0 })));
-    expect(v.forger.rejected).toMatch(VIOLATION);
-  });
+        { entry },
+      );
+      const v = value as { honest: unknown[]; forger: { rejected?: string } };
+      expect(v.honest).toEqual(
+        [0, 1, 2, 3].map(() => ({ stdout: 'own', stderr: '', exitCode: 0 })),
+      );
+      expect(v.forger.rejected).toMatch(VIOLATION);
+      const forger = Number(readFileSync(FORGER_PID, 'utf8'));
+      await waitFor(() => (alive(forger) ? undefined : true), 3000);
+    },
+  );
 
-  it('a frame for a call already settled rejects the calls still in flight on that worker', async () => {
-    const { value } = await consumer(
-      `const settled = settle(runCode(${JSON.stringify(
-        'f(2, call, [0]); setTimeout(() => f(1, call, [1, 0, ...text("LATE")]), 300)',
-      )}, { timeoutMs: 5000 }));
+  carrier(
+    'a frame for a call already settled rejects the calls still in flight on that worker',
+    async () => {
+      writeFileSync(LEDGER, '');
+      const { value } = await consumer(
+        `const settled = settle(runCode(${JSON.stringify(
+          'f(2, call, [0]); setTimeout(() => f(1, call, [1, 0, ...text("LATE")]), 300)',
+        )}, { timeoutMs: 5000 }));
        const inFlight = settle(runCode(${JSON.stringify(HONEST)}, { timeoutMs: 5000 }));
        out({ settled: await settled, inFlight: await inFlight });`,
+        { entry },
+      );
+      expect(value).toEqual({
+        settled: { stdout: '', stderr: '', exitCode: 0 },
+        inFlight: { rejected: expect.stringMatching(VIOLATION) },
+      });
+    },
+  );
+
+  carrier("a lost worker's rejection carries no worker-written text", async () => {
+    writeFileSync(LEDGER, '');
+    // Each hostile worker writes text to its stderr and dies; the call reruns once, then rejects.
+    const { value } = await consumer(
+      `out(await settle(runCode(${JSON.stringify(
+        "process.stderr.write('WORKER-TEXT\\n', () => process.kill(process.pid, 'SIGKILL'))",
+      )}, { timeoutMs: 10000 })));`,
       { entry },
     );
-    expect(value).toEqual({
-      settled: { stdout: '', stderr: '', exitCode: 0 },
-      inFlight: { rejected: expect.stringMatching(VIOLATION) },
-    });
+    const v = value as { rejected?: string; code?: string };
+    expect(v.code).toBe('ERR_ISOLATE_HOST_WORKER_LOST');
+    expect(v.rejected).toMatch(/exited unexpectedly .*SIGKILL/);
+    expect(v.rejected).not.toContain('WORKER-TEXT');
   });
 });
