@@ -98,15 +98,20 @@ blocks it.
    (`src/child/bridge.ts`) with guest-safe `TypeError`s. What the run does
    after guest code — the fatal write, the natural exit — uses the host bridge
    and the captured `process.exit`. The guest realm is the guest's, so no
-   lookup there is authority: the run's status and a `diagnosed` flag cross the
-   isolate boundary as copied data (`{code, diagnosed}` — object-literal syntax,
-   no poisonable lookup between the failure and the report) and the CHILD
-   validates them in its own realm. A non-integer status, a rejected tail, or a
-   `diagnosed` run whose stderr never arrived becomes the child's own line plus
-   a failed status. So whatever a guest replaces, the host still resolves,
-   settles inside the deadline and never lets a failed run read as clean; Node's
-   exact status needs the guest's own status path intact, and a guest that
-   poisons that gets its own answer (compat ⚠️, two backlog items). No Node IPC: the request goes as one JSON line on the child's
+   lookup there is authority: the run's status crosses the isolate boundary as
+   ONE PRIMITIVE (an integer — resolving a promise with a number does no
+   `then` lookup a guest can forge; an object did, 2026-11-18) and the CHILD
+   validates it in its own realm. A non-integer or out-of-range status, a
+   rejected tail or a throw becomes exit 1; the child adds no text (stderr is
+   guest bytes only, §1). So whatever a guest replaces, the host still resolves,
+   settles within `timeoutMs` + 1000 ms (a guest that hangs its own run — a
+   loop, a poisoned `Map.prototype.get` inside the drain — is killed as
+   `timeout`), and its transport never turns a failure into a clean status.
+   Node's exact status and text need the guest's own status path intact: a
+   guest that breaks its diagnostic gets exit 1 with no text; one that forges
+   its runtime's own terminal (or catches and rewrites its exit signal) reads
+   as the status it forged, exit 0 included — the only way a failed run reads
+   clean (compat ⚠️, two backlog items). No Node IPC: the request goes as one JSON line on the child's
    stdin (kept open; its end tells the child the consumer died → self-kill),
    results come back as length-framed binary frames on fd 3 that the
    consumer parses itself (`src/protocol.ts`). A header announcing more than
@@ -158,3 +163,7 @@ memory invariant — pending the user, not built.
   `process.cwd()`, empty `process.env`); compat lists them.
 - Successors (directions, not scoped): host file ops on a live sandbox,
   `exec node <path>`, FS snapshot, template, process pool.
+
+## Corrections
+
+- 2026-11-18 — §5: the status crossed as `{code, diagnosed}`; a guest `Object.prototype.then` rewrote it (resolution looks up `then` on objects). Now one integer, and an unusable status is exit 1 with no child-written stderr line (that line broke §1 "stderr is guest bytes only"); `diagnosed` removed with it.

@@ -40,24 +40,27 @@ challenge: 2026-11-18 — inherits the goal premise check (`goal.md` §Challenge
 14. Output accounting holds for every write shape: 1e6 empty writes at a 1 KiB cap and 1e6 one-byte writes at 512 KiB grow consumer RSS < 64 MiB; `truncated` survives a timeout kill; `timeoutMs` above 2^31-1 is a `RangeError` (`limits.test.ts`) → I4
 15. A child whose consumer dies exits (no orphan); a child that cannot spawn rejects at once (`lifecycle.test.ts`) → I4
 16. Whatever guest code replaced or poisoned in its realm — `process`, its
-    `stderr`/`exit`, `console`, `Error`, `TextEncoder`, `Uint8Array`, the array
-    iterator, `String`, or a forged `RIFTY_PROCESS_EXIT` lookalike — the host's
-    own promises hold: `runCode` resolves (never an infrastructure failure of
-    the host's), settles well inside the deadline, and a run Node failed never
-    reads as clean — the guest's own diagnostic, or the child's own line when
-    the guest's reporting broke. For the 23 cases that leave the runtime's
-    status path intact the status is Node's, and where the guest hid nothing its
-    own `Error: x` is what the consumer reads. A guest that poisons the status
-    machinery itself (`Number.isInteger`, `Reflect.get`, `Object.assign`, or
-    catching its own exit signal) gets its own answer — breaking its own rifty,
-    declared in compat — and only the host promises above are asserted for those
+    `stderr`/`exit`, `console`, `TextEncoder`, `Uint8Array`, `String`, the
+    array iterator, `Object.prototype.then`, `Promise.prototype.then`,
+    `Map.prototype.get`, or a forged `RIFTY_PROCESS_EXIT` lookalike — the host's
+    own promises hold for all 36 cases: `runCode` resolves (never an
+    infrastructure failure of the host's), settles within `timeoutMs` + 1000 ms,
+    and adds no text to stderr. For the 22 cases that leave the runtime's status
+    path intact the status is Node's, a failure is never silent, and where the
+    guest hid nothing its own `Error: x` is what the consumer reads. The 14 that
+    poison the status machinery itself each read exactly as declared: exit 1
+    (incl. exit 1 with empty stderr when the guest broke its own diagnostic), a
+    `timeout` when it hangs its own drain, and exit 0 for a run Node failed only
+    where the guest forged its runtime's terminal or rewrote its own caught exit
+    signal — no other row may read clean for a Node failure
     (`guest-seam.test.ts`) → I3
 17. The child judges what the isolate hands it: a guest bundle whose `run`
-    returns a non-number, an out-of-range or fractional status, no status, null,
-    a bare number, a rejected promise or a throw becomes the child's own
-    "ended without a usable status" line and exit 1; one that never settles ends
-    as `timeout`; a bundle with no entry at all rejects as a child failure, not
-    a clean run (`child-trust.test.ts`, stub guest bundles) → I3
+    yields a non-number, a negative, out-of-range, fractional or non-finite
+    status, `undefined`, `null`, an object, a thenable, a rejected promise or a
+    throw ends exit 1 with empty stderr; an accepted status is the run's; one
+    that never settles ends as `timeout`; a bundle with no entry at all rejects
+    as a child failure, not a clean run (`child-trust.test.ts`, stub guest
+    bundles) → I3
 
 ## Reference contract
 
@@ -126,3 +129,4 @@ ready-verdict: 2026-11-18 — Contract+RED @ 9e76eb622
 - 2026-11-18 — stderr canonicalization only on uncaught-error rows; stdout and every other stderr compared raw (no CRLF/ANSI normalization).
 - re-cut: 2026-11-18 — manager amend (goal.md): I3 bridge-walk attack, I4 reasons `timeout`|`memory` + one memory knob + settle bound + child death, ESM and ceiling rows; ceiling rows run as expected failures — trace: I1, I3, I4
 - 2026-11-18 — the parity carrier lives with the package (it needs the package build) and imports the node-cli-eval projection rather than copying it.
+- re-cut: 2026-11-18 — own Final+GREEN @ c66155044 BLOCK: the `{code, diagnosed}` report was rewritable via `Object.prototype.then`; 16/17 restated (PR-4, old: "settles well inside the deadline", child-written "usable status"/"diagnostic was lost" lines, exit 1) — status crosses as one integer, no host stderr text (manager decision: stderr is guest bytes only), the hang path bound is I4's `timeoutMs` + 1000 ms, every poisoned-status row asserted exactly instead of host promises only.

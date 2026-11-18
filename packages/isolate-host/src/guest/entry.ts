@@ -150,11 +150,12 @@ const HOST_CEILING_MODULES = {
  *
  * This realm is the guest's: every lookup here can be poisoned, so nothing it
  * returns is authority. The child validates the number in its own realm and
- * treats anything else — a throw, a hang in a render, a garbage value — as a
- * failed run with its own diagnostic. What a guest can reach is therefore its
- * own status and its own text, never the consumer's view of the host.
+ * treats anything else (a throw, a garbage value) as a failed run, exit 1, with
+ * no text of its own; a hang is the deadline's. What a guest can reach is
+ * therefore its own status and its own text, never the consumer's view of the
+ * host.
  */
-function settle(caught: unknown): { code: number; diagnosed: boolean } {
+function settle(caught: unknown): number {
   // The runtime's own terminal for this process; its `exitCode` is already
   // clamped by the runtime (`toUint8ExitCode`). A lookalike the guest threw is
   // not it, so a thrown `{code:'RIFTY_PROCESS_EXIT'}` cannot pick a status.
@@ -163,16 +164,14 @@ function settle(caught: unknown): { code: number; diagnosed: boolean } {
     if (terminal !== null) {
       const code = terminal.exitCode;
       if (typeof code === 'number' && Number.isInteger(code) && code >= 0 && code <= 255) {
-        return { code, diagnosed: false };
+        return code;
       }
     }
   } catch {
     // A broken lifecycle read is a failed run, not an exit.
   }
   writeDiagnostic(esmGapOf(caught) ?? caught);
-  // `diagnosed`: this path owed stderr a line. Object-literal syntax, no lookup
-  // the guest can poison — the child checks the line actually arrived.
-  return { code: 1, diagnosed: true };
+  return 1;
 }
 
 /**
@@ -205,8 +204,10 @@ function writeDiagnostic(error: unknown): void {
         : undefined;
     },
     () => (error as Error).message,
-    // A non-Error throw: its type, never a coercion the guest controls.
-    () => `isolate-host: the run threw a non-Error value (${typeof error})`,
+    // Nothing rendered: the thrown value's type, never a coercion the guest
+    // controls. One text for every reason a render can fail (a non-Error throw,
+    // a poisoned member, a text too large to encode) — it never says which.
+    () => `isolate-host: the run failed and no diagnostic could be rendered (${typeof error})`,
   ]) {
     try {
       const text = render();
@@ -235,8 +236,8 @@ function fatal(error: unknown): void {
   nativeExit();
 }
 
-async function run(source: string): Promise<{ code: number; diagnosed: boolean }> {
-  let outcome: { code: number; diagnosed: boolean } = { code: 0, diagnosed: false };
+async function run(source: string): Promise<number> {
+  let outcome = 0;
   try {
     installMemoryFs();
     syncMirror().mkdirSync(CWD, { recursive: true });
@@ -282,7 +283,9 @@ async function run(source: string): Promise<{ code: number; diagnosed: boolean }
   } catch (caught) {
     outcome = settle(caught);
   }
-  // Crosses as copied data; the child validates it (ADR-0557 §5).
+  // A primitive: resolving this promise with a number does no lookup the guest
+  // can poison (the thenable check runs only for objects). The child judges it
+  // in its own realm (ADR-0557 §5).
   return outcome;
 }
 

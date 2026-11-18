@@ -1,8 +1,8 @@
 /**
  * The child does not trust the isolate (ADR-0557 §5). The guest realm is the
- * guest's, so the status crosses as copied data and the CHILD validates it: a
- * guest bundle that returns garbage, rejects, or vanishes must become the
- * child's own line and a failed status — never a forged clean run, never a
+ * guest's, so the status crosses as ONE PRIMITIVE and the CHILD validates it: a
+ * guest bundle that returns garbage, rejects, or throws must become a failed
+ * run (exit 1) with no host text in stderr — never a forged clean run, never a
  * rejection of `runCode` as an infrastructure failure (I3, I4).
  *
  * Each case runs the real built `runCode` over a copy of the package whose
@@ -22,12 +22,15 @@ afterAll(() => rmSync(work, { recursive: true, force: true }));
 
 /** `run` bodies for the stub guest; each is evaluated inside the isolate. */
 const STUBS: Readonly<Record<string, string>> = {
-  'status not a number': "() => ({ code: 'pwn', diagnosed: false })",
-  'status out of range': '() => ({ code: 300, diagnosed: false })',
-  'status fractional': '() => ({ code: 1.5, diagnosed: false })',
-  'no status at all': '() => ({ diagnosed: false })',
-  'null instead of a result': '() => null',
-  'a bare number': '() => 0',
+  'status not a number': "() => 'pwn'",
+  'status out of range': '() => 256',
+  'status negative': '() => -1',
+  'status fractional': '() => 1.5',
+  'status not finite': '() => Number.POSITIVE_INFINITY',
+  'no status at all': '() => undefined',
+  'null instead of a status': '() => null',
+  'an object instead of the primitive': '() => ({ code: 0 })',
+  'a thenable instead of the primitive': '() => ({ then: (resolve) => resolve(0) })',
   'a rejected promise': "() => Promise.reject(new Error('pwn'))",
   'a throw': "() => { throw new Error('pwn') }",
   'never settles': '() => new Promise(() => {})',
@@ -80,12 +83,17 @@ describe('the child judges what the isolate hands it', () => {
       }
       expect(report.resolved).toEqual({
         stdout: '',
-        stderr:
-          'isolate-host: the run ended without a usable status (the guest broke its own runtime)\n',
+        // stderr stays the program's own bytes: the child adds no line.
+        stderr: '',
         exitCode: 1,
       });
     }, 30_000);
   }
+
+  it("a status the child accepts is the run's, so the stubs above are judged, not ignored", () => {
+    const report = consume(stubPackage('an accepted status', '() => 7'));
+    expect(report.resolved).toEqual({ stdout: '', stderr: '', exitCode: 7 });
+  }, 30_000);
 
   it("a guest bundle with no entry at all is the child's own failure, not a clean run", () => {
     const entry = stubPackage('no guest entry', '() => 0');
