@@ -16,8 +16,7 @@ section + ADR (public API, unstable) + compat/trust-model lines.
 
 ## Open questions
 
-- Whether isolated-vm `evalClosure` with `ivm.Callback` arguments behaves the
-  same in 7.0.2 as in the 6.2.0 probe — owner: agent — the carrier run.
+- none (the 7.0.2 `evalClosure` question was settled by the probe in `ledger.md`)
 
 ## Out of scope
 

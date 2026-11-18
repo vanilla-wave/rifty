@@ -3,7 +3,7 @@ kind: epic
 status: draft
 title: Isolate guest export — rifty's isolate guest bundle and bridge contract as a public unstable package for custom embedders
 created: 2026-11-18
-value: A Node service with its own isolated-vm (or another V8 embedder) and its own process topology runs rifty guests node -e-faithfully from a public export, without rifty's isolate host.
+value: A Node service with its own isolated-vm 7.0.2 and its own process topology runs rifty guests node -e-faithfully from a public export, without rifty's isolate host.
 user_story: As a Node service that embeds V8 isolates itself, I want rifty's guest runtime and its bridge contract as a public export, but today the bundle and bridge live inside `@riftydev/isolate-host` behind `runCode` only
 tier: works
 ---
@@ -109,8 +109,9 @@ challenge: 2026-11-18 — 1 problem
   isolate-host fails I3 (its install pulls isolated-vm). ADR at the export unit.
 - The host's child builds its bridge with the export's validating wrapper; a
   second copy is duplicate machinery (`REV-7`), not an invariant.
-- Probe 2026-11-18, Node v24.16.0, isolated-vm 6.2.0 (`/tmp/ivm6probe/p.mjs`):
-  `evalClosure` with `ivm.Callback` arguments works; neither
+- Probe 2026-11-18, Node v24.16.0, isolated-vm 6.2.0 vs 7.0.2 (script and
+  verbatim output: `ledger.md`): `evalClosure` with `ivm.Callback` arguments
+  works on both; on 6.2.0 neither
   `onUnhandledRejection` nor `importModuleDynamically` fires — `import()`
   rejects in the guest with `Not supported`, an unhandled rejection rejects
   the embedder's `eval`. The contract names both hooks as embedder duties;

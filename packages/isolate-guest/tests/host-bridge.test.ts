@@ -80,6 +80,14 @@ describe('createHostBridge argument validation (I5)', () => {
         write: (fd, bytes) => written.push([fd, bytes]),
         fire: () => {},
       });
+      // Nothing guest-callable beyond the contract.
+      expect(Object.keys(functions).sort()).toEqual([
+        'now',
+        'random',
+        'timerClear',
+        'timerStart',
+        'write',
+      ]);
       const calls: [string, (g: unknown) => unknown][] = [
         ['write(fd)', (g) => functions.write(g, Uint8Array.of(120))],
         ['write(bytes)', (g) => functions.write(1, g)],
@@ -161,6 +169,7 @@ describe('createHostBridge argument validation (I5)', () => {
 
   carrier('timers fire by id; close() stops every timer and arms no new one', async () => {
     const { createHostBridge } = await load();
+    const timeouts = () => process.getActiveResourcesInfo().filter((r) => r === 'Timeout').length;
     const fired: number[] = [];
     const { functions, close } = createHostBridge({
       write: () => {},
@@ -175,13 +184,44 @@ describe('createHostBridge argument validation (I5)', () => {
     expect(fired.filter((id) => id === 2).length).toBeGreaterThan(1);
     expect(fired).not.toContain(3);
     functions.timerStart(4, 20, false);
+    const before = timeouts();
     close();
+    // Every host timer of the bridge is gone, and after close timerStart is a no-op.
+    expect(timeouts()).toBe(before - 2);
     const seen = fired.length;
     functions.timerStart(5, 1, false);
     functions.timerStart(6, 1, true);
+    expect(timeouts()).toBe(before - 2);
     await sleep(40);
     expect(fired.length).toBe(seen);
   });
+
+  carrier(
+    'a throwing fire hook (a disposed isolate) stays inside the bridge and ends that timer',
+    async () => {
+      const { createHostBridge } = await load();
+      const uncaught: unknown[] = [];
+      const onUncaught = (error: unknown) => uncaught.push(error);
+      process.prependListener('uncaughtException', onUncaught);
+      let calls = 0;
+      const { functions, close } = createHostBridge({
+        write: () => {},
+        fire: () => {
+          calls++;
+          throw new Error('isolate is disposed');
+        },
+      });
+      try {
+        functions.timerStart(1, 1, true);
+        await sleep(30);
+        expect(uncaught).toEqual([]);
+        expect(calls).toBe(1);
+      } finally {
+        process.removeListener('uncaughtException', onUncaught);
+        close();
+      }
+    },
+  );
 });
 
 describe('exitStatus (I5)', () => {

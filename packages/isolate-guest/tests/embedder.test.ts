@@ -13,6 +13,13 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { CORPUS, type Outcome, parityView } from '../../isolate-host/tests/corpus.ts';
 import { nodeEval } from '../../isolate-host/tests/support.ts';
 
+/**
+ * Unhandled rejections whose reason isolated-vm cannot copy out: the guest
+ * controls the reason, the embedder sends `UNCOPYABLE_REJECTION` instead.
+ * Compared on stdout + status, as in `runCode` parity (Node's wording differs).
+ */
+const UNCOPYABLE = ['Promise.reject({ f() {} })', 'Promise.reject(Symbol())', 'Promise.reject(1)'];
+
 /** RED until the export lands (map item 1): then `it`. */
 const carrier = it.fails;
 
@@ -61,8 +68,22 @@ function runCorpus(): Promise<Record<string, Outcome>> {
     const readme = readFileSync(join(PACKAGE_DIR, 'README.md'), 'utf8');
     const example = /```js\n([\s\S]*?)```/.exec(readme)?.[1];
     if (example === undefined) throw new Error('README has no js block');
+    // Only the public export, the consumer's own isolated-vm and Node builtins.
+    const specifiers = [...example.matchAll(/(?:from|import)\s*\(?\s*['"]([^'"]+)['"]/g)].map(
+      (m) => m[1],
+    );
+    const foreign = specifiers.filter(
+      (s) =>
+        !['@riftydev/isolate-guest', '@riftydev/isolate-guest/guest.js', 'isolated-vm'].includes(
+          s as string,
+        ) && !(s as string).startsWith('node:'),
+    );
+    if (foreign.length > 0) throw new Error(`README embedder imports ${foreign.join(', ')}`);
     writeFileSync(join(app, 'embed.mjs'), example);
-    writeFileSync(join(app, 'rows.json'), JSON.stringify(CORPUS.map((r) => [r.label, r.code])));
+    writeFileSync(
+      join(app, 'rows.json'),
+      JSON.stringify([...CORPUS.map((r) => [r.label, r.code]), ...UNCOPYABLE.map((c) => [c, c])]),
+    );
     writeFileSync(
       join(app, 'driver.mjs'),
       `import { readFileSync } from 'node:fs';
@@ -98,6 +119,14 @@ describe('the packed export (I3)', () => {
       expect(manifest.peerDependencies ?? {}).toEqual({});
       expect(manifest.optionalDependencies ?? {}).toEqual({});
       expect(existsSync(join(app, 'node_modules/isolated-vm'))).toBe(false);
+      const scripts = (manifest.scripts ?? {}) as Record<string, unknown>;
+      expect(['preinstall', 'install', 'postinstall'].filter((k) => k in scripts)).toEqual([]);
+      const files = (
+        readdirSync(join(app, 'node_modules/@riftydev/isolate-guest'), {
+          recursive: true,
+        }) as string[]
+      ).filter((f) => f.endsWith('.node'));
+      expect(files).toEqual([]);
       const probe = `
       const root = await import('@riftydev/isolate-guest');
       const { statSync } = await import('node:fs');
@@ -134,4 +163,52 @@ describe('the README embedder runs the corpus like node -e (I1, I4)', () => {
       );
     }, 240_000);
   }
+});
+
+describe('unhandled rejections with uncopyable reasons fail the run as in Node (I1)', () => {
+  for (const code of UNCOPYABLE) {
+    carrier(
+      code,
+      async () => {
+        const oracle = nodeEval(code);
+        const result = (await runCorpus())[code];
+        expect({ stdout: result?.stdout, exitCode: result?.exitCode }).toEqual({
+          stdout: oracle.stdout,
+          exitCode: oracle.code,
+        });
+      },
+      240_000,
+    );
+  }
+});
+
+describe('the README states the contract (I4)', () => {
+  // The prose is review-read; this pins that every contract name is documented.
+  carrier(
+    'names every bridge function, both guest entry points, both embedder hooks and the unstable status',
+    () => {
+      const readme = readFileSync(join(PACKAGE_DIR, 'README.md'), 'utf8');
+      const names = [
+        'write',
+        'timerStart',
+        'timerClear',
+        'now',
+        'random',
+        'timeOrigin',
+        'run',
+        'fire',
+        'rejection',
+        'onUnhandledRejection',
+        'importModuleDynamically',
+        'UNCOPYABLE_REJECTION',
+        'IMPORT_GAP',
+        'exitStatus',
+        'close',
+        '7.0.2',
+        '6.2.0',
+      ];
+      expect(names.filter((n) => !readme.includes(`\`${n}`))).toEqual([]);
+      expect(readme).toMatch(/unstable/i);
+    },
+  );
 });
