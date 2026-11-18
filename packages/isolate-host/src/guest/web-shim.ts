@@ -5,7 +5,7 @@
  * Callbacks (`HostBridge`); no isolated-vm object reaches the guest.
  */
 import { notImplemented } from './loud.ts';
-import { TextDecoder, TextEncoder } from './text-codec.ts';
+import { TextDecoder, TextEncoder, encodeUtf8 } from './text-codec.ts';
 
 /** Functions the child installs as `globalThis.__riftyIsolateHost` (copying Callbacks). */
 export interface HostBridge {
@@ -27,16 +27,41 @@ if (typeof bridge?.write !== 'function') throw new Error('isolate-host guest: ho
 // biome-ignore lint/performance/noDelete: the property must be gone, not undefined.
 delete g.__riftyIsolateHost;
 
-// Built before guest code; `TextEncoder` here is the module's own class, and it
-// allocates through a captured `Uint8Array` (text-codec.ts).
-const hostEncoder = new TextEncoder();
+// Captured before guest code, for the work the host schedules in this realm.
+const reflectApplyPrimordial = Reflect.apply;
+const definePropertyPrimordial = Object.defineProperty;
+const PromisePrimordial = Promise;
+const promiseResolvePrimordial = Promise.resolve;
+const promiseThenPrimordial = Promise.prototype.then;
+const mapGetPrimordial = Map.prototype.get;
+const mapSetPrimordial = Map.prototype.set;
+const mapDeletePrimordial = Map.prototype.delete;
+
+/** UTF-8 bytes straight to the host, through the codec's module function, not the guest-visible class. */
+export function writeHost(fd: 1 | 2, text: string): void {
+  bridge.write(fd, encodeUtf8(text));
+}
+
+// Null prototype: reading the descriptor's fields does no lookup the guest can poison.
+const OWN_UNDEFINED = { __proto__: null, value: undefined } as PropertyDescriptor;
 
 /**
- * UTF-8 bytes straight to the host, bypassing anything the guest can replace
- * (the encoder and its allocations are primordial — text-codec.ts).
+ * Run `ok`/`err` when `promise` settles. `await` and a live `then` look up the
+ * guest's `then`; the captured `then` still resolves the species through
+ * `promise.constructor`, so an own `constructor: undefined` (null-prototype
+ * descriptor) makes it take the default without a lookup. A throw → `err`.
  */
-export function writeHost(fd: 1 | 2, text: string): void {
-  bridge.write(fd, hostEncoder.encode(text));
+export function onSettled(
+  promise: Promise<unknown>,
+  ok: () => void,
+  err: (caught: unknown) => void,
+): void {
+  try {
+    definePropertyPrimordial(promise, 'constructor', OWN_UNDEFINED);
+    reflectApplyPrimordial(promiseThenPrimordial, promise, [ok, err]);
+  } catch (caught) {
+    err(caught);
+  }
 }
 
 let uncaught: (error: unknown) => void = (error) => {
@@ -147,13 +172,18 @@ define('TextDecoder', TextDecoder);
 // --- task scheduling ---
 define('queueMicrotask', function queueMicrotask(callback: unknown): void {
   if (typeof callback !== 'function') throw argType('callback', 'of type function', callback);
-  Promise.resolve().then(() => {
+  const run = (): void => {
     try {
       (callback as () => void)();
     } catch (error) {
       uncaught(error);
     }
-  });
+  };
+  onSettled(
+    reflectApplyPrimordial(promiseResolvePrimordial, PromisePrimordial, []) as Promise<void>,
+    run,
+    uncaught,
+  );
 });
 
 /** A host-scheduled timer; expiry runs `_onTimeout`, as Node's `Timeout` does. */
@@ -164,8 +194,8 @@ class Timeout {
     readonly repeat: boolean,
   ) {}
   _onTimeout(): void {
-    const fn = this.fn;
-    fn(...this.args);
+    // No spread: it iterates through the guest-replaceable array iterator.
+    reflectApplyPrimordial(this.fn, undefined, this.args);
   }
 }
 const timers = new Map<number, Timeout>();
@@ -173,14 +203,17 @@ let nextTimerId = 1;
 function startTimer(repeat: boolean, fn: unknown, ms: unknown, args: unknown[]): number {
   if (typeof fn !== 'function') throw argType('callback', 'of type function', fn);
   const id = nextTimerId++;
-  timers.set(id, new Timeout(fn as Timeout['fn'], args, repeat));
+  reflectApplyPrimordial(mapSetPrimordial, timers, [
+    id,
+    new Timeout(fn as Timeout['fn'], args, repeat),
+  ]);
   const delay = Number(ms);
   bridge.timerStart(id, Number.isFinite(delay) && delay > 0 ? delay : 0, repeat);
   return id;
 }
 function clearTimer(id: unknown): void {
   const key = Number(id);
-  if (timers.delete(key)) bridge.timerClear(key);
+  if (reflectApplyPrimordial(mapDeletePrimordial, timers, [key])) bridge.timerClear(key);
 }
 define('setTimeout', (fn: unknown, ms?: unknown, ...args: unknown[]) =>
   startTimer(false, fn, ms, args),
@@ -193,10 +226,11 @@ define('clearInterval', clearTimer);
 
 /** Host timer expiry → the guest callback; a throw takes the uncaught path. */
 export function fireTimer(id: number): void {
-  const entry = timers.get(id);
+  const entry = reflectApplyPrimordial(mapGetPrimordial, timers, [id]) as Timeout | undefined;
   if (entry === undefined) return;
-  if (!entry.repeat) timers.delete(id);
+  if (!entry.repeat) reflectApplyPrimordial(mapDeletePrimordial, timers, [id]);
   try {
+    // `Timeout` never reaches guest code (timers hand out ids), so its prototype is the host's.
     entry._onTimeout();
   } catch (error) {
     uncaught(error);

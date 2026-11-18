@@ -7,10 +7,14 @@
  *    infrastructure failure of its own;
  *  - the call settles within `timeoutMs` + 1000 ms — a guest can hang its own
  *    run (the host then kills it), never the consumer's call;
- *  - the host's own tail (the guest bundle's chaining, the status transport,
- *    the child) consults nothing the guest can replace; the status crosses as
- *    one primitive and the child judges it;
- *  - the child and the consumer add no text to stderr.
+ *  - nothing reaches the host: the status crosses as one primitive and the
+ *    child judges it in its own realm;
+ *  - the host writes no stderr text of its own (beyond the two declared
+ *    diagnostics, ADR-0557 §6).
+ *
+ * The guest bundle's tail runs in the guest realm too; it avoids every lookup
+ * measured to steer it (the hooks below fire only inside its helpers). That is
+ * measured, not proven exhaustive — the promises above do not rest on it.
  *
  * Node's exact status needs rifty's runtime intact. rifty's runtime does not
  * use primordials, so a guest that replaces intrinsics it uses can change its
@@ -19,6 +23,7 @@
  * replaceable-intrinsics`). `BROKEN_RUNTIME` pins what each measured member
  * reads, so a change in any of them is seen; it is a sample, not the class.
  */
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { type RunCodeResult, runCode } from '../src/index.ts';
 import { nodeEval } from './support.ts';
@@ -101,14 +106,6 @@ const FAITHFUL: readonly { readonly label: string; readonly code: string }[] = [
     code: "Promise.prototype.then = function (r) { r(0) }; throw new Error('x')",
   },
   {
-    label: 'Promise species broken, throw from a timer',
-    code: "Promise.prototype.constructor = 0; Promise.prototype.then = (f) => f(); setTimeout(() => { throw new Error('x') })",
-  },
-  {
-    label: 'Promise species broken, pending rejection',
-    code: "Promise.prototype.constructor = 0; Promise.prototype.then = (f) => f(); Promise.reject(new Error('x'))",
-  },
-  {
     label: 'Number.isInteger poisoned',
     code: 'Number.isInteger = () => false; console.log(1)',
   },
@@ -131,6 +128,42 @@ const FAITHFUL: readonly { readonly label: string; readonly code: string }[] = [
   {
     label: 'Object.prototype.then forged and the array iterator muted',
     code: `${ITERATOR} Object.prototype.then = function (r) { delete Object.prototype.then; r({ code: 0, diagnosed: false }) }; it.next = () => ({ done: true }); throw new Error('x')`,
+  },
+  // Hooks that fire only inside the host's own helpers (named in
+  // HOST_FRAMES, checked against the bundle below): the host tail's species
+  // read, its encoder and its timer table are not the guest's to steer.
+  {
+    label: 'Promise constructor getter exits 0 inside the host tail',
+    code: "Object.defineProperty(Promise.prototype, 'constructor', { configurable: true, get() { if (new Error().stack.includes('onSettled')) process.exit(0); return Promise } }); setTimeout(() => { throw new Error('x') }, 50)",
+  },
+  {
+    label: 'Promise species getter exits 0 inside the host tail',
+    code: "Object.defineProperty(Promise, Symbol.species, { configurable: true, get() { if (new Error().stack.includes('onSettled')) process.exit(0); return Promise } }); setTimeout(() => { throw new Error('x') }, 50)",
+  },
+  {
+    label: 'Promise constructor getter throws inside the host tail',
+    code: "Object.defineProperty(Promise.prototype, 'constructor', { configurable: true, get() { if (new Error().stack.includes('onSettled')) throw new Error('boom'); return Promise } }); process.exitCode = 4",
+  },
+  {
+    label: "TextEncoder.prototype.encode forges the host's write",
+    code: "const o = TextEncoder.prototype.encode; TextEncoder.prototype.encode = function (s) { return new Error().stack.includes('writeHost') ? o.call(this, 'FORGED\\n') : o.call(this, s) }; throw new Error('x')",
+  },
+  {
+    label: "Map.prototype.get hides the host's timers",
+    code: "const g = Map.prototype.get; Map.prototype.get = function (k) { return new Error().stack.includes('fireTimer') ? undefined : g.call(this, k) }; setTimeout(() => { throw new Error('x') }, 5)",
+  },
+  {
+    label: 'global Promise replaced before queueMicrotask',
+    code: "globalThis.Promise = function () {}; globalThis.Promise.resolve = () => ({ then() {} }); queueMicrotask(() => console.log('mt'))",
+  },
+  { label: 'String replaced', code: "String = () => ''; throw new Error('x')" },
+  {
+    label: 'String replaced, throw from a timer',
+    code: "String = () => ''; setTimeout(() => { throw new Error('x') }, 1)",
+  },
+  {
+    label: 'Map.prototype.get poisoned',
+    code: 'Map.prototype.get = function () { return undefined }; console.log(1)',
   },
   { label: 'non-Error throw with no prototype', code: 'throw Object.create(null)' },
   { label: 'forged exit signal', code: "throw { code: 'RIFTY_PROCESS_EXIT', exitCode: 0 }" },
@@ -172,7 +205,16 @@ const KEEPS_ERROR_TEXT = new Set([
   'array iterator ends early',
   'Array.prototype[Symbol.iterator] replaced',
   'Object.prototype.then forged and the array iterator muted',
+  'Promise constructor getter exits 0 inside the host tail',
+  'Promise species getter exits 0 inside the host tail',
+  "TextEncoder.prototype.encode forges the host's write",
+  "Map.prototype.get hides the host's timers",
+  'String replaced',
+  'String replaced, throw from a timer',
 ]);
+
+/** Host helpers the hooks above match by name: a rename must fail here, not make them vacuous. */
+const HOST_FRAMES = ['onSettled', 'writeHost', 'fireTimer'];
 
 /**
  * Measured members of the open class: the guest replaced something rifty's
@@ -187,6 +229,7 @@ const BROKEN_RUNTIME: readonly {
     readonly termination?: string;
     /** The guest broke its diagnostic path: nothing reached stderr, and the host adds nothing. */
     readonly stderr?: '';
+    readonly stdout?: string;
   };
   readonly cleanForAFailure?: true;
 }[] = [
@@ -219,19 +262,6 @@ const BROKEN_RUNTIME: readonly {
     reads: { exitCode: 0 },
     cleanForAFailure: true,
   },
-  // Broke the runtime's diagnostic: Node's status, but no text arrives, and
-  // the host writes none of its own (stderr carries guest bytes only, goal.md
-  // Decisions).
-  {
-    label: 'String replaced',
-    code: "String = () => ''; throw new Error('x')",
-    reads: { exitCode: 1, stderr: '' },
-  },
-  {
-    label: 'String replaced, throw from a timer',
-    code: "String = () => ''; setTimeout(() => { throw new Error('x') }, 1)",
-    reads: { exitCode: 1, stderr: '' },
-  },
   {
     label: 'exit signal lookalike thrown from a timer',
     code: "setTimeout(() => { throw { code: 'RIFTY_PROCESS_EXIT', exitCode: 0 } })",
@@ -250,12 +280,30 @@ const BROKEN_RUNTIME: readonly {
     code: 'Promise.prototype.constructor = 0; Promise.prototype.then = (f) => f(); setTimeout(() => process.exit(2), 20)',
     reads: { exitCode: 1 },
   },
-  // Hangs its own run inside the runtime's drain (a keepalive map lookup), as
-  // an infinite loop would: the deadline owns it.
+  // The guest's `then` skips the runtime's own error reporting: Node's status,
+  // no text, and the host writes none of its own (goal.md Decisions).
   {
-    label: 'Map.prototype.get poisoned',
-    code: 'Map.prototype.get = function () { return undefined }; console.log(1)',
-    reads: { exitCode: null, termination: 'timeout' },
+    label: 'Promise species broken, throw from a timer',
+    code: "Promise.prototype.constructor = 0; Promise.prototype.then = (f) => f(); setTimeout(() => { throw new Error('x') })",
+    reads: { exitCode: 1, stderr: '' },
+  },
+  {
+    label: 'Promise species broken, pending rejection',
+    code: "Promise.prototype.constructor = 0; Promise.prototype.then = (f) => f(); Promise.reject(new Error('x'))",
+    reads: { exitCode: 1, stderr: '' },
+  },
+  // The runtime's terminal forged with a non-number status: not a primitive,
+  // so it never crosses (resolving with an object would look up its `then`).
+  {
+    label: 'lifecycle slot forged with a thenable status',
+    code: "const rg = Reflect.get; Reflect.get = (t, k, r) => (typeof k === 'symbol' && String(k).includes('lifecycle') ? { terminal: { exitCode: { then: (ok) => ok(0) } } } : rg(t, k, r)); throw new Error('x')",
+    reads: { exitCode: 1 },
+  },
+  // The runtime's timer wrapper spreads the arguments through the iterator.
+  {
+    label: 'array iterator replaced before a timer with arguments fires',
+    code: "setTimeout((a) => { process.stdout.write(String(a) + '\\n') }, 5, 'arg'); Array.prototype[Symbol.iterator] = function* () {}",
+    reads: { exitCode: 0, stdout: 'undefined\n' },
   },
 ];
 
@@ -278,7 +326,8 @@ describe('post-guest paths: what the host owes whatever the guest replaced', () 
       const oracle = nodeEval(code);
       const result = await runCode(code, { timeoutMs: TIMEOUT_MS });
       expect({ label, exitCode: result.exitCode }).toEqual({ label, exitCode: oracle.code });
-      if (oracle.code !== 0) {
+      if (oracle.stderr.length > 0) {
+        // Where Node reported something, so does the run.
         expect(result.stderr.length).toBeGreaterThan(0);
         // Where the guest hid nothing, its own error is what the consumer reads.
         if (KEEPS_ERROR_TEXT.has(label)) expect(result.stderr).toContain('Error: x');
@@ -292,12 +341,13 @@ describe('post-guest paths: what the host owes whatever the guest replaced', () 
     it(`${label} — reads exactly as declared`, async () => {
       const oracle = nodeEval(code);
       const result = await runCode(code, { timeoutMs: TIMEOUT_MS });
-      const { stderr, ...status } = reads;
+      const { stderr, stdout, ...status } = reads;
       expect({ label, exitCode: result.exitCode, termination: result.termination }).toEqual({
         label,
         ...status,
       });
       if (stderr !== undefined) expect({ label, stderr: result.stderr }).toEqual({ label, stderr });
+      if (stdout !== undefined) expect({ label, stdout: result.stdout }).toEqual({ label, stdout });
       const clean = result.exitCode === 0 && result.stderr.length === 0;
       // Only the declared rows may read clean for a run Node failed.
       expect({ label, clean: clean && oracle.code !== 0 }).toEqual({
@@ -307,11 +357,30 @@ describe('post-guest paths: what the host owes whatever the guest replaced', () 
     }, 10_000);
   }
 
-  it('an unrenderable throw names its type, never a coercion through guest code', async () => {
-    const result = await runCode('throw Object.create(null)');
-    expect(result.stderr).toBe(
-      'isolate-host: the run failed and no diagnostic could be rendered (object)\n',
-    );
-    expect(result.exitCode).toBe(1);
+  it("a non-Error throw prints the runtime's fatal text, never a line of the host's", async () => {
+    // rifty's `formatThrown`, as its fatal exit prints it; Node's `[eval]`
+    // header and inspect form are a declared gap
+    // (`backlog/runtime-js/node-eval-non-error-throw-rendering`).
+    for (const [code, stderr] of [
+      ["throw 'oops'", 'oops\n'],
+      ['throw 5', '5\n'],
+      ['throw Object.create(null)', '[object Object]\n'],
+    ] as const) {
+      const result = await runCode(code);
+      expect({ code, stderr: result.stderr, exitCode: result.exitCode }).toEqual({
+        code,
+        stderr,
+        exitCode: 1,
+      });
+    }
+  });
+
+  it('the host helpers the hooks match are named so in the built bundle', () => {
+    const bundle = readFileSync(new URL('../dist/guest.js', import.meta.url), 'utf8');
+    for (const name of HOST_FRAMES)
+      expect({ name, defined: bundle.includes(`function ${name}(`) }).toEqual({
+        name,
+        defined: true,
+      });
   });
 });

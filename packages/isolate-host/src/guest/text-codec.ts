@@ -53,15 +53,19 @@ export class TextEncoder {
   }
 
   encode(input = ''): Uint8Array {
-    const s = String(input);
-    const out = new Uint8ArrayPrimordial(s.length * 3);
-    const { written } = encodeInto(s, out);
-    return sliceBytes(out, 0, written);
+    return encodeUtf8(String(input));
   }
 
   encodeInto(input: string, dest: Uint8Array): { read: number; written: number } {
     return encodeInto(String(input), dest);
   }
+}
+
+/** UTF-8 of a string with no member lookup the guest can replace (the host's own writes). */
+export function encodeUtf8(s: string): Uint8Array {
+  const out = new Uint8ArrayPrimordial(s.length * 3);
+  const { written } = encodeInto(s, out);
+  return sliceBytes(out, 0, written);
 }
 
 function encodeInto(s: string, dest: Uint8Array): { read: number; written: number } {

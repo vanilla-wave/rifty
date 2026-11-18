@@ -22,7 +22,7 @@ Two more measured @ b9ff5be73: the signal object is mutable and catchable, so
 `try { process.exit(3) } catch (e) { e.exitCode = 0 }` exits 0 (Node 3), and
 `try { process.exit(3) } catch {}; console.log('after')` prints `after` where
 Node prints nothing. `Object.freeze` on the signal in `#terminate` would close
-the mutation half. Also @ 1d3fc3c43: `queueMicrotask(() => { throw { code: 'RIFTY_PROCESS_EXIT', exitCode: 0 } })`
+the mutation half. Also @ 1d3fc3c43 (Node v24.16.0): `queueMicrotask(() => { throw { code: 'RIFTY_PROCESS_EXIT', exitCode: 0 } })`
 → exit 0, Node 1; and the brand check *reads* the thrown value, so
 `throw new Proxy({}, { get() { throw new Error('trap') } })` runs the guest's
 trap inside `isRiftyProcessExit` and stderr shows `Error: trap … at

@@ -22,14 +22,20 @@ and a `Reflect.get` that forges the lifecycle slot makes a throwing run exit 0.
 @ 1d3fc3c43: `Promise.prototype.constructor = 0; Promise.prototype.then = (f) => f(); setTimeout(() => process.exit(2), 20)`
 → exit 1 (`TypeError: The .constructor property is not an object`), Node 2;
 `Reflect.get = () => undefined; console.log(1)` → exit 1 with the runtime's
-`Error: process.exit(0)` stack in stderr, Node 0 with empty stderr. Since the
-next commit the isolate host's own tail (bundle chaining, status transport,
-child) uses captured `then`, index loops and a primitive status (ADR-0557 §6),
-so what remains is the runtime's paths, shared with the browser realms. Parts of
+`Error: process.exit(0)` stack in stderr, Node 0 with empty stderr.
+@ 937595c70 (v24.16.0): `Map.prototype.get = () => { throw new Error('boom') }; console.log(1)`
+→ exit 1, `Error: boom … at process.emit (rifty-isolate-guest.js:…)`, Node 0
+(the `undefined`-returning variant hung in the host's own timer table, since
+captured); `Function.prototype.bind = function () { throw new Error('b') }; console.log(1)`
+→ exit 1 at `keepaliveState`, Node 0; `setTimeout((a) => { process.stdout.write(String(a) + '\n') }, 5, 'arg'); Array.prototype[Symbol.iterator] = function* () {}`
+→ prints `undefined`, Node `arg` (the runtime timer wrapper spreads its
+arguments). The isolate host's own tail avoids every lookup measured to steer
+it (ADR-0557 §6, measured, not exhaustive); these are the runtime's paths,
+shared with the browser realms. Parts of
 runtime-js already capture primordials (`reflectApplyPrimordial` in
 `module-loader`, `process.ts`); the lifecycle modules do not. A guest hanging
 its own run is bounded by the deadline (I4); what is not accepted is a wrong
-status where Node has a right one (ADR-0557 §Corrections 2026-11-18: an open,
+status where Node has a right one (goal.md Decisions, manager 2026-11-18: an open,
 declared fidelity class until this lands).
 
 ## Challenge

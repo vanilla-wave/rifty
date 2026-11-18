@@ -98,20 +98,26 @@ blocks it.
    (`src/child/bridge.ts`) with guest-safe `TypeError`s. What the run does
    after guest code — the fatal write, the natural exit — uses the host bridge
    and the captured `process.exit`. The guest realm is the guest's, so no
-   lookup there is authority. The host's own tail consults nothing the guest
-   can replace: it chains on the runtime's promises with the captured
-   `Promise.prototype.then` (a native `await` looks up the guest's
-   `constructor`/`then`), iterates by index, and hands the status over as ONE
-   PRIMITIVE (resolving with a number does no `then` lookup); the CHILD
-   validates it in its own realm — a non-integer or out-of-range status, a
-   rejected tail or a throw is exit 1, and the child adds no text (stderr is
-   guest bytes only, §1). So whatever a guest replaces, `runCode` resolves and
-   settles within `timeoutMs` + 1000 ms (a guest that hangs its own run is
-   killed as `timeout`). Node's exact status and text need rifty's runtime
-   intact, and the runtime shares the guest's realm without primordials: a
-   guest that replaces intrinsics it uses, or forges its exit signal, can
-   change its own status and text either way, exit 0 for a Node failure
-   included — an open class, compat ⚠️, owned by the runtime backlog. No Node IPC: the request goes as one JSON line on the child's
+   lookup there is authority, and the guest bundle's own tail runs there too.
+   It avoids every lookup measured to steer a run: it chains on the runtime's
+   promises through `onSettled` (captured `then`, an own `constructor:
+   undefined` so the species takes the default), keeps timers and encodes
+   through captured members, iterates by index, renders a fatal error with the
+   runtime's own `formatThrown`, and hands the status over as ONE PRIMITIVE
+   (resolving with a number does no `then` lookup). That is measured, not
+   proven exhaustive — the host's promises do not rest on it: the CHILD
+   validates the primitive in its own realm (a non-integer or out-of-range
+   status, a rejected tail or a throw is exit 1) and the consumer bounds the
+   call, so whatever runs in the isolate, `runCode` resolves within
+   `timeoutMs` + 1000 ms and nothing reaches the host (I3, I4). The host
+   writes no stderr text of its own (§1) except two declared diagnostics a
+   guest cannot render itself: the `import()` gap line (the child sees the
+   request; the guest may never see the rejection) and the uncopyable
+   rejection reason. Node's exact status and text need rifty's runtime intact,
+   and the runtime shares the guest's realm without primordials: a guest that
+   replaces intrinsics it uses, or forges its exit signal, can change its own
+   status and text either way, exit 0 for a Node failure included — an open
+   class, compat ⚠️, owned by the runtime backlog. No Node IPC: the request goes as one JSON line on the child's
    stdin (kept open; its end tells the child the consumer died → self-kill),
    results come back as length-framed binary frames on fd 3 that the
    consumer parses itself (`src/protocol.ts`). A header announcing more than
@@ -167,4 +173,5 @@ memory invariant — pending the user, not built.
 ## Corrections
 
 - 2026-11-18 — §6: the status crossed as `{code, diagnosed}`; a guest `Object.prototype.then` rewrote it (resolution looks up `then` on objects). Now one integer, and an unusable status is exit 1 with no child-written stderr line (that line broke §1 "stderr is guest bytes only"); `diagnosed` removed with it.
-- 2026-11-18 — §6: the tail's native `await`s let a guest `Promise.prototype.constructor`/`then` skip the drain (a timer throw read clean 0); now captured-`then` chaining and index loops. The earlier claim "only N named routes read clean" is dropped: rifty's runtime, not the host, decides the status in a shared realm, so the class is open (agent decision: self-poisoning that changes the guest's own status is a declared fidelity gap, not a host safety fault — no host reach, I3; bounded, I4).
+- 2026-11-18 — §6: the tail's native `await`s let a guest `Promise.prototype.constructor`/`then` skip the drain (a timer throw read clean 0); now captured-`then` chaining and index loops. The earlier claim "only N named routes read clean" is dropped: rifty's runtime, not the host, decides the status in a shared realm, so the class is open (manager decision 2026-11-18, `goal.md` Decisions: the boundary is the child, not the guest realm; self-poisoning that changes the guest's own result is a declared fidelity gap, not fixed vector by vector).
+- 2026-11-18 — §6: verify @ 937595c70 hooked four host-owned lookups by frame name (the captured `then`'s species read, `TextEncoder.prototype.encode` in `writeHost`, `Map.prototype.get` and the spread in `fireTimer`, the live `Promise` in `queueMicrotask`) — all captured now; and the fatal fallback wrote host text for ordinary non-Error throws (`throw 'oops'`) — now the runtime's `formatThrown`, no fallback line. The tail is declared measured-not-exhaustive; the host's promises are the child's and the consumer's.

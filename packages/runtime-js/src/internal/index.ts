@@ -8,7 +8,7 @@ export { installConsole } from '../repl/console.ts';
 export { setDefaultProcessOutputSink } from '../builtins/process-stdio-writer.ts';
 // The runtime's own first terminal signal: identity, so a host cannot be fooled
 // by a guest-thrown lookalike (isolate host, ADR-0557 §5).
-export { readNodeProcessTerminal } from '../builtins/process-lifecycle-events.ts';
+export { formatThrown, readNodeProcessTerminal } from '../builtins/process-lifecycle-events.ts';
 export {
   handleRealmUncaughtError,
   handleRealmUnhandledRejection,

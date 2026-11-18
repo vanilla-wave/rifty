@@ -16,6 +16,7 @@ import {
 } from '@riftydev/runtime-js/builtins/process';
 import { installTimerGlobals } from '@riftydev/runtime-js/builtins/timers';
 import {
+  formatThrown,
   handleRealmUncaughtError,
   handleRealmUnhandledRejection,
   readNodeProcessTerminal,
@@ -30,6 +31,7 @@ import {
   bridge,
   fireTimer,
   installCeilingGlobals,
+  onSettled,
   setUncaughtHandler,
   writeHost,
 } from './web-shim.ts';
@@ -40,26 +42,8 @@ bindNotImplemented(NotImplementedError);
 const stringIncludesPrimordial = String.prototype.includes;
 const reflectApplyPrimordial = Reflect.apply;
 const PromisePrimordial = Promise;
-const promiseThenPrimordial = Promise.prototype.then;
 const stringIncludes = (haystack: string, needle: string): boolean =>
   reflectApplyPrimordial(stringIncludesPrimordial, haystack, [needle]) as boolean;
-/**
- * `await p` in this realm looks up `p.constructor` and then `p.then`, both
- * guest-replaceable: a forged `then` resolves at once and skips the drain. The
- * captured `then` registers on the real promise, so `ok`/`err` run when it
- * settles; a guest species constructor can only make the call throw (→ `err`).
- */
-function onSettled(
-  promise: Promise<unknown>,
-  ok: () => void,
-  err: (caught: unknown) => void,
-): void {
-  try {
-    reflectApplyPrimordial(promiseThenPrimordial, promise, [ok, err]);
-  } catch (caught) {
-    err(caught);
-  }
-}
 
 const CWD = '/workspace';
 /**
@@ -216,9 +200,15 @@ function esmGapOf(caught: unknown): Error | null {
   }
 }
 
-/** Write the guest's error as Node's fatal path does; never throws. */
+/**
+ * Write the guest's error with the runtime's own fatal text (`formatThrown`,
+ * as rifty's fatal exit prints it); never throws. Its member reads can be
+ * poisoned, so narrower renders follow; when none renders, stderr gets nothing
+ * — the host never writes text of its own (goal.md Decisions).
+ */
 function writeDiagnostic(error: unknown): void {
   const renders = [
+    () => formatThrown(error),
     () => (error as Error).stack,
     () => {
       const { name, message } = error as Error;
@@ -227,10 +217,6 @@ function writeDiagnostic(error: unknown): void {
         : undefined;
     },
     () => (error as Error).message,
-    // Nothing rendered: the thrown value's type, never a coercion the guest
-    // controls. One text for every reason a render can fail (a non-Error throw,
-    // a poisoned member, a text too large to encode) — it never says which.
-    () => `isolate-host: the run failed and no diagnostic could be rendered (${typeof error})`,
   ];
   // Index loop: the array iterator is guest-replaceable.
   for (let i = 0; i < renders.length; i++) {
