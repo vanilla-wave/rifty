@@ -128,6 +128,16 @@ throw new Error('entry');`,
     expect(await run(line)).toMatchObject({ status: 'exited', exitCode: 1 });
   });
 
+  it("keeps an 'exit' listener's exitCode over a microtask queued before the throw", async () => {
+    const { run } = fixture({
+      '/project/fatal.cjs': `process.on('exit', () => { process.exitCode = 9; });
+Promise.resolve().then(() => { process.exitCode = 6; });
+throw new Error('entry');`,
+    });
+
+    expect(await run('node fatal.cjs')).toMatchObject({ status: 'exited', exitCode: 9 });
+  });
+
   it('takes the status a write from the report itself leaves, as Node reads it after printing', async () => {
     const { run } = fixture({
       '/project/fatal.cjs': `Promise.resolve().then(() => { process.exitCode = 6; });
