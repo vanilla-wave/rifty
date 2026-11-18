@@ -35,7 +35,7 @@ shared with the browser realms. Parts of
 runtime-js already capture primordials (`reflectApplyPrimordial` in
 `module-loader`, `process.ts`); the lifecycle modules do not. A guest hanging
 its own run is bounded by the deadline (I4); what is not accepted is a wrong
-status where Node has a right one (goal.md Decisions, manager 2026-11-18: an open,
+status where Node has a right one (manager decision 2026-11-18, ADR-0557 §Not the user's words: an open,
 declared fidelity class until this lands).
 
 ## Challenge

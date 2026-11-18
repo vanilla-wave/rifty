@@ -7,7 +7,7 @@ Date: 2026-11
 
 ## Context
 
-Mission widening (`AGENTS.md` Scope), narrow (goal `isolate-host-run-code`; manager decision
+Mission widening (`AGENTS.md` Scope), narrow (goal `isolate-host-run-code`, closed 2026-11-18; manager decision
 2026-11-18 — the user saw the recommendation 2026-11-17, raised no objection
 and said to start 2026-11-18): a Node host executes a rifty guest in a V8 isolate.
 Overturns, for this host only, `docs/research/open-webcontainers-alternative-2026-06.md`
@@ -15,7 +15,7 @@ Overturns, for this host only, `docs/research/open-webcontainers-alternative-202
 rifty now ships a server-side host. Orchestration, pods, hypervisor and deploy
 stay outside rifty. Browser runtime, its trust model and ADRs are unchanged.
 
-Probes (goal §Evidence, Node v24.16.0, isolated-vm 6.2.0/7.0.2): in-process
+Probes (2026-11-18, macOS arm64, Node v24.16.0, isolated-vm 6.2.0/7.0.2): in-process
 isolated-vm cannot keep the host healthy — `new Array(2**28).fill(0)` under
 `memoryLimit: 64` grows host RSS to ~1.26 GB, fires `onCatastrophicError`, the
 eval never settles and `process.exit` hangs; README: after it "resources … are
@@ -160,6 +160,10 @@ resolves real Node; isolate rejects `Not supported`); `node:vm`, workerd,
 quickjs-emscripten (requirements §Тупики); option B, in-process with a weaker
 memory invariant — pending the user, not built.
 
+## Not the user's words
+
+Manager decisions by delegation (2026-11-18), on which the user has not spoken: option A (a child process per call) over B (in-process, weaker memory promise); the killed-run shape `exitCode: null` + `termination`, not checked against the consumer's own type; the requirements' Web API list (`URL`, `structuredClone`, web streams, `AbortController`, `Event`…) as loud ceilings (§5), not shimmed; and the post-guest boundary at the child (§Corrections).
+
 ## Consequences
 
 - Each call pays a process spawn + isolate + runtime-bundle load; measured,
@@ -174,6 +178,6 @@ memory invariant — pending the user, not built.
 ## Corrections
 
 - 2026-11-18 — §6: the status crossed as `{code, diagnosed}`; a guest `Object.prototype.then` rewrote it (resolution looks up `then` on objects). Now one integer, and an unusable status is exit 1 with no child-written stderr line (that line broke §1 "stderr is guest bytes only"); `diagnosed` removed with it.
-- 2026-11-18 — §6: the tail's native `await`s let a guest `Promise.prototype.constructor`/`then` skip the drain (a timer throw read clean 0); now captured-`then` chaining. The earlier claim "only N named routes read clean" is dropped: rifty's runtime, not the host, decides the status in a shared realm, so the class is open (manager decision 2026-11-18, `goal.md` Decisions: the boundary is the child, not the guest realm; self-poisoning that changes the guest's own result is a declared fidelity gap, not fixed vector by vector).
+- 2026-11-18 — §6: the tail's native `await`s let a guest `Promise.prototype.constructor`/`then` skip the drain (a timer throw read clean 0); now captured-`then` chaining. The earlier claim "only N named routes read clean" is dropped: rifty's runtime, not the host, decides the status in a shared realm, so the class is open (manager decision 2026-11-18, §Not the user's words: the boundary is the child, not the guest realm; self-poisoning that changes the guest's own result is a declared fidelity gap, not fixed vector by vector).
 - 2026-11-18 — §6: verify @ 937595c70 hooked host-owned lookups by frame name (the captured `then`'s species read, `TextEncoder.prototype.encode` in `writeHost`, `Map.prototype.get` in `fireTimer`, the live `Promise` in `queueMicrotask`); they were captured before the manager bounded the class at the child, and stay because each holds a measured case (mutants killed) — not as a policy: under that bound no further in-realm vector is chased. The fatal fallback wrote host text for ordinary non-Error throws (`throw 'oops'`) — now the runtime's `formatThrown`, no fallback line.
 - 2026-11-18 — §6, cross-review 3 (REV-7): captures that served only the guest's own result went — the `writeDiagnostic` render cascade (one `formatThrown`, nothing written if it throws), the index loops and captured `includes` in `esmGapOf`, the captured `Promise` in `run`, the spread capture in `Timeout`, the child's dead `early` timer buffer, the `onFrame` bool (the consumer's `end` is idempotent).
