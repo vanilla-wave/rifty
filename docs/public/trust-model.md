@@ -55,6 +55,9 @@ isolated-vm V8 isolate, and the parent kills it after the call.
 - **Consumer's duty.** Put the child behind an external boundary: a separate uid, a sandbox or
   container, an RSS cgroup. No secrets may be reachable by that user. Track Node point releases
   that patch V8. rifty does not orchestrate pods, hypervisors or deploys.
+- **Custom embedders (`@riftydev/isolate-guest`, ADR-0558).** The same guest in an isolate the
+  consumer creates. Its `createHostBridge` validates every guest argument. The limits, the kill,
+  the process boundary and the escape posture above are then the embedder's to provide, not rifty's.
 
 ## Eddy fast-install resolver (mirror-grade)
 

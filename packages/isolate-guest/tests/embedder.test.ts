@@ -21,8 +21,8 @@ import { nodeEval } from '../../isolate-host/tests/support.ts';
  */
 const UNCOPYABLE = ['Promise.reject({ f() {} })', 'Promise.reject(Symbol())', 'Promise.reject(1)'];
 
-/** RED until the export lands (map item 1): then `it`. */
-const carrier = it.fails;
+/** The acceptance carrier (map item 1); RED was `it.fails` before the export landed. */
+const carrier = it;
 
 const PACKAGE_DIR = fileURLToPath(new URL('..', import.meta.url));
 const work = mkdtempSync(join(tmpdir(), 'isolate-guest-embedder-'));

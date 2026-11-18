@@ -7,8 +7,8 @@
  */
 import { describe, expect, it } from 'vitest';
 
-/** RED until the export lands (map item 1): then `it`. */
-const carrier = it.fails;
+/** The acceptance carrier (map item 1); RED was `it.fails` before the export landed. */
+const carrier = it;
 
 interface Functions {
   write(fd: unknown, bytes: unknown): void;

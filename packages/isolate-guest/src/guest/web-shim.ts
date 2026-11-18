@@ -1,26 +1,15 @@
 /**
  * Bare-V8 Web globals the rifty runtime and the corpus need (ADR-0557 §5).
  * Imported first by the guest bundle: runtime modules capture timers and
- * codecs at load. Host work goes through the child's copying isolated-vm
- * Callbacks (`HostBridge`); no isolated-vm object reaches the guest.
+ * codecs at load. Host work goes through the embedder's
+ * `__riftyIsolateHost` functions (`GuestHost`, `../contract.ts`).
  */
+import type { GuestHost } from '../contract.ts';
 import { notImplemented } from './loud.ts';
 import { TextDecoder, TextEncoder, encodeUtf8 } from './text-codec.ts';
 
-/** Functions the child installs as `globalThis.__riftyIsolateHost` (copying Callbacks). */
-export interface HostBridge {
-  write(fd: 1 | 2, bytes: Uint8Array): void;
-  timerStart(id: number, ms: number, repeat: boolean): void;
-  timerClear(id: number): void;
-  now(): number;
-  readonly timeOrigin: number;
-  random(byteLength: number): Uint8Array;
-  /** The token the child sends for an unhandled rejection reason it cannot copy. */
-  readonly uncopyableReason: string;
-}
-
 const g = globalThis as unknown as Record<string, unknown>;
-export const bridge = g.__riftyIsolateHost as HostBridge;
+export const bridge = g.__riftyIsolateHost as GuestHost;
 if (typeof bridge?.write !== 'function') throw new Error('isolate-host guest: host bridge missing');
 // Captured in this closure, then removed from the realm: guest code cannot call
 // the host directly (`done` would bypass the process lifecycle) — ADR-0557 §6.

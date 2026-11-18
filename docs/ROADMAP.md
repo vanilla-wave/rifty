@@ -156,6 +156,8 @@ hypervisor and deploy stay outside rifty; the consumer supplies the outer bounda
 (`docs/public/trust-model.md` §Isolate host).
 - A — done: `runCode(code)` → `{stdout, stderr, exitCode}` with `node -e` parity and limits —
   `packages/isolate-host`, ADR-0557 (PR #405); gaps in `docs/public/compat/isolate-host.md`.
+- Guest export — in progress: `@riftydev/isolate-guest`, the guest bundle + bridge contract for
+  custom embedders, unstable; `runCode` runs on it — ADR-0558, goal `isolate-guest-embed`.
 - Directions (not fitted): B — live sandbox: host binary file ops, `exec node <path>`; C — FS
   snapshot export/import + library template; D — agent tool set over the host. Shim
   completion (URL, structuredClone, web streams, AbortController, EventTarget — requirements'

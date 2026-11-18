@@ -1,23 +1,27 @@
 /**
  * Child process (ADR-0557 §2–3): one isolated-vm isolate holding the rifty
  * guest bundle, one run. Spawned with `--no-node-snapshot` and an empty env by
- * `runCode`; killed by the parent after its last message. Only the validated
- * copying `ivm.Callback`s of `bridge.ts` cross into the isolate.
+ * `runCode`; killed by the parent after its last message. Only copying
+ * `ivm.Callback`s over the export's validated `createHostBridge` functions
+ * cross into the isolate (ADR-0558).
  */
 import { readFileSync } from 'node:fs';
 import { Socket } from 'node:net';
+import {
+  IMPORT_GAP,
+  UNCOPYABLE_REJECTION,
+  createHostBridge,
+  exitStatus,
+} from '@riftydev/isolate-guest';
 import ivm from 'isolated-vm';
 import { FRAME_CHANNEL_FD, KIND, MAX_ERROR_TEXT, type RunRequest, frame } from '../protocol.ts';
-import { IMPORT_GAP, OutputBudget, createBridge, importGapError } from './bridge.ts';
+import { OutputBudget, importGapError } from './bridge.ts';
 
 const channel = new Socket({ fd: FRAME_CHANNEL_FD, readable: false, writable: true });
 channel.on('error', () => process.kill(process.pid, 'SIGKILL'));
 const send = (kind: number, payload: Uint8Array): void => {
   channel.write(frame(kind, payload));
 };
-
-/** Unhandled rejection reasons isolated-vm cannot copy out arrive as this token. */
-const UNCOPYABLE_REASON = 'isolate-host:uncopyable-rejection-reason';
 
 async function run(request: RunRequest): Promise<void> {
   // Before the guest's entry exists, a failure is this child's, not the guest's.
@@ -77,7 +81,7 @@ async function run(request: RunRequest): Promise<void> {
       try {
         rejection?.applyIgnored(undefined, [reason], { arguments: { copy: true } });
       } catch {
-        rejection?.applyIgnored(undefined, [UNCOPYABLE_REASON]);
+        rejection?.applyIgnored(undefined, [UNCOPYABLE_REJECTION]);
       }
     },
   });
@@ -86,22 +90,21 @@ async function run(request: RunRequest): Promise<void> {
     const jail = context.global;
     // Bound once the bundle has loaded; the bundle arms no timer while loading.
     const guestFire: { ref?: ivm.Reference<(id: number) => void> } = {};
-    const bridge = createBridge({
-      output,
-      outputPending: () => {
-        if (flushScheduled) return;
+    const { functions } = createHostBridge({
+      write: (fd, bytes) => {
+        if (!output.write(fd, bytes) || flushScheduled) return;
         flushScheduled = true;
         // Batch: guest writes arrive as separate host tasks; one frame batch per 5 ms.
         setTimeout(flush, 5);
       },
       fire: (id) => guestFire.ref?.applyIgnored(undefined, [id]),
     });
-    const names = Object.keys(bridge);
-    for (const [name, fn] of Object.entries(bridge)) {
+    const names = Object.keys(functions);
+    for (const [name, fn] of Object.entries(functions)) {
       await jail.set(`__riftyHost_${name}`, new ivm.Callback(fn));
     }
     await context.eval(`{
-      const bridge = { timeOrigin: ${performance.timeOrigin}, uncopyableReason: ${JSON.stringify(UNCOPYABLE_REASON)} };
+      const bridge = { timeOrigin: ${performance.timeOrigin} };
       for (const name of ${JSON.stringify(names)}) {
         bridge[name] = globalThis['__riftyHost_' + name];
         delete globalThis['__riftyHost_' + name];
@@ -127,11 +130,7 @@ async function run(request: RunRequest): Promise<void> {
       arguments: { copy: true },
       result: { promise: true, copy: true },
     });
-    if (typeof code !== 'number' || !Number.isInteger(code) || code < 0 || code > 255) {
-      reportFailed();
-      return;
-    }
-    report(KIND.exit, Uint8Array.of(code));
+    report(KIND.exit, Uint8Array.of(exitStatus(code)));
   } catch (error) {
     if (isolate.isDisposed) reportMemory();
     // The guest's own tail broke (its realm is the guest's to break): a failed

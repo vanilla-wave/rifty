@@ -108,6 +108,10 @@ Known differences:
 
 Matrix: `docs/public/compat/isolate-host.md`.
 
+To run the same guest in an isolate you create yourself (your own isolated-vm,
+your own topology), use `@riftydev/isolate-guest` (unstable, ADR-0558). The
+guarantees on this page do not carry over to it.
+
 ## Security: what this does and does not protect
 
 Tested:

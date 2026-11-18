@@ -121,6 +121,14 @@ const SPEC = {
     keywords: ['npm', 'semver', 'install'],
   },
   '@riftydev/shell': { dir: 'packages/shell', sideEffects: false, keywords: ['shell', 'bash'] },
+  // ADR-0558: the isolate guest for custom embedders; `./guest.js` is the bundle (an asset, no .d.ts).
+  '@riftydev/isolate-guest': {
+    dir: 'packages/isolate-guest',
+    build: 'tsup && node scripts/build-guest.mjs',
+    sideEffects: false,
+    assetExports: { './guest.js': './dist/guest.js' },
+    keywords: ['isolate', 'isolated-vm', 'sandbox', 'node-compatible'],
+  },
   // ADR-0557: Node-only host. `build` adds the child entry + guest IIFE runCode loads from dist/.
   '@riftydev/isolate-host': {
     dir: 'packages/isolate-host',
@@ -219,6 +227,8 @@ const DESCRIPTIONS = {
   '@riftydev/runtime-wasi': 'WASI (preview1) runner for rifty: run .wasm guests in a Web Worker.',
   '@riftydev/npm-client':
     'In-browser npm client for rifty: semver, registry, tarball extract, link, install.',
+  '@riftydev/isolate-guest':
+    "rifty's V8-isolate guest: the node -e runtime bundle and its bridge contract, for custom isolate embedders (unstable).",
   '@riftydev/shell': 'Tiny bash-flavoured shell for rifty, backed by @riftydev/vfs.',
   '@riftydev/ts-language-service':
     'TypeScript language service over the rifty VFS: LSP-shaped diagnostics, hostable in a kernel worker.',

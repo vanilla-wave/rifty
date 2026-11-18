@@ -7,8 +7,8 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { expect, it } from 'vitest';
 
-/** RED until the export lands (map item 1): then `it`. */
-const carrier = it.fails;
+/** The acceptance carrier (map item 1); RED was `it.fails` before the export landed. */
+const carrier = it;
 
 carrier("the host's guest bundle is the export's, byte for byte", () => {
   const exported = createRequire(import.meta.url).resolve('@riftydev/isolate-guest/guest.js');
