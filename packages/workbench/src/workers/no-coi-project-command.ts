@@ -12,7 +12,9 @@ import {
   type ToolchainCommandResult,
   activeRefs,
   installConsole,
+  isNodeProcessExiting,
   takeUnhandledRejection,
+  terminateFatal,
 } from '@riftydev/runtime-js/internal';
 import { type CommandContext, Shell, ShellCommandLifecycleError } from '@riftydev/shell';
 import type { FsSync } from '@riftydev/vfs';
@@ -133,9 +135,16 @@ export async function runNoCoiProjectCommand(
         await runNodeEntry(entry);
       } catch (error) {
         executionFailed = true;
-        executionError = error;
+        // ADR-0445 (2026-11-18): Node prints a no-listener entry/eval throw and
+        // exits inside TriggerUncaughtException. The runtime fatal terminal
+        // prints it now; none of the process's timers runs after it.
+        executionError =
+          processExitCode(error) === null && isNodeProcessExiting(riftyProcess)
+            ? (terminateFatal(error) ?? error)
+            : error;
+        if (processExitCode(executionError) !== null) invocation.clearTimers();
       }
-      // A throwing entry may already have scheduled real work. Never skip its drain.
+      // The drain settles with the terminal, else runs the entry's scheduled work.
       let terminal: number | null = null;
       try {
         await awaitDrain({ capMs: 600_000, hasRef: () => listPorts().length > 0 });

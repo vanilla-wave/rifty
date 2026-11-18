@@ -169,3 +169,14 @@ sample. Node v24.16.0 facts: evidence §O1–§O3.
   while the drain retains the original status. Native Node24 async exit(1):
   status1, empty stderr; real stock Vite failed build reproduced the internal
   error leak. Other uncaught errors keep the existing dispatch/fatal behavior.
+- 2026-11-18 — rule 3's "existing terminal path" for a no-COI project
+  command's no-listener entry/eval throw was the shell's `node: <message>`:
+  no stack, a later task's `exit()` set the status, timers ran. It now runs
+  the fatal terminal at the entry catch (`terminateFatal`, as a rejection at
+  the trap): the error's stack on stderr, `uint8(exitCode ?? 1)` read after
+  the `'exit'` listeners, and any entry terminal (`exit()` included) clears
+  the invocation's timers at once (a 0 ms timer queued ahead of the drain
+  ran). A declared gap behind it is named as behind a fatal rejection. Kernel
+  children unchanged. Node: `src/node_errors.cc` TriggerUncaughtException
+  @v24.16.0 (`env->Exit(env->exit_code(kGenericUserError))`); proof
+  `tests/no-coi/no-coi-fatal-stderr.spec.ts`, `no-coi-process-exit-status.spec.ts`.

@@ -1,5 +1,7 @@
 # Changelog
 
+- No-COI project commands end a `node` killed by a synchronous no-listener throw (entry, `-e`, `.bin`) as Node does (ADR-0445 correction 2026-11-18): stderr carries the runtime fatal print a kernel child prints — the error's name, message and stack with its user frame, an eval's `[eval]:N` source line and caret (was `node: <message>`) — the status is the `'exit'` listeners' `exitCode ?? 1` (was 1), and no timer of the process runs afterwards (was: they ran). An entry `exit()` also kills a 0 ms timer queued ahead of it (was: it ran). A declared gap behind such a throw is reported by name (`failed`, realm replaced) as behind a fatal rejection (was `exited` 1). Not reproduced on any host: compat process.md "Fatal error stderr bytes".
+
 - The rooted guest view (`ProjectTerminalFsSync`) forwards ADR-0365 head/chunk reads through its usual guest resolution, so dev-server-child relays stay linear for nested Workers (esbuild-wasm service).
 
 - Supply owner-stable Stats metadata for virtual namespace directories, retaining guest-only error paths.
