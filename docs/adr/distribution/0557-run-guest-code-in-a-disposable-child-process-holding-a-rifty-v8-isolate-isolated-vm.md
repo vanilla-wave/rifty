@@ -38,7 +38,7 @@ blocks it.
    an error naming the code/signal — an unknown failure, not a guest result.
 2. Process boundary per call (manager decision A, 2026-11-18): the package
    spawns `process.execPath --no-node-snapshot <dist/child.js>` with `env: {}`,
-   code sent over IPC (never argv). The consumer process loads no native addon
+   code sent over a pipe (never argv). The consumer process loads no native addon
    and needs no flag — replaces the requirements' "flag in every host launch
    path". Deviation from the requirements' "one Node process holds all agents
    and isolates": agents stay in the consumer process, isolates move to
@@ -94,18 +94,18 @@ blocks it.
    bridge is copying `ivm.Callback`s on a frozen, guest-reachable
    `__riftyIsolateHost` — untrusted surface: every argument is validated in the
    child (`src/child/bridge.ts`), refusals are guest-safe `TypeError`s with no
-   host frame. The consumer validates every child IPC message against the
-   protocol state (exact keys per type, also on the `chunks` array and each
-   `[fd, bytes]` pair; one `ready`; output only with new
-   non-empty bytes or the one
-   truncation flip, ≤ 2 chunks, total ≤ cap; integer exit code 0..255; error
-   text ≤ 4 KiB; type looked up as an own key only): a
+   host frame. No Node IPC: the request goes as one JSON line on the child's
+   stdin (kept open; its end tells the child the consumer died → self-kill),
+   results come back as length-framed binary frames on fd 3 that the
+   consumer parses itself (`src/protocol.ts`). A header announcing more than
+   its kind may legally carry now (output ≤ 2 + remaining cap, exit 2, memory
+   1, error ≤ 4 KiB) is refused before its payload is buffered; each complete
+   frame is judged against the protocol state (fd 1|2, flags 0|1, output only
+   with new non-empty bytes or the one truncation flip, total ≤ cap). A
    violation kills the child and rejects `isolate-host child protocol
-   violation: …` (a child after an isolate escape is hostile). So a child can
-   make the consumer hold at most the cap (copied into one buffer per fd,
-   never a view into an IPC message) in at most cap + 2 messages; one
-   oversized message still costs its size transiently, because Node IPC
-   deserializes before validation (declared, README).
+   violation: …` (a child after an isolate escape is hostile). The consumer
+   thus buffers at most one legal frame and holds at most the cap, copied into
+   one buffer per fd.
 7. Dependency: `isolated-vm@7.0.2` exact (ships prebuilds linux-x64/arm64,
    darwin-arm64, win32-x64; engines node ≥24; maintenance mode). 7 over the
    consumer's 6.2.0: the addon now loads only in rifty's child, so the

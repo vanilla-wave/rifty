@@ -4,7 +4,14 @@
  */
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import type { ChildMessage, RunRequest } from './protocol.ts';
+import {
+  type ChildFrame,
+  FRAME_CHANNEL_FD,
+  FrameReader,
+  KIND,
+  MAX_ERROR_TEXT,
+  type RunRequest,
+} from './protocol.ts';
 
 /** Limits for one `runCode` call; omitted fields take the documented defaults. */
 export interface RunCodeOptions {
@@ -54,16 +61,6 @@ function limit(
   return value;
 }
 
-const MAX_ERROR_MESSAGE = 4096;
-
-const MESSAGE_KEYS: Readonly<Record<string, readonly string[]>> = {
-  ready: ['type'],
-  output: ['type', 'chunks', 'truncated'],
-  exit: ['type', 'exitCode', 'truncated'],
-  memory: ['type', 'truncated'],
-  error: ['type', 'message'],
-};
-
 /** Accepted output, copied into one growable buffer: never a view into an IPC message. */
 class FdBytes {
   #buf = new Uint8Array(0);
@@ -84,68 +81,66 @@ class FdBytes {
   }
 }
 
-/** What the consumer has accepted so far: the protocol state a message is judged against. */
+/** What the consumer has accepted so far: the state each frame is judged against. */
 interface ProtocolState {
-  ready: boolean;
   kept: number;
   truncated: boolean;
 }
 
-/**
- * A child message the consumer accepts; anything else is a protocol violation.
- * Every accepted message advances the state (one `ready`; output carries new
- * bytes or the one truncation flip), so a child can make the consumer hold at
- * most `cap` bytes in at most `cap + 2` messages.
- */
-function violation(message: unknown, cap: number, state: ProtocolState): string | null {
-  if (typeof message !== 'object' || message === null) return 'non-object message';
-  const m = message as Record<string, unknown>;
-  // Exact keys: an extra key is unvalidated padding riding on an accepted message.
-  const keys =
-    typeof m.type === 'string' && Object.hasOwn(MESSAGE_KEYS, m.type)
-      ? MESSAGE_KEYS[m.type]
-      : undefined;
-  if (keys === undefined) return 'message type';
-  if (Object.keys(m).length !== keys.length || !keys.every((k) => Object.hasOwn(m, k)))
-    return `${String(m.type)} message keys`;
-  if (m.type !== 'ready' && !state.ready) return 'message before ready';
-  switch (m.type) {
-    case 'ready':
-      return state.ready ? 'repeated ready' : null;
-    case 'output': {
-      if (!Array.isArray(m.chunks) || m.chunks.length > 2) return 'output chunks';
-      // Exact shape below the top level too: no named property rides on an array.
-      if (Object.keys(m.chunks).length !== m.chunks.length) return 'output chunks keys';
-      if (typeof m.truncated !== 'boolean') return 'output truncated flag';
-      let bytes = 0;
-      for (const chunk of m.chunks as unknown[]) {
-        if (!Array.isArray(chunk) || chunk.length !== 2 || Object.keys(chunk).length !== 2)
-          return 'output chunk shape';
-        if (chunk[0] !== 1 && chunk[0] !== 2) return 'output fd';
-        if (!(chunk[1] instanceof Uint8Array)) return 'output bytes';
-        if (chunk[1].byteLength === 0) return 'empty output chunk';
-        bytes += chunk[1].byteLength;
-      }
-      if (state.kept + bytes > cap) return 'output past the cap';
-      if (bytes === 0 && !(m.truncated && !state.truncated)) return 'output without new bytes';
-      if (state.truncated && !m.truncated) return 'output truncation reverted';
-      return null;
-    }
-    case 'exit': {
-      const code = m.exitCode;
-      if (typeof code !== 'number' || !Number.isInteger(code) || code < 0 || code > 255)
-        return 'exit code';
-      return typeof m.truncated === 'boolean' ? null : 'exit truncated flag';
-    }
-    case 'memory':
-      return typeof m.truncated === 'boolean' ? null : 'memory truncated flag';
-    case 'error':
-      // Bounded before acceptance: a kept slice of a huge string would pin all of it.
-      return typeof m.message === 'string' && m.message.length <= MAX_ERROR_MESSAGE
-        ? null
-        : 'error message';
+/** Largest payload a frame of `kind` may carry now; -1 for an unknown kind. */
+function maxPayload(kind: number, cap: number, state: ProtocolState): number {
+  switch (kind) {
+    case KIND.output:
+      return 2 + (cap - state.kept);
+    case KIND.exit:
+      return 2;
+    case KIND.memory:
+      return 1;
+    case KIND.error:
+      return MAX_ERROR_TEXT;
     default:
-      return 'message type';
+      return -1;
+  }
+}
+
+/**
+ * One raw frame from a possibly escaped child, judged against the protocol
+ * state: output only with new non-empty bytes or the one truncation flip, total
+ * ≤ cap; exact payload sizes for exit/memory. A string is the violation.
+ */
+function decode(
+  kind: number,
+  p: Uint8Array,
+  cap: number,
+  state: ProtocolState,
+): ChildFrame | string {
+  const flag = (v: number | undefined): boolean | null => (v === 0 ? false : v === 1 ? true : null);
+  switch (kind) {
+    case KIND.output: {
+      const fd = p[0];
+      const truncated = flag(p[1]);
+      if (p.byteLength < 2 || (fd !== 1 && fd !== 2) || truncated === null) return 'output header';
+      const bytes = p.subarray(2);
+      if (state.kept + bytes.byteLength > cap) return 'output past the cap';
+      if (state.truncated && !truncated) return 'output truncation reverted';
+      if (bytes.byteLength === 0 && !(truncated && !state.truncated))
+        return 'output without new bytes';
+      return { kind: 'output', fd, truncated, bytes };
+    }
+    case KIND.exit: {
+      const truncated = flag(p[1]);
+      if (p.byteLength !== 2 || truncated === null) return 'exit payload';
+      return { kind: 'exit', exitCode: p[0] as number, truncated };
+    }
+    case KIND.memory: {
+      const truncated = flag(p[0]);
+      if (p.byteLength !== 1 || truncated === null) return 'memory payload';
+      return { kind: 'memory', truncated };
+    }
+    case KIND.error:
+      return { kind: 'error', message: new TextDecoder().decode(p) };
+    default:
+      return `frame kind ${kind}`;
   }
 }
 
@@ -163,7 +158,6 @@ export function runCode(code: string, options: RunCodeOptions = {}): Promise<Run
     timeoutMs = limit('timeoutMs', options.timeoutMs, 30_000, 1, MAX_TIMER_MS);
     const memoryLimitMb = limit('memoryLimitMb', options.memoryLimitMb, 256, 8);
     request = {
-      type: 'run',
       code,
       memoryLimitMb,
       maxRssBytes: (256 + 3 * memoryLimitMb) * 1024 * 1024,
@@ -175,12 +169,12 @@ export function runCode(code: string, options: RunCodeOptions = {}): Promise<Run
   return new Promise<RunCodeResult>((resolve, reject) => {
     const child = spawn(process.execPath, ['--no-node-snapshot', CHILD_ENTRY], {
       env: {},
-      stdio: ['ignore', 'ignore', 'pipe', 'ipc'],
-      serialization: 'advanced',
+      stdio: ['pipe', 'ignore', 'pipe', 'pipe'],
     });
     const out = new FdBytes();
     const err = new FdBytes();
-    const state: ProtocolState = { ready: false, kept: 0, truncated: false };
+    const cap = request.maxOutputBytes;
+    const state: ProtocolState = { kept: 0, truncated: false };
     let stderrTail = '';
     child.stderr?.on('data', (data: Buffer) => {
       stderrTail = (stderrTail + data.toString('utf8')).slice(-STDERR_TAIL_BYTES);
@@ -200,40 +194,43 @@ export function runCode(code: string, options: RunCodeOptions = {}): Promise<Run
       child.kill('SIGKILL');
     };
     const deadline = setTimeout(() => end({ result: result(null, 'timeout') }), timeoutMs);
-    // The child may be compromised (isolate escape): validate every message; a bad one
-    // kills it with a distinct rejection, never a throw inside this listener.
-    child.on('message', (message: unknown) => {
+    const violated = (what: string): void =>
+      end({ error: new Error(`isolate-host child protocol violation: ${what}`) });
+    // A child that died meanwhile surfaces through 'exit' (code/signal), not an EPIPE.
+    child.stdin?.on('error', () => {});
+    // stdin stays open: its end tells the child its consumer is gone.
+    child.stdin?.write(`${JSON.stringify(request)}\n`);
+    // The child may be compromised (isolate escape): the consumer parses its frames
+    // itself — bounded, never a throw in this listener — and judges each one.
+    const reader = new FrameReader((kind) => maxPayload(kind, cap, state));
+    const frames = child.stdio[FRAME_CHANNEL_FD] as NodeJS.ReadableStream | null;
+    frames?.on('error', () => {});
+    frames?.on('data', (chunk: Buffer) => {
       if (outcome !== undefined) return;
-      const bad = violation(message, request.maxOutputBytes, state);
-      if (bad !== null) {
-        end({ error: new Error(`isolate-host child protocol violation: ${bad}`) });
-        return;
-      }
-      const m = message as ChildMessage;
-      switch (m.type) {
-        case 'ready':
-          state.ready = true;
-          // A child that died meanwhile surfaces through 'exit' (code/signal), not an EPIPE.
-          child.send(request, () => {});
-          return;
-        case 'output':
-          state.truncated ||= m.truncated;
-          for (const [fd, bytes] of m.chunks) {
-            state.kept += bytes.byteLength;
-            (fd === 2 ? err : out).append(bytes);
-          }
-          return;
-        case 'exit':
-          state.truncated ||= m.truncated;
-          end({ result: result(m.exitCode) });
-          return;
-        case 'memory':
-          state.truncated ||= m.truncated;
-          end({ result: result(null, 'memory') });
-          return;
-        case 'error':
-          end({ error: new Error(`isolate-host child failed: ${m.message}`) });
-          return;
+      const parsed = reader.push(chunk);
+      if ('violation' in parsed) return violated(parsed.violation);
+      for (const raw of parsed.frames) {
+        if (outcome !== undefined) return;
+        const f = decode(raw.kind, raw.payload, cap, state);
+        if (typeof f === 'string') return violated(f);
+        switch (f.kind) {
+          case 'output':
+            state.truncated ||= f.truncated;
+            state.kept += f.bytes.byteLength;
+            (f.fd === 2 ? err : out).append(f.bytes);
+            break;
+          case 'exit':
+            state.truncated ||= f.truncated;
+            end({ result: result(f.exitCode) });
+            break;
+          case 'memory':
+            state.truncated ||= f.truncated;
+            end({ result: result(null, 'memory') });
+            break;
+          case 'error':
+            end({ error: new Error(`isolate-host child failed: ${f.message}`) });
+            break;
+        }
       }
     });
     // Only a failed spawn ends here; a live child's failure arrives as 'exit'.

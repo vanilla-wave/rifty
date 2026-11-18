@@ -5,15 +5,16 @@
  * copying `ivm.Callback`s of `bridge.ts` cross into the isolate.
  */
 import { readFileSync } from 'node:fs';
+import { Socket } from 'node:net';
 import ivm from 'isolated-vm';
-import type { ChildMessage, RunRequest } from '../protocol.ts';
+import { FRAME_CHANNEL_FD, KIND, MAX_ERROR_TEXT, type RunRequest, frame } from '../protocol.ts';
 import { OutputBudget, createBridge } from './bridge.ts';
 
-const send = (message: ChildMessage): void => {
-  process.send?.(message);
+const channel = new Socket({ fd: FRAME_CHANNEL_FD, readable: false, writable: true });
+channel.on('error', () => process.kill(process.pid, 'SIGKILL'));
+const send = (kind: number, payload: Uint8Array): void => {
+  channel.write(frame(kind, payload));
 };
-// The parent owns this child's lifetime; an orphan never keeps running.
-process.on('disconnect', () => process.kill(process.pid, 'SIGKILL'));
 
 /** Unhandled rejection reasons isolated-vm cannot copy out arrive as this token. */
 const UNCOPYABLE_REASON = 'isolate-host:uncopyable-rejection-reason';
@@ -30,16 +31,24 @@ async function run(request: RunRequest): Promise<void> {
     const chunks = output.drain();
     // The consumer accepts only new bytes or the one truncation flip (protocol state).
     if (chunks.length === 0 && (!output.truncated || sentTruncated)) return;
+    const t = output.truncated ? 1 : 0;
+    if (chunks.length === 0) send(KIND.output, Uint8Array.of(1, t));
+    for (const [fd, bytes] of chunks) {
+      const payload = new Uint8Array(2 + bytes.byteLength);
+      payload[0] = fd;
+      payload[1] = t;
+      payload.set(bytes, 2);
+      send(KIND.output, payload);
+    }
     sentTruncated = output.truncated;
-    send({ type: 'output', chunks, truncated: output.truncated });
   };
-  const report = (message: ChildMessage): void => {
+  const report = (kind: number, payload: Uint8Array): void => {
     if (reported) return;
     reported = true;
     flush();
-    send(message);
+    send(kind, payload);
   };
-  const reportMemory = (): void => report({ type: 'memory', truncated: output.truncated });
+  const reportMemory = (): void => report(KIND.memory, Uint8Array.of(output.truncated ? 1 : 0));
   setInterval(() => {
     if (process.memoryUsage.rss() > request.maxRssBytes) reportMemory();
   }, 25);
@@ -79,7 +88,7 @@ async function run(request: RunRequest): Promise<void> {
         if (fire === undefined) early.push(id);
         else fire.applyIgnored(undefined, [id]);
       },
-      done: (exitCode) => report({ type: 'exit', exitCode, truncated: output.truncated }),
+      done: (exitCode) => report(KIND.exit, Uint8Array.of(exitCode, output.truncated ? 1 : 0)),
     });
     const names = Object.keys(bridge);
     for (const [name, fn] of Object.entries(bridge)) {
@@ -108,15 +117,24 @@ async function run(request: RunRequest): Promise<void> {
     });
   } catch (error) {
     if (isolate.isDisposed) reportMemory();
-    else
-      report({
-        type: 'error',
-        message: (error instanceof Error ? error.message : String(error)).slice(0, 4096),
-      });
+    else {
+      const text = error instanceof Error ? error.message : String(error);
+      report(KIND.error, new TextEncoder().encode(text).subarray(0, MAX_ERROR_TEXT));
+    }
   }
 }
 
-process.once('message', (message: RunRequest) => {
-  void run(message);
+// One request line on stdin. The parent owns this child's lifetime: stdin ends
+// when the parent dies, and an orphan never keeps running.
+let pending = '';
+let started = false;
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (data: string) => {
+  if (started) return;
+  pending += data;
+  const newline = pending.indexOf('\n');
+  if (newline < 0) return;
+  started = true;
+  void run(JSON.parse(pending.slice(0, newline)) as RunRequest);
 });
-send({ type: 'ready' });
+process.stdin.on('end', () => process.kill(process.pid, 'SIGKILL'));

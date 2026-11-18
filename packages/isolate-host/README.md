@@ -118,10 +118,10 @@ Tested:
 - limits kill the child, never your process.
 
 The child starts with an empty environment. The child itself is treated as
-hostile: a malformed or out-of-protocol message kills it, and the call
-rejects with `isolate-host child protocol violation: …`. A single oversized
-IPC message still costs your process its size briefly, since Node
-deserializes a message before it can be checked.
+hostile: it reports through length-framed binary frames on a pipe that your
+process parses itself, bounded by the output cap. A malformed or
+out-of-protocol frame kills the child, and the call rejects with
+`isolate-host child protocol violation: …`.
 
 Not protected: an isolate escape. A V8 or isolated-vm bug can give the guest
 code execution as the child's OS user. Escaped code can then read your
