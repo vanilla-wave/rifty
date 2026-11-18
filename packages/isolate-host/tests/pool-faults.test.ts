@@ -20,11 +20,14 @@ interface Outcome {
   culprit: Record<string, unknown> & { ms: number };
   neighbours: unknown[];
   next: unknown;
+  /** A call placed 1200 ms after the culprit settled: its result, and whether a new worker took it. */
+  probe: { result: unknown; newWorker: boolean };
 }
 
 /**
- * 3 neighbours (b<i> at 3 s, `neighbourOptions`), then the culprit, concurrently on
- * one cold worker; then one more call.
+ * 3 neighbours (b<i> at 3.5 s, `neighbourOptions`), then the culprit, concurrently
+ * on one cold worker; a probe call 1200 ms after the culprit settled, while the
+ * neighbours still run; then one more call.
  */
 async function withNeighbours(
   culprit: string,
@@ -33,7 +36,7 @@ async function withNeighbours(
 ): Promise<Outcome> {
   const { value } = await consumer(
     `const neighbours = [0, 1, 2].map((i) =>
-       settle(runCode("console.log('a" + i + "'); setTimeout(() => console.log('b" + i + "'), 3000)", ${neighbourOptions})));
+       settle(runCode("console.log('a" + i + "'); setTimeout(() => console.log('b" + i + "'), 3500)", ${neighbourOptions})));
      await sleep(300);
      const t0 = now();
      const running = settle(runCode(${JSON.stringify(culprit)}, ${options}));
@@ -41,9 +44,13 @@ async function withNeighbours(
      const pids = children();
      const culprit = await running;
      const ms = now() - t0;
+     await sleep(1200);
+     const probing = settle(runCode("console.log('p')"));
+     const newWorker = children().some((p) => !pids.includes(p));
+     const probe = { result: await probing, newWorker };
      const results = await Promise.all(neighbours);
      const retired = await waitFor(() => (children().includes(pids[0]) ? undefined : true), 3000).catch(() => false);
-     out({ shared: pids.length, retired, culprit: { ...culprit, ms }, neighbours: results, next: await settle(runCode('console.log(6 * 7)')) });`,
+     out({ shared: pids.length, retired, probe, culprit: { ...culprit, ms }, neighbours: results, next: await settle(runCode('console.log(6 * 7)')) });`,
     { timeoutMs: 90_000 },
   );
   return value as Outcome;
@@ -113,9 +120,9 @@ describe('time on a shared worker (I4)', () => {
   ])(
     '%s: culprit timeout within timeoutMs + 1000 ms; neighbours exact',
     async (label, code) => {
-      // Neighbours (b at 3 s) at 4500 ms: a rerun after the worker's loss (≥ 1.8 s) could
-      // not finish in time, so they must finish where they are.
-      const v = await withNeighbours(code, '{ timeoutMs: 1500 }', '{ timeoutMs: 4500 }');
+      // Neighbours (b at 3.5 s) at 5000 ms: a rerun after the worker's loss (≥ 1.8 s)
+      // could not finish in time, so they must finish where they are.
+      const v = await withNeighbours(code, '{ timeoutMs: 1500 }', '{ timeoutMs: 5000 }');
       const { ms, ...culprit } = v.culprit;
       expect(culprit).toEqual({
         stdout: 'c\n',
@@ -129,7 +136,12 @@ describe('time on a shared worker (I4)', () => {
       expect(v.neighbours).toEqual(NEIGHBOURS);
       // A guest still running after termination retires its worker once the
       // neighbours are done (I4); `next` cannot have landed there.
-      if (label.startsWith('a builtin')) expect(v.retired).toBe(true);
+      expect(v.probe.result).toEqual({ stdout: 'p\n', stderr: '', exitCode: 0 });
+      if (label.startsWith('a builtin')) {
+        // Retiring (stuck past 1000 ms): no new call goes there, and it dies after its neighbours.
+        expect(v.probe.newWorker).toBe(true);
+        expect(v.retired).toBe(true);
+      }
       expect(v.next).toEqual(NEXT);
     },
     120_000,
@@ -165,12 +177,14 @@ describe('host-side floods change a neighbour only by delay (I2)', () => {
 describe('a worker lost with no culprit (I5)', () => {
   carrier('killed once: the call reruns on a new worker and resolves exactly once', async () => {
     const { value } = await consumer(`
-      const call = settle(runCode("console.log('x'); setTimeout(() => console.log('y'), 3000)", { timeoutMs: 20000 }));
+      const call = settle(runCode("console.log('x'); setTimeout(() => console.log('y'), 5000)", { timeoutMs: 20000 }));
       const first = await waitFor(() => children()[0], 5000);
-      await sleep(500);
+      // Late enough that attempt 1's 'x' has reached the consumer: a pool keeping it shows 'x' twice.
+      await sleep(1500);
       kill(first);
       const second = await waitFor(() => children().find((p) => p !== first), 5000);
       out({ result: await call, moved: first !== second });`);
+    expect(value).not.toHaveProperty('harnessError');
     expect(value).toEqual({ result: { stdout: 'x\ny\n', stderr: '', exitCode: 0 }, moved: true });
   });
 
@@ -186,6 +200,7 @@ describe('a worker lost with no culprit (I5)', () => {
       kill(second);
       const result = await call;
       out({ result, ms: now() - t0, next: await settle(runCode('console.log(6 * 7)')) });`);
+    expect(value).not.toHaveProperty('harnessError');
     const v = value as { result: { rejected?: string; code?: string }; ms: number; next: unknown };
     expect(v.result.rejected).toMatch(/isolate-host .*exited unexpectedly .*SIGKILL/);
     expect(v.result.code).toBe(LOST);
@@ -206,6 +221,7 @@ describe('a worker lost with no culprit (I5)', () => {
       await waitFor(() => children().find((p) => p !== first), 2000);
       const result = await call;
       out({ result, ms: now() - t0 });`);
+      expect(value).not.toHaveProperty('harnessError');
       const v = value as { result: { rejected?: string; code?: string }; ms: number };
       expect(v.result.rejected).toMatch(/isolate-host .*exited unexpectedly .*SIGKILL/);
       expect(v.result.code).toBe(LOST);
@@ -229,6 +245,7 @@ describe('a worker lost with no culprit (I5)', () => {
       const workers = children().length;
       kill(quarantine);
       out({ suspect: await suspect, fresh: await fresh, workers });`);
+      expect(value).not.toHaveProperty('harnessError');
       const v = value as { suspect: { code?: string }; fresh: unknown; workers: number };
       expect(v.workers).toBe(2);
       expect(v.suspect.code).toBe(LOST);
@@ -236,16 +253,42 @@ describe('a worker lost with no culprit (I5)', () => {
     },
   );
 
+  carrier(
+    'reruns never join a live worker with free slots: they get a worker of their own',
+    async () => {
+      const { value } = await consumer(`
+      const lost = [0, 1, 2, 3].map(() => settle(runCode("setTimeout(() => console.log('s'), 5000)", { timeoutMs: 20000 })));
+      const first = await waitFor(() => children()[0], 5000);
+      await sleep(300);
+      const other = settle(runCode("setTimeout(() => console.log('o'), 4000)", { timeoutMs: 20000 }));
+      const second = await waitFor(() => children().find((p) => p !== first), 5000);
+      await sleep(1200);
+      kill(first);
+      const quarantine = await waitFor(() => children().find((p) => p !== first && p !== second), 5000);
+      await sleep(300);
+      kill(quarantine);
+      out({ lost: await Promise.all(lost), other: await other });`);
+      expect(value).not.toHaveProperty('harnessError');
+      const v = value as { lost: { code?: string }[]; other: unknown };
+      expect(v.lost.map((r) => r.code)).toEqual([LOST, LOST, LOST, LOST]);
+      expect(v.other).toEqual({ stdout: 'o\n', stderr: '', exitCode: 0 });
+    },
+  );
+
   carrier('two calls sharing a killed worker both resolve exactly', async () => {
     const { value } = await consumer(`
-      const calls = [0, 1].map((i) => settle(runCode("console.log('x" + i + "'); setTimeout(() => console.log('y'), 2000)")));
+      const calls = [0, 1].map((i) => settle(runCode("console.log('x" + i + "'); setTimeout(() => console.log('y'), 4000)")));
       const first = await waitFor(() => children()[0], 5000);
-      await sleep(500);
+      await sleep(1500);
       const shared = children().length;
       kill(first);
-      out({ shared, results: await Promise.all(calls) });`);
+      // Both reruns together, on one worker of their own.
+      const sampler = sampleChildren();
+      const results = await Promise.all(calls);
+      out({ shared, rerunWorkers: sampler.stop(), results });`);
     expect(value).toEqual({
       shared: 1,
+      rerunWorkers: 1,
       results: [0, 1].map((i) => ({ stdout: `x${i}\ny\n`, stderr: '', exitCode: 0 })),
     });
   });

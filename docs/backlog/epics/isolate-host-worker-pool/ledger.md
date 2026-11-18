@@ -4,3 +4,4 @@
 - 2026-11-18 — premise challenge: 8 problems, dispositions in `goal.md` §Challenge; rival A + code cache probed (74.5 ms, 108 MiB)
 - 2026-11-18 — forks F1 (rerun out of budget) and F2 (culprit-less loss) sent to manager; manager decided by delegation F1 (a) reject `ERR_ISOLATE_HOST_WORKER_LOST`, F2 (a) rerun once with quarantine; user answer pending, lands as `amend:`; full answer: `goal.md` §Decisions
 - 2026-11-18 — FIT final written-result check: 11 findings fixed @ a403ff556, verify pass 1 concern + 3 nits fixed; goal `ready` on the manager's delegation
+- 2026-11-18 — Contract+RED PASS (concerns, no blocker) @ 49e448a8a, JSON on PR #412; 11 concerns fixed in place, carrier now 27 cases, all RED on main for the pool reason

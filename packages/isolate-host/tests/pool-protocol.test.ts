@@ -56,6 +56,8 @@ function hostileWorkerPackage(): string {
          new Function('call', 'f', 'text', 'others', 'writeFileSync', 'FORGER_PID', req.code)(req.call, f, text, others, writeFileSync, FORGER_PID);
        }
      });
+     // Like a real worker, gone when its consumer is (stdin end): no orphan per test run.
+     process.stdin.on('end', () => process.exit(0));
      setInterval(() => {}, 1000);`,
   );
   return pathToFileURL(join(dir, 'dist', 'index.js')).href;
@@ -92,6 +94,17 @@ describe('call-addressed frames from a hostile worker (I7)', () => {
       expect(v.killed).toBe(true);
     },
   );
+
+  carrier('a frame for an unknown call id alone is a violation', async () => {
+    writeFileSync(LEDGER, '');
+    const { value } = await consumer(
+      `out(await settle(runCode(${JSON.stringify(
+        'f(1, call + 1000, [1, 0, ...text("FORGED")]); setTimeout(() => f(2, call, [0]), 800)',
+      )}, { timeoutMs: 5000 })));`,
+      { entry },
+    );
+    expect((value as { rejected?: string }).rejected).toMatch(VIOLATION);
+  });
 
   carrier(
     'a frame for a call already settled rejects the calls still in flight on that worker',

@@ -40,8 +40,9 @@ challenge: 2026-11-18 — inherits the goal premise check (`goal.md` §Challenge
    on the same pid (`pool.test.ts`) → I2
 4. A consumer that called `runCode` and then idles exits on its own < 5 s
    with a worker present before exit; the worker is gone < 3 s after; a
-   consumer SIGKILLed with an idle worker leaves none (`pool.test.ts`) → I6
-5. 3 neighbours (`a<i>` now, `b<i>` at 3 s) + `new Array(2**28).fill(0)`
+   consumer SIGKILLed with an idle worker, or with a worker stuck in a
+   builtin that ignores termination, leaves none (`pool.test.ts`) → I6
+5. 3 neighbours (`a<i>` now, `b<i>` at 3.5 s) + `new Array(2**28).fill(0)`
    at `memoryLimitMb: 64` on one worker: culprit `{stdout: 'big\n', stderr:
    '', exitCode: null, termination: 'memory'}`; each neighbour exactly
    `a<i>\nb<i>\n`, exit 0; a heap-growth culprit likewise; next call works
@@ -49,19 +50,24 @@ challenge: 2026-11-18 — inherits the goal premise check (`goal.md` §Challenge
 6. Same neighbours + a culprit past `timeoutMs` 1500: busy loop,
    `Atomics.wait` forever, a default-comparator `sort` of 3e6 doubles in a
    loop: culprit `timeout` with its prior output, settled ≤ 1500 + 1000 ms
-   after its call; neighbours, at `timeoutMs` 4500, exact — a neighbour
-   rerun after the worker's loss (≥ 1.8 s) could not finish inside 4500 ms,
-   so this discriminates "finish where they are"; after the sort the shared
-   worker's pid is gone < 3 s after its last call settled (retired, not
-   reused) (`pool-faults.test.ts`) → I4
+   after its call; neighbours, at `timeoutMs` 5000, exact — a neighbour
+   rerun after the worker's loss (≥ 1.8 s) could not finish inside 5000 ms,
+   so this discriminates "finish where they are"; a probe call 1200 ms after
+   the culprit settled resolves exactly, and after the sort it lands on a new
+   worker (no new call goes to a retiring one); the sort's shared worker is
+   gone < 3 s after its last call settled (`pool-faults.test.ts`) → I4
 7. Same neighbours + an output flood past a 1 KiB cap, 20000 ×
    `setInterval(f, 1)`: culprit `exitCode: null` with a `termination`;
    neighbours exact (`pool-faults.test.ts`) → I2
 8. One call (`x` now, `y` at 3 s) whose worker is SIGKILLed once resolves
-   exactly `x\ny\n`, exit 0, on a new pid; SIGKILLed again on that pid it
+   exactly `x\ny\n`, exit 0, on a new pid (killed 1.5 s in, after `x` reached
+   the consumer); SIGKILLed again on that pid it
    rejects `code: 'ERR_ISOLATE_HOST_WORKER_LOST'`, message `isolate-host …
    exited unexpectedly (… SIGKILL)` < 1000 ms after the kill; two calls sharing
-   a worker killed once both resolve exactly; a call (`timeoutMs` 4000, `y` at
+   a worker killed once both resolve exactly, rerun together on one new
+   worker; 4 calls lost with a full worker rerun on a worker of their own,
+   never on a live worker with free slots (killing it rejects all 4, the
+   other worker's call resolves); a call (`timeoutMs` 4000, `y` at
    3 s) whose worker dies at 1.5 s is rerun (a new pid appears) and rejects
    with that code at its deadline, never `timeout`; a fresh call started
    after a loss survives the kill of the reruns' worker, which rejects only
@@ -70,8 +76,9 @@ challenge: 2026-11-18 — inherits the goal premise check (`goal.md` §Challenge
    share a ledger of the real call ids each received): frames for the ids of
    calls on the other worker and for an unknown id reject the forging
    worker's call with `isolate-host child protocol violation` and kill it
-   (pid gone < 3 s), while the other worker's calls resolve with only their
-   own bytes; a frame for a call already settled rejects the calls still in
+   (pid gone < 3 s, checked in the live consumer), while the other worker's
+   calls resolve with only their own bytes; an unknown id alone is a
+   violation; a frame for a call already settled rejects the calls still in
    flight on that worker; a worker that writes text to its stderr and dies,
    twice, rejects `ERR_ISOLATE_HOST_WORKER_LOST` with none of that text
    (`pool-protocol.test.ts`) → I7, I5
@@ -83,7 +90,10 @@ challenge: 2026-11-18 — inherits the goal premise check (`goal.md` §Challenge
     (`isolation.test.ts`, `limits.test.ts`); the per-child RSS bounds of
     ADR-0557 §3 in `limits.test.ts` (catastrophic peak < 2 × (256 + 3 ×
     limit), "child RSS ceiling 352 MiB" in the flood case) are re-derived from
-    the worker ceiling (`map.md` fog) at IMPLEMENT. At IMPLEMENT the
+    the worker ceiling with a rule frozen now: each bound becomes 2 × the
+    worker kill ceiling the ADR names for that call (overshoot of one
+    doubling, as today), and the flood case grows past that ceiling so a
+    buffering worker still ends as `memory`. At IMPLEMENT the
     `protocol.test.ts` hostile bodies move to the wire below, criteria
     unchanged. Everything else A proves stays as is → I1, I5, I6
 
@@ -101,6 +111,10 @@ Wire (agent-owned, pinned for the hostile cases): consumer → worker stdin
 JSON lines `{"type":"run","call":<u32>,"code","memoryLimitMb","maxOutputBytes"}`
 and `{"type":"cancel","call":<u32>}`; worker → consumer fd 3 frames `u32be
 length, u8 kind, u32be call, payload`, kinds and payloads as ADR-0557 §6.
+"Settled" for I7 = the worker sent its terminal frame for that call; a call
+the consumer settled at its deadline and cancelled stays addressable until the
+worker's terminal frame for it, and its frames are dropped, never a
+violation (a stuck or late isolate is not a hostile worker).
 
 ## Fault matrix
 
@@ -128,4 +142,7 @@ length, u8 kind, u32be call, payload`, kinds and payloads as ADR-0557 §6.
 
 ## Decisions
 
+ready-verdict: 2026-11-18 — Contract+RED @ 49e448a8a
+
 - 2026-11-18 — each pool scenario in its own consumer process: no `close()` exists to reset a pool between tests, and counting workers needs a fresh consumer.
+- 2026-11-18 — Contract+RED concerns fixed in place after the verdict (REDs only strengthened, none weakened): rerun placement both ways, unknown id alone, stuck-worker consumer kill, retiring worker takes no call, attempt-1 output window, cancelled-call addressing, frozen RSS-bound rule.

@@ -119,4 +119,20 @@ describe('worker lifecycle (I6)', () => {
     expect(workers).toHaveLength(1);
     await waitFor(() => (alive(workers[0] as number) ? undefined : true), 3000);
   });
+
+  carrier(
+    'a consumer SIGKILLed while its worker is stuck in a builtin that ignores termination leaves no worker behind',
+    async () => {
+      const { value, signal } = await consumer(
+        `runCode("const a = Array.from({ length: 3e6 }, Math.random); for (;;) a.sort()", { timeoutMs: 1000 }).catch(() => {});
+       await sleep(2200);
+       await new Promise((r) => process.stdout.write('\\n' + JSON.stringify({ value: children() }) + '\\n', r));
+       kill(process.pid); await sleep(60000);`,
+      );
+      const workers = value as number[];
+      expect(signal).toBe('SIGKILL');
+      expect(workers.length).toBeGreaterThan(0);
+      for (const pid of workers) await waitFor(() => (alive(pid) ? undefined : true), 3000);
+    },
+  );
 });
