@@ -1,8 +1,8 @@
 {
   "overall_verdict": "concern",
-  "merge_call": "No blocker at 50cf12614; delta correct (byte stderr tail proven by probe), but README memory line understates transient RSS; merge only after the 18 pending PR checks are green at HEAD (gh pr checks 405: 2 pass, 18 pending).",
+  "merge_call": "No blocker at b1a21a061; test-only delta keeps discrimination (mutant killed at old and new sizes) and the Linux env assertion is correct and stricter; merge only after unit-and-conformance (run) and the other 14 pending checks are green at HEAD.",
   "checkpoint": "Final+GREEN",
-  "unit_goal_source": "docs/backlog/distribution/isolate-host-acceptance.md (ready-verdict Contract+RED @ 9e76eb622; re-cut 2026-11-18 Acceptance 13 restated for framed fd-3 channel) in goal docs/backlog/epics/isolate-host-run-code/ (goal.md I1–I6), ADR-0557 §6; reviewed 50cf126148cfcdd62bb52af1ac568fb507aa65a6 vs prior verify @ 3d9958e84 (delta: git diff 3d9958e84 50cf12614)",
+  "unit_goal_source": "docs/backlog/distribution/isolate-host-acceptance.md (ready-verdict Contract+RED @ 9e76eb622; Acceptance 13 re-cut 2026-11-18; Acceptance 14 sizes restated @ b1a21a061) in goal docs/backlog/epics/isolate-host-run-code/ (goal.md I1–I6), ADR-0557 §6; reviewed b1a21a061e3960868fea906667f680deeb1236bc vs prior verify @ 50cf12614 (delta: git diff 50cf12614 b1a21a061; coverage rows for unchanged carriers reused from docs/backlog/distribution/reference/isolate-host-acceptance-final-green.json)",
   "unit_residuals": [],
   "goal_residuals": [],
   "goal_complete": false,
@@ -13,7 +13,7 @@
       "trace": "ADR-0557",
       "status": "pass",
       "citation": "packages/isolate-host/tests/parity.test.ts:150",
-      "note": "Carrier unchanged in delta 3d9958e84..50cf12614; row reused from verify @ 3d9958e84; suite re-run at 50cf12614: 104/104 pass."
+      "note": "Carrier unchanged in delta 50cf12614..b1a21a061; row reused from verify @ 50cf12614; suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
     },
     {
       "row": "runCode(code, options) public entry point",
@@ -21,7 +21,7 @@
       "trace": "ADR-0557",
       "status": "pass",
       "citation": "packages/isolate-host/tests/parity.test.ts:150",
-      "note": "Carrier unchanged in delta 3d9958e84..50cf12614; row reused from verify @ 3d9958e84; suite re-run at 50cf12614: 104/104 pass."
+      "note": "Carrier unchanged in delta 50cf12614..b1a21a061; row reused from verify @ 50cf12614; suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
     },
     {
       "row": "corpus parity vs live node oracle; ceiling rows expected failures",
@@ -29,7 +29,7 @@
       "trace": "I1",
       "status": "pass",
       "citation": "packages/isolate-host/tests/parity.test.ts:155",
-      "note": "Carrier unchanged in delta 3d9958e84..50cf12614; row reused from verify @ 3d9958e84; suite re-run at 50cf12614: 104/104 pass."
+      "note": "Carrier unchanged in delta 50cf12614..b1a21a061; row reused from verify @ 50cf12614; suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
     },
     {
       "row": "declared ceilings fail with named NotImplementedError",
@@ -37,7 +37,7 @@
       "trace": "scenario",
       "status": "pass",
       "citation": "packages/isolate-host/tests/parity.test.ts:205",
-      "note": "Carrier unchanged in delta 3d9958e84..50cf12614; row reused from verify @ 3d9958e84; suite re-run at 50cf12614: 104/104 pass."
+      "note": "Carrier unchanged in delta 50cf12614..b1a21a061; row reused from verify @ 50cf12614; suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
     },
     {
       "row": "fresh instance per call; no child outlives its result",
@@ -45,15 +45,15 @@
       "trace": "I2",
       "status": "pass",
       "citation": "packages/isolate-host/tests/isolation.test.ts:25",
-      "note": "Carrier unchanged in delta 3d9958e84..50cf12614; row reused from verify @ 3d9958e84; suite re-run at 50cf12614: 104/104 pass."
+      "note": "Carrier unchanged in delta 50cf12614..b1a21a061; row reused from verify @ 50cf12614; suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
     },
     {
       "row": "no host reach (canaries, realm walk, env, --no-node-snapshot)",
       "source": "acceptance",
       "trace": "I3",
       "status": "pass",
-      "citation": "packages/isolate-host/tests/isolation.test.ts:42",
-      "note": "Carrier unchanged in delta 3d9958e84..50cf12614; row reused from verify @ 3d9958e84; suite re-run at 50cf12614: 104/104 pass."
+      "citation": "packages/isolate-host/tests/isolation.test.ts:161",
+      "note": "Carrier changed (PR-4): Linux env assertion NODE_CHANNEL_{FD,SERIALIZATION_MODE} exactly → environment === '' (stricter). Docker node:24 (Linux) /tmp/ih8/docker/env.mjs with run-code.ts:170-173 spawn options (env {}, stdio [pipe,ignore,pipe,pipe]): /proc/<pid>/environ \"\" → empty; old stdio with 'ipc' → \"NODE_CHANNEL_FD=3\\0NODE_CHANNEL_SERIALIZATION_MODE=json\\0\". CI run 44249353089 @ 3d9958e84 already showed names [] vs expected NODE_CHANNEL_*. macOS branch (canaries absent) unchanged. suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
     },
     {
       "row": "busy loop / never-draining → timeout within +1000 ms; heap / Array(2**28) → memory",
@@ -61,7 +61,7 @@
       "trace": "I4",
       "status": "pass",
       "citation": "packages/isolate-host/tests/limits.test.ts:37",
-      "note": "Carrier unchanged in delta 3d9958e84..50cf12614; row reused from verify @ 3d9958e84; suite re-run at 50cf12614: 104/104 pass."
+      "note": "Carrier unchanged in delta 50cf12614..b1a21a061; row reused from verify @ 50cf12614; suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
     },
     {
       "row": "output cap truncates, run continues; 256 MiB flood not buffered",
@@ -69,7 +69,7 @@
       "trace": "I4",
       "status": "pass",
       "citation": "packages/isolate-host/tests/limits.test.ts:116",
-      "note": "Carrier unchanged in delta 3d9958e84..50cf12614; row reused from verify @ 3d9958e84; suite re-run at 50cf12614: 104/104 pass."
+      "note": "Carrier unchanged in delta 50cf12614..b1a21a061; row reused from verify @ 50cf12614; suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
     },
     {
       "row": "kill -9 rejects within 1000 ms naming signal; host keeps working",
@@ -77,7 +77,7 @@
       "trace": "I4",
       "status": "pass",
       "citation": "packages/isolate-host/tests/lifecycle.test.ts:25",
-      "note": "Carrier unchanged in delta 3d9958e84..50cf12614; row reused from verify @ 3d9958e84; suite re-run at 50cf12614: 104/104 pass. Delta touches the crash message tail (run-code.ts:178-181,248): /tmp/ih7/probe.mjs crash children (exit code / SIGKILL / uncaught throw) reject naming code/signal with byte tail."
+      "note": "Carrier unchanged in delta 50cf12614..b1a21a061; row reused from verify @ 50cf12614; suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
     },
     {
       "row": "egress APIs → NotImplementedError",
@@ -85,7 +85,7 @@
       "trace": "I5",
       "status": "pass",
       "citation": "packages/isolate-host/tests/egress.test.ts:19",
-      "note": "Carrier unchanged in delta 3d9958e84..50cf12614; row reused from verify @ 3d9958e84; suite re-run at 50cf12614: 104/104 pass."
+      "note": "Carrier unchanged in delta 50cf12614..b1a21a061; row reused from verify @ 50cf12614; suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
     },
     {
       "row": "packed tarball runs under plain node",
@@ -93,7 +93,7 @@
       "trace": "I6",
       "status": "pass",
       "citation": "packages/isolate-host/tests/packed-consumer.test.ts",
-      "note": "Carrier unchanged in delta 3d9958e84..50cf12614; row reused from verify @ 3d9958e84; suite re-run at 50cf12614: 104/104 pass."
+      "note": "Carrier unchanged in delta 50cf12614..b1a21a061; row reused from verify @ 50cf12614; suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
     },
     {
       "row": "guest TextEncoder/TextDecoder equals Node",
@@ -101,7 +101,7 @@
       "trace": "ADR-0557",
       "status": "pass",
       "citation": "packages/isolate-host/tests/text-codec.test.ts:31",
-      "note": "Carrier unchanged in delta 3d9958e84..50cf12614; row reused from verify @ 3d9958e84; suite re-run at 50cf12614: 104/104 pass."
+      "note": "Carrier unchanged in delta 50cf12614..b1a21a061; row reused from verify @ 50cf12614; suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
     },
     {
       "row": "host bridge garbage → guest-safe TypeError",
@@ -109,7 +109,7 @@
       "trace": "I3",
       "status": "pass",
       "citation": "packages/isolate-host/tests/bridge.test.ts:16",
-      "note": "Carrier unchanged in delta 3d9958e84..50cf12614; row reused from verify @ 3d9958e84; suite re-run at 50cf12614: 104/104 pass."
+      "note": "Carrier unchanged in delta 50cf12614..b1a21a061; row reused from verify @ 50cf12614; suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
     },
     {
       "row": "hostile child frames (garbage, kind, over-announce, fd/flags, payload sizes, no-new-bytes, past cap, revert, long error) → kill + protocol violation <1000 ms, never a throw; stalled legal frame ≤ one frame; 2^16 1-byte frames < 4 MiB held",
@@ -117,15 +117,15 @@
       "trace": "I4",
       "status": "pass",
       "citation": "packages/isolate-host/tests/protocol.test.ts:81",
-      "note": "Carrier unchanged in delta 3d9958e84..50cf12614; row reused from verify @ 3d9958e84; suite re-run at 50cf12614: 104/104 pass."
+      "note": "Carrier unchanged in delta 50cf12614..b1a21a061; row reused from verify @ 50cf12614; suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
     },
     {
-      "row": "write shapes: 3e6 empty / 2e6 one-byte writes < 64 MiB RSS; truncated survives timeout; timeoutMs > 2^31-1 RangeError",
+      "row": "write shapes: 1e6 empty writes @ 1 KiB cap / 1e6 one-byte writes @ 512 KiB cap < 64 MiB consumer RSS; truncated survives timeout; timeoutMs > 2^31-1 RangeError",
       "source": "acceptance",
       "trace": "I4",
       "status": "pass",
       "citation": "packages/isolate-host/tests/limits.test.ts:144",
-      "note": "Carrier unchanged in delta 3d9958e84..50cf12614; row reused from verify @ 3d9958e84; suite re-run at 50cf12614: 104/104 pass."
+      "note": "Carrier changed (PR-4): floods 3e6/2e6@1MiB → 1e6/1e6@512KiB, timeoutMs 60→120 s, test timeout 150 s; Acceptance 14 restated to match. Mutant /tmp/ih8/m1 (child keeps one chunk per write incl. empties, one frame per chunk; consumer drops the \"output without new bytes\" check and keeps per-frame chunks) via /tmp/ih8/probe.mjs, fresh process, same assertions: new empty1e6 FAIL +459 MiB, new one1e6 FAIL +296 MiB; old empty3e6 FAIL +1273 MiB, old one2e6 FAIL +496 MiB. Unmutated control: +6.9 / +9.6 MiB PASS. Mutant /tmp/ih8/m3 (child per-write 1-byte frames only, consumer intact) passes old and new alike (+6.6–11 MiB): not a clause violation. Kill set equal old vs new; margin ≥4.6× the 64 MiB bound. suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
     },
     {
       "row": "consumer death → child exits; spawn failure rejects at once",
@@ -133,7 +133,7 @@
       "trace": "I4",
       "status": "pass",
       "citation": "packages/isolate-host/tests/lifecycle.test.ts:43",
-      "note": "Carrier unchanged in delta 3d9958e84..50cf12614; row reused from verify @ 3d9958e84; suite re-run at 50cf12614: 104/104 pass."
+      "note": "Carrier unchanged in delta 50cf12614..b1a21a061; row reused from verify @ 50cf12614; suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
     },
     {
       "row": "guest CPU × run → SIGKILL at deadline, timeout",
@@ -141,7 +141,7 @@
       "trace": "I4",
       "status": "pass",
       "citation": "packages/isolate-host/tests/limits.test.ts:37",
-      "note": "Carrier unchanged in delta 3d9958e84..50cf12614; row reused from verify @ 3d9958e84; suite re-run at 50cf12614: 104/104 pass."
+      "note": "Carrier unchanged in delta 50cf12614..b1a21a061; row reused from verify @ 50cf12614; suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
     },
     {
       "row": "guest heap × run → memory",
@@ -149,7 +149,7 @@
       "trace": "I4",
       "status": "pass",
       "citation": "packages/isolate-host/tests/limits.test.ts:64",
-      "note": "Carrier unchanged in delta 3d9958e84..50cf12614; row reused from verify @ 3d9958e84; suite re-run at 50cf12614: 104/104 pass."
+      "note": "Carrier unchanged in delta 50cf12614..b1a21a061; row reused from verify @ 50cf12614; suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
     },
     {
       "row": "V8 fatal OOM / child RSS × run → memory",
@@ -157,7 +157,7 @@
       "trace": "I4",
       "status": "pass",
       "citation": "packages/isolate-host/tests/limits.test.ts:91",
-      "note": "Carrier unchanged in delta 3d9958e84..50cf12614; row reused from verify @ 3d9958e84; suite re-run at 50cf12614: 104/104 pass."
+      "note": "Carrier unchanged in delta 50cf12614..b1a21a061; row reused from verify @ 50cf12614; suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
     },
     {
       "row": "guest output × run → discard past cap, truncated",
@@ -165,7 +165,7 @@
       "trace": "I4",
       "status": "pass",
       "citation": "packages/isolate-host/tests/limits.test.ts:128",
-      "note": "Carrier unchanged in delta 3d9958e84..50cf12614; row reused from verify @ 3d9958e84; suite re-run at 50cf12614: 104/104 pass."
+      "note": "Carrier unchanged in delta 50cf12614..b1a21a061; row reused from verify @ 50cf12614; suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
     },
     {
       "row": "child killed externally / crash → reject at once naming code/signal",
@@ -173,7 +173,7 @@
       "trace": "I4",
       "status": "pass",
       "citation": "packages/isolate-host/tests/lifecycle.test.ts:25",
-      "note": "Carrier unchanged in delta 3d9958e84..50cf12614; row reused from verify @ 3d9958e84; suite re-run at 50cf12614: 104/104 pass. Delta touches the crash message tail (run-code.ts:178-181,248): /tmp/ih7/probe.mjs crash children (exit code / SIGKILL / uncaught throw) reject naming code/signal with byte tail."
+      "note": "Carrier unchanged in delta 50cf12614..b1a21a061; row reused from verify @ 50cf12614; suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
     },
     {
       "row": "concurrent calls × run → independent",
@@ -181,7 +181,7 @@
       "trace": "I2",
       "status": "pass",
       "citation": "packages/isolate-host/tests/lifecycle.test.ts:12",
-      "note": "Carrier unchanged in delta 3d9958e84..50cf12614; row reused from verify @ 3d9958e84; suite re-run at 50cf12614: 104/104 pass."
+      "note": "Carrier unchanged in delta 50cf12614..b1a21a061; row reused from verify @ 50cf12614; suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
     },
     {
       "row": "guest bridge args × call → validated refusal",
@@ -189,7 +189,7 @@
       "trace": "I3",
       "status": "pass",
       "citation": "packages/isolate-host/tests/bridge.test.ts:17",
-      "note": "Carrier unchanged in delta 3d9958e84..50cf12614; row reused from verify @ 3d9958e84; suite re-run at 50cf12614: 104/104 pass."
+      "note": "Carrier unchanged in delta 50cf12614..b1a21a061; row reused from verify @ 50cf12614; suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
     },
     {
       "row": "child frames × fd 3 (escaped child) → kill + protocol violation",
@@ -197,7 +197,7 @@
       "trace": "I4",
       "status": "pass",
       "citation": "packages/isolate-host/tests/protocol.test.ts:81",
-      "note": "Carrier unchanged in delta 3d9958e84..50cf12614; row reused from verify @ 3d9958e84; suite re-run at 50cf12614: 104/104 pass."
+      "note": "Carrier unchanged in delta 50cf12614..b1a21a061; row reused from verify @ 50cf12614; suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
     },
     {
       "row": "consumer death × run → child exits on disconnect (stdin EOF)",
@@ -205,7 +205,7 @@
       "trace": "I4",
       "status": "pass",
       "citation": "packages/isolate-host/tests/lifecycle.test.ts:61",
-      "note": "Carrier unchanged in delta 3d9958e84..50cf12614; row reused from verify @ 3d9958e84; suite re-run at 50cf12614: 104/104 pass."
+      "note": "Carrier unchanged in delta 50cf12614..b1a21a061; row reused from verify @ 50cf12614; suite re-run at b1a21a061: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0."
     }
   ],
   "axes": [
@@ -215,9 +215,9 @@
       "findings": [
         {
           "severity": "concern",
-          "location": "PR #405 @ 50cf12614",
-          "evidence": "gh pr checks 405 → 2 pass, 18 pending (unit-and-conformance run/parity, lint-and-typecheck, e2e-chromium ×12, browser-unit, no-coi, deploy). Local: npx vitest run --project isolate-host → 9 files, 104 passed, exit 0; pnpm -s check:arch → OK; pnpm -s backlog:check → OK.",
-          "summary": "PR CI not green at HEAD yet; local gates green. goal_complete false until merge on green CI (REV-9 / DoD).",
+          "location": "PR #405 @ b1a21a061",
+          "evidence": "gh pr checks 405 @ b1a21a061: 7 pass (Change scope, Deploy landing, Deploy playground, lint-and-typecheck, unit-and-conformance (parity), e2e light 4/8, 7/8), 15 pending incl. unit-and-conformance (run) — the Linux lane that runs the isolate-host project and failed @ 3d9958e84 (run 44249353089: env NODE_CHANNEL_* assertion; both floods resolved termination timeout at 60 s). Local: npx vitest run --project isolate-host → 104 passed, exit 0; pnpm -s backlog:check → backlog: OK.",
+          "summary": "PR CI not green at HEAD yet (Linux run lane pending); local gates green. goal_complete false until merge on green CI (REV-9 / DoD).",
           "authority": ""
         }
       ]
@@ -248,23 +248,23 @@
       "findings": [
         {
           "severity": "concern",
-          "location": "packages/isolate-host/README.md:122",
-          "evidence": "/tmp/ih7/mem.mjs (raw-byte child, one legal output frame of 64 MiB at cap 64 MiB + exit) → stdout 67108864, consumer peak RSS +419 MiB (~6.5× cap); prior verify probe a4 (protocol code unchanged): 1e6 legal 1-byte frames at default 1 MiB cap → RSS peak +96 MiB.",
-          "summary": "README now says consumer memory is \"bounded by the output cap: about 2× the cap while a frame is in flight\" — true for held memory, untrue for RSS (transient ~6.5× cap for a cap frame, ~96× default cap for a tiny-frame flood); ADR-0557 §6 states held ~2× + \"a few × cap transient RSS\" correctly. \"Its\" also reads as the child. Wording: say held ~2× cap, transient RSS several × cap.",
+          "location": "packages/isolate-host/tests/limits.test.ts:148",
+          "evidence": "Local (darwin): base 1e6 empty 8.1 s, 1e6 one-byte 7.4 s; 3e6 empty 24.4 s. CI @ 3d9958e84: 3e6 empty and 2e6 one-byte both > 60 s (resolved termination timeout, stdout '' / exitCode null) → CI ≥ ~2.5× slower than local under the full run lane; only a lower bound is known.",
+          "summary": "Headroom of the 120 s timeoutMs on the CI runner is unproven until unit-and-conformance (run) reports: 1e6 needs CI ≤ ~15× local. Failure mode is loud (timeout result ≠ expected), not a silent pass.",
           "authority": ""
         },
         {
           "severity": "concern",
           "location": "packages/isolate-host/src/protocol.ts:78",
-          "evidence": "probe.mjs a4: 1e6 legal 1-byte output frames in one 8 MB write at default 1 MiB cap → resolved, stdout 1e6, consumer RSS peak +96.2 MiB, max loop lag 63 ms; a16 4e6 @ 4 MB cap → +180 MiB; a17 16e6 @ 16 MB cap → +214 MiB (sublinear, transient).",
-          "summary": "Per-frame slice allocation makes a hostile tiny-frame flood at the default cap peak consumer RSS ~96 MiB (Acceptance 14 holds honest write shapes < 64 MiB; Acceptance 13 bounds only held heap, which holds). Hardening, not a clause violation. Carried from verify @ 3d9958e84; code unchanged.",
+          "evidence": "Carried from verify @ 50cf12614 (probe a4: 1e6 legal 1-byte frames in one 8 MB write at default 1 MiB cap → consumer RSS peak +96 MiB); code unchanged in delta. /tmp/ih8/m3 (per-write frames arriving through the pipe as the guest writes) peaks +11 MiB.",
+          "summary": "Per-frame slice allocation lets a hostile burst of tiny frames peak consumer RSS ~96 MiB at the default cap (held memory stays bounded; README:121-124 now states transient RSS honestly). Hardening, not a clause violation.",
           "authority": ""
         },
         {
           "severity": "nit",
           "location": "packages/isolate-host/src/run-code.ts:181",
-          "evidence": "/tmp/ih7/probe.mjs at HEAD: split \"ж\" across two stderr writes then exit 7 → tail \"ж\" (old-logic mutant /tmp/ih7/oldpkg → \"��\"); 16 MiB \"я\" then SIGKILL → tail 4096 bytes ending \"END-конец\", RSS +29.8 MiB; emoji ×3500 then uncaught throw → tail 4100 UTF-8 bytes with 2 leading U+FFFD (cut mid code point); empty stderr → no \": \" suffix. Old-logic mutant: tails 6001–8188 bytes.",
-          "summary": "Byte-based tail correct and bounded; leading cut mid code point decodes to U+FFFD (decoded tail may exceed 4096 bytes by a few). No suite test pins it: the same 104 tests passed at 3d9958e84 with the old logic (prior verify), mutant suite run not done here (diagnostic text only, untraced).",
+          "evidence": "Carried from verify @ 50cf12614; code unchanged.",
+          "summary": "Byte-based stderr tail may start mid code point (leading U+FFFD); no suite test pins the tail logic.",
           "authority": ""
         }
       ]
@@ -280,5 +280,5 @@
       "findings": []
     }
   ],
-  "reviewed_sha": "50cf126148cfcdd62bb52af1ac568fb507aa65a6"
+  "reviewed_sha": "b1a21a061e3960868fea906667f680deeb1236bc"
 }
