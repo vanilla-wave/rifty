@@ -1,7 +1,6 @@
 /**
  * Fault matrix rows of distribution/isolate-host-acceptance: concurrent calls
- * stay independent; a child killed from outside rejects loudly; the host
- * keeps working.
+ * stay independent; a failed spawn rejects at once; no worker is orphaned.
  */
 import { execFileSync, spawn } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
@@ -22,23 +21,7 @@ describe('runCode lifecycle faults', () => {
     );
   });
 
-  it('a child killed from outside rejects the call loudly, then the host keeps working', async () => {
-    const before = new Set(childPids());
-    const running = runCode("setTimeout(() => console.log('never'), 5000)");
-    running.catch(() => {}); // asserted below; keeps an early failure from going unhandled
-    const pid = await waitFor(() => childPids().find((p) => !before.has(p)), 1000);
-    const killedAt = Date.now();
-    execFileSync('kill', ['-9', String(pid)]);
-    await expect(running).rejects.toThrow(/isolate-host child .*SIGKILL/);
-    // At once — not at the 30 s default deadline.
-    expect(Date.now() - killedAt).toBeLessThan(1000);
-    await expect(runCode('console.log(1)')).resolves.toEqual({
-      stdout: '1\n',
-      stderr: '',
-      exitCode: 0,
-    });
-    expect(childPids()).toEqual([]);
-  });
+  // A worker killed from outside: its calls rerun once (pool-faults.test.ts, I5).
 
   it('a child that cannot spawn rejects the call at once (no hang)', () => {
     // A real spawn failure in a separate consumer process: its execPath points nowhere.

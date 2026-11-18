@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { runCode } from '../src/index.ts';
-import { childPids, rssKb, waitFor } from './support.ts';
+import { rssKb, soleChild, waitFor } from './support.ts';
 
 /** Max main-thread lag of this process while `work` runs. */
 async function withLag<T>(work: () => Promise<T>): Promise<{ value: T; maxLagMs: number }> {
@@ -28,13 +28,12 @@ async function withLag<T>(work: () => Promise<T>): Promise<{ value: T; maxLagMs:
 }
 
 afterEach(async () => {
-  // The consumer keeps working after every overrun, and no child is left behind.
+  // The consumer keeps working after every overrun (worker lifetime: pool.test.ts, I6).
   await expect(runCode('console.log(6 * 7)')).resolves.toEqual({
     stdout: '42\n',
     stderr: '',
     exitCode: 0,
   });
-  expect(childPids()).toEqual([]);
 });
 
 describe('runCode limits (I4)', () => {
@@ -93,7 +92,6 @@ describe('runCode limits (I4)', () => {
   }, 120_000);
 
   it('a catastrophic allocation ends with termination memory, child RSS held near 256 + 3 × limit', async () => {
-    const before = new Set(childPids());
     const started = Date.now();
     const running = runCode("console.log('big'); new Array(2 ** 28).fill(0)", {
       memoryLimitMb: 64,
@@ -104,7 +102,7 @@ describe('runCode limits (I4)', () => {
     // its fatal-OOM callback); the RSS watchdog (ceiling 448 MiB here) must stop it
     // first. A sampled watchdog overshoots by one backing-store doubling (measured
     // 661–808 MiB on macOS arm64), so the bound is 2 × the ceiling.
-    const pid = await waitFor(() => childPids().find((p) => !before.has(p)), 2000);
+    const pid = await waitFor(() => soleChild(), 2000);
     let peakMb = 0;
     const sampler = setInterval(() => {
       const kb = rssKb(pid);
