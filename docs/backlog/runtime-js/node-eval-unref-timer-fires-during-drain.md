@@ -10,11 +10,11 @@ code: [packages/runtime-js/src/internal/event-loop-keepalive.ts, packages/runtim
 
 ## Context
 
-Node v24.16.0: `node -e "setTimeout(() => console.log('fired'), 5).unref()"` → no
-output, status 0. Isolate host (ADR-0557) prints `fired`;
-`setInterval(…, 1).unref()` fires several times before exit. Found by the
-isolate-host Final+GREEN review; the no-settle mutant fires too, so the drain's
-macrotask idle confirmation is the owner, plus the isolate host's settle turns.
+Node v24.16.0: `node -e "setInterval(() => console.log('fired'), 1).unref()"` → no
+output, status 0. Isolate host (ADR-0557) prints `fired` 2–3 times (10/10
+runs @ 09337abe3); `setTimeout(f, 5).unref()` no longer fires there. Found by
+the isolate-host Final+GREEN review; the drain's macrotask idle confirmation is
+the owner.
 `docs/public/compat/process.md` claims `unref` ✅. Reproduce on the browser
 `node -e` path to scope it.
 

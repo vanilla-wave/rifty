@@ -94,10 +94,14 @@ blocks it.
    bridge is copying `ivm.Callback`s on a frozen, guest-reachable
    `__riftyIsolateHost` — untrusted surface: every argument is validated in the
    child (`src/child/bridge.ts`), refusals are guest-safe `TypeError`s with no
-   host frame. The consumer validates every child IPC message (types, integer
-   exit code 0..255, ≤ 2 chunks, bytes ≤ cap): a violation kills the child and
-   rejects `isolate-host child protocol violation: …` (a child after an isolate
-   escape is hostile).
+   host frame. The consumer validates every child IPC message against the
+   protocol state (one `ready`; output only with new non-empty bytes or the one
+   truncation flip, ≤ 2 chunks, total ≤ cap; integer exit code 0..255): a
+   violation kills the child and rejects `isolate-host child protocol
+   violation: …` (a child after an isolate escape is hostile). So a child can
+   make the consumer hold at most the cap in at most cap + 2 messages; one
+   oversized message still costs its size transiently, because Node IPC
+   deserializes before validation (declared, README).
 7. Dependency: `isolated-vm@7.0.2` exact (ships prebuilds linux-x64/arm64,
    darwin-arm64, win32-x64; engines node ≥24; maintenance mode). 7 over the
    consumer's 6.2.0: the addon now loads only in rifty's child, so the

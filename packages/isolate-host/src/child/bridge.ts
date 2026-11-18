@@ -45,13 +45,13 @@ export class OutputBudget {
     return this.#truncated;
   }
 
-  /** Accept a guest write; false when nothing new is pending. */
+  /** Accept a guest write; true when new bytes or the truncation flip await a flush. */
   write(fd: 1 | 2, bytes: Uint8Array): boolean {
-    if (bytes.byteLength === 0) return false;
     const room = this.cap - this.#kept;
-    if (bytes.byteLength > room) this.#truncated = true;
+    const flipped = bytes.byteLength > room && !this.#truncated;
+    if (flipped) this.#truncated = true;
     const take = Math.min(room, bytes.byteLength);
-    if (take <= 0) return false;
+    if (take <= 0) return flipped;
     const slot = this.#pending[fd];
     if (slot.len + take > slot.buf.byteLength) {
       const size = Math.max(slot.len + take, Math.min(this.cap, slot.buf.byteLength * 2 || 4096));

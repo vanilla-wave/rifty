@@ -24,11 +24,14 @@ async function run(request: RunRequest): Promise<void> {
   const output = new OutputBudget(request.maxOutputBytes);
   let flushScheduled = false;
   let reported = false;
+  let sentTruncated = false;
   const flush = (): void => {
     flushScheduled = false;
     const chunks = output.drain();
-    if (chunks.length > 0 || output.truncated)
-      send({ type: 'output', chunks, truncated: output.truncated });
+    // The consumer accepts only new bytes or the one truncation flip (protocol state).
+    if (chunks.length === 0 && (!output.truncated || sentTruncated)) return;
+    sentTruncated = output.truncated;
+    send({ type: 'output', chunks, truncated: output.truncated });
   };
   const report = (message: ChildMessage): void => {
     if (reported) return;

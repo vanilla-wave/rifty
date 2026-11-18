@@ -20,23 +20,35 @@ describe('host bridge under hostile arguments', () => {
       const garbage = ${GARBAGE};
       const calls = [];
       for (const g of garbage) {
-        calls.push(['write(fd=g)', () => bridge.write(g, new Uint8Array([120]))]);
-        calls.push(['write(bytes=g)', () => bridge.write(1, g)]);
-        calls.push(['timerStart(id=g)', () => bridge.timerStart(g, 0, false)]);
-        calls.push(['timerStart(ms=g)', () => bridge.timerStart(1e6, g, false)]);
-        calls.push(['timerStart(repeat=g)', () => bridge.timerStart(1e6 + 1, 0, g)]);
-        calls.push(['timerClear(g)', () => bridge.timerClear(g)]);
-        calls.push(['random(g)', () => bridge.random(g)]);
+        calls.push(['write(fd=g)', () => bridge.write(g, new Uint8Array([120, g]))]);
+        calls.push(['write(bytes=g)', () => bridge.write(1, g), g]);
+        calls.push(['timerStart(id=g)', () => bridge.timerStart(g, 0, false), g]);
+        calls.push(['timerStart(ms=g)', () => bridge.timerStart(1e6, g, false), g]);
+        calls.push(['timerStart(repeat=g)', () => bridge.timerStart(1e6 + 1, 0, g), g]);
+        calls.push(['timerClear(g)', () => bridge.timerClear(g), g]);
+        calls.push(['random(g)', () => bridge.random(g), g]);
         // A valid code (0) would end the run: done() is probed only with non-codes.
-        if (!(Number.isInteger(g) && g >= 0 && g <= 255)) calls.push(['done(g)', () => bridge.done(g)]);
+        if (!(Number.isInteger(g) && g >= 0 && g <= 255)) calls.push(['done(g)', () => bridge.done(g), g]);
       }
+      // The contract's valid values among the garbage: only these may be accepted.
+      const valid = (label, g) =>
+        (label === 'timerStart(ms=g)' && typeof g === 'number' && g >= 0 && g <= 2 ** 31 - 1) ||
+        (label === 'random(g)' && Number.isInteger(g) && g >= 0 && g <= 65536);
       const bad = [];
-      for (const [label, call] of calls) {
-        try { call(); } catch (e) {
-          const text = String(e && e.stack) + String(e && e.message);
-          if (/file:|child\\.js|node:internal|\\/node_modules\\//.test(text)) bad.push(label + ' leaked: ' + text.slice(0, 200));
+      for (let i = 0; i < calls.length; i++) {
+        const [label, call, g] = calls[i];
+        let refused = null;
+        try { call(); } catch (e) { refused = e; }
+        if (refused === null) {
+          if (!valid(label, g)) bad.push(label + ' accepted ' + String(g).slice(0, 20));
+          continue;
         }
+        const text = String(refused && refused.stack) + String(refused && refused.message);
+        if (/file:|child\\.js|node:internal|\\/node_modules\\//.test(text)) bad.push(label + ' leaked: ' + text.slice(0, 200));
+        // A refusal is the bridge's own TypeError, or isolated-vm's clone refusal at the boundary.
+        else if (!(refused instanceof TypeError) || !/^isolate-host bridge: |could not be cloned/.test(refused.message)) bad.push(label + ' threw ' + String(refused).slice(0, 80));
       }
+
       // Valid calls still work after the abuse.
       const r = bridge.random(4);
       if (!(r instanceof Uint8Array) || r.length !== 4) bad.push('random(4) broken');

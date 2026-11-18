@@ -117,7 +117,11 @@ Tested:
 - the guest has no network;
 - limits kill the child, never your process.
 
-The child starts with an empty environment.
+The child starts with an empty environment. The child itself is treated as
+hostile: a malformed or out-of-protocol message kills it, and the call
+rejects with `isolate-host child protocol violation: …`. A single oversized
+IPC message still costs your process its size briefly, since Node
+deserializes a message before it can be checked.
 
 Not protected: an isolate escape. A V8 or isolated-vm bug can give the guest
 code execution as the child's OS user. Escaped code can then read your

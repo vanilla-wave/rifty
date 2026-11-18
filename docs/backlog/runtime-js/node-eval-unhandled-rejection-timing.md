@@ -10,8 +10,8 @@ code: [packages/runtime-js/src/internal/event-loop-keepalive.ts]
 
 ## Context
 
-Node v24.16.0, `node -e "const p = Promise.reject(new Error('x')); setTimeout(() => p.catch(() => console.log('late-caught')), 10)"`
-→ stdout empty, `[eval]` diagnostic, status 1. rifty (isolate host, ADR-0557;
+Node v24.16.0, `node -e "const p = Promise.reject(new Error('x')); setTimeout(() => p.catch(() => console.log('late-caught')), 1)"`
+(or `setImmediate`) → stdout empty, `[eval]` diagnostic, status 1 (at 10 ms both agree). rifty (isolate host, ADR-0557;
 the eval drain lifecycle is shared with the browser `node -e` path) prints
 `late-caught` before the same diagnostic and status 1. Separately
 `node -e "process.on('exit', () => { Promise.reject(new Error('x')) })"` →

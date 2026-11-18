@@ -18,12 +18,20 @@ afterAll(() => rmSync(work, { recursive: true, force: true }));
 
 /** Messages the hostile child sends after `ready` and the run request (JS source of an array). */
 const HOSTILE: Readonly<Record<string, string>> = {
-  'output chunk not bytes': "[{ type: 'output', chunks: [[1, { byteLength: 0, x: 1 }]] }]",
-  'output fd 3': "[{ type: 'output', chunks: [[3, new Uint8Array(1)]] }]",
-  'output not an array': "[{ type: 'output', chunks: 'x' }]",
-  'output past the cap': "[{ type: 'output', chunks: [[1, new Uint8Array(4096)]] }]",
-  'too many chunks':
-    "[{ type: 'output', chunks: Array.from({ length: 5000 }, () => [1, new Uint8Array(0)]) }]",
+  // Every output fixture is well-formed but for the one field it names (truncated: false set).
+  'output chunk not bytes':
+    "[{ type: 'output', chunks: [[1, { byteLength: 5, x: 1 }]], truncated: false }]",
+  'output fd 3': "[{ type: 'output', chunks: [[3, new Uint8Array(1)]], truncated: false }]",
+  'output not an array': "[{ type: 'output', chunks: 'x', truncated: false }]",
+  'output past the cap':
+    "[{ type: 'output', chunks: [[1, new Uint8Array(4096)]], truncated: false }]",
+  'output three chunks':
+    "[{ type: 'output', chunks: [[1, new Uint8Array(1)], [2, new Uint8Array(1)], [1, new Uint8Array(1)]], truncated: false }]",
+  'output without truncated flag': "[{ type: 'output', chunks: [[1, new Uint8Array(1)]] }]",
+  'empty output chunk':
+    "[{ type: 'output', chunks: [[1, new Uint8Array(1)], [2, new Uint8Array(0)]], truncated: false }]",
+  'output with no new bytes': "[{ type: 'output', chunks: [], truncated: false }]",
+  'repeated ready': "[{ type: 'ready' }]",
   'exit code string': "[{ type: 'exit', exitCode: 'pwn', truncated: false }]",
   'exit code fraction': "[{ type: 'exit', exitCode: 1.5, truncated: false }]",
   'exit code out of range': "[{ type: 'exit', exitCode: 300, truncated: false }]",

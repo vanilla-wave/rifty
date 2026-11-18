@@ -54,13 +54,26 @@ function limit(
   return value;
 }
 
-/** A child message the consumer accepts; anything else is a protocol violation. */
-function violation(message: unknown, cap: number, kept: number): string | null {
+/** What the consumer has accepted so far: the protocol state a message is judged against. */
+interface ProtocolState {
+  ready: boolean;
+  kept: number;
+  truncated: boolean;
+}
+
+/**
+ * A child message the consumer accepts; anything else is a protocol violation.
+ * Every accepted message advances the state (one `ready`; output carries new
+ * bytes or the one truncation flip), so a child can make the consumer hold at
+ * most `cap` bytes in at most `cap + 2` messages.
+ */
+function violation(message: unknown, cap: number, state: ProtocolState): string | null {
   if (typeof message !== 'object' || message === null) return 'non-object message';
   const m = message as Record<string, unknown>;
+  if (m.type !== 'ready' && !state.ready) return 'message before ready';
   switch (m.type) {
     case 'ready':
-      return null;
+      return state.ready ? 'repeated ready' : null;
     case 'output': {
       if (!Array.isArray(m.chunks) || m.chunks.length > 2) return 'output chunks';
       if (typeof m.truncated !== 'boolean') return 'output truncated flag';
@@ -69,9 +82,13 @@ function violation(message: unknown, cap: number, kept: number): string | null {
         if (!Array.isArray(chunk) || chunk.length !== 2) return 'output chunk shape';
         if (chunk[0] !== 1 && chunk[0] !== 2) return 'output fd';
         if (!(chunk[1] instanceof Uint8Array)) return 'output bytes';
+        if (chunk[1].byteLength === 0) return 'empty output chunk';
         bytes += chunk[1].byteLength;
       }
-      return kept + bytes > cap ? 'output past the cap' : null;
+      if (state.kept + bytes > cap) return 'output past the cap';
+      if (bytes === 0 && !(m.truncated && !state.truncated)) return 'output without new bytes';
+      if (state.truncated && !m.truncated) return 'output truncation reverted';
+      return null;
     }
     case 'exit': {
       const code = m.exitCode;
@@ -119,8 +136,7 @@ export function runCode(code: string, options: RunCodeOptions = {}): Promise<Run
     });
     const out: Uint8Array[] = [];
     const err: Uint8Array[] = [];
-    let kept = 0;
-    let truncated = false;
+    const state: ProtocolState = { ready: false, kept: 0, truncated: false };
     let stderrTail = '';
     child.stderr?.on('data', (data: Buffer) => {
       stderrTail = (stderrTail + data.toString('utf8')).slice(-STDERR_TAIL_BYTES);
@@ -132,7 +148,7 @@ export function runCode(code: string, options: RunCodeOptions = {}): Promise<Run
       stderr: text(err),
       exitCode,
       ...(termination === undefined ? {} : { termination }),
-      ...(truncated ? { truncated: true as const } : {}),
+      ...(state.truncated ? { truncated: true as const } : {}),
     });
     const end = (next: typeof outcome): void => {
       if (outcome !== undefined) return;
@@ -145,7 +161,7 @@ export function runCode(code: string, options: RunCodeOptions = {}): Promise<Run
     // kills it with a distinct rejection, never a throw inside this listener.
     child.on('message', (message: unknown) => {
       if (outcome !== undefined) return;
-      const bad = violation(message, request.maxOutputBytes, kept);
+      const bad = violation(message, request.maxOutputBytes, state);
       if (bad !== null) {
         end({ error: new Error(`isolate-host child protocol violation: ${bad}`) });
         return;
@@ -153,22 +169,23 @@ export function runCode(code: string, options: RunCodeOptions = {}): Promise<Run
       const m = message as ChildMessage;
       switch (m.type) {
         case 'ready':
+          state.ready = true;
           // A child that died meanwhile surfaces through 'exit' (code/signal), not an EPIPE.
           child.send(request, () => {});
           return;
         case 'output':
-          truncated ||= m.truncated;
+          state.truncated ||= m.truncated;
           for (const [fd, bytes] of m.chunks) {
-            kept += bytes.byteLength;
+            state.kept += bytes.byteLength;
             (fd === 2 ? err : out).push(bytes);
           }
           return;
         case 'exit':
-          truncated ||= m.truncated;
+          state.truncated ||= m.truncated;
           end({ result: result(m.exitCode) });
           return;
         case 'memory':
-          truncated ||= m.truncated;
+          state.truncated ||= m.truncated;
           end({ result: result(null, 'memory') });
           return;
         case 'error':
