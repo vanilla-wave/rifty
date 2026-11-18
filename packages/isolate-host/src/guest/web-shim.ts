@@ -23,6 +23,19 @@ export interface HostBridge {
 const g = globalThis as unknown as Record<string, unknown>;
 export const bridge = g.__riftyIsolateHost as HostBridge;
 if (typeof bridge?.write !== 'function') throw new Error('isolate-host guest: host bridge missing');
+// Captured in this closure, then removed from the realm: guest code cannot call
+// the host directly (`done` would bypass the process lifecycle) — ADR-0557 §6.
+// biome-ignore lint/performance/noDelete: the property must be gone, not undefined.
+delete g.__riftyIsolateHost;
+
+// Built before guest code; `TextEncoder` here is the module's own class, and it
+// allocates through a captured `Uint8Array` (text-codec.ts).
+const hostEncoder = new TextEncoder();
+
+/** UTF-8 bytes straight to the host, bypassing anything the guest can replace. */
+export function writeHost(fd: 1 | 2, text: string): void {
+  bridge.write(fd, hostEncoder.encode(text));
+}
 
 let uncaught: (error: unknown) => void = (error) => {
   throw error;

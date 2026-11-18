@@ -93,9 +93,9 @@ function maxPayload(kind: number, cap: number, state: ProtocolState): number {
     case KIND.output:
       return 2 + (cap - state.kept);
     case KIND.exit:
-      return 2;
-    case KIND.memory:
       return 1;
+    case KIND.memory:
+      return 0;
     case KIND.error:
       return MAX_ERROR_TEXT;
     default:
@@ -105,38 +105,26 @@ function maxPayload(kind: number, cap: number, state: ProtocolState): number {
 
 /**
  * One raw frame from a possibly escaped child, judged against the protocol
- * state: output only with new non-empty bytes or the one truncation flip, total
- * ≤ cap; exact payload sizes for exit/memory. A string is the violation.
+ * state: output only with new non-empty bytes or the one truncation flip
+ * (its total is bounded before buffering by `maxPayload`); exact payload sizes
+ * for the terminal kinds. A string is the violation.
  */
-function decode(
-  kind: number,
-  p: Uint8Array,
-  cap: number,
-  state: ProtocolState,
-): ChildFrame | string {
-  const flag = (v: number | undefined): boolean | null => (v === 0 ? false : v === 1 ? true : null);
+function decode(kind: number, p: Uint8Array, state: ProtocolState): ChildFrame | string {
   switch (kind) {
     case KIND.output: {
       const fd = p[0];
-      const truncated = flag(p[1]);
+      const truncated = p[1] === 0 ? false : p[1] === 1 ? true : null;
       if (p.byteLength < 2 || (fd !== 1 && fd !== 2) || truncated === null) return 'output header';
       const bytes = p.subarray(2);
-      if (state.kept + bytes.byteLength > cap) return 'output past the cap';
       if (state.truncated && !truncated) return 'output truncation reverted';
       if (bytes.byteLength === 0 && !(truncated && !state.truncated))
         return 'output without new bytes';
       return { kind: 'output', fd, truncated, bytes };
     }
-    case KIND.exit: {
-      const truncated = flag(p[1]);
-      if (p.byteLength !== 2 || truncated === null) return 'exit payload';
-      return { kind: 'exit', exitCode: p[0] as number, truncated };
-    }
-    case KIND.memory: {
-      const truncated = flag(p[0]);
-      if (p.byteLength !== 1 || truncated === null) return 'memory payload';
-      return { kind: 'memory', truncated };
-    }
+    case KIND.exit:
+      return p.byteLength === 1 ? { kind: 'exit', exitCode: p[0] as number } : 'exit payload';
+    case KIND.memory:
+      return p.byteLength === 0 ? { kind: 'memory' } : 'memory payload';
     case KIND.error:
       return { kind: 'error', message: new TextDecoder().decode(p) };
     default:
@@ -206,33 +194,41 @@ export function runCode(code: string, options: RunCodeOptions = {}): Promise<Run
     const reader = new FrameReader((kind) => maxPayload(kind, cap, state));
     const frames = child.stdio[FRAME_CHANNEL_FD] as NodeJS.ReadableStream | null;
     frames?.on('error', () => {});
+    // The channel ending with no result is its own outcome, not a wait for the
+    // deadline. A dying child closes it too, so give its 'exit' (code/signal,
+    // the more precise outcome) one turn first.
+    frames?.on('end', () => {
+      setTimeout(() => {
+        end({ error: new Error('isolate-host child closed its result channel without a result') });
+      }, 50).unref();
+    });
     frames?.on('data', (chunk: Buffer) => {
       if (outcome !== undefined) return;
-      const parsed = reader.push(chunk);
-      if ('violation' in parsed) return violated(parsed.violation);
-      for (const raw of parsed.frames) {
-        if (outcome !== undefined) return;
-        const f = decode(raw.kind, raw.payload, cap, state);
-        if (typeof f === 'string') return violated(f);
+      // `false` settles the run: every later byte, in this chunk or after it, is ignored.
+      const bad = reader.push(chunk, (kind, payload) => {
+        const f = decode(kind, payload, state);
+        if (typeof f === 'string') {
+          violated(f);
+          return false;
+        }
         switch (f.kind) {
           case 'output':
             state.truncated ||= f.truncated;
             state.kept += f.bytes.byteLength;
             (f.fd === 2 ? err : out).append(f.bytes);
-            break;
+            return true;
           case 'exit':
-            state.truncated ||= f.truncated;
             end({ result: result(f.exitCode) });
-            break;
+            return false;
           case 'memory':
-            state.truncated ||= f.truncated;
             end({ result: result(null, 'memory') });
-            break;
+            return false;
           case 'error':
             end({ error: new Error(`isolate-host child failed: ${f.message}`) });
-            break;
+            return false;
         }
-      }
+      });
+      if (bad !== null) violated(bad);
     });
     // Only a failed spawn ends here; a live child's failure arrives as 'exit'.
     child.on('error', (error) => {

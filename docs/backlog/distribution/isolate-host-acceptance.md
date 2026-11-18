@@ -26,7 +26,7 @@ challenge: 2026-11-18 — inherits the goal premise check (`goal.md` §Challenge
 
 1. `runCode` is the package root's only runtime export; options `{timeoutMs, memoryLimitMb, maxOutputBytes}`, result `{stdout, stderr, exitCode, termination?: 'timeout' | 'memory', truncated?}` (ADR-0557 §1) → ADR-0557
 2. Corpus parity: every `parity.test.ts` row without a `ceiling` equals the live oracle; a `ceiling` row stays literal and runs as an expected failure naming its compat/backlog owner → I1
-3. Declared ceilings (`URL`, `structuredClone`, `fetch`, ESM syntax, `import()`) fail with a `NotImplementedError`/named message the model can act on, while real Node runs the same code (`parity.test.ts` ceilings block) → scenario
+3. Declared ceilings (`URL`, `structuredClone`, `fetch`, ESM syntax) fail with a `NotImplementedError`/named message the model can act on, while real Node runs the same code; `import()` in every form (top level, `await` in an async function, `eval`, `new Function`, a timer, with or without a handler) ends the run with that message on stderr and exit 1, keeping output produced before it, and no form exits 0 (`parity.test.ts` ceilings block) → scenario
 4. A file, a global and a pending timer of one call are absent from the next; no child outlives its result (`isolation.test.ts`) → I2
 5. Host `globalThis`/env canaries absent from the guest; indirect-eval `import`, `getBuiltinModule`, `require('fs')`, `process.binding`, `Function` reach no host file; a walk of every value reachable from `globalThis` (symbols, getters, prototypes; host bridge included) plus every function flowing through intercepted `call`/`apply`/`bind`/`Reflect` while timers, stdio, crypto, performance and the codec run finds no foreign realm, no foreign `process`, no isolated-vm handle method; the guest pid is not the child's; the child's environment block holds no host variable (Linux: empty) and its command has `--no-node-snapshot` (`isolation.test.ts`) → I3
 6. Sync busy loop and never-draining loop → `termination: 'timeout'`, each settled within `timeoutMs` + 1000 ms with consumer main-thread lag < 250 ms; heap growth → `memory`; `new Array(2**28).fill(0)` → `memory` with the child's sampled peak RSS < 2 × (256 + 3 × 64) MiB; each followed by a working `runCode` and no leftover child (`limits.test.ts`) → I4
@@ -35,10 +35,11 @@ challenge: 2026-11-18 — inherits the goal premise check (`goal.md` §Challenge
 9. `fetch`, `node:http` request, `https.get`, `net.connect`, `tls`, `dgram`, `http2`, `WebSocket` → `NotImplementedError` (`egress.test.ts`) → I5
 10. `pnpm pack` tarball + `npm install` into a clean project; `runCode` under plain `node` with only `PATH` (`packed-consumer.test.ts`) → I6
 11. The guest UTF-8 TextEncoder/TextDecoder equals Node's on randomized one-shot, streamed, fatal, BOM and `encodeInto` inputs (`text-codec.test.ts`) → ADR-0557
-12. The host bridge is hostile surface: every bridge function called with garbage (non-bytes, bad fd, non-integer/out-of-range ids, ms, lengths, exit codes) refuses with a guest-safe `TypeError` (no `file:`/`child.js` frame); the run keeps its own status, the consumer survives, no `__riftyHost_*` global remains, bridge return values carry no child state (`bridge.test.ts`) → I3
-13. A hostile child (isolate escape) cannot hurt the consumer: garbage bytes, unknown kind, a header announcing more than its kind may carry (4 GiB, past the cap), bad fd/flags, short/long exit/memory payloads, output with no new bytes, past the cap or reverting truncation, error text > 4 KiB → child killed, `runCode` rejects `isolate-host child protocol violation: …` within 1000 ms, never a throw; a stalled legal frame buffers at most one frame; 2^16 accepted 1-byte frames hold < 4 MiB heap+arrayBuffers (`protocol.test.ts`, real hostile child processes) → I4
+12. The host bridge is not reachable from guest code (no `__riftyIsolateHost`, no `__riftyHost_*`, no native bridge-shaped object found by a deep walk; the only extra global is rifty's own `__rifty` table) and still refuses hostile arguments: every entry accepts a value only when its contract allows it, refusals are `isolate-host bridge: …` `TypeError`s with no host path, `now()` tracks the child clock (`bridge.test.ts`) → I3
+13. A hostile child (isolate escape) cannot hurt the consumer: garbage bytes, a byte-by-byte garbage header, unknown kind, a header announcing more than its kind may carry (4 GiB, past the cap), bad fd/flags, wrong exit/memory payload sizes, output with no new bytes, past the cap or reverting truncation, error text > 4 KiB → child killed, `runCode` rejects `isolate-host child protocol violation: …` within 1000 ms, never a throw. A frame fed one byte at a time is accepted whole; bytes after a terminal frame are ignored, in its chunk or after it; a channel closed with no result rejects at once instead of waiting for the deadline; a stalled legal frame buffers at most one frame; 2^16 accepted 1-byte frames hold < 4 MiB (`protocol.test.ts`, real hostile child processes) → I4
 14. Output accounting holds for every write shape: 1e6 empty writes at a 1 KiB cap and 1e6 one-byte writes at 512 KiB grow consumer RSS < 64 MiB; `truncated` survives a timeout kill; `timeoutMs` above 2^31-1 is a `RangeError` (`limits.test.ts`) → I4
 15. A child whose consumer dies exits (no orphan); a child that cannot spawn rejects at once (`lifecycle.test.ts`) → I4
+16. Nothing the run does after guest code trusts a guest-replaceable object: with `process.stderr.write`, `process.stderr`, `process`, `process.exit`, `console`, `Error.prototype.stack`, `TextEncoder` or `Uint8Array` replaced or made to throw, the status is still Node's, the guest's own error still reaches stderr, and the consumer never reports a child failure instead (`guest-seam.test.ts`) → I3
 
 ## Reference contract
 
@@ -72,7 +73,9 @@ challenge: 2026-11-18 — inherits the goal premise check (`goal.md` §Challenge
 | child killed externally / crash × run | `runCode` rejects at once naming code/signal | lifecycle: `kill -9` | → I4 |
 | concurrent calls × run | independent instances | lifecycle: 3 parallel | → I2 |
 | guest bridge args × call | validated, guest-safe refusal | bridge: garbage matrix | → I3 |
-| child frames × fd 3 (escaped child) | kill + `protocol violation` rejection | protocol: hostile children | → I4 |
+| child frames × fd 3 (escaped child) | kill + `protocol violation` rejection; trailing bytes ignored | protocol: hostile children | → I4 |
+| result channel closed × run | reject at once, not at the deadline | protocol: channel closed | → I4 |
+| guest replaces post-run objects × run | host paths bypass them; status stays Node's | guest-seam: 10 replacements | → I3 |
 | consumer death × run | child exits on disconnect | lifecycle: orphan | → I4 |
 
 ## Out of scope
@@ -84,7 +87,8 @@ challenge: 2026-11-18 — inherits the goal premise check (`goal.md` §Challenge
 - Identity ceilings (rifty's): `process.version`, `os.platform()`,
   `process.cwd()`, empty `process.env`, `process.argv`.
 - ESM syntax in `-e` → `NotImplementedError('isolate-host.node-eval-esm')`;
-  `import()` → named rejection (unhandled: may exit 0 — compat ❌).
+  `import()` → the run ends 1 with the named gap, in every form (compat ❌);
+  try-import-with-fallback is the declared price.
 - stdin, `-p`, TypeScript input.
 
 ## Decisions
@@ -97,6 +101,7 @@ ready-verdict: 2026-11-18 — Contract+RED @ 9e76eb622
 - re-cut: 2026-11-18 — manager (cross-review 1): unhandled-import() ordering machinery removed, no corpus/scenario row needs it (REV-7); unhandled import() may exit 0 — compat ❌ — trace: ADR-0557
 - re-cut: 2026-11-18 — cross-review 1: Acceptance 12–15 + three fault rows added (hostile bridge args, hostile child IPC, write-shape accounting, orphan/spawn) — trace: I3, I4
 - re-cut: 2026-11-18 — Acceptance 13 restated for the framed fd-3 channel (Node IPC removed after a malformed frame crashed the consumer in Node's deserializer) — trace: I4
+- re-cut: 2026-11-18 — cross-review 2: `import()` is loud and terminal in every form (no silent exit 0); Acceptance 12 restated (bridge unreachable + arg validation as a unit), Acceptance 13 extended (byte-by-byte, trailing bytes, closed channel), Acceptance 16 added (post-guest paths distrust guest objects) — trace: I3, I4, scenario
 - 2026-11-18 — stderr canonicalization only on uncaught-error rows; stdout and every other stderr compared raw (no CRLF/ANSI normalization).
 - re-cut: 2026-11-18 — manager amend (goal.md): I3 bridge-walk attack, I4 reasons `timeout`|`memory` + one memory knob + settle bound + child death, ESM and ceiling rows; ceiling rows run as expected failures — trace: I1, I3, I4
 - 2026-11-18 — the parity carrier lives with the package (it needs the package build) and imports the node-cli-eval projection rather than copying it.

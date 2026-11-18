@@ -25,7 +25,13 @@ import { syncMirror } from '@riftydev/vfs';
 import { installMemoryFs } from '@riftydev/vfs/internal';
 import { bindNotImplemented } from './loud.ts';
 // Evaluated before every runtime module: the build injects it first (scripts/build-runtime.mjs).
-import { bridge, fireTimer, installCeilingGlobals, setUncaughtHandler } from './web-shim.ts';
+import {
+  bridge,
+  fireTimer,
+  installCeilingGlobals,
+  setUncaughtHandler,
+  writeHost,
+} from './web-shim.ts';
 
 bindNotImplemented(NotImplementedError);
 
@@ -141,8 +147,15 @@ function exitCodeOf(reason: unknown): number | null {
 function writeFatal(error: unknown): void {
   const text =
     error instanceof Error ? (error.stack ?? `${error.name}: ${error.message}`) : String(error);
-  riftyProcess.stderr.write(`${text}\n`);
+  // Straight to the host, as Node's fatal path bypasses a replaced
+  // `process.stderr.write`: guest code must not forge or mute a failure.
+  writeHost(2, `${text}\n`);
 }
+
+/** The runtime's own `process.exit`, captured before guest code can replace it. */
+let nativeExit: () => void = () => {
+  throw new Error('isolate-host guest: exit before the runtime was installed');
+};
 
 let finished = false;
 function finish(code: number): void {
@@ -187,6 +200,7 @@ async function run(source: string): Promise<void> {
     installCeilingGlobals();
     installEvalBuiltinGlobals();
     setProcessCwd(CWD);
+    nativeExit = riftyProcess.exit.bind(riftyProcess) as () => void;
     await runNodeEntry({
       kind: 'eval',
       vfs: syncMirror(),
@@ -196,7 +210,9 @@ async function run(source: string): Promise<void> {
       explicitCommonJs: false,
     });
     await awaitDrain({ capMs: Number.POSITIVE_INFINITY });
-    riftyProcess.exit();
+    // The runtime's own exit: a guest-replaced `process.exit` must not change
+    // this run's status (Node's natural exit does not call it either).
+    nativeExit();
     throw new Error('isolate-host guest: process.exit() returned');
   } catch (caught) {
     const error =

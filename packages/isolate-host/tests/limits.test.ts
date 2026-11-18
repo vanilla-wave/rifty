@@ -163,6 +163,15 @@ describe('runCode limits (I4)', () => {
     expect((process.memoryUsage().rss - before) / (1 << 20)).toBeLessThan(64);
   }, 150_000);
 
+  it('a flip to truncated with no new bytes still reaches the consumer', async () => {
+    // Exactly the cap, then more: the later write adds no kept bytes, only the flip.
+    const value = await runCode(
+      "process.stdout.write('abcd'); setTimeout(() => process.stdout.write('e'), 20)",
+      { maxOutputBytes: 4 },
+    );
+    expect(value).toEqual({ stdout: 'abcd', stderr: '', exitCode: 0, truncated: true });
+  });
+
   it('truncation survives a timeout kill', async () => {
     const value = await runCode("process.stdout.write('x'.repeat(5000)); for (;;) {}", {
       maxOutputBytes: 100,

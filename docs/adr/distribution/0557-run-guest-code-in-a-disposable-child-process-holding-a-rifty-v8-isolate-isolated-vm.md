@@ -92,20 +92,29 @@ blocks it.
    as loud modules (`NotImplementedError` at require); `tls`/`dgram`/`http2`
    keep rifty's loud stubs. No host callback exposes network or host FS. The
    bridge is copying `ivm.Callback`s on a frozen, guest-reachable
-   `__riftyIsolateHost` — untrusted surface: every argument is validated in the
-   child (`src/child/bridge.ts`), refusals are guest-safe `TypeError`s with no
-   host frame. No Node IPC: the request goes as one JSON line on the child's
+   `__riftyIsolateHost`: the shim captures it in a closure and deletes the
+   global before guest code, so no guest can call the host (`done` would bypass
+   the process lifecycle); its arguments are still validated in the child
+   (`src/child/bridge.ts`) with guest-safe `TypeError`s. What the run does
+   after guest code — the fatal write, the natural exit — uses the host bridge
+   and the captured `process.exit`, never an object the guest can replace, so a
+   guest can neither forge nor mute an infrastructure failure. No Node IPC: the request goes as one JSON line on the child's
    stdin (kept open; its end tells the child the consumer died → self-kill),
    results come back as length-framed binary frames on fd 3 that the
    consumer parses itself (`src/protocol.ts`). A header announcing more than
-   its kind may legally carry now (output ≤ 2 + remaining cap, exit 2, memory
-   1, error ≤ 4 KiB) is refused before its payload is buffered; each complete
-   frame is judged against the protocol state (fd 1|2, flags 0|1, output only
-   with new non-empty bytes or the one truncation flip, total ≤ cap). A
+   its kind may legally carry now (output ≤ 2 + remaining cap, exit 1,
+   memory 0, error ≤ 4 KiB) is refused before its payload is buffered; each
+   complete frame is judged against the protocol state (fd 1|2, flags 0|1,
+   output only with new non-empty bytes or the one truncation flip — truncation
+   rides output frames only, the terminal kinds carry exactly their code or
+   nothing). A
    violation kills the child and rejects `isolate-host child protocol
    violation: …` (a child after an isolate escape is hostile). The consumer
    thus buffers at most one legal frame and keeps at most the cap of output,
-   copied into one buffer per fd; with buffer doubling and the frame copy a
+   copied into one buffer per fd. Frames are handled as they are parsed, so a
+   terminal frame settles the run and every later byte — in its chunk or after
+   it — is ignored; a channel closed with no result settles as its own error,
+   not at the deadline. With buffer doubling and the frame copy a
    cap-sized frame costs ~2× cap held and a few × cap transient RSS.
 7. Dependency: `isolated-vm@7.0.2` exact (ships prebuilds linux-x64/arm64,
    darwin-arm64, win32-x64; engines node ≥24; maintenance mode). 7 over the

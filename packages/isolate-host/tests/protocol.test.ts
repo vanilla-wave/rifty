@@ -34,11 +34,12 @@ const HOSTILE: Readonly<Record<string, string>> = {
   'output past the cap in two frames':
     'f(1, [1, 0, ...new Array(1000).fill(65)]); f(1, [2, 0, ...new Array(100).fill(66)])',
   'output truncation reverted': 'f(1, [1, 1, 65]); f(1, [1, 0, 66])',
-  'exit payload too short': 'f(2, [0])',
-  'exit payload too long': 'f(2, [0, 0, 0])',
-  'exit truncated flag 7': 'f(2, [0, 7])',
-  'memory payload empty': 'f(3, [])',
+  'exit payload empty': 'f(2, [])',
+  'exit payload too long': 'f(2, [0, 0])',
+  'memory payload not empty': 'f(3, [0])',
   'error text over 4 KiB': 'f(4, new Array(5000).fill(120))',
+  // A header split across writes must not be mistaken for a short frame.
+  'byte-by-byte garbage': 'for (const b of [0xff, 0xff, 0xff, 0xff, 1]) raw([b])',
 };
 
 function hostilePackage(label: string, body: string): string {
@@ -48,7 +49,7 @@ function hostilePackage(label: string, body: string): string {
   symlinkSync(join(PACKAGE_DIR, 'node_modules'), join(dir, 'node_modules'));
   writeFileSync(
     join(dir, 'dist', 'child.js'),
-    `import { writeSync } from 'node:fs';
+    `import { closeSync, writeSync } from 'node:fs';
      const raw = (bytes) => writeSync(3, Uint8Array.from(bytes));
      const f = (kind, payload) => {
        const b = Uint8Array.from(payload);
@@ -123,4 +124,41 @@ describe('consumer treats the child channel as hostile', () => {
     expect(report.held).toBeGreaterThanOrEqual(0);
     expect(report.held).toBeLessThan(4);
   }, 30_000);
+
+  it('a frame fed one byte at a time is accepted whole', () => {
+    const entry = hostilePackage(
+      'byte-by-byte valid',
+      'for (const b of [0, 0, 0, 5, 1, 1, 0, 104, 105, 33]) raw([b]); for (const b of [0, 0, 0, 1, 2, 7]) raw([b])',
+    );
+    const report = consume(entry, '{ timeoutMs: 5000, maxOutputBytes: 1024 }') as {
+      resolved?: { stdout: string; exitCode: number | null };
+    };
+    expect(report.resolved).toEqual({ stdout: 'hi!', stderr: '', exitCode: 7 });
+  });
+
+  it('bytes after a terminal frame are ignored, in its chunk or after it', () => {
+    for (const [label, body] of [
+      ['same chunk', 'f(2, [3]); raw([0xff, 0xff, 0xff, 0xff, 9])'],
+      ['later chunk', 'f(2, [3]); setTimeout(() => raw([0xff, 0xff, 0xff, 0xff, 9]), 20)'],
+    ] as const) {
+      const report = consume(
+        hostilePackage(`trailing garbage ${label}`, body),
+        '{ timeoutMs: 5000, maxOutputBytes: 1024 }',
+      ) as { resolved?: { exitCode: number | null } };
+      expect(report.resolved?.exitCode, label).toBe(3);
+    }
+  });
+
+  it('a channel closed without a result is its own outcome, not the deadline', () => {
+    // The child closes fd 3 and lives on; the call must not wait for timeoutMs.
+    const entry = hostilePackage('channel closed', 'closeSync(3)');
+    const started = Date.now();
+    const report = consume(entry, '{ timeoutMs: 20000, maxOutputBytes: 1024 }') as {
+      rejected?: string;
+      ms?: number;
+    };
+    expect(report.rejected).toBe('isolate-host child closed its result channel without a result');
+    expect(Date.now() - started).toBeLessThan(5000);
+    expect(report.ms).toBeLessThan(1000);
+  });
 });

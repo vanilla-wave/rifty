@@ -1,98 +1,166 @@
 /**
- * The host bridge is reachable guest surface (ADR-0557 §6): every function takes
- * hostile arguments. The child validates each argument, throws only a guest-safe
- * error (no host frames or paths) and the consumer process never sees it (I3, I4).
+ * The host bridge (ADR-0557 §6). Two halves:
+ *  - it is unreachable from guest code (captured in a closure, removed from the
+ *    realm), so no guest can call the host directly (I3);
+ *  - it still treats every argument as hostile, in case a later change exposes
+ *    it: each refusal is a guest-safe `TypeError` with no host frame.
  */
 import { describe, expect, it } from 'vitest';
+import { OutputBudget, createBridge } from '../src/child/bridge.ts';
 import { runCode } from '../src/index.ts';
 import { childPids } from './support.ts';
 
-const GARBAGE = `[
-  undefined, null, 0, -1, 1.5, NaN, Infinity, 2 ** 53, '1', 'pwn', {}, { byteLength: 0, x: 1 },
-  { byteLength: 5, buffer: 1 }, [], [1, 2], () => 1, new Proxy({}, {}), 'x'.repeat(1e5),
-  new ArrayBuffer(4), new Uint16Array(2), new DataView(new ArrayBuffer(2)),
-]`;
+const GARBAGE: readonly unknown[] = [
+  undefined,
+  null,
+  0,
+  -1,
+  1.5,
+  Number.NaN,
+  Number.POSITIVE_INFINITY,
+  2 ** 53,
+  '1',
+  'pwn',
+  {},
+  { byteLength: 0, x: 1 },
+  { byteLength: 5, buffer: 1 },
+  [],
+  [1, 2],
+  () => 1,
+  new Proxy({}, {}),
+  'x'.repeat(1e5),
+  new ArrayBuffer(4),
+  new Uint16Array(2),
+  new DataView(new ArrayBuffer(2)),
+  Symbol('s'),
+  10n,
+  true,
+];
 
-describe('host bridge under hostile arguments', () => {
-  it('every bridge function rejects garbage with a guest-safe error; the run and the consumer survive', async () => {
-    const result = await runCode(`
-      const bridge = globalThis.__riftyIsolateHost;
-      const garbage = ${GARBAGE};
-      const calls = [];
-      for (const g of garbage) {
-        calls.push(['write(fd=g)', () => bridge.write(g, new Uint8Array([120, g]))]);
-        calls.push(['write(bytes=g)', () => bridge.write(1, g), g]);
-        calls.push(['timerStart(id=g)', () => bridge.timerStart(g, 0, false), g]);
-        calls.push(['timerStart(ms=g)', () => bridge.timerStart(1e6, g, false), g]);
-        calls.push(['timerStart(repeat=g)', () => bridge.timerStart(1e6 + 1, 0, g), g]);
-        calls.push(['timerClear(g)', () => bridge.timerClear(g), g]);
-        calls.push(['random(g)', () => bridge.random(g), g]);
-        // A valid code (0) would end the run: done() is probed only with non-codes.
-        if (!(Number.isInteger(g) && g >= 0 && g <= 255)) calls.push(['done(g)', () => bridge.done(g), g]);
-      }
-      // The contract's valid values among the garbage: only these may be accepted.
-      const valid = (label, g) =>
-        (label === 'timerStart(ms=g)' && typeof g === 'number' && g >= 0 && g <= 2 ** 31 - 1) ||
-        (label === 'random(g)' && Number.isInteger(g) && g >= 0 && g <= 65536);
-      const bad = [];
-      for (let i = 0; i < calls.length; i++) {
-        const [label, call, g] = calls[i];
-        let refused = null;
-        try { call(); } catch (e) { refused = e; }
-        if (refused === null) {
-          if (!valid(label, g)) bad.push(label + ' accepted ' + String(g).slice(0, 20));
+/** The bridge's own contract: the only values each entry may accept. */
+const VALID: Readonly<Record<string, (v: unknown) => boolean>> = {
+  'write(fd)': (v) => v === 1 || v === 2,
+  'write(bytes)': (v) => v instanceof Uint8Array,
+  'timerStart(id)': (v) =>
+    Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 2 ** 31 - 1,
+  'timerStart(ms)': (v) => typeof v === 'number' && v >= 0 && v <= 2 ** 31 - 1,
+  'timerStart(repeat)': (v) => typeof v === 'boolean',
+  'timerClear(id)': (v) =>
+    Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 2 ** 31 - 1,
+  'random(n)': (v) => Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 65536,
+  'done(code)': (v) => Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 255,
+};
+
+describe('host bridge argument validation', () => {
+  it('accepts a value only when its contract allows it, and refuses guest-safely', () => {
+    const done: number[] = [];
+    const output = new OutputBudget(1 << 20);
+    const bridge = createBridge({
+      output,
+      outputPending: () => {},
+      fire: () => {},
+      done: (code) => done.push(code),
+    });
+    const calls: [string, (g: unknown) => unknown][] = [
+      ['write(fd)', (g) => bridge.write(g, Uint8Array.of(120))],
+      ['write(bytes)', (g) => bridge.write(1, g)],
+      ['timerStart(id)', (g) => bridge.timerStart(g, 0, false)],
+      ['timerStart(ms)', (g) => bridge.timerStart(7, g, false)],
+      ['timerStart(repeat)', (g) => bridge.timerStart(8, 0, g)],
+      ['timerClear(id)', (g) => bridge.timerClear(g)],
+      ['random(n)', (g) => bridge.random(g)],
+      ['done(code)', (g) => bridge.done(g)],
+    ];
+    const bad: string[] = [];
+    for (const g of GARBAGE) {
+      for (const [label, call] of calls) {
+        let refused: unknown;
+        try {
+          call(g);
+        } catch (error) {
+          refused = error;
+        }
+        const allowed = (VALID[label] as (v: unknown) => boolean)(g);
+        if (refused === undefined) {
+          if (!allowed) bad.push(`${label} accepted ${String(g).slice(0, 20)}`);
           continue;
         }
-        const text = String(refused && refused.stack) + String(refused && refused.message);
-        if (/file:|child\\.js|node:internal|\\/node_modules\\//.test(text)) bad.push(label + ' leaked: ' + text.slice(0, 200));
-        // A refusal is the bridge's own TypeError, or isolated-vm's clone refusal at the boundary.
-        else if (!(refused instanceof TypeError) || !/^isolate-host bridge: |could not be cloned/.test(refused.message)) bad.push(label + ' threw ' + String(refused).slice(0, 80));
+        if (allowed) bad.push(`${label} refused a valid ${String(g).slice(0, 20)}`);
+        const error = refused as Error;
+        if (!(error instanceof TypeError) || !error.message.startsWith('isolate-host bridge: ')) {
+          bad.push(`${label} threw ${String(error).slice(0, 60)}`);
+        }
+        // A refusal crosses into the guest: no host frame or path may ride along.
+        if (/file:|child\.js|node:internal|\/node_modules\//.test(String(error.stack))) {
+          bad.push(`${label} leaked a host path`);
+        }
       }
-
-      // Valid calls still work after the abuse.
-      const r = bridge.random(4);
-      if (!(r instanceof Uint8Array) || r.length !== 4) bad.push('random(4) broken');
-      if (typeof bridge.now() !== 'number') bad.push('now() broken');
-      bridge.timerClear(1e6); bridge.timerClear(1e6 + 1);
-      console.log(JSON.stringify({ calls: calls.length, bad }));
-    `);
-    expect(result.exitCode).toBe(0);
-    expect(result.stderr).toBe('');
-    const report = JSON.parse(result.stdout) as { calls: number; bad: string[] };
-    expect(report.bad).toEqual([]);
-    expect(report.calls).toBeGreaterThan(100);
-    expect(childPids()).toEqual([]);
+    }
+    expect(bad).toEqual([]);
+    // Valid calls still work after the abuse, and only valid ones took effect.
+    expect(bridge.random(4)).toHaveLength(4);
+    bridge.write(1, Uint8Array.of(65));
+    expect(output.drain()).toEqual([[1, Uint8Array.of(65)]]);
+    expect(done).toEqual([0]);
+    for (const id of [7, 8]) bridge.timerClear(id);
   });
 
-  it('done() with a non-exit-code value is refused; the run keeps its real status', async () => {
-    const result = await runCode(
-      "try { __riftyIsolateHost.done('pwn') } catch (e) { console.log(e.name) }; process.exitCode = 3",
-    );
-    expect(result).toEqual({ stdout: 'TypeError\n', stderr: '', exitCode: 3 });
+  it('now() is the child clock, not a constant and not child state', () => {
+    const bridge = createBridge({
+      output: new OutputBudget(16),
+      outputPending: () => {},
+      fire: () => {},
+      done: () => {},
+    });
+    const first = bridge.now();
+    // Bounded by the wall clock, so a constant `now()` fails here instead of spinning.
+    const until = Date.now() + 50;
+    let spun = first;
+    while (spun - first < 2 && Date.now() < until) spun = bridge.now();
+    expect(spun).toBeGreaterThan(first + 1);
+    // Tracks the wall clock, so a constant or a pid cannot pass.
+    expect(Math.abs(performance.timeOrigin + spun - Date.now())).toBeLessThan(200);
   });
+});
 
-  it('bridge writes of non-byte values never reach the consumer', async () => {
-    const result = await runCode(
-      "for (const g of [{ byteLength: 0, x: 1 }, null, [1], 'str']) { try { __riftyIsolateHost.write(1, g) } catch {} } console.log('ok')",
-    );
-    expect(result).toEqual({ stdout: 'ok\n', stderr: '', exitCode: 0 });
-  });
-
-  it('bridge return values carry no child state', async () => {
+describe('host bridge reachability from the guest (I3)', () => {
+  it('no bridge object or host function is reachable in the guest realm', async () => {
     const result = await runCode(`
-      const b = globalThis.__riftyIsolateHost;
-      const now = b.now();
+      const names = Object.getOwnPropertyNames(globalThis);
+      const seen = new Set();
+      const bad = [];
+      const walk = (v, path, depth) => {
+        if (v === null || (typeof v !== 'object' && typeof v !== 'function') || seen.has(v) || depth > 6) return;
+        seen.add(v);
+        // An ivm.Callback is a native function; intrinsics (Math.random) are too,
+        // so a hit counts only when the object carries the bridge's own shape.
+        const bridgeish = ['write', 'done', 'timerStart', 'timerClear', 'random'].every(
+          (k) => { try { return typeof v[k] === 'function' } catch { return false } },
+        );
+        if (bridgeish) bad.push(path);
+        let keys = [];
+        try { keys = Reflect.ownKeys(v); } catch {}
+        for (const k of keys) {
+          let d;
+          try { d = Reflect.getOwnPropertyDescriptor(v, k); } catch { continue; }
+          if (d && 'value' in d) walk(d.value, path + '.' + String(k), depth + 1);
+        }
+      };
+      walk(globalThis, 'globalThis', 0);
       console.log(JSON.stringify({
-        // The child's monotonic clock: timeOrigin + now() tracks the wall clock.
-        nowIsClock: Math.abs(b.timeOrigin + now - Date.now()) < 1000,
-        random: Object.prototype.toString.call(b.random(3)),
-        hostGlobals: Object.getOwnPropertyNames(globalThis).filter((n) => n.startsWith('__riftyHost_')),
+        bridge: typeof globalThis.__riftyIsolateHost,
+        extras: names.filter((n) => n.startsWith('__rifty')),
+        bad,
       }));
     `);
+    expect(result.exitCode).toBe(0);
     expect(JSON.parse(result.stdout)).toEqual({
-      nowIsClock: true,
-      random: '[object Uint8Array]',
-      hostGlobals: [],
+      bridge: 'undefined',
+      // `__rifty` is rifty's own runtime table: breaking its own rifty is the
+      // guest's business (goal Decisions), and it holds no host function.
+      extras: ['__rifty'],
+      bad: [],
     });
+    expect(childPids()).toEqual([]);
   });
 });

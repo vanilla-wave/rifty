@@ -83,8 +83,9 @@ Not available. Each of these throws `NotImplementedError` naming the API:
   `AbortSignal.timeout`, …) are missing and give a plain `TypeError`;
 - ESM syntax in the code (`import … from`, top-level `await`). Node runs such
   input as a module; this host evaluates CommonJS only, so use `require()`.
-  `import()` rejects with a named error. An unhandled one may go unreported
-  (exit 0 where Node exits 1).
+  `import()` ends the run: its named error goes to stderr and the run exits 1,
+  whatever the code does with the returned promise (a `.catch` cannot keep the
+  run alive). Use `require()`.
 - `zlib`, `child_process`, `worker_threads` (throw at require).
 
 Known differences:
@@ -96,9 +97,8 @@ Known differences:
   prints without Node's `[eval]:1` source header.
 - An unhandled rejection fails at rifty's next event-loop check, not at once: a
   `.catch` attached from a later timer may still run first. A rejection whose
-  handler comes from a timer or immediate already due (expired while the
-  rejecting task ran, or a sibling due in the same turn), or that is chained
-  after an `fs.promises` call, can go unreported (exit 0; Node exits 1).
+  handler comes from a timer or immediate already due, or that is chained after
+  an `fs.promises` call, can go unreported (exit 0; Node exits 1).
 - An `unref()`'d timer may still fire during the few ms the run takes to
   confirm its loop is idle.
 - An `unhandledRejection` listener receives a copy of the reason, and
@@ -138,14 +138,18 @@ up to date: upgrade Node point releases that patch V8.
 
 Each call spawns one Node process. That process loads a ~7 MB runtime bundle
 into a fresh isolate. N concurrent calls run N processes; there is no pool and
-no queue, so cap concurrency yourself. Measured on an Apple M3 Pro, macOS,
-Node v24.16.0:
+no queue, so cap concurrency yourself. Reproduce with
+`node scripts/measure.mjs` after `pnpm run build`. On an Apple M3 Pro, macOS,
+Node v24.16.0 (darwin/arm64), at this commit:
 
-- `runCode('console.log(1)')`: p50 126 ms, max 132 ms over 10 sequential calls;
-- one child at rest is ~140 MiB RSS;
-- 4 parallel calls peak at ~560 MiB, 8 parallel at ~1.1 GiB total;
-- wall time of a 500 ms guest: 645 ms for 1 call, 710 ms for 8 calls.
+```
+runCode('console.log(1)'): p50 128 ms, max 130 ms (10 sequential)
+one child at rest: 143 MiB peak RSS
+1 concurrent: 141 MiB peak child RSS, 629 ms wall
+4 concurrent: 558 MiB peak child RSS, 654 ms wall
+8 concurrent: 1115 MiB peak child RSS, 705 ms wall
+```
 
-A guest's heap counts on top of this, up to `memoryLimitMb`. The RSS
-watchdog sits at 256 MiB + 3 × `memoryLimitMb`. These numbers are
-measurements, not promises.
+(The wall times are for a guest that sleeps 500 ms.) A guest's heap counts on
+top of this, up to `memoryLimitMb`; the RSS watchdog sits at
+256 MiB + 3 × `memoryLimitMb`. These are measurements, not promises.

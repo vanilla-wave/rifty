@@ -6,7 +6,7 @@
 import { readFileSync } from 'node:fs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { runCode } from '../src/index.ts';
-import { childPids, processCommand, processEnvironment, waitFor } from './support.ts';
+import { childPids, nodeEval, processCommand, processEnvironment, waitFor } from './support.ts';
 
 const GLOBAL_CANARY = 'RIFTY_HOST_GLOBAL_CANARY';
 const ENV_CANARY = 'RIFTY_HOST_ENV_CANARY';
@@ -60,7 +60,6 @@ describe('no host reach (I3)', () => {
       const out = [];
       const probe = async (label, f) => { try { const v = await f(); out.push(label + ':' + (typeof v === 'string' && v === ${JSON.stringify(hosts)} ? 'LEAK' : 'no')); } catch (e) { out.push(label + ':blocked'); } };
       (async () => {
-        await probe('import', async () => (await (0, eval)("import('node:fs')")).readFileSync('/etc/hosts', 'utf8'));
         await probe('getBuiltinModule', () => process.getBuiltinModule('node:fs').readFileSync('/etc/hosts', 'utf8'));
         await probe('require', () => require('fs').readFileSync('/etc/hosts', 'utf8'));
         await probe('binding', () => { const b = process.binding('fs'); return b && (typeof b.open === 'function' || typeof b.readFileUtf8 === 'function') ? ${JSON.stringify(hosts)} : 'no'; });
@@ -70,9 +69,7 @@ describe('no host reach (I3)', () => {
     `);
     expect(result.exitCode).toBe(0);
     expect(result.stdout).not.toContain('LEAK');
-    expect(result.stdout).toMatch(
-      /^import:\w+ getBuiltinModule:\w+ require:\w+ binding:\w+ Function:\w+\n$/,
-    );
+    expect(result.stdout).toMatch(/^getBuiltinModule:\w+ require:\w+ binding:\w+ Function:\w+\n$/);
   });
 
   it('no reachable value or bridge function yields the child realm or an isolated-vm handle', async () => {
@@ -158,6 +155,15 @@ describe('no host reach (I3)', () => {
     expect(report.walked).toBeGreaterThan(500);
   });
 
+  it('indirect-eval import() delivers no module: the run ends with the named gap', async () => {
+    const result = await runCode(
+      '(0, eval)("import(\'node:fs\')").then((m) => console.log("GOT", typeof m.readFileSync))',
+    );
+    expect(result.stdout).toBe('');
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain('Not implemented: isolate-host.dynamic-import');
+  });
+
   it('the process hosting the isolate carries no inherited host environment', async () => {
     const before = new Set(childPids());
     const running = runCode("setTimeout(() => console.log('done'), 1500)");
@@ -170,5 +176,15 @@ describe('no host reach (I3)', () => {
     // Linux: the block is empty (the channel is plain pipes, so not even Node's NODE_CHANNEL_*).
     if (process.platform === 'linux') expect(environment).toBe('');
     await expect(running).resolves.toEqual({ stdout: 'done\n', stderr: '', exitCode: 0 });
+  });
+
+  it("the guest realm adds no global name beyond rifty's own runtime table", async () => {
+    const list = 'console.log(JSON.stringify(Object.getOwnPropertyNames(globalThis).sort()))';
+    const nodeNames = new Set(JSON.parse(nodeEval(list).stdout) as string[]);
+    const guest = await runCode(list);
+    const extras = (JSON.parse(guest.stdout) as string[]).filter((n) => !nodeNames.has(n));
+    // `__rifty` is rifty's own runtime table (`publishRuntimeGlobal`); the host
+    // bridge and every `__riftyHost_*` binding are gone before guest code runs.
+    expect(extras).toEqual(['__rifty']);
   });
 });

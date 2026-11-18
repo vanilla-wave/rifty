@@ -118,11 +118,6 @@ const CORPUS: readonly Row[] = [
     ceiling: 'node -e ESM syntax detection (runtime-js/node-cli-esm-eval-context)',
   },
   {
-    label: 'dynamic-import',
-    code: "import('node:fs').then((m) => console.log(typeof m.readFileSync, typeof m.default.writeFileSync))",
-    ceiling: 'import() in the isolate (ADR-0557 §5)',
-  },
-  {
     label: 'builtin-module-globals',
     code: "console.log(path.join('a', 'b'), typeof fs.readFileSync, util.format('%d', 1), path === require('path'), typeof crypto.createHash); path = 5; console.log(path)",
   },
@@ -353,17 +348,30 @@ describe('declared ceilings fail loudly (I1 ceilings, scenario step 4)', () => {
     });
   }
 
-  it('import() rejects with a named gap', async () => {
-    const result = await runCode(
-      "import('node:fs').then(() => console.log('LOADED'), (e) => console.log(e.message))",
-    );
-    expect(result).toEqual({
-      stdout:
-        'Not implemented: isolate-host.dynamic-import (import() is not available in the rifty isolate host; use require(), ADR-0557)\n',
-      stderr: '',
-      exitCode: 0,
+  // `import()` is a gap this host cannot serve and whose rejection the guest may
+  // never observe. Every form therefore ends the run loudly (exit 1 + the named
+  // gap on stderr), keeping whatever the run printed first. No form exits 0.
+  for (const code of [
+    "import('node:fs')",
+    "(async () => { const fs = await import('node:fs'); console.log('read') })()",
+    'eval("import(\'node:fs\')")',
+    'new Function("return import(\'node:fs\')")()',
+    "import('node:fs').then(() => console.log('LOADED'), () => console.log('caught'))",
+    "import('node:fs').catch(() => {}); process.exit(0)",
+    "setTimeout(() => import('node:fs'), 5)",
+    "console.log('before'); import('nope')",
+  ]) {
+    it(`import() ends the run loudly: ${code}`, async () => {
+      const result = await runCode(code);
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain(
+        'Error: Not implemented: isolate-host.dynamic-import (import() is not available in the rifty isolate host; use require(), ADR-0557)',
+      );
+      // Output the run produced before the gap is kept.
+      if (code.startsWith("console.log('before')")) expect(result.stdout).toBe('before\n');
+      expect(result.stderr).not.toMatch(/child\.js|dist\/|file:/);
     });
-  });
+  }
 
   it('fetch', async () => {
     const result = await runCode("fetch('http://example.com/').then((r) => console.log(r.status))");

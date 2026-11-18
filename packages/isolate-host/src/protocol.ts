@@ -5,8 +5,11 @@
  * between a possibly escaped child and the consumer.
  *
  * Frame: u32be payload length, u8 kind, payload.
- *   output: [fd 1|2][truncated 0|1][bytes…]   exit: [code][truncated]
- *   memory: [truncated]                        error: utf8 text (≤ MAX_ERROR_TEXT)
+ *   output: [fd 1|2][truncated 0|1][bytes…]   exit: [code]
+ *   memory: (empty)                            error: utf8 text (≤ MAX_ERROR_TEXT)
+ *
+ * Truncation rides output frames only (a flip with no new bytes is its own
+ * frame): a terminal frame is always preceded by the flush of what came before.
  */
 export interface RunRequest {
   readonly code: string;
@@ -35,8 +38,8 @@ export type ChildFrame =
       readonly truncated: boolean;
       readonly bytes: Uint8Array;
     }
-  | { readonly kind: 'exit'; readonly exitCode: number; readonly truncated: boolean }
-  | { readonly kind: 'memory'; readonly truncated: boolean }
+  | { readonly kind: 'exit'; readonly exitCode: number }
+  | { readonly kind: 'memory' }
   | { readonly kind: 'error'; readonly message: string };
 
 /**
@@ -47,13 +50,17 @@ export type ChildFrame =
 export class FrameReader {
   #buf = new Uint8Array(0);
   #len = 0;
+  #done = false;
   /** `maxPayload(kind)` → the largest payload this kind may legally have now, or -1 for an unknown kind. */
   constructor(private readonly maxPayload: (kind: number) => number) {}
 
-  /** Feed bytes; returns complete raw frames, or a violation string. */
-  push(
-    chunk: Uint8Array,
-  ): { frames: { kind: number; payload: Uint8Array }[] } | { violation: string } {
+  /**
+   * Feed bytes, handing each complete frame to `onFrame` as it is parsed, so
+   * parsing and handling interleave: once `onFrame` returns false the run is
+   * settled and every later byte is ignored. Returns a violation, or null.
+   */
+  push(chunk: Uint8Array, onFrame: (kind: number, payload: Uint8Array) => boolean): string | null {
+    if (this.#done) return null;
     if (this.#len + chunk.byteLength > this.#buf.byteLength) {
       const grown = new Uint8Array(
         Math.max(this.#len + chunk.byteLength, this.#buf.byteLength * 2, 64),
@@ -63,26 +70,31 @@ export class FrameReader {
     }
     this.#buf.set(chunk, this.#len);
     this.#len += chunk.byteLength;
-    const frames: { kind: number; payload: Uint8Array }[] = [];
     let at = 0;
     while (this.#len - at >= HEADER) {
       const view = new DataView(this.#buf.buffer, at, HEADER);
       const length = view.getUint32(0);
       const kind = view.getUint8(4);
       const max = this.maxPayload(kind);
-      if (max < 0) return { violation: `frame kind ${kind}` };
+      if (max < 0) return `frame kind ${kind}`;
       // Refused before buffering its payload: the reader never holds an illegal frame.
-      if (length > max) return { violation: `frame length ${length} > ${max}` };
+      if (length > max) return `frame length ${length} > ${max}`;
       if (this.#len - at - HEADER < length) break;
-      // Copy: nothing returned aliases the reader's buffer.
-      frames.push({ kind, payload: this.#buf.slice(at + HEADER, at + HEADER + length) });
+      // Copy: nothing handed out aliases the reader's buffer.
+      const payload = this.#buf.slice(at + HEADER, at + HEADER + length);
       at += HEADER + length;
+      if (!onFrame(kind, payload)) {
+        this.#done = true;
+        this.#buf = new Uint8Array(0);
+        this.#len = 0;
+        return null;
+      }
     }
     this.#buf.copyWithin(0, at, this.#len);
     this.#len -= at;
     if (this.#buf.byteLength > 4096 && this.#len < this.#buf.byteLength / 4) {
       this.#buf = this.#buf.slice(0, Math.max(this.#len, 64));
     }
-    return { frames };
+    return null;
   }
 }

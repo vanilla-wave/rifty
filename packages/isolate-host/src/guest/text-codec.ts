@@ -5,16 +5,19 @@
  */
 import { notImplemented } from './loud.ts';
 
+// Captured at load, before guest code: a guest replacing the global must not
+// break the runtime's own encode/decode (nor the host's fatal path).
+const Uint8ArrayPrimordial = Uint8Array;
 const UTF8_LABELS = new Set(['utf-8', 'utf8', 'unicode-1-1-utf-8']);
 const REPLACEMENT = 0xfffd;
 
 function toBytes(input: unknown): Uint8Array {
-  if (input === undefined) return new Uint8Array(0);
-  if (input instanceof ArrayBuffer) return new Uint8Array(input);
+  if (input === undefined) return new Uint8ArrayPrimordial(0);
+  if (input instanceof ArrayBuffer) return new Uint8ArrayPrimordial(input);
   if (ArrayBuffer.isView(input))
-    return new Uint8Array(input.buffer, input.byteOffset, input.byteLength);
+    return new Uint8ArrayPrimordial(input.buffer, input.byteOffset, input.byteLength);
   if (typeof SharedArrayBuffer === 'function' && input instanceof SharedArrayBuffer)
-    return new Uint8Array(input);
+    return new Uint8ArrayPrimordial(input);
   throw Object.assign(
     new TypeError(
       'The "input" argument must be an instance of ArrayBuffer, SharedArrayBuffer, or ArrayBufferView.',
@@ -38,7 +41,7 @@ export class TextEncoder {
 
   encode(input = ''): Uint8Array {
     const s = String(input);
-    const out = new Uint8Array(s.length * 3);
+    const out = new Uint8ArrayPrimordial(s.length * 3);
     const { written } = encodeInto(s, out);
     return out.slice(0, written);
   }
@@ -99,7 +102,7 @@ function lead(b: number): readonly [number, number, number] | null {
 export class TextDecoder {
   readonly #fatal: boolean;
   readonly #ignoreBOM: boolean;
-  #pending: Uint8Array = new Uint8Array(0);
+  #pending: Uint8Array = new Uint8ArrayPrimordial(0);
   #bomSeen = false;
 
   constructor(label = 'utf-8', options: { fatal?: unknown; ignoreBOM?: unknown } = {}) {
@@ -127,11 +130,11 @@ export class TextDecoder {
     const fresh = toBytes(input);
     let bytes = fresh;
     if (this.#pending.length > 0) {
-      bytes = new Uint8Array(this.#pending.length + fresh.length);
+      bytes = new Uint8ArrayPrimordial(this.#pending.length + fresh.length);
       bytes.set(this.#pending);
       bytes.set(fresh, this.#pending.length);
     }
-    this.#pending = new Uint8Array(0);
+    this.#pending = new Uint8ArrayPrimordial(0);
     const units: number[] = [];
     const push = (cp: number): void => {
       if (!this.#bomSeen) {

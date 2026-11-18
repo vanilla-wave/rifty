@@ -32,6 +32,7 @@ async function run(request: RunRequest): Promise<void> {
     // The consumer accepts only new bytes or the one truncation flip (protocol state).
     if (chunks.length === 0 && (!output.truncated || sentTruncated)) return;
     const t = output.truncated ? 1 : 0;
+    // A truncation flip with nothing new to send is its own frame.
     if (chunks.length === 0) send(KIND.output, Uint8Array.of(1, t));
     for (const [fd, bytes] of chunks) {
       const payload = new Uint8Array(2 + bytes.byteLength);
@@ -48,7 +49,7 @@ async function run(request: RunRequest): Promise<void> {
     flush();
     send(kind, payload);
   };
-  const reportMemory = (): void => report(KIND.memory, Uint8Array.of(output.truncated ? 1 : 0));
+  const reportMemory = (): void => report(KIND.memory, new Uint8Array(0));
   setInterval(() => {
     if (process.memoryUsage.rss() > request.maxRssBytes) reportMemory();
   }, 25);
@@ -57,9 +58,16 @@ async function run(request: RunRequest): Promise<void> {
   const isolate = new ivm.Isolate({
     memoryLimit: request.memoryLimitMb,
     onCatastrophicError: reportMemory,
-    // A sync throw rejects the guest's import() — a declared ceiling (compat). No
-    // child frames: the stack crosses into the guest and must not reveal host paths.
+    // `import()` is a gap this host cannot serve, and a rejection the guest may
+    // never observe (it can drain first, or swallow it). Fidelity: end the run
+    // loudly here, then reject the guest's promise too (no child frames in the
+    // stack — it crosses into the guest and must not reveal host paths).
     importModuleDynamically: () => {
+      // Loud and terminal, as any other ceiling: the guest's stderr gets the gap
+      // and the run ends 1. The guest may never observe the rejection below (it
+      // can drain first, or swallow it), so the gap cannot be left to it.
+      output.write(2, new TextEncoder().encode(`Error: ${IMPORT_GAP}\n`));
+      report(KIND.exit, Uint8Array.of(1));
       throw Object.assign(new Error(IMPORT_GAP), { stack: `Error: ${IMPORT_GAP}` });
     },
     onUnhandledRejection: (reason: unknown) => {
@@ -88,7 +96,7 @@ async function run(request: RunRequest): Promise<void> {
         if (fire === undefined) early.push(id);
         else fire.applyIgnored(undefined, [id]);
       },
-      done: (exitCode) => report(KIND.exit, Uint8Array.of(exitCode, output.truncated ? 1 : 0)),
+      done: (exitCode) => report(KIND.exit, Uint8Array.of(exitCode)),
     });
     const names = Object.keys(bridge);
     for (const [name, fn] of Object.entries(bridge)) {
