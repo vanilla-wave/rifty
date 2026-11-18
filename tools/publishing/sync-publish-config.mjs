@@ -251,6 +251,8 @@ function buildExportsAndEntries(orig, spec) {
   const entries = {};
   for (const [key, val] of Object.entries(devExports)) {
     if (spec.dropExports?.includes(key)) continue;
+    // A built asset (`./dist/…`) is a build output, never a tsup input (tsup cleans dist).
+    if (spec.assetExports?.[key]?.startsWith('./dist/')) continue;
     const distKey = key === '.' ? 'index' : key.replace(/^\.\//, '');
     entries[distKey] = val.replace(/^\.\//, '');
     pubExports[key] = { types: `./dist/${distKey}.d.ts`, import: `./dist/${distKey}.js` };

@@ -108,12 +108,12 @@ challenge: 2026-11-18 — inherits the goal premise check (`goal.md` §Challenge
 
 | axis × operation | honest outcome | artifact / fault target | trace |
 |---|---|---|---|
-| embedder `write` hook throws × guest write | guest sees `TypeError: isolate-host bridge: write failed`, no host path | acceptance 5 | I5 |
-| embedder `fire` hook throws × timer tick | no uncaught host error; that timer ends | acceptance 5 | I5 |
-| call ends with timers armed × `close()` | every bridge timer cleared; later `timerStart` a no-op | acceptance 6, 12 | I5 |
-| guest status not an integer 0..255 × `exitStatus` | exit 1 | acceptance 7 | I5 |
-| guest `import()` × embedder hook | run ends: gap line, exit 1, later guest output dropped | acceptance 11 | I1 |
-| uncopyable rejection reason × `onUnhandledRejection` | `UNCOPYABLE_REJECTION` sent, run fails as `runCode` | acceptance 3, 11 | I1 |
+| embedder `write` hook throws × guest write | guest sees `TypeError: isolate-host bridge: write failed`, no host path | acceptance 5 | → I5 |
+| embedder `fire` hook throws × timer tick | no uncaught host error; that timer ends | acceptance 5 | → I5 |
+| call ends with timers armed × `close()` | every bridge timer cleared; later `timerStart` a no-op | acceptance 6, 12 | → I5 |
+| guest status not an integer 0..255 × `exitStatus` | exit 1 | acceptance 7 | → I5 |
+| guest `import()` × embedder hook | run ends: gap line, exit 1, later guest output dropped | acceptance 11 | → I1 |
+| uncopyable rejection reason × `onUnhandledRejection` | `UNCOPYABLE_REJECTION` sent, run fails as `runCode` | acceptance 3, 11 | → I1 |
 
 ## Out of scope
 

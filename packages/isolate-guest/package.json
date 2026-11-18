@@ -31,7 +31,7 @@
     ".": "./src/index.ts",
     "./guest.js": "./dist/guest.js"
   },
-  "files": ["dist"],
+  "files": ["dist", "CHANGELOG.md"],
   "publishConfig": {
     "access": "public",
     "main": "./dist/index.js",
