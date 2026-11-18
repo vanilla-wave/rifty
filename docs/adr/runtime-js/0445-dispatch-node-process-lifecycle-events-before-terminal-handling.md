@@ -174,12 +174,16 @@ sample. Node v24.16.0 facts: evidence §O1–§O3.
   no stack, a later task's `exit()` set the status, timers ran. It now runs
   the fatal terminal at the entry catch (`terminateFatal`, as a rejection at
   the trap) to the command's stderr, not a guest-patched
-  `process.stderr.write` (Node writes fd 2). The fatal status is read when
-  `beginFatal` returns, after the `'exit'` listeners, so a microtask before
-  the host's catch cannot change it. Any entry terminal (`exit()` included)
-  clears the invocation's timers at once (a 0 ms timer queued ahead of the
-  drain ran). A declared gap behind it is named as behind a fatal rejection.
-  Kernel children unchanged. Residual: such a microtask still runs (Node:
-  never). Node: `src/node_errors.cc` TriggerUncaughtException @v24.16.0
-  (`env->Exit(env->exit_code(kGenericUserError))`); proof
+  `process.stderr.write` (Node writes fd 2). Node reads the status after its
+  report and runs no task between the `'exit'` listeners and the report, so
+  `fatal()` first restores `exitCode` as those listeners left it (undoing a
+  microtask that ran before the host's catch), then reads it after the
+  report (a `stack` getter's write counts); the realm traps run both at once,
+  unchanged. Any entry terminal (`exit()` included) clears the invocation's
+  timers at once (a 0 ms timer queued ahead of the drain ran). A declared gap
+  behind it is named as behind a fatal rejection. Kernel children unchanged.
+  Residual (CommonJS entry, `-e`): such a microtask still runs — its output,
+  an `exit()` (Node: never). Node: `src/node_errors.cc`
+  TriggerUncaughtException @v24.16.0 (`ReportFatalException`, then
+  `env->Exit(env->exit_code(kGenericUserError))`); proof
   `tests/no-coi/no-coi-fatal-stderr.spec.ts`, `no-coi-process-exit-status.spec.ts`.

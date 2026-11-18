@@ -128,6 +128,17 @@ throw new Error('entry');`,
     expect(await run(line)).toMatchObject({ status: 'exited', exitCode: 1 });
   });
 
+  it('takes the status a write from the report itself leaves, as Node reads it after printing', async () => {
+    const { run } = fixture({
+      '/project/fatal.cjs': `Promise.resolve().then(() => { process.exitCode = 6; });
+const e = new Error('entry');
+Object.defineProperty(e, 'stack', { get() { process.exitCode = 5; return 'Error: entry'; } });
+throw e;`,
+    });
+
+    expect(await run('node fatal.cjs')).toMatchObject({ status: 'exited', exitCode: 5 });
+  });
+
   it.each([
     ['silenced', '() => true'],
     ['throwing', "() => { throw new Error('write'); }"],

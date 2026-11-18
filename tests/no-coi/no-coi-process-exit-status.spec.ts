@@ -85,6 +85,20 @@ const evalFatalMicrotask = {
   line: `node -e "Promise.resolve().then(()=>{process.exitCode=5});throw new Error('FATAL-MICRO')"`,
   fatal: 'FATAL-MICRO',
 };
+// Node reads the status after its report: a write the report's own `stack`
+// getter makes counts, on the entry terminal and the rejection trap alike.
+const GETTER = (marker: string) =>
+  `const e = new Error('${marker}');\nObject.defineProperty(e, 'stack', { get() { process.exitCode = 5; return 'Error: ${marker}'; } });`;
+const fatalStackGetter = program(
+  'fatal-stack-getter-exit-code',
+  `${GETTER('FATAL-GETTER')}\nthrow e;`,
+  'FATAL-GETTER',
+);
+const rejectionStackGetter = program(
+  'fatal-rejection-stack-getter-exit-code',
+  `${GETTER('FATAL-REJ-GETTER')}\nPromise.reject(e);`,
+  'FATAL-REJ-GETTER',
+);
 const fatalSilencedStderr = program(
   'fatal-silenced-stderr',
   "process.stderr.write = () => true;\nthrow new Error('FATAL-SILENCED');",
@@ -119,6 +133,8 @@ const commandCases: readonly ProcessLifecycleCase[] = [
   fatalEntryTimer,
   exitEntryTimer,
   evalFatalMicrotask,
+  fatalStackGetter,
+  rejectionStackGetter,
   fatalSilencedStderr,
   fatalThrowingStderr,
 ];
