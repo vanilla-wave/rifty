@@ -105,8 +105,8 @@ blocks it.
    `queueMicrotask`, `writeHost` beside `process.stderr.write`, the captured
    `process.exit` — renders a fatal error with the runtime's own
    `formatThrown`, and hands the status over as ONE PRIMITIVE (resolving with
-   a number does no `then` lookup). No more than that: the host's promises do
-   not rest on the guest realm: the CHILD
+   a number does no `then` lookup). No more than that, because the host's
+   promises do not rest on the guest realm: the CHILD
    validates the primitive in its own realm (a non-integer or out-of-range
    status, a rejected tail or a throw is exit 1) and the consumer bounds the
    call, so whatever runs in the isolate, `runCode` resolves within

@@ -213,9 +213,9 @@ function fatal(error: unknown): void {
 }
 
 function run(source: string): Promise<number> {
-  // The captured constructor; resolved with a primitive only, so resolving it
-  // does no lookup the guest can poison (the thenable check runs only for
-  // objects). The child judges the number in its own realm (ADR-0557 §6).
+  // Resolved with a primitive only, so resolving it does no lookup the guest
+  // can poison (the thenable check runs only for objects). The child judges
+  // the number in its own realm (ADR-0557 §6).
   return new Promise<number>((resolve) => {
     const finish = (caught: unknown): void => resolve(settle(caught));
     try {

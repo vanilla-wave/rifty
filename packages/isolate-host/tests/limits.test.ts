@@ -3,6 +3,10 @@
  * the child, not this (consumer) process, with a distinct `termination`; the
  * output cap truncates and discards. Every case runs a real child + isolate.
  */
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { runCode } from '../src/index.ts';
 import { childPids, rssKb, waitFor } from './support.ts';
@@ -190,6 +194,31 @@ describe('runCode limits (I4)', () => {
     await expect(runCode('1', { timeoutMs: 2 ** 31 })).rejects.toThrow(RangeError);
     await expect(runCode('1', { timeoutMs: 2 ** 31 - 1 })).resolves.toEqual({
       stdout: '',
+      stderr: '',
+      exitCode: 0,
+    });
+  });
+});
+
+describe('a refused timer keeps nothing alive (I4)', () => {
+  it('2000 caught setTimeout(f, 1n) holding 80 KB each run in a 64 MiB heap, as in Node', async () => {
+    // `after *= 1` throws before the timer exists: its callback (and what it
+    // closes over) must not stay in the host's timer table.
+    const code =
+      "for (let i = 0; i < 2000; i++) { const big = new Array(1e4).fill(i); try { setTimeout(() => big, 1n) } catch {} } console.log('done')";
+    const cwd = mkdtempSync(join(tmpdir(), 'isolate-host-oracle-'));
+    try {
+      const node = spawnSync(process.execPath, ['--max-old-space-size=64', '-e', code], {
+        cwd,
+        env: {},
+        encoding: 'utf8',
+      });
+      expect({ stdout: node.stdout, code: node.status }).toEqual({ stdout: 'done\n', code: 0 });
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+    expect(await runCode(code, { memoryLimitMb: 64 })).toEqual({
+      stdout: 'done\n',
       stderr: '',
       exitCode: 0,
     });

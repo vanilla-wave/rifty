@@ -203,6 +203,9 @@ let nextTimerId = 1;
 const MAX_TIMER_MS = 2 ** 31 - 1;
 function startTimer(repeat: boolean, fn: unknown, ms: unknown, args: unknown[]): number {
   if (typeof fn !== 'function') throw argType('callback', 'of type function', fn);
+  // Node's `after *= 1`: a BigInt or Symbol delay throws, as there — before
+  // anything is recorded, so a refused timer leaves no entry behind.
+  const delay = (ms as number) * 1;
   const id = nextTimerId++;
   reflectApplyPrimordial(mapSetPrimordial, timers, [
     id,
@@ -210,8 +213,6 @@ function startTimer(repeat: boolean, fn: unknown, ms: unknown, args: unknown[]):
   ]);
   // Node's `Timeout`: a delay outside 1..2^31-1 (or NaN) runs after 1 ms. Its
   // `Timeout*Warning` is rifty's gap (`backlog/runtime-js/timeout-delay-warnings`).
-  // Node's `after *= 1`: a BigInt or Symbol delay throws, as there.
-  const delay = (ms as number) * 1;
   bridge.timerStart(id, delay >= 1 && delay <= MAX_TIMER_MS ? delay : 1, repeat);
   return id;
 }
