@@ -119,7 +119,8 @@ Tested:
 
 The child starts with an empty environment. The child itself is treated as
 hostile: it reports through length-framed binary frames on a pipe that your
-process parses itself, bounded by the output cap. A malformed or
+process parses itself. Its memory is bounded by the output cap: about 2× the
+cap while a frame is in flight. A malformed or
 out-of-protocol frame kills the child, and the call rejects with
 `isolate-host child protocol violation: …`.
 

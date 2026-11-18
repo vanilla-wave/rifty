@@ -104,8 +104,9 @@ blocks it.
    with new non-empty bytes or the one truncation flip, total ≤ cap). A
    violation kills the child and rejects `isolate-host child protocol
    violation: …` (a child after an isolate escape is hostile). The consumer
-   thus buffers at most one legal frame and holds at most the cap, copied into
-   one buffer per fd.
+   thus buffers at most one legal frame and keeps at most the cap of output,
+   copied into one buffer per fd; with buffer doubling and the frame copy a
+   cap-sized frame costs ~2× cap held and a few × cap transient RSS.
 7. Dependency: `isolated-vm@7.0.2` exact (ships prebuilds linux-x64/arm64,
    darwin-arm64, win32-x64; engines node ≥24; maintenance mode). 7 over the
    consumer's 6.2.0: the addon now loads only in rifty's child, so the

@@ -61,7 +61,7 @@ function limit(
   return value;
 }
 
-/** Accepted output, copied into one growable buffer: never a view into an IPC message. */
+/** Accepted output, copied into one growable buffer: never a view into a received chunk. */
 class FdBytes {
   #buf = new Uint8Array(0);
   #len = 0;
@@ -175,9 +175,10 @@ export function runCode(code: string, options: RunCodeOptions = {}): Promise<Run
     const err = new FdBytes();
     const cap = request.maxOutputBytes;
     const state: ProtocolState = { kept: 0, truncated: false };
-    let stderrTail = '';
+    let stderrTail = Buffer.alloc(0);
     child.stderr?.on('data', (data: Buffer) => {
-      stderrTail = (stderrTail + data.toString('utf8')).slice(-STDERR_TAIL_BYTES);
+      // Last STDERR_TAIL_BYTES bytes, decoded once at the end (no per-chunk split code points).
+      stderrTail = Buffer.concat([stderrTail, data]).subarray(-STDERR_TAIL_BYTES);
     });
     let outcome: { readonly result: RunCodeResult } | { readonly error: Error } | undefined;
     const result = (exitCode: number | null, termination?: RunCodeTermination): RunCodeResult => ({
@@ -244,7 +245,7 @@ export function runCode(code: string, options: RunCodeOptions = {}): Promise<Run
       end({
         error: new Error(
           `isolate-host child exited unexpectedly (code ${String(exitCode)}, signal ${String(signal)})${
-            stderrTail ? `: ${stderrTail}` : ''
+            stderrTail.byteLength > 0 ? `: ${stderrTail.toString('utf8')}` : ''
           }`,
         ),
       });

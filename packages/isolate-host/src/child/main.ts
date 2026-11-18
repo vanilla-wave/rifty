@@ -81,7 +81,7 @@ async function run(request: RunRequest): Promise<void> {
       outputPending: () => {
         if (flushScheduled) return;
         flushScheduled = true;
-        // Batch: guest writes arrive as separate host tasks; one IPC message per 5 ms.
+        // Batch: guest writes arrive as separate host tasks; one frame batch per 5 ms.
         setTimeout(flush, 5);
       },
       fire: (id) => {
