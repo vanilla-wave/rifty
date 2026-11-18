@@ -1,0 +1,354 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "No blocker at 454d20504. The timer-table leak fix is verified: the new limits carrier discriminates it against a live Node oracle, and the old-order mutant is killed. The delta changes no property 1–4 path. Merge only on green PR CI at HEAD.",
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "docs/backlog/distribution/isolate-host-acceptance.md (Acceptance 1–17 + Fault matrix) in goal docs/backlog/epics/isolate-host-run-code/goal.md (I1–I6; Decisions 2026-11-18 post-guest class bound), ADR-0557 §1, §6, §Corrections. Re-bound to b322d26da; scope only git diff 4cacd8cfc b322d26da (manager cross-review 3: REV-7 cuts, import-gap test, timer `ms * 1`, FrameReader split tests, ADR §6/§Corrections, README §Security, backpressure record; no new vector hunt). Coverage rows whose carriers are unchanged in that delta are reused from the verify bound to 9269eb909 (whose own reuse chain runs to 264e4b894); rows Acceptance 2, 12, 13, 16 and Fault-matrix fd 3 / bridge args / post-run were re-evidenced here. Re-bound to ee8cee6e0: git diff b322d26da ee8cee6e0 is comment/docs-only (compat:23, post-guest backlog:32, the guest-seam.test.ts:15 header comment; no code or assertion line). npx vitest run --root . packages/isolate-host/tests/guest-seam.test.ts @ee8cee6e0 → 102 passed. All other rows reused unchanged from the b322d26da verify. Re-bound to 454d20504: scope only git diff 56190aaa7 454d20504. It changes web-shim.ts startTimer (`ms * 1` before Map.set), adds the carrier limits.test.ts:203, and fixes comments in entry.ts and ADR-0557 §6, plus ledger lines; 56190aaa7 itself is the verdict commit after ee8cee6e0. npx vitest run --root . packages/isolate-host/tests/limits.test.ts @454d20504 → 13 passed. Rows other than Acceptance 6/14 and the Fault-matrix guest-heap row are reused unchanged.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: runCode only runtime export; options/result shape",
+      "source": "acceptance",
+      "trace": "ADR-0557",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/parity.test.ts:151",
+      "note": "Carrier unchanged in delta 4cacd8cfc..b322d26da; row reused from verify bound to 9269eb909. npx vitest run --root . --project isolate-host @b322d26da → 11 files, 249 passed, exit 0."
+    },
+    {
+      "row": "Acceptance 2: corpus parity vs live node oracle; ceiling rows expected failures",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/parity.test.ts:398",
+      "note": "npx vitest run --root . --project isolate-host @b322d26da → 11 files, 249 passed, exit 0. Carrier changed (PR-4): new corpus row `timer-delay-coercion` (1n, Symbol, '5' vs live node) passes. Probes /tmp/rifty-fg7/p6.mjs: `setTimeout(f, 1n)` → 'TypeError: Cannot mix BigInt…' = node; valueOf that throws = node; timer args 'x 2' = node."
+    },
+    {
+      "row": "Acceptance 3: declared ceilings + import() loud and terminal in every form, never exit 0",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/parity.test.ts:206",
+      "note": "Carrier unchanged in delta 4cacd8cfc..b322d26da; row reused from verify bound to 9269eb909. npx vitest run --root . --project isolate-host @b322d26da → 11 files, 249 passed, exit 0."
+    },
+    {
+      "row": "Acceptance 4: fresh instance per call; no child outlives its result",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/isolation.test.ts:25",
+      "note": "Carrier unchanged in delta 4cacd8cfc..b322d26da; row reused from verify bound to 9269eb909. npx vitest run --root . --project isolate-host @b322d26da → 11 files, 249 passed, exit 0."
+    },
+    {
+      "row": "Acceptance 5: no host reach (canaries, realm walk, env, --no-node-snapshot)",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/isolation.test.ts:43",
+      "note": "Carrier unchanged in delta 4cacd8cfc..b322d26da; row reused from verify bound to 9269eb909. npx vitest run --root . --project isolate-host @b322d26da → 11 files, 249 passed, exit 0."
+    },
+    {
+      "row": "Acceptance 6: busy loop / never-draining → timeout ≤ +1000 ms; heap / Array(2**28) → memory",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/limits.test.ts:37; packages/isolate-host/tests/limits.test.ts:203",
+      "note": "New carrier limits.test.ts:203 'a refused timer keeps nothing alive' (2000 caught setTimeout(() => big, 1n) at memoryLimitMb 64 vs `node --max-old-space-size=64`, env {}, temp cwd). Old-order mutant (`ms * 1` moved back after Map.set) killed: host {stdout:'', …} ≠ 'done'. npx vitest run --root . packages/isolate-host/tests/limits.test.ts @454d20504 → 13 passed; dist rebuilt from clean src after the mutant. Other evidence for this row reused from the verify bound to ee8cee6e0."
+    },
+    {
+      "row": "Acceptance 7: output cap truncates, run continues; 256 MiB flood not buffered",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/limits.test.ts:116",
+      "note": "Carrier unchanged in delta 4cacd8cfc..b322d26da; row reused from verify bound to 9269eb909. npx vitest run --root . --project isolate-host @b322d26da → 11 files, 249 passed, exit 0."
+    },
+    {
+      "row": "Acceptance 8: kill -9 rejects within 1000 ms naming signal; host keeps working",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/lifecycle.test.ts:25",
+      "note": "Carrier unchanged in delta 4cacd8cfc..b322d26da; row reused from verify bound to 9269eb909. npx vitest run --root . --project isolate-host @b322d26da → 11 files, 249 passed, exit 0."
+    },
+    {
+      "row": "Acceptance 9: egress APIs → NotImplementedError",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/egress.test.ts:19",
+      "note": "Carrier unchanged in delta 4cacd8cfc..b322d26da; row reused from verify bound to 9269eb909. npx vitest run --root . --project isolate-host @b322d26da → 11 files, 249 passed, exit 0."
+    },
+    {
+      "row": "Acceptance 10: packed tarball runs under plain node",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/packed-consumer.test.ts:17",
+      "note": "Carrier unchanged in delta 4cacd8cfc..b322d26da; row reused from verify bound to 9269eb909. npx vitest run --root . --project isolate-host @b322d26da → 11 files, 249 passed, exit 0."
+    },
+    {
+      "row": "Acceptance 11: guest TextEncoder/TextDecoder equals Node",
+      "source": "acceptance",
+      "trace": "ADR-0557",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/text-codec.test.ts:31",
+      "note": "Carrier unchanged in delta 4cacd8cfc..b322d26da; row reused from verify bound to 9269eb909. npx vitest run --root . --project isolate-host @b322d26da → 11 files, 249 passed, exit 0."
+    },
+    {
+      "row": "Acceptance 12: bridge unreachable; hostile args refused guest-safely",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/bridge.test.ts:54",
+      "note": "npx vitest run --root . --project isolate-host @b322d26da → 11 files, 249 passed, exit 0. Carrier changed: bridge.test.ts:164 'the import() rejection a guest sees' drives a real isolated-vm isolate. Mutant importGapError → `return new Error(IMPORT_GAP)` killed (1 failed: the stack carries host frames). main.ts throws the same importGapError()."
+    },
+    {
+      "row": "Acceptance 13: hostile child frames → kill + protocol violation; framing bounds",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/protocol.test.ts:82",
+      "note": "npx vitest run --root . --project isolate-host @b322d26da → 11 files, 249 passed, exit 0. Carrier changed: protocol.test.ts:177 deterministic FrameReader splits (every split point, byte at a time, over-long header refused before payload). The `onFrame` bool is cut and frames after a terminal still count for nothing: mutant dropping end()'s `if (outcome !== undefined) return` killed by 21 protocol rows, among them 'bytes after a terminal frame are ignored, in its chunk or after it'."
+    },
+    {
+      "row": "Acceptance 14: write-shape accounting; truncated survives timeout; timeoutMs > 2^31-1 RangeError",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/limits.test.ts:144",
+      "note": "New carrier limits.test.ts:203 'a refused timer keeps nothing alive' (2000 caught setTimeout(() => big, 1n) at memoryLimitMb 64 vs `node --max-old-space-size=64`, env {}, temp cwd). Old-order mutant (`ms * 1` moved back after Map.set) killed: host {stdout:'', …} ≠ 'done'. npx vitest run --root . packages/isolate-host/tests/limits.test.ts @454d20504 → 13 passed; dist rebuilt from clean src after the mutant. Other evidence for this row reused from the verify bound to ee8cee6e0."
+    },
+    {
+      "row": "Acceptance 15: consumer death → child exits; spawn failure rejects at once",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/lifecycle.test.ts:43",
+      "note": "Carrier unchanged in delta 4cacd8cfc..b322d26da; row reused from verify bound to 9269eb909. npx vitest run --root . --project isolate-host @b322d26da → 11 files, 249 passed, exit 0."
+    },
+    {
+      "row": "Acceptance 16: post-guest replacements: host promises hold for 50 cases; 38 Node's status; 12 BROKEN_RUNTIME pinned; open class declared; non-Error throw → runtime fatal text",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/guest-seam.test.ts:310",
+      "note": "npx vitest run --root . --project isolate-host @b322d26da → 11 files, 249 passed, exit 0. Carrier unchanged in the delta (guest-seam.test.ts not touched), so no FAITHFUL/BROKEN_RUNTIME/KEEPS_ERROR_TEXT row was moved or weakened; all 102 pass against the cut tail (writeDiagnostic → one formatThrown, esmGapOf `.some`/`includes`, live `Promise` in run, Timeout spread). Probes: plain/undefined/timer-string throws and a throwing `stack` getter keep their text and status = node; poisoning probes are in-realm only (concerns)."
+    },
+    {
+      "row": "Acceptance 17: child judges the isolate's status (stubs) → exit 1, empty stderr",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/child-trust.test.ts:72",
+      "note": "Carrier unchanged in delta 4cacd8cfc..b322d26da; row reused from verify bound to 9269eb909. npx vitest run --root . --project isolate-host @b322d26da → 11 files, 249 passed, exit 0."
+    },
+    {
+      "row": "Fault matrix: guest CPU × run → SIGKILL at deadline, timeout",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/limits.test.ts:37",
+      "note": "Carrier unchanged in delta 4cacd8cfc..b322d26da; row reused from verify bound to 9269eb909. npx vitest run --root . --project isolate-host @b322d26da → 11 files, 249 passed, exit 0."
+    },
+    {
+      "row": "Fault matrix: guest heap × run → isolate disposed, memory",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/limits.test.ts:64",
+      "note": "New carrier limits.test.ts:203 'a refused timer keeps nothing alive' (2000 caught setTimeout(() => big, 1n) at memoryLimitMb 64 vs `node --max-old-space-size=64`, env {}, temp cwd). Old-order mutant (`ms * 1` moved back after Map.set) killed: host {stdout:'', …} ≠ 'done'. npx vitest run --root . packages/isolate-host/tests/limits.test.ts @454d20504 → 13 passed; dist rebuilt from clean src after the mutant. Other evidence for this row reused from the verify bound to ee8cee6e0."
+    },
+    {
+      "row": "Fault matrix: V8 fatal OOM / child RSS × run → memory",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/limits.test.ts:91",
+      "note": "Carrier unchanged in delta 4cacd8cfc..b322d26da; row reused from verify bound to 9269eb909. npx vitest run --root . --project isolate-host @b322d26da → 11 files, 249 passed, exit 0."
+    },
+    {
+      "row": "Fault matrix: guest output × run → discard past cap, truncated",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/limits.test.ts:116",
+      "note": "Carrier unchanged in delta 4cacd8cfc..b322d26da; row reused from verify bound to 9269eb909. npx vitest run --root . --project isolate-host @b322d26da → 11 files, 249 passed, exit 0."
+    },
+    {
+      "row": "Fault matrix: child killed externally / crash × run → reject at once naming code/signal",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/lifecycle.test.ts:25",
+      "note": "Carrier unchanged in delta 4cacd8cfc..b322d26da; row reused from verify bound to 9269eb909. npx vitest run --root . --project isolate-host @b322d26da → 11 files, 249 passed, exit 0."
+    },
+    {
+      "row": "Fault matrix: concurrent calls × run → independent instances",
+      "source": "fault-matrix",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/lifecycle.test.ts:12",
+      "note": "Carrier unchanged in delta 4cacd8cfc..b322d26da; row reused from verify bound to 9269eb909. npx vitest run --root . --project isolate-host @b322d26da → 11 files, 249 passed, exit 0."
+    },
+    {
+      "row": "Fault matrix: guest bridge args × call → validated, guest-safe refusal",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/bridge.test.ts:54",
+      "note": "npx vitest run --root . --project isolate-host @b322d26da → 11 files, 249 passed, exit 0. Carrier changed: bridge.test.ts:164 'the import() rejection a guest sees' drives a real isolated-vm isolate. Mutant importGapError → `return new Error(IMPORT_GAP)` killed (1 failed: the stack carries host frames). main.ts throws the same importGapError()."
+    },
+    {
+      "row": "Fault matrix: child frames × fd 3 (escaped child) → kill + protocol violation; trailing bytes ignored",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/protocol.test.ts:82",
+      "note": "npx vitest run --root . --project isolate-host @b322d26da → 11 files, 249 passed, exit 0. Carrier changed: protocol.test.ts:177 deterministic FrameReader splits (every split point, byte at a time, over-long header refused before payload). The `onFrame` bool is cut and frames after a terminal still count for nothing: mutant dropping end()'s `if (outcome !== undefined) return` killed by 21 protocol rows, among them 'bytes after a terminal frame are ignored, in its chunk or after it'."
+    },
+    {
+      "row": "Fault matrix: result channel closed × run → reject at once, not at the deadline",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/protocol.test.ts:162",
+      "note": "npx vitest run --root . --project isolate-host @b322d26da → 11 files, 249 passed, exit 0. Carrier changed: protocol.test.ts:177 deterministic FrameReader splits (every split point, byte at a time, over-long header refused before payload). The `onFrame` bool is cut and frames after a terminal still count for nothing: mutant dropping end()'s `if (outcome !== undefined) return` killed by 21 protocol rows, among them 'bytes after a terminal frame are ignored, in its chunk or after it'."
+    },
+    {
+      "row": "Fault matrix: guest replaces post-run objects × run → host promises hold; status Node's while the runtime path is intact",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/guest-seam.test.ts:310",
+      "note": "npx vitest run --root . --project isolate-host @b322d26da → 11 files, 249 passed, exit 0. Carrier unchanged in the delta (guest-seam.test.ts not touched), so no FAITHFUL/BROKEN_RUNTIME/KEEPS_ERROR_TEXT row was moved or weakened; all 102 pass against the cut tail (writeDiagnostic → one formatThrown, esmGapOf `.some`/`includes`, live `Promise` in run, Timeout spread). Probes: plain/undefined/timer-string throws and a throwing `stack` getter keep their text and status = node; poisoning probes are in-realm only (concerns)."
+    },
+    {
+      "row": "Fault matrix: isolate reports a bad status × run → exit 1, no child-written stderr",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/child-trust.test.ts:72",
+      "note": "Carrier unchanged in delta 4cacd8cfc..b322d26da; row reused from verify bound to 9269eb909. npx vitest run --root . --project isolate-host @b322d26da → 11 files, 249 passed, exit 0."
+    },
+    {
+      "row": "Fault matrix: consumer death × run → child exits on disconnect",
+      "source": "fault-matrix",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/lifecycle.test.ts:61",
+      "note": "Carrier unchanged in delta 4cacd8cfc..b322d26da; row reused from verify bound to 9269eb909. npx vitest run --root . --project isolate-host @b322d26da → 11 files, 249 passed, exit 0."
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "PR #405 @ b322d26da",
+          "evidence": "npx vitest run --root . --project isolate-host @b322d26da → 11 files, 249 passed, exit 0; PR CI at HEAD not checked in this pass. The child `early`-buffer cut was instrumented on a scratch dist copy (/tmp/rifty-fg7/pkg3): timerStart calls before guestFire.ref is bound = 0, no fire dropped, over console.log, setTimeout(0) and setInterval(1) runs.",
+          "summary": "Merge only on green PR CI at HEAD.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "docs/adr/distribution/0557-run-guest-code-in-a-disposable-child-process-holding-a-rifty-v8-isolate-isolated-vm.md:101",
+          "evidence": "grep for 'consults nothing|closed list|host-side class closed|primordial-only|bypassing anything' over ADR/compat/README/src/tests/backlog items → only ledger history lines and web-shim.ts:309 (§5 ceiling list, a different list). ADR §6 :108, compat :23, guest-seam.test.ts:17 and post-guest backlog :33 state the class is open and the hardening 'measured, not proven exhaustive'.",
+          "summary": "Docs match the scope decision: the open class is stated as open and no closure claim remains.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "docs/public/compat/isolate-host.md:23",
+          "evidence": "git diff b322d26da ee8cee6e0: the three passages now read 'keeps only the captures that hold measured cases (ADR-0557 §6)'; grep 'avoids every lookup' over docs/public, docs/backlog/runtime-js, docs/adr, packages/isolate-host → none.",
+          "summary": "The prior doc concern is closed.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "packages/isolate-host/src/child/main.ts:97",
+          "evidence": "`fire: (id) => guestFire.ref?.applyIgnored(…)` drops an expiry silently if a future bundle arms a timer while loading (0 today, measured).",
+          "summary": "The `early` cut is correct today. A later runtime change that arms a load-time timer would lose it silently (most likely ending in a hang → timeout).",
+          "authority": ""
+        },
+        {
+          "severity": "nit",
+          "location": "docs/backlog/distribution/isolate-host-timer-fire-backpressure.md:14",
+          "evidence": "Repro re-run: 20000 × setInterval(f, 1) → {exitCode:null, termination:'memory'} in 1068 ms, node 'done true' exit 0; at 2000 intervals host = node.",
+          "summary": "Backpressure record reproduces as written; the 2000 run marks a lower bound of the threshold.",
+          "authority": ""
+        },
+        {
+          "severity": "nit",
+          "location": "docs/backlog/epics/isolate-host-run-code/ledger.md",
+          "evidence": "The ledger correction @454d20504 says '`setTimeout(f, 1n)` error lacks `code` is not a gap'. True for a bad delay, but the nit was about a bad CALLBACK. Node v24.16.0: `try { setTimeout(5, 1n) } catch (e) { console.log(e.name, e.code) }` → 'TypeError ERR_INVALID_ARG_TYPE'; host (dist @454d20504) → 'TypeError undefined'. Delay `1n`: both 'TypeError undefined'.",
+          "summary": "The ledger correction misreads the nit. Node's non-function timer-callback TypeError has `code: ERR_INVALID_ARG_TYPE`, the host's has none. The gap is real, pre-existing and small: worth a new correction line.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "packages/isolate-host/src/child/main.ts:74",
+          "evidence": "Recorded in the ledger: the mutant `throw new Error(IMPORT_GAP)` at the importModuleDynamically call site survives the suite (the helper is covered by bridge.test.ts:164). End to end the guest's .catch output arrives after the child's exit report, so it is never delivered.",
+          "summary": "The importGapError call site has no carrier. A regression would only show in a stack the consumer never receives today. Honest record; advisory.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "/tmp/rifty-fg6",
+          "evidence": "Prior blockers: xr2-4 P1 closed, P2 declared, P3(a) closed / P3(b) closed (formatThrown, no fallback line), P4 closed. xr2-6 B1 closed: repros (a)–(f) equal Node at HEAD, and the 'consults nothing' claim is gone. xr2-6 B2 closed: throw 5/Symbol/function/proxy/null-proto print runtime fatal text, no host line; the remaining shape gaps are declared (compat non-Error row + runtime-js/node-eval-non-error-throw-rendering).",
+          "summary": "Prior-round blockers are closed or now fall under the scope decision.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/isolate-host/src/guest/web-shim.ts:197",
+          "evidence": "In-realm poisoning after the cuts: `Array.prototype[Symbol.iterator] = function* () {}; setTimeout((a) => console.log(a), 5, 'arg')` → host 'undefined', node 'arg' (exit 0 both; the runtime timer wrapper spreads too, per post-guest backlog:31, so the shim capture was equivalent). The earlier in-realm divergences remain.",
+          "summary": "Open poisoning class as declared; concern only (scope decision).",
+          "authority": "goal.md Decisions 2026-11-18 post-guest class bound"
+        }
+      ]
+    }
+  ],
+  "reviewed_sha": "454d20504bf19026a8e08149d9a862811accbf96"
+}

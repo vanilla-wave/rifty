@@ -25,6 +25,7 @@ from test RESULTS is tracked in `docs/backlog/toolchain-build/compat-matrix-test
 - [vitest.md](./vitest.md) — `vitest run` for exactly vitest 4.1.11 on Vite 8.0.16 in the browser shell, both pools; unclaimed modes and versions stay loud or ⚠️
 - [shell.md](./shell.md) — `@riftydev/shell` command language: a bash subset; heredoc, compound commands and `$(…)` stay loud, fd redirects and other divergences ⚠️
 - [process.md](./process.md) — process lifecycle / event-loop drain + the drain-cap divergence (ADR-0152); the terminal `node <file>` command + its gaps (ADR-0155/0157)
+- [isolate-host.md](./isolate-host.md) — `@riftydev/isolate-host` `runCode` in a V8 isolate (ADR-0557): parity corpus, limits, declared ceilings
 - [wasi.md](./wasi.md) — WASI preview1 syscall surface (`@riftydev/runtime-wasi`)
 - [incompatible-packages.md](./incompatible-packages.md) — packages rifty can't run (native deps)
 - (sqlite.md — coming with the `node:sqlite` `DatabaseSync` shim, ADR-0065)

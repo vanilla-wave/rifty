@@ -13,7 +13,6 @@
  * `bind`/closure on boot) bypasses the drain. Acceptable for M3; revisit if a
  * real package breaks.
  */
-import { bytesToString } from '@riftydev/io';
 import {
   type IpcFrame,
   type KernelProcessSpec,
@@ -58,7 +57,12 @@ import {
 } from './process-lifecycle-events.ts';
 import { defineNodeProcessBrand, defineNodeProcessRelease } from './process-own-identity.ts';
 import { type NodeStdin, makeStdinReader } from './process-stdin-reader.ts';
-import { type NodeStdioWriter, applyTtyShape, makeStdioWriter } from './process-stdio-writer.ts';
+import {
+  type NodeStdioWriter,
+  applyTtyShape,
+  makeDefaultStdioWriter,
+  makeStdioWriter,
+} from './process-stdio-writer.ts';
 import { type EmitWarning, installProcessWarnings } from './process-warnings.ts';
 import { captureProcessStdio } from './stdio-fd-source.ts';
 
@@ -476,21 +480,8 @@ export class NodeProcess extends EventEmitter {
       this.ppid = 0;
       this.argv = ['rifty', 'repl'];
       this.env = Object.create(null);
-      const size = { cols: 80, rows: 24 };
-      this.stdout = makeStdioWriter(
-        { write: (bytes) => console.log(bytesToString(bytes, 'utf8')) },
-        1,
-        false,
-        size,
-        nextTick,
-      );
-      this.stderr = makeStdioWriter(
-        { write: (bytes) => console.error(bytesToString(bytes, 'utf8')) },
-        2,
-        false,
-        size,
-        nextTick,
-      );
+      this.stdout = makeDefaultStdioWriter(1, nextTick);
+      this.stderr = makeDefaultStdioWriter(2, nextTick);
       const reader = makeStdinReader();
       this.stdin = reader.stdin;
       this.#stdinPush = reader.push;

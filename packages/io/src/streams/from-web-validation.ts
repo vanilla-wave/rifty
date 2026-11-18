@@ -29,14 +29,15 @@ interface HighWaterMarkResult {
   invalid: boolean;
 }
 
-const readableLockedGetter = /* @__PURE__ */ Object.getOwnPropertyDescriptor(
-  ReadableStream.prototype,
-  'locked',
-)?.get;
-const writableLockedGetter = /* @__PURE__ */ Object.getOwnPropertyDescriptor(
-  WritableStream.prototype,
-  'locked',
-)?.get;
+// A realm without web streams (the isolate host, ADR-0557) holds no web stream to brand.
+const readableLockedGetter =
+  typeof ReadableStream === 'function'
+    ? Object.getOwnPropertyDescriptor(ReadableStream.prototype, 'locked')?.get
+    : undefined;
+const writableLockedGetter =
+  typeof WritableStream === 'function'
+    ? Object.getOwnPropertyDescriptor(WritableStream.prototype, 'locked')?.get
+    : undefined;
 
 function invalidArgType(key: string, expected: string): TypeError & { code: string } {
   const error = new TypeError(`The "${key}" argument must be ${expected}`) as TypeError & {

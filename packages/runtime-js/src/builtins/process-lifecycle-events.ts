@@ -420,7 +420,8 @@ function noSideEffectsToString(value: unknown): string {
   return `[object ${typeof tag === 'string' ? tag : builtinTag(value)}]`;
 }
 
-function formatThrown(error: unknown): string {
+/** The fatal report's text for a thrown value (also the isolate host's, ADR-0557 §6). */
+export function formatThrown(error: unknown): string {
   if (error instanceof Error) return error.stack ?? `${error.name}: ${error.message}`;
   return noSideEffectsToString(error);
 }
