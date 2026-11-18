@@ -11,6 +11,7 @@ import {
   type ToolchainCommandInput,
   type ToolchainCommandResult,
   activeRefs,
+  captureNodeProcessGlobals,
   installConsole,
   isNodeProcessExiting,
   takeUnhandledRejection,
@@ -85,7 +86,7 @@ export async function runNoCoiProjectCommand(
       ? undefined
       : new Set(input.project.allowedCommands);
 
-  const executeNode = async (
+  const runInPlace = async (
     entry: RunNodeEntryOptions,
     argv: readonly string[],
     execArgv: readonly string[],
@@ -194,6 +195,33 @@ export async function runNoCoiProjectCommand(
         setProcessCwd(previous.cwd);
       }
     }
+  };
+
+  // Node: a process sees no global `require`, and its `-e`/`-p` bindings die
+  // with it; a guest value under one survives (ADR-0418 correction 2026-11-18).
+  const executeNode = async (
+    entry: RunNodeEntryOptions,
+    argv: readonly string[],
+    execArgv: readonly string[],
+    ctx: CommandContext,
+  ): Promise<number> => {
+    const restoreGlobals = captureNodeProcessGlobals(entry.kind === 'eval');
+    const settled = await runInPlace(entry, argv, execArgv, ctx).then(
+      (exitCode) => ({ ok: true as const, exitCode }),
+      (error: unknown) => ({ ok: false as const, error }),
+    );
+    const unrestored = requiresTermination ? null : restoreGlobals();
+    if (unrestored !== null) {
+      // A non-configurable binding or non-extensible globalThis: only a new realm returns it.
+      requiresTermination = true;
+      failure = new Error(
+        `cannot restore globalThis.${unrestored} after this node process; the Worker is replaced`,
+        settled.ok ? undefined : { cause: settled.error },
+      );
+      throw new ShellCommandLifecycleError('Node process globals not restored', { cause: failure });
+    }
+    if (!settled.ok) throw settled.error;
+    return settled.exitCode;
   };
 
   const makeShell = (cwd: string, env: Record<string, string>): Shell => {

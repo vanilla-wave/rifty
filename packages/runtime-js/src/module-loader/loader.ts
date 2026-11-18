@@ -6,6 +6,7 @@ import { __setCreateRequireImpl } from '../builtins/module.ts';
 import { setSameRealmWorkerModuleImporter } from '../builtins/worker_threads.ts';
 import { createRequirePath } from '../internal/create-require-path.ts';
 import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
+import { readRuntimeGlobal } from '../internal/worker-globals.ts';
 import { createCjsInteropAuthority } from './cjs-interop-authority.ts';
 import {
   type CjsExtensionHook,
@@ -84,6 +85,9 @@ const STUB_FROM_FILE_DEFAULT = '/__entry__';
 const indirectEvalPrimordial = globalThis.eval;
 const objectDefinePropertyPrimordial = Object.defineProperty;
 const reflectApplyPrimordial = Reflect.apply;
+const reflectDefinePropertyPrimordial = Reflect.defineProperty;
+const reflectDeletePropertyPrimordial = Reflect.deleteProperty;
+const reflectGetOwnPropertyDescriptorPrimordial = Reflect.getOwnPropertyDescriptor;
 const stringEndsWithPrimordial = String.prototype.endsWith;
 
 function stringEndsWith(value: string, suffix: string): boolean {
@@ -367,14 +371,58 @@ export function projectNodeEvalError(
   return error;
 }
 
+// Node v24 lib/internal/process/execution.js runScriptInContext: the globals `[eval]` defines.
+const NODE_EVAL_CJS_BINDINGS = ['require', 'module', 'exports', '__filename', '__dirname'] as const;
+
+/**
+ * A host running Node processes in place in a reused realm opens this before
+ * guest code: rifty's console `require` mirror is hidden (a Node process has no
+ * global `require`); an eval's bindings end with the process. The restore puts
+ * the realm back (a guest value survives) and names a binding it could not
+ * return (a guest made it non-configurable), else null.
+ */
+export function captureNodeProcessGlobals(evaluates: boolean): () => string | null {
+  const consoleRequire = readRuntimeGlobal('require');
+  const mirror = reflectGetOwnPropertyDescriptorPrimordial(globalThis, 'require');
+  const hidden =
+    consoleRequire !== null &&
+    mirror?.value === consoleRequire &&
+    reflectDeletePropertyPrimordial(globalThis, 'require');
+  const prior = evaluates
+    ? NODE_EVAL_CJS_BINDINGS.map(
+        (key) => [key, reflectGetOwnPropertyDescriptorPrimordial(globalThis, key)] as const,
+      )
+    : [];
+  return () => {
+    let unrestored: string | null = null;
+    for (const [key, descriptor] of prior) {
+      const restored =
+        descriptor === undefined
+          ? reflectDeletePropertyPrimordial(globalThis, key)
+          : reflectDefinePropertyPrimordial(globalThis, key, descriptor);
+      if (!restored) unrestored ??= key;
+    }
+    if (
+      hidden &&
+      mirror !== undefined &&
+      reflectGetOwnPropertyDescriptorPrimordial(globalThis, 'require') === undefined &&
+      !reflectDefinePropertyPrimordial(globalThis, 'require', mirror)
+    )
+      unrestored ??= 'require';
+    return unrestored;
+  };
+}
+
 function installNodeEvalCjsBindings(moduleObject: CjsModule, require: CjsRequire): void {
-  for (const [key, value] of [
-    ['require', require],
-    ['module', moduleObject],
-    ['exports', moduleObject.exports],
-    ['__filename', '[eval]'],
-    ['__dirname', '.'],
-  ] as const) {
+  const values = {
+    require,
+    module: moduleObject,
+    exports: moduleObject.exports,
+    __filename: '[eval]',
+    __dirname: '.',
+  } satisfies Record<(typeof NODE_EVAL_CJS_BINDINGS)[number], unknown>;
+  for (const key of NODE_EVAL_CJS_BINDINGS) {
+    const value = values[key];
     objectDefinePropertyPrimordial(globalThis, key, {
       value,
       writable: true,
