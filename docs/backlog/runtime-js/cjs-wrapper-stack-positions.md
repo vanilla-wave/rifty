@@ -1,9 +1,9 @@
 ---
 area: runtime-js
 status: draft
-title: CJS stack positions outside standalone first-line strict sources
+title: CJS stack frames report Node's positions (outside standalone first-line strict sources) and Node's top-level frame name (every CJS source)
 created: 2026-10-20
-why: Function's two wrapper lines shift ordinary CJS diagnostics relative to Node
+why: Function's two wrapper lines shift ordinary CJS diagnostics relative to Node, and every CJS top-level frame (strict indirect-eval path included) reads `Object.eval` where Node's reads `Object.<anonymous>`
 sources: [docs/adr/runtime-js/0450-project-vm-script-offsets-through-one-owned-stack-hook.md, docs/public/compat/modules.md]
 code: [packages/runtime-js/src/module-loader/cjs-factory.ts, packages/runtime-js/src/module-loader/cjs-stack-positions.test.ts]
 ---
@@ -68,3 +68,14 @@ filename/character count/strict predicate/time outside the timed interval;
 playwright.browser-unit.config.ts tests/browser-unit/pr379-measure.spec.ts
 --repeat-each=3`. Wall-clock timing is host-specific; unchanged validation
 still prevents wrapper escape. Existing stack-position work remains the trigger.
+
+## Observation — 2026-11-18
+
+PR #406 now prints these frames in a no-COI command's fatal report, so agents
+read the shifted line (`node fail.cjs` → `at Object.eval (<root>/fail.cjs:3:7)`,
+Node `at Object.<anonymous> (<root>/fail.cjs:1:7)`; pinned residual in
+`tests/no-coi/no-coi-fatal-stderr.spec.ts`). Both compile paths name the
+top-level frame `eval`: `'use strict';\nthrow new Error('s');` keeps Node's
+position but reads `at Object.eval (/project/strict.cjs:2:7)` (RDY-6 reviewer
+probe, scratch; Node v24.16.0 `at Object.<anonymous> (…/strict.cjs:2:7)`), so
+this item owns the name for every CJS source.
