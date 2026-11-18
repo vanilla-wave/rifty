@@ -25,13 +25,7 @@ import { syncMirror } from '@riftydev/vfs';
 import { installMemoryFs } from '@riftydev/vfs/internal';
 import { bindNotImplemented } from './loud.ts';
 // Evaluated before every runtime module: the build injects it first (scripts/build-runtime.mjs).
-import {
-  bridge,
-  fireTimer,
-  installCeilingGlobals,
-  setUncaughtHandler,
-  settleHostTasks,
-} from './web-shim.ts';
+import { bridge, fireTimer, installCeilingGlobals, setUncaughtHandler } from './web-shim.ts';
 
 bindNotImplemented(NotImplementedError);
 
@@ -131,6 +125,12 @@ const ESM_SYNTAX = [
   "Cannot use 'import.meta' outside a module",
 ];
 const EGRESS_MODULES = ['http', 'https', 'net'] as const;
+/** rifty builds these on browser primitives this host lacks (CompressionStream, Workers + SAB). */
+const HOST_CEILING_MODULES = {
+  zlib: 'needs web CompressionStream, absent in the rifty isolate host',
+  child_process: 'no child processes in the rifty isolate host',
+  worker_threads: 'no Workers in the rifty isolate host',
+} as const;
 
 function exitCodeOf(reason: unknown): number | null {
   if (typeof reason !== 'object' || reason === null) return null;
@@ -179,6 +179,11 @@ async function run(source: string): Promise<void> {
         );
       });
     }
+    for (const [name, hint] of Object.entries(HOST_CEILING_MODULES)) {
+      registerBuiltin(name, () => {
+        throw new NotImplementedError(`isolate-host.${name}`, `${hint}, ADR-0557`);
+      });
+    }
     installCeilingGlobals();
     installEvalBuiltinGlobals();
     setProcessCwd(CWD);
@@ -190,10 +195,7 @@ async function run(source: string): Promise<void> {
       print: false,
       explicitCommonJs: false,
     });
-    // Node keeps the loop alive for a pending import(); here its request and
-    // rejection arrive as isolate tasks after the guest task that made it.
-    do await awaitDrain({ capMs: Number.POSITIVE_INFINITY });
-    while (await settleHostTasks());
+    await awaitDrain({ capMs: Number.POSITIVE_INFINITY });
     riftyProcess.exit();
     throw new Error('isolate-host guest: process.exit() returned');
   } catch (caught) {
@@ -212,7 +214,15 @@ async function run(source: string): Promise<void> {
 }
 
 /** A rejection isolated-vm found unhandled after the microtask checkpoint (a copy of the reason). */
-function rejection(reason: unknown): void {
+function rejection(copied: unknown): void {
+  // A reason isolated-vm could not copy out (function-bearing object, symbol): Node
+  // still fails the run; the reason itself is lost (compat ⚠️).
+  const reason =
+    copied === bridge.uncopyableReason
+      ? new Error(
+          'isolate-host: an unhandled rejection reason that cannot be copied out of the isolate',
+        )
+      : copied;
   if (!handleRealmUnhandledRejection(reason, undefined)) fatal(reason);
 }
 

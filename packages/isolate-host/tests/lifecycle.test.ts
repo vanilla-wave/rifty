@@ -71,6 +71,8 @@ describe('runCode lifecycle faults', () => {
     );
     await new Promise((resolve) => consumer.stdout?.once('data', resolve));
     const grandchild = await waitFor(() => childPids(consumer.pid)[0], 3000);
+    // Past startup (a child still sending 'ready' dies of EPIPE anyway): the guest is running.
+    await new Promise((resolve) => setTimeout(resolve, 1000));
     consumer.kill('SIGKILL');
     await waitFor(
       () => (childPids(1).includes(grandchild) || alive(grandchild) ? undefined : true),

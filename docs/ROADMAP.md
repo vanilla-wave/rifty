@@ -160,4 +160,5 @@ hypervisor and deploy stay outside rifty; the consumer supplies the outer bounda
   snapshot export/import + library template; D — agent tool set over the host. Shim
   completion (URL, structuredClone, web streams, AbortController, EventTarget — requirements'
   shim list, ceilings in A) rides B. A pool / long-lived worker process for many isolates is a
-  later density direction, unmeasured.
+  later density direction, unmeasured. Also: an `AbortSignal` option and a concurrency
+  limit (semaphore) in `runCode` — the consumer caps concurrency itself today.

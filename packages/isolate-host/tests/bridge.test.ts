@@ -27,7 +27,8 @@ describe('host bridge under hostile arguments', () => {
         calls.push(['timerStart(repeat=g)', () => bridge.timerStart(1e6 + 1, 0, g)]);
         calls.push(['timerClear(g)', () => bridge.timerClear(g)]);
         calls.push(['random(g)', () => bridge.random(g)]);
-        calls.push(['done(g)', () => bridge.done(g)]);
+        // A valid code (0) would end the run: done() is probed only with non-codes.
+        if (!(Number.isInteger(g) && g >= 0 && g <= 255)) calls.push(['done(g)', () => bridge.done(g)]);
       }
       const bad = [];
       for (const [label, call] of calls) {
@@ -70,15 +71,14 @@ describe('host bridge under hostile arguments', () => {
       const b = globalThis.__riftyIsolateHost;
       const now = b.now();
       console.log(JSON.stringify({
-        nowNear: Math.abs(now - performance.now()) < 1000,
-        nowNotPid: now !== process.pid,
+        // The child's monotonic clock: timeOrigin + now() tracks the wall clock.
+        nowIsClock: Math.abs(b.timeOrigin + now - Date.now()) < 1000,
         random: Object.prototype.toString.call(b.random(3)),
         hostGlobals: Object.getOwnPropertyNames(globalThis).filter((n) => n.startsWith('__riftyHost_')),
       }));
     `);
     expect(JSON.parse(result.stdout)).toEqual({
-      nowNear: true,
-      nowNotPid: true,
+      nowIsClock: true,
       random: '[object Uint8Array]',
       hostGlobals: [],
     });

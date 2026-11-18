@@ -16,8 +16,8 @@ export interface HostBridge {
   readonly timeOrigin: number;
   random(byteLength: number): Uint8Array;
   done(exitCode: number): void;
-  /** True when the child served an import() request since the last call. */
-  takeImportRequested(): boolean;
+  /** The token the child sends for an unhandled rejection reason it cannot copy. */
+  readonly uncopyableReason: string;
 }
 
 const g = globalThis as unknown as Record<string, unknown>;
@@ -175,16 +175,6 @@ define('setInterval', (fn: unknown, ms?: unknown, ...args: unknown[]) =>
 );
 define('clearTimeout', clearTimer);
 define('clearInterval', clearTimer);
-
-/**
- * Isolate tasks queued before now (an import() request, its rejection) run
- * first; true when an import() was requested meanwhile. Two host timer turns,
- * outside the runtime's keepalive accounting.
- */
-export async function settleHostTasks(): Promise<boolean> {
-  for (let i = 0; i < 2; i++) await new Promise((resolve) => startTimer(false, resolve, 0, []));
-  return bridge.takeImportRequested();
-}
 
 /** Host timer expiry → the guest callback; a throw takes the uncaught path. */
 export function fireTimer(id: number): void {

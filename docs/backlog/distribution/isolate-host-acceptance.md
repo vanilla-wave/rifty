@@ -35,6 +35,10 @@ challenge: 2026-11-18 — inherits the goal premise check (`goal.md` §Challenge
 9. `fetch`, `node:http` request, `https.get`, `net.connect`, `tls`, `dgram`, `http2`, `WebSocket` → `NotImplementedError` (`egress.test.ts`) → I5
 10. `pnpm pack` tarball + `npm install` into a clean project; `runCode` under plain `node` with only `PATH` (`packed-consumer.test.ts`) → I6
 11. The guest UTF-8 TextEncoder/TextDecoder equals Node's on randomized one-shot, streamed, fatal, BOM and `encodeInto` inputs (`text-codec.test.ts`) → ADR-0557
+12. The host bridge is hostile surface: every bridge function called with garbage (non-bytes, bad fd, non-integer/out-of-range ids, ms, lengths, exit codes) refuses with a guest-safe `TypeError` (no `file:`/`child.js` frame); the run keeps its own status, the consumer survives, no `__riftyHost_*` global remains, bridge return values carry no child state (`bridge.test.ts`) → I3
+13. A hostile child (isolate escape) cannot hurt the consumer: non-object, unknown type, non-byte/fd-3/oversized/over-cap output, non-integer or out-of-range exit code → child killed, `runCode` rejects `isolate-host child protocol violation: …` within 1000 ms, never a listener throw (`protocol.test.ts`, real hostile child processes) → I4
+14. Output accounting holds for every write shape: 3e6 empty writes at a 1 KiB cap and 2e6 one-byte writes at 1 MiB grow consumer RSS < 64 MiB; `truncated` survives a timeout kill; `timeoutMs` above 2^31-1 is a `RangeError` (`limits.test.ts`) → I4
+15. A child whose consumer dies exits (no orphan); a child that cannot spawn rejects at once (`lifecycle.test.ts`) → I4
 
 ## Reference contract
 
@@ -67,6 +71,9 @@ challenge: 2026-11-18 — inherits the goal premise check (`goal.md` §Challenge
 | guest output × run | discard past cap, `truncated` | limits: cap + 256 MiB flood | → I4 |
 | child killed externally / crash × run | `runCode` rejects at once naming code/signal | lifecycle: `kill -9` | → I4 |
 | concurrent calls × run | independent instances | lifecycle: 3 parallel | → I2 |
+| guest bridge args × call | validated, guest-safe refusal | bridge: garbage matrix | → I3 |
+| child IPC × message (escaped child) | kill + `protocol violation` rejection | protocol: hostile children | → I4 |
+| consumer death × run | child exits on disconnect | lifecycle: orphan | → I4 |
 
 ## Out of scope
 
@@ -77,7 +84,7 @@ challenge: 2026-11-18 — inherits the goal premise check (`goal.md` §Challenge
 - Identity ceilings (rifty's): `process.version`, `os.platform()`,
   `process.cwd()`, empty `process.env`, `process.argv`.
 - ESM syntax in `-e` → `NotImplementedError('isolate-host.node-eval-esm')`;
-  `import()` → named rejection (unhandled: exit 1 from any task, incl. a handler attached in a later task; except a handler from a timer/immediate already due when the import is served, or chained after `fs.promises` — compat ⚠️).
+  `import()` → named rejection (unhandled: may exit 0 — compat ❌).
 - stdin, `-p`, TypeScript input.
 
 ## Decisions
@@ -87,6 +94,8 @@ ready-verdict: 2026-11-18 — Contract+RED @ 9e76eb622
 - re-cut: 2026-11-18 — import() unhandled detection trimmed to isolated-vm's report after three Final+GREEN rounds on that boundary (late handler → exit 0, compat ⚠️, `distribution/isolate-host-import-late-handler`) — trace: ADR-0557
 - re-cut: 2026-11-18 — trim reverted: the late-handler case is fixed (empty isolate task after each import request flushes isolated-vm's unhandled report) and carried by a parity row — trace: ADR-0557
 - re-cut: 2026-11-18 — import() handler from a timer queued before the import request declared ⚠️ (REV-7, 5th instance; ordering needs a guest-owned import(), `distribution/isolate-host-import-before-queued-timer`) — trace: ADR-0557
+- re-cut: 2026-11-18 — manager (cross-review 1): unhandled-import() ordering machinery removed, no corpus/scenario row needs it (REV-7); unhandled import() may exit 0 — compat ❌ — trace: ADR-0557
+- re-cut: 2026-11-18 — cross-review 1: Acceptance 12–15 + three fault rows added (hostile bridge args, hostile child IPC, write-shape accounting, orphan/spawn) — trace: I3, I4
 - 2026-11-18 — stderr canonicalization only on uncaught-error rows; stdout and every other stderr compared raw (no CRLF/ANSI normalization).
 - re-cut: 2026-11-18 — manager amend (goal.md): I3 bridge-walk attack, I4 reasons `timeout`|`memory` + one memory knob + settle bound + child death, ESM and ceiling rows; ceiling rows run as expected failures — trace: I1, I3, I4
 - 2026-11-18 — the parity carrier lives with the package (it needs the package build) and imports the node-cli-eval projection rather than copying it.

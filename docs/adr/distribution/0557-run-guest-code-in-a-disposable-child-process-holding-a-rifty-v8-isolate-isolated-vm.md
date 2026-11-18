@@ -80,25 +80,24 @@ blocks it.
    sink (`setDefaultProcessOutputSink`), never via `console`. ESM syntax in
    `-e` (Node's detect-module SyntaxErrors) → `NotImplementedError(
    'isolate-host.node-eval-esm')`; `import()` rejects with a named error (no
-   child frames in its stack). isolated-vm serves the import after the guest
-   task that made it, so the guest's drain is one chokepoint: after the loop
-   empties it waits two host timer turns and repeats while the child served an
-   import() — the rejection lands in a live process (listeners, `'exit'`,
-   `process.exit` as in Node). isolated-vm flushes unhandled rejections only in
-   a task epilogue, so the import request also queues one empty isolate task:
-   the report precedes guest tasks queued after the import. Declared ⚠️: a
-   timer/immediate task already due when the import request is served (expired
-   while the importing task ran, or due in the same host turn, e.g. a sibling
-   `setImmediate`) runs first; its handler suppresses the report (exit 0;
-   Node 1).
-   Ordering those needs the guest to own import() (source rewrite) — not
-   built here. `node -e`'s builtin-module globals are
+   child frames in its stack); whether an *unhandled* one fails the run is a
+   ceiling: isolated-vm serves the import after the importing task, so the
+   run may already have drained (exit 0; Node 1). No scenario row needs more;
+   ordering it took eight review rounds of machinery, removed (REV-7). `node -e`'s builtin-module globals are
    lazy getters over the rifty loader (Node v24.16.0 list); a test asserts the
    guest has every global name live `node -e` defines.
+   `zlib`, `child_process`, `worker_threads` register as loud modules naming
+   themselves (rifty builds them on CompressionStream / Workers).
 6. Egress: `fetch`/`WebSocket` loud (5); `node:http`, `https`, `net` register
    as loud modules (`NotImplementedError` at require); `tls`/`dgram`/`http2`
    keep rifty's loud stubs. No host callback exposes network or host FS. The
-   bridge is copying `ivm.Callback`s on a frozen `__riftyIsolateHost`.
+   bridge is copying `ivm.Callback`s on a frozen, guest-reachable
+   `__riftyIsolateHost` — untrusted surface: every argument is validated in the
+   child (`src/child/bridge.ts`), refusals are guest-safe `TypeError`s with no
+   host frame. The consumer validates every child IPC message (types, integer
+   exit code 0..255, ≤ 2 chunks, bytes ≤ cap): a violation kills the child and
+   rejects `isolate-host child protocol violation: …` (a child after an isolate
+   escape is hostile).
 7. Dependency: `isolated-vm@7.0.2` exact (ships prebuilds linux-x64/arm64,
    darwin-arm64, win32-x64; engines node ≥24; maintenance mode). 7 over the
    consumer's 6.2.0: the addon now loads only in rifty's child, so the

@@ -83,8 +83,9 @@ Not available. Each of these throws `NotImplementedError` naming the API:
   `AbortSignal.timeout`, …) are missing and give a plain `TypeError`;
 - ESM syntax in the code (`import … from`, top-level `await`). Node runs such
   input as a module; this host evaluates CommonJS only, so use `require()`.
-  `import()` rejects with a named error; unhandled, the run fails with
-  exit 1, as Node fails a missing module.
+  `import()` rejects with a named error. An unhandled one may go unreported
+  (exit 0 where Node exits 1).
+- `zlib`, `child_process`, `worker_threads` (throw at require).
 
 Known differences:
 
@@ -128,7 +129,16 @@ up to date: upgrade Node point releases that patch V8.
 
 ## Cost
 
-Each call spawns a Node process and loads a ~7 MB runtime bundle into a
-fresh isolate. Measured: `runCode('console.log(1)')` p50 123 ms, p95 125 ms
-(20 sequential calls, Apple M3 Pro, macOS, Node v24.16.0). This is a
-measurement, not a promise of density or speed.
+Each call spawns one Node process. That process loads a ~7 MB runtime bundle
+into a fresh isolate. N concurrent calls run N processes; there is no pool and
+no queue, so cap concurrency yourself. Measured on an Apple M3 Pro, macOS,
+Node v24.16.0:
+
+- `runCode('console.log(1)')`: p50 126 ms, max 132 ms over 10 sequential calls;
+- one child at rest is ~140 MiB RSS;
+- 4 parallel calls peak at ~560 MiB, 8 parallel at ~1.1 GiB total;
+- wall time of a 500 ms guest: 645 ms for 1 call, 710 ms for 8 calls.
+
+A guest's heap counts on top of this, up to `memoryLimitMb`. The RSS
+watchdog sits at 256 MiB + 3 × `memoryLimitMb`. These numbers are
+measurements, not promises.

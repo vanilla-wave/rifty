@@ -324,57 +324,6 @@ describe('declared ceilings fail loudly (I1 ceilings, scenario step 4)', () => {
     expect(nodeNames.filter((name) => !guestNames.has(name))).toEqual([]);
   });
 
-  for (const code of [
-    "import('nonexistent-pkg')",
-    "setTimeout(() => import('nonexistent-pkg'), 20)",
-    "setImmediate(() => import('nonexistent-pkg'))",
-    "Promise.resolve().then(() => import('nonexistent-pkg'))",
-  ]) {
-    it(`an unhandled import() fails loudly, as Node fails a missing module: ${code}`, async () => {
-      expect(nodeEval(code).code).toBe(1);
-      const result = await runCode(code);
-      expect(result.exitCode).toBe(1);
-      expect(result.stderr).toContain(
-        'Error: Not implemented: isolate-host.dynamic-import (import() is not available in the rifty isolate host; use require(), ADR-0557)',
-      );
-      // The rejection is made in the child: none of its frames (host paths) reach the guest.
-      expect(result.stderr).not.toMatch(/child\.js|importModuleDynamically/);
-    });
-  }
-
-  // The import() rejection lands while the guest's process is alive: its events and
-  // exit status follow Node (stdout + status; Node's stderr is ERR_MODULE_NOT_FOUND).
-  for (const code of [
-    "process.on('unhandledRejection', (r) => console.log('UR', typeof r)); import('nonexistent-pkg')",
-    "process.on('uncaughtException', (e, o) => console.log('UE', o)); import('nonexistent-pkg')",
-    "process.on('exit', (c) => console.log('exit', c)); import('nonexistent-pkg')",
-    "import('nonexistent-pkg'); process.exit(0)",
-    "setTimeout(() => import('nonexistent-pkg').catch(() => console.log('caught')), 5)",
-  ]) {
-    it(`process events around a failing import() follow Node: ${code}`, async () => {
-      const oracle = nodeEval(code);
-      const result = await runCode(code);
-      expect({ stdout: result.stdout, exitCode: result.exitCode }).toEqual({
-        stdout: oracle.stdout,
-        exitCode: oracle.code,
-      });
-    });
-  }
-
-  // A handler attached in a later task: Node has already reported the import()
-  // rejection unhandled → status 1. (The late handler's own output still runs here:
-  // the declared rejection-timing ⚠️, compat isolate-host.md.)
-  for (const code of [
-    "const p = import('nonexistent-pkg'); setTimeout(() => p.catch(() => console.log('late')))",
-    "const p = import('nonexistent-pkg'); setTimeout(() => p.catch(() => console.log('late')), 2)",
-    "const p = import('nonexistent-pkg'); setImmediate(async () => { try { await p } catch { console.log('late') } })",
-  ]) {
-    it(`an import() rejection handled only in a later task still fails the run: ${code}`, async () => {
-      expect(nodeEval(code).code).toBe(1);
-      expect((await runCode(code)).exitCode).toBe(1);
-    });
-  }
-
   // A rejection reason isolated-vm cannot copy out (function-bearing object, symbol)
   // still fails the run, as Node does (stdout + status; Node's stderr wording differs).
   for (const code of [

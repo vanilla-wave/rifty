@@ -33,17 +33,59 @@ export interface RunCodeResult {
 const CHILD_ENTRY = fileURLToPath(new URL('../dist/child.js', import.meta.url));
 const STDERR_TAIL_BYTES = 4096;
 
-function limit(name: string, value: number | undefined, fallback: number, min: number): number {
+const MAX_TIMER_MS = 2 ** 31 - 1;
+
+function limit(
+  name: string,
+  value: number | undefined,
+  fallback: number,
+  min: number,
+  max = Number.MAX_SAFE_INTEGER,
+): number {
   if (value === undefined) return fallback;
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < min) {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max) {
     throw Object.assign(
       new RangeError(
-        `The "options.${name}" must be a finite number >= ${min}. Received ${String(value)}`,
+        `The "options.${name}" must be a finite number in ${min}..${max}. Received ${String(value)}`,
       ),
       { code: 'ERR_OUT_OF_RANGE' },
     );
   }
   return value;
+}
+
+/** A child message the consumer accepts; anything else is a protocol violation. */
+function violation(message: unknown, cap: number, kept: number): string | null {
+  if (typeof message !== 'object' || message === null) return 'non-object message';
+  const m = message as Record<string, unknown>;
+  switch (m.type) {
+    case 'ready':
+      return null;
+    case 'output': {
+      if (!Array.isArray(m.chunks) || m.chunks.length > 2) return 'output chunks';
+      if (typeof m.truncated !== 'boolean') return 'output truncated flag';
+      let bytes = 0;
+      for (const chunk of m.chunks as unknown[]) {
+        if (!Array.isArray(chunk) || chunk.length !== 2) return 'output chunk shape';
+        if (chunk[0] !== 1 && chunk[0] !== 2) return 'output fd';
+        if (!(chunk[1] instanceof Uint8Array)) return 'output bytes';
+        bytes += chunk[1].byteLength;
+      }
+      return kept + bytes > cap ? 'output past the cap' : null;
+    }
+    case 'exit': {
+      const code = m.exitCode;
+      if (typeof code !== 'number' || !Number.isInteger(code) || code < 0 || code > 255)
+        return 'exit code';
+      return typeof m.truncated === 'boolean' ? null : 'exit truncated flag';
+    }
+    case 'memory':
+      return typeof m.truncated === 'boolean' ? null : 'memory truncated flag';
+    case 'error':
+      return typeof m.message === 'string' ? null : 'error message';
+    default:
+      return 'message type';
+  }
 }
 
 export function runCode(code: string, options: RunCodeOptions = {}): Promise<RunCodeResult> {
@@ -57,7 +99,7 @@ export function runCode(code: string, options: RunCodeOptions = {}): Promise<Run
   let timeoutMs: number;
   let request: RunRequest;
   try {
-    timeoutMs = limit('timeoutMs', options.timeoutMs, 30_000, 1);
+    timeoutMs = limit('timeoutMs', options.timeoutMs, 30_000, 1, MAX_TIMER_MS);
     const memoryLimitMb = limit('memoryLimitMb', options.memoryLimitMb, 256, 8);
     request = {
       type: 'run',
@@ -77,55 +119,60 @@ export function runCode(code: string, options: RunCodeOptions = {}): Promise<Run
     });
     const out: Uint8Array[] = [];
     const err: Uint8Array[] = [];
+    let kept = 0;
+    let truncated = false;
     let stderrTail = '';
     child.stderr?.on('data', (data: Buffer) => {
       stderrTail = (stderrTail + data.toString('utf8')).slice(-STDERR_TAIL_BYTES);
     });
     let outcome: { readonly result: RunCodeResult } | { readonly error: Error } | undefined;
     const text = (chunks: Uint8Array[]): string => Buffer.concat(chunks).toString('utf8');
+    const result = (exitCode: number | null, termination?: RunCodeTermination): RunCodeResult => ({
+      stdout: text(out),
+      stderr: text(err),
+      exitCode,
+      ...(termination === undefined ? {} : { termination }),
+      ...(truncated ? { truncated: true as const } : {}),
+    });
     const end = (next: typeof outcome): void => {
       if (outcome !== undefined) return;
       outcome = next;
       clearTimeout(deadline);
       child.kill('SIGKILL');
     };
-    const killed = (termination: RunCodeTermination, truncated: boolean): RunCodeResult => ({
-      stdout: text(out),
-      stderr: text(err),
-      exitCode: null,
-      termination,
-      ...(truncated ? { truncated: true as const } : {}),
-    });
-    let truncatedSoFar = false;
-    const deadline = setTimeout(
-      () => end({ result: killed('timeout', truncatedSoFar) }),
-      timeoutMs,
-    );
-    child.on('message', (message: ChildMessage) => {
-      switch (message.type) {
+    const deadline = setTimeout(() => end({ result: result(null, 'timeout') }), timeoutMs);
+    // The child may be compromised (isolate escape): validate every message; a bad one
+    // kills it with a distinct rejection, never a throw inside this listener.
+    child.on('message', (message: unknown) => {
+      if (outcome !== undefined) return;
+      const bad = violation(message, request.maxOutputBytes, kept);
+      if (bad !== null) {
+        end({ error: new Error(`isolate-host child protocol violation: ${bad}`) });
+        return;
+      }
+      const m = message as ChildMessage;
+      switch (m.type) {
         case 'ready':
           // A child that died meanwhile surfaces through 'exit' (code/signal), not an EPIPE.
           child.send(request, () => {});
           return;
         case 'output':
-          for (const [fd, bytes] of message.chunks) (fd === 2 ? err : out).push(bytes);
+          truncated ||= m.truncated;
+          for (const [fd, bytes] of m.chunks) {
+            kept += bytes.byteLength;
+            (fd === 2 ? err : out).push(bytes);
+          }
           return;
         case 'exit':
-          end({
-            result: {
-              stdout: text(out),
-              stderr: text(err),
-              exitCode: message.exitCode,
-              ...(message.truncated ? { truncated: true as const } : {}),
-            },
-          });
+          truncated ||= m.truncated;
+          end({ result: result(m.exitCode) });
           return;
         case 'memory':
-          truncatedSoFar ||= message.truncated;
-          end({ result: killed('memory', truncatedSoFar) });
+          truncated ||= m.truncated;
+          end({ result: result(null, 'memory') });
           return;
         case 'error':
-          end({ error: new Error(`isolate-host child failed: ${message.message}`) });
+          end({ error: new Error(`isolate-host child failed: ${m.message.slice(0, 1000)}`) });
           return;
       }
     });

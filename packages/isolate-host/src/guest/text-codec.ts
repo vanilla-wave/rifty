@@ -133,15 +133,6 @@ export class TextDecoder {
     }
     this.#pending = new Uint8Array(0);
     const units: number[] = [];
-    const fail = (): void => {
-      if (this.#fatal) {
-        this.#bomSeen = false;
-        throw Object.assign(new TypeError('The encoded data was not valid for encoding utf-8'), {
-          code: 'ERR_ENCODING_INVALID_ENCODED_DATA',
-        });
-      }
-      units.push(REPLACEMENT);
-    };
     const push = (cp: number): void => {
       if (!this.#bomSeen) {
         this.#bomSeen = true;
@@ -151,6 +142,15 @@ export class TextDecoder {
         const v = cp - 0x10000;
         units.push(0xd800 + (v >> 10), 0xdc00 + (v & 0x3ff));
       } else units.push(cp);
+    };
+    const fail = (): void => {
+      if (this.#fatal) {
+        this.#bomSeen = false;
+        throw Object.assign(new TypeError('The encoded data was not valid for encoding utf-8'), {
+          code: 'ERR_ENCODING_INVALID_ENCODED_DATA',
+        });
+      }
+      push(REPLACEMENT);
     };
     let i = 0;
     while (i < bytes.length) {
