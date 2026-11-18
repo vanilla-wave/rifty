@@ -98,7 +98,8 @@ blocks it.
    protocol state (exact keys per type, also on the `chunks` array and each
    `[fd, bytes]` pair; one `ready`; output only with new
    non-empty bytes or the one
-   truncation flip, ≤ 2 chunks, total ≤ cap; integer exit code 0..255): a
+   truncation flip, ≤ 2 chunks, total ≤ cap; integer exit code 0..255; error
+   text ≤ 4 KiB; type looked up as an own key only): a
    violation kills the child and rejects `isolate-host child protocol
    violation: …` (a child after an isolate escape is hostile). So a child can
    make the consumer hold at most the cap (copied into one buffer per fd,

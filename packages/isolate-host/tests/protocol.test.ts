@@ -32,6 +32,11 @@ const HOSTILE: Readonly<Record<string, string>> = {
     "[{ type: 'output', chunks: [[1, new Uint8Array(1)], [2, new Uint8Array(0)]], truncated: false }]",
   'output with no new bytes': "[{ type: 'output', chunks: [], truncated: false }]",
   'repeated ready': "[{ type: 'ready' }]",
+  'type constructor': "[{ type: 'constructor' }]",
+  'type hasOwnProperty': "[{ type: 'hasOwnProperty' }]",
+  'type __proto__-like getter': "[{ type: '__defineGetter__', a: 1 }]",
+  'type not a string': '[{ type: 1 }]',
+  'error message over 4 KiB': "[{ type: 'error', message: 'x'.repeat(1 << 20) }]",
   'output with an extra key (padding)':
     "[{ type: 'output', chunks: [[1, new Uint8Array([65])]], truncated: false, pad: 'x'.repeat(1 << 20) }]",
   'exit with an extra key': "[{ type: 'exit', exitCode: 0, truncated: false, extra: 1 }]",

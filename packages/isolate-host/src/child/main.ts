@@ -108,7 +108,11 @@ async function run(request: RunRequest): Promise<void> {
     });
   } catch (error) {
     if (isolate.isDisposed) reportMemory();
-    else report({ type: 'error', message: error instanceof Error ? error.message : String(error) });
+    else
+      report({
+        type: 'error',
+        message: (error instanceof Error ? error.message : String(error)).slice(0, 4096),
+      });
   }
 }
 

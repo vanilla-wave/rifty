@@ -54,6 +54,8 @@ function limit(
   return value;
 }
 
+const MAX_ERROR_MESSAGE = 4096;
+
 const MESSAGE_KEYS: Readonly<Record<string, readonly string[]>> = {
   ready: ['type'],
   output: ['type', 'chunks', 'truncated'],
@@ -99,7 +101,10 @@ function violation(message: unknown, cap: number, state: ProtocolState): string 
   if (typeof message !== 'object' || message === null) return 'non-object message';
   const m = message as Record<string, unknown>;
   // Exact keys: an extra key is unvalidated padding riding on an accepted message.
-  const keys = MESSAGE_KEYS[m.type as string];
+  const keys =
+    typeof m.type === 'string' && Object.hasOwn(MESSAGE_KEYS, m.type)
+      ? MESSAGE_KEYS[m.type]
+      : undefined;
   if (keys === undefined) return 'message type';
   if (Object.keys(m).length !== keys.length || !keys.every((k) => Object.hasOwn(m, k)))
     return `${String(m.type)} message keys`;
@@ -135,7 +140,10 @@ function violation(message: unknown, cap: number, state: ProtocolState): string 
     case 'memory':
       return typeof m.truncated === 'boolean' ? null : 'memory truncated flag';
     case 'error':
-      return typeof m.message === 'string' ? null : 'error message';
+      // Bounded before acceptance: a kept slice of a huge string would pin all of it.
+      return typeof m.message === 'string' && m.message.length <= MAX_ERROR_MESSAGE
+        ? null
+        : 'error message';
     default:
       return 'message type';
   }
@@ -224,7 +232,7 @@ export function runCode(code: string, options: RunCodeOptions = {}): Promise<Run
           end({ result: result(null, 'memory') });
           return;
         case 'error':
-          end({ error: new Error(`isolate-host child failed: ${m.message.slice(0, 1000)}`) });
+          end({ error: new Error(`isolate-host child failed: ${m.message}`) });
           return;
       }
     });
