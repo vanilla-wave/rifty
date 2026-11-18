@@ -104,7 +104,8 @@ export function runCode(code: string, options: RunCodeOptions = {}): Promise<Run
     child.on('message', (message: ChildMessage) => {
       switch (message.type) {
         case 'ready':
-          child.send(request);
+          // A child that died meanwhile surfaces through 'exit' (code/signal), not an EPIPE.
+          child.send(request, () => {});
           return;
         case 'output':
           for (const [fd, bytes] of message.chunks) (fd === 2 ? err : out).push(bytes);
@@ -128,7 +129,13 @@ export function runCode(code: string, options: RunCodeOptions = {}): Promise<Run
           return;
       }
     });
-    child.on('error', (error) => end({ error }));
+    // Only a failed spawn ends here; a live child's failure arrives as 'exit'.
+    child.on('error', (error) => {
+      if (child.pid === undefined) {
+        end({ error });
+        reject(error);
+      }
+    });
     child.on('exit', (exitCode, signal) => {
       end({
         error: new Error(

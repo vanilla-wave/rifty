@@ -39,12 +39,17 @@ it('packed tarball installs and runs under plain node', () => {
   expect(snippet).toContain("import { runCode } from '@riftydev/isolate-host';");
   writeFileSync(
     join(app, 'main.js'),
-    `${snippet}\nconsole.log(JSON.stringify({ stdout, stderr, exitCode }));\n`,
+    `${snippet}\nconst root = await import('@riftydev/isolate-host');\nconsole.log(JSON.stringify({ stdout, stderr, exitCode, exports: Object.keys(root) }));\n`,
   );
   const out = execFileSync(process.execPath, ['main.js'], {
     cwd: app,
     encoding: 'utf8',
     env: { PATH: process.env.PATH ?? '' },
   });
-  expect(JSON.parse(out)).toEqual({ stdout: '42\n', stderr: '', exitCode: 0 });
+  expect(JSON.parse(out)).toEqual({
+    stdout: '42\n',
+    stderr: '',
+    exitCode: 0,
+    exports: ['runCode'],
+  });
 }, 240_000);

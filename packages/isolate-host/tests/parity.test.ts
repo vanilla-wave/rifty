@@ -51,7 +51,7 @@ const CORPUS: readonly Row[] = [
   },
   {
     label: 'event-loop-order',
-    code: "setTimeout(() => console.log('t20'), 20); setTimeout(() => console.log('t5'), 5); setImmediate(() => console.log('immediate')); Promise.resolve().then(() => console.log('micro')); queueMicrotask(() => console.log('qm')); process.nextTick(() => console.log('tick')); console.log('sync')",
+    code: "setTimeout(() => console.log('t60'), 60); setTimeout(() => console.log('t30'), 30); setImmediate(() => console.log('immediate')); Promise.resolve().then(() => console.log('micro')); queueMicrotask(() => console.log('qm')); process.nextTick(() => console.log('tick')); console.log('sync')",
   },
   {
     label: 'async-await',
@@ -210,6 +210,63 @@ describe('declared ceilings fail loudly (I1 ceilings, scenario step 4)', () => {
       );
     });
   }
+
+  it('every global and member of the closed ceiling list (ADR-0557 §5) throws its named gap', async () => {
+    const globals = [
+      'URL',
+      'URLSearchParams',
+      'structuredClone',
+      'ReadableStream',
+      'WritableStream',
+      'TransformStream',
+      'TextDecoderStream',
+      'TextEncoderStream',
+      'CompressionStream',
+      'DecompressionStream',
+      'AbortController',
+      'AbortSignal',
+      'EventTarget',
+      'Event',
+      'CustomEvent',
+      'Blob',
+      'File',
+      'Request',
+      'Response',
+      'Headers',
+      'FormData',
+      'WebSocket',
+      'MessageChannel',
+      'MessagePort',
+      'BroadcastChannel',
+    ];
+    const members = [
+      'crypto.subtle',
+      'performance.mark',
+      'performance.measure',
+      'performance.getEntries',
+      'performance.getEntriesByName',
+      'performance.getEntriesByType',
+      'performance.clearMarks',
+      'performance.clearMeasures',
+      'performance.eventLoopUtilization',
+      'performance.timerify',
+    ];
+    const result = await runCode(`
+      const out = [];
+      const named = (label, e) => out.push(label + '=' + (e && e.name === 'NotImplementedError' && e.message.startsWith('Not implemented: isolate-host.' + label + ' ') ? 'loud' : 'WRONG ' + (e && e.message)));
+      for (const g of ${JSON.stringify(globals)}) {
+        try { new globalThis[g](); out.push(g + '=WRONG constructed'); } catch (e) { named(g, e); }
+      }
+      for (const m of ${JSON.stringify(members)}) {
+        const [o, k] = m.split('.');
+        try { const v = globalThis[o][k]; if (typeof v === 'function') v(); out.push(m + '=WRONG returned'); } catch (e) { named(m, e); }
+      }
+      fetch('http://example.com/').then(() => out.push('fetch=WRONG resolved'), (e) => named('fetch', e))
+        .then(() => console.log(out.join('\\n')));
+    `);
+    const expected = [...globals, ...members, 'fetch'].map((n) => `${n}=loud`).join('\n');
+    expect(result).toEqual({ stdout: `${expected}\n`, stderr: '', exitCode: 0 });
+  });
 
   for (const code of [
     "await Promise.resolve(); console.log('tla')",
