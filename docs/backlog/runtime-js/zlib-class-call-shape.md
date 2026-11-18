@@ -1,10 +1,10 @@
 ---
 area: runtime-js
 status: draft
-title: "`zlib` stream classes called without `new` or via `X.call(this)` construct (Gzip) or reach their named ceiling, as Node's callable constructors do"
+title: "zlib stream classes accept Node's call-without-`new` and `X.call(this)` forms: Gzip constructs, ceilings throw their reason"
 created: 2026-11-18
 why: Node 24's zlib classes (except Zstd*) are callable legacy constructors; rifty's ES classes throw V8's bare class-constructor TypeError, so the PR #403 reasoned ceiling is never reached on that path
-sources: [docs/adr/runtime-js/0178-node-zlib-gzip-transform-stream-subset.md, docs/adr/runtime-js/0353-callable-node-stream-constructors-preserve-legacy-initialization.md, docs/backlog/net/http-agent-call-shape.md]
+sources: [docs/adr/runtime-js/0178-node-zlib-gzip-transform-stream-subset.md, docs/adr/runtime-js/0353-callable-node-stream-constructors-preserve-legacy-initialization.md, docs/adr/runtime-js/0464-named-loud-members-for-charted-unclaimed-mode-ceilings.md, docs/backlog/net/http-agent-call-shape.md]
 code: [packages/runtime-js/src/builtins/zlib.ts, packages/io/src/streams/callable-constructor.ts]
 ---
 
@@ -41,9 +41,10 @@ Coverage gaps:
 
 Owner runtime-js, with the next zlib stream work or a guest reaching the call
 form. The fix shape for each class:
-- `Gzip`: callable via ADR-0353's `makeCallableStreamConstructor`, which is
-  io-package-private (exporting it is a public-API ADR), or zlib-local. Its setup moves
-  to a receiver initializer, and DEP0184 is emitted once.
+- `Gzip`: callable. Its setup moves to a receiver initializer, and DEP0184 is
+  emitted once. Open fork: export ADR-0353's io-package-private
+  `makeCallableStreamConstructor` (a public-API ADR) or use a zlib-local
+  publisher.
 - Ceilings: a named function with `length` 1 whose call and construct paths both
   throw the reasoned ceiling. `Zstd*` keep Node's TypeError, named.
 

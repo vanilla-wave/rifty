@@ -18,7 +18,7 @@ reason is that rifty has no sync-child protocol, and the execSync RPC carries
 
 Rifty @ 39cf60307 (`runInRifty` probes, plain and SAB-modelled):
 - Both members give the bare messages.
-- `execSync` already carries a reason, and that reason is COI-only (`child_process-sync.ts:53`, `:73`).
+- `execSync` is COI-only; its no-COI ceiling carries a reason (`child_process-sync.ts:73`).
 - Async `spawn` / `execFile('node', …)` work in COI and no-COI: parity
   `child_process/exec-file` and `recursive-env` pass, and the no-COI spawn is
   asserted in `tests/no-coi/no-coi-sandbox-build-loop.spec.ts:1219`.
@@ -31,9 +31,9 @@ and stdout `["two words"]`. The execSync RPC splits argv on whitespace, with no 
 `['"two', 'words"']`. It also has no `input`, which esbuild-wasm's `execFileSync`
 needs.
 
-Two docs are stale. `compat/process.md` says "`execFileSync` stays a link-time miss",
-and `node-builtins-loud-stub-capability-gaps.md` lists it as absent. Both have been
-false since 2026-10-20 (ADR-0443 correction; it throws `NotImplementedError` now).
+Corrected in this capture: `compat/process.md` (execFileSync "link-time miss") and
+`node-builtins-loud-stub-capability-gaps.md` (listed it absent). Both had been stale
+since the ADR-0443 2026-10-20 correction.
 
 The office-docs traces show 0 hits, so there is no observed demand.
 

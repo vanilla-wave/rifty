@@ -347,18 +347,18 @@ const matrices = [
     rows: [
       [
         '`gzip` / `gunzip` (async)',
-        '✅',
-        "`CompressionStream('gzip')` — RFC-1952; rifty output reads in Node and vice versa",
+        '⚠️',
+        "`CompressionStream('gzip')` — RFC-1952; rifty output reads in Node and vice versa. Chromium `gunzip` rejects zero padding and a 2nd member, Node accepts — `backlog/runtime-js/zlib-trailing-bytes-after-stream-end`",
       ],
       [
         '`deflate` / `inflate` (async)',
-        '✅',
-        "`'deflate'` — RFC-1950 zlib-wrapped; both-direction wire-compat",
+        '⚠️',
+        "`'deflate'` — RFC-1950 zlib-wrapped; both-direction wire-compat. `inflate` rejects bytes after the stream end, Node ignores them — `backlog/runtime-js/zlib-trailing-bytes-after-stream-end`",
       ],
       [
         '`deflateRaw` / `inflateRaw` (async)',
-        '✅',
-        "`'deflate-raw'` — RFC-1951 raw; both-direction wire-compat",
+        '⚠️',
+        "`'deflate-raw'` — RFC-1951 raw; both-direction wire-compat. `inflateRaw` rejects bytes after the stream end, Node ignores them — `backlog/runtime-js/zlib-trailing-bytes-after-stream-end`",
       ],
       ['`util.promisify(zlib.gzip)`', '✅', 'Standard `(err, Buffer)` callback convention'],
       [
