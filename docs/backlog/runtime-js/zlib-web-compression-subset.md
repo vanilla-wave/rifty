@@ -32,14 +32,39 @@ This item now tracks the surface DELIBERATELY deferred from those PRs.
   needs Content-Encoding auto-detect.
 - **`crc32`**: pure-sync, honestly implementable (~15 lines) — out of the
   compression subset, parked until a consumer reads it.
-- Brotli / zstd / `*Sync` stay loud ceilings — no honest browser path (no Web API
-  for brotli/zstd; async-only stream API can't back a sync facade). Promote only if
-  a browser primitive appears.
-- **Cross-engine e2e** (residual risk, low — ADR-0159 Design notes): conformance +
+- **Sync engine** (`*Sync`; also the remaining streams/options if unified): not
+  implemented yet; engine choice open. Options: (a) `pako` (pure JS, no preload;
+  1.0.11 already in the lockfile via isomorphic-git → `@riftydev/git`; direct dep
+  → ADR; 1.0.11 lacks `deflateParams`, so `params()` stays loud); (b) WASM build
+  of Node's `deps/zlib` (Chromium fork; byte-exactness possible; needs toolchain or
+  vendored binary + async preload, ADR-0351/0352). Measure first whether Chromium
+  `CompressionStream` already emits Node-identical bytes — unifying async on
+  `pako` could lose that. Consumers: pdf t1/t3 `inflateSync` (no-COI office-docs
+  2026-11-12), pdfkit `deflateSync`. Wave-2 refine + ADR (ADR-0159 correction
+  2026-11-18). Until then each export ceiling's error names its working async
+  alternative. pako 1.0.11 diverges from Node on gunzip edges (`+'\n'`/`+'JUNK!'`
+  OK, 2nd member dropped) and matches on inflate tails (`runtime-js/zlib-trailing-bytes-after-stream-end`).
+- **Option + `Gzip` instance ceiling reasons** (PR #403 outside finding): the
+  `zlib.<fn> option: flush|finishFlush|windowBits|dictionary|info` and
+  `zlib.Gzip.flush|params|reset|close|bytesWritten` throws still have no reason;
+  they fire from working functions, so they invite the misreading #403 fixed.
+  Rifty advice @ 39cf60307 (tsx host streams; Chromium codes differ, unverified):
+  omit `finishFlush` (complete input decodes; truncated input errors, no partial output) / `flush` / `info` /
+  `windowBits` (compress emits window 15 — a consumer pinned smaller rejects);
+  `dictionary` none; `close` → `destroy()`; `reset` → new
+  `createGzip()`; `params`/`flush`/`bytesWritten` none (`end()` emits the rest).
+  0/12 office-docs traces hit them. Closed table over options × {6 one-shots,
+  createGzip} + 5 members, like #403's; reason text quotes no zlib codes.
+  REVERSIBLE message change.
+- Brotli / zstd stay loud ceilings — no Web API for brotli/zstd; not implemented
+  yet (a WASM/JS codec is not evaluated).
+- **Cross-engine e2e** (residual risk — ADR-0159 Design note 4): conformance +
   parity drive the WHATWG `CompressionStream` via Node's in-process global, not
   Chromium's; only the gunzip path rides on the npm-install e2e (`unpacker.ts`). A
   small in-runtime e2e exercising compress + deflate/raw in real Chromium would close
   the last verification gap. Gate: any zlib-touching e2e flow worth pinning in-browser.
+  2026-11-18: Node's DecompressionStream concatenates gzip members, Chromium 148
+  throws; the harness masks it (`runtime-js/zlib-trailing-bytes-after-stream-end`).
 
 ## Reversibility
 
