@@ -115,8 +115,8 @@ Why the option handling is exactly this, verified against Node 24 — so a later
    dedicated in-runtime e2e for the compress + deflate/raw directions is a low-risk residual gap —
    tracked in `docs/backlog/runtime-js/zlib-web-compression-subset.md`.
    Correction 2026-11-18: same primitive, not same behaviour — Node's `DecompressionStream`
-   concatenates gzip members, Chromium 148 throws; the harness cannot pin that, and inflate tails
-   diverge from Node on both hosts (`docs/backlog/runtime-js/zlib-trailing-bytes-after-stream-end.md`).
+   concatenates gzip members, Chromium 148 throws; the harness cannot pin that, and inflate/inflateRaw
+   tails and gunzip zero padding diverge from Node on both hosts (`docs/backlog/runtime-js/zlib-trailing-bytes-after-stream-end.md`).
 
 ## Consequences
 

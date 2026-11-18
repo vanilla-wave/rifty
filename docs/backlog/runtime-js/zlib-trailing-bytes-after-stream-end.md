@@ -15,7 +15,7 @@ Source: the Final+GREEN Ecosystem-UX concern on PR #403
 (`reference/pr-403-final-green.json`). The PR's ceiling hint ("async `zlib.inflate`
 works") sends the pdf-t3 author (no-COI office-docs, 2026-11-12) to a call
 that still fails. pdf-t3 slices
-`b.subarray(m.index+m[0].length, s.indexOf('endstream', m.index))`, which keeps the
+`b.subarray(m.index+m[0].length, e)` with `e = s.indexOf('endstream', m.index)`, which keeps the
 EOL: all 5 FlateDecode slices in its fixtures end in `\n`.
 
 Node v24.16.0, `promisify(zlib.X)` and `XSync` (probe 2026-11-18):
@@ -29,7 +29,7 @@ Node v24.16.0, `promisify(zlib.X)` and `XSync` (probe 2026-11-18):
 
 Rifty @ 39cf60307: `runStream` (`zlib.ts:174`) hands the host stream error to
 the callback, with no trailing-data handling.
-- Chromium 148.0.7778.96 (bundled `zlib.ts` in a Playwright page):
+- Chromium 148.0.7778.96 (bundled `zlib.ts` in a Playwright page; probe not persisted):
   - `inflate`, `inflateRaw` and `gunzip`, with each tail above → `TypeError: Junk found after end of compressed data.` (no code);
   - a second gzip member → the same TypeError.
 - tsx / Node's DecompressionStream:
@@ -43,7 +43,7 @@ ADLER32 / BFINAL block / gzip member a TypeError, and allows a single gzip membe
 wording came via a fetch summary and is not byte-verified. Chromium conforms.
 
 Facts that bound a fix:
-- The Chromium 148 probes behind these facts were not persisted. Re-run them before design.
+- These Chromium 148 probes, and those in Context, were not persisted. Re-run them before design.
 - Catching the junk error loses output: Chromium drops queued chunks
   (600000 B + `\n` delivered 131072 B before the error).
 - Junk and truncation fail at different points: junk → `write` rejects; truncated → `close` rejects.

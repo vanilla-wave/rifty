@@ -348,7 +348,7 @@ const matrices = [
       [
         '`gzip` / `gunzip` (async)',
         '⚠️',
-        "`CompressionStream('gzip')` — RFC-1952; rifty output reads in Node and vice versa. Chromium `gunzip` rejects zero padding and a 2nd member, Node accepts — `backlog/runtime-js/zlib-trailing-bytes-after-stream-end`",
+        "`CompressionStream('gzip')` — RFC-1952; rifty output reads in Node and vice versa. `gunzip` rejects zero padding (every host) and, in Chromium, a 2nd member; Node accepts both — `backlog/runtime-js/zlib-trailing-bytes-after-stream-end`",
       ],
       [
         '`deflate` / `inflate` (async)',
