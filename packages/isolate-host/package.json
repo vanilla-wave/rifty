@@ -1,0 +1,26 @@
+{
+  "name": "@riftydev/isolate-host",
+  "version": "0.1.0",
+  "description": "Run guest JS like `node -e` in a fresh rifty runtime inside a V8 isolate (isolated-vm) in a disposable child process.",
+  "type": "module",
+  "license": "MIT",
+  "main": "./src/index.ts",
+  "module": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "tsup"
+  },
+  "dependencies": {
+    "isolated-vm": "7.0.2"
+  },
+  "devDependencies": {
+    "@riftydev/io": "workspace:*",
+    "@riftydev/runtime-js": "workspace:*",
+    "@riftydev/vfs": "workspace:*",
+    "esbuild": "0.28.0"
+  }
+}

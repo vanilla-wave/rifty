@@ -206,6 +206,25 @@ importers:
         specifier: '*'
         version: 2.1.9(@types/node@22.19.19)
 
+  packages/isolate-host:
+    dependencies:
+      isolated-vm:
+        specifier: 7.0.2
+        version: 7.0.2
+    devDependencies:
+      '@riftydev/io':
+        specifier: workspace:*
+        version: link:../io
+      '@riftydev/runtime-js':
+        specifier: workspace:*
+        version: link:../runtime-js
+      '@riftydev/vfs':
+        specifier: workspace:*
+        version: link:../vfs
+      esbuild:
+        specifier: 0.28.0
+        version: 0.28.0
+
   packages/kernel:
     dependencies:
       '@riftydev/io':
@@ -2327,6 +2346,10 @@ packages:
   isexe@2.0.0:
     resolution: {integrity: sha512-RHxMLp9lnKHGHRng9QFhRCMbYAcVpn69smSGcq3f36xjgVVWThj4qqLbTLlq7Ssj8B+fIQ1EuCEGI2lKsyQeIw==}
 
+  isolated-vm@7.0.2:
+    resolution: {integrity: sha512-Z1sYxpptGyGiKblG16EJEdP5x9/68C6AuqFFsewnrxlwSlrTLHKqtRMogOjcYZ0f8/cijMaRi+XwiHVQ1+uG+g==}
+    engines: {node: '>=24.0.0'}
+
   isomorphic-git@1.38.5:
     resolution: {integrity: sha512-4HBmx1UB+SdRaQh7+zN7lvFQxc4zl7s0oIM/1+5xveu6+QrOeFfx5QDeRNpqCzFHICISEdbK7GilsTsrgE006Q==}
     engines: {node: '>=14.17'}
@@ -2449,6 +2472,10 @@ packages:
   node-fetch@3.3.2:
     resolution: {integrity: sha512-dRB78srN/l6gqWulah9SrxeYnxeddIG30+GOqK/9OlLVyLg3HPnr6SqOWTWOXKRwC2eGYCkZ59NNuSgvSrpgOA==}
     engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
+
+  node-gyp-build@4.8.4:
+    resolution: {integrity: sha512-LA4ZjwlnUblHVgq0oBF3Jl/6h/Nvs5fzBLwdEF4nuxnFdsfajde4WfxtJr3CaiH+F6ewcIB/q4jQ4UzPyid+CQ==}
+    hasBin: true
 
   node-releases@2.0.45:
     resolution: {integrity: sha512-iIbHXV9eBB2nB0wa7oTsrrXq+qQt+9SIlx9AX3T96YgobtEQfis5n6TJ6vV+3QP8DwdriEAcGhARaFCu37peBg==}
@@ -4590,6 +4617,10 @@ snapshots:
 
   isexe@2.0.0: {}
 
+  isolated-vm@7.0.2:
+    dependencies:
+      node-gyp-build: 4.8.4
+
   isomorphic-git@1.38.5:
     dependencies:
       async-lock: 1.4.1
@@ -4702,6 +4733,8 @@ snapshots:
       data-uri-to-buffer: 4.0.1
       fetch-blob: 3.2.0
       formdata-polyfill: 4.0.10
+
+  node-gyp-build@4.8.4: {}
 
   node-releases@2.0.45: {}
 

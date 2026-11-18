@@ -1,4 +1,4 @@
-import { defineWorkspace } from 'vitest/config';
+import { configDefaults, defineWorkspace } from 'vitest/config';
 
 export default defineWorkspace([
   'apps/playground/vitest.config.ts',
@@ -14,7 +14,18 @@ export default defineWorkspace([
         'tools/*/src/**/*.test.ts',
         'tools/checks/**/*.test.ts',
       ],
+      exclude: [...configDefaults.exclude, 'packages/isolate-host/**'],
       environment: 'node',
+    },
+  },
+  {
+    // ADR-0557: real child processes + isolated-vm over the built package.
+    test: {
+      name: 'isolate-host',
+      include: ['packages/isolate-host/tests/**/*.test.ts'],
+      globalSetup: ['packages/isolate-host/tests/global-setup.ts'],
+      environment: 'node',
+      testTimeout: 60_000,
     },
   },
   {
