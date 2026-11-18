@@ -12,8 +12,9 @@ code: [packages/runtime-js/src/builtins/node-entry.ts, packages/runtime-js/src/m
 
 PR #408 outside finding 2. Node v24.16.0
 `lib/internal/main/eval_string.js` calls `addBuiltinLibsToObject(globalThis,
-'<eval>')` before `evalScript`: accessor globals per builtin name (44 on
-v24.16.0: `node -p` count of own accessor-with-setter globals). Live:
+'<eval>')` before `evalScript`: an accessor global per builtin name (live:
+43 non-internal `builtinModules` names read as accessor globals under `node -p`;
+own get/set accessor globals: 44 under `-p`, 3 in a file entry). Live:
 `node -e "console.log(typeof fs, typeof path)"` → `object object`. Rifty no-COI
 project command, same line → `undefined undefined` (PR #408 probe, exit 0).
 `runScriptInContext` then restores `globalThis.module = origModule` (the
