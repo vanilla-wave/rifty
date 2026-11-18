@@ -15,7 +15,10 @@ Measured in the isolate host (ADR-0557) @ 2cbb37c50, each against `node -e`:
 run never drains (`termination: 'timeout'`), Node exits 0;
 `Function.prototype.bind` poisoned → exit 1, Node 0;
 `Object.defineProperty(Promise.prototype, 'constructor', { get() { throw … } }); console.log(1)`
-→ exit 1, Node 0; `process.emit` throwing → exit 1, Node 7. The isolate host's
+→ exit 1, Node 0; `process.emit` throwing → exit 1, Node 7. Also measured @ b9ff5be73:
+`Number.isInteger = () => false`, `Reflect.get = () => undefined` and
+`Object.assign = () => { throw … }` each turn a clean run into exit 1 (Node 0),
+and a `Reflect.get` that forges the lifecycle slot makes a throwing run exit 0. The isolate host's
 own tail is primordial-only (ADR-0557 §5), so these are the runtime's paths,
 shared with the browser realms. Parts of runtime-js already capture
 primordials (`reflectApplyPrimordial` in `module-loader`, `process.ts`); the

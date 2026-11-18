@@ -112,6 +112,9 @@ Matrix: `docs/public/compat/isolate-host.md`.
 
 Tested:
 
+- a guest cannot make `runCode` report a failure of the host's own, cannot hang
+  the call, and cannot make a failed run read as a clean one;
+
 - the guest sees none of your process's globals or env;
 - the guest gets no Node primitive or isolated-vm handle;
 - the guest has no network;

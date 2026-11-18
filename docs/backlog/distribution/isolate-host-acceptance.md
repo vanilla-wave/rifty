@@ -39,7 +39,25 @@ challenge: 2026-11-18 — inherits the goal premise check (`goal.md` §Challenge
 13. A hostile child (isolate escape) cannot hurt the consumer: garbage bytes, a byte-by-byte garbage header, unknown kind, a header announcing more than its kind may carry (4 GiB, past the cap), bad fd/flags, wrong exit/memory payload sizes, output with no new bytes, past the cap or reverting truncation, error text > 4 KiB → child killed, `runCode` rejects `isolate-host child protocol violation: …` within 1000 ms, never a throw. A frame fed one byte at a time is accepted whole; bytes after a terminal frame are ignored, in its chunk or after it; a channel closed with no result rejects at once instead of waiting for the deadline; a stalled legal frame buffers at most one frame; 2^16 accepted 1-byte frames hold < 4 MiB (`protocol.test.ts`, real hostile child processes) → I4
 14. Output accounting holds for every write shape: 1e6 empty writes at a 1 KiB cap and 1e6 one-byte writes at 512 KiB grow consumer RSS < 64 MiB; `truncated` survives a timeout kill; `timeoutMs` above 2^31-1 is a `RangeError` (`limits.test.ts`) → I4
 15. A child whose consumer dies exits (no orphan); a child that cannot spawn rejects at once (`lifecycle.test.ts`) → I4
-16. Nothing the run does after guest code trusts a guest-replaceable object: with `process.stderr.write`, `process.stderr`, `process`, `process.exit`, `console`, `Error.prototype.stack`, `TextEncoder` or `Uint8Array` replaced or made to throw, the status is still Node's, the guest's own error still reaches stderr, and the consumer never reports a child failure instead (`guest-seam.test.ts`) → I3
+16. Whatever guest code replaced or poisoned in its realm — `process`, its
+    `stderr`/`exit`, `console`, `Error`, `TextEncoder`, `Uint8Array`, the array
+    iterator, `String`, or a forged `RIFTY_PROCESS_EXIT` lookalike — the host's
+    own promises hold: `runCode` resolves (never an infrastructure failure of
+    the host's), settles well inside the deadline, and a run Node failed never
+    reads as clean — the guest's own diagnostic, or the child's own line when
+    the guest's reporting broke. For the 23 cases that leave the runtime's
+    status path intact the status is Node's, and where the guest hid nothing its
+    own `Error: x` is what the consumer reads. A guest that poisons the status
+    machinery itself (`Number.isInteger`, `Reflect.get`, `Object.assign`, or
+    catching its own exit signal) gets its own answer — breaking its own rifty,
+    declared in compat — and only the host promises above are asserted for those
+    (`guest-seam.test.ts`) → I3
+17. The child judges what the isolate hands it: a guest bundle whose `run`
+    returns a non-number, an out-of-range or fractional status, no status, null,
+    a bare number, a rejected promise or a throw becomes the child's own
+    "ended without a usable status" line and exit 1; one that never settles ends
+    as `timeout`; a bundle with no entry at all rejects as a child failure, not
+    a clean run (`child-trust.test.ts`, stub guest bundles) → I3
 
 ## Reference contract
 
@@ -75,7 +93,8 @@ challenge: 2026-11-18 — inherits the goal premise check (`goal.md` §Challenge
 | guest bridge args × call | validated, guest-safe refusal | bridge: garbage matrix | → I3 |
 | child frames × fd 3 (escaped child) | kill + `protocol violation` rejection; trailing bytes ignored | protocol: hostile children | → I4 |
 | result channel closed × run | reject at once, not at the deadline | protocol: channel closed | → I4 |
-| guest replaces post-run objects × run | host paths bypass them; status stays Node's | guest-seam: 10 replacements | → I3 |
+| guest replaces post-run objects × run | the host's promises hold; status stays Node's unless the guest broke its own status path | guest-seam: 30 replacements | → I3 |
+| isolate reports a bad status × run | child's own line + failed status | child-trust: stub guest bundles | → I3 |
 | consumer death × run | child exits on disconnect | lifecycle: orphan | → I4 |
 
 ## Out of scope
@@ -102,6 +121,8 @@ ready-verdict: 2026-11-18 — Contract+RED @ 9e76eb622
 - re-cut: 2026-11-18 — cross-review 1: Acceptance 12–15 + three fault rows added (hostile bridge args, hostile child IPC, write-shape accounting, orphan/spawn) — trace: I3, I4
 - re-cut: 2026-11-18 — Acceptance 13 restated for the framed fd-3 channel (Node IPC removed after a malformed frame crashed the consumer in Node's deserializer) — trace: I4
 - re-cut: 2026-11-18 — cross-review 2: `import()` is loud and terminal in every form (no silent exit 0); Acceptance 12 restated (bridge unreachable + arg validation as a unit), Acceptance 13 extended (byte-by-byte, trailing bytes, closed channel), Acceptance 16 added (post-guest paths distrust guest objects) — trace: I3, I4, scenario
+- re-cut: 2026-11-18 — Acceptance 17 added (the child validates the isolate's reported status; stub-guest carriers) — trace: I3
+- re-cut: 2026-11-18 — cross-review 2 verify: Acceptance 16 restated to what a shared realm can guarantee (host promises unconditional; Node's status only while the guest's status path is intact, the rest declared in compat). The status now crosses the isolate boundary as copied data validated in the child — trace: I3
 - 2026-11-18 — stderr canonicalization only on uncaught-error rows; stdout and every other stderr compared raw (no CRLF/ANSI normalization).
 - re-cut: 2026-11-18 — manager amend (goal.md): I3 bridge-walk attack, I4 reasons `timeout`|`memory` + one memory knob + settle bound + child death, ESM and ceiling rows; ceiling rows run as expected failures — trace: I1, I3, I4
 - 2026-11-18 — the parity carrier lives with the package (it needs the package build) and imports the node-cli-eval projection rather than copying it.

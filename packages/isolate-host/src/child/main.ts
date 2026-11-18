@@ -18,10 +18,16 @@ const send = (kind: number, payload: Uint8Array): void => {
 
 /** Unhandled rejection reasons isolated-vm cannot copy out arrive as this token. */
 const UNCOPYABLE_REASON = 'isolate-host:uncopyable-rejection-reason';
+const GUEST_UNUSABLE_STATUS =
+  'isolate-host: the run ended without a usable status (the guest broke its own runtime)';
+const GUEST_LOST_DIAGNOSTIC =
+  'isolate-host: the run failed and its diagnostic was lost (the guest broke its own runtime)';
 const IMPORT_GAP =
   'Not implemented: isolate-host.dynamic-import (import() is not available in the rifty isolate host; use require(), ADR-0557)';
 
 async function run(request: RunRequest): Promise<void> {
+  // Before the guest's entry exists, a failure is this child's, not the guest's.
+  let started = false;
   const output = new OutputBudget(request.maxOutputBytes);
   let flushScheduled = false;
   let reported = false;
@@ -50,6 +56,10 @@ async function run(request: RunRequest): Promise<void> {
     send(kind, payload);
   };
   const reportMemory = (): void => report(KIND.memory, new Uint8Array(0));
+  const reportUnusableStatus = (text: string, code: number): void => {
+    output.write(2, new TextEncoder().encode(`${text}\n`));
+    report(KIND.exit, Uint8Array.of(code));
+  };
   setInterval(() => {
     if (process.memoryUsage.rss() > request.maxRssBytes) reportMemory();
   }, 25);
@@ -96,7 +106,6 @@ async function run(request: RunRequest): Promise<void> {
         if (fire === undefined) early.push(id);
         else fire.applyIgnored(undefined, [id]);
       },
-      done: (exitCode) => report(KIND.exit, Uint8Array.of(exitCode)),
     });
     const names = Object.keys(bridge);
     for (const [name, fn] of Object.entries(bridge)) {
@@ -119,12 +128,33 @@ async function run(request: RunRequest): Promise<void> {
     rejection = await guest.get('rejection', { reference: true });
     const start = await guest.get('run', { reference: true });
     await jail.delete('__riftyGuest');
-    await start.apply(undefined, [request.code], {
+    // From here a failure is the guest's run, not this child's wiring.
+    started = true;
+    // The status crosses the isolate boundary as copied data and is validated
+    // HERE, in the child's own realm: the guest realm is the guest's, so a
+    // poisoned lookup there can only cost the guest its own status and text,
+    // never the consumer's view of this host (ADR-0557 §5).
+    const reported = (await start.apply(undefined, [request.code], {
       arguments: { copy: true },
-      result: { promise: true },
-    });
+      result: { promise: true, copy: true },
+    })) as { code?: unknown; diagnosed?: unknown } | null;
+    const code = reported === null ? undefined : reported.code;
+    if (typeof code !== 'number' || !Number.isInteger(code) || code < 0 || code > 255) {
+      reportUnusableStatus(GUEST_UNUSABLE_STATUS, 1);
+      return;
+    }
+    // The guest said it owed stderr a diagnostic; if none arrived, its reporting
+    // broke, and a failed run must never read as a clean one.
+    if (reported?.diagnosed === true && !output.wrote(2)) {
+      reportUnusableStatus(GUEST_LOST_DIAGNOSTIC, code);
+      return;
+    }
+    report(KIND.exit, Uint8Array.of(code));
   } catch (error) {
     if (isolate.isDisposed) reportMemory();
+    // The guest's own tail broke (its realm is the guest's to break): a failed
+    // run with this child's diagnostic, never this child reporting a failure.
+    else if (started) reportUnusableStatus(GUEST_UNUSABLE_STATUS, 1);
     else {
       const text = error instanceof Error ? error.message : String(error);
       report(KIND.error, new TextEncoder().encode(text).subarray(0, MAX_ERROR_TEXT));

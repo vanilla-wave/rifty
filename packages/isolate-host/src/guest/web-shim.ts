@@ -15,7 +15,6 @@ export interface HostBridge {
   now(): number;
   readonly timeOrigin: number;
   random(byteLength: number): Uint8Array;
-  done(exitCode: number): void;
   /** The token the child sends for an unhandled rejection reason it cannot copy. */
   readonly uncopyableReason: string;
 }

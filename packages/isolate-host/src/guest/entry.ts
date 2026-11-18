@@ -146,31 +146,33 @@ const HOST_CEILING_MODULES = {
 } as const;
 
 /**
- * The run's terminal, decided by the runtime and the host alone (ADR-0557 §5).
+ * The run's status, as this realm's runtime reports it (ADR-0557 §5).
  *
- * Everything here runs AFTER guest code, so it reads no value the guest can
- * forge: the status is the runtime's own recorded terminal — the only way to
- * one is the real `process.exit`, so a thrown
- * `{code:'RIFTY_PROCESS_EXIT'}` lookalike cannot pick a status — the
- * diagnostic goes straight to the host bridge, and every step is total, so a
- * throw here still ends the run with a status instead of a host failure.
+ * This realm is the guest's: every lookup here can be poisoned, so nothing it
+ * returns is authority. The child validates the number in its own realm and
+ * treats anything else — a throw, a hang in a render, a garbage value — as a
+ * failed run with its own diagnostic. What a guest can reach is therefore its
+ * own status and its own text, never the consumer's view of the host.
  */
-function settle(caught: unknown): number {
+function settle(caught: unknown): { code: number; diagnosed: boolean } {
   // The runtime's own terminal for this process; its `exitCode` is already
-  // clamped by the runtime (`toUint8ExitCode`).
+  // clamped by the runtime (`toUint8ExitCode`). A lookalike the guest threw is
+  // not it, so a thrown `{code:'RIFTY_PROCESS_EXIT'}` cannot pick a status.
   try {
     const terminal = readNodeProcessTerminal(riftyProcess);
     if (terminal !== null) {
       const code = terminal.exitCode;
       if (typeof code === 'number' && Number.isInteger(code) && code >= 0 && code <= 255) {
-        return code;
+        return { code, diagnosed: false };
       }
     }
   } catch {
     // A broken lifecycle read is a failed run, not an exit.
   }
   writeDiagnostic(esmGapOf(caught) ?? caught);
-  return 1;
+  // `diagnosed`: this path owed stderr a line. Object-literal syntax, no lookup
+  // the guest can poison — the child checks the line actually arrived.
+  return { code: 1, diagnosed: true };
 }
 
 /**
@@ -223,21 +225,18 @@ let nativeExit: () => void = () => {
   throw new Error('isolate-host guest: exit before the runtime was installed');
 };
 
-let finished = false;
-function finish(code: number): void {
-  if (finished) return;
-  finished = true;
-  bridge.done(code);
-}
-
-/** An uncaught error the runtime did not claim (no eval lifecycle): Node's fatal exit. */
+/**
+ * An uncaught error the runtime did not claim (no eval lifecycle): Node's fatal
+ * exit. The status rides the run's own return value, so this only reports the
+ * text and lets the drain end the run.
+ */
 function fatal(error: unknown): void {
   writeDiagnostic(error);
-  finish(1);
+  nativeExit();
 }
 
-async function run(source: string): Promise<void> {
-  let code = 0;
+async function run(source: string): Promise<{ code: number; diagnosed: boolean }> {
+  let outcome: { code: number; diagnosed: boolean } = { code: 0, diagnosed: false };
   try {
     installMemoryFs();
     syncMirror().mkdirSync(CWD, { recursive: true });
@@ -281,11 +280,10 @@ async function run(source: string): Promise<void> {
     nativeExit();
     throw new Error('isolate-host guest: process.exit() returned');
   } catch (caught) {
-    code = settle(caught);
+    outcome = settle(caught);
   }
-  // `settle` is total, so this is reached on every path: the child never
-  // reports a guest error as its own failure.
-  finish(code);
+  // Crosses as copied data; the child validates it (ADR-0557 §5).
+  return outcome;
 }
 
 /** A rejection isolated-vm found unhandled after the microtask checkpoint (a copy of the reason). */

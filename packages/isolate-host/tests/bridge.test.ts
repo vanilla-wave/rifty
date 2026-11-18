@@ -48,18 +48,15 @@ const VALID: Readonly<Record<string, (v: unknown) => boolean>> = {
   'timerClear(id)': (v) =>
     Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 2 ** 31 - 1,
   'random(n)': (v) => Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 65536,
-  'done(code)': (v) => Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 255,
 };
 
 describe('host bridge argument validation', () => {
   it('accepts a value only when its contract allows it, and refuses guest-safely', () => {
-    const done: number[] = [];
     const output = new OutputBudget(1 << 20);
     const bridge = createBridge({
       output,
       outputPending: () => {},
       fire: () => {},
-      done: (code) => done.push(code),
     });
     const calls: [string, (g: unknown) => unknown][] = [
       ['write(fd)', (g) => bridge.write(g, Uint8Array.of(120))],
@@ -69,7 +66,6 @@ describe('host bridge argument validation', () => {
       ['timerStart(repeat)', (g) => bridge.timerStart(8, 0, g)],
       ['timerClear(id)', (g) => bridge.timerClear(g)],
       ['random(n)', (g) => bridge.random(g)],
-      ['done(code)', (g) => bridge.done(g)],
     ];
     const bad: string[] = [];
     for (const g of GARBAGE) {
@@ -101,7 +97,6 @@ describe('host bridge argument validation', () => {
     expect(bridge.random(4)).toHaveLength(4);
     bridge.write(1, Uint8Array.of(65));
     expect(output.drain()).toEqual([[1, Uint8Array.of(65)]]);
-    expect(done).toEqual([0]);
     for (const id of [7, 8]) bridge.timerClear(id);
   });
 
@@ -110,7 +105,6 @@ describe('host bridge argument validation', () => {
       output: new OutputBudget(16),
       outputPending: () => {},
       fire: () => {},
-      done: () => {},
     });
     const first = bridge.now();
     // Bounded by the wall clock, so a constant `now()` fails here instead of spinning.
@@ -134,7 +128,7 @@ describe('host bridge reachability from the guest (I3)', () => {
         seen.add(v);
         // An ivm.Callback is a native function; intrinsics (Math.random) are too,
         // so a hit counts only when the object carries the bridge's own shape.
-        const bridgeish = ['write', 'done', 'timerStart', 'timerClear', 'random'].every(
+        const bridgeish = ['write', 'timerStart', 'timerClear', 'random'].every(
           (k) => { try { return typeof v[k] === 'function' } catch { return false } },
         );
         if (bridgeish) bad.push(path);

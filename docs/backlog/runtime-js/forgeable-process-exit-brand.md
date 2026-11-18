@@ -18,7 +18,11 @@ Measured in the isolate host (ADR-0557) @ 2cbb37c50:
 → exit 0 with no diagnostic; `node -e` exits 1. The host's own tail now reads
 the runtime's recorded terminal instead of the thrown value, so a top-level
 forgery no longer works there, but a throw the *runtime* interprets still does.
-Fix direction: a private brand (symbol or class identity) checked by the
+Two more measured @ b9ff5be73: the signal object is mutable and catchable, so
+`try { process.exit(3) } catch (e) { e.exitCode = 0 }` exits 0 (Node 3), and
+`try { process.exit(3) } catch {}; console.log('after')` prints `after` where
+Node prints nothing. `Object.freeze` on the signal in `#terminate` would close
+the mutation half. Fix direction: a private brand (symbol or class identity) checked by the
 runtime, so only the runtime's own signal counts. Browser kernel children share
 the shape, so the same forgery should be probed there.
 

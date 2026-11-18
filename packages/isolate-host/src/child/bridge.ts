@@ -35,6 +35,7 @@ function guard<A extends unknown[], R>(name: string, fn: (...args: A) => R): (..
 export class OutputBudget {
   #kept = 0;
   #truncated = false;
+  readonly #wrote = { 1: false, 2: false };
   readonly #pending = {
     1: { buf: new Uint8Array(0), len: 0 },
     2: { buf: new Uint8Array(0), len: 0 },
@@ -43,6 +44,11 @@ export class OutputBudget {
 
   get truncated(): boolean {
     return this.#truncated;
+  }
+
+  /** Whether any byte was ever accepted for `fd` (the diagnostic actually arrived). */
+  wrote(fd: 1 | 2): boolean {
+    return this.#wrote[fd];
   }
 
   /** Accept a guest write; true when new bytes or the truncation flip await a flush. */
@@ -59,6 +65,7 @@ export class OutputBudget {
       grown.set(slot.buf.subarray(0, slot.len));
       slot.buf = grown;
     }
+    this.#wrote[fd] = true;
     slot.buf.set(bytes.subarray(0, take), slot.len);
     slot.len += take;
     this.#kept += take;
@@ -81,7 +88,6 @@ export interface BridgeHooks {
   readonly output: OutputBudget;
   outputPending(): void;
   fire(id: number): void;
-  done(exitCode: number): void;
 }
 
 export function createBridge(hooks: BridgeHooks) {
@@ -117,10 +123,6 @@ export function createBridge(hooks: BridgeHooks) {
     random: guard('random', (n: unknown) => {
       if (!isInt(n, 0, 65536)) refuse('random: length must be an integer in 0..65536');
       return new Uint8Array(randomBytes(n));
-    }),
-    done: guard('done', (exitCode: unknown) => {
-      if (!isInt(exitCode, 0, 255)) refuse('done: exit code must be an integer in 0..255');
-      hooks.done(exitCode);
     }),
   };
 }
