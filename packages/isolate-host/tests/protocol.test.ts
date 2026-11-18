@@ -35,6 +35,10 @@ const HOSTILE: Readonly<Record<string, string>> = {
   'output with an extra key (padding)':
     "[{ type: 'output', chunks: [[1, new Uint8Array([65])]], truncated: false, pad: 'x'.repeat(1 << 20) }]",
   'exit with an extra key': "[{ type: 'exit', exitCode: 0, truncated: false, extra: 1 }]",
+  'padding on a chunk tuple':
+    "[(() => { const c = [1, new Uint8Array([65])]; c.pad = 'x'.repeat(1 << 20); return { type: 'output', chunks: [c], truncated: false }; })()]",
+  'padding on the chunks array':
+    "[(() => { const cs = [[1, new Uint8Array([65])]]; cs.pad = 'x'.repeat(1 << 20); return { type: 'output', chunks: cs, truncated: false }; })()]",
   'exit code string': "[{ type: 'exit', exitCode: 'pwn', truncated: false }]",
   'exit code fraction': "[{ type: 'exit', exitCode: 1.5, truncated: false }]",
   'exit code out of range': "[{ type: 'exit', exitCode: 300, truncated: false }]",
@@ -77,4 +81,31 @@ describe('consumer treats child IPC as hostile', () => {
       expect(report.ms).toBeLessThan(1000);
     });
   }
+
+  it('accepted output is copied, not kept as views into IPC messages', () => {
+    // 2^18 valid one-byte messages; the child then idles. While the call is pending
+    // the consumer may hold O(cap) bytes, not the deserialized message buffers.
+    const entry = hostilePackage(
+      'valid one-byte flood',
+      "Array.from({ length: 1 << 18 }, () => ({ type: 'output', chunks: [[1, new Uint8Array([65])]], truncated: false }))",
+    );
+    const script = `const { runCode } = await import(${JSON.stringify(new URL(`file://${entry}`).href)});
+      const base = (globalThis.gc(), process.memoryUsage().arrayBuffers);
+      runCode('1', { timeoutMs: 8000, maxOutputBytes: 1 << 20 }).then((r) => console.log(JSON.stringify({ heldMiB, out: r.stdout.length, termination: r.termination })));
+      let heldMiB = -1;
+      setTimeout(() => { globalThis.gc(); heldMiB = (process.memoryUsage().arrayBuffers - base) / (1 << 20); }, 6000);`;
+    const out = execFileSync(
+      process.execPath,
+      ['--expose-gc', '--input-type=module', '-e', script],
+      {
+        encoding: 'utf8',
+        timeout: 20_000,
+      },
+    );
+    const report = JSON.parse(out) as { heldMiB: number; out: number; termination: string };
+    expect(report.out).toBe(1 << 18);
+    expect(report.termination).toBe('timeout');
+    expect(report.heldMiB).toBeGreaterThanOrEqual(0);
+    expect(report.heldMiB).toBeLessThan(4);
+  }, 30_000);
 });

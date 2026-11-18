@@ -109,10 +109,13 @@ function violation(message: unknown, cap: number, state: ProtocolState): string 
       return state.ready ? 'repeated ready' : null;
     case 'output': {
       if (!Array.isArray(m.chunks) || m.chunks.length > 2) return 'output chunks';
+      // Exact shape below the top level too: no named property rides on an array.
+      if (Object.keys(m.chunks).length !== m.chunks.length) return 'output chunks keys';
       if (typeof m.truncated !== 'boolean') return 'output truncated flag';
       let bytes = 0;
       for (const chunk of m.chunks as unknown[]) {
-        if (!Array.isArray(chunk) || chunk.length !== 2) return 'output chunk shape';
+        if (!Array.isArray(chunk) || chunk.length !== 2 || Object.keys(chunk).length !== 2)
+          return 'output chunk shape';
         if (chunk[0] !== 1 && chunk[0] !== 2) return 'output fd';
         if (!(chunk[1] instanceof Uint8Array)) return 'output bytes';
         if (chunk[1].byteLength === 0) return 'empty output chunk';
