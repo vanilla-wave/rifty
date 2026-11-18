@@ -87,6 +87,13 @@ Date.now() smallest delta: 1 ms
 
 isolated-vm thread pool: `src/isolate/scheduler.cc:12` `thread_pool_t thread_pool{std::thread::hardware_concurrency() + 1};`
 
+Rival route "A + code cache" — `node a-cache.mjs <pkg>` (spawn per call, guest compiled from a V8 cache file
+produced by the first run; `oneshot.mjs` reports its RSS at the result):
+
+```
+A + code cache: p50 74.5 ms, max 80.3 ms (10 sequential spawn→exit); child RSS at result 108 MiB max
+```
+
 ## Prototype sources
 
 ### `lib.mjs`
@@ -153,6 +160,8 @@ async function runIn(isolate, code, { cache }) {
   }
 }
 
+export const setCachedData = (c) => { cachedData = c; };
+export const getCachedData = () => cachedData;
 ```
 
 ### `worker.mjs`
@@ -335,4 +344,36 @@ await new Promise((resolve) => {
 const neighbours = await Promise.race([Promise.allSettled(guests.map((g) => g.done)), new Promise((r) => setTimeout(() => r('neighbours hung 6 s'), 6000))]);
 console.log(`${name}: base ${Math.round(base/1048576)} MiB, threshold +256 → crossed ${JSON.stringify(crossed)}; max RSS ${Math.round(maxRss/1048576)} MiB; culprit ${settledC ?? 'unsettled'}; catastrophic [${catastrophic}]; neighbours ${JSON.stringify(Array.isArray(neighbours) ? neighbours.map((n) => n.status === 'fulfilled' ? n.value.stdout.trim() : n.reason.message) : neighbours)}`);
 process.kill(process.pid, 'SIGKILL');
+```
+
+### `oneshot.mjs`
+
+```js
+// Usage: node --no-node-snapshot oneshot.mjs <pkg> <cache-file> — one process, one isolate, one call (A + V8 code cache).
+import { readFileSync, existsSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+const [, , pkg, cacheFile] = process.argv;
+const ivm = createRequire(`${pkg}/package.json`)('isolated-vm');
+const { runOne, setCachedData, getCachedData } = await import('./lib.mjs');
+if (existsSync(cacheFile)) setCachedData(new ivm.ExternalCopy(readFileSync(cacheFile).buffer.slice(0)));
+const r = await runOne('console.log(1)', { cache: true });
+if (!existsSync(cacheFile)) writeFileSync(cacheFile, Buffer.from(getCachedData().copy()));
+if (r.stdout !== '1\n') throw new Error(JSON.stringify(r));
+process.stdout.write(String(process.memoryUsage.rss()));
+process.kill(process.pid, 'SIGKILL');
+```
+
+### `a-cache.mjs`
+
+```js
+// Usage: node a-cache.mjs <pkg> — A with a V8 code cache: spawn per call, cached compile; wall + child peak RSS.
+import { spawn } from 'node:child_process';
+import { rmSync } from 'node:fs';
+const pkg = process.argv[2]; const cache = '/tmp/rifty-c-proto/guest.cache';
+rmSync(cache, { force: true });
+const once = () => new Promise((res) => { const t0 = performance.now(); const c = spawn(process.execPath, ['--no-node-snapshot', '/tmp/rifty-c-proto/oneshot.mjs', pkg, cache]); let out = ''; c.stdout.on('data', (d) => out += d); c.on('exit', () => res({ ms: performance.now() - t0, rss: Number(out) / 1048576 })); });
+await once();
+const rs = []; for (let i = 0; i < 10; i++) rs.push(await once());
+const ms = rs.map((r) => r.ms).sort((a, b) => a - b);
+console.log(`A + code cache: p50 ${ms[4].toFixed(1)} ms, max ${ms.at(-1).toFixed(1)} ms (10 sequential spawn→exit); child RSS at result ${Math.round(Math.max(...rs.map((r) => r.rss)))} MiB max`);
 ```

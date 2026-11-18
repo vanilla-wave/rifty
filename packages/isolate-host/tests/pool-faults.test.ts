@@ -1,8 +1,8 @@
 /**
  * Goal isolate-host-worker-pool, acceptance rows 5–8: a culprit on a shared
  * worker (memory, time, host-side floods) costs its neighbours nothing but
- * delay (I3, I4, I8); a worker lost with no culprit reruns its calls once
- * (I5). Each scenario runs in its own cold consumer process, so 4 concurrent
+ * delay (I2, I3, I4); a worker lost with no culprit reruns its calls once,
+ * inside their deadline (I5). Each scenario runs in its own cold consumer process, so 4 concurrent
  * calls share its one worker (row 2 proves the packing).
  */
 import { describe, expect, it } from 'vitest';
@@ -16,11 +16,18 @@ interface Outcome {
   next: unknown;
 }
 
-/** 3 neighbours (b<i> at 3 s), then the culprit, concurrently on one cold worker; then one more call. */
-async function withNeighbours(culprit: string, options: string): Promise<Outcome> {
+/**
+ * 3 neighbours (b<i> at 3 s, `neighbourOptions`), then the culprit, concurrently on
+ * one cold worker; then one more call.
+ */
+async function withNeighbours(
+  culprit: string,
+  options: string,
+  neighbourOptions = '{}',
+): Promise<Outcome> {
   const { value } = await consumer(
     `const neighbours = [0, 1, 2].map((i) =>
-       settle(runCode("console.log('a" + i + "'); setTimeout(() => console.log('b" + i + "'), 3000)")));
+       settle(runCode("console.log('a" + i + "'); setTimeout(() => console.log('b" + i + "'), 3000)", ${neighbourOptions})));
      await sleep(300);
      const t0 = now();
      const running = settle(runCode(${JSON.stringify(culprit)}, ${options}));
@@ -83,7 +90,9 @@ describe('time on a shared worker (I4)', () => {
   ])(
     '%s: culprit timeout within timeoutMs + 1000 ms; neighbours exact',
     async (_, code) => {
-      const v = await withNeighbours(code, '{ timeoutMs: 1500 }');
+      // A neighbour rerun after losing the worker could not finish inside 4000 ms: they
+      // must finish on the retiring worker.
+      const v = await withNeighbours(code, '{ timeoutMs: 1500 }', '{ timeoutMs: 4000 }');
       const { ms, ...culprit } = v.culprit;
       expect(culprit).toEqual({
         stdout: 'c\n',
@@ -101,7 +110,7 @@ describe('time on a shared worker (I4)', () => {
   );
 });
 
-describe('host-side floods change a neighbour only by delay (I8)', () => {
+describe('host-side floods change a neighbour only by delay (I2)', () => {
   it.each([
     [
       'an output flood past a 1 KiB cap',
@@ -155,6 +164,23 @@ describe('a worker lost with no culprit (I5)', () => {
     expect(v.result.rejected).toMatch(/isolate-host .*exited unexpectedly .*SIGKILL/);
     expect(v.ms).toBeLessThan(1000);
     expect(v.next).toEqual(NEXT);
+  });
+
+  it('a rerun that cannot finish inside its original deadline rejects naming the lost worker, at the deadline', async () => {
+    const { value } = await consumer(`
+      const t0 = now();
+      const call = settle(runCode("console.log('x'); setTimeout(() => console.log('y'), 3000)", { timeoutMs: 4000 }));
+      const first = await waitFor(() => children()[0], 5000);
+      await sleep(1500);
+      kill(first);
+      // The rerun is attempted (a new worker), not refused up front.
+      await waitFor(() => children().find((p) => p !== first), 2000);
+      const result = await call;
+      out({ result, ms: now() - t0 });`);
+    const v = value as { result: { rejected?: string }; ms: number };
+    expect(v.result.rejected).toMatch(/isolate-host .*exited unexpectedly .*SIGKILL/);
+    expect(v.ms).toBeGreaterThanOrEqual(4000);
+    expect(v.ms).toBeLessThanOrEqual(4000 + 1000);
   });
 
   it('two calls sharing a killed worker both resolve exactly', async () => {
