@@ -81,6 +81,8 @@ export class NodeProcessExit {
   #exiting = false;
   /** The first requested terminal: after it the process is gone for Node. */
   #terminal: RiftyProcessExitSignal | null = null;
+  /** The fatal status `beginFatal` read after the `'exit'` listeners. */
+  #fatalStatus: number | null = null;
 
   constructor(host: NodeProcessExitHost) {
     this.#host = host;
@@ -106,7 +108,10 @@ export class NodeProcessExit {
     return this.#terminate(toUint8ExitCode(this.#host.readExitCode() ?? 0));
   }
 
-  /** No listener: Node sets `exitCode = 1` and emits `'exit'` 1 behind `_exiting`. */
+  /**
+   * No listener: Node sets `exitCode = 1` and emits `'exit'` 1 behind `_exiting`,
+   * then exits with `exitCode` read before any later task (TriggerUncaughtException).
+   */
   beginFatal(): void {
     if (this.#exiting) return;
     this.#exiting = true;
@@ -116,16 +121,18 @@ export class NodeProcessExit {
     } catch {
       // Node: "Nothing to be done about it at this point."
     }
+    this.#fatalStatus = toUint8ExitCode(this.#host.readExitCode() ?? 1);
   }
 
   /**
-   * After `beginFatal`, Node prints and exits with `exitCode ?? 1` inside its
+   * After `beginFatal`, Node prints and exits with that status inside its
    * handler — unless an `exit()` already ended it (e.g. in the fatal `'exit'`).
    */
   fatal(error: unknown): never {
     if (this.#terminal !== null) throw this.#terminal;
     this.#host.writeStderr(`${formatThrown(error)}\n`);
-    return this.#terminate(toUint8ExitCode(this.#host.readExitCode() ?? 1), { cause: error });
+    const status = this.#fatalStatus ?? toUint8ExitCode(this.#host.readExitCode() ?? 1);
+    return this.#terminate(status, { cause: error });
   }
 
   /** A throwing `uncaughtException` listener: stderr, status 7, no `'exit'`. */
@@ -140,6 +147,7 @@ export class NodeProcessExit {
     this.#host.writeExitCode(undefined);
     this.#exiting = false;
     this.#terminal = null;
+    this.#fatalStatus = null;
   }
 
   /**

@@ -3,7 +3,7 @@ area: runtime-js
 status: draft
 title: "An `'exit'` listener's throw reaches `'uncaughtException'`, and its `exitCode` sets a fatal throw's status, as in Node"
 created: 2026-09-24
-why: rifty treats a throw inside an `'exit'` listener as a new fatal error (stderr, status 1) where Node routes it to `'uncaughtException'` and keeps the status; after a no-listener throw rifty exits 1 even when an `'exit'` listener set `exitCode` (Node: that code)
+why: rifty treats a throw inside an `'exit'` listener as a new fatal error (stderr, status 1) where Node routes it to `'uncaughtException'` and keeps the status; after a no-listener throw rifty exits 1 even when an `'exit'` listener set `exitCode` (Node: that code) — kernel children and no-COI asynchronous throws; a no-COI project command's synchronous entry/eval throw honours it since 2026-11-18
 sources: [docs/backlog/runtime-js/reference/process-lifecycle-events-exit-code-evidence.md, docs/adr/runtime-js/0445-dispatch-node-process-lifecycle-events-before-terminal-handling.md, docs/public/compat/process.md]
 code: [packages/runtime-js/src/builtins/process-lifecycle-events.ts, packages/runtime-js/src/builtins/process.ts]
 ---

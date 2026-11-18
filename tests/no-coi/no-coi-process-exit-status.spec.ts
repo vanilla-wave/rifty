@@ -73,6 +73,28 @@ const exitEntryTimer = program(
   'exit-entry-timer',
   `${EXIT_ROW}\nsetTimeout(() => console.log('L|after'), 0);\nprocess.exit(3);`,
 );
+// The status is read after the 'exit' listeners, before any later task; the
+// report goes to fd 2, not a guest-patched process.stderr.write.
+const evalFatalMicrotask = {
+  name: 'eval-fatal-microtask-exit-code',
+  files: {},
+  nodeArgv: [
+    '-e',
+    "Promise.resolve().then(()=>{process.exitCode=5});throw new Error('FATAL-MICRO')",
+  ],
+  line: `node -e "Promise.resolve().then(()=>{process.exitCode=5});throw new Error('FATAL-MICRO')"`,
+  fatal: 'FATAL-MICRO',
+};
+const fatalSilencedStderr = program(
+  'fatal-silenced-stderr',
+  "process.stderr.write = () => true;\nthrow new Error('FATAL-SILENCED');",
+  'FATAL-SILENCED',
+);
+const fatalThrowingStderr = program(
+  'fatal-throwing-stderr',
+  "process.stderr.write = () => { throw new Error('write'); };\nthrow new Error('FATAL-THROWING');",
+  'FATAL-THROWING',
+);
 
 const commandCases: readonly ProcessLifecycleCase[] = [
   listenerThrowRejection,
@@ -96,6 +118,9 @@ const commandCases: readonly ProcessLifecycleCase[] = [
   fatalEntryExitCode,
   fatalEntryTimer,
   exitEntryTimer,
+  evalFatalMicrotask,
+  fatalSilencedStderr,
+  fatalThrowingStderr,
 ];
 
 const binCases: readonly ProcessLifecycleCase[] = [

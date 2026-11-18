@@ -16,7 +16,8 @@ import {
 // rifty's host modules) are dropped; the trailer keeps the major version.
 // Compared: exit status and every FatalShape field. A field rifty does not
 // reproduce on any host is a declared residual (compat process.md, "Fatal
-// error stderr bytes") and must still differ, so a fix undeclares it.
+// error stderr bytes"): rifty prints exactly the declared value and Node does
+// not, so any other output or a fix fails until the declaration changes.
 
 const ROOT = '/fatal-stderr';
 
@@ -37,7 +38,8 @@ interface FatalShape {
 }
 
 interface FatalRow extends ProcessLifecycleCase {
-  readonly residual: readonly (keyof FatalShape)[];
+  /** Rifty's declared value of each field that differs from Node. */
+  readonly residual: Partial<FatalShape>;
 }
 
 const FRAME = /^\s+at /u;
@@ -89,56 +91,64 @@ function fatalShape(stderr: string, root: string): FatalShape {
   };
 }
 
-// Residuals on every host (kernel child included): `header` and `trailer` are
-// not printed outside `node -e` (compat process.md "Fatal error stderr bytes");
-// CJS/ESM `userFrame` positions/naming: compat modules.md "CJS/ESM stack
-// positions" (backlog runtime-js/cjs-wrapper-stack-positions, esm-stack-positions);
-// a compile error prints rifty's ModuleLoadError, a non-Error lacks the hint,
-// an eval `require()` miss lacks the inspected props.
+// Residuals: `header`/`trailer`/`hint` are not printed outside `node -e`;
+// `userFrame` positions/names per compat modules.md "CJS/ESM stack positions"
+// (backlog runtime-js/cjs-wrapper-stack-positions, esm-stack-positions); a
+// compile error prints the loader's ModuleLoadError; an eval `require()` miss
+// lacks the inspected props.
+const UNPRINTED = { header: null, trailer: null } as const;
 const rows: readonly FatalRow[] = [
   {
     name: 'cjs-entry-throw',
     files: { 'fail.cjs': "throw new Error('boom');\n" },
     nodeArgv: ['fail.cjs'],
-    residual: ['header', 'userFrame', 'trailer'],
+    residual: { ...UNPRINTED, userFrame: 'at Object.eval (<root>/fail.cjs:3:7)' },
   },
   {
     name: 'eval-throw',
     files: {},
     nodeArgv: ['-e', "throw new Error('boom')"],
     line: `node -e "throw new Error('boom')"`,
-    residual: ['trailer'],
+    residual: { trailer: null },
   },
   {
     name: 'esm-entry-throw',
     files: { 'fail.mjs': "throw new Error('boom');\n" },
     nodeArgv: ['fail.mjs'],
-    residual: ['header', 'userFrame', 'trailer'],
+    residual: { ...UNPRINTED, userFrame: 'at eval (<root>/fail.mjs:6:7)' },
   },
   {
     name: 'cjs-syntax-error',
     files: { 'syntax.cjs': 'const a = 1;\nlet x = ;\n' },
     nodeArgv: ['syntax.cjs'],
-    residual: ['header', 'error', 'trailer'],
+    residual: {
+      ...UNPRINTED,
+      error:
+        "ModuleLoadError: Failed to compile CJS module <root>/syntax.cjs: Unexpected token ';'",
+    },
   },
   {
     name: 'esm-syntax-error',
     files: { 'syntax.mjs': 'const a = 1;\nlet x = ;\n' },
     nodeArgv: ['syntax.mjs'],
-    residual: ['header', 'error', 'trailer'],
+    residual: {
+      ...UNPRINTED,
+      error:
+        'ModuleLoadError: Failed to parse ESM source for <root>/syntax.mjs: Unexpected token (2:8)',
+    },
   },
   {
     name: 'eval-module-not-found',
     files: {},
     nodeArgv: ['-e', "require('missing-pkg')"],
     line: `node -e "require('missing-pkg')"`,
-    residual: ['header', 'props', 'trailer'],
+    residual: { ...UNPRINTED, props: null },
   },
   {
     name: 'non-error-throw',
     files: { 'throw-number.cjs': 'throw 42;\n' },
     nodeArgv: ['throw-number.cjs'],
-    residual: ['header', 'hint', 'trailer'],
+    residual: { ...UNPRINTED, hint: false },
   },
 ];
 
@@ -187,20 +197,17 @@ for (const row of rows) {
     const node = fatalShape(oracle.stderr, oracle.root);
     const rifty = fatalShape(observed.stderr, ROOT);
     const label = `${row.name} vs Node ${oracle.version}\n--- node\n${oracle.stderr}\n--- rifty\n${observed.stderr}`;
+    const declared = row.residual as Readonly<Record<string, unknown>>;
     const compared = (shape: FatalShape) =>
-      Object.fromEntries(
-        Object.entries(shape).filter(
-          ([field]) => !row.residual.includes(field as keyof FatalShape),
-        ),
-      );
+      Object.fromEntries(Object.entries(shape).filter(([field]) => !(field in declared)));
     expect(
       { status: observed.status, exitCode: observed.exitCode, ...compared(rifty) },
       label,
     ).toEqual({ status: 'exited', exitCode: oracle.code, ...compared(node) });
-    for (const field of row.residual) {
-      expect(rifty[field], `${label}\ndeclared residual ${field} now matches Node`).not.toEqual(
-        node[field],
-      );
+    for (const [field, value] of Object.entries(declared)) {
+      const key = field as keyof FatalShape;
+      expect(rifty[key], `${label}\ndeclared residual ${field}`).toEqual(value);
+      expect(node[key], `${label}\nNode now prints the declared ${field}`).not.toEqual(value);
     }
   });
 }

@@ -173,10 +173,13 @@ sample. Node v24.16.0 facts: evidence §O1–§O3.
   command's no-listener entry/eval throw was the shell's `node: <message>`:
   no stack, a later task's `exit()` set the status, timers ran. It now runs
   the fatal terminal at the entry catch (`terminateFatal`, as a rejection at
-  the trap): the error's stack on stderr, `uint8(exitCode ?? 1)` read after
-  the `'exit'` listeners, and any entry terminal (`exit()` included) clears
-  the invocation's timers at once (a 0 ms timer queued ahead of the drain
-  ran). A declared gap behind it is named as behind a fatal rejection. Kernel
-  children unchanged. Node: `src/node_errors.cc` TriggerUncaughtException
-  @v24.16.0 (`env->Exit(env->exit_code(kGenericUserError))`); proof
+  the trap) to the command's stderr, not a guest-patched
+  `process.stderr.write` (Node writes fd 2). The fatal status is read when
+  `beginFatal` returns, after the `'exit'` listeners, so a microtask before
+  the host's catch cannot change it. Any entry terminal (`exit()` included)
+  clears the invocation's timers at once (a 0 ms timer queued ahead of the
+  drain ran). A declared gap behind it is named as behind a fatal rejection.
+  Kernel children unchanged. Residual: such a microtask still runs (Node:
+  never). Node: `src/node_errors.cc` TriggerUncaughtException @v24.16.0
+  (`env->Exit(env->exit_code(kGenericUserError))`); proof
   `tests/no-coi/no-coi-fatal-stderr.spec.ts`, `no-coi-process-exit-status.spec.ts`.

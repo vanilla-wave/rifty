@@ -9,8 +9,9 @@ import { runNoCoiProjectCommand } from './no-coi-project-command.ts';
 // terminal, no later callback of that process runs, the next invocation is clean.
 // Node v24.16.0: `setTimeout(write, 20 | 0); process.exit(3)` → status 3, no write;
 // a throwing `uncaughtException` listener → status 7, no write; a no-listener
-// entry throw → its stack on stderr, status 1 (an 'exit' listener's exitCode
-// wins), no write, also for a 0 ms timer queued before it.
+// entry throw → its stack on stderr (fd 2, past a patched process.stderr.write),
+// status 1 (an 'exit' listener's exitCode wins; a later microtask's does not),
+// no write, also for a 0 ms timer queued before it.
 
 const nativeProcess = Object.getOwnPropertyDescriptor(globalThis, 'process');
 
@@ -102,13 +103,42 @@ throw new Error('entry');`,
       '/project/ok.cjs': "console.log('next');",
     });
 
-    const result = await run('node fatal.cjs');
-    expect(result).toMatchObject({ status: 'exited', exitCode: 1 });
+    // The next segment runs once the process is gone; its timer never does.
+    const result = await run('node fatal.cjs ; echo next');
+    expect(result).toMatchObject({ status: 'exited', exitCode: 0, stdout: 'next\n' });
     expect(result.requiresTermination).toBeUndefined();
     expect(result.stderr).toMatch(/^Error: entry\n {4}at \S+ \(\/project\/fatal\.cjs:\d+:7\)\n/u);
     await run('sleep 0.05');
     expect(fs.existsSync('/project/late.txt')).toBe(false);
     expect(await run('node ok.cjs')).toMatchObject({ exitCode: 0, stdout: 'next\n' });
+  });
+
+  it.each([
+    ['an entry', 'node fatal.cjs'],
+    [
+      'an eval',
+      `node -e "Promise.resolve().then(() => { process.exitCode = 5; }); throw new Error('entry')"`,
+    ],
+  ])('keeps the fatal status of %s throw from a microtask queued before it', async (_, line) => {
+    const { run } = fixture({
+      '/project/fatal.cjs':
+        "Promise.resolve().then(() => { process.exitCode = 5; });\nthrow new Error('entry');",
+    });
+
+    expect(await run(line)).toMatchObject({ status: 'exited', exitCode: 1 });
+  });
+
+  it.each([
+    ['silenced', '() => true'],
+    ['throwing', "() => { throw new Error('write'); }"],
+  ])('prints the fatal report to the invocation stderr past a %s guest write', async (_, write) => {
+    const { run } = fixture({
+      '/project/fatal.cjs': `process.stderr.write = ${write};\nthrow new Error('entry');`,
+    });
+
+    const result = await run('node fatal.cjs');
+    expect(result).toMatchObject({ status: 'exited', exitCode: 1 });
+    expect(result.stderr).toMatch(/^Error: entry\n {4}at /u);
   });
 
   it('ends a no-listener entry throw with the exitCode its exit listener sets', async () => {
