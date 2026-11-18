@@ -1,6 +1,6 @@
 ---
 area: distribution
-status: draft
+status: ready
 title: Isolate host pool acceptance carrier — shared warm workers, neighbour-safe limits and reruns as executable tests
 created: 2026-11-18
 why: First unit of goal isolate-host-worker-pool; the scenario must be executable and RED before the pool exists.
