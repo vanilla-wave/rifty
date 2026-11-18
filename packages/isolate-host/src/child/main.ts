@@ -90,7 +90,7 @@ async function run(request: RunRequest): Promise<void> {
     const jail = context.global;
     // Bound once the bundle has loaded; the bundle arms no timer while loading.
     const guestFire: { ref?: ivm.Reference<(id: number) => void> } = {};
-    const { functions } = createHostBridge({
+    const { functions, timeOrigin } = createHostBridge({
       write: (fd, bytes) => {
         if (!output.write(fd, bytes) || flushScheduled) return;
         flushScheduled = true;
@@ -104,7 +104,7 @@ async function run(request: RunRequest): Promise<void> {
       await jail.set(`__riftyHost_${name}`, new ivm.Callback(fn));
     }
     await context.eval(`{
-      const bridge = { timeOrigin: ${performance.timeOrigin} };
+      const bridge = { timeOrigin: ${timeOrigin} };
       for (const name of ${JSON.stringify(names)}) {
         bridge[name] = globalThis['__riftyHost_' + name];
         delete globalThis['__riftyHost_' + name];

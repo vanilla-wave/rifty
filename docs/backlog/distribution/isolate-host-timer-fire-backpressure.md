@@ -5,7 +5,7 @@ title: Isolate host timer expiries have no backpressure into the isolate — an 
 created: 2026-11-18
 why: The child queues one `fire.applyIgnored` per host timer tick with no bound, so many short intervals pile up calls faster than the isolate runs them and the child dies of memory where Node just runs them.
 sources: [docs/public/compat/isolate-host.md]
-code: [packages/isolate-host/src/child/main.ts, packages/isolate-host/src/child/bridge.ts]
+code: [packages/isolate-host/src/child/main.ts, packages/isolate-guest/src/bridge.ts]
 ---
 
 ## Context

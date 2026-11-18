@@ -10,24 +10,28 @@ import type { HostFunctions } from './contract.ts';
 
 const MAX_TIMER = 2 ** 31 - 1;
 
+/** Errors `refuse` created: the only ones `guard` lets through. */
+const refusals = new WeakSet<object>();
+
 /** A refusal the guest sees: no host stack crosses the boundary. */
 function refuse(message: string): never {
   const error = new TypeError(`isolate-host bridge: ${message}`);
   error.stack = `TypeError: ${error.message}`;
+  refusals.add(error);
   throw error;
 }
 
 const isInt = (v: unknown, min: number, max: number): v is number =>
   typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max;
 
-/** Run `fn`; any unexpected host failure becomes a refusal, never a host stack. */
+/** Run `fn`; anything but the bridge's own refusal becomes `<name> failed`, never a host error. */
 function guard<A extends unknown[], R>(name: string, fn: (...args: A) => R): (...args: A) => R {
   return (...args) => {
     try {
       return fn(...args);
     } catch (error) {
-      if (error instanceof TypeError && error.message.startsWith('isolate-host bridge: '))
-        throw error;
+      // By identity: a hook's own `TypeError('isolate-host bridge: …')` carries host text and stack.
+      if (refusals.has(error as object)) throw error;
       return refuse(`${name} failed`);
     }
   };
@@ -43,11 +47,16 @@ export interface HostHooks {
 export interface HostBridge {
   /** Install these, and only these, for the guest (plus `timeOrigin`). */
   readonly functions: HostFunctions;
+  /** The guest's `performance.timeOrigin`: this bridge's creation, epoch ms. */
+  readonly timeOrigin: number;
   /** End of the call: clear every host timer; later `timerStart` arms nothing. */
   close(): void;
 }
 
 export function createHostBridge(hooks: HostHooks): HostBridge {
+  // The guest's clock starts with its call, as a fresh `node -e` process's does:
+  // never the embedder's uptime, and nothing that links one call to another.
+  const origin = performance.now();
   const timers = new Map<number, NodeJS.Timeout>();
   let closed = false;
   const clear = (id: number): void => {
@@ -83,7 +92,7 @@ export function createHostBridge(hooks: HostHooks): HostBridge {
       if (!isInt(id, 1, MAX_TIMER)) refuse('timerClear: id must be an integer in 1..2^31-1');
       clear(id);
     }),
-    now: guard('now', () => performance.now()),
+    now: guard('now', () => performance.now() - origin),
     random: guard('random', (n: unknown) => {
       if (!isInt(n, 0, 65536)) refuse('random: length must be an integer in 0..65536');
       return new Uint8Array(randomBytes(n));
@@ -91,6 +100,7 @@ export function createHostBridge(hooks: HostHooks): HostBridge {
   };
   return {
     functions,
+    timeOrigin: performance.timeOrigin + origin,
     close() {
       closed = true;
       for (const timer of timers.values()) clearTimeout(timer);

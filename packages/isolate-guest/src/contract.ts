@@ -11,7 +11,7 @@ export interface HostFunctions {
   /** Arm host timer `id` (1..2^31-1) for `ms` (0..2^31-1); expiry → `GuestEntry.fire(id)`. */
   timerStart(id: number, ms: number, repeat: boolean): void;
   timerClear(id: number): void;
-  /** ms since `timeOrigin`. */
+  /** ms since `timeOrigin` (the call's start). */
   now(): number;
   /** `byteLength` (0..65536) random bytes. */
   random(byteLength: number): Uint8Array;
@@ -19,7 +19,7 @@ export interface HostFunctions {
 
 /** `globalThis.__riftyIsolateHost`, set by the embedder before the bundle runs. */
 export interface GuestHost extends HostFunctions {
-  /** `performance.timeOrigin` of the host, epoch ms. */
+  /** The call's start, epoch ms (`HostBridge.timeOrigin`). */
   readonly timeOrigin: number;
 }
 

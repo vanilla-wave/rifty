@@ -6,8 +6,9 @@
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
 import { runCode } from '../../isolate-host/src/index.ts';
@@ -25,6 +26,12 @@ const UNCOPYABLE = ['Promise.reject({ f() {} })', 'Promise.reject(Symbol())', 'P
 const carrier = it;
 
 const PACKAGE_DIR = fileURLToPath(new URL('..', import.meta.url));
+/** isolated-vm as rifty's host installs it (7.0.2), resolved from that package. */
+const WORKSPACE_IVM = dirname(
+  createRequire(join(PACKAGE_DIR, '../isolate-host/package.json')).resolve(
+    'isolated-vm/package.json',
+  ),
+);
 const work = mkdtempSync(join(tmpdir(), 'isolate-guest-embedder-'));
 afterAll(() => rmSync(work, { recursive: true, force: true }));
 const env = { PATH: process.env.PATH ?? '' };
@@ -63,7 +70,8 @@ function embedder(name: string): string {
   const app = join(work, name);
   if (existsSync(join(app, 'embed.mjs'))) return app;
   install(name);
-  execFileSync('npm', ['install', '--no-audit', '--no-fund', 'isolated-vm@7.0.2'], {
+  // The consumer's own isolated-vm 7.0.2: the workspace's copy (no registry access).
+  execFileSync('npm', ['install', '--no-audit', '--no-fund', '--offline', WORKSPACE_IVM], {
     cwd: app,
     stdio: 'pipe',
   });
@@ -77,9 +85,12 @@ function embedder(name: string): string {
   );
   const foreign = specifiers.filter(
     (s) =>
-      !['@riftydev/isolate-guest', '@riftydev/isolate-guest/guest.js', 'isolated-vm'].includes(
-        s as string,
-      ) && !(s as string).startsWith('node:'),
+      ![
+        '@riftydev/isolate-guest',
+        '@riftydev/isolate-guest/guest.js',
+        'isolated-vm',
+        'isolated-vm/package.json',
+      ].includes(s as string) && !(s as string).startsWith('node:'),
   );
   if (foreign.length > 0) throw new Error(`README embedder imports ${foreign.join(', ')}`);
   writeFileSync(join(app, 'embed.mjs'), example);
@@ -245,6 +256,60 @@ describe('the README embedder ends each call (I5)', () => {
         stderr: '',
         exitCode: 0,
       });
+    },
+    240_000,
+  );
+});
+
+describe('each call has its own clock (I1)', () => {
+  // A fresh `node -e` starts its clock near 0; two in-process calls must not
+  // read the embedder's uptime nor each other's.
+  carrier(
+    'performance.now() restarts with every call in one process',
+    () => {
+      const first =
+        "const e = Date.now() + 1200; while (Date.now() < e); console.log('a', performance.now() < 2000)";
+      const second =
+        "console.log('b', performance.now() < 1000, Math.abs(performance.timeOrigin + performance.now() - Date.now()) < 50)";
+      const out = runEmbedder('corpus', [first, second]);
+      expect([out[first]?.stdout, out[second]?.stdout]).toEqual(['a true\n', 'b true true\n']);
+      expect(nodeEval(second).stdout).toBe('b true true\n');
+    },
+    240_000,
+  );
+});
+
+describe('the README embedder refuses isolated-vm < 7 (I4)', () => {
+  // 6.x lacks both hooks and ignores unknown options: a silently wrong result.
+  // A stand-in package carries only the version the example reads.
+  carrier(
+    'importing it throws, naming the version',
+    () => {
+      const app = install('v6');
+      const ivm = join(app, 'node_modules/isolated-vm');
+      execFileSync('mkdir', ['-p', ivm]);
+      writeFileSync(
+        join(ivm, 'package.json'),
+        JSON.stringify({ name: 'isolated-vm', version: '6.2.0', main: 'index.js' }),
+      );
+      writeFileSync(join(ivm, 'index.js'), 'module.exports = {};');
+      const readme = readFileSync(join(PACKAGE_DIR, 'README.md'), 'utf8');
+      writeFileSync(join(app, 'embed.mjs'), /```js\n([\s\S]*?)```/.exec(readme)?.[1] ?? '');
+      let error = '';
+      try {
+        execFileSync(
+          process.execPath,
+          ['--input-type=module', '-e', "await import('./embed.mjs')"],
+          {
+            cwd: app,
+            env,
+            stdio: 'pipe',
+          },
+        );
+      } catch (e) {
+        error = String((e as { stderr?: Buffer }).stderr);
+      }
+      expect(error).toContain('isolated-vm 6.2.0: need >= 7');
     },
     240_000,
   );

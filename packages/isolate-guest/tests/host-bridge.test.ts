@@ -5,6 +5,8 @@
  * never lets a hook failure through as a host error, stops all host timers at
  * `close()`, and `exitStatus` reads anything but an integer 0..255 as 1.
  */
+import { setFlagsFromString } from 'node:v8';
+import { runInNewContext } from 'node:vm';
 import { describe, expect, it } from 'vitest';
 
 /** The acceptance carrier (map item 1); RED was `it.fails` before the export landed. */
@@ -20,6 +22,7 @@ interface Functions {
 interface Export {
   createHostBridge(hooks: { write(fd: 1 | 2, bytes: Uint8Array): void; fire(id: number): void }): {
     functions: Functions;
+    timeOrigin: number;
     close(): void;
   };
   exitStatus(value: unknown): number;
@@ -37,6 +40,11 @@ const GARBAGE: readonly unknown[] = [
   Number.NaN,
   Number.POSITIVE_INFINITY,
   2 ** 53,
+  2 ** 52,
+  2 ** 31,
+  2 ** 31 - 1,
+  65536,
+  65537,
   '1',
   'pwn',
   {},
@@ -162,16 +170,71 @@ describe('createHostBridge argument validation (I5)', () => {
     },
   );
 
-  carrier('now() is the host clock', async () => {
+  carrier('the guest clock starts with the bridge, never at the host process start', async () => {
     const { createHostBridge } = await load();
-    const { functions, close } = createHostBridge({ write: () => {}, fire: () => {} });
+    await sleep(30);
+    const { functions, timeOrigin, close } = createHostBridge({ write: () => {}, fire: () => {} });
     const first = functions.now();
+    expect(first).toBeGreaterThanOrEqual(0);
+    expect(first).toBeLessThan(20);
     const until = Date.now() + 50;
     let spun = first;
     while (spun - first < 2 && Date.now() < until) spun = functions.now();
     expect(spun).toBeGreaterThan(first + 1);
-    expect(Math.abs(performance.timeOrigin + spun - Date.now())).toBeLessThan(200);
+    // timeOrigin + now() is the wall clock, so a constant `now()` or a host-uptime origin fails.
+    expect(Math.abs(timeOrigin + functions.now() - Date.now())).toBeLessThan(50);
+    expect(timeOrigin - performance.timeOrigin).toBeGreaterThan(25);
     close();
+  });
+
+  carrier('random() is random, not a fixed fill', async () => {
+    const { createHostBridge } = await load();
+    const { functions, close } = createHostBridge({ write: () => {}, fire: () => {} });
+    const a = functions.random(32);
+    const b = functions.random(32);
+    expect(a).toHaveLength(32);
+    expect(Buffer.from(a).equals(Buffer.from(b))).toBe(false);
+    expect(new Set([...a, ...b]).size).toBeGreaterThan(16);
+    close();
+  });
+
+  carrier("a hook's own bridge-looking TypeError is still a guest-safe refusal", async () => {
+    const { createHostBridge } = await load();
+    const { functions, close } = createHostBridge({
+      write: () => {
+        throw new TypeError(`isolate-host bridge: host detail ${import.meta.url}`);
+      },
+      fire: () => {},
+    });
+    let caught: unknown;
+    try {
+      functions.write(1, Uint8Array.of(1));
+    } catch (error) {
+      caught = error;
+    }
+    expect(String((caught as Error).message)).toBe('isolate-host bridge: write failed');
+    expect(String((caught as Error).stack)).not.toMatch(HOST_PATH);
+    close();
+  });
+
+  carrier('a fired one-shot timer leaves nothing behind in the bridge', async () => {
+    const { createHostBridge } = await load();
+    setFlagsFromString('--expose-gc');
+    const gc = runInNewContext('gc') as () => void;
+    let fired = 0;
+    const { functions, close } = createHostBridge({ write: () => {}, fire: () => fired++ });
+    const N = 100_000;
+    gc();
+    const base = process.memoryUsage().heapUsed;
+    for (let id = 1; id <= N; id++) functions.timerStart(id, 0, false);
+    const until = Date.now() + 5000;
+    while (fired < N && Date.now() < until) await sleep(20);
+    expect(fired).toBe(N);
+    gc();
+    const kept = process.memoryUsage().heapUsed - base;
+    close();
+    // Kept entries for 1e5 fired timers hold well over 8 MiB.
+    expect(kept).toBeLessThan(4 * 1024 * 1024);
   });
 
   carrier('timers fire by id; close() stops every timer and arms no new one', async () => {

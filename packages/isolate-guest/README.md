@@ -31,6 +31,12 @@ import {
   exitStatus,
 } from '@riftydev/isolate-guest';
 
+// isolated-vm < 7 lacks two hooks this contract needs and ignores unknown options silently.
+const ivmVersion = JSON.parse(
+  readFileSync(new URL(import.meta.resolve('isolated-vm/package.json')), 'utf8'),
+).version;
+if (Number(ivmVersion.split('.')[0]) < 7) throw new Error(`isolated-vm ${ivmVersion}: need >= 7`);
+
 const bundle = readFileSync(
   new URL(import.meta.resolve('@riftydev/isolate-guest/guest.js')),
   'utf8',
@@ -51,9 +57,8 @@ export async function run(code) {
     settle(exitCode);
   };
   let guest;
-  const { functions, close } = createHostBridge({
-    // Nothing the guest writes after the call ended is part of its result.
-    write: (fd, bytes) => ended || out[fd].push(Buffer.from(bytes)),
+  const { functions, timeOrigin, close } = createHostBridge({
+    write: (fd, bytes) => out[fd].push(Buffer.from(bytes)),
     fire: (id) => guest.fire.applyIgnored(undefined, [id]),
   });
   const isolate = new ivm.Isolate({
@@ -76,7 +81,7 @@ export async function run(code) {
     const context = await isolate.createContext();
     const names = Object.keys(functions);
     await context.evalClosure(
-      `globalThis.__riftyIsolateHost = { timeOrigin: ${performance.timeOrigin}, ${names
+      `globalThis.__riftyIsolateHost = { timeOrigin: ${timeOrigin}, ${names
         .map((name, i) => `${name}: $${i}`)
         .join(', ')} };`,
       names.map((name) => new ivm.Callback(functions[name])),
@@ -109,10 +114,16 @@ export async function run(code) {
 ```
 
 Start your process with `node --no-node-snapshot` (isolated-vm's own
-requirement on Node ≥ 20). This example runs isolates in your process, which
-ADR-0557 rejected for rifty's own host: a catastrophic out-of-memory in
-isolated-vm can leave the process unrecoverable. rifty's host runs each call in
-a child process for that reason. The topology is your choice.
+requirement on Node ≥ 20).
+
+**This example has no limits, so one guest line takes your service down.**
+Measured in cross-review (2026-11-18, isolated-vm 7.0.2, Node 24):
+`while (true) {}` hangs `run()` forever; 3 GB of stdout grow the embedder to
+7.3 GB RSS; `new Array(1e9).fill({})` aborts the process (SIGABRT). The
+example runs isolates in your own process, which ADR-0557 rejected for rifty's
+own host. For untrusted code, the protected path is `runCode` from
+`@riftydev/isolate-host`: it adds the limits and a child process per call.
+Your own topology is your choice and your responsibility.
 
 ## Contract
 
@@ -132,9 +143,9 @@ your own, you must perform them yourself.
 | `write(fd, bytes)` | `fd`, `bytes`: guest | `fd` is `1` or `2`, `bytes` is a `Uint8Array` of your realm; then your `write` hook. Size is unbounded: cap the output yourself |
 | `timerStart(id, ms, repeat)` | all: guest | `id` an integer in 1..2^31-1, `ms` a number in 0..2^31-1, `repeat` a boolean; re-arming an `id` replaces it; on expiry call `fire(id)`. The number of timers is unbounded: bound it with your limits |
 | `timerClear(id)` | `id`: guest | `id` as above; an unknown `id` is a no-op |
-| `now()` | none | returns ms since `timeOrigin` |
+| `now()` | none | returns ms since `timeOrigin`, the start of this call |
 | `random(byteLength)` | `byteLength`: guest | an integer in 0..65536; returns that many random bytes |
-| `timeOrigin` | you | a number: your `performance.timeOrigin` |
+| `timeOrigin` | you | a number: the call's start in epoch ms (`createHostBridge` returns it). Never your process's `performance.timeOrigin`: the guest would read your uptime and could link calls |
 
 The `write` and `fire` hooks must be synchronous: a promise they return is not
 awaited, and its rejection is yours.
@@ -144,6 +155,14 @@ host stack. A hook that throws reaches the guest as `isolate-host bridge: <name>
 failed`. A `fire` hook that throws ends that timer, and nothing reaches your
 event loop. `close()` ends the call: it clears every timer, and after it
 `timerStart` arms nothing.
+
+Timer expiries queue in your process, not in the isolate. A host timer that
+fires while the guest is still busy queues its `fire` call. Neither
+`memoryLimit` nor the guest bounds that queue. A slow interval falls behind
+(`setInterval` of a 10 ms callback at 1 ms: Node runs it 101 times in the
+first second; through this bridge it runs 879 times and a 1000 ms timeout
+fires at 8.8 s). Many short intervals grow your process's memory: 20000 of
+them reached 4.96 GB RSS at `memoryLimit: 128`.
 
 ### Guest entry: `globalThis.__riftyGuest`
 
