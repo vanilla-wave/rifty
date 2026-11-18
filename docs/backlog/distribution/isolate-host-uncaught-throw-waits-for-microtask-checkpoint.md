@@ -5,7 +5,7 @@ title: In the isolate host an uncaught throw followed by an endless microtask ch
 created: 2026-11-18
 why: Node exits 1 inside its fatal handler before any further microtask runs; the isolate host reports the throw but the isolate never leaves its microtask checkpoint, so the run ends at the deadline.
 sources: [docs/public/compat/isolate-host.md]
-code: [packages/isolate-host/src/guest/entry.ts, packages/isolate-host/src/child/main.ts]
+code: [packages/isolate-guest/src/guest/entry.ts, packages/isolate-host/src/child/main.ts]
 ---
 
 ## Context

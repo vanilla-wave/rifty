@@ -57,7 +57,8 @@ challenge: 2026-11-18 — inherits the goal premise check (`goal.md` §Challenge
    `TypeError: isolate-host bridge: write failed`, no host path; a throwing
    `fire` hook raises no uncaught host error and ends
    that timer (`host-bridge.test.ts`) → I5, scenario
-6. Timers fire by id (one-shot once, repeat repeatedly, cleared never);
+6. Timers fire by id (one-shot once, repeat repeatedly, cleared never;
+   re-arming an id replaces its timer);
    `close()` removes every host timer of the bridge (active `Timeout` count),
    and after it `timerStart` is a no-op that arms and fires nothing
    (`host-bridge.test.ts`) → I5
@@ -89,7 +90,7 @@ challenge: 2026-11-18 — inherits the goal premise check (`goal.md` §Challenge
 11. Through the README embedder, `import()` in every form `runCode` parity
     runs (top level, async `await`, `eval`, `new Function`, `.then` with a
     handler, `.catch` + `exit(0)`, a timer, after output, `.catch` printing the
-    stack) and the three uncopyable/plain rejections give exactly `runCode`'s
+    stack, two requests: one gap line) and the three uncopyable/plain rejections give exactly `runCode`'s
     `{stdout, stderr, exitCode}` (the gap line, exit 1, nothing after the gap,
     the uncopyable diagnostic), with no host path (`embedder.test.ts`) → I1,
     ADR-0557
@@ -124,3 +125,4 @@ challenge: 2026-11-18 — inherits the goal premise check (`goal.md` §Challenge
 - ready-verdict: 2026-11-18 — Contract+RED @ 385d2f26b (verdict JSON on PR #411)
 - re-cut: 2026-11-18 — row 5 + fault-matrix row 2 wording: a throwing `fire` hook, not "a disposed isolate" (reviewer probe, isolated-vm 7.0.2: `applyIgnored` after `dispose()` does not throw; row 12 covers the pending timer) — trace: none
 - Contract+RED @ a871a712f: BLOCK — 2 blockers (no RED for the embedder's `import()` hook; a refused `timerStart` could still arm) fixed in rows 4, 11; concerns taken: rows 11 (uncopyable vs `runCode`), 12 (`close()` through the README embedder), README timer/output bounds, fault matrix, separate install dirs. Not taken: an embedder analog of `child-trust` (the real bundle hands back only numbers; `exitStatus` row 7 covers the judgement).
+- re-cut: 2026-11-18 — rows 6, 11 gain the re-arm and two-`import()` cases (Final+GREEN concerns; mutants killed) — trace: none

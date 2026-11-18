@@ -126,6 +126,8 @@ const IMPORT_FORMS = [
   "setTimeout(() => import('node:fs'), 5)",
   "console.log('before'); import('nope')",
   "import('x').catch((e) => console.log(String(e.stack)))",
+  // Two requests: the gap line is written once.
+  "import('a'); import('b')",
 ];
 
 let ran: Record<string, Outcome> | undefined;

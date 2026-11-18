@@ -202,6 +202,18 @@ describe('createHostBridge argument validation (I5)', () => {
     expect(fired.length).toBe(seen);
   });
 
+  carrier('re-arming an id replaces its timer, and close() still clears it', async () => {
+    const { createHostBridge } = await load();
+    const { functions, close } = createHostBridge({ write: () => {}, fire: () => {} });
+    const before = timeouts();
+    functions.timerStart(9, 1000, true);
+    functions.timerStart(9, 1000, true);
+    functions.timerStart(9, 1000, false);
+    expect(timeouts()).toBe(before + 1);
+    close();
+    expect(timeouts()).toBe(before);
+  });
+
   carrier('a throwing fire hook stays inside the bridge and ends that timer', async () => {
     const { createHostBridge } = await load();
     const uncaught: unknown[] = [];

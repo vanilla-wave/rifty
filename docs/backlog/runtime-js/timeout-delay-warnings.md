@@ -5,7 +5,7 @@ title: Timers clamp an out-of-range delay without Node's Timeout*Warning
 created: 2026-11-18
 why: Node prints `TimeoutOverflowWarning` / `TimeoutNegativeWarning` / `TimeoutNaNWarning` to stderr when it sets a delay to 1 ms; rifty clamps silently.
 sources: [docs/public/compat/isolate-host.md]
-code: [packages/runtime-js/src/builtins/timers.ts, packages/isolate-host/src/guest/web-shim.ts]
+code: [packages/runtime-js/src/builtins/timers.ts, packages/isolate-guest/src/guest/web-shim.ts]
 ---
 
 ## Context
