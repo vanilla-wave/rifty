@@ -69,9 +69,11 @@ function runCorpus(): Promise<Record<string, Outcome>> {
     const example = /```js\n([\s\S]*?)```/.exec(readme)?.[1];
     if (example === undefined) throw new Error('README has no js block');
     // Only the public export, the consumer's own isolated-vm and Node builtins.
-    const specifiers = [...example.matchAll(/(?:from|import)\s*\(?\s*['"]([^'"]+)['"]/g)].map(
-      (m) => m[1],
-    );
+    if (/createRequire|\brequire\s*\(/.test(example))
+      throw new Error('README embedder uses require');
+    const specifiers = [
+      ...example.matchAll(/(?:from|import|resolve)\s*\(?\s*['"]([^'"]+)['"]/g),
+    ].map((m) => m[1]);
     const foreign = specifiers.filter(
       (s) =>
         !['@riftydev/isolate-guest', '@riftydev/isolate-guest/guest.js', 'isolated-vm'].includes(
@@ -204,10 +206,11 @@ describe('the README states the contract (I4)', () => {
         'IMPORT_GAP',
         'exitStatus',
         'close',
-        '7.0.2',
-        '6.2.0',
       ];
-      expect(names.filter((n) => !readme.includes(`\`${n}`))).toEqual([]);
+      expect(
+        names.filter((n) => !readme.includes(`\`${n}\``) && !readme.includes(`\`${n}(`)),
+      ).toEqual([]);
+      for (const version of ['7.0.2', '6.2.0']) expect(readme).toContain(version);
       expect(readme).toMatch(/unstable/i);
     },
   );

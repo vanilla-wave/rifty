@@ -1,6 +1,6 @@
 ---
 kind: epic
-status: draft
+status: ready
 title: Isolate guest export — rifty's isolate guest bundle and bridge contract as a public unstable package for custom embedders
 created: 2026-11-18
 value: A Node service with its own isolated-vm 7.0.2 and its own process topology runs rifty guests node -e-faithfully from a public export, without rifty's isolate host.
@@ -66,7 +66,8 @@ dependencies); the README has no integration section. -->
   (installed from its packed tarball) and its own isolated-vm 7.0.2 runs every
   isolate-host parity-corpus row with `{stdout, stderr, exitCode}` equal to
   `node -e <code>` (live oracle, same projection and declared ceilings as
-  `runCode` parity).
+  `runCode` parity), and the `runCode` uncopyable-rejection cases with
+  Node's stdout and status.
 - I2. One implementation: `runCode` runs the export's guest bundle (the
   file is byte-identical); the existing isolate-host tests pass with no
   assertion changed (a relocated test keeps its assertions), the host root
