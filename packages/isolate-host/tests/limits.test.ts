@@ -71,6 +71,23 @@ describe('runCode limits (I4)', () => {
     expect(Date.now() - started).toBeLessThan(61_000);
   });
 
+  it('memoryLimitMb is the heap limit: 2e6 small objects die at 128 MiB and complete at 512 MiB', async () => {
+    const code =
+      "const a = []; for (let i = 0; i < 2e6; i++) a.push({ i, s: 'k' + i }); console.log(a.length)";
+    // 128 MiB is also isolated-vm's own default: the 512 MiB run proves the option reaches the isolate.
+    await expect(runCode(code, { memoryLimitMb: 128, timeoutMs: 60_000 })).resolves.toEqual({
+      stdout: '',
+      stderr: '',
+      exitCode: null,
+      termination: 'memory',
+    });
+    await expect(runCode(code, { memoryLimitMb: 512, timeoutMs: 60_000 })).resolves.toEqual({
+      stdout: '2000000\n',
+      stderr: '',
+      exitCode: 0,
+    });
+  }, 120_000);
+
   it('a catastrophic allocation ends with termination memory, child RSS held near 256 + 3 × limit', async () => {
     const before = new Set(childPids());
     const started = Date.now();

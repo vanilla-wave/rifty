@@ -64,7 +64,8 @@ Calls may run concurrently; each one is its own child process.
 
 The guest gets rifty's Node environment, which is not real Node: `require`,
 `fs` over an empty in-memory filesystem (cwd `/workspace`), `Buffer`,
-`process`, timers, `console`, `TextEncoder`/`TextDecoder` (UTF-8),
+`process`, timers, `console`, the builtin modules as globals (`path`, `fs`, …,
+as `node -e` provides), `TextEncoder`/`TextDecoder` (UTF-8),
 `atob`/`btoa`, `crypto.getRandomValues`/`randomUUID` and `performance.now`.
 Parity with `node -e` on Node 24 is tested on a corpus of model-style
 snippets (`tests/parity.test.ts`).
@@ -76,14 +77,14 @@ Not available. Each of these throws `NotImplementedError` naming the API:
 - `URL`, `URLSearchParams`, `structuredClone`, web streams,
   `AbortController`/`AbortSignal`, `Event`/`EventTarget`/`CustomEvent`,
   `Blob`/`File`, `Request`/`Response`/`Headers`/`FormData`,
-  `MessageChannel`/`MessagePort`/`BroadcastChannel`, `crypto.subtle`,
-  `performance.mark`/`measure`/…. Static members of these (`URL.canParse`,
+  `MessageChannel`/`MessagePort`/`BroadcastChannel`, the other web-stream,
+  `Performance*`, `Crypto*` and event classes, `URLPattern`, `navigator.*`,
+  `crypto.subtle`, `performance.mark`/`measure`/`nodeTiming`/…. Static members of these (`URL.canParse`,
   `AbortSignal.timeout`, …) are missing and give a plain `TypeError`;
 - ESM syntax in the code (`import … from`, top-level `await`). Node runs such
   input as a module; this host evaluates CommonJS only, so use `require()`.
-  `import()` rejects with a named error. If the guest does not handle that
-  rejection, nothing is reported and the run exits normally. This is a
-  declared gap.
+  `import()` rejects with a named error; unhandled, the run fails with
+  exit 1, as Node fails a missing module.
 
 Known differences:
 

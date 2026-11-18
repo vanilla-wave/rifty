@@ -122,6 +122,10 @@ const CORPUS: readonly Row[] = [
     code: "import('node:fs').then((m) => console.log(typeof m.readFileSync, typeof m.default.writeFileSync))",
     ceiling: 'import() in the isolate (ADR-0557 §5)',
   },
+  {
+    label: 'builtin-module-globals',
+    code: "console.log(path.join('a', 'b'), typeof fs.readFileSync, util.format('%d', 1), path === require('path'), typeof crypto.createHash); path = 5; console.log(path)",
+  },
   { label: 'throw-sync', code: "console.log('before'); throw new Error('boom')", evalError: true },
   { label: 'reject-unhandled', code: "Promise.reject(new Error('rej'))", evalError: true },
   {
@@ -238,6 +242,30 @@ describe('declared ceilings fail loudly (I1 ceilings, scenario step 4)', () => {
       'MessageChannel',
       'MessagePort',
       'BroadcastChannel',
+      'ReadableStreamDefaultReader',
+      'ReadableStreamBYOBReader',
+      'ReadableStreamBYOBRequest',
+      'ReadableByteStreamController',
+      'ReadableStreamDefaultController',
+      'TransformStreamDefaultController',
+      'WritableStreamDefaultWriter',
+      'WritableStreamDefaultController',
+      'ByteLengthQueuingStrategy',
+      'CountQueuingStrategy',
+      'CloseEvent',
+      'MessageEvent',
+      'URLPattern',
+      'Crypto',
+      'CryptoKey',
+      'SubtleCrypto',
+      'Navigator',
+      'Performance',
+      'PerformanceEntry',
+      'PerformanceMark',
+      'PerformanceMeasure',
+      'PerformanceObserver',
+      'PerformanceObserverEntryList',
+      'PerformanceResourceTiming',
     ];
     const members = [
       'crypto.subtle',
@@ -250,6 +278,12 @@ describe('declared ceilings fail loudly (I1 ceilings, scenario step 4)', () => {
       'performance.clearMeasures',
       'performance.eventLoopUtilization',
       'performance.timerify',
+      'performance.nodeTiming',
+      'navigator.hardwareConcurrency',
+      'navigator.language',
+      'navigator.languages',
+      'navigator.platform',
+      'navigator.userAgent',
     ];
     const result = await runCode(`
       const out = [];
@@ -281,6 +315,24 @@ describe('declared ceilings fail loudly (I1 ceilings, scenario step 4)', () => {
       );
     });
   }
+
+  it('every global node -e defines exists in the guest (live oracle list)', async () => {
+    const list = 'console.log(JSON.stringify(Object.getOwnPropertyNames(globalThis).sort()))';
+    const nodeNames = JSON.parse(nodeEval(list).stdout) as string[];
+    const guest = await runCode(list);
+    const guestNames = new Set(JSON.parse(guest.stdout) as string[]);
+    expect(nodeNames.filter((name) => !guestNames.has(name))).toEqual([]);
+  });
+
+  it('an unhandled import() fails loudly, as Node fails a missing module', async () => {
+    const code = "import('nonexistent-pkg')";
+    expect(nodeEval(code).code).toBe(1);
+    const result = await runCode(code);
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain(
+      'Error: Not implemented: isolate-host.dynamic-import (import() is not available in the rifty isolate host; use require(), ADR-0557)',
+    );
+  });
 
   it('import() rejects with a named gap', async () => {
     const result = await runCode(

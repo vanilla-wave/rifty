@@ -43,9 +43,12 @@ async function run(request: RunRequest): Promise<void> {
   const isolate = new ivm.Isolate({
     memoryLimit: request.memoryLimitMb,
     onCatastrophicError: reportMemory,
-    // A sync throw rejects the guest's import(). isolated-vm does not report that
-    // rejection as unhandled: an unhandled import() is a declared ceiling (compat).
+    // A sync throw rejects the guest's import(). The import is pending for one host
+    // macrotask (hold → release), so an unhandled rejection reaches the guest's
+    // rejection path before its loop can drain (Node keeps the loop alive too).
     importModuleDynamically: () => {
+      hold?.applyIgnored(undefined, []);
+      setTimeout(() => release?.applyIgnored(undefined, []), 0);
       throw new Error(
         'Not implemented: isolate-host.dynamic-import (import() is not available in the rifty isolate host; use require(), ADR-0557)',
       );
@@ -55,6 +58,8 @@ async function run(request: RunRequest): Promise<void> {
     },
   });
   let rejection: ivm.Reference<(reason: unknown) => void> | undefined;
+  let hold: ivm.Reference<() => void> | undefined;
+  let release: ivm.Reference<() => void> | undefined;
   const failed = (error: unknown): void => {
     if (isolate.isDisposed) {
       reportMemory();
@@ -125,6 +130,8 @@ async function run(request: RunRequest): Promise<void> {
     fire = await guest.get('fire', { reference: true });
     for (const id of early.splice(0)) fire.applyIgnored(undefined, [id]);
     rejection = await guest.get('rejection', { reference: true });
+    hold = await guest.get('hold', { reference: true });
+    release = await guest.get('release', { reference: true });
     const start = await guest.get('run', { reference: true });
     await jail.delete('__riftyGuest');
     await start.apply(undefined, [request.code], {

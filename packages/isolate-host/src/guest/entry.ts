@@ -18,8 +18,11 @@ import { installTimerGlobals } from '@riftydev/runtime-js/builtins/timers';
 import {
   handleRealmUncaughtError,
   handleRealmUnhandledRejection,
+  ref,
   setDefaultProcessOutputSink,
+  unref,
 } from '@riftydev/runtime-js/internal';
+import { createModuleLoader } from '@riftydev/runtime-js/loader';
 import { syncMirror } from '@riftydev/vfs';
 import { installMemoryFs } from '@riftydev/vfs/internal';
 import { bindNotImplemented } from './loud.ts';
@@ -29,6 +32,88 @@ import { bridge, fireTimer, installCeilingGlobals, setUncaughtHandler } from './
 bindNotImplemented(NotImplementedError);
 
 const CWD = '/workspace';
+/**
+ * Builtin modules `node -e` exposes as lazy globals (Node v24.16.0
+ * `Object.getOwnPropertyNames(globalThis)` getters under `[eval]`); `process`
+ * is already the global. A read requires the module, a write replaces it.
+ */
+const EVAL_BUILTIN_GLOBALS = [
+  'assert',
+  'async_hooks',
+  'buffer',
+  'child_process',
+  'cluster',
+  'constants',
+  'crypto',
+  'dgram',
+  'diagnostics_channel',
+  'dns',
+  'domain',
+  'events',
+  'fs',
+  'http',
+  'http2',
+  'https',
+  'inspector',
+  'net',
+  'node:sea',
+  'node:sqlite',
+  'node:test',
+  'os',
+  'path',
+  'perf_hooks',
+  'punycode',
+  'querystring',
+  'readline',
+  'repl',
+  'stream',
+  'string_decoder',
+  'sys',
+  'timers',
+  'tls',
+  'trace_events',
+  'tty',
+  'url',
+  'util',
+  'v8',
+  'vm',
+  'wasi',
+  'worker_threads',
+  'zlib',
+];
+
+function installEvalBuiltinGlobals(): void {
+  const loader = createModuleLoader(syncMirror(), { cwd: CWD });
+  // node:crypto captured `subtle` at load from a webcrypto without it: name the gap.
+  const cryptoModule = loader.require('crypto', `${CWD}/[eval]`) as Record<string, unknown>;
+  if (cryptoModule.subtle === undefined) {
+    Object.defineProperty(cryptoModule, 'subtle', {
+      get: () => (cryptoModule.webcrypto as { subtle: unknown }).subtle,
+      configurable: true,
+      enumerable: true,
+    });
+  }
+  for (const name of EVAL_BUILTIN_GLOBALS) {
+    const replace = (value: unknown): void => {
+      Object.defineProperty(globalThis, name, {
+        value,
+        writable: true,
+        configurable: true,
+        enumerable: false,
+      });
+    };
+    Object.defineProperty(globalThis, name, {
+      get() {
+        const value = loader.require(name, `${CWD}/[eval]`);
+        replace(value);
+        return value;
+      },
+      set: replace,
+      configurable: true,
+      enumerable: false,
+    });
+  }
+}
 /**
  * V8 messages by which Node 24 re-runs `-e` input with ESM syntax as a module
  * (detect-module). rifty's eval is CommonJS-only (backlog
@@ -91,6 +176,7 @@ async function run(source: string): Promise<void> {
       });
     }
     installCeilingGlobals();
+    installEvalBuiltinGlobals();
     setProcessCwd(CWD);
     await runNodeEntry({
       kind: 'eval',
@@ -124,6 +210,7 @@ function rejection(reason: unknown): void {
 }
 
 Object.defineProperty(globalThis, '__riftyGuest', {
-  value: Object.freeze({ run, fire: fireTimer, rejection }),
+  // hold/release: a pending import() keeps the loop alive until its rejection lands, as in Node.
+  value: Object.freeze({ run, fire: fireTimer, rejection, hold: ref, release: unref }),
   configurable: true,
 });

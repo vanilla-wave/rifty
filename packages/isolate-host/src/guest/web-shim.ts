@@ -285,7 +285,35 @@ export const CEILING_GLOBALS = [
   'MessageChannel',
   'MessagePort',
   'BroadcastChannel',
+  // Node 24 globals the corpus does not need (live list: tests/parity.test.ts).
+  'ReadableStreamDefaultReader',
+  'ReadableStreamBYOBReader',
+  'ReadableStreamBYOBRequest',
+  'ReadableByteStreamController',
+  'ReadableStreamDefaultController',
+  'TransformStreamDefaultController',
+  'WritableStreamDefaultWriter',
+  'WritableStreamDefaultController',
+  'ByteLengthQueuingStrategy',
+  'CountQueuingStrategy',
+  'CloseEvent',
+  'MessageEvent',
+  'URLPattern',
+  'Crypto',
+  'CryptoKey',
+  'SubtleCrypto',
+  'Navigator',
+  'Performance',
+  'PerformanceEntry',
+  'PerformanceMark',
+  'PerformanceMeasure',
+  'PerformanceObserver',
+  'PerformanceObserverEntryList',
+  'PerformanceResourceTiming',
 ] as const;
+
+/** `navigator` members Node 24 defines; each read is the named gap. */
+const NAVIGATOR_MEMBERS = ['hardwareConcurrency', 'language', 'languages', 'platform', 'userAgent'];
 
 export function installCeilingGlobals(): void {
   for (const name of CEILING_GLOBALS) {
@@ -294,6 +322,18 @@ export function installCeilingGlobals(): void {
     define(name, thrower);
   }
   Object.defineProperty(crypto, 'subtle', { get: loud('crypto.subtle'), configurable: true });
+  const navigator = {};
+  for (const member of NAVIGATOR_MEMBERS) {
+    Object.defineProperty(navigator, member, {
+      get: loud(`navigator.${member}`),
+      enumerable: true,
+    });
+  }
+  define('navigator', navigator);
+  Object.defineProperty(performance, 'nodeTiming', {
+    get: loud('performance.nodeTiming'),
+    configurable: true,
+  });
   const fetchFeature = loud('fetch');
   define('fetch', function fetch(): Promise<never> {
     try {

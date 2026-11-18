@@ -67,8 +67,11 @@ blocks it.
    Writable/TransformStream, TextDecoder/TextEncoderStream, Compression/
    DecompressionStream, AbortController, AbortSignal, EventTarget, Event,
    CustomEvent, Blob, File, fetch (rejects), Request, Response, Headers,
-   FormData, WebSocket, MessageChannel, MessagePort, BroadcastChannel,
-   `crypto.subtle`, `performance.mark`/`measure`/`getEntries*`/`clear*`/
+   FormData, WebSocket, MessageChannel, MessagePort, BroadcastChannel, the
+   web-stream reader/controller/strategy classes, CloseEvent, MessageEvent,
+   URLPattern, Crypto, CryptoKey, SubtleCrypto, Navigator + `navigator.*`,
+   Performance/PerformanceEntry/Mark/Measure/Observer/ObserverEntryList/
+   ResourceTiming, `performance.nodeTiming`, `crypto.subtle`, `performance.mark`/`measure`/`getEntries*`/`clear*`/
    `eventLoopUtilization`/`timerify`. The requirements' shim list (URL,
    structuredClone, streams, AbortController, EventTarget) is a ceiling here
    by manager decision, owned by the successor (`docs/ROADMAP.md` M14 B).
@@ -76,8 +79,11 @@ blocks it.
    fd 1/2 bytes reach the host through the no-spec process's default output
    sink (`setDefaultProcessOutputSink`), never via `console`. ESM syntax in
    `-e` (Node's detect-module SyntaxErrors) → `NotImplementedError(
-   'isolate-host.node-eval-esm')`; `import()` rejects with a named error
-   (isolated-vm does not report it when unhandled — compat ❌).
+   'isolate-host.node-eval-esm')`; `import()` rejects with a named error and
+   holds the loop one host task (rifty `ref`/`unref`) so an unhandled one
+   reaches the fatal path, as in Node. `node -e`'s builtin-module globals are
+   lazy getters over the rifty loader (Node v24.16.0 list); a test asserts the
+   guest has every global name live `node -e` defines.
 6. Egress: `fetch`/`WebSocket` loud (5); `node:http`, `https`, `net` register
    as loud modules (`NotImplementedError` at require); `tls`/`dgram`/`http2`
    keep rifty's loud stubs. No host callback exposes network or host FS. The

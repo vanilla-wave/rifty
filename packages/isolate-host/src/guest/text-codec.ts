@@ -102,13 +102,14 @@ export class TextDecoder {
   #pending: Uint8Array = new Uint8Array(0);
   #bomSeen = false;
 
-  constructor(label = 'utf-8', options: { fatal?: boolean; ignoreBOM?: boolean } = {}) {
+  constructor(label = 'utf-8', options: { fatal?: unknown; ignoreBOM?: unknown } = {}) {
     const normalized = String(label).trim().toLowerCase();
     if (!UTF8_LABELS.has(normalized)) {
       throw notImplemented(`isolate-host.TextDecoder(${normalized})`, 'only utf-8');
     }
-    this.#fatal = options.fatal === true;
-    this.#ignoreBOM = options.ignoreBOM === true;
+    // WebIDL boolean conversion: any truthy value, as Node.
+    this.#fatal = Boolean(options.fatal);
+    this.#ignoreBOM = Boolean(options.ignoreBOM);
   }
 
   get encoding(): string {
@@ -121,8 +122,8 @@ export class TextDecoder {
     return this.#ignoreBOM;
   }
 
-  decode(input?: unknown, options: { stream?: boolean } = {}): string {
-    const stream = options.stream === true;
+  decode(input?: unknown, options: { stream?: unknown } = {}): string {
+    const stream = Boolean(options.stream);
     const fresh = toBytes(input);
     let bytes = fresh;
     if (this.#pending.length > 0) {
