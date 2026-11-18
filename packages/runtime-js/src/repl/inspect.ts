@@ -67,7 +67,9 @@ function inspectValue(
   if (value === null) return 'null';
   const type = typeof value;
   if (type === 'string') return quoteString(value as string);
-  if (type === 'number' || type === 'boolean') return String(value);
+  // Node prints negative zero as `-0` (`String(-0)` is `'0'`).
+  if (type === 'number') return Object.is(value, -0) ? '-0' : String(value);
+  if (type === 'boolean') return String(value);
   // Node renders bigints with a trailing `n` at every depth (`3n`, `{ a: 3n }`).
   if (type === 'bigint') return `${String(value)}n`;
   if (type === 'symbol') return (value as symbol).toString();

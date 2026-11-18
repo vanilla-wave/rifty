@@ -38,6 +38,24 @@ control over browser-local workers, not hostile-code containment.
 If a product needs to execute arbitrary hostile code, put a real containment boundary outside the
 browser runtime.
 
+## Isolate host (Node, ADR-0557)
+
+`@riftydev/isolate-host` is a server-side host: a Node service calls `runCode(code)`. Each call
+spawns a child Node process with an empty environment. The child runs the rifty runtime in an
+isolated-vm V8 isolate, and the parent kills it after the call.
+
+- **Tested seam properties.** The guest sees no host global, host env, Node primitive or
+  isolated-vm handle. It gets no network: `fetch`, `node:http`/`https`/`net` and `WebSocket`
+  throw `NotImplementedError`. The time limit, the isolate heap limit, V8 fatal OOM and the
+  sampled child RSS watchdog all end the child, never the consumer process. The watchdog can
+  overshoot by one allocation step.
+- **Not protected: an isolate escape.** A V8 or isolated-vm bug can give the guest code execution
+  as the child's OS user. Escaped code can read the parent's `/proc/<ppid>/environ`, the
+  filesystem, and the network. The empty child env only stops a leak through a rifty bug.
+- **Consumer's duty.** Put the child behind an external boundary: a separate uid, a sandbox or
+  container, an RSS cgroup. No secrets may be reachable by that user. Track Node point releases
+  that patch V8. rifty does not orchestrate pods, hypervisors or deploys.
+
 ## Eddy fast-install resolver (mirror-grade)
 
 The opt-in `@riftydev/eddy` fast install (ADR-0182) adds a second, narrower trust surface —

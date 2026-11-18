@@ -75,7 +75,8 @@ All were INFRA — none needed a curated package-substitution registry.
 ## Explicitly out of scope (unchanged)
 
 A curated shadow/substitution registry (the `overrides` mechanism stays; growing the TABLE is the
-user's job); remote/cloud execution + the agent-backend market (e2b/Modal/Daytona/Cloudflare);
+user's job); remote/cloud execution + the agent-backend market (e2b/Modal/Daytona/Cloudflare) —
+narrowed 2026-11-18 by ADR-0557: a Node host running a rifty guest in a V8 isolate is in scope, orchestration/pods/deploy stay out;
 full-system x86/Linux emulation (CheerpX/WebVM/container2wasm); WASIX as a dependency (target the
 WASI 0.2 Component Model instead); browser capability ceilings (`tls`/`dgram`/`http2`-server/raw-TCP
 `net.Socket`/native addons) stay loud-throw — shared physics that WebContainers hits too.

@@ -7,8 +7,9 @@ Date: 2026-11
 
 ## Context
 
-Mission widening, narrow (goal `isolate-host-run-code`, manager by the user's
-delegation 2026-11-17): a Node host executes a rifty guest in a V8 isolate.
+Mission widening (`AGENTS.md` Scope), narrow (goal `isolate-host-run-code`; manager decision
+2026-11-18 — the user saw the recommendation 2026-11-17, raised no objection
+and said to start 2026-11-18): a Node host executes a rifty guest in a V8 isolate.
 Overturns, for this host only, `docs/research/open-webcontainers-alternative-2026-06.md`
 §Explicitly out of scope "remote/cloud execution + the agent-backend market":
 rifty now ships a server-side host. Orchestration, pods, hypervisor and deploy
@@ -24,14 +25,17 @@ blocks it.
 ## Decision
 
 1. Public API (`src/index.ts` only): `runCode(code: string, options?: {
-   timeoutMs, memoryLimitMb, maxRssMb, maxOutputBytes }) →
-   Promise<{ stdout, stderr, exitCode: number | null, termination?,
-   truncated? }>`. Contract: observable result = `node -e <code>` on the same
-   Node, minus declared ceilings. Killed run → `exitCode: null` (Node
-   `spawnSync().status` for a killed child; rifty `AgentCommandResult`) and
-   `termination: 'timeout' | 'memory' | 'catastrophic-oom' | 'rss'`; stderr is
-   guest bytes only. Output past `maxOutputBytes` (stdout+stderr) is dropped,
-   run continues, `truncated: true`.
+   timeoutMs, memoryLimitMb, maxOutputBytes }) → Promise<{ stdout, stderr,
+   exitCode: number | null, termination?: 'timeout' | 'memory', truncated?:
+   true }>`. Contract: observable result = `node -e <code>` on the same Node,
+   minus declared ceilings. Killed run → `exitCode: null` (Node
+   `spawnSync().status` for a killed child; rifty `AgentCommandResult`);
+   stderr is guest bytes only. The consumer reacts to every memory path the
+   same way, so they share one reason. Output past `maxOutputBytes`
+   (stdout+stderr) is dropped, run continues, `truncated: true`. Every call
+   settles within `timeoutMs` + 1000 ms. A child that exits without a result
+   (crash, external SIGKILL, cgroup OOM-killer) rejects the call at once with
+   an error naming the code/signal — an unknown failure, not a guest result.
 2. Process boundary per call (manager decision A, 2026-11-18): the package
    spawns `process.execPath --no-node-snapshot <dist/child.js>` with `env: {}`,
    code sent over IPC (never argv). The consumer process loads no native addon
@@ -40,36 +44,61 @@ blocks it.
    and isolates": agents stay in the consumer process, isolates move to
    children; reason: the OOM probe + isolated-vm README ("keep instances of
    isolated-vm in a different nodejs process").
-3. Kills, all SIGKILL by the parent, each a distinct `termination`: wall-clock
-   deadline from call start (`timeout`); isolate heap limit disposes the
-   isolate (`memory`); `onCatastrophicError` reported by the child
-   (`catastrophic-oom`); child RSS self-sampled every 25 ms over `maxRssMb`
-   (`rss`). The deadline also backstops a child that stops reporting.
+3. Kills, SIGKILL by the parent: wall-clock deadline from call start →
+   `timeout`; isolate heap limit (isolate disposed), `onCatastrophicError`,
+   or child RSS (self-sampled every 25 ms) over 256 MiB + 3 × `memoryLimitMb`
+   (README: a hostile guest may use 2–3× the limit) → `memory`. The RSS
+   watchdog is sampled: one backing-store doubling can overshoot it (measured
+   peak 661–808 MiB at a 448 MiB ceiling; without it the same guest reached
+   ~1.26 GB). One public
+   memory knob; the RSS ceiling is derived.
 4. Isolate content: one esbuild IIFE (`dist/guest.js`) = bare-V8 Web shim +
    rifty runtime-js/vfs/io from source + guest entry running the existing
    node-eval lifecycle (`runNodeEntry({kind:'eval'})` → `awaitDrain` →
    natural exit). Owner of FS in the same realm (MemoryFs, no SAB).
-5. Shim (`src/guest/`), sized by the scenario corpus: real UTF-8
-   TextEncoder/TextDecoder (differential-tested against Node), atob/btoa,
-   DOMException, queueMicrotask (errors routed to rifty's uncaught path),
-   timers and `performance.now`/`crypto.getRandomValues` via host callbacks.
-   Every other Node global the runtime or guest may touch (URL,
-   URLSearchParams, structuredClone, web streams, AbortController, EventTarget,
-   Event, Blob, fetch, Request, Response, Headers, FormData, WebSocket,
-   MessageChannel) exists and throws `NotImplementedError` on use; compat ❌.
-6. Egress: `fetch`/`WebSocket` loud (5); `node:http`, `https`, `net`, `tls`,
-   `dgram`, `http2` register as loud modules (`NotImplementedError` at
-   require). No host callback exposes network or host FS.
+5. Shim (`src/guest/`, injected before every runtime module), sized by the
+   scenario corpus: UTF-8 TextEncoder/TextDecoder (WHATWG decode, other labels
+   loud), atob/btoa, DOMException, queueMicrotask (throws → rifty's uncaught
+   path), timers via host callbacks (expiry runs `Timeout._onTimeout`),
+   `performance.now`/`timeOrigin`, `crypto.getRandomValues`/`randomUUID`.
+   Closed ceiling list, each a `NotImplementedError('isolate-host.<api>')`
+   installed after the runtime loaded (its load-time feature detection still
+   sees them absent): URL, URLSearchParams, structuredClone, Readable/
+   Writable/TransformStream, TextDecoder/TextEncoderStream, Compression/
+   DecompressionStream, AbortController, AbortSignal, EventTarget, Event,
+   CustomEvent, Blob, File, fetch (rejects), Request, Response, Headers,
+   FormData, WebSocket, MessageChannel, MessagePort, BroadcastChannel,
+   `crypto.subtle`, `performance.mark`/`measure`/`getEntries*`/`clear*`/
+   `eventLoopUtilization`/`timerify`. The requirements' shim list (URL,
+   structuredClone, streams, AbortController, EventTarget) is a ceiling here
+   by manager decision, owned by the successor (`docs/ROADMAP.md` M14 B).
+   Global `console` = `require('console')` (util.format over process stdio);
+   fd 1/2 bytes reach the host through the no-spec process's default output
+   sink (`setDefaultProcessOutputSink`), never via `console`. ESM syntax in
+   `-e` (Node's detect-module SyntaxErrors) → `NotImplementedError(
+   'isolate-host.node-eval-esm')`; `import()` rejects with a named error
+   (isolated-vm does not report it when unhandled — compat ❌).
+6. Egress: `fetch`/`WebSocket` loud (5); `node:http`, `https`, `net` register
+   as loud modules (`NotImplementedError` at require); `tls`/`dgram`/`http2`
+   keep rifty's loud stubs. No host callback exposes network or host FS. The
+   bridge is copying `ivm.Callback`s on a frozen `__riftyIsolateHost`.
 7. Dependency: `isolated-vm@7.0.2` exact (ships prebuilds linux-x64/arm64,
-   darwin-arm64, win32-x64; engines node ≥24; maintenance mode). Allowed in
+   darwin-arm64, win32-x64; engines node ≥24; maintenance mode). 7 over the
+   consumer's 6.2.0: the addon now loads only in rifty's child, so the
+   consumer's pin does not constrain it, and 7 adds `onUnhandledRejection`,
+   which the guest's rejection path needs. Allowed in
    `pnpm-workspace.yaml` `allowBuilds`. Only child code imports it; no ivm
    object ever enters the isolate.
 
-Safety promise: the seam properties the tests prove (guest sees no host
-globals/env/Node primitive, no network, limits end the child not the host).
-Hard containment is not promised; an external boundary (container/VM, RSS
-cgroup, no secrets in the pod) is required — `docs/public/trust-model.md`
-§Isolate host.
+Safety promise: the seam properties the tests prove (guest code in the
+isolate sees no host globals/env/Node primitive or isolated-vm handle, no
+network; limits end the child, not the host). Not protected: an isolate
+escape (V8 bug, isolated-vm glue bug) gives code execution as the child's
+uid — it can read the parent's `/proc/<ppid>/environ`, the filesystem and the
+network. The empty child env only stops leaks through a rifty bug. The
+consumer must put the child behind its own boundary (separate uid, sandbox or
+container, RSS cgroup); a parent holding secrets in the same uid/pod is
+exposed to an escape — `docs/public/trust-model.md` §Isolate host.
 
 Rejected: in-process isolated-vm (catastrophic OOM, above); rifty in a plain
 child realm or `worker_threads` (indirect-eval `import('node:child_process')`

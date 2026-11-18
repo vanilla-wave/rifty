@@ -14,6 +14,12 @@ describe('inspect', () => {
     expect(inspect([1n, 2n])).toBe('[ 1n, 2n ]');
   });
 
+  it('formats negative zero as Node does (`-0`, also nested)', () => {
+    // Node v24.16.0: `node -e "console.log(-0, [-0], {z: -0})"` → `-0 [ -0 ] { z: -0 }`
+    expect(formatArgs([-0, [-0], { z: -0 }])).toBe('-0 [ -0 ] { z: -0 }');
+    expect(inspect(0)).toBe('0');
+  });
+
   it('formats arrays', () => {
     expect(inspect([1, 2, 3])).toBe('[ 1, 2, 3 ]');
   });

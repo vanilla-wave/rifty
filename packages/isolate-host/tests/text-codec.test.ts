@@ -3,7 +3,10 @@
  * against Node's own on the same inputs.
  */
 import { describe, expect, it } from 'vitest';
-import { TextDecoder as GuestDecoder, TextEncoder as GuestEncoder } from '../src/guest/text-codec.ts';
+import {
+  TextDecoder as GuestDecoder,
+  TextEncoder as GuestEncoder,
+} from '../src/guest/text-codec.ts';
 
 // Deterministic PRNG so a failure reproduces.
 function prng(seed: number): () => number {
@@ -16,7 +19,10 @@ function prng(seed: number): () => number {
 
 /** Bytes biased toward UTF-8 edge structure: leads, continuations, boundaries. */
 function randomBytes(rand: () => number, n: number): Uint8Array {
-  const pool = [0x00, 0x41, 0x7f, 0x80, 0xbf, 0xc0, 0xc1, 0xc2, 0xdf, 0xe0, 0xed, 0xef, 0xf0, 0xf4, 0xf5, 0xff, 0x9f, 0xa0, 0x8f, 0x90];
+  const pool = [
+    0x00, 0x41, 0x7f, 0x80, 0xbf, 0xc0, 0xc1, 0xc2, 0xdf, 0xe0, 0xed, 0xef, 0xf0, 0xf4, 0xf5, 0xff,
+    0x9f, 0xa0, 0x8f, 0x90,
+  ];
   return Uint8Array.from({ length: n }, () =>
     rand() < 0.6 ? (pool[Math.floor(rand() * pool.length)] as number) : Math.floor(rand() * 256),
   );
@@ -74,14 +80,20 @@ describe('guest UTF-8 codec vs Node', () => {
 
   it('encode and encodeInto match, lone surrogates included', () => {
     const rand = prng(3);
-    const units = [0x41, 0x7ff, 0x800, 0xd7ff, 0xd800, 0xdbff, 0xdc00, 0xdfff, 0xe000, 0xffff, 0xe9];
+    const units = [
+      0x41, 0x7ff, 0x800, 0xd7ff, 0xd800, 0xdbff, 0xdc00, 0xdfff, 0xe000, 0xffff, 0xe9,
+    ];
     for (let i = 0; i < 2000; i++) {
       const s = String.fromCharCode(
         ...Array.from({ length: Math.floor(rand() * 10) }, () =>
-          rand() < 0.5 ? (units[Math.floor(rand() * units.length)] as number) : Math.floor(rand() * 0x10000),
+          rand() < 0.5
+            ? (units[Math.floor(rand() * units.length)] as number)
+            : Math.floor(rand() * 0x10000),
         ),
       );
-      expect(Array.from(new GuestEncoder().encode(s))).toEqual(Array.from(new TextEncoder().encode(s)));
+      expect(Array.from(new GuestEncoder().encode(s))).toEqual(
+        Array.from(new TextEncoder().encode(s)),
+      );
       const size = Math.floor(rand() * 12);
       const a = new Uint8Array(size);
       const b = new Uint8Array(size);

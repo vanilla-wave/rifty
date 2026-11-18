@@ -1,1 +1,5 @@
 # Ledger — isolate-host-run-code
+- 2026-11-18 — re-cut: corpus rows hit pre-existing rifty ceilings, kept literal as expected failures: `text-codec` (inspect typed arrays/grouping, `runtime-js/util-surface-completions`), `esm-top-level-await` + `esm-static-import` (`runtime-js/node-cli-esm-eval-context`), `dynamic-import` (isolate, ADR-0557 §5), `type-error` (`runtime-js/node-eval-non-throw-diagnostic-header`) — trace: I1
+- 2026-11-18 — re-cut: new ceilings in implementation: unhandled `import()` rejection unreported by isolated-vm; `unhandledRejection` listener gets a reason copy + `promise` undefined; RSS watchdog overshoots by one allocation step (peak 661–808 MiB at 448 MiB ceiling) — compat `isolate-host.md` — trace: I4, I1
+- 2026-11-18 — fixed on the way: inspect `-0` (corpus `console-log-values`), io web-stream brand capture in a realm without web streams, no-spec process default output sink (byte fd 1/2) — runtime-js/io CHANGELOGs
+- 2026-11-18 — per-call cost `runCode('console.log(1)')`: p50 123 ms, p95 125 ms (20 sequential, M3 Pro macOS, Node v24.16.0, isolated-vm 7.0.2; guest bundle 7.0 MB); recorded, not promised

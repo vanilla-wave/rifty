@@ -14,6 +14,9 @@
 
 ## [Unreleased]
 
+- `util.inspect`/console print negative zero as `-0`, as Node.
+- The spec-less process's fd 1/2 resolve a byte sink per write: `setDefaultProcessOutputSink` (`./internal`) routes the exact bytes (isolate host, ADR-0557); unset keeps the console fallback. `./internal` also exports `handleRealmUncaughtError`/`handleRealmUnhandledRejection` for a realm without `error`/`unhandledrejection` events.
+
 - Node decode surfaces keep a leading UTF-8 BOM: `fs` encoded reads and `createReadStream({ encoding })`, `string_decoder`, `readline`, `process.stdin.setEncoding`, `execSync` encoded output, `digest('utf8')`, Buffer paths, spec-less default process stdout/stderr. One-shot decodes use io `bytesToString`; COI `execSync` failure message carries the child stderr verbatim (no trim). `stream/consumers` `text()`/`json()` follow Node: string chunks verbatim, byte chunks through one default `TextDecoder` as they arrive. Module loader unchanged (`.json`, `package.json`, ESM still strip, as Node).
 
 - Guest Fetch instances and `markAsUncloneable` graphs throw Node's `DataCloneError` (code 25) on `structuredClone`, realm/`MessagePort`/`Worker`/`parentPort`/`BroadcastChannel` `postMessage` (kernel and same-realm workers): tags on ordinary objects and real Errors throw as Node, intrinsics ignore theirs; nested data properties, spoofed prototypes, Map/Set entries and Error `cause` included. One side-effect-free admission walk (`internal/clone-marks.ts`, realm-global marks shared across bundles) runs ahead of the native clone, which always gets the original graph; wrapped clone surfaces touch only captured primordials and forward a read transfer list as a primordial-only iterable. Declared gaps: a tag behind a getter is not seen (compat ❌); a tag on a host object is honoured where Node ignores it, and a getter deleting a later tagged sibling still throws (compat ⚠️) (ADR-0541).

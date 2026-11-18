@@ -121,6 +121,13 @@ const SPEC = {
     keywords: ['npm', 'semver', 'install'],
   },
   '@riftydev/shell': { dir: 'packages/shell', sideEffects: false, keywords: ['shell', 'bash'] },
+  // ADR-0557: Node-only host. `build` adds the child entry + guest IIFE runCode loads from dist/.
+  '@riftydev/isolate-host': {
+    dir: 'packages/isolate-host',
+    build: 'tsup && node scripts/build-runtime.mjs',
+    sideEffects: false,
+    keywords: ['isolate', 'isolated-vm', 'sandbox', 'node-compatible'],
+  },
   '@riftydev/ts-language-service': {
     dir: 'packages/ts-language-service',
     // The kernel `serve`-worker boot self-installs on load (auto-boot guard) —

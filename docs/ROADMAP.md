@@ -146,3 +146,18 @@ project IS an agent stand).
 open:
 - `docs/backlog/epics/from-intent-to-running-project` — outcome-first launcher plus local/Git project ingress and an explicit install/run plan.
 - `docs/backlog/distribution/export-project-as-starter-m13` — project bundle → Starter / share-by-link; reuses the ADR-0165 baseline artifact. Links `create-rifty-template`.
+
+## M14 — Isolate host
+
+**IN PROGRESS.**
+A Node service runs a rifty guest in a V8 isolate (ADR-0557): `@riftydev/isolate-host`, one
+disposable clean-env child process + isolated-vm isolate per call. Orchestration, pods,
+hypervisor and deploy stay outside rifty; the consumer supplies the outer boundary
+(`docs/public/trust-model.md` §Isolate host).
+- A — `runCode(code)` → `{stdout, stderr, exitCode}` with `node -e` parity and limits: goal
+  `docs/backlog/epics/isolate-host-run-code`.
+- Directions (not fitted): B — live sandbox: host binary file ops, `exec node <path>`; C — FS
+  snapshot export/import + library template; D — agent tool set over the host. Shim
+  completion (URL, structuredClone, web streams, AbortController, EventTarget — requirements'
+  shim list, ceilings in A) rides B. A pool / long-lived worker process for many isolates is a
+  later density direction, unmeasured.

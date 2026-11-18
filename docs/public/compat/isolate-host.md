@@ -1,0 +1,19 @@
+# Isolate host (`@riftydev/isolate-host`, ADR-0557)
+
+`runCode(code)` runs `code` like `node -e <code>` on Node 24. Tests:
+`packages/isolate-host/tests/` (vitest project `isolate-host`). The oracle is a live `node -e`
+child.
+
+| Surface | Status | Notes |
+|---|---|---|
+| `{stdout, stderr, exitCode}` of CommonJS `node -e` code | ✅ | Corpus parity `parity.test.ts`: console, byte `process.stdout.write`, UTF-8, `exit`/`exitCode`/`'exit'`, event-loop order, fs on the in-memory VFS, Buffer, path/util/crypto hashes/events, uncaught throw/rejection diagnostics (canonical `[eval]` projection) |
+| Fresh instance per call | ✅ | `isolation.test.ts` |
+| Limits: time / isolate heap / V8 fatal OOM / child RSS / output cap | ✅ | `termination: 'timeout' \| 'memory'`; RSS is a sampled watchdog that can overshoot by one allocation step; output past the cap is dropped (`truncated`). `limits.test.ts` |
+| Network: `fetch`, `WebSocket`, `node:http`/`https`/`net` | ❌ | `NotImplementedError('isolate-host.<api>')`; `node:tls`/`dgram`/`http2` keep rifty's loud stubs. `egress.test.ts` |
+| `URL`, `URLSearchParams`, `structuredClone`, web streams, `AbortController`/`AbortSignal`, `Event`/`EventTarget`/`CustomEvent`, `Blob`/`File`, `Request`/`Response`/`Headers`/`FormData`, `MessageChannel`/`MessagePort`/`BroadcastChannel`, `crypto.subtle`, `performance.mark`/`measure`/… | ❌ | `NotImplementedError('isolate-host.<api>')`; successor goal (`docs/ROADMAP.md` M14 B) |
+| ESM syntax in `-e` (static `import`, top-level `await`) | ❌ | Node 24 detects and runs it as a module; here `NotImplementedError('isolate-host.node-eval-esm')`. `backlog/runtime-js/node-cli-esm-eval-context` |
+| `import()` | ❌ | Rejects `Error: Not implemented: isolate-host.dynamic-import …`. An **unhandled** `import()` rejection is not reported: isolated-vm does not surface it, and the run exits normally |
+| `console.log` / `util.inspect` layout | ⚠️ | No line breaking or grouping of long arrays/objects; typed arrays print as objects; default depth 3. `backlog/runtime-js/util-surface-completions` |
+| Uncaught non-`throw` error diagnostic (`undefined.x`) | ⚠️ | No `[eval]:1` source header/caret. `backlog/runtime-js/node-eval-non-throw-diagnostic-header` |
+| `unhandledRejection` listener arguments | ⚠️ | The reason is an isolated-vm copy, and `promise` is `undefined`; a non-`Error` reason arrives as a generic `Error` |
+| Identity: `process.version`, `os.platform()`, `process.cwd()` (`/workspace`), `process.argv`, `process.env` (empty), stdin | ⚠️ | rifty's, not the host's |
