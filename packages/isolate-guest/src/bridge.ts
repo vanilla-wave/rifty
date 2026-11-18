@@ -73,7 +73,7 @@ export function createHostBridge(hooks: HostHooks): HostBridge {
         try {
           hooks.fire(id);
         } catch {
-          // The guest is gone (e.g. a disposed isolate): nothing to deliver to.
+          // The embedder cannot deliver: this timer has nothing left to do.
           clear(id);
         }
       };

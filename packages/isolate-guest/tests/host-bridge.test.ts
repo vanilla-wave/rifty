@@ -202,32 +202,29 @@ describe('createHostBridge argument validation (I5)', () => {
     expect(fired.length).toBe(seen);
   });
 
-  carrier(
-    'a throwing fire hook (a disposed isolate) stays inside the bridge and ends that timer',
-    async () => {
-      const { createHostBridge } = await load();
-      const uncaught: unknown[] = [];
-      const onUncaught = (error: unknown) => uncaught.push(error);
-      process.prependListener('uncaughtException', onUncaught);
-      let calls = 0;
-      const { functions, close } = createHostBridge({
-        write: () => {},
-        fire: () => {
-          calls++;
-          throw new Error('isolate is disposed');
-        },
-      });
-      try {
-        functions.timerStart(1, 1, true);
-        await sleep(30);
-        expect(uncaught).toEqual([]);
-        expect(calls).toBe(1);
-      } finally {
-        process.removeListener('uncaughtException', onUncaught);
-        close();
-      }
-    },
-  );
+  carrier('a throwing fire hook stays inside the bridge and ends that timer', async () => {
+    const { createHostBridge } = await load();
+    const uncaught: unknown[] = [];
+    const onUncaught = (error: unknown) => uncaught.push(error);
+    process.prependListener('uncaughtException', onUncaught);
+    let calls = 0;
+    const { functions, close } = createHostBridge({
+      write: () => {},
+      fire: () => {
+        calls++;
+        throw new Error('cannot deliver');
+      },
+    });
+    try {
+      functions.timerStart(1, 1, true);
+      await sleep(30);
+      expect(uncaught).toEqual([]);
+      expect(calls).toBe(1);
+    } finally {
+      process.removeListener('uncaughtException', onUncaught);
+      close();
+    }
+  });
 });
 
 describe('exitStatus (I5)', () => {

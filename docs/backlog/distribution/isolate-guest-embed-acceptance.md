@@ -1,6 +1,6 @@
 ---
 area: distribution
-status: draft
+status: ready
 title: Isolate guest export acceptance carrier — packed export install, README embedder over the parity corpus, hostile bridge arguments, host bundle identity
 created: 2026-11-18
 why: First unit of goal isolate-guest-embed; the scenario must be executable and RED before the export exists.
@@ -55,7 +55,7 @@ challenge: 2026-11-18 — inherits the goal premise check (`goal.md` §Challenge
    (`host-bridge.test.ts`) → I5
 5. A throwing `write` hook reaches the guest as
    `TypeError: isolate-host bridge: write failed`, no host path; a throwing
-   `fire` hook (a disposed isolate) raises no uncaught host error and ends
+   `fire` hook raises no uncaught host error and ends
    that timer (`host-bridge.test.ts`) → I5, scenario
 6. Timers fire by id (one-shot once, repeat repeatedly, cleared never);
    `close()` removes every host timer of the bridge (active `Timeout` count),
@@ -109,7 +109,7 @@ challenge: 2026-11-18 — inherits the goal premise check (`goal.md` §Challenge
 | axis × operation | honest outcome | artifact / fault target | trace |
 |---|---|---|---|
 | embedder `write` hook throws × guest write | guest sees `TypeError: isolate-host bridge: write failed`, no host path | acceptance 5 | I5 |
-| embedder `fire` hook throws (isolate disposed) × timer tick | no uncaught host error; that timer ends | acceptance 5 | I5 |
+| embedder `fire` hook throws × timer tick | no uncaught host error; that timer ends | acceptance 5 | I5 |
 | call ends with timers armed × `close()` | every bridge timer cleared; later `timerStart` a no-op | acceptance 6, 12 | I5 |
 | guest status not an integer 0..255 × `exitStatus` | exit 1 | acceptance 7 | I5 |
 | guest `import()` × embedder hook | run ends: gap line, exit 1, later guest output dropped | acceptance 11 | I1 |
@@ -120,4 +120,7 @@ challenge: 2026-11-18 — inherits the goal premise check (`goal.md` §Challenge
 - isolated-vm 6.2.0 and other embedders (declared ceilings, goal §Outcome).
 
 ## Decisions
+
+- ready-verdict: 2026-11-18 — Contract+RED @ 385d2f26b (verdict JSON on PR #411)
+- re-cut: 2026-11-18 — row 5 + fault-matrix row 2 wording: a throwing `fire` hook, not "a disposed isolate" (reviewer probe, isolated-vm 7.0.2: `applyIgnored` after `dispose()` does not throw; row 12 covers the pending timer) — trace: none
 - Contract+RED @ a871a712f: BLOCK — 2 blockers (no RED for the embedder's `import()` hook; a refused `timerStart` could still arm) fixed in rows 4, 11; concerns taken: rows 11 (uncopyable vs `runCode`), 12 (`close()` through the README embedder), README timer/output bounds, fault matrix, separate install dirs. Not taken: an embedder analog of `child-trust` (the real bundle hands back only numbers; `exitStatus` row 7 covers the judgement).
