@@ -123,6 +123,33 @@ resolves real Node; isolate rejects `Not supported`); `node:vm`, workerd,
 quickjs-emscripten (requirements §Тупики); option B, in-process with a weaker
 memory invariant — pending the user, not built.
 
+## Proven seam
+
+Goal `isolate-host-run-code`, closed 2026-11-18 (landing verdict
+`docs/backlog/distribution/reference/isolate-host-acceptance-final-green.json`).
+Carriers live in `packages/isolate-host/tests/`; each invariant is an executed
+test over real children and isolated-vm. The oracle is live `node -e`.
+
+- I1 parity: corpus `{stdout, stderr, exitCode}` equals `node -e`; stdout is
+  byte-exact; stderr is canonicalized only on uncaught-error rows; ceiling
+  rows are expected failures.
+- I2 fresh instance: no file, global or timer crosses calls; no child
+  outlives its result.
+- I3 no host reach: host global/env canaries are absent; no Node primitive,
+  foreign realm or ivm handle is reachable (bridge walk + intercepted calls);
+  the child env is only Node's `NODE_CHANNEL_*`.
+- I4 limits: `timeout` and `memory` (heap, fatal OOM, RSS watchdog); every
+  call settles within `timeoutMs` + 1 s; output past the cap is discarded on
+  both sides; child death or spawn failure rejects at once.
+- I5 egress throws `NotImplementedError`.
+- I6 the packed tarball installs per README; plain `node` suffices.
+
+Authority: the user asked for a V8-isolate host (2026-11-17) and to start
+(2026-11-18). The manager, delegated by the user, decided: a narrow mission;
+the seam-not-containment safety claim; no density promise; tier `works`; the
+child process per call (OOM probe). Rejected: an in-process isolate, rifty in
+a plain child realm, the consumer composing internals.
+
 ## Consequences
 
 - Each call pays a process spawn + isolate + runtime-bundle load; measured,

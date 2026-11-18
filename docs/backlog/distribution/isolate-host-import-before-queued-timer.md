@@ -4,7 +4,6 @@ status: draft
 title: Isolate host — import() rejection handled by an already-due timer or immediate exits 0
 created: 2026-11-18
 why: A guest timer/immediate already due when isolated-vm serves the import (expired during the importing task, or a sibling due in the same host turn) runs first; its handler suppresses the unhandled report (Node exits 1).
-epic: isolate-host-run-code
 sources: [docs/adr/distribution/0557-run-guest-code-in-a-disposable-child-process-holding-a-rifty-v8-isolate-isolated-vm.md, docs/public/compat/isolate-host.md]
 code: [packages/isolate-host/src/child/main.ts]
 ---

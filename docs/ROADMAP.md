@@ -154,8 +154,9 @@ A Node service runs a rifty guest in a V8 isolate (ADR-0557): `@riftydev/isolate
 disposable clean-env child process + isolated-vm isolate per call. Orchestration, pods,
 hypervisor and deploy stay outside rifty; the consumer supplies the outer boundary
 (`docs/public/trust-model.md` §Isolate host).
-- A — `runCode(code)` → `{stdout, stderr, exitCode}` with `node -e` parity and limits: goal
-  `docs/backlog/epics/isolate-host-run-code`.
+- A — delivered: `runCode(code)` → `{stdout, stderr, exitCode}` with `node -e` parity and
+  limits (ADR-0557 §Proven seam, `docs/public/compat/isolate-host.md`,
+  `packages/isolate-host/README.md`).
 - Directions (not fitted): B — live sandbox: host binary file ops, `exec node <path>`; C — FS
   snapshot export/import + library template; D — agent tool set over the host. Shim
   completion (URL, structuredClone, web streams, AbortController, EventTarget — requirements'
