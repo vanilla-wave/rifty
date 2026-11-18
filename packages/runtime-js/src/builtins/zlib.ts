@@ -67,13 +67,14 @@ function unsupportedClass(feature: string, reason: string) {
 }
 
 type OneShot = 'gzip' | 'gunzip' | 'deflate' | 'inflate' | 'deflateRaw' | 'inflateRaw';
-const useAsync = (fn: OneShot): string =>
-  `async zlib.${fn} works: zlib.${fn}(buf, cb) or await util.promisify(zlib.${fn})(buf)`;
+const callAsync = (fn: OneShot): string =>
+  `zlib.${fn}(buf, cb) or await util.promisify(zlib.${fn})(buf)`;
 const BY_HEADER =
   'pick by header: gzip input (starts 1f 8b) → async zlib.gunzip, else → async zlib.inflate; both take (buf, cb) and work with util.promisify';
-const syncReason = (fn: OneShot): string => `sync zlib not implemented yet; ${useAsync(fn)}`;
+const syncReason = (fn: OneShot): string =>
+  `sync zlib not implemented yet; async zlib.${fn} works: ${callAsync(fn)}`;
 const streamReason = (fn: OneShot): string =>
-  `this stream not implemented yet; buffer the input, then ${useAsync(fn)}`;
+  `this stream not implemented yet; buffer the input, then call async zlib.${fn}: ${callAsync(fn)}`;
 const UNZIP_STREAM_REASON = `this stream not implemented yet; buffer the input, then ${BY_HEADER}`;
 const noAlternative = (codec: 'brotli' | 'zstd' | 'crc32'): string =>
   `${codec} not implemented yet; node:zlib has no working alternative`;

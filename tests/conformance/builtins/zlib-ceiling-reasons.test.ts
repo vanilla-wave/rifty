@@ -1,5 +1,3 @@
-import { promisify } from 'node:util';
-import nodeZlib from 'node:zlib';
 /**
  * `node:zlib` ceiling reasons — rifty's own `NotImplementedError(feature, hint)`
  * convention, not Node parity (Node runs these). Every export that throws names
@@ -10,6 +8,7 @@ import nodeZlib from 'node:zlib';
  * `CEILINGS` is the closed list: the completeness case derives the module's actual
  * throwing exports and compares, so a new or changed ceiling cannot slip past it.
  */
+import nodeZlib from 'node:zlib';
 import { MemoryFsSync, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach, describe, expect, it } from 'vitest';
 import { loadBuiltin } from '../../../packages/io/src/builtin-registry.ts';
@@ -21,13 +20,14 @@ type OneShot = 'gzip' | 'gunzip' | 'deflate' | 'inflate' | 'deflateRaw' | 'infla
 /** The working async alternative a row's message names; `by-header` = gunzip or inflate. */
 type Alternative = OneShot | 'by-header' | 'none';
 
-const use = (fn: OneShot): string =>
-  `async zlib.${fn} works: zlib.${fn}(buf, cb) or await util.promisify(zlib.${fn})(buf)`;
+const call = (fn: OneShot): string =>
+  `zlib.${fn}(buf, cb) or await util.promisify(zlib.${fn})(buf)`;
 const BY_HEADER =
   'pick by header: gzip input (starts 1f 8b) → async zlib.gunzip, else → async zlib.inflate; both take (buf, cb) and work with util.promisify';
-const sync = (fn: OneShot): string => `sync zlib not implemented yet; ${use(fn)}`;
+const sync = (fn: OneShot): string =>
+  `sync zlib not implemented yet; async zlib.${fn} works: ${call(fn)}`;
 const stream = (fn: OneShot): string =>
-  `this stream not implemented yet; buffer the input, then ${use(fn)}`;
+  `this stream not implemented yet; buffer the input, then call async zlib.${fn}: ${call(fn)}`;
 const none = (codec: string): string =>
   `${codec} not implemented yet; node:zlib has no working alternative`;
 
@@ -78,7 +78,7 @@ const CEILINGS: Readonly<Record<string, readonly [Alternative, string]>> = Objec
   ZstdDecompress: ['none', none('zstd')],
 });
 
-/** Function exports that run instead of throwing — the rest of the module. */
+/** Function exports that run instead of throwing; with CEILINGS, all 45 (= Node 24.16's 45). */
 const WORKING = [
   'gzip',
   'gunzip',
@@ -92,22 +92,34 @@ const WORKING = [
 
 ensureRuntimeJsBuiltinsRegistered();
 const zlib = loadBuiltin('node:zlib') as Record<string, unknown>;
+// The guest's own util.promisify — the one the messages tell a guest to call.
+const { promisify } = loadBuiltin('node:util') as {
+  promisify: typeof import('node:util').promisify;
+};
 
 function isNotImplemented(error: unknown): error is Error & { feature: string } {
   return error instanceof Error && error.name === 'NotImplementedError';
 }
 
-/** The `NotImplementedError` an export throws when called and when constructed. */
+/** Argument shapes probed: none, and a valid one-shot `(buf, cb)` call. */
+const PROBE_ARGS: ReadonlyArray<readonly unknown[]> = [[], [Buffer.from('x'), () => {}]];
+
+/** The `NotImplementedError`s an export throws, called and constructed, per probe. */
 function ceilingErrors(value: unknown): Array<Error & { feature: string }> {
   if (typeof value !== 'function') return [];
   const fn = value as (...args: unknown[]) => unknown;
   const errors: Array<Error & { feature: string }> = [];
-  for (const invoke of [() => Reflect.apply(fn, undefined, []), () => Reflect.construct(fn, [])]) {
-    try {
-      const made = invoke() as { destroy?: () => void } | undefined;
-      made?.destroy?.();
-    } catch (error) {
-      if (isNotImplemented(error)) errors.push(error);
+  for (const args of PROBE_ARGS) {
+    for (const invoke of [
+      () => Reflect.apply(fn, undefined, args),
+      () => Reflect.construct(fn, args),
+    ]) {
+      try {
+        const made = invoke() as { destroy?: () => void } | undefined;
+        made?.destroy?.();
+      } catch (error) {
+        if (isNotImplemented(error)) errors.push(error);
+      }
     }
   }
   return errors;
@@ -166,7 +178,7 @@ describe('node:zlib ceilings — every named alternative works on the same modul
   ) as Set<OneShot>;
 
   for (const fn of named) {
-    it(`util.promisify(zlib.${fn}) round-trips with real Node zlib`, async () => {
+    it(`guest util.promisify(zlib.${fn}) round-trips with real Node zlib`, async () => {
       const run = promisify(
         zlib[fn] as (data: Buffer, cb: (e: Error | null, r: Buffer) => void) => void,
       );
