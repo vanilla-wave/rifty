@@ -200,6 +200,7 @@ class Timeout {
 }
 const timers = new Map<number, Timeout>();
 let nextTimerId = 1;
+const MAX_TIMER_MS = 2 ** 31 - 1;
 function startTimer(repeat: boolean, fn: unknown, ms: unknown, args: unknown[]): number {
   if (typeof fn !== 'function') throw argType('callback', 'of type function', fn);
   const id = nextTimerId++;
@@ -207,8 +208,10 @@ function startTimer(repeat: boolean, fn: unknown, ms: unknown, args: unknown[]):
     id,
     new Timeout(fn as Timeout['fn'], args, repeat),
   ]);
+  // Node's `Timeout`: a delay outside 1..2^31-1 (or NaN) runs after 1 ms. Its
+  // `Timeout*Warning` is rifty's gap (`backlog/runtime-js/timeout-delay-warnings`).
   const delay = Number(ms);
-  bridge.timerStart(id, Number.isFinite(delay) && delay > 0 ? delay : 0, repeat);
+  bridge.timerStart(id, delay >= 1 && delay <= MAX_TIMER_MS ? delay : 1, repeat);
   return id;
 }
 function clearTimer(id: unknown): void {

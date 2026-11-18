@@ -37,7 +37,7 @@ child.
 | option | default | meaning |
 |---|---|---|
 | `timeoutMs` | 30 000 | wall-clock deadline from the call |
-| `memoryLimitMb` | 256 | isolate heap limit (min 8); child RSS ceiling = 256 + 3 × this |
+| `memoryLimitMb` | 256 | isolate heap limit (min 8); child RSS ceiling = 256 + 3 × this. Below ~16 the rifty runtime itself does not fit and every run ends as `termination: 'memory'` (measured: 12 fails, 15 runs `console.log`) |
 | `maxOutputBytes` | 1 MiB | stdout + stderr bytes kept |
 
 Result:

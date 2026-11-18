@@ -124,6 +124,12 @@ const CORPUS: readonly Row[] = [
     ceiling: 'import() ends the run (ADR-0557 §5)',
   },
   {
+    // Kept literal: Node also prints a TimeoutOverflowWarning on stderr.
+    label: 'timer-delay-out-of-range',
+    code: "setTimeout(() => console.log('t'), 2 ** 31); const t = setInterval(() => { console.log('i'); clearInterval(t) }, 3e9)",
+    ceiling: 'Timeout*Warning (runtime-js/timeout-delay-warnings)',
+  },
+  {
     label: 'builtin-module-globals',
     code: "console.log(path.join('a', 'b'), typeof fs.readFileSync, util.format('%d', 1), path === require('path'), typeof crypto.createHash); path = 5; console.log(path)",
   },
@@ -387,4 +393,36 @@ describe('declared ceilings fail loudly (I1 ceilings, scenario step 4)', () => {
       'NotImplementedError: Not implemented: isolate-host.fetch (not available in the rifty isolate host, ADR-0557)',
     );
   });
+});
+
+describe('timer delays Node clamps to 1 ms (2^31 and above, negative, NaN)', () => {
+  // The output and status are Node's; Node's `Timeout*Warning` on stderr is the
+  // declared gap (`timer-delay-out-of-range` ceiling row).
+  for (const delay of ['2 ** 31', '1e10', '-5', 'NaN']) {
+    it(delay, async () => {
+      const code = `setTimeout(() => console.log('t'), ${delay})`;
+      const oracle = nodeEval(code);
+      const result = await runCode(code);
+      expect({ stdout: result.stdout, exitCode: result.exitCode }).toEqual({
+        stdout: oracle.stdout,
+        exitCode: oracle.code,
+      });
+      expect(result.stderr).toBe('');
+    });
+  }
+});
+
+describe('declared: an exit() already queued overrides a pending fatal', () => {
+  // `backlog/runtime-js/node-eval-queued-exit-overrides-pending-fatal`: Node
+  // exits 1 with the report; a runtime fix turns these red until promoted.
+  for (const code of [
+    "setTimeout(() => { throw new Error('x') }); setTimeout(() => process.exit(0))",
+    "setTimeout(() => { queueMicrotask(() => process.exit(0)); throw new Error('x') })",
+    "Promise.reject(new Error('x')); setTimeout(() => process.exit(0))",
+  ]) {
+    it(code, async () => {
+      expect(nodeEval(code).code, 'Node fails it').toBe(1);
+      expect(await runCode(code)).toEqual({ stdout: '', stderr: '', exitCode: 0 });
+    });
+  }
 });
