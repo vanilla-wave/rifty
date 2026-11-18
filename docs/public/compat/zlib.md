@@ -8,9 +8,9 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat / exact-vers
 
 | Feature | Status | Notes |
 |---|---|---|
-| `gzip` / `gunzip` (async) | ✅ | `CompressionStream('gzip')` — RFC-1952; rifty output reads in Node and vice versa |
-| `deflate` / `inflate` (async) | ✅ | `'deflate'` — RFC-1950 zlib-wrapped; both-direction wire-compat |
-| `deflateRaw` / `inflateRaw` (async) | ✅ | `'deflate-raw'` — RFC-1951 raw; both-direction wire-compat |
+| `gzip` / `gunzip` (async) | ⚠️ | `CompressionStream('gzip')` — RFC-1952; rifty output reads in Node and vice versa. `gunzip` rejects zero padding (every host) and, in Chromium, a 2nd member; Node accepts both — `backlog/runtime-js/zlib-trailing-bytes-after-stream-end` |
+| `deflate` / `inflate` (async) | ⚠️ | `'deflate'` — RFC-1950 zlib-wrapped; both-direction wire-compat. `inflate` rejects bytes after the stream end, Node ignores them — `backlog/runtime-js/zlib-trailing-bytes-after-stream-end` |
+| `deflateRaw` / `inflateRaw` (async) | ⚠️ | `'deflate-raw'` — RFC-1951 raw; both-direction wire-compat. `inflateRaw` rejects bytes after the stream end, Node ignores them — `backlog/runtime-js/zlib-trailing-bytes-after-stream-end` |
 | `util.promisify(zlib.gzip)` | ✅ | Standard `(err, Buffer)` callback convention |
 | String / Buffer / TypedArray / ArrayBuffer input | ✅ | Normalised to bytes, utf-8 for strings |
 | `constants` / `codes` | ✅ | Full real Node table; legacy top-level aliases are non-enumerable; `codes` frozen (Node shape) |
