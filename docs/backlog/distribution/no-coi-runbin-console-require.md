@@ -25,6 +25,13 @@ Declared in compat process.md "Shared realm across no-COI `node` invocations".
 `__rifty` and `__riftyImport` globals are visible to every no-COI `node`
 (declared; Node has neither). Fault: `sibling-drift` between in-place hosts.
 
+Greptile on PR #408 (code read, `captureNodeProcessGlobals` in
+`module-loader/loader.ts`): when console eval has made the mirror
+non-configurable, the delete fails, the mirror is treated as absent, and the
+next project-command `node` sees it while the restore reports success. Only the
+host's console eval (the trusted control plane, ADR-0418 Consequences) can do
+that.
+
 ## Next
 
 Owner distribution (workbench toolchain). Probe `startBin`; extend
