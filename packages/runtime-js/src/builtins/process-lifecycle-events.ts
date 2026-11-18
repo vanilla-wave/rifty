@@ -81,6 +81,8 @@ export class NodeProcessExit {
   #exiting = false;
   /** The first requested terminal: after it the process is gone for Node. */
   #terminal: RiftyProcessExitSignal | null = null;
+  /** `exitCode` as the fatal `'exit'` listeners left it; null before `beginFatal`. */
+  #fatalExitCode: { readonly value: number | undefined } | null = null;
 
   constructor(host: NodeProcessExitHost) {
     this.#host = host;
@@ -116,14 +118,19 @@ export class NodeProcessExit {
     } catch {
       // Node: "Nothing to be done about it at this point."
     }
+    this.#fatalExitCode = { value: this.#host.readExitCode() };
   }
 
   /**
-   * After `beginFatal`, Node prints and exits with `exitCode ?? 1` inside its
-   * handler — unless an `exit()` already ended it (e.g. in the fatal `'exit'`).
+   * After `beginFatal`, Node prints and exits with `exitCode ?? 1` read after its
+   * report, inside its handler (TriggerUncaughtException): no task runs between
+   * the `'exit'` listeners and the report, so a later one's `exitCode` (an
+   * in-process host's catch runs after microtasks) is undone first. An `exit()`
+   * that already ended the process (e.g. in the fatal `'exit'`) keeps its status.
    */
   fatal(error: unknown): never {
     if (this.#terminal !== null) throw this.#terminal;
+    if (this.#fatalExitCode !== null) this.#host.writeExitCode(this.#fatalExitCode.value);
     this.#host.writeStderr(`${formatThrown(error)}\n`);
     return this.#terminate(toUint8ExitCode(this.#host.readExitCode() ?? 1), { cause: error });
   }
@@ -140,6 +147,7 @@ export class NodeProcessExit {
     this.#host.writeExitCode(undefined);
     this.#exiting = false;
     this.#terminal = null;
+    this.#fatalExitCode = null;
   }
 
   /**

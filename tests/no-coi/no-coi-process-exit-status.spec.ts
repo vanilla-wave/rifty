@@ -56,6 +56,59 @@ const unrefInterval = program(
   'unref-interval',
   `${EXIT_ROW}\nsetInterval(() => console.log('L|tick'), 20).unref();`,
 );
+// Node src/node_errors.cc TriggerUncaughtException: a no-listener entry throw
+// exits with the 'exit' listeners' exitCode, before any timer; an entry exit()
+// also ends the process before a 0 ms timer queued ahead of it.
+const fatalEntryExitCode = program(
+  'fatal-entry-exit-code',
+  "process.on('exit', () => { process.exitCode = 5; });\nthrow new Error('FATAL-EXIT-CODE');",
+  'FATAL-EXIT-CODE',
+);
+const fatalEntryTimer = program(
+  'fatal-entry-timer',
+  `${EXIT_ROW}\nsetTimeout(() => console.log('L|after'), 0);\nthrow new Error('FATAL-ENTRY-TIMER');`,
+  'FATAL-ENTRY-TIMER',
+);
+const exitEntryTimer = program(
+  'exit-entry-timer',
+  `${EXIT_ROW}\nsetTimeout(() => console.log('L|after'), 0);\nprocess.exit(3);`,
+);
+// The status is read after the 'exit' listeners, before any later task; the
+// report goes to fd 2, not a guest-patched process.stderr.write.
+const evalFatalMicrotask = {
+  name: 'eval-fatal-microtask-exit-code',
+  files: {},
+  nodeArgv: [
+    '-e',
+    "Promise.resolve().then(()=>{process.exitCode=5});throw new Error('FATAL-MICRO')",
+  ],
+  line: `node -e "Promise.resolve().then(()=>{process.exitCode=5});throw new Error('FATAL-MICRO')"`,
+  fatal: 'FATAL-MICRO',
+};
+// Node reads the status after its report: a write the report's own `stack`
+// getter makes counts, on the entry terminal and the rejection trap alike.
+const GETTER = (marker: string) =>
+  `const e = new Error('${marker}');\nObject.defineProperty(e, 'stack', { get() { process.exitCode = 5; return 'Error: ${marker}'; } });`;
+const fatalStackGetter = program(
+  'fatal-stack-getter-exit-code',
+  `${GETTER('FATAL-GETTER')}\nthrow e;`,
+  'FATAL-GETTER',
+);
+const rejectionStackGetter = program(
+  'fatal-rejection-stack-getter-exit-code',
+  `${GETTER('FATAL-REJ-GETTER')}\nPromise.reject(e);`,
+  'FATAL-REJ-GETTER',
+);
+const fatalSilencedStderr = program(
+  'fatal-silenced-stderr',
+  "process.stderr.write = () => true;\nthrow new Error('FATAL-SILENCED');",
+  'FATAL-SILENCED',
+);
+const fatalThrowingStderr = program(
+  'fatal-throwing-stderr',
+  "process.stderr.write = () => { throw new Error('write'); };\nthrow new Error('FATAL-THROWING');",
+  'FATAL-THROWING',
+);
 
 const commandCases: readonly ProcessLifecycleCase[] = [
   listenerThrowRejection,
@@ -76,6 +129,14 @@ const commandCases: readonly ProcessLifecycleCase[] = [
   shared('natural-exit-code'),
   shared('exit-listener-timer'),
   unrefInterval,
+  fatalEntryExitCode,
+  fatalEntryTimer,
+  exitEntryTimer,
+  evalFatalMicrotask,
+  fatalStackGetter,
+  rejectionStackGetter,
+  fatalSilencedStderr,
+  fatalThrowingStderr,
 ];
 
 const binCases: readonly ProcessLifecycleCase[] = [
