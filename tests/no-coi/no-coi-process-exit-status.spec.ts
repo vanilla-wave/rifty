@@ -56,6 +56,23 @@ const unrefInterval = program(
   'unref-interval',
   `${EXIT_ROW}\nsetInterval(() => console.log('L|tick'), 20).unref();`,
 );
+// Node src/node_errors.cc TriggerUncaughtException: a no-listener entry throw
+// exits with the 'exit' listeners' exitCode, before any timer; an entry exit()
+// also ends the process before a 0 ms timer queued ahead of it.
+const fatalEntryExitCode = program(
+  'fatal-entry-exit-code',
+  "process.on('exit', () => { process.exitCode = 5; });\nthrow new Error('FATAL-EXIT-CODE');",
+  'FATAL-EXIT-CODE',
+);
+const fatalEntryTimer = program(
+  'fatal-entry-timer',
+  `${EXIT_ROW}\nsetTimeout(() => console.log('L|after'), 0);\nthrow new Error('FATAL-ENTRY-TIMER');`,
+  'FATAL-ENTRY-TIMER',
+);
+const exitEntryTimer = program(
+  'exit-entry-timer',
+  `${EXIT_ROW}\nsetTimeout(() => console.log('L|after'), 0);\nprocess.exit(3);`,
+);
 
 const commandCases: readonly ProcessLifecycleCase[] = [
   listenerThrowRejection,
@@ -76,6 +93,9 @@ const commandCases: readonly ProcessLifecycleCase[] = [
   shared('natural-exit-code'),
   shared('exit-listener-timer'),
   unrefInterval,
+  fatalEntryExitCode,
+  fatalEntryTimer,
+  exitEntryTimer,
 ];
 
 const binCases: readonly ProcessLifecycleCase[] = [
