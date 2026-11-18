@@ -38,3 +38,12 @@ Which mechanism owns plain-ESM coordinates (always-on rewrite line map vs an
 unshifted rewrite), and is file-URL frame identity in scope with it?
 Settled at PICKUP against Node parity for nested, top-level and post-await
 frames; must keep ADR-0136/0450's scoped hook ownership.
+
+## Observation — 2026-11-18
+
+PR #406 now prints these frames in a no-COI command's fatal report, so agents
+read them (`node fail.mjs` → `at eval (<root>/fail.mjs:6:7)`, Node
+`at file://<root>/fail.mjs:1:7`; pinned residual in
+`tests/no-coi/no-coi-fatal-stderr.spec.ts`). That top-level `throw` is +5 lines
+with the column kept, against the Context's +7 / changed column: the offset
+depends on module shape.
