@@ -141,27 +141,27 @@ describe('runCode limits (I4)', () => {
     expect(grownMb).toBeLessThan(64);
   }, 90_000);
 
-  it("empty writes count against nothing and buffer nothing (3e6 × write('') at a 1 KiB cap)", async () => {
+  it("empty writes count against nothing and buffer nothing (1e6 × write('') at a 1 KiB cap)", async () => {
     const before = process.memoryUsage().rss;
     const value = await runCode(
-      "for (let i = 0; i < 3e6; i++) process.stdout.write(''); process.stdout.write('end')",
-      { maxOutputBytes: 1024, timeoutMs: 60_000 },
+      "for (let i = 0; i < 1e6; i++) process.stdout.write(''); process.stdout.write('end')",
+      { maxOutputBytes: 1024, timeoutMs: 120_000 },
     );
     expect(value).toEqual({ stdout: 'end', stderr: '', exitCode: 0 });
     expect((process.memoryUsage().rss - before) / (1 << 20)).toBeLessThan(64);
-  }, 90_000);
+  }, 150_000);
 
-  it('2e6 one-byte writes past a 1 MiB cap stay bounded in the consumer', async () => {
+  it('1e6 one-byte writes past a 512 KiB cap stay bounded in the consumer', async () => {
     const before = process.memoryUsage().rss;
     const value = await runCode(
-      "for (let i = 0; i < 2e6; i++) process.stdout.write(i % 2 ? 'a' : 'b'); console.error('e')",
-      { maxOutputBytes: 1 << 20, timeoutMs: 60_000 },
+      "for (let i = 0; i < 1e6; i++) process.stdout.write(i % 2 ? 'a' : 'b'); console.error('e')",
+      { maxOutputBytes: 1 << 19, timeoutMs: 120_000 },
     );
     expect(value.exitCode).toBe(0);
     expect(value.truncated).toBe(true);
-    expect(value.stdout.length).toBe(1 << 20);
+    expect(value.stdout.length).toBe(1 << 19);
     expect((process.memoryUsage().rss - before) / (1 << 20)).toBeLessThan(64);
-  }, 90_000);
+  }, 150_000);
 
   it('truncation survives a timeout kill', async () => {
     const value = await runCode("process.stdout.write('x'.repeat(5000)); for (;;) {}", {

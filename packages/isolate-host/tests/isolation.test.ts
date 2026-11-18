@@ -167,15 +167,8 @@ describe('no host reach (I3)', () => {
     const environment = processEnvironment(pid);
     expect(environment).not.toContain(SECRET);
     expect(environment).not.toContain(ENV_CANARY);
-    // Linux: only the IPC variables Node itself adds for `stdio: 'ipc'`
-    // (NODE_CHANNEL_FD, NODE_CHANNEL_SERIALIZATION_MODE) — nothing inherited.
-    if (process.platform === 'linux') {
-      const names = environment
-        .split('\0')
-        .filter(Boolean)
-        .map((kv) => kv.slice(0, kv.indexOf('=')));
-      expect(names.sort()).toEqual(['NODE_CHANNEL_FD', 'NODE_CHANNEL_SERIALIZATION_MODE']);
-    }
+    // Linux: the block is empty (the channel is plain pipes, so not even Node's NODE_CHANNEL_*).
+    if (process.platform === 'linux') expect(environment).toBe('');
     await expect(running).resolves.toEqual({ stdout: 'done\n', stderr: '', exitCode: 0 });
   });
 });
