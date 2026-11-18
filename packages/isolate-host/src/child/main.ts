@@ -44,8 +44,7 @@ async function run(request: RunRequest): Promise<void> {
     memoryLimit: request.memoryLimitMb,
     onCatastrophicError: reportMemory,
     // A sync throw rejects the guest's import(). isolated-vm runs this after the
-    // guest task that called import(), possibly after the guest reported its exit:
-    // `done` settles through isolate round trips so that rejection still lands.
+    // guest task that called import(); the guest's drain waits on `settle` for it.
     importModuleDynamically: () => {
       importRequested = true;
       const message =
@@ -77,8 +76,6 @@ async function run(request: RunRequest): Promise<void> {
     // Timers armed while the bundle loads can expire before `fire` is bound.
     const early: number[] = [];
     const origin = performance.timeOrigin;
-    let lastExit = 0;
-    let settling = false;
     const host = {
       write: (fd: 1 | 2, bytes: Uint8Array) => {
         if (kept >= request.maxOutputBytes) {
@@ -110,29 +107,24 @@ async function run(request: RunRequest): Promise<void> {
       now: () => performance.now(),
       random: (n: number) => new Uint8Array(randomBytes(Math.max(0, Math.min(65536, n | 0)))),
       done: (exitCode: number) => {
-        lastExit = exitCode;
-        if (settling) return;
-        settling = true;
-        void (async () => {
-          // Barrier: an isolate round trip queued after any pending import(); while one
-          // ran, give its unhandled rejection a host turn plus a round trip to reach
-          // the guest, which then reports exit 1 (a later `done` wins).
-          await fire?.apply(undefined, [0]).catch(() => {});
-          for (let i = 0; i < 3 && importRequested; i++) {
-            await new Promise((resolve) => setTimeout(resolve, 0));
-            await fire?.apply(undefined, [0]).catch(() => {});
-          }
-          report({ type: 'exit', exitCode: lastExit, truncated });
-        })();
+        report({ type: 'exit', exitCode, truncated });
+      },
+      /** Whether an import() was requested since the last call (the guest's drain asks). */
+      takeImportRequested: () => {
+        const requested = importRequested;
+        importRequested = false;
+        return requested;
       },
     };
     for (const [name, fn] of Object.entries(host)) {
       await jail.set(`__riftyHost_${name}`, new ivm.Callback(fn));
     }
+
     await context.eval(`Object.defineProperty(globalThis, '__riftyIsolateHost', {
       value: Object.freeze({
         write: __riftyHost_write, timerStart: __riftyHost_timerStart, timerClear: __riftyHost_timerClear,
-        now: __riftyHost_now, random: __riftyHost_random, done: __riftyHost_done, timeOrigin: ${origin},
+        now: __riftyHost_now, random: __riftyHost_random, done: __riftyHost_done,
+        takeImportRequested: __riftyHost_takeImportRequested, timeOrigin: ${origin},
       }),
       configurable: true,
     });

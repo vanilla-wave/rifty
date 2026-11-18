@@ -80,9 +80,11 @@ blocks it.
    sink (`setDefaultProcessOutputSink`), never via `console`. ESM syntax in
    `-e` (Node's detect-module SyntaxErrors) → `NotImplementedError(
    'isolate-host.node-eval-esm')`; `import()` rejects with a named error (no
-   child frames in its stack). isolated-vm resolves the import after the guest
-   task that made it, so the child settles `done` through isolate round trips:
-   a late unhandled rejection still reports exit 1, as Node fails. `node -e`'s builtin-module globals are
+   child frames in its stack). isolated-vm serves the import after the guest
+   task that made it, so the guest's drain is one chokepoint: after the loop
+   empties it waits two host timer turns and repeats while the child served an
+   import() — the rejection lands in a live process (listeners, `'exit'`,
+   `process.exit` as in Node). `node -e`'s builtin-module globals are
    lazy getters over the rifty loader (Node v24.16.0 list); a test asserts the
    guest has every global name live `node -e` defines.
 6. Egress: `fetch`/`WebSocket` loud (5); `node:http`, `https`, `net` register

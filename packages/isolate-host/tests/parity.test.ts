@@ -342,6 +342,25 @@ describe('declared ceilings fail loudly (I1 ceilings, scenario step 4)', () => {
     });
   }
 
+  // The import() rejection lands while the guest's process is alive: its events and
+  // exit status follow Node (stdout + status; Node's stderr is ERR_MODULE_NOT_FOUND).
+  for (const code of [
+    "process.on('unhandledRejection', (r) => console.log('UR', typeof r)); import('nonexistent-pkg')",
+    "process.on('uncaughtException', (e, o) => console.log('UE', o)); import('nonexistent-pkg')",
+    "process.on('exit', (c) => console.log('exit', c)); import('nonexistent-pkg')",
+    "import('nonexistent-pkg'); process.exit(0)",
+    "setTimeout(() => import('nonexistent-pkg').catch(() => console.log('caught')), 5)",
+  ]) {
+    it(`process events around a failing import() follow Node: ${code}`, async () => {
+      const oracle = nodeEval(code);
+      const result = await runCode(code);
+      expect({ stdout: result.stdout, exitCode: result.exitCode }).toEqual({
+        stdout: oracle.stdout,
+        exitCode: oracle.code,
+      });
+    });
+  }
+
   it('import() rejects with a named gap', async () => {
     const result = await runCode(
       "import('node:fs').then(() => console.log('LOADED'), (e) => console.log(e.message))",

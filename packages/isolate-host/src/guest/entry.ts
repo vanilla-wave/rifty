@@ -25,7 +25,13 @@ import { syncMirror } from '@riftydev/vfs';
 import { installMemoryFs } from '@riftydev/vfs/internal';
 import { bindNotImplemented } from './loud.ts';
 // Evaluated before every runtime module: the build injects it first (scripts/build-runtime.mjs).
-import { bridge, fireTimer, installCeilingGlobals, setUncaughtHandler } from './web-shim.ts';
+import {
+  bridge,
+  fireTimer,
+  installCeilingGlobals,
+  setUncaughtHandler,
+  settleHostTasks,
+} from './web-shim.ts';
 
 bindNotImplemented(NotImplementedError);
 
@@ -145,14 +151,10 @@ function finish(code: number): void {
   bridge.done(code);
 }
 
-/**
- * An uncaught error the runtime did not claim: Node's fatal exit. After a
- * reported exit (an import() rejection landing late) it still reports 1.
- */
+/** An uncaught error the runtime did not claim (no eval lifecycle): Node's fatal exit. */
 function fatal(error: unknown): void {
   writeFatal(error);
-  if (finished) bridge.done(1);
-  else finish(1);
+  finish(1);
 }
 
 async function run(source: string): Promise<void> {
@@ -188,7 +190,10 @@ async function run(source: string): Promise<void> {
       print: false,
       explicitCommonJs: false,
     });
-    await awaitDrain({ capMs: Number.POSITIVE_INFINITY });
+    // Node keeps the loop alive for a pending import(); here its request and
+    // rejection arrive as isolate tasks after the guest task that made it.
+    do await awaitDrain({ capMs: Number.POSITIVE_INFINITY });
+    while (await settleHostTasks());
     riftyProcess.exit();
     throw new Error('isolate-host guest: process.exit() returned');
   } catch (caught) {
@@ -208,7 +213,7 @@ async function run(source: string): Promise<void> {
 
 /** A rejection isolated-vm found unhandled after the microtask checkpoint (a copy of the reason). */
 function rejection(reason: unknown): void {
-  if (finished || !handleRealmUnhandledRejection(reason, undefined)) fatal(reason);
+  if (!handleRealmUnhandledRejection(reason, undefined)) fatal(reason);
 }
 
 Object.defineProperty(globalThis, '__riftyGuest', {
