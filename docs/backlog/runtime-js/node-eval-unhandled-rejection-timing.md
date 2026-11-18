@@ -16,7 +16,12 @@ the eval drain lifecycle is shared with the browser `node -e` path) prints
 `late-caught` before the same diagnostic and status 1. Separately
 `node -e "process.on('exit', () => { Promise.reject(new Error('x')) })"` →
 Node status 1 with a diagnostic; rifty status 0, nothing printed (found by the
-isolate-host Final+GREEN review). Open: whether the rejection should
+isolate-host Final+GREEN review); microtasks queued inside an `'exit'` listener
+are dropped too (`process.on('exit', () => Promise.reject(1).catch(() => console.log('caught')))`
+→ Node prints `caught`, rifty does not). The late-catch evidence was collected
+in the isolate host, where isolated-vm adds ~10 ms before reporting a plain
+rejection (instrumented child: catch @268 ms, report @280 ms); reproduce on
+the browser `node -e` path before fixing here. Open: whether the rejection should
 terminate before the next macrotask in every realm (kernel child, no-COI,
 isolate) — `awaitDrain` owner.
 
