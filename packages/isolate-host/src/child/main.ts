@@ -43,23 +43,22 @@ async function run(request: RunRequest): Promise<void> {
   const isolate = new ivm.Isolate({
     memoryLimit: request.memoryLimitMb,
     onCatastrophicError: reportMemory,
-    // A sync throw rejects the guest's import(). The import is pending for one host
-    // macrotask (hold → release), so an unhandled rejection reaches the guest's
-    // rejection path before its loop can drain (Node keeps the loop alive too).
+    // A sync throw rejects the guest's import(). isolated-vm runs this after the
+    // guest task that called import(), possibly after the guest reported its exit:
+    // `done` settles through isolate round trips so that rejection still lands.
     importModuleDynamically: () => {
-      hold?.applyIgnored(undefined, []);
-      setTimeout(() => release?.applyIgnored(undefined, []), 0);
-      throw new Error(
-        'Not implemented: isolate-host.dynamic-import (import() is not available in the rifty isolate host; use require(), ADR-0557)',
-      );
+      importRequested = true;
+      const message =
+        'Not implemented: isolate-host.dynamic-import (import() is not available in the rifty isolate host; use require(), ADR-0557)';
+      // No child frames: the stack crosses into the guest and must not reveal host paths.
+      throw Object.assign(new Error(message), { stack: `Error: ${message}` });
     },
     onUnhandledRejection: (reason: unknown) => {
       rejection?.applyIgnored(undefined, [reason], { arguments: { copy: true } });
     },
   });
   let rejection: ivm.Reference<(reason: unknown) => void> | undefined;
-  let hold: ivm.Reference<() => void> | undefined;
-  let release: ivm.Reference<() => void> | undefined;
+  let importRequested = false;
   const failed = (error: unknown): void => {
     if (isolate.isDisposed) {
       reportMemory();
@@ -78,6 +77,8 @@ async function run(request: RunRequest): Promise<void> {
     // Timers armed while the bundle loads can expire before `fire` is bound.
     const early: number[] = [];
     const origin = performance.timeOrigin;
+    let lastExit = 0;
+    let settling = false;
     const host = {
       write: (fd: 1 | 2, bytes: Uint8Array) => {
         if (kept >= request.maxOutputBytes) {
@@ -109,7 +110,20 @@ async function run(request: RunRequest): Promise<void> {
       now: () => performance.now(),
       random: (n: number) => new Uint8Array(randomBytes(Math.max(0, Math.min(65536, n | 0)))),
       done: (exitCode: number) => {
-        report({ type: 'exit', exitCode, truncated });
+        lastExit = exitCode;
+        if (settling) return;
+        settling = true;
+        void (async () => {
+          // Barrier: an isolate round trip queued after any pending import(); while one
+          // ran, give its unhandled rejection a host turn plus a round trip to reach
+          // the guest, which then reports exit 1 (a later `done` wins).
+          await fire?.apply(undefined, [0]).catch(() => {});
+          for (let i = 0; i < 3 && importRequested; i++) {
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            await fire?.apply(undefined, [0]).catch(() => {});
+          }
+          report({ type: 'exit', exitCode: lastExit, truncated });
+        })();
       },
     };
     for (const [name, fn] of Object.entries(host)) {
@@ -130,8 +144,6 @@ async function run(request: RunRequest): Promise<void> {
     fire = await guest.get('fire', { reference: true });
     for (const id of early.splice(0)) fire.applyIgnored(undefined, [id]);
     rejection = await guest.get('rejection', { reference: true });
-    hold = await guest.get('hold', { reference: true });
-    release = await guest.get('release', { reference: true });
     const start = await guest.get('run', { reference: true });
     await jail.delete('__riftyGuest');
     await start.apply(undefined, [request.code], {

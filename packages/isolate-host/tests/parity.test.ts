@@ -324,15 +324,23 @@ describe('declared ceilings fail loudly (I1 ceilings, scenario step 4)', () => {
     expect(nodeNames.filter((name) => !guestNames.has(name))).toEqual([]);
   });
 
-  it('an unhandled import() fails loudly, as Node fails a missing module', async () => {
-    const code = "import('nonexistent-pkg')";
-    expect(nodeEval(code).code).toBe(1);
-    const result = await runCode(code);
-    expect(result.exitCode).toBe(1);
-    expect(result.stderr).toContain(
-      'Error: Not implemented: isolate-host.dynamic-import (import() is not available in the rifty isolate host; use require(), ADR-0557)',
-    );
-  });
+  for (const code of [
+    "import('nonexistent-pkg')",
+    "setTimeout(() => import('nonexistent-pkg'), 20)",
+    "setImmediate(() => import('nonexistent-pkg'))",
+    "Promise.resolve().then(() => import('nonexistent-pkg'))",
+  ]) {
+    it(`an unhandled import() fails loudly, as Node fails a missing module: ${code}`, async () => {
+      expect(nodeEval(code).code).toBe(1);
+      const result = await runCode(code);
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain(
+        'Error: Not implemented: isolate-host.dynamic-import (import() is not available in the rifty isolate host; use require(), ADR-0557)',
+      );
+      // The rejection is made in the child: none of its frames (host paths) reach the guest.
+      expect(result.stderr).not.toMatch(/child\.js|importModuleDynamically/);
+    });
+  }
 
   it('import() rejects with a named gap', async () => {
     const result = await runCode(

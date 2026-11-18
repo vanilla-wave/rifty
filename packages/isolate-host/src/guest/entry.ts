@@ -18,9 +18,7 @@ import { installTimerGlobals } from '@riftydev/runtime-js/builtins/timers';
 import {
   handleRealmUncaughtError,
   handleRealmUnhandledRejection,
-  ref,
   setDefaultProcessOutputSink,
-  unref,
 } from '@riftydev/runtime-js/internal';
 import { createModuleLoader } from '@riftydev/runtime-js/loader';
 import { syncMirror } from '@riftydev/vfs';
@@ -147,10 +145,14 @@ function finish(code: number): void {
   bridge.done(code);
 }
 
-/** An uncaught error the runtime did not claim (no eval lifecycle): Node's fatal exit. */
+/**
+ * An uncaught error the runtime did not claim: Node's fatal exit. After a
+ * reported exit (an import() rejection landing late) it still reports 1.
+ */
 function fatal(error: unknown): void {
   writeFatal(error);
-  finish(1);
+  if (finished) bridge.done(1);
+  else finish(1);
 }
 
 async function run(source: string): Promise<void> {
@@ -206,11 +208,10 @@ async function run(source: string): Promise<void> {
 
 /** A rejection isolated-vm found unhandled after the microtask checkpoint (a copy of the reason). */
 function rejection(reason: unknown): void {
-  if (!handleRealmUnhandledRejection(reason, undefined)) fatal(reason);
+  if (finished || !handleRealmUnhandledRejection(reason, undefined)) fatal(reason);
 }
 
 Object.defineProperty(globalThis, '__riftyGuest', {
-  // hold/release: a pending import() keeps the loop alive until its rejection lands, as in Node.
-  value: Object.freeze({ run, fire: fireTimer, rejection, hold: ref, release: unref }),
+  value: Object.freeze({ run, fire: fireTimer, rejection }),
   configurable: true,
 });

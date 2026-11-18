@@ -48,7 +48,7 @@ challenge: 2026-11-18 — inherits the goal premise check (`goal.md` §Challenge
 
 ## Parity cases
 
-1. The 31 `parity.test.ts` corpus rows (5 marked `ceiling`) (console values/format, byte `stdout.write`,
+1. The 32 `parity.test.ts` corpus rows (5 marked `ceiling`) (console values/format, byte `stdout.write`,
    UTF-8, stderr, interleaving, `exitCode`, `exit()`, `'exit'` event, event
    loop order, async/await, interval, fs sync/promises/ENOENT, Buffer,
    path/util, crypto hashes, events, CJS eval scope, compute, TextEncoder/
@@ -77,7 +77,7 @@ challenge: 2026-11-18 — inherits the goal premise check (`goal.md` §Challenge
 - Identity ceilings (rifty's): `process.version`, `os.platform()`,
   `process.cwd()`, empty `process.env`, `process.argv`.
 - ESM syntax in `-e` → `NotImplementedError('isolate-host.node-eval-esm')`;
-  `import()` → named rejection (unhandled: unreported).
+  `import()` → named rejection (unhandled: exit 1, from any task).
 - stdin, `-p`, TypeScript input.
 
 ## Decisions

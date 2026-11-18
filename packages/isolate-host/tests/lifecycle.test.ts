@@ -39,4 +39,22 @@ describe('runCode lifecycle faults', () => {
     });
     expect(childPids()).toEqual([]);
   });
+
+  it('a child that cannot spawn rejects the call at once (no hang)', () => {
+    // A real spawn failure in a separate consumer process: its execPath points nowhere.
+    const dist = new URL('../dist/index.js', import.meta.url).href;
+    const script = `process.execPath = '/nonexistent/node'; const t = Date.now();
+      const { runCode } = await import(${JSON.stringify(dist)});
+      runCode('1', { timeoutMs: 60000 }).then(
+        () => console.log('RESOLVED'),
+        (e) => console.log(JSON.stringify({ code: e.code, ms: Date.now() - t })),
+      );`;
+    const out = execFileSync(process.execPath, ['--input-type=module', '-e', script], {
+      encoding: 'utf8',
+      timeout: 10_000,
+    });
+    const report = JSON.parse(out) as { code: string; ms: number };
+    expect(report.code).toBe('ENOENT');
+    expect(report.ms).toBeLessThan(1000);
+  });
 });
