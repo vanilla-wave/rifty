@@ -77,7 +77,7 @@ challenge: 2026-11-18 — inherits the goal premise check (`goal.md` §Challenge
 - Identity ceilings (rifty's): `process.version`, `os.platform()`,
   `process.cwd()`, empty `process.env`, `process.argv`.
 - ESM syntax in `-e` → `NotImplementedError('isolate-host.node-eval-esm')`;
-  `import()` → named rejection (unhandled: exit 1 from any task, incl. a handler attached in a later task; except a handler from a timer that expired while the importing task ran — compat ⚠️).
+  `import()` → named rejection (unhandled: exit 1 from any task, incl. a handler attached in a later task; except a handler from a timer/immediate already due when the import is served, or chained after `fs.promises` — compat ⚠️).
 - stdin, `-p`, TypeScript input.
 
 ## Decisions

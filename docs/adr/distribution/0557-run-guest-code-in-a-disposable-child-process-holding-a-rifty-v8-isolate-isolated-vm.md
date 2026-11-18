@@ -87,8 +87,10 @@ blocks it.
    `process.exit` as in Node). isolated-vm flushes unhandled rejections only in
    a task epilogue, so the import request also queues one empty isolate task:
    the report precedes guest tasks queued after the import. Declared ⚠️: a
-   timer that expired while the importing task ran is already queued ahead of
-   the import request; its handler suppresses the report (exit 0; Node 1).
+   timer/immediate task already due when the import request is served (expired
+   while the importing task ran, or due in the same host turn, e.g. a sibling
+   `setImmediate`) runs first; its handler suppresses the report (exit 0;
+   Node 1).
    Ordering those needs the guest to own import() (source rewrite) — not
    built here. `node -e`'s builtin-module globals are
    lazy getters over the rifty loader (Node v24.16.0 list); a test asserts the
