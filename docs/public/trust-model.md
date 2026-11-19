@@ -50,8 +50,11 @@ calls share a worker process.
   throw `NotImplementedError`. The time limit, the isolate heap limit, V8 fatal OOM and the
   worker RSS ceiling end the guilty call or its worker, never the consumer process. A guest that
   does not escape changes a neighbour's result only by delay (memory, hangs, floods tested next
-  to neighbours); a lost worker's calls rerun once. The worker's shared resources and their
-  bounds: ADR-0563 §7.
+  to neighbours); a lost worker's calls rerun once. Guest memory isolated-vm does not count
+  against `memoryLimitMb` is unavailable: `WebAssembly` (engine flag + removed global) and
+  resizable/growable buffers are named gaps; host timers and request size are bounded per guest.
+  Unmeasured: V8's per-isolate Intl/ICU and compiled-code memory. The worker's shared resources
+  and their bounds: ADR-0563 §7.
 - **Not protected: an isolate escape.** A V8 or isolated-vm bug can give the guest code execution
   as the worker's OS user, in a process that hosts other calls' guests, now and later: their
   code, data and output are reachable. Escaped code can read the consumer's `/proc/<ppid>/environ`,

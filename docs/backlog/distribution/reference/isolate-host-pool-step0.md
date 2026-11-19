@@ -119,6 +119,38 @@ wasmGrow: culprit 1/undefined; neighbours n0,n1,n2; peak worker RSS 227 MiB
 No vector crosses the worker ceiling without an isolate signal: the RSS-kill-without-culprit path is
 recorded unreachable for these vectors (goal map fog).
 
+Guest memory outside the isolate heap (2026-11-19, cross-review round 1). `node --no-node-snapshot probe-wasm.mjs <pkg>`:
+`WebAssembly.Memory` grown 30 × 160 pages with every page written, `memoryLimit` 64 — the isolate's own stats
+do not see it, and it is not disposed:
+
+```
+302 ms rss 236 used 2 total 4 physical 3 external 13 malloced 1 peakMalloced 1 limit 67
+903 ms rss 408 used 2 total 4 physical 3 external 13 malloced 1 peakMalloced 2 limit 67
+3004 ms rss 441 used 3 total 4 physical 3 external 13 malloced 1 peakMalloced 2 limit 67
+result {"exitCode":0,"stdout":""}
+```
+
+`node --no-node-snapshot probe-offheap.mjs <pkg>` (each vector writes its pages; `memoryLimit` 64; peak RSS over base):
+
+```
+sab: exit 1 ""; peak RSS +48 MiB over base                 (fixed SharedArrayBuffer: counted, RangeError)
+sabGrowable: exit 0 "len 640"; peak RSS +637 MiB over base (maxByteLength: NOT counted)
+resizableAB: exit 0 "len 640"; peak RSS +593 MiB over base (maxByteLength: NOT counted)
+manyResizable: exit 0 "kept 40"; peak RSS +581 MiB over base
+plainAB: exit 1 ""; peak RSS +4 MiB over base              (counted)
+bigString: exit 0 "kept 40"; peak RSS +4 MiB over base     (on-heap; ropes)
+wasmWritten: exit 0 "pages 10241"; peak RSS +607 MiB over base (NOT counted)
+```
+
+Engine knobs (`node --v8-options`, Node v24.16.0): no flag removes `WebAssembly` short of `--jitless` (`--expose-wasm`
+is gone); `--wasm-max-mem-pages=0` makes `new WebAssembly.Memory({initial: 1})` throw "could not allocate memory" and
+`grow` throw "Unable to grow instance memory" in every isolate of the process; no flag disables `maxByteLength`.
+A realm wrapper refusing `maxByteLength` (`probe-rab-wrap.mjs`): the direct, `prototype.constructor`, subclass,
+`Reflect.construct` new-target and species paths all reach the refusal; no stack frame hands out the original;
+`transfer(16 MiB)` × 40 goes through the counted allocator ("Array buffer allocation failed").
+
+Not measured: Intl/ICU data and caches, compiled-code space, regexp code (V8 heap spaces, likely counted; unproven).
+
 ## Prototype sources
 
 ### `lib.mjs`
@@ -446,4 +478,102 @@ for (const [name, c] of Object.entries(cases)) {
   console.log(`${name}: culprit ${culprit}; neighbours ${n.join(',')}; peak worker RSS ${Math.round(peak)} MiB; workers seen ${pids.size} (before ${before.length})`);
 }
 process.exit(0);
+```
+
+### `probe-wasm.mjs`
+
+```js
+// Usage: node --no-node-snapshot probe-wasm.mjs <pkg> — wasm memory with written pages: what the isolate's own stats report.
+import { startOne, runOne } from './lib.mjs';
+await runOne('1', { cache: true });
+const code = `const m = new WebAssembly.Memory({ initial: 1, maximum: 65536 });
+  let n = 0; const tick = () => { if (n++ >= 30) return; m.grow(160); const u = new Uint8Array(m.buffer); for (let i = 0; i < u.length; i += 4096) u[i] = 1; setTimeout(tick, 30); }; tick();
+  setTimeout(() => {}, 3000);`;
+const g = startOne(code, { cache: true, memoryLimit: 64 });
+const mib = (b) => Math.round(b / 1048576);
+const t0 = performance.now();
+const iv = setInterval(() => {
+  if (g.isolate.isDisposed) { console.log('disposed'); return; }
+  const s = g.isolate.getHeapStatisticsSync();
+  console.log(`${Math.round(performance.now() - t0)} ms rss ${mib(process.memoryUsage.rss())} used ${mib(s.used_heap_size)} total ${mib(s.total_heap_size)} physical ${mib(s.total_physical_size)} external ${mib(s.externally_allocated_size)} malloced ${mib(s.malloced_memory)} peakMalloced ${mib(s.peak_malloced_memory)} limit ${mib(s.heap_size_limit)}`);
+}, 300);
+console.log('result', JSON.stringify(await g.done.catch((e) => e.message)));
+clearInterval(iv);
+process.exit(0);
+```
+
+### `probe-offheap.mjs`
+
+```js
+// Usage: node --no-node-snapshot probe-offheap.mjs <pkg> — guest-controlled memory outside the isolate heap? memoryLimit 64,
+// each vector writes its pages; reports peak process RSS over base, the guest's result, and isolate stats at the end.
+import { startOne, runOne } from './lib.mjs';
+await runOne('1', { cache: true });
+const touch = 'for (let i = 0; i < u.length; i += 4096) u[i] = 1;';
+const cases = {
+  sab: `const a = []; for (let k = 0; k < 40; k++) { const u = new Uint8Array(new SharedArrayBuffer(16 << 20)); ${touch} a.push(u) } console.log('kept', a.length)`,
+  sabGrowable: `const s = new SharedArrayBuffer(0, { maxByteLength: 1 << 30 }); for (let k = 1; k <= 40; k++) { s.grow(k * (16 << 20)); const u = new Uint8Array(s); ${touch} } console.log('len', s.byteLength >> 20)`,
+  resizableAB: `const b = new ArrayBuffer(0, { maxByteLength: 1 << 30 }); for (let k = 1; k <= 40; k++) { b.resize(k * (16 << 20)); const u = new Uint8Array(b); ${touch} } console.log('len', b.byteLength >> 20)`,
+  manyResizable: `const a = []; for (let k = 0; k < 40; k++) { const b = new ArrayBuffer(16 << 20, { maxByteLength: 1 << 30 }); const u = new Uint8Array(b); ${touch} a.push(b) } console.log('kept', a.length)`,
+  plainAB: `const a = []; for (let k = 0; k < 40; k++) { const u = new Uint8Array(16 << 20); ${touch} a.push(u) } console.log('kept', a.length)`,
+  bigString: `let s = 'x'; const a = []; for (let k = 0; k < 40; k++) { a.push('y'.repeat(16 << 20) + k) } console.log('kept', a.length)`,
+  wasmWritten: `const m = new WebAssembly.Memory({ initial: 1, maximum: 65536 }); for (let k = 0; k < 40; k++) { m.grow(256); const u = new Uint8Array(m.buffer); ${touch} } console.log('pages', m.buffer.byteLength >> 16)`,
+};
+const mib = (b) => Math.round(b / 1048576);
+for (const [name, code] of Object.entries(cases)) {
+  await new Promise((r) => setTimeout(r, 300));
+  const base = process.memoryUsage.rss();
+  let peak = base;
+  const g = startOne(code, { cache: true, memoryLimit: 64 });
+  const iv = setInterval(() => { peak = Math.max(peak, process.memoryUsage.rss()); }, 10);
+  const r = await Promise.race([g.done.then((v) => `exit ${v.exitCode} ${JSON.stringify(v.stdout.trim())}`, (e) => `rejected: ${e.message.slice(0, 50)}`), new Promise((res) => setTimeout(() => res('still running at 15 s'), 15000))]);
+  clearInterval(iv);
+  console.log(`${name}: ${r}; peak RSS +${mib(peak - base)} MiB over base`);
+  if (!g.isolate.isDisposed) g.isolate.dispose();
+}
+process.exit(0);
+```
+
+### `probe-rab-wrap.mjs`
+
+```js
+// Usage: node --no-node-snapshot probe-rab-wrap.mjs <pkg> — a realm wrapper refusing maxByteLength: does any path
+// reach the original constructor? Plus: does transfer() of a fixed buffer go through the limited allocator?
+import { createRequire } from 'node:module';
+const ivm = createRequire(`${process.argv[2]}/package.json`)('isolated-vm');
+const iso = new ivm.Isolate({ memoryLimit: 64 });
+const ctx = iso.createContextSync();
+ctx.evalSync(`{
+  for (const Original of [ArrayBuffer, SharedArrayBuffer]) {
+    const name = Original.name;
+    const construct = Reflect.construct;
+    const Wrapper = function (length, options) {
+      if (new.target === undefined) throw new TypeError("Constructor " + name + " requires 'new'");
+      if (options !== undefined && options !== null && typeof options === 'object' && options.maxByteLength !== undefined)
+        throw new Error('Not implemented: isolate-host.resizable-' + name);
+      return construct(Original, [length], new.target);
+    };
+    Object.defineProperty(Wrapper, 'name', { value: name });
+    Wrapper.prototype = Original.prototype;
+    Object.defineProperty(Original.prototype, 'constructor', { value: Wrapper, writable: true, configurable: true });
+    for (const k of Reflect.ownKeys(Original)) if (k !== 'prototype' && k !== 'length' && k !== 'name') Object.defineProperty(Wrapper, k, Object.getOwnPropertyDescriptor(Original, k));
+    Object.defineProperty(globalThis, name, { value: Wrapper, writable: true, configurable: true });
+  }
+}`);
+const attempts = {
+  direct: 'new ArrayBuffer(1 << 20, { maxByteLength: 1 << 30 }).resizable',
+  directSab: 'new SharedArrayBuffer(1 << 20, { maxByteLength: 1 << 30 }).growable',
+  protoCtor: 'new (new Uint8Array(1).buffer.constructor)(16, { maxByteLength: 1 << 30 }).resizable',
+  subclass: 'class X extends ArrayBuffer {}; new X(16, { maxByteLength: 1 << 30 }).resizable',
+  reflectNewTarget: 'Reflect.construct(ArrayBuffer, [16, { maxByteLength: 1 << 30 }], function () {}).resizable',
+  speciesSlice: 'const b = new ArrayBuffer(16); b.constructor = undefined; b.slice(0).resizable',
+  stackGetFunction: `let got; Error.prepareStackTrace = (e, s) => { for (const f of s) { try { const fn = f.getFunction(); if (fn && fn.name === 'ArrayBuffer' && fn !== ArrayBuffer) got = fn } catch {} } return ''; };
+    new ArrayBuffer({ valueOf() { new Error().stack; return 16 } }); got ? new got(16, { maxByteLength: 1 << 30 }).resizable : 'no original on the stack'`,
+  instanceOk: 'new Uint8Array(4).buffer instanceof ArrayBuffer && new ArrayBuffer(4) instanceof ArrayBuffer && ArrayBuffer.isView(new Uint8Array(1))',
+  transferBig: 'const a = []; for (let k = 0; k < 40; k++) a.push(new ArrayBuffer(16).transfer(16 << 20)); a.length',
+};
+for (const [k, c] of Object.entries(attempts)) {
+  try { console.log(k, '→', ctx.evalSync(c)); } catch (e) { console.log(k, '→ throws', e.message.slice(0, 70)); }
+}
+console.log('rss MiB', Math.round(process.memoryUsage.rss() / 1048576));
 ```

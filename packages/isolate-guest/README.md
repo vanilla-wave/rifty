@@ -143,7 +143,7 @@ your own, you must perform them yourself.
 | member | arguments, controlled by | what the embedder must check / does |
 |---|---|---|
 | `write(fd, bytes)` | `fd`, `bytes`: guest | `fd` is `1` or `2`, `bytes` is a `Uint8Array` of your realm; then your `write` hook. Size is unbounded: cap the output yourself |
-| `timerStart(id, ms, repeat)` | all: guest | `id` an integer in 1..2^31-1, `ms` a number in 0..2^31-1, `repeat` a boolean; re-arming an `id` replaces it; on expiry call `fire(id)`. The number of timers is unbounded: bound it with your limits |
+| `timerStart(id, ms, repeat)` | all: guest | `id` an integer in 1..2^31-1, `ms` a number in 0..2^31-1, `repeat` a boolean; re-arming an `id` replaces it; on expiry call `fire(id)`. `createHostBridge(hooks, { maxTimers })` bounds the live timers: past it the start is refused and `hooks.timersExhausted()` is called once. Omitted, the number is unbounded |
 | `timerClear(id)` | `id`: guest | `id` as above; an unknown `id` is a no-op |
 | `now()` | none | returns ms since `timeOrigin`, the start of this call |
 | `random(byteLength)` | `byteLength`: guest | an integer in 0..65536; returns that many random bytes |
@@ -166,6 +166,12 @@ nothing reaches your event loop. `close()` ends the call: it clears every timer,
 Timer expiries queue in your process, not in the isolate: at most one `fire`
 per armed timer is in flight, so the queue is bounded by the guest's own
 timers, each of which lives in its heap.
+
+What the bundle refuses for every embedder: resizable/growable buffers
+(`maxByteLength` on `ArrayBuffer`/`SharedArrayBuffer`) are
+`NotImplementedError`, because isolated-vm does not count them against
+`memoryLimit`. If you delete `WebAssembly` from the context before the bundle
+runs, the bundle installs it as a named gap; the bundle itself needs no wasm.
 
 ### Guest entry: `globalThis.__riftyGuest`
 
