@@ -3,121 +3,16 @@
  *  - it is unreachable from guest code (captured in a closure, removed from the
  *    realm), so no guest can call the host directly (I3);
  *  - it still treats every argument as hostile, in case a later change exposes
- *    it: each refusal is a guest-safe `TypeError` with no host frame.
+ *    it: that validation is the export's `createHostBridge`, tested in
+ *    `packages/isolate-guest/tests/host-bridge.test.ts` (relocated, ADR-0558).
  */
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
+import { IMPORT_GAP } from '@riftydev/isolate-guest';
 import { describe, expect, it } from 'vitest';
-import { IMPORT_GAP, OutputBudget, createBridge, importGapError } from '../src/child/bridge.ts';
+import { importGapError } from '../src/child/bridge.ts';
 import { runCode } from '../src/index.ts';
 import { childPids } from './support.ts';
-
-const GARBAGE: readonly unknown[] = [
-  undefined,
-  null,
-  0,
-  -1,
-  1.5,
-  Number.NaN,
-  Number.POSITIVE_INFINITY,
-  2 ** 53,
-  '1',
-  'pwn',
-  {},
-  { byteLength: 0, x: 1 },
-  { byteLength: 5, buffer: 1 },
-  [],
-  [1, 2],
-  () => 1,
-  new Proxy({}, {}),
-  'x'.repeat(1e5),
-  new ArrayBuffer(4),
-  new Uint16Array(2),
-  new DataView(new ArrayBuffer(2)),
-  Symbol('s'),
-  10n,
-  true,
-];
-
-/** The bridge's own contract: the only values each entry may accept. */
-const VALID: Readonly<Record<string, (v: unknown) => boolean>> = {
-  'write(fd)': (v) => v === 1 || v === 2,
-  'write(bytes)': (v) => v instanceof Uint8Array,
-  'timerStart(id)': (v) =>
-    Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 2 ** 31 - 1,
-  'timerStart(ms)': (v) => typeof v === 'number' && v >= 0 && v <= 2 ** 31 - 1,
-  'timerStart(repeat)': (v) => typeof v === 'boolean',
-  'timerClear(id)': (v) =>
-    Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 2 ** 31 - 1,
-  'random(n)': (v) => Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 65536,
-};
-
-describe('host bridge argument validation', () => {
-  it('accepts a value only when its contract allows it, and refuses guest-safely', () => {
-    const output = new OutputBudget(1 << 20);
-    const bridge = createBridge({
-      output,
-      outputPending: () => {},
-      fire: () => {},
-    });
-    const calls: [string, (g: unknown) => unknown][] = [
-      ['write(fd)', (g) => bridge.write(g, Uint8Array.of(120))],
-      ['write(bytes)', (g) => bridge.write(1, g)],
-      ['timerStart(id)', (g) => bridge.timerStart(g, 0, false)],
-      ['timerStart(ms)', (g) => bridge.timerStart(7, g, false)],
-      ['timerStart(repeat)', (g) => bridge.timerStart(8, 0, g)],
-      ['timerClear(id)', (g) => bridge.timerClear(g)],
-      ['random(n)', (g) => bridge.random(g)],
-    ];
-    const bad: string[] = [];
-    for (const g of GARBAGE) {
-      for (const [label, call] of calls) {
-        let refused: unknown;
-        try {
-          call(g);
-        } catch (error) {
-          refused = error;
-        }
-        const allowed = (VALID[label] as (v: unknown) => boolean)(g);
-        if (refused === undefined) {
-          if (!allowed) bad.push(`${label} accepted ${String(g).slice(0, 20)}`);
-          continue;
-        }
-        if (allowed) bad.push(`${label} refused a valid ${String(g).slice(0, 20)}`);
-        const error = refused as Error;
-        if (!(error instanceof TypeError) || !error.message.startsWith('isolate-host bridge: ')) {
-          bad.push(`${label} threw ${String(error).slice(0, 60)}`);
-        }
-        // A refusal crosses into the guest: no host frame or path may ride along.
-        if (/file:|child\.js|node:internal|\/node_modules\//.test(String(error.stack))) {
-          bad.push(`${label} leaked a host path`);
-        }
-      }
-    }
-    expect(bad).toEqual([]);
-    // Valid calls still work after the abuse, and only valid ones took effect.
-    expect(bridge.random(4)).toHaveLength(4);
-    bridge.write(1, Uint8Array.of(65));
-    expect(output.drain()).toEqual([[1, Uint8Array.of(65)]]);
-    for (const id of [7, 8]) bridge.timerClear(id);
-  });
-
-  it('now() is the child clock, not a constant and not child state', () => {
-    const bridge = createBridge({
-      output: new OutputBudget(16),
-      outputPending: () => {},
-      fire: () => {},
-    });
-    const first = bridge.now();
-    // Bounded by the wall clock, so a constant `now()` fails here instead of spinning.
-    const until = Date.now() + 50;
-    let spun = first;
-    while (spun - first < 2 && Date.now() < until) spun = bridge.now();
-    expect(spun).toBeGreaterThan(first + 1);
-    // Tracks the wall clock, so a constant or a pid cannot pass.
-    expect(Math.abs(performance.timeOrigin + spun - Date.now())).toBeLessThan(200);
-  });
-});
 
 describe('host bridge reachability from the guest (I3)', () => {
   it('no bridge object or host function is reachable in the guest realm', async () => {

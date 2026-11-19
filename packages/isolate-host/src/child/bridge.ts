@@ -1,38 +1,9 @@
 /**
- * The host functions the isolate can call (ADR-0557 §6). The guest is hostile:
- * every argument is validated, every failure is a guest-safe `TypeError`
- * (name + message, no host frame or path), and nothing a call does can throw
- * into the child's own event loop.
+ * The child's own side of the bridge (ADR-0557 §6): the output cap and the
+ * `import()` rejection. Argument validation is the export's `createHostBridge`
+ * (`@riftydev/isolate-guest`, ADR-0558).
  */
-import { randomBytes } from 'node:crypto';
-
-const MAX_TIMER = 2 ** 31 - 1;
-
-/** A refusal the guest sees: no child stack crosses the boundary. */
-function refuse(message: string): never {
-  const error = new TypeError(`isolate-host bridge: ${message}`);
-  error.stack = `TypeError: ${error.message}`;
-  throw error;
-}
-
-const isInt = (v: unknown, min: number, max: number): v is number =>
-  typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max;
-
-/** Run `fn`; any unexpected host failure becomes a refusal, never a host stack. */
-function guard<A extends unknown[], R>(name: string, fn: (...args: A) => R): (...args: A) => R {
-  return (...args) => {
-    try {
-      return fn(...args);
-    } catch (error) {
-      if (error instanceof TypeError && error.message.startsWith('isolate-host bridge: '))
-        throw error;
-      return refuse(`${name} failed`);
-    }
-  };
-}
-
-export const IMPORT_GAP =
-  'Not implemented: isolate-host.dynamic-import (import() is not available in the rifty isolate host; use require(), ADR-0557)';
+import { IMPORT_GAP } from '@riftydev/isolate-guest';
 
 /**
  * The rejection a guest `import()` receives. isolated-vm copies a thrown host
@@ -86,47 +57,4 @@ export class OutputBudget {
     }
     return out;
   }
-}
-
-export interface BridgeHooks {
-  readonly output: OutputBudget;
-  outputPending(): void;
-  fire(id: number): void;
-}
-
-export function createBridge(hooks: BridgeHooks) {
-  const timers = new Map<number, NodeJS.Timeout>();
-  const clear = (id: number): void => {
-    const timer = timers.get(id);
-    if (timer !== undefined) clearTimeout(timer);
-    timers.delete(id);
-  };
-  return {
-    write: guard('write', (fd: unknown, bytes: unknown) => {
-      if (fd !== 1 && fd !== 2) refuse('write: fd must be 1 or 2');
-      if (!(bytes instanceof Uint8Array)) refuse('write: bytes must be a Uint8Array');
-      if (hooks.output.write(fd, bytes)) hooks.outputPending();
-    }),
-    timerStart: guard('timerStart', (id: unknown, ms: unknown, repeat: unknown) => {
-      if (!isInt(id, 1, MAX_TIMER)) refuse('timerStart: id must be an integer in 1..2^31-1');
-      if (typeof ms !== 'number' || !(ms >= 0 && ms <= MAX_TIMER))
-        refuse('timerStart: ms out of range');
-      if (typeof repeat !== 'boolean') refuse('timerStart: repeat must be a boolean');
-      clear(id);
-      const tick = (): void => {
-        if (!repeat) timers.delete(id);
-        hooks.fire(id);
-      };
-      timers.set(id, repeat ? setInterval(tick, ms) : setTimeout(tick, ms));
-    }),
-    timerClear: guard('timerClear', (id: unknown) => {
-      if (!isInt(id, 1, MAX_TIMER)) refuse('timerClear: id must be an integer in 1..2^31-1');
-      clear(id);
-    }),
-    now: guard('now', () => performance.now()),
-    random: guard('random', (n: unknown) => {
-      if (!isInt(n, 0, 65536)) refuse('random: length must be an integer in 0..65536');
-      return new Uint8Array(randomBytes(n));
-    }),
-  };
 }

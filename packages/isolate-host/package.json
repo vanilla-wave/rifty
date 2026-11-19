@@ -45,15 +45,13 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "build": "tsup && node scripts/build-runtime.mjs"
+    "build": "pnpm --dir ../isolate-guest run build && tsup && node scripts/build-runtime.mjs"
   },
   "dependencies": {
     "isolated-vm": "7.0.2"
   },
   "devDependencies": {
-    "@riftydev/io": "workspace:*",
-    "@riftydev/runtime-js": "workspace:*",
-    "@riftydev/vfs": "workspace:*",
+    "@riftydev/isolate-guest": "workspace:*",
     "esbuild": "0.28.0"
   },
   "engines": {

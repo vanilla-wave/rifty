@@ -25,6 +25,7 @@ import {
 import { createModuleLoader } from '@riftydev/runtime-js/loader';
 import { syncMirror } from '@riftydev/vfs';
 import { installMemoryFs } from '@riftydev/vfs/internal';
+import { UNCOPYABLE_REJECTION } from '../contract.ts';
 import { bindNotImplemented } from './loud.ts';
 // Evaluated before every runtime module: the build injects it first (scripts/build-runtime.mjs).
 import {
@@ -293,7 +294,7 @@ function rejection(copied: unknown): void {
   // A reason isolated-vm could not copy out (function-bearing object, symbol): Node
   // still fails the run; the reason itself is lost (compat ⚠️).
   const reason =
-    copied === bridge.uncopyableReason
+    copied === UNCOPYABLE_REJECTION
       ? new Error(
           'isolate-host: an unhandled rejection reason that cannot be copied out of the isolate',
         )

@@ -5,7 +5,7 @@ title: Isolate-host guest TextEncoder allocates 3 bytes per char, so large strin
 created: 2026-11-18
 why: The guest shim's `TextEncoder.encode` sizes its buffer at 3× the string length before slicing, so an ASCII string near the heap limit dies where Node succeeds.
 sources: [docs/public/compat/isolate-host.md]
-code: [packages/isolate-host/src/guest/text-codec.ts]
+code: [packages/isolate-guest/src/guest/text-codec.ts]
 ---
 
 ## Context

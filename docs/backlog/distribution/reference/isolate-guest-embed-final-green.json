@@ -1,0 +1,222 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Merge once a1bcea70a is pushed, the landing verdict is committed (pass-binding) and PR CI is green at HEAD. The ef72b097b CI reds are pass-binding (verdict not yet committed) and an unrelated EPIPE unhandled error in packages/shell/tests/git-portable-network.integration.test.ts. The runCode clock-origin change goes to the user in the CLOSE report.",
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "CLOSE of goal docs/backlog/epics/isolate-guest-embed/goal.md (I1-I5, User scenario 1-5) via carrier docs/backlog/distribution/isolate-guest-embed-acceptance.md (Contract+RED PASS @ 385d2f26b, re-cuts in its Decisions); ADR-0557, ADR-0558; PR #411; BASE 4018de0fc; HEAD a1bcea70a (verify pass of the CLOSE review @ ef72b097b; diff ef72b097b..a1bcea70a plus the whole goal end to end)",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [
+    {
+      "row": "Acceptance 1: packed export installs alone, no deps/scripts/.node, root exports exactly 4 names, guest.js resolves, no .node loaded",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/isolate-guest/tests/embedder.test.ts:156",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: README first js block, only public export + consumer isolated-vm 7.0.2 + node:*, runs every corpus row = node -e under parityView",
+      "source": "acceptance",
+      "trace": "I1+I4",
+      "status": "pass",
+      "citation": "packages/isolate-guest/tests/embedder.test.ts:196",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: uncopyable/plain rejections through README embedder: stdout+status = Node",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/isolate-guest/tests/embedder.test.ts:215",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: functions exactly write/timerStart/timerClear/now/random; hostile args refused with guest-safe TypeError, no effect; now() tracks host clock",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "packages/isolate-guest/tests/host-bridge.test.ts:85",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: throwing write hook -> `isolate-host bridge: write failed`, no host path; throwing fire hook -> no uncaught host error, timer ends",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "packages/isolate-guest/tests/host-bridge.test.ts:208",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 6: timers by id, re-arm replaces, close() clears all, later timerStart no-op",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "packages/isolate-guest/tests/host-bridge.test.ts:247",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 7: exitStatus integer 0..255 unchanged, else 1",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "packages/isolate-guest/tests/host-bridge.test.ts:313",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 8: host dist/guest.js byte-identical to export guest.js",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/guest-export.test.ts:14",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 9: pre-existing host tests unchanged, runCode only root export, packed host installs by README steps",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/parity.test.ts:13",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 10: README documents per-function contract, lifecycle, hooks, owned guarantees, versions, unstable, bounds, 6.2.0 losses",
+      "source": "acceptance",
+      "trace": "I4+scenario 3",
+      "status": "pass",
+      "citation": "packages/isolate-guest/tests/embedder.test.ts:324",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 11: import() in every runCode form + uncopyable rejections through README embedder = runCode's result exactly (gap line, exit 1, nothing after the gap, no host path)",
+      "source": "acceptance",
+      "trace": "I1+ADR-0557",
+      "status": "pass",
+      "citation": "packages/isolate-guest/tests/embedder.test.ts:235",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 12: guest interval armed at exit(0): README embedder process exits on its own within 20 s with {x\\n,'',0}",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "packages/isolate-guest/tests/embedder.test.ts:254",
+      "note": ""
+    },
+    {
+      "row": "FM: embedder write hook throws x guest write -> guest-safe write failed",
+      "source": "fault-matrix",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "packages/isolate-guest/tests/host-bridge.test.ts:208",
+      "note": ""
+    },
+    {
+      "row": "FM: fire hook throws x timer tick -> no uncaught host error; timer ends",
+      "source": "fault-matrix",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "packages/isolate-guest/tests/host-bridge.test.ts:287",
+      "note": ""
+    },
+    {
+      "row": "FM: call ends with timers armed x close() -> all cleared, later timerStart no-op",
+      "source": "fault-matrix",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "packages/isolate-guest/tests/host-bridge.test.ts:247",
+      "note": ""
+    },
+    {
+      "row": "FM: guest status not integer 0..255 x exitStatus -> 1",
+      "source": "fault-matrix",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "packages/isolate-guest/tests/host-bridge.test.ts:313",
+      "note": ""
+    },
+    {
+      "row": "FM: guest import() x embedder hook -> gap line, exit 1, later guest output dropped",
+      "source": "fault-matrix",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/isolate-guest/tests/embedder.test.ts:235",
+      "note": ""
+    },
+    {
+      "row": "FM: uncopyable rejection reason x onUnhandledRejection -> UNCOPYABLE_REJECTION, run fails as runCode",
+      "source": "fault-matrix",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/isolate-guest/tests/embedder.test.ts:235",
+      "note": ""
+    },
+    {
+      "row": "Public API: HostBridge.timeOrigin (createHostBridge returns the call's start, now() relative to it)",
+      "source": "public-api",
+      "trace": "ADR-0558",
+      "status": "pass",
+      "citation": "packages/isolate-guest/tests/host-bridge.test.ts:180",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/isolate-host/src/child/main.ts:107",
+          "evidence": "",
+          "summary": "runCode's guest performance.now()/timeOrigin/process.uptime()/hrtime origin moved from child start to bridge setup. Declared (isolate-host CHANGELOG, ADR-0558 \u00a7Decisions), now pinned (guest-export.test.ts:20), closer to node -e. Still an observable runCode change against scenario 5 / map 'Out of scope: any change of runCode behavior'. Goes to the user in the CLOSE report.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "packages/isolate-host/tests/guest-export.test.ts:23",
+          "evidence": "",
+          "summary": "`performance.now() < 1000` at the guest's first line includes bundle load (~100-150 ms measured locally), and `< 20` ms wall-clock tolerance is tight on a loaded runner. Flake headroom only.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "a1bcea70ab039d7fffed501b30638ac9d8e535a4"
+}

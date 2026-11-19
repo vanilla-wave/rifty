@@ -24,7 +24,9 @@ child.
 | Work already queued when an uncaught throw or unhandled rejection happens (a timer, microtask, `nextTick` or fs callback) | ⚠️ | Node ends the process at the fatal; here queued callbacks still run and print, and an `exit(n)` among them sets the status — `exit(0)` reads as a clean `{exitCode: 0, stderr: ''}` (an `'exit'` listener still sees 1), `exit(3)` gives 3 — where Node exits 1 with the report. `backlog/runtime-js/node-eval-queued-exit-overrides-pending-fatal` |
 | Timer delay outside 1..2^31-1 or NaN | ⚠️ | Runs after 1 ms as in Node, without Node's `Timeout*Warning` on stderr. `backlog/runtime-js/timeout-delay-warnings` |
 | Non-function timer callback (`setTimeout(5)`) | ⚠️ | Accepted instead of Node's `ERR_INVALID_ARG_TYPE` (and a BigInt delay's error wins). `backlog/runtime-js/timer-callback-not-validated` |
+| A slow interval (callback longer than its period) | ⚠️ | Falls behind and starves later timers: a 10 ms callback at `setInterval(f, 1)` runs 879 times and a 1000 ms timeout fires at 8.8 s, where Node runs it 101 times and fires at 1.0 s. Host timer ticks queue `fire` calls with no backpressure. `backlog/distribution/isolate-host-timer-fire-backpressure` |
 | Many short intervals at once (e.g. 20000 × `setInterval(f, 1)`) | ⚠️ | Ends as `termination: 'memory'` where Node runs them: host timer ticks queue calls into the isolate with no backpressure. `backlog/distribution/isolate-host-timer-fire-backpressure` |
+| Uncaught throw from a `queueMicrotask` callback (`queueMicrotask(() => { throw 1 })`) | ⚠️ | The diagnostic is written, then the run ends as `termination: 'timeout'` (Node: exit 1); a custom embedder's `run()` does not settle. `backlog/distribution/isolate-host-queuemicrotask-throw-times-out` |
 | Uncaught throw followed by an endless microtask chain | ⚠️ | Ends as `termination: 'timeout'` (Node: exit 1 at once): the isolate never leaves its microtask checkpoint. `backlog/distribution/isolate-host-uncaught-throw-waits-for-microtask-checkpoint` |
 | `'exit'` listener setting `process.exitCode` after an uncaught throw | ⚠️ | Exit 1; Node takes the listener's code. `backlog/runtime-js/process-exit-listener-effects` |
 | A guest `throw` inside an `'exit'` listener | ⚠️ | Exit 1 with the thrown value reported; Node keeps the status it was exiting with (3 or 5 in the measured cases) |
@@ -34,3 +36,20 @@ child.
 | Uncaught non-`Error` throw (`throw 'oops'`, `throw 5`, `throw {…}`) | ⚠️ | stderr is rifty's fatal text for the value (`oops`, `5`, `[object Object]`), without Node's `[eval]` header, inspect form or `--trace-uncaught` hint; thrown from a timer or async function it arrives wrapped as `Error: oops` with a bundle frame. `backlog/runtime-js/node-eval-non-error-throw-rendering` |
 | `unhandledRejection` listener arguments | ⚠️ | The reason is an isolated-vm copy, and `promise` is `undefined`; a non-`Error` reason arrives as a generic `Error` |
 | Identity: `process.version`, `os.platform()`, `process.cwd()` (`/workspace`), `process.argv`, `process.env` (empty), stdin | ⚠️ | rifty's, not the host's |
+
+## Custom embedder (`@riftydev/isolate-guest`, ADR-0558)
+
+The same guest bundle in an isolate the consumer creates itself. The guest
+surface and its gaps are the rows above. Tests: `packages/isolate-guest/tests/`
+(vitest project `isolate-host`).
+
+| Surface | Status | Notes |
+|---|---|---|
+| Packed export installs and imports with no dependency and no native addon | ✅ | `embedder.test.ts` |
+| README example embedder on isolated-vm 7.0.2: parity corpus vs `node -e`; `import()` and uncopyable rejections as `runCode` | ✅ | `embedder.test.ts` |
+| Hostile bridge arguments, throwing embedder hooks, `close()`, `exitStatus` | ✅ | `host-bridge.test.ts` |
+| isolated-vm 6.2.0 | ⚠️ | No `onUnhandledRejection`: an unhandled rejection rejects the embedder's call instead of failing the run with Node's diagnostic. No `importModuleDynamically`: `import()` rejects `Not supported` in the guest, and a `.catch` keeps the run alive (it can exit 0) |
+| Other V8 embedders | ⚠️ | Untested; the contract (package README §Contract) is embedder-neutral |
+| Timer `fire` queue in the embedder's process | ⚠️ | Unbounded, outside `memoryLimit`: 20000 short intervals reached 4.96 GB embedder RSS at `memoryLimit: 128` (README example). `backlog/distribution/isolate-host-timer-fire-backpressure` |
+| Limits, kill, process boundary, escape posture | ❌ | Not provided by the export; the embedder's duty (package README §What you own) |
+| Contract stability | ⚠️ | Unstable: any release may change it |

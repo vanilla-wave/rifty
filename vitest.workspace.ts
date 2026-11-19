@@ -14,15 +14,18 @@ export default defineWorkspace([
         'tools/*/src/**/*.test.ts',
         'tools/checks/**/*.test.ts',
       ],
-      exclude: [...configDefaults.exclude, 'packages/isolate-host/**'],
+      exclude: [...configDefaults.exclude, 'packages/isolate-host/**', 'packages/isolate-guest/**'],
       environment: 'node',
     },
   },
   {
-    // ADR-0557: real child processes + isolated-vm over the built package.
+    // ADR-0557: real child processes + isolated-vm over the built packages.
     test: {
       name: 'isolate-host',
-      include: ['packages/isolate-host/tests/**/*.test.ts'],
+      include: [
+        'packages/isolate-host/tests/**/*.test.ts',
+        'packages/isolate-guest/tests/**/*.test.ts',
+      ],
       globalSetup: ['packages/isolate-host/tests/global-setup.ts'],
       environment: 'node',
       testTimeout: 60_000,

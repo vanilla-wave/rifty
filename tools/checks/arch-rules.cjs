@@ -12,6 +12,7 @@ const TIERS = [
   ['vfs', 'io', 'net', 'service-worker', 'git'],
   ['kernel', 'shadow-registry'],
   ['runtime-js', 'runtime-wasi'],
+  ['isolate-guest'],
   ['shell', 'terminal', 'npm-client', 'ts-language-service', 'isolate-host'],
   ['workbench'],
   ['rifty'],
