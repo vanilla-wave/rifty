@@ -132,7 +132,7 @@ Known differences:
 - An unhandled rejection is lost when the GC collects its promise before the
   task ends (isolated-vm keeps it by weak handle,
   https://github.com/laverdet/isolated-vm/issues/589): `Promise.reject(err)`
-  or an un-awaited `async` call followed by allocation (a few ms of work) gives
+  or an un-awaited `async` call followed by allocating work (a few ms can be enough) gives
   `exitCode: 0` and an empty stderr where Node exits 1. Nothing in the result
   tells it from a clean exit, and an `unhandledRejection` listener does not
   fire. In guest code, handle every promise: end each chain and the async

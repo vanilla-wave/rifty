@@ -4,7 +4,7 @@ status: draft
 title: Isolate host — an unhandled rejection whose promise the GC collects before its task ends exits 0 with no diagnostic
 created: 2026-11-19
 why: A silent false success in merged code: Node exits 1 with the rejection's report; runCode and the README embedder exit 0, stderr empty.
-user_story: As a service running model-generated code that rejects a promise and then allocates (a few ms of work), I want Node's exit 1 and the error so the model can fix it, but today runCode reports a clean exit 0.
+user_story: As a service running model-generated code that rejects a promise and then does a few ms of allocating work, I want Node's exit 1 and the error so the model can fix it, but today runCode reports a clean exit 0.
 sources: [docs/public/compat/isolate-host.md, docs/adr/distribution/0557-run-guest-code-in-a-disposable-child-process-holding-a-rifty-v8-isolate-isolated-vm.md]
 code: [packages/isolate-host/src/child/main.ts, packages/isolate-guest/README.md]
 ---
@@ -65,9 +65,14 @@ and `late-unhandled-rejection-drain` are rifty lifecycle/browser paths.
 Pinned: `packages/isolate-host/tests/corpus.ts` rows `reject-then-gc`, `reject-new-promise-then-gc`,
 `reject-async-fn-then-gc`, `reject-in-timer-then-gc` run as expected failures (ceiling) in the runCode and
 README-embedder lanes; a fixed isolated-vm turns them red (checked with the rebuilt addon: exactly these 8 tests).
-Rows `reject-caught-then-gc` and `reject-caught-exit-code-then-gc` pin the workaround. The busy-wait rows of the
-original repro are not in CI: their outcome depends on how much the loop allocates per ms (macOS from 3 ms,
-Linux CI from 4–8 ms), so as expected failures they would flake.
+Their churn stores each object to a global: with a non-escaping `let a; … a = { i }` inside the timer callback the
+optimizing tiers drop the allocations once the loop tiers up, which depends on load, so no GC ran and the report
+survived — `reject-in-timer-then-gc` passed 1–8/160 at 16 concurrent `runCode` under CPU load (two reviewers and
+here), 0/320 with `--no-maglev --no-turbofan`, 0/320 with the escaping churn. With the escaping churn each of the
+four rows: 0 reports in 320 runs (16 concurrent, 8 busy processes, 2026-11-19); the external reviewers saw no slip of
+the other three in their 160-run batches. `reject-caught-then-gc` and the workaround test in `parity.test.ts`
+(the compat snippet verbatim) pin the workaround. The busy-wait rows of the original repro are not in CI: their
+outcome depends on how much the loop allocates per ms (macOS from 3 ms, Linux CI from 4–8 ms).
 
 Upstream: https://github.com/laverdet/isolated-vm/issues/589 (filed 2026-11-19 by the manager with the user's consent).
 

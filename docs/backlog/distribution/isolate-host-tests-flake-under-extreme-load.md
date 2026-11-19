@@ -16,12 +16,14 @@ start, up to 188 — 7/10 green; one failure each in runs 5, 6, 8, all in tests 
 
 - `guest-export.test.ts:19` "timeOrigin + now() is the wall clock": stdout `false true` — the 50 ms tolerance
   between two host clock reads (`guest-export.test.ts:21-23`).
-- `pool-faults.test.ts:472` "intervals created and cleared in a loop": culprit `exitCode` `undefined`, not `null`
-  (the call did not end as `timeout`/`memory` with a result).
+- `pool-faults.test.ts:462` "intervals created and cleared in a loop: its own end (timeout as Node, or memory
+  alone), neighbours exact" (assertion `:472`): culprit `exitCode` `undefined`, not `null` (the call did not end as
+  `timeout`/`memory` with a result). The same test is known red under load from a neighbouring PR.
 - `protocol.test.ts:167` "a child that closes the channel and exits is reported by its own exit code": received
   `code null, signal SIGKILL … after closing its result channel without a result`, expected `code 7`.
 
-The three files rerun together in isolation (load ~116 from other sessions): 59/59 green. Not reproduced on main
+The two external reviewers of PR #413 (2026-11-19) independently saw failures under load in the same three files
+(`protocol.test.ts`, `pool-faults.test.ts`, the `guest-export` clock test). The three files rerun together in isolation (load ~116 from other sessions): 59/59 green. Not reproduced on main
 separately. Owner: next isolate-host test-hygiene pickup; trigger: any of the three reds in CI. Lead: a time
 tolerance (first) and process-timing races under load (others) where the rule is waiting on events.
 

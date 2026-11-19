@@ -19,8 +19,9 @@ without `SetWeak()`, and with or without allocation after the rejection: not the
 the child logs that `onUnhandledRejection` fires, but delivering it to the guest fails `Isolate is disposed`:
 the run's terminal was already reported. Cause beyond that unverified (where Node's natural exit still processes
 rejections from `'exit'` listeners vs rifty's eval lifecycle ending at `exit()`). Neighbour, different surface:
-`runtime-js/process-exit-listener-effects` (throw / `exitCode` in `'exit'`). Owner: next isolate-host
-runtime-fidelity pickup; trigger: any change to the eval lifecycle's exit path.
+`runtime-js/process-exit-listener-effects` (throw / `exitCode` in `'exit'`). Deterministic: exit 0 in 160/160 runs, 16 concurrent
+under CPU load — the run's status is fixed before the report arrives; ceiling row `reject-in-exit-listener`
+(`packages/isolate-host/tests/corpus.ts`, both lanes). Owner: next isolate-host runtime-fidelity pickup; trigger: any change to the eval lifecycle's exit path.
 
 ## Challenge
 

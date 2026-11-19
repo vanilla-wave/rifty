@@ -30,7 +30,9 @@ Promise.resolve().then(() => process.exit(3)), 1)`, after `await` of a timer) th
 shares this item's cause is unverified. Lead: stderr gets `Error: process exit requires an active control port`
 at `#requestSelfExit` ← `onFlushed` — the exit lands before the guest entry calls `awaitDrain`, so the eval
 lifecycle takes its no-drain path (`completeNodeEvalTerminalWithoutDrain`,
-`packages/runtime-js/src/internal/event-loop-keepalive.ts`), which needs a kernel control port this host lacks. Compat ⚠️ row "`process.exit()` from a promise callback".
+`packages/runtime-js/src/internal/event-loop-keepalive.ts`), which needs a kernel control port this host lacks. Compat ⚠️ row "`process.exit()` from a promise callback". Deterministic (nothing ends such a run): `timeout` in 160/160
+runs, 16 concurrent under CPU load; pinned in `packages/isolate-host/tests/parity.test.ts` (runCode lane only:
+the corpus lanes would wait a 30 s deadline per run).
 Unlike `isolate-host-uncaught-throw-waits-for-microtask-checkpoint`, no endless
 microtask chain is involved. Owner: next isolate-host runtime-fidelity pickup;
 trigger: any change to the shim's `queueMicrotask` or the eval lifecycle.
