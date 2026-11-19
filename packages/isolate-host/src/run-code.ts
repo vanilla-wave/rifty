@@ -29,6 +29,8 @@ export interface RunCodeResult {
 }
 
 const MAX_TIMER_MS = 2 ** 31 - 1;
+/** `code` at most this many UTF-8 bytes (ADR-0563 §7): the request is bounded before it is sent. */
+const MAX_CODE_BYTES = 1 << 20;
 
 function limit(
   name: string,
@@ -61,6 +63,14 @@ export function runCode(code: string, options: RunCodeOptions = {}): Promise<Run
     );
   }
   try {
+    const bytes = Buffer.byteLength(code, 'utf8');
+    if (bytes > MAX_CODE_BYTES)
+      throw Object.assign(
+        new RangeError(
+          `The "code" argument must be at most ${MAX_CODE_BYTES} bytes of UTF-8. Received ${bytes}`,
+        ),
+        { code: 'ERR_OUT_OF_RANGE' },
+      );
     const spec = {
       code,
       timeoutMs: limit('timeoutMs', options.timeoutMs, 30_000, 1, MAX_TIMER_MS),

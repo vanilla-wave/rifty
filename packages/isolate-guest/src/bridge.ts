@@ -47,6 +47,14 @@ export interface HostHooks {
    * A throw or a rejection ends that timer.
    */
   fire(id: number): unknown;
+  /** The guest asked for more live timers than `limits.maxTimers`: called once, the start is refused. */
+  timersExhausted?(): void;
+}
+
+/** Per-guest bounds on host resources created on the guest's behalf. */
+export interface HostLimits {
+  /** Live host timers at once; unbounded when omitted. */
+  readonly maxTimers?: number;
 }
 
 export interface HostBridge {
@@ -58,16 +66,24 @@ export interface HostBridge {
   close(): void;
 }
 
-export function createHostBridge(hooks: HostHooks): HostBridge {
+/** One armed timer: its host handle, or `null` while its expiry is with the guest. */
+interface Slot {
+  handle: NodeJS.Timeout | null;
+}
+
+export function createHostBridge(hooks: HostHooks, limits: HostLimits = {}): HostBridge {
   // The guest's clock starts with its call, as a fresh `node -e` process's does:
   // never the embedder's uptime, and nothing that links one call to another.
   const origin = performance.now();
-  // Per id: the armed host timer, or `null` while its expiry is with the guest.
-  const timers = new Map<number, NodeJS.Timeout | null>();
+  const maxTimers = limits.maxTimers ?? Number.POSITIVE_INFINITY;
+  // Per id, the slot of its current timer: a reused id gets a new slot, so a
+  // stale delivery of the old timer can only touch its own.
+  const timers = new Map<number, Slot>();
   let closed = false;
+  let exhausted = false;
   const clear = (id: number): void => {
-    const timer = timers.get(id);
-    if (timer) clearTimeout(timer);
+    const slot = timers.get(id);
+    if (slot?.handle) clearTimeout(slot.handle);
     timers.delete(id);
   };
   const functions: HostFunctions = {
@@ -83,24 +99,32 @@ export function createHostBridge(hooks: HostHooks): HostBridge {
       if (typeof repeat !== 'boolean') refuse('timerStart: repeat must be a boolean');
       if (closed) return;
       clear(id);
+      if (timers.size >= maxTimers) {
+        if (!exhausted) {
+          exhausted = true;
+          hooks.timersExhausted?.();
+        }
+        refuse('timerStart: too many live timers');
+      }
+      const slot: Slot = { handle: null };
+      timers.set(id, slot);
+      const live = (): boolean => !closed && timers.get(id) === slot;
       const arm = (delay: number): void => {
-        timers.set(id, setTimeout(tick, delay));
+        slot.handle = setTimeout(tick, delay);
       };
       const tick = (): void => {
         const started = performance.now();
-        if (!repeat) {
-          timers.delete(id);
-        } else timers.set(id, null);
+        slot.handle = null;
+        if (!repeat) timers.delete(id);
         // Node re-arms from the tick's start (its period holds; an overrun ticks again at
         // once), but only once the guest ran it: no tick queues behind a running one.
-        // Not if anything cleared or re-armed `id` meanwhile.
+        // Whole ms, rounded up: a fractional delay fires early.
         const rearm = (): void => {
-          if (repeat && !closed && timers.get(id) === null)
-            arm(Math.max(1, started + ms - performance.now()));
+          if (repeat && live()) arm(Math.max(1, Math.ceil(started + ms - performance.now())));
         };
         // A rejection (the isolate is gone) ends the timer and never reaches the embedder's loop.
         const end = (): void => {
-          if (timers.get(id) === null) timers.delete(id);
+          if (live()) timers.delete(id);
         };
         try {
           const delivered = hooks.fire(id);
@@ -109,7 +133,7 @@ export function createHostBridge(hooks: HostHooks): HostBridge {
           else rearm();
         } catch {
           // The embedder cannot deliver: this timer has nothing left to do.
-          clear(id);
+          if (live()) clear(id);
         }
       };
       arm(ms);
@@ -129,7 +153,7 @@ export function createHostBridge(hooks: HostHooks): HostBridge {
     timeOrigin: performance.timeOrigin + origin,
     close() {
       closed = true;
-      for (const timer of timers.values()) if (timer) clearTimeout(timer);
+      for (const slot of timers.values()) if (slot.handle) clearTimeout(slot.handle);
       timers.clear();
     },
   };

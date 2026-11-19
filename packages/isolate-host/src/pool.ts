@@ -124,6 +124,7 @@ class Worker {
   readonly calls = new Map<number, Call>();
   retiring = false;
   dead = false;
+  exited = false;
   /**
    * Why the consumer itself ended this worker; unset = an exit nobody asked for.
    * `done`: nothing left on it (idle, retired, quarantine finished).
@@ -138,10 +139,15 @@ class Worker {
     private readonly pool: Pool,
     readonly quarantine: boolean,
   ) {
-    this.child = spawn(process.execPath, ['--no-node-snapshot', WORKER_ENTRY], {
-      env: {},
-      stdio: ['pipe', 'ignore', 'ignore', 'pipe'],
-    });
+    // --wasm-max-mem-pages=0: the engine layer of the WebAssembly ceiling (ADR-0563 §7).
+    this.child = spawn(
+      process.execPath,
+      ['--no-node-snapshot', '--wasm-max-mem-pages=0', WORKER_ENTRY],
+      {
+        env: {},
+        stdio: ['pipe', 'ignore', 'ignore', 'pipe'],
+      },
+    );
     const child = this.child;
     // Idle workers never keep the consumer alive; a pending call's deadline does.
     child.unref();
@@ -168,6 +174,10 @@ class Worker {
           this.kill();
         }
       }, CHANNEL_END_GRACE_MS).unref();
+    });
+    // Exited, its stdio still draining: no new call goes here.
+    child.on('exit', () => {
+      this.exited = true;
     });
     child.on('error', (error) => {
       // Only a failed spawn ends here; a live worker's failure arrives as 'exit'.
@@ -297,7 +307,12 @@ export class Pool {
   #placeFresh(call: Call): void {
     const worker =
       this.#workers.find(
-        (w) => !w.quarantine && !w.retiring && w.ended === undefined && w.calls.size < SHARD,
+        (w) =>
+          !w.quarantine &&
+          !w.retiring &&
+          !w.exited &&
+          w.ended === undefined &&
+          w.calls.size < SHARD,
       ) ?? this.#spawn(false);
     worker.place(call);
   }
@@ -320,7 +335,15 @@ export class Pool {
       }
     }
     if (again.length === 0) return;
-    const quarantine = this.#spawn(true);
+    let quarantine: Worker;
+    try {
+      quarantine = this.#spawn(true);
+    } catch {
+      // spawn throws synchronously (ENOMEM, a bad path): this runs in a 'close'
+      // handler, so a throw would take the consumer down. The calls are lost.
+      for (const call of again) call.rejectWith(lostError(reason));
+      return;
+    }
     for (const call of again) quarantine.place(call);
   }
 

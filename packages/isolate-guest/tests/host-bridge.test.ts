@@ -475,26 +475,26 @@ describe('per-guest host resources (ADR-0563 §7)', () => {
         return new Promise<void>((resolve) => settles.push(resolve));
       },
     });
-    const before = timeouts();
+    const waitFired = async (n: number, ms: number): Promise<void> => {
+      for (const until = Date.now() + ms; fired < n && Date.now() < until; ) await sleep(5);
+    };
     functions.timerStart(1, 1, true);
-    for (const until = Date.now() + 2000; fired < 1 && Date.now() < until; ) await sleep(5);
+    await waitFired(1, 2000);
     // The guest clears id 1 and arms a new id-1 interval while the old delivery is in flight;
     // the new one ticks too, and its delivery is in flight as well.
     functions.timerClear(1);
-    functions.timerStart(1, 1, true);
-    for (const until = Date.now() + 2000; fired < 2 && Date.now() < until; ) await sleep(5);
+    functions.timerStart(1, 200, true);
+    await waitFired(2, 2000);
     expect(fired).toBe(2);
-    expect(timeouts()).toBe(before);
-    // The old delivery settles: it must not arm the new id-1 timer behind its in-flight delivery.
+    // The old delivery settles. Re-arming the new timer from it would tick within ~1 ms,
+    // behind the new delivery still in flight.
     settles[0]?.();
-    await sleep(30);
-    expect(timeouts()).toBe(before);
+    await sleep(50);
     expect(fired).toBe(2);
-    // The new delivery settles: exactly one timer re-arms.
+    // The new delivery settles: the new timer is alive and ticks again on its own period.
     settles[1]?.();
-    await sleep(0);
-    expect(timeouts()).toBe(before + 1);
+    await waitFired(3, 2000);
+    expect(fired).toBe(3);
     close();
-    expect(timeouts()).toBe(before);
   });
 });

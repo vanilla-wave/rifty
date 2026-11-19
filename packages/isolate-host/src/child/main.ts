@@ -45,6 +45,8 @@ const dieAfterFlush = (): void => {
 };
 
 const guestSource = readFileSync(new URL('./guest.js', import.meta.url), 'utf8');
+/** Live host timers a call may hold per MiB of its `memoryLimitMb` (~1 KiB of worker memory each, measured). */
+const TIMERS_PER_MIB = 1024;
 /** V8 code cache of the guest bundle, produced by this worker's first compile. */
 let cachedData: ivm.ExternalCopy<ArrayBuffer> | undefined;
 /** The compile producing the cache: concurrent first calls wait for it instead of compiling cold too. */
@@ -183,16 +185,21 @@ async function run(request: RunRequest): Promise<void> {
     const jail = context.global;
     // Bound once the bundle has loaded; the bundle arms no timer while loading.
     const guestFire: { ref?: ivm.Reference<(id: number) => void> } = {};
-    const bridge = createHostBridge({
-      write: (fd, bytes) => {
-        if (!output.write(fd, bytes) || flushScheduled) return;
-        flushScheduled = true;
-        // Batch: guest writes arrive as separate host tasks; one frame batch per 5 ms.
-        setTimeout(flush, 5);
+    const bridge = createHostBridge(
+      {
+        write: (fd, bytes) => {
+          if (!output.write(fd, bytes) || flushScheduled) return;
+          flushScheduled = true;
+          // Batch: guest writes arrive as separate host tasks; one frame batch per 5 ms.
+          setTimeout(flush, 5);
+        },
+        // Settles once the guest ran the callback: an interval re-arms only then (ADR-0558).
+        fire: (timer) => guestFire.ref?.apply(undefined, [timer]),
+        // Host timers count against the call's own memory budget (ADR-0563 §7).
+        timersExhausted: () => state.report(KIND.memory, new Uint8Array(0)),
       },
-      // Settles once the guest ran the callback: an interval re-arms only then (ADR-0558).
-      fire: (timer) => guestFire.ref?.apply(undefined, [timer]),
-    });
+      { maxTimers: request.memoryLimitMb * TIMERS_PER_MIB },
+    );
     closeBridge = bridge.close;
     if (state.reported) closeBridge();
     const names = Object.keys(bridge.functions);
@@ -206,6 +213,9 @@ async function run(request: RunRequest): Promise<void> {
         delete globalThis['__riftyHost_' + name];
       }
       Object.defineProperty(globalThis, '__riftyIsolateHost', { value: Object.freeze(bridge), configurable: true });
+      // Wasm memory is outside memoryLimit (ADR-0563 §7): the API is gone before any
+      // guest code, and the engine flag --wasm-max-mem-pages=0 backs it.
+      delete globalThis.WebAssembly;
     }`);
     if (cachedData === undefined && producing !== undefined) await producing.catch(() => {});
     const compiling = isolate.compileScript(guestSource, {
@@ -266,15 +276,19 @@ function cancel(id: number): void {
 
 // The consumer owns this worker's lifetime: stdin ends when it dies, and an
 // orphan never keeps running.
-let pending = '';
+// Linear in the bytes: each chunk is scanned once, a line is joined once.
+let pending: string[] = [];
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', (data: string) => {
-  pending += data;
-  for (let nl = pending.indexOf('\n'); nl >= 0; nl = pending.indexOf('\n')) {
-    const request = JSON.parse(pending.slice(0, nl)) as WorkerRequest;
-    pending = pending.slice(nl + 1);
+  let from = 0;
+  for (let nl = data.indexOf('\n'); nl >= 0; nl = data.indexOf('\n', from)) {
+    pending.push(data.slice(from, nl));
+    const request = JSON.parse(pending.join('')) as WorkerRequest;
+    pending = [];
+    from = nl + 1;
     if (request.type === 'run') void run(request);
     else cancel(request.call);
   }
+  if (from < data.length) pending.push(data.slice(from));
 });
 process.stdin.on('end', die);
