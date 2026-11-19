@@ -1,27 +1,27 @@
 {
   "overall_verdict": "pass",
-  "merge_call": "Mergeable once PR CI is green at HEAD 4f0c57c43 and the driver commits this landing verdict under docs/backlog/distribution/reference/ (REV-8: the PR touches a test path); only advisory concerns remain.",
+  "merge_call": "Mergeable once PR CI is green at HEAD 1ed8ea8d8 (17 checks still pending at review time) and the driver commits this verdict under docs/backlog/distribution/reference/ (REV-8). Prefer a squash merge (or a branch rewrite) so the deleted 7 MB .probe-dist blob from 1c3bc4812 does not land in main's history; advisory.",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "4f0c57c4380ae510cf84d0854482407b22ed80c7",
-  "unit_goal_source": "Observed defect, standalone unit: docs/backlog/distribution/isolate-host-unhandled-rejection-lost-to-gc.md (Context + `## Decisions` 2026-11-19 user line: declared ceiling, no product change, upstream https://github.com/laverdet/isolated-vm/issues/589); baseline = live `node -e` v24.16.0 exit 1 + diagnostic. BASE 9b948d757 (origin main, merge of PR #412), HEAD 4f0c57c43.",
+  "reviewed_sha": "1ed8ea8d85a6d4b653c6c92cfe228aeb2695fb5f",
+  "unit_goal_source": "Observed defect, standalone unit: docs/backlog/distribution/isolate-host-unhandled-rejection-lost-to-gc.md (Context + `## Decisions` 2026-11-19 user line: declared ceiling, no product change, upstream https://github.com/laverdet/isolated-vm/issues/589); baseline = live `node -e` v24.16.0 exit 1 + diagnostic. BASE 9b948d757, prior reviewed commits 4f0c57c43 (docs/backlog/distribution/reference/pr-413-final-green.json) and 1c3bc4812 (blocker: stray .probe-dist build), HEAD 1ed8ea8d8; focus diff 1c3bc4812..1ed8ea8d8.",
   "unit_residuals": [],
   "goal_residuals": [],
   "goal_complete": false,
   "coverage": [
     {
-      "row": "The defect is pinned as a declared ceiling in both lanes (runCode and the README embedder): the rows stay literal against live `node -e` and run as expected failures, so a fixed isolated-vm turns them red",
+      "row": "The defect is pinned as a declared ceiling in both lanes (runCode and the README embedder): the rows stay literal against live `node -e`, run as expected failures with one outcome under any load, and a fixed isolated-vm turns them red",
       "source": "acceptance",
-      "trace": "ADR-0557 + ADR-0558 §2/§6 + user decision docs/backlog/distribution/isolate-host-unhandled-rejection-lost-to-gc.md:76",
+      "trace": "ADR-0557 + ADR-0558 §2/§6 + user decision docs/backlog/distribution/isolate-host-unhandled-rejection-lost-to-gc.md:81",
       "status": "pass",
-      "citation": "packages/isolate-host/tests/corpus.ts:164-178; packages/isolate-host/tests/parity.test.ts:19-33; packages/isolate-guest/tests/embedder.test.ts:196-210",
+      "citation": "packages/isolate-host/tests/corpus.ts:22-27; packages/isolate-host/tests/corpus.ts:168-183; packages/isolate-host/tests/parity.test.ts:19-34; packages/isolate-guest/tests/embedder.test.ts:196-210",
       "note": ""
     },
     {
-      "row": "The documented consumer workaround (handle every promise; `.catch` that sets `process.exitCode`) gives Node's result under the same GC pressure in both lanes",
+      "row": "The documented consumer workaround (`.catch((e) => { console.error(e); process.exitCode = 1 })` on every chain) gives Node's result under the same GC pressure, for runCode and (compat: 'Same for the README embedder') the README embedder",
       "source": "acceptance",
-      "trace": "ADR-0557 + ADR-0558 §2/§6 + user decision docs/backlog/distribution/isolate-host-unhandled-rejection-lost-to-gc.md:76",
+      "trace": "ADR-0557 + ADR-0558 §2/§6 + user decision docs/backlog/distribution/isolate-host-unhandled-rejection-lost-to-gc.md:81",
       "status": "pass",
-      "citation": "packages/isolate-host/tests/corpus.ts:180-188",
+      "citation": "packages/isolate-host/tests/parity.test.ts:38-49; packages/isolate-host/tests/corpus.ts:186-195",
       "note": ""
     }
   ],
@@ -32,9 +32,9 @@
       "findings": [
         {
           "severity": "nit",
-          "location": "docs/public/compat/isolate-host.md:28",
-          "evidence": "runCode(\"queueMicrotask(() => process.exit(2))\", {timeoutMs:3000}) -> exitCode null, termination 'timeout', stderr 'Error: process exit requires an active control port\\n    at #requestSelfExit (rifty-isolate-guest.js:105159:15) ...'; node -e -> 2, stderr ''",
-          "summary": "The new `process.exit()` from a microtask row says 'output kept' but not that stderr also gains a rifty-internal 'process exit requires an active control port' stack; a consumer reading stderr sees internal frames. Worth one clause in the row or the backlog item.",
+          "location": "packages/isolate-host/tests/corpus.ts:190-195",
+          "evidence": "Stock, 16 burner processes (load avg 46-67, 12 cpus): `pnpm vitest run --project isolate-host parity.test.ts embedder.test.ts` -> 144/144; -t reject-caught-exit-code-then-gc -> ✓ runCode lane, ✓ README embedder lane. runCode probe 16 concurrent: 1600/1600 {exitCode 1, stderr 'rej'}; live node -e exit 1, stderr 'rej'.",
+          "summary": "The 1c3bc4812 Completeness concern is closed: `reject-caught-exit-code-then-gc` is back in the shared corpus, so both lanes run an exitCode-setting .catch under GC churn byte-exact vs Node; the verbatim compat snippet stays in parity.test.ts:40 for runCode (its stack frames differ from Node's, so it cannot be a byte-exact corpus row).",
           "authority": ""
         }
       ]
@@ -42,7 +42,15 @@
     {
       "axis": "Mission and architecture",
       "verdict": "pass",
-      "findings": []
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "packages/isolate-host/.probe-dist/",
+          "evidence": "e999859a9 deletes all five .probe-dist files (-134879 lines); `git ls-tree -r HEAD packages/isolate-host | grep -c probe-dist` -> 0. `pnpm check:file-size` -> 'file-size: OK (ratchet holds)', exit 0. `pnpm exec biome check .` -> 'Checked 3269 files … No fixes applied.', exit 0. `git diff --name-only 9b948d757..1ed8ea8d8 -- 'packages/*/src'` -> empty.",
+          "summary": "The 1c3bc4812 blocker is fixed at HEAD: both gates green, no product source changed.",
+          "authority": ""
+        }
+      ]
     },
     {
       "axis": "Goal drift",
@@ -60,9 +68,9 @@
       "findings": [
         {
           "severity": "concern",
-          "location": "docs/public/compat/isolate-host.md:28; docs/public/compat/isolate-host.md:40",
-          "evidence": "rows.mjs x5: main().then(() => process.exit(0)) node 0 / runCode null+timeout 5/5; process.on('exit', () => { Promise.reject(new Error('r')) }) node 1+stderr / runCode 0, stderr '' 5/5",
-          "summary": "Two discoveries ride the branch as compat rows + backlog drafts (PR-1 allows it; both measured correctly), but neither has a ceiling corpus row, so a later fix leaves those compat rows stale with nothing turning red. Hardening for isolate-host-queuemicrotask-throw-times-out / isolate-host-rejection-in-exit-listener-exits-0, not required by this unit.",
+          "location": "packages/isolate-host/.probe-dist/guest.js (commit 1c3bc4812)",
+          "evidence": "`git cat-file -s 1c3bc4812:packages/isolate-host/.probe-dist/guest.js` -> 7038322 bytes; origin/main lands PRs as merge commits (`git log --merges origin/main`: #415, #412, #411, …); repo allows squash and rebase merges.",
+          "summary": "The deleted build stays reachable from branch history; a usual merge commit carries the ~7 MB blob (plus child/index) into main forever. Squash-merge this PR or rewrite the branch to drop it. Not a contract violation, so advisory.",
           "authority": ""
         }
       ]
@@ -73,9 +81,9 @@
       "findings": [
         {
           "severity": "concern",
-          "location": "packages/isolate-host/tests/parity.test.ts:20; packages/isolate-guest/tests/embedder.test.ts:197",
-          "evidence": "Pre-existing mechanism, not changed by the diff. Stock run: the four ceiling rows fail on exitCode 0 vs node's 1 with stderr '' (rows.mjs 5/5 each), so they fail for the declared reason today.",
-          "summary": "`it.fails` accepts any failure, so a ceiling row would stay green if the run later failed differently (e.g. timeout, crash). Pinning the observed wrong outcome (`exitCode: 0, stderr: ''`) would make the ceiling discriminate its own failure mode; advisory.",
+          "location": "packages/isolate-host/tests/parity.test.ts:21; packages/isolate-guest/tests/embedder.test.ts:197; packages/isolate-host/tests/corpus.ts:198",
+          "evidence": "Unchanged since 1c3bc4812 (carried). Stock under load: reject-in-exit-listener 1600/1600 {exitCode 0, stderr ''} (1c3bc4812 run; code unchanged).",
+          "summary": "`it.fails` accepts any failure, also for the `reject-in-exit-listener` ceiling: a run that later failed differently (timeout, crash) keeps the row green and the compat 'exit 0' text stale. Pinning the observed outcome (`exitCode: 0, stderr: ''`) would discriminate it; advisory.",
           "authority": ""
         }
       ]
@@ -83,7 +91,15 @@
     {
       "axis": "Regressions",
       "verdict": "pass",
-      "findings": []
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "packages/isolate-host/tests/corpus.ts:168-195",
+          "evidence": "Mutant addon (environment.cc:155 SetWeak() removed) copied to node_modules/.pnpm/isolated-vm@7.0.2/node_modules/isolated-vm/build/Release/: parity+embedder -> exactly 8 failed (4 GC ceiling rows x runCode + README embedder), 136 passed; `reject-caught-exit-code-then-gc` green in both lanes (handled stays handled); build/ removed afterwards. Stock under load: reject-in-timer-then-gc 0 reports in 1600 more runs (16 concurrent).",
+          "summary": "The new row does not change what a fixed isolated-vm turns red; ceiling rows keep one outcome under load.",
+          "authority": ""
+        }
+      ]
     },
     {
       "axis": "Ecosystem UX",
