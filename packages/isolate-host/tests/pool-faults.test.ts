@@ -427,7 +427,9 @@ describe('a guest that never ends and churns host timers (I2, I4)', () => {
     async () => {
       const v = await withNeighbours(
         'for (;;) { const t = []; for (let i = 0; i < 4096; i++) t.push(setInterval(() => {}, 1)); t.forEach(clearInterval) }',
-        '{ memoryLimitMb: 64, timeoutMs: 20000 }',
+        // Its memory grows slowly: lost late on the shared worker, its solo rerun needs
+        // budget left (F1) to meet its own end.
+        '{ memoryLimitMb: 64, timeoutMs: 60000 }',
         '{ memoryLimitMb: 64 }',
       );
       // Node runs it forever: `timeout` is faithful; `memory` is its own exhaustion, met alone.
