@@ -192,6 +192,8 @@ async function run(request: RunRequest): Promise<void> {
       }
     },
   };
+  // Idle → busy: the allowance starts from this call, not from what came before.
+  if (live.size === 0) busyAllowanceMb = 0;
   live.set(id, state);
   try {
     const context = await isolate.createContext();

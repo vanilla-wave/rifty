@@ -180,7 +180,16 @@ class Worker {
       if (child.pid !== undefined || this.dead) return;
       this.dead = true;
       this.pool.forget(this);
-      for (const call of this.calls.values()) call.rejectWith(error);
+      // A rerun's worker that cannot start (ENOENT, EAGAIN, EMFILE — a mass loss is when
+      // they come): the call is lost, with the code a consumer retries on.
+      for (const call of this.calls.values())
+        call.rejectWith(
+          call.lost === undefined
+            ? error
+            : lostError(
+                `${call.lost}; its rerun could not start (${String((error as NodeJS.ErrnoException).code ?? error.message)})`,
+              ),
+        );
       this.calls.clear();
     });
     // 'close', not 'exit': every frame the worker wrote is read before its loss is judged.
