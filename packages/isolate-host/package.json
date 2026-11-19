@@ -1,7 +1,7 @@
 {
   "name": "@riftydev/isolate-host",
   "version": "0.1.0",
-  "description": "Run guest JS like `node -e` in a fresh rifty runtime inside a V8 isolate (isolated-vm) in a disposable child process.",
+  "description": "Run guest JS like `node -e` in a fresh rifty runtime inside a V8 isolate (isolated-vm) in a pool of long-lived worker processes.",
   "type": "module",
   "license": "MIT",
   "author": "vanilla-wave <vizetmail@gmail.com>",

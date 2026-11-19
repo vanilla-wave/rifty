@@ -60,7 +60,8 @@ export async function run(code) {
   const { functions, timeOrigin, close } = createHostBridge({
     // The call's result ends with it (step 8): later guest output is dropped.
     write: (fd, bytes) => ended || out[fd].push(Buffer.from(bytes)),
-    fire: (id) => guest.fire.applyIgnored(undefined, [id]),
+    // Settles when the guest ran the callback: an interval re-arms only then.
+    fire: (id) => guest.fire.apply(undefined, [id]),
   });
   const isolate = new ivm.Isolate({
     memoryLimit: 128,
@@ -123,7 +124,7 @@ Measured in cross-review (2026-11-18, isolated-vm 7.0.2, Node 24):
 7.3 GB RSS; `new Array(1e9).fill({})` aborts the process (SIGABRT). The
 example runs isolates in your own process, which ADR-0557 rejected for rifty's
 own host. For untrusted code, the protected path is `runCode` from
-`@riftydev/isolate-host`: it adds the limits and a child process per call.
+`@riftydev/isolate-host`: it adds the limits and runs isolates in its own worker processes.
 Your own topology is your choice and your responsibility.
 
 ## Contract
@@ -148,22 +149,27 @@ your own, you must perform them yourself.
 | `random(byteLength)` | `byteLength`: guest | an integer in 0..65536; returns that many random bytes |
 | `timeOrigin` | you | a number: the call's start in epoch ms (`createHostBridge` returns it). Never your process's `performance.timeOrigin`: the guest would read your uptime and could link calls |
 
-The `write` and `fire` hooks must be synchronous: a promise they return is not
-awaited, and its rejection is yours.
+The `write` hook must be synchronous: a promise it returns is not awaited, and
+its rejection is yours. The `fire` hook returns a promise that settles once the
+guest ran the callback (isolated-vm: `Reference.apply`, not `applyIgnored`).
+A repeating timer re-arms only after it settles, so expiries never pile up
+behind a busy guest, and its next expiry keeps Node's period from the tick's
+start (an overrun ticks again at once). A hook that returns no promise
+re-arms at once and gets no such bound.
 
 A refused call throws a `TypeError` starting `isolate-host bridge: `, with no
 host stack. A hook that throws reaches the guest as `isolate-host bridge: <name>
-failed`. A `fire` hook that throws ends that timer, and nothing reaches your
-event loop. `close()` ends the call: it clears every timer, and after it
+failed`. A `fire` hook that throws or whose promise rejects ends that timer, and
+nothing reaches your event loop. `close()` ends the call: it clears every timer, and after it
 `timerStart` arms nothing.
 
-Timer expiries queue in your process, not in the isolate. A host timer that
-fires while the guest is still busy queues its `fire` call. Neither
-`memoryLimit` nor the guest bounds that queue. A slow interval falls behind
-(`setInterval` of a 10 ms callback at 1 ms: Node runs it 101 times in the
-first second; through this bridge it runs 879 times and a 1000 ms timeout
-fires at 8.8 s). Many short intervals grow your process's memory: 20000 of
-them reached 4.96 GB RSS at `memoryLimit: 128`.
+Timer expiries queue in your process, not in the isolate: at most one `fire`
+per armed timer is in flight, so the queue is bounded by the guest's own
+timers, each of which lives in its heap.
+
+isolated-vm does not count some guest memory against `memoryLimit`: wasm
+memory, resizable/growable buffers (`maxByteLength`), Intl/ICU data, host
+timers. Bound your process from outside (measured: `docs/backlog/distribution/reference/isolate-host-pool-step0.md`).
 
 ### Guest entry: `globalThis.__riftyGuest`
 

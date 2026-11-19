@@ -28,13 +28,12 @@ async function withLag<T>(work: () => Promise<T>): Promise<{ value: T; maxLagMs:
 }
 
 afterEach(async () => {
-  // The consumer keeps working after every overrun, and no child is left behind.
+  // The consumer keeps working after every overrun (worker lifetime: pool.test.ts, ADR-0563 §1).
   await expect(runCode('console.log(6 * 7)')).resolves.toEqual({
     stdout: '42\n',
     stderr: '',
     exitCode: 0,
   });
-  expect(childPids()).toEqual([]);
 });
 
 describe('runCode limits (I4)', () => {
@@ -44,7 +43,7 @@ describe('runCode limits (I4)', () => {
       runCode("console.log('spin'); for (;;) {}", { timeoutMs: 1500 }),
     );
     expect(value).toEqual({ stdout: 'spin\n', stderr: '', exitCode: null, termination: 'timeout' });
-    expect(Date.now() - started).toBeGreaterThanOrEqual(1500);
+    expect(Date.now() - started).toBeGreaterThanOrEqual(1500 - 5);
     expect(Date.now() - started).toBeLessThanOrEqual(1500 + 1000);
     expect(maxLagMs).toBeLessThan(250);
   });
@@ -60,7 +59,8 @@ describe('runCode limits (I4)', () => {
       exitCode: null,
       termination: 'timeout',
     });
-    expect(Date.now() - started).toBeGreaterThanOrEqual(1000);
+    // libuv fires timers on its cached loop time, up to ~1 ms early by the wall clock.
+    expect(Date.now() - started).toBeGreaterThanOrEqual(1000 - 5);
     expect(Date.now() - started).toBeLessThanOrEqual(1000 + 1000);
     expect(maxLagMs).toBeLessThan(250);
   });
@@ -93,7 +93,6 @@ describe('runCode limits (I4)', () => {
   }, 120_000);
 
   it('a catastrophic allocation ends with termination memory, child RSS held near 256 + 3 × limit', async () => {
-    const before = new Set(childPids());
     const started = Date.now();
     const running = runCode("console.log('big'); new Array(2 ** 28).fill(0)", {
       memoryLimitMb: 64,
@@ -104,12 +103,17 @@ describe('runCode limits (I4)', () => {
     // its fatal-OOM callback); the RSS watchdog (ceiling 448 MiB here) must stop it
     // first. A sampled watchdog overshoots by one backing-store doubling (measured
     // 661–808 MiB on macOS arm64), so the bound is 2 × the ceiling.
-    const pid = await waitFor(() => childPids().find((p) => !before.has(p)), 2000);
+    // Every worker of this consumer: a warm one may retire as this call starts on a new one.
+    await waitFor(() => (childPids().length > 0 ? true : undefined), 2000);
     let peakMb = 0;
-    const sampler = setInterval(() => {
-      const kb = rssKb(pid);
-      if (kb !== null) peakMb = Math.max(peakMb, kb / 1024);
-    }, 20);
+    const sample = (): void => {
+      for (const pid of childPids()) {
+        const kb = rssKb(pid);
+        if (kb !== null) peakMb = Math.max(peakMb, kb / 1024);
+      }
+    };
+    sample();
+    const sampler = setInterval(sample, 20);
     const value = await running.finally(() => clearInterval(sampler));
     expect(value).toEqual({ stdout: 'big\n', stderr: '', exitCode: null, termination: 'memory' });
     expect(Date.now() - started).toBeLessThan(61_000);
@@ -133,8 +137,8 @@ describe('runCode limits (I4)', () => {
     const before = process.memoryUsage().rss;
     const value = await runCode(
       "const s = 'z'.repeat(1 << 20); for (let i = 0; i < 256; i++) process.stdout.write(s); console.error('end')",
-      // memoryLimitMb 32 → child RSS ceiling 352 MiB: a child buffering the flood
-      // (≥ 256 MiB over its baseline) would end as `memory`, not exit 0.
+      // memoryLimitMb 32 → worker RSS ceiling 352 MiB: a worker buffering the flood
+      // (≥ 256 MiB over its baseline) would be lost (ADR-0563 §5), not exit 0.
       { maxOutputBytes: 1 << 20, timeoutMs: 60_000, memoryLimitMb: 32 },
     );
     const grownMb = (process.memoryUsage().rss - before) / (1 << 20);

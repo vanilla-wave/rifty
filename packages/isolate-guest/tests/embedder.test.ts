@@ -1,5 +1,5 @@
 /**
- * Goal isolate-guest-embed, scenario 1–2 (I1, I3, I4): the packed export
+ * ADR-0558 §1, §2, §6: the packed export
  * installs alone and brings no native addon; the README's custom-integration
  * block, with the consumer's own isolated-vm and nothing internal of rifty,
  * runs the isolate-host corpus like `node -e`.
@@ -22,7 +22,6 @@ import { nodeEval } from '../../isolate-host/tests/support.ts';
  */
 const UNCOPYABLE = ['Promise.reject({ f() {} })', 'Promise.reject(Symbol())', 'Promise.reject(1)'];
 
-/** The acceptance carrier (map item 1); RED was `it.fails` before the export landed. */
 const carrier = it;
 
 const PACKAGE_DIR = fileURLToPath(new URL('..', import.meta.url));
@@ -152,7 +151,7 @@ function runCorpus(): Record<string, Outcome> {
   return ran;
 }
 
-describe('the packed export (I3)', () => {
+describe('the packed export (ADR-0558 §1)', () => {
   carrier(
     'installs alone, declares no dependency, imports and resolves its bundle without isolated-vm',
     async () => {
@@ -193,7 +192,7 @@ describe('the packed export (I3)', () => {
   );
 });
 
-describe('the README embedder runs the corpus like node -e (I1, I4)', () => {
+describe('the README embedder runs the corpus like node -e (ADR-0558 §2, §6)', () => {
   for (const row of CORPUS) {
     const test = row.ceiling === undefined ? carrier : it.fails;
     test(row.ceiling === undefined
@@ -210,7 +209,7 @@ describe('the README embedder runs the corpus like node -e (I1, I4)', () => {
   }
 });
 
-describe('unhandled rejections with uncopyable reasons fail the run as in Node (I1)', () => {
+describe('unhandled rejections with uncopyable reasons fail the run as in Node (ADR-0558 §6)', () => {
   for (const code of UNCOPYABLE) {
     carrier(
       code,
@@ -227,7 +226,7 @@ describe('unhandled rejections with uncopyable reasons fail the run as in Node (
   }
 });
 
-describe("declared ceilings read as runCode's (I1, ADR-0557 §5, §6)", () => {
+describe("declared ceilings read as runCode's (ADR-0557 §5, §6)", () => {
   // The built-in host is the reference for rifty's own declared behavior: the
   // import() gap (stderr line, exit 1, nothing the guest does after it, no host
   // path) and the uncopyable-rejection diagnostic must not depend on the embedder.
@@ -248,7 +247,7 @@ describe("declared ceilings read as runCode's (I1, ADR-0557 §5, §6)", () => {
   }
 });
 
-describe('the README embedder ends each call (I5)', () => {
+describe('the README embedder ends each call (ADR-0558 §2, §3)', () => {
   // A host interval still armed when the guest exits: without `close()` the
   // embedder's process never exits and the driver times out.
   carrier(
@@ -265,7 +264,7 @@ describe('the README embedder ends each call (I5)', () => {
   );
 });
 
-describe('each call has its own clock (I1)', () => {
+describe('each call has its own clock (ADR-0558 Decisions 2026-11-18)', () => {
   // A fresh `node -e` starts its clock near 0; two in-process calls must not
   // read the embedder's uptime nor each other's.
   carrier(
@@ -283,7 +282,7 @@ describe('each call has its own clock (I1)', () => {
   );
 });
 
-describe('the README embedder refuses isolated-vm < 7 (I4)', () => {
+describe('the README embedder refuses isolated-vm < 7 (ADR-0558 §6)', () => {
   // 6.x lacks both hooks and ignores unknown options: a silently wrong result.
   // A stand-in package carries only the version the example reads.
   carrier(
@@ -319,7 +318,7 @@ describe('the README embedder refuses isolated-vm < 7 (I4)', () => {
   );
 });
 
-describe('the README states the contract (I4)', () => {
+describe('the README states the contract (ADR-0558 §2)', () => {
   // The prose is review-read; this pins that every contract name is documented.
   carrier(
     'names every bridge function, both guest entry points, both embedder hooks and the unstable status',

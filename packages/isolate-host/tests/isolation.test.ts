@@ -6,7 +6,7 @@
 import { readFileSync } from 'node:fs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { runCode } from '../src/index.ts';
-import { childPids, nodeEval, processCommand, processEnvironment, waitFor } from './support.ts';
+import { nodeEval, processCommand, processEnvironment, soleChild, waitFor } from './support.ts';
 
 const GLOBAL_CANARY = 'RIFTY_HOST_GLOBAL_CANARY';
 const ENV_CANARY = 'RIFTY_HOST_ENV_CANARY';
@@ -31,11 +31,6 @@ describe('fresh instance per call (I2)', () => {
       "setTimeout(() => console.log(require('fs').existsSync('state.txt'), typeof globalThis.leaked), 300)",
     );
     expect(second).toEqual({ stdout: 'false undefined\n', stderr: '', exitCode: 0 });
-  });
-
-  it('no child process outlives its result', async () => {
-    await runCode("console.log('x')");
-    expect(childPids()).toEqual([]);
   });
 });
 
@@ -73,7 +68,6 @@ describe('no host reach (I3)', () => {
   });
 
   it('no reachable value or bridge function yields the child realm or an isolated-vm handle', async () => {
-    const before = new Set(childPids());
     const running = runCode(String.raw`
       const leaks = [];
       // isolated-vm handle methods (Reference/ExternalCopy); not WeakRef's plain 'deref'.
@@ -145,7 +139,8 @@ describe('no host reach (I3)', () => {
       }, 10);
     `);
     running.catch(() => {}); // asserted below; keeps an early failure from going unhandled
-    const childPid = await waitFor(() => childPids().find((p) => !before.has(p)), 1000);
+    // The one process hosting this call (a fresh child per call, or the warm worker).
+    const childPid = await waitFor(() => soleChild(), 1000);
     const result = await running;
     expect(result.exitCode).toBe(0);
     expect(result.stderr).toBe('');
@@ -165,10 +160,9 @@ describe('no host reach (I3)', () => {
   });
 
   it('the process hosting the isolate carries no inherited host environment', async () => {
-    const before = new Set(childPids());
     const running = runCode("setTimeout(() => console.log('done'), 1500)");
     running.catch(() => {}); // asserted below; keeps an early failure from going unhandled
-    const pid = await waitFor(() => childPids().find((p) => !before.has(p)), 1000);
+    const pid = await waitFor(() => soleChild(), 1000);
     expect(processCommand(pid)).toContain('--no-node-snapshot');
     const environment = processEnvironment(pid);
     expect(environment).not.toContain(SECRET);

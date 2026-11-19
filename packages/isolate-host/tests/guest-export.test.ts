@@ -1,5 +1,5 @@
 /**
- * Goal isolate-guest-embed I2: `runCode` runs the export's guest bundle — the
+ * ADR-0558 §4: `runCode` runs the export's guest bundle — the
  * file its child loads is byte-identical to `@riftydev/isolate-guest/guest.js`.
  */
 import { readFileSync } from 'node:fs';
@@ -8,7 +8,6 @@ import { fileURLToPath } from 'node:url';
 import { expect, it } from 'vitest';
 import { runCode } from '../src/index.ts';
 
-/** The acceptance carrier (map item 1); RED was `it.fails` before the export landed. */
 const carrier = it;
 
 carrier("the host's guest bundle is the export's, byte for byte", () => {
@@ -18,9 +17,10 @@ carrier("the host's guest bundle is the export's, byte for byte", () => {
 });
 
 it("runCode's guest clock is the export's: timeOrigin + now() is the wall clock", async () => {
-  // A fresh `node -e` reads ~0.5 ms here; the child's process origin would be ~70 ms off.
+  // A fresh `node -e` reads ~0.5 ms here; a worker's process origin is its whole uptime off.
+  // 50 ms: the two clock reads are separate host calls, and a loaded machine can preempt between them.
   const result = await runCode(
-    'console.log(Math.abs(performance.timeOrigin + performance.now() - Date.now()) < 20, performance.now() < 1000)',
+    'console.log(Math.abs(performance.timeOrigin + performance.now() - Date.now()) < 50, performance.now() < 1000)',
   );
   expect(result).toEqual({ stdout: 'true true\n', stderr: '', exitCode: 0 });
 });

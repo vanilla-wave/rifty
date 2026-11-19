@@ -1,7 +1,7 @@
 /**
- * The model-style `node -e` corpus (goal isolate-host-run-code I1), shared by
+ * The model-style `node -e` corpus (ADR-0557 §1), shared by
  * `runCode` parity and the custom-embedder parity of `@riftydev/isolate-guest`
- * (goal isolate-guest-embed I1). `parityView` is the one comparison: raw bytes,
+ * (ADR-0558 §6). `parityView` is the one comparison: raw bytes,
  * except an uncaught-error row's stderr goes through the node-cli-eval
  * diagnostic projection.
  */
@@ -13,7 +13,7 @@ export interface Row {
   /** Uncaught error: compare the canonical `[eval]` diagnostic, not internal frames. */
   readonly evalError?: true;
   /**
-   * A declared ceiling this row hits (compat ❌, ledger `re-cut:`): the row stays
+   * A declared ceiling this row hits (compat ❌): the row stays
    * literal and runs as an expected failure, so a fix turns it red until promoted.
    */
   readonly ceiling?: string;
@@ -130,6 +130,27 @@ export const CORPUS: readonly Row[] = [
     label: 'timer-delay-out-of-range',
     code: "setTimeout(() => console.log('t'), 2 ** 31); const t = setInterval(() => { console.log('i'); clearInterval(t) }, 3e9)",
     ceiling: 'Timeout*Warning (runtime-js/timeout-delay-warnings)',
+  },
+  {
+    // Node re-arms an interval after its callback ran: ticks never pile up
+    // (backlog distribution/isolate-host-timer-fire-backpressure).
+    label: 'slow-interval-keeps-pace',
+    code: 'let n = 0; const t0 = Date.now(); const iv = setInterval(() => { n++; const e = Date.now() + 10; while (Date.now() < e); }, 1); setTimeout(() => { clearInterval(iv); console.log(Date.now() - t0 < 3000, n < 150) }, 1000)',
+  },
+  {
+    // Node re-arms from the tick's start: a 150 ms callback every 200 ms starts ~200 ms apart
+    // (re-arming from its end: ~350). Gaps, not counts: a loaded machine stretches both alike.
+    label: 'interval-keeps-its-period',
+    code: 'const s = []; const iv = setInterval(() => { s.push(Date.now()); if (s.length === 4) { clearInterval(iv); const g = [s[2] - s[1], s[3] - s[2]].sort((a, b) => a - b); console.log(g[0] < 275) } const e = Date.now() + 150; while (Date.now() < e); }, 200)',
+  },
+  {
+    // Never early: Node's `setInterval(f, 10)` averages ≥ 10 ms between ticks (~11.5 here).
+    label: 'interval-never-early',
+    code: 'const t = []; let p = performance.now(); const iv = setInterval(() => { const n = performance.now(); t.push(n - p); p = n; if (t.length === 20) { clearInterval(iv); console.log(t.slice(1).reduce((a, b) => a + b) / 19 >= 9.8) } }, 10)',
+  },
+  {
+    label: 'interval-storm',
+    code: "let n = 0; const ts = []; for (let i = 0; i < 20000; i++) ts.push(setInterval(() => { n++ }, 1)); setTimeout(() => { ts.forEach(clearInterval); console.log('done', n > 0) }, 1000)",
   },
   {
     label: 'builtin-module-globals',

@@ -38,22 +38,37 @@ control over browser-local workers, not hostile-code containment.
 If a product needs to execute arbitrary hostile code, put a real containment boundary outside the
 browser runtime.
 
-## Isolate host (Node, ADR-0557)
+## Isolate host (Node, ADR-0557, ADR-0563)
 
 `@riftydev/isolate-host` is a server-side host: a Node service calls `runCode(code)`. Each call
-spawns a child Node process with an empty environment. The child runs the rifty runtime in an
-isolated-vm V8 isolate, and the parent kills it after the call.
+gets a fresh isolated-vm V8 isolate running the rifty runtime. Isolates live in long-lived worker
+processes with an empty environment, up to 4 concurrent calls per worker; guests of different
+calls share a worker process.
 
 - **Tested seam properties.** The guest sees no host global, host env, Node primitive or
   isolated-vm handle. It gets no network: `fetch`, `node:http`/`https`/`net` and `WebSocket`
   throw `NotImplementedError`. The time limit, the isolate heap limit, V8 fatal OOM and the
-  sampled child RSS watchdog all end the child, never the consumer process. The watchdog can
-  overshoot by one allocation step.
+  worker RSS ceiling end the guilty call or its worker, never the consumer process. A guest that
+  does not escape changes a neighbour's result only by delay (memory, hangs, floods tested next
+  to neighbours); a lost worker's calls rerun once, each alone, where any exhaustion of the
+  process — guest memory isolated-vm does not count (wasm, resizable buffers, ICU, timers)
+  included — is that call's own. The worker's shared resources and their bounds: ADR-0563 §7.
 - **Not protected: an isolate escape.** A V8 or isolated-vm bug can give the guest code execution
-  as the child's OS user. Escaped code can read the parent's `/proc/<ppid>/environ`, the
-  filesystem, and the network. The empty child env only stops a leak through a rifty bug.
-- **Consumer's duty.** Put the child behind an external boundary: a separate uid, a sandbox or
-  container, an RSS cgroup. No secrets may be reachable by that user. Track Node point releases
+  as the worker's OS user, in a process that hosts other calls' guests, now and later: their
+  code, data and output are reachable. Escaped code can read the consumer's `/proc/<ppid>/environ`,
+  the filesystem, and the network. The empty worker env only stops a leak through a rifty bug.
+- **Not protected: side channels between isolates of one worker** — an open class.
+  `SharedArrayBuffer` and `Atomics` reach the guest (no second thread, no memory shared across
+  isolates); `performance.now()` resolves to ~3 µs. Tenants that must not share a process need
+  separate consumer processes.
+- **Consumer's duty.** Put the workers behind an external boundary: a separate uid, a sandbox or
+  container, an RSS cgroup above the pool's bound: at most (calls in flight + 1) workers — a timed-out call still in flight until its isolate stops — each up
+  to 256 MiB + 3 × the largest sum of its concurrent calls' `memoryLimitMb` since it last went
+  busy (README §API, with an example). No secrets may be reachable by that user. Limit the call rate per
+  source: a guest can repeat an attack in new calls without bound. `ERR_ISOLATE_HOST_WORKER_LOST`
+  can be the call's own doing (a guest that exhausts its worker only at first or only late), and
+  each retry reruns its worker's other calls: retry at most once, counted against that source's
+  limit. Track Node point releases
   that patch V8. rifty does not orchestrate pods, hypervisors or deploys.
 - **Custom embedders (`@riftydev/isolate-guest`, ADR-0558).** The same guest in an isolate the
   consumer creates. Its `createHostBridge` validates every guest argument. The limits, the kill,

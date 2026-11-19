@@ -40,8 +40,13 @@ function guard<A extends unknown[], R>(name: string, fn: (...args: A) => R): (..
 /** What the embedder does with validated calls. */
 export interface HostHooks {
   write(fd: 1 | 2, bytes: Uint8Array): void;
-  /** Deliver expiry to the guest (`GuestEntry.fire`); a throw ends that timer. */
-  fire(id: number): void;
+  /**
+   * Deliver expiry to the guest (`GuestEntry.fire`). Return a promise that settles
+   * once the guest ran it: a repeating timer re-arms only then (no tick queues
+   * behind a running callback), keeping Node's period from the tick's start.
+   * A throw or a rejection ends that timer.
+   */
+  fire(id: number): unknown;
 }
 
 export interface HostBridge {
@@ -53,15 +58,22 @@ export interface HostBridge {
   close(): void;
 }
 
+/** One armed timer: its host handle, or `null` while its expiry is with the guest. */
+interface Slot {
+  handle: NodeJS.Timeout | null;
+}
+
 export function createHostBridge(hooks: HostHooks): HostBridge {
   // The guest's clock starts with its call, as a fresh `node -e` process's does:
   // never the embedder's uptime, and nothing that links one call to another.
   const origin = performance.now();
-  const timers = new Map<number, NodeJS.Timeout>();
+  // Per id, the slot of its current timer: a reused id gets a new slot, so a
+  // stale delivery of the old timer can only touch its own.
+  const timers = new Map<number, Slot>();
   let closed = false;
   const clear = (id: number): void => {
-    const timer = timers.get(id);
-    if (timer !== undefined) clearTimeout(timer);
+    const slot = timers.get(id);
+    if (slot?.handle) clearTimeout(slot.handle);
     timers.delete(id);
   };
   const functions: HostFunctions = {
@@ -77,16 +89,37 @@ export function createHostBridge(hooks: HostHooks): HostBridge {
       if (typeof repeat !== 'boolean') refuse('timerStart: repeat must be a boolean');
       if (closed) return;
       clear(id);
+      const slot: Slot = { handle: null };
+      timers.set(id, slot);
+      const live = (): boolean => !closed && timers.get(id) === slot;
+      const arm = (delay: number): void => {
+        slot.handle = setTimeout(tick, delay);
+      };
       const tick = (): void => {
+        const started = performance.now();
+        slot.handle = null;
         if (!repeat) timers.delete(id);
+        // Node re-arms from the tick's start (its period holds; an overrun ticks again at
+        // once), but only once the guest ran it: no tick queues behind a running one.
+        // Whole ms, rounded up: a fractional delay fires early.
+        const rearm = (): void => {
+          if (repeat && live()) arm(Math.max(1, Math.ceil(started + ms - performance.now())));
+        };
+        // A rejection (the isolate is gone) ends the timer and never reaches the embedder's loop.
+        const end = (): void => {
+          if (live()) timers.delete(id);
+        };
         try {
-          hooks.fire(id);
+          const delivered = hooks.fire(id);
+          const then = (delivered as PromiseLike<unknown> | null | undefined)?.then;
+          if (typeof then === 'function') then.call(delivered, rearm, end);
+          else rearm();
         } catch {
           // The embedder cannot deliver: this timer has nothing left to do.
-          clear(id);
+          if (live()) clear(id);
         }
       };
-      timers.set(id, repeat ? setInterval(tick, ms) : setTimeout(tick, ms));
+      arm(ms);
     }),
     timerClear: guard('timerClear', (id: unknown) => {
       if (!isInt(id, 1, MAX_TIMER)) refuse('timerClear: id must be an integer in 1..2^31-1');
@@ -103,7 +136,7 @@ export function createHostBridge(hooks: HostHooks): HostBridge {
     timeOrigin: performance.timeOrigin + origin,
     close() {
       closed = true;
-      for (const timer of timers.values()) clearTimeout(timer);
+      for (const slot of timers.values()) if (slot.handle) clearTimeout(slot.handle);
       timers.clear();
     },
   };

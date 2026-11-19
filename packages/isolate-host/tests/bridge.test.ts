@@ -12,7 +12,6 @@ import { IMPORT_GAP } from '@riftydev/isolate-guest';
 import { describe, expect, it } from 'vitest';
 import { importGapError } from '../src/child/bridge.ts';
 import { runCode } from '../src/index.ts';
-import { childPids } from './support.ts';
 
 describe('host bridge reachability from the guest (I3)', () => {
   it('no bridge object or host function is reachable in the guest realm', async () => {
@@ -52,7 +51,6 @@ describe('host bridge reachability from the guest (I3)', () => {
       extras: ['__rifty'],
       bad: [],
     });
-    expect(childPids()).toEqual([]);
   });
 });
 

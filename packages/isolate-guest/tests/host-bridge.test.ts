@@ -1,5 +1,5 @@
 /**
- * Goal isolate-guest-embed I5: every bridge function a guest can call is
+ * ADR-0558 §3: every bridge function a guest can call is
  * guest-controlled input. The export's wrapper accepts a value only when the
  * contract allows it, refuses with a guest-safe `TypeError` (no host frame),
  * never lets a hook failure through as a host error, stops all host timers at
@@ -9,7 +9,6 @@ import { setFlagsFromString } from 'node:v8';
 import { runInNewContext } from 'node:vm';
 import { describe, expect, it } from 'vitest';
 
-/** The acceptance carrier (map item 1); RED was `it.fails` before the export landed. */
 const carrier = it;
 
 interface Functions {
@@ -20,7 +19,10 @@ interface Functions {
   random(n: unknown): Uint8Array;
 }
 interface Export {
-  createHostBridge(hooks: { write(fd: 1 | 2, bytes: Uint8Array): void; fire(id: number): void }): {
+  createHostBridge(hooks: {
+    write(fd: 1 | 2, bytes: Uint8Array): void;
+    fire(id: number): unknown;
+  }): {
     functions: Functions;
     timeOrigin: number;
     close(): void;
@@ -81,7 +83,7 @@ const timeouts = () => process.getActiveResourcesInfo().filter((r) => r === 'Tim
 
 const HOST_PATH = /file:|node:internal|\/node_modules\/|\.ts:|\.js:/;
 
-describe('createHostBridge argument validation (I5)', () => {
+describe('createHostBridge argument validation (ADR-0558 §3)', () => {
   carrier(
     'accepts a value only when the contract allows it, and refuses guest-safely',
     async () => {
@@ -229,7 +231,7 @@ describe('createHostBridge argument validation (I5)', () => {
     setFlagsFromString('--expose-gc');
     const gc = runInNewContext('gc') as () => void;
     let fired = 0;
-    const { functions, close } = createHostBridge({ write: () => {}, fire: () => fired++ });
+    const { functions, close } = createHostBridge({ write: () => {}, fire: () => void fired++ });
     const N = 50_000;
     gc();
     const base = process.memoryUsage().heapUsed;
@@ -249,13 +251,17 @@ describe('createHostBridge argument validation (I5)', () => {
     const fired: number[] = [];
     const { functions, close } = createHostBridge({
       write: () => {},
-      fire: (id) => fired.push(id),
+      fire: (id) => void fired.push(id),
     });
     functions.timerStart(1, 1, false);
     functions.timerStart(2, 1, true);
     functions.timerStart(3, 1, false);
     functions.timerClear(3);
-    await sleep(30);
+    // Waits for the event, not a time slice: a loaded machine runs fewer 1 ms ticks per 30 ms.
+    for (const until = Date.now() + 2000; fired.filter((id) => id === 2).length < 2; ) {
+      if (Date.now() > until) break;
+      await sleep(5);
+    }
     expect(fired.filter((id) => id === 1)).toEqual([1]);
     expect(fired.filter((id) => id === 2).length).toBeGreaterThan(1);
     expect(fired).not.toContain(3);
@@ -309,7 +315,7 @@ describe('createHostBridge argument validation (I5)', () => {
   });
 });
 
-describe('exitStatus (I5)', () => {
+describe('exitStatus (ADR-0558 §3)', () => {
   carrier('passes an integer 0..255 through and reads anything else as 1', async () => {
     const { exitStatus } = await load();
     for (const v of [0, 1, 7, 255]) expect(exitStatus(v)).toBe(v);
@@ -323,5 +329,143 @@ describe('exitStatus (I5)', () => {
       Promise.resolve(0),
     ].filter((v) => !(Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 255));
     for (const v of wrong) expect(exitStatus(v), String(typeof v)).toBe(1);
+  });
+});
+
+describe('interval backpressure (Node: an interval re-arms after its callback ran)', () => {
+  carrier('a repeating timer fires again only after its delivery settled', async () => {
+    const { createHostBridge } = await load();
+    const pending: (() => void)[] = [];
+    let fired = 0;
+    const { functions, close } = createHostBridge({
+      write: () => {},
+      fire: () => {
+        fired++;
+        return new Promise<void>((resolve) => pending.push(resolve));
+      },
+    });
+    functions.timerStart(1, 1, true);
+    await sleep(100);
+    // ~100 ticks elapsed; the guest is still "running" the first callback.
+    expect(fired).toBe(1);
+    pending.shift()?.();
+    await sleep(50);
+    expect(fired).toBe(2);
+    close();
+  });
+
+  carrier('a rejected delivery ends its timer; a clear while in flight is not undone', async () => {
+    const { createHostBridge } = await load();
+    let fired = 0;
+    const settle: ((ok: boolean) => void)[] = [];
+    const { functions, close } = createHostBridge({
+      write: () => {},
+      fire: () => {
+        fired++;
+        return new Promise<void>((resolve, reject) =>
+          settle.push((ok) => (ok ? resolve() : reject(new Error('disposed')))),
+        );
+      },
+    });
+    functions.timerStart(1, 1, true);
+    functions.timerStart(2, 1, true);
+    await sleep(30);
+    expect(fired).toBe(2);
+    settle[0]?.(false);
+    functions.timerClear(2);
+    settle[1]?.(true);
+    await sleep(50);
+    expect(fired).toBe(2);
+    close();
+  });
+
+  carrier('close() ends an interval whose delivery is still in flight', async () => {
+    const { createHostBridge } = await load();
+    let fired = 0;
+    let settle = (): void => {};
+    const { functions, close } = createHostBridge({
+      write: () => {},
+      fire: () => {
+        fired++;
+        return new Promise<void>((resolve) => {
+          settle = resolve;
+        });
+      },
+    });
+    functions.timerStart(1, 1, true);
+    await sleep(30);
+    close();
+    settle();
+    await sleep(50);
+    expect(fired).toBe(1);
+  });
+
+  carrier(
+    'an interval keeps its period from the tick start (Node), not from the callback end',
+    async () => {
+      const { createHostBridge } = await load();
+      const starts: number[] = [];
+      const { functions, close } = createHostBridge({
+        write: () => {},
+        // The guest "runs" each callback for 150 ms of a 200 ms period.
+        fire: () => {
+          starts.push(performance.now());
+          return new Promise<void>((resolve) => setTimeout(resolve, 150));
+        },
+      });
+      functions.timerStart(1, 200, true);
+      for (const until = Date.now() + 10_000; starts.length < 3 && Date.now() < until; )
+        await sleep(20);
+      close();
+      // From the start the gap is ~200 ms, from the end ~350; 275 leaves room for a loaded scheduler.
+      expect(starts.length).toBe(3);
+      expect((starts[2] as number) - (starts[1] as number)).toBeLessThan(275);
+    },
+  );
+
+  carrier('a hook returning no promise keeps the interval running', async () => {
+    const { createHostBridge } = await load();
+    let fired = 0;
+    const { functions, close } = createHostBridge({ write: () => {}, fire: () => void fired++ });
+    functions.timerStart(1, 1, true);
+    await sleep(100);
+    close();
+    expect(fired).toBeGreaterThan(5);
+  });
+});
+
+describe('per-guest host resources (ADR-0563 §7)', () => {
+  carrier('a stale delivery of a reused id neither re-arms nor ends the new timer', async () => {
+    const { createHostBridge } = await load();
+    const settles: (() => void)[] = [];
+    let fired = 0;
+    const { functions, close } = createHostBridge({
+      write: () => {},
+      fire: () => {
+        fired++;
+        return new Promise<void>((resolve) => settles.push(resolve));
+      },
+    });
+    const waitFired = async (n: number, ms: number): Promise<void> => {
+      for (const until = Date.now() + ms; fired < n && Date.now() < until; ) await sleep(5);
+    };
+    functions.timerStart(1, 1, true);
+    await waitFired(1, 2000);
+    // The guest clears id 1 and arms a new id-1 interval while the old delivery is in flight;
+    // the new one ticks too, and its delivery is in flight as well.
+    functions.timerClear(1);
+    functions.timerStart(1, 200, true);
+    await waitFired(2, 2000);
+    expect(fired).toBe(2);
+    // The old delivery settles. Re-arming the new timer from it would tick within ~1 ms,
+    // behind the new delivery still in flight.
+    settles[0]?.();
+    await sleep(50);
+    expect(fired).toBe(2);
+    // The new delivery settles: the new timer is alive and ticks again on its own period.
+    settles[1]?.();
+    await waitFired(3, 2000);
+    expect(fired).toBe(3);
+    close();
   });
 });

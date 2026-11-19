@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
-import { FrameReader, KIND, frame } from '../src/protocol.ts';
+import { FrameReader, HEADER, KIND, frame } from '../src/protocol.ts';
 
 const PACKAGE_DIR = fileURLToPath(new URL('..', import.meta.url));
 const work = mkdtempSync(join(tmpdir(), 'isolate-host-hostile-'));
@@ -26,8 +26,8 @@ const HOSTILE: Readonly<Record<string, string>> = {
   'garbage bytes': 'raw([0xff, 0x0f, 0x99, 0x99, 0x99, 0x42, 0x42, 0x42, 0x42])',
   'unknown kind': 'f(9, [])',
   'kind zero': 'f(0, [1])',
-  'frame announcing 4 GiB': 'raw([0xff, 0xff, 0xff, 0xf0, 1])',
-  'output announcing past the cap': 'raw([0, 0, 0x10, 0, 1])',
+  'frame announcing 4 GiB': 'raw([0xff, 0xff, 0xff, 0xf0, 1, ...C])',
+  'output announcing past the cap': 'raw([0, 0, 0x10, 0, 1, ...C])',
   'output fd 3': 'f(1, [3, 0, 65])',
   'output truncated flag 2': 'f(1, [1, 2, 65])',
   'output header too short': 'f(1, [1])',
@@ -40,7 +40,7 @@ const HOSTILE: Readonly<Record<string, string>> = {
   'memory payload not empty': 'f(3, [0])',
   'error text over 4 KiB': 'f(4, new Array(5000).fill(120))',
   // A header split across writes must not be mistaken for a short frame.
-  'byte-by-byte garbage': 'for (const b of [0xff, 0xff, 0xff, 0xff, 1]) raw([b])',
+  'byte-by-byte garbage': 'for (const b of [0xff, 0xff, 0xff, 0xff, 1, ...C]) raw([b])',
 };
 
 function hostilePackage(label: string, body: string): string {
@@ -52,12 +52,19 @@ function hostilePackage(label: string, body: string): string {
     join(dir, 'dist', 'child.js'),
     `import { closeSync, writeSync } from 'node:fs';
      const raw = (bytes) => writeSync(3, Uint8Array.from(bytes));
+     let C = [];
      const f = (kind, payload) => {
        const b = Uint8Array.from(payload);
        const h = new Uint8Array(5); new DataView(h.buffer).setUint32(0, b.length); h[4] = kind;
-       raw([...h, ...b]);
+       raw([...h, ...C, ...b]);
      };
-     process.stdin.once('data', () => { ${body}; setInterval(() => {}, 1000); });`,
+     process.stdin.on('end', () => process.exit(0));
+     process.stdin.once('data', (d) => {
+       // The call id of the run request, big-endian: what every frame addresses.
+       const call = JSON.parse(String(d).split('\\n')[0]).call;
+       C = [call >>> 24, (call >>> 16) & 255, (call >>> 8) & 255, call & 255];
+       ${body}; setInterval(() => {}, 1000);
+     });`,
   );
   return join(dir, 'dist', 'index.js');
 }
@@ -96,7 +103,7 @@ describe('consumer treats the child channel as hostile', () => {
     // Announces a 1026-byte output frame (cap 1024), sends 1000 bytes of it, then stalls.
     const entry = hostilePackage(
       'stalled frame',
-      'raw([0, 0, 0x04, 0x02, 1, 1, 0, ...new Array(998).fill(65)])',
+      'raw([0, 0, 0x04, 0x02, 1, ...C, 1, 0, ...new Array(998).fill(65)])',
     );
     const report = consume(entry, '{ timeoutMs: 2000, maxOutputBytes: 1024 }') as {
       resolved?: { termination?: string; stdout: string };
@@ -129,7 +136,7 @@ describe('consumer treats the child channel as hostile', () => {
   it('a frame fed one byte at a time is accepted whole', () => {
     const entry = hostilePackage(
       'byte-by-byte valid',
-      'for (const b of [0, 0, 0, 5, 1, 1, 0, 104, 105, 33]) raw([b]); for (const b of [0, 0, 0, 1, 2, 7]) raw([b])',
+      'for (const b of [0, 0, 0, 5, 1, ...C, 1, 0, 104, 105, 33]) raw([b]); for (const b of [0, 0, 0, 1, 2, ...C, 7]) raw([b])',
     );
     const report = consume(entry, '{ timeoutMs: 5000, maxOutputBytes: 1024 }') as {
       resolved?: { stdout: string; exitCode: number | null };
@@ -168,7 +175,10 @@ describe('consumer treats the child channel as hostile', () => {
       rejected?: string;
       ms?: number;
     };
-    expect(report.rejected).toBe('isolate-host child closed its result channel without a result');
+    // A lost worker (ADR-0563 §6): named by its exit, which the consumer forced.
+    expect(report.rejected).toBe(
+      'isolate-host child exited unexpectedly (code null, signal SIGKILL) after closing its result channel without a result',
+    );
     expect(Date.now() - started).toBeLessThan(5000);
     expect(report.ms).toBeLessThan(1000);
   });
@@ -176,18 +186,28 @@ describe('consumer treats the child channel as hostile', () => {
 
 describe('FrameReader framing is independent of how the bytes are chunked', () => {
   // Deterministic, unlike a pipe: every split point and one byte at a time.
-  const max = (kind: number): number => (kind === KIND.output ? 16 : kind === KIND.exit ? 1 : -1);
+  const max = (kind: number, call: number): number | string =>
+    call !== 7
+      ? `call ${call}`
+      : kind === KIND.output
+        ? 16
+        : kind === KIND.exit
+          ? 1
+          : `kind ${kind}`;
   const stream = Uint8Array.from([
-    ...frame(KIND.output, Uint8Array.of(1, 0, 0x61, 0x62)),
-    ...frame(KIND.output, Uint8Array.of(2, 0, 0x63)),
-    ...frame(KIND.exit, Uint8Array.of(3)),
+    ...frame(KIND.output, 7, Uint8Array.of(1, 0, 0x61, 0x62)),
+    ...frame(KIND.output, 7, Uint8Array.of(2, 0, 0x63)),
+    ...frame(KIND.exit, 7, Uint8Array.of(3)),
   ]);
   const feed = (chunks: Uint8Array[]) => {
     const reader = new FrameReader(max);
-    const frames: [number, number[]][] = [];
+    const frames: [number, number, number[]][] = [];
     const violations: string[] = [];
     for (const chunk of chunks) {
-      const bad = reader.push(chunk, (kind, payload) => frames.push([kind, [...payload]]));
+      const bad = reader.push(chunk, (kind, call, payload) => {
+        frames.push([kind, call, [...payload]]);
+        return undefined;
+      });
       if (bad !== null) violations.push(bad);
     }
     return { frames, violations };
@@ -197,9 +217,9 @@ describe('FrameReader framing is independent of how the bytes are chunked', () =
   it('parses the stream whole', () => {
     expect(whole).toEqual({
       frames: [
-        [KIND.output, [1, 0, 0x61, 0x62]],
-        [KIND.output, [2, 0, 0x63]],
-        [KIND.exit, [3]],
+        [KIND.output, 7, [1, 0, 0x61, 0x62]],
+        [KIND.output, 7, [2, 0, 0x63]],
+        [KIND.exit, 7, [3]],
       ],
       violations: [],
     });
@@ -216,13 +236,18 @@ describe('FrameReader framing is independent of how the bytes are chunked', () =
   });
 
   it('refuses an over-long header however it is split, before its payload arrives', () => {
-    const hostile = frame(KIND.exit, Uint8Array.of(0, 0));
-    for (let at = 1; at < 5; at++) {
-      expect({ at, ...feed([hostile.slice(0, at), hostile.slice(at, 5)]) }).toEqual({
+    const hostile = frame(KIND.exit, 7, Uint8Array.of(0, 0));
+    for (let at = 1; at < HEADER; at++) {
+      expect({ at, ...feed([hostile.slice(0, at), hostile.slice(at, HEADER)]) }).toEqual({
         at,
         frames: [],
         violations: ['frame length 2 > 1'],
       });
     }
+  });
+
+  it('refuses a frame for a call the judge does not know, before its payload arrives', () => {
+    const hostile = frame(KIND.exit, 8, Uint8Array.of(0));
+    expect(feed([hostile.slice(0, HEADER)])).toEqual({ frames: [], violations: ['call 8'] });
   });
 });
