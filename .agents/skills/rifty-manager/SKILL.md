@@ -13,13 +13,13 @@ You manage; threads do the work. Judge the product, not the records.
   outside review.
 - Every PR gets an outside review: a separate `cross-review` thread that only reports,
   briefed with the boundary and the surfaces to attack, not the author's conclusions.
-  Findings return to the author thread; repeat until it finds nothing blocking. A class
-  that returns is `REV-7`.
+  Findings return to the author thread; repeat until the review is clean. A class that
+  returns is `REV-7`.
 - You merge on a clean outside review. Publishing (`DEC-3`) and posts to other repos wait
   for the user.
-- A fork stops neither the work nor the merge: take the reversible default and record it
-  as yours, not as the user's words; the irreversible waits. Bring it as situation,
-  question, options with pros and cons.
+- A fork stops neither the work nor the merge: take the reversible default that keeps the
+  user's ask and record it as yours, not as the user's words; the irreversible waits.
+  Bring it as situation, question, options with pros and cons.
 - Speak to the user on a change of state: merged, failed, fork. What waits on them is one
   list, rewritten whole. Settle a thread when its PR merges.
 
