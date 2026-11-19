@@ -62,7 +62,6 @@ export function createHostBridge(hooks: HostHooks): HostBridge {
   // The guest's clock starts with its call, as a fresh `node -e` process's does:
   // never the embedder's uptime, and nothing that links one call to another.
   const origin = performance.now();
-  const wallOrigin = Date.now();
   // Per id: the armed host timer, or `null` while its expiry is with the guest.
   const timers = new Map<number, NodeJS.Timeout | null>();
   let closed = false;
@@ -127,9 +126,7 @@ export function createHostBridge(hooks: HostHooks): HostBridge {
   };
   return {
     functions,
-    // The wall clock at creation, as a fresh process's `timeOrigin` is: a long-lived
-    // embedder's monotonic clock drifts from the wall clock over its uptime.
-    timeOrigin: wallOrigin,
+    timeOrigin: performance.timeOrigin + origin,
     close() {
       closed = true;
       for (const timer of timers.values()) if (timer) clearTimeout(timer);
