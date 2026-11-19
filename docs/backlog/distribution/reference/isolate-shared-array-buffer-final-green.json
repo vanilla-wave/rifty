@@ -1,9 +1,9 @@
 {
   "overall_verdict": "pass",
-  "merge_call": "Close the goal at 284519fd7 and merge after verdict binding, cleanup and green HEAD CI.",
+  "merge_call": "Goal closed. Merge after green HEAD CI and manager handoff.",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "284519fd7cde38f742e4c18e1632cad51bce277c",
-  "unit_goal_source": "PR #414, docs/backlog/distribution/isolate-shared-array-buffer.md and docs/backlog/epics/isolate-host-shared-array-buffer/goal.md at 284519fd7, ADR-0566, BASE 9b948d757. Round-one changes since 2bef54f83.",
+  "reviewed_sha": "5723929bd4e4d6100bb45a92eb2e71fb9cd95f98",
+  "unit_goal_source": "PR #414, ADR-0566 and the closed goal contract at 284519fd7. External round two accepted 6e8d1f9f1. Manager authorized binding the two test additions after the merge of main at d6b811f8e.",
   "unit_residuals": [],
   "goal_residuals": [],
   "goal_complete": true,
@@ -110,15 +110,15 @@
       "trace": "I1+ADR-0566",
       "status": "pass",
       "citation": "packages/isolate-guest/tests/embedder.test.ts:404",
-      "note": ""
+      "note": "ArrayBuffer[Symbol.hasInstance] records and throws on a late check. The instanceof mutant rejected ordinary memory on all three operations."
     },
     {
       "row": "Restricted bootstrap removes the original global before runtime captures it and performs only its own early native wasm memory lookup.",
       "source": "acceptance",
       "trace": "ADR-0566",
       "status": "pass",
-      "citation": "packages/isolate-guest/tests/embedder.test.ts:451",
-      "note": ""
+      "citation": "packages/isolate-guest/tests/embedder.test.ts:453",
+      "note": "The observer also requires zero Instance.exports reads before the buffer getter is guarded. An early lookup through an ordinary module-exported memory changed the count to one."
     }
   ],
   "axes": [
