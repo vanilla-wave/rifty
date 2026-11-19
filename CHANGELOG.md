@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-- Add manual `rifty-manager` skill: threads do the work, the chat leads each unit through an outside `cross-review` to merge.
+- Add manual `rifty-manager` skill: threads do the work, the chat leads each PR through an outside `cross-review` to merge. While invoked it overrides three process defaults: the author thread hands back before CLOSE (§Route "never return control between stages"), a user fork merges on the manager's recorded reversible default (`STOP-1` "nothing closes on it"), and posts to other repos join `DEC-3` confirm-first.
 
 - Parity: `npmTreeFiles` mounts original npm trees (npm-authored lock + SRI-checked registry tarballs, system `tar`) as case files; real readable-stream 2.3.8/3.6.2/4.7.0 (+ through2) cases under `cases/stream/readable-stream-v*-real`. Fault taxonomy gains the builtin-prototype ↔ guest-override boundary.
 
