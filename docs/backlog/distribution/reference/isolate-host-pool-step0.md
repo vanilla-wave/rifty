@@ -104,6 +104,21 @@ objects do not.
 ```
 (6e6 objects at limit 1024: 525 MiB; 3e6: 338 MiB.)
 
+RSS vectors re-run on the landed pool (2026-11-19, after the interval backpressure; `node probe-pool-rss.mjs
+<pkg>/dist/index.js`, 3 neighbours + culprit on one worker, `memoryLimitMb` 64; the "workers seen" column of
+the run counted `ps` itself and is dropped):
+
+```
+timerFlood: culprit null/timeout; neighbours n0,n1,n2; peak worker RSS 365 MiB
+catastrophic: culprit null/memory; neighbours n0,n1,n2; peak worker RSS 810 MiB
+heapGrowth: culprit null/memory; neighbours n0,n1,n2; peak worker RSS 262 MiB
+arrayBuffers: culprit 1/undefined; neighbours n0,n1,n2; peak worker RSS 244 MiB
+wasmGrow: culprit 1/undefined; neighbours n0,n1,n2; peak worker RSS 227 MiB
+```
+
+No vector crosses the worker ceiling without an isolate signal: the RSS-kill-without-culprit path is
+recorded unreachable for these vectors (goal map fog).
+
 ## Prototype sources
 
 ### `lib.mjs`
@@ -401,4 +416,34 @@ for (const code of ['const a = new Array(7e7).fill(1.5); console.log(a.length)',
   await new Promise((r) => setTimeout(r, 1000));
   console.log(JSON.stringify(r.stdout), r.exitCode, 'rss after dispose + 1 s:', mib());
 }
+```
+
+### `probe-pool-rss.mjs`
+
+```js
+// Usage: node probe-pool-rss.mjs <pkg>/dist/index.js — step-0 RSS vectors on the landed pool: 3 neighbours + culprit,
+// peak worker RSS, whether the worker was lost (pid set changed), culprit result.
+import { execFileSync } from 'node:child_process';
+const { runCode } = await import(process.argv[2]);
+const kids = () => execFileSync('ps', ['-A', '-o', 'pid=,ppid=,rss='], { encoding: 'utf8' }).split('\n').map((l) => l.trim().split(/\s+/).map(Number)).filter(([p, pp]) => pp === process.pid && p !== undefined);
+const cases = {
+  timerFlood: ['for (let i = 0; i < 20000; i++) setInterval(() => {}, 1)', { timeoutMs: 3000, memoryLimitMb: 64 }],
+  catastrophic: ['new Array(2**28).fill(0)', { memoryLimitMb: 64, timeoutMs: 20000 }],
+  heapGrowth: ['const a = []; for(;;) a.push({x: Math.random()})', { memoryLimitMb: 64, timeoutMs: 20000 }],
+  arrayBuffers: ['const a = []; for(;;) a.push(new ArrayBuffer(8 << 20))', { memoryLimitMb: 64, timeoutMs: 20000 }],
+  wasmGrow: 'const m = new WebAssembly.Memory({initial: 1, maximum: 65536}); for(;;) m.grow(160)',
+};
+await runCode('1');
+for (const [name, c] of Object.entries(cases)) {
+  const [code, opts] = Array.isArray(c) ? c : [c, { memoryLimitMb: 64, timeoutMs: 20000 }];
+  const before = kids().map(([p]) => p);
+  let peak = 0; const pids = new Set();
+  const t = setInterval(() => { for (const [p, , r] of kids()) { pids.add(p); peak = Math.max(peak, r / 1024); } }, 20);
+  const ns = [0, 1, 2].map((i) => runCode(`setTimeout(() => console.log('n${i}'), 1500)`).then((r) => r.stdout.trim(), (e) => 'REJ ' + e.code));
+  const culprit = await runCode(code, opts).then((r) => `${r.exitCode}/${r.termination}`, (e) => 'REJ ' + e.code);
+  const n = await Promise.all(ns);
+  clearInterval(t);
+  console.log(`${name}: culprit ${culprit}; neighbours ${n.join(',')}; peak worker RSS ${Math.round(peak)} MiB; workers seen ${pids.size} (before ${before.length})`);
+}
+process.exit(0);
 ```

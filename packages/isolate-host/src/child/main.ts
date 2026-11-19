@@ -159,19 +159,11 @@ async function run(request: RunRequest): Promise<void> {
       flush();
       state.reported = true;
       closeBridge();
-      // Checked before the frame leaves: a retire sent with it arrives in the
-      // same write, before the consumer can place another call here.
+      // Retire first (call 0, order-free): the consumer stops placing calls here
+      // before this slot frees, however the bytes are split into chunks.
       const idle = [...live.values()].every((c) => c === state || c.reported);
-      if (state.unwound && idle && process.memoryUsage.rss() > RECYCLE_RSS_BYTES) retiring = true;
-      // One write: the consumer reads the retire with the terminal frame.
-      if (retiring) {
-        const terminal = frame(kind, id, payload);
-        const retireFrame = frame(KIND.retire, 0, new Uint8Array(0));
-        const both = new Uint8Array(terminal.byteLength + retireFrame.byteLength);
-        both.set(terminal);
-        both.set(retireFrame, terminal.byteLength);
-        channel.write(both);
-      } else send(kind, id, payload);
+      if (state.unwound && idle && process.memoryUsage.rss() > RECYCLE_RSS_BYTES) retire();
+      send(kind, id, payload);
       if (!isolate.isDisposed) {
         state.disposedHere = true;
         // Not inside an isolate callback (`importModuleDynamically` reports from one).

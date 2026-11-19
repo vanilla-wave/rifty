@@ -41,7 +41,7 @@ ADR-0557 §1's API, result shape and `timeoutMs` + 1000 ms bound, §4–§7 othe
 5. **Memory.** Blame needs a certain signal from the culprit's own isolate: ivm disposing it for its heap limit (polled every 25 ms, reported at once even while a builtin holds its thread), or its `onCatastrophicError`. The culprit resolves `memory` and is never rerun.
    - The worker's RSS ceiling is 256 MiB + 3 × the sum of its live calls' `memoryLimitMb` (ADR-0557 §3, summed). Crossing it, or a catastrophic error, kills the worker (SIGKILL) after it flushes its frames.
    - No heap-stats guess: per-isolate heap stats separated a host-side timer flood by 4 MiB only.
-   - An idle worker above `RECYCLE_RSS_BYTES` = 256 MiB retires. Its retire frame goes out in one write with the last terminal frame, before the consumer can place another call there.
+   - An idle worker above `RECYCLE_RSS_BYTES` = 256 MiB retires. Its retire frame goes out before the last terminal frame, so the consumer stops placing calls there before the slot frees.
 6. **Lost worker.** A worker that exits without the consumer ending it — external SIGKILL, OOM-killer, crash, its own RSS kill, a closed result channel — loses its unsettled calls.
    - They rerun once, together, on a new worker of their own that takes no other call and ends when they are settled.
    - The rerun keeps the original deadline. A second loss, or a rerun past the deadline, rejects with `code: 'ERR_ISOLATE_HOST_WORKER_LOST'` and `isolate-host child exited unexpectedly (code …, signal …)` (+ ` after closing its result channel without a result` when the consumer forced that exit, + `; its rerun did not finish within timeoutMs`). The text holds no guest or worker-written bytes: worker stderr is ignored.
@@ -85,7 +85,7 @@ Manager decisions by delegation (2026-11-18/19), shown to the user and not answe
 - F1: a rerun out of budget rejects `ERR_ISOLATE_HOST_WORKER_LOST`, never `timeout` and never with a fresh budget;
 - F2: one rerun, quarantined.
 
-Manager decision, 2026-11-19: blame only on a certain signal from the culprit's own isolate («угадывание по heap хуже честного "неизвестно"»).
+Manager decision, 2026-11-18: blame only on a certain signal from the culprit's own isolate («угадывание по heap хуже честного "неизвестно"»).
 
 Agent decisions: the shard size, the 1000 ms grace, the 256 MiB watermark and the summed ceiling, keeping one warm idle worker, no `close()`, no process-per-call mode, side channels declared rather than mitigated (no `performance.now` coarsening), and the wire's `retire` kind.
 

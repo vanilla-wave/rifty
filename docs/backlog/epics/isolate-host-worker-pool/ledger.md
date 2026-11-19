@@ -6,3 +6,6 @@
 - 2026-11-18 — FIT final written-result check: 11 findings fixed @ a403ff556, verify pass 1 concern + 3 nits fixed; goal `ready` on the manager's delegation
 - 2026-11-18 — Contract+RED PASS (concerns, no blocker) @ 49e448a8a, JSON on PR #412; 11 concerns fixed in place, carrier now 27 cases, all RED on main for the pool reason
 - 2026-11-19 — rebased on main 6d7640353 (export PR #411); manager adds timer-fire backpressure to scope; fixed in the export's `createHostBridge` (interval re-arms after delivery), parity rows RED→GREEN, backlog item closed
+- 2026-11-19 — IMPLEMENT: pool landed on the export (ADR-0563); carrier 27→28 GREEN; 15/15 invariant mutants killed; 5/5 load runs green before the critic
+- 2026-11-19 — DEC-2 critic on ADR-0563: 7 problems (2 blockers: idle-ended worker still placeable — RED first, fixed; overturned ADR-0557 clauses unnamed — named); verify pass: holds, 1 concern (retire must precede the terminal frame) + 1 nit fixed
+- 2026-11-19 — RSS-kill-without-culprit re-probed on the landed pool: no vector crosses the ceiling without an isolate signal → recorded unreachable (step0 reference)
