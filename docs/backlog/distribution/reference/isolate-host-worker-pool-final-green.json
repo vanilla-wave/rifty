@@ -1,0 +1,142 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS, goal complete: the CLOSE blocker (I10 Linux retention) is fixed and independently re-measured, 5b and the nits are fixed. Commit this verdict as the landing JSON (REV-8): lint-and-typecheck at 7c53ded38 fails only in its check:pass-binding step. Merge only on a green PR CI at HEAD.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "7c53ded389b662dbcd66d7d033745a045a502d05",
+  "unit_goal_source": "CLOSE of goal isolate-host-worker-pool, PR #412 HEAD 7c53ded389b662dbcd66d7d033745a045a502d05 (= last product/test commit); BASE origin/main merge-base 6d764035315524cc242d88673d44f4b9041b1ae8. Authorities removed by CLOSE (99ee27913), read via git show b6d8a8625 under docs/backlog: epics/isolate-host-worker-pool/goal.md (I1-I10 + §Decisions amend 2026-11-19 solo reruns), distribution/isolate-host-pool-acceptance.md (carrier rows 1-11, fault matrix), epics/isolate-host-worker-pool/map.md (Linux-retention question). Verify pass over 99ee27913..7c53ded38 on the prior CLOSE verdict.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [
+    {
+      "row": "I1: sequential calls reuse one worker; N concurrent calls in ceil(N/4) workers; API/result shape unchanged",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/pool.test.ts:15 (same pid over 6 calls), pool.test.ts:~30 (4->1, 5->2, 8->2, exact results); mutant SHARD=1 killed",
+      "note": ""
+    },
+    {
+      "row": "I2: calls on one worker see none of each other's files/globals/timers/promises; output only to own result; floods/spin/Atomics.wait/heap-to-limit leave neighbours at solo result",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/pool.test.ts:49,79 (freshness, pending timer/promise); pool-faults.test.ts:156-180 (output and interval floods), :109-154 (busy loop, Atomics.wait), :65-107 (heap), :385 (262 000 intervals at 64 MiB, neighbours exact)",
+      "note": ""
+    },
+    {
+      "row": "I3: own-isolate memory signal -> {exitCode:null, termination:'memory'}, never rerun; neighbours exact once; lost-worker neighbours rerun by I5",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/pool-faults.test.ts:66 (Array(2**28)), :87 (heap growth), slots-and-ceilings 'memory retained from finished calls never lands on the last call left'",
+      "note": ""
+    },
+    {
+      "row": "I4: timeout within timeoutMs+1000 incl. Atomics.wait and termination-ignoring builtin; stuck >1000 ms retires worker, neighbours finish there, then killed",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/pool-faults.test.ts:110-153 (probe on new worker, retired), slots 'a cancelled call still running keeps its slot'; mutant no-stuck-retire killed",
+      "note": ""
+    },
+    {
+      "row": "I5 (amended 2026-11-19): each lost call reruns once alone on a solo worker; exhaustion there is its own memory; unknown solo loss or rerun past deadline rejects ERR_ISOLATE_HOST_WORKER_LOST naming code/signal, no guest/worker bytes; <=2 runs; mass loss <= one process per call",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/pool-faults.test.ts:183,203,223,246,268,311 (kill once/twice, budget, fresh not placed with reruns, 4 solos, 2 rerun workers); :354-383 + 'attribution of a worker's RSS' describe (solo memory: wasm, resizable/growable buffers, Intl, call-alone-on-shared, allowance reset); mass loss <=8; sync/async spawn failure -> LOST; pool-protocol.test.ts:128 (no worker text); mutants rerun-on-shared, solo-not-blamed (6 carriers), blame-last-on-shared, async-spawn-raw killed",
+      "note": ""
+    },
+    {
+      "row": "I6: idle worker does not keep consumer alive; never outlives it (consumer SIGKILL -> worker gone)",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/pool.test.ts:104,116,127; mutant no-unref killed",
+      "note": ""
+    },
+    {
+      "row": "I7: hostile worker frames for unknown/other-worker/settled calls kill it and reject its in-flight calls with protocol violation; other calls unchanged",
+      "source": "acceptance",
+      "trace": "I7",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/pool-protocol.test.ts:71,98,109,143",
+      "note": ""
+    },
+    {
+      "row": "I8: trust-model, README, ADR state escape reach (now and later), open side-channel class (SAB/Atomics, measured performance.now), shared resources each with its guard, unbounded repeat -> consumer rate limiting",
+      "source": "acceptance",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "docs/public/trust-model.md:41-71; packages/isolate-host/README.md:137-198; docs/adr/distribution/0563-run-runcode-in-a-pool-of-long-lived-worker-processes-each-hosting-many-isolates.md:52-71",
+      "note": ""
+    },
+    {
+      "row": "I9: README §Cost records measure.mjs next to A; warm p50 and 8-concurrent peak RSS each <= 1/2 of A (137 ms, 1118 MiB)",
+      "source": "acceptance",
+      "trace": "I9",
+      "status": "pass",
+      "citation": "packages/isolate-host/README.md:200-221 (13.1 ms, 414 MiB vs 137 ms, 1118 MiB); reviewer run @ 99ee27913 (pool src unchanged since) under the 10x load: p50 27.3 ms (<= 68.5), 8 concurrent 415 MiB (<= 559)",
+      "note": ""
+    },
+    {
+      "row": "I10: idle worker never warm above recycle watermark (ADR: 256 MiB, <= 512); past it takes no new call, killed once idle",
+      "source": "acceptance",
+      "trace": "I10",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/pool-faults.test.ts:330-349; mutant no-idle-retire killed (macOS); Linux retention: docs/backlog/distribution/reference/isolate-host-pool-step0.md:154-164, reviewer re-run in node:24.16.0-bookworm linux/arm64: 8e6 objects 712 MiB, 585 MiB 1 s after dispose (> 512), so the carrier discriminates on Linux",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "packages/isolate-host/tests/pool-faults.test.ts:385-401",
+          "evidence": "",
+          "summary": "The 262 000-interval carrier (own heap limit, as its comment says) sits under the describe titled 'a solo rerun names the culprit'; the title overstates it for this one case.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}
