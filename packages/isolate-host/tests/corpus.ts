@@ -132,6 +132,16 @@ export const CORPUS: readonly Row[] = [
     ceiling: 'Timeout*Warning (runtime-js/timeout-delay-warnings)',
   },
   {
+    // Node re-arms an interval after its callback ran: ticks never pile up
+    // (backlog distribution/isolate-host-timer-fire-backpressure).
+    label: 'slow-interval-keeps-pace',
+    code: "let n = 0; const t0 = Date.now(); const iv = setInterval(() => { n++; const e = Date.now() + 10; while (Date.now() < e); }, 1); setTimeout(() => { clearInterval(iv); console.log(Date.now() - t0 < 3000, n < 150) }, 1000)",
+  },
+  {
+    label: 'interval-storm',
+    code: "let n = 0; const ts = []; for (let i = 0; i < 20000; i++) ts.push(setInterval(() => { n++ }, 1)); setTimeout(() => { ts.forEach(clearInterval); console.log('done', n > 0) }, 1000)",
+  },
+  {
     label: 'builtin-module-globals',
     code: "console.log(path.join('a', 'b'), typeof fs.readFileSync, util.format('%d', 1), path === require('path'), typeof crypto.createHash); path = 5; console.log(path)",
   },
