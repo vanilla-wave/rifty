@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { runCode } from '../src/index.ts';
-import { CORPUS, parityView } from './corpus.ts';
+import { CORPUS, GC_CHURN, parityView } from './corpus.ts';
 import { nodeEval } from './support.ts';
 
 describe('package surface (ADR-0557 §1)', () => {
@@ -37,6 +37,32 @@ describe.each([undefined, true])(
     }
   },
 );
+
+/** Declared gaps pinned to what they do today: a fix turns them red (compat ⚠️ rows). */
+describe('declared gaps and their workarounds (compat ⚠️)', () => {
+  it('the documented workaround for a GC-lost rejection: a .catch that reports and sets exitCode', async () => {
+    // Exactly the snippet of the compat row and the README.
+    const code = `(async () => { throw new Error('rej') })().catch((e) => { console.error(e); process.exitCode = 1 }); ${GC_CHURN}`;
+    const raw = nodeEval(code);
+    const result = await runCode(code);
+    expect(raw.code).toBe(1);
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toBe(raw.stdout);
+    // The frames below are rifty's (`at eval ([eval]:1:22)`, guest-bundle frames), not Node's.
+    expect(result.stderr.split('\n')[0]).toBe('Error: rej');
+    expect(raw.stderr.split('\n')[0]).toBe('Error: rej');
+  });
+
+  it('process.exit() from a microtask of the synchronous run ends as timeout (Node exits with its code)', async () => {
+    // Nothing ends such a run: `timeout` in 160/160 runs, 16 concurrent under load.
+    const code = 'Promise.resolve().then(() => process.exit(3))';
+    expect(nodeEval(code).code).toBe(3);
+    const result = await runCode(code, { timeoutMs: 2000 });
+    expect(result.termination).toBe('timeout');
+    expect(result.exitCode).toBeNull();
+    expect(result.stderr).toContain('Error: process exit requires an active control port');
+  });
+});
 
 /**
  * Declared ceilings (ADR-0557 §5; goal scenario step 4): real Node runs these;
