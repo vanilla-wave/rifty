@@ -3,7 +3,7 @@
 Status: Accepted
 Date: 2026-11
 
-> TL;DR: `runCode` keeps its API and a fresh isolate per call, but the isolates live in long-lived worker processes of a lazy pool, 4 calls per worker. A guest's OOM or hang costs its neighbours only delay, a lost worker's calls rerun once on a worker of their own, and the guests of one worker share its process.
+> TL;DR: `runCode` keeps its API and a fresh isolate per call, but the isolates live in long-lived worker processes of a lazy pool, 4 calls per worker. A guest's OOM or hang costs its neighbours only delay; a lost worker's calls rerun once, each alone on a worker of its own; the guests of one worker share its process.
 
 ## Context
 
@@ -97,7 +97,7 @@ Agent decisions: the shard size, the 1000 ms grace, the 256 MiB watermark and th
 
 ## Consequences
 
-- Proven at landing (goal `isolate-host-worker-pool`, closed 2026-11-19; carriers `packages/isolate-host/tests/pool.test.ts`, `pool-faults.test.ts`, `pool-protocol.test.ts`, each discriminating mutant run): shared warm workers and packing; freshness of files, globals, timers, promises and output across calls on one worker; a culprit's heap limit, fatal OOM, deadline (busy loop, `Atomics.wait`, a builtin ignoring termination) and memory outside its heap (wasm, resizable buffers, ICU, 600 000 intervals) next to three neighbours — culprit `memory`/`timeout`, neighbours exact once; lost workers (external kill once and twice, budget, spawn failures, mass loss ≤ one process per call); idle workers unref'd, never orphaned; hostile-worker frames confined to their own calls; idle recycle above 256 MiB. Premise and density probes: `docs/backlog/distribution/reference/isolate-host-pool-step0.md`.
+- Proven at landing (goal `isolate-host-worker-pool`, closed 2026-11-19; carriers `packages/isolate-host/tests/pool.test.ts`, `pool-faults.test.ts`, `pool-protocol.test.ts`, each discriminating mutant run): shared warm workers and packing; freshness of files, globals, timers, promises and output across calls on one worker; a culprit's heap limit, fatal OOM, deadline (busy loop, `Atomics.wait`, a builtin ignoring termination) and memory outside its heap (wasm, resizable buffers, ICU) and floods of intervals next to three neighbours — culprit `memory`/`timeout`, neighbours exact once; lost workers (external kill once and twice, budget, spawn failures, mass loss ≤ one process per call); idle workers unref'd, never orphaned; hostile-worker frames confined to their own calls; idle recycle above 256 MiB. Premise and density probes: `docs/backlog/distribution/reference/isolate-host-pool-step0.md`.
 
 - Measured on landed code (README §Cost): warm call p50 13 ms vs 137 ms; +22 MiB per concurrent call in one worker; 8 cold concurrent calls 414 MiB vs 1118 MiB. Measurements, not promises.
 - An externally killed worker no longer rejects its calls at once: they rerun once (ADR-0557 §1 sentence superseded).

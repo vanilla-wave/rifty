@@ -382,10 +382,16 @@ describe('guest memory outside the isolate heap: a solo rerun names the culprit 
     180_000,
   );
 
-  carrier.each([])(
-    '%s: the culprit gets memory (solo rerun), neighbours exact',
-    async (_, code) => {
-      const v = await withNeighbours(code, '{ memoryLimitMb: 64, timeoutMs: 20000 }', SMALL);
+  carrier(
+    '262 000 one-millisecond intervals at memoryLimitMb 64: the culprit gets memory, neighbours exact',
+    async () => {
+      // Its own heap limit ends it (~256 B of guest heap per interval); the point is the
+      // neighbours', not the path: the solo RSS path is pinned by the rows above.
+      const v = await withNeighbours(
+        'for (let i = 0; i < 262000; i++) setInterval(() => {}, 1)',
+        '{ memoryLimitMb: 64, timeoutMs: 20000 }',
+        SMALL,
+      );
       const { ms: _ms, ...culprit } = v.culprit;
       expect(culprit).toEqual({ stdout: '', stderr: '', exitCode: null, termination: 'memory' });
       expect(v.shared).toBe(1);
@@ -406,7 +412,8 @@ describe('guest memory outside the isolate heap: a solo rerun names the culprit 
       out({ eight, forty: { exitCode: forty.exitCode, rejected: forty.rejected }, neighbour: await neighbour });`);
       expect(value).toEqual({
         eight: { stdout: '1\n', stderr: '', exitCode: 0 },
-        // 40 MiB is the guest's own failure (isolated-vm refuses code longer than memoryLimit / 8), never a lost worker.
+        // 40 MiB is the guest's own failure (EvalError past memoryLimit / 8, cause unverified:
+        // backlog isolate-host-code-longer-than-memory-limit-eighth-evalerror), never a lost worker.
         forty: { exitCode: 1 },
         neighbour: { stdout: 'n\n', stderr: '', exitCode: 0 },
       });
@@ -415,26 +422,7 @@ describe('guest memory outside the isolate heap: a solo rerun names the culprit 
   );
 });
 
-describe('host memory a guest makes outside its heap, past both ceilings (ADR-0563 §7, §5)', () => {
-  carrier(
-    '600 000 intervals at memoryLimitMb 256: the culprit gets memory from its solo, neighbours exact',
-    async () => {
-      // ~3.3 KiB of worker memory per interval, ~120 MiB of guest heap (under its 256):
-      // past the shared ceiling 256 + 3 × (256 + 192) MiB, then past its solo's 256 + 3 × 256.
-      const v = await withNeighbours(
-        'for (let i = 0; i < 600000; i++) setInterval(() => {}, 1)',
-        '{ memoryLimitMb: 256, timeoutMs: 60000 }',
-        '{ memoryLimitMb: 64 }',
-      );
-      const { ms: _ms, ...culprit } = v.culprit;
-      expect(culprit).toEqual({ stdout: '', stderr: '', exitCode: null, termination: 'memory' });
-      expect(v.shared).toBe(1);
-      expect(v.neighbours).toEqual(NEIGHBOURS);
-      expect(v.next).toEqual(NEXT);
-    },
-    180_000,
-  );
-
+describe("attribution of a worker's RSS (ADR-0563 §5, §6)", () => {
   carrier(
     'a call alone on a shared worker is not blamed for its RSS: it reruns alone first',
     async () => {

@@ -151,6 +151,18 @@ A realm wrapper refusing `maxByteLength` (`probe-rab-wrap.mjs`): the direct, `pr
 
 Not measured: Intl/ICU data and caches, compiled-code space, regexp code (V8 heap spaces, likely counted; unproven).
 
+Retention on Linux (CLOSE, 2026-11-19): `retain.mjs` — an isolate holds N small objects, is disposed, RSS 1 s later —
+in `docker run node:24.16.0-bookworm` (colima VM on the M3 Pro; `npm i isolated-vm@7.0.2`; x64 under qemu reads
+VmRSS of the emulator, base included):
+
+```
+darwin/arm64 (host):        8000000 objects (limit 1536): RSS 712 MiB with them, 585 MiB 1 s after dispose
+linux/arm64 (Debian 12):    8000000 objects (limit 1536): RSS 721 MiB with them, 595 MiB 1 s after dispose
+linux/x64 (qemu, Debian 12): 8000000 objects (limit 1536): RSS 849 MiB with them, 723 MiB 1 s after dispose (base 118)
+```
+
+The small-object heap stays resident on Linux too: the I10 carrier (an idle worker above 512 MiB) discriminates there.
+
 ## Prototype sources
 
 ### `lib.mjs`
@@ -576,4 +588,25 @@ for (const [k, c] of Object.entries(attempts)) {
   try { console.log(k, '→', ctx.evalSync(c)); } catch (e) { console.log(k, '→ throws', e.message.slice(0, 70)); }
 }
 console.log('rss MiB', Math.round(process.memoryUsage.rss() / 1048576));
+```
+
+### `retain.mjs`
+
+```js
+// Usage (in a Linux container with isolated-vm@7.0.2 installed next to it):
+//   node --no-node-snapshot retain.mjs — RSS a process keeps 1 s after disposing an isolate that held N small objects.
+import { createRequire } from 'node:module';
+const ivm = createRequire(import.meta.url)('isolated-vm');
+import { readFileSync } from 'node:fs';
+const mib = () => Math.round((process.memoryUsage.rss() || Number(/VmRSS:\s+(\d+)/.exec(readFileSync('/proc/self/status', 'utf8'))[1]) * 1024) / 1048576);
+console.log(`node ${process.version} ${process.platform}/${process.arch} isolated-vm ${createRequire(import.meta.url)('isolated-vm/package.json').version}; rest ${mib()} MiB`);
+for (const [n, limit] of [[3e6, 1024], [8e6, 1536]]) {
+  const iso = new ivm.Isolate({ memoryLimit: limit });
+  const ctx = await iso.createContext();
+  const len = await ctx.eval(`const a = []; for (let i = 0; i < ${n}; i++) a.push({ i, s: 'k' + i }); a.length`);
+  const peak = mib();
+  iso.dispose();
+  await new Promise((r) => setTimeout(r, 1000));
+  console.log(`${n} objects (limit ${limit}): ${len} built, RSS ${peak} MiB with them, ${mib()} MiB 1 s after dispose`);
+}
 ```
