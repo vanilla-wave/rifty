@@ -1,31 +1,47 @@
 {
   "overall_verdict": "pass",
-  "merge_call": "Pass this unit at a41f3ec28. Keep PR #414 open for the external review and manager closure.",
+  "merge_call": "Close the goal at 284519fd7 and merge after verdict binding, cleanup and green HEAD CI.",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "a41f3ec28ce94aab37aa6aab8495e8ea017598f0",
-  "unit_goal_source": "docs/backlog/distribution/isolate-shared-array-buffer.md @ a41f3ec28, BASE 9b948d757, goal docs/backlog/epics/isolate-host-shared-array-buffer/goal.md, PR #414",
+  "reviewed_sha": "284519fd7cde38f742e4c18e1632cad51bce277c",
+  "unit_goal_source": "PR #414, docs/backlog/distribution/isolate-shared-array-buffer.md and docs/backlog/epics/isolate-host-shared-array-buffer/goal.md at 284519fd7, ADR-0566, BASE 9b948d757. Round-one changes since 2bef54f83.",
   "unit_residuals": [],
   "goal_residuals": [],
-  "goal_complete": false,
+  "goal_complete": true,
   "coverage": [
     {
-      "row": "Fixed and growable global construction and JS-created and module-exported shared wasm backing stores report the named gap.",
+      "row": "The disabled V8 global is absent, fallback works, and direct fixed and growable construction produce ReferenceError.",
       "source": "acceptance",
       "trace": "I1",
       "status": "pass",
-      "citation": "packages/isolate-host/tests/shared-array-buffer.test.ts:14",
+      "citation": "packages/isolate-host/tests/shared-array-buffer.test.ts:28",
       "note": ""
     },
     {
-      "row": "Views produced by the runtime have ordinary backing stores and expose the ordinary constructor on their prototype.",
+      "row": "Shared wasm backing stores from JS memory and grown module-exported memory raise the named gap.",
       "source": "acceptance",
       "trace": "I1",
       "status": "pass",
-      "citation": "packages/isolate-host/tests/shared-array-buffer.test.ts:44",
+      "citation": "packages/isolate-host/tests/shared-array-buffer.test.ts:19",
       "note": ""
     },
     {
-      "row": "The packed README embedder selects denied, omitted and explicit-allow modes for each fresh context.",
+      "row": "Runtime views expose ordinary backing stores and ordinary ArrayBuffer prototype constructors.",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/shared-array-buffer.test.ts:57",
+      "note": ""
+    },
+    {
+      "row": "Ordinary wasm and the ordinary-view Atomics operations retain live Node semantics.",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/shared-array-buffer.test.ts:68",
+      "note": ""
+    },
+    {
+      "row": "Packaged README code selects restricted, omitted and explicit-allow guests in fresh contexts.",
       "source": "acceptance",
       "trace": "I3",
       "status": "pass",
@@ -33,7 +49,7 @@
       "note": ""
     },
     {
-      "row": "The same full corpus, including marked ceilings, runs against live Node for omitted and explicit true.",
+      "row": "The complete corpus retains live Node behavior and declared ceilings with omitted and explicit true.",
       "source": "acceptance",
       "trace": "I2",
       "status": "pass",
@@ -41,47 +57,15 @@
       "note": ""
     },
     {
-      "row": "Growable buffers, shared wasm memory and Atomics in the allowed modes retain Node behavior.",
+      "row": "Allow and default retain growable shared buffers, Atomics and shared wasm behavior.",
       "source": "acceptance",
       "trace": "I2",
       "status": "pass",
-      "citation": "packages/isolate-host/tests/shared-array-buffer.test.ts:30",
+      "citation": "packages/isolate-host/tests/shared-array-buffer.test.ts:43",
       "note": ""
     },
     {
-      "row": "Ordinary wasm memory, ordinary buffer prototypes and Atomics.wait/waitAsync/notify/store/load match live Node under restriction.",
-      "source": "acceptance",
-      "trace": "I1",
-      "status": "pass",
-      "citation": "packages/isolate-host/tests/shared-array-buffer.test.ts:44",
-      "note": ""
-    },
-    {
-      "row": "Both wasm conversions preserve native names, non-constructibility and invocation by method name on ordinary memory, and both deny shared buffers.",
-      "source": "acceptance",
-      "trace": "I1+I3",
-      "status": "pass",
-      "citation": "packages/isolate-guest/tests/embedder.test.ts:386",
-      "note": ""
-    },
-    {
-      "row": "The bundle installs the policy before runtime modules capture the original global.",
-      "source": "acceptance",
-      "trace": "ADR-0566",
-      "status": "pass",
-      "citation": "packages/isolate-guest/tests/embedder.test.ts:431",
-      "note": ""
-    },
-    {
-      "row": "Sequential and overlapping opposite choices continue on one warm worker.",
-      "source": "fault-matrix",
-      "trace": "I2",
-      "status": "pass",
-      "citation": "packages/isolate-host/tests/shared-array-buffer.test.ts:66",
-      "note": ""
-    },
-    {
-      "row": "The original restriction survives worker loss and the solo retry.",
+      "row": "Opposite choices stay independent on sequential and overlapping calls to one warm worker.",
       "source": "fault-matrix",
       "trace": "I2",
       "status": "pass",
@@ -89,19 +73,51 @@
       "note": ""
     },
     {
-      "row": "runCode validates the optional boolean before placement.",
-      "source": "public-api",
-      "trace": "ADR-0566",
+      "row": "A restricted call keeps its policy after worker loss and a solo retry.",
+      "source": "fault-matrix",
+      "trace": "I2",
       "status": "pass",
-      "citation": "packages/isolate-host/tests/shared-array-buffer.test.ts:89",
+      "citation": "packages/isolate-host/tests/shared-array-buffer.test.ts:96",
       "note": ""
     },
     {
-      "row": "The guest consumes the optional pre-load boolean, rejects invalid options and accepts its documented default.",
+      "row": "runCode accepts the optional boolean and rejects invalid values.",
+      "source": "public-api",
+      "trace": "ADR-0566",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/shared-array-buffer.test.ts:107",
+      "note": ""
+    },
+    {
+      "row": "The pre-load GuestHost option selects policy and the packed embedder rejects invalid values.",
       "source": "public-api",
       "trace": "I3+ADR-0566",
       "status": "pass",
-      "citation": "packages/isolate-guest/tests/embedder.test.ts:353",
+      "citation": "packages/isolate-guest/tests/embedder.test.ts:357",
+      "note": ""
+    },
+    {
+      "row": "The pinned wasm prototype surface includes the three covered producers. Ordinary conversions retain callable method identity by name and non-constructability.",
+      "source": "acceptance",
+      "trace": "ADR-0566",
+      "status": "pass",
+      "citation": "packages/isolate-guest/tests/embedder.test.ts:388",
+      "note": ""
+    },
+    {
+      "row": "All three wasm producers distinguish ordinary and shared backing stores under guest replacement of the selected intrinsics.",
+      "source": "acceptance",
+      "trace": "I1+ADR-0566",
+      "status": "pass",
+      "citation": "packages/isolate-guest/tests/embedder.test.ts:404",
+      "note": ""
+    },
+    {
+      "row": "Restricted bootstrap removes the original global before runtime captures it and performs only its own early native wasm memory lookup.",
+      "source": "acceptance",
+      "trace": "ADR-0566",
+      "status": "pass",
+      "citation": "packages/isolate-guest/tests/embedder.test.ts:451",
       "note": ""
     }
   ],
