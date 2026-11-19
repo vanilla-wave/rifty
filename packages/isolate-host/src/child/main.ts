@@ -217,7 +217,7 @@ async function run(request: RunRequest): Promise<void> {
       await jail.set(`__riftyHost_${name}`, new ivm.Callback(fn));
     }
     await context.eval(`{
-      const bridge = { timeOrigin: ${bridge.timeOrigin} };
+      const bridge = { timeOrigin: ${bridge.timeOrigin}, allowSharedArrayBuffer: ${request.allowSharedArrayBuffer !== false} };
       for (const name of ${JSON.stringify(names)}) {
         bridge[name] = globalThis['__riftyHost_' + name];
         delete globalThis['__riftyHost_' + name];

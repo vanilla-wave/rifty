@@ -58,9 +58,10 @@ calls share a worker process.
   code, data and output are reachable. Escaped code can read the consumer's `/proc/<ppid>/environ`,
   the filesystem, and the network. The empty worker env only stops a leak through a rifty bug.
 - **Not protected: side channels between isolates of one worker** — an open class.
-  `SharedArrayBuffer` and `Atomics` reach the guest (no second thread, no memory shared across
-  isolates); `performance.now()` resolves to ~3 µs. Tenants that must not share a process need
-  separate consumer processes.
+  By default the guest has `SharedArrayBuffer` and `Atomics` (no second thread or memory shared across
+  isolates). A caller can set `allowSharedArrayBuffer: false` to withhold shared buffers.
+  Atomics retains its native semantics. `performance.now()` resolves to ~3 µs. Tenants that must
+  run in separate processes need separate consumer processes.
 - **Consumer's duty.** Put the workers behind an external boundary: a separate uid, a sandbox or
   container, an RSS cgroup above the pool's bound: at most (calls in flight + 1) workers — a timed-out call still in flight until its isolate stops — each up
   to 256 MiB + 3 × the largest sum of its concurrent calls' `memoryLimitMb` since it last went

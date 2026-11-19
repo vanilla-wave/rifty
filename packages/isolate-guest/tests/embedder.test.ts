@@ -350,14 +350,16 @@ describe('the README states the contract (ADR-0558 §2)', () => {
   );
 });
 
-it.fails('the packed README embedder selects shared buffers per fresh guest', () => {
+it('the packed README embedder selects shared buffers per fresh guest', () => {
   const app = embedder('shared-buffers');
   const code = `try { console.log(new SharedArrayBuffer(4).byteLength) }
     catch (e) { console.log(e.name, e.feature) }`;
   const driver = `import { run } from './embed.mjs';
     for (const options of [{allowSharedArrayBuffer: false}, undefined, {allowSharedArrayBuffer: true}]) {
       console.log(JSON.stringify(await run(${JSON.stringify(code)}, options)));
-    }`;
+    }
+    try { await run('0', {allowSharedArrayBuffer: 'false'}); }
+    catch (e) { console.log(JSON.stringify(e.message)); }`;
   const results = execFileSync(
     process.execPath,
     ['--no-node-snapshot', '--input-type=module', '-e', driver],
@@ -370,7 +372,8 @@ it.fails('the packed README embedder selects shared buffers per fresh guest', ()
   )
     .trim()
     .split('\n')
-    .map((line) => JSON.parse(line) as Outcome);
+    .map((line): unknown => JSON.parse(line));
+  expect(results.pop()).toBe('isolate-host guest: allowSharedArrayBuffer must be a boolean');
   expect(results).toEqual(
     ['NotImplementedError isolate-host.SharedArrayBuffer\n', '4\n', '4\n'].map((stdout) => ({
       stdout,
@@ -380,7 +383,7 @@ it.fails('the packed README embedder selects shared buffers per fresh guest', ()
   );
 });
 
-it.fails('guards both wasm buffer conversion methods when V8 enables them', () => {
+it('guards both wasm buffer conversion methods when V8 enables them', () => {
   // Node 24 exposes these methods under a V8 flag. Newer engines enable them by default.
   const flags =
     'toResizableBuffer' in WebAssembly.Memory.prototype
@@ -413,4 +416,44 @@ it.fails('guards both wasm buffer conversion methods when V8 enables them', () =
     stderr: '',
     exitCode: 0,
   });
+});
+
+it('the restricted bundle boots without reading the native shared buffer constructor', () => {
+  // Observe the original binding from the embedder before running any bundle code.
+  // Returning the real constructor preserves the ordinary runtime's captures in the control.
+  const driver = `import ivm from 'isolated-vm';
+    import { readFileSync } from 'node:fs';
+    import { createHostBridge } from '@riftydev/isolate-guest';
+    const bundle = readFileSync(new URL(import.meta.resolve('@riftydev/isolate-guest/guest.js')), 'utf8');
+    for (const flag of [false, true]) {
+      const isolate = new ivm.Isolate();
+      const context = isolate.createContextSync();
+      const bridge = createHostBridge({ write() {}, fire() {} });
+      try {
+        context.evalSync(\`let reads = 0;
+          (() => {
+            const original = SharedArrayBuffer;
+            Object.defineProperty(globalThis, 'SharedArrayBuffer', {
+              configurable: true, get() { reads++; return original; }
+            });
+          })();
+          globalThis.__riftyIsolateHost = { allowSharedArrayBuffer: \${flag}, timeOrigin: \${bridge.timeOrigin} };
+        \`);
+        const record = context.global.getSync('__riftyIsolateHost', {reference: true});
+        for (const [key, fn] of Object.entries(bridge.functions)) record.setSync(key, new ivm.Callback(fn));
+        isolate.compileScriptSync(bundle).runSync(context);
+        console.log(context.evalSync('reads > 0'));
+      } finally { bridge.close(); isolate.dispose(); }
+    }`;
+  const output = execFileSync(
+    process.execPath,
+    ['--no-node-snapshot', '--input-type=module', '-e', driver],
+    {
+      cwd: embedder('shared-buffers'),
+      encoding: 'utf8',
+      env,
+      timeout: 30_000,
+    },
+  );
+  expect(output).toBe('false\ntrue\n');
 });

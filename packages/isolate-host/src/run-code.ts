@@ -5,8 +5,10 @@
  */
 import { Pool } from './pool.ts';
 
-/** Limits for one `runCode` call; omitted fields take the documented defaults. */
+/** Options for one `runCode` call; omitted fields take the documented defaults. */
 export interface RunCodeOptions {
+  /** Whether this guest may obtain shared buffers. Default true. */
+  readonly allowSharedArrayBuffer?: boolean;
   /** Wall-clock deadline from the call, ms. Default 30 000. */
   readonly timeoutMs?: number;
   /** isolated-vm heap limit, MiB (min 8). Default 256. Adds 3 × this to its worker's RSS ceiling. */
@@ -61,7 +63,14 @@ export function runCode(code: string, options: RunCodeOptions = {}): Promise<Run
     );
   }
   try {
+    const { allowSharedArrayBuffer = true } = options;
+    if (typeof allowSharedArrayBuffer !== 'boolean') {
+      throw Object.assign(new TypeError('options.allowSharedArrayBuffer must be a boolean'), {
+        code: 'ERR_INVALID_ARG_TYPE',
+      });
+    }
     const spec = {
+      allowSharedArrayBuffer,
       code,
       timeoutMs: limit('timeoutMs', options.timeoutMs, 30_000, 1, MAX_TIMER_MS),
       memoryLimitMb: limit('memoryLimitMb', options.memoryLimitMb, 256, 8),

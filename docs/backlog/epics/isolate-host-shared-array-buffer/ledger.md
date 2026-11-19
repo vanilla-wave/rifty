@@ -1,3 +1,5 @@
 # Ledger — per-call SharedArrayBuffer access
 
 - 2026-11-19 — raw RED against 9b948d757 on Node 24.16.0 and isolated-vm 7.0.2: 8 failed, 2 baseline controls passed. Direct and exported memory returned the native brand, both pool paths allowed construction, invalid input ran, and the packed README embedder allowed all three calls. Expected failures marked for the contract commit.
+- 2026-11-19 — independent Contract+RED PASS @ 8398e09f3 after extending the entire parity corpus to explicit true. Review JSON on PR #414.
+- 2026-11-19 — ran each product mutant separately with the normal Vitest entry point. The designated assertions failed for a missing global ceiling (fixed and growable), a late removal (native constructor read at bootstrap), an unguarded wasm buffer (JS memory and grown export), either unguarded conversion, refusing ordinary wasm, replacing the ordinary prototype constructor, changing Atomics.wait, false by default, false on explicit allow, retaining the first worker policy, dropping false on solo retry, ignoring invalid host input, and omitting the README embedder option.

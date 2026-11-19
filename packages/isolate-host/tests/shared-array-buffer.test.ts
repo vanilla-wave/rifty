@@ -19,7 +19,7 @@ const sources = {
 };
 
 for (const [name, expression] of Object.entries(sources)) {
-  it.fails(`denies ${name}`, async () => {
+  it(`denies ${name}`, async () => {
     const code = `try { console.log(Object.prototype.toString.call(${expression})) }
       catch (e) { console.log(e.name, e.feature) }`;
     expect(nodeEval(code).stdout).toBe('[object SharedArrayBuffer]\n');
@@ -43,7 +43,7 @@ it('keeps explicit allow and the default at live Node behavior', async () => {
 
 it('ordinary backing stores and their prototype constructors stay unshared', async () => {
   const code = `const m = new WebAssembly.Memory({initial: 1, maximum: 2}); m.grow(1);
-    for (const b of [m.buffer, new Uint8Array(8).buffer, Buffer.alloc(8).buffer,
+    for (const b of [m.buffer, new Uint8Array(8).buffer, new DataView(new ArrayBuffer(8)).buffer, Buffer.alloc(8).buffer,
         new TextEncoder().encode('x').buffer, crypto.getRandomValues(new Uint8Array(4)).buffer]) {
       const ctor = Object.getPrototypeOf(b).constructor;
       console.log(ctor === ArrayBuffer, Object.prototype.toString.call(new ctor(4)));
@@ -59,10 +59,8 @@ it('ordinary backing stores and their prototype constructors stay unshared', asy
 
 const checkPolicy =
   "try { new SharedArrayBuffer(4); console.log('on') } catch (e) { console.log(e.name, e.feature) }";
-it.fails(
-  'keeps alternating policies on the same worker, sequentially and concurrently',
-  async () => {
-    const { value } = await consumer(`
+it('keeps alternating policies on the same worker, sequentially and concurrently', async () => {
+  const { value } = await consumer(`
     const code = ${JSON.stringify(checkPolicy)};
     const call = (flag, delay) => runCode('setTimeout(() => {' + code + '}, ' + delay + ')',
       {allowSharedArrayBuffer: flag});
@@ -70,17 +68,10 @@ it.fails(
     const warm = children();
     const batch = await Promise.all([true, false, undefined, false].map(flag => call(flag, 200)));
     out([first, batch, await call(true, 0), warm.length, String(warm) === String(children())]);`);
-    expect(value).toEqual([
-      ok(gap),
-      [ok('on\n'), ok(gap), ok('on\n'), ok(gap)],
-      ok('on\n'),
-      1,
-      true,
-    ]);
-  },
-);
+  expect(value).toEqual([ok(gap), [ok('on\n'), ok(gap), ok('on\n'), ok(gap)], ok('on\n'), 1, true]);
+});
 
-it.fails('retains a restriction on a solo retry', async () => {
+it('retains a restriction on a solo retry', async () => {
   const { value } = await consumer(`
     await runCode('0');
     const [worker] = children();
@@ -91,10 +82,10 @@ it.fails('retains a restriction on a solo retry', async () => {
   expect(value).toEqual(ok(gap));
 });
 
-it.fails('rejects invalid policy values before starting guest code', async () => {
+it('rejects invalid policy values before starting guest code', async () => {
   for (const flag of [0, null, 'false']) {
     await expect(
-      runCode('0', { ...off, allowSharedArrayBuffer: flag } as typeof off),
+      runCode('0', { ...off, allowSharedArrayBuffer: flag } as unknown as typeof off),
     ).rejects.toMatchObject({ code: 'ERR_INVALID_ARG_TYPE' });
   }
 });

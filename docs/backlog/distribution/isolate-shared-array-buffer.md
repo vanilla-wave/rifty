@@ -1,6 +1,6 @@
 ---
 area: distribution
-status: draft
+status: ready
 title: Let callers select shared buffer access per guest
 created: 2026-11-19
 why: Services need different guest policies on the same worker.
@@ -34,6 +34,12 @@ Compare to the running Node 24 executable via nodeEval. With an ordinary Int32Ar
 
 - Closing cross-tenant side channels or coarsening timers.
 
+## Challenge
+
+challenge: 2026-11-19 — clear (goal FIT).
+
 ## Decisions
+
+- ready-verdict: 2026-11-19 — Contract+RED @ 8398e09f3.
 
 - ADR-0566.

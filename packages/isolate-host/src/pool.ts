@@ -34,6 +34,7 @@ export interface Result {
   readonly truncated?: true;
 }
 export interface CallSpec {
+  readonly allowSharedArrayBuffer: boolean;
   readonly code: string;
   readonly timeoutMs: number;
   readonly memoryLimitMb: number;
@@ -206,6 +207,7 @@ class Worker {
     const { code, memoryLimitMb, maxOutputBytes } = call.spec;
     const request: RunRequest = {
       type: 'run',
+      allowSharedArrayBuffer: call.spec.allowSharedArrayBuffer,
       call: call.id,
       code,
       memoryLimitMb,

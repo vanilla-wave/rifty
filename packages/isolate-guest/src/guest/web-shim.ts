@@ -26,6 +26,46 @@ const mapGetPrimordial = Map.prototype.get;
 const mapSetPrimordial = Map.prototype.set;
 const mapDeletePrimordial = Map.prototype.delete;
 
+// Remove the producer before any runtime module can capture it. The named
+// ceiling is installed alongside the other globals after feature detection.
+const { allowSharedArrayBuffer = true } = bridge;
+if (typeof allowSharedArrayBuffer !== 'boolean')
+  throw new TypeError('isolate-host guest: allowSharedArrayBuffer must be a boolean');
+if (!allowSharedArrayBuffer) {
+  // biome-ignore lint/performance/noDelete: runtime feature detection must see the constructor absent.
+  delete g.SharedArrayBuffer;
+  if (typeof WebAssembly !== 'undefined') restrictWasmBuffers(WebAssembly.Memory.prototype);
+}
+
+function sharedBufferUnavailable(): never {
+  throw notImplemented('isolate-host.SharedArrayBuffer', 'disabled for this guest');
+}
+
+/** Only release native ArrayBuffers. The captured getter tests V8 internal slots
+ * without asking the guest for a brand, prototype or property. Applies equally
+ * to JS-constructed memories and memories exported from a compiled module. */
+function restrictWasmBuffers(prototype: object): void {
+  const byteLength = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, 'byteLength')!.get!;
+  for (const key of ['buffer', 'toFixedLengthBuffer', 'toResizableBuffer']) {
+    const descriptor = Object.getOwnPropertyDescriptor(prototype, key);
+    if (!descriptor) continue;
+    const field = key === 'buffer' ? 'get' : 'value';
+    const native = descriptor[field];
+    Object.defineProperty(prototype, key, {
+      ...descriptor,
+      [field]: function (this: WebAssembly.Memory) {
+        const buffer: unknown = reflectApplyPrimordial(native, this, []);
+        try {
+          reflectApplyPrimordial(byteLength, buffer, []);
+        } catch {
+          sharedBufferUnavailable();
+        }
+        return buffer;
+      },
+    });
+  }
+}
+
 /** UTF-8 bytes straight to the host, through the codec's module function, not the guest-visible class. */
 export function writeHost(fd: 1 | 2, text: string): void {
   bridge.write(fd, encodeUtf8(text));
@@ -361,6 +401,7 @@ export const CEILING_GLOBALS = [
 const NAVIGATOR_MEMBERS = ['hardwareConcurrency', 'language', 'languages', 'platform', 'userAgent'];
 
 export function installCeilingGlobals(): void {
+  if (!allowSharedArrayBuffer) define('SharedArrayBuffer', sharedBufferUnavailable);
   for (const name of CEILING_GLOBALS) {
     const thrower = loud(name);
     Object.defineProperty(thrower, 'name', { value: name });

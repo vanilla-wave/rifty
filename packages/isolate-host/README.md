@@ -37,6 +37,7 @@ workers.
 
 | option | default | meaning |
 |---|---|---|
+| `allowSharedArrayBuffer` | true | false makes shared buffer construction and access to a shared wasm backing buffer throw `NotImplementedError('isolate-host.SharedArrayBuffer')` for this call. Ordinary buffers, wasm and Atomics keep their semantics. |
 | `timeoutMs` | 30 000 | wall-clock deadline from the call |
 | `memoryLimitMb` | 256 | isolate heap limit (min 8); adds 3 × this to its worker's RSS ceiling (256 MiB + 3 × the sum over the worker's calls). Below ~16 the rifty runtime itself does not fit and every run ends as `termination: 'memory'` (measured: 12 fails, 15 runs `console.log`) |
 | `maxOutputBytes` | 1 MiB | stdout + stderr bytes kept |
@@ -189,7 +190,7 @@ Not protected:
   uid, a sandbox or container, an RSS cgroup, no secrets reachable by that
   user. Keep V8 up to date: upgrade Node point releases that patch V8.
 - **Side channels between isolates of one worker** are an open class.
-  `SharedArrayBuffer` and `Atomics` exist in the guest (no second thread, no
+  By default `SharedArrayBuffer` and `Atomics` exist in the guest (no second thread, no
   memory shared with other isolates). `performance.now()` resolves to ~3 µs.
   Tenants that must not share a process need separate consumer processes.
 - **Repeated attacks.** A guest can repeat any attack in new calls without
