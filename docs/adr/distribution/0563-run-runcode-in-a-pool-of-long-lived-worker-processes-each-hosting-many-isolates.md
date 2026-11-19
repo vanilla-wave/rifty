@@ -82,6 +82,8 @@ Rejected:
 
 ## Not the user's words
 
+Decided by the manager, not by the user (who saw them and had not answered at landing): reading «C» as a pool of worker processes, F1, F2, and the solo reruns of a lost worker's calls.
+
 Manager decisions by delegation (2026-11-18/19), shown to the user and not answered at landing; reversible until merge, a user answer lands as a correction here:
 - «C» = option C of the A/B/C table: a pool of worker processes;
 - F1: a rerun out of budget rejects `ERR_ISOLATE_HOST_WORKER_LOST`, never `timeout` and never with a fresh budget;
@@ -91,9 +93,11 @@ Manager decision by delegation, 2026-11-19, cross-review round 2 (supersedes the
 
 Manager decision, 2026-11-18: blame only on a certain signal from the culprit's own isolate («угадывание по heap хуже честного "неизвестно"»).
 
-Agent decisions: the shard size, the 1000 ms grace, the 256 MiB watermark and the summed ceiling, keeping one warm idle worker, no `close()`, no process-per-call mode, side channels declared rather than mitigated (no `performance.now` coarsening), and the wire's `retire` kind.
+Agent decisions: the shard size, the 1000 ms grace, the 256 MiB watermark and the summed ceiling (never shrinking while busy, reset when a worker goes busy), blame on an RSS crossing only in a solo worker, keeping one warm idle worker, no `close()`, no process-per-call mode, side channels declared rather than mitigated (no `performance.now` coarsening), and the wire's `retire` kind.
 
 ## Consequences
+
+- Proven at landing (goal `isolate-host-worker-pool`, closed 2026-11-19; carriers `packages/isolate-host/tests/pool.test.ts`, `pool-faults.test.ts`, `pool-protocol.test.ts`, each discriminating mutant run): shared warm workers and packing; freshness of files, globals, timers, promises and output across calls on one worker; a culprit's heap limit, fatal OOM, deadline (busy loop, `Atomics.wait`, a builtin ignoring termination) and memory outside its heap (wasm, resizable buffers, ICU, 600 000 intervals) next to three neighbours — culprit `memory`/`timeout`, neighbours exact once; lost workers (external kill once and twice, budget, spawn failures, mass loss ≤ one process per call); idle workers unref'd, never orphaned; hostile-worker frames confined to their own calls; idle recycle above 256 MiB. Premise and density probes: `docs/backlog/distribution/reference/isolate-host-pool-step0.md`.
 
 - Measured on landed code (README §Cost): warm call p50 13 ms vs 137 ms; +22 MiB per concurrent call in one worker; 8 cold concurrent calls 414 MiB vs 1118 MiB. Measurements, not promises.
 - An externally killed worker no longer rejects its calls at once: they rerun once (ADR-0557 §1 sentence superseded).
