@@ -188,6 +188,12 @@ export const CORPUS: readonly Row[] = [
     code: `Promise.reject(new Error('rej')).catch(() => console.log('caught')); ${GC_CHURN}`,
   },
   {
+    // The workaround's twin for both lanes (`parity.test.ts` runs the compat snippet
+    // verbatim on runCode; `e.message` here because rifty's stack frames differ).
+    label: 'reject-caught-exit-code-then-gc',
+    code: `(async () => { throw new Error('rej') })().catch((e) => { console.error(e.message); process.exitCode = 1 }); ${GC_CHURN}`,
+  },
+  {
     // Exit 0 in 160/160 runs, 16 concurrent under load: the run's status is fixed before the report arrives.
     label: 'reject-in-exit-listener',
     code: "process.on('exit', () => { Promise.reject(new Error('rej')) })",
