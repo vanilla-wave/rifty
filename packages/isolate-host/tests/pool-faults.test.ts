@@ -1,10 +1,9 @@
 /**
- * Goal isolate-host-worker-pool, acceptance rows 5–8: a culprit on a shared
- * worker (memory, time, host-side floods) costs its neighbours nothing but
- * delay (I2, I3, I4); a worker lost with no culprit reruns its calls once,
- * inside their deadline, on a worker of their own (I5). Each scenario runs in
- * its own cold consumer process, so 4 concurrent calls share its one worker
- * (row 2 proves the packing).
+ * ADR-0563 §4–§7: a culprit on a shared worker (memory in or out of its heap,
+ * time, host-side floods) costs its neighbours nothing but delay; a worker lost
+ * with no culprit reruns each call once, alone, inside its deadline. Each
+ * scenario runs in its own cold consumer process, so 4 concurrent calls share
+ * its one worker (pool.test.ts proves the packing).
  */
 import { describe, expect, it } from 'vitest';
 import { consumer } from './support.ts';
@@ -63,7 +62,7 @@ const NEXT = { stdout: '42\n', stderr: '', exitCode: 0 };
 /** The rejection a consumer can retry on: a call lost with its worker (manager decision F1). */
 const LOST = 'ERR_ISOLATE_HOST_WORKER_LOST';
 
-describe('memory on a shared worker (I3)', () => {
+describe('memory on a shared worker (ADR-0563 §5)', () => {
   carrier(
     'a catastrophic allocation is the culprit alone; neighbours get their own result once',
     async () => {
@@ -107,7 +106,7 @@ describe('memory on a shared worker (I3)', () => {
   );
 });
 
-describe('time on a shared worker (I4)', () => {
+describe('time on a shared worker (ADR-0563 §4)', () => {
   carrier.each([
     ['a busy loop', "console.log('c'); for (;;) {}"],
     [
@@ -138,7 +137,7 @@ describe('time on a shared worker (I4)', () => {
       expect(v.shared).toBe(1);
       expect(v.neighbours).toEqual(NEIGHBOURS.slice(0, 2));
       // A guest still running after termination retires its worker once the
-      // neighbours are done (I4); `next` cannot have landed there.
+      // neighbours are done (ADR-0563 §4); `next` cannot have landed there.
       expect(v.probe.result).toEqual({ stdout: 'p\n', stderr: '', exitCode: 0 });
       if (label.startsWith('a builtin')) {
         // Retiring (stuck past 1000 ms): no new call goes there, and it dies after its neighbours.
@@ -154,7 +153,7 @@ describe('time on a shared worker (I4)', () => {
   );
 });
 
-describe('host-side floods change a neighbour only by delay (I2)', () => {
+describe('host-side floods change a neighbour only by delay (ADR-0563 §7)', () => {
   carrier.each([
     [
       'an output flood past a 1 KiB cap',
@@ -180,7 +179,7 @@ describe('host-side floods change a neighbour only by delay (I2)', () => {
   );
 });
 
-describe('a worker lost with no culprit (I5)', () => {
+describe('a worker lost with no culprit (ADR-0563 §6)', () => {
   carrier('killed once: the call reruns on a new worker and resolves exactly once', async () => {
     const { value } = await consumer(`
       const call = settle(runCode("console.log('x'); setTimeout(() => console.log('y'), 5000)", { timeoutMs: 20000 }));
@@ -328,7 +327,7 @@ describe('a worker lost with no culprit (I5)', () => {
   });
 });
 
-describe('bounded worker memory (I10)', () => {
+describe('bounded worker memory (ADR-0563 §5)', () => {
   carrier(
     'a worker left holding a big call’s memory is recycled, never kept warm above 512 MiB',
     async () => {
@@ -349,7 +348,7 @@ describe('bounded worker memory (I10)', () => {
   );
 });
 
-describe('guest memory outside the isolate heap: a solo rerun names the culprit (I2, I3)', () => {
+describe('guest memory outside the isolate heap: a solo rerun names the culprit (ADR-0563 §7, §5)', () => {
   // Neighbours at memoryLimitMb 64: the shared worker's ceiling is 256 + 3 × 256 MiB.
   const SMALL = '{ memoryLimitMb: 64 }';
   carrier.each([
@@ -416,7 +415,7 @@ describe('guest memory outside the isolate heap: a solo rerun names the culprit 
   );
 });
 
-describe('host memory a guest makes outside its heap, past both ceilings (I2, I3)', () => {
+describe('host memory a guest makes outside its heap, past both ceilings (ADR-0563 §7, §5)', () => {
   carrier(
     '600 000 intervals at memoryLimitMb 256: the culprit gets memory from its solo, neighbours exact',
     async () => {
@@ -469,7 +468,7 @@ describe('host memory a guest makes outside its heap, past both ceilings (I2, I3
   );
 });
 
-describe('a guest that never ends and churns host timers (I2, I4)', () => {
+describe('a guest that never ends and churns host timers (ADR-0563 §7, §4)', () => {
   carrier(
     'intervals created and cleared in a loop: its own end (timeout as Node, or memory alone), neighbours exact',
     async () => {
@@ -492,7 +491,7 @@ describe('a guest that never ends and churns host timers (I2, I4)', () => {
   );
 });
 
-describe('a mass loss costs at most a process per call (I5)', () => {
+describe('a mass loss costs at most a process per call (ADR-0563 §6)', () => {
   carrier(
     '8 calls on 2 workers, both killed: at most 8 rerun processes, every call exact',
     async () => {
@@ -513,7 +512,7 @@ describe('a mass loss costs at most a process per call (I5)', () => {
   );
 });
 
-describe('a failing spawn during a rerun never takes the consumer down (I5)', () => {
+describe('a failing spawn during a rerun never takes the consumer down (ADR-0563 §6)', () => {
   carrier(
     'spawn throws synchronously for the rerun: the call rejects LOST, the consumer lives',
     async () => {
@@ -550,7 +549,7 @@ describe('a failing spawn during a rerun never takes the consumer down (I5)', ()
   });
 });
 
-describe('slots and ceilings of a shared worker (I1, I3)', () => {
+describe('slots and ceilings of a shared worker (ADR-0563 §1–2, §5)', () => {
   carrier(
     'a cancelled call still running keeps its slot: a 5th call starts another worker',
     async () => {

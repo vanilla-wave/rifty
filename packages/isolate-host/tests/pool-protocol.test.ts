@@ -1,10 +1,10 @@
 /**
- * Goal isolate-host-worker-pool, acceptance row 9 (I7): a worker after an
+ * ADR-0563 §3: a worker after an
  * isolate escape is hostile and now carries several calls; a frame it
  * addresses to a call not in flight on it is a protocol violation, never
  * output or a status for another call. The worker here is a real Node process
  * replacing `dist/child.js` in a package copy; each call's `code` is the
- * hostile body it runs for that call (wire: acceptance item, "Wire").
+ * hostile body it runs for that call (wire: `src/protocol.ts`).
  */
 import { cpSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -67,7 +67,7 @@ const entry = hostileWorkerPackage();
 const HONEST = 'setTimeout(() => { f(1, call, [1, 0, ...text("own")]); f(2, call, [0]); }, 1500)';
 const VIOLATION = /^isolate-host child protocol violation: /;
 
-describe('call-addressed frames from a hostile worker (I7)', () => {
+describe('call-addressed frames from a hostile worker (ADR-0563 §3)', () => {
   carrier(
     'frames for ids of calls on the other worker, or unknown ids, kill only the forging worker',
     async () => {

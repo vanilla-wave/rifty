@@ -1,6 +1,6 @@
 /**
- * Goal isolate-host-worker-pool, acceptance rows 1–4 (I1 shared warm workers,
- * I2 freshness inside a worker, I6 lifecycle). Each scenario runs in its own
+ * ADR-0563 §1–2, §7: shared warm workers, freshness inside a worker, worker
+ * lifecycle. Each scenario runs in its own
  * consumer process over the built package: its child pids are its workers.
  */
 import { describe, expect, it } from 'vitest';
@@ -11,7 +11,7 @@ const carrier = it;
 
 const ok = (stdout: string) => ({ stdout, stderr: '', exitCode: 0 });
 
-describe('shared warm workers (I1)', () => {
+describe('shared warm workers (ADR-0563 §1–2)', () => {
   carrier('a worker outlives its call and serves the next sequential calls', async () => {
     const { value } = await consumer(`
       await runCode('1');
@@ -45,7 +45,7 @@ describe('shared warm workers (I1)', () => {
   });
 });
 
-describe('freshness inside a worker (I2)', () => {
+describe('freshness inside a worker (ADR-0563 §7)', () => {
   carrier(
     '4 concurrent calls on one worker see only their own files, globals, timers and output',
     async () => {
@@ -100,7 +100,7 @@ describe('freshness inside a worker (I2)', () => {
   );
 });
 
-describe('worker lifecycle (I6)', () => {
+describe('worker lifecycle (ADR-0563 §1)', () => {
   carrier('an idle worker does not keep the consumer alive, and does not outlive it', async () => {
     const { value, exitCode, signal, ms } = await consumer(
       `await runCode('console.log(1)'); out({ workers: children() });`,
