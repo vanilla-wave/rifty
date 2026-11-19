@@ -33,9 +33,10 @@ async function withNeighbours(
   culprit: string,
   options: string,
   neighbourOptions = '{}',
+  count = 3,
 ): Promise<Outcome> {
   const { value } = await consumer(
-    `const neighbours = [0, 1, 2].map((i) =>
+    `const neighbours = Array.from({ length: ${count} }, (_, i) =>
        settle(runCode("console.log('a" + i + "'); setTimeout(() => console.log('b" + i + "'), 3500)", ${neighbourOptions})));
      await sleep(300);
      const t0 = now();
@@ -121,8 +122,9 @@ describe('time on a shared worker (I4)', () => {
     '%s: culprit timeout within timeoutMs + 1000 ms; neighbours exact',
     async (label, code) => {
       // Neighbours (b at 3.5 s) at 5000 ms: a rerun after the worker's loss (≥ 1.8 s)
-      // could not finish in time, so they must finish where they are.
-      const v = await withNeighbours(code, '{ timeoutMs: 1500 }', '{ timeoutMs: 5000 }');
+      // could not finish in time, so they must finish where they are. Two of them:
+      // the shared worker keeps a free slot for the probe unless it retires.
+      const v = await withNeighbours(code, '{ timeoutMs: 1500 }', '{ timeoutMs: 5000 }', 2);
       const { ms, ...culprit } = v.culprit;
       expect(culprit).toEqual({
         stdout: 'c\n',
@@ -133,7 +135,7 @@ describe('time on a shared worker (I4)', () => {
       expect(ms).toBeGreaterThanOrEqual(1500);
       expect(ms).toBeLessThanOrEqual(1500 + 1000);
       expect(v.shared).toBe(1);
-      expect(v.neighbours).toEqual(NEIGHBOURS);
+      expect(v.neighbours).toEqual(NEIGHBOURS.slice(0, 2));
       // A guest still running after termination retires its worker once the
       // neighbours are done (I4); `next` cannot have landed there.
       expect(v.probe.result).toEqual({ stdout: 'p\n', stderr: '', exitCode: 0 });
@@ -141,6 +143,9 @@ describe('time on a shared worker (I4)', () => {
         // Retiring (stuck past 1000 ms): no new call goes there, and it dies after its neighbours.
         expect(v.probe.newWorker).toBe(true);
         expect(v.retired).toBe(true);
+      } else {
+        // Stopped by termination: its worker keeps serving.
+        expect(v.probe.newWorker).toBe(false);
       }
       expect(v.next).toEqual(NEXT);
     },
