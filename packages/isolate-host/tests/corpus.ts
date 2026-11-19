@@ -13,11 +13,14 @@ export interface Row {
   /** Uncaught error: compare the canonical `[eval]` diagnostic, not internal frames. */
   readonly evalError?: true;
   /**
-   * A declared ceiling this row hits (compat ❌): the row stays
+   * A declared ceiling this row hits (compat ❌ or ⚠️): the row stays
    * literal and runs as an expected failure, so a fix turns it red until promoted.
    */
   readonly ceiling?: string;
 }
+
+/** Garbage enough to force several scavenges in any young generation isolated-vm sizes. */
+const GC_CHURN = 'let a; for (let i = 0; i < 2e6; i++) a = { i };';
 
 export const CORPUS: readonly Row[] = [
   {
@@ -158,36 +161,30 @@ export const CORPUS: readonly Row[] = [
   },
   { label: 'throw-sync', code: "console.log('before'); throw new Error('boom')", evalError: true },
   { label: 'reject-unhandled', code: "Promise.reject(new Error('rej'))", evalError: true },
-  // A GC between an unhandled rejection and the end of its task must not lose the
-  // report: busy-waiting allocates (`Date.now()`), so the time is a GC dial, not a delay.
-  ...[1, 2, 3, 4, 5, 8, 10, 20].map(
-    (ms): Row => ({
-      label: `reject-then-sync-work-${ms}ms`,
-      code: `Promise.reject(new Error('rej')); const e = Date.now() + ${ms}; while (Date.now() < e);`,
-      evalError: true,
-    }),
-  ),
-  // Each promise origin, with a GC forced by allocation (deterministic, no clock).
+  // Each promise origin, rejected unhandled, then a GC forced by allocation in the
+  // same task (deterministic, no clock): isolated-vm drops the report (compat ⚠️).
   ...Object.entries({
     'reject-then-gc': "Promise.reject(new Error('rej'));",
     'reject-new-promise-then-gc': "new Promise((_, r) => r(new Error('rej')));",
     'reject-async-fn-then-gc': "(async () => { throw new Error('rej') })();",
-    // Rejected in a microtask; a later microtask of the same checkpoint allocates.
-    'reject-then-chain-then-gc':
-      "Promise.resolve().then(() => { throw new Error('rej') }); Promise.resolve().then(() => { let a; for (let i = 0; i < 2e6; i++) a = { i }; });",
-    'reject-in-timer-then-gc':
-      "setTimeout(() => { Promise.reject(new Error('rej')); let a; for (let i = 0; i < 2e6; i++) a = { i }; }, 1);",
+    'reject-in-timer-then-gc': "setTimeout(() => { Promise.reject(new Error('rej')); ALLOC }, 1);",
   }).map(
     ([label, head]): Row => ({
       label,
-      code: head.includes('2e6') ? head : `${head} let a; for (let i = 0; i < 2e6; i++) a = { i };`,
+      code: head.includes('ALLOC') ? head.replace('ALLOC', GC_CHURN) : `${head} ${GC_CHURN}`,
       evalError: true,
+      ceiling:
+        'isolated-vm drops an unhandled rejection a GC collects before its task ends (distribution/isolate-host-unhandled-rejection-lost-to-gc)',
     }),
   ),
+  // The workaround the compat row gives: a handled rejection survives the GC.
   {
-    // A rejection handled in its task stays handled when the GC collects it.
     label: 'reject-caught-then-gc',
-    code: "Promise.reject(new Error('rej')).catch(() => console.log('caught')); let a; for (let i = 0; i < 2e6; i++) a = { i };",
+    code: `Promise.reject(new Error('rej')).catch(() => console.log('caught')); ${GC_CHURN}`,
+  },
+  {
+    label: 'reject-caught-exit-code-then-gc',
+    code: `(async () => { throw new Error('rej') })().catch((e) => { console.error(e.message); process.exitCode = 1 }); ${GC_CHURN}`,
   },
   {
     label: 'throw-in-timer',

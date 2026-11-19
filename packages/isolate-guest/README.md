@@ -230,8 +230,11 @@ Tested: isolated-vm 7.0.2 on Node 24. The example above runs the isolate-host
 parity corpus with the same result as `node -e`
 (`tests/embedder.test.ts`), except one gap of isolated-vm itself: it keeps an
 unhandled rejection by weak handle, so when a GC collects the rejected promise
-before its task ends, `onUnhandledRejection` never fires and the run can exit 0
-with no diagnostic (`docs/public/compat/isolate-host.md`).
+before its task ends, `onUnhandledRejection` never fires and the run exits 0
+with an empty stderr where Node exits 1
+(https://github.com/laverdet/isolated-vm/issues/589). Your embedder cannot see
+it happen; guest code avoids it by handling every promise
+(`docs/public/compat/isolate-host.md`).
 
 isolated-vm 6.2.0 has neither `onUnhandledRejection` nor
 `importModuleDynamically`. Measured on Node v24.16.0, a guest loses two

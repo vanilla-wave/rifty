@@ -29,7 +29,7 @@ task (`TaskEpilogue`). A GC in between collects an unreferenced promise, the rec
   → exit 0 3/3; unheld + a 3e7-iteration integer loop (no allocation) → exit 1 3/3.
 - isolated-vm 7.0.2 rebuilt from source without `SetWeak()`: bare counts 1/1/1, `.catch` + `gc()`
   still 0 (handled stays handled); corpus rows `reject-then-*` all green for `runCode` and the
-  README embedder (40/40), red on the stock prebuild (23 rows).
+  README embedder (40/40), red on the stock prebuild (23 rows; the first RED set @ f405533a7, busy-wait rows since dropped).
 
 Independent re-check 2026-11-19 (second agent, from scratch, bare isolated-vm 7.0.2): under GC pressure 0/12
 reports stock, 12/12 without `SetWeak()`, Node 24 12/12 on the same code. Also found:
@@ -62,16 +62,23 @@ lifecycle after it misbehaves): `isolate-host-queuemicrotask-throw-times-out`,
 `isolate-host-uncaught-throw-waits-for-microtask-checkpoint`; `runtime-js/node-eval-unhandled-rejection-timing`
 and `late-unhandled-rejection-drain` are rifty lifecycle/browser paths.
 
-RED: `packages/isolate-host/tests/corpus.ts` rows `reject-then-sync-work-{1..20}ms`,
-`reject-*-then-gc`, `reject-caught-then-gc` (runCode + README embedder lanes).
+Pinned: `packages/isolate-host/tests/corpus.ts` rows `reject-then-gc`, `reject-new-promise-then-gc`,
+`reject-async-fn-then-gc`, `reject-in-timer-then-gc` run as expected failures (ceiling) in the runCode and
+README-embedder lanes; a fixed isolated-vm turns them red (checked with the rebuilt addon: exactly these 8 tests).
+Rows `reject-caught-then-gc` and `reject-caught-exit-code-then-gc` pin the workaround. The busy-wait rows of the
+original repro are not in CI: their outcome depends on how much the loop allocates per ms (macOS from 3 ms,
+Linux CI from 4–8 ms), so as expected failures they would flake.
+
+Upstream: https://github.com/laverdet/isolated-vm/issues/589 (filed 2026-11-19 by the manager with the user's consent).
 
 ## Decisions
 
-- owner: user — how the patched isolated-vm reaches consumers: (A) fork with own prebuilds
-  (npm package, or binaries inside the `isolate-host` tarball) + upstream PR, kill condition =
-  an upstream release with the fix; (B) upstream PR only, the gap stays ⚠️ until a release.
-  Needs a new native dependency and publishing (`DEC-3`). Probe: bare isolated-vm counts above;
-  RED rows above.
+- 2026-11-19, user: «По багу - пока оставляем как есть. В репу либы заведи issue». Declared ceiling, no product
+  change. Rejected for now: a fork of isolated-vm with our own prebuilds (new native dependency, native CI and
+  publishing for a one-line upstream fix) and a rifty `ivm.NativeModule` with `SetPromiseHooks` (roots every
+  promise until the context dies; still our native code per platform). Return condition: an isolated-vm release
+  fixing https://github.com/laverdet/isolated-vm/issues/589 (bump the pin, promote the ceiling rows, delete this
+  item), or a user decision for the fork.
 
 ## Challenge
 
