@@ -412,10 +412,12 @@ it('pins the wasm memory API and checks each buffer producer with guest intrinsi
       try {
         const unexpected = () => { lookups++; throw Error('late lookup') };
         Object.prototype.toString = Reflect.apply = unexpected;
+        Object.defineProperty(ArrayBuffer, Symbol.hasInstance, {configurable: true, value: unexpected});
         Object.defineProperty(ArrayBuffer.prototype, 'byteLength', {...length, get: unexpected});
         result = key === 'buffer' ? memory.buffer : memory[key]();
       } catch (e) { error = e }
       finally {
+        delete ArrayBuffer[Symbol.hasInstance];
         Object.defineProperty(ArrayBuffer.prototype, 'byteLength', length);
         Object.prototype.toString = tag;
         Reflect.apply = apply;
@@ -450,7 +452,7 @@ it('pins the wasm memory API and checks each buffer producer with guest intrinsi
 
 it('the restricted bundle removes the global and guards wasm before runtime imports capture them', () => {
   // Observe the original binding from the embedder before running any bundle code.
-  // Both observers return V8's original binding.
+  // Each observer forwards to V8 so the bundle sees real constructors and exports.
   const driver = `import ivm from 'isolated-vm';
     import { readFileSync } from 'node:fs';
     import { createHostBridge } from '@riftydev/isolate-guest';
@@ -460,14 +462,23 @@ it('the restricted bundle removes the global and guards wasm before runtime impo
       const context = isolate.createContextSync();
       const bridge = createHostBridge({ write() {}, fire() {} });
       try {
-        context.evalSync(\`let reads = 0, rawMemoryLookups = 0;
+        context.evalSync(\`let reads = 0, rawMemoryLookups = 0, earlyExports = 0;
           (() => {
             const Memory = WebAssembly.Memory;
             const nativeGet = Object.getOwnPropertyDescriptor(Memory.prototype, 'buffer').get;
+            const guardPending = () =>
+              Object.getOwnPropertyDescriptor(Memory.prototype, 'buffer').get === nativeGet;
+            const instance = WebAssembly.Instance.prototype;
+            const exportsDescriptor = Object.getOwnPropertyDescriptor(instance, 'exports');
+            Object.defineProperty(instance, 'exports', {
+              ...exportsDescriptor, get() {
+                if (guardPending()) earlyExports++;
+                return exportsDescriptor.get.call(this);
+              }
+            });
             Object.defineProperty(WebAssembly, 'Memory', {
               configurable: true, get() {
-                if (Object.getOwnPropertyDescriptor(Memory.prototype, 'buffer').get === nativeGet)
-                  rawMemoryLookups++;
+                if (guardPending()) rawMemoryLookups++;
                 return Memory;
               }
             });
@@ -482,7 +493,7 @@ it('the restricted bundle removes the global and guards wasm before runtime impo
         for (const [key, fn] of Object.entries(bridge.functions)) record.setSync(key, new ivm.Callback(fn));
         isolate.compileScriptSync(bundle).runSync(context);
         console.log(context.evalSync('reads > 0'));
-        if (!flag) console.log(context.evalSync('rawMemoryLookups'));
+        if (!flag) console.log(context.evalSync('JSON.stringify([rawMemoryLookups, earlyExports])'));
       } finally { bridge.close(); isolate.dispose(); }
     }`;
   const output = execFileSync(
@@ -496,5 +507,5 @@ it('the restricted bundle removes the global and guards wasm before runtime impo
     },
   );
   // The shim itself looks up Memory once to replace its native buffer getter.
-  expect(output).toBe('false\n1\ntrue\n');
+  expect(output).toBe('false\n[1,0]\ntrue\n');
 });
