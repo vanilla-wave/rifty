@@ -21,7 +21,7 @@ interface Functions {
 interface Export {
   createHostBridge(hooks: {
     write(fd: 1 | 2, bytes: Uint8Array): void;
-    fire(id: number): PromiseLike<unknown> | void;
+    fire(id: number): unknown;
   }): {
     functions: Functions;
     timeOrigin: number;

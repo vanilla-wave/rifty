@@ -46,7 +46,7 @@ export interface HostHooks {
    * interval does (no tick queues behind a running callback). A throw or a
    * rejection ends that timer.
    */
-  fire(id: number): PromiseLike<unknown> | void;
+  fire(id: number): unknown;
 }
 
 export interface HostBridge {
@@ -90,14 +90,6 @@ export function createHostBridge(hooks: HostHooks): HostBridge {
         if (!repeat) {
           timers.delete(id);
         } else timers.set(id, null);
-        let delivered: PromiseLike<unknown> | void;
-        try {
-          delivered = hooks.fire(id);
-        } catch {
-          // The embedder cannot deliver: this timer has nothing left to do.
-          clear(id);
-          return;
-        }
         // Re-arm from the callback's end, and only if nothing cleared or re-armed `id` meanwhile.
         const rearm = (): void => {
           if (repeat && !closed && timers.get(id) === null) arm();
@@ -106,8 +98,15 @@ export function createHostBridge(hooks: HostHooks): HostBridge {
         const end = (): void => {
           if (timers.get(id) === null) timers.delete(id);
         };
-        if (delivered && typeof delivered.then === 'function') delivered.then(rearm, end);
-        else rearm();
+        try {
+          const delivered = hooks.fire(id);
+          const then = (delivered as PromiseLike<unknown> | null | undefined)?.then;
+          if (typeof then === 'function') then.call(delivered, rearm, end);
+          else rearm();
+        } catch {
+          // The embedder cannot deliver: this timer has nothing left to do.
+          clear(id);
+        }
       };
       arm();
     }),
