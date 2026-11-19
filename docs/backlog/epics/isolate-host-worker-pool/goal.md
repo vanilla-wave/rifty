@@ -83,14 +83,15 @@ asserts the calls share one pid, and that precondition is what fails on main
   running 1000 ms after termination retires its worker: no new call goes
   there, neighbours finish there undisturbed, then the worker is killed.
 - I5. Lost worker, no culprit known (external SIGKILL, OOM-killer, crash, RSS
-  ceiling without a certain culprit): its in-flight calls rerun once, together,
-  on a fresh worker no other call is placed on; with budget left the rerun is
-  transparent (the call resolves its own result once). A call whose worker is
-  lost a second time, or whose rerun cannot finish inside its original
+  ceiling without a certain culprit): each of its in-flight calls reruns once,
+  alone, on a solo worker no other call is placed on; there an exhaustion of
+  the process is that call's own (`memory`), and with budget left the rerun is
+  transparent (the call resolves its own result once). A call whose solo is
+  lost for an unknown reason, or whose rerun cannot finish inside its original
   deadline, rejects with `code: 'ERR_ISOLATE_HOST_WORKER_LOST'` and a message
   naming the lost worker's code/signal, built from no guest or worker-written
-  bytes. A fresh call never shares a worker with rerun calls, so a second loss
-  rejects only calls already lost once. No call runs more than twice.
+  bytes. No call runs more than twice; a mass loss spawns at most one process
+  per call in flight.
 - I6. Lifecycle: an idle worker stays warm without keeping the consumer alive
   (a consumer that called `runCode` exits on its own) and never outlives the
   consumer (consumer SIGKILL → worker gone).
@@ -134,6 +135,7 @@ final-check: 2026-11-18 — PASS on verify pass (fresh RDY-6/FIT 8 reviewer over
 - 2026-11-18 — frame point 2 refuted in part by step 0: in the catastrophic case ivm disposes the culprit's isolate for its memory limit (seen at the RSS crossing) while `onCatastrophicError` had not fired after 8 s; per-isolate heap stats separate a host-side timer flood by 4 MiB only. Blame = the culprit isolate's own disposal/fatal signal; no heap-stats guess (I3, I5).
 - 2026-11-18 — manager (hand-off authority): «Цель можно переводить в `ready`: до мержа оба решения обратимы, ответ пользователя придёт поправкой» — ready on delegated decisions; the C interpretation, F1 and F2 stay marked as not the user's words.
 - 2026-11-18 — manager decision by delegation (F1; both forks shown to the user, no answer yet; reversible until merge, a user answer lands as `amend:`): a rerun keeps the call's original deadline; out of budget it rejects `ERR_ISOLATE_HOST_WORKER_LOST`, never `timeout`, never a fresh `timeoutMs` — the consumer builds its own timeouts on `timeoutMs`, so a silent doubling is worse than a rare reject it can retry. Text and code carry no guest data.
+- amend: 2026-11-19 — manager (delegation, cross-review round 2): «потеря без виновника → подозреваемые перезапускаются поодиночке» — I5: each lost call reruns alone on a solo worker (was: together on one quarantine worker); its exhaustion there is its own `memory`; mass loss ≤ one process per call. The per-source ceilings of round 1 (wasm removed, `maxByteLength` refused, timer quota, `code` limit) are withdrawn (`REV-7`); the user's answer on F1/F2 is still pending.
 - 2026-11-18 — manager decision by delegation (F2): one rerun, a second loss rejects. Quarantine, minimal form: the calls of one lost worker rerun together on a worker of their own that takes no other call, so an unknown culprit's second kill reaches only calls lost once with it, never a fresh innocent call. Burst price: one extra process per lost worker. Rejected: rerun each suspect alone (names the culprit exactly, costs up to shard-size processes per loss).
 - 2026-11-18 — manager: blame only on a certain signal from the culprit's isolate accepted («угадывание по heap хуже честного "неизвестно"»).
 - 2026-11-18 — overturns ADR-0557 §2 (process per call) and the kill shape of §3 for this host; recorded per `DEC-2` as a superseding ADR + dated ADR-0557 §Corrections note, critic before landing.

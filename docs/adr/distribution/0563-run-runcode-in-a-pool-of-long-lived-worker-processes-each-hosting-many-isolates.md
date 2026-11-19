@@ -42,31 +42,23 @@ ADR-0557 §1's API, result shape and `timeoutMs` + 1000 ms bound, §4–§7 othe
    - The worker's RSS ceiling is 256 MiB + 3 × the sum of its live calls' `memoryLimitMb` (ADR-0557 §3, summed). Crossing it, or a catastrophic error, kills the worker (SIGKILL) after it flushes its frames.
    - No heap-stats guess: per-isolate heap stats separated a host-side timer flood by 4 MiB only.
    - An idle worker above `RECYCLE_RSS_BYTES` = 256 MiB retires.
-   - Guest memory isolated-vm does not count against `memoryLimit` (probes: step-0 reference) does not exist in a worker's guests, because it would make an RSS crossing that nobody can be blamed for:
-     - `WebAssembly` has two layers. The engine flag `--wasm-max-mem-pages=0` on every worker means no wasm memory can hold a page. Separately, the global is deleted from each context before any guest code, so no reference remains. In its place the guest bundle installs a namespace whose every member is `NotImplementedError('isolate-host.WebAssembly')`. The bundle itself needs no wasm: its cjs-module-lexer is the plain-JS build.
-     - Resizable `ArrayBuffer` / growable `SharedArrayBuffer` (`maxByteLength`) have no engine knob. The guest bundle wraps both constructors before any runtime module, so `maxByteLength` is `NotImplementedError('isolate-host.ArrayBuffer.maxByteLength' | '…SharedArrayBuffer.maxByteLength')`. The originals are unreachable: the global and `prototype.constructor` are replaced, and the wrapper hands them only primitives. Fixed-length buffers, `transfer` included, go through the counted allocator.
-   - Host resources made on a guest's behalf are bounded per guest:
-     - at most `memoryLimitMb` × 1024 live host timers (~1 KiB of worker memory each, measured). The next start is refused and the call ends `memory`, a breach of its own budget;
-     - `code` is at most 1 MiB of UTF-8, checked in the consumer before anything is sent (`ERR_OUT_OF_RANGE`). The worker reads requests linearly.
+   - With exactly one isolate in the worker, an RSS crossing is that call's own: it resolves `memory` (a solo rerun's attribution, §6). With more than one, nobody is blamed.
+   - No per-source accounting of guest memory outside the isolate heap (wasm, `maxByteLength` buffers, ICU, compiled code, host timers, a large `code`): any exhaustion of the worker is attributed by §6, so the protection of neighbours does not depend on listing those sources.
 6. **Lost worker.** A worker that exits without the consumer ending it — external SIGKILL, OOM-killer, crash, its own RSS kill, a closed result channel — loses its unsettled calls.
-   - They rerun once, together, on a new worker of their own that takes no other call and ends when they are settled.
-   - The rerun keeps the original deadline. A second loss, or a rerun past the deadline, rejects with `code: 'ERR_ISOLATE_HOST_WORKER_LOST'` and `isolate-host child exited unexpectedly (code …, signal …)` (+ ` after closing its result channel without a result` when the consumer forced that exit, + `; its rerun did not finish within timeoutMs`). The text holds no guest or worker-written bytes: worker stderr is ignored.
-   - A worker the consumer ends itself (idle, retired, quarantine done) takes no call from that moment and its exit loses nothing.
-   - No call runs more than twice. A guest that keeps killing workers costs at most two workers per call, and its co-runners only the calls lost with it.
-   - The cost of a culprit-less loss is one extra process per lost worker.
+   - Each reruns once, alone, on a solo worker that takes no other call and ends when the call settles. There the attribution is trivial: an RSS crossing is that call's `memory`, its deadline its `timeout`; an innocent call simply completes.
+   - The rerun keeps the original deadline (F1). A solo lost for an unknown reason, or a rerun past the deadline, rejects with `code: 'ERR_ISOLATE_HOST_WORKER_LOST'` and `isolate-host child exited unexpectedly (code …, signal …)` (+ ` after closing its result channel without a result` when the consumer forced that exit, + `; its rerun did not finish within timeoutMs`). The text holds no guest or worker-written bytes: worker stderr is ignored.
+   - A worker the consumer ends itself (idle, retired, solo done) or that has exited takes no call from that moment and its exit loses nothing.
+   - No call runs more than twice. Processes: a loss of N calls spawns at most N solos, so a mass loss never exceeds one process per call in flight — ADR-0557's worst case (carrier: 8 calls on 2 killed workers peak ≤ 8 processes).
 7. **Shared worker resources**, each with its guard:
 
    | Resource | Guard |
    |---|---|
-   | RSS / address space | per-isolate heap limit, worker ceiling (§5), idle recycle |
-   | isolated-vm thread pool (cores + 1 threads) | shard 4; a stuck isolate's thread retires its worker (§4) |
-   | The worker's main thread (bridge callbacks, frames) | output capped per call; at most one timer `fire` in flight per timer (ADR-0558 Decisions 2026-11-19) |
-   | Host timers | per-call bridge, closed with the call; ≤ `memoryLimitMb` × 1024 live, past it the call ends `memory` (§5) |
-   | Requests (stdin) | `code` ≤ 1 MiB, refused in the consumer; read linearly |
-   | Guest memory outside the isolate heap | wasm removed (engine flag + realm), `maxByteLength` buffers a named gap (§5); unmeasured: Intl/ICU data and caches, compiled-code and regexp spaces |
+   | Any exhaustion of the worker process (RSS in or out of the isolate heaps, crash) | the guilty isolate's own signal (§5), else the lost-worker path: every call reruns alone, where the exhaustion is its own (§6) |
+   | isolated-vm thread pool (cores + 1 threads) | shard 4; a stuck isolate's thread retires its worker (§4). On 1–2 cores the pool has 2–3 threads for a shard of 4: busy neighbours wait for a thread, not just a time slice |
+   | The worker's main thread (bridge callbacks, frames) | output capped per call; at most one timer `fire` in flight per timer (ADR-0558 Decisions 2026-11-19); requests read linearly |
    | Pipes | bounded per call by the consumer (ADR-0557 §6) |
    | V8 code cache | produced by a compile before that isolate's guest code runs; bytes only |
-   | CPU | OS scheduling, delay only. On 1–2 cores the pool has 2–3 threads for a shard of 4: busy neighbours wait for a thread, not just a time slice |
+   | CPU | OS scheduling, delay only |
 
    A non-escaped guest changes a neighbour's result only by delaying it. A neighbour whose deadline the delay outlives resolves `timeout` (compat ⚠️).
 8. **Security** (trust-model §Isolate host).
@@ -82,7 +74,8 @@ Rejected:
 - ADR-0557 plus a V8 code cache: 74.5 ms and 108 MiB per call (step 0);
 - a pool of warm single-isolate children: ≥ 108 MiB per concurrent call stays;
 - in-process isolates (ADR-0557 Context);
-- rerunning each suspect of a lost worker alone: names the culprit exactly, but costs up to 4 processes per loss;
+- rerunning a lost worker's calls together on one quarantine worker: an unknown culprit's second kill took its innocent co-runners with it (accepted first, overturned in §Corrections);
+- enumerating guest memory outside the isolate heap with a per-source ceiling (wasm removed, `maxByteLength` refused, a timer quota, a `code` limit): each estimate that was wrong let a guest take its neighbours down again, and the sources are not enumerable (§Corrections);
 - a fresh `timeoutMs` for a rerun: silently doubles the consumer's bound;
 - blaming the largest heap at an RSS crossing.
 
@@ -91,9 +84,9 @@ Rejected:
 Manager decisions by delegation (2026-11-18/19), shown to the user and not answered at landing; reversible until merge, a user answer lands as a correction here:
 - «C» = option C of the A/B/C table: a pool of worker processes;
 - F1: a rerun out of budget rejects `ERR_ISOLATE_HOST_WORKER_LOST`, never `timeout` and never with a fresh budget;
-- F2: one rerun, quarantined.
+- F2: one rerun; how it is placed: together on a quarantine worker (round 1), then each call alone (round 2, §Corrections).
 
-Manager decision by delegation, 2026-11-19 (shown to the user, no answer yet): wasm is unavailable in the pool's guests (option 2 of the manager's cross-review round 1: no per-isolate signal for wasm memory exists, probe in the step-0 reference); two layers, each with its own mutant.
+Manager decision by delegation, 2026-11-19, cross-review round 2 (supersedes the round-1 decision that made wasm unavailable): a lost worker with no culprit reruns each call alone; wasm, `maxByteLength` buffers and unbounded timers return (`REV-7`).
 
 Manager decision, 2026-11-18: blame only on a certain signal from the culprit's own isolate («угадывание по heap хуже честного "неизвестно"»).
 
@@ -103,7 +96,11 @@ Agent decisions: the shard size, the 1000 ms grace, the 256 MiB watermark and th
 
 - Measured on landed code (README §Cost): warm call p50 13 ms vs 137 ms; +22 MiB per concurrent call in one worker; 8 cold concurrent calls 414 MiB vs 1118 MiB. Measurements, not promises.
 - An externally killed worker no longer rejects its calls at once: they rerun once (ADR-0557 §1 sentence superseded).
-- An RSS crossing with no isolate signal blames nobody: its calls, including the unknown culprit, rerun together and reject on its second kill — innocent co-runners included.
+- An RSS crossing with no isolate signal blames nobody in a shared worker: each call reruns alone, and only the culprit's solo crosses again (its `memory`).
 - A worker carries guests of many calls, so an escape's reach is wider than under ADR-0557.
-- `WebAssembly` worked in `runCode` guests before this pool (one process per call) and is now a named gap; so are resizable/growable buffers. Direction (ROADMAP M14): wasm calls in a process of their own, where its memory is the process's.
+- A guest whose memory grows outside its heap holds its worker's neighbours until the summed ceiling (§5) is crossed; they then rerun from scratch within their deadline. Provision an RSS cgroup above the sum of the workers' ceilings.
 - Directions, not scoped: per-tenant worker affinity, a concurrency limit, an `AbortSignal` option.
+
+## Corrections
+
+- 2026-11-19 — §5–§7, cross-review round 2 (manager decision by delegation): the lost-worker path reruns each call alone instead of together on a quarantine worker. The rejected rerun-alone option is accepted: its cost is bounded by one process per call in flight (ADR-0557's worst case), and it closes the class "guest memory outside the heap → worker lost without a culprit" by construction. Round 2 had shown the enumeration failing anew: 100 000 `Intl.DateTimeFormat` (ICU memory), a create/clear loop of intervals (the delivery queue outgrows a quota that clearing returns), and 262 000 intervals below the quota (~3.3 KiB each, not 1) each made all four calls `LOST`. Overturned with it (`REV-7`): wasm removal (engine flag and global), the `maxByteLength` wrappers, the per-guest timer quota and the 1 MiB `code` limit. Carriers: wasm with written pages, resizable and growable buffers, the Intl flood, the interval loop and 262 000 intervals, each next to three neighbours, the culprit `memory`, the neighbours exact once; mass loss ≤ one process per call.

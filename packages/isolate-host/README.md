@@ -40,9 +40,6 @@ workers.
 | `memoryLimitMb` | 256 | isolate heap limit (min 8); adds 3 × this to its worker's RSS ceiling (256 MiB + 3 × the sum over the worker's calls). Below ~16 the rifty runtime itself does not fit and every run ends as `termination: 'memory'` (measured: 12 fails, 15 runs `console.log`) |
 | `maxOutputBytes` | 1 MiB | stdout + stderr bytes kept |
 
-`code` may be at most 1 MiB of UTF-8; longer code rejects at once with a
-`RangeError` (`code: 'ERR_OUT_OF_RANGE'`) before anything starts.
-
 Result:
 
 - `stdout`, `stderr`: the bytes the guest wrote, decoded as UTF-8.
@@ -62,11 +59,13 @@ other call, on the same worker or not. Calls may run concurrently: the first
 4 share a worker, the next ones start another. One idle worker stays warm. A
 worker does not keep your process alive, and it dies with your process.
 
-When a worker is lost with no culprit known, its calls rerun once on a worker
-of their own, within their original deadline. Causes: a crash, the OOM-killer,
-an external `kill`, or its RSS ceiling with no isolate to blame. A call lost a
-second time, or whose rerun does not finish before its deadline, rejects with
-an `Error` whose `code` is `'ERR_ISOLATE_HOST_WORKER_LOST'`. Its message,
+When a worker is lost with no culprit known, each of its calls reruns once on
+a worker of its own, within its original deadline. Causes: a crash, the
+OOM-killer, an external `kill`, or its RSS ceiling with more than one isolate
+to blame. Alone, a call that exhausts its worker gets `memory`; an innocent one
+completes. A call whose own worker is lost for an unknown reason, or whose
+rerun does not finish before its deadline, rejects with an `Error` whose
+`code` is `'ERR_ISOLATE_HOST_WORKER_LOST'`. Its message,
 `isolate-host child exited unexpectedly (code …, signal …)`, contains no guest
 text. You can retry such a call yourself.
 
@@ -97,11 +96,6 @@ Not available. Each of these throws `NotImplementedError` naming the API:
   whatever the code does with the returned promise (a `.catch` cannot keep the
   run alive). Use `require()`.
 - `zlib`, `child_process`, `worker_threads` (throw at require).
-- `WebAssembly` (every member) and resizable/growable buffers
-  (`new ArrayBuffer(n, { maxByteLength })`, the same for `SharedArrayBuffer`).
-  isolated-vm does not count their memory against `memoryLimitMb`, so in a
-  shared worker one guest could take its neighbours down (ADR-0563 §5).
-  Fixed-length buffers work as in Node.
 
 Known differences:
 
@@ -184,14 +178,10 @@ What a worker shares between its calls, and what bounds each part
 
 | Shared | Bound |
 |---|---|
-| Process memory | each call's isolate heap limit; guest memory outside that heap (wasm, resizable buffers) is not available; the worker's RSS ceiling (256 MiB + 3 × the calls' limits) kills it, and its other calls rerun; an idle worker above 256 MiB is replaced |
+| Process memory, in or out of the isolate heaps (wasm, resizable buffers, ICU, timers) | each call's isolate heap limit; the worker's RSS ceiling (256 MiB + 3 × the calls' limits) kills it, and each call reruns alone, where an exhaustion is its own `memory`; an idle worker above 256 MiB is replaced |
 | isolated-vm's thread pool (cores + 1 threads) | 4 calls per worker; an isolate still running 1 s after termination retires its worker, whose other calls finish there |
-| The worker's event loop (guest writes, timers) | output capped per call; an interval re-arms only after its callback ran; at most `memoryLimitMb` × 1024 live timers per call, past it the call ends `memory` |
-| Requests | `code` ≤ 1 MiB |
+| The worker's event loop (guest writes, timers) | output capped per call; an interval re-arms only after its callback ran; requests are read linearly |
 | CPU | the OS scheduler: delay only. On a 1–2 core machine the pool has fewer threads than a worker's 4 calls, so busy neighbours wait their turn |
-
-Not measured: memory V8 keeps per isolate outside its heap for Intl/ICU and
-compiled code.
 
 ## Cost
 

@@ -166,6 +166,4 @@ hypervisor and deploy stay outside rifty; the consumer supplies the outer bounda
   completion (URL, structuredClone, web streams, AbortController, EventTarget — requirements'
   shim list, ceilings in A) rides B. Also: an `AbortSignal` option, a concurrency limit
   (semaphore) and per-tenant worker affinity in `runCode` — the consumer caps concurrency and
-  separates tenants by process itself today. WebAssembly in `runCode` (a named gap since the
-  pool: isolated-vm does not count wasm memory, ADR-0563 §5) returns as wasm calls in a process of
-  their own, where its memory is that process's.
+  separates tenants by process itself today.
