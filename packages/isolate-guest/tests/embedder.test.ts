@@ -349,3 +349,33 @@ describe('the README states the contract (ADR-0558 §2)', () => {
     },
   );
 });
+
+it.fails('the packed README embedder selects shared buffers per fresh guest', () => {
+  const app = embedder('shared-buffers');
+  const code = `try { console.log(new SharedArrayBuffer(4).byteLength) }
+    catch (e) { console.log(e.name, e.feature) }`;
+  const driver = `import { run } from './embed.mjs';
+    for (const options of [{allowSharedArrayBuffer: false}, undefined, {allowSharedArrayBuffer: true}]) {
+      console.log(JSON.stringify(await run(${JSON.stringify(code)}, options)));
+    }`;
+  const results = execFileSync(
+    process.execPath,
+    ['--no-node-snapshot', '--input-type=module', '-e', driver],
+    {
+      cwd: app,
+      encoding: 'utf8',
+      env,
+      timeout: 30_000,
+    },
+  )
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line) as Outcome);
+  expect(results).toEqual(
+    ['NotImplementedError isolate-host.SharedArrayBuffer\n', '4\n', '4\n'].map((stdout) => ({
+      stdout,
+      stderr: '',
+      exitCode: 0,
+    })),
+  );
+});
