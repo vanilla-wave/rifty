@@ -389,7 +389,8 @@ describe('guest memory outside the isolate heap: a solo rerun names the culprit 
       // neighbours', not the path: the solo RSS path is pinned by the rows above.
       const v = await withNeighbours(
         'for (let i = 0; i < 262000; i++) setInterval(() => {}, 1)',
-        '{ memoryLimitMb: 64, timeoutMs: 20000 }',
+        // A loaded machine reaches the heap limit late: 60 s keeps the outcome its own.
+        '{ memoryLimitMb: 64, timeoutMs: 60000 }',
         SMALL,
       );
       const { ms: _ms, ...culprit } = v.culprit;

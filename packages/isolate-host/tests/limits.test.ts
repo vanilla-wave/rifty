@@ -43,7 +43,7 @@ describe('runCode limits (I4)', () => {
       runCode("console.log('spin'); for (;;) {}", { timeoutMs: 1500 }),
     );
     expect(value).toEqual({ stdout: 'spin\n', stderr: '', exitCode: null, termination: 'timeout' });
-    expect(Date.now() - started).toBeGreaterThanOrEqual(1500);
+    expect(Date.now() - started).toBeGreaterThanOrEqual(1500 - 5);
     expect(Date.now() - started).toBeLessThanOrEqual(1500 + 1000);
     expect(maxLagMs).toBeLessThan(250);
   });
@@ -59,7 +59,8 @@ describe('runCode limits (I4)', () => {
       exitCode: null,
       termination: 'timeout',
     });
-    expect(Date.now() - started).toBeGreaterThanOrEqual(1000);
+    // libuv fires timers on its cached loop time, up to ~1 ms early by the wall clock.
+    expect(Date.now() - started).toBeGreaterThanOrEqual(1000 - 5);
     expect(Date.now() - started).toBeLessThanOrEqual(1000 + 1000);
     expect(maxLagMs).toBeLessThan(250);
   });
