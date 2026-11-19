@@ -355,15 +355,16 @@ describe('guest memory outside the isolate heap: a solo rerun names the culprit 
   carrier.each([
     [
       'WebAssembly.Memory with written pages',
-      'const m = new WebAssembly.Memory({ initial: 1, maximum: 65536 }); for (let k = 0; k < 400; k++) { m.grow(160); const u = new Uint8Array(m.buffer); for (let i = 0; i < u.length; i += 4096) u[i] = 1 }',
+      // 10 MiB more every 10 ms: slow enough to be seen sharing its worker first.
+      'const m = new WebAssembly.Memory({ initial: 1, maximum: 65536 }); let k = 0; const step = () => { if (k++ >= 400) return; m.grow(160); const u = new Uint8Array(m.buffer); for (let i = 0; i < u.length; i += 4096) u[i] = 1; setTimeout(step, 10) }; step()',
     ],
     [
       'a resizable ArrayBuffer with written pages',
-      'const b = new ArrayBuffer(0, { maxByteLength: 2 ** 34 }); for (let k = 1; k <= 400; k++) { b.resize(k * (10 << 20)); const u = new Uint8Array(b); for (let i = 0; i < u.length; i += 4096) u[i] = 1 }',
+      'const b = new ArrayBuffer(0, { maxByteLength: 2 ** 34 }); let k = 0; const step = () => { if (k++ >= 400) return; b.resize(k * (10 << 20)); const u = new Uint8Array(b); for (let i = 0; i < u.length; i += 4096) u[i] = 1; setTimeout(step, 10) }; step()',
     ],
     [
       'a growable SharedArrayBuffer with written pages',
-      'const b = new SharedArrayBuffer(0, { maxByteLength: 2 ** 34 }); for (let k = 1; k <= 400; k++) { b.grow(k * (10 << 20)); const u = new Uint8Array(b); for (let i = 0; i < u.length; i += 4096) u[i] = 1 }',
+      'const b = new SharedArrayBuffer(0, { maxByteLength: 2 ** 34 }); let k = 0; const step = () => { if (k++ >= 400) return; b.grow(k * (10 << 20)); const u = new Uint8Array(b); for (let i = 0; i < u.length; i += 4096) u[i] = 1; setTimeout(step, 10) }; step()',
     ],
     [
       'an Intl flood (ICU memory)',
@@ -392,11 +393,11 @@ describe('guest memory outside the isolate heap: a solo rerun names the culprit 
       'for (let i = 0; i < 262000; i++) setInterval(() => {}, 1)',
     ],
   ])(
-    '%s: the culprit ends on its own (memory or timeout), neighbours exact',
+    '%s: the culprit gets memory (solo rerun), neighbours exact',
     async (_, code) => {
       const v = await withNeighbours(code, '{ memoryLimitMb: 64, timeoutMs: 20000 }', SMALL);
-      expect(v.culprit.exitCode).toBeNull();
-      expect(['memory', 'timeout']).toContain(v.culprit.termination);
+      const { ms: _ms, ...culprit } = v.culprit;
+      expect(culprit).toEqual({ stdout: '', stderr: '', exitCode: null, termination: 'memory' });
       expect(v.shared).toBe(1);
       expect(v.neighbours).toEqual(NEIGHBOURS);
       expect(v.next).toEqual(NEXT);
@@ -405,15 +406,18 @@ describe('guest memory outside the isolate heap: a solo rerun names the culprit 
   );
 
   carrier(
-    '40 MiB of code next to a neighbour: both get their own result',
+    'large code is read linearly: 8 MiB runs, 40 MiB ends on its own, a neighbour is untouched',
     async () => {
       const { value } = await consumer(`
       const neighbour = settle(runCode("setTimeout(() => console.log('n'), 1500)"));
       await sleep(200);
-      const big = await settle(runCode("console.log(1)//" + 'x'.repeat(40 << 20)));
-      out({ big, neighbour: await neighbour });`);
+      const eight = await settle(runCode("console.log(1)//" + 'x'.repeat(8 << 20)));
+      const forty = await settle(runCode("console.log(1)//" + 'x'.repeat(40 << 20)));
+      out({ eight, forty: { exitCode: forty.exitCode, rejected: forty.rejected }, neighbour: await neighbour });`);
       expect(value).toEqual({
-        big: { stdout: '1\n', stderr: '', exitCode: 0 },
+        eight: { stdout: '1\n', stderr: '', exitCode: 0 },
+        // 40 MiB is the guest's own failure (V8 refuses to compile it), never a lost worker.
+        forty: { exitCode: 1 },
         neighbour: { stdout: 'n\n', stderr: '', exitCode: 0 },
       });
     },

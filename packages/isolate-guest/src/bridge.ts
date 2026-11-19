@@ -47,14 +47,6 @@ export interface HostHooks {
    * A throw or a rejection ends that timer.
    */
   fire(id: number): unknown;
-  /** The guest asked for more live timers than `limits.maxTimers`: called once, the start is refused. */
-  timersExhausted?(): void;
-}
-
-/** Per-guest bounds on host resources created on the guest's behalf. */
-export interface HostLimits {
-  /** Live host timers at once; unbounded when omitted. */
-  readonly maxTimers?: number;
 }
 
 export interface HostBridge {
@@ -71,16 +63,14 @@ interface Slot {
   handle: NodeJS.Timeout | null;
 }
 
-export function createHostBridge(hooks: HostHooks, limits: HostLimits = {}): HostBridge {
+export function createHostBridge(hooks: HostHooks): HostBridge {
   // The guest's clock starts with its call, as a fresh `node -e` process's does:
   // never the embedder's uptime, and nothing that links one call to another.
   const origin = performance.now();
-  const maxTimers = limits.maxTimers ?? Number.POSITIVE_INFINITY;
   // Per id, the slot of its current timer: a reused id gets a new slot, so a
   // stale delivery of the old timer can only touch its own.
   const timers = new Map<number, Slot>();
   let closed = false;
-  let exhausted = false;
   const clear = (id: number): void => {
     const slot = timers.get(id);
     if (slot?.handle) clearTimeout(slot.handle);
@@ -99,13 +89,6 @@ export function createHostBridge(hooks: HostHooks, limits: HostLimits = {}): Hos
       if (typeof repeat !== 'boolean') refuse('timerStart: repeat must be a boolean');
       if (closed) return;
       clear(id);
-      if (timers.size >= maxTimers) {
-        if (!exhausted) {
-          exhausted = true;
-          hooks.timersExhausted?.();
-        }
-        refuse('timerStart: too many live timers');
-      }
       const slot: Slot = { handle: null };
       timers.set(id, slot);
       const live = (): boolean => !closed && timers.get(id) === slot;

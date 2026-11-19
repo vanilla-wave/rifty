@@ -1,6 +1,6 @@
 /**
  * The consumer's pool of worker processes (pool ADR): calls packed SHARD to a
- * worker; a lost worker's calls rerun once, together, on a worker of their own;
+ * worker; a lost worker's calls rerun once, each alone on a solo worker;
  * a retiring worker takes no new call and dies once its calls are settled.
  * Workers are unref'd: only a pending call (its deadline timer) keeps the
  * consumer alive. A worker may be hostile (isolate escape): its frames are
@@ -127,7 +127,7 @@ class Worker {
   exited = false;
   /**
    * Why the consumer itself ended this worker; unset = an exit nobody asked for.
-   * `done`: nothing left on it (idle, retired, quarantine finished).
+   * `done`: nothing left on it (idle, retired, solo finished).
    */
   ended:
     | { readonly violation: string }
@@ -137,17 +137,13 @@ class Worker {
   readonly child: ChildProcess;
   constructor(
     private readonly pool: Pool,
-    readonly quarantine: boolean,
+    /** Holds one rerun call, takes no other, ends with it. */
+    readonly solo: boolean,
   ) {
-    // --wasm-max-mem-pages=0: the engine layer of the WebAssembly ceiling (ADR-0563 §7).
-    this.child = spawn(
-      process.execPath,
-      ['--no-node-snapshot', '--wasm-max-mem-pages=0', WORKER_ENTRY],
-      {
-        env: {},
-        stdio: ['pipe', 'ignore', 'ignore', 'pipe'],
-      },
-    );
+    this.child = spawn(process.execPath, ['--no-node-snapshot', WORKER_ENTRY], {
+      env: {},
+      stdio: ['pipe', 'ignore', 'ignore', 'pipe'],
+    });
     const child = this.child;
     // Idle workers never keep the consumer alive; a pending call's deadline does.
     child.unref();
@@ -299,7 +295,12 @@ export class Pool {
       this.#nextId = id === MAX_CALL_ID ? 1 : id + 1;
       const call = new Call(id, spec, resolve, reject, (c) => this.#deadline(c));
       call.restart();
-      this.#placeFresh(call);
+      try {
+        this.#placeFresh(call);
+      } catch (error) {
+        // spawn threw synchronously: settle now, and clear the deadline that would hold the process.
+        call.rejectWith(error as Error);
+      }
     });
   }
 
@@ -307,44 +308,39 @@ export class Pool {
   #placeFresh(call: Call): void {
     const worker =
       this.#workers.find(
-        (w) =>
-          !w.quarantine &&
-          !w.retiring &&
-          !w.exited &&
-          w.ended === undefined &&
-          w.calls.size < SHARD,
+        (w) => !w.solo && !w.retiring && !w.exited && w.ended === undefined && w.calls.size < SHARD,
       ) ?? this.#spawn(false);
     worker.place(call);
   }
 
-  #spawn(quarantine: boolean): Worker {
-    const worker = new Worker(this, quarantine);
+  #spawn(solo: boolean): Worker {
+    const worker = new Worker(this, solo);
     this.#workers.push(worker);
     return worker;
   }
 
-  /** The calls of one lost worker: rerun once, together, on a worker of their own (I5). */
+  /**
+   * The calls of a lost worker with no culprit: each reruns once, alone, on a
+   * solo worker (I5, ADR-0563 Corrections 2026-11-19). There any exhaustion is
+   * that call's own: an RSS crossing is its `memory`. Processes at most equal the
+   * calls lost: never more than one process per call.
+   */
   rerun(lost: readonly Call[], reason: string): void {
-    const again: Call[] = [];
     for (const call of lost) {
-      if (call.attempts >= 2) call.rejectWith(lostError(reason));
-      else {
-        call.lost = reason;
-        call.restart();
-        again.push(call);
+      if (call.attempts >= 2) {
+        call.rejectWith(lostError(reason));
+        continue;
+      }
+      call.lost = reason;
+      call.restart();
+      try {
+        this.#spawn(true).place(call);
+      } catch {
+        // spawn throws synchronously (ENOMEM, a bad path): this runs in a 'close'
+        // handler, so a throw would take the consumer down. The call is lost.
+        call.rejectWith(lostError(reason));
       }
     }
-    if (again.length === 0) return;
-    let quarantine: Worker;
-    try {
-      quarantine = this.#spawn(true);
-    } catch {
-      // spawn throws synchronously (ENOMEM, a bad path): this runs in a 'close'
-      // handler, so a throw would take the consumer down. The calls are lost.
-      for (const call of again) call.rejectWith(lostError(reason));
-      return;
-    }
-    for (const call of again) quarantine.place(call);
   }
 
   #deadline(call: Call): void {
@@ -364,14 +360,14 @@ export class Pool {
     if (worker.dead || worker.ended !== undefined) return;
     const unsettled = [...worker.calls.values()].some((call) => !call.settled);
     if (unsettled) return;
-    if (worker.retiring || worker.quarantine) {
+    if (worker.retiring || worker.solo) {
       worker.end();
       return;
     }
     if (worker.calls.size > 0) return;
     // Keep one idle worker warm; a second idle one ends.
     const idle = this.#workers.filter(
-      (w) => !w.quarantine && !w.retiring && w.ended === undefined && w.calls.size === 0,
+      (w) => !w.solo && !w.retiring && w.ended === undefined && w.calls.size === 0,
     );
     if (idle.length > 1) worker.end();
   }

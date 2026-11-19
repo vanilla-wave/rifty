@@ -6,7 +6,6 @@
  */
 import type { GuestHost } from '../contract.ts';
 import { notImplemented } from './loud.ts';
-import { installBufferCeilings, installWebAssemblyCeiling } from './memory-ceilings.ts';
 import { TextDecoder, TextEncoder, encodeUtf8 } from './text-codec.ts';
 
 const g = globalThis as unknown as Record<string, unknown>;
@@ -240,8 +239,6 @@ const loud = (feature: string) =>
       'not available in the rifty isolate host, ADR-0557',
     );
   };
-// Before any runtime module: the uncounted buffer kinds never exist in this realm.
-installBufferCeilings(loud);
 const performance: Record<string, unknown> = {
   now: () => bridge.now(),
   timeOrigin: bridge.timeOrigin,
@@ -378,7 +375,6 @@ export function installCeilingGlobals(): void {
     });
   }
   define('navigator', navigator);
-  installWebAssemblyCeiling(loud);
   Object.defineProperty(performance, 'nodeTiming', {
     get: loud('performance.nodeTiming'),
     configurable: true,
