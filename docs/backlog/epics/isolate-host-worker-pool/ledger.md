@@ -9,3 +9,4 @@
 - 2026-11-19 — IMPLEMENT: pool landed on the export (ADR-0563); carrier 27→28 GREEN; 15/15 invariant mutants killed; 5/5 load runs green before the critic
 - 2026-11-19 — DEC-2 critic on ADR-0563: 7 problems (2 blockers: idle-ended worker still placeable — RED first, fixed; overturned ADR-0557 clauses unnamed — named); verify pass: holds, 1 concern (retire must precede the terminal frame) + 1 nit fixed
 - 2026-11-19 — RSS-kill-without-culprit re-probed on the landed pool: no vector crosses the ceiling without an isolate signal → recorded unreachable (step0 reference)
+- 2026-11-19 — load runs (10× package suite, one busy process per core): on 80f99a0e7 3/10 red (harness ps-fork count, libuv timer epsilon, guest clock drift in a long-lived worker — the last a real defect, fixed in the export); on 6b496d318 10/10 green (351/351)
