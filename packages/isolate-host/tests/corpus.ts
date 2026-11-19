@@ -158,6 +158,35 @@ export const CORPUS: readonly Row[] = [
   },
   { label: 'throw-sync', code: "console.log('before'); throw new Error('boom')", evalError: true },
   { label: 'reject-unhandled', code: "Promise.reject(new Error('rej'))", evalError: true },
+  // A GC between an unhandled rejection and the end of its task must not lose the
+  // report: busy-waiting allocates (`Date.now()`), so the time is a GC dial, not a delay.
+  ...[1, 2, 3, 4, 5, 8, 10, 20].map(
+    (ms): Row => ({
+      label: `reject-then-sync-work-${ms}ms`,
+      code: `Promise.reject(new Error('rej')); const e = Date.now() + ${ms}; while (Date.now() < e);`,
+      evalError: true,
+    }),
+  ),
+  // Each promise origin, with a GC forced by allocation (deterministic, no clock).
+  ...Object.entries({
+    'reject-then-gc': "Promise.reject(new Error('rej'));",
+    'reject-new-promise-then-gc': "new Promise((_, r) => r(new Error('rej')));",
+    'reject-async-fn-then-gc': "(async () => { throw new Error('rej') })();",
+    // Rejected in a microtask; a later microtask of the same checkpoint allocates.
+    'reject-then-chain-then-gc': "Promise.resolve().then(() => { throw new Error('rej') }); Promise.resolve().then(() => { let a; for (let i = 0; i < 2e6; i++) a = { i }; });",
+    'reject-in-timer-then-gc': "setTimeout(() => { Promise.reject(new Error('rej')); let a; for (let i = 0; i < 2e6; i++) a = { i }; }, 1);",
+  }).map(
+    ([label, head]): Row => ({
+      label,
+      code: head.includes('2e6') ? head : `${head} let a; for (let i = 0; i < 2e6; i++) a = { i };`,
+      evalError: true,
+    }),
+  ),
+  {
+    // A rejection handled in its task stays handled when the GC collects it.
+    label: 'reject-caught-then-gc',
+    code: "Promise.reject(new Error('rej')).catch(() => console.log('caught')); let a; for (let i = 0; i < 2e6; i++) a = { i };",
+  },
   {
     label: 'throw-in-timer',
     code: "setTimeout(() => { throw new Error('late') }, 1)",
