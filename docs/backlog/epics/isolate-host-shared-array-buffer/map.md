@@ -1,10 +1,10 @@
 ## Items
 
-1. `distribution/isolate-shared-array-buffer` — commit the executable scenario RED at both public entry points, then implement to GREEN.
+1. `distribution/isolate-shared-array-buffer` — delivered at a41f3ec28. The contract stays here for the manager’s external review and closure commit.
 
 ## Open questions
 
-- Verify enforcement on the supported engine and the packed embedder — owner: agent — real worker tests, reference Node, mutations and independent review.
+No open owner decisions.
 
 ## Out of scope
 
