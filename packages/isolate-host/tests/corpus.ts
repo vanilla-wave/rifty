@@ -173,8 +173,10 @@ export const CORPUS: readonly Row[] = [
     'reject-new-promise-then-gc': "new Promise((_, r) => r(new Error('rej')));",
     'reject-async-fn-then-gc': "(async () => { throw new Error('rej') })();",
     // Rejected in a microtask; a later microtask of the same checkpoint allocates.
-    'reject-then-chain-then-gc': "Promise.resolve().then(() => { throw new Error('rej') }); Promise.resolve().then(() => { let a; for (let i = 0; i < 2e6; i++) a = { i }; });",
-    'reject-in-timer-then-gc': "setTimeout(() => { Promise.reject(new Error('rej')); let a; for (let i = 0; i < 2e6; i++) a = { i }; }, 1);",
+    'reject-then-chain-then-gc':
+      "Promise.resolve().then(() => { throw new Error('rej') }); Promise.resolve().then(() => { let a; for (let i = 0; i < 2e6; i++) a = { i }; });",
+    'reject-in-timer-then-gc':
+      "setTimeout(() => { Promise.reject(new Error('rej')); let a; for (let i = 0; i < 2e6; i++) a = { i }; }, 1);",
   }).map(
     ([label, head]): Row => ({
       label,
