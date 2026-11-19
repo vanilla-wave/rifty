@@ -36,6 +36,7 @@ child.
 | Uncaught throw followed by an endless microtask chain | ⚠️ | Ends as `termination: 'timeout'` (Node: exit 1 at once): the isolate never leaves its microtask checkpoint. `backlog/distribution/isolate-host-uncaught-throw-waits-for-microtask-checkpoint` |
 | `'exit'` listener setting `process.exitCode` after an uncaught throw | ⚠️ | Exit 1; Node takes the listener's code. `backlog/runtime-js/process-exit-listener-effects` |
 | A guest `throw` inside an `'exit'` listener | ⚠️ | Exit 1 with the thrown value reported; Node keeps the status it was exiting with (3 or 5 in the measured cases) |
+| A promise rejected inside an `'exit'` listener | ⚠️ | Exit 0, stderr empty (Node: exit 1 with the rejection's diagnostic). `backlog/distribution/isolate-host-rejection-in-exit-listener-exits-0` |
 | Guest-visible runtime global `__rifty` | ⚠️ | rifty's own runtime table (`publishRuntimeGlobal`) is reachable from guest code; it holds no host function, and breaking its own rifty is the guest's business. The host bridge is not reachable |
 | `util.inspect` default format: getters, classes, array holes | ⚠️ | Getter printed by value (and called), `class A` as `[Function: A]`, holes as bare commas. `backlog/runtime-js/inspect-default-format-gaps` |
 | Uncaught non-`throw` error diagnostic (`undefined.x`) | ⚠️ | No `[eval]:1` source header/caret. `backlog/runtime-js/node-eval-non-throw-diagnostic-header` |
@@ -54,7 +55,7 @@ surface and its gaps are the rows above. Tests: `packages/isolate-guest/tests/`
 | Packed export installs and imports with no dependency and no native addon | ✅ | `embedder.test.ts` |
 | README example embedder on isolated-vm 7.0.2: parity corpus vs `node -e`; `import()` and uncopyable rejections as `runCode` | ✅ | `embedder.test.ts` |
 | Hostile bridge arguments, throwing embedder hooks, `close()`, `exitStatus` | ✅ | `host-bridge.test.ts` |
-| isolated-vm 6.2.0 | ⚠️ | No `onUnhandledRejection`: an unhandled rejection rejects the embedder's call instead of failing the run with Node's diagnostic. No `importModuleDynamically`: `import()` rejects `Not supported` in the guest, and a `.catch` keeps the run alive (it can exit 0) |
+| isolated-vm 6.2.0 | ⚠️ | No `onUnhandledRejection`: an unhandled rejection rejects the embedder's call instead of failing the run with Node's diagnostic — or, after a GC collected the promise, the call settles normally (row "Unhandled rejection whose promise the GC collects"; measured on 7.0.2 without the hook, same code in 6.2.0). No `importModuleDynamically`: `import()` rejects `Not supported` in the guest, and a `.catch` keeps the run alive (it can exit 0) |
 | Other V8 embedders | ⚠️ | Untested; the contract (package README §Contract) is embedder-neutral |
 | Limits, kill, process boundary, escape posture | ❌ | Not provided by the export; the embedder's duty (package README §What you own) |
 | Contract stability | ⚠️ | Unstable: any release may change it |

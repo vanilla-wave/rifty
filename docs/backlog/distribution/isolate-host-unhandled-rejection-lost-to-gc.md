@@ -31,6 +31,28 @@ task (`TaskEpilogue`). A GC in between collects an unreferenced promise, the rec
   still 0 (handled stays handled); corpus rows `reject-then-*` all green for `runCode` and the
   README embedder (40/40), red on the stock prebuild (23 rows).
 
+Independent re-check 2026-11-19 (second agent, from scratch, bare isolated-vm 7.0.2): under GC pressure 0/12
+reports stock, 12/12 without `SetWeak()`, Node 24 12/12 on the same code. Also found:
+
+- `TaskEpilogue` is skipped when a task's body throws (`src/isolate/three_phase_task.cc:182,201,253-264,332`):
+  records then wait for the next completed task's epilogue or the isolate's disposal
+  (`environment.cc:452` `clear()`). Without `SetWeak()` they are strong meanwhile (64 promises / ~8 MiB survived
+  a GC into the next task, then reported). In this host the isolate lives one call and is disposed at its terminal
+  frame, and the records sit in the call's own heap (`memoryLimitMb`): retention is bounded by the call. Guest
+  tasks do not throw out of the body (`run` and `fireTimer` catch; probe @ f405533a7 of six fatal/exit rows logged
+  no escaped `fire`); a record that arrives after the terminal is dropped (`Isolate is disposed`), status already
+  Node's in those rows.
+- `SetWeak()` came with the #252 leak fix (`8a3ace674bce`, 2021) together with
+  `CopyablePersistentTraits`: the leak was the drained list's `Persistent`s never resetting in their destructor.
+  The list is `v8::Global` now (resets on destruction) and drained every completed task; upstream's #252
+  regression (`tests/promise-error.js`) passes with and without the patch.
+- Without `onUnhandledRejection` (isolated-vm 6.2.0, or 7 without the hook) the same loss turns the call's
+  rejection into a normal result (`evalSync` returns its value).
+- Rejected alternative without a fork: an `ivm.NativeModule` installing `Context::SetPromiseHooks` that roots
+  the context's promises reports 12/12, but roots every promise (settled ones too) until the context dies and
+  is still rifty-owned native code built per platform — a fork's cost with a leak on top.
+- Upstream: npm `latest` 7.0.2; `main` @ d180c553 has the same line; no issue or PR about GC loss.
+
 No guest-realm or host-JS fix is causal: V8 creates the promises (async functions, `then`), only
 the embedder's `PromiseRejectCallback` sees them, and isolated-vm owns it. The fix is that one line
 in isolated-vm, shipped to consumers. Every isolated-vm embedder of `@riftydev/isolate-guest` has it.
