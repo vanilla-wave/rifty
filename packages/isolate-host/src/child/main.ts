@@ -47,6 +47,8 @@ const dieAfterFlush = (): void => {
 const guestSource = readFileSync(new URL('./guest.js', import.meta.url), 'utf8');
 /** V8 code cache of the guest bundle, produced by this worker's first compile. */
 let cachedData: ivm.ExternalCopy<ArrayBuffer> | undefined;
+/** The compile producing the cache: concurrent first calls wait for it instead of compiling cold too. */
+let producing: Promise<unknown> | undefined;
 
 interface Live {
   readonly limitMb: number;
@@ -206,10 +208,13 @@ async function run(request: RunRequest): Promise<void> {
       }
       Object.defineProperty(globalThis, '__riftyIsolateHost', { value: Object.freeze(bridge), configurable: true });
     }`);
-    const script = await isolate.compileScript(guestSource, {
+    if (cachedData === undefined && producing !== undefined) await producing.catch(() => {});
+    const compiling = isolate.compileScript(guestSource, {
       filename: 'rifty-isolate-guest.js',
       ...(cachedData === undefined ? { produceCachedData: true } : { cachedData }),
     });
+    if (cachedData === undefined) producing = compiling;
+    const script = await compiling;
     // isolated-vm sets these on the script; its typings omit them.
     const cache = script as ivm.Script & ivm.CachedDataResult & { cachedDataRejected?: boolean };
     if (cachedData === undefined) cachedData = cache.cachedData;
