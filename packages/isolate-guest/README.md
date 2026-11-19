@@ -124,7 +124,7 @@ Measured in cross-review (2026-11-18, isolated-vm 7.0.2, Node 24):
 7.3 GB RSS; `new Array(1e9).fill({})` aborts the process (SIGABRT). The
 example runs isolates in your own process, which ADR-0557 rejected for rifty's
 own host. For untrusted code, the protected path is `runCode` from
-`@riftydev/isolate-host`: it adds the limits and a child process per call.
+`@riftydev/isolate-host`: it adds the limits and runs isolates in its own worker processes.
 Your own topology is your choice and your responsibility.
 
 ## Contract

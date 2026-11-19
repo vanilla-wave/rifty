@@ -1,9 +1,9 @@
 # @riftydev/isolate-host
 
 Run untrusted JavaScript from a Node service like `node -e <code>`. The code
-runs in a fresh rifty runtime inside a V8 isolate (isolated-vm), inside a
-child process that is spawned for the call and killed after it. Decision:
-ADR-0557.
+runs in a fresh rifty runtime inside a V8 isolate (isolated-vm). Isolates live
+in long-lived worker processes that the package spawns and reuses, up to 4
+calls per worker. Decisions: ADR-0557, ADR-0563.
 
 ```js
 import { runCode } from '@riftydev/isolate-host';
@@ -28,7 +28,7 @@ Requirements: Node ≥ 24, an ESM importer. The only runtime dependency is
 `isolated-vm@7.0.2`. It ships prebuilt binaries for linux-x64/arm64,
 darwin-arm64 and win32-x64; other platforms need a C++ toolchain. Your service
 starts with plain `node`. The package passes `--no-node-snapshot` to its own
-child.
+workers.
 
 ## API
 
@@ -37,7 +37,7 @@ child.
 | option | default | meaning |
 |---|---|---|
 | `timeoutMs` | 30 000 | wall-clock deadline from the call |
-| `memoryLimitMb` | 256 | isolate heap limit (min 8); child RSS ceiling = 256 + 3 × this. Below ~16 the rifty runtime itself does not fit and every run ends as `termination: 'memory'` (measured: 12 fails, 15 runs `console.log`) |
+| `memoryLimitMb` | 256 | isolate heap limit (min 8); adds 3 × this to its worker's RSS ceiling (256 MiB + 3 × the sum over the worker's calls). Below ~16 the rifty runtime itself does not fit and every run ends as `termination: 'memory'` (measured: 12 fails, 15 runs `console.log`) |
 | `maxOutputBytes` | 1 MiB | stdout + stderr bytes kept |
 
 Result:
@@ -47,18 +47,25 @@ Result:
 - `exitCode`: Node's status. It is `null` when the run was killed; Node's
   `spawnSync().status` is also `null` for a killed child.
 - `termination`: `'timeout'` or `'memory'`, present only on a kill. `'memory'`
-  covers the isolate heap limit, V8 fatal OOM and the child RSS ceiling. The
-  RSS ceiling is a sampled watchdog, so one large allocation can overshoot
-  it. Keep an RSS cgroup around the child.
+  means the call's own isolate hit its heap limit or a V8 fatal OOM. Keep an
+  RSS cgroup around the workers.
 - `truncated: true`: output passed `maxOutputBytes`. The excess was dropped,
   not buffered, and the run went on to its own exit.
 
-Every call settles within `timeoutMs` + 1 s. If the child dies on its own
-(crash, OOM-killer, external `kill`), the call rejects at once with an
-`Error` that names the code and signal.
+Every call settles within `timeoutMs` + 1 s, measured from the call.
 
-Each call is a new instance: files, globals and timers do not carry over.
-Calls may run concurrently; each one is its own child process.
+Each call is a new isolate: files, globals and timers do not carry over to any
+other call, on the same worker or not. Calls may run concurrently: the first
+4 share a worker, the next ones start another. One idle worker stays warm. A
+worker does not keep your process alive, and it dies with your process.
+
+When a worker is lost with no culprit known, its calls rerun once on a worker
+of their own, within their original deadline. Causes: a crash, the OOM-killer,
+an external `kill`, or its RSS ceiling with no isolate to blame. A call lost a
+second time, or whose rerun does not finish before its deadline, rejects with
+an `Error` whose `code` is `'ERR_ISOLATE_HOST_WORKER_LOST'`. Its message,
+`isolate-host child exited unexpectedly (code …, signal …)`, contains no guest
+text. You can retry such a call yourself.
 
 ## What the guest gets
 
@@ -118,9 +125,14 @@ Tested:
 
 - a guest cannot make `runCode` report a failure of the host's own, and
   cannot hang the call past `timeoutMs` + 1 s. One exception is outside the
-  isolate: if something kills the child, such as your cgroup's OOM-killer
-  (which a guest can provoke by allocating), the call rejects with
-  `isolate-host child exited unexpectedly (…, signal SIGKILL)`;
+  isolate: something can kill a worker, such as your cgroup's OOM-killer
+  (which a guest can provoke by allocating). The calls on it then rerun once,
+  and a second loss rejects them with `ERR_ISOLATE_HOST_WORKER_LOST`;
+- a guest that does not escape changes another call's result only by
+  delaying it. Memory blow-ups, hangs, `Atomics.wait`, builtins that ignore
+  termination, and output or timer floods were tested next to 3 concurrent
+  calls on one worker. A call whose deadline the delay outlives ends as
+  `timeout`;
 - a guest can change its own result. It can forge its exit status (throw a
   `RIFTY_PROCESS_EXIT` lookalike, rewrite a caught exit signal) or replace JS
   intrinsics rifty's runtime uses. Either way its stdout, stderr and exit code
@@ -130,41 +142,64 @@ Tested:
 - the guest sees none of your process's globals or env;
 - the guest gets no Node primitive or isolated-vm handle;
 - the guest has no network;
-- limits kill the child, never your process.
+- limits end the guilty call or its worker, never your process.
 
-The child starts with an empty environment. The child itself is treated as
-hostile: it reports through length-framed binary frames on a pipe that your
-process parses itself. What your process keeps is bounded by the output cap
+Workers start with an empty environment. A worker is treated as hostile: it
+reports through length-framed binary frames on a pipe that your process parses
+itself. Each frame names its call, and a frame for a call that is not in
+flight on that worker is a violation. What your process keeps is bounded by the output cap
 (about 2× the cap while a frame is in flight). Transient RSS can reach several
 times the cap: ~6.5× for one cap-sized frame, ~100 MiB for a flood of tiny
 frames at the default 1 MiB cap. A malformed or
-out-of-protocol frame kills the child, and the call rejects with
+out-of-protocol frame kills the worker, and its calls reject with
 `isolate-host child protocol violation: …`.
 
-Not protected: an isolate escape. A V8 or isolated-vm bug can give the guest
-code execution as the child's OS user. Escaped code can then read your
-process's environment (`/proc/<ppid>/environ`), the filesystem, and the
-network. The empty child env only stops a leak through a rifty bug. **You
-must put the child behind your own boundary:** a separate uid, a sandbox or
-container, an RSS cgroup, no secrets reachable by that user. Keep V8
-up to date: upgrade Node point releases that patch V8.
+Not protected:
+
+- **An isolate escape.** A V8 or isolated-vm bug can give the guest code
+  execution as the worker's OS user, inside a process that hosts other calls'
+  guests, now and later. Escaped code can read and change their code, data and
+  output, read your process's environment (`/proc/<ppid>/environ`), the
+  filesystem and the network. The empty worker env only stops a leak through a
+  rifty bug. **You must put the workers behind your own boundary:** a separate
+  uid, a sandbox or container, an RSS cgroup, no secrets reachable by that
+  user. Keep V8 up to date: upgrade Node point releases that patch V8.
+- **Side channels between isolates of one worker** are an open class.
+  `SharedArrayBuffer` and `Atomics` exist in the guest (no second thread, no
+  memory shared with other isolates). `performance.now()` resolves to ~3 µs.
+  Tenants that must not share a process need separate consumer processes.
+- **Repeated attacks.** A guest can repeat any attack in new calls without
+  bound. Limit the call rate per source yourself.
+
+What a worker shares between its calls, and what bounds each part
+(ADR-0563 §7):
+
+| Shared | Bound |
+|---|---|
+| Process memory | each call's isolate heap limit; the worker's RSS ceiling (256 MiB + 3 × the calls' limits) kills it, and its other calls rerun; an idle worker above 256 MiB is replaced |
+| isolated-vm's thread pool (cores + 1 threads) | 4 calls per worker; an isolate still running 1 s after termination retires its worker, whose other calls finish there |
+| The worker's event loop (guest writes, timers) | output capped per call; an interval re-arms only after its callback ran |
+| CPU | the OS scheduler: delay only |
 
 ## Cost
 
-Each call spawns one Node process. That process loads a ~7 MB runtime bundle
-into a fresh isolate. N concurrent calls run N processes; there is no pool and
-no queue, so cap concurrency yourself. Reproduce with
+Each call builds a fresh isolate and loads a ~7 MB runtime bundle into it, on a
+warm worker from a V8 code cache. N concurrent calls run in ⌈N/4⌉ workers.
+There is no queue, so cap concurrency yourself. Reproduce with
 `node scripts/measure.mjs` after `pnpm run build`. On an Apple M3 Pro, macOS,
 Node v24.16.0 (darwin/arm64), at this commit:
 
 ```
-runCode('console.log(1)'): p50 128 ms, max 130 ms (10 sequential)
-one child at rest: 143 MiB peak RSS
-1 concurrent: 141 MiB peak child RSS, 629 ms wall
-4 concurrent: 558 MiB peak child RSS, 654 ms wall
-8 concurrent: 1115 MiB peak child RSS, 705 ms wall
+first call (worker spawn, uncached compile): 127 ms
+warm worker runCode('console.log(1)'): p50 13.1 ms, max 16.1 ms (20 sequential)
+1 concurrent on one worker: 143 MiB peak worker RSS
+2 concurrent on one worker: 165 MiB peak worker RSS
+3 concurrent on one worker: 187 MiB peak worker RSS
+4 concurrent on one worker: 211 MiB peak worker RSS
+8 concurrent, cold (2 workers): 414 MiB peak total RSS, 658 ms wall
 ```
 
-(The wall times are for a guest that sleeps 500 ms.) A guest's heap counts on
-top of this, up to `memoryLimitMb`; the RSS watchdog sits at
-256 MiB + 3 × `memoryLimitMb`. These are measurements, not promises.
+The same machine with a child process per call (ADR-0557, before this pool):
+p50 137 ms per call; 8 concurrent calls peaked at 1118 MiB. Concurrent calls
+sleep 500 ms. A guest's heap counts on top of this, up to `memoryLimitMb`.
+These are measurements, not promises.

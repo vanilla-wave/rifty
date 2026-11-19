@@ -1,4 +1,4 @@
-# Isolate host (`@riftydev/isolate-host`, ADR-0557)
+# Isolate host (`@riftydev/isolate-host`, ADR-0557, ADR-0563)
 
 `runCode(code)` runs `code` like `node -e <code>` on Node 24. Tests:
 `packages/isolate-host/tests/` (vitest project `isolate-host`). The oracle is a live `node -e`
@@ -7,8 +7,12 @@ child.
 | Surface | Status | Notes |
 |---|---|---|
 | `{stdout, stderr, exitCode}` of CommonJS `node -e` code | ✅ | Corpus parity `parity.test.ts`: console, byte `process.stdout.write`, UTF-8, `exit`/`exitCode`/`'exit'`, event-loop order, a slow interval and 20000 intervals keeping pace (an interval re-arms after its callback, ADR-0558 Decisions 2026-11-19), fs on the in-memory VFS, Buffer, path/util/crypto hashes/events, uncaught throw/rejection diagnostics (canonical `[eval]` projection) |
-| Fresh instance per call | ✅ | `isolation.test.ts` |
-| Limits: time / isolate heap / V8 fatal OOM / child RSS / output cap | ✅ | `termination: 'timeout' \| 'memory'`; RSS is a sampled watchdog that can overshoot by one allocation step; output past the cap is dropped (`truncated`). `limits.test.ts` |
+| Fresh isolate per call, sequential or concurrent, inside shared warm workers (4 calls per worker) | ✅ | Files, globals, timers, unsettled promises and output stay with their call. `isolation.test.ts`, `pool.test.ts` |
+| Limits: time / isolate heap / V8 fatal OOM / worker RSS / output cap | ✅ | `termination: 'timeout' \| 'memory'` for the guilty call. The worker RSS ceiling (256 MiB + 3 × the sum of its calls' `memoryLimitMb`) is a sampled watchdog that can overshoot by one allocation step. Output past the cap is dropped (`truncated`). `limits.test.ts`, `pool-faults.test.ts` |
+| A culprit next to other calls on one worker (heap limit, fatal OOM, busy loop, `Atomics.wait`, a builtin ignoring termination, output or interval flood) | ✅ | The culprit gets `memory`/`timeout`; each neighbour gets its solo result, once. A guest still running 1 s after termination retires its worker, and its neighbours finish there. `pool-faults.test.ts` |
+| A neighbour's deadline shorter than the delay a culprit or a rerun costs it | ⚠️ | `timeout` (never a rerun) or, after a lost worker, `ERR_ISOLATE_HOST_WORKER_LOST`: the deadline counts from the call, across a rerun (ADR-0563 §6) |
+| A worker lost with no culprit known (external kill, OOM-killer, crash, RSS ceiling without a signal) | ⚠️ | Not in Node. Its calls rerun once, together, on a worker of their own, inside their deadline. A second loss, or a rerun past the deadline, rejects with `code: 'ERR_ISOLATE_HOST_WORKER_LOST'` (no guest text). `pool-faults.test.ts` |
+| Side channels between isolates of one worker (`SharedArrayBuffer`, `Atomics`, `performance.now` at ~3 µs) | ⚠️ | Declared open class, not mitigated: tenants that must not share a process need separate consumer processes (`docs/public/trust-model.md` §Isolate host) |
 | Network: `fetch`, `WebSocket`, `node:http`/`https`/`net` | ❌ | `NotImplementedError('isolate-host.<api>')`; `node:tls`/`dgram`/`http2` keep rifty's loud stubs. `egress.test.ts` |
 | `URL`, `URLSearchParams`, `structuredClone`, web streams, `AbortController`/`AbortSignal`, `Event`/`EventTarget`/`CustomEvent`, `Blob`/`File`, `Request`/`Response`/`Headers`/`FormData`, `MessageChannel`/`MessagePort`/`BroadcastChannel`, web-stream reader/controller/strategy classes, `CloseEvent`/`MessageEvent`, `URLPattern`, `Crypto`/`CryptoKey`/`SubtleCrypto`, `Navigator` and `navigator.*`, `Performance*` classes, `crypto.subtle`, `performance.mark`/`measure`/`nodeTiming`/… | ❌ | `NotImplementedError('isolate-host.<api>')`; successor goal (`docs/ROADMAP.md` M14 B) |
 | Static members of those ceiling globals (`AbortSignal.timeout`, `URL.canParse`, `Response.json`, …) | ❌ | `TypeError: … is not a function` — not the named gap; constructing or calling the global itself is |
