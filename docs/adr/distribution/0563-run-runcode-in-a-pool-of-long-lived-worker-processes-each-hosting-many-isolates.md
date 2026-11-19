@@ -17,7 +17,12 @@ Goal `isolate-host-worker-pool`. User (2026-11-18, via the manager, verbatim): �
 
 ## Decision
 
-Overturns ADR-0557 §2 (process per call) and the kill shape of §3. ADR-0557 §1 (API, result, `timeoutMs` + 1000 ms bound), §4–§7 and its escape posture still hold, widened below.
+Overturns ADR-0557 §2 (process per call) and the kill shape of §3, including:
+- §1 "a child that exits without a result rejects the call at once": its calls rerun once (§6);
+- §1 "every memory path shares one reason" and §3 "child RSS over the ceiling → `memory`": `memory` now needs a signal from the call's own isolate; an RSS crossing without one is a lost worker (§5, §6), so even a solo call reruns, then rejects `ERR_ISOLATE_HOST_WORKER_LOST`;
+- §6 "a channel closed with no result settles as its own error": it is a lost worker too.
+
+ADR-0557 §1's API, result shape and `timeoutMs` + 1000 ms bound, §4–§7 otherwise, and its escape posture still hold, widened below.
 
 1. **Topology.** A lazy pool in the consumer process, created by the first `runCode`. Workers are `process.execPath --no-node-snapshot dist/child.js`, `env: {}`. There is no host object, no `close()`, no process-per-call mode and no queue.
    - Idle workers are `unref`'d: only a pending call's deadline timer keeps the consumer alive.
@@ -27,8 +32,8 @@ Overturns ADR-0557 §2 (process per call) and the kill shape of §3. ADR-0557 §
    - Each worker produces its own V8 code cache with its first compile; concurrent first calls wait for it.
 3. **Wire** (`src/protocol.ts`).
    - Consumer → worker: JSON lines `run{call, code, memoryLimitMb, maxOutputBytes}` and `cancel{call}`.
-   - Worker → consumer: frames `u32be length, u8 kind, u32be call, payload` on fd 3, with ADR-0557 §6's kinds plus `released` (a cancelled call's isolate unwound) and `retire` (call 0).
-   - A frame may name only a call in flight on that worker. A settled call stops being addressable at its terminal frame; a cancelled one at its `released`/terminal frame, and its frames are dropped in between.
+   - Worker → consumer: frames `u32be length, u8 kind, u32be call, payload` on fd 3, with ADR-0557 §6's kinds plus `retire` (call 0).
+   - A frame may name only a call in flight on that worker; a call stops being addressable at its terminal frame. A call the consumer cancelled stays addressable until then, and its frames are dropped (the worker's terminal frame for it only ends the addressing).
    - Anything else is a protocol violation: the worker is killed and its unsettled calls reject `isolate-host child protocol violation: …`, with no rerun.
 4. **Time.** The consumer owns the deadline: at `timeoutMs` it resolves `timeout` with the output so far and sends `cancel`, and the worker disposes the isolate.
    - A disposed isolate still running after `STUCK_GRACE_MS` = 1000 ms (a builtin that ignores termination) makes the worker `retire`: no new call goes there.
@@ -36,10 +41,11 @@ Overturns ADR-0557 §2 (process per call) and the kill shape of §3. ADR-0557 §
 5. **Memory.** Blame needs a certain signal from the culprit's own isolate: ivm disposing it for its heap limit (polled every 25 ms, reported at once even while a builtin holds its thread), or its `onCatastrophicError`. The culprit resolves `memory` and is never rerun.
    - The worker's RSS ceiling is 256 MiB + 3 × the sum of its live calls' `memoryLimitMb` (ADR-0557 §3, summed). Crossing it, or a catastrophic error, kills the worker (SIGKILL) after it flushes its frames.
    - No heap-stats guess: per-isolate heap stats separated a host-side timer flood by 4 MiB only.
-   - An idle worker above `RECYCLE_RSS_BYTES` = 256 MiB retires. Its retire frame goes out in the same write as the last terminal frame, before the consumer can place another call there.
+   - An idle worker above `RECYCLE_RSS_BYTES` = 256 MiB retires. Its retire frame goes out in one write with the last terminal frame, before the consumer can place another call there.
 6. **Lost worker.** A worker that exits without the consumer ending it — external SIGKILL, OOM-killer, crash, its own RSS kill, a closed result channel — loses its unsettled calls.
    - They rerun once, together, on a new worker of their own that takes no other call and ends when they are settled.
-   - The rerun keeps the original deadline. A second loss, or a rerun past the deadline, rejects with `code: 'ERR_ISOLATE_HOST_WORKER_LOST'` and `isolate-host child exited unexpectedly (code …, signal …)` (+ `; its rerun did not finish within timeoutMs`). The text holds no guest or worker-written bytes: worker stderr is ignored.
+   - The rerun keeps the original deadline. A second loss, or a rerun past the deadline, rejects with `code: 'ERR_ISOLATE_HOST_WORKER_LOST'` and `isolate-host child exited unexpectedly (code …, signal …)` (+ ` after closing its result channel without a result` when the consumer forced that exit, + `; its rerun did not finish within timeoutMs`). The text holds no guest or worker-written bytes: worker stderr is ignored.
+   - A worker the consumer ends itself (idle, retired, quarantine done) takes no call from that moment and its exit loses nothing.
    - No call runs more than twice. A guest that keeps killing workers costs at most two workers per call, and its co-runners only the calls lost with it.
    - The cost of a culprit-less loss is one extra process per lost worker.
 7. **Shared worker resources**, each with its guard:
@@ -51,7 +57,7 @@ Overturns ADR-0557 §2 (process per call) and the kill shape of §3. ADR-0557 §
    | The worker's main thread (bridge callbacks, frames) | output capped per call; at most one timer `fire` in flight per timer (ADR-0558 Decisions 2026-11-19) |
    | Host timers | per-call bridge, closed with the call |
    | Pipes | bounded per call by the consumer (ADR-0557 §6) |
-   | V8 code cache | produced before any guest code; bytes only |
+   | V8 code cache | produced by a compile before that isolate's guest code runs; bytes only |
    | CPU | OS scheduling, delay only |
 
    A non-escaped guest changes a neighbour's result only by delaying it. A neighbour whose deadline the delay outlives resolves `timeout` (compat ⚠️).
@@ -79,11 +85,14 @@ Manager decisions by delegation (2026-11-18/19), shown to the user and not answe
 - F1: a rerun out of budget rejects `ERR_ISOLATE_HOST_WORKER_LOST`, never `timeout` and never with a fresh budget;
 - F2: one rerun, quarantined.
 
-Agent decisions: the shard size, the 1000 ms grace, the 256 MiB watermark and ceiling base, keeping one warm idle worker, and the absence of `close()`.
+Manager decision, 2026-11-19: blame only on a certain signal from the culprit's own isolate («угадывание по heap хуже честного "неизвестно"»).
+
+Agent decisions: the shard size, the 1000 ms grace, the 256 MiB watermark and the summed ceiling, keeping one warm idle worker, no `close()`, no process-per-call mode, side channels declared rather than mitigated (no `performance.now` coarsening), and the wire's `retire` kind.
 
 ## Consequences
 
 - Measured on landed code (README §Cost): warm call p50 13 ms vs 137 ms; +22 MiB per concurrent call in one worker; 8 cold concurrent calls 414 MiB vs 1118 MiB. Measurements, not promises.
 - An externally killed worker no longer rejects its calls at once: they rerun once (ADR-0557 §1 sentence superseded).
+- An RSS crossing with no isolate signal blames nobody: its calls, including the unknown culprit, rerun together and reject on its second kill — innocent co-runners included.
 - A worker carries guests of many calls, so an escape's reach is wider than under ADR-0557.
 - Directions, not scoped: per-tenant worker affinity, a concurrency limit, an `AbortSignal` option.

@@ -175,7 +175,10 @@ describe('consumer treats the child channel as hostile', () => {
       rejected?: string;
       ms?: number;
     };
-    expect(report.rejected).toBe('isolate-host child closed its result channel without a result');
+    // A lost worker (ADR-0563 §6): named by its exit, which the consumer forced.
+    expect(report.rejected).toBe(
+      'isolate-host child exited unexpectedly (code null, signal SIGKILL) after closing its result channel without a result',
+    );
     expect(Date.now() - started).toBeLessThan(5000);
     expect(report.ms).toBeLessThan(1000);
   });

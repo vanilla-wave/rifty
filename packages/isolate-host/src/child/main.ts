@@ -163,8 +163,15 @@ async function run(request: RunRequest): Promise<void> {
       // same write, before the consumer can place another call here.
       const idle = [...live.values()].every((c) => c === state || c.reported);
       if (state.unwound && idle && process.memoryUsage.rss() > RECYCLE_RSS_BYTES) retiring = true;
-      send(kind, id, payload);
-      if (retiring) send(KIND.retire, 0, new Uint8Array(0));
+      // One write: the consumer reads the retire with the terminal frame.
+      if (retiring) {
+        const terminal = frame(kind, id, payload);
+        const retireFrame = frame(KIND.retire, 0, new Uint8Array(0));
+        const both = new Uint8Array(terminal.byteLength + retireFrame.byteLength);
+        both.set(terminal);
+        both.set(retireFrame, terminal.byteLength);
+        channel.write(both);
+      } else send(kind, id, payload);
       if (!isolate.isDisposed) {
         state.disposedHere = true;
         // Not inside an isolate callback (`importModuleDynamically` reports from one).
@@ -238,7 +245,8 @@ async function run(request: RunRequest): Promise<void> {
     state.report(KIND.exit, Uint8Array.of(exitStatus(code)));
   } catch (error) {
     state.unwound = true;
-    if (state.cancelled) state.report(KIND.released, new Uint8Array(0));
+    // Cancelled: the consumer already settled it; this terminal frame only ends its addressing.
+    if (state.cancelled) state.report(KIND.exit, Uint8Array.of(1));
     else if (isolate.isDisposed && !state.disposedHere)
       state.report(KIND.memory, new Uint8Array(0));
     // The guest's own tail broke (its realm is the guest's to break): a failed run.
@@ -257,8 +265,9 @@ function cancel(id: number): void {
   if (state === undefined || state.reported) return;
   state.cancelled = true;
   state.disposedHere = true;
-  state.isolate.dispose();
-  // The run unwinds into `run`'s catch, which reports `released`; a builtin that
+  // Its heap limit may have disposed it already (inside the 25 ms poll window).
+  if (!state.isolate.isDisposed) state.isolate.dispose();
+  // The run unwinds into `run`'s catch, which sends its terminal frame; a builtin that
   // ignores termination keeps the thread: retire after the grace.
   setTimeout(() => state.unwound || retire(), STUCK_GRACE_MS).unref();
 }

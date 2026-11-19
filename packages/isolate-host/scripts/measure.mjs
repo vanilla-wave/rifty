@@ -16,7 +16,9 @@ import { fileURLToPath } from 'node:url';
 if (process.argv[2] === undefined) {
   for (const section of ['latency', 'shard', 'eight']) {
     process.stdout.write(
-      execFileSync(process.execPath, [fileURLToPath(import.meta.url), section], { encoding: 'utf8' }),
+      execFileSync(process.execPath, [fileURLToPath(import.meta.url), section], {
+        encoding: 'utf8',
+      }),
     );
   }
   console.log(`node ${process.version}, ${process.platform}/${process.arch}`);
@@ -48,7 +50,9 @@ const section = process.argv[2];
 if (section === 'latency') {
   let started = performance.now();
   await runCode('console.log(1)');
-  console.log(`first call (worker spawn, uncached compile): ${Math.round(performance.now() - started)} ms`);
+  console.log(
+    `first call (worker spawn, uncached compile): ${Math.round(performance.now() - started)} ms`,
+  );
   await runCode('console.log(1)');
   const times = [];
   for (let i = 0; i < 20; i++) {

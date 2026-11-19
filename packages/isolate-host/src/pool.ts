@@ -124,8 +124,15 @@ class Worker {
   readonly calls = new Map<number, Call>();
   retiring = false;
   dead = false;
-  /** Why the consumer itself ended this worker; unset = an exit nobody asked for. */
-  ended: { readonly violation: string } | { readonly lost: string } | undefined;
+  /**
+   * Why the consumer itself ended this worker; unset = an exit nobody asked for.
+   * `done`: nothing left on it (idle, retired, quarantine finished).
+   */
+  ended:
+    | { readonly violation: string }
+    | { readonly lost: string }
+    | { readonly done: true }
+    | undefined;
   readonly child: ChildProcess;
   constructor(
     private readonly pool: Pool,
@@ -157,7 +164,7 @@ class Worker {
     frames?.on('end', () => {
       setTimeout(() => {
         if (!this.dead && this.ended === undefined) {
-          this.ended = { lost: 'isolate-host child closed its result channel without a result' };
+          this.ended = { lost: 'after closing its result channel without a result' };
           this.kill();
         }
       }, CHANNEL_END_GRACE_MS).unref();
@@ -189,6 +196,13 @@ class Worker {
     this.child.kill('SIGKILL');
   }
 
+  /** Nothing left to do here: from now on no call is placed on it, and its exit loses nothing. */
+  end(): void {
+    if (this.ended !== undefined) return;
+    this.ended = { done: true };
+    this.kill();
+  }
+
   /** Largest payload a frame may carry now, or the violation. */
   #maxPayload(kind: number, id: number): number | string {
     if (kind === KIND.retire) return id === 0 ? 0 : `retire for call ${id}`;
@@ -203,8 +217,6 @@ class Worker {
         return 0;
       case KIND.error:
         return MAX_ERROR_TEXT;
-      case KIND.released:
-        return call.cancelled ? 0 : `released for call ${id}, never cancelled`;
       default:
         return `frame kind ${kind}`;
     }
@@ -258,8 +270,8 @@ class Worker {
     const ended = this.ended;
     if (ended !== undefined && 'violation' in ended) return;
     // Everything still unsettled here was lost with this worker.
-    const reason =
-      ended?.lost ?? `isolate-host child exited unexpectedly (code ${code}, signal ${signal})`;
+    const detail = ended !== undefined && 'lost' in ended ? ` ${ended.lost}` : '';
+    const reason = `isolate-host child exited unexpectedly (code ${code}, signal ${signal})${detail}`;
     const lost = [...this.calls.values()].filter((call) => !call.settled);
     this.calls.clear();
     this.pool.rerun(lost, reason);
@@ -283,8 +295,9 @@ export class Pool {
   /** Packed: the oldest worker with a free slot that takes fresh calls, else a new one. */
   #placeFresh(call: Call): void {
     const worker =
-      this.#workers.find((w) => !w.quarantine && !w.retiring && w.calls.size < SHARD) ??
-      this.#spawn(false);
+      this.#workers.find(
+        (w) => !w.quarantine && !w.retiring && w.ended === undefined && w.calls.size < SHARD,
+      ) ?? this.#spawn(false);
     worker.place(call);
   }
 
@@ -328,15 +341,15 @@ export class Pool {
     const unsettled = [...worker.calls.values()].some((call) => !call.settled);
     if (unsettled) return;
     if (worker.retiring || worker.quarantine) {
-      worker.kill();
+      worker.end();
       return;
     }
     if (worker.calls.size > 0) return;
     // Keep one idle worker warm; a second idle one ends.
     const idle = this.#workers.filter(
-      (w) => !w.quarantine && !w.retiring && !w.dead && w.calls.size === 0,
+      (w) => !w.quarantine && !w.retiring && w.ended === undefined && w.calls.size === 0,
     );
-    if (idle.length > 1) worker.kill();
+    if (idle.length > 1) worker.end();
   }
 
   forget(worker: Worker): void {

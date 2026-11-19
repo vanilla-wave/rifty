@@ -7,11 +7,10 @@
  * Frame: u32be payload length, u8 kind, u32be call, payload.
  *   output: [fd 1|2][truncated 0|1][bytes…]   exit: [code]
  *   memory: (empty)   error: utf8 text (≤ MAX_ERROR_TEXT)
- *   released: (empty) — a cancelled call's isolate unwound
  *   retire: (empty, call 0) — send this worker no new call
  *
- * Per call: output frames, then exactly one terminal frame (exit, memory,
- * error, or released for a cancelled call). Truncation rides output frames only
+ * Per call: output frames, then exactly one terminal frame (exit, memory or
+ * error); for a call the consumer cancelled it only ends its addressing. Truncation rides output frames only
  * (a flip with no new bytes is its own frame): a terminal frame is always
  * preceded by the flush of what came before.
  */
@@ -33,7 +32,7 @@ export type WorkerRequest = RunRequest | CancelRequest;
 
 export const FRAME_CHANNEL_FD = 3;
 export const MAX_ERROR_TEXT = 4096;
-export const KIND = { output: 1, exit: 2, memory: 3, error: 4, released: 5, retire: 6 } as const;
+export const KIND = { output: 1, exit: 2, memory: 3, error: 4, retire: 5 } as const;
 export const HEADER = 9;
 /** Calls the consumer places on one worker at once (pool ADR). */
 export const SHARD = 4;

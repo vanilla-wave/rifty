@@ -280,6 +280,25 @@ describe('a worker lost with no culprit (I5)', () => {
     },
   );
 
+  carrier(
+    'a call placed as a second idle worker ends is not lost with it: it keeps its one rerun',
+    async () => {
+      const { value } = await consumer(`
+      // W1 holds 4 calls that end last; W2 holds 1 that ends first. When W1 goes
+      // idle it is the second idle worker and ends: the next call must not land there.
+      const w1 = [0, 1, 2, 3].map(() => runCode("setTimeout(() => {}, 1200)"));
+      await sleep(100);
+      await runCode("setTimeout(() => {}, 200)");
+      const call = Promise.all(w1).then(() =>
+        settle(runCode("console.log('n'); setTimeout(() => console.log('m'), 3000)", { timeoutMs: 20000 })));
+      await sleep(2000);
+      // One loss for whatever runs it now: a call that already spent its rerun would reject.
+      for (const pid of children()) kill(pid);
+      out({ result: await call });`);
+      expect(value).toEqual({ result: { stdout: 'n\nm\n', stderr: '', exitCode: 0 } });
+    },
+  );
+
   carrier('two calls sharing a killed worker both resolve exactly', async () => {
     const { value } = await consumer(`
       const calls = [0, 1].map((i) => settle(runCode("console.log('x" + i + "'); setTimeout(() => console.log('y'), 4000)")));
