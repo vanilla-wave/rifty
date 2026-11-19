@@ -1,0 +1,94 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Mergeable once PR CI is green at HEAD 4f0c57c43 and the driver commits this landing verdict under docs/backlog/distribution/reference/ (REV-8: the PR touches a test path); only advisory concerns remain.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "4f0c57c4380ae510cf84d0854482407b22ed80c7",
+  "unit_goal_source": "Observed defect, standalone unit: docs/backlog/distribution/isolate-host-unhandled-rejection-lost-to-gc.md (Context + `## Decisions` 2026-11-19 user line: declared ceiling, no product change, upstream https://github.com/laverdet/isolated-vm/issues/589); baseline = live `node -e` v24.16.0 exit 1 + diagnostic. BASE 9b948d757 (origin main, merge of PR #412), HEAD 4f0c57c43.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "The defect is pinned as a declared ceiling in both lanes (runCode and the README embedder): the rows stay literal against live `node -e` and run as expected failures, so a fixed isolated-vm turns them red",
+      "source": "acceptance",
+      "trace": "ADR-0557 + ADR-0558 §2/§6 + user decision docs/backlog/distribution/isolate-host-unhandled-rejection-lost-to-gc.md:76",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/corpus.ts:164-178; packages/isolate-host/tests/parity.test.ts:19-33; packages/isolate-guest/tests/embedder.test.ts:196-210",
+      "note": ""
+    },
+    {
+      "row": "The documented consumer workaround (handle every promise; `.catch` that sets `process.exitCode`) gives Node's result under the same GC pressure in both lanes",
+      "source": "acceptance",
+      "trace": "ADR-0557 + ADR-0558 §2/§6 + user decision docs/backlog/distribution/isolate-host-unhandled-rejection-lost-to-gc.md:76",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/corpus.ts:180-188",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "docs/public/compat/isolate-host.md:28",
+          "evidence": "runCode(\"queueMicrotask(() => process.exit(2))\", {timeoutMs:3000}) -> exitCode null, termination 'timeout', stderr 'Error: process exit requires an active control port\\n    at #requestSelfExit (rifty-isolate-guest.js:105159:15) ...'; node -e -> 2, stderr ''",
+          "summary": "The new `process.exit()` from a microtask row says 'output kept' but not that stderr also gains a rifty-internal 'process exit requires an active control port' stack; a consumer reading stderr sees internal frames. Worth one clause in the row or the backlog item.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/public/compat/isolate-host.md:28; docs/public/compat/isolate-host.md:40",
+          "evidence": "rows.mjs x5: main().then(() => process.exit(0)) node 0 / runCode null+timeout 5/5; process.on('exit', () => { Promise.reject(new Error('r')) }) node 1+stderr / runCode 0, stderr '' 5/5",
+          "summary": "Two discoveries ride the branch as compat rows + backlog drafts (PR-1 allows it; both measured correctly), but neither has a ceiling corpus row, so a later fix leaves those compat rows stale with nothing turning red. Hardening for isolate-host-queuemicrotask-throw-times-out / isolate-host-rejection-in-exit-listener-exits-0, not required by this unit.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/isolate-host/tests/parity.test.ts:20; packages/isolate-guest/tests/embedder.test.ts:197",
+          "evidence": "Pre-existing mechanism, not changed by the diff. Stock run: the four ceiling rows fail on exitCode 0 vs node's 1 with stderr '' (rows.mjs 5/5 each), so they fail for the declared reason today.",
+          "summary": "`it.fails` accepts any failure, so a ceiling row would stay green if the run later failed differently (e.g. timeout, crash). Pinning the observed wrong outcome (`exitCode: 0, stderr: ''`) would make the ceiling discriminate its own failure mode; advisory.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

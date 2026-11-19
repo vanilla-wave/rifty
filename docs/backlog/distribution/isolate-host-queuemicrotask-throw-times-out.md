@@ -27,8 +27,10 @@ process.exit(0))`, `main().then(() => process.exit(0))`, `.catch(() => process.e
 `termination: 'timeout'` (output kept); Node exits with `n`. From a later task (`setTimeout(() =>
 Promise.resolve().then(() => process.exit(3)), 1)`, after `await` of a timer) the host exits as Node;
 `process.exitCode = n` in a microtask works. Same with isolated-vm rebuilt without `SetWeak()`. Whether it
-shares this item's cause (the runtime's exit throwing inside the first task's microtask checkpoint) is
-unverified. Compat ⚠️ row "`process.exit()` from a promise callback".
+shares this item's cause is unverified. Lead: stderr gets `Error: process exit requires an active control port`
+at `#requestSelfExit` ← `onFlushed` — the exit lands before the guest entry calls `awaitDrain`, so the eval
+lifecycle takes its no-drain path (`completeNodeEvalTerminalWithoutDrain`,
+`packages/runtime-js/src/internal/event-loop-keepalive.ts`), which needs a kernel control port this host lacks. Compat ⚠️ row "`process.exit()` from a promise callback".
 Unlike `isolate-host-uncaught-throw-waits-for-microtask-checkpoint`, no endless
 microtask chain is involved. Owner: next isolate-host runtime-fidelity pickup;
 trigger: any change to the shim's `queueMicrotask` or the eval lifecycle.
