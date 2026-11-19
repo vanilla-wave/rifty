@@ -20,6 +20,19 @@ reviewer, also at 4018de0fc), Node v24.16.0, `runCode(code, { timeoutMs: 3000 })
 - Contrast `Promise.resolve().then(()=>{throw 1})` → exit 1 (the rejection path).
 
 The fatal text is written, so the uncaught path runs, but the run never ends.
+
+Same shape, 2026-11-19 @ dd4ea8b42 (Node v24.16.0, `timeoutMs: 3000`): a guest `process.exit(n)` from a
+promise callback or `queueMicrotask` queued by the code's synchronous run — `Promise.resolve().then(() =>
+process.exit(0))`, `main().then(() => process.exit(0))`, `.catch(() => process.exit(1))` — ends as
+`termination: 'timeout'` (output kept); Node exits with `n`. From a later task (`setTimeout(() =>
+Promise.resolve().then(() => process.exit(3)), 1)`, after `await` of a timer) the host exits as Node;
+`process.exitCode = n` in a microtask works. Same with isolated-vm rebuilt without `SetWeak()`. Whether it
+shares this item's cause is unverified. Lead: stderr gets `Error: process exit requires an active control port`
+at `#requestSelfExit` ← `onFlushed` — the exit lands before the guest entry calls `awaitDrain`, so the eval
+lifecycle takes its no-drain path (`completeNodeEvalTerminalWithoutDrain`,
+`packages/runtime-js/src/internal/event-loop-keepalive.ts`), which needs a kernel control port this host lacks. Compat ⚠️ row "`process.exit()` from a promise callback". Deterministic (nothing ends such a run): `timeout` in 160/160
+runs, 16 concurrent under CPU load; pinned in `packages/isolate-host/tests/parity.test.ts` (runCode lane only:
+the corpus lanes would wait a 30 s deadline per run).
 Unlike `isolate-host-uncaught-throw-waits-for-microtask-checkpoint`, no endless
 microtask chain is involved. Owner: next isolate-host runtime-fidelity pickup;
 trigger: any change to the shim's `queueMicrotask` or the eval lifecycle.

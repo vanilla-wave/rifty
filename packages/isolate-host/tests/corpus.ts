@@ -13,11 +13,18 @@ export interface Row {
   /** Uncaught error: compare the canonical `[eval]` diagnostic, not internal frames. */
   readonly evalError?: true;
   /**
-   * A declared ceiling this row hits (compat ❌): the row stays
+   * A declared ceiling this row hits (compat ❌ or ⚠️): the row stays
    * literal and runs as an expected failure, so a fix turns it red until promoted.
    */
   readonly ceiling?: string;
 }
+
+/**
+ * Garbage enough to force several scavenges in any young generation isolated-vm sizes
+ * (≤16 MiB). Stored to a global so it escapes: an optimized loop drops non-escaping
+ * allocations, and when it tiers up depends on load (no GC → the report survives).
+ */
+export const GC_CHURN = 'for (let i = 0; i < 2e6; i++) globalThis.gcChurn = { i };';
 
 export const CORPUS: readonly Row[] = [
   {
@@ -158,6 +165,42 @@ export const CORPUS: readonly Row[] = [
   },
   { label: 'throw-sync', code: "console.log('before'); throw new Error('boom')", evalError: true },
   { label: 'reject-unhandled', code: "Promise.reject(new Error('rej'))", evalError: true },
+  // Each promise origin, rejected unhandled, then a GC forced by allocation in the
+  // same task (no clock): isolated-vm drops the report (compat ⚠️). 0 reports in
+  // 320 runs each, 16 concurrent under CPU load (2026-11-19).
+  ...Object.entries({
+    'reject-then-gc': "Promise.reject(new Error('rej'));",
+    'reject-new-promise-then-gc': "new Promise((_, r) => r(new Error('rej')));",
+    'reject-async-fn-then-gc': "(async () => { throw new Error('rej') })();",
+    'reject-in-timer-then-gc': "setTimeout(() => { Promise.reject(new Error('rej')); ALLOC }, 1);",
+  }).map(
+    ([label, head]): Row => ({
+      label,
+      code: head.includes('ALLOC') ? head.replace('ALLOC', GC_CHURN) : `${head} ${GC_CHURN}`,
+      evalError: true,
+      ceiling:
+        'isolated-vm drops an unhandled rejection a GC collects before its task ends (distribution/isolate-host-unhandled-rejection-lost-to-gc)',
+    }),
+  ),
+  // A handled rejection survives the GC (the compat workaround: `parity.test.ts`).
+  {
+    label: 'reject-caught-then-gc',
+    code: `Promise.reject(new Error('rej')).catch(() => console.log('caught')); ${GC_CHURN}`,
+  },
+  {
+    // The workaround's twin for both lanes (`parity.test.ts` runs the compat snippet
+    // verbatim on runCode; `e.message` here because rifty's stack frames differ).
+    label: 'reject-caught-exit-code-then-gc',
+    code: `(async () => { throw new Error('rej') })().catch((e) => { console.error(e.message); process.exitCode = 1 }); ${GC_CHURN}`,
+  },
+  {
+    // Exit 0 in 160/160 runs, 16 concurrent under load: the run's status is fixed before the report arrives.
+    label: 'reject-in-exit-listener',
+    code: "process.on('exit', () => { Promise.reject(new Error('rej')) })",
+    evalError: true,
+    ceiling:
+      'a rejection inside an exit listener exits 0 (distribution/isolate-host-rejection-in-exit-listener-exits-0)',
+  },
   {
     label: 'throw-in-timer',
     code: "setTimeout(() => { throw new Error('late') }, 1)",

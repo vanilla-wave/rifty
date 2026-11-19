@@ -129,6 +129,17 @@ Known differences:
   `.catch` attached from a later timer may still run first. A rejection whose
   handler comes from a timer or immediate already due, or that is chained after
   an `fs.promises` call, can go unreported (exit 0; Node exits 1).
+- An unhandled rejection is lost when the GC collects its promise before the
+  task ends (isolated-vm keeps it by weak handle,
+  https://github.com/laverdet/isolated-vm/issues/589): `Promise.reject(err)`
+  or an un-awaited `async` call followed by allocating work (a few ms can be enough) gives
+  `exitCode: 0` and an empty stderr where Node exits 1. Nothing in the result
+  tells it from a clean exit, and an `unhandledRejection` listener does not
+  fire. In guest code, handle every promise: end each chain and the async
+  entry point with `.catch((e) => { console.error(e); process.exitCode = 1 })`.
+- `process.exit()` from a promise callback or `queueMicrotask` queued by the
+  code's synchronous run ends as `termination: 'timeout'`; from a later task
+  it exits as in Node. Set `process.exitCode` instead.
 - An `unref()`'d timer may still fire during the few ms the run takes to
   confirm its loop is idle.
 - An `unhandledRejection` listener receives a copy of the reason, and

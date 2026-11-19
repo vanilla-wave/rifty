@@ -228,14 +228,22 @@ declared gaps as `runCode` (`docs/public/compat/isolate-host.md`).
 
 Tested: isolated-vm 7.0.2 on Node 24. The example above runs the isolate-host
 parity corpus with the same result as `node -e`
-(`tests/embedder.test.ts`).
+(`tests/embedder.test.ts`), except one gap of isolated-vm itself: it keeps an
+unhandled rejection by weak handle, so when a GC collects the rejected promise
+before its task ends, `onUnhandledRejection` never fires and the run exits 0
+with an empty stderr where Node exits 1
+(https://github.com/laverdet/isolated-vm/issues/589). Your embedder cannot see
+it happen; guest code avoids it by handling every promise
+(`docs/public/compat/isolate-host.md`).
 
 isolated-vm 6.2.0 has neither `onUnhandledRejection` nor
 `importModuleDynamically`. Measured on Node v24.16.0, a guest loses two
 behaviors there:
 
 - An unhandled rejection does not fail the run with Node's diagnostic.
-  Instead, the embedder's pending `eval`/`apply` call rejects with the reason.
+  Instead, the embedder's pending `eval`/`apply` call rejects with the reason —
+  or, after a GC collected the promise, settles normally (the same weak record;
+  measured on 7.0.2 without the hook, 6.2.0 has the same code).
 - `import()` rejects in the guest with `Not supported`. A `.catch` keeps the
   run alive, and the run can exit 0.
 
