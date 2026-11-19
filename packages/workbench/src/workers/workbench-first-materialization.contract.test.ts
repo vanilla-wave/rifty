@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import { gzipSync } from 'node:zlib';
+import { readFileSync } from 'node:fs';
+import { gunzipSync, gzipSync } from 'node:zlib';
 import { globalProcessManager } from '@riftydev/kernel';
 import {
   type InstallOptions,
@@ -1866,6 +1867,67 @@ describe('Workbench companion first materialization Contract+RED', () => {
       h.authority.existsSync(`${recompressed.projectRoot}/node_modules/vite/package.json`),
     ).toBe(true);
   });
+
+  it('restores a real baked snapshot with one replay-cache verification', async () => {
+    const gzipped = readFileSync(
+      new URL(
+        '../../../../apps/playground/public/snapshots/vite8-node-modules.json.gz',
+        import.meta.url,
+      ),
+    );
+    const bytes = gunzipSync(gzipped);
+    const baked = JSON.parse(bytes.toString('utf8')) as {
+      readonly templateId: string;
+      readonly packageJsonText: string;
+      readonly tarballCache: { readonly files: readonly { readonly content: string }[] };
+    };
+    const replayLengths = new Set(
+      baked.tarballCache.files.map((file) => Buffer.from(file.content, 'base64').byteLength),
+    );
+    expect(baked.tarballCache.files.length).toBeGreaterThan(0);
+    const descriptor = {
+      snapshotId: `sha256:${createHash('sha256').update(bytes).digest('hex')}`,
+      assetUrl: 'https://playground.test/snapshots/vite8.json.gz',
+      templateId: baked.templateId,
+    } as const;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(gzipped)),
+    );
+    const digest = vi.spyOn(globalThis.crypto.subtle, 'digest');
+    const h = ownerHarness();
+
+    const definition = withPlaygroundMetadata(
+      inspectProjectDefinition(
+        projects.vite({
+          id: 'vite-real-replay',
+          files: {
+            '/index.html': '<main id="app"></main>',
+            '/package.json': baked.packageJsonText,
+          },
+        }),
+      ),
+      {
+        starterId: 'vite-starter',
+        templateId: 'vite-template-v1',
+        firstMaterialization: { kind: 'snapshot', snapshot: descriptor },
+        port: VITE_PORT,
+      },
+    );
+    const opened = await h.open(definition);
+    await h.packageState.quiesce();
+    await h.close();
+
+    expect(opened.acquisition).toMatchObject({
+      kind: 'ready',
+      provenance: { outcome: 'snapshot', snapshotId: descriptor.snapshotId },
+    });
+    const replayVerifications = digest.mock.calls.filter(
+      ([algorithm, data]) =>
+        algorithm === 'SHA-512' && replayLengths.has((data as ArrayBufferView).byteLength),
+    );
+    expect(replayVerifications).toHaveLength(baked.tarballCache.files.length);
+  }, 60_000);
 
   it.each(SNAPSHOT_FALLBACK_CASES)(
     'records $name exactly, defers install to the session, then falls back visibly',

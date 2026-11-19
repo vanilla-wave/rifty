@@ -87,12 +87,6 @@ export interface OwnerPackageState {
   projectSave: PackageAcquisitionAuthority['projectSave'];
   /** Freeze the exact installed-tree shadow facts across synchronous child spawn. */
   reserveChildAdmission(root: string): Promise<OwnerChildPackageReservation>;
-  /** Registers the terminal-facing config and starts its optional prefetch. */
-  configure(config: OwnerPackageConfig): void;
-  /** Restore an instant config without ever turning boot into an implicit install. */
-  restore(config: OwnerPackageConfig): Promise<void>;
-  /** Serialize the active-project transition and restore instant dependencies. */
-  transition(config: OwnerPackageConfig): Promise<void>;
   /** Reassert missing template-owned node_modules files under the package FIFO. */
   reassertTemplateNodeModules(config: OwnerPackageConfig): Promise<void>;
   /** The npm command already bound to the same acquisition/stamp authority. */
