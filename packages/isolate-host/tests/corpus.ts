@@ -138,10 +138,10 @@ export const CORPUS: readonly Row[] = [
     code: 'let n = 0; const t0 = Date.now(); const iv = setInterval(() => { n++; const e = Date.now() + 10; while (Date.now() < e); }, 1); setTimeout(() => { clearInterval(iv); console.log(Date.now() - t0 < 3000, n < 150) }, 1000)',
   },
   {
-    // Node re-arms from the callback's start: an 80 ms callback every 100 ms runs ~20 times in 2 s
-    // (re-arming from its end would give ~11).
+    // Node re-arms from the tick's start: a 150 ms callback every 200 ms starts ~200 ms apart
+    // (re-arming from its end: ~350). Gaps, not counts: a loaded machine stretches both alike.
     label: 'interval-keeps-its-period',
-    code: 'let n = 0; const iv = setInterval(() => { n++; const e = Date.now() + 80; while (Date.now() < e); }, 100); setTimeout(() => { clearInterval(iv); console.log(n >= 15) }, 2050)',
+    code: 'const s = []; const iv = setInterval(() => { s.push(Date.now()); if (s.length === 4) { clearInterval(iv); const g = [s[2] - s[1], s[3] - s[2]].sort((a, b) => a - b); console.log(g[0] < 275) } const e = Date.now() + 150; while (Date.now() < e); }, 200)',
   },
   {
     label: 'interval-storm',

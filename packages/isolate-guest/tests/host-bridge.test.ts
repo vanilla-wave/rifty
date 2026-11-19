@@ -257,7 +257,11 @@ describe('createHostBridge argument validation (ADR-0558 §3)', () => {
     functions.timerStart(2, 1, true);
     functions.timerStart(3, 1, false);
     functions.timerClear(3);
-    await sleep(30);
+    // Waits for the event, not a time slice: a loaded machine runs fewer 1 ms ticks per 30 ms.
+    for (const until = Date.now() + 2000; fired.filter((id) => id === 2).length < 2; ) {
+      if (Date.now() > until) break;
+      await sleep(5);
+    }
     expect(fired.filter((id) => id === 1)).toEqual([1]);
     expect(fired.filter((id) => id === 2).length).toBeGreaterThan(1);
     expect(fired).not.toContain(3);
@@ -397,28 +401,25 @@ describe('interval backpressure (Node: an interval re-arms after its callback ra
   });
 
   carrier(
-    'an interval keeps its period from the callback start (Node), not from its end',
+    'an interval keeps its period from the tick start (Node), not from the callback end',
     async () => {
       const { createHostBridge } = await load();
       const starts: number[] = [];
-      let release = (): void => {};
       const { functions, close } = createHostBridge({
         write: () => {},
+        // The guest "runs" each callback for 150 ms of a 200 ms period.
         fire: () => {
           starts.push(performance.now());
-          // The guest "runs" the callback for 60 ms of a 100 ms period.
-          return new Promise<void>((resolve) => {
-            release = resolve;
-            setTimeout(resolve, 60);
-          });
+          return new Promise<void>((resolve) => setTimeout(resolve, 150));
         },
       });
-      functions.timerStart(1, 100, true);
-      await sleep(560);
+      functions.timerStart(1, 200, true);
+      for (const until = Date.now() + 10_000; starts.length < 3 && Date.now() < until; )
+        await sleep(20);
       close();
-      release();
-      // From the start: ticks at ~100, 200, 300, 400, 500 → 5; from the end: ~100, 260, 420 → 3.
-      expect(starts.length).toBeGreaterThanOrEqual(5);
+      // From the start the gap is ~200 ms, from the end ~350; 275 leaves room for a loaded scheduler.
+      expect(starts.length).toBe(3);
+      expect((starts[2] as number) - (starts[1] as number)).toBeLessThan(275);
     },
   );
 

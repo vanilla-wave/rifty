@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { runCode } from '../src/index.ts';
-import { rssKb, soleChild, waitFor } from './support.ts';
+import { childPids, rssKb, waitFor } from './support.ts';
 
 /** Max main-thread lag of this process while `work` runs. */
 async function withLag<T>(work: () => Promise<T>): Promise<{ value: T; maxLagMs: number }> {
@@ -102,12 +102,17 @@ describe('runCode limits (I4)', () => {
     // its fatal-OOM callback); the RSS watchdog (ceiling 448 MiB here) must stop it
     // first. A sampled watchdog overshoots by one backing-store doubling (measured
     // 661–808 MiB on macOS arm64), so the bound is 2 × the ceiling.
-    const pid = await waitFor(() => soleChild(), 2000);
+    // Every worker of this consumer: a warm one may retire as this call starts on a new one.
+    await waitFor(() => (childPids().length > 0 ? true : undefined), 2000);
     let peakMb = 0;
-    const sampler = setInterval(() => {
-      const kb = rssKb(pid);
-      if (kb !== null) peakMb = Math.max(peakMb, kb / 1024);
-    }, 20);
+    const sample = (): void => {
+      for (const pid of childPids()) {
+        const kb = rssKb(pid);
+        if (kb !== null) peakMb = Math.max(peakMb, kb / 1024);
+      }
+    };
+    sample();
+    const sampler = setInterval(sample, 20);
     const value = await running.finally(() => clearInterval(sampler));
     expect(value).toEqual({ stdout: 'big\n', stderr: '', exitCode: null, termination: 'memory' });
     expect(Date.now() - started).toBeLessThan(61_000);
