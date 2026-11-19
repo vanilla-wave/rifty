@@ -493,6 +493,29 @@ describe('slots and ceilings of a shared worker (I1, I3)', () => {
   );
 
   carrier(
+    'memory retained from finished calls never lands on the last call left on the worker',
+    async () => {
+      const { value } = await consumer(`
+      // Three calls leave ~1.5 GiB of small-object heap resident when they end (macOS);
+      // the fourth, at memoryLimitMb 64, is then alone on the worker with that RSS.
+      const sampler = sampleChildren();
+      const heavy = "const a = []; for (let i = 0; i < 8e6; i++) a.push({ i, s: 'k' + i }); console.log(a.length)";
+      const calls = [0, 1, 2].map(() => settle(runCode(heavy, { memoryLimitMb: 1536, timeoutMs: 60000 })));
+      calls.push(settle(runCode("setTimeout(() => console.log('light'), 6000)", { memoryLimitMb: 64, timeoutMs: 60000 })));
+      const results = await Promise.all(calls);
+      out({ results, peak: sampler.stop() });`);
+      expect(value).toEqual({
+        results: [
+          ...[0, 1, 2].map(() => ({ stdout: '8000000\n', stderr: '', exitCode: 0 })),
+          { stdout: 'light\n', stderr: '', exitCode: 0 },
+        ],
+        peak: 1,
+      });
+    },
+    120_000,
+  );
+
+  carrier(
     'the RSS ceiling sums its calls: 4 calls each holding most of their own limit complete on their worker',
     async () => {
       const { value } = await consumer(`
