@@ -135,7 +135,7 @@ export const CORPUS: readonly Row[] = [
     // Node re-arms an interval after its callback ran: ticks never pile up
     // (backlog distribution/isolate-host-timer-fire-backpressure).
     label: 'slow-interval-keeps-pace',
-    code: "let n = 0; const t0 = Date.now(); const iv = setInterval(() => { n++; const e = Date.now() + 10; while (Date.now() < e); }, 1); setTimeout(() => { clearInterval(iv); console.log(Date.now() - t0 < 3000, n < 150) }, 1000)",
+    code: 'let n = 0; const t0 = Date.now(); const iv = setInterval(() => { n++; const e = Date.now() + 10; while (Date.now() < e); }, 1); setTimeout(() => { clearInterval(iv); console.log(Date.now() - t0 < 3000, n < 150) }, 1000)',
   },
   {
     label: 'interval-storm',

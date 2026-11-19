@@ -6,8 +6,8 @@
 import { describe, expect, it } from 'vitest';
 import { alive, consumer, waitFor } from './support.ts';
 
-/** Committed RED (FIT §5): the pool unit flips `carrier` to `it`. */
-const carrier = it.fails;
+/** The acceptance carrier; RED was `it.fails` before the pool landed. */
+const carrier = it;
 
 const ok = (stdout: string) => ({ stdout, stderr: '', exitCode: 0 });
 
@@ -125,7 +125,9 @@ describe('worker lifecycle (I6)', () => {
     async () => {
       const { value, signal } = await consumer(
         `runCode("const a = Array.from({ length: 3e6 }, Math.random); for (;;) a.sort()", { timeoutMs: 1000 }).catch(() => {});
-       await sleep(2200);
+       // A neighbour keeps the retiring worker alive with its stuck isolate.
+       runCode("setTimeout(() => {}, 20000)", { timeoutMs: 30000 }).catch(() => {});
+       await sleep(2500);
        await new Promise((r) => process.stdout.write('\\n' + JSON.stringify({ value: children() }) + '\\n', r));
        kill(process.pid); await sleep(60000);`,
       );

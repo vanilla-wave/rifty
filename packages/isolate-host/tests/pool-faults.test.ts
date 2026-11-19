@@ -9,8 +9,8 @@
 import { describe, expect, it } from 'vitest';
 import { consumer } from './support.ts';
 
-/** Committed RED (FIT §5): the pool unit flips `carrier` to `it`. */
-const carrier = it.fails;
+/** The acceptance carrier; RED was `it.fails` before the pool landed. */
+const carrier = it;
 
 interface Outcome {
   /** Children while all 4 calls are in flight: 1 = they share a worker. */

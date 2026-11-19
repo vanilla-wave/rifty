@@ -1,9 +1,14 @@
 /**
- * Child process (ADR-0557 §2–3): one isolated-vm isolate holding the rifty
- * guest bundle, one run. Spawned with `--no-node-snapshot` and an empty env by
- * `runCode`; killed by the parent after its last message. Only copying
- * `ivm.Callback`s over the export's validated `createHostBridge` functions
- * cross into the isolate (ADR-0558).
+ * Worker process (pool ADR, ADR-0557 §6): a long-lived embedder of many rifty
+ * guests, one fresh isolated-vm isolate per call (`@riftydev/isolate-guest`,
+ * ADR-0558). Spawned with `--no-node-snapshot` and an empty env by the
+ * consumer's pool; requests arrive as JSON lines on stdin, results leave as
+ * call-addressed frames on fd 3. Only copying `ivm.Callback`s over the
+ * export's validated host functions cross into an isolate.
+ *
+ * Kills itself (SIGKILL) when its stdin ends (consumer gone), when an isolate
+ * reports a catastrophic error (V8: unrecoverable), or when its RSS passes the
+ * ceiling of its live calls; the consumer reruns what was in flight.
  */
 import { readFileSync } from 'node:fs';
 import { Socket } from 'node:net';
@@ -14,83 +19,170 @@ import {
   exitStatus,
 } from '@riftydev/isolate-guest';
 import ivm from 'isolated-vm';
-import { FRAME_CHANNEL_FD, KIND, MAX_ERROR_TEXT, type RunRequest, frame } from '../protocol.ts';
+import {
+  FRAME_CHANNEL_FD,
+  KIND,
+  MAX_ERROR_TEXT,
+  RECYCLE_RSS_BYTES,
+  type RunRequest,
+  STUCK_GRACE_MS,
+  type WorkerRequest,
+  frame,
+  rssCeilingBytes,
+} from '../protocol.ts';
 import { OutputBudget, importGapError } from './bridge.ts';
 
 const channel = new Socket({ fd: FRAME_CHANNEL_FD, readable: false, writable: true });
-channel.on('error', () => process.kill(process.pid, 'SIGKILL'));
-const send = (kind: number, payload: Uint8Array): void => {
-  channel.write(frame(kind, payload));
+const die = (): never => process.kill(process.pid, 'SIGKILL') as never;
+channel.on('error', die);
+const send = (kind: number, call: number, payload: Uint8Array): void => {
+  channel.write(frame(kind, call, payload));
+};
+/** Flush what is queued, then die (a fallback in case the channel never drains). */
+const dieAfterFlush = (): void => {
+  channel.write(new Uint8Array(0), die);
+  setTimeout(die, 200).unref();
 };
 
+const guestSource = readFileSync(new URL('./guest.js', import.meta.url), 'utf8');
+/** V8 code cache of the guest bundle, produced by this worker's first compile. */
+let cachedData: ivm.ExternalCopy<ArrayBuffer> | undefined;
+
+interface Live {
+  readonly limitMb: number;
+  readonly isolate: ivm.Isolate;
+  /** This worker disposed the isolate (cancel, end of call); anything else was its heap limit. */
+  disposedHere: boolean;
+  reported: boolean;
+  cancelled: boolean;
+  unwound: boolean;
+  report(kind: number, payload: Uint8Array): void;
+}
+const live = new Map<number, Live>();
+let retiring = false;
+const retire = (): void => {
+  if (retiring) return;
+  retiring = true;
+  send(KIND.retire, 0, new Uint8Array(0));
+};
+
+setInterval(() => {
+  // Its own heap limit disposed this isolate: a certain culprit, even while a
+  // builtin keeps its thread (step 0: the run may not settle for seconds).
+  for (const call of live.values()) {
+    if (call.isolate.isDisposed && !call.disposedHere) call.report(KIND.memory, new Uint8Array(0));
+  }
+  const rss = process.memoryUsage.rss();
+  // Idle above the watermark: retire, never die under a call the consumer may be placing.
+  if (live.size === 0) {
+    if (rss > RECYCLE_RSS_BYTES) retire();
+  } else if (rss > rssCeilingBytes([...live.values()].map((c) => c.limitMb))) {
+    // No certain culprit beyond those reported: the consumer reruns the rest.
+    dieAfterFlush();
+  }
+}, 25);
+
 async function run(request: RunRequest): Promise<void> {
-  // Before the guest's entry exists, a failure is this child's, not the guest's.
+  const id = request.call;
+  // Before the guest's entry exists, a failure is this worker's, not the guest's.
   let started = false;
   const output = new OutputBudget(request.maxOutputBytes);
   let flushScheduled = false;
-  let reported = false;
   let sentTruncated = false;
+  let closeBridge = (): void => {};
   const flush = (): void => {
     flushScheduled = false;
+    if (state.reported) return;
     const chunks = output.drain();
     // The consumer accepts only new bytes or the one truncation flip (protocol state).
     if (chunks.length === 0 && (!output.truncated || sentTruncated)) return;
     const t = output.truncated ? 1 : 0;
     // A truncation flip with nothing new to send is its own frame.
-    if (chunks.length === 0) send(KIND.output, Uint8Array.of(1, t));
+    if (chunks.length === 0) send(KIND.output, id, Uint8Array.of(1, t));
     for (const [fd, bytes] of chunks) {
       const payload = new Uint8Array(2 + bytes.byteLength);
       payload[0] = fd;
       payload[1] = t;
       payload.set(bytes, 2);
-      send(KIND.output, payload);
+      send(KIND.output, id, payload);
     }
     sentTruncated = output.truncated;
   };
-  const report = (kind: number, payload: Uint8Array): void => {
-    if (reported) return;
-    reported = true;
-    flush();
-    send(kind, payload);
-  };
-  const reportMemory = (): void => report(KIND.memory, new Uint8Array(0));
-  // A report the child cannot use is a failed run. stderr stays the guest's
-  // bytes (goal.md Decisions): the child adds no text of its own.
-  const reportFailed = (): void => report(KIND.exit, Uint8Array.of(1));
-  setInterval(() => {
-    if (process.memoryUsage.rss() > request.maxRssBytes) reportMemory();
-  }, 25);
 
   let rejection: ivm.Reference<(reason: unknown) => void> | undefined;
   const isolate = new ivm.Isolate({
     memoryLimit: request.memoryLimitMb,
-    onCatastrophicError: reportMemory,
+    // V8 cannot recover this process: report the culprit, then the consumer reruns the rest.
+    onCatastrophicError: () => {
+      state.report(KIND.memory, new Uint8Array(0));
+      dieAfterFlush();
+    },
     // `import()` is a gap this host cannot serve, and a rejection the guest may
-    // never observe (it can drain first, or swallow it). Fidelity: end the run
-    // loudly here, then reject the guest's promise too (no child frames in the
-    // stack — it crosses into the guest and must not reveal host paths).
+    // never observe (it can drain first, or swallow it): the run ends here,
+    // loudly; the guest's promise rejects too, with no worker frame in its stack.
     importModuleDynamically: () => {
-      // Loud and terminal, as any other ceiling: the guest's stderr gets the gap
-      // and the run ends 1. The guest may never observe the rejection below (it
-      // can drain first, or swallow it), so the gap cannot be left to it.
       output.write(2, new TextEncoder().encode(`Error: ${IMPORT_GAP}\n`));
-      report(KIND.exit, Uint8Array.of(1));
+      state.report(KIND.exit, Uint8Array.of(1));
       throw importGapError();
     },
     onUnhandledRejection: (reason: unknown) => {
       try {
         rejection?.applyIgnored(undefined, [reason], { arguments: { copy: true } });
       } catch {
-        rejection?.applyIgnored(undefined, [UNCOPYABLE_REJECTION]);
+        try {
+          rejection?.applyIgnored(undefined, [UNCOPYABLE_REJECTION]);
+        } catch {
+          // The isolate is gone: its call already has its terminal frame.
+        }
       }
     },
   });
+  /** The isolate is gone for good: disposed and its run unwound. */
+  const forget = (): void => {
+    state.unwound = true;
+    if (!live.has(id)) return;
+    if (state.reported) live.delete(id);
+    if (live.size === 0 && process.memoryUsage.rss() > RECYCLE_RSS_BYTES) retire();
+  };
+  const state: Live = {
+    limitMb: request.memoryLimitMb,
+    isolate,
+    disposedHere: false,
+    reported: false,
+    cancelled: false,
+    unwound: false,
+    /** The call's one terminal frame; the isolate ends with it. */
+    report(kind, payload) {
+      if (state.reported) return;
+      flush();
+      state.reported = true;
+      closeBridge();
+      // Checked before the frame leaves: a retire sent with it arrives in the
+      // same write, before the consumer can place another call here.
+      const idle = [...live.values()].every((c) => c === state || c.reported);
+      if (state.unwound && idle && process.memoryUsage.rss() > RECYCLE_RSS_BYTES) retiring = true;
+      send(kind, id, payload);
+      if (retiring) send(KIND.retire, 0, new Uint8Array(0));
+      if (!isolate.isDisposed) {
+        state.disposedHere = true;
+        // Not inside an isolate callback (`importModuleDynamically` reports from one).
+        setImmediate(() => isolate.isDisposed || isolate.dispose());
+      }
+      if (state.unwound) live.delete(id);
+      else {
+        // Still running after dispose (a builtin that ignores termination): this
+        // worker takes no new call (I4).
+        setTimeout(() => state.unwound || retire(), STUCK_GRACE_MS).unref();
+      }
+    },
+  };
+  live.set(id, state);
   try {
     const context = await isolate.createContext();
     const jail = context.global;
     // Bound once the bundle has loaded; the bundle arms no timer while loading.
     const guestFire: { ref?: ivm.Reference<(id: number) => void> } = {};
-    const { functions, timeOrigin } = createHostBridge({
+    const bridge = createHostBridge({
       write: (fd, bytes) => {
         if (!output.write(fd, bytes) || flushScheduled) return;
         flushScheduled = true;
@@ -98,63 +190,85 @@ async function run(request: RunRequest): Promise<void> {
         setTimeout(flush, 5);
       },
       // Settles once the guest ran the callback: an interval re-arms only then (ADR-0558).
-      fire: (id) => guestFire.ref?.apply(undefined, [id]),
+      fire: (timer) => guestFire.ref?.apply(undefined, [timer]),
     });
-    const names = Object.keys(functions);
-    for (const [name, fn] of Object.entries(functions)) {
+    closeBridge = bridge.close;
+    if (state.reported) closeBridge();
+    const names = Object.keys(bridge.functions);
+    for (const [name, fn] of Object.entries(bridge.functions)) {
       await jail.set(`__riftyHost_${name}`, new ivm.Callback(fn));
     }
     await context.eval(`{
-      const bridge = { timeOrigin: ${timeOrigin} };
+      const bridge = { timeOrigin: ${bridge.timeOrigin} };
       for (const name of ${JSON.stringify(names)}) {
         bridge[name] = globalThis['__riftyHost_' + name];
         delete globalThis['__riftyHost_' + name];
       }
       Object.defineProperty(globalThis, '__riftyIsolateHost', { value: Object.freeze(bridge), configurable: true });
     }`);
-    const guestSource = readFileSync(new URL('./guest.js', import.meta.url), 'utf8');
-    const script = await isolate.compileScript(guestSource, { filename: 'rifty-isolate-guest.js' });
+    const script = await isolate.compileScript(guestSource, {
+      filename: 'rifty-isolate-guest.js',
+      ...(cachedData === undefined ? { produceCachedData: true } : { cachedData }),
+    });
+    // isolated-vm sets these on the script; its typings omit them.
+    const cache = script as ivm.Script & ivm.CachedDataResult & { cachedDataRejected?: boolean };
+    if (cachedData === undefined) cachedData = cache.cachedData;
+    else if (cache.cachedDataRejected === true) cachedData = undefined;
     await script.run(context);
     const guest = await jail.get('__riftyGuest', { reference: true });
     guestFire.ref = await guest.get('fire', { reference: true });
     rejection = await guest.get('rejection', { reference: true });
     const start = await guest.get('run', { reference: true });
     await jail.delete('__riftyGuest');
-    // From here a failure is the guest's run, not this child's wiring.
+    // From here a failure is the guest's run, not this worker's wiring.
     started = true;
-    // The status crosses as ONE PRIMITIVE and is judged HERE, in the child's
-    // realm. A number resolves a promise with no lookup in the guest realm (the
-    // thenable check runs only for objects), so a poisoned prototype there
-    // cannot rewrite it; the guest can cost itself only its own status and
-    // text, never the consumer's view of this host (ADR-0557 §6).
+    // The status crosses as ONE PRIMITIVE and is judged HERE, in the worker's
+    // realm (ADR-0557 §6): a number resolves a promise with no lookup in the
+    // guest realm, so a poisoned prototype there cannot rewrite it.
     const code: unknown = await start.apply(undefined, [request.code], {
       arguments: { copy: true },
       result: { promise: true, copy: true },
     });
-    report(KIND.exit, Uint8Array.of(exitStatus(code)));
+    state.unwound = true;
+    state.report(KIND.exit, Uint8Array.of(exitStatus(code)));
   } catch (error) {
-    if (isolate.isDisposed) reportMemory();
-    // The guest's own tail broke (its realm is the guest's to break): a failed
-    // run with this child's diagnostic, never this child reporting a failure.
-    else if (started) reportFailed();
+    state.unwound = true;
+    if (state.cancelled) state.report(KIND.released, new Uint8Array(0));
+    else if (isolate.isDisposed && !state.disposedHere)
+      state.report(KIND.memory, new Uint8Array(0));
+    // The guest's own tail broke (its realm is the guest's to break): a failed run.
+    else if (started) state.report(KIND.exit, Uint8Array.of(1));
     else {
       const text = error instanceof Error ? error.message : String(error);
-      report(KIND.error, new TextEncoder().encode(text).subarray(0, MAX_ERROR_TEXT));
+      state.report(KIND.error, new TextEncoder().encode(text).subarray(0, MAX_ERROR_TEXT));
     }
+  } finally {
+    forget();
   }
 }
 
-// One request line on stdin. The parent owns this child's lifetime: stdin ends
-// when the parent dies, and an orphan never keeps running.
+function cancel(id: number): void {
+  const state = live.get(id);
+  if (state === undefined || state.reported) return;
+  state.cancelled = true;
+  state.disposedHere = true;
+  state.isolate.dispose();
+  // The run unwinds into `run`'s catch, which reports `released`; a builtin that
+  // ignores termination keeps the thread: retire after the grace.
+  setTimeout(() => state.unwound || retire(), STUCK_GRACE_MS).unref();
+}
+
+// The consumer owns this worker's lifetime: stdin ends when it dies, and an
+// orphan never keeps running.
 let pending = '';
-let started = false;
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', (data: string) => {
-  if (started) return;
   pending += data;
-  const newline = pending.indexOf('\n');
-  if (newline < 0) return;
-  started = true;
-  void run(JSON.parse(pending.slice(0, newline)) as RunRequest);
+  for (let nl = pending.indexOf('\n'); nl >= 0; nl = pending.indexOf('\n')) {
+    const request = JSON.parse(pending.slice(0, nl)) as WorkerRequest;
+    pending = pending.slice(nl + 1);
+    if (request.type === 'run') void run(request);
+    else cancel(request.call);
+  }
 });
-process.stdin.on('end', () => process.kill(process.pid, 'SIGKILL'));
+process.stdin.on('end', die);

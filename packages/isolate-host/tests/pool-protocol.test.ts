@@ -13,8 +13,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
 import { consumer } from './support.ts';
 
-/** Committed RED (FIT §5): the pool unit flips `carrier` to `it`. */
-const carrier = it.fails;
+/** The acceptance carrier; RED was `it.fails` before the pool landed. */
+const carrier = it;
 
 const PACKAGE_DIR = fileURLToPath(new URL('..', import.meta.url));
 const work = mkdtempSync(join(tmpdir(), 'isolate-host-hostile-pool-'));
