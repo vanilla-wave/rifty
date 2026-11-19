@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Add the per-call `allowSharedArrayBuffer` option to `runCode`. False withholds shared buffers, including wasm backing buffers. Default true (ADR-0566).
+- Add the per-call `allowSharedArrayBuffer` option to `runCode`. False removes the global for feature detection. Shared wasm backing buffers throw the named gap on access. Default true (ADR-0566).
 
 - Cross-review round 3: a lost call's rerun whose worker fails to start asynchronously (ENOENT, EAGAIN, EMFILE) rejects `ERR_ISOLATE_HOST_WORKER_LOST`; a worker's RSS allowance resets when it goes from idle to busy. README states how far a worker's RSS can go and how to retry `ERR_ISOLATE_HOST_WORKER_LOST` (at most once, counted against the source's limit).
 - Cross-review rounds 1–2 (ADR-0563 §Corrections): a worker lost with no culprit reruns each call alone, where an exhaustion of the process (wasm, resizable buffers, ICU, timers) is that call's `memory`; at most one process per call in flight. An interval never ticks early. A spawn failure rejects its call without holding the consumer, and while rerunning a lost worker's calls rejects them `ERR_ISOLATE_HOST_WORKER_LOST` instead of throwing in the consumer.

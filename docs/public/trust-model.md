@@ -60,8 +60,7 @@ calls share a worker process.
 - **Not protected: side channels between isolates of one worker** — an open class.
   By default the guest has `SharedArrayBuffer` and `Atomics` (no second thread or memory shared across
   isolates). A caller can set `allowSharedArrayBuffer: false` to withhold shared buffers.
-  Atomics retains its native semantics. `performance.now()` resolves to ~3 µs. Tenants that must
-  run in separate processes need separate consumer processes.
+  Atomics retains its native semantics. `performance.now()` resolves to ~3 µs. Use a separate consumer process for each tenant that requires process isolation.
 - **Consumer's duty.** Put the workers behind an external boundary: a separate uid, a sandbox or
   container, an RSS cgroup above the pool's bound: at most (calls in flight + 1) workers — a timed-out call still in flight until its isolate stops — each up
   to 256 MiB + 3 × the largest sum of its concurrent calls' `memoryLimitMb` since it last went

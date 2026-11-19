@@ -26,8 +26,7 @@ const mapGetPrimordial = Map.prototype.get;
 const mapSetPrimordial = Map.prototype.set;
 const mapDeletePrimordial = Map.prototype.delete;
 
-// Remove the producer before any runtime module can capture it. The named
-// ceiling is installed alongside the other globals after feature detection.
+// Apply the policy before runtime imports can capture native buffer producers.
 const { allowSharedArrayBuffer = true } = bridge;
 if (typeof allowSharedArrayBuffer !== 'boolean')
   throw new TypeError('isolate-host guest: allowSharedArrayBuffer must be a boolean');
@@ -35,10 +34,6 @@ if (!allowSharedArrayBuffer) {
   // biome-ignore lint/performance/noDelete: runtime feature detection must see the constructor absent.
   delete g.SharedArrayBuffer;
   if (typeof WebAssembly !== 'undefined') restrictWasmBuffers(WebAssembly.Memory.prototype);
-}
-
-function sharedBufferUnavailable(): never {
-  throw notImplemented('isolate-host.SharedArrayBuffer', 'disabled for this guest');
 }
 
 /** Only release native ArrayBuffers. The captured getter tests V8 internal slots
@@ -58,7 +53,7 @@ function restrictWasmBuffers(prototype: object): void {
         try {
           reflectApplyPrimordial(byteLength, buffer, []);
         } catch {
-          sharedBufferUnavailable();
+          throw notImplemented('isolate-host.SharedArrayBuffer', 'disabled for this guest');
         }
         return buffer;
       },
@@ -402,7 +397,6 @@ export const CEILING_GLOBALS = [
 const NAVIGATOR_MEMBERS = ['hardwareConcurrency', 'language', 'languages', 'platform', 'userAgent'];
 
 export function installCeilingGlobals(): void {
-  if (!allowSharedArrayBuffer) define('SharedArrayBuffer', sharedBufferUnavailable);
   for (const name of CEILING_GLOBALS) {
     const thrower = loud(name);
     Object.defineProperty(thrower, 'name', { value: name });

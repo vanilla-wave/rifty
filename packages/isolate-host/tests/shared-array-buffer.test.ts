@@ -12,8 +12,6 @@ const exportedMemory =
   'new WebAssembly.Instance(new WebAssembly.Module(Uint8Array.of(0,97,115,109,1,0,0,0,5,4,1,3,1,2,7,5,1,1,109,2,0))).exports.m';
 
 const sources = {
-  global: 'new SharedArrayBuffer(8)',
-  growable: 'new SharedArrayBuffer(8, {maxByteLength: 16})',
   'wasm memory': `${wasmMemory}.buffer`,
   'grown exported memory': `(() => { const m = ${exportedMemory}; m.grow(1); return m.buffer })()`,
 };
@@ -26,6 +24,21 @@ for (const [name, expression] of Object.entries(sources)) {
     expect(await runCode(code, off)).toEqual(ok(gap));
   });
 }
+
+it('matches disabled V8 for feature detection, fallback and direct construction', async () => {
+  const code = `console.log(typeof SharedArrayBuffer, 'SharedArrayBuffer' in globalThis,
+      Object.getOwnPropertyDescriptor(globalThis, 'SharedArrayBuffer') === undefined);
+    if (typeof SharedArrayBuffer !== 'undefined') console.log(new SharedArrayBuffer(4).byteLength);
+    else console.log('fallback', new Int32Array(new ArrayBuffer(4)).length);
+    for (const options of [undefined, {maxByteLength: 16}]) {
+      try { console.log(new SharedArrayBuffer(8, options).byteLength) }
+      catch (error) { console.log(error.name) }
+    }`;
+  const oracle = nodeEval(code, ['--enable-sharedarraybuffer-per-context']);
+  expect(oracle.code).toBe(0);
+  expect(oracle.stdout).toBe('undefined false true\nfallback 1\nReferenceError\nReferenceError\n');
+  expect(await runCode(code, off)).toEqual(ok(oracle.stdout));
+});
 
 const behavior = `
   const b = new SharedArrayBuffer(4, {maxByteLength: 8}); b.grow(8);
@@ -61,8 +74,7 @@ it('ordinary backing stores and their prototype constructors stay unshared', asy
   expect(await runCode(code, off)).toEqual(ok(raw.stdout));
 });
 
-const checkPolicy =
-  "try { new SharedArrayBuffer(4); console.log('on') } catch (e) { console.log(e.name, e.feature) }";
+const checkPolicy = "console.log(typeof SharedArrayBuffer === 'undefined' ? 'off' : 'on')";
 it('keeps alternating policies on the same worker, sequentially and concurrently', async () => {
   const { value } = await consumer(`
     const code = ${JSON.stringify(checkPolicy)};
@@ -72,7 +84,13 @@ it('keeps alternating policies on the same worker, sequentially and concurrently
     const warm = children();
     const batch = await Promise.all([true, false, undefined, false].map(flag => call(flag, 200)));
     out([first, batch, await call(true, 0), warm.length, String(warm) === String(children())]);`);
-  expect(value).toEqual([ok(gap), [ok('on\n'), ok(gap), ok('on\n'), ok(gap)], ok('on\n'), 1, true]);
+  expect(value).toEqual([
+    ok('off\n'),
+    [ok('on\n'), ok('off\n'), ok('on\n'), ok('off\n')],
+    ok('on\n'),
+    1,
+    true,
+  ]);
 });
 
 it('retains a restriction on a solo retry', async () => {
@@ -83,7 +101,7 @@ it('retains a restriction on a solo retry', async () => {
       {allowSharedArrayBuffer: false});
     kill(worker);
     out(await pending);`);
-  expect(value).toEqual(ok(gap));
+  expect(value).toEqual(ok('off\n'));
 });
 
 it('rejects invalid policy values before starting guest code', async () => {

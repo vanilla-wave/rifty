@@ -37,7 +37,7 @@ workers.
 
 | option | default | meaning |
 |---|---|---|
-| `allowSharedArrayBuffer` | true | false makes shared buffer construction and access to a shared wasm backing buffer throw `NotImplementedError('isolate-host.SharedArrayBuffer')` for this call. Ordinary buffers, wasm and Atomics keep their semantics. |
+| `allowSharedArrayBuffer` | true | false removes the global (`typeof SharedArrayBuffer === 'undefined'`), matching Node with `--enable-sharedarraybuffer-per-context`. Access to a shared wasm backing buffer throws `NotImplementedError('isolate-host.SharedArrayBuffer')` for this call. Ordinary buffers, wasm and Atomics keep their semantics. |
 | `timeoutMs` | 30 000 | wall-clock deadline from the call |
 | `memoryLimitMb` | 256 | isolate heap limit (min 8); adds 3 × this to its worker's RSS ceiling (256 MiB + 3 × the sum over the worker's calls). Below ~16 the rifty runtime itself does not fit and every run ends as `termination: 'memory'` (measured: 12 fails, 15 runs `console.log`) |
 | `maxOutputBytes` | 1 MiB | stdout + stderr bytes kept |

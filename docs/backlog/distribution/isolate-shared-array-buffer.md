@@ -13,7 +13,7 @@ ADR-0557, ADR-0558 and ADR-0563 establish the two public entry points and shared
 
 ## Acceptance
 
-- Fixed and growable global construction, wasm JS memory and wasm exports refuse buffer access with NotImplementedError naming isolate-host.SharedArrayBuffer. Runtime-returned views expose ordinary backing stores and ordinary ArrayBuffer constructors through their prototype chains. → I1
+- The absent global, fallback selection and direct fixed/growable construction match live Node with --enable-sharedarraybuffer-per-context. Wasm JS memory and wasm exports refuse shared buffer access with NotImplementedError naming isolate-host.SharedArrayBuffer. Runtime-returned views expose ordinary backing stores and ordinary ArrayBuffer constructors through their prototype chains. → I1
 - The packed README embedder restricts a fresh context and retains its default. → I3
 
 ## Reference contract

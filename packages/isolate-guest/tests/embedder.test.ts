@@ -352,8 +352,8 @@ describe('the README states the contract (ADR-0558 §2)', () => {
 
 it('the packed README embedder selects shared buffers per fresh guest', () => {
   const app = embedder('shared-buffers');
-  const code = `try { console.log(new SharedArrayBuffer(4).byteLength) }
-    catch (e) { console.log(e.name, e.feature) }`;
+  const code = `if (typeof SharedArrayBuffer === 'undefined') console.log('fallback');
+    else console.log(new SharedArrayBuffer(4).byteLength);`;
   const driver = `import { run } from './embed.mjs';
     for (const options of [{allowSharedArrayBuffer: false}, undefined, {allowSharedArrayBuffer: true}]) {
       console.log(JSON.stringify(await run(${JSON.stringify(code)}, options)));
@@ -375,15 +375,17 @@ it('the packed README embedder selects shared buffers per fresh guest', () => {
     .map((line): unknown => JSON.parse(line));
   expect(results.pop()).toBe('isolate-host guest: allowSharedArrayBuffer must be a boolean');
   expect(results).toEqual(
-    ['NotImplementedError isolate-host.SharedArrayBuffer\n', '4\n', '4\n'].map((stdout) => ({
-      stdout,
-      stderr: '',
-      exitCode: 0,
-    })),
+    [nodeEval(code, ['--enable-sharedarraybuffer-per-context']).stdout, '4\n', '4\n'].map(
+      (stdout) => ({
+        stdout,
+        stderr: '',
+        exitCode: 0,
+      }),
+    ),
   );
 });
 
-it('guards both wasm buffer conversion methods when V8 enables them', () => {
+it('pins the wasm memory API and checks each buffer producer with guest intrinsics replaced', () => {
   // Node 24 exposes these methods under a V8 flag. Newer engines enable them by default.
   const flags =
     'toResizableBuffer' in WebAssembly.Memory.prototype
@@ -398,11 +400,27 @@ it('guards both wasm buffer conversion methods when V8 enables them', () => {
     }`;
   const oracle = execFileSync(process.execPath, [...flags, '-e', ordinary], { encoding: 'utf8' });
   const code = `${ordinary}
+  console.log(Reflect.ownKeys(WebAssembly.Memory.prototype).map(String).sort().join(','));
   for (const shared of [false, true]) {
     const memory = new WebAssembly.Memory({initial: 1, maximum: 2, shared});
-    for (const name of ['toFixedLengthBuffer', 'toResizableBuffer']) {
-      try { console.log(Object.prototype.toString.call(memory[name]())) }
-      catch (e) { console.log(e.name, e.feature) }
+    for (const key of ['buffer', 'toFixedLengthBuffer', 'toResizableBuffer']) {
+      const tag = Object.prototype.toString;
+      const apply = Reflect.apply;
+      const length = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, 'byteLength');
+      let lookups = 0;
+      let result, error;
+      try {
+        const unexpected = () => { lookups++; throw Error('late lookup') };
+        Object.prototype.toString = Reflect.apply = unexpected;
+        Object.defineProperty(ArrayBuffer.prototype, 'byteLength', {...length, get: unexpected});
+        result = key === 'buffer' ? memory.buffer : memory[key]();
+      } catch (e) { error = e }
+      finally {
+        Object.defineProperty(ArrayBuffer.prototype, 'byteLength', length);
+        Object.prototype.toString = tag;
+        Reflect.apply = apply;
+      }
+      console.log(lookups, error ? error.name + ' ' + error.feature : tag.call(result));
     }
   }`;
   const driver = `import { run } from './embed.mjs';
@@ -419,18 +437,20 @@ it('guards both wasm buffer conversion methods when V8 enables them', () => {
   );
   const raw = JSON.parse(output) as Outcome;
   expect(raw).toEqual({
-    stdout:
-      oracle +
-      '[object ArrayBuffer]\n'.repeat(2) +
-      'NotImplementedError isolate-host.SharedArrayBuffer\n'.repeat(2),
+    stdout: [
+      oracle,
+      'Symbol(Symbol.toStringTag),buffer,constructor,grow,toFixedLengthBuffer,toResizableBuffer\n',
+      '0 [object ArrayBuffer]\n'.repeat(3),
+      '0 NotImplementedError isolate-host.SharedArrayBuffer\n'.repeat(3),
+    ].join(''),
     stderr: '',
     exitCode: 0,
   });
 });
 
-it('the restricted bundle boots without reading the native shared buffer constructor', () => {
+it('the restricted bundle removes the global and guards wasm before runtime imports capture them', () => {
   // Observe the original binding from the embedder before running any bundle code.
-  // Returning the real constructor preserves the ordinary runtime's captures in the control.
+  // Both observers return V8's original binding.
   const driver = `import ivm from 'isolated-vm';
     import { readFileSync } from 'node:fs';
     import { createHostBridge } from '@riftydev/isolate-guest';
@@ -440,8 +460,17 @@ it('the restricted bundle boots without reading the native shared buffer constru
       const context = isolate.createContextSync();
       const bridge = createHostBridge({ write() {}, fire() {} });
       try {
-        context.evalSync(\`let reads = 0;
+        context.evalSync(\`let reads = 0, rawMemoryLookups = 0;
           (() => {
+            const Memory = WebAssembly.Memory;
+            const nativeGet = Object.getOwnPropertyDescriptor(Memory.prototype, 'buffer').get;
+            Object.defineProperty(WebAssembly, 'Memory', {
+              configurable: true, get() {
+                if (Object.getOwnPropertyDescriptor(Memory.prototype, 'buffer').get === nativeGet)
+                  rawMemoryLookups++;
+                return Memory;
+              }
+            });
             const original = SharedArrayBuffer;
             Object.defineProperty(globalThis, 'SharedArrayBuffer', {
               configurable: true, get() { reads++; return original; }
@@ -453,6 +482,7 @@ it('the restricted bundle boots without reading the native shared buffer constru
         for (const [key, fn] of Object.entries(bridge.functions)) record.setSync(key, new ivm.Callback(fn));
         isolate.compileScriptSync(bundle).runSync(context);
         console.log(context.evalSync('reads > 0'));
+        if (!flag) console.log(context.evalSync('rawMemoryLookups'));
       } finally { bridge.close(); isolate.dispose(); }
     }`;
   const output = execFileSync(
@@ -465,5 +495,6 @@ it('the restricted bundle boots without reading the native shared buffer constru
       timeout: 30_000,
     },
   );
-  expect(output).toBe('false\ntrue\n');
+  // The shim itself looks up Memory once to replace its native buffer getter.
+  expect(output).toBe('false\n1\ntrue\n');
 });
