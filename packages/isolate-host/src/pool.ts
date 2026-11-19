@@ -177,7 +177,8 @@ class Worker {
       for (const call of this.calls.values()) call.rejectWith(error);
       this.calls.clear();
     });
-    child.on('exit', (code, signal) => this.#exited(code, signal));
+    // 'close', not 'exit': every frame the worker wrote is read before its loss is judged.
+    child.on('close', (code, signal) => this.#exited(code, signal));
   }
 
   send(request: WorkerRequest): void {

@@ -42,9 +42,9 @@ export interface HostHooks {
   write(fd: 1 | 2, bytes: Uint8Array): void;
   /**
    * Deliver expiry to the guest (`GuestEntry.fire`). Return a promise that settles
-   * once the guest ran it: a repeating timer re-arms only then, as Node's
-   * interval does (no tick queues behind a running callback). A throw or a
-   * rejection ends that timer.
+   * once the guest ran it: a repeating timer re-arms only then (no tick queues
+   * behind a running callback), keeping Node's period from the tick's start.
+   * A throw or a rejection ends that timer.
    */
   fire(id: number): unknown;
 }
@@ -84,16 +84,20 @@ export function createHostBridge(hooks: HostHooks): HostBridge {
       if (typeof repeat !== 'boolean') refuse('timerStart: repeat must be a boolean');
       if (closed) return;
       clear(id);
-      const arm = (): void => {
-        timers.set(id, setTimeout(tick, ms));
+      const arm = (delay: number): void => {
+        timers.set(id, setTimeout(tick, delay));
       };
       const tick = (): void => {
+        const started = performance.now();
         if (!repeat) {
           timers.delete(id);
         } else timers.set(id, null);
-        // Re-arm from the callback's end, and only if nothing cleared or re-armed `id` meanwhile.
+        // Node re-arms from the tick's start (its period holds; an overrun ticks again at
+        // once), but only once the guest ran it: no tick queues behind a running one.
+        // Not if anything cleared or re-armed `id` meanwhile.
         const rearm = (): void => {
-          if (repeat && !closed && timers.get(id) === null) arm();
+          if (repeat && !closed && timers.get(id) === null)
+            arm(Math.max(1, started + ms - performance.now()));
         };
         // A rejection (the isolate is gone) ends the timer and never reaches the embedder's loop.
         const end = (): void => {
@@ -109,7 +113,7 @@ export function createHostBridge(hooks: HostHooks): HostBridge {
           clear(id);
         }
       };
-      arm();
+      arm(ms);
     }),
     timerClear: guard('timerClear', (id: unknown) => {
       if (!isInt(id, 1, MAX_TIMER)) refuse('timerClear: id must be an integer in 1..2^31-1');

@@ -131,8 +131,8 @@ describe('runCode limits (I4)', () => {
     const before = process.memoryUsage().rss;
     const value = await runCode(
       "const s = 'z'.repeat(1 << 20); for (let i = 0; i < 256; i++) process.stdout.write(s); console.error('end')",
-      // memoryLimitMb 32 → child RSS ceiling 352 MiB: a child buffering the flood
-      // (≥ 256 MiB over its baseline) would end as `memory`, not exit 0.
+      // memoryLimitMb 32 → worker RSS ceiling 352 MiB: a worker buffering the flood
+      // (≥ 256 MiB over its baseline) would be lost (ADR-0563 §5), not exit 0.
       { maxOutputBytes: 1 << 20, timeoutMs: 60_000, memoryLimitMb: 32 },
     );
     const grownMb = (process.memoryUsage().rss - before) / (1 << 20);

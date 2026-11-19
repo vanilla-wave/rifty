@@ -152,8 +152,9 @@ your own, you must perform them yourself.
 The `write` hook must be synchronous: a promise it returns is not awaited, and
 its rejection is yours. The `fire` hook returns a promise that settles once the
 guest ran the callback (isolated-vm: `Reference.apply`, not `applyIgnored`).
-A repeating timer re-arms only after it settles, as Node's `setInterval` does,
-so expiries never pile up behind a busy guest. A hook that returns no promise
+A repeating timer re-arms only after it settles, so expiries never pile up
+behind a busy guest, and its next expiry keeps Node's period from the tick's
+start (an overrun ticks again at once). A hook that returns no promise
 re-arms at once and gets no such bound.
 
 A refused call throws a `TypeError` starting `isolate-host bridge: `, with no
