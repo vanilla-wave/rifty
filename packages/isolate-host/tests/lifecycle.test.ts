@@ -21,7 +21,7 @@ describe('runCode lifecycle faults', () => {
     );
   });
 
-  // A worker killed from outside: its calls rerun once (pool-faults.test.ts, I5).
+  // A worker killed from outside: its calls rerun once (pool-faults.test.ts, ADR-0563 §6).
 
   it('a child that cannot spawn rejects the call at once (no hang)', () => {
     // A real spawn failure in a separate consumer process: its execPath points nowhere.

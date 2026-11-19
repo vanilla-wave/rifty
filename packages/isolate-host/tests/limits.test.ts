@@ -28,7 +28,7 @@ async function withLag<T>(work: () => Promise<T>): Promise<{ value: T; maxLagMs:
 }
 
 afterEach(async () => {
-  // The consumer keeps working after every overrun (worker lifetime: pool.test.ts, I6).
+  // The consumer keeps working after every overrun (worker lifetime: pool.test.ts, ADR-0563 §1).
   await expect(runCode('console.log(6 * 7)')).resolves.toEqual({
     stdout: '42\n',
     stderr: '',

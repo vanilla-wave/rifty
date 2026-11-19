@@ -24,7 +24,8 @@ cd packages/isolate-host && pnpm pack          # → riftydev-isolate-host-0.1.0
 npm install /path/to/riftydev-isolate-host-0.1.0.tgz
 ```
 
-Requirements: Node ≥ 24, an ESM importer. The only runtime dependency is
+Requirements: Node ≥ 24, an ESM importer. Tested on darwin-arm64 and
+linux-x64 (CI); Windows is not tested. The only runtime dependency is
 `isolated-vm@7.0.2`. It ships prebuilt binaries for linux-x64/arm64,
 darwin-arm64 and win32-x64; other platforms need a C++ toolchain. Your service
 starts with plain `node`. The package passes `--no-node-snapshot` to its own
@@ -76,11 +77,17 @@ its rerun and may run out of its deadline. Each retry also reruns the calls
 that share its worker, at up to four processes. Retry such a call at most once,
 and count the retry against the rate limit of its source.
 
-How far RSS can go, for your RSS cgroup: one worker reaches at most
-256 MiB + 3 × the sum of `memoryLimitMb` of its (up to 4) concurrent calls,
-plus one allocation step past the sampled ceiling; a call rerun alone, at most
-256 MiB + 3 × its own `memoryLimitMb`. With the defaults (256), one full worker
-can reach 3328 MiB.
+How far RSS can go, for your RSS cgroup. A worker's ceiling is
+256 MiB + 3 × A, where A is the largest sum of `memoryLimitMb` over the calls
+it ran at the same time since it last went from idle to busy; A does not fall
+while the worker stays busy. A worker may pass its ceiling by one allocation
+step before it is caught. Example: a call at 1024 and a call at 64 run together
+(A = 1088); the 1024 one ends and the 64 one goes on alone — that worker may
+still reach 256 + 3 × 1088 = 3520 MiB, not 448. With the defaults (256) a full
+worker can reach 3328 MiB; a call rerun alone, 256 MiB + 3 × its own limit.
+The pool runs at most (calls in flight + 1) workers at once: every worker but
+one warm idle one holds a call. Size the cgroup for your peak of concurrent
+calls times their workers' ceilings.
 
 ## What the guest gets
 
