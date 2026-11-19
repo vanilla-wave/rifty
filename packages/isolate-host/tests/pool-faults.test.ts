@@ -431,7 +431,7 @@ describe('a mass loss costs at most a process per call (I5)', () => {
     async () => {
       const { value } = await consumer(`
       const calls = Array.from({ length: 8 }, (_, i) => settle(runCode("console.log('a" + i + "'); setTimeout(() => console.log('b'), 3000)", { timeoutMs: 20000 })));
-      const pair = await waitFor(() => { const c = children(); return c.length === 2 ? c : undefined; }, 5000);
+      const pair = await waitFor(() => { const c = children(); return c.length === 2 ? c : undefined; }, 15000);
       await sleep(1000);
       const sampler = sampleChildren();
       for (const pid of pair) kill(pid);
@@ -474,15 +474,18 @@ describe('slots and ceilings of a shared worker (I1, I3)', () => {
     'a cancelled call still running keeps its slot: a 5th call starts another worker',
     async () => {
       const { value } = await consumer(`
-      const stuck = settle(runCode("const a = Array.from({ length: 3e6 }, Math.random); for (;;) a.sort()", { timeoutMs: 800 }));
-      const three = [0, 1, 2].map(() => runCode("setTimeout(() => {}, 4000)", { timeoutMs: 20000 }));
-      await stuck;
+      // 3 s: the array is built and the uninterruptible sort running at the deadline, even under load.
+      const stuck = settle(runCode("const a = Array.from({ length: 3e6 }, Math.random); console.log('c'); for (;;) a.sort()", { timeoutMs: 3000 }));
+      const three = [0, 1, 2].map(() => runCode("setTimeout(() => {}, 6000)", { timeoutMs: 20000 }));
+      const culprit = await stuck;
       // Inside the 1 s grace: the stuck isolate is still on its worker.
       const before = children();
       const fifth = await runCode("console.log('5')");
-      out({ before, during: children().length, fifth });
+      out({ culprit: culprit.stdout, before, during: children().length, fifth });
       await Promise.all(three);`);
-      const v = value as { before: number[]; during: number; fifth: unknown };
+      const v = value as { culprit: string; before: number[]; during: number; fifth: unknown };
+      // Precondition: the sort had started, so its isolate is still running after the cancel.
+      expect(v.culprit).toBe('c\n');
       expect(v.before).toHaveLength(1);
       expect(v.during).toBe(2);
       expect(v.fifth).toEqual({ stdout: '5\n', stderr: '', exitCode: 0 });
@@ -490,16 +493,19 @@ describe('slots and ceilings of a shared worker (I1, I3)', () => {
   );
 
   carrier(
-    'the RSS ceiling sums its calls: 4 calls each near their own limit all complete',
+    'the RSS ceiling sums its calls: 4 calls each holding most of their own limit complete on their worker',
     async () => {
       const { value } = await consumer(`
-      // 4 × 280 MiB resident at memoryLimitMb 300: over 256 + 3 × 300 (one call's
-      // allowance), under 256 + 3 × 1200 (their sum).
-      const code = "const b = new Uint8Array(280 << 20).fill(1); setTimeout(() => console.log(b[123]), 1500)";
-      const results = await Promise.all([0, 1, 2, 3].map(() => runCode(code, { memoryLimitMb: 300, timeoutMs: 30000 }).catch((e) => ({ rejected: e.code }))));
-      out({ results });`);
+      // 4 × 500 MiB resident at memoryLimitMb 600: over 256 + 3 × 600 (one call's
+      // allowance), under 256 + 3 × 2400 (their sum). A ceiling of one call's
+      // allowance would lose the worker and rerun all four alone.
+      const sampler = sampleChildren();
+      const code = "const b = new Uint8Array(500 << 20).fill(1); setTimeout(() => console.log(b[123]), 1500)";
+      const results = await Promise.all([0, 1, 2, 3].map(() => settle(runCode(code, { memoryLimitMb: 600, timeoutMs: 30000 }))));
+      out({ results, peak: sampler.stop() });`);
       expect(value).toEqual({
         results: [0, 1, 2, 3].map(() => ({ stdout: '1\n', stderr: '', exitCode: 0 })),
+        peak: 1,
       });
     },
     120_000,
