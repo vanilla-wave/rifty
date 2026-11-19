@@ -88,7 +88,8 @@ export async function consumer(
     const { runCode } = await import(${JSON.stringify(entry)});
     const children = () => execFileSync('ps', ['-A', '-o', 'pid=,ppid=,command='], { encoding: 'utf8' })
       .split('\\n').map((l) => /^\\s*(\\d+)\\s+(\\d+)\\s+(.*)$/.exec(l))
-      .filter((m) => m && Number(m[2]) === process.pid && !m[3].startsWith('ps ')).map((m) => Number(m[1]));
+      // Workers only: a just-forked \`ps\` still shows its parent's command line until it execs.
+      .filter((m) => m && Number(m[2]) === process.pid && m[3].includes('child.js')).map((m) => Number(m[1]));
     const kill = (pid) => process.kill(pid, 'SIGKILL');
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const now = () => performance.now();

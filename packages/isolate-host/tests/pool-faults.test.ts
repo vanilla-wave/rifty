@@ -132,7 +132,8 @@ describe('time on a shared worker (I4)', () => {
         exitCode: null,
         termination: 'timeout',
       });
-      expect(ms).toBeGreaterThanOrEqual(1500);
+      // libuv fires timers on its cached loop time, up to ~1 ms behind performance.now().
+      expect(ms).toBeGreaterThanOrEqual(1500 - 5);
       expect(ms).toBeLessThanOrEqual(1500 + 1000);
       expect(v.shared).toBe(1);
       expect(v.neighbours).toEqual(NEIGHBOURS.slice(0, 2));
@@ -230,7 +231,7 @@ describe('a worker lost with no culprit (I5)', () => {
       const v = value as { result: { rejected?: string; code?: string }; ms: number };
       expect(v.result.rejected).toMatch(/isolate-host .*exited unexpectedly .*SIGKILL/);
       expect(v.result.code).toBe(LOST);
-      expect(v.ms).toBeGreaterThanOrEqual(4000);
+      expect(v.ms).toBeGreaterThanOrEqual(4000 - 5);
       expect(v.ms).toBeLessThanOrEqual(4000 + 1000);
     },
   );
