@@ -389,7 +389,16 @@ it('guards both wasm buffer conversion methods when V8 enables them', () => {
     'toResizableBuffer' in WebAssembly.Memory.prototype
       ? []
       : ['--experimental-wasm-rab-integration'];
-  const code = `for (const shared of [false, true]) {
+  const ordinary = `const memory = new WebAssembly.Memory({initial: 1, maximum: 2});
+    for (const name of ['toFixedLengthBuffer', 'toResizableBuffer']) {
+      const fn = memory[name];
+      console.log(fn.name, Object.hasOwn(fn, 'prototype'), memory[fn.name]().byteLength);
+      try { Reflect.construct(Object, [], fn); console.log('constructable') }
+      catch (e) { console.log(e.name) }
+    }`;
+  const oracle = execFileSync(process.execPath, [...flags, '-e', ordinary], { encoding: 'utf8' });
+  const code = `${ordinary}
+  for (const shared of [false, true]) {
     const memory = new WebAssembly.Memory({initial: 1, maximum: 2, shared});
     for (const name of ['toFixedLengthBuffer', 'toResizableBuffer']) {
       try { console.log(Object.prototype.toString.call(memory[name]())) }
@@ -411,6 +420,7 @@ it('guards both wasm buffer conversion methods when V8 enables them', () => {
   const raw = JSON.parse(output) as Outcome;
   expect(raw).toEqual({
     stdout:
+      oracle +
       '[object ArrayBuffer]\n'.repeat(2) +
       'NotImplementedError isolate-host.SharedArrayBuffer\n'.repeat(2),
     stderr: '',

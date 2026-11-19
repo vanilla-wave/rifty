@@ -43,6 +43,10 @@ it('keeps explicit allow and the default at live Node behavior', async () => {
 
 it('ordinary backing stores and their prototype constructors stay unshared', async () => {
   const code = `const m = new WebAssembly.Memory({initial: 1, maximum: 2}); m.grow(1);
+    const getBuffer = Object.getOwnPropertyDescriptor(WebAssembly.Memory.prototype, 'buffer').get;
+    console.log(getBuffer.name, Object.hasOwn(getBuffer, 'prototype'));
+    try { Reflect.construct(Object, [], getBuffer); console.log('constructable') }
+    catch (e) { console.log(e.name) }
     for (const b of [m.buffer, new Uint8Array(8).buffer, new DataView(new ArrayBuffer(8)).buffer, Buffer.alloc(8).buffer,
         new TextEncoder().encode('x').buffer, crypto.getRandomValues(new Uint8Array(4)).buffer]) {
       const ctor = Object.getPrototypeOf(b).constructor;

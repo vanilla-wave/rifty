@@ -50,10 +50,10 @@ function restrictWasmBuffers(prototype: object): void {
     const descriptor = Object.getOwnPropertyDescriptor(prototype, key);
     if (!descriptor) continue;
     const field = key === 'buffer' ? 'get' : 'value';
-    const native = descriptor[field];
-    Object.defineProperty(prototype, key, {
-      ...descriptor,
-      [field]: function (this: WebAssembly.Memory) {
+    const native: (this: WebAssembly.Memory) => ArrayBufferLike = descriptor[field];
+    // Like the native accessor and methods, this method has a name and no [[Construct]].
+    const checked = {
+      [native.name](this: WebAssembly.Memory) {
         const buffer: unknown = reflectApplyPrimordial(native, this, []);
         try {
           reflectApplyPrimordial(byteLength, buffer, []);
@@ -62,7 +62,8 @@ function restrictWasmBuffers(prototype: object): void {
         }
         return buffer;
       },
-    });
+    };
+    Object.defineProperty(prototype, key, { ...descriptor, [field]: checked[native.name] });
   }
 }
 
