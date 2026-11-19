@@ -195,7 +195,14 @@ class Worker {
     call.worker = this;
     this.calls.set(call.id, call);
     const { code, memoryLimitMb, maxOutputBytes } = call.spec;
-    const request: RunRequest = { type: 'run', call: call.id, code, memoryLimitMb, maxOutputBytes };
+    const request: RunRequest = {
+      type: 'run',
+      call: call.id,
+      code,
+      memoryLimitMb,
+      maxOutputBytes,
+      ...(this.solo ? { solo: true as const } : {}),
+    };
     this.send(request);
   }
 

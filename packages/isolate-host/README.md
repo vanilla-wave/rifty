@@ -178,7 +178,7 @@ What a worker shares between its calls, and what bounds each part
 
 | Shared | Bound |
 |---|---|
-| Process memory, in or out of the isolate heaps (wasm, resizable buffers, ICU, timers) | each call's isolate heap limit; the worker's RSS ceiling (256 MiB + 3 × the calls' limits) kills it, and each call reruns alone, where an exhaustion is its own `memory`; an idle worker above 256 MiB is replaced |
+| Process memory, in or out of the isolate heaps (wasm, resizable buffers, ICU, timers) | each call's isolate heap limit; the worker's RSS ceiling (256 MiB + 3 × the calls' limits, never lowered while it is busy) kills it, and each call reruns alone, where an exhaustion is its own `memory`; an idle worker above 256 MiB is replaced |
 | isolated-vm's thread pool (cores + 1 threads) | 4 calls per worker; an isolate still running 1 s after termination retires its worker, whose other calls finish there |
 | The worker's event loop (guest writes, timers) | output capped per call; an interval re-arms only after its callback ran; requests are read linearly |
 | CPU | the OS scheduler: delay only. On a 1–2 core machine the pool has fewer threads than a worker's 4 calls, so busy neighbours wait their turn |

@@ -385,10 +385,6 @@ describe('guest memory outside the isolate heap: a solo rerun names the culprit 
 
   carrier.each([
     [
-      'intervals created and cleared in a loop',
-      'for (;;) { const t = []; for (let i = 0; i < 4096; i++) t.push(setInterval(() => {}, 1)); t.forEach(clearInterval) }',
-    ],
-    [
       '262000 one-millisecond intervals',
       'for (let i = 0; i < 262000; i++) setInterval(() => {}, 1)',
     ],
@@ -422,6 +418,27 @@ describe('guest memory outside the isolate heap: a solo rerun names the culprit 
       });
     },
     120_000,
+  );
+});
+
+describe('a guest that never ends and churns host timers (I2, I4)', () => {
+  carrier(
+    'intervals created and cleared in a loop: its own end (timeout as Node, or memory alone), neighbours exact',
+    async () => {
+      const v = await withNeighbours(
+        'for (;;) { const t = []; for (let i = 0; i < 4096; i++) t.push(setInterval(() => {}, 1)); t.forEach(clearInterval) }',
+        '{ memoryLimitMb: 64, timeoutMs: 20000 }',
+        '{ memoryLimitMb: 64 }',
+      );
+      // Node runs it forever: `timeout` is faithful; `memory` is its own exhaustion, met alone.
+      expect(v.culprit.exitCode).toBeNull();
+      expect(['timeout', 'memory']).toContain(v.culprit.termination);
+      expect(v.culprit).not.toHaveProperty('rejected');
+      expect(v.shared).toBe(1);
+      expect(v.neighbours).toEqual(NEIGHBOURS);
+      expect(v.next).toEqual(NEXT);
+    },
+    180_000,
   );
 });
 
@@ -502,14 +519,19 @@ describe('slots and ceilings of a shared worker (I1, I3)', () => {
       const heavy = "const a = []; for (let i = 0; i < 8e6; i++) a.push({ i, s: 'k' + i }); console.log(a.length)";
       const calls = [0, 1, 2].map(() => settle(runCode(heavy, { memoryLimitMb: 1536, timeoutMs: 60000 })));
       calls.push(settle(runCode("setTimeout(() => console.log('light'), 6000)", { memoryLimitMb: 64, timeoutMs: 60000 })));
+      const worker = await waitFor(() => children()[0], 5000);
+      // Well after the heavy calls ended, before the light one does: still its first worker.
+      await sleep(4500);
+      const survived = children().includes(worker);
       const results = await Promise.all(calls);
-      out({ results, peak: sampler.stop() });`);
+      out({ results, peak: sampler.stop(), survived });`);
       expect(value).toEqual({
         results: [
           ...[0, 1, 2].map(() => ({ stdout: '8000000\n', stderr: '', exitCode: 0 })),
           { stdout: 'light\n', stderr: '', exitCode: 0 },
         ],
         peak: 1,
+        survived: true,
       });
     },
     120_000,

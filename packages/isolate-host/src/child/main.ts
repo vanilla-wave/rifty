@@ -52,6 +52,8 @@ let producing: Promise<unknown> | undefined;
 
 interface Live {
   readonly limitMb: number;
+  /** The only call of a solo worker (a rerun): its worker's exhaustion is its own. */
+  readonly solo: boolean;
   readonly isolate: ivm.Isolate;
   /** This worker disposed the isolate (cancel, end of call); anything else was its heap limit. */
   disposedHere: boolean;
@@ -61,6 +63,8 @@ interface Live {
   report(kind: number, payload: Uint8Array): void;
 }
 const live = new Map<number, Live>();
+/** Largest sum of live calls' `memoryLimitMb` since the worker was last idle. */
+let busyAllowanceMb = 0;
 let retiring = false;
 const retire = (): void => {
   if (retiring) return;
@@ -77,12 +81,19 @@ setInterval(() => {
   const rss = process.memoryUsage.rss();
   // Idle above the watermark: retire, never die under a call the consumer may be placing.
   if (live.size === 0) {
+    busyAllowanceMb = 0;
     if (rss > RECYCLE_RSS_BYTES) retire();
-  } else if (rss > rssCeilingBytes([...live.values()].map((c) => c.limitMb))) {
-    // One isolate in the process: the crossing is its call's (a solo rerun, ADR-0563 §6).
-    // Several: nobody is blamed; the consumer reruns each call alone.
-    if (live.size === 1)
-      for (const call of live.values()) call.report(KIND.memory, new Uint8Array(0));
+    return;
+  }
+  // The allowance never shrinks while the worker is busy: memory a finished call
+  // left resident is not a later call's (ADR-0563 §5).
+  let liveMb = 0;
+  for (const call of live.values()) liveMb += call.limitMb;
+  busyAllowanceMb = Math.max(busyAllowanceMb, liveMb);
+  if (rss > rssCeilingBytes([busyAllowanceMb])) {
+    // A solo worker's only call: the crossing is its own (ADR-0563 §6). Anywhere
+    // else nobody is blamed: the consumer reruns each call alone.
+    for (const call of live.values()) if (call.solo) call.report(KIND.memory, new Uint8Array(0));
     dieAfterFlush();
   }
 }, 25);
@@ -151,6 +162,7 @@ async function run(request: RunRequest): Promise<void> {
   };
   const state: Live = {
     limitMb: request.memoryLimitMb,
+    solo: request.solo === true,
     isolate,
     disposedHere: false,
     reported: false,

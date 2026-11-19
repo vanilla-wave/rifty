@@ -20,6 +20,8 @@ export interface RunRequest {
   readonly code: string;
   readonly memoryLimitMb: number;
   readonly maxOutputBytes: number;
+  /** Set on a solo worker's only call: the worker's exhaustion is attributed to it. */
+  readonly solo?: true;
 }
 
 /** The consumer settled `call` at its deadline: dispose its isolate. */
