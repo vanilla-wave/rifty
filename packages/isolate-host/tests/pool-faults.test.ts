@@ -347,6 +347,102 @@ describe('bounded worker memory (I10)', () => {
   );
 });
 
+describe('guest memory outside the isolate heap is closed, not shared (I2, I3)', () => {
+  carrier.each([
+    [
+      'WebAssembly.Memory with written pages',
+      'const m = new WebAssembly.Memory({ initial: 1, maximum: 65536 }); for (let k = 0; k < 40; k++) { m.grow(1600); const u = new Uint8Array(m.buffer); for (let i = 0; i < u.length; i += 4096) u[i] = 1 }',
+      'isolate-host.WebAssembly',
+    ],
+    [
+      'a resizable ArrayBuffer with written pages',
+      'const b = new ArrayBuffer(0, { maxByteLength: 2 ** 32 }); for (let k = 1; k <= 40; k++) { b.resize(k * (16 << 20)); const u = new Uint8Array(b); for (let i = 0; i < u.length; i += 4096) u[i] = 1 }',
+      'isolate-host.ArrayBuffer.maxByteLength',
+    ],
+    [
+      'a growable SharedArrayBuffer with written pages',
+      'const b = new SharedArrayBuffer(0, { maxByteLength: 2 ** 32 }); for (let k = 1; k <= 40; k++) { b.grow(k * (16 << 20)); const u = new Uint8Array(b); for (let i = 0; i < u.length; i += 4096) u[i] = 1 }',
+      'isolate-host.SharedArrayBuffer.maxByteLength',
+    ],
+  ])(
+    '%s: a named gap for the culprit, neighbours exact',
+    async (_, code, gap) => {
+      const v = await withNeighbours(code, '{ memoryLimitMb: 64, timeoutMs: 20000 }');
+      expect(v.shared).toBe(1);
+      expect(v.culprit.exitCode).toBe(1);
+      expect(v.culprit.stderr).toContain(`Not implemented: ${gap}`);
+      expect(v.neighbours).toEqual(NEIGHBOURS);
+      expect(v.next).toEqual(NEXT);
+    },
+    120_000,
+  );
+
+  carrier(
+    "a million intervals exhaust the culprit's own budget: memory, neighbours exact",
+    async () => {
+      const v = await withNeighbours(
+        'for (let i = 0; i < 1e6; i++) setInterval(() => {}, 1)',
+        '{ timeoutMs: 20000 }',
+      );
+      const { ms: _ms, ...culprit } = v.culprit;
+      expect(culprit).toEqual({ stdout: '', stderr: '', exitCode: null, termination: 'memory' });
+      expect(v.shared).toBe(1);
+      expect(v.neighbours).toEqual(NEIGHBOURS);
+      expect(v.next).toEqual(NEXT);
+    },
+    120_000,
+  );
+});
+
+describe('the request a call sends is bounded (I2)', () => {
+  carrier(
+    'code over 1 MiB of UTF-8 rejects at once in the consumer; a neighbour is untouched',
+    async () => {
+      const { value } = await consumer(`
+      const neighbour = settle(runCode("setTimeout(() => console.log('n'), 1500)"));
+      await sleep(200);
+      const t0 = now();
+      const big = await settle(runCode('//' + 'x'.repeat(40 << 20)));
+      const ms = now() - t0;
+      const atLimit = await settle(runCode("console.log(1)//" + 'x'.repeat((1 << 20) - 16)));
+      out({ big, ms, atLimit, neighbour: await neighbour });`);
+      const v = value as {
+        big: { rejected?: string; code?: string };
+        ms: number;
+        atLimit: unknown;
+        neighbour: unknown;
+      };
+      expect(v.big.code).toBe('ERR_OUT_OF_RANGE');
+      expect(v.ms).toBeLessThan(1000);
+      expect(v.atLimit).toEqual({ stdout: '1\n', stderr: '', exitCode: 0 });
+      expect(v.neighbour).toEqual({ stdout: 'n\n', stderr: '', exitCode: 0 });
+    },
+  );
+});
+
+describe('a failing spawn during a rerun never takes the consumer down (I5)', () => {
+  carrier(
+    'spawn throws synchronously for the rerun: the call rejects LOST, the consumer lives',
+    async () => {
+      const { value, exitCode } = await consumer(`
+      const call = settle(runCode("setTimeout(() => console.log('y'), 3000)", { timeoutMs: 20000 }));
+      const first = await waitFor(() => children()[0], 5000);
+      await sleep(500);
+      // A path with a NUL byte makes child_process.spawn throw synchronously (ERR_INVALID_ARG_VALUE).
+      const execPath = process.execPath;
+      process.execPath = execPath + '\\0';
+      kill(first);
+      const result = await call;
+      process.execPath = execPath;
+      out({ result, next: await settle(runCode('console.log(6 * 7)')) });`);
+      expect(exitCode).toBe(0);
+      const v = value as { result: { code?: string }; next: unknown };
+      expect(v.result.code).toBe(LOST);
+      expect(v.next).toEqual(NEXT);
+    },
+  );
+});
+
 describe('slots and ceilings of a shared worker (I1, I3)', () => {
   carrier(
     'a cancelled call still running keeps its slot: a 5th call starts another worker',

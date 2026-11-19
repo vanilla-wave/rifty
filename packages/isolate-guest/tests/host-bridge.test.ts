@@ -19,10 +19,14 @@ interface Functions {
   random(n: unknown): Uint8Array;
 }
 interface Export {
-  createHostBridge(hooks: {
-    write(fd: 1 | 2, bytes: Uint8Array): void;
-    fire(id: number): unknown;
-  }): {
+  createHostBridge(
+    hooks: {
+      write(fd: 1 | 2, bytes: Uint8Array): void;
+      fire(id: number): unknown;
+      timersExhausted?(): void;
+    },
+    limits?: { maxTimers?: number },
+  ): {
     functions: Functions;
     timeOrigin: number;
     close(): void;
@@ -431,5 +435,66 @@ describe('interval backpressure (Node: an interval re-arms after its callback ra
     await sleep(100);
     close();
     expect(fired).toBeGreaterThan(5);
+  });
+});
+
+describe('per-guest host resources (ADR-0563 §7)', () => {
+  carrier(
+    'live host timers stop at maxTimers: the next start is refused and reported once',
+    async () => {
+      const { createHostBridge } = await load();
+      let exhausted = 0;
+      const { functions, close } = createHostBridge(
+        { write: () => {}, fire: () => {}, timersExhausted: () => void exhausted++ },
+        { maxTimers: 3 },
+      );
+      for (const id of [1, 2, 3]) functions.timerStart(id, 10_000, false);
+      // Re-arming a live id replaces it: no new timer.
+      functions.timerStart(2, 10_000, true);
+      expect(() => functions.timerStart(4, 10_000, false)).toThrow(
+        /^isolate-host bridge: timerStart: /,
+      );
+      expect(() => functions.timerStart(5, 10_000, false)).toThrow(
+        /^isolate-host bridge: timerStart: /,
+      );
+      expect(exhausted).toBe(1);
+      functions.timerClear(1);
+      functions.timerStart(4, 10_000, false);
+      close();
+    },
+  );
+
+  carrier('a stale delivery of a reused id neither re-arms nor ends the new timer', async () => {
+    const { createHostBridge } = await load();
+    const settles: (() => void)[] = [];
+    let fired = 0;
+    const { functions, close } = createHostBridge({
+      write: () => {},
+      fire: () => {
+        fired++;
+        return new Promise<void>((resolve) => settles.push(resolve));
+      },
+    });
+    const before = timeouts();
+    functions.timerStart(1, 1, true);
+    for (const until = Date.now() + 2000; fired < 1 && Date.now() < until; ) await sleep(5);
+    // The guest clears id 1 and arms a new id-1 interval while the old delivery is in flight;
+    // the new one ticks too, and its delivery is in flight as well.
+    functions.timerClear(1);
+    functions.timerStart(1, 1, true);
+    for (const until = Date.now() + 2000; fired < 2 && Date.now() < until; ) await sleep(5);
+    expect(fired).toBe(2);
+    expect(timeouts()).toBe(before);
+    // The old delivery settles: it must not arm the new id-1 timer behind its in-flight delivery.
+    settles[0]?.();
+    await sleep(30);
+    expect(timeouts()).toBe(before);
+    expect(fired).toBe(2);
+    // The new delivery settles: exactly one timer re-arms.
+    settles[1]?.();
+    await sleep(0);
+    expect(timeouts()).toBe(before + 1);
+    close();
+    expect(timeouts()).toBe(before);
   });
 });

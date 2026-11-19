@@ -144,6 +144,11 @@ export const CORPUS: readonly Row[] = [
     code: 'const s = []; const iv = setInterval(() => { s.push(Date.now()); if (s.length === 4) { clearInterval(iv); const g = [s[2] - s[1], s[3] - s[2]].sort((a, b) => a - b); console.log(g[0] < 275) } const e = Date.now() + 150; while (Date.now() < e); }, 200)',
   },
   {
+    // Never early: Node's `setInterval(f, 10)` averages ≥ 10 ms between ticks (~11.5 here).
+    label: 'interval-never-early',
+    code: 'const t = []; let p = performance.now(); const iv = setInterval(() => { const n = performance.now(); t.push(n - p); p = n; if (t.length === 20) { clearInterval(iv); console.log(t.slice(1).reduce((a, b) => a + b) / 19 >= 9.8) } }, 10)',
+  },
+  {
     label: 'interval-storm',
     code: "let n = 0; const ts = []; for (let i = 0; i < 20000; i++) ts.push(setInterval(() => { n++ }, 1)); setTimeout(() => { ts.forEach(clearInterval); console.log('done', n > 0) }, 1000)",
   },
