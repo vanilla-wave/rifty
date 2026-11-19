@@ -1,9 +1,9 @@
 {
-  "overall_verdict": "pass",
-  "merge_call": "PASS, goal complete: the CLOSE blocker (I10 Linux retention) is fixed and re-measured independently; 5b and the nits are fixed; the 6367dde13 load-robust timing edits are test-only and weaken no criterion beyond libuv epsilon (PR-4). Rebind the committed landing JSON to 6367dde13; merge only on a green PR CI at HEAD.",
+  "overall_verdict": "concern",
+  "merge_call": "PASS, goal complete. Round 4 (docs + comment-only test edits) matches the code for the busy-period RSS ceiling and F1 in the solo. Two advisory items: the retire-before-terminal order has no discriminating carrier (weak row, backlog item owns it), and the calls-in-flight + 1 worker bound ignores cancelled isolates still running in their 1 s grace. Rebind the landing JSON to df0bf20f7; merge only on a green PR CI at HEAD.",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "6367dde13ba2c105e8899fbea3106f7adc464be8",
-  "unit_goal_source": "CLOSE of goal isolate-host-worker-pool, PR #412 @ 6367dde13ba2c105e8899fbea3106f7adc464be8 (= last product/test commit); BASE origin/main merge-base 6d764035315524cc242d88673d44f4b9041b1ae8. Authorities removed by CLOSE (99ee27913), read via git show b6d8a8625 under docs/backlog: epics/isolate-host-worker-pool/goal.md (I1-I10 + §Decisions amend 2026-11-19 solo reruns), distribution/isolate-host-pool-acceptance.md (carrier rows 1-11, fault matrix), epics/isolate-host-worker-pool/map.md (Linux-retention question). Verify passes over 99ee27913..7c53ded38 (CLOSE findings) and 7c53ded38..6367dde13 (test timing, PR-4).",
+  "reviewed_sha": "df0bf20f7c96086a0c4f798573cd8f9a0a60428e",
+  "unit_goal_source": "CLOSE of goal isolate-host-worker-pool, PR #412 @ df0bf20f7c96086a0c4f798573cd8f9a0a60428e (= last product/test commit); BASE origin/main merge-base 6d764035315524cc242d88673d44f4b9041b1ae8. Authorities removed by CLOSE (99ee27913), read via git show b6d8a8625 under docs/backlog: epics/isolate-host-worker-pool/goal.md (I1-I10 + §Decisions amend 2026-11-19 solo reruns), distribution/isolate-host-pool-acceptance.md (carrier rows 1-11, fault matrix), epics/isolate-host-worker-pool/map.md (Linux-retention question). Verify passes over 99ee27913..7c53ded38 (CLOSE findings), 7c53ded38..6367dde13 (test timing, PR-4) and 9a8a67596..df0bf20f7 (round-4 docs; test diff comment-only).",
   "unit_residuals": [],
   "goal_residuals": [],
   "goal_complete": true,
@@ -87,6 +87,14 @@
       "status": "pass",
       "citation": "packages/isolate-host/tests/pool-faults.test.ts:330-349; mutant no-idle-retire killed (macOS); Linux retention: docs/backlog/distribution/reference/isolate-host-pool-step0.md:154-164, reviewer re-run in node:24.16.0-bookworm linux/arm64: 8e6 objects 712 MiB, 585 MiB 1 s after dispose (> 512), so the carrier discriminates on Linux",
       "note": ""
+    },
+    {
+      "row": "I10: a worker past its watermark takes no new call — the worker sends retire before the last terminal frame, so the consumer stops placing calls before the slot frees",
+      "source": "acceptance",
+      "trace": "I10",
+      "status": "weak",
+      "citation": "packages/isolate-host/src/child/main.ts:177-181 (report: retire before send); carrier pool-faults.test.ts:330-349",
+      "note": "A mutant sending retire after the terminal frame passes every test: the consumer usually reads both frames in one chunk, the 25 ms idle poll retires shortly after, and the carrier places its next call 1 s later. On a split read one call could land on a worker above its watermark; it still gets a correct result and the worker retires after it, so the main I10 clause (no idle worker kept warm above it) holds. Advisory (REV-4 weak). Owner: docs/backlog/distribution/isolate-host-retire-before-terminal-uncarried.md; ADR-0563 §Corrections residual line (2026-11-19, residual at landing)."
     }
   ],
   "axes": [
@@ -117,13 +125,27 @@
     },
     {
       "axis": "Bugs",
-      "verdict": "pass",
+      "verdict": "concern",
       "findings": [
         {
           "severity": "nit",
           "location": "packages/isolate-host/tests/pool-faults.test.ts:385-401",
           "evidence": "",
           "summary": "The 262 000-interval carrier (own heap limit, as its comment says) sits under the describe titled 'a solo rerun names the culprit'; the title overstates it for this one case.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "packages/isolate-host/src/child/main.ts:177-181; docs/backlog/distribution/isolate-host-retire-before-terminal-uncarried.md; docs/adr/distribution/0563-run-runcode-in-a-pool-of-long-lived-worker-processes-each-hosting-many-isolates.md:116",
+          "evidence": "The driver reports the mutant (retire sent after the terminal frame) passes the full isolate-host suite; I did not rerun it in this pass (the round-4 test diff is comment-only, and the order code is unchanged).",
+          "summary": "The retire-before-terminal order has no discriminating carrier (the I10 sub-clause \"takes no new call\"). Advisory, not a residual: if it broke, one call placed in a split-read window would run on a worker above its watermark with a correct result, and the worker would retire after it. Owned by the backlog item and the ADR-0563 §Corrections residual line.",
+          "authority": ""
+        },
+        {
+          "severity": "nit",
+          "location": "docs/adr/distribution/0563-run-runcode-in-a-pool-of-long-lived-worker-processes-each-hosting-many-isolates.md:48-49",
+          "evidence": "",
+          "summary": "§6 says F1 twice: the new sentence in the first bullet, then \"The rerun keeps the original deadline (F1)\" opening the next.",
           "authority": ""
         }
       ]
@@ -135,8 +157,16 @@
     },
     {
       "axis": "Ecosystem UX",
-      "verdict": "pass",
-      "findings": []
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/adr/distribution/0563-run-runcode-in-a-pool-of-long-lived-worker-processes-each-hosting-many-isolates.md:65; packages/isolate-host/README.md:88-90; docs/public/trust-model.md:65-67",
+          "evidence": "Code read @ df0bf20f7: pool.ts:362-371 (#deadline settles the call, then marks it cancelled while it stays in worker.calls), pool.ts:375-383 (settleWorker returns while calls.size > 0 and none is unsettled, unless the worker is retiring or solo), main.ts:191,281 (retire only after STUCK_GRACE_MS = 1000).",
+          "summary": "\"every worker but one warm idle one holds at least one unsettled call\" is false for up to ~1 s after deadlines. A worker whose calls all timed out and keep running is held by settled (cancelled) calls until their terminal frame, or until retire after the 1 s grace. Example: 8 stuck calls on 2 workers time out together, so 0 calls are in flight but 2 workers stay up for about 1 s, against a stated bound of 1. For RSS sizing, count cancelled isolates still running as in flight, or add \"+ workers in their 1 s stuck grace\".",
+          "authority": ""
+        }
+      ]
     }
   ]
 }

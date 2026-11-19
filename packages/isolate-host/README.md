@@ -86,7 +86,8 @@ step before it is caught. Example: a call at 1024 and a call at 64 run together
 still reach 256 + 3 × 1088 = 3520 MiB, not 448. With the defaults (256) a full
 worker can reach 3328 MiB; a call rerun alone, 256 MiB + 3 × its own limit.
 The pool runs at most (calls in flight + 1) workers at once: every worker but
-one warm idle one holds a call. Size the cgroup for your peak of concurrent
+one warm idle one holds a call. A call that timed out counts as in flight until
+its isolate stops (at most ~1 s more for a guest that ignores termination). Size the cgroup for your peak of concurrent
 calls times their workers' ceilings.
 
 ## What the guest gets

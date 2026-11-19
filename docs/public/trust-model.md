@@ -62,7 +62,7 @@ calls share a worker process.
   isolates); `performance.now()` resolves to ~3 µs. Tenants that must not share a process need
   separate consumer processes.
 - **Consumer's duty.** Put the workers behind an external boundary: a separate uid, a sandbox or
-  container, an RSS cgroup above the pool's bound: at most (calls in flight + 1) workers, each up
+  container, an RSS cgroup above the pool's bound: at most (calls in flight + 1) workers — a timed-out call still in flight until its isolate stops — each up
   to 256 MiB + 3 × the largest sum of its concurrent calls' `memoryLimitMb` since it last went
   busy (README §API, with an example). No secrets may be reachable by that user. Limit the call rate per
   source: a guest can repeat an attack in new calls without bound. `ERR_ISOLATE_HOST_WORKER_LOST`
