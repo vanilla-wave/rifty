@@ -40,8 +40,13 @@ function guard<A extends unknown[], R>(name: string, fn: (...args: A) => R): (..
 /** What the embedder does with validated calls. */
 export interface HostHooks {
   write(fd: 1 | 2, bytes: Uint8Array): void;
-  /** Deliver expiry to the guest (`GuestEntry.fire`); a throw ends that timer. */
-  fire(id: number): void;
+  /**
+   * Deliver expiry to the guest (`GuestEntry.fire`). Return a promise that settles
+   * once the guest ran it: a repeating timer re-arms only then, as Node's
+   * interval does (no tick queues behind a running callback). A throw or a
+   * rejection ends that timer.
+   */
+  fire(id: number): PromiseLike<unknown> | void;
 }
 
 export interface HostBridge {
@@ -57,11 +62,12 @@ export function createHostBridge(hooks: HostHooks): HostBridge {
   // The guest's clock starts with its call, as a fresh `node -e` process's does:
   // never the embedder's uptime, and nothing that links one call to another.
   const origin = performance.now();
-  const timers = new Map<number, NodeJS.Timeout>();
+  // Per id: the armed host timer, or `null` while its expiry is with the guest.
+  const timers = new Map<number, NodeJS.Timeout | null>();
   let closed = false;
   const clear = (id: number): void => {
     const timer = timers.get(id);
-    if (timer !== undefined) clearTimeout(timer);
+    if (timer) clearTimeout(timer);
     timers.delete(id);
   };
   const functions: HostFunctions = {
@@ -77,16 +83,33 @@ export function createHostBridge(hooks: HostHooks): HostBridge {
       if (typeof repeat !== 'boolean') refuse('timerStart: repeat must be a boolean');
       if (closed) return;
       clear(id);
+      const arm = (): void => {
+        timers.set(id, setTimeout(tick, ms));
+      };
       const tick = (): void => {
-        if (!repeat) timers.delete(id);
+        if (!repeat) {
+          timers.delete(id);
+        } else timers.set(id, null);
+        let delivered: PromiseLike<unknown> | void;
         try {
-          hooks.fire(id);
+          delivered = hooks.fire(id);
         } catch {
           // The embedder cannot deliver: this timer has nothing left to do.
           clear(id);
+          return;
         }
+        // Re-arm from the callback's end, and only if nothing cleared or re-armed `id` meanwhile.
+        const rearm = (): void => {
+          if (repeat && !closed && timers.get(id) === null) arm();
+        };
+        // A rejection (the isolate is gone) ends the timer and never reaches the embedder's loop.
+        const end = (): void => {
+          if (timers.get(id) === null) timers.delete(id);
+        };
+        if (delivered && typeof delivered.then === 'function') delivered.then(rearm, end);
+        else rearm();
       };
-      timers.set(id, repeat ? setInterval(tick, ms) : setTimeout(tick, ms));
+      arm();
     }),
     timerClear: guard('timerClear', (id: unknown) => {
       if (!isInt(id, 1, MAX_TIMER)) refuse('timerClear: id must be an integer in 1..2^31-1');
@@ -103,7 +126,7 @@ export function createHostBridge(hooks: HostHooks): HostBridge {
     timeOrigin: performance.timeOrigin + origin,
     close() {
       closed = true;
-      for (const timer of timers.values()) clearTimeout(timer);
+      for (const timer of timers.values()) if (timer) clearTimeout(timer);
       timers.clear();
     },
   };

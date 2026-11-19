@@ -1,7 +1,7 @@
 /**
- * The model-style `node -e` corpus (goal isolate-host-run-code I1), shared by
+ * The model-style `node -e` corpus (ADR-0557 §1), shared by
  * `runCode` parity and the custom-embedder parity of `@riftydev/isolate-guest`
- * (goal isolate-guest-embed I1). `parityView` is the one comparison: raw bytes,
+ * (ADR-0558 §6). `parityView` is the one comparison: raw bytes,
  * except an uncaught-error row's stderr goes through the node-cli-eval
  * diagnostic projection.
  */
@@ -13,7 +13,7 @@ export interface Row {
   /** Uncaught error: compare the canonical `[eval]` diagnostic, not internal frames. */
   readonly evalError?: true;
   /**
-   * A declared ceiling this row hits (compat ❌, ledger `re-cut:`): the row stays
+   * A declared ceiling this row hits (compat ❌): the row stays
    * literal and runs as an expected failure, so a fix turns it red until promoted.
    */
   readonly ceiling?: string;

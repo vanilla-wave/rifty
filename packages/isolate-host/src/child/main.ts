@@ -97,7 +97,8 @@ async function run(request: RunRequest): Promise<void> {
         // Batch: guest writes arrive as separate host tasks; one frame batch per 5 ms.
         setTimeout(flush, 5);
       },
-      fire: (id) => guestFire.ref?.applyIgnored(undefined, [id]),
+      // Settles once the guest ran the callback: an interval re-arms only then (ADR-0558).
+      fire: (id) => guestFire.ref?.apply(undefined, [id]),
     });
     const names = Object.keys(functions);
     for (const [name, fn] of Object.entries(functions)) {

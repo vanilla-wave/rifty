@@ -17,7 +17,7 @@ were internal to `@riftydev/isolate-host`, whose install pulls
 ## Decision
 
 1. Package `@riftydev/isolate-guest`, no dependencies of any kind (a subpath of
-   isolate-host would install isolated-vm: I3). Root exports:
+   isolate-host would install isolated-vm). Root exports:
    `createHostBridge(hooks) → { functions, timeOrigin, close }`, `exitStatus(value)`,
    `IMPORT_GAP`, `UNCOPYABLE_REJECTION`, and types `GuestHost`, `GuestEntry`,
    `HostFunctions`, `HostHooks`, `HostBridge`. The bundle is an asset subpath
@@ -43,8 +43,8 @@ were internal to `@riftydev/isolate-host`, whose install pulls
 4. One implementation: isolate-host's child uses `createHostBridge`,
    `exitStatus` and both constants from the export; its build copies the
    resolved `@riftydev/isolate-guest/guest.js` byte for byte into its own
-   `dist/guest.js`, so the host tarball installs alone and `runCode`'s install,
-   API and output are unchanged. The export is a devDependency of the host.
+   `dist/guest.js`, so the host tarball installs alone and `runCode`'s install
+   and API are unchanged (its guest clock origin moved: Decisions 2026-11-18). The export is a devDependency of the host.
 5. Unstable: `0.x`; any release may change the contract, with a CHANGELOG
    line. Bundle and host functions must come from one version; nothing checks
    a mismatch (no version handshake — the contract does not need one).
@@ -90,3 +90,4 @@ Manager decision 2026-11-18: isolated-vm 6.2.0 stays a declared ceiling.
 - 2026-11-18 — cross-review round 1: the guest clock starts at `createHostBridge` (`timeOrigin` returned by it, `now()` relative), not the embedder's process start — an in-process embedder leaked its uptime and linked calls; `runCode`'s guest clock now starts at the child's bridge setup. `guard` passes only refusals it created (by identity). The README example refuses isolated-vm < 7 and states it has no limits; the timer `fire` queue is unbounded embedder memory (compat ⚠️, backpressure owned by `backlog/distribution/isolate-host-timer-fire-backpressure`, due with the pool goal). The `isolate-host bridge:` prefix stays (one name with the other guest-visible `isolate-host.*` texts).
 - 2026-11-18 — CLOSE review: the README example's write hook keeps `ended ||` — without it guest output after the `import()` gap leaked into the result nondeterministically (34/40 runs); carriers pin the post-gap forms. Landing verdict: `docs/backlog/distribution/reference/isolate-guest-embed-final-green.json` (PASS @ a1bcea70a, goal complete).
 - 2026-11-18 — not the user's words (manager, cross-review round 1): `runCode`'s guest clock origin moved to the child's bridge setup — an observable `runCode` change outside the goal's "no change" line, declared in the isolate-host CHANGELOG; closer to `node -e`.
+- 2026-11-19 — §3, goal `isolate-host-worker-pool` (manager scope): the `fire` hook returns a promise that settles once the guest ran the callback; a repeating timer re-arms only then, from the callback's end, as Node's interval does; a rejection ends the timer. Expiries no longer pile up in the embedder (20000 × `setInterval(f, 1)` had reached 4.96 GB; a 10 ms callback at 1 ms delayed a 1000 ms timeout to 8.8 s) — in a shared worker that queue was a neighbour's memory and latency. A hook returning no promise re-arms at once, unbounded (README). Closes `backlog/distribution/isolate-host-timer-fire-backpressure`; parity rows `slow-interval-keeps-pace`, `interval-storm`.

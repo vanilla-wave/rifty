@@ -1,5 +1,5 @@
 /**
- * Goal isolate-guest-embed I5: every bridge function a guest can call is
+ * ADR-0558 §3: every bridge function a guest can call is
  * guest-controlled input. The export's wrapper accepts a value only when the
  * contract allows it, refuses with a guest-safe `TypeError` (no host frame),
  * never lets a hook failure through as a host error, stops all host timers at
@@ -9,7 +9,6 @@ import { setFlagsFromString } from 'node:v8';
 import { runInNewContext } from 'node:vm';
 import { describe, expect, it } from 'vitest';
 
-/** The acceptance carrier (map item 1); RED was `it.fails` before the export landed. */
 const carrier = it;
 
 interface Functions {
@@ -20,7 +19,10 @@ interface Functions {
   random(n: unknown): Uint8Array;
 }
 interface Export {
-  createHostBridge(hooks: { write(fd: 1 | 2, bytes: Uint8Array): void; fire(id: number): void }): {
+  createHostBridge(hooks: {
+    write(fd: 1 | 2, bytes: Uint8Array): void;
+    fire(id: number): PromiseLike<unknown> | void;
+  }): {
     functions: Functions;
     timeOrigin: number;
     close(): void;
@@ -81,7 +83,7 @@ const timeouts = () => process.getActiveResourcesInfo().filter((r) => r === 'Tim
 
 const HOST_PATH = /file:|node:internal|\/node_modules\/|\.ts:|\.js:/;
 
-describe('createHostBridge argument validation (I5)', () => {
+describe('createHostBridge argument validation (ADR-0558 §3)', () => {
   carrier(
     'accepts a value only when the contract allows it, and refuses guest-safely',
     async () => {
@@ -229,7 +231,7 @@ describe('createHostBridge argument validation (I5)', () => {
     setFlagsFromString('--expose-gc');
     const gc = runInNewContext('gc') as () => void;
     let fired = 0;
-    const { functions, close } = createHostBridge({ write: () => {}, fire: () => fired++ });
+    const { functions, close } = createHostBridge({ write: () => {}, fire: () => void fired++ });
     const N = 50_000;
     gc();
     const base = process.memoryUsage().heapUsed;
@@ -249,7 +251,7 @@ describe('createHostBridge argument validation (I5)', () => {
     const fired: number[] = [];
     const { functions, close } = createHostBridge({
       write: () => {},
-      fire: (id) => fired.push(id),
+      fire: (id) => void fired.push(id),
     });
     functions.timerStart(1, 1, false);
     functions.timerStart(2, 1, true);
@@ -309,7 +311,7 @@ describe('createHostBridge argument validation (I5)', () => {
   });
 });
 
-describe('exitStatus (I5)', () => {
+describe('exitStatus (ADR-0558 §3)', () => {
   carrier('passes an integer 0..255 through and reads anything else as 1', async () => {
     const { exitStatus } = await load();
     for (const v of [0, 1, 7, 255]) expect(exitStatus(v)).toBe(v);
@@ -323,5 +325,63 @@ describe('exitStatus (I5)', () => {
       Promise.resolve(0),
     ].filter((v) => !(Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 255));
     for (const v of wrong) expect(exitStatus(v), String(typeof v)).toBe(1);
+  });
+});
+
+describe('interval backpressure (Node: an interval re-arms after its callback ran)', () => {
+  carrier('a repeating timer fires again only after its delivery settled', async () => {
+    const { createHostBridge } = await load();
+    const pending: (() => void)[] = [];
+    let fired = 0;
+    const { functions, close } = createHostBridge({
+      write: () => {},
+      fire: () => {
+        fired++;
+        return new Promise<void>((resolve) => pending.push(resolve));
+      },
+    });
+    functions.timerStart(1, 1, true);
+    await sleep(100);
+    // ~100 ticks elapsed; the guest is still "running" the first callback.
+    expect(fired).toBe(1);
+    pending.shift()?.();
+    await sleep(50);
+    expect(fired).toBe(2);
+    close();
+  });
+
+  carrier('a rejected delivery ends its timer; a clear while in flight is not undone', async () => {
+    const { createHostBridge } = await load();
+    let fired = 0;
+    const settle: ((ok: boolean) => void)[] = [];
+    const { functions, close } = createHostBridge({
+      write: () => {},
+      fire: () => {
+        fired++;
+        return new Promise<void>((resolve, reject) =>
+          settle.push((ok) => (ok ? resolve() : reject(new Error('disposed')))),
+        );
+      },
+    });
+    functions.timerStart(1, 1, true);
+    functions.timerStart(2, 1, true);
+    await sleep(30);
+    expect(fired).toBe(2);
+    settle[0]?.(false);
+    functions.timerClear(2);
+    settle[1]?.(true);
+    await sleep(50);
+    expect(fired).toBe(2);
+    close();
+  });
+
+  carrier('a hook returning no promise keeps the interval running', async () => {
+    const { createHostBridge } = await load();
+    let fired = 0;
+    const { functions, close } = createHostBridge({ write: () => {}, fire: () => void fired++ });
+    functions.timerStart(1, 1, true);
+    await sleep(100);
+    close();
+    expect(fired).toBeGreaterThan(5);
   });
 });

@@ -6,7 +6,7 @@ child.
 
 | Surface | Status | Notes |
 |---|---|---|
-| `{stdout, stderr, exitCode}` of CommonJS `node -e` code | ✅ | Corpus parity `parity.test.ts`: console, byte `process.stdout.write`, UTF-8, `exit`/`exitCode`/`'exit'`, event-loop order, fs on the in-memory VFS, Buffer, path/util/crypto hashes/events, uncaught throw/rejection diagnostics (canonical `[eval]` projection) |
+| `{stdout, stderr, exitCode}` of CommonJS `node -e` code | ✅ | Corpus parity `parity.test.ts`: console, byte `process.stdout.write`, UTF-8, `exit`/`exitCode`/`'exit'`, event-loop order, a slow interval and 20000 intervals keeping pace (an interval re-arms after its callback, ADR-0558 Decisions 2026-11-19), fs on the in-memory VFS, Buffer, path/util/crypto hashes/events, uncaught throw/rejection diagnostics (canonical `[eval]` projection) |
 | Fresh instance per call | ✅ | `isolation.test.ts` |
 | Limits: time / isolate heap / V8 fatal OOM / child RSS / output cap | ✅ | `termination: 'timeout' \| 'memory'`; RSS is a sampled watchdog that can overshoot by one allocation step; output past the cap is dropped (`truncated`). `limits.test.ts` |
 | Network: `fetch`, `WebSocket`, `node:http`/`https`/`net` | ❌ | `NotImplementedError('isolate-host.<api>')`; `node:tls`/`dgram`/`http2` keep rifty's loud stubs. `egress.test.ts` |
@@ -24,8 +24,6 @@ child.
 | Work already queued when an uncaught throw or unhandled rejection happens (a timer, microtask, `nextTick` or fs callback) | ⚠️ | Node ends the process at the fatal; here queued callbacks still run and print, and an `exit(n)` among them sets the status — `exit(0)` reads as a clean `{exitCode: 0, stderr: ''}` (an `'exit'` listener still sees 1), `exit(3)` gives 3 — where Node exits 1 with the report. `backlog/runtime-js/node-eval-queued-exit-overrides-pending-fatal` |
 | Timer delay outside 1..2^31-1 or NaN | ⚠️ | Runs after 1 ms as in Node, without Node's `Timeout*Warning` on stderr. `backlog/runtime-js/timeout-delay-warnings` |
 | Non-function timer callback (`setTimeout(5)`) | ⚠️ | Accepted instead of Node's `ERR_INVALID_ARG_TYPE` (and a BigInt delay's error wins). `backlog/runtime-js/timer-callback-not-validated` |
-| A slow interval (callback longer than its period) | ⚠️ | Falls behind and starves later timers: a 10 ms callback at `setInterval(f, 1)` runs 879 times and a 1000 ms timeout fires at 8.8 s, where Node runs it 101 times and fires at 1.0 s. Host timer ticks queue `fire` calls with no backpressure. `backlog/distribution/isolate-host-timer-fire-backpressure` |
-| Many short intervals at once (e.g. 20000 × `setInterval(f, 1)`) | ⚠️ | Ends as `termination: 'memory'` where Node runs them: host timer ticks queue calls into the isolate with no backpressure. `backlog/distribution/isolate-host-timer-fire-backpressure` |
 | Uncaught throw from a `queueMicrotask` callback (`queueMicrotask(() => { throw 1 })`) | ⚠️ | The diagnostic is written, then the run ends as `termination: 'timeout'` (Node: exit 1); a custom embedder's `run()` does not settle. `backlog/distribution/isolate-host-queuemicrotask-throw-times-out` |
 | Uncaught throw followed by an endless microtask chain | ⚠️ | Ends as `termination: 'timeout'` (Node: exit 1 at once): the isolate never leaves its microtask checkpoint. `backlog/distribution/isolate-host-uncaught-throw-waits-for-microtask-checkpoint` |
 | `'exit'` listener setting `process.exitCode` after an uncaught throw | ⚠️ | Exit 1; Node takes the listener's code. `backlog/runtime-js/process-exit-listener-effects` |
@@ -50,6 +48,5 @@ surface and its gaps are the rows above. Tests: `packages/isolate-guest/tests/`
 | Hostile bridge arguments, throwing embedder hooks, `close()`, `exitStatus` | ✅ | `host-bridge.test.ts` |
 | isolated-vm 6.2.0 | ⚠️ | No `onUnhandledRejection`: an unhandled rejection rejects the embedder's call instead of failing the run with Node's diagnostic. No `importModuleDynamically`: `import()` rejects `Not supported` in the guest, and a `.catch` keeps the run alive (it can exit 0) |
 | Other V8 embedders | ⚠️ | Untested; the contract (package README §Contract) is embedder-neutral |
-| Timer `fire` queue in the embedder's process | ⚠️ | Unbounded, outside `memoryLimit`: 20000 short intervals reached 4.96 GB embedder RSS at `memoryLimit: 128` (README example). `backlog/distribution/isolate-host-timer-fire-backpressure` |
 | Limits, kill, process boundary, escape posture | ❌ | Not provided by the export; the embedder's duty (package README §What you own) |
 | Contract stability | ⚠️ | Unstable: any release may change it |

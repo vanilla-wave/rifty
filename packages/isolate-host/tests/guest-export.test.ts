@@ -1,5 +1,5 @@
 /**
- * Goal isolate-guest-embed I2: `runCode` runs the export's guest bundle — the
+ * ADR-0558 §4: `runCode` runs the export's guest bundle — the
  * file its child loads is byte-identical to `@riftydev/isolate-guest/guest.js`.
  */
 import { readFileSync } from 'node:fs';
@@ -8,7 +8,6 @@ import { fileURLToPath } from 'node:url';
 import { expect, it } from 'vitest';
 import { runCode } from '../src/index.ts';
 
-/** The acceptance carrier (map item 1); RED was `it.fails` before the export landed. */
 const carrier = it;
 
 carrier("the host's guest bundle is the export's, byte for byte", () => {
