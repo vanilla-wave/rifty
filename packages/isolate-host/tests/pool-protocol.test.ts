@@ -139,4 +139,27 @@ describe('call-addressed frames from a hostile worker (I7)', () => {
     expect(v.rejected).toMatch(/exited unexpectedly .*SIGKILL/);
     expect(v.rejected).not.toContain('WORKER-TEXT');
   });
+
+  carrier(
+    'a worker that has exited but whose channel is still open takes no new call',
+    async () => {
+      writeFileSync(LEDGER, '');
+      // The first call answers, then its worker exits while a grandchild keeps fd 3 open for 3 s:
+      // 'exit' has fired, 'close' has not.
+      const { value } = await consumer(
+        `await settle(runCode(${JSON.stringify(
+          'f(2, call, [0]); import("node:child_process").then(({ spawn }) => { spawn("sleep", ["3"], { stdio: ["ignore", "ignore", "ignore", 3], detached: true }).unref(); setTimeout(() => process.exit(0), 50) })',
+        )}, { timeoutMs: 10000 }));
+       await sleep(400);
+       const t0 = now();
+       const next = await settle(runCode(${JSON.stringify('setTimeout(() => f(2, call, [0]), 100)')}, { timeoutMs: 10000 }));
+       out({ next, ms: now() - t0 });`,
+        { entry },
+      );
+      const v = value as { next: unknown; ms: number };
+      expect(v.next).toEqual({ stdout: '', stderr: '', exitCode: 0 });
+      // Placed on the exited worker it would wait for 'close' (3 s), then rerun.
+      expect(v.ms).toBeLessThan(2000);
+    },
+  );
 });

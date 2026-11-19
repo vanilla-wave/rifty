@@ -164,8 +164,6 @@ describe('no host reach (I3)', () => {
     running.catch(() => {}); // asserted below; keeps an early failure from going unhandled
     const pid = await waitFor(() => soleChild(), 1000);
     expect(processCommand(pid)).toContain('--no-node-snapshot');
-    // Engine layer of the WebAssembly ceiling (ADR-0563): no wasm memory can hold a page.
-    expect(processCommand(pid)).toContain('--wasm-max-mem-pages=0');
     const environment = processEnvironment(pid);
     expect(environment).not.toContain(SECRET);
     expect(environment).not.toContain(ENV_CANARY);

@@ -141,4 +141,19 @@ describe('worker lifecycle (I6)', () => {
       for (const pid of workers) await waitFor(() => (alive(pid) ? undefined : true), 3000);
     },
   );
+
+  carrier(
+    'a spawn that throws synchronously rejects the call and holds nothing: the consumer exits on its own',
+    async () => {
+      const { value, exitCode, signal, ms } = await consumer(
+        `process.execPath = process.execPath + '\\0';
+       out(await settle(runCode('console.log(1)', { timeoutMs: 30000 })));`,
+        { naturalExit: true, timeoutMs: 20_000 },
+      );
+      expect((value as { rejected?: string }).rejected).toBeDefined();
+      expect({ exitCode, signal }).toEqual({ exitCode: 0, signal: null });
+      // Not held by the 30 s deadline timer of a call that never started.
+      expect(ms).toBeLessThan(5000);
+    },
+  );
 });

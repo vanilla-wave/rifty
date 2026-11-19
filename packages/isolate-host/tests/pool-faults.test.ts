@@ -266,27 +266,29 @@ describe('a worker lost with no culprit (I5)', () => {
     },
   );
 
-  carrier(
-    'reruns never join a live worker with free slots: they get a worker of their own',
-    async () => {
-      const { value } = await consumer(`
-      const lost = [0, 1, 2, 3].map(() => settle(runCode("setTimeout(() => console.log('s'), 5000)", { timeoutMs: 20000 })));
+  carrier('each lost call reruns alone, never on a live worker with free slots', async () => {
+    const { value } = await consumer(`
+      const lost = [0, 1, 2, 3].map((i) => settle(runCode("setTimeout(() => console.log('s" + i + "'), 5000)", { timeoutMs: 20000 })));
       const first = await waitFor(() => children()[0], 5000);
       await sleep(300);
       const other = settle(runCode("setTimeout(() => console.log('o'), 4000)", { timeoutMs: 20000 }));
       const second = await waitFor(() => children().find((p) => p !== first), 5000);
       await sleep(1200);
       kill(first);
-      const quarantine = await waitFor(() => children().find((p) => p !== first && p !== second), 5000);
+      // Four solo workers, one per lost call; the live worker with 3 free slots takes none.
+      const solos = await waitFor(() => { const s = children().filter((p) => p !== first && p !== second); return s.length === 4 ? s : undefined; }, 5000);
       await sleep(300);
-      kill(quarantine);
-      out({ lost: await Promise.all(lost), other: await other });`);
-      expect(value).not.toHaveProperty('harnessError');
-      const v = value as { lost: { code?: string }[]; other: unknown };
-      expect(v.lost.map((r) => r.code)).toEqual([LOST, LOST, LOST, LOST]);
-      expect(v.other).toEqual({ stdout: 'o\n', stderr: '', exitCode: 0 });
-    },
-  );
+      // A solo's loss is its own call's: the other three still resolve.
+      kill(solos[0]);
+      const results = await Promise.all(lost);
+      out({ codes: results.map((r) => r.code ?? r.stdout), other: await other });`);
+    expect(value).not.toHaveProperty('harnessError');
+    const v = value as { codes: string[]; other: unknown };
+    expect(v.codes.filter((c) => c === LOST)).toHaveLength(1);
+    expect(v.codes.filter((c) => c !== LOST).sort()).toHaveLength(3);
+    for (const c of v.codes) if (c !== LOST) expect(c).toMatch(/^s[0-3]\n$/);
+    expect(v.other).toEqual({ stdout: 'o\n', stderr: '', exitCode: 0 });
+  });
 
   carrier(
     'a call placed as a second idle worker ends is not lost with it: it keeps its one rerun',
@@ -314,13 +316,13 @@ describe('a worker lost with no culprit (I5)', () => {
       await sleep(1500);
       const shared = children().length;
       kill(first);
-      // Both reruns together, on one worker of their own.
+      // Each rerun alone, on a worker of its own.
       const sampler = sampleChildren();
       const results = await Promise.all(calls);
       out({ shared, rerunWorkers: sampler.stop(), results });`);
     expect(value).toEqual({
       shared: 1,
-      rerunWorkers: 1,
+      rerunWorkers: 2,
       results: [0, 1].map((i) => ({ stdout: `x${i}\ny\n`, stderr: '', exitCode: 0 })),
     });
   });
@@ -347,75 +349,95 @@ describe('bounded worker memory (I10)', () => {
   );
 });
 
-describe('guest memory outside the isolate heap is closed, not shared (I2, I3)', () => {
+describe('guest memory outside the isolate heap: a solo rerun names the culprit (I2, I3)', () => {
+  // Neighbours at memoryLimitMb 64: the shared worker's ceiling is 256 + 3 × 256 MiB.
+  const SMALL = '{ memoryLimitMb: 64 }';
   carrier.each([
     [
       'WebAssembly.Memory with written pages',
-      'const m = new WebAssembly.Memory({ initial: 1, maximum: 65536 }); for (let k = 0; k < 40; k++) { m.grow(1600); const u = new Uint8Array(m.buffer); for (let i = 0; i < u.length; i += 4096) u[i] = 1 }',
-      'isolate-host.WebAssembly',
+      'const m = new WebAssembly.Memory({ initial: 1, maximum: 65536 }); for (let k = 0; k < 400; k++) { m.grow(160); const u = new Uint8Array(m.buffer); for (let i = 0; i < u.length; i += 4096) u[i] = 1 }',
     ],
     [
       'a resizable ArrayBuffer with written pages',
-      'const b = new ArrayBuffer(0, { maxByteLength: 2 ** 32 }); for (let k = 1; k <= 40; k++) { b.resize(k * (16 << 20)); const u = new Uint8Array(b); for (let i = 0; i < u.length; i += 4096) u[i] = 1 }',
-      'isolate-host.ArrayBuffer.maxByteLength',
+      'const b = new ArrayBuffer(0, { maxByteLength: 2 ** 34 }); for (let k = 1; k <= 400; k++) { b.resize(k * (10 << 20)); const u = new Uint8Array(b); for (let i = 0; i < u.length; i += 4096) u[i] = 1 }',
     ],
     [
       'a growable SharedArrayBuffer with written pages',
-      'const b = new SharedArrayBuffer(0, { maxByteLength: 2 ** 32 }); for (let k = 1; k <= 40; k++) { b.grow(k * (16 << 20)); const u = new Uint8Array(b); for (let i = 0; i < u.length; i += 4096) u[i] = 1 }',
-      'isolate-host.SharedArrayBuffer.maxByteLength',
+      'const b = new SharedArrayBuffer(0, { maxByteLength: 2 ** 34 }); for (let k = 1; k <= 400; k++) { b.grow(k * (10 << 20)); const u = new Uint8Array(b); for (let i = 0; i < u.length; i += 4096) u[i] = 1 }',
+    ],
+    [
+      'an Intl flood (ICU memory)',
+      'const a = []; for (let i = 0; i < 1e6; i++) a.push(new Intl.DateTimeFormat("en", { timeZone: "UTC" }))',
     ],
   ])(
-    '%s: a named gap for the culprit, neighbours exact',
-    async (_, code, gap) => {
-      const v = await withNeighbours(code, '{ memoryLimitMb: 64, timeoutMs: 20000 }');
-      expect(v.shared).toBe(1);
-      expect(v.culprit.exitCode).toBe(1);
-      expect(v.culprit.stderr).toContain(`Not implemented: ${gap}`);
-      expect(v.neighbours).toEqual(NEIGHBOURS);
-      expect(v.next).toEqual(NEXT);
-    },
-    120_000,
-  );
-
-  carrier(
-    "a million intervals exhaust the culprit's own budget: memory, neighbours exact",
-    async () => {
-      const v = await withNeighbours(
-        'for (let i = 0; i < 1e6; i++) setInterval(() => {}, 1)',
-        '{ timeoutMs: 20000 }',
-      );
+    '%s: the culprit gets memory, neighbours their own result once',
+    async (_, code) => {
+      const v = await withNeighbours(code, '{ memoryLimitMb: 64, timeoutMs: 60000 }', SMALL);
       const { ms: _ms, ...culprit } = v.culprit;
       expect(culprit).toEqual({ stdout: '', stderr: '', exitCode: null, termination: 'memory' });
       expect(v.shared).toBe(1);
       expect(v.neighbours).toEqual(NEIGHBOURS);
       expect(v.next).toEqual(NEXT);
     },
-    120_000,
+    180_000,
   );
-});
 
-describe('the request a call sends is bounded (I2)', () => {
+  carrier.each([
+    [
+      'intervals created and cleared in a loop',
+      'for (;;) { const t = []; for (let i = 0; i < 4096; i++) t.push(setInterval(() => {}, 1)); t.forEach(clearInterval) }',
+    ],
+    [
+      '262000 one-millisecond intervals',
+      'for (let i = 0; i < 262000; i++) setInterval(() => {}, 1)',
+    ],
+  ])(
+    '%s: the culprit ends on its own (memory or timeout), neighbours exact',
+    async (_, code) => {
+      const v = await withNeighbours(code, '{ memoryLimitMb: 64, timeoutMs: 20000 }', SMALL);
+      expect(v.culprit.exitCode).toBeNull();
+      expect(['memory', 'timeout']).toContain(v.culprit.termination);
+      expect(v.shared).toBe(1);
+      expect(v.neighbours).toEqual(NEIGHBOURS);
+      expect(v.next).toEqual(NEXT);
+    },
+    180_000,
+  );
+
   carrier(
-    'code over 1 MiB of UTF-8 rejects at once in the consumer; a neighbour is untouched',
+    '40 MiB of code next to a neighbour: both get their own result',
     async () => {
       const { value } = await consumer(`
       const neighbour = settle(runCode("setTimeout(() => console.log('n'), 1500)"));
       await sleep(200);
-      const t0 = now();
-      const big = await settle(runCode('//' + 'x'.repeat(40 << 20)));
-      const ms = now() - t0;
-      const atLimit = await settle(runCode("console.log(1)//" + 'x'.repeat((1 << 20) - 16)));
-      out({ big, ms, atLimit, neighbour: await neighbour });`);
-      const v = value as {
-        big: { rejected?: string; code?: string };
-        ms: number;
-        atLimit: unknown;
-        neighbour: unknown;
-      };
-      expect(v.big.code).toBe('ERR_OUT_OF_RANGE');
-      expect(v.ms).toBeLessThan(1000);
-      expect(v.atLimit).toEqual({ stdout: '1\n', stderr: '', exitCode: 0 });
-      expect(v.neighbour).toEqual({ stdout: 'n\n', stderr: '', exitCode: 0 });
+      const big = await settle(runCode("console.log(1)//" + 'x'.repeat(40 << 20)));
+      out({ big, neighbour: await neighbour });`);
+      expect(value).toEqual({
+        big: { stdout: '1\n', stderr: '', exitCode: 0 },
+        neighbour: { stdout: 'n\n', stderr: '', exitCode: 0 },
+      });
+    },
+    120_000,
+  );
+});
+
+describe('a mass loss costs at most a process per call (I5)', () => {
+  carrier(
+    '8 calls on 2 workers, both killed: at most 8 rerun processes, every call exact',
+    async () => {
+      const { value } = await consumer(`
+      const calls = Array.from({ length: 8 }, (_, i) => settle(runCode("console.log('a" + i + "'); setTimeout(() => console.log('b'), 3000)", { timeoutMs: 20000 })));
+      const pair = await waitFor(() => { const c = children(); return c.length === 2 ? c : undefined; }, 5000);
+      await sleep(1000);
+      const sampler = sampleChildren();
+      for (const pid of pair) kill(pid);
+      const results = await Promise.all(calls);
+      out({ peak: sampler.stop(), results });`);
+      const v = value as { peak: number; results: unknown[] };
+      expect(v.results).toEqual(
+        Array.from({ length: 8 }, (_, i) => ({ stdout: `a${i}\nb\n`, stderr: '', exitCode: 0 })),
+      );
+      expect(v.peak).toBeLessThanOrEqual(8);
     },
   );
 });

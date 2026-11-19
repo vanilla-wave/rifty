@@ -19,14 +19,10 @@ interface Functions {
   random(n: unknown): Uint8Array;
 }
 interface Export {
-  createHostBridge(
-    hooks: {
-      write(fd: 1 | 2, bytes: Uint8Array): void;
-      fire(id: number): unknown;
-      timersExhausted?(): void;
-    },
-    limits?: { maxTimers?: number },
-  ): {
+  createHostBridge(hooks: {
+    write(fd: 1 | 2, bytes: Uint8Array): void;
+    fire(id: number): unknown;
+  }): {
     functions: Functions;
     timeOrigin: number;
     close(): void;
@@ -439,31 +435,6 @@ describe('interval backpressure (Node: an interval re-arms after its callback ra
 });
 
 describe('per-guest host resources (ADR-0563 §7)', () => {
-  carrier(
-    'live host timers stop at maxTimers: the next start is refused and reported once',
-    async () => {
-      const { createHostBridge } = await load();
-      let exhausted = 0;
-      const { functions, close } = createHostBridge(
-        { write: () => {}, fire: () => {}, timersExhausted: () => void exhausted++ },
-        { maxTimers: 3 },
-      );
-      for (const id of [1, 2, 3]) functions.timerStart(id, 10_000, false);
-      // Re-arming a live id replaces it: no new timer.
-      functions.timerStart(2, 10_000, true);
-      expect(() => functions.timerStart(4, 10_000, false)).toThrow(
-        /^isolate-host bridge: timerStart: /,
-      );
-      expect(() => functions.timerStart(5, 10_000, false)).toThrow(
-        /^isolate-host bridge: timerStart: /,
-      );
-      expect(exhausted).toBe(1);
-      functions.timerClear(1);
-      functions.timerStart(4, 10_000, false);
-      close();
-    },
-  );
-
   carrier('a stale delivery of a reused id neither re-arms nor ends the new timer', async () => {
     const { createHostBridge } = await load();
     const settles: (() => void)[] = [];
