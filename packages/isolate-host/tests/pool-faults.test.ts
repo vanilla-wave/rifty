@@ -251,12 +251,12 @@ describe('a worker lost with no culprit (I5)', () => {
       const first = await waitFor(() => children()[0], 5000);
       await sleep(500);
       kill(first);
-      const quarantine = await waitFor(() => children().find((p) => p !== first), 5000);
+      const solo = await waitFor(() => children().find((p) => p !== first), 5000);
       await sleep(300);
       const fresh = settle(runCode("setTimeout(() => console.log('f'), 2000)", { timeoutMs: 20000 }));
       await sleep(500);
       const workers = children().length;
-      kill(quarantine);
+      kill(solo);
       out({ suspect: await suspect, fresh: await fresh, workers });`);
       expect(value).not.toHaveProperty('harnessError');
       const v = value as { suspect: { code?: string }; fresh: unknown; workers: number };
@@ -383,12 +383,7 @@ describe('guest memory outside the isolate heap: a solo rerun names the culprit 
     180_000,
   );
 
-  carrier.each([
-    [
-      '262000 one-millisecond intervals',
-      'for (let i = 0; i < 262000; i++) setInterval(() => {}, 1)',
-    ],
-  ])(
+  carrier.each([])(
     '%s: the culprit gets memory (solo rerun), neighbours exact',
     async (_, code) => {
       const v = await withNeighbours(code, '{ memoryLimitMb: 64, timeoutMs: 20000 }', SMALL);
@@ -412,9 +407,62 @@ describe('guest memory outside the isolate heap: a solo rerun names the culprit 
       out({ eight, forty: { exitCode: forty.exitCode, rejected: forty.rejected }, neighbour: await neighbour });`);
       expect(value).toEqual({
         eight: { stdout: '1\n', stderr: '', exitCode: 0 },
-        // 40 MiB is the guest's own failure (V8 refuses to compile it), never a lost worker.
+        // 40 MiB is the guest's own failure (isolated-vm refuses code longer than memoryLimit / 8), never a lost worker.
         forty: { exitCode: 1 },
         neighbour: { stdout: 'n\n', stderr: '', exitCode: 0 },
+      });
+    },
+    120_000,
+  );
+});
+
+describe('host memory a guest makes outside its heap, past both ceilings (I2, I3)', () => {
+  carrier(
+    '600 000 intervals at memoryLimitMb 256: the culprit gets memory from its solo, neighbours exact',
+    async () => {
+      // ~3.3 KiB of worker memory per interval, ~120 MiB of guest heap (under its 256):
+      // past the shared ceiling 256 + 3 × (256 + 192) MiB, then past its solo's 256 + 3 × 256.
+      const v = await withNeighbours(
+        'for (let i = 0; i < 600000; i++) setInterval(() => {}, 1)',
+        '{ memoryLimitMb: 256, timeoutMs: 60000 }',
+        '{ memoryLimitMb: 64 }',
+      );
+      const { ms: _ms, ...culprit } = v.culprit;
+      expect(culprit).toEqual({ stdout: '', stderr: '', exitCode: null, termination: 'memory' });
+      expect(v.shared).toBe(1);
+      expect(v.neighbours).toEqual(NEIGHBOURS);
+      expect(v.next).toEqual(NEXT);
+    },
+    180_000,
+  );
+
+  carrier(
+    'a call alone on a shared worker is not blamed for its RSS: it reruns alone first',
+    async () => {
+      const { value } = await consumer(`
+      const pids = new Set();
+      const t = setInterval(() => { for (const p of children()) pids.add(p); }, 20);
+      const r = await settle(runCode("const m = new WebAssembly.Memory({ initial: 1, maximum: 65536 }); let k = 0; const step = () => { if (k++ >= 400) return; m.grow(160); const u = new Uint8Array(m.buffer); for (let i = 0; i < u.length; i += 4096) u[i] = 1; setTimeout(step, 10) }; step()", { memoryLimitMb: 64, timeoutMs: 60000 }));
+      clearInterval(t);
+      out({ r, workers: pids.size });`);
+      const v = value as { r: Record<string, unknown>; workers: number };
+      expect(v.r).toEqual({ stdout: '', stderr: '', exitCode: null, termination: 'memory' });
+      // Blame comes only from its solo: the shared worker it started on, then the solo.
+      expect(v.workers).toBe(2);
+    },
+    120_000,
+  );
+
+  carrier(
+    'the allowance resets when a worker goes idle: a big call does not lend its ceiling to the next',
+    async () => {
+      const { value } = await consumer(`
+      await runCode('console.log(1)', { memoryLimitMb: 1024 });
+      // Next call at once, on the same warm worker: its ceiling is its own 256 + 3 × 64 MiB.
+      const r = await settle(runCode("const m = new WebAssembly.Memory({ initial: 1, maximum: 65536 }); let k = 0; const step = () => { if (k++ >= 70) return; m.grow(160); const u = new Uint8Array(m.buffer); for (let i = 0; i < u.length; i += 4096) u[i] = 1; setTimeout(step, 10) }; step(); setTimeout(() => console.log('grew'), 2000)", { memoryLimitMb: 64, timeoutMs: 60000 }));
+      out({ r });`);
+      expect(value).toEqual({
+        r: { stdout: '', stderr: '', exitCode: null, termination: 'memory' },
       });
     },
     120_000,
@@ -486,6 +534,20 @@ describe('a failing spawn during a rerun never takes the consumer down (I5)', ()
       expect(v.next).toEqual(NEXT);
     },
   );
+  carrier('spawn fails asynchronously for the rerun (ENOENT): the call rejects LOST', async () => {
+    const { value } = await consumer(`
+      const call = settle(runCode("setTimeout(() => console.log('y'), 3000)", { timeoutMs: 20000 }));
+      const first = await waitFor(() => children()[0], 5000);
+      await sleep(500);
+      // A path that does not exist: spawn reports ENOENT through 'error', after it returned.
+      const execPath = process.execPath;
+      process.execPath = '/nonexistent/rifty-node';
+      kill(first);
+      const result = await call;
+      process.execPath = execPath;
+      out({ result });`);
+    expect((value as { result: { code?: string } }).result.code).toBe(LOST);
+  });
 });
 
 describe('slots and ceilings of a shared worker (I1, I3)', () => {
