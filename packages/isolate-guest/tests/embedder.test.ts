@@ -379,3 +379,38 @@ it.fails('the packed README embedder selects shared buffers per fresh guest', ()
     })),
   );
 });
+
+it.fails('guards both wasm buffer conversion methods when V8 enables them', () => {
+  // Node 24 exposes these methods under a V8 flag. Newer engines enable them by default.
+  const flags =
+    'toResizableBuffer' in WebAssembly.Memory.prototype
+      ? []
+      : ['--experimental-wasm-rab-integration'];
+  const code = `for (const shared of [false, true]) {
+    const memory = new WebAssembly.Memory({initial: 1, maximum: 2, shared});
+    for (const name of ['toFixedLengthBuffer', 'toResizableBuffer']) {
+      try { console.log(Object.prototype.toString.call(memory[name]())) }
+      catch (e) { console.log(e.name, e.feature) }
+    }
+  }`;
+  const driver = `import { run } from './embed.mjs';
+    console.log(JSON.stringify(await run(${JSON.stringify(code)}, {allowSharedArrayBuffer: false})))`;
+  const output = execFileSync(
+    process.execPath,
+    [...flags, '--no-node-snapshot', '--input-type=module', '-e', driver],
+    {
+      cwd: embedder('shared-buffers'),
+      encoding: 'utf8',
+      env,
+      timeout: 30_000,
+    },
+  );
+  const raw = JSON.parse(output) as Outcome;
+  expect(raw).toEqual({
+    stdout:
+      '[object ArrayBuffer]\n'.repeat(2) +
+      'NotImplementedError isolate-host.SharedArrayBuffer\n'.repeat(2),
+    stderr: '',
+    exitCode: 0,
+  });
+});

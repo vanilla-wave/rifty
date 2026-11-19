@@ -22,7 +22,7 @@ Compare to the running Node 24 executable via nodeEval. With an ordinary Int32Ar
 
 ## Parity cases
 
-- Unrestricted fixed/growable buffers and shared wasm memory match live Node. → I2
+- The complete existing node -e corpus with omitted and explicit true retains its passing rows and declared ceilings. Unrestricted fixed/growable buffers and shared wasm memory match live Node. → I2
 - Under restriction, ordinary wasm memory, buffers and Atomics on ordinary views match live Node. → I1
 
 ## Fault matrix

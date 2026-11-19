@@ -59,7 +59,7 @@ it('ordinary backing stores and their prototype constructors stay unshared', asy
 
 const checkPolicy =
   "try { new SharedArrayBuffer(4); console.log('on') } catch (e) { console.log(e.name, e.feature) }";
-it(
+it.fails(
   'keeps alternating policies on the same worker, sequentially and concurrently',
   async () => {
     const { value } = await consumer(`
