@@ -138,6 +138,12 @@ export const CORPUS: readonly Row[] = [
     code: 'let n = 0; const t0 = Date.now(); const iv = setInterval(() => { n++; const e = Date.now() + 10; while (Date.now() < e); }, 1); setTimeout(() => { clearInterval(iv); console.log(Date.now() - t0 < 3000, n < 150) }, 1000)',
   },
   {
+    // Node re-arms from the callback's start: an 80 ms callback every 100 ms runs ~20 times in 2 s
+    // (re-arming from its end would give ~11).
+    label: 'interval-keeps-its-period',
+    code: 'let n = 0; const iv = setInterval(() => { n++; const e = Date.now() + 80; while (Date.now() < e); }, 100); setTimeout(() => { clearInterval(iv); console.log(n >= 15) }, 2050)',
+  },
+  {
     label: 'interval-storm',
     code: "let n = 0; const ts = []; for (let i = 0; i < 20000; i++) ts.push(setInterval(() => { n++ }, 1)); setTimeout(() => { ts.forEach(clearInterval); console.log('done', n > 0) }, 1000)",
   },

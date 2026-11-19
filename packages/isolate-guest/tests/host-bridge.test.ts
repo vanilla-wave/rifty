@@ -375,6 +375,53 @@ describe('interval backpressure (Node: an interval re-arms after its callback ra
     close();
   });
 
+  carrier('close() ends an interval whose delivery is still in flight', async () => {
+    const { createHostBridge } = await load();
+    let fired = 0;
+    let settle = (): void => {};
+    const { functions, close } = createHostBridge({
+      write: () => {},
+      fire: () => {
+        fired++;
+        return new Promise<void>((resolve) => {
+          settle = resolve;
+        });
+      },
+    });
+    functions.timerStart(1, 1, true);
+    await sleep(30);
+    close();
+    settle();
+    await sleep(50);
+    expect(fired).toBe(1);
+  });
+
+  carrier(
+    'an interval keeps its period from the callback start (Node), not from its end',
+    async () => {
+      const { createHostBridge } = await load();
+      const starts: number[] = [];
+      let release = (): void => {};
+      const { functions, close } = createHostBridge({
+        write: () => {},
+        fire: () => {
+          starts.push(performance.now());
+          // The guest "runs" the callback for 60 ms of a 100 ms period.
+          return new Promise<void>((resolve) => {
+            release = resolve;
+            setTimeout(resolve, 60);
+          });
+        },
+      });
+      functions.timerStart(1, 100, true);
+      await sleep(560);
+      close();
+      release();
+      // From the start: ticks at ~100, 200, 300, 400, 500 → 5; from the end: ~100, 260, 420 → 3.
+      expect(starts.length).toBeGreaterThanOrEqual(5);
+    },
+  );
+
   carrier('a hook returning no promise keeps the interval running', async () => {
     const { createHostBridge } = await load();
     let fired = 0;

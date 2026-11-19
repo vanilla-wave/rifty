@@ -34,10 +34,14 @@ describe('shared warm workers (I1)', () => {
       const sampler = sampleChildren();
       const results = await Promise.all(Array.from({ length: ${n} }, (_, i) =>
         runCode('setTimeout(() => console.log(' + i + '), 1000)')));
-      out({ peak: sampler.stop(), results });`);
-    const v = value as { peak: number; results: unknown[] };
+      const peak = sampler.stop();
+      // One idle worker stays warm; a second idle one ends.
+      const settled = await waitFor(() => (children().length === 1 ? true : undefined), 3000).catch(() => false);
+      out({ peak, results, settled });`);
+    const v = value as { peak: number; results: unknown[]; settled: boolean };
     expect(v.results).toEqual(Array.from({ length: n }, (_, i) => ok(`${i}\n`)));
     expect(v.peak).toBe(workers);
+    expect(v.settled).toBe(true);
   });
 });
 

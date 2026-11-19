@@ -189,9 +189,16 @@ describe('a worker lost with no culprit (I5)', () => {
       await sleep(1500);
       kill(first);
       const second = await waitFor(() => children().find((p) => p !== first), 5000);
-      out({ result: await call, moved: first !== second });`);
+      const result = await call;
+      // The reruns' worker ends once they are settled: no idle process per loss.
+      const ended = await waitFor(() => (children().includes(second) ? undefined : true), 3000).catch(() => false);
+      out({ result, moved: first !== second, ended });`);
     expect(value).not.toHaveProperty('harnessError');
-    expect(value).toEqual({ result: { stdout: 'x\ny\n', stderr: '', exitCode: 0 }, moved: true });
+    expect(value).toEqual({
+      result: { stdout: 'x\ny\n', stderr: '', exitCode: 0 },
+      moved: true,
+      ended: true,
+    });
   });
 
   carrier('killed twice: the call rejects naming the signal, at once', async () => {
@@ -335,6 +342,43 @@ describe('bounded worker memory (I10)', () => {
       expect(v.big).toEqual({ stdout: '8000000\n', stderr: '', exitCode: 0 });
       for (const mb of v.idleRssMb) expect(mb).toBeLessThanOrEqual(512);
       expect(v.next).toEqual(NEXT);
+    },
+    120_000,
+  );
+});
+
+describe('slots and ceilings of a shared worker (I1, I3)', () => {
+  carrier(
+    'a cancelled call still running keeps its slot: a 5th call starts another worker',
+    async () => {
+      const { value } = await consumer(`
+      const stuck = settle(runCode("const a = Array.from({ length: 3e6 }, Math.random); for (;;) a.sort()", { timeoutMs: 800 }));
+      const three = [0, 1, 2].map(() => runCode("setTimeout(() => {}, 4000)", { timeoutMs: 20000 }));
+      await stuck;
+      // Inside the 1 s grace: the stuck isolate is still on its worker.
+      const before = children();
+      const fifth = await runCode("console.log('5')");
+      out({ before, during: children().length, fifth });
+      await Promise.all(three);`);
+      const v = value as { before: number[]; during: number; fifth: unknown };
+      expect(v.before).toHaveLength(1);
+      expect(v.during).toBe(2);
+      expect(v.fifth).toEqual({ stdout: '5\n', stderr: '', exitCode: 0 });
+    },
+  );
+
+  carrier(
+    'the RSS ceiling sums its calls: 4 calls each near their own limit all complete',
+    async () => {
+      const { value } = await consumer(`
+      // 4 × 280 MiB resident at memoryLimitMb 300: over 256 + 3 × 300 (one call's
+      // allowance), under 256 + 3 × 1200 (their sum).
+      const code = "const b = new Uint8Array(280 << 20).fill(1); setTimeout(() => console.log(b[123]), 1500)";
+      const results = await Promise.all([0, 1, 2, 3].map(() => runCode(code, { memoryLimitMb: 300, timeoutMs: 30000 }).catch((e) => ({ rejected: e.code }))));
+      out({ results });`);
+      expect(value).toEqual({
+        results: [0, 1, 2, 3].map(() => ({ stdout: '1\n', stderr: '', exitCode: 0 })),
+      });
     },
     120_000,
   );
