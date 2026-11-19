@@ -47,8 +47,9 @@ Result:
 - `exitCode`: Node's status. It is `null` when the run was killed; Node's
   `spawnSync().status` is also `null` for a killed child.
 - `termination`: `'timeout'` or `'memory'`, present only on a kill. `'memory'`
-  means the call's own isolate hit its heap limit or a V8 fatal OOM. Keep an
-  RSS cgroup around the workers.
+  means the call's own isolate hit its heap limit or a V8 fatal OOM, or the
+  call, rerun alone, exhausted its worker. Keep an RSS cgroup around the
+  workers (bound below).
 - `truncated: true`: output passed `maxOutputBytes`. The excess was dropped,
   not buffered, and the run went on to its own exit.
 
@@ -61,13 +62,25 @@ worker does not keep your process alive, and it dies with your process.
 
 When a worker is lost with no culprit known, each of its calls reruns once on
 a worker of its own, within its original deadline. Causes: a crash, the
-OOM-killer, an external `kill`, or its RSS ceiling with more than one isolate
-to blame. Alone, a call that exhausts its worker gets `memory`; an innocent one
+OOM-killer, an external `kill`, or its RSS ceiling on a worker shared with
+other calls. Alone, a call that exhausts its worker gets `memory`; an innocent one
 completes. A call whose own worker is lost for an unknown reason, or whose
 rerun does not finish before its deadline, rejects with an `Error` whose
 `code` is `'ERR_ISOLATE_HOST_WORKER_LOST'`. Its message,
 `isolate-host child exited unexpectedly (code …, signal …)`, contains no guest
-text. You can retry such a call yourself.
+text.
+
+`ERR_ISOLATE_HOST_WORKER_LOST` can be the call's own doing: a guest that
+exhausts its worker only on its first attempt, or only late, is not caught by
+its rerun and may run out of its deadline. Each retry also reruns the calls
+that share its worker, at up to four processes. Retry such a call at most once,
+and count the retry against the rate limit of its source.
+
+How far RSS can go, for your RSS cgroup: one worker reaches at most
+256 MiB + 3 × the sum of `memoryLimitMb` of its (up to 4) concurrent calls,
+plus one allocation step past the sampled ceiling; a call rerun alone, at most
+256 MiB + 3 × its own `memoryLimitMb`. With the defaults (256), one full worker
+can reach 3328 MiB.
 
 ## What the guest gets
 
@@ -128,13 +141,14 @@ Tested:
 - a guest cannot make `runCode` report a failure of the host's own, and
   cannot hang the call past `timeoutMs` + 1 s. One exception is outside the
   isolate: something can kill a worker, such as your cgroup's OOM-killer
-  (which a guest can provoke by allocating). The calls on it then rerun once,
-  and a second loss rejects them with `ERR_ISOLATE_HOST_WORKER_LOST`;
+  (which a guest can provoke by allocating). Each call on it then reruns once,
+  alone, and a loss of that worker rejects it with
+  `ERR_ISOLATE_HOST_WORKER_LOST`;
 - a guest that does not escape changes another call's result only by
   delaying it. Memory blow-ups, hangs, `Atomics.wait`, builtins that ignore
   termination, and output or timer floods were tested next to 3 concurrent
   calls on one worker. A call whose deadline the delay outlives ends as
-  `timeout`;
+  `timeout`, or as `ERR_ISOLATE_HOST_WORKER_LOST` after its worker was lost;
 - a guest can change its own result. It can forge its exit status (throw a
   `RIFTY_PROCESS_EXIT` lookalike, rewrite a caught exit signal) or replace JS
   intrinsics rifty's runtime uses. Either way its stdout, stderr and exit code

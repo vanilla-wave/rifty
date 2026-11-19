@@ -62,8 +62,12 @@ calls share a worker process.
   isolates); `performance.now()` resolves to ~3 µs. Tenants that must not share a process need
   separate consumer processes.
 - **Consumer's duty.** Put the workers behind an external boundary: a separate uid, a sandbox or
-  container, an RSS cgroup. No secrets may be reachable by that user. Limit the call rate per
-  source: a guest can repeat an attack in new calls without bound. Track Node point releases
+  container, an RSS cgroup above the workers' bound (README §API: 256 MiB + 3 × the sum of a
+  worker's call limits). No secrets may be reachable by that user. Limit the call rate per
+  source: a guest can repeat an attack in new calls without bound. `ERR_ISOLATE_HOST_WORKER_LOST`
+  can be the call's own doing (a guest that exhausts its worker only at first or only late), and
+  each retry reruns its worker's other calls: retry at most once, counted against that source's
+  limit. Track Node point releases
   that patch V8. rifty does not orchestrate pods, hypervisors or deploys.
 - **Custom embedders (`@riftydev/isolate-guest`, ADR-0558).** The same guest in an isolate the
   consumer creates. Its `createHostBridge` validates every guest argument. The limits, the kill,
