@@ -349,3 +349,163 @@ describe('the README states the contract (ADR-0558 §2)', () => {
     },
   );
 });
+
+it('the packed README embedder selects shared buffers per fresh guest', () => {
+  const app = embedder('shared-buffers');
+  const code = `if (typeof SharedArrayBuffer === 'undefined') console.log('fallback');
+    else console.log(new SharedArrayBuffer(4).byteLength);`;
+  const driver = `import { run } from './embed.mjs';
+    for (const options of [{allowSharedArrayBuffer: false}, undefined, {allowSharedArrayBuffer: true}]) {
+      console.log(JSON.stringify(await run(${JSON.stringify(code)}, options)));
+    }
+    try { await run('0', {allowSharedArrayBuffer: 'false'}); }
+    catch (e) { console.log(JSON.stringify(e.message)); }`;
+  const results = execFileSync(
+    process.execPath,
+    ['--no-node-snapshot', '--input-type=module', '-e', driver],
+    {
+      cwd: app,
+      encoding: 'utf8',
+      env,
+      timeout: 30_000,
+    },
+  )
+    .trim()
+    .split('\n')
+    .map((line): unknown => JSON.parse(line));
+  expect(results.pop()).toBe('isolate-host guest: allowSharedArrayBuffer must be a boolean');
+  expect(results).toEqual(
+    [nodeEval(code, ['--enable-sharedarraybuffer-per-context']).stdout, '4\n', '4\n'].map(
+      (stdout) => ({
+        stdout,
+        stderr: '',
+        exitCode: 0,
+      }),
+    ),
+  );
+});
+
+it('pins the wasm memory API and checks each buffer producer with guest intrinsics replaced', () => {
+  // Node 24 exposes these methods under a V8 flag. Newer engines enable them by default.
+  const flags =
+    'toResizableBuffer' in WebAssembly.Memory.prototype
+      ? []
+      : ['--experimental-wasm-rab-integration'];
+  const ordinary = `const memory = new WebAssembly.Memory({initial: 1, maximum: 2});
+    for (const name of ['toFixedLengthBuffer', 'toResizableBuffer']) {
+      const fn = memory[name];
+      console.log(fn.name, Object.hasOwn(fn, 'prototype'), memory[fn.name]().byteLength);
+      try { Reflect.construct(Object, [], fn); console.log('constructable') }
+      catch (e) { console.log(e.name) }
+    }`;
+  const oracle = execFileSync(process.execPath, [...flags, '-e', ordinary], { encoding: 'utf8' });
+  const code = `${ordinary}
+  console.log(Reflect.ownKeys(WebAssembly.Memory.prototype).map(String).sort().join(','));
+  for (const shared of [false, true]) {
+    const memory = new WebAssembly.Memory({initial: 1, maximum: 2, shared});
+    for (const key of ['buffer', 'toFixedLengthBuffer', 'toResizableBuffer']) {
+      const tag = Object.prototype.toString;
+      const apply = Reflect.apply;
+      const length = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, 'byteLength');
+      let lookups = 0;
+      let result, error;
+      try {
+        const unexpected = () => { lookups++; throw Error('late lookup') };
+        Object.prototype.toString = Reflect.apply = unexpected;
+        Object.defineProperty(ArrayBuffer, Symbol.hasInstance, {configurable: true, value: unexpected});
+        Object.defineProperty(ArrayBuffer.prototype, 'byteLength', {...length, get: unexpected});
+        result = key === 'buffer' ? memory.buffer : memory[key]();
+      } catch (e) { error = e }
+      finally {
+        delete ArrayBuffer[Symbol.hasInstance];
+        Object.defineProperty(ArrayBuffer.prototype, 'byteLength', length);
+        Object.prototype.toString = tag;
+        Reflect.apply = apply;
+      }
+      console.log(lookups, error ? error.name + ' ' + error.feature : tag.call(result));
+    }
+  }`;
+  const driver = `import { run } from './embed.mjs';
+    console.log(JSON.stringify(await run(${JSON.stringify(code)}, {allowSharedArrayBuffer: false})))`;
+  const output = execFileSync(
+    process.execPath,
+    [...flags, '--no-node-snapshot', '--input-type=module', '-e', driver],
+    {
+      cwd: embedder('shared-buffers'),
+      encoding: 'utf8',
+      env,
+      timeout: 30_000,
+    },
+  );
+  const raw = JSON.parse(output) as Outcome;
+  expect(raw).toEqual({
+    stdout: [
+      oracle,
+      'Symbol(Symbol.toStringTag),buffer,constructor,grow,toFixedLengthBuffer,toResizableBuffer\n',
+      '0 [object ArrayBuffer]\n'.repeat(3),
+      '0 NotImplementedError isolate-host.SharedArrayBuffer\n'.repeat(3),
+    ].join(''),
+    stderr: '',
+    exitCode: 0,
+  });
+});
+
+it('the restricted bundle removes the global and guards wasm before runtime imports capture them', () => {
+  // Observe the original binding from the embedder before running any bundle code.
+  // Each observer forwards to V8 so the bundle sees real constructors and exports.
+  const driver = `import ivm from 'isolated-vm';
+    import { readFileSync } from 'node:fs';
+    import { createHostBridge } from '@riftydev/isolate-guest';
+    const bundle = readFileSync(new URL(import.meta.resolve('@riftydev/isolate-guest/guest.js')), 'utf8');
+    for (const flag of [false, true]) {
+      const isolate = new ivm.Isolate();
+      const context = isolate.createContextSync();
+      const bridge = createHostBridge({ write() {}, fire() {} });
+      try {
+        context.evalSync(\`let reads = 0, rawMemoryLookups = 0, earlyExports = 0;
+          (() => {
+            const Memory = WebAssembly.Memory;
+            const nativeGet = Object.getOwnPropertyDescriptor(Memory.prototype, 'buffer').get;
+            const guardPending = () =>
+              Object.getOwnPropertyDescriptor(Memory.prototype, 'buffer').get === nativeGet;
+            const instance = WebAssembly.Instance.prototype;
+            const exportsDescriptor = Object.getOwnPropertyDescriptor(instance, 'exports');
+            Object.defineProperty(instance, 'exports', {
+              ...exportsDescriptor, get() {
+                if (guardPending()) earlyExports++;
+                return exportsDescriptor.get.call(this);
+              }
+            });
+            Object.defineProperty(WebAssembly, 'Memory', {
+              configurable: true, get() {
+                if (guardPending()) rawMemoryLookups++;
+                return Memory;
+              }
+            });
+            const original = SharedArrayBuffer;
+            Object.defineProperty(globalThis, 'SharedArrayBuffer', {
+              configurable: true, get() { reads++; return original; }
+            });
+          })();
+          globalThis.__riftyIsolateHost = { allowSharedArrayBuffer: \${flag}, timeOrigin: \${bridge.timeOrigin} };
+        \`);
+        const record = context.global.getSync('__riftyIsolateHost', {reference: true});
+        for (const [key, fn] of Object.entries(bridge.functions)) record.setSync(key, new ivm.Callback(fn));
+        isolate.compileScriptSync(bundle).runSync(context);
+        console.log(context.evalSync('reads > 0'));
+        if (!flag) console.log(context.evalSync('JSON.stringify([rawMemoryLookups, earlyExports])'));
+      } finally { bridge.close(); isolate.dispose(); }
+    }`;
+  const output = execFileSync(
+    process.execPath,
+    ['--no-node-snapshot', '--input-type=module', '-e', driver],
+    {
+      cwd: embedder('shared-buffers'),
+      encoding: 'utf8',
+      env,
+      timeout: 30_000,
+    },
+  );
+  // The shim itself looks up Memory once to replace its native buffer getter.
+  expect(output).toBe('false\n[1,0]\ntrue\n');
+});

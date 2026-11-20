@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add the per-call `allowSharedArrayBuffer` option to `runCode`. False removes the global for feature detection. Shared wasm backing buffers throw the named gap on access. Default true (ADR-0566).
+
 - Known gaps declared (no behavior change): an unhandled rejection whose promise the GC collects before its task ends is lost — `exitCode: 0`, empty stderr where Node exits 1 (isolated-vm weak record, https://github.com/laverdet/isolated-vm/issues/589); `process.exit()` from a microtask of the code's synchronous run ends as `timeout`. README gives the guest-side workaround (handle every promise, set `process.exitCode`).
 - Cross-review round 3: a lost call's rerun whose worker fails to start asynchronously (ENOENT, EAGAIN, EMFILE) rejects `ERR_ISOLATE_HOST_WORKER_LOST`; a worker's RSS allowance resets when it goes from idle to busy. README states how far a worker's RSS can go and how to retry `ERR_ISOLATE_HOST_WORKER_LOST` (at most once, counted against the source's limit).
 - Cross-review rounds 1–2 (ADR-0563 §Corrections): a worker lost with no culprit reruns each call alone, where an exhaustion of the process (wasm, resizable buffers, ICU, timers) is that call's `memory`; at most one process per call in flight. An interval never ticks early. A spawn failure rejects its call without holding the consumer, and while rerunning a lost worker's calls rejects them `ERR_ISOLATE_HOST_WORKER_LOST` instead of throwing in the consumer.

@@ -43,7 +43,7 @@ const bundle = readFileSync(
 );
 
 /** One call: a fresh isolate runs `code` like `node -e`, then is disposed. */
-export async function run(code) {
+export async function run(code, { allowSharedArrayBuffer = true } = {}) {
   const out = { 1: [], 2: [] };
   let ended = false;
   let settle;
@@ -83,10 +83,10 @@ export async function run(code) {
     const context = await isolate.createContext();
     const names = Object.keys(functions);
     await context.evalClosure(
-      `globalThis.__riftyIsolateHost = { timeOrigin: ${timeOrigin}, ${names
-        .map((name, i) => `${name}: $${i}`)
+      `globalThis.__riftyIsolateHost = { timeOrigin: ${timeOrigin}, allowSharedArrayBuffer: $0, ${names
+        .map((name, i) => `${name}: $${i + 1}`)
         .join(', ')} };`,
-      names.map((name) => new ivm.Callback(functions[name])),
+      [allowSharedArrayBuffer, ...names.map((name) => new ivm.Callback(functions[name]))],
     );
     const script = await isolate.compileScript(bundle, { filename: 'rifty-isolate-guest.js' });
     await script.run(context);
@@ -147,6 +147,7 @@ your own, you must perform them yourself.
 | `timerClear(id)` | `id`: guest | `id` as above; an unknown `id` is a no-op |
 | `now()` | none | returns ms since `timeOrigin`, the start of this call |
 | `random(byteLength)` | `byteLength`: guest | an integer in 0..65536; returns that many random bytes |
+| `allowSharedArrayBuffer?` | you | boolean, default true. False removes the global (`typeof SharedArrayBuffer === 'undefined'`), as in Node with `--enable-sharedarraybuffer-per-context`. Requesting a shared wasm backing buffer throws `NotImplementedError('isolate-host.SharedArrayBuffer')`. Use a fresh pristine context and supply only the specified bridge values with ordinary backing stores. |
 | `timeOrigin` | you | a number: the call's start in epoch ms (`createHostBridge` returns it). Never your process's `performance.timeOrigin`: the guest would read your uptime and could link calls |
 
 The `write` hook must be synchronous: a promise it returns is not awaited, and

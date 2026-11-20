@@ -15,23 +15,28 @@ describe('package surface (ADR-0557 §1)', () => {
   });
 });
 
-describe('runCode parity with node -e (I1)', () => {
-  for (const row of CORPUS) {
-    const test = row.ceiling === undefined ? it : it.fails;
-    test(row.ceiling === undefined
-      ? row.label
-      : `${row.label} — ceiling: ${row.ceiling}`, async () => {
-      const raw = nodeEval(row.code);
-      expect(raw.signal, 'oracle must exit on its own').toBeNull();
-      const result = await runCode(row.code);
-      expect(result.termination).toBeUndefined();
-      expect(result.truncated).toBeUndefined();
-      expect(parityView(row, result)).toEqual(
-        parityView(row, { stdout: raw.stdout, stderr: raw.stderr, exitCode: raw.code }),
-      );
-    });
-  }
-});
+describe.each([undefined, true])(
+  'runCode parity with node -e (allowSharedArrayBuffer=%s)',
+  (allowSharedArrayBuffer) => {
+    for (const row of CORPUS) {
+      const test = row.ceiling === undefined ? it : it.fails;
+      test(row.ceiling === undefined
+        ? row.label
+        : `${row.label} — ceiling: ${row.ceiling}`, async () => {
+        const raw = nodeEval(row.code);
+        expect(raw.signal, 'oracle must exit on its own').toBeNull();
+        const options =
+          allowSharedArrayBuffer === undefined ? undefined : { allowSharedArrayBuffer };
+        const result = await runCode(row.code, options);
+        expect(result.termination).toBeUndefined();
+        expect(result.truncated).toBeUndefined();
+        expect(parityView(row, result)).toEqual(
+          parityView(row, { stdout: raw.stdout, stderr: raw.stderr, exitCode: raw.code }),
+        );
+      });
+    }
+  },
+);
 
 /** Declared gaps pinned to what they do today: a fix turns them red (compat ⚠️ rows). */
 describe('declared gaps and their workarounds (compat ⚠️)', () => {

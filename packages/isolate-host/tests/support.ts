@@ -6,10 +6,10 @@ import { join } from 'node:path';
 import type { NodeCliEvalRawOutcome } from '../../../tools/node-parity-runner/src/node-cli-eval.ts';
 
 /** The live oracle: `node -e <code>` by this very Node executable, empty env, fresh cwd. */
-export function nodeEval(code: string): NodeCliEvalRawOutcome {
+export function nodeEval(code: string, flags: readonly string[] = []): NodeCliEvalRawOutcome {
   const cwd = mkdtempSync(join(tmpdir(), 'isolate-host-oracle-'));
   try {
-    const r = spawnSync(process.execPath, ['-e', code], {
+    const r = spawnSync(process.execPath, [...flags, '-e', code], {
       cwd,
       env: {},
       encoding: 'utf8',

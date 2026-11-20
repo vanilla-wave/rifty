@@ -15,6 +15,7 @@
  * preceded by the flush of what came before.
  */
 export interface RunRequest {
+  readonly allowSharedArrayBuffer?: boolean;
   readonly type: 'run';
   readonly call: number;
   readonly code: string;

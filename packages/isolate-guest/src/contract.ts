@@ -19,6 +19,8 @@ export interface HostFunctions {
 
 /** `globalThis.__riftyIsolateHost`, set by the embedder before the bundle runs. */
 export interface GuestHost extends HostFunctions {
+  /** Set before bundle load in a fresh context. Omitted or true permits shared buffers. */
+  readonly allowSharedArrayBuffer?: boolean;
   /** The call's start, epoch ms (`HostBridge.timeOrigin`). */
   readonly timeOrigin: number;
 }

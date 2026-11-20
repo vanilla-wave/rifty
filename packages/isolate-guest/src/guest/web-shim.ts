@@ -26,6 +26,42 @@ const mapGetPrimordial = Map.prototype.get;
 const mapSetPrimordial = Map.prototype.set;
 const mapDeletePrimordial = Map.prototype.delete;
 
+// Apply the policy before runtime imports can capture native buffer producers.
+const { allowSharedArrayBuffer = true } = bridge;
+if (typeof allowSharedArrayBuffer !== 'boolean')
+  throw new TypeError('isolate-host guest: allowSharedArrayBuffer must be a boolean');
+if (!allowSharedArrayBuffer) {
+  // biome-ignore lint/performance/noDelete: runtime feature detection must see the constructor absent.
+  delete g.SharedArrayBuffer;
+  if (typeof WebAssembly !== 'undefined') restrictWasmBuffers(WebAssembly.Memory.prototype);
+}
+
+/** Only release native ArrayBuffers. The captured getter tests V8 internal slots
+ * without asking the guest for a brand, prototype or property. Applies equally
+ * to JS-constructed memories and memories exported from a compiled module. */
+function restrictWasmBuffers(prototype: object): void {
+  const byteLength = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, 'byteLength')!.get!;
+  for (const key of ['buffer', 'toFixedLengthBuffer', 'toResizableBuffer']) {
+    const descriptor = Object.getOwnPropertyDescriptor(prototype, key);
+    if (!descriptor) continue;
+    const field = key === 'buffer' ? 'get' : 'value';
+    const native: (this: WebAssembly.Memory) => ArrayBufferLike = descriptor[field];
+    // Like the native accessor and methods, this method has a name and no [[Construct]].
+    const checked = {
+      [native.name](this: WebAssembly.Memory) {
+        const buffer: unknown = reflectApplyPrimordial(native, this, []);
+        try {
+          reflectApplyPrimordial(byteLength, buffer, []);
+        } catch {
+          throw notImplemented('isolate-host.SharedArrayBuffer', 'disabled for this guest');
+        }
+        return buffer;
+      },
+    };
+    Object.defineProperty(prototype, key, { ...descriptor, [field]: checked[native.name] });
+  }
+}
+
 /** UTF-8 bytes straight to the host, through the codec's module function, not the guest-visible class. */
 export function writeHost(fd: 1 | 2, text: string): void {
   bridge.write(fd, encodeUtf8(text));
