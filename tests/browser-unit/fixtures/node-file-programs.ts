@@ -240,6 +240,30 @@ export const fatalPrograms: readonly NodeFileProgram[] = [
     argv: ['main.js'],
   },
   {
+    name: 'fatal-with-queued-timer',
+    files: {
+      'main.js':
+        "setTimeout(() => {\n  throw new Error('a');\n}, 1);\nsetTimeout(() => console.log('queued'), 1);\n",
+    },
+    argv: ['main.js'],
+  },
+  {
+    name: 'fatal-with-queued-exit-zero',
+    files: {
+      'main.js':
+        "setTimeout(() => {\n  throw new Error('a');\n}, 1);\nsetTimeout(() => process.exit(0), 1);\n",
+    },
+    argv: ['main.js'],
+  },
+  {
+    name: 'rejection-with-queued-work',
+    files: {
+      'main.js':
+        "Promise.reject(new Error('r'));\nsetTimeout(() => console.log('queued'), 0);\nprocess.nextTick(() => console.log('tick'));\n",
+    },
+    argv: ['main.js'],
+  },
+  {
     name: 'syntax-error-entry',
     files: { 'main.js': 'const a = 1;\nlet x = ;\n' },
     argv: ['main.js'],
@@ -372,6 +396,7 @@ export type NodeFileHost = 'no-COI' | 'COI';
  * other row must equal Node. Shrinks to empty as the goal's map lands.
  */
 const LANDED = new Set([
+  'fatal-with-queued-exit-zero',
   'throw-from-timer',
   'error-with-props',
   'rethrow-in-catch',
