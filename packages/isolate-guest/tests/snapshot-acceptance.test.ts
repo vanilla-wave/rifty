@@ -178,6 +178,13 @@ describe('guest FS snapshot — scenario', () => {
         'String.prototype.charCodeAt = function () { return 47 }',
         'globalThis.Uint8Array = function () { return new Proxy({}, {}) }',
       ];
+      // Control: the unaltered realm's snapshot restores.
+      const [, , control] = drive([
+        { op: 'isolate' },
+        { op: 'run', code: BUILD_TREE },
+        { op: 'snapshot', options: OPTIONS },
+      ]);
+      restoreFs(createMemoryFs().fsSync, unb64(control?.bytes), OPTIONS);
       for (const poison of poisons) {
         const [, ran, snap] = drive([
           { op: 'isolate' },
