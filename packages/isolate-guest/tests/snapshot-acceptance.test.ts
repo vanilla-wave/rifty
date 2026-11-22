@@ -1,11 +1,14 @@
 /**
  * Acceptance carrier, goal `isolate-host-fs-snapshot` (scenario steps 1–4,
- * I1–I5): the built guest bundle in real isolated-vm 7.0.2 and rifty
+ * I1–I6): the built guest bundle in real isolated-vm 7.0.2 and rifty
  * `MemoryFs` in this Node realm, no sandbox API. RED until the codec lands
  * (`carrier` = `it.fails`), then plain `it`.
  */
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createMemoryFs } from '@riftydev/vfs/internal';
-import { describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 import { FsSnapshotError, restoreFs, snapshotFs } from '../src/index.ts';
 import { BUILD_TREE, LIST_TREE, type Row, drive, listFs, withoutMode } from './snapshot-support.ts';
 
@@ -13,23 +16,27 @@ const carrier = it.fails;
 
 const TEMPLATE = { id: 'docs-libs', version: '2026.11.1' };
 const OPTIONS = { template: TEMPLATE, maxBytes: 1 << 20 };
+const MiB = 1 << 20;
 const rows = (stdout: string | undefined): Row[] => JSON.parse(stdout ?? 'null') as Row[];
+const shape = (list: readonly Row[]) =>
+  list.map(({ path, kind, names }) => ({ path, kind, names }));
 const b64 = (bytes: Uint8Array): string => Buffer.from(bytes).toString('base64');
 const unb64 = (text: string | undefined): Uint8Array =>
   new Uint8Array(Buffer.from(text ?? '', 'base64'));
+const work = mkdtempSync(join(tmpdir(), 'isolate-guest-snapshot-'));
+afterAll(() => rmSync(work, { recursive: true, force: true }));
 
 describe('guest FS snapshot — scenario', () => {
-  carrier('steps 1–2: written in one isolate, seen identically in a fresh one (I1)', () => {
-    const [, built, before, snap] = drive([
+  carrier('steps 1–2: written in one isolate, seen identically in a fresh one (I1, I6)', () => {
+    const [, before, snap] = drive([
       { op: 'isolate' },
-      { op: 'run', code: BUILD_TREE },
-      // Listed after the build run ended, in the same isolate: the reference.
-      { op: 'run', code: LIST_TREE },
+      // Build and list in the one run of this isolate; the listing is the reference.
+      { op: 'run', code: BUILD_TREE + LIST_TREE },
       { op: 'snapshot', options: OPTIONS },
     ]);
-    expect(built?.exitCode).toBe(0);
+    expect(before?.exitCode).toBe(0);
     expect(snap?.error).toBeUndefined();
-    // Crossed the ivm boundary as an exact-length buffer (I6).
+    // An honest snapshot crosses the ivm boundary as an exact-length buffer.
     expect(snap).toMatchObject({ type: '[object Uint8Array]', exact: true });
     const [, restored, after] = drive([
       { op: 'isolate' },
@@ -41,10 +48,9 @@ describe('guest FS snapshot — scenario', () => {
   });
 
   carrier('step 3: isolate ⇄ consumer realm, both directions (I1, I5)', () => {
-    const [, , listed, snap] = drive([
+    const [, listed, snap] = drive([
       { op: 'isolate' },
-      { op: 'run', code: BUILD_TREE },
-      { op: 'run', code: LIST_TREE },
+      { op: 'run', code: BUILD_TREE + LIST_TREE },
       { op: 'snapshot', options: OPTIONS },
     ]);
     const isolateBytes = unb64(snap?.bytes);
@@ -52,7 +58,7 @@ describe('guest FS snapshot — scenario', () => {
     const node = createMemoryFs().fsSync;
     restoreFs(node, isolateBytes, OPTIONS);
     expect(listFs(node)).toEqual(withoutMode(rows(listed?.stdout)));
-    expect(b64(snapshotFs(node, OPTIONS))).toBe(snap?.bytes);
+    expect(Buffer.from(snapshotFs(node, OPTIONS)).equals(Buffer.from(isolateBytes))).toBe(true);
     // Node → isolate: a tree built here restores there.
     const built = createMemoryFs().fsSync;
     built.mkdirSync('/workspace/out', { recursive: true });
@@ -102,11 +108,8 @@ describe('guest FS snapshot — scenario', () => {
         { op: 'run', code: LIST_TREE },
       ]);
       expect(refused?.error, label).toMatch(new RegExp(`^${code}: `));
-      // The fresh tree, untouched; ino/times of a fresh FS are its own.
-      expect(
-        rows(listing?.stdout).map((r) => r.path),
-        label,
-      ).toEqual(rows(freshListing?.stdout).map((r) => r.path));
+      // The fresh tree, untouched (its own times: another isolate).
+      expect(shape(rows(listing?.stdout)), label).toEqual(shape(rows(freshListing?.stdout)));
       const node = createMemoryFs().fsSync;
       node.writeFileSync('/marker', new Uint8Array([1]));
       const before = listFs(node);
@@ -117,21 +120,82 @@ describe('guest FS snapshot — scenario', () => {
     }
   });
 
+  carrier('snapshot over maxBytes is refused before the blob is allocated (I4)', () => {
+    // 50 MiB of files under a 96 MiB isolate: a second copy would not fit.
+    const [, built, tooBig, fits] = drive([
+      { op: 'isolate', memoryLimit: 96 },
+      {
+        op: 'run',
+        code: "require('fs').writeFileSync('/workspace/big', new Uint8Array(50 * 1024 * 1024))",
+      },
+      { op: 'snapshot', options: { ...OPTIONS, maxBytes: MiB } },
+      { op: 'snapshot', options: { ...OPTIONS, maxBytes: 1 << 30 } },
+    ]);
+    expect(built?.exitCode).toBe(0);
+    expect(tooBig?.error).toMatch(/^ERR_FS_SNAPSHOT_TOO_LARGE: /);
+    // Control: the same tree within the limit does need the second copy.
+    expect(fits?.error).toBeDefined();
+  });
+
+  carrier('restore over maxBytes is refused before the blob is read (I4)', () => {
+    const file = join(work, 'big.blob');
+    writeFileSync(file, Buffer.alloc(60 * MiB, 0x41));
+    const [, refused, listing] = drive([
+      { op: 'isolate', memoryLimit: 96 },
+      { op: 'restore', file, options: { ...OPTIONS, maxBytes: MiB } },
+      { op: 'run', code: LIST_TREE },
+    ]);
+    expect(refused?.error).toMatch(/^ERR_FS_SNAPSHOT_TOO_LARGE: /);
+    expect(listing?.exitCode).toBe(0);
+  });
+
+  carrier('restore during or after guest code is refused; snapshot after it works (I4)', () => {
+    // A valid blob: refused for freshness alone.
+    const valid = b64(snapshotFs(createMemoryFs().fsSync, OPTIONS));
+    const [, , during, settled, after, late] = drive([
+      { op: 'isolate' },
+      { op: 'run', code: `${BUILD_TREE}; setTimeout(() => {}, 300)`, wait: false },
+      { op: 'restore', bytes: valid, options: OPTIONS },
+      { op: 'settle' },
+      { op: 'snapshot', options: OPTIONS },
+      { op: 'restore', bytes: valid, options: OPTIONS },
+    ]);
+    expect(during?.error).toMatch(/^ERR_FS_SNAPSHOT_NOT_FRESH: /);
+    expect(settled?.exitCode).toBe(0);
+    expect(after).toMatchObject({ exact: true });
+    expect(late?.error).toMatch(/^ERR_FS_SNAPSHOT_NOT_FRESH: /);
+  });
+
   carrier(
-    'a tree over maxBytes is refused at snapshot; restore after guest code is refused (I4)',
+    'a snapshot from a realm the guest altered is only bytes to the consumer (I3, I4)',
     () => {
-      // A valid blob: refused for freshness alone.
-      const valid = b64(snapshotFs(createMemoryFs().fsSync, OPTIONS));
-      const [, , tooBig, after, late] = drive([
-        { op: 'isolate' },
-        { op: 'run', code: BUILD_TREE },
-        { op: 'snapshot', options: { ...OPTIONS, maxBytes: 64 } },
-        { op: 'snapshot', options: OPTIONS },
-        { op: 'restore', bytes: valid, options: OPTIONS },
-      ]);
-      expect(after?.exact).toBe(true);
-      expect(tooBig?.error).toMatch(/^ERR_FS_SNAPSHOT_TOO_LARGE: /);
-      expect(late?.error).toMatch(/^ERR_FS_SNAPSHOT_NOT_FRESH: /);
+      // Intrinsics a writer may use, replaced by guest code before the snapshot.
+      const poisons = [
+        'DataView.prototype.setFloat64 = function () {}',
+        'DataView.prototype.setUint32 = function () { throw new Error("SECRET") }',
+        'Uint8Array.prototype.set = function () {}',
+        'Array.prototype.sort = function () { return this.reverse() }',
+        'String.prototype.charCodeAt = function () { return 47 }',
+        'globalThis.Uint8Array = function () { return new Proxy({}, {}) }',
+      ];
+      for (const poison of poisons) {
+        const [, ran, snap] = drive([
+          { op: 'isolate' },
+          { op: 'run', code: `${BUILD_TREE}; ${poison}` },
+          { op: 'snapshot', options: OPTIONS },
+        ]);
+        expect(ran?.exitCode, poison).toBe(0);
+        if (snap?.bytes === undefined) continue;
+        const node = createMemoryFs().fsSync;
+        try {
+          restoreFs(node, unb64(snap.bytes), OPTIONS);
+          // Accepted only as a consistent tree: it snapshots again.
+          expect(() => snapshotFs(node, { ...OPTIONS, maxBytes: 1 << 30 }), poison).not.toThrow();
+        } catch (error) {
+          expect(error, poison).toBeInstanceOf(FsSnapshotError);
+          expect(String(error), poison).not.toContain('SECRET');
+        }
+      }
     },
   );
 });
