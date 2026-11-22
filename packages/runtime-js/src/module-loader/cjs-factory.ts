@@ -15,6 +15,7 @@ export function cjsLineOnePrefix(filename: string): number | undefined {
 
 /** Node's CommonJS wrapper parameters, in its order. */
 const NODE_WRAPPER = 'exports,require,module,__filename,__dirname';
+const NODE_PARAMS = NODE_WRAPPER.split(',');
 
 /**
  * Node's `compileFunction` wrapper keeps every source line where it is. The
@@ -31,13 +32,16 @@ export function compileCjsFactory(
   filename: string,
 ): (...helperValues: unknown[]) => Factory {
   const sourceURL = `\n//# sourceURL=${filename}`;
-  // Validate the body before eval: otherwise a closing brace could escape the
-  // expression and execute code during compilation. Also the general fallback.
-  const validated = new Function(
-    ...helpers,
-    `return function(${NODE_WRAPPER}){${source}\n}${sourceURL}`,
-  ) as (...helperValues: unknown[]) => Factory;
-  if (/[\r\n\u2028\u2029]/.test(filename)) return validated;
+  // The source alone must be a function body (Node compileFunction): only
+  // then are its braces its own, so no `}` of it can close the wrapper and
+  // run a line outside it. The wrapper text is never part of this check.
+  new Function(...NODE_PARAMS, `${source}${sourceURL}`);
+  if (/[\r\n\u2028\u2029]/.test(filename)) {
+    return new Function(
+      ...helpers,
+      `return function(${NODE_WRAPPER}){${source}\n}${sourceURL}`,
+    ) as (...helperValues: unknown[]) => Factory;
+  }
   // Anonymous + strict keeps function-name bindings and callee reflection out.
   const prefix = `(function(${helpers.join(',')}){return function(${NODE_WRAPPER}){`;
   const outer = indirectEval(`${prefix}${source}\n}})${sourceURL}`) as (

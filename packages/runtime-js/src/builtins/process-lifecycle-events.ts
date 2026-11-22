@@ -9,7 +9,7 @@
  * another bundle than the process: they reach its state through the
  * `Symbol.for` slot, never a module-local import.
  */
-import { type FatalOrigin, clearFatalTaskRoot, formatFatalReport } from './fatal-report.ts';
+import { FATAL_TRAILER, type FatalOrigin, formatFatalReport } from './fatal-report.ts';
 import { readActiveNodeProcessBootstrap } from './process-bootstrap-identity.ts';
 
 const NODE_PROCESS_LIFECYCLE = Symbol.for('rifty.runtime-js.process-lifecycle.v1');
@@ -235,15 +235,9 @@ export function dispatchUncaughtException(
   const active = lifecycleTarget(target);
   if (active === null) return NO_PROCESS;
   try {
-    // A listener that sees the error may keep and throw it again: a later
-    // throw of it is not this task root's (no header proof, fatal-report.ts).
-    if (active.process.emit('uncaughtExceptionMonitor', error, origin)) clearFatalTaskRoot(error);
-    if (active.process.emit('uncaughtException', error, origin)) {
-      clearFatalTaskRoot(error);
-      return HANDLED;
-    }
+    active.process.emit('uncaughtExceptionMonitor', error, origin);
+    if (active.process.emit('uncaughtException', error, origin)) return HANDLED;
   } catch (thrown) {
-    clearFatalTaskRoot(error);
     if (isRiftyProcessExit(thrown)) return { kind: 'exited', signal: thrown };
     try {
       active.exit.listenerThrew(thrown);
@@ -431,24 +425,19 @@ function noSideEffectsToString(value: unknown): string {
   return `[object ${typeof tag === 'string' ? tag : builtinTag(value)}]`;
 }
 
-/** The value's plain fatal text (V8 `NoSideEffectsToString` for a non-Error). */
-function formatThrown(error: unknown): string {
-  if (error instanceof Error) return error.stack ?? `${error.name}: ${error.message}`;
-  return noSideEffectsToString(error);
-}
-
 /**
- * Node's fatal report; where guest-replaced intrinsics break it (an open class,
- * compat isolate-host.md), the plain text — a failure is never silent.
+ * Node's fatal report; where a guest value or guest-replaced intrinsics break
+ * it, the value's side-effect-free text and the trailer — never a stack, so no
+ * rifty frame or host path reaches the output, and a failure is never silent.
  */
 export function fatalReportText(error: unknown, origin?: FatalOrigin): string {
   try {
     return formatFatalReport(error, origin);
   } catch {
     try {
-      return `${formatThrown(error)}\n`;
+      return `${noSideEffectsToString(error)}\n${FATAL_TRAILER}`;
     } catch {
-      return 'Uncaught exception\n';
+      return `Uncaught exception\n${FATAL_TRAILER}`;
     }
   }
 }

@@ -1,42 +1,47 @@
 import { parse as acornParse, tokenizer as acornTokenizer } from 'acorn';
 import { setFatalHeader } from '../builtins/fatal-report.ts';
 
-// biome-ignore lint/security/noGlobalEval: a never-completing parse yields V8's own compile message.
-const indirectEval = eval;
+const NODE_PARAMS = ['exports', 'require', 'module', '__filename', '__dirname'];
 
 /**
- * Node's compile failure of a CommonJS source: V8's own `SyntaxError` with
- * `compileFunction`'s message (no wrapper token: the body is parsed inside an
- * unterminated function, so an end-of-input error reads as Node's and nothing
- * can execute) and the report header Node's V8 message gives it. JS cannot
- * read V8's error position, so acorn locates it (compat process.md "Fatal
- * error stderr bytes" where they disagree). Null when V8 accepts `source`.
+ * Node's compile failure of a CommonJS source: a `SyntaxError` with
+ * `compileFunction`'s message — V8's own from `new Function` over the source
+ * alone, nothing executes; at the end of input `new Function`'s closing
+ * token reads instead of Node's `Unexpected end of input`, so acorn's
+ * end-of-input failure picks that message. The header only where acorn's
+ * failing token is the one V8 names (or the end of input); JS cannot read
+ * V8's position otherwise (compat process.md). Null when V8 accepts `source`.
  */
 export function cjsSyntaxError(source: string, filename: string): SyntaxError | null {
-  let error: unknown;
+  let message: string;
   try {
-    indirectEval(`(function(){(function(){${source}`);
+    new Function(...NODE_PARAMS, source);
+    return null;
   } catch (caught) {
-    error = caught;
+    if (!(caught instanceof SyntaxError)) return null;
+    message = caught.message;
   }
-  if (!(error instanceof SyntaxError) || error.message === 'Unexpected end of input') {
-    try {
-      // A complete body: V8 accepts it unless it fails to the very end.
-      new Function(source);
-      return null;
-    } catch {
-      // fall through with V8's end-of-input diagnostic
-    }
-  }
-  if (!(error instanceof SyntaxError)) return null;
-  const header = syntaxHeader(source, filename);
+  const failure = acornFailure(source);
+  // `new Function` closes the body with `\n})`: V8 meets that closer where
+  // Node's compileFunction meets the end of input.
+  const atEnd =
+    failure?.pos !== undefined &&
+    source.slice(failure.pos).trim() === '' &&
+    /^Unexpected token '[})]'$/u.test(message);
+  if (atEnd) message = 'Unexpected end of input';
+  // An unmatched `}` ends `new Function`'s own body early, so V8 names a
+  // later token; Node's compileFunction names that `}`.
+  else if (failure?.pos !== undefined && source[failure.pos] === '}')
+    message = "Unexpected token '}'";
+  const error = new SyntaxError(message);
+  const header = failure === null ? null : syntaxHeader(source, filename, failure, message, atEnd);
   if (header !== null) setFatalHeader(error, header);
   return error;
 }
 
-function syntaxHeader(source: string, filename: string): string | null {
-  type AcornFailure = { readonly pos?: number; readonly loc?: { line: number; column: number } };
-  let failure: AcornFailure | null = null as AcornFailure | null;
+type AcornFailure = { readonly pos?: number; readonly loc?: { line: number; column: number } };
+
+function acornFailure(source: string): AcornFailure | null {
   try {
     acornParse(source, {
       ecmaVersion: 'latest',
@@ -45,25 +50,40 @@ function syntaxHeader(source: string, filename: string): string | null {
       allowHashBang: true,
       locations: true,
     });
+    return null;
   } catch (caught) {
-    failure = caught as typeof failure;
+    return caught as AcornFailure;
   }
-  const pos = failure?.pos;
-  if (failure?.loc === undefined || pos === undefined) return null;
+}
+
+function syntaxHeader(
+  source: string,
+  filename: string,
+  failure: AcornFailure,
+  message: string,
+  atEnd: boolean,
+): string | null {
+  const pos = failure.pos;
+  if (failure.loc === undefined || pos === undefined) return null;
   const lines = source.split(/\r\n|[\n\r\u2028\u2029]/u);
   let { line, column } = failure.loc;
   let width = 0;
-  if (source.slice(pos).trim() === '') {
+  if (atEnd) {
     // End of input: V8 points past the last line terminator.
     line = lines.length;
     column = 0;
   } else {
+    // Only a message naming the token acorn stopped at locates it as V8 does.
+    const named = /^Unexpected token '(.+)'$/u.exec(message)?.[1];
+    let token: string | null = null;
     try {
-      const token = acornTokenizer(source.slice(pos), { ecmaVersion: 'latest' }).getToken();
-      width = Math.max(1, token.end - token.start);
+      const t = acornTokenizer(source.slice(pos), { ecmaVersion: 'latest' }).getToken();
+      token = source.slice(pos + t.start, pos + t.end);
+      width = Math.max(1, t.end - t.start);
     } catch {
-      width = 1;
+      token = null;
     }
+    if (named === undefined || token !== named) return null;
   }
   const text = lines[line - 1] ?? '';
   let pad = '';

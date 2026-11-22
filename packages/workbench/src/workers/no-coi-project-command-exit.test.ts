@@ -107,9 +107,9 @@ throw new Error('entry');`,
     const result = await run('node fatal.cjs ; echo next');
     expect(result).toMatchObject({ status: 'exited', exitCode: 0, stdout: 'next\n' });
     expect(result.requiresTermination).toBeUndefined();
-    // Node's report: header at the throw, the user frame, the trailer.
+    // Node's report without its header (compat process.md): the user frame, the trailer.
     expect(result.stderr).toBe(
-      "/project/fatal.cjs:2\nthrow new Error('entry');\n^\n\nError: entry\n    at Object.<anonymous> (/project/fatal.cjs:2:7)\n\nNode.js v24.0.0\n",
+      'Error: entry\n    at Object.<anonymous> (/project/fatal.cjs:2:7)\n\nNode.js v24.0.0\n',
     );
     await run('sleep 0.05');
     expect(fs.existsSync('/project/late.txt')).toBe(false);
@@ -162,7 +162,7 @@ throw e;`,
 
     const result = await run('node fatal.cjs');
     expect(result).toMatchObject({ status: 'exited', exitCode: 1 });
-    expect(result.stderr).toMatch(/^\/project\/fatal\.cjs:2\n[\s\S]*\n\nError: entry\n {4}at /u);
+    expect(result.stderr).toMatch(/^Error: entry\n {4}at /u);
   });
 
   it('ends a no-listener entry throw with the exitCode its exit listener sets', async () => {

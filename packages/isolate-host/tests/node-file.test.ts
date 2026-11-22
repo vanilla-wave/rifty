@@ -5,7 +5,7 @@
  * both sides run the identical source; `<root>` is the oracle temp dir
  * (realpath) and the guest's `/workspace`. Comparison: `nodeFileExpected`
  * (tests/browser-unit/fixtures/node-file-programs.ts), plus Node's own
- * `[eval]-wrapper` frames under its projection (1). Open rows run as `it.fails`.
+ * `[eval]-wrapper` frames under its projection (1). Each row's verdict is its pin (`node-file-pins.json`).
  */
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
@@ -16,7 +16,7 @@ import {
   fatalPrograms,
   nodeFileExpected,
   nodeFileNormalized,
-  nodeFileRacy,
+  nodeFileVerdict,
 } from '../../../tests/browser-unit/fixtures/node-file-programs.ts';
 import { runCode } from '../src/index.ts';
 
@@ -27,29 +27,6 @@ const RIFTY_VERSION = 'v24.0.0';
 const programs = fatalPrograms.filter(
   (program) =>
     !program.argv[0]?.endsWith('.mjs') && program.files[program.argv[0] ?? ''] !== undefined,
-);
-
-/** Rows at parity in the isolate guest; the others still differ (`it.fails`). */
-const LANDED = new Set([
-  'throw-top-level',
-  'throw-nested-function',
-  'type-error-runtime',
-  'reference-error',
-  'throw-in-dependency',
-  'throw-from-async-function',
-  'unhandled-rejection-error',
-  'unhandled-rejection-non-error',
-  'error-with-cause',
-  'syntax-error-entry',
-  'throw-from-timer',
-  'error-with-props',
-  'fatal-with-queued-in-callback',
-  'throw-from-named-timer',
-]);
-const OPEN = new Set(
-  programs
-    .map((program) => program.name)
-    .filter((name) => !LANDED.has(name) && nodeFileRacy[name] === undefined),
 );
 
 function codeFor(files: Readonly<Record<string, string>>, main: string): string {
@@ -87,8 +64,7 @@ function withoutEvalWrapper(stderr: string): string {
 
 describe('node -e require(file) fatal report matches Node (isolate guest)', () => {
   for (const program of programs) {
-    const test = OPEN.has(program.name) ? it.fails : it;
-    test(program.name, async () => {
+    it(program.name, async () => {
       const code = codeFor(program.files, program.argv[0] ?? '');
       const raw = oracle(code);
       const expected = nodeFileExpected(
@@ -98,13 +74,7 @@ describe('node -e require(file) fatal report matches Node (isolate guest)', () =
       const result = await runCode(code);
       expect(result.termination).toBeUndefined();
       const actual = nodeFileNormalized(result, GUEST_ROOT);
-      const racy = nodeFileRacy[program.name];
-      if (racy === undefined) expect(actual).toEqual(expected);
-      else {
-        // A race between due timers: Node's stderr and status, a declared stdout residual.
-        expect({ ...actual, stdout: '' }).toEqual({ ...expected, stdout: '' });
-        expect([expected.stdout, `${expected.stdout}${racy}`]).toContain(actual.stdout);
-      }
+      nodeFileVerdict(expect, 'isolate', { program, expected, actual });
     });
   }
 });

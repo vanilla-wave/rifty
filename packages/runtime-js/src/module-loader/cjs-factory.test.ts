@@ -36,3 +36,21 @@ it('a multiline filename cannot escape the sourceURL and run while compiling', (
     Reflect.deleteProperty(globalThis, '__riftyFilenameHook');
   }
 });
+
+it.each([
+  [
+    'a stray closing brace',
+    'globalThis.__riftyRan = 1;\n}}\nglobalThis.__riftyRan = 2;\nfunction b() {\n',
+  ],
+  ['a brace closed later', 'globalThis.__riftyRan = 1;\n}\nglobalThis.__riftyRan = 2;\n{\n'],
+  [
+    'a wrapper escape',
+    'globalThis.__riftyRan = 1;\n}); globalThis.__riftyRan = 2; (function () {\n',
+  ],
+])('%s: compileFunction refuses it and no line of it runs', (_, source) => {
+  const parameters = ['exports', 'require', 'module', '__filename', '__dirname'];
+  expect(() => compileFunction(source, parameters)).toThrow(SyntaxError);
+  Reflect.deleteProperty(globalThis, '__riftyRan');
+  expect(() => compileCjsFactory([], source, '/app/broken.cjs')()).toThrow(SyntaxError);
+  expect(Reflect.get(globalThis, '__riftyRan')).toBeUndefined();
+});

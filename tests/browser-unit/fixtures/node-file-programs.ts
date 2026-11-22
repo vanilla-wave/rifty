@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -308,6 +308,24 @@ export const fatalPrograms: readonly NodeFileProgram[] = [
     argv: ['main.js'],
   },
   {
+    name: 'stray-closing-brace',
+    files: {
+      'main.js':
+        'function a() {\n  console.log("a");\n}}\nconsole.log("top");\nfunction b() {\n  console.log("b");\n}\n',
+    },
+    argv: ['main.js'],
+  },
+  {
+    name: 'stray-brace-closed-later',
+    files: { 'main.js': 'console.log("start");\n}\nconsole.log("after");\n{\n' },
+    argv: ['main.js'],
+  },
+  {
+    name: 'wrapper-escape',
+    files: { 'main.js': 'console.log("inside");\n}); console.log("escaped"); (function () {\n' },
+    argv: ['main.js'],
+  },
+  {
     name: 'syntax-error-dependency',
     files: { 'main.js': "require('./lib/broken');\n", 'lib/broken.js': 'function (\n' },
     argv: ['main.js'],
@@ -427,73 +445,37 @@ export function nodeFileNormalized(outcome: NodeFileOutcome, root: string): Node
   };
 }
 
-export type NodeFileHost = 'no-COI' | 'COI';
+export type NodeFileHost = 'no-COI' | 'COI' | 'isolate';
 
 /**
- * Expected-failure rows: a row listed for a host is not at Node parity yet and
- * must still differ (a fix that lands makes it fail until removed here); every
- * other row must equal Node. Shrinks to empty as the goal's map lands.
+ * Each row's verdict per host (`node-file-pins.json`): `"node"` — equal to
+ * Node; otherwise rifty's exact normalized outcome, which must also still
+ * differ from Node, so any change (a fix or a new defect) fails until the pin
+ * moves. Every pinned row is a named compat row (process.md "Fatal error
+ * stderr bytes", modules.md, isolate-host.md). Regenerate from
+ * `NODE_FILE_DUMP` output only after reading the diff.
  */
-const LANDED = new Set([
-  'throw-from-named-timer',
-  'fatal-with-queued-exit-zero',
-  'throw-from-timer',
-  'error-with-props',
-  'rethrow-in-catch',
-  'entry-facts',
-  'entry-facts-extensionless',
-  'entry-esm-syntax-detection',
-  'require-cache-reload',
-  'esm-entry-facts',
-  'entry-main-guard',
-  'entry-directory',
-  'entry-cjs-extension',
-  'throw-top-level',
-  'throw-nested-function',
-  'type-error-runtime',
-  'reference-error',
-  'throw-in-dependency',
-  'throw-from-async-function',
-  'unhandled-rejection-error',
-  'unhandled-rejection-non-error',
-  'error-with-cause',
-  'throw-in-callback',
-  'syntax-error-entry',
-  'module-not-found-entry',
-  'module-not-found-dependency',
-  'module-not-found-package',
-]);
-const OPEN = [...entryPrograms, ...fatalPrograms]
-  .map((program) => program.name)
-  .filter((name) => !LANDED.has(name));
-export const nodeFileOpenRows: Readonly<Record<NodeFileHost, ReadonlySet<string>>> = {
-  'no-COI': new Set(OPEN),
-  // The kernel child's realm trap ends the process before work its callback queued.
-  COI: new Set(OPEN.filter((name) => name !== 'fatal-with-queued-in-callback')),
-};
+export const nodeFilePins = JSON.parse(
+  readFileSync(new URL('./node-file-pins.json', import.meta.url), 'utf8'),
+) as Readonly<Record<NodeFileHost, Readonly<Record<string, NodeFileOutcome | 'node'>>>>;
 
 /**
- * Rows whose rifty outcome races (two timers due in one host turn): stderr
- * and status must be Node's; stdout is Node's or the declared residual
- * (compat process.md "Fatal error stderr bytes", work queued at a fatal).
+ * Rows whose rifty outcome races (two timers due in one host turn): the pin
+ * holds without stdout, which is the pin's or the declared residual.
  */
 export const nodeFileRacy: Readonly<Record<string, string>> = {
   'fatal-with-queued-timer': 'queued\n',
 };
 
-interface SoftExpect {
-  soft(
-    actual: unknown,
-    message?: string,
-  ): {
-    toEqual(expected: unknown): void;
-    toContain(item: unknown): void;
-    not: { toEqual(expected: unknown): void };
-  };
+interface Expectation {
+  toEqual(expected: unknown): void;
+  toContain(item: unknown): void;
+  not: { toEqual(expected: unknown): void };
 }
 
+/** One row's assertion against its pin; `assert` is vitest's or playwright's (soft) expect. */
 export function nodeFileVerdict(
-  expect: SoftExpect,
+  assert: (actual: unknown, message?: string) => Expectation,
   host: NodeFileHost,
   row: {
     readonly program: NodeFileProgram;
@@ -502,23 +484,22 @@ export function nodeFileVerdict(
   },
 ): void {
   const label = `${host} ${row.program.name}`;
-  const racy = nodeFileRacy[row.program.name];
-  if (racy !== undefined) {
-    expect
-      .soft({ ...row.actual, stdout: '' }, `${label} vs Node`)
-      .toEqual({ ...row.expected, stdout: '' });
-    expect
-      .soft([row.expected.stdout, `${row.expected.stdout}${racy}`], label)
-      .toContain(row.actual.stdout);
+  const pin = nodeFilePins[host][row.program.name];
+  if (pin === undefined) throw new Error(`${label}: no pin in node-file-pins.json`);
+  if (pin === 'node') {
+    assert(row.actual, `${label} vs Node`).toEqual(row.expected);
     return;
   }
-  if (nodeFileOpenRows[host].has(row.program.name)) {
-    expect
-      .soft(row.actual, `${label}: open row now equals Node — remove it from nodeFileOpenRows`)
-      .not.toEqual(row.expected);
-  } else {
-    expect.soft(row.actual, `${label} vs Node`).toEqual(row.expected);
+  const racy = nodeFileRacy[row.program.name];
+  if (racy !== undefined) {
+    assert({ ...row.actual, stdout: '' }, `${label} vs its pin`).toEqual({ ...pin, stdout: '' });
+    assert([pin.stdout, `${pin.stdout}${racy}`], label).toContain(row.actual.stdout);
+    return;
   }
+  assert(row.actual, `${label} vs its pin (a change: read the diff, then move the pin)`).toEqual(
+    pin,
+  );
+  assert(row.actual, `${label}: pinned row equals Node — pin it "node"`).not.toEqual(row.expected);
 }
 
 /** Dev aid: `NODE_FILE_DUMP=<dir>` writes each host's rows for diffing. */

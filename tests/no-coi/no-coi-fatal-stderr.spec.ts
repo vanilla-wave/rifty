@@ -91,8 +91,8 @@ function fatalShape(stderr: string, root: string): FatalShape {
   };
 }
 
-// Residuals (byte parity for file entries: node-file-parity.spec.ts): an ES
-// module entry prints no header and its shifted frame (compat modules.md "ESM
+// Residuals (byte parity for file entries: node-file-parity.spec.ts): a
+// synchronous file-entry throw prints no header; an ES module entry no header and its shifted frame (compat modules.md "ESM
 // stack positions"), its compile error the loader's ModuleLoadError; a
 // non-Error throw has no header; Node's eval `require()` miss header names its
 // own loader source.
@@ -101,7 +101,8 @@ const rows: readonly FatalRow[] = [
     name: 'cjs-entry-throw',
     files: { 'fail.cjs': "throw new Error('boom');\n" },
     nodeArgv: ['fail.cjs'],
-    residual: {},
+    // A synchronous throw has no header: V8's throw site is not readable from JS.
+    residual: { header: null },
   },
   {
     name: 'eval-throw',

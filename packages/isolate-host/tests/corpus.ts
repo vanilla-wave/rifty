@@ -210,6 +210,8 @@ export const CORPUS: readonly Row[] = [
     label: 'type-error',
     code: 'const o = undefined; o.x',
     evalError: true,
+    ceiling:
+      'node -e diagnostic header for a non-throw error (runtime-js/node-eval-non-throw-diagnostic-header)',
   },
   {
     label: 'uncaught-handler',

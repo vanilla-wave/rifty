@@ -77,7 +77,7 @@ test('node <file> matches Node (COI Workbench)', async ({ page }) => {
       const expected = nodeFileExpected(oracle, riftyVersion);
       const actual = nodeFileNormalized(observed, observed.root);
       dump.push({ program, expected, actual });
-      nodeFileVerdict(expect, 'COI', { program, expected, actual });
+      nodeFileVerdict(expect.soft, 'COI', { program, expected, actual });
     }
   } finally {
     nodeFileDump('COI', dump);

@@ -195,3 +195,19 @@ sample. Node v24.16.0 facts: evidence §O1–§O3.
   inspected error, user frames, trailer), with the dispatch origin choosing the
   header (a rejection's error frame, a throw's statement). Goal
   `node-file-entry-parity`; carriers `tests/{no-coi,browser-unit}/node-file-parity.spec.ts`.
+- 2026-11-22 — fatal report header, by construction (manager contract after
+  external review round 1). Node's header is V8's message location. For an
+  unhandled rejection it is `Exception::CreateMessage(error)`: the top frame
+  of the error's own captured stack — rifty prints it when that frame
+  (unfiltered, so no builtin or runtime frame above it) is guest code whose
+  coordinates are Node's: a CJS factory (native lines, line-1 columns
+  projected) or `-e`. ES module frames are shifted, a builtin top frame names
+  V8's own script: none. For a synchronous throw it is the propagating throw
+  statement; no frame, CallSite or source records it (creation ≠ throw: a
+  kept, rethrown, swallowed or caught-by-runtime error differs, and three
+  rule lists failed review), so none is printed. A compile error's is V8's
+  parse position: printed where V8's message names the token acorn stops at
+  (`Unexpected token 'X'`, or the end of input), else none. Carriers:
+  `fatal-header-generator.test.ts` (360 generated programs, a printed header
+  equals Node's), `fatal-report.test.ts`.
+

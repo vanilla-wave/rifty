@@ -1,0 +1,396 @@
+{
+  "no-COI": {
+    "entry-facts": "node",
+    "entry-facts-extensionless": "node",
+    "entry-main-guard": "node",
+    "entry-directory": "node",
+    "entry-cjs-extension": "node",
+    "entry-esm-syntax-detection": "node",
+    "require-cache-reload": "node",
+    "esm-entry-facts": "node",
+    "throw-top-level": {
+      "stdout": "",
+      "stderr": "Error: boom\n    at Object.<anonymous> (<root>/main.js:1:7)\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "throw-nested-function": {
+      "stdout": "",
+      "stderr": "RangeError: bad 1\n    at fail (<root>/main.js:3:9)\n    at Object.<anonymous> (<root>/main.js:5:1)\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "type-error-runtime": {
+      "stdout": "",
+      "stderr": "TypeError: Cannot read properties of undefined (reading 'port')\n    at Object.<anonymous> (<root>/main.js:2:20)\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "reference-error": {
+      "stdout": "",
+      "stderr": "ReferenceError: startServer is not defined\n    at Object.<anonymous> (<root>/main.js:2:3)\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "throw-in-dependency": {
+      "stdout": "",
+      "stderr": "TypeError: bad thing\n    at f (<root>/lib/dep.js:2:9)\n    at Object.<anonymous> (<root>/lib/dep.js:4:1)\n    at Object.<anonymous> (<root>/main.js:2:1)\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "throw-from-timer": {
+      "stdout": "",
+      "stderr": "Error: timer\n    at Timeout._onTimeout (<root>/main.js:2:9)\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "throw-from-async-function": "node",
+    "unhandled-rejection-error": "node",
+    "unhandled-rejection-non-error": "node",
+    "throw-non-error-number": {
+      "stdout": "",
+      "stderr": "42\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "throw-non-error-object": {
+      "stdout": "",
+      "stderr": "{ reason: 'nope', code: 7 }\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "error-with-cause": {
+      "stdout": "",
+      "stderr": "Error: outer\n    at Object.<anonymous> (<root>/main.js:7:9) {\n  [cause]: Error: inner\n      at load (<root>/main.js:2:9)\n      at Object.<anonymous> (<root>/main.js:5:3)\n}\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "error-with-props": {
+      "stdout": "",
+      "stderr": "TypeError: x\n    at Object.<anonymous> (<root>/main.js:1:13) {\n  code: 'E_X'\n}\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "rethrow-in-catch": {
+      "stdout": "cleanup\n",
+      "stderr": "SyntaxError: Expected property name or '}' in JSON at position 1 (line 1 column 2)\n    at JSON.parse (<anonymous>)\n    at parse (<root>/main.js:2:15)\n    at Object.<anonymous> (<root>/main.js:5:3)\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "throw-in-callback": {
+      "stdout": "",
+      "stderr": "Error: item 2\n    at <root>/main.js:2:22\n    at Array.forEach (<anonymous>)\n    at Object.<anonymous> (<root>/main.js:1:8)\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "throw-from-named-timer": {
+      "stdout": "",
+      "stderr": "Error: tick\n    at Timeout.tick [as _onTimeout] (<root>/main.js:2:9)\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "rethrow-after-import": {
+      "stdout": "",
+      "stderr": "Error: dep\n    at Object.<anonymous> (<root>/dep.js:2:7)\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "listener-logs-and-rethrows": {
+      "stdout": "log\n",
+      "stderr": "Error: a\n    at Timeout._onTimeout (<root>/main.js:6:9)\n\nNode.js v24.0.0\n",
+      "exitCode": 7
+    },
+    "listener-rethrows-from-later-timer": {
+      "stdout": "",
+      "stderr": "Error: first\n    at Timeout._onTimeout (<root>/main.js:7:9)\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "fatal-with-queued-timer": {
+      "stdout": "",
+      "stderr": "Error: a\n    at Timeout._onTimeout (<root>/main.js:2:9)\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "fatal-with-queued-in-callback": {
+      "stdout": "queued\nimmediate\n",
+      "stderr": "Error: a\n    at Timeout._onTimeout (<root>/main.js:4:9)\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "fatal-with-queued-exit-zero": {
+      "stdout": "",
+      "stderr": "Error: a\n    at Timeout._onTimeout (<root>/main.js:2:9)\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "rejection-with-queued-work": {
+      "stdout": "tick\nqueued\n",
+      "stderr": "<root>/main.js:1\nPromise.reject(new Error('r'));\n               ^\n\nError: r\n    at Object.<anonymous> (<root>/main.js:1:16)\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "syntax-error-entry": "node",
+    "stray-closing-brace": "node",
+    "stray-brace-closed-later": "node",
+    "wrapper-escape": "node",
+    "syntax-error-dependency": {
+      "stdout": "",
+      "stderr": "SyntaxError: Function statements require a function name\n    at Object.<anonymous> (<root>/main.js:1:1)\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "module-not-found-entry": "node",
+    "module-not-found-dependency": "node",
+    "module-not-found-package": "node",
+    "esm-throw": {
+      "stdout": "",
+      "stderr": "Error: esm\n    at eval (<root>/main.mjs:7:7)\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "esm-syntax-error": {
+      "stdout": "",
+      "stderr": "ModuleLoadError: Failed to parse ESM source for <root>/main.mjs: Unexpected token (2:8) {\n  code: 'SYNTAX_ERROR',\n  specifier: '<root>/main.mjs',\n  importer: '<root>/main.mjs',\n  requireStack: undefined\n}\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    }
+  },
+  "COI": {
+    "entry-facts": "node",
+    "entry-facts-extensionless": "node",
+    "entry-main-guard": "node",
+    "entry-directory": "node",
+    "entry-cjs-extension": "node",
+    "entry-esm-syntax-detection": "node",
+    "require-cache-reload": "node",
+    "esm-entry-facts": "node",
+    "throw-top-level": {
+      "stdout": "",
+      "stderr": "Error: boom\n    at Object.<anonymous> (<root>/main.js:1:7)\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "throw-nested-function": {
+      "stdout": "",
+      "stderr": "RangeError: bad 1\n    at fail (<root>/main.js:3:9)\n    at Object.<anonymous> (<root>/main.js:5:1)\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "type-error-runtime": {
+      "stdout": "",
+      "stderr": "TypeError: Cannot read properties of undefined (reading 'port')\n    at Object.<anonymous> (<root>/main.js:2:20)\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "reference-error": {
+      "stdout": "",
+      "stderr": "ReferenceError: startServer is not defined\n    at Object.<anonymous> (<root>/main.js:2:3)\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "throw-in-dependency": {
+      "stdout": "",
+      "stderr": "TypeError: bad thing\n    at f (<root>/lib/dep.js:2:9)\n    at Object.<anonymous> (<root>/lib/dep.js:4:1)\n    at Object.<anonymous> (<root>/main.js:2:1)\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "throw-from-timer": {
+      "stdout": "",
+      "stderr": "Error: timer\n    at Timeout._onTimeout (<root>/main.js:2:9)\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "throw-from-async-function": "node",
+    "unhandled-rejection-error": "node",
+    "unhandled-rejection-non-error": "node",
+    "throw-non-error-number": {
+      "stdout": "",
+      "stderr": "42\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "throw-non-error-object": {
+      "stdout": "",
+      "stderr": "{ reason: 'nope', code: 7 }\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "error-with-cause": {
+      "stdout": "",
+      "stderr": "Error: outer\n    at Object.<anonymous> (<root>/main.js:7:9) {\n  [cause]: Error: inner\n      at load (<root>/main.js:2:9)\n      at Object.<anonymous> (<root>/main.js:5:3)\n}\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "error-with-props": {
+      "stdout": "",
+      "stderr": "TypeError: x\n    at Object.<anonymous> (<root>/main.js:1:13) {\n  code: 'E_X'\n}\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "rethrow-in-catch": {
+      "stdout": "cleanup\n",
+      "stderr": "SyntaxError: Expected property name or '}' in JSON at position 1 (line 1 column 2)\n    at JSON.parse (<anonymous>)\n    at parse (<root>/main.js:2:15)\n    at Object.<anonymous> (<root>/main.js:5:3)\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "throw-in-callback": {
+      "stdout": "",
+      "stderr": "Error: item 2\n    at <root>/main.js:2:22\n    at Array.forEach (<anonymous>)\n    at Object.<anonymous> (<root>/main.js:1:8)\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "throw-from-named-timer": {
+      "stdout": "",
+      "stderr": "Error: tick\n    at Timeout.tick [as _onTimeout] (<root>/main.js:2:9)\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "rethrow-after-import": {
+      "stdout": "",
+      "stderr": "Error: dep\n    at Object.<anonymous> (<root>/dep.js:2:7)\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "listener-logs-and-rethrows": {
+      "stdout": "log\n",
+      "stderr": "Error: a\n    at Timeout._onTimeout (<root>/main.js:6:9)\n\nNode.js v24.0.0\n",
+      "exitCode": 7
+    },
+    "listener-rethrows-from-later-timer": {
+      "stdout": "",
+      "stderr": "Error: first\n    at Timeout._onTimeout (<root>/main.js:7:9)\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "fatal-with-queued-timer": {
+      "stdout": "",
+      "stderr": "Error: a\n    at Timeout._onTimeout (<root>/main.js:2:9)\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "fatal-with-queued-in-callback": {
+      "stdout": "",
+      "stderr": "Error: a\n    at Timeout._onTimeout (<root>/main.js:4:9)\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "fatal-with-queued-exit-zero": {
+      "stdout": "",
+      "stderr": "Error: a\n    at Timeout._onTimeout (<root>/main.js:2:9)\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "rejection-with-queued-work": {
+      "stdout": "tick\nqueued\n",
+      "stderr": "<root>/main.js:1\nPromise.reject(new Error('r'));\n               ^\n\nError: r\n    at Object.<anonymous> (<root>/main.js:1:16)\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "syntax-error-entry": "node",
+    "stray-closing-brace": "node",
+    "stray-brace-closed-later": "node",
+    "wrapper-escape": "node",
+    "syntax-error-dependency": {
+      "stdout": "",
+      "stderr": "SyntaxError: Function statements require a function name\n    at Object.<anonymous> (<root>/main.js:1:1)\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "module-not-found-entry": "node",
+    "module-not-found-dependency": "node",
+    "module-not-found-package": "node",
+    "esm-throw": {
+      "stdout": "",
+      "stderr": "Error: esm\n    at eval (<root>/main.mjs:7:7)\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "esm-syntax-error": {
+      "stdout": "",
+      "stderr": "ModuleLoadError: Failed to parse ESM source for <root>/main.mjs: Unexpected token (2:8) {\n  code: 'SYNTAX_ERROR',\n  specifier: '<root>/main.mjs',\n  importer: '<root>/main.mjs',\n  requireStack: undefined\n}\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    }
+  },
+  "isolate": {
+    "throw-top-level": {
+      "stdout": "",
+      "stderr": "Error: boom\n    at Object.<anonymous> (<root>/main.js:1:7)\n    at [eval]:1:197\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "throw-nested-function": {
+      "stdout": "",
+      "stderr": "RangeError: bad 1\n    at fail (<root>/main.js:3:9)\n    at Object.<anonymous> (<root>/main.js:5:1)\n    at [eval]:1:263\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "type-error-runtime": {
+      "stdout": "",
+      "stderr": "TypeError: Cannot read properties of undefined (reading 'port')\n    at Object.<anonymous> (<root>/main.js:2:20)\n    at [eval]:1:225\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "reference-error": {
+      "stdout": "",
+      "stderr": "ReferenceError: startServer is not defined\n    at Object.<anonymous> (<root>/main.js:2:3)\n    at [eval]:1:204\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "throw-in-dependency": {
+      "stdout": "",
+      "stderr": "TypeError: bad thing\n    at f (<root>/lib/dep.js:2:9)\n    at Object.<anonymous> (<root>/lib/dep.js:4:1)\n    at Object.<anonymous> (<root>/main.js:2:1)\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "throw-from-timer": {
+      "stdout": "",
+      "stderr": "Error: timer\n    at Timeout._onTimeout (<root>/main.js:2:9)\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "throw-from-async-function": "node",
+    "unhandled-rejection-error": "node",
+    "unhandled-rejection-non-error": "node",
+    "throw-non-error-number": {
+      "stdout": "",
+      "stderr": "42\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "throw-non-error-object": {
+      "stdout": "",
+      "stderr": "{ reason: 'nope', code: 7 }\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "error-with-cause": {
+      "stdout": "",
+      "stderr": "Error: outer\n    at Object.<anonymous> (<root>/main.js:7:9)\n    at [eval]:1:305 {\n  [cause]: Error: inner\n      at load (<root>/main.js:2:9)\n      at Object.<anonymous> (<root>/main.js:5:3)\n      at [eval]:1:305\n}\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "error-with-props": {
+      "stdout": "",
+      "stderr": "TypeError: x\n    at Object.<anonymous> (<root>/main.js:1:13)\n    at [eval]:1:235 {\n  code: 'E_X'\n}\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "rethrow-in-catch": {
+      "stdout": "cleanup\n",
+      "stderr": "SyntaxError: Expected property name or '}' in JSON at position 1 (line 1 column 2)\n    at JSON.parse (<anonymous>)\n    at parse (<root>/main.js:2:15)\n    at Object.<anonymous> (<root>/main.js:5:3)\n    at [eval]:1:304\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "throw-in-callback": {
+      "stdout": "",
+      "stderr": "Error: item 2\n    at <root>/main.js:2:22\n    at Array.forEach (<anonymous>)\n    at Object.<anonymous> (<root>/main.js:1:8)\n    at [eval]:1:247\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "throw-from-named-timer": {
+      "stdout": "",
+      "stderr": "Error: tick\n    at Timeout.tick [as _onTimeout] (<root>/main.js:2:9)\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "rethrow-after-import": {
+      "stdout": "",
+      "stderr": "Error: dep\n    at Object.<anonymous> (<root>/dep.js:2:7)\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "listener-logs-and-rethrows": {
+      "stdout": "log\n",
+      "stderr": "Error: a\n    at Timeout._onTimeout (<root>/main.js:6:9)\n\nNode.js v24.0.0\n",
+      "exitCode": 7
+    },
+    "listener-rethrows-from-later-timer": {
+      "stdout": "",
+      "stderr": "Error: first\n    at Timeout._onTimeout (<root>/main.js:7:9)\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "fatal-with-queued-timer": {
+      "stdout": "",
+      "stderr": "Error: a\n    at Timeout._onTimeout (<root>/main.js:2:9)\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "fatal-with-queued-in-callback": {
+      "stdout": "",
+      "stderr": "Error: a\n    at Timeout._onTimeout (<root>/main.js:4:9)\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "fatal-with-queued-exit-zero": {
+      "stdout": "",
+      "stderr": "",
+      "exitCode": 0
+    },
+    "rejection-with-queued-work": {
+      "stdout": "tick\nqueued\n",
+      "stderr": "<root>/main.js:1\nPromise.reject(new Error('r'));\n               ^\n\nError: r\n    at Object.<anonymous> (<root>/main.js:1:16)\n    at [eval]:1:295\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "syntax-error-entry": "node",
+    "stray-closing-brace": "node",
+    "stray-brace-closed-later": "node",
+    "wrapper-escape": "node",
+    "syntax-error-dependency": {
+      "stdout": "",
+      "stderr": "SyntaxError: Function statements require a function name\n    at Object.<anonymous> (<root>/main.js:1:1)\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "module-not-found-dependency": {
+      "stdout": "",
+      "stderr": "Error: Cannot find module './nope'\nRequire stack:\n- <root>/main.js\n    at Object.<anonymous> (<root>/main.js:2:1) {\n  code: 'MODULE_NOT_FOUND',\n  requireStack: [ '<root>/main.js' ]\n}\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "module-not-found-package": {
+      "stdout": "",
+      "stderr": "Error: Cannot find module 'left-pad'\nRequire stack:\n- <root>/main.js\n    at Object.<anonymous> (<root>/main.js:1:1) {\n  code: 'MODULE_NOT_FOUND',\n  requireStack: [ '<root>/main.js' ]\n}\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    }
+  }
+}

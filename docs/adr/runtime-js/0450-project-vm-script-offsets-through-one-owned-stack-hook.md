@@ -171,3 +171,11 @@ format, receiver `Error`), and freezes every `CallSite.prototype` method
   Still no stack-hook ownership. Cost: 3061-module CJS tree, CPU median +5%
   (one extra parse per module that had none). Critic 2026-11-22: direction
   holds, no cheaper route (no eval offsets in V8). Goal `node-file-entry-parity`.
+- 2026-11-22 — correction to the line above: Function validated the wrapper
+  with the body, so a stray `}` of the body closed it and the file ran its
+  remaining lines silently (external review round 1, B2). Now the source
+  alone is validated as a function body (Node `compileFunction`); only then
+  can no `}` of it close the wrapper. Syntax errors are diagnosed without
+  evaluating any text. Carriers: `cjs-factory.test.ts` (no line of an
+  escaping source runs), `node-file-parity` rows `stray-*`, `wrapper-escape`.
+

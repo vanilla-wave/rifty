@@ -1,8 +1,7 @@
 /**
- * The fatal report's header proofs against live Node (goal
- * node-file-entry-parity I2): where the source proves V8's throw site the
- * report equals Node's under the carrier's normalization; where a value may
- * leave to be thrown elsewhere there is no header, never a guessed one.
+ * The fatal report against live Node (goal node-file-entry-parity I2): a
+ * synchronous throw prints Node's report without its header (V8's throw site
+ * is not readable from JS, compat process.md), frames and props as Node's.
  */
 import { MemoryFsSync, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach, expect, it } from 'vitest';
@@ -11,9 +10,7 @@ import {
   nodeFileNormalized,
   runNodeFileOracle,
 } from '../../../tests/browser-unit/fixtures/node-file-programs.ts';
-import { formatFatalReport, markFatalTaskRoot } from '../src/builtins/fatal-report.ts';
-import { dispatchUncaughtException } from '../src/builtins/process-lifecycle-events.ts';
-import { NodeProcess } from '../src/builtins/process.ts';
+import { formatFatalReport } from '../src/builtins/fatal-report.ts';
 import { createModuleLoader } from '../src/module-loader/loader.ts';
 
 afterEach(() => resetSyncMirror());
@@ -25,8 +22,6 @@ function riftyReport(source: string): string {
   try {
     createModuleLoader(vfs, { cwd: '/p' }).require('./main.js', '/p/x.js');
   } catch (error) {
-    // As runNodeEntry's catch: out of the entry's evaluation, a task root.
-    markFatalTaskRoot(error);
     return formatFatalReport(error);
   }
   throw new Error('program did not throw');
@@ -61,9 +56,10 @@ it.each([
     "class Calc { eval() { throw new Error('m'); } }\nnew Calc().eval();\n",
   ],
   ['a V8 throw inside a callback', '[1].forEach(() => {\n  null.x;\n});\n'],
-])('%s: Node bytes', async (_, source) => {
+])('%s: Node bytes but the header', async (_, source) => {
   const { node, rifty } = await againstNode(source);
-  expect(rifty).toBe(node);
+  expect(headerOf(node)).toMatch(/^<root>\/main\.js:\d+\n/u);
+  expect(rifty).toBe(node.slice(node.indexOf('\n\n') + 2));
 });
 
 it.each([
@@ -131,8 +127,6 @@ function riftyFiles(files: Record<string, string>): string {
   try {
     createModuleLoader(vfs, { cwd: '/p' }).require('./main.js', '/p/x.js');
   } catch (error) {
-    // As runNodeEntry's catch: out of the entry's evaluation, a task root.
-    markFatalTaskRoot(error);
     return formatFatalReport(error);
   }
   throw new Error('program did not throw');
@@ -174,13 +168,6 @@ it("a nested error's frames are projected like the report's own, its props and b
   expect(limited).toMatch(/code: 7 \}\n\nNode\.js/u);
 });
 
-it('a callback the module itself runs keeps the header', async () => {
-  const { node, rifty } = await againstNode(
-    "function later(cb) { return cb; }\nconst run = later(() => {\n  throw new Error('x');\n});\nrun();\n",
-  );
-  expect(rifty).toBe(node);
-});
-
 it('a promise reaction may have held the error: no header', async () => {
   const head = "const p = Promise.resolve().then(() => {\n  throw new Error('x');\n});\n";
   const oracle = await runNodeFileOracle({
@@ -208,55 +195,34 @@ it('a promise reaction may have held the error: no header', async () => {
   expect(rifty).toBe(node.slice(node.indexOf('\n\n') + 2));
 });
 
-it('an error a listener received and threw again loses its header proof', () => {
-  const vfs = new MemoryFsSync();
-  vfs.loadFixture({ '/p/main.js': "module.exports = () => {\n  throw new Error('a');\n};\n" });
-  setSyncMirror(vfs);
-  const fail = createModuleLoader(vfs, { cwd: '/p' }).require('./main.js', '/p/x.js') as () => void;
-  const caught = (): unknown => {
-    try {
-      fail();
-    } catch (error) {
-      markFatalTaskRoot(error);
-      return error;
-    }
-    return null;
-  };
-  // Control: a marked error the runtime caught at its root has Node's header.
-  expect(formatFatalReport(caught())).toMatch(/^\/p\/main\.js:2\n/u);
-  const proc = new NodeProcess();
-  let printed = '';
-  proc.stderr.write = ((chunk: string) => {
-    printed += chunk;
-    return true;
-  }) as typeof proc.stderr.write;
-  proc.on('uncaughtException', (error: unknown) => {
-    throw error;
-  });
-  try {
-    dispatchUncaughtException(caught(), 'uncaughtException', proc);
-  } catch {
-    // the exit-7 signal
-  }
-  expect(printed).toMatch(/^Error: a\n {4}at /u);
+it.each([
+  ['an error that is its own cause', "const e = new Error('x');\ne.cause = e;\nthrow e;\n"],
+  [
+    'an enumerable getter that throws',
+    "const e = new Error('x');\nObject.defineProperty(e, 'bad', { enumerable: true, get() { throw new Error('g'); } });\nthrow e;\n",
+  ],
+  [
+    'an enumerable getter that never returns',
+    "const e = new Error('x');\nObject.defineProperty(e, 'spin', { enumerable: true, get() { for (;;) {} } });\nthrow e;\n",
+  ],
+  [
+    'a subclass hiding the name',
+    "class NotFound extends Error {}\nthrow new NotFound('missing');\n",
+  ],
+  ['a subclass carrying the name', "class MyError extends Error {}\nthrow new MyError('m');\n"],
+  [
+    'a hand-written stack',
+    "const e = new Error('x');\ne.stack = 'Error: x\\n    at fake (z.js:1:1)';\nthrow e;\n",
+  ],
+])('%s: Node bytes but the header', async (_, source) => {
+  const { node, rifty } = await againstNode(source);
+  expect(rifty).toBe(node.slice(node.indexOf('\n\n') + 2));
 });
 
-it('an error that already left a task root is never one again', () => {
-  const vfs = new MemoryFsSync();
-  vfs.loadFixture({ '/p/main.js': "module.exports = () => {\n  throw new Error('a');\n};\n" });
-  setSyncMirror(vfs);
-  const fail = createModuleLoader(vfs, { cwd: '/p' }).require('./main.js', '/p/x.js') as () => void;
-  let error: unknown;
-  try {
-    fail();
-  } catch (caught) {
-    error = caught;
-  }
-  markFatalTaskRoot(error);
-  // A listener kept it; a later timer dispatch rethrows the same object.
-  const proc = new NodeProcess();
-  proc.on('uncaughtException', () => {});
-  dispatchUncaughtException(error, 'uncaughtException', proc);
-  markFatalTaskRoot(error);
-  expect(formatFatalReport(error)).toMatch(/^Error: a\n {4}at /u);
+it('code compiled from a string keeps its frame, never a rifty path', () => {
+  const report = riftyReport(
+    "const n = 1;\nconst f = new Function('a', 'const b = 1;\\nthrow new Error(a);');\nf('x');\n",
+  );
+  expect(report).toContain('    at eval (eval at <anonymous>, <anonymous>:4:7)\n');
+  expect(report).not.toMatch(/function-import-routing|\/src\//u);
 });

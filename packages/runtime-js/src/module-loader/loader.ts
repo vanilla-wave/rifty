@@ -358,7 +358,6 @@ export function projectNodeEvalError(
   const frameColumn = Number(frame[2]);
   const thrown = nodeEvalThrowLocation(source, frameLine, Math.max(0, frameColumn - 1));
   if (origin === 'sync' && thrown === null) {
-    // No `throw` statement: V8 threw at the frame; the fatal report heads it.
     error.stack = nodeEvalStackThroughUserFrame(stack) ?? stack;
     return error;
   }

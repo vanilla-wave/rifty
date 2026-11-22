@@ -78,5 +78,5 @@ test('node <file> matches Node (no-COI SDK)', async ({ page }) => {
     contentType: 'application/json',
   });
   nodeFileDump('no-COI', rows);
-  for (const row of rows) nodeFileVerdict(expect, 'no-COI', row);
+  for (const row of rows) nodeFileVerdict(expect.soft, 'no-COI', row);
 });

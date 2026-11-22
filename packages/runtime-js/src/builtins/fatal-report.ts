@@ -15,54 +15,27 @@ import { syncMirror } from '@riftydev/vfs';
 import type { Node as AcornNode } from 'acorn';
 import { cjsLineOnePrefix } from '../module-loader/cjs-factory.ts';
 import { inspect } from '../repl/inspect.ts';
-import {
-  bindingThrowSite,
-  catchingTries,
-  enclosing,
-  innermostFunction,
-  offsetOf,
-  parseProgram,
-  rethrowSite,
-} from './fatal-throw-site.ts';
+import { enclosing, offsetOf, parseProgram } from './fatal-source.ts';
 import { NODE_PROCESS_IDENTITY } from './process-identity.ts';
+
+/** Node's `\nNode.js <version>\n` (`extra_info_on_fatal_exception`). */
+export const FATAL_TRAILER = `\nNode.js ${NODE_PROCESS_IDENTITY.version}\n`;
 
 export type FatalOrigin = 'uncaughtException' | 'unhandledRejection';
 
 const HINT = '(Use `node --trace-uncaught ...` to show where the exception was thrown)';
 const FRAME = /^\s+at /u;
+const RUNTIME_LOCATION =
+  /^(?:[a-z][a-z0-9+.-]*:\/\/|blob:|<isolated-vm>$)|rifty-isolate-guest\.js$/u;
 const decorated = new WeakSet<object>();
 const reflectApply = Reflect.apply;
 const errorToString = Error.prototype.toString;
 const objectToString = Object.prototype.toString;
 const objectGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
 const objectKeys = Object.keys;
+const objectGetPrototypeOf = Object.getPrototypeOf;
 
 const headers = new WeakMap<object, string>();
-const roots = new WeakSet<object>();
-/** Errors that already left a task root or reached a listener: never a root again. */
-const settled = new WeakSet<object>();
-
-/**
- * The runtime caught `error` thrown synchronously out of a task root it runs
- * (the entry's evaluation, a timer dispatch) and created during it: only then
- * can its own stack prove V8's throw site.
- */
-export function markFatalTaskRoot(error: unknown): void {
-  // Only its first escape: a later root rethrowing a kept error proves nothing.
-  if (typeof error !== 'object' || error === null || settled.has(error)) return;
-  settled.add(error);
-  roots.add(error);
-}
-
-/** A listener received `error`: its mark proves no later throw of it. */
-export function clearFatalTaskRoot(error: unknown): void {
-  if (typeof error !== 'object' || error === null) return;
-  roots.delete(error);
-  settled.add(error);
-}
-
-/** The name the timer dispatch frame carries, so a caught error can tell it ran under it. */
-export const TIMER_DISPATCH_NAME = '__riftyTimerDispatch';
 const origins = new WeakMap<object, FatalOrigin>();
 
 /** The dispatch that made `reason` fatal, for a host that prints it later (isolate guest). */
@@ -135,6 +108,8 @@ function readGuestSource(file: string): string | null {
 type FrameKind = 'user' | 'builtin' | 'runtime';
 
 function frameKind(frame: string): FrameKind {
+  // Code compiled from a string (`eval`, `Function`): guest code.
+  if (frame.includes('(eval at ')) return 'user';
   const location = frameLocation(frame);
   if (location === null) {
     // `at JSON.parse (<anonymous>)`, `at async Promise.all (index 0)`, `native`.
@@ -142,7 +117,9 @@ function frameKind(frame: string): FrameKind {
   }
   if (location.file === '[eval]') return 'user';
   const path = filePath(location.file);
-  if (path === null) return 'runtime';
+  // A location rifty's own code runs from (a served URL, the isolate bundle);
+  // any other relative name is guest text (a hand-written `stack`): kept.
+  if (path === null) return RUNTIME_LOCATION.test(location.file) ? 'runtime' : 'user';
   try {
     return syncMirror().existsSync(path) ? 'user' : 'runtime';
   } catch {
@@ -219,6 +196,12 @@ const EVAL_NAMED = /^(\s+at )(async )?(new )?(?:([^\s()]+)\.)?eval(?: \[as ([^\]
  * anonymous function of eval-compiled code removed (Node: no name).
  */
 function asNodeFrame(frame: string): string {
+  if (frame.includes('(eval at ')) {
+    // rifty's Function routing is the origin V8 records: not a guest place.
+    return frame.replace(/eval at ([^\s(),]+) \(([^()]+)\)/gu, (whole, name: string, at: string) =>
+      frameKind(`    at x (${at})`) === 'runtime' ? `eval at ${name}` : whole,
+    );
+  }
   const location = frameLocation(frame);
   const prefix =
     location === null
@@ -287,115 +270,26 @@ interface HeaderSite {
 }
 
 /**
- * V8's message location as far as the source proves it. A rejection's message
- * is the error's top user frame. A throw's is its throw statement: the
- * innermost `throw` enclosing the top user frame, or that frame itself when it
- * is V8's own throw (not an error construction). Any user frame inside a
- * catching `try` may mean a rethrow elsewhere: no header.
+ * Node's header, where JS can know it. An unhandled rejection's is V8's
+ * message built from the error itself (`Exception::CreateMessage`): the top
+ * frame of its captured stack — printed when that frame is guest code whose
+ * coordinates are Node's (a CJS factory or `-e`). A synchronous throw's is
+ * V8's throw site, which no frame or source records: none (compat process.md
+ * "Fatal error stderr bytes").
  */
-function headerSite(raw: string, origin: FatalOrigin, rooted: boolean): HeaderSite | null {
-  const frames = guestStack(raw).frames;
-  const user = frames.filter((frame) => frameKind(frame) === 'user');
-  const top = user[0] === undefined ? null : frameLocation(user[0]);
-  // Only CJS factories and `-e` keep Node's coordinates (ESM: compat modules.md).
-  if (top === null || (top.file !== '[eval]' && cjsLineOnePrefix(top.file) === undefined))
-    return null;
-  const source = readGuestSource(top.file);
+function headerSite(raw: string, origin: FatalOrigin): HeaderSite | null {
+  if (origin !== 'unhandledRejection') return null;
+  const line = raw.split('\n').find((text) => FRAME.test(text));
+  if (line === undefined) return null;
+  const tail = frameTail(line);
+  const top = tail === '' ? line : line.slice(0, -tail.length);
+  if (frameKind(top) !== 'user') return null;
+  const location = frameLocation(asNodeFrame(top));
+  if (location === null) return null;
+  if (location.file !== '[eval]' && cjsLineOnePrefix(location.file) === undefined) return null;
+  const source = readGuestSource(location.file);
   if (source === null) return null;
-  if (origin === 'unhandledRejection') {
-    return { file: top.file, source, line: top.line, column: top.column - 1 };
-  }
-  const programs = new Map<string, { readonly source: string; readonly root: AcornNode } | null>();
-  const program = (file: string) => {
-    if (!programs.has(file)) {
-      const text = file === top.file ? source : readGuestSource(file);
-      const ast = text === null ? null : parseProgram(text, file);
-      programs.set(file, text === null || ast === null ? null : { source: text, root: ast });
-    }
-    return programs.get(file) ?? null;
-  };
-  // The last catch the error passed: the outermost catching `try` of the
-  // outermost frame inside one. It must provably rethrow, else no header.
-  // The runtime marked the error as thrown out of a task root it runs (the
-  // entry's evaluation, a timer dispatch), created during it. A promise
-  // (async function, executor) on its own stack may still have held it.
-  if (!rooted) return null;
-  // Between creation and the root escape nothing may have held the error:
-  // rifty code between two user frames may catch (`assert.throws`) unless it
-  // only ran a module's top level (the require path); any `finally` may
-  // swallow (`return`/`break`). Unproven → no header (compat).
-  const rawFrames = raw.split('\n').filter((line) => FRAME.test(line));
-  let callee: string | null = null;
-  let gap = false;
-  for (let f = 0; f < rawFrames.length; f += 1) {
-    const kind = frameKind(rawFrames[f] as string);
-    if (kind === 'runtime' && callee !== null) gap = true;
-    if (kind !== 'user') continue;
-    if (gap && !atModuleTop(callee as string)) return null;
-    callee = asNodeFrame(rawFrames[f] as string);
-    gap = false;
-  }
-  for (let f = 0; f < frames.length; f += 1) {
-    if (/^\s+at (?:async |new Promise \(|Promise\.)/u.test(frames[f] as string)) return null;
-  }
-  for (let f = 0; f < user.length; f += 1) {
-    const location = frameLocation(user[f] as string);
-    const parsed = location === null ? null : program(location.file);
-    const at =
-      parsed === null || location === null
-        ? null
-        : offsetOf(parsed.source, location.line, location.column - 1);
-    if (parsed === null || at === null) return null;
-    const chain = enclosing(parsed.root, at);
-    const fn = innermostFunction(chain);
-    if (fn !== null && (fn as { async?: boolean }).async === true) return null;
-    if (chain.some((node) => node.type === 'TryStatement' && node.finalizer != null)) return null;
-  }
-  let lastCatch: { readonly file: string; readonly node: AcornNode } | null = null;
-  for (let f = user.length - 1; f >= 0 && lastCatch === null; f -= 1) {
-    const location = frameLocation(user[f] as string);
-    const parsed = location === null ? null : program(location.file);
-    if (location === null || parsed === null) return null;
-    const at = offsetOf(parsed.source, location.line, location.column - 1);
-    if (at === null) return null;
-    const tries = catchingTries(enclosing(parsed.root, at));
-    if (tries[0] !== undefined) lastCatch = { file: location.file, node: tries[0] };
-  }
-  const site = (file: string, node: AcornNode | null | undefined): HeaderSite | null => {
-    const text = program(file)?.source;
-    return node?.loc == null || text === undefined
-      ? null
-      : { file, source: text, line: node.loc.start.line, column: node.loc.start.column };
-  };
-  if (lastCatch !== null) return site(lastCatch.file, rethrowSite(lastCatch.node as never));
-  const root = program(top.file)?.root;
-  if (root === undefined) return null;
-  const offset = offsetOf(source, top.line, top.column - 1);
-  if (offset === null) return null;
-  const chain = enclosing(root, offset);
-  let thrown: AcornNode | undefined;
-  for (let n = 0; n < chain.length; n += 1) {
-    if (chain[n]?.type === 'ThrowStatement') thrown = chain[n];
-  }
-  if (thrown !== undefined) return site(top.file, thrown);
-  const at = chain.at(-1);
-  if (at === undefined || at.start !== offset) return null;
-  // An error built here and thrown later: only its binding's sole `throw` proves where.
-  if (chain.some((node) => node.start === offset && node.type === 'NewExpression'))
-    return site(top.file, bindingThrowSite(chain, offset));
-  return { file: top.file, source, line: top.line, column: top.column - 1 };
-}
-
-/** The frame runs a module's top level (no enclosing function in its source). */
-function atModuleTop(frame: string): boolean {
-  const location = frameLocation(frame);
-  const source = location === null ? null : readGuestSource(location.file);
-  const root = source === null || location === null ? null : parseProgram(source, location.file);
-  const at =
-    source === null || location === null
-      ? null
-      : offsetOf(source, location.line, location.column - 1);
-  return root !== null && at !== null && innermostFunction(enclosing(root, at)) === null;
+  return { file: location.file, source, line: location.line, column: location.column - 1 };
 }
 
 /** Node `GetErrorSource`: `<file>:<line>\n<source line>\n<caret>\n`. */
@@ -426,9 +320,18 @@ function isErrorLike(value: unknown): value is object {
   );
 }
 
+interface InspectState {
+  readonly ancestors: object[];
+  circular: boolean;
+}
+
 /** Node's inspect of a value inside an error's props block, at `indent` columns. */
-function propValue(value: unknown, indent: number): string {
-  if (isErrorLike(value)) return inspectError(value, indent);
+function propValue(value: unknown, indent: number, state: InspectState): string {
+  if (typeof value === 'object' && value !== null && state.ancestors.includes(value)) {
+    state.circular = true;
+    return '[Circular *1]';
+  }
+  if (isErrorLike(value)) return inspectError(value, indent, state);
   if (Array.isArray(value) && value.every((v) => typeof v !== 'object' || v === null)) {
     const items = value.map((v) => inspect(v));
     const start = items.length + indent + 1 + 10;
@@ -441,11 +344,43 @@ function propValue(value: unknown, indent: number): string {
   return inspect(value);
 }
 
-/** Node `formatError` + `reduceToSingleString` for an error at `indent` columns. */
-function inspectError(error: object, indent: number): string {
+/** Node `getConstructorName` without running guest getters: the first own data `constructor`. */
+function constructorName(error: object): string | null {
+  for (let o: object | null = error; o !== null; o = objectGetPrototypeOf(o)) {
+    const ctor = objectGetOwnPropertyDescriptor(o, 'constructor')?.value;
+    if (typeof ctor !== 'function') continue;
+    const name = objectGetOwnPropertyDescriptor(ctor, 'name')?.value;
+    return typeof name === 'string' && name !== '' ? name : null;
+  }
+  return null;
+}
+
+/** Node `improveStack`: `NotFound [Error]: …` when the class name hides the error's name. */
+function improveStack(stack: string, error: object): string {
+  let errorName: unknown;
+  for (
+    let o: object | null = error;
+    o !== null && errorName === undefined;
+    o = objectGetPrototypeOf(o)
+  ) {
+    errorName = objectGetOwnPropertyDescriptor(o, 'name')?.value;
+  }
+  const ctor = constructorName(error);
+  if (typeof errorName !== 'string' || ctor === null || ctor === errorName) return stack;
+  const len = errorName.length;
+  if (!errorName.endsWith('Error') || !stack.startsWith(errorName)) return stack;
+  if (stack.length !== len && stack[len] !== ':' && stack[len] !== '\n') return stack;
+  return ctor.includes(errorName)
+    ? `${ctor}${stack.slice(len)}`
+    : `${ctor} [${errorName}]${stack.slice(len)}`;
+}
+
+/** Node `formatError` + `reduceToSingleString`; accessors read as `[Getter]`, never run. */
+function inspectError(error: object, indent: number, state: InspectState): string {
   const raw = stackOf(error) ?? (reflectApply(errorToString, error, []) as string);
+  state.ancestors.push(error);
   // Frames are projected once, over the whole report (`guestStack`).
-  let base = raw;
+  let base = improveStack(raw, error);
   // Node brackets a stackless error; a runtime-decorated stack is not one.
   if (!/\n\s+at /u.test(raw) && !decorated.has(error)) base = `[${base}]`;
   if (indent > 0) base = base.replaceAll('\n', `\n${' '.repeat(indent)}`);
@@ -454,18 +389,33 @@ function inspectError(error: object, indent: number): string {
   for (let k = 0; k < keys.length; k += 1) {
     const key = keys[k] as string;
     if (key === 'stack') continue;
-    const value = (error as Record<string, unknown>)[key];
+    const descriptor = objectGetOwnPropertyDescriptor(error, key);
+    if (descriptor === undefined) continue;
+    if (descriptor.get !== undefined || descriptor.set !== undefined) {
+      const kind =
+        descriptor.get !== undefined && descriptor.set !== undefined
+          ? 'Getter/Setter'
+          : descriptor.get !== undefined
+            ? 'Getter'
+            : 'Setter';
+      entries.push(`${key}: [${kind}]`);
+      continue;
+    }
+    const value = descriptor.value;
     if ((key === 'name' || key === 'message') && typeof value === 'string' && raw.includes(value))
       continue;
-    entries.push(`${key}: ${propValue(value, indent + 2)}`);
+    entries.push(`${key}: ${propValue(value, indent + 2, state)}`);
   }
   const hidden = ['cause', 'errors'] as const;
   for (let k = 0; k < hidden.length; k += 1) {
     const key = hidden[k] as (typeof hidden)[number];
-    if (objectGetOwnPropertyDescriptor(error, key)?.enumerable === false) {
-      entries.push(`[${key}]: ${propValue((error as Record<string, unknown>)[key], indent + 2)}`);
+    const descriptor = objectGetOwnPropertyDescriptor(error, key);
+    if (descriptor?.enumerable === false && 'value' in descriptor) {
+      entries.push(`[${key}]: ${propValue(descriptor.value, indent + 2, state)}`);
     }
   }
+  state.ancestors.pop();
+  if (indent === 0 && state.circular) base = `<ref *1> ${base}`;
   if (entries.length === 0) return base;
   const single = `${base} { ${entries.join(', ')} }`;
   if (!raw.includes('\n') && !single.includes('\n') && single.length + indent <= 80) return single;
@@ -482,7 +432,7 @@ export function formatFatalReport(error: unknown, explicit?: FatalOrigin): strin
   const origin =
     explicit ??
     ((typeof error === 'object' && error !== null && origins.get(error)) || 'uncaughtException');
-  const trailer = `\nNode.js ${NODE_PROCESS_IDENTITY.version}\n`;
+  const trailer = FATAL_TRAILER;
   if (!isErrorLike(error)) {
     const body =
       typeof error === 'object' || typeof error === 'function'
@@ -498,12 +448,10 @@ export function formatFatalReport(error: unknown, explicit?: FatalOrigin): strin
   const internal = top !== undefined && frameKind(top) === 'runtime';
   const known = headers.get(error);
   const site =
-    decorated.has(error) || internal || known !== undefined
-      ? null
-      : headerSite(raw, origin, roots.has(error));
+    decorated.has(error) || internal || known !== undefined ? null : headerSite(raw, origin);
   const arrow = decorated.has(error)
     ? undefined
     : (known ?? (site === null ? undefined : headerText(site)));
   const header = arrow === undefined ? '' : `${arrow}\n`;
-  return `${header}${guestStack(inspectError(error, 0)).text}\n${trailer}`;
+  return `${header}${guestStack(inspectError(error, 0, { ancestors: [], circular: false })).text}\n${trailer}`;
 }
