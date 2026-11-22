@@ -41,7 +41,11 @@ export interface GuestEntry {
   rejection(reason: unknown): void;
   /** The realm's whole FS as a snapshot (ADR-0567); whenever no guest code runs, after `run` included. */
   snapshot(options: SnapshotOptions): Uint8Array;
-  /** Replace the realm's FS with a snapshot; only before `run`, else `ERR_FS_SNAPSHOT_NOT_FRESH`. */
+  /**
+   * Replace the realm's FS with a snapshot; only before `run`, else `ERR_FS_SNAPSHOT_NOT_FRESH`.
+   * A failure while writing is `ERR_FS_SNAPSHOT_INCOMPLETE`: `run`, `snapshot` and `restore`
+   * then refuse with it — dispose the isolate.
+   */
   restore(bytes: Uint8Array, options: SnapshotOptions): void;
 }
 

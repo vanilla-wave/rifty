@@ -47,6 +47,23 @@ const guestFs = syncMirror() as MemoryFsSync;
 for (const dir of GUEST_DIRS) guestFs.mkdirSync(dir, { recursive: true });
 /** Guest code has started in this realm: no restore from here on. */
 let started = false;
+/** A restore failed after it began writing: the FS is partial, the isolate is done (ADR-0567 §6). */
+let broken = false;
+/** Codes `restoreFs` throws before it writes anything (and option `TypeError`s). */
+const BEFORE_WRITING = new Set([
+  'ERR_FS_SNAPSHOT_TOO_LARGE',
+  'ERR_FS_SNAPSHOT_CORRUPT',
+  'ERR_FS_SNAPSHOT_VERSION',
+  'ERR_FS_SNAPSHOT_TEMPLATE',
+]);
+
+function refuseIfBroken(): void {
+  if (broken)
+    throw new FsSnapshotError(
+      'ERR_FS_SNAPSHOT_INCOMPLETE',
+      'a restore failed while writing; dispose this isolate',
+    );
+}
 /**
  * Builtin modules `node -e` exposes as lazy globals (Node v24.16.0
  * `Object.getOwnPropertyNames(globalThis)` getters under `[eval]`); `process`
@@ -225,6 +242,7 @@ function fatal(error: unknown): void {
  * natural `exit()`, as `node` does. Resolves with the status, a primitive only.
  */
 function runToExit(launch: () => Promise<void>): Promise<number> {
+  refuseIfBroken();
   started = true;
   // Resolved with a primitive only, so resolving it does no lookup the guest
   // can poison (the thenable check runs only for objects). The child judges
@@ -362,14 +380,24 @@ function rejection(copied: unknown): void {
 
 /** The realm's whole FS; whenever no guest code runs. After guest code ran, the result is guest-authored. */
 function snapshot(options: SnapshotOptions): Uint8Array {
+  refuseIfBroken();
   return snapshotFs(guestFs, options);
 }
 
 /** Replace the realm's FS; only in a fresh isolate (module cache, fds and cwd would keep the old tree). */
 function restore(bytes: Uint8Array, options: SnapshotOptions): void {
+  refuseIfBroken();
   if (started)
     throw new FsSnapshotError('ERR_FS_SNAPSHOT_NOT_FRESH', 'restore runs only before guest code');
-  restoreFs(guestFs, bytes, options);
+  try {
+    restoreFs(guestFs, bytes, options);
+  } catch (error) {
+    const refusedFirst =
+      error instanceof TypeError ||
+      (error instanceof FsSnapshotError && BEFORE_WRITING.has(error.code));
+    if (!refusedFirst) broken = true;
+    throw error;
+  }
 }
 
 Object.defineProperty(globalThis, '__riftyGuest', {

@@ -2,18 +2,12 @@
 
 ## Items
 
-1. `distribution/isolate-host-fs-snapshot-acceptance` — **acceptance carrier** —
-   scenario steps 1–4 as one test file over the real guest bundle in real
-   isolated-vm and in the Node realm, committed RED/expected-failure. No
-   product capability by itself.
-2. `distribution/isolate-host-fs-snapshot-codec` — format v1 codec
-   (ADR-0567), FS adapter, `GuestEntry.snapshot`/`restore`, fault matrix,
-   published cost (I1–I6). Hypothesis until the carrier hits it; expected the
-   only wall.
+None: the carrier and the codec landed on the goal branch (Final+GREEN PASS @ 6c765ddbe). Next: CLOSE, after the manager's external review (manager, 2026-11-22).
 
 ## Open questions
 
-- Is a field-level `restoreStat` on vfs `MemoryFsSync` the smallest way to set `ino`/`ctime`/`birthtime` exactly (I1)? — owner: agent — Contract+RED of item 2, against the vfs owner README.
+- I1 «for any name rifty's FS holds»: the codec also refuses at snapshot names with NUL and times not finite or outside the Date range (`ERR_FS_SNAPSHOT_UNREPRESENTABLE`); rifty stops producing both once PR #419 lands (runtime `nullCheck`, `fs-times.ts`) — narrow I1 for them meanwhile? — owner: user — not yet asked; evidence: compat row, codec `the writer never emits what the reader refuses`.
+- Outcome says «never a partial tree»; a restore that runs out of memory while writing leaves a partial FS in an isolate that then refuses `run`/`snapshot`/`restore` (`ERR_FS_SNAPSHOT_INCOMPLETE`) — accept «all of the tree, or the isolate is thrown away»? — owner: user — asked by the manager 2026-11-22; evidence: acceptance `restore that runs out of memory while writing…`.
 - Does the packaged `isolate-host` need the codec at runtime (today `@riftydev/isolate-guest` is its devDependency, bundled into the child only)? — owner: agent — the sandbox goal decides; noted to the manager 2026-11-22.
 
 ## Out of scope

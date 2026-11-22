@@ -5,9 +5,11 @@
  * (CRC from `node:zlib`): it pins the format and forges blobs a correct writer
  * never makes.
  */
+import { readFileSync } from 'node:fs';
+import { runInNewContext } from 'node:vm';
 import { crc32 } from 'node:zlib';
 import { createMemoryFs } from '@riftydev/vfs/internal';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   FsSnapshotError,
   type SnapshotOptions,
@@ -28,6 +30,24 @@ interface Rec {
 }
 
 const OPTIONS: SnapshotOptions = { template: null, maxBytes: 1 << 24 };
+/** Budget an entry takes from `maxBytes` beyond its bytes (ADR-0567 §7). */
+const ENTRY_COST = 384;
+/** Budget per code unit of an entry's path (ADR-0567 §7). */
+const PATH_COST = 8;
+/** Budget per level of an entry's depth (ADR-0567 §7). */
+const DEPTH_COST = 80;
+const depthOf = (path: string): number => (path === '/' ? 0 : path.split('/').length - 1);
+/** The budget a tree's snapshot needs: its bytes + per entry, per path unit, per level. */
+const budgetOf = (fs: ReturnType<typeof createMemoryFs>['fsSync'], blob: Uint8Array): number =>
+  listFs(fs).reduce(
+    (n, row) => n + ENTRY_COST + PATH_COST * row.path.length + DEPTH_COST * depthOf(row.path),
+    blob.length,
+  );
+const MiB = 1 << 20;
+/** The golden blob's tree (listFs form), fixed when the fixture was written. */
+const GOLDEN_TREE = JSON.parse(
+  readFileSync(new URL('./fixtures/snapshot-v1.json', import.meta.url), 'utf8'),
+) as unknown;
 const MAGIC = [0x52, 0x49, 0x46, 0x54, 0x59, 0x46, 0x53, 0x00];
 
 /** ADR-0567 §1, written by hand. `tail` lands between `end` and the CRC. */
@@ -225,6 +245,11 @@ describe('format v1 layout (ADR-0567 §1, §2)', () => {
 });
 
 describe('long names (ADR-0567 §5, I3)', () => {
+  carrier('restore: a blob name of 16 383 code units is accepted, 16 384 refused', () => {
+    restoreFs(createMemoryFs().fsSync, encode([root, file(`/${'n'.repeat(16_383)}`)]), OPTIONS);
+    refused(encode([root, file(`/${'n'.repeat(16_384)}`)]), 'ERR_FS_SNAPSHOT_CORRUPT');
+  });
+
   carrier('a name of 16 383 code units round-trips; a longer one is refused at snapshot', () => {
     const fs = createMemoryFs().fsSync;
     fs.writeFileSync(`/${'n'.repeat(16_383)}`, new Uint8Array([1]));
@@ -232,39 +257,405 @@ describe('long names (ADR-0567 §5, I3)', () => {
     restoreFs(back, snapshotFs(fs, OPTIONS), OPTIONS);
     expect(listFs(back)).toEqual(listFs(fs));
     fs.writeFileSync(`/${'m'.repeat(16_384)}`, new Uint8Array([1]));
-    expect(() => snapshotFs(fs, OPTIONS)).toThrow(/^ERR_FS_SNAPSHOT_TOO_LARGE: /);
+    expect(() => snapshotFs(fs, OPTIONS)).toThrow(/^ERR_FS_SNAPSHOT_UNREPRESENTABLE: /);
+  });
+
+  carrier('equal-length paths over 16 383 units decode in linear time (no hash flooding)', () => {
+    // V8 hashes strings over 16 383 units by length only: a Map keyed by such
+    // paths is quadratic. A linear reader doubles its time with the entries;
+    // a quadratic one quadruples it (measured: 2000 entries 1.7 s, 4000 5.4 s).
+    const deep = `/${'d'.repeat(16_380)}`;
+    const blob = (n: number) =>
+      encode([
+        root,
+        dir(deep),
+        ...Array.from({ length: n }, (_, i) => file(`${deep}/f${String(i).padStart(4, '0')}`)),
+      ]);
+    const options = { template: null, maxBytes: 1 << 30 };
+    const time = (bytes: Uint8Array) => {
+      const started = performance.now();
+      restoreFs(createMemoryFs().fsSync, bytes, options);
+      return performance.now() - started;
+    };
+    // Interleaved, best of 5 each: load on the machine moves both alike.
+    const small = blob(1000);
+    const large = blob(2000);
+    let one = Number.POSITIVE_INFINITY;
+    let two = Number.POSITIVE_INFINITY;
+    for (let r = 0; r < 5; r++) {
+      one = Math.min(one, time(small));
+      two = Math.min(two, time(large));
+    }
+    expect(two / one).toBeLessThan(3);
+  });
+});
+
+describe('the writer never emits what the reader refuses (ADR-0567 §5, I3)', () => {
+  // States rifty's FS holds that the format cannot carry (Node never produces them:
+  // NaN/huge times and NUL: aligned with Node by the sandbox goal, PR #419).
+  const odd: readonly [string, (fs: ReturnType<typeof createMemoryFs>['fsSync']) => void][] = [
+    ['NaN time', (fs) => fs.utimes('/a', Number.NaN, 1)],
+    ['infinite time', (fs) => fs.utimes('/a', 1, Number.POSITIVE_INFINITY)],
+    ['time 1e306', (fs) => fs.utimes('/a', 1e306, 1)],
+    ['time past the Date range', (fs) => fs.utimes('/a', 1, 8.64e15 + 1)],
+    ['NUL in a name', (fs) => fs.writeFileSync('/a\0b', new Uint8Array(0))],
+    [
+      'a name over 16 383 code units',
+      (fs) => fs.writeFileSync(`/${'n'.repeat(16_384)}`, new Uint8Array(0)),
+    ],
+    ['the Date range edge', (fs) => fs.utimes('/a', -8.64e15, 8.64e15)],
+    [
+      'negative zero and sub-ms times',
+      (fs) =>
+        fs.restoreStatSync('/a', { mtimeMs: -0, atimeMs: 1.25, ctimeMs: 0.5, birthtimeMs: -1.5 }),
+    ],
+  ];
+  for (const [label, alter] of odd) {
+    carrier(`${label}: snapshot refuses by name, or its blob restores`, () => {
+      const fs = createMemoryFs().fsSync;
+      fs.writeFileSync('/a', new Uint8Array([1]));
+      alter(fs);
+      let bytes: Uint8Array | undefined;
+      try {
+        bytes = snapshotFs(fs, OPTIONS);
+      } catch (error) {
+        expect(error).toBeInstanceOf(FsSnapshotError);
+        expect((error as FsSnapshotError).code).toBe('ERR_FS_SNAPSHOT_UNREPRESENTABLE');
+        return;
+      }
+      const back = createMemoryFs().fsSync;
+      restoreFs(back, bytes, OPTIONS);
+      expect(listFs(back)).toEqual(listFs(fs));
+    });
+  }
+
+  carrier('the states the format cannot carry are refused, the edge ones restore', () => {
+    const outcome = (alter: (fs: ReturnType<typeof createMemoryFs>['fsSync']) => void) => {
+      const fs = createMemoryFs().fsSync;
+      fs.writeFileSync('/a', new Uint8Array([1]));
+      alter(fs);
+      try {
+        snapshotFs(fs, OPTIONS);
+        return 'ok';
+      } catch (error) {
+        return (error as FsSnapshotError).code;
+      }
+    };
+    expect(odd.map(([label, alter]) => [label, outcome(alter)])).toEqual([
+      ['NaN time', 'ERR_FS_SNAPSHOT_UNREPRESENTABLE'],
+      ['infinite time', 'ERR_FS_SNAPSHOT_UNREPRESENTABLE'],
+      ['time 1e306', 'ERR_FS_SNAPSHOT_UNREPRESENTABLE'],
+      ['time past the Date range', 'ERR_FS_SNAPSHOT_UNREPRESENTABLE'],
+      ['NUL in a name', 'ERR_FS_SNAPSHOT_UNREPRESENTABLE'],
+      ['a name over 16 383 code units', 'ERR_FS_SNAPSHOT_UNREPRESENTABLE'],
+      ['the Date range edge', 'ok'],
+      ['negative zero and sub-ms times', 'ok'],
+    ]);
+  });
+});
+
+describe('restore input (ADR-0567 §6)', () => {
+  carrier('file bytes are owned copies, also from a Buffer blob', () => {
+    const fs = createMemoryFs().fsSync;
+    fs.writeFileSync('/a', new Uint8Array([1, 2, 3]));
+    const blob = Buffer.from(snapshotFs(fs, OPTIONS));
+    const back = createMemoryFs().fsSync;
+    restoreFs(back, blob, OPTIONS);
+    blob.fill(0);
+    const data = back.readFileBytesSync('/a');
+    expect([...data]).toEqual([1, 2, 3]);
+    expect(data.buffer.byteLength).toBe(3);
+  });
+
+  carrier('a Uint8Array from another realm is accepted; a non-Uint8Array is a TypeError', () => {
+    const fs = createMemoryFs().fsSync;
+    fs.writeFileSync('/a', new Uint8Array([4]));
+    const bytes = snapshotFs(fs, OPTIONS);
+    const foreign = runInNewContext(
+      '(b) => new Uint8Array(b)',
+      {},
+    )(Array.from(bytes)) as Uint8Array;
+    const back = createMemoryFs().fsSync;
+    restoreFs(back, foreign, OPTIONS);
+    expect([...back.readFileBytesSync('/a')]).toEqual([4]);
+    for (const wrong of [new Uint16Array(4), new DataView(new ArrayBuffer(4)), [1, 2], 'x'])
+      expect(() => restoreFs(createMemoryFs().fsSync, wrong as never, OPTIONS)).toThrow(TypeError);
   });
 
   carrier(
-    'equal-length paths over 16 383 units decode as fast as short ones (no hash flooding)',
+    'dense blobs: each entry counts ENTRY_COST against maxBytes, checked before writing',
     () => {
-      // V8 hashes strings over 16 383 units by length only: a Map keyed by such
-      // paths is quadratic. 2000 entries, ~65 MB either way; the control has
-      // short paths and the same bytes as content.
-      const deep = `/${'d'.repeat(16_380)}`;
-      const hostile = encode([
-        root,
-        dir(deep),
-        ...Array.from({ length: 2000 }, (_, i) => file(`${deep}/f${String(i).padStart(4, '0')}`)),
-      ]);
-      const control = encode([
-        root,
-        ...Array.from({ length: 2000 }, (_, i) =>
-          file(`/f${String(i).padStart(4, '0')}`, 'x'.repeat(32_768)),
-        ),
-      ]);
-      const options = { template: null, maxBytes: 1 << 30 };
-      const time = (bytes: Uint8Array) => {
-        const started = performance.now();
-        restoreFs(createMemoryFs().fsSync, bytes, options);
-        return performance.now() - started;
-      };
-      time(control);
-      const controlMs = time(control);
-      // Quadratic here measured ~10x the control at this size (Final+GREEN probe).
-      expect(time(hostile)).toBeLessThan(3 * controlMs + 1000);
+      // 50 000 empty dirs: ~2.5 MB of bytes, ~19 MB of budget.
+      const fs = createMemoryFs().fsSync;
+      for (let i = 0; i < 50_000; i++) fs.mkdirSync(`/${i.toString(36)}`, { recursive: false });
+      const blob = snapshotFs(fs, { template: null, maxBytes: 1 << 30 });
+      const budget = budgetOf(fs, blob);
+      expect(() => snapshotFs(fs, { template: null, maxBytes: budget - 1 })).toThrow(
+        /^ERR_FS_SNAPSHOT_TOO_LARGE: /,
+      );
+      refused(blob, 'ERR_FS_SNAPSHOT_TOO_LARGE', { template: null, maxBytes: budget - 1 });
+      restoreFs(createMemoryFs().fsSync, blob, { template: null, maxBytes: budget });
     },
   );
+});
+
+describe('golden v1 blob (ADR-0567 §3: every later reader reads it)', () => {
+  // Written by the v1 writer on 2026-11-22. Never regenerate: a reader that fails here broke v1.
+  const golden = new Uint8Array(
+    readFileSync(new URL('./fixtures/snapshot-v1.bin', import.meta.url)),
+  );
+  const template = { id: 'golden', version: '1' };
+
+  carrier('restores to its recorded tree', () => {
+    const fs = createMemoryFs().fsSync;
+    restoreFs(fs, golden, { template, maxBytes: 1 << 20 });
+    expect(listFs(fs)).toEqual(GOLDEN_TREE);
+  });
+
+  carrier('the v1 writer writes exactly these bytes for its tree', () => {
+    // Rebuilt from the recorded listing, not from the blob.
+    const fs = createMemoryFs().fsSync;
+    const rows = GOLDEN_TREE as {
+      path: string;
+      kind: string;
+      bytes?: string;
+      mtimeMs: number;
+      atimeMs: number;
+      ctimeMs: number;
+      birthtimeMs: number;
+    }[];
+    for (const row of rows) {
+      if (row.path === '/') continue;
+      if (row.kind === 'dir') fs.mkdirSync(row.path, { recursive: false });
+      else fs.writeFileSync(row.path, new Uint8Array(Buffer.from(row.bytes ?? '', 'base64')));
+    }
+    for (const { path, mtimeMs, atimeMs, ctimeMs, birthtimeMs } of rows)
+      fs.restoreStatSync(path, { mtimeMs, atimeMs, ctimeMs, birthtimeMs });
+    expect(
+      Buffer.from(snapshotFs(fs, { template, maxBytes: 1 << 20 })).equals(Buffer.from(golden)),
+    ).toBe(true);
+  });
+});
+
+describe('a restore failing while writing, in the consumer realm (ADR-0567 §6)', () => {
+  carrier('is ERR_FS_SNAPSHOT_INCOMPLETE, whatever the FS threw', () => {
+    const source = createMemoryFs().fsSync;
+    for (const name of ['a', 'b', 'c']) source.writeFileSync(`/${name}`, new Uint8Array([1]));
+    const blob = snapshotFs(source, OPTIONS);
+    // A consumer FS that fails on its second write (a full disk, a quota).
+    const real = createMemoryFs().fsSync;
+    let writes = 0;
+    const failing = Object.assign(Object.create(real) as typeof real, {
+      writeFileSync(path: string, data: Uint8Array) {
+        if (++writes === 2) throw new Error('ENOSPC');
+        real.writeFileSync(path, data);
+      },
+    });
+    expect(() => restoreFs(failing, blob, OPTIONS)).toThrow(/^ERR_FS_SNAPSHOT_INCOMPLETE: /);
+  });
+});
+
+describe('a record the budget refuses allocates nothing (ADR-0567 §5, §7)', () => {
+  carrier('its path is charged before it is decoded or split', () => {
+    // Four nested 16 000-unit names: paths the bytes admit but the path charge does not.
+    const seg = 'x'.repeat(16_000);
+    const paths = [1, 2, 3, 4].map((n) => `/${Array.from({ length: n }, () => seg).join('/')}`);
+    const bytes = encode([root, ...paths.slice(0, 3).map(dir), file(paths[3] as string)]);
+    const units = paths.reduce((n, p) => n + p.length, 1);
+    const decodes = (maxBytes: number) => {
+      const spy = vi.spyOn(String, 'fromCharCode');
+      try {
+        restoreFs(createMemoryFs().fsSync, bytes, { template: null, maxBytes });
+        return { ok: true, calls: spy.mock.calls.length };
+      } catch (error) {
+        expect((error as FsSnapshotError).code).toBe('ERR_FS_SNAPSHOT_TOO_LARGE');
+        return { ok: false, calls: spy.mock.calls.length };
+      } finally {
+        spy.mockRestore();
+      }
+    };
+    const enough = bytes.length + 5 * ENTRY_COST + PATH_COST * units + DEPTH_COST * 10;
+    const accepted = decodes(enough);
+    const refusedNow = decodes(bytes.length + 2 * ENTRY_COST + PATH_COST * 1000);
+    // Accepted: the paths are decoded (one call per 4096 units); refused at the first: only `/` was.
+    expect(accepted).toEqual({ ok: true, calls: expect.any(Number) });
+    expect(accepted.calls).toBeGreaterThan(20);
+    expect(refusedNow).toEqual({ ok: false, calls: 1 });
+  });
+});
+
+describe('the budget bounds time as well as memory (ADR-0567 §7, I3)', () => {
+  const budget = 4 * MiB;
+  const options = { template: null, maxBytes: budget };
+  const best = (blob: Uint8Array) => {
+    let ms = Number.POSITIVE_INFINITY;
+    for (let r = 0; r < 3; r++) {
+      const started = performance.now();
+      restoreFs(createMemoryFs().fsSync, blob, options);
+      ms = Math.min(ms, performance.now() - started);
+    }
+    return ms;
+  };
+  /** The largest tree `grow(k)` builds that snapshots within the budget (k found by bisection). */
+  const largest = (
+    grow: (k: number) => ReturnType<typeof createMemoryFs>['fsSync'],
+    max: number,
+  ) => {
+    let lo = 1;
+    let hi = max;
+    let blob = snapshotFs(grow(1), options);
+    while (hi - lo > 1) {
+      const mid = (lo + hi) >> 1;
+      try {
+        const bytes = snapshotFs(grow(mid), options);
+        lo = mid;
+        blob = bytes;
+      } catch (error) {
+        if ((error as FsSnapshotError).code !== 'ERR_FS_SNAPSHOT_TOO_LARGE') throw error;
+        hi = mid;
+      }
+    }
+    return blob;
+  };
+  const flat = (k: number) => {
+    const fs = createMemoryFs().fsSync;
+    for (let i = 0; i < k; i++) fs.mkdirSync(`/${i.toString(36)}`, { recursive: false });
+    return fs;
+  };
+  const chain = (depth: number, leaves = 0) => {
+    const fs = createMemoryFs().fsSync;
+    let path = '';
+    for (let i = 0; i < depth; i++) {
+      path += '/a';
+      fs.mkdirSync(path, { recursive: false });
+    }
+    for (let i = 0; i < leaves; i++)
+      fs.mkdirSync(`${path}/${i.toString(36)}`, { recursive: false });
+    return fs;
+  };
+
+  /** Files with 16 383-unit names under a dir with one too: the longest paths a budget admits. */
+  const longNames = (k: number) => {
+    const fs = createMemoryFs().fsSync;
+    const deep = `/${'d'.repeat(16_383)}`;
+    fs.mkdirSync(deep, { recursive: false });
+    for (let i = 0; i < k; i++)
+      fs.writeFileSync(
+        `${deep}/${String(i).padStart(5, '0')}${'n'.repeat(16_378)}`,
+        new Uint8Array(0),
+      );
+    return fs;
+  };
+
+  carrier(
+    'a deep chain, leaves at depth and long names cost the same order of time as flat entries',
+    () => {
+      // Relative to the flat densest blob of the same budget: machine load moves both.
+      const flatMs = best(largest(flat, 50_000));
+      const chainMs = best(largest(chain, 3_000));
+      const leavesMs = best(largest((k) => chain(100, k), 50_000));
+      const longMs = best(largest(longNames, 300));
+      expect(chainMs / flatMs).toBeLessThan(4);
+      expect(leavesMs / flatMs).toBeLessThan(4);
+      expect(longMs / flatMs).toBeLessThan(4);
+    },
+  );
+});
+
+describe('random trees: snapshot refuses by name or restores byte for byte (ADR-0567 §5)', () => {
+  // A fixed-seed generator (mulberry32) over what rifty's FS holds: odd and long
+  // names, NUL, deep paths, odd times, binary contents.
+  const rng = (start: number) => {
+    let seed = start;
+    return () => {
+      seed = (seed + 0x6d2b79f5) | 0;
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  };
+  const NAMES = [
+    'a',
+    'B',
+    'é',
+    '😀',
+    '\uD800',
+    ' ',
+    'x\ny',
+    '\0',
+    '.git',
+    'n'.repeat(16_383),
+    'm'.repeat(16_384),
+    '__proto__',
+    'constructor',
+  ];
+  const TIMES = [
+    0,
+    -0,
+    1.25,
+    -1e12,
+    8.64e15,
+    -8.64e15,
+    8.64e15 + 1,
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    1e306,
+    1_700_000_000_000,
+  ];
+  carrier('300 trees', () => {
+    const next = rng(20261122);
+    const pick = <T>(xs: readonly T[]): T => xs[Math.floor(next() * xs.length)] as T;
+    const outcomes = new Set<string>();
+    for (let t = 0; t < 300; t++) {
+      const fs = createMemoryFs().fsSync;
+      const dirs = ['/'];
+      for (let i = 0, n = 1 + Math.floor(next() * 12); i < n; i++) {
+        const parent = pick(dirs);
+        const name = pick(NAMES) + (next() < 0.5 ? String(i) : '');
+        const path = parent === '/' ? `/${name}` : `${parent}/${name}`;
+        try {
+          if (next() < 0.4) {
+            fs.mkdirSync(path, { recursive: false });
+            dirs.push(path);
+          } else {
+            fs.writeFileSync(
+              path,
+              new Uint8Array(
+                Array.from({ length: Math.floor(next() * 64) }, () => Math.floor(next() * 256)),
+              ),
+            );
+          }
+          if (next() < 0.5)
+            fs.restoreStatSync(path, {
+              mtimeMs: pick(TIMES),
+              atimeMs: pick(TIMES),
+              ctimeMs: pick(TIMES),
+              birthtimeMs: pick(TIMES),
+            });
+        } catch {
+          // A name the FS itself refuses (an existing path): skip it.
+        }
+      }
+      let blob: Uint8Array;
+      try {
+        blob = snapshotFs(fs, OPTIONS);
+      } catch (error) {
+        expect(error).toBeInstanceOf(FsSnapshotError);
+        expect(['ERR_FS_SNAPSHOT_UNREPRESENTABLE', 'ERR_FS_SNAPSHOT_TOO_LARGE']).toContain(
+          (error as FsSnapshotError).code,
+        );
+        outcomes.add((error as FsSnapshotError).code);
+        continue;
+      }
+      const back = createMemoryFs().fsSync;
+      restoreFs(back, blob, OPTIONS);
+      expect(listFs(back)).toEqual(listFs(fs));
+      expect(Buffer.from(snapshotFs(back, OPTIONS)).equals(Buffer.from(blob))).toBe(true);
+      outcomes.add('restored');
+    }
+    // The generator reaches both sides.
+    expect([...outcomes].sort()).toEqual(['ERR_FS_SNAPSHOT_UNREPRESENTABLE', 'restored']);
+  });
 });
 
 describe('limits (ADR-0567 §7, I4)', () => {
@@ -273,11 +664,16 @@ describe('limits (ADR-0567 §7, I4)', () => {
     () => {
       const fs = createMemoryFs().fsSync;
       fs.writeFileSync('/big', new Uint8Array(10_000));
+      // The budget is the blob's bytes + per entry, per path unit, per level (ADR-0567 §7).
       const size = snapshotFs(fs, OPTIONS).length;
-      expect(snapshotFs(fs, { template: null, maxBytes: size }).length).toBe(size);
-      expect(() => snapshotFs(fs, { template: null, maxBytes: size - 1 })).toThrow(
+      const budget = size + 2 * ENTRY_COST + PATH_COST * ('/'.length + '/big'.length) + DEPTH_COST;
+      expect(snapshotFs(fs, { template: null, maxBytes: budget }).length).toBe(size);
+      expect(() => snapshotFs(fs, { template: null, maxBytes: budget - 1 })).toThrow(
         /^ERR_FS_SNAPSHOT_TOO_LARGE: /,
       );
+      const blob = snapshotFs(fs, OPTIONS);
+      restoreFs(createMemoryFs().fsSync, blob, { template: null, maxBytes: budget });
+      refused(blob, 'ERR_FS_SNAPSHOT_TOO_LARGE', { template: null, maxBytes: budget - 1 });
     },
   );
 
@@ -324,7 +720,9 @@ describe('hostile bytes (ADR-0567 §5, I2, I3)', () => {
       for (let bit = 0; bit < 8; bit++) {
         const copy = bytes.slice();
         copy[i] = (copy[i] as number) ^ (1 << bit);
-        refused(copy, i >= 8 && i < 12 ? 'ERR_FS_SNAPSHOT_VERSION' : 'ERR_FS_SNAPSHOT_CORRUPT');
+        // Version 1 with its low bit flipped is version 0: never released, not a snapshot.
+        const version = i >= 8 && i < 12 && !(i === 8 && bit === 0);
+        refused(copy, version ? 'ERR_FS_SNAPSHOT_VERSION' : 'ERR_FS_SNAPSHOT_CORRUPT');
       }
     }
   });
@@ -342,7 +740,8 @@ describe('hostile bytes (ADR-0567 §5, I2, I3)', () => {
     expect(() => restoreFs(fs, encode([root], { version: 2 }), OPTIONS)).toThrow(
       /^ERR_FS_SNAPSHOT_VERSION: .*\b2\b.*\b1\b/,
     );
-    refused(encode([root], { version: 0 }), 'ERR_FS_SNAPSHOT_VERSION');
+    // No version 0 was ever released: not a snapshot.
+    refused(encode([root], { version: 0 }), 'ERR_FS_SNAPSHOT_CORRUPT');
   });
 
   carrier('another template, none, or one where none was expected', () => {
@@ -366,7 +765,13 @@ describe('hostile bytes (ADR-0567 §5, I2, I3)', () => {
     restoreFs(fs, withT, { template: t, maxBytes: 1 << 20 });
   });
 
-  const structural: readonly (readonly [string, readonly Rec[], (readonly number[])?])[] = [
+  // [label, records, bytes after `end`, the refusal's detail when another check would also refuse]
+  const structural: readonly (readonly [
+    string,
+    readonly Rec[],
+    (readonly number[] | undefined)?,
+    RegExp?,
+  ])[] = [
     ['no root entry', [dir('/w')]],
     ['root as a file', [file('/')]],
     ['root twice', [root, dir('/')]],
@@ -378,7 +783,7 @@ describe('hostile bytes (ADR-0567 §5, I2, I3)', () => {
     ['empty segment', [root, dir('/w'), file('/w//SECRET')]],
     ['trailing slash', [root, dir('/w/')]],
     ['NUL in a name', [root, file('/SECRET\0x')]],
-    ['parent missing', [root, file('/nope/SECRET')]],
+    ['parent missing', [root, file('/nope/SECRET')], undefined, /outside its parent directory/],
     ['parent is a file', [root, file('/f'), file('/f/SECRET')]],
     ['child before its parent', [root, file('/w/SECRET'), dir('/w')]],
     ['siblings out of code-unit order', [root, file('/b'), file('/a')]],
@@ -387,13 +792,21 @@ describe('hostile bytes (ADR-0567 §5, I2, I3)', () => {
     ['unknown kind (no symlinks in v1)', [root, { kind: 3, path: '/link' }]],
     ['NaN time', [root, { ...file('/a'), times: [Number.NaN, 0, 0, 0] }]],
     ['infinite time', [root, { ...file('/a'), times: [0, 0, Number.POSITIVE_INFINITY, 0] }]],
-    ['size not an integer', [root, { ...file('/a', 'xy'), size: 1.5 }]],
-    ['negative size', [root, { ...file('/a'), size: -1 }]],
+    ['size not an integer', [root, { ...file('/a', 'xy'), size: 1.5 }], undefined, /bad file size/],
+    [
+      'time past the Date range',
+      [root, { ...file('/a'), times: [8.64e15 + 1, 0, 0, 0] }],
+      undefined,
+      /time/,
+    ],
+    ['negative size', [root, { ...file('/a'), size: -1 }], undefined, /bad file size/],
     ['bytes after end', [root], [0x53, 0x45, 0x43]],
   ];
-  for (const [label, recs, tail] of structural) {
+  for (const [label, recs, tail, detail] of structural) {
     carrier(`${label} — refused, nothing written`, () => {
       refused(encode(recs, { tail }), 'ERR_FS_SNAPSHOT_CORRUPT');
+      if (detail)
+        expect(() => restoreFs(target(), encode(recs, { tail }), OPTIONS)).toThrow(detail);
     });
   }
 

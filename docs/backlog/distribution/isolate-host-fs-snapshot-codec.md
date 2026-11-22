@@ -61,12 +61,25 @@ challenge: 2026-11-22 — reuses the goal's premise check (goal `## Challenge`)
 | restore × every truncation of a valid blob | `ERR_FS_SNAPSHOT_CORRUPT`, target unchanged | codec `every truncation` | → I3 |
 | restore × every single-bit flip | `ERR_FS_SNAPSHOT_CORRUPT` (version bytes: `_VERSION`) | codec `every flipped bit` | → I3, I2 |
 | restore × wrong CRC, foreign magic, empty | `_CORRUPT` | codec | → I3 |
-| restore × version 0 or 2 | `ERR_FS_SNAPSHOT_VERSION` naming found and supported | codec | → I2 |
+| restore × version 2 | `ERR_FS_SNAPSHOT_VERSION` naming found and supported | codec | → I2 |
 | restore × other/none/unexpected template | `ERR_FS_SNAPSHOT_TEMPLATE`; matching template restores | codec, acceptance step 4 | → I2 |
 | restore × CRC-valid structural defects: no/second/file root, duplicate path, dir+file at a path, relative, `..`/`.`/empty segment, trailing `/`, NUL, missing/file parent, child before parent, unknown kind (no symlinks), NaN/∞ time, fractional/negative size, size past end (2^50, not allocated), path/template length past end, bytes after `end` | `_CORRUPT`, target unchanged | codec `hostile bytes` table | → I3 |
 | restore × siblings out of order, re-entry into a closed directory, a name over 16 383 code units | `_CORRUPT` | codec `hostile bytes` table | → I3 |
-| restore × 2000 equal-length paths over 16 383 units (~65 MB) | decodes within 3× a same-size control (no hash flooding; was ~10×) | codec `equal-length paths over 16 383 units…` | → I3 |
-| snapshot × a name of 16 383 / 16 384 code units | round-trips / `_TOO_LARGE` | codec `a name of 16 383 code units…` | → I3 |
+| restore × 2000 equal-length paths over 16 383 units (~65 MB) | restore time for 2000 entries < 3 × that for 1000, best of 3 (no hash flooding; the quadratic reader gave 3.9–4.4) | codec `equal-length paths over 16 383 units…` | → I3 |
+| snapshot × a name of 16 383 / 16 384 code units | round-trips / `_UNREPRESENTABLE` | codec `a name of 16 383 code units…` | → I3 |
+| restore in the isolate × memory runs out while writing (honest 40 MB blob, `memoryLimit` 64) | `ERR_FS_SNAPSHOT_INCOMPLETE`; then `run`, `snapshot`, `restore` refuse with it | acceptance `restore that runs out of memory while writing…` | → I4 |
+| snapshot × NaN / ∞ / 1e306 / past-Date-range time, NUL or overlong name (both realms) | `ERR_FS_SNAPSHOT_UNREPRESENTABLE`; the Date-range edge, −0 and sub-ms times restore | codec `the writer never emits what the reader refuses`; acceptance `a tree the format cannot carry…` | → I1, I3 |
+| restore × a time past the Date range | `_CORRUPT` | codec `hostile bytes` table | → I3 |
+| restore × a `Buffer` blob, another realm's `Uint8Array`, a non-`Uint8Array` | owned exact copies; accepted; `TypeError` | codec `restore input` | → ADR-0567 |
+| restore × the deepest chain, a chain + leaves, 16 383-unit names within a 4 MiB budget | restore time within 4 × the flat densest blob of the same budget (chain was 14.5 ×) | codec `the budget bounds time as well as memory` | → I3 |
+| snapshot in the isolate × the most two-byte 16 383-unit names a 64 MiB budget admits | fits `memoryLimit` 2 × 64 + 16 | acceptance `a snapshot dense in long two-byte names…` | → I4 |
+| snapshot in the isolate × a 50 MiB tree, budget over the limit (`memoryLimit` 96) | `_TOO_LARGE: out of memory…`, twice (FS intact) | acceptance `a snapshot that runs out of isolate memory…` | → I4 |
+| restore in the consumer realm × the FS throws on a write | `_INCOMPLETE` | codec `a restore failing while writing, in the consumer realm` | → ADR-0567 |
+| snapshot × 300 random trees over what the FS holds (fixed seed) | refuses by name, or restores byte for byte | codec `random trees` | → ADR-0567 |
+| the v1 writer × the golden tree | writes exactly the fixture bytes | codec `golden v1 blob` | → I2 |
+| both × entries beyond the budget (bytes + 384 per entry + 8 per path unit + 80 per level) | `_TOO_LARGE` before writing; the densest blob within 32 MiB restores at `memoryLimit` 80 | codec `dense blobs…`; acceptance `the densest blob within maxBytes…` | → I3, I4 |
+| restore × version 0 | `_CORRUPT` (never released) | codec | → ADR-0567 |
+| restore × the golden v1 fixture (`tests/fixtures/snapshot-v1.bin`) | restores to its recorded tree, in every later reader | codec `golden v1 blob` | → I2 |
 | any refusal × error text | `<code>: ` + printable ASCII, no blob text (`SECRET` marker in paths and in the blob's template absent) | codec `refused()` | → I3 |
 | consumer realm × snapshot of a realm the guest altered (`DataView`/`Uint8Array`/`Array.prototype.sort`/`charCodeAt`/global `Uint8Array` replaced) | `restoreFs` refuses with `FsSnapshotError` (no `SECRET`) or yields a tree that snapshots again | acceptance `a snapshot from a realm the guest altered…` | → I3, I4 |
 | restore in the isolate × refused blob | named error across ivm; guest then sees the fresh tree | acceptance step 4 | → I3 |
@@ -86,4 +99,7 @@ challenge: 2026-11-22 — reuses the goal's premise check (goal `## Challenge`)
 - 2026-11-22 — `it.fails` marks RED rows; IMPLEMENT flips them to `it`.
 - 2026-11-22 — after Contract+RED: the outside-target RED's bound tightened from `≤ first + 9` to the exact `first + 8` (target() 4 incl. its root, restore 3, probe 1) — stricter, same row.
 - 2026-11-22 — Final+GREEN round 1 (blocker, I3): the decoder's path-keyed Map was quadratic on equal-length paths over 16 383 units (V8 length-only hash) → parent/order checks on the walk's stack, names capped at 16 383 code units both ways (the vfs directory Map is keyed by names); REDs added; packed-export pin `embedder.test.ts` updated to the ADR-0558 2026-11-22 surface (PR-4).
+- re-cut: 2026-11-22 — the hash-flooding row's carrier is a scaling ratio (2000 vs 1000 entries) instead of a same-size control (Final+GREEN verify: the control margin was the constant, not the ratio) — trace: none
+- 2026-11-22 — external review round 1 (manager by delegation; narrowing I1/the Outcome is the user's — map `owner: user`): B1 incomplete restore → `ERR_FS_SNAPSHOT_INCOMPLETE` + the isolate refuses afterwards; S1 writer refuses what the reader refuses (`_UNREPRESENTABLE`; the overlong-name refusal at snapshot moved from `_TOO_LARGE`); S2 owned copies; S3 entry charge 384 (measured ~670 B, ~1.1 µs per entry); version 0 → `_CORRUPT`; golden v1 fixture; redundant `need(size)` removed, the other two checks got detail asserts. Two tests changed with the decisions (overlong-name code, the version-bit row).
+- 2026-11-22 — external review round 2 (manager by delegation): budget gains 8 per path code unit and 80 per level of depth (both sides; a parent-index writer was tried and reverted — the path charge already caps paths' memory, REV-7); an allocation refused at snapshot is `_TOO_LARGE: out of memory`; tests changed with it: the budget arithmetic (`budgetOf`), the densest-dirs count (> 60 000), the long-names snapshot count (390).
 - 2026-11-22 — I6 floor measured as a sandbox run goes (restore → `run` → snapshot): 223 MiB at template scale; snapshot straight after restore can need ~3 × S (garbage blob), stated in README/ADR.

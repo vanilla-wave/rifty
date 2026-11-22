@@ -136,6 +136,126 @@ describe('guest FS snapshot — scenario', () => {
     expect(fits?.error).toBeDefined();
   });
 
+  carrier(
+    'restore that runs out of memory while writing leaves an unusable isolate (I3, I4)',
+    () => {
+      // An honest 40 MB blob of two 20 MiB files under a 64 MiB isolate: the
+      // blob fits, a file's copy does not — the failure comes after the write
+      // phase began (the old tree is already gone).
+      const fs = createMemoryFs().fsSync;
+      fs.mkdirSync('/workspace', { recursive: false });
+      fs.writeFileSync('/workspace/a', new Uint8Array(20 * MiB).fill(1));
+      fs.writeFileSync('/workspace/b', new Uint8Array(20 * MiB).fill(2));
+      const options = { ...OPTIONS, maxBytes: 1 << 30 };
+      const file = join(work, 'two-files.blob');
+      writeFileSync(file, snapshotFs(fs, options));
+      const [, refused, ran, snap, again] = drive([
+        { op: 'isolate', memoryLimit: 64 },
+        { op: 'restore', file, options },
+        { op: 'run', code: LIST_TREE },
+        { op: 'snapshot', options },
+        { op: 'restore', file, options },
+      ]);
+      expect(refused?.error).toMatch(/^ERR_FS_SNAPSHOT_INCOMPLETE: /);
+      expect(ran?.error).toMatch(/^ERR_FS_SNAPSHOT_INCOMPLETE: /);
+      expect(snap?.error).toMatch(/^ERR_FS_SNAPSHOT_INCOMPLETE: /);
+      expect(again?.error).toMatch(/^ERR_FS_SNAPSHOT_INCOMPLETE: /);
+    },
+  );
+
+  carrier('a tree the format cannot carry is refused at snapshot, by name (I3)', () => {
+    for (const code of [
+      "fs.utimesSync('/workspace/f', new Date(NaN), new Date(NaN))",
+      'fs.utimesSync("/workspace/f", 1e306, 1e306)',
+      "fs.writeFileSync('/workspace/a\\0b', 'x')",
+    ]) {
+      const [, ran, snap] = drive([
+        { op: 'isolate' },
+        {
+          op: 'run',
+          code: `const fs = require('fs'); fs.writeFileSync('/workspace/f', 'x'); ${code}`,
+        },
+        { op: 'snapshot', options: OPTIONS },
+      ]);
+      expect(ran?.exitCode, code).toBe(0);
+      expect(snap?.error, code).toMatch(/^ERR_FS_SNAPSHOT_UNREPRESENTABLE: /);
+    }
+  });
+
+  carrier(
+    'the densest blob within maxBytes restores under 2 × maxBytes of isolate memory (I4)',
+    () => {
+      // Empty directories with short names: the most entries a 32 MiB budget admits.
+      const budget = 32 * MiB;
+      const options = { template: null, maxBytes: budget };
+      const fs = createMemoryFs().fsSync;
+      let n = 0;
+      for (;;) {
+        fs.mkdirSync(`/${n.toString(36)}`, { recursive: false });
+        n++;
+        if (n % 1000 === 0) {
+          try {
+            snapshotFs(fs, options);
+          } catch {
+            break;
+          }
+        }
+      }
+      for (let i = n - 1000; i < n; i++) fs.rmSync(`/${i.toString(36)}`, { recursive: true });
+      const file = join(work, 'dense.blob');
+      writeFileSync(file, snapshotFs(fs, options));
+      const [, restored, listed] = drive([
+        { op: 'isolate', memoryLimit: 2 * 32 + 16 },
+        { op: 'restore', file, options },
+        { op: 'run', code: "console.log(require('fs').readdirSync('/').length)" },
+      ]);
+      expect(n).toBeGreaterThan(60_000);
+      expect(restored).toMatchObject({ ok: true });
+      expect(listed?.stdout).toBe(`${n - 1000}\n`);
+    },
+  );
+
+  carrier(
+    'a snapshot dense in long two-byte names fits 2 × maxBytes + 16 MiB of isolate memory (I4)',
+    () => {
+      // Empty files with 16 383-unit names of a two-byte character: 390 fill a 64 MiB
+      // budget (~32 KB of bytes + 8 per path unit, per entry and per level).
+      const options = { ...OPTIONS, maxBytes: 64 * MiB };
+      const build = `const fs = require('fs'); const tail = 'ж'.repeat(16_379);
+      for (let i = 0; i < 390; i++) fs.writeFileSync('/workspace/' + String(i).padStart(4, '0') + tail, '');`;
+      const [, built, snap] = drive([
+        { op: 'isolate', memoryLimit: 2 * 64 + 16 },
+        { op: 'run', code: build },
+        { op: 'snapshot', options },
+      ]);
+      expect(built?.exitCode).toBe(0);
+      expect(snap?.error).toBeUndefined();
+      expect(snap?.exact).toBe(true);
+    },
+  );
+
+  carrier(
+    'a snapshot that runs out of isolate memory is a named error; the FS is intact (I4)',
+    () => {
+      // A budget larger than the memory limit allows (the README's sizing broken):
+      // a 50 MiB tree fits a 96 MiB isolate, its blob does not.
+      const options = { ...OPTIONS, maxBytes: 1 << 30 };
+      const [, built, snap, again] = drive([
+        { op: 'isolate', memoryLimit: 96 },
+        {
+          op: 'run',
+          code: "require('fs').writeFileSync('/workspace/big', new Uint8Array(50 * 1024 * 1024))",
+        },
+        { op: 'snapshot', options },
+        // The FS is still there: the same refusal again, not a broken realm.
+        { op: 'snapshot', options },
+      ]);
+      expect(built?.exitCode).toBe(0);
+      expect(snap?.error).toMatch(/^ERR_FS_SNAPSHOT_TOO_LARGE: out of memory/);
+      expect(again?.error).toMatch(/^ERR_FS_SNAPSHOT_TOO_LARGE: out of memory/);
+    },
+  );
+
   carrier('restore over maxBytes is refused before the blob is read (I4)', () => {
     const file = join(work, 'big.blob');
     writeFileSync(file, Buffer.alloc(60 * MiB, 0x41));
