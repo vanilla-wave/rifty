@@ -1,9 +1,9 @@
 {
   "overall_verdict": "concern",
-  "merge_call": "Mergeable once PR CI is green at 6acee922a. Every blocker and concern from the earlier passes is fixed; the gate's fd 2 half now has a carrier (M3 fails it). One advisory NOTE remains: the time cost of work queued at exit has no ceiling row, though compat and the README declare it.",
+  "merge_call": "Mergeable once PR CI is green at 78613de7e. The blocker is fixed: the compat claim is trimmed to the single-hop form that holds, and later hops, status writes, nextTick and the fatal-listener microtask are declared with ceiling rows that fail for their stated reasons in every lane. Remaining: the time-cost NOTE and one ceiling-label nit.",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "6acee922a32ad30ed2d8c644587ea18df05518c7",
-  "unit_goal_source": "PR #416 (observed-defect fix, no contract doc), verify pass at 6acee922a (diffs since the first review: 0d36886af..7f482bdd9, then 7f482bdd9..6acee922a). Baseline: the deleted finding record distribution/isolate-host-queuemicrotask-throw-times-out as of 50c9d8bf1 (git show 50c9d8bf1:<that record>), plus the removed/changed rows of docs/public/compat/isolate-host.md at 50c9d8bf1. BASE 50c9d8bf1. Oracle: node -e v24.16.0.",
+  "reviewed_sha": "78613de7e0c12b23394a6b7d2db0c53ff7ba0703",
+  "unit_goal_source": "PR #416 (observed-defect fix, no contract doc), verify pass at 78613de7e (this round: 52157a679..78613de7e; earlier rounds 0d36886af..52157a679 with external-review findings S1/S2 routed into the unit). Baseline: the deleted finding record distribution/isolate-host-queuemicrotask-throw-times-out as of 50c9d8bf1 (git show 50c9d8bf1:<that record>), plus the removed/changed rows of docs/public/compat/isolate-host.md at 50c9d8bf1. BASE 50c9d8bf1. Oracle: node -e v24.16.0.",
   "unit_residuals": [],
   "goal_residuals": [],
   "goal_complete": false,
@@ -33,7 +33,7 @@
       "note": ""
     },
     {
-      "row": "Guest fd 1/2 bytes written after the process's terminal are dropped at the default output sink (output before/inside exit() and 'exit' listeners kept)",
+      "row": "Guest fd 1/2 bytes written after an explicit terminal are dropped at the default output sink (output before/inside exit() and 'exit' listeners kept)",
       "source": "acceptance",
       "trace": "ADR-0557",
       "status": "pass",
@@ -41,11 +41,19 @@
       "note": ""
     },
     {
-      "row": "No-COI project command: the same pre-drain eval exit ends with Node's status (was a hang); a 0 ms timer queued before it is a declared expected-failure",
+      "row": "At a natural exit, the first microtask hop an 'exit' listener queues prints as in Node; later hops, status writes and a queued nextTick are declared ceilings (ADR-0557 2026-11-22 line, compat isolate-host.md:29-30)",
+      "source": "acceptance",
+      "trace": "ADR-0557",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/corpus.ts:249",
+      "note": ""
+    },
+    {
+      "row": "No-COI project command: the same pre-drain eval exit ends with Node's status (was a hang); each declared queued-at-exit form pinned exactly (status + extra L| rows)",
       "source": "acceptance",
       "trace": "ADR-0342+ADR-0445",
       "status": "pass",
-      "citation": "tests/no-coi/no-coi-process-exit-status.spec.ts:99",
+      "citation": "tests/no-coi/no-coi-process-exit-status.spec.ts:256",
       "note": ""
     },
     {
@@ -97,9 +105,16 @@
       "findings": [
         {
           "severity": "concern",
-          "location": "docs/backlog/runtime-js/node-eval-work-queued-at-exit-runs.md:22",
-          "evidence": "Code read: corpus rows assert only stdout/stderr/exitCode. git grep for an endless-chain or long-job row in packages/isolate-host/tests and packages/isolate-guest/tests: no hit.",
-          "summary": "In the isolate host, queued work after exit() still runs and costs time; an endless job ends as timeout. The compat ⚠️ row and the README declare this honestly, but no ceiling row pins it. A fix that stops the dispatchers would turn nothing red, and a regression that makes the time cost worse would pass. Add an it.fails ceiling row, e.g. exit followed by an endless or long ripe job.",
+          "location": "docs/backlog/runtime-js/node-eval-work-queued-at-exit-runs.md:26",
+          "evidence": "Code read: corpus rows assert only stdout/stderr/exitCode; git grep finds no long-job or endless-chain row after exit() in packages/isolate-host/tests or packages/isolate-guest/tests.",
+          "summary": "Kept as NOTE from the earlier pass: compat and the README declare the time cost of queued work after exit() (a long job delays the result; an endless one is timeout, a heavy one is memory), but no ceiling row pins it.",
+          "authority": ""
+        },
+        {
+          "severity": "nit",
+          "location": "packages/isolate-host/tests/corpus.ts:30",
+          "evidence": "Ceilings stripped in the scratch copy: `exit-listener-next-tick-natural` fails with stdout 'nt\\n' vs '' (runCode lanes and embedder).",
+          "summary": "The shared ceiling label NATURAL_EXIT_QUEUED ('only the first microtask hop ... counts') does not describe the nextTick row, which fails because a tick prints where Node runs none. The finding record names that cause correctly; the label could say so too.",
           "authority": ""
         }
       ]
