@@ -12,6 +12,8 @@ import {
   runNodeFileOracle,
 } from '../../../tests/browser-unit/fixtures/node-file-programs.ts';
 import { formatFatalReport, markFatalTaskRoot } from '../src/builtins/fatal-report.ts';
+import { dispatchUncaughtException } from '../src/builtins/process-lifecycle-events.ts';
+import { NodeProcess } from '../src/builtins/process.ts';
 import { createModuleLoader } from '../src/module-loader/loader.ts';
 
 afterEach(() => resetSyncMirror());
@@ -196,4 +198,37 @@ it('a promise reaction may have held the error: no header', async () => {
   ).stderr;
   expect(headerOf(node)).toMatch(/^<root>\/main\.js:4\n/u);
   expect(rifty).toBe(node.slice(node.indexOf('\n\n') + 2));
+});
+
+it('an error a listener received and threw again loses its header proof', () => {
+  const vfs = new MemoryFsSync();
+  vfs.loadFixture({ '/p/main.js': "module.exports = () => {\n  throw new Error('a');\n};\n" });
+  setSyncMirror(vfs);
+  const fail = createModuleLoader(vfs, { cwd: '/p' }).require('./main.js', '/p/x.js') as () => void;
+  const caught = (): unknown => {
+    try {
+      fail();
+    } catch (error) {
+      markFatalTaskRoot(error);
+      return error;
+    }
+    return null;
+  };
+  // Control: a marked error the runtime caught at its root has Node's header.
+  expect(formatFatalReport(caught())).toMatch(/^\/p\/main\.js:2\n/u);
+  const proc = new NodeProcess();
+  let printed = '';
+  proc.stderr.write = ((chunk: string) => {
+    printed += chunk;
+    return true;
+  }) as typeof proc.stderr.write;
+  proc.on('uncaughtException', (error: unknown) => {
+    throw error;
+  });
+  try {
+    dispatchUncaughtException(caught(), 'uncaughtException', proc);
+  } catch {
+    // the exit-7 signal
+  }
+  expect(printed).toMatch(/^Error: a\n {4}at /u);
 });
