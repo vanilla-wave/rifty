@@ -18,8 +18,9 @@
 5b. **queued work at a fatal** — rows `fatal-with-queued-timer`,
    `rejection-with-queued-work`: due timers still run; owner: exit lifecycle
    (manager thread / PR #416 seam). → I2
-6. `runtime-js/module-compile-error-node-syntax-error` — **ESM** compile
-   failure as V8's `SyntaxError` (CJS landed). → I2
+6. `runtime-js/module-compile-error-node-syntax-error` — CJS and ESM compile
+   failure as V8's `SyntaxError` (CJS rolled back to main's `ModuleLoadError`
+   after review round 3; dead ends recorded there). → I2
 8. `runtime-js/esm-stack-positions` — **ESM entry frames** (existing draft;
    hypothesis). → I2 I3
 ## Open questions
@@ -27,10 +28,10 @@
 - No Node-format header (`<file>:<line>`, source line, caret) on any path — a
   throw, an unhandled rejection, a compile error (JS cannot read V8's message
   location; manager decision after external review round 2, ADR-0445
-  2026-11-22 correction); a compile error names its place on a separate line
-  with rifty's parser position (`(rifty parser position: <file>:<line>:<col>)`).
+  2026-11-22 correction); a compile error prints main's `ModuleLoadError:
+  Failed to compile CJS module <file>: <V8 message>` (file named, no line).
   I2 admits it as a named compat row; whether the scenario accepts headerless
-  reports (the first frame or the parser line still names file:line) is the
+  reports (the first frame names file:line; a compile error names the file) is the
   user's — owner: user — evidence: `fatal-report.test.ts`, the `NODE_HEADER`
   assertion on every carrier row, compat process.md.
 

@@ -21,11 +21,35 @@ const reflectApplyPrimordial = Reflect.apply;
 const getOwnPropertyDescriptorPrimordial = Object.getOwnPropertyDescriptor;
 const getPrototypeOfPrimordial = Object.getPrototypeOf;
 
-/** Node's default (`getters: false`): an accessor reads as `[Getter]`, never runs. */
-function accessorText(descriptor: PropertyDescriptor): string | null {
-  if (descriptor.get === undefined && descriptor.set === undefined) return null;
-  if (descriptor.get !== undefined && descriptor.set !== undefined) return '[Getter/Setter]';
-  return descriptor.get !== undefined ? '[Getter]' : '[Setter]';
+const datePrimordialToISOString = Date.prototype.toISOString;
+const regExpPrimordialToString = RegExp.prototype.toString;
+
+/**
+ * An accessor as Node's `formatProperty`: `[Getter]`/`[Setter]`/`[Getter/Setter]`,
+ * never run — unless the `getters` option asks (`[Getter: <value>]`).
+ */
+function accessorText(
+  descriptor: PropertyDescriptor,
+  holder: object,
+  depth: number,
+  context: InspectContext,
+  maxDepth: number,
+): string | null {
+  const { get, set } = descriptor;
+  if (get === undefined && set === undefined) return null;
+  const label =
+    get !== undefined && set !== undefined ? 'Getter/Setter' : get ? 'Getter' : 'Setter';
+  const run =
+    get !== undefined &&
+    (context.getters === true ||
+      (context.getters === 'get' && set === undefined) ||
+      (context.getters === 'set' && set !== undefined));
+  if (!run) return `[${label}]`;
+  try {
+    return `[${label}: ${inspectValue(reflectApplyPrimordial(get, holder, []), depth, context, maxDepth)}]`;
+  } catch (error) {
+    return `[${label}: <Inspection threw (${(error as Error)?.message})>]`;
+  }
 }
 
 /** The first data `constructor` up the chain, read without running a getter. */
@@ -43,11 +67,17 @@ interface InspectContext {
   readonly ancestors: WeakSet<object>;
   readonly referenceIds: WeakMap<object, number>;
   nextReferenceId: number;
+  readonly getters?: boolean | 'get' | 'set' | undefined;
+  readonly customInspect: boolean;
 }
 
 export interface InspectOptions {
   /** Nesting levels to render before collapsing to `[Object]`/`[Array]`. `null` = unlimited. */
   depth?: number | null;
+  /** Node `getters`: run accessors and print `[Getter: <value>]`. */
+  getters?: boolean | 'get' | 'set';
+  /** Node `customInspect`; false (the fatal report's): no Buffer custom inspect, so no getter runs. */
+  customInspect?: boolean;
 }
 
 /**
@@ -72,6 +102,8 @@ export function inspect(value: unknown, options?: InspectOptions): string {
       ancestors: new WeakSet(),
       referenceIds: new WeakMap(),
       nextReferenceId: 1,
+      getters: options?.getters,
+      customInspect: options?.customInspect !== false,
     },
     maxDepth,
   );
@@ -95,13 +127,13 @@ function inspectValue(
   if (type === 'symbol') return (value as symbol).toString();
   if (type === 'function') return formatFunction(value as (...args: unknown[]) => unknown);
   if (value instanceof Error) return formatError(value);
-  if (value instanceof Date) return value.toISOString();
-  if (value instanceof RegExp) return value.toString();
+  if (value instanceof Date) return reflectApplyPrimordial(datePrimordialToISOString, value, []);
+  if (value instanceof RegExp) return reflectApplyPrimordial(regExpPrimordialToString, value, []);
   if (value instanceof Promise) return 'Promise { <pending> }';
   // Buffer renders as Node's `<Buffer 01 02 …>` hex, truncated at the live
   // `buffer.INSPECT_MAX_BYTES`. Checked before the generic Uint8Array/object
   // paths so a Buffer never falls through to a key dump.
-  if (Buffer.isBuffer(value)) return formatBuffer(value as Uint8Array);
+  if (Buffer.isBuffer(value)) return formatBuffer(value as Uint8Array, depth, context, maxDepth);
   if (value instanceof Map) return formatMap(value, depth, context, maxDepth);
   if (value instanceof Set) return formatSet(value, depth, context, maxDepth);
   if (Array.isArray(value)) return formatArray(value, depth, context, maxDepth);
@@ -160,7 +192,12 @@ function quoteString(raw: string): string {
 }
 
 /** `<Buffer 01 02 …>` hex dump, truncated at the live `buffer.INSPECT_MAX_BYTES`. */
-function formatBuffer(buf: Uint8Array): string {
+function formatBuffer(
+  buf: Uint8Array,
+  depth: number,
+  context: InspectContext,
+  maxDepth: number,
+): string {
   const max = getInspectMaxBytes();
   const shown = Math.min(buf.length, max);
   let hex = '';
@@ -170,10 +207,20 @@ function formatBuffer(buf: Uint8Array): string {
   const more = buf.length > max ? `${hex ? ' ' : ''}... ${buf.length - max} more bytes` : '';
   // Node appends own ENUMERABLE non-index properties after the hex
   // (`<Buffer 01 02, foo: 'bar'>`); the integer indices are not shown.
-  const rec = buf as unknown as Record<string, unknown>;
   const extra = Object.keys(buf)
     .filter((k) => !/^\d+$/.test(k))
-    .map((k) => `${k}: ${inspect(rec[k])}`);
+    .map((k) => {
+      // Node's Buffer custom inspect reads each by value (a getter runs).
+      if (context.customInspect)
+        return `${k}: ${inspectValue((buf as unknown as Record<string, unknown>)[k], depth + 1, context, maxDepth)}`;
+      const d = getOwnPropertyDescriptorPrimordial(buf, k);
+      const text =
+        d === undefined
+          ? 'undefined'
+          : (accessorText(d, buf, depth + 1, context, maxDepth) ??
+            inspectValue(d.value, depth + 1, context, maxDepth));
+      return `${k}: ${text}`;
+    });
   const props = extra.length > 0 ? `, ${extra.join(', ')}` : '';
   return `<Buffer ${hex}${more}${props}>`;
 }
@@ -197,25 +244,44 @@ function formatArray(
   if (circular !== null) return circular;
   if (depth > maxDepth) return '[Array]';
   context.ancestors.add(arr);
-  const items: string[] = [];
-  let i = 0;
-  while (i < arr.length && items.length < MAX_ARRAY_ITEMS) {
-    const descriptor = getOwnPropertyDescriptorPrimordial(arr, i);
-    if (descriptor === undefined) {
-      // Node: a run of holes is one `<N empty items>` entry.
-      let end = i + 1;
-      while (end < arr.length && getOwnPropertyDescriptorPrimordial(arr, end) === undefined)
-        end += 1;
-      items.push(`<${end - i} empty item${end - i > 1 ? 's' : ''}>`);
-      i = end;
-      continue;
-    }
-    items.push(
-      accessorText(descriptor) ?? inspectValue(descriptor.value, depth + 1, context, maxDepth),
+  const element = (key: number | string): string => {
+    const d = getOwnPropertyDescriptorPrimordial(arr, key);
+    if (d === undefined) return 'undefined';
+    return (
+      accessorText(d, arr, depth + 1, context, maxDepth) ??
+      inspectValue(d.value, depth + 1, context, maxDepth)
     );
-    i += 1;
+  };
+  const items: string[] = [];
+  const length = arr.length;
+  let index = 0;
+  while (index < length && items.length < MAX_ARRAY_ITEMS) {
+    if (getOwnPropertyDescriptorPrimordial(arr, index) === undefined) break;
+    items.push(element(index));
+    index += 1;
   }
-  if (i < arr.length) items.push(`... ${arr.length - i} more item${arr.length - i > 1 ? 's' : ''}`);
+  const more = (n: number) => `... ${n} more item${n > 1 ? 's' : ''}`;
+  const holes = (n: number) => `<${n} empty item${n > 1 ? 's' : ''}>`;
+  if (index < length && items.length < MAX_ARRAY_ITEMS) {
+    // Node `formatSpecialArray`: walk the own index keys; a run of holes is one entry.
+    const keys = Object.keys(arr);
+    for (let k = index; k < keys.length && items.length < MAX_ARRAY_ITEMS; k += 1) {
+      const key = keys[k] as string;
+      const at = Number(key);
+      if (!(at <= 2 ** 32 - 2) || `${at}` !== key) break;
+      if (at !== index) {
+        items.push(holes(at - index));
+        index = at;
+        if (items.length === MAX_ARRAY_ITEMS) break;
+      }
+      items.push(element(key));
+      index += 1;
+    }
+    const remaining = length - index;
+    if (items.length !== MAX_ARRAY_ITEMS) {
+      if (remaining > 0) items.push(holes(remaining));
+    } else if (remaining > 0) items.push(more(remaining));
+  } else if (index < length) items.push(more(length - index));
   context.ancestors.delete(arr);
   return `${referencePrefix(arr, context)}[ ${items.join(', ')} ]`;
 }
@@ -238,7 +304,7 @@ function formatObject(
     const text =
       descriptor === undefined
         ? 'undefined'
-        : (accessorText(descriptor) ??
+        : (accessorText(descriptor, obj, depth + 1, context, maxDepth) ??
           inspectValue(descriptor.value, depth + 1, context, maxDepth));
     return `${k}: ${text}`;
   });

@@ -122,13 +122,15 @@ const rows: readonly FatalRow[] = [
     name: 'cjs-syntax-error',
     files: { 'syntax.cjs': 'const a = 1;\nlet x = ;\n' },
     nodeArgv: ['syntax.cjs'],
-    // Node's only frames are its own loader's (`node:internal/…`). No header
-    // (ADR-0445 2026-11-22): rifty's parser position line instead.
+    // main's compile error, unchanged (manager decision after review round 3):
+    // the loader's ModuleLoadError naming the file; no header.
     residual: {
       header: null,
       error:
-        "SyntaxError: Unexpected token ';'\n    (rifty parser position: <root>/syntax.cjs:2:9)",
+        "ModuleLoadError: Failed to compile CJS module <root>/syntax.cjs: Unexpected token ';'",
       stack: false,
+      props:
+        "code: 'SYNTAX_ERROR',\nspecifier: '<root>/syntax.cjs',\nimporter: '<root>/syntax.cjs',\nrequireStack: undefined",
     },
   },
   {

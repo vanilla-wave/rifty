@@ -64,7 +64,7 @@ for (const name of ['ws', 'cmt', 'mlcmt', 'line2', 'open', 'bang', 'bom', 'stric
   try {
     out[name] = require('./first/' + name).v;
   } catch (e) {
-    out[name] = e.name + ': ' + e.message + (globalThis.ran ? ' (ran)' : '');
+    out[name] = 'refused' + (globalThis.ran ? ' (ran)' : '');
   }
 }
 module.exports = JSON.stringify(out);
@@ -466,13 +466,24 @@ export interface NodeFileOutcome {
   readonly exitCode: number | null;
 }
 
-/** Live `node <argv>` in a fresh temp dir; `root` is its realpath (macOS `/private/var/…`). */
+/**
+ * Every oracle root's length, on every platform: the rifty root matches it
+ * (`nodeFileRoot`), so inspect breaks printed paths alike and the pins hold on
+ * Linux (`/tmp/…`) and macOS (`/private/var/folders/…`).
+ */
+const ORACLE_ROOT_LENGTH = 96;
+
+/** Live `node <argv>` in a fresh temp dir; `root` is a realpath dir of `ORACLE_ROOT_LENGTH`. */
 export async function runNodeFileOracle(
   program: NodeFileProgram,
 ): Promise<NodeFileOutcome & { readonly root: string; readonly version: string }> {
   const directory = await mkdtemp(join(tmpdir(), 'rifty-node-file-'));
-  const physical = await realpath(directory);
+  const temp = await realpath(directory);
+  const width = ORACLE_ROOT_LENGTH - temp.length - 1;
+  if (width < 1) throw new Error(`temp dir ${temp} is longer than ${ORACLE_ROOT_LENGTH - 2}`);
+  const physical = `${temp}/${'r'.repeat(width)}`;
   try {
+    await mkdir(physical);
     for (const [path, content] of Object.entries(program.files)) {
       await mkdir(dirname(join(physical, path)), { recursive: true });
       await writeFile(join(physical, path), content);
@@ -538,13 +549,9 @@ export function nodeFileExpected(
  */
 export function nodeFileRoot(parent: string, name: string, oracleRoot: string): string {
   const width = oracleRoot.length - parent.length;
-  // A short oracle dir (Linux `/tmp/…`) fits no row name: a stable token of it.
-  let hash = 5381;
-  for (const char of name) hash = (hash * 33 + (char.codePointAt(0) ?? 0)) >>> 0;
-  const id = name.length <= width ? name : `r${hash.toString(36)}`;
-  if (width < id.length)
-    throw new Error(`oracle root ${oracleRoot} is shorter than ${parent}${id}`);
-  return `${parent}${id.padEnd(width, '_')}`;
+  if (width < name.length)
+    throw new Error(`oracle root ${oracleRoot} is shorter than ${parent}${name}`);
+  return `${parent}${name.padEnd(width, '_')}`;
 }
 
 export function nodeFileNormalized(outcome: NodeFileOutcome, root: string): NodeFileOutcome {

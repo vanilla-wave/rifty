@@ -3,9 +3,9 @@ area: runtime-js
 status: draft
 title: "The fatal report carries Node's `<file>:<line>` header (throw, rejection, compile error)"
 created: 2026-11-22
-why: Node heads every fatal report with V8's message location; rifty prints none on any path (ADR-0445 2026-11-22, manager decision after PR #421 review round 2), so an agent reads file:line only from the first frame — or, for a compile error, from rifty's own parser position line
+why: Node heads every fatal report with V8's message location; rifty prints none on any path (ADR-0445 2026-11-22, manager decision after PR #421 review round 2), so an agent reads file:line only from the first frame; a compile error names only its file (main's `ModuleLoadError`)
 sources: [docs/adr/runtime-js/0445-dispatch-node-process-lifecycle-events-before-terminal-handling.md, docs/public/compat/process.md]
-code: [packages/runtime-js/src/builtins/fatal-report.ts, packages/runtime-js/src/module-loader/cjs-syntax-error.ts]
+code: [packages/runtime-js/src/builtins/fatal-report.ts, packages/runtime-js/src/module-loader/cjs.ts]
 ---
 
 ## Context

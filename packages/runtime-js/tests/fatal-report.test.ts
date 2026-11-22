@@ -216,6 +216,7 @@ it.each([
     'nested getters, holes and a long list',
     "const e = new Error('x');\ne.detail = { get ran() { console.log('RAN'); return 1; }, a: { get bad() { throw new Error('g'); } } };\ne.holes = new Array(1e5);\nthrow e;\n",
   ],
+  ['symbol-keyed props', "const e = new Error('x');\ne[Symbol('k')] = 1;\ne.a = 2;\nthrow e;\n"],
   [
     'an array element getter',
     "const e = new Error('x');\ne.list = [1, 2];\nObject.defineProperty(e.list, 0, { get() { console.log('RAN'); throw new Error('g'); } });\nthrow e;\n",
@@ -252,4 +253,17 @@ it('code compiled from a string keeps its frame, never a rifty path', () => {
 it("a direct eval frame names its module as origin, without Node's position", () => {
   const report = riftyReport('eval(\'function f() {\\n  throw new Error("ev");\\n}\\nf();\');\n');
   expect(report).toContain('    at f (eval at <anonymous> (/p/main.js), <anonymous>:2:9)\n');
+});
+
+it.each([
+  ['Buffer', 'Buffer.from([1])'],
+  ['Date', 'new Date(0)'],
+  ['RegExp', '/r/'],
+])('a %s prop: its own getter never runs', (_, make) => {
+  const report = riftyReport(
+    `const v = ${make};\nObject.defineProperty(v, 'x', { enumerable: true, get() { globalThis.__riftyGetterRan = true; return 7; } });\nObject.defineProperty(v, 'toISOString', { get() { globalThis.__riftyGetterRan = true; return () => ''; } });\nconst e = new Error('x');\ne.v = v;\nthrow e;\n`,
+  );
+  expect(Reflect.get(globalThis, '__riftyGetterRan')).toBeUndefined();
+  expect(report).not.toContain('x: 7');
+  Reflect.deleteProperty(globalThis, '__riftyGetterRan');
 });

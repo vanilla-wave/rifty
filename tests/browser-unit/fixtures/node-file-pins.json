@@ -163,32 +163,32 @@
     },
     "syntax-error-entry": {
       "stdout": "",
-      "stderr": "SyntaxError: Unexpected token ';'\n    (rifty parser position: <root>/main.js:2:9)\n\nNode.js v24.0.0\n",
+      "stderr": "ModuleLoadError: Failed to compile CJS module <root>/main.js: Unexpected token ';' {\n  code: 'SYNTAX_ERROR',\n  specifier: '<root>/main.js',\n  importer: '<root>/main.js',\n  requireStack: undefined\n}\n\nNode.js v24.0.0\n",
       "exitCode": 1
     },
     "stray-closing-brace": {
       "stdout": "",
-      "stderr": "SyntaxError: Unexpected identifier 'console'\n    (rifty parser position: <root>/main.js:3:2)\n\nNode.js v24.0.0\n",
+      "stderr": "ModuleLoadError: Failed to compile CJS module <root>/main.js: Unexpected identifier 'console' {\n  code: 'SYNTAX_ERROR',\n  specifier: '<root>/main.js',\n  importer: '<root>/main.js',\n  requireStack: undefined\n}\n\nNode.js v24.0.0\n",
       "exitCode": 1
     },
     "stray-brace-closed-later": {
       "stdout": "",
-      "stderr": "SyntaxError: Unexpected identifier 'console'\n    (rifty parser position: <root>/main.js:2:1)\n\nNode.js v24.0.0\n",
+      "stderr": "ModuleLoadError: Failed to compile CJS module <root>/main.js: Unexpected identifier 'console' {\n  code: 'SYNTAX_ERROR',\n  specifier: '<root>/main.js',\n  importer: '<root>/main.js',\n  requireStack: undefined\n}\n\nNode.js v24.0.0\n",
       "exitCode": 1
     },
     "wrapper-escape": {
       "stdout": "",
-      "stderr": "SyntaxError: Single function literal required\n    (rifty parser position: <root>/main.js:2:1)\n\nNode.js v24.0.0\n",
+      "stderr": "ModuleLoadError: Failed to compile CJS module <root>/main.js: Single function literal required {\n  code: 'SYNTAX_ERROR',\n  specifier: '<root>/main.js',\n  importer: '<root>/main.js',\n  requireStack: undefined\n}\n\nNode.js v24.0.0\n",
       "exitCode": 1
     },
     "syntax-error-dependency": {
       "stdout": "",
-      "stderr": "SyntaxError: Function statements require a function name\n    (rifty parser position: <root>/lib/broken.js:1:10)\n    at Object.<anonymous> (<root>/main.js:1:1)\n\nNode.js v24.0.0\n",
+      "stderr": "ModuleLoadError: Failed to compile CJS module <root>/lib/broken.js: Function statements require a function name\n    at Object.<anonymous> (<root>/main.js:1:1) {\n  code: 'SYNTAX_ERROR',\n  specifier: '<root>/lib/broken.js',\n  importer: '<root>/lib/broken.js',\n  requireStack: undefined\n}\n\nNode.js v24.0.0\n",
       "exitCode": 1
     },
     "syntax-error-missing-paren": {
       "stdout": "",
-      "stderr": "SyntaxError: missing ) after argument list\n    (rifty parser position: <root>/main.js:2:9)\n\nNode.js v24.0.0\n",
+      "stderr": "ModuleLoadError: Failed to compile CJS module <root>/main.js: missing ) after argument list {\n  code: 'SYNTAX_ERROR',\n  specifier: '<root>/main.js',\n  importer: '<root>/main.js',\n  requireStack: undefined\n}\n\nNode.js v24.0.0\n",
       "exitCode": 1
     },
     "module-not-found-entry": "node",
@@ -369,32 +369,32 @@
     },
     "syntax-error-entry": {
       "stdout": "",
-      "stderr": "SyntaxError: Unexpected token ';'\n    (rifty parser position: <root>/main.js:2:9)\n\nNode.js v24.0.0\n",
+      "stderr": "ModuleLoadError: Failed to compile CJS module <root>/main.js: Unexpected token ';' {\n  code: 'SYNTAX_ERROR',\n  specifier: '<root>/main.js',\n  importer: '<root>/main.js',\n  requireStack: undefined\n}\n\nNode.js v24.0.0\n",
       "exitCode": 1
     },
     "stray-closing-brace": {
       "stdout": "",
-      "stderr": "SyntaxError: Unexpected identifier 'console'\n    (rifty parser position: <root>/main.js:3:2)\n\nNode.js v24.0.0\n",
+      "stderr": "ModuleLoadError: Failed to compile CJS module <root>/main.js: Unexpected identifier 'console' {\n  code: 'SYNTAX_ERROR',\n  specifier: '<root>/main.js',\n  importer: '<root>/main.js',\n  requireStack: undefined\n}\n\nNode.js v24.0.0\n",
       "exitCode": 1
     },
     "stray-brace-closed-later": {
       "stdout": "",
-      "stderr": "SyntaxError: Unexpected identifier 'console'\n    (rifty parser position: <root>/main.js:2:1)\n\nNode.js v24.0.0\n",
+      "stderr": "ModuleLoadError: Failed to compile CJS module <root>/main.js: Unexpected identifier 'console' {\n  code: 'SYNTAX_ERROR',\n  specifier: '<root>/main.js',\n  importer: '<root>/main.js',\n  requireStack: undefined\n}\n\nNode.js v24.0.0\n",
       "exitCode": 1
     },
     "wrapper-escape": {
       "stdout": "",
-      "stderr": "SyntaxError: Single function literal required\n    (rifty parser position: <root>/main.js:2:1)\n\nNode.js v24.0.0\n",
+      "stderr": "ModuleLoadError: Failed to compile CJS module <root>/main.js: Single function literal required {\n  code: 'SYNTAX_ERROR',\n  specifier: '<root>/main.js',\n  importer: '<root>/main.js',\n  requireStack: undefined\n}\n\nNode.js v24.0.0\n",
       "exitCode": 1
     },
     "syntax-error-dependency": {
       "stdout": "",
-      "stderr": "SyntaxError: Function statements require a function name\n    (rifty parser position: <root>/lib/broken.js:1:10)\n    at Object.<anonymous> (<root>/main.js:1:1)\n\nNode.js v24.0.0\n",
+      "stderr": "ModuleLoadError: Failed to compile CJS module <root>/lib/broken.js: Function statements require a function name\n    at Object.<anonymous> (<root>/main.js:1:1) {\n  code: 'SYNTAX_ERROR',\n  specifier: '<root>/lib/broken.js',\n  importer: '<root>/lib/broken.js',\n  requireStack: undefined\n}\n\nNode.js v24.0.0\n",
       "exitCode": 1
     },
     "syntax-error-missing-paren": {
       "stdout": "",
-      "stderr": "SyntaxError: missing ) after argument list\n    (rifty parser position: <root>/main.js:2:9)\n\nNode.js v24.0.0\n",
+      "stderr": "ModuleLoadError: Failed to compile CJS module <root>/main.js: missing ) after argument list {\n  code: 'SYNTAX_ERROR',\n  specifier: '<root>/main.js',\n  importer: '<root>/main.js',\n  requireStack: undefined\n}\n\nNode.js v24.0.0\n",
       "exitCode": 1
     },
     "module-not-found-entry": "node",
@@ -567,32 +567,32 @@
     },
     "syntax-error-entry": {
       "stdout": "",
-      "stderr": "SyntaxError: Unexpected token ';'\n    (rifty parser position: <root>/main.js:2:9)\n    at [eval]:1:196\n\nNode.js v24.0.0\n",
+      "stderr": "ModuleLoadError: Failed to compile CJS module <root>/main.js: Unexpected token ';'\n    at [eval]:1:196 {\n  code: 'SYNTAX_ERROR',\n  specifier: '<root>/main.js',\n  importer: '<root>/main.js',\n  requireStack: undefined\n}\n\nNode.js v24.0.0\n",
       "exitCode": 1
     },
     "stray-closing-brace": {
       "stdout": "",
-      "stderr": "SyntaxError: Unexpected identifier 'console'\n    (rifty parser position: <root>/main.js:3:2)\n    at [eval]:1:279\n\nNode.js v24.0.0\n",
+      "stderr": "ModuleLoadError: Failed to compile CJS module <root>/main.js: Unexpected identifier 'console'\n    at [eval]:1:279 {\n  code: 'SYNTAX_ERROR',\n  specifier: '<root>/main.js',\n  importer: '<root>/main.js',\n  requireStack: undefined\n}\n\nNode.js v24.0.0\n",
       "exitCode": 1
     },
     "stray-brace-closed-later": {
       "stdout": "",
-      "stderr": "SyntaxError: Unexpected identifier 'console'\n    (rifty parser position: <root>/main.js:2:1)\n    at [eval]:1:227\n\nNode.js v24.0.0\n",
+      "stderr": "ModuleLoadError: Failed to compile CJS module <root>/main.js: Unexpected identifier 'console'\n    at [eval]:1:227 {\n  code: 'SYNTAX_ERROR',\n  specifier: '<root>/main.js',\n  importer: '<root>/main.js',\n  requireStack: undefined\n}\n\nNode.js v24.0.0\n",
       "exitCode": 1
     },
     "wrapper-escape": {
       "stdout": "",
-      "stderr": "SyntaxError: Single function literal required\n    (rifty parser position: <root>/main.js:2:1)\n    at [eval]:1:243\n\nNode.js v24.0.0\n",
+      "stderr": "ModuleLoadError: Failed to compile CJS module <root>/main.js: Single function literal required\n    at [eval]:1:243 {\n  code: 'SYNTAX_ERROR',\n  specifier: '<root>/main.js',\n  importer: '<root>/main.js',\n  requireStack: undefined\n}\n\nNode.js v24.0.0\n",
       "exitCode": 1
     },
     "syntax-error-dependency": {
       "stdout": "",
-      "stderr": "SyntaxError: Function statements require a function name\n    (rifty parser position: <root>/lib/broken.js:1:10)\n    at Object.<anonymous> (<root>/main.js:1:1)\n\nNode.js v24.0.0\n",
+      "stderr": "ModuleLoadError: Failed to compile CJS module <root>/lib/broken.js: Function statements require a function name\n    at Object.<anonymous> (<root>/main.js:1:1) {\n  code: 'SYNTAX_ERROR',\n  specifier: '<root>/lib/broken.js',\n  importer: '<root>/lib/broken.js',\n  requireStack: undefined\n}\n\nNode.js v24.0.0\n",
       "exitCode": 1
     },
     "syntax-error-missing-paren": {
       "stdout": "",
-      "stderr": "SyntaxError: missing ) after argument list\n    (rifty parser position: <root>/main.js:2:9)\n    at [eval]:1:198\n\nNode.js v24.0.0\n",
+      "stderr": "ModuleLoadError: Failed to compile CJS module <root>/main.js: missing ) after argument list\n    at [eval]:1:198 {\n  code: 'SYNTAX_ERROR',\n  specifier: '<root>/main.js',\n  importer: '<root>/main.js',\n  requireStack: undefined\n}\n\nNode.js v24.0.0\n",
       "exitCode": 1
     },
     "module-not-found-dependency": {

@@ -10,7 +10,6 @@ import { createRequirePath } from '../internal/create-require-path.ts';
 import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
 import { readRuntimeGlobal } from '../internal/worker-globals.ts';
 import { createCjsInteropAuthority } from './cjs-interop-authority.ts';
-import { isCjsSyntaxError } from './cjs-syntax-error.ts';
 import {
   type CjsExtensionHook,
   type CjsExtensions,
@@ -338,8 +337,7 @@ export function projectNodeEvalError(
   origin: 'sync' | 'unhandled' | 'uncaught' = 'sync',
   compiler?: NodeEvalCompiler,
 ): unknown {
-  // A required file's compile error names that file, not `[eval]`.
-  if (!(error instanceof Error) || isCjsSyntaxError(error)) return error;
+  if (!(error instanceof Error)) return error;
   const firstLine =
     (error.stack ?? `${error.name}: ${error.message}`).split('\n')[0] ?? error.message;
   if (error instanceof SyntaxError) {

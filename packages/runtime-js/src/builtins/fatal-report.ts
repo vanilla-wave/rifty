@@ -31,6 +31,7 @@ const errorToString = Error.prototype.toString;
 const objectToString = Object.prototype.toString;
 const objectGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
 const objectKeys = Object.keys;
+const objectGetOwnPropertySymbols = Object.getOwnPropertySymbols;
 const objectGetPrototypeOf = Object.getPrototypeOf;
 
 /** Node `IsExceptionDecorated`: the error's stack already carries its header (`-e`). */
@@ -300,7 +301,7 @@ function propValue(value: unknown, indent: number, state: InspectState, depth: n
     const pad = ' '.repeat(indent);
     return `[\n${pad}  ${items.join(`,\n${pad}  `)}\n${pad}]`;
   }
-  return inspect(value, { depth: REPORT_DEPTH - depth });
+  return inspect(value, { depth: REPORT_DEPTH - depth, customInspect: false });
 }
 
 /** A dense array's elements when each is an own data primitive, else null. */
@@ -356,11 +357,18 @@ function inspectError(error: object, indent: number, state: InspectState, depth:
   if (!/\n\s+at /u.test(raw) && !decorated.has(error)) base = `[${base}]`;
   if (indent > 0) base = base.replaceAll('\n', `\n${' '.repeat(indent)}`);
   const entries: string[] = [];
-  const keys = objectKeys(error);
+  // Own enumerable keys, then enumerable symbols (Node prints `Symbol(x): v`).
+  const keys: (string | symbol)[] = objectKeys(error);
+  const symbols = objectGetOwnPropertySymbols(error);
+  for (let k = 0; k < symbols.length; k += 1) {
+    const symbol = symbols[k] as symbol;
+    if (objectGetOwnPropertyDescriptor(error, symbol)?.enumerable === true) keys.push(symbol);
+  }
   for (let k = 0; k < keys.length; k += 1) {
-    const key = keys[k] as string;
-    if (key === 'stack') continue;
-    const descriptor = objectGetOwnPropertyDescriptor(error, key);
+    const own = keys[k] as string | symbol;
+    if (own === 'stack') continue;
+    const key = typeof own === 'symbol' ? own.toString() : own;
+    const descriptor = objectGetOwnPropertyDescriptor(error, own);
     if (descriptor === undefined) continue;
     if (descriptor.get !== undefined || descriptor.set !== undefined) {
       const kind =
@@ -403,7 +411,7 @@ export function formatFatalReport(error: unknown): string {
   if (!isErrorLike(error)) {
     const body =
       (typeof error === 'object' && error !== null) || typeof error === 'function'
-        ? guestStack(inspect(error)).text
+        ? guestStack(inspect(error, { depth: REPORT_DEPTH, customInspect: false })).text
         : `${primitiveText(error)}\n${HINT}`;
     return `${body}\n${FATAL_TRAILER}`;
   }

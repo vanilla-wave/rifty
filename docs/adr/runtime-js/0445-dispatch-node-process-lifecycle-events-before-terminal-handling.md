@@ -227,4 +227,10 @@ sample. Node v24.16.0 facts: evidence §O1–§O3.
   stays nonterminal (ADR-0340); before, it ended the process inside the trap
   (CI on Linux, PR #421; `kernel-process-terminal-drain-real-worker.spec.ts`).
   The child writes Node's report to its own stderr, sequenced after stdout.
+- 2026-11-23 — correction (manager decision after external review round 3):
+  a CJS compile error is main's again — `ModuleLoadError: Failed to compile
+  CJS module <file>: <message>` — not V8's `SyntaxError` with rifty's parser
+  position: acorn's position and the wrapper-relative `new Function` message
+  both mislead (`backlog/runtime-js/module-compile-error-node-syntax-error`,
+  dead ends). The source is still validated alone (nothing runs, ADR-0450).
 
