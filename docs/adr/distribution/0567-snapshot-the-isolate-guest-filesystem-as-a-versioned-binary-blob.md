@@ -29,7 +29,7 @@ Probes: `docs/backlog/distribution/reference/isolate-host-fs-snapshot-fit-probes
    version  u32   1
    template u8    0 = none | 1 = u16 n, n UTF-16 code units (id), u16 m, m code units (version)
    entry*         u8 kind (1 dir, 2 file), u32 n + n UTF-16 code units (path),
-                  f64 ino, f64 mtimeMs, f64 atimeMs, f64 ctimeMs, f64 birthtimeMs,
+                  f64 mtimeMs, f64 atimeMs, f64 ctimeMs, f64 birthtimeMs,
                   file: f64 size + size bytes
    end      u8    0
    crc      u32   CRC-32 (ISO-HDLC, zlib's `crc32`) of every byte before it
@@ -39,10 +39,13 @@ Probes: `docs/backlog/distribution/reference/isolate-host-fs-snapshot-fit-probes
    code-unit order. Paths are canonical absolute JS strings stored as code
    units, so any name rifty's FS holds round-trips (lone surrogates included,
    P4). The snapshot is the sandbox's disk between runs, not a copy of it, so
-   every `fs.stat` field rifty's FS keeps comes back verbatim — `ino` and
-   `ctime`/`birthtime` included, which a copy onto a real filesystem would
-   renew (P4 oracle). No symlink, hard link, mode or owner: rifty's FS has none
-   (ADR-0050, P4); `mode`/`nlink`/`uid` follow from kind and tree.
+   the four times come back verbatim — `ctime`/`birthtime` included, which a
+   copy onto a real filesystem would renew (P4 oracle). `ino` is renewed, as
+   after a copy: rifty draws inodes from one counter per realm, so a restored
+   `ino` would move every other FS of the consumer's realm (a hostile blob
+   could push it past what restore accepts). No symlink, hard link, mode or
+   owner: rifty's FS has none (ADR-0050, P4); `mode`/`nlink`/`uid` follow from
+   kind and tree.
 2. **Deterministic.** The same tree (paths, kinds, bytes, times) gives the same
    bytes; export reads without touching atime. A consumer may compare blobs (or
    a hash it computes) to skip storing an unchanged one.
@@ -67,14 +70,15 @@ Probes: `docs/backlog/distribution/reference/isolate-host-fs-snapshot-fit-probes
    by the blob's length: no allocation from a claimed size before it is checked
    against the bytes present, no recursion.
 6. **Restore** decodes fully, then replaces the whole target FS: a refused
-   blob leaves it as it was. `ino` values are unique in the blob and ≤ 2^52;
-   the realm's inode counter moves past the largest. File bytes are copied out
+   blob leaves it as it was. File bytes are copied out
    of the blob (a view would pin the whole blob per file). In the guest bundle,
    `GuestEntry.restore` runs only before any guest code in that isolate, else
    `ERR_FS_SNAPSHOT_NOT_FRESH` (module cache, fds and cwd keep the old tree);
    `GuestEntry.snapshot` runs whenever no guest code runs — after the run
    ended included. Who enforces "no exec in flight" is the sandbox's.
-7. **Limits.** `maxBytes` is a required argument of both directions; export
+7. **Limits.** `maxBytes` is a required argument of both directions (an
+   invalid `maxBytes` or template is a `TypeError`: a caller bug, not a
+   refusal); export
    sums the size first and refuses before allocating; restore checks the
    blob's length before reading it. Peak memory ≈ 2 × S in either realm, for
    snapshot (tree + blob) and for restore (blob + copies) (P2 in the isolate:
@@ -90,15 +94,23 @@ Probes: `docs/backlog/distribution/reference/isolate-host-fs-snapshot-fit-probes
    and `restore` over the realm's FS, which is installed at bundle load.
    The decoder relies on nothing an honest encoder guarantees: a snapshot
    taken after guest code ran is produced in the guest's realm, whose
-   intrinsics the guest may have replaced. Bytes crossing the ivm boundary are
-   exact-length buffers: ivm copies a view's whole backing store (P3).
+   intrinsics the guest may have replaced. There `snapshot`'s own promises —
+   an exact-length buffer, the `maxBytes` refusal before allocating — hold
+   only while the realm is unaltered (ADR-0557 §6: the boundary is outside
+   the guest realm): the consumer takes the result as guest-authored bytes,
+   bounded by the isolate's memory limit (ivm copies a view's whole backing
+   store, P3), and accepts them only through `restoreFs`.
 
 Rejected (P1, template scale, S ≈ 95 MB):
 - JSON+base64 (`WorkspaceArchiveV1`): +33 % bytes, gzip 1.67× larger, 831 MiB
   heap after export against 204 MiB;
-- tar (ADR-0386): +18 % bytes, +41 % with the per-entry pax times millisecond
-  mtimes need; its tooling buys nothing for a blob the host never opens; dups,
-  links and devices it allows would each need a refusal;
+- tar (ADR-0386): pax/ustar names are UTF-8, so a lone-surrogate name rifty's
+  FS keeps cannot round-trip; +18 % bytes, +41 % with the per-entry pax times
+  millisecond mtimes need; its tooling buys nothing for a blob the host never
+  opens; dups, links and devices it allows would each need a refusal;
+- keeping `ino`: one realm-wide inode counter (`stat-metadata.ts`) makes a
+  restored `ino` everyone's in the consumer's realm; a per-FS counter is a vfs
+  refactor no consumer needs (Node over a copy renews `ino` too);
 - SHA-256 as the checksum: 4.4 s vs 0.6 s per direction with rifty's pure-JS
   hash (the isolate has no native digest); the CRC guards storage corruption,
   and no checksum can guard against the guest, who authored the bytes;

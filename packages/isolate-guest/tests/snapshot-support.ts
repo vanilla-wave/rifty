@@ -15,9 +15,15 @@ const WORKSPACE_IVM = dirname(
 
 export type Step =
   | { readonly op: 'isolate'; readonly memoryLimit?: number }
-  | { readonly op: 'run'; readonly code: string }
+  | { readonly op: 'run'; readonly code: string; readonly wait?: false }
+  | { readonly op: 'settle' }
   | { readonly op: 'snapshot'; readonly options: unknown }
-  | { readonly op: 'restore'; readonly bytes: string; readonly options: unknown };
+  | {
+      readonly op: 'restore';
+      readonly bytes?: string;
+      readonly file?: string;
+      readonly options: unknown;
+    };
 
 export interface StepResult {
   readonly ok?: true;
@@ -49,6 +55,7 @@ export const ODD_NAMES = ['a b', 'new\nline', 'é', '😀', 'lone\uD800', 'trail
 
 /** Guest code building the scenario's tree (step 1). */
 export const BUILD_TREE = `
+{
 const fs = require('fs');
 fs.mkdirSync('/workspace/src/deep/er', { recursive: true });
 fs.mkdirSync('/workspace/empty');
@@ -61,18 +68,22 @@ fs.writeFileSync('/tmp/outside', 'outside /workspace');
 for (const name of ${JSON.stringify(ODD_NAMES)}) fs.writeFileSync('/workspace/src/' + name, name);
 fs.utimesSync('/workspace/bin.dat', 1000, 2000);
 fs.utimesSync('/workspace/empty', 3000, 4000);
+}
 `;
 
 /**
- * Guest code printing every path from `/`: kind, the `fs.stat` fields rifty
- * keeps, `readdirSync` order, file bytes. Reading changes nothing (no atime).
+ * Guest code printing every path from `/`: kind, the `fs.stat` fields a
+ * restore keeps (not `ino`: renewed, ADR-0567 §1), `readdirSync` order, file
+ * bytes. Reading changes nothing (no atime). One run per isolate: append it to
+ * the code whose tree it lists.
  */
 export const LIST_TREE = `
+{
 const fs = require('fs');
 const out = [];
 const visit = (path) => {
   const s = fs.statSync(path);
-  const row = { path, kind: s.isDirectory() ? 'dir' : 'file', ino: s.ino, size: s.size, nlink: s.nlink,
+  const row = { path, kind: s.isDirectory() ? 'dir' : 'file', size: s.size, nlink: s.nlink,
     mode: s.mode, mtimeMs: s.mtimeMs, atimeMs: s.atimeMs, ctimeMs: s.ctimeMs, birthtimeMs: s.birthtimeMs };
   out.push(row);
   if (row.kind === 'dir') {
@@ -82,12 +93,12 @@ const visit = (path) => {
 };
 visit('/');
 console.log(JSON.stringify(out));
+}
 `;
 
 export interface Row {
   readonly path: string;
   readonly kind: 'dir' | 'file';
-  readonly ino: number;
   readonly size: number;
   readonly nlink: number;
   readonly mode?: number;
@@ -109,7 +120,6 @@ export function listFs(fs: MemoryFsSync): Row[] {
     const base = {
       path,
       kind: s.isDirectory ? ('dir' as const) : ('file' as const),
-      ino: s.metadata?.ino ?? 0,
       size: s.size ?? 0,
       nlink: s.nlink ?? 0,
       mtimeMs: s.mtime ?? 0,

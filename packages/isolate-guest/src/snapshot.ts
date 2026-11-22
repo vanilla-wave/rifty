@@ -37,9 +37,8 @@ export class FsSnapshotError extends Error {
   }
 }
 
-/** Every `fs.stat` field rifty's FS keeps per entry; restored verbatim. */
+/** The times of an entry, restored verbatim (`ino` is renewed, ADR-0567 §1). */
 export interface SnapshotStat {
-  readonly ino: number;
   readonly mtimeMs: number;
   readonly atimeMs: number;
   readonly ctimeMs: number;
@@ -66,7 +65,7 @@ export interface SnapshotFs {
   writeFileSync(path: string, data: Uint8Array): void;
   mkdirSync(path: string, options: { recursive?: boolean }): void;
   rmSync(path: string, options: { recursive?: boolean; force?: boolean }): void;
-  /** Set `ino` and the four times of an existing entry exactly. */
+  /** Set the four times of an existing entry exactly. */
   restoreStatSync(path: string, stat: SnapshotStat): void;
 }
 

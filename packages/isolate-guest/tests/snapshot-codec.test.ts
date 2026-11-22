@@ -22,7 +22,6 @@ const red = it.fails;
 interface Rec {
   kind: number;
   path: string;
-  ino: number;
   times?: readonly [number, number, number, number];
   bytes?: Uint8Array;
   size?: number;
@@ -75,7 +74,6 @@ function encode(
     u8(r.kind);
     u32(r.path.length);
     units(r.path);
-    f64(r.ino);
     for (const t of r.times ?? [10, 20, 30, 40]) f64(t);
     if (r.kind === 2) {
       const bytes = r.bytes ?? new Uint8Array(0);
@@ -91,12 +89,11 @@ function encode(
   return new Uint8Array(Buffer.concat([body, sum]));
 }
 
-const root: Rec = { kind: 1, path: '/', ino: 1 };
-const dir = (path: string, ino: number): Rec => ({ kind: 1, path, ino });
-const file = (path: string, ino: number, text = ''): Rec => ({
+const root: Rec = { kind: 1, path: '/' };
+const dir = (path: string): Rec => ({ kind: 1, path });
+const file = (path: string, text = ''): Rec => ({
   kind: 2,
   path,
-  ino,
   bytes: new Uint8Array(Buffer.from(text)),
 });
 
@@ -143,14 +140,13 @@ describe('format v1 layout (ADR-0567 §1, §2)', () => {
           number,
           number,
         ];
-        const ino = s.metadata?.ino as number;
         return s.isDirectory
-          ? { kind: 1, path, ino, times }
-          : { kind: 2, path, ino, times, bytes: fs.readFileBytesSync(path) };
+          ? { kind: 1, path, times }
+          : { kind: 2, path, times, bytes: fs.readFileBytesSync(path) };
       };
       const expected = encode([rec('/'), rec('/a'), rec('/b'), rec('/b/\uD800')], { template });
-      expect(Buffer.from(snapshotFs(fs, { template, maxBytes: 1 << 20 }))).toEqual(
-        Buffer.from(expected),
+      expect(Buffer.from(snapshotFs(fs, { template, maxBytes: 1 << 20 })).toString('hex')).toBe(
+        Buffer.from(expected).toString('hex'),
       );
     },
   );
@@ -163,13 +159,12 @@ describe('format v1 layout (ADR-0567 §1, §2)', () => {
         for (const name of order) fs.writeFileSync(`/${name}`, new Uint8Array(Buffer.from(name)));
         for (const name of order)
           fs.restoreStatSync(`/${name}`, {
-            ino: 100 + name.charCodeAt(0),
             mtimeMs: 1,
             atimeMs: 2,
             ctimeMs: 3,
             birthtimeMs: 4,
           });
-        fs.restoreStatSync('/', { ino: 1, mtimeMs: 1, atimeMs: 2, ctimeMs: 3, birthtimeMs: 4 });
+        fs.restoreStatSync('/', { mtimeMs: 1, atimeMs: 2, ctimeMs: 3, birthtimeMs: 4 });
         return fs;
       };
       const one = build(['b', 'a', 'é', 'B']);
@@ -177,8 +172,9 @@ describe('format v1 layout (ADR-0567 §1, §2)', () => {
       const before = listFs(one);
       const first = snapshotFs(one, OPTIONS);
       expect(listFs(one)).toEqual(before);
-      expect(Buffer.from(snapshotFs(one, OPTIONS))).toEqual(Buffer.from(first));
-      expect(Buffer.from(snapshotFs(two, OPTIONS))).toEqual(Buffer.from(first));
+      // Only content and stat decide: `ino` is not in the format, times are set alike.
+      expect(Buffer.from(snapshotFs(one, OPTIONS)).equals(Buffer.from(first))).toBe(true);
+      expect(Buffer.from(snapshotFs(two, OPTIONS)).equals(Buffer.from(first))).toBe(true);
     },
   );
 
@@ -195,12 +191,27 @@ describe('format v1 layout (ADR-0567 §1, §2)', () => {
       const fs = target();
       restoreFs(fs, snapshotFs(source, OPTIONS), OPTIONS);
       expect(listFs(fs)).toEqual(listFs(source));
-      // New entries never reuse a restored ino.
-      fs.writeFileSync('/workspace/new', new Uint8Array(0));
-      const inos = listFs(fs).map((r) => r.ino);
-      expect(new Set(inos).size).toBe(inos.length);
     },
   );
+
+  red('a restore changes nothing outside its target (I3)', () => {
+    const other = createMemoryFs().fsSync;
+    other.writeFileSync('/mine', new Uint8Array([9]));
+    const before = listFs(other);
+    const blob = encode([root, dir('/w'), file('/w/a', 'x'), file('/w/b', 'y')]);
+    other.writeFileSync('/probe1', new Uint8Array(0));
+    const first = other.statSync('/probe1').metadata?.ino as number;
+    restoreFs(target(), blob, OPTIONS);
+    other.writeFileSync('/probe2', new Uint8Array(0));
+    // v1 carries no `ino`, so no blob value can reach the realm's counter by construction;
+    // it moves only by the nodes created: target() 3, restore 3, probe2 1.
+    expect(other.statSync('/probe2').metadata?.ino).toBe(first + 7);
+    other.rmSync('/probe1', {});
+    other.rmSync('/probe2', {});
+    expect(listFs(other).map(({ path, bytes }) => ({ path, bytes }))).toEqual(
+      before.map(({ path, bytes }) => ({ path, bytes })),
+    );
+  });
 
   red('100 000 siblings round-trip: no quadratic pass over a directory (I3)', () => {
     const wide = createMemoryFs().fsSync;
@@ -209,7 +220,7 @@ describe('format v1 layout (ADR-0567 §1, §2)', () => {
     const bytes = snapshotFs(wide, options);
     const back = createMemoryFs().fsSync;
     restoreFs(back, bytes, options);
-    expect(Buffer.from(snapshotFs(back, options))).toEqual(Buffer.from(bytes));
+    expect(Buffer.from(snapshotFs(back, options)).equals(Buffer.from(bytes))).toBe(true);
   });
 });
 
@@ -235,7 +246,7 @@ describe('limits (ADR-0567 §7, I4)', () => {
   });
 
   red('a claimed file size past the bytes present is refused, not allocated', () => {
-    const bytes = encode([root, { kind: 2, path: '/f', ino: 2, size: 2 ** 50 }]);
+    const bytes = encode([root, { kind: 2, path: '/f', size: 2 ** 50 }]);
     refused(bytes, 'ERR_FS_SNAPSHOT_CORRUPT');
   });
 
@@ -257,7 +268,7 @@ describe('limits (ADR-0567 §7, I4)', () => {
 });
 
 describe('hostile bytes (ADR-0567 §5, I2, I3)', () => {
-  const valid = () => encode([root, dir('/w', 2), file('/w/a', 3, 'SECRET-a')]);
+  const valid = () => encode([root, dir('/w'), file('/w/a', 'SECRET-a')]);
 
   red('every truncation is refused', () => {
     const bytes = valid();
@@ -267,9 +278,11 @@ describe('hostile bytes (ADR-0567 §5, I2, I3)', () => {
   red('every flipped bit is refused; in the version field as a version', () => {
     const bytes = valid();
     for (let i = 0; i < bytes.length; i++) {
-      const copy = bytes.slice();
-      copy[i] = (copy[i] as number) ^ 0x10;
-      refused(copy, i >= 8 && i < 12 ? 'ERR_FS_SNAPSHOT_VERSION' : 'ERR_FS_SNAPSHOT_CORRUPT');
+      for (let bit = 0; bit < 8; bit++) {
+        const copy = bytes.slice();
+        copy[i] = (copy[i] as number) ^ (1 << bit);
+        refused(copy, i >= 8 && i < 12 ? 'ERR_FS_SNAPSHOT_VERSION' : 'ERR_FS_SNAPSHOT_CORRUPT');
+      }
     }
   });
 
@@ -291,6 +304,10 @@ describe('hostile bytes (ADR-0567 §5, I2, I3)', () => {
 
   red('another template, none, or one where none was expected', () => {
     const t = { id: 'tpl', version: '1' };
+    // The blob's own template is guest text: never echoed.
+    const guestT = encode([root], { template: { id: 'SECRET-id', version: 'SECRET-v' } });
+    refused(guestT, 'ERR_FS_SNAPSHOT_TEMPLATE');
+    refused(guestT, 'ERR_FS_SNAPSHOT_TEMPLATE', { template: t, maxBytes: 1 << 20 });
     const withT = encode([root], { template: t });
     refused(withT, 'ERR_FS_SNAPSHOT_TEMPLATE');
     refused(withT, 'ERR_FS_SNAPSHOT_TEMPLATE', {
@@ -307,29 +324,25 @@ describe('hostile bytes (ADR-0567 §5, I2, I3)', () => {
   });
 
   const structural: readonly (readonly [string, readonly Rec[], (readonly number[])?])[] = [
-    ['no root entry', [dir('/w', 2)]],
-    ['root as a file', [file('/', 1)]],
-    ['root twice', [root, dir('/', 2)]],
-    ['duplicate path', [root, file('/SECRET', 2), file('/SECRET', 3)]],
-    ['dir and file at one path', [root, dir('/x', 2), file('/x', 3)]],
-    ['relative path', [root, file('SECRET', 2)]],
-    ['.. segment', [root, dir('/w', 2), file('/w/../SECRET', 3)]],
-    ['. segment', [root, dir('/w', 2), file('/w/./SECRET', 3)]],
-    ['empty segment', [root, dir('/w', 2), file('/w//SECRET', 3)]],
-    ['trailing slash', [root, dir('/w/', 2)]],
-    ['NUL in a name', [root, file('/SECRET\0x', 2)]],
-    ['parent missing', [root, file('/nope/SECRET', 2)]],
-    ['parent is a file', [root, file('/f', 2), file('/f/SECRET', 3)]],
-    ['child before its parent', [root, file('/w/SECRET', 3), dir('/w', 2)]],
-    ['unknown kind (no symlinks in v1)', [root, { kind: 3, path: '/link', ino: 2 }]],
-    ['duplicate ino', [root, file('/a', 2), file('/b', 2)]],
-    ['ino 0', [root, file('/a', 0)]],
-    ['ino not an integer', [root, file('/a', 2.5)]],
-    ['ino above 2^52', [root, file('/a', 2 ** 52 + 1)]],
-    ['NaN time', [root, { ...file('/a', 2), times: [Number.NaN, 0, 0, 0] }]],
-    ['infinite time', [root, { ...file('/a', 2), times: [0, 0, Number.POSITIVE_INFINITY, 0] }]],
-    ['size not an integer', [root, { ...file('/a', 2, 'xy'), size: 1.5 }]],
-    ['negative size', [root, { ...file('/a', 2), size: -1 }]],
+    ['no root entry', [dir('/w')]],
+    ['root as a file', [file('/')]],
+    ['root twice', [root, dir('/')]],
+    ['duplicate path', [root, file('/SECRET'), file('/SECRET')]],
+    ['dir and file at one path', [root, dir('/x'), file('/x')]],
+    ['relative path', [root, file('SECRET')]],
+    ['.. segment', [root, dir('/w'), file('/w/../SECRET')]],
+    ['. segment', [root, dir('/w'), file('/w/./SECRET')]],
+    ['empty segment', [root, dir('/w'), file('/w//SECRET')]],
+    ['trailing slash', [root, dir('/w/')]],
+    ['NUL in a name', [root, file('/SECRET\0x')]],
+    ['parent missing', [root, file('/nope/SECRET')]],
+    ['parent is a file', [root, file('/f'), file('/f/SECRET')]],
+    ['child before its parent', [root, file('/w/SECRET'), dir('/w')]],
+    ['unknown kind (no symlinks in v1)', [root, { kind: 3, path: '/link' }]],
+    ['NaN time', [root, { ...file('/a'), times: [Number.NaN, 0, 0, 0] }]],
+    ['infinite time', [root, { ...file('/a'), times: [0, 0, Number.POSITIVE_INFINITY, 0] }]],
+    ['size not an integer', [root, { ...file('/a', 'xy'), size: 1.5 }]],
+    ['negative size', [root, { ...file('/a'), size: -1 }]],
     ['bytes after end', [root], [0x53, 0x45, 0x43]],
   ];
   for (const [label, recs, tail] of structural) {
@@ -339,11 +352,11 @@ describe('hostile bytes (ADR-0567 §5, I2, I3)', () => {
   }
 
   red('a path or template length past the end is refused', () => {
-    const bytes = encode([root, file('/a', 2)]);
-    // Header 13 B, root record 1 + 4 + 2 + 40 = 47 B: the second path length is at 61.
+    const bytes = encode([root, file('/a')]);
+    // Header 13 B, root record 1 + 4 + 2 + 32 = 39 B: the second path length is at 53.
     const view = new DataView(bytes.buffer);
-    expect(bytes[60]).toBe(2);
-    view.setUint32(61, 0x7fffffff, true);
+    expect(bytes[52]).toBe(2);
+    view.setUint32(53, 0x7fffffff, true);
     const body = bytes.subarray(0, bytes.length - 4);
     view.setUint32(bytes.length - 4, crc32(body), true);
     refused(bytes, 'ERR_FS_SNAPSHOT_CORRUPT');

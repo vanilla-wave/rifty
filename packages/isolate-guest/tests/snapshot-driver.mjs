@@ -5,8 +5,10 @@
  *
  *   node --no-node-snapshot snapshot-driver.mjs <isolated-vm dir> < steps.json
  *
- * Steps: {op:'isolate', memoryLimit?} · {op:'run', code} ·
- * {op:'snapshot', options} · {op:'restore', bytes (base64), options}.
+ * Steps: {op:'isolate', memoryLimit?} · {op:'run', code, wait?: false} ·
+ * {op:'settle'} (await a run started with `wait: false`) ·
+ * {op:'snapshot', options} · {op:'restore', bytes (base64) | file, options}.
+ * A restore `file` is read here (large blobs stay off the step JSON).
  */
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -54,15 +56,21 @@ for (const step of steps) {
     if (step.op === 'isolate') {
       await fresh(step.memoryLimit);
       result = { ok: true };
-    } else if (step.op === 'run') {
-      current.out[1] = [];
-      current.out[2] = [];
-      const status = await current.guest.run.apply(undefined, [step.code], {
-        arguments: { copy: true },
-        result: { promise: true, copy: true },
-      });
-      const text = (fd) => Buffer.concat(current.out[fd]).toString('utf8');
-      result = { stdout: text(1), stderr: text(2), exitCode: exitStatus(status) };
+    } else if (step.op === 'run' || step.op === 'settle') {
+      if (step.op === 'run') {
+        current.out[1] = [];
+        current.out[2] = [];
+        current.pending = current.guest.run.apply(undefined, [step.code], {
+          arguments: { copy: true },
+          result: { promise: true, copy: true },
+        });
+      }
+      if (step.op === 'run' && step.wait === false) result = { ok: true };
+      else {
+        const status = await current.pending;
+        const text = (fd) => Buffer.concat(current.out[fd]).toString('utf8');
+        result = { stdout: text(1), stderr: text(2), exitCode: exitStatus(status) };
+      }
     } else if (step.op === 'snapshot') {
       const started = performance.now();
       const bytes = await current.guest.snapshot.apply(undefined, [step.options], {
@@ -76,7 +84,9 @@ for (const step of steps) {
         bytes: Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString('base64'),
       };
     } else if (step.op === 'restore') {
-      const bytes = new Uint8Array(Buffer.from(step.bytes, 'base64'));
+      const bytes = new Uint8Array(
+        step.file === undefined ? Buffer.from(step.bytes, 'base64') : readFileSync(step.file),
+      );
       const started = performance.now();
       await current.guest.restore.apply(undefined, [bytes, step.options], {
         arguments: { copy: true },
