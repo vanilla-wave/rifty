@@ -1,9 +1,9 @@
 {
   "overall_verdict": "pass",
-  "merge_call": "Mergeable once PR CI at HEAD is green; verdict re-bound to b959f129e after the verify pass over cross-review round 2 (F1 starved carrier by events, no start in the budget; a worker whose grace ran out takes no new call).",
+  "merge_call": "Mergeable once PR CI at HEAD is green; verdict re-bound to 3e5403f6e after the verify passes over cross-review round 3 (one mark on the result channel's end: no placement, never idle; F1 bound reds readably; idle case event-ordered).",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "b959f129e333cd5e42773664b143614299fb390e",
-  "unit_goal_source": "PR #420 (branch t3/isolate-host-suite-flake), standalone rifty-fix unit. Observed baseline: the finding backlog distribution/isolate-host-tests-flake-under-extreme-load (deleted by this PR; read at BASE 50c9d8bf1) — guest-export clock tolerance, pool-faults interval churn, protocol closed-then-exit red under load. BASE 50c9d8bf1, HEAD b959f129e333cd5e42773664b143614299fb390e. Passes: b1ca3e5f0 (2 blockers: removed period parity row, compat line 9 — fixed), d98cd3fa8 PASS, external cross-review round 1 at bb022938b (B1: deadline after one poll admitted late results — reverted), 375d1bd21 PASS, dd429db50 PASS, external cross-review round 2 at 325f22022 (no blocker; F1 carrier budget-dependent, placement window during the grace decision — both fixed), b959f129e PASS.",
+  "reviewed_sha": "3e5403f6e044a587e92f16f7028e2e21c878bc46",
+  "unit_goal_source": "PR #420 (branch t3/isolate-host-suite-flake), standalone rifty-fix unit. Observed baseline: the finding backlog distribution/isolate-host-tests-flake-under-extreme-load (deleted by this PR; read at BASE 50c9d8bf1) — guest-export clock tolerance, pool-faults interval churn, protocol closed-then-exit red under load. BASE 50c9d8bf1, HEAD 3e5403f6e044a587e92f16f7028e2e21c878bc46. Passes: b1ca3e5f0 (2 blockers: removed period parity row, compat line 9 — fixed), d98cd3fa8 PASS, external cross-review round 1 at bb022938b (B1: deadline after one poll admitted late results — reverted), 375d1bd21 PASS, dd429db50 PASS, external cross-review round 2 at 325f22022 (no blocker; F1 carrier budget-dependent, placement window during the grace decision — both fixed), b959f129e PASS, external cross-review round 3 at 12151aea5 (no blocker; window from channel end reached placement and idle accounting — closed by one mark on 'end'; F1 bound spun), ba2d16844 PASS, 3e5403f6e PASS.",
   "unit_residuals": [],
   "goal_residuals": [],
   "goal_complete": false,
@@ -21,15 +21,23 @@
       "source": "acceptance",
       "trace": "ADR-0563 §6 + Corrections 2026-11-22",
       "status": "pass",
-      "citation": "packages/isolate-host/tests/protocol.test.ts:184-199; packages/isolate-host/src/pool.ts:173-182",
+      "citation": "packages/isolate-host/tests/protocol.test.ts:184-199; packages/isolate-host/src/pool.ts:173-183",
       "note": ""
     },
     {
-      "row": "A worker whose closed-channel grace ran out takes no new call while its loss is judged (a call placed in that window does not spend its rerun on a dead worker)",
+      "row": "A worker whose result channel ended takes no new call: the call gets a fresh worker, not a spent rerun",
       "source": "acceptance",
       "trace": "ADR-0563 §6 + Corrections 2026-11-22",
       "status": "pass",
-      "citation": "packages/isolate-host/tests/protocol.test.ts:283-323; packages/isolate-host/src/pool.ts:130,175,342",
+      "citation": "packages/isolate-host/tests/protocol.test.ts:308-329; packages/isolate-host/src/pool.ts:130,174,342",
+      "note": ""
+    },
+    {
+      "row": "A worker whose result channel ended is not idle: a healthy warm worker survives it",
+      "source": "acceptance",
+      "trace": "ADR-0563 §2 + §6 + Corrections 2026-11-22",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/protocol.test.ts:331-367; packages/isolate-host/src/pool.ts:404",
       "note": ""
     },
     {
@@ -37,7 +45,7 @@
       "source": "acceptance",
       "trace": "ADR-0563 §4",
       "status": "pass",
-      "citation": "packages/isolate-host/tests/protocol.test.ts:204-227; packages/isolate-host/src/pool.ts:85",
+      "citation": "packages/isolate-host/tests/protocol.test.ts:205-228; packages/isolate-host/src/pool.ts:85",
       "note": ""
     },
     {
@@ -45,7 +53,7 @@
       "source": "acceptance",
       "trace": "ADR-0563 §6 (F1)",
       "status": "pass",
-      "citation": "packages/isolate-host/tests/protocol.test.ts:229-281",
+      "citation": "packages/isolate-host/tests/protocol.test.ts:230-288",
       "note": ""
     },
     {
@@ -53,7 +61,7 @@
       "source": "acceptance",
       "trace": "ADR-0563 Corrections 2026-11-22 (compat ⚠️ row)",
       "status": "pass",
-      "citation": "packages/isolate-host/tests/protocol.test.ts:325-352; docs/public/compat/isolate-host.md:15",
+      "citation": "packages/isolate-host/tests/protocol.test.ts (case 'a starved consumer: a result sent before the deadline but read after it is timeout'); docs/public/compat/isolate-host.md:15",
       "note": ""
     },
     {
@@ -61,7 +69,7 @@
       "source": "acceptance",
       "trace": "ADR-0563 Corrections 2026-11-22 (compat ⚠️ row)",
       "status": "pass",
-      "citation": "packages/isolate-host/tests/protocol.test.ts:354-383; docs/public/compat/isolate-host.md:15",
+      "citation": "packages/isolate-host/tests/protocol.test.ts (case 'a starved consumer: a worker lost before the deadline but read after it is timeout, no rerun'); docs/public/compat/isolate-host.md:15",
       "note": ""
     },
     {
