@@ -211,7 +211,7 @@ class LiveSandbox implements Sandbox {
         fs.existsSync(target) && fs.statSync(target).isFile
           ? fs.readFileBytesSync(target)
           : undefined;
-      const created = missingDirs(fs, parent);
+      const created = firstMissingDir(fs, parent);
       vfs('mkdir', parent, () => fs.mkdirSync(parent, { recursive: true }));
       vfs('open', target, () => fs.writeFileSync(target, bytes));
       try {
@@ -220,7 +220,7 @@ class LiveSandbox implements Sandbox {
         // Over the state cap: undo, then refuse.
         if (previous === undefined) fs.rmSync(target, { force: true });
         else fs.writeFileSync(target, previous);
-        for (const dir of created) fs.rmSync(dir, { recursive: true, force: true });
+        if (created !== undefined) fs.rmSync(created, { recursive: true, force: true });
         if (isCodec(error) && error.code === REFUSED[2])
           throw coded(
             new RangeError(
@@ -338,12 +338,22 @@ function tooLarge(size: number, max: number): Error {
   );
 }
 
-/** The directories `mkdir -p dir` would create, deepest last. */
-function missingDirs(fs: Fs, dir: string): string[] {
-  const out: string[] = [];
-  for (let d = dir; d !== '/' && !fs.existsSync(d); d = d.slice(0, d.lastIndexOf('/')) || '/')
-    out.unshift(d);
-  return out;
+/**
+ * The highest directory `mkdir -p dir` would create, if any. Existence along a
+ * path is monotone (present, then absent), so a binary search keeps a deep
+ * path at O(depth · log depth) VFS lookups instead of O(depth²).
+ */
+function firstMissingDir(fs: Fs, dir: string): string | undefined {
+  const parts = dir.split('/').filter(Boolean);
+  const at = (n: number): string => `/${parts.slice(0, n).join('/')}`;
+  let lo = 0; // at(lo) exists ('/' always does)
+  let hi = parts.length + 1; // at(hi) does not exist, or past the end
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (fs.existsSync(at(mid))) lo = mid;
+    else hi = mid;
+  }
+  return hi <= parts.length ? at(hi) : undefined;
 }
 
 export async function createSandbox(options: SandboxOptions = {}): Promise<Sandbox> {
