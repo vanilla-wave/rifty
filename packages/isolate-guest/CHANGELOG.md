@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A fresh guest FS holds `/tmp` beside `/workspace` (`GUEST_DIRS`): rifty's `os.tmpdir()` is `/tmp`, and writing there failed with `ENOENT` where Node writes (`runCode` corpus `os-tmpdir-is-writable`).
 - `GuestEntry.runFile(path, args)`: `node <path> [args]` over the realm's FS with cwd `/workspace`, instead of `run` (ADR-0568). An ES module entry (`.mjs`, `"type": "module"`, ESM syntax in a typeless `.js`) throws `NotImplementedError('isolate-host.esm')`. A file run has no `node -e` builtin-module globals (`typeof fs` is `'undefined'`, as in Node).
 - Add optional `allowSharedArrayBuffer` on the pre-load `GuestHost` record. False removes the global for feature detection. Shared wasm backing buffers throw the named gap on access. Default true (ADR-0566).
 
