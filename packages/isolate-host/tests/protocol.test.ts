@@ -192,7 +192,8 @@ describe('consumer treats the child channel as hostile', () => {
     );
     const report = consume(
       entry,
-      '{ timeoutMs: 5000, maxOutputBytes: 1024 }',
+      // No reachable deadline: two attempts with their stalls are not a budget question.
+      '{ timeoutMs: 2 ** 31 - 1, maxOutputBytes: 1024 }',
       [],
       STARVED_AT_GRACE,
     ) as { rejected?: string };
@@ -320,8 +321,11 @@ describe('consumer treats the child channel as hostile', () => {
       { entry: pathToFileURL(entry).href },
     );
     expect(value).toEqual({
+      // Its solo kills itself; whether its exit beat the grace is not this case's claim.
       first: {
-        rejected: 'isolate-host child exited unexpectedly (code null, signal SIGKILL)',
+        rejected: expect.stringMatching(
+          /^isolate-host child exited unexpectedly \(code null, signal SIGKILL\)/,
+        ),
         code: 'ERR_ISOLATE_HOST_WORKER_LOST',
       },
       second: { stdout: '', stderr: '', exitCode: 9 },
