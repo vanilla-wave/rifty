@@ -187,3 +187,11 @@ sample. Node v24.16.0 facts: evidence §O1–§O3.
   TriggerUncaughtException @v24.16.0 (`ReportFatalException`, then
   `env->Exit(env->exit_code(kGenericUserError))`); proof
   `tests/no-coi/no-coi-fatal-stderr.spec.ts`, `no-coi-process-exit-status.spec.ts`.
+- 2026-11-22 — rule 3's realm-uncaught path: a no-listener error (timer, I/O
+  callback) runs the fatal terminal in the trap at once, as a rejection does,
+  not the default Worker report; the COI kernel child and the no-COI child
+  Worker run it at the entry catch, as the no-COI command does. The terminal
+  prints Node's ReportFatalException shape (`builtins/fatal-report.ts`: header,
+  inspected error, user frames, trailer), with the dispatch origin choosing the
+  header (a rejection's error frame, a throw's statement). Goal
+  `node-file-entry-parity`; carriers `tests/{no-coi,browser-unit}/node-file-parity.spec.ts`.

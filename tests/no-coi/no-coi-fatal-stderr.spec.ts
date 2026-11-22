@@ -91,50 +91,49 @@ function fatalShape(stderr: string, root: string): FatalShape {
   };
 }
 
-// Residuals: `header`/`trailer`/`hint` are not printed outside `node -e`;
-// `userFrame` positions/names per compat modules.md "CJS/ESM stack positions"
-// (backlog runtime-js/cjs-wrapper-stack-positions, esm-stack-positions); a
-// compile error prints the loader's ModuleLoadError; an eval `require()` miss
-// lacks the inspected props.
-const UNPRINTED = { header: null, trailer: null } as const;
+// Residuals (byte parity for file entries: node-file-parity.spec.ts): an ES
+// module entry prints no header and its shifted frame (compat modules.md "ESM
+// stack positions"), its compile error the loader's ModuleLoadError; a
+// non-Error throw has no header; Node's eval `require()` miss header names its
+// own loader source.
 const rows: readonly FatalRow[] = [
   {
     name: 'cjs-entry-throw',
     files: { 'fail.cjs': "throw new Error('boom');\n" },
     nodeArgv: ['fail.cjs'],
-    residual: { ...UNPRINTED, userFrame: 'at Object.eval (<root>/fail.cjs:3:7)' },
+    residual: {},
   },
   {
     name: 'eval-throw',
     files: {},
     nodeArgv: ['-e', "throw new Error('boom')"],
     line: `node -e "throw new Error('boom')"`,
-    residual: { trailer: null },
+    residual: {},
   },
   {
     name: 'esm-entry-throw',
     files: { 'fail.mjs': "throw new Error('boom');\n" },
     nodeArgv: ['fail.mjs'],
-    residual: { ...UNPRINTED, userFrame: 'at eval (<root>/fail.mjs:6:7)' },
+    residual: { header: null, userFrame: 'at eval (<root>/fail.mjs:6:7)' },
   },
   {
     name: 'cjs-syntax-error',
     files: { 'syntax.cjs': 'const a = 1;\nlet x = ;\n' },
     nodeArgv: ['syntax.cjs'],
-    residual: {
-      ...UNPRINTED,
-      error:
-        "ModuleLoadError: Failed to compile CJS module <root>/syntax.cjs: Unexpected token ';'",
-    },
+    // Node's only frames are its own loader's (`node:internal/…`).
+    residual: { stack: false },
   },
   {
     name: 'esm-syntax-error',
     files: { 'syntax.mjs': 'const a = 1;\nlet x = ;\n' },
     nodeArgv: ['syntax.mjs'],
     residual: {
-      ...UNPRINTED,
+      header: null,
       error:
         'ModuleLoadError: Failed to parse ESM source for <root>/syntax.mjs: Unexpected token (2:8)',
+      stack: false,
+      props:
+        "code: 'SYNTAX_ERROR',\nspecifier: '<root>/syntax.mjs',\nimporter: '<root>/syntax.mjs',\nrequireStack: undefined",
     },
   },
   {
@@ -142,13 +141,19 @@ const rows: readonly FatalRow[] = [
     files: {},
     nodeArgv: ['-e', "require('missing-pkg')"],
     line: `node -e "require('missing-pkg')"`,
-    residual: { ...UNPRINTED, props: null },
+    // Node's header names its own loader source (`node:internal/…`); inspect
+    // breaks Node's long temp path onto lines, not the short `/fatal-stderr` one.
+    residual: {
+      header: null,
+      props: "code: 'MODULE_NOT_FOUND',\nrequireStack: [ '<root>/[eval]' ]",
+    },
   },
   {
     name: 'non-error-throw',
     files: { 'throw-number.cjs': 'throw 42;\n' },
     nodeArgv: ['throw-number.cjs'],
-    residual: { ...UNPRINTED, hint: false },
+    // No stack locates a non-Error throw.
+    residual: { header: null },
   },
 ];
 

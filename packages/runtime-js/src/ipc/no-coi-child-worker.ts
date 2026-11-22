@@ -11,6 +11,7 @@ import { refreshRuntimeJsProcessBuiltin } from '../builtins/index.ts';
 import { buildNodeEntryWorkerEntry } from '../builtins/node-entry-runtime-config.ts';
 import { runNodeEntry } from '../builtins/node-entry.ts';
 import { setActiveNodeProcessBootstrap } from '../builtins/process-bootstrap-identity.ts';
+import { isNodeProcessExiting, terminateFatal } from '../builtins/process-lifecycle-events.ts';
 import { type NodeProcess, bindNodeProcessDescendantAuthority } from '../builtins/process.ts';
 import { installTimerGlobals } from '../builtins/timers.ts';
 import { setVmEngineOverride } from '../builtins/vm/engine-config.ts';
@@ -100,7 +101,12 @@ export function installNoCoiChildWorker(): void {
       const exit = proc.exit;
       const entryPath = init.argv[1];
       if (entryPath === undefined) throw new Error('child entry is missing');
-      await runNodeEntry({ vfs, entryPath, cwd: init.cwd });
+      try {
+        await runNodeEntry({ vfs, entryPath, cwd: init.cwd });
+      } catch (error) {
+        // ADR-0445: a dispatched no-listener throw ends in the fatal terminal.
+        throw (isNodeProcessExiting(proc) ? terminateFatal(error, proc) : null) ?? error;
+      }
       await awaitDrain({ capMs: 600_000 });
       exit();
     })().catch((error: unknown) => {

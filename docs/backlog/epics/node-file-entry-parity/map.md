@@ -6,26 +6,20 @@
    corpus, `tests/no-coi/node-file-parity.spec.ts` (no-COI SDK) and
    `tests/browser-unit/node-file-parity.spec.ts` (COI Workbench); committed RED,
    open rows marked expected-failure. → I1–I4
-2. `runtime-js/node-entry-main-module` — **main module identity**: entry CJS
-   record is Node's main (`require.main`, `process.mainModule`, `id` `.`,
-   `parent` null). First slice (sandbox blocker). → I1
 3. `runtime-js/require-cache-module-record-surface` — **live `require.cache`**
    (existing draft). → I1
 3b. **ESM entry facts** — `import.meta.main`; a CJS module required through
    `createRequire` sees its synthetic parent (Node `[object Object]`). → I1
 3c. `runtime-js/cjs-wrapper-arguments-shape` — top-level `arguments.length`
    8 (rifty helper parameters) vs Node 5 (existing draft). → I1
-4. `runtime-js/fatal-report-node-shape` — **one fatal formatter** for every
-   host: header, inspected error, trailer, rifty frames dropped (existing
-   draft; with `node-eval-non-error-throw-rendering`). → I2 I3 I4
-5. `runtime-js/cjs-wrapper-stack-positions` — **CJS positions + top-level
-   frame name** (existing draft). Compensations to find first: `snippetForSource`
-   `-2`, pinned residuals in `no-coi-fatal-stderr.spec.ts`, `cjs-stack-*`
-   tests, vitest 4.1.11 browser lane. → I2 I3
-6. `runtime-js/module-compile-error-node-syntax-error` — **V8 SyntaxError**
-   for CJS/ESM compile failures (existing draft). → I2
-7. `runtime-js/node-entry-miss-node-shape` — **MODULE_NOT_FOUND report**
-   frames/trailer (hypothesis until the run). → I2
+4. `runtime-js/timer-callback-this-is-timeout` — **timer callback as
+   `Timeout._onTimeout`** (`this`, frame name; row `throw-from-timer`). → I2 I3
+5. **header residue** — rows `rethrow-in-catch`, `error-with-props`,
+   `throw-non-error-*`, `syntax-error-dependency` (acorn vs V8 caret): no
+   provable throw site from JS; probe a source-proven rule or keep as declared
+   compat rows (process.md "Fatal error stderr bytes"). → I2
+6. `runtime-js/module-compile-error-node-syntax-error` — **ESM** compile
+   failure as V8's `SyntaxError` (CJS landed). → I2
 8. `runtime-js/esm-stack-positions` — **ESM entry frames** (existing draft;
    hypothesis). → I2 I3
 9. **isolate rows** — `packages/isolate-host` parity: a file `require`d from

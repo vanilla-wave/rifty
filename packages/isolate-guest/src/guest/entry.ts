@@ -16,7 +16,7 @@ import {
 } from '@riftydev/runtime-js/builtins/process';
 import { installTimerGlobals } from '@riftydev/runtime-js/builtins/timers';
 import {
-  formatThrown,
+  fatalReportText,
   handleRealmUncaughtError,
   handleRealmUnhandledRejection,
   readNodeProcessTerminal,
@@ -189,10 +189,10 @@ function esmGapOf(caught: unknown): Error | null {
   }
 }
 
-/** Write the guest's error with the runtime's own fatal text (`formatThrown`); never throws. */
+/** Write the guest's error as the runtime's fatal report (`fatalReportText`); never throws. */
 function writeDiagnostic(error: unknown): void {
   try {
-    writeHost(2, `${formatThrown(error)}\n`);
+    writeHost(2, fatalReportText(error));
   } catch {
     // The guest broke its own diagnostic: nothing is written, the status still crosses.
   }

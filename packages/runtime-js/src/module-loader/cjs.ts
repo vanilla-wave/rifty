@@ -5,6 +5,7 @@ import { parse as acornParse } from 'acorn';
 import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
 import { compileCjsFactory } from './cjs-factory.ts';
 import { type Edit, applyEdits, uniqueHelperName } from './cjs-source-rewrite.ts';
+import { cjsSyntaxError } from './cjs-syntax-error.ts';
 import { rewriteDirectEvalImportCallArgument } from './direct-eval-import.ts';
 import { ModuleLoadError } from './errors.ts';
 import { createFunctionImportRouting } from './function-import-routing.ts';
@@ -96,32 +97,6 @@ export type CjsRequire = ((specifier: string) => unknown) & {
   main: CjsModule | undefined;
 };
 
-/**
- * Best-effort source snippet for a `new Function` compile failure. A bare
- * SyntaxError often carries no `<anonymous>:line:col`; then returns '' (the
- * caller's directed error still names the module). When V8 gives an offset,
- * subtract the 2-line synthetic `function anonymous(...) {` header to map back
- * onto the source.
- */
-function snippetForSource(source: string, stack: string): string {
-  const m = /<anonymous>:(\d+):(\d+)/.exec(stack);
-  if (!m) return '';
-  const srcLine = Number(m[1]) - 2;
-  const lines = source.split('\n');
-  if (srcLine < 1 || srcLine > lines.length) return '';
-  const start = Math.max(0, srcLine - 3);
-  const end = Math.min(lines.length, srcLine + 2);
-  const numbered = lines
-    .slice(start, end)
-    .map((l, i) => {
-      const n = start + i + 1;
-      const marker = n === srcLine ? '>> ' : '   ';
-      return `${marker}${String(n).padStart(5, ' ')} | ${l.length > 200 ? `${l.slice(0, 200)}…` : l}`;
-    })
-    .join('\n');
-  return `\nNear line ${srcLine}:\n${numbered}`;
-}
-
 interface AnyNodeShape {
   readonly type: string;
   readonly start: number;
@@ -170,11 +145,9 @@ function rewriteDynamicImports(source: string, id: string, helperName: string): 
     }) as Program;
   } catch (err) {
     const msg = (err as Error).message ?? String(err);
-    throw new ModuleLoadError(
-      'SYNTAX_ERROR',
-      id,
-      `Failed to parse CJS source for ${id}: ${msg}`,
-      id,
+    throw (
+      cjsSyntaxError(source, id) ??
+      new ModuleLoadError('SYNTAX_ERROR', id, `Failed to parse CJS source for ${id}: ${msg}`, id)
     );
   }
 
@@ -233,11 +206,9 @@ function rewriteCjsFunctionConstructorReferences(
     }) as Program;
   } catch (err) {
     const msg = (err as Error).message ?? String(err);
-    throw new ModuleLoadError(
-      'SYNTAX_ERROR',
-      id,
-      `Failed to parse CJS source for ${id}: ${msg}`,
-      id,
+    throw (
+      cjsSyntaxError(source, id) ??
+      new ModuleLoadError('SYNTAX_ERROR', id, `Failed to parse CJS source for ${id}: ${msg}`, id)
     );
   }
 
@@ -1784,15 +1755,8 @@ function compileCjsSource(
       filename,
     ) as CjsFactory;
   } catch (error) {
-    // `new Function` SyntaxError has no file context — surface a directed
-    // error naming the module (mirrors the ESM path in esm.ts).
-    const message = (error as Error).message ?? String(error);
-    throw new ModuleLoadError(
-      'SYNTAX_ERROR',
-      filename,
-      `Failed to compile CJS module ${filename}: ${message}${snippetForSource(sourceText, (error as Error).stack ?? '')}`,
-      filename,
-    );
+    // Node: V8's SyntaxError, its header naming the module (not a loader wrapper).
+    throw (error instanceof SyntaxError ? cjsSyntaxError(sourceText, filename) : null) ?? error;
   }
 
   fn.call(

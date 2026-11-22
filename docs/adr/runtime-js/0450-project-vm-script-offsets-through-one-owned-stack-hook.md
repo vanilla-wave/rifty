@@ -155,3 +155,19 @@ format, receiver `Error`), and freezes every `CallSite.prototype` method
   TypeScript 5.9.3 starts with a license comment, so ordinary require uses one
   Function; the TS language-service has its own single-Function compiler.
   No runtime change. Method/raw timings: `docs/backlog/runtime-js/cjs-wrapper-stack-positions.md`.
+- 2026-11-22 — every CJS source now shares line one with the anonymous
+  indirect-eval prefix (Function still validates the body first, so nothing
+  escapes the wrapper): all lines keep their native numbers, the factory is
+  named `Object.<anonymous>` (V8 renders Node's nameless wrapper so; a guest
+  reads that name through a sloppy `arguments.callee` or
+  `CallSite.getFunctionName()`, Node `''`/null). Line-1 columns stay right of
+  the source by the prefix in `err.stack` and CallSites — a one-line
+  (minified) bundle maps through its source map to a plausible wrong original
+  position (before: unmappable +2 lines). Only the fatal report projects
+  line-1 columns back, and drops V8's `eval` name where the source shows the
+  function anonymous, from a per-filename prefix length kept by the factory:
+  the one filename record, read by no stack formatter or hook; a guest
+  Function/eval whose sourceURL is a module's filename is projected there too.
+  Still no stack-hook ownership. Cost: 3061-module CJS tree, CPU median +5%
+  (one extra parse per module that had none). Critic 2026-11-22: direction
+  holds, no cheaper route (no eval offsets in V8). Goal `node-file-entry-parity`.

@@ -31,8 +31,13 @@ import {
   projectNodeEvalError,
 } from '../module-loader/loader.ts';
 import { formatNodeEvalPrintValue } from '../repl/inspect.ts';
+import { setFatalEvalSource, setFatalOrigin } from './fatal-report.ts';
 import { refreshRuntimeJsProcessBuiltin } from './index.ts';
-import { type UncaughtOrigin, dispatchUncaughtException } from './process-lifecycle-events.ts';
+import {
+  type UncaughtOrigin,
+  dispatchUncaughtException,
+  fatalReportText,
+} from './process-lifecycle-events.ts';
 
 const utf8 = new TextDecoder();
 const reflectApplyPrimordial = Reflect.apply;
@@ -110,39 +115,16 @@ function captureNodeEvalTerminalProcess(): NodeEvalTerminalProcess {
 }
 
 /**
- * Real-Node printed form of an uncaught CJS-loader `MODULE_NOT_FOUND`: the
- * `Error: <message>` line — the message already carries Node's `Require stack:`
- * block when the require-stack is non-empty — followed by the inspected tail of
- * the error's own props, `{ code, requireStack }`. ALL stack frames are dropped:
- * the `node:internal/…` loader frames have no in-browser equivalent (and are
- * version-specific noise tooling does not match on), and rifty does not
- * synthesize the Node-style user call-site frame either — so a nested miss omits
- * the `at <file>` line Node would interleave (an entry miss has no user frame
- * anyway). The `Node.js vX` trailer is likewise omitted. `requireStack` uses
- * Node's INLINE array form (`[]` / `[ 'a', 'b' ]`) — faithful for the common
- * short-path case; util.inspect's multi-line wrap for long paths + single-quote
- * escaping are not reproduced. See docs/public/compat/process.md.
- */
-function formatNodeModuleNotFound(err: ModuleLoadError): string {
-  const stack = err.requireStack ?? [];
-  const inspected = stack.length === 0 ? '[]' : `[ ${stack.map((p) => `'${p}'`).join(', ')} ]`;
-  return `Error: ${err.message}\n{\n  code: '${err.code}',\n  requireStack: ${inspected}\n}`;
-}
-
-/**
- * Surface an uncaught `MODULE_NOT_FOUND` as Node's CJS-loader Error. The kernel
- * worker-entry writes `err.stack` to the child stderr, so set it to the printed
- * form above (plain `Error` name, no rifty `ModuleLoadError` name / frames).
- * `code`/`requireStack` ride along for error-matching tooling.
+ * Surface an uncaught `MODULE_NOT_FOUND` as Node's CJS-loader Error: plain
+ * `Error` name, `code` and `requireStack`, the loader error's frames (the fatal
+ * report keeps the user's `require` call site and drops rifty's own).
  *
  * Gated on `requireStack` being present: the resolver sets it ONLY on the
  * CJS-loader-shaped misses (a missing entry — incl. `.mjs`, which Node runs
- * through the CJS loader — and a nested `require()`), where this CJS printed
- * form is faithful. A nested ESM `import()` miss (Node's `ERR_MODULE_NOT_FOUND`,
- * a shape rifty does not emit yet) carries NO `requireStack`, so it is left as
- * the honest rifty `ModuleLoadError` rather than masquerade as the CJS form.
- * Every other error propagates unchanged (the generic-throw path stays
- * `err.stack`). TODO(backlog: runtime-js/esm-import-miss-err-module-not-found)
+ * through the CJS loader — and a nested `require()`). A nested ESM `import()`
+ * miss (Node's `ERR_MODULE_NOT_FOUND`, a shape rifty does not emit yet)
+ * carries NO `requireStack`, so it is left as the honest rifty
+ * `ModuleLoadError`. TODO(backlog: runtime-js/esm-import-miss-err-module-not-found)
  */
 function asNodePrintedError(err: unknown): unknown {
   if (
@@ -154,7 +136,10 @@ function asNodePrintedError(err: unknown): unknown {
       code?: string;
       requireStack?: readonly string[];
     };
-    out.stack = formatNodeModuleNotFound(err);
+    const stack = err.stack ?? '';
+    out.stack = stack.startsWith(`${err.name}: `)
+      ? `Error: ${stack.slice(err.name.length + 2)}`
+      : `Error: ${err.message}`;
     out.code = err.code;
     out.requireStack = err.requireStack;
     return out;
@@ -214,11 +199,13 @@ export async function runNodeEntry(opts: RunNodeEntryOptions): Promise<void> {
   // A reused in-process process (no-COI) starts without a previous run's main.
   const process = (globalThis as { process?: object }).process;
   if (process !== undefined) reflectDeletePropertyPrimordial(process, 'mainModule');
+  setFatalEvalSource(null);
   if (opts.kind === 'eval') {
     // Capture the installed process capabilities before guest code can replace
     // `process`, its streams, or their methods. Late eval terminals are runtime
     // work and must not trust guest-mutated globals.
     const terminalProcess = captureNodeEvalTerminalProcess();
+    setFatalEvalSource(opts.source);
     const preparation = prepareNodeEvalCompiler(opts.source);
     const compiler = preparation === undefined ? undefined : await preparation;
     let completion: unknown;
@@ -230,7 +217,8 @@ export async function runNodeEntry(opts: RunNodeEntryOptions): Promise<void> {
         explicitCommonJs: opts.explicitCommonJs,
         compiler,
       }).run(opts.source);
-    } catch (error) {
+    } catch (thrown) {
+      const error = asNodePrintedError(thrown);
       // ADR-0445: a listener-handled eval throw continues with no `-p` result.
       const outcome = dispatchUncaughtException(error, 'uncaughtException');
       if (outcome.kind === 'exited') throw outcome.signal;
@@ -244,19 +232,25 @@ export async function runNodeEntry(opts: RunNodeEntryOptions): Promise<void> {
         const output = await formatNodeEvalPrintValue(completion);
         terminalProcess.writeStdout(`${output}\n`);
       },
-      projectUnhandled: (reason, origin) =>
-        projectNodeEvalError(
+      projectUnhandled: (reason, origin) => {
+        setFatalOrigin(
+          reason,
+          origin === 'uncaught-error' ? 'uncaughtException' : 'unhandledRejection',
+        );
+        return projectNodeEvalError(
           reason,
           opts.source,
           origin === 'uncaught-error' ? 'uncaught' : 'unhandled',
           compiler,
-        ),
-      terminateUnhandled: (reason) => {
-        const message =
-          reason instanceof Error
-            ? (reason.stack ?? `${reason.name}: ${reason.message}`)
-            : String(reason);
-        terminalProcess.writeStderr(`${message}\n`);
+        );
+      },
+      terminateUnhandled: (reason, origin) => {
+        terminalProcess.writeStderr(
+          fatalReportText(
+            reason,
+            origin === 'rejection' ? 'unhandledRejection' : 'uncaughtException',
+          ),
+        );
         try {
           const returned = terminalProcess.exit(1);
           throw new Error(`node eval process.exit(1) returned ${String(returned)}`);

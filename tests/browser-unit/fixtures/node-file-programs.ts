@@ -343,6 +343,18 @@ export function nodeFileExpected(
   return nodeFileNormalized({ ...oracle, stderr }, oracle.root);
 }
 
+/**
+ * A rifty project root under `parent` as long as the oracle's temp dir, so
+ * util.inspect's 80-column line breaking over printed paths decides alike on
+ * both sides of the one `<root>` rewrite.
+ */
+export function nodeFileRoot(parent: string, name: string, oracleRoot: string): string {
+  const width = oracleRoot.length - parent.length;
+  if (width < name.length)
+    throw new Error(`oracle root ${oracleRoot} is shorter than ${parent}${name}`);
+  return `${parent}${name.padEnd(width, '_')}`;
+}
+
 export function nodeFileNormalized(outcome: NodeFileOutcome, root: string): NodeFileOutcome {
   const paths = (text: string) => text.split(root).join('<root>');
   return {
@@ -359,7 +371,25 @@ export type NodeFileHost = 'no-COI' | 'COI';
  * must still differ (a fix that lands makes it fail until removed here); every
  * other row must equal Node. Shrinks to empty as the goal's map lands.
  */
-const LANDED = new Set(['entry-main-guard', 'entry-cjs-extension', 'entry-directory']);
+const LANDED = new Set([
+  'entry-main-guard',
+  'entry-directory',
+  'entry-cjs-extension',
+  'throw-top-level',
+  'throw-nested-function',
+  'type-error-runtime',
+  'reference-error',
+  'throw-in-dependency',
+  'throw-from-async-function',
+  'unhandled-rejection-error',
+  'unhandled-rejection-non-error',
+  'error-with-cause',
+  'throw-in-callback',
+  'syntax-error-entry',
+  'module-not-found-entry',
+  'module-not-found-dependency',
+  'module-not-found-package',
+]);
 const OPEN = [...entryPrograms, ...fatalPrograms]
   .map((program) => program.name)
   .filter((name) => !LANDED.has(name));

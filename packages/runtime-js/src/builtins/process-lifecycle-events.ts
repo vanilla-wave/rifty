@@ -9,6 +9,7 @@
  * another bundle than the process: they reach its state through the
  * `Symbol.for` slot, never a module-local import.
  */
+import { type FatalOrigin, formatFatalReport } from './fatal-report.ts';
 import { readActiveNodeProcessBootstrap } from './process-bootstrap-identity.ts';
 
 const NODE_PROCESS_LIFECYCLE = Symbol.for('rifty.runtime-js.process-lifecycle.v1');
@@ -83,6 +84,8 @@ export class NodeProcessExit {
   #terminal: RiftyProcessExitSignal | null = null;
   /** `exitCode` as the fatal `'exit'` listeners left it; null before `beginFatal`. */
   #fatalExitCode: { readonly value: number | undefined } | null = null;
+  /** The dispatched origin: a rejection's report header is its error's top frame. */
+  #fatalOrigin: FatalOrigin = 'uncaughtException';
 
   constructor(host: NodeProcessExitHost) {
     this.#host = host;
@@ -109,8 +112,9 @@ export class NodeProcessExit {
   }
 
   /** No listener: Node sets `exitCode = 1` and emits `'exit'` 1 behind `_exiting`. */
-  beginFatal(): void {
+  beginFatal(origin: FatalOrigin = 'uncaughtException'): void {
     if (this.#exiting) return;
+    this.#fatalOrigin = origin;
     this.#exiting = true;
     try {
       this.#host.writeExitCode(1);
@@ -131,13 +135,13 @@ export class NodeProcessExit {
   fatal(error: unknown): never {
     if (this.#terminal !== null) throw this.#terminal;
     if (this.#fatalExitCode !== null) this.#host.writeExitCode(this.#fatalExitCode.value);
-    this.#host.writeStderr(`${formatThrown(error)}\n`);
+    this.#host.writeStderr(fatalReportText(error, this.#fatalOrigin));
     return this.#terminate(toUint8ExitCode(this.#host.readExitCode() ?? 1), { cause: error });
   }
 
   /** A throwing `uncaughtException` listener: stderr, status 7, no `'exit'`. */
   listenerThrew(error: unknown): never {
-    this.#host.writeStderr(`${formatThrown(error)}\n`);
+    this.#host.writeStderr(fatalReportText(error));
     this.#exiting = true;
     return this.#terminate(7, { cause: error });
   }
@@ -148,6 +152,7 @@ export class NodeProcessExit {
     this.#exiting = false;
     this.#terminal = null;
     this.#fatalExitCode = null;
+    this.#fatalOrigin = 'uncaughtException';
   }
 
   /**
@@ -241,7 +246,7 @@ export function dispatchUncaughtException(
       throw signal;
     }
   }
-  active.exit.beginFatal();
+  active.exit.beginFatal(origin);
   return { kind: 'unhandled', error };
 }
 
@@ -420,8 +425,24 @@ function noSideEffectsToString(value: unknown): string {
   return `[object ${typeof tag === 'string' ? tag : builtinTag(value)}]`;
 }
 
-/** The fatal report's text for a thrown value (also the isolate host's, ADR-0557 §6). */
-export function formatThrown(error: unknown): string {
+/** The value's plain fatal text (V8 `NoSideEffectsToString` for a non-Error). */
+function formatThrown(error: unknown): string {
   if (error instanceof Error) return error.stack ?? `${error.name}: ${error.message}`;
   return noSideEffectsToString(error);
+}
+
+/**
+ * Node's fatal report; where guest-replaced intrinsics break it (an open class,
+ * compat isolate-host.md), the plain text — a failure is never silent.
+ */
+export function fatalReportText(error: unknown, origin?: FatalOrigin): string {
+  try {
+    return formatFatalReport(error, origin);
+  } catch {
+    try {
+      return `${formatThrown(error)}\n`;
+    } catch {
+      return 'Uncaught exception\n';
+    }
+  }
 }

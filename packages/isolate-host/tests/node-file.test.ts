@@ -28,8 +28,20 @@ const programs = fatalPrograms.filter(
     !program.argv[0]?.endsWith('.mjs') && program.files[program.argv[0] ?? ''] !== undefined,
 );
 
-/** Rows not yet at parity in the isolate guest. */
-const OPEN = new Set(programs.map((program) => program.name));
+/** Rows at parity in the isolate guest; the others still differ (`it.fails`). */
+const LANDED = new Set([
+  'throw-top-level',
+  'throw-nested-function',
+  'type-error-runtime',
+  'reference-error',
+  'throw-in-dependency',
+  'throw-from-async-function',
+  'unhandled-rejection-error',
+  'unhandled-rejection-non-error',
+  'error-with-cause',
+  'syntax-error-entry',
+]);
+const OPEN = new Set(programs.map((program) => program.name).filter((name) => !LANDED.has(name)));
 
 function codeFor(files: Readonly<Record<string, string>>, main: string): string {
   return `const fs = require('fs'); for (const [p, c] of Object.entries(${JSON.stringify(files)})) { fs.mkdirSync(require('path').dirname(p), { recursive: true }); fs.writeFileSync(p, c); } require('./${main}');`;

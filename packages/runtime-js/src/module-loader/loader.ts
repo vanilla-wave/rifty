@@ -1,6 +1,7 @@
 import { NotImplementedError } from '@riftydev/io';
 import { type FsSync, joinPath } from '@riftydev/vfs';
 import { type Node as AcornNode, parse as acornParse } from 'acorn';
+import { firstGuestFrame, hasFatalHeader, markFatalDecorated } from '../builtins/fatal-report.ts';
 import { loadBuiltin } from '../builtins/index.ts';
 import { __setCreateRequireImpl } from '../builtins/module.ts';
 import { setSameRealmWorkerModuleImporter } from '../builtins/worker_threads.ts';
@@ -357,26 +358,32 @@ export function projectNodeEvalError(
   origin: 'sync' | 'unhandled' | 'uncaught' = 'sync',
   compiler?: NodeEvalCompiler,
 ): unknown {
-  if (!(error instanceof Error)) return error;
+  // A compile error of a required file already carries Node's header.
+  if (!(error instanceof Error) || hasFatalHeader(error)) return error;
   const firstLine =
     (error.stack ?? `${error.name}: ${error.message}`).split('\n')[0] ?? error.message;
   if (error instanceof SyntaxError) {
     const prelude = nodeEvalSyntaxPrelude(source, error, compiler);
     if (prelude !== null) {
       error.stack = `${prelude}${firstLine}`;
+      markFatalDecorated(error);
       return error;
     }
   }
   const stack = error.stack ?? firstLine;
+  // A file's frame leads (a required module threw): the fatal report heads it.
+  if (!(firstGuestFrame(stack)?.includes('[eval]') ?? true)) return error;
   const frame = /(?:eval \()?\[eval\]:(\d+):(\d+)\)?/u.exec(stack);
   if (frame === null) return error;
   const frameLine = Number(frame[1]);
   const frameColumn = Number(frame[2]);
   const thrown = nodeEvalThrowLocation(source, frameLine, Math.max(0, frameColumn - 1));
   if (origin === 'sync' && thrown === null) {
+    // No `throw` statement: V8 threw at the frame; the fatal report heads it.
     error.stack = nodeEvalStackThroughUserFrame(stack) ?? stack;
     return error;
   }
+  markFatalDecorated(error);
   const useThrowLocation =
     thrown !== null &&
     (origin === 'sync' || (origin === 'uncaught' && nodeEvalHasTimerWrapperFrame(stack)));

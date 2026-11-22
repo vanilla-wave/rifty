@@ -357,14 +357,15 @@ describe('post-guest paths: what the host owes whatever the guest replaced', () 
     }, 10_000);
   }
 
-  it("a non-Error throw prints the runtime's fatal text, never a line of the host's", async () => {
-    // rifty's `formatThrown`, as its fatal exit prints it; Node's `[eval]`
-    // header and inspect form are a declared gap
+  it("a non-Error throw prints the runtime's fatal report, never a line of the host's", async () => {
+    // Node's report without its `[eval]` header (no stack locates a non-Error
+    // throw) and with rifty's inspect form: declared gaps
     // (`backlog/runtime-js/node-eval-non-error-throw-rendering`).
+    const hint = '(Use `node --trace-uncaught ...` to show where the exception was thrown)\n';
     for (const [code, stderr] of [
-      ["throw 'oops'", 'oops\n'],
-      ['throw 5', '5\n'],
-      ['throw Object.create(null)', '[object Object]\n'],
+      ["throw 'oops'", `oops\n${hint}\nNode.js v24.0.0\n`],
+      ['throw 5', `5\n${hint}\nNode.js v24.0.0\n`],
+      ['throw Object.create(null)', '{  }\n\nNode.js v24.0.0\n'],
     ] as const) {
       const result = await runCode(code);
       expect({ code, stderr: result.stderr, exitCode: result.exitCode }).toEqual({

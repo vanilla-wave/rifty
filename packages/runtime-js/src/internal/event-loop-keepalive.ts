@@ -14,6 +14,7 @@
  */
 
 import { setKernelDrainHook } from '@riftydev/kernel';
+import { setFatalOrigin } from '../builtins/fatal-report.ts';
 import {
   dispatchUncaughtException,
   dispatchUnhandledRejection,
@@ -406,7 +407,8 @@ export function awaitDrain(opts: DrainOptions = {}): Promise<void> {
                 outcome.origin === 'explicit-exit'
                   ? outcome.reason
                   : (lifecycle?.projectUnhandled(outcome.reason, outcome.origin) ?? outcome.reason);
-              reject(projected instanceof Error ? projected : new Error(String(projected)));
+              // A thrown non-Error stays itself: the fatal report prints its value.
+              reject(projected);
             }
           } catch (error) {
             reject(error);
@@ -488,11 +490,15 @@ interface ErrorTarget {
  */
 export function handleRealmUncaughtError(reason: unknown): boolean {
   if (isRiftyProcessExit(reason)) return true;
-  if (!takeUndispatchedRethrow(reason)) {
-    const { kind } = dispatchUncaughtException(reason, 'uncaughtException');
-    if (kind === 'handled' || kind === 'exited') return true;
-  }
-  return beginNodeEvalUnhandled(reason, 'uncaught-error');
+  const outcome = takeUndispatchedRethrow(reason)
+    ? null
+    : dispatchUncaughtException(reason, 'uncaughtException');
+  if (outcome?.kind === 'handled' || outcome?.kind === 'exited') return true;
+  if (beginNodeEvalUnhandled(reason, 'uncaught-error')) return true;
+  // As a rejection: the fatal terminal runs now (Node's report, one exit request).
+  const fatal = outcome?.kind === 'unhandled' ? terminateFatal(outcome.error) : null;
+  if (fatal !== null) recordRejection(fatal);
+  return fatal !== null;
 }
 
 /**
@@ -508,7 +514,11 @@ export function handleRealmUnhandledRejection(reason: unknown, promise: unknown)
   if (isRiftyProcessExit(reason) && readNodeProcessTerminal() !== reason) return true;
   const outcome = isRiftyProcessExit(reason) ? null : dispatchUnhandledRejection(reason, promise);
   if (outcome?.kind === 'handled' || outcome?.kind === 'exited') return true;
-  if (beginNodeEvalUnhandled(reason, 'rejection')) return true;
+  // Node's fatal reason: an `Error` as is, any other value wrapped as
+  // `UnhandledPromiseRejection` by the dispatch; its report heads the error's frame.
+  const fatalReason = outcome?.kind === 'unhandled' ? outcome.error : reason;
+  setFatalOrigin(fatalReason, 'unhandledRejection');
+  if (beginNodeEvalUnhandled(fatalReason, 'rejection')) return true;
   const fatal = outcome?.kind === 'unhandled' ? terminateFatal(outcome.error) : null;
   recordRejection(fatal ?? reason);
   // A current exit signal still settles the drain, but is never a guest error.

@@ -5,6 +5,7 @@ import {
   nodeFileDump,
   nodeFileExpected,
   nodeFileNormalized,
+  nodeFileRoot,
   nodeFileVerdict,
   runNodeFileOracle,
 } from '../browser-unit/fixtures/node-file-programs.ts';
@@ -22,9 +23,12 @@ const programs = [...entryPrograms, ...fatalPrograms];
 test('node <file> matches Node (no-COI SDK)', async ({ page }) => {
   test.setTimeout(900_000);
   const oracles = await Promise.all(programs.map((program) => runNodeFileOracle(program)));
+  const roots = programs.map((program, index) =>
+    nodeFileRoot('/', program.name, oracles[index]?.root ?? ''),
+  );
   await page.goto('/no-coi-harness.html');
   const observed = await page.evaluate(
-    async ({ root, programs }) => {
+    async ({ root, programs, roots }) => {
       const { createSandbox } = await import(`/@fs${root}/packages/rifty/src/index.ts`);
       const sandbox = await createSandbox({
         requireCrossOriginIsolation: false,
@@ -36,8 +40,8 @@ test('node <file> matches Node (no-COI SDK)', async ({ page }) => {
       try {
         const results: { root: string; outcome: NodeFileOutcome }[] = [];
         let version = '';
-        for (const program of programs) {
-          const projectRoot = `/nf/${program.name}`;
+        for (const [index, program] of programs.entries()) {
+          const projectRoot = roots[index] as string;
           await sandbox.fs.writeFile(`${projectRoot}/.keep`, '');
           for (const [path, content] of Object.entries(program.files)) {
             await sandbox.fs.writeFile(`${projectRoot}/${path}`, content);
@@ -57,7 +61,7 @@ test('node <file> matches Node (no-COI SDK)', async ({ page }) => {
         sandbox.dispose();
       }
     },
-    { root, programs },
+    { root, programs, roots },
   );
   const rows = programs.map((program, index) => {
     const oracle = oracles[index];
