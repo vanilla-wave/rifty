@@ -2,8 +2,8 @@
   "overall_verdict": "concern",
   "merge_call": "Mergeable once PR CI is green at 78613de7e. The blocker is fixed: the compat claim is trimmed to the single-hop form that holds, and later hops, status writes, nextTick and the fatal-listener microtask are declared with ceiling rows that fail for their stated reasons in every lane. Remaining: the time-cost NOTE and one ceiling-label nit.",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "78613de7e0c12b23394a6b7d2db0c53ff7ba0703",
-  "unit_goal_source": "PR #416 (observed-defect fix, no contract doc), verify pass at 78613de7e (this round: 52157a679..78613de7e; earlier rounds 0d36886af..52157a679 with external-review findings S1/S2 routed into the unit). Baseline: the deleted finding record distribution/isolate-host-queuemicrotask-throw-times-out as of 50c9d8bf1 (git show 50c9d8bf1:<that record>), plus the removed/changed rows of docs/public/compat/isolate-host.md at 50c9d8bf1. BASE 50c9d8bf1. Oracle: node -e v24.16.0.",
+  "reviewed_sha": "6b39c772178826412aae3871cb4f4b360d3f60eb",
+  "unit_goal_source": "PR #416 (observed-defect fix, no contract doc), verify pass at 78613de7e (this round: 52157a679..78613de7e; earlier rounds 0d36886af..52157a679 with external-review findings S1/S2 routed into the unit). Baseline: the deleted finding record distribution/isolate-host-queuemicrotask-throw-times-out as of 50c9d8bf1 (git show 50c9d8bf1:<that record>), plus the removed/changed rows of docs/public/compat/isolate-host.md at 50c9d8bf1. BASE 50c9d8bf1. Oracle: node -e v24.16.0. Re-bound by the driver to 6b39c7721 (manager-authorized after external round 2 @ 3a1c1e5fd): texts, finding records and corpus ceiling labels only, no product or assertion change.",
   "unit_residuals": [],
   "goal_residuals": [],
   "goal_complete": false,
@@ -13,7 +13,7 @@
       "source": "acceptance",
       "trace": "baseline isolate-host-queuemicrotask-throw-times-out@50c9d8bf1+ADR-0557",
       "status": "pass",
-      "citation": "packages/isolate-host/tests/corpus.ts:205",
+      "citation": "packages/isolate-host/tests/corpus.ts:210",
       "note": ""
     },
     {
@@ -21,7 +21,7 @@
       "source": "acceptance",
       "trace": "baseline isolate-host-queuemicrotask-throw-times-out@50c9d8bf1+ADR-0557",
       "status": "pass",
-      "citation": "packages/isolate-host/tests/corpus.ts:229",
+      "citation": "packages/isolate-host/tests/corpus.ts:210",
       "note": ""
     },
     {
@@ -29,7 +29,7 @@
       "source": "acceptance",
       "trace": "baseline isolate-host-queuemicrotask-throw-times-out@50c9d8bf1+ADR-0557",
       "status": "pass",
-      "citation": "packages/isolate-host/tests/corpus.ts:248",
+      "citation": "packages/isolate-host/tests/corpus.ts:303",
       "note": ""
     },
     {
@@ -37,15 +37,15 @@
       "source": "acceptance",
       "trace": "ADR-0557",
       "status": "pass",
-      "citation": "packages/isolate-host/tests/corpus.ts:241",
+      "citation": "packages/isolate-host/tests/corpus.ts:230",
       "note": ""
     },
     {
-      "row": "At a natural exit, the first microtask hop an 'exit' listener queues prints as in Node; later hops, status writes and a queued nextTick are declared ceilings (ADR-0557 2026-11-22 line, compat isolate-host.md:29-30)",
+      "row": "At a natural exit, the output of the first microtask hop an 'exit' listener queues is kept as in Node; a status change there, later hops and a queued nextTick are declared ceilings (ADR-0557 2026-11-22 line, compat isolate-host.md:29-30)",
       "source": "acceptance",
       "trace": "ADR-0557",
       "status": "pass",
-      "citation": "packages/isolate-host/tests/corpus.ts:249",
+      "citation": "packages/isolate-host/tests/corpus.ts:255",
       "note": ""
     },
     {
@@ -53,7 +53,7 @@
       "source": "acceptance",
       "trace": "ADR-0342+ADR-0445",
       "status": "pass",
-      "citation": "tests/no-coi/no-coi-process-exit-status.spec.ts:256",
+      "citation": "tests/no-coi/no-coi-process-exit-status.spec.ts:98",
       "note": ""
     },
     {
