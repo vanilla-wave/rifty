@@ -277,7 +277,7 @@ describe('long names (ADR-0567 §5, I3)', () => {
 
 describe('the writer never emits what the reader refuses (ADR-0567 §5, I3)', () => {
   // States rifty's FS holds that the format cannot carry (Node never produces them:
-  // backlog runtime-js/utimes-time-values-differ-from-node; NUL: fixed in runtime-js fs-path by the sandbox goal).
+  // NaN/huge times and NUL: aligned with Node by the sandbox goal, PR #419).
   const odd: readonly [string, (fs: ReturnType<typeof createMemoryFs>['fsSync']) => void][] = [
     ['NaN time', (fs) => fs.utimes('/a', Number.NaN, 1)],
     ['infinite time', (fs) => fs.utimes('/a', 1, Number.POSITIVE_INFINITY)],
