@@ -2,21 +2,10 @@
 
 ## Items
 
-1. `distribution/isolate-host-sandbox-acceptance` — **acceptance carrier** —
-   the `## User scenario` as tests vs real `node <path>` sequences;
-   committed RED (`it.fails`).
-2. `distribution/isolate-host-sandbox-core` — **the sandbox** — the wall the
-   carrier hits first; carries the Fault matrix rows below the scenario
-   level — after the codec seam (#418).
-Wall hypotheses the carrier is expected to hit (units only when the run hits
-them): the guest's `node <path>` entry beside `run(code)` (ESM entry as a loud
-gap); the snapshot goal's codec seam — restore before the run, snapshot after
-it, decode in the consumer realm; the wire carrying state bytes both ways
-(consumer → worker today JSON lines); the consumer's `Sandbox` (one operation
-at a time, destroy, host file ops over the decoded state, limits); bytes
-crossing the bridge as their view's range (step 0 S2); the corpus of run
-sequences against `node <path>` (I2); ADR, README, compat, trust-model,
-ROADMAP M14 (I8).
+None left to build: the acceptance carrier and `distribution/isolate-host-sandbox-core` landed
+on the goal branch (Final+GREEN PASS @ 30c8c1ff1). What still gates leaving draft and CLOSE is in
+`## Open questions` (owned outside this branch) — CLOSE runs on the manager's message after the
+external review.
 
 ## Open questions
 
