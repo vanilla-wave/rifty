@@ -10,10 +10,11 @@ import { execFileSync } from 'node:child_process';
 import { cpSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
 import { CHANNEL_END_GRACE_MS } from '../src/pool.ts';
 import { FrameReader, HEADER, KIND, frame } from '../src/protocol.ts';
+import { consumer } from './support.ts';
 
 const PACKAGE_DIR = fileURLToPath(new URL('..', import.meta.url));
 const work = mkdtempSync(join(tmpdir(), 'isolate-host-hostile-'));
@@ -266,7 +267,11 @@ describe('consumer treats the child channel as hostile', () => {
          until(() => kids(true).includes(warm), 'exit');
          const step = () => {
            const solo = kids(false).find((p) => p !== warm);
-           if (solo === undefined) return void setImmediate(step);
+           if (solo === undefined) {
+             // Read late (the deadline won): a readable red, not a spin until the harness kills it.
+             if (Date.now() > end) throw new Error('no solo rerun spawned');
+             return void setImmediate(step);
+           }
            until(() => existsSync(${JSON.stringify(ready)}), 'ready');
            until(() => performance.now() >= due + 5, 'deadline');
            process.kill(solo, 'SIGUSR2');
@@ -280,46 +285,78 @@ describe('consumer treats the child channel as hostile', () => {
     );
   });
 
-  it('a worker whose closed-channel grace ran out takes no new call while its loss is judged', () => {
-    // The consumer reads the grace as due together with a call placed in the same timer
-    // phase (a timer 1 ms after the grace's); the worker has exited, unread. That call
-    // must go to a fresh worker, not spend its one rerun on a known-dead one.
+  // From its channel's end the worker can answer nothing: it takes no call and is never
+  // idle, through the grace and until its loss is decided. Each case acts inside the
+  // consumer's 'end' handler (where the grace is armed), so no timing decides it.
+  const AT_CHANNEL_END = (act: string) => `const arm = globalThis.setTimeout;
+    let acted = false;
+    globalThis.setTimeout = (fn, ms, ...args) => {
+      const timer = arm(fn, ms, ...args);
+      if (ms === ${CHANNEL_END_GRACE_MS} && !acted) { acted = true; ${act} }
+      return timer;
+    };`;
+  const ANSWER = (
+    cases: string,
+  ) => `const id = (c) => [c >>> 24, (c >>> 16) & 255, (c >>> 8) & 255, c & 255];
+    const answer = (r) => { C = id(r.call); ${cases} };
+    const each = (chunk) => { for (const l of String(chunk).trim().split('\\n')) answer(JSON.parse(l)) };
+    each(d);
+    process.stdin.on('data', each)`;
+
+  it('a worker whose result channel ended takes no new call: the call gets a fresh worker, not a spent rerun', async () => {
     const entry = hostilePackage(
-      'placement after a grace',
-      `const answer = (r) => {
-         C = [r.call >>> 24, (r.call >>> 16) & 255, (r.call >>> 8) & 255, r.call & 255];
-         if (r.solo) process.kill(process.pid, 'SIGKILL');
-         else if (r.code === '1') { process.on('SIGUSR2', () => process.exit(7)); closeSync(3); }
-         else f(2, [9]);
-       };
-       answer(JSON.parse(String(d).split('\\n')[0]));
-       process.stdin.on('data', (more) => answer(JSON.parse(String(more).split('\\n')[0])))`,
+      'placement after channel end',
+      ANSWER(`if (r.solo) process.kill(process.pid, 'SIGKILL');
+        else if (r.code === 'first') closeSync(3);
+        else f(2, [9]);`),
     );
-    const report = consume(
-      entry,
-      '{ timeoutMs: 5000, maxOutputBytes: 1024 }',
-      [],
-      `const { execFileSync } = await import('node:child_process');
-       const kids = () => execFileSync('ps', ['-A', '-o', 'pid=,ppid=,stat=,command='], { encoding: 'utf8' })
-         .split('\\n').map((l) => /^\\s*(\\d+)\\s+(\\d+)\\s+(\\S+)\\s+(.*)$/.exec(l))
-         .filter((m) => m && Number(m[2]) === process.pid);
-       const arm = globalThis.setTimeout;
-       let cued = false;
-       globalThis.setTimeout = (fn, ms, ...args) => {
-         const timer = arm(fn, ms, ...args);
-         if (ms === ${CHANNEL_END_GRACE_MS} && !cued) {
-           cued = true;
-           const due = performance.now() + ms + 1;
-           arm(() => { globalThis.held = runCode('second', { timeoutMs: 5000 }).then((r) => r, (e) => ({ rejected: e.message })); }, ms + 1);
-           for (const m of kids()) if (m[4].includes('child.js')) process.kill(Number(m[1]), 'SIGUSR2');
-           const end = Date.now() + 10000;
-           while (!kids().some((m) => m[3].startsWith('Z'))) if (Date.now() > end) throw new Error('no exit');
-           while (performance.now() < due + 5);
-         }
-         return timer;
-       };`,
-    ) as { held?: unknown };
-    expect(report.held).toEqual({ stdout: '', stderr: '', exitCode: 9 });
+    const { value } = await consumer(
+      `let second;
+       ${AT_CHANNEL_END("second = settle(runCode('second'));")}
+       const first = await settle(runCode('first'));
+       out({ first, second: await second });`,
+      { entry: pathToFileURL(entry).href },
+    );
+    expect(value).toEqual({
+      first: {
+        rejected: 'isolate-host child exited unexpectedly (code null, signal SIGKILL)',
+        code: 'ERR_ISOLATE_HOST_WORKER_LOST',
+      },
+      second: { stdout: '', stderr: '', exitCode: 9 },
+    });
+  });
+
+  it('a worker whose result channel ended is not idle: a healthy warm worker survives it', async () => {
+    // Worker A holds 4 calls, B 1. A answers its 4 and ends its channel; at that end B
+    // answers. B going idle must not count A as a second idle worker and end itself.
+    const marker = (name: string) => JSON.stringify(join(work, `idle-${name}`));
+    const entry = hostilePackage(
+      'idle after channel end',
+      `const calls = [];
+       process.on('SIGUSR1', () => { for (const c of calls) { C = id(c); f(2, [0]); } closeSync(3); });
+       ${ANSWER(`if (r.code === 'bad') { calls.push(r.call); if (calls.length === 4) writeFileSync(${marker('bad')}, String(process.pid)); }
+         else if (r.code === 'healthy') {
+           process.on('SIGUSR2', () => { C = id(r.call); f(2, [0]); writeFileSync(${marker('sent')}, ''); });
+           writeFileSync(${marker('healthy')}, String(process.pid));
+         } else { writeFileSync(${marker('next')}, String(process.pid)); f(2, [0]); }`)}`,
+    );
+    const { value } = await consumer(
+      `const { existsSync } = await import('node:fs');
+       const pid = (m) => Number(readFileSync(m, 'utf8'));
+       const calls = [...Array.from({ length: 4 }, () => settle(runCode('bad'))), settle(runCode('healthy'))];
+       await waitFor(() => (existsSync(${marker('bad')}) && existsSync(${marker('healthy')}) ? true : undefined), 20000);
+       const healthy = pid(${marker('healthy')});
+       ${AT_CHANNEL_END(`process.kill(healthy, 'SIGUSR2');
+         const end = Date.now() + 10000;
+         while (!existsSync(${marker('sent')})) if (Date.now() > end) throw new Error('no frame');`)}
+       process.kill(pid(${marker('bad')}), 'SIGUSR1');
+       const results = await Promise.all(calls);
+       const next = await settle(runCode('next'));
+       out({ results, next, servedBy: pid(${marker('next')}) === healthy ? 'healthy' : 'another' });`,
+      { entry: pathToFileURL(entry).href },
+    );
+    const ok = { stdout: '', stderr: '', exitCode: 0 };
+    expect(value).toEqual({ results: [ok, ok, ok, ok, ok], next: ok, servedBy: 'healthy' });
   });
 
   it('a starved consumer: a result sent before the deadline but read after it is timeout (declared, compat ⚠️)', () => {

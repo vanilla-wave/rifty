@@ -126,8 +126,8 @@ class Worker {
   retiring = false;
   dead = false;
   exited = false;
-  /** Its closed channel's grace ran out: no new call goes here while its loss is judged. */
-  graceOver = false;
+  /** Its result channel ended: it can answer nothing, so it takes no call and is never idle. */
+  channelEnded = false;
   /**
    * Why the consumer itself ended this worker; unset = an exit nobody asked for.
    * `done`: nothing left on it (idle, retired, solo finished).
@@ -171,8 +171,8 @@ class Worker {
     // unread. (Not the deadline: reading late, it cannot tell a frame sent in time
     // from one sent after — backlog distribution/isolate-host-starved-deadline-outcome.)
     frames?.on('end', () => {
+      this.channelEnded = true;
       setTimeout(() => {
-        this.graceOver = true;
         setImmediate(() => {
           if (!this.dead && this.ended === undefined) {
             this.ended = { lost: 'after closing its result channel without a result' };
@@ -339,7 +339,7 @@ export class Pool {
           !w.solo &&
           !w.retiring &&
           !w.exited &&
-          !w.graceOver &&
+          !w.channelEnded &&
           w.ended === undefined &&
           w.calls.size < SHARD,
       ) ?? this.#spawn(false);
@@ -400,7 +400,8 @@ export class Pool {
     if (worker.calls.size > 0) return;
     // Keep one idle worker warm; a second idle one ends.
     const idle = this.#workers.filter(
-      (w) => !w.solo && !w.retiring && w.ended === undefined && w.calls.size === 0,
+      (w) =>
+        !w.solo && !w.retiring && !w.channelEnded && w.ended === undefined && w.calls.size === 0,
     );
     if (idle.length > 1) worker.end();
   }
