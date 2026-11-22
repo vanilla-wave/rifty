@@ -232,3 +232,23 @@ it('an error a listener received and threw again loses its header proof', () => 
   }
   expect(printed).toMatch(/^Error: a\n {4}at /u);
 });
+
+it('an error that already left a task root is never one again', () => {
+  const vfs = new MemoryFsSync();
+  vfs.loadFixture({ '/p/main.js': "module.exports = () => {\n  throw new Error('a');\n};\n" });
+  setSyncMirror(vfs);
+  const fail = createModuleLoader(vfs, { cwd: '/p' }).require('./main.js', '/p/x.js') as () => void;
+  let error: unknown;
+  try {
+    fail();
+  } catch (caught) {
+    error = caught;
+  }
+  markFatalTaskRoot(error);
+  // A listener kept it; a later timer dispatch rethrows the same object.
+  const proc = new NodeProcess();
+  proc.on('uncaughtException', () => {});
+  dispatchUncaughtException(error, 'uncaughtException', proc);
+  markFatalTaskRoot(error);
+  expect(formatFatalReport(error)).toMatch(/^Error: a\n {4}at /u);
+});

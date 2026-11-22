@@ -39,6 +39,8 @@ const objectKeys = Object.keys;
 
 const headers = new WeakMap<object, string>();
 const roots = new WeakSet<object>();
+/** Errors that already left a task root or reached a listener: never a root again. */
+const settled = new WeakSet<object>();
 
 /**
  * The runtime caught `error` thrown synchronously out of a task root it runs
@@ -46,12 +48,17 @@ const roots = new WeakSet<object>();
  * can its own stack prove V8's throw site.
  */
 export function markFatalTaskRoot(error: unknown): void {
-  if (typeof error === 'object' && error !== null) roots.add(error);
+  // Only its first escape: a later root rethrowing a kept error proves nothing.
+  if (typeof error !== 'object' || error === null || settled.has(error)) return;
+  settled.add(error);
+  roots.add(error);
 }
 
 /** A listener received `error`: its mark proves no later throw of it. */
 export function clearFatalTaskRoot(error: unknown): void {
-  if (typeof error === 'object' && error !== null) roots.delete(error);
+  if (typeof error !== 'object' || error === null) return;
+  roots.delete(error);
+  settled.add(error);
 }
 
 /** The name the timer dispatch frame carries, so a caught error can tell it ran under it. */
