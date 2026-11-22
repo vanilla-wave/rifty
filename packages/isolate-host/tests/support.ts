@@ -93,7 +93,7 @@ export async function consumer(
 ): Promise<{ value: unknown; exitCode: number | null; signal: string | null; ms: number }> {
   const script = `import { execFileSync } from 'node:child_process';
     import { readFileSync } from 'node:fs';
-    const { runCode } = await import(${JSON.stringify(entry)});
+    const { runCode, createSandbox } = await import(${JSON.stringify(entry)});
     const children = () => execFileSync('ps', ['-A', '-o', 'pid=,ppid=,command='], { encoding: 'utf8' })
       .split('\\n').map((l) => /^\\s*(\\d+)\\s+(\\d+)\\s+(.*)$/.exec(l))
       // Workers only: a just-forked \`ps\` still shows its parent's command line until it execs.
