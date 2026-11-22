@@ -260,33 +260,55 @@ describe('long names (ADR-0567 §5, I3)', () => {
     expect(() => snapshotFs(fs, OPTIONS)).toThrow(/^ERR_FS_SNAPSHOT_UNREPRESENTABLE: /);
   });
 
-  carrier('equal-length paths over 16 383 units decode in linear time (no hash flooding)', () => {
-    // V8 hashes strings over 16 383 units by length only: a Map keyed by such
-    // paths is quadratic. A linear reader doubles its time with the entries;
-    // a quadratic one quadruples it (measured: 2000 entries 1.7 s, 4000 5.4 s).
+  carrier('no Map or Set is keyed by a string V8 would hash by length (no hash flooding)', () => {
+    // V8 hashes strings over 16 383 units by length alone: such keys make a Map
+    // quadratic. 200 files under a 16 380-unit directory: every path is longer.
     const deep = `/${'d'.repeat(16_380)}`;
-    const blob = (n: number) =>
-      encode([
-        root,
-        dir(deep),
-        ...Array.from({ length: n }, (_, i) => file(`${deep}/f${String(i).padStart(4, '0')}`)),
-      ]);
-    const options = { template: null, maxBytes: 1 << 30 };
-    const time = (bytes: Uint8Array) => {
-      const started = performance.now();
-      restoreFs(createMemoryFs().fsSync, bytes, options);
-      return performance.now() - started;
+    const bytes = encode([
+      root,
+      dir(deep),
+      ...Array.from({ length: 200 }, (_, i) => file(`${deep}/f${String(i).padStart(4, '0')}`)),
+    ]);
+    let longest = 0;
+    const watch = (key: unknown) => {
+      if (typeof key === 'string') longest = Math.max(longest, key.length);
     };
-    // Interleaved, best of 5 each: load on the machine moves both alike.
-    const small = blob(1000);
-    const large = blob(2000);
-    let one = Number.POSITIVE_INFINITY;
-    let two = Number.POSITIVE_INFINITY;
-    for (let r = 0; r < 5; r++) {
-      one = Math.min(one, time(small));
-      two = Math.min(two, time(large));
+    const setNative = Map.prototype.set;
+    const getNative = Map.prototype.get;
+    const hasNative = Map.prototype.has;
+    const addNative = Set.prototype.add;
+    const setHasNative = Set.prototype.has;
+    Map.prototype.set = function (key, value) {
+      watch(key);
+      return setNative.call(this, key, value);
+    };
+    Map.prototype.get = function (key) {
+      watch(key);
+      return getNative.call(this, key);
+    };
+    Map.prototype.has = function (key) {
+      watch(key);
+      return hasNative.call(this, key);
+    };
+    Set.prototype.add = function (key) {
+      watch(key);
+      return addNative.call(this, key);
+    };
+    Set.prototype.has = function (key) {
+      watch(key);
+      return setHasNative.call(this, key);
+    };
+    try {
+      restoreFs(createMemoryFs().fsSync, bytes, { template: null, maxBytes: 1 << 30 });
+    } finally {
+      Map.prototype.set = setNative;
+      Map.prototype.get = getNative;
+      Map.prototype.has = hasNative;
+      Set.prototype.add = addNative;
+      Set.prototype.has = setHasNative;
     }
-    expect(two / one).toBeLessThan(3);
+    expect(longest).toBeGreaterThan(0);
+    expect(longest).toBeLessThanOrEqual(16_383);
   });
 });
 
@@ -485,16 +507,12 @@ describe('a record the budget refuses allocates nothing (ADR-0567 §5, §7)', ()
 });
 
 describe('the budget bounds time as well as memory (ADR-0567 §7, I3)', () => {
-  const budget = 4 * MiB;
+  const budget = 16 * MiB;
   const options = { template: null, maxBytes: budget };
   const best = (blob: Uint8Array) => {
-    let ms = Number.POSITIVE_INFINITY;
-    for (let r = 0; r < 3; r++) {
-      const started = performance.now();
-      restoreFs(createMemoryFs().fsSync, blob, options);
-      ms = Math.min(ms, performance.now() - started);
-    }
-    return ms;
+    const started = performance.now();
+    restoreFs(createMemoryFs().fsSync, blob, options);
+    return performance.now() - started;
   };
   /** The largest tree `grow(k)` builds that snapshots within the budget (k found by bisection). */
   const largest = (
@@ -550,11 +568,21 @@ describe('the budget bounds time as well as memory (ADR-0567 §7, I3)', () => {
   carrier(
     'a deep chain, leaves at depth and long names cost the same order of time as flat entries',
     () => {
-      // Relative to the flat densest blob of the same budget: machine load moves both.
-      const flatMs = best(largest(flat, 50_000));
-      const chainMs = best(largest(chain, 3_000));
-      const leavesMs = best(largest((k) => chain(100, k), 50_000));
-      const longMs = best(largest(longNames, 300));
+      // Relative to the flat densest blob of the same budget, interleaved rounds,
+      // best of 5 per shape: load or a GC pause hits a sample, not the minimum.
+      // Typical ratios 0.6–1.3 (M3 Pro); the uncharged reader gave 14.5 for the chain.
+      const blobs = [
+        largest(flat, 200_000),
+        largest(chain, 3_000),
+        largest((k) => chain(100, k), 200_000),
+        largest(longNames, 300),
+      ];
+      const best5 = blobs.map(() => Number.POSITIVE_INFINITY);
+      for (let r = 0; r < 5; r++)
+        blobs.forEach((blob, k) => {
+          best5[k] = Math.min(best5[k] as number, best(blob));
+        });
+      const [flatMs, chainMs, leavesMs, longMs] = best5 as [number, number, number, number];
       expect(chainMs / flatMs).toBeLessThan(4);
       expect(leavesMs / flatMs).toBeLessThan(4);
       expect(longMs / flatMs).toBeLessThan(4);
