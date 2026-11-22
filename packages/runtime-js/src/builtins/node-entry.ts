@@ -26,10 +26,10 @@ import {
   type ModuleLoader,
   createModuleLoader,
   createNodeEvalScriptRunner,
-  importNodeMain,
   prepareNodeEvalCompiler,
   projectNodeEvalError,
 } from '../module-loader/loader.ts';
+import { importNodeMain } from '../module-loader/node-main.ts';
 import { formatNodeEvalPrintValue } from '../repl/inspect.ts';
 import { setFatalEvalSource, setFatalOrigin } from './fatal-report.ts';
 import { refreshRuntimeJsProcessBuiltin } from './index.ts';

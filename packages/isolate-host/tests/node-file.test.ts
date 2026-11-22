@@ -40,6 +40,8 @@ const LANDED = new Set([
   'unhandled-rejection-non-error',
   'error-with-cause',
   'syntax-error-entry',
+  'throw-from-timer',
+  'error-with-props',
 ]);
 const OPEN = new Set(programs.map((program) => program.name).filter((name) => !LANDED.has(name)));
 

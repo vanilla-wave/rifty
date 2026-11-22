@@ -372,6 +372,14 @@ export type NodeFileHost = 'no-COI' | 'COI';
  * other row must equal Node. Shrinks to empty as the goal's map lands.
  */
 const LANDED = new Set([
+  'throw-from-timer',
+  'error-with-props',
+  'rethrow-in-catch',
+  'entry-facts',
+  'entry-facts-extensionless',
+  'entry-esm-syntax-detection',
+  'require-cache-reload',
+  'esm-entry-facts',
   'entry-main-guard',
   'entry-directory',
   'entry-cjs-extension',

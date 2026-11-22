@@ -12,9 +12,17 @@
  * (`throwSiteHeader`), else omitted (compat process.md "Fatal error stderr bytes").
  */
 import { syncMirror } from '@riftydev/vfs';
-import { type Node as AcornNode, parse as acornParse } from 'acorn';
+import type { Node as AcornNode } from 'acorn';
 import { cjsLineOnePrefix } from '../module-loader/cjs-factory.ts';
 import { inspect } from '../repl/inspect.ts';
+import {
+  bindingThrowSite,
+  catchingTries,
+  enclosing,
+  offsetOf,
+  parseProgram,
+  rethrowSite,
+} from './fatal-throw-site.ts';
 import { NODE_PROCESS_IDENTITY } from './process-identity.ts';
 
 export type FatalOrigin = 'uncaughtException' | 'unhandledRejection';
@@ -205,72 +213,6 @@ export function firstGuestFrame(stack: string): string | null {
   return guestStack(stack).frames.find((frame) => frameKind(frame) === 'user') ?? null;
 }
 
-function parseProgram(source: string, file: string): AcornNode | null {
-  const options = {
-    ecmaVersion: 'latest',
-    allowHashBang: true,
-    allowReturnOutsideFunction: true,
-    allowAwaitOutsideFunction: true,
-    locations: true,
-  } as const;
-  const esm = file.startsWith('file://') || file.endsWith('.mjs');
-  try {
-    return acornParse(source, { ...options, sourceType: esm ? 'module' : 'script' });
-  } catch {
-    return null;
-  }
-}
-
-function offsetOf(source: string, line: number, column: number): number | null {
-  let offset = 0;
-  for (let current = 1; current < line; current += 1) {
-    const newline = source.indexOf('\n', offset);
-    if (newline === -1) return null;
-    offset = newline + 1;
-  }
-  return offset + column;
-}
-
-function children(node: AcornNode): AcornNode[] {
-  const out: AcornNode[] = [];
-  const values = Object.values(node as unknown as Record<string, unknown>);
-  for (let v = 0; v < values.length; v += 1) {
-    const value = values[v];
-    const list: unknown[] = Array.isArray(value) ? value : [value];
-    for (let c = 0; c < list.length; c += 1) {
-      const child = list[c];
-      if (
-        child !== null &&
-        typeof child === 'object' &&
-        typeof (child as AcornNode).type === 'string'
-      )
-        out.push(child as AcornNode);
-    }
-  }
-  return out;
-}
-
-/** Nodes enclosing `offset`, outermost first. */
-function enclosing(root: AcornNode, offset: number): AcornNode[] {
-  const chain: AcornNode[] = [];
-  let node: AcornNode | undefined = root;
-  while (node !== undefined) {
-    chain.push(node);
-    node = children(node).find((child) => child.start <= offset && offset < child.end);
-  }
-  return chain;
-}
-
-/** Inside a `try` block with a `catch`: the error may be caught and thrown again elsewhere. */
-function insideCatchingTry(chain: readonly AcornNode[]): boolean {
-  return chain.some(
-    (node, index) =>
-      node.type === 'TryStatement' &&
-      (node as unknown as { handler: unknown }).handler !== null &&
-      chain[index + 1] === (node as unknown as { block: AcornNode }).block,
-  );
-}
-
 interface HeaderSite {
   readonly file: string;
   readonly source: string;
@@ -305,14 +247,25 @@ function headerSite(frames: readonly string[], origin: FatalOrigin): HeaderSite 
     }
     return programs.get(file) ?? null;
   };
-  for (let f = 0; f < user.length; f += 1) {
-    const frame = user[f] as string;
-    const location = frameLocation(frame);
+  // The last catch the error passed: the outermost catching `try` of the
+  // outermost frame inside one. It must provably rethrow, else no header.
+  let lastCatch: { readonly file: string; readonly node: AcornNode } | null = null;
+  for (let f = user.length - 1; f >= 0 && lastCatch === null; f -= 1) {
+    const location = frameLocation(user[f] as string);
     const parsed = location === null ? null : program(location.file);
     if (location === null || parsed === null) return null;
     const at = offsetOf(parsed.source, location.line, location.column - 1);
-    if (at === null || insideCatchingTry(enclosing(parsed.root, at))) return null;
+    if (at === null) return null;
+    const tries = catchingTries(enclosing(parsed.root, at));
+    if (tries[0] !== undefined) lastCatch = { file: location.file, node: tries[0] };
   }
+  const site = (file: string, node: AcornNode | null | undefined): HeaderSite | null => {
+    const text = program(file)?.source;
+    return node?.loc == null || text === undefined
+      ? null
+      : { file, source: text, line: node.loc.start.line, column: node.loc.start.column };
+  };
+  if (lastCatch !== null) return site(lastCatch.file, rethrowSite(lastCatch.node as never));
   const root = program(top.file)?.root;
   if (root === undefined) return null;
   const offset = offsetOf(source, top.line, top.column - 1);
@@ -322,12 +275,12 @@ function headerSite(frames: readonly string[], origin: FatalOrigin): HeaderSite 
   for (let n = 0; n < chain.length; n += 1) {
     if (chain[n]?.type === 'ThrowStatement') thrown = chain[n];
   }
-  if (thrown?.loc != null) {
-    return { file: top.file, source, line: thrown.loc.start.line, column: thrown.loc.start.column };
-  }
+  if (thrown !== undefined) return site(top.file, thrown);
   const at = chain.at(-1);
   if (at === undefined || at.start !== offset) return null;
-  if (chain.some((node) => node.start === offset && node.type === 'NewExpression')) return null;
+  // An error built here and thrown later: only its binding's sole `throw` proves where.
+  if (chain.some((node) => node.start === offset && node.type === 'NewExpression'))
+    return site(top.file, bindingThrowSite(chain, offset));
   return { file: top.file, source, line: top.line, column: top.column - 1 };
 }
 

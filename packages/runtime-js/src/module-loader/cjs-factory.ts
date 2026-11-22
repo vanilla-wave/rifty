@@ -13,23 +13,40 @@ export function cjsLineOnePrefix(filename: string): number | undefined {
   return lineOnePrefix.get(filename);
 }
 
+/** Node's CommonJS wrapper parameters, in its order. */
+const NODE_WRAPPER = 'exports,require,module,__filename,__dirname';
+
 /**
  * Node's `compileFunction` wrapper keeps every source line where it is. The
  * anonymous indirect-eval prefix shares the source's first line, so every
  * line keeps its native number; only line 1 columns move by the prefix
- * (compat modules.md "CJS stack positions"). Named as V8 renders Node's
- * nameless wrapper called on `module.exports`: `Object.<anonymous>`.
+ * (compat modules.md "CJS stack positions"). The factory takes Node's five
+ * wrapper arguments (its `arguments`); rifty's loader helpers are closed over
+ * from `helpers`. Named as V8 renders Node's nameless wrapper called on
+ * `module.exports`: `Object.<anonymous>`.
  */
-export function compileCjsFactory(parameters: string[], source: string, filename: string): Factory {
+export function compileCjsFactory(
+  helpers: readonly string[],
+  source: string,
+  filename: string,
+): (...helperValues: unknown[]) => Factory {
   const sourceURL = `\n//# sourceURL=${filename}`;
   // Validate the body before eval: otherwise a closing brace could escape the
   // expression and execute code during compilation. Also the general fallback.
-  const factory = new Function(...parameters, source + sourceURL) as Factory;
-  if (/[\r\n\u2028\u2029]/.test(filename)) return factory;
+  const validated = new Function(
+    ...helpers,
+    `return function(${NODE_WRAPPER}){${source}\n}${sourceURL}`,
+  ) as (...helperValues: unknown[]) => Factory;
+  if (/[\r\n\u2028\u2029]/.test(filename)) return validated;
   // Anonymous + strict keeps function-name bindings and callee reflection out.
-  const prefix = `(function(${parameters.join(',')}){`;
-  const shared = indirectEval(`${prefix}${source}\n})${sourceURL}`) as Factory;
+  const prefix = `(function(${helpers.join(',')}){return function(${NODE_WRAPPER}){`;
+  const outer = indirectEval(`${prefix}${source}\n}})${sourceURL}`) as (
+    ...helperValues: unknown[]
+  ) => Factory;
   lineOnePrefix.set(filename, prefix.length);
-  objectDefineProperty(shared, 'name', { value: 'Object.<anonymous>' });
-  return shared;
+  return (...helperValues) => {
+    const factory = outer(...helperValues);
+    objectDefineProperty(factory, 'name', { value: 'Object.<anonymous>' });
+    return factory;
+  };
 }

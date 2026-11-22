@@ -14,9 +14,7 @@ return { ownThis: this === exports, arguments: arguments.length,
   const exports = {};
   const args = [exports, () => undefined, { exports }, '/app/main.cjs', '/app'];
   const native = compileFunction(source, parameters).apply(exports, args);
-  expect(compileCjsFactory(parameters, source, '/app/main.cjs').apply(exports, args)).toEqual(
-    native,
-  );
+  expect(compileCjsFactory([], source, '/app/main.cjs')().apply(exports, args)).toEqual(native);
 });
 
 it('a multiline filename cannot escape the sourceURL and run while compiling', () => {
@@ -31,7 +29,7 @@ it('a multiline filename cannot escape the sourceURL and run while compiling', (
     const source = '"use strict";\nreturn 42;';
     const filename = '/app/entry\n;globalThis.__riftyFilenameHook(); //';
     const native = compileFunction(source, [], { filename });
-    const actual = compileCjsFactory([], source, filename);
+    const actual = compileCjsFactory([], source, filename)();
     expect(calls).toBe(0);
     expect(typeof actual).toBe(typeof native);
   } finally {
