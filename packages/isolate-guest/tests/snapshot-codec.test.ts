@@ -565,11 +565,14 @@ describe('the budget bounds time as well as memory (ADR-0567 §7, I3)', () => {
 describe('random trees: snapshot refuses by name or restores byte for byte (ADR-0567 §5)', () => {
   // A fixed-seed generator (mulberry32) over what rifty's FS holds: odd and long
   // names, NUL, deep paths, odd times, binary contents.
-  const rng = (seed: number) => () => {
-    seed = (seed + 0x6d2b79f5) | 0;
-    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  const rng = (start: number) => {
+    let seed = start;
+    return () => {
+      seed = (seed + 0x6d2b79f5) | 0;
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
   };
   const NAMES = [
     'a',

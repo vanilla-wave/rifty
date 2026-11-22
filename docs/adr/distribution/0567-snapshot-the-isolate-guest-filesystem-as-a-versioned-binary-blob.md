@@ -139,9 +139,9 @@ Rejected (P1, template scale, S ≈ 95 MB):
   FS keeps cannot round-trip; +18 % bytes, +41 % with the per-entry pax times
   millisecond mtimes need; its tooling buys nothing for a blob the host never
   opens; dups, links and devices it allows would each need a refusal;
-- keeping `ino`: one realm-wide inode counter (`stat-metadata.ts`) makes a
-  restored `ino` everyone's in the consumer's realm; a per-FS counter is a vfs
-  refactor no consumer needs (Node over a copy renews `ino` too);
+- keeping `ino` in v1: one realm-wide inode counter (`stat-metadata.ts`) makes
+  a restored `ino` everyone's in the consumer's realm; deferred by the user
+  (2026-11-22, `backlog/distribution/isolate-host-fs-snapshot-keep-ino`);
 - SHA-256 as the checksum: 4.4 s vs 0.6 s per direction with rifty's pure-JS
   hash (the isolate has no native digest); the CRC guards storage corruption,
   and no checksum can guard against the guest, who authored the bytes;
@@ -161,8 +161,9 @@ Rejected (P1, template scale, S ≈ 95 MB):
   (template scale 95 → 18 MB).
 - A snapshot from an isolate that ran guest code is guest-authored: CRC and
   structure checks keep it consistent, not truthful.
-- Not the user's words: format, CRC-32, renewed `ino`, replace-on-fresh-only
-  and exact template match are agent decisions; the 16 383-unit name cap, the
-  `_UNREPRESENTABLE` refusals and «all of the tree or the isolate is thrown
-  away» are the manager's decisions by delegation; whether the goal's I1 and
-  Outcome narrow to them is the user's, open (goal map) (goal `isolate-host-fs-snapshot` Decisions).
+- Not the user's words: format, CRC-32, replace-on-fresh-only and exact
+  template match are agent decisions; the `_UNREPRESENTABLE` refusals of NUL
+  and out-of-range times and «all of the tree or the isolate is thrown away»
+  are the manager's decisions by delegation, open for the user (goal map).
+  The user's words (2026-11-22, goal `amend:` lines): the 16 383-unit name
+  cap («ок»), `ino` renewed for now («давая в бэклог положим») (goal `isolate-host-fs-snapshot` Decisions).
