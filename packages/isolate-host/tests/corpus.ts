@@ -26,6 +26,9 @@ export interface Row {
  */
 export const GC_CHURN = 'for (let i = 0; i < 2e6; i++) globalThis.gcChurn = { i };';
 
+const NATURAL_EXIT_QUEUED =
+  "at a natural exit only the first microtask hop an 'exit' listener queues counts (distribution/isolate-host-natural-exit-listener-queued-work)";
+
 export const CORPUS: readonly Row[] = [
   {
     label: 'console-log-values',
@@ -267,6 +270,28 @@ export const CORPUS: readonly Row[] = [
     code: "process.on('exit', () => { Promise.resolve().then(() => console.log('late')); process.exit(3) })",
     ceiling:
       "output of work queued before an exit() inside a natural exit's listener still prints (runtime-js/node-eval-work-queued-at-exit-runs)",
+  },
+  {
+    label: 'exit-listener-microtask-chain-natural',
+    code: "process.on('exit', () => { Promise.resolve().then(() => console.log('a1')).then(() => console.log('a2')).then(() => console.log('a3')) })",
+    ceiling: NATURAL_EXIT_QUEUED,
+  },
+  {
+    label: 'exit-listener-next-tick-natural',
+    code: "process.on('exit', () => process.nextTick(() => console.log('nt')))",
+    ceiling: NATURAL_EXIT_QUEUED,
+  },
+  {
+    label: 'exit-listener-microtask-exit-code-natural',
+    code: "process.on('exit', () => { Promise.resolve().then(() => { process.exitCode = 6 }) })",
+    ceiling: NATURAL_EXIT_QUEUED,
+  },
+  {
+    label: 'exit-listener-microtask-after-fatal',
+    code: "process.on('exit', () => queueMicrotask(() => console.log('late'))); setTimeout(() => { throw new Error('x') }, 1)",
+    evalError: true,
+    ceiling:
+      "a microtask an 'exit' listener queues on a fatal still prints (runtime-js/node-eval-queued-exit-overrides-pending-fatal)",
   },
   {
     label: 'exit-in-next-tick',

@@ -25,7 +25,8 @@ Measured 2026-11-22 (PR #416), `node -e` v24.16.0 runs none of it. Who dispatche
 Where it shows:
 
 - Isolate host: guest stdout/stderr is dropped once the process has an explicit terminal (`entry.ts` output sink;
-  not at a natural exit, where Node prints what `'exit'` listeners queue), and the status is the terminal's, so
+  not at a natural exit, where Node prints what `'exit'` listeners queue; past the first hop there:
+  `distribution/isolate-host-natural-exit-listener-queued-work`), and the status is the terminal's, so
   `runCode` equals Node (corpus `exit-in-microtask-*`, `exit-listener-*`). Left: time — a long queued job delays the
   result, an endless one is `distribution/isolate-host-uncaught-throw-waits-for-microtask-checkpoint` (`timeout`),
   one allocating past the heap limit ends as `termination: 'memory'`; and an `exit()` inside an `'exit'` listener at
