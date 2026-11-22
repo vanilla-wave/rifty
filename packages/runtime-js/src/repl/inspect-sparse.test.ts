@@ -10,7 +10,8 @@ it.each([
     'holes between elements',
     true,
     () => {
-      const a = [1, , 3];
+      const a: unknown[] = [1];
+    a[2] = 3;
       a[10] = 4;
       return a;
     },
