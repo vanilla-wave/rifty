@@ -3,7 +3,7 @@ area: process-meta
 status: draft
 title: Legacy ready epics carry no Invariants/tier — every hand-off starts with an unplanned refit
 created: 2026-07-30
-why: legacy single-file ready epics predate goal-shape requirements, so most are shaped for reading, not pickup — re-typing them (bounded goal via `rifty-goal` FIT vs direction → ROADMAP) is a user-owned fork per epic
+why: legacy single-file ready epics predate goal-shape requirements, so most are shaped for reading, not pickup — re-typing them (bounded goal via FIT, `docs/backlog/README.md` §Epic fit, vs direction → ROADMAP) is a user-owned fork per epic
 user_story: As the repo owner handing off a ready epic, I want the hand-off to start the run, but today it starts a refit — an invariants/tier fit before any slice can be picked (bands are JIT since goal artifact v2)
 sources: [docs/backlog/README.md §Epic fit, tools/backlog/check.mjs:231, M11 parallel-track sweep 2026-07-30]
 code: [docs/backlog/README.md, tools/backlog/check.mjs]
@@ -49,7 +49,7 @@ Pick at refine; each is a different cost/timing trade:
   hand-off — e.g. `backlog:check` warns (not fails) on a ready epic without
   Invariants/tier so the refit is priced before the run is promised;
 - eager batch: one refine pass per epic, ordered by which epics are actually
-  near pickup (M11 first), each producing invariants + tier via `rifty-goal` FIT;
+  near pickup (M11 first), each producing invariants + tier via FIT;
 - gate: require the three on `draft→ready` for NEW epics only, leaving the 10
   legacy ones on the lazy path — stops the debt growing without a big-bang.
 

@@ -17,7 +17,7 @@ Probe (reference table): same guest source — `fork` a module, child sends
 `spawnWorkerChild`): no settle in >45 s, interrupted manually. Root cause not
 diagnosed in the spike — candidates (unverified): IPC channel wiring over the
 worker boundary, fork control frames (ADR-0150 P6b fork-control), exit/close
-ordering. Needs root-cause before any contract (`rifty-fix` shape at pickup:
+ordering. Needs root-cause before any contract (observed defect:
 RED e2e first).
 
 Contradicting evidence (independent challenge 2026-08-28): main CI has a GREEN

@@ -29,4 +29,4 @@ code and keep the worker free for the next operation.
 
 ## Decisions
 
-- 2026-09-11 — capture only; the repair follows `rifty-fix` with its RED and independent review.
+- 2026-09-11 — capture only; the repair starts from its RED (observed defect).

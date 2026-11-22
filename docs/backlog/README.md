@@ -2,13 +2,12 @@
 
 - Item: one implementable unit at `docs/backlog/<area>/<slug>.md`.
 - Epic: user outcome spanning items at `docs/backlog/epics/<slug>/` — `goal.md`
-  (user-owned destination) + `map.md` (live plan) + `ledger.md` (append-only
-  journal). Template: `epics/TEMPLATE.md`. Legacy single-file epics remain
-  valid until re-typed or closed; no new ones.
+  (user-owned destination) + `map.md` (agent-owned plan). Template:
+  `epics/TEMPLATE.md`. Legacy single-file epics remain valid until re-typed or
+  closed; no new ones.
 
-Routing: `AGENTS.md` + `docs/process/README.md`; artifact shapes and
-owners: `docs/process/README.md §Artifacts`; goal lifecycle (FIT / PICKUP / RECHART /
-CLOSE): `docs/process/README.md §Route`. Delete completed work; there is no done status.
+Routing: `AGENTS.md`. Here: the store shape and the goal write-up (§Epic fit).
+Delete completed work; there is no done status.
 
 ## Shape
 
@@ -38,7 +37,8 @@ A draft is one of two shapes — never a solution without its decision:
   compat ❌ / code-marker link. A draft whose `sources`/`code` refs no longer
   resolve on main is stale: refresh or delete.
 
-A ready item needs:
+Item `ready` = a compiled contract; goal children may stay `draft` — the goal
+is their contract. A ready item needs:
 
 - `## User scenario` unless its epic supplies it: real package/program, exact
   call, observed result;
@@ -48,14 +48,10 @@ A ready item needs:
 - `## Parity cases`: enumerated oracle behaviors and RED targets — where an
   oracle exists; a process/tooling unit has none and omits the section;
 - every Acceptance/Parity/Fault row traced (`→ I#` / `→ scenario` /
-  `→ ADR-NNNN`; a `→ <rule-id>` trace is a note, never an obligation —
-  `docs/process/README.md` `RDY-3`; gated by `backlog:check` for
-  items `created ≥ 2026-09-03`); one intent, one-sentence `title` (`RDY-4`);
+  `→ ADR-NNNN`; gated by `backlog:check` for items `created ≥ 2026-09-03`);
+  one intent, one-sentence `title`;
 - `## Out of scope`: named loud throws + compat ❌;
-- `## Decisions`: every fork resolved or ADR-linked; one-line records only
-  (`docs/process/README.md`);
-- at pickup: record the reference/RED evidence required by `RDY-8`; a prior
-  review is a reference to its artifact, never permission from a status flag.
+- `## Decisions`: every fork resolved or ADR-linked; one-line records only.
 
 External-oracle work adds `## Reference contract` with pinned version/mechanism;
 semantic copies require an ADR + differential suite.
@@ -69,27 +65,26 @@ Use `docs/process/rules/fault-classes.md`. Template: `TEMPLATE.md`.
 Recording a fact or question needs no premise critic. When refine recommends
 a new direction whose value or competing direct route could change what or
 whether the user chooses to build, check the premise before that choice is
-treated as settled. Otherwise check it at FIT/PICKUP before adopting the plan;
-the Contract+RED reviewer may do it in the same pass.
+treated as settled. Otherwise check it at FIT before adopting the plan.
 
 One fresh read-only critic receives the original user request/answers, proposed
 outcome, evidence, alternatives and unresolved forks, not just the polished
 solution. It asks whether the value follows and a cheaper direct route reaches
-it, and checks for omitted material user choices by `RDY-6`.
+it, and checks for omitted material user choices (§Scope authority).
 An omission names a reachable action, consequential difference and missing
 authority; a preferred extra feature is not an omitted choice. Verify objections;
 return new scope/value choices to the current research/interview frontier.
 Record the verdict verbatim in `## Challenge`, including an early draft check.
-FIT/PICKUP and goal children reuse a checked premise for unchanged promises;
-new evidence or materially changed promises need reconsideration, a new stage
-name does not. Existing-baseline repairs and just-file captures gain no premise critic.
-Every completed backlog write-up still gets the `RDY-6` final check of the written
-result after drafting; reuse of an early premise check cannot skip it.
+FIT and goal children reuse a checked premise for unchanged promises; new
+evidence or materially changed promises need reconsideration. Existing-baseline
+repairs and just-file captures gain no premise critic. Every completed backlog
+write-up still gets the final check of the written result (§Scope authority)
+after drafting; reuse of an early premise check cannot skip it.
 
 A ready document records `challenge: <date> — clear | N problems` in
 `## Challenge`. Resolve a value/cheaper-route objection with evidence or the
 user's explicit decision before adoption; other concerns are advisory. The
-verified live user forks follow `RDY-6` / `STOP-1` even when reported as concerns;
+verified live user forks follow §Scope authority even when reported as concerns;
 they cannot be waved through as advice. The machine checks this record at ready,
 not when an observation is captured; `clear` alone is not scope-closure evidence.
 
@@ -102,31 +97,91 @@ ends with the completion report (§Report) — a ready goal is immediately
 runnable. FIT runs where the outcome was ratified: in the refine session for a
 refined epic (`rifty-refine` §4), in the hand-off session for a legacy epic.
 A `draft` goal directory is unfinished FIT input (an unanswered user question
-or a just-file); no merge is required before FIT resumes (`PR-3`).
-`map.md` seeds order and holds `## Open questions` (fog) + `## Out of scope`;
-`ledger.md` opens empty. Seeded children stay `draft` — a ready goal hands off
-with draft children; each compiles to `ready` at its own PICKUP, never at FIT
-(`docs/process/README.md` `RDY-1`).
+or a just-file); no merge is required before FIT resumes.
+`map.md` seeds order and holds `## Open questions` (fog) + `## Out of scope`.
+Seeded children stay `draft` — a ready goal hands off with draft children.
 
 A user-owned observable-scope question (what the value requires, what must
 NOT change, whose scenario counts) is asked at FIT while the user is there — a
-probe existing for its technical half is not a reason to park it
-(`docs/process/README.md` §FIT 3). Unanswered → the goal stays `draft`: a ready
+probe existing for its technical half is not a reason to park it (§FIT 3).
+Unanswered → the goal stays `draft`: a ready
 goal carries no `owner: user` fog, so its run is autonomous. Fog in a ready
 map is agent-owned — `<question> — owner: agent — <what settles it>`;
 `owner: user` lives only in a `draft` goal (unanswered at FIT) or mid-run
-(`STOP-1`). A rejected rival route is recorded checkable in goal `##
+(a goal conflict — `AGENTS.md` §Fidelity). A rejected rival route is recorded checkable in goal `##
 Decisions`: `rejected route: <route> — violates <I#|Outcome clause>` — the
-clause a later agent cites instead of re-deriving the comparison. The first unit is the acceptance carrier (`docs/process/README.md` §FIT 5);
-later units are the walls running it exposes; a child whose contract depends
-on an open question is not seeded. A mechanism shared by two children needs an existing owner, a first
-substrate item, or an ADR explaining separation. Procedure, incl.
-probe-or-fog and the completion report: `docs/process/README.md`.
+clause a later agent cites instead of re-deriving the comparison. The first
+unit is the acceptance carrier (§FIT 5); later units are the walls running it
+exposes; a child whose contract depends on an open question is not seeded. A
+mechanism shared by two children needs an existing owner, a first substrate
+item, or an ADR explaining separation.
+
+### FIT — procedure
+
+Input: a ratified outcome (a refine session's settled epic, a draft left on an
+unanswered question or a just-file, a hand-off, a legacy single-file epic).
+Output: a ready goal directory (`goal.md`, `map.md`). Derive, never invent
+scope; the user is present (the refine session, or the hand-off session).
+
+1. Bounded-destination test: provably closable, or it is not a goal — a
+   direction or standing invariant routes to `docs/ROADMAP.md`, an owner doc or
+   a ratchet; a legacy epic failing the test is re-typed and its file deleted.
+2. `goal.md` (`status: draft`): frontmatter, `## Outcome`, `## User scenario`;
+   a legacy epic carries ratified content verbatim, old file deleted.
+3. Owner first, then probe-or-fog (§Scope authority): a user-owned question
+   (observable scope, what must not change, whose scenario counts) is asked
+   now — no answer → the goal stays `draft` with the question as an
+   `owner: user` line; an agent-owned fact gets a discriminating probe (command
+   + output + version) or an `owner: agent` fog line. Split mixed questions.
+4. `## Invariants` numbered from Outcome/scenario/decisions only, each false on
+   current main (evidence above the list); `tier` with one `## Decisions` line;
+   a rejected rival route as `rejected route: <route> — violates <I#|Outcome>`.
+5. Map: the first unit is the acceptance carrier — the `## User scenario` as an
+   executable e2e/parity case, committed RED and marked expected-failure. Later
+   units are the walls that running it exposes; a seeded item is a hypothesis
+   until the run hits it. Add `## Out of scope`.
+6. Challenge (§Challenge) on outcome and route; reuse an early checked premise
+   for unchanged promises; record `## Challenge`.
+7. Final written-result check (§Scope authority) over goal/map/seeded drafts
+   together in one fresh reviewer context; resolve findings, recheck material
+   edits.
+8. Flip `status: ready`; write the completion report (§Report); no approval
+   gate. Pushback before work starts re-fits in place; after → user amendment.
+
+Done when `pnpm backlog:check` passes and every fit-time decision lives in
+`goal.md` or `map.md`.
+
+## Scope authority
+
+The user owns observable scope; the agent owns carriers and implementation.
+Before claiming scope settled, check material assumptions against the original
+request and answers, not only the agent's scenario: walk the requested actions
+and reachable transitions; try two outcomes the words allow — a difference is a
+user fork only when it is reachable, materially affects the requested value and
+nothing accepted settles it; ask the informed frontier together; revisit
+dependent choices after an answer. A probe establishes behavior, not consent.
+An unanswered user question keeps the goal `draft`.
+
+Final written-result check: before a write-up (capture, refine, FIT) is
+complete, one fresh read-only reviewer reads the final draft set with the
+original request, the user's answers and the evidence; verify its findings
+against their evidence; material edits get a new pass; no approval of the
+report.
+
+Amendments: a user decision amends a ready goal in place — `amend: <date> —
+user: <their words> — <changed obligations and why>`. Dropping or weakening an
+invariant or scenario row is the user's. Silence, a technical failure, an ADR
+or a reviewer demand is not consent.
+
+Reachability: own-product work without an external oracle needs a user-action
+repro path; without one record the attempt and keep `draft`. Inject only faults
+physically allowed by `docs/process/rules/fault-classes.md` §Boundary failure
+models within the goal tier; raising tier requires an ADR.
 
 ## Report
 
 Every user-facing refine ends with a report after the fresh final written-result
-check (`RDY-6`), in the conversation, before any
+check (§Scope authority), in the conversation, before any
 implementation. The driver writes it from recorded facts, in the user's
 language: proposed observable result; decisive findings and evidence; chosen
 direction and meaningful rejected alternative; major steps and what becomes
@@ -135,32 +190,14 @@ Distinguish research evidence from outcomes still to be implemented/proven.
 Omit empty sections; a settled capture may take a few lines. No separate report
 document, report-writing agent or fixed six-part template.
 
-FIT/PICKUP reuse that report and communicate changes after preparation, before
-the first IMPLEMENT. A standalone pickup without an earlier report emits it
-at that boundary. Repeated stages need only material changes, not the whole
-report again. Mid-task capture needs only its durable record.
+FIT reuses that report and communicates material changes before
+implementation. Mid-task capture needs only its durable record.
 
 A report is not an approval gate. Refine-only authorizes preparation — for an
 epic, through FIT to a ready goal — not a build; already-authorized
 implementation continues without another hand-off.
-An unresolved user scope/value choice still needs the user's answer (`RDY-6`);
-silence is not a decision.
-
-## Goal run
-
-An explicit whole-ready-goal hand-off starts a run; the goal directory is the
-run id. Stages, roles, stops, PR rules: `docs/process/README.md`. Store-level
-facts that hold inside a run: a ready `goal.md` changes only with the user's recorded amendment (`RDY-6`); `ledger.md` only grows; `map.md` and unit contracts are re-cut by the
-agent (`RDY-5`); every landed slice gets a `re-chart after <slice>` ledger
-line; scope outside `ready` items: 0; new coordination mechanisms: 0 unless a
-named substrate item owns one.
-
-## Gates
-
-`docs/process/README.md` lists each gate and its authority. Record checks prove
-shape and attribution; independent review proves authorization, reference
-semantics and acceptance. Document creation/deletion is not another review
-state machine. No machine rule requires a separate PR.
+An unresolved user scope/value choice still needs the user's answer; silence
+is not a decision.
 
 ## Tier
 

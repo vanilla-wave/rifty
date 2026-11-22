@@ -33,7 +33,7 @@ process: run N+1 prints only `[pre2]` lines. COI terminal runs were not
 checked for the same leak.
 
 Owner: no-COI toolchain run isolation (ADR-0375 one Worker / one runtime).
-Route: observed defect → `rifty-fix` (baseline: the two-run repro above;
+Route: observed defect, RED first (baseline: the two-run repro above;
 RED: a no-COI two-run test where run 2 observes no run-1 mutation of a
 builtin export or a builtin class prototype). Unknown: which builtin objects
 are shared across runs (module cache vs builtin singletons vs prototypes) —

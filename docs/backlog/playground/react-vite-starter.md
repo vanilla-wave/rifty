@@ -350,8 +350,7 @@ final-green: 2026-09-02 — pass @ 712deeee3 (verify pass; 1 finding adjudicated
 - 2026-09-02 (user override, go/no-go (b) — closes the stop): keep the swap;
   the launch benchmark subject is this tile from now on and
   `open-auditable-launch`'s "<5s cold start" clause is superseded by an
-  override line in its `## Decisions` (frozen scenario text stays —
-  `check:contract-drift`). `perf/benchmarks.json`
+  override line in its `## Decisions` (frozen scenario text stays). `perf/benchmarks.json`
   regenerated on this tile (2026-09-02, `--runs 5`, `registry.rifty.dev` +
   `eddy.rifty.dev`): cold-start-to-interactive 444 ms; install → first Vite
   response standard 9820 ms (samples 10331/9307/10576/9820/9560); eddy pass

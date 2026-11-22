@@ -46,11 +46,11 @@ describe('pr:check lanes follow the diff class', () => {
 
   it('a documentation-only working tree skips exactly the source lanes and keeps every other check', () => {
     const paths = [
-      'docs/process/README.md',
+      'docs/process/traps.md',
       'AGENTS.md',
       'CHANGELOG.md',
-      '.agents/skills/rifty-goal/SKILL.md',
-      '.agents/skills/rifty-fix/SKILL.md',
+      '.agents/skills/rifty-refine/SKILL.md',
+      '.agents/skills/rifty-to-backlog/SKILL.md',
     ];
     expect(classifyDiff(paths)).toBe('docs-only');
     const names = selectTasks(TASKS, 'docs-only').map((t: { name: string }) => t.name);
@@ -59,7 +59,6 @@ describe('pr:check lanes follow the diff class', () => {
       TASKS.map((t: { name: string }) => t.name).filter((n: string) => !SOURCE_LANES.has(n)),
     );
     expect(names).toContain('backlog:check');
-    expect(names).toContain('check:contract-drift');
     expect(names).toContain('lint');
   });
 

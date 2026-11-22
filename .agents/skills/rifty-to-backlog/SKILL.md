@@ -4,8 +4,8 @@ description: Formalize a rifty finding or idea into a deduplicated, gated backlo
 ---
 
 Capture = verify relevance → dedup → record a fact/question that must wait.
-Never invent work from a review suggestion. `REV-12` routes verified facts
-by the accepted result, regardless of the discovering actor or stage.
+Never invent work from a review suggestion. Route a verified fact by the
+accepted result, regardless of who found it or when.
 
 ## 1. Classify
 
@@ -41,7 +41,7 @@ Use `docs/process/rules/fault-classes.md` §§Boundary failure models/Class-kill
 Create `docs/backlog/<area>/<slug>.md` from `docs/backlog/README.md` (an epic:
 `epics/<slug>/` from `epics/TEMPLATE.md`, `goal.md` draft) — committed
 to the discovering unit's branch; with no unit branch to ride (a post-merge
-audit) it is its own docs-only PR (`docs/process/README.md` `PR-2`). A draft is
+audit) it is its own docs-only PR. A draft is
 one of two shapes (README §Shape): **question** (`## Question`, no prescribed
 carrier) or **finding** (observed `## Context`, honest sources, compat ❌ /
 code-marker link) — never a solution without its decision. Optional real-path
@@ -52,12 +52,13 @@ the write-up. Continue to the final check below.
 
 A factual capture needs no premise critic. A proposed direction follows
 `docs/backlog/README.md` §Challenge: early when it informs the user's choice,
-otherwise at FIT/PICKUP. Preserve any early record for reuse; formalizing the
+otherwise at FIT. Preserve any early record for reuse; formalizing the
 same premise does not require another premise critique.
 
-Every completed write-up, including a factual/agent-only capture, gets `RDY-6`
-final written-result check after the draft is written (an epic
-continuing into FIT in this session: that check is README §FIT 8). Use a fresh
+Every completed write-up, including a factual/agent-only capture, gets the
+final written-result check (`docs/backlog/README.md` §Scope authority) after the
+draft is written (an epic continuing into FIT in this session: that check is
+FIT step 7). Use a fresh
 reviewer on the final draft set and original sources; an early Challenge cannot
 substitute. Keep explicit unanswered questions in drafts; do not self-run a
 user interview in an agent-only context or claim their scope settled.

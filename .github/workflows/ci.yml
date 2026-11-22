@@ -2,8 +2,6 @@ name: CI
 
 on:
   pull_request:
-    # ready_for_review re-runs the gates a draft PR skips (check:pass-binding, REV-8).
-    types: [opened, synchronize, reopened, ready_for_review]
   merge_group:
     types: [checks_requested]
   push:
@@ -78,8 +76,6 @@ jobs:
       - run: pnpm check:esbuild-runtime-drift # generated esbuild runtime artifacts match their inventory
       - run: pnpm check:publish-config-drift # publish configs match the inventory
       - run: pnpm check:install-stamp-writers # one install-stamp writer
-      - run: pnpm check:contract-drift # blocking: no in-place ready-contract edits in the same diff as source changes
-      - run: pnpm check:pass-binding # blocking on a ready PR: product/test changes carry a landing verdict bound to an ancestor sha (REV-8); draft PRs skipped
       - run: pnpm backlog:check # blocking: frontmatter + TODO(backlog:) integrity
       - run: pnpm refs:check # blocking: ADR index + cross-ref integrity
 
