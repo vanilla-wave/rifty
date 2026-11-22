@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
+import { CHANNEL_END_GRACE_MS } from '../src/pool.ts';
 import { FrameReader, HEADER, KIND, frame } from '../src/protocol.ts';
 
 const PACKAGE_DIR = fileURLToPath(new URL('..', import.meta.url));
@@ -50,7 +51,7 @@ function hostilePackage(label: string, body: string): string {
   symlinkSync(join(PACKAGE_DIR, 'node_modules'), join(dir, 'node_modules'));
   writeFileSync(
     join(dir, 'dist', 'child.js'),
-    `import { closeSync, writeSync } from 'node:fs';
+    `import { closeSync, writeFileSync, writeSync } from 'node:fs';
      const raw = (bytes) => writeSync(3, Uint8Array.from(bytes));
      let C = [];
      const f = (kind, payload) => {
@@ -86,6 +87,29 @@ function consume(entry: string, options: string, flags: string[] = [], before = 
     }),
   );
 }
+
+/**
+ * A preempted consumer, at the instant that matters: arming the closed-channel
+ * grace, it stops running until its child (cued by SIGUSR2) has exited and the
+ * grace is due, so the exit is still unread when the grace timer fires. `ps`
+ * shows the exit; no fixed wait.
+ */
+const STARVED_AT_GRACE = `const { execFileSync } = await import('node:child_process');
+  const kids = () => execFileSync('ps', ['-A', '-o', 'pid=,ppid=,stat=,command='], { encoding: 'utf8' })
+    .split('\\n').map((l) => /^\\s*(\\d+)\\s+(\\d+)\\s+(\\S+)\\s+(.*)$/.exec(l))
+    .filter((m) => m && Number(m[2]) === process.pid);
+  const arm = globalThis.setTimeout;
+  globalThis.setTimeout = (fn, ms, ...args) => {
+    const timer = arm(fn, ms, ...args);
+    if (ms === ${CHANNEL_END_GRACE_MS}) {
+      const due = performance.now() + ms;
+      for (const m of kids()) if (m[4].includes('child.js')) process.kill(Number(m[1]), 'SIGUSR2');
+      const end = Date.now() + 10000;
+      while (!kids().some((m) => m[3].startsWith('Z'))) if (Date.now() > end) throw new Error('no exit');
+      while (performance.now() < due + 5);
+    }
+    return timer;
+  };`;
 
 describe('consumer treats the child channel as hostile', () => {
   for (const [label, body] of Object.entries(HOSTILE)) {
@@ -159,12 +183,42 @@ describe('consumer treats the child channel as hostile', () => {
 
   it('a child that closes the channel and exits is reported by its own exit code', () => {
     // Both the closed channel and the exit describe this run; the exit is the
-    // precise one, so it must win over the channel-closed outcome.
-    const entry = hostilePackage('closed then exit', 'closeSync(3); process.exit(7)');
-    const report = consume(entry, '{ timeoutMs: 5000, maxOutputBytes: 1024 }') as {
-      rejected?: string;
-    };
+    // precise one, so it must win over the channel-closed outcome — also when
+    // the consumer reads it only after the grace timer is due.
+    const entry = hostilePackage(
+      'closed then exit',
+      "process.on('SIGUSR2', () => process.exit(7)); closeSync(3)",
+    );
+    const report = consume(
+      entry,
+      '{ timeoutMs: 5000, maxOutputBytes: 1024 }',
+      [],
+      STARVED_AT_GRACE,
+    ) as { rejected?: string };
     expect(report.rejected).toBe('isolate-host child exited unexpectedly (code 7, signal null)');
+  });
+
+  it('a result sent before the deadline wins over it, however late the consumer reads it', () => {
+    // A preempted consumer: from the call on it does not run until the child has
+    // written its exit frame and the deadline is due; the frame waits unread.
+    const marker = join(work, 'exit-frame-written');
+    const entry = hostilePackage(
+      'result before a starved deadline',
+      `f(2, [5]); writeFileSync(${JSON.stringify(marker)}, '')`,
+    );
+    const report = consume(
+      entry,
+      '{ timeoutMs: 1500, maxOutputBytes: 1024 }',
+      [],
+      `const { existsSync } = await import('node:fs');
+       queueMicrotask(() => {
+         const due = performance.now() + 1500;
+         const end = Date.now() + 10000;
+         while (!existsSync(${JSON.stringify(marker)})) if (Date.now() > end) throw new Error('no frame');
+         while (performance.now() < due + 5);
+       });`,
+    ) as { resolved?: unknown };
+    expect(report.resolved).toEqual({ stdout: '', stderr: '', exitCode: 5 });
   });
 
   it('a channel closed without a result is its own outcome, not the deadline', () => {

@@ -22,7 +22,7 @@ import {
 // `src/` in the workspace and `dist/` when packed are both one level under the package root.
 const WORKER_ENTRY = fileURLToPath(new URL('../dist/child.js', import.meta.url));
 /** How long a closed result channel waits for the worker's own exit to explain it. */
-const CHANNEL_END_GRACE_MS = 50;
+export const CHANNEL_END_GRACE_MS = 50;
 const MAX_CALL_ID = 2 ** 32 - 1;
 
 export type Termination = 'timeout' | 'memory';
