@@ -1,34 +1,47 @@
 ---
 area: runtime-js
 status: draft
-title: Work already queued when process.exit() runs still executes in in-process hosts
+title: Work already queued when process.exit() runs still executes
 created: 2026-11-22
-why: Node ends the process inside exit(); rifty records the terminal and ends the run at the drain's next tick, so what the realm already queued still runs — invisible in the isolate host (output dropped, status fixed) but it costs time there, and a no-COI command still prints it.
+why: Node ends the process inside exit(); rifty records the terminal and the realm ends later (the drain's next tick, or the kernel's async control exit), so what the realm already queued still runs — invisible in the isolate host (output dropped, status fixed) but it costs time there, and kernel children and no-COI commands still print it.
 sources: [docs/public/compat/isolate-host.md, docs/public/compat/process.md, docs/backlog/runtime-js/node-eval-queued-exit-overrides-pending-fatal.md]
 code: [packages/runtime-js/src/internal/event-loop-keepalive.ts, packages/runtime-js/src/builtins/timers.ts, packages/isolate-guest/src/guest/entry.ts]
 ---
 
 ## Context
 
-Measured 2026-11-22 (PR #416), `node -e` v24.16.0 runs none of it. What still runs after `exit()`:
+Measured 2026-11-22 (PR #416), `node -e` v24.16.0 runs none of it. Who dispatches what still runs after `exit()`:
 
-- V8-owned: microtasks of the same checkpoint (`Promise.resolve().then(() => process.exit(0)); Promise.resolve().then(f)`),
-  one an `'exit'` listener queues. JS cannot drop V8's microtask queue; only ending the isolate stops them.
-- rifty-owned: a timer or `setImmediate` ripe before the drain's first tick (`setTimeout(f, 0)` queued before an exit
-  from a microtask; `setTimeout(() => process.exit(3), 1); setTimeout(f, 1)`). Dispatch points: `KeepaliveTimerHandle`
-  (`fireTimeout`, `shouldRunInterval`) and the immediate queue in `timers.ts` — several, and shared with kernel
-  children (control-port exit, async; unprobed). A queued `nextTick` after an exit in `nextTick` already does not run.
-- Output: the isolate host drops guest stdout/stderr once the process has its terminal (`entry.ts` output sink), and
-  the status is the terminal's, so `runCode` equals Node (corpus `exit-in-microtask-*`, `exit-listener-queues-microtask`).
-  Left there: time — a long queued job delays the result; an endless one is
-  `distribution/isolate-host-uncaught-throw-waits-for-microtask-checkpoint` (`timeout`).
-  A no-COI project command prints it: `node -e` with `setTimeout(() => console.log('L|timer'), 0)` queued before
-  `Promise.resolve().then(() => process.exit(3))` prints `L|timer` (exit 3); expected-failure row
-  `eval-microtask-exit-ripe-timer` (`tests/no-coi/no-coi-process-exit-status.spec.ts`).
+- V8: microtasks of the same checkpoint (`Promise.resolve().then(() => process.exit(0)); Promise.resolve().then(f)`),
+  one an `'exit'` listener queues. JS cannot drop V8's microtask queue; only ending the isolate/Worker stops them.
+- rifty: a timer, `setImmediate` or fs callback ripe before the drain's first tick, a timer an `'exit'` listener arms.
+  Dispatch points: `KeepaliveTimerHandle` (`fireTimeout`, `shouldRunInterval`), the immediate queue (`timers.ts`), fs
+  callback scheduling (`fs.ts`, `fs-streams.ts` `queueMicrotask`) — several, shared with kernel children. A queued
+  `nextTick` after an exit in `nextTick` already does not run.
+- Checked dead end for one point: settling `awaitDrain` at once (`tick()` without the macrotask hop) when a
+  terminal already exists stops the isolate host's ripe timers but breaks no-COI `setImmediate` ordering
+  (PR #416 external review probe).
+
+Where it shows:
+
+- Isolate host: guest stdout/stderr is dropped once the process has an explicit terminal (`entry.ts` output sink;
+  not at a natural exit, where Node prints what `'exit'` listeners queue), and the status is the terminal's, so
+  `runCode` equals Node (corpus `exit-in-microtask-*`, `exit-listener-*`). Left: time — a long queued job delays the
+  result, an endless one is `distribution/isolate-host-uncaught-throw-waits-for-microtask-checkpoint` (`timeout`),
+  one allocating past the heap limit ends as `termination: 'memory'`; and an `exit()` inside an `'exit'` listener at
+  a natural exit still prints the microtask queued before it (corpus ceiling
+  `exit-in-exit-listener-at-natural-exit-queued-microtask`).
+- No-COI project command (status Node's, extra output pinned exactly in `declared:` rows of
+  `tests/no-coi/no-coi-process-exit-status.spec.ts`): after an `exit()` from a microtask of `-e`, a 0 ms timer, a
+  `setImmediate`, an fs callback, a timer and a microtask an `'exit'` listener queues; after a synchronous `exit()` or
+  one in a timer, a microtask queued before it.
+- Kernel children (COI): a microtask queued before a synchronous `exit()` or one in a timer prints (external review
+  probe, PR #416; not re-measured here).
 
 Twin of `node-eval-queued-exit-overrides-pending-fatal` (the fatal terminal, same deferral). Not a timing
-tolerance: a fix ends the run at the terminal (the isolate host's child sees no request then — ADR-0557 §6
-removed a guest-reachable `done`) or stops rifty's dispatchers once the terminal exists.
+tolerance: a fix ends the realm at the terminal (the isolate host's child sees no request then — ADR-0557 §6
+removed a guest-reachable `done`) or stops rifty's dispatchers once the terminal exists (V8 microtasks stay a
+ceiling).
 
 ## Challenge
 
