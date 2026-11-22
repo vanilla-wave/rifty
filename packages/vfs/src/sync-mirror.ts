@@ -1,3 +1,4 @@
+import { NotImplementedError } from './errors.ts';
 import type { ReplicaAdmissionEvent } from './opfs-replica-types.ts';
 import type { FsStat } from './stat-metadata.ts';
 /**
@@ -74,6 +75,25 @@ export class MemoryFsSync implements FsSync {
 
   utimes(path: string, atimeMs: number, mtimeMs: number): void {
     this.#backend.utimes(normalizeAbsolute(path), atimeMs, mtimeMs);
+  }
+
+  /**
+   * Set `ino` and all four times of an existing entry verbatim — a snapshot
+   * restore (ADR-0567 §6); later entries get inodes above `ino`.
+   */
+  restoreStatSync(
+    path: string,
+    stat: {
+      readonly ino: number;
+      readonly mtimeMs: number;
+      readonly atimeMs: number;
+      readonly ctimeMs: number;
+      readonly birthtimeMs: number;
+    },
+  ): void {
+    void path;
+    void stat;
+    throw new NotImplementedError('vfs.MemoryFsSync.restoreStatSync');
   }
 
   copyFileSync(src: string, dst: string): void {
