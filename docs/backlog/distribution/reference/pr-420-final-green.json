@@ -1,0 +1,86 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Mergeable once PR CI at HEAD d98cd3fa8 is green (gh pr checks 420 still pending at review time); fill the PR body with baseline/RED/stand artifacts before ready, as the coordinator stated.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "d98cd3fa8f05452ef697f6031637d252e0d446a2",
+  "unit_goal_source": "PR #420 (branch t3/isolate-host-suite-flake), standalone rifty-fix unit. Observed baseline: the finding backlog distribution/isolate-host-tests-flake-under-extreme-load (deleted by this PR; read at BASE 50c9d8bf1) — guest-export.test.ts:19 clock tolerance, pool-faults.test.ts:462 interval churn (culprit exitCode undefined), protocol.test.ts:167 closed-then-exit (code null, signal SIGKILL … after closing its result channel without a result). BASE 50c9d8bf1, HEAD d98cd3fa8f05452ef697f6031637d252e0d446a2 (verify pass over fixes b1ca3e5f0..d98cd3fa8; first pass at b1ca3e5f0: blockers on the removed period parity row and compat line 9, both fixed).",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Baseline: the guest clock is the wall clock and starts at the call's start, not the worker's (green under load)",
+      "source": "acceptance",
+      "trace": "ADR-0558 (Decisions 2026-11-18, clock origin at bridge setup)",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/guest-export.test.ts:19-33",
+      "note": ""
+    },
+    {
+      "row": "Baseline: a child that closes the channel then exits is reported by its own exit code, also when the consumer reads the exit only after the grace is due",
+      "source": "acceptance",
+      "trace": "ADR-0563 §6 + Corrections 2026-11-22",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/protocol.test.ts:184-199",
+      "note": ""
+    },
+    {
+      "row": "A result frame sent before the deadline wins over the deadline, however late the consumer reads it",
+      "source": "acceptance",
+      "trace": "ADR-0563 §4 + Corrections 2026-11-22",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/protocol.test.ts:201-222",
+      "note": ""
+    },
+    {
+      "row": "Interval create/clear loop next to three neighbours: culprit memory (solo rerun after a no-culprit loss), neighbours exact once",
+      "source": "acceptance",
+      "trace": "ADR-0563 Corrections 2026-11-19 (round 2 carriers)",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/pool-faults.test.ts:469-504",
+      "note": ""
+    },
+    {
+      "row": "A repeating timer keeps Node's period from the tick's start, not from the callback's end",
+      "source": "acceptance",
+      "trace": "ADR-0558 (Decisions 2026-11-19 §3, 2026-11-22)",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/corpus.ts:147-152 (real-Node parity row, runCode + embedder); packages/isolate-guest/tests/host-bridge.test.ts:425 (deterministic twin)",
+      "note": ""
+    }
+  ],
+  "axes": [
+    { "axis": "Completeness", "verdict": "pass", "findings": [] },
+    { "axis": "Mission and architecture", "verdict": "pass", "findings": [] },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "docs/backlog/distribution/isolate-host-time-phase-rows-under-load.md:19",
+          "evidence": "",
+          "summary": "Title says three rows; the Owner line still says 'trigger: either red in CI' — should be 'any'.",
+          "authority": ""
+        }
+      ]
+    },
+    { "axis": "Approach cost", "verdict": "pass", "findings": [] },
+    { "axis": "Scope", "verdict": "pass", "findings": [] },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "packages/isolate-host/src/pool.ts:95",
+          "evidence": "",
+          "summary": "Comment says onDeadline 'finds nothing to settle or cancel'; on a worker already ended by #violated the call stays in worker.calls, so #deadline still sends a harmless cancel to the killed worker. Wording overstates.",
+          "authority": ""
+        }
+      ]
+    },
+    { "axis": "Regressions", "verdict": "pass", "findings": [] },
+    { "axis": "Ecosystem UX", "verdict": "pass", "findings": [] }
+  ]
+}

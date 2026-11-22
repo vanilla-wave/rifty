@@ -16,7 +16,7 @@ Stand (PR #420, macOS arm64, 12 CPUs): `pnpm vitest run --project isolate-host` 
 - `corpus.ts` parity row `interval-keeps-its-period` (`g[0] < 275`) — the period (re-armed from the tick's start, not the callback's end) is observable only below the embedder's delivery latency: the worker stalled 170 ms in every 340 gives 342 ms gaps, exactly what re-arming from the end gives (repro: SIGSTOP/SIGCONT the warm worker every 170 ms while `runCode` runs the row). Deterministic twin: `isolate-guest/tests/host-bridge.test.ts` on a fake host clock; the real-Node row stays the oracle.
 - `corpus.ts` parity row `event-loop-order` — `setImmediate` against `setTimeout(…, 100)` armed in the same run: a loop whose first turn starts more than 100 ms late runs the timer first, in Node as in rifty, each independently. The row pins phase order through a time race.
 
-Owner: next isolate-host test-hygiene pickup; trigger: either red in CI. Rule: `docs/process/traps.md` wall-clock-assertion-under-load (no bigger bound; an event or a stall at the judged point).
+Owner: next isolate-host test-hygiene pickup; trigger: any of them red in CI. Rule: `docs/process/traps.md` wall-clock-assertion-under-load (no bigger bound; an event or a stall at the judged point).
 
 ## Challenge
 
