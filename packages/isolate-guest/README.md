@@ -17,7 +17,10 @@ It gives you:
 - `createHostBridge(hooks)`: the host functions the guest calls, with every
   argument validated;
 - `exitStatus(value)`, `IMPORT_GAP`, `UNCOPYABLE_REJECTION`, and the types
-  `GuestHost`, `GuestEntry`, `HostFunctions`, `HostHooks`, `HostBridge`.
+  `GuestHost`, `GuestEntry`, `HostFunctions`, `HostHooks`, `HostBridge`;
+- the FS snapshot (§Snapshot): `snapshotFs`, `restoreFs`, `FsSnapshotError`
+  and the types `SnapshotFs`, `SnapshotOptions`, `SnapshotStat`,
+  `SnapshotTemplate`, `FsSnapshotErrorCode`.
 
 ## Minimal embedder (isolated-vm 7.0.2)
 
@@ -174,7 +177,7 @@ timers. Bound your process from outside (measured: `docs/backlog/distribution/re
 
 ### Guest entry: `globalThis.__riftyGuest`
 
-The bundle defines this global. You take its three functions before you call
+The bundle defines this global. You take its functions before you call
 `run`, then delete the global.
 
 | function | called by | arguments, controlled by | what the embedder must check |
@@ -182,6 +185,8 @@ The bundle defines this global. You take its three functions before you call
 | `run(code)` | you, once | `code`: you | the promise's value is guest-controlled: pass it through `exitStatus(value)` (an integer 0..255, else 1). A rejection while the isolate is alive is exit 1 |
 | `fire(id)` | your `fire` hook | `id`: armed by the guest | none (`createHostBridge` fires only ids it armed) |
 | `rejection(reason)` | your unhandled-rejection hook | `reason`: guest | send a copy. If it cannot be copied (a function-bearing object, a symbol), send `UNCOPYABLE_REJECTION` |
+| `restore(bytes, options)` | you, before `run` | `bytes`: a snapshot, once written by a guest | copy exactly the bytes' range in (isolated-vm copies a view's whole backing store). Throws `ERR_FS_SNAPSHOT_*` (§Snapshot); `ERR_FS_SNAPSHOT_NOT_FRESH` once `run` was called |
+| `snapshot(options)` | you, whenever no guest code runs (after `run` settled included) | — | after `run` the result is guest-authored: bound it by `memoryLimit`, accept it only through `restoreFs` |
 
 ### Lifecycle of one call
 
@@ -206,6 +211,48 @@ The guest cannot see two events itself. Your embedder has to report them:
   Node's diagnostic and exit 1.
 - `importModuleDynamically` (isolated-vm option): end the run as in step 7.
   The guest may never see the rejection: it can swallow it, or exit first.
+
+## Snapshot
+
+The guest's whole in-memory FS as one opaque byte string, and back (ADR-0567).
+The same module runs in the isolate (inside `guest.js`) and in your Node
+realm, over rifty's `MemoryFsSync` (or any `SnapshotFs`):
+
+```js
+const options = { template: { id: 'docs-libs', version: '2026.11.1' }, maxBytes: 256 << 20 };
+const bytes = await guest.snapshot.apply(undefined, [options], {
+  arguments: { copy: true },
+  result: { copy: true },
+});
+// … store bytes; next turn, a fresh isolate, before run:
+await guest.restore.apply(undefined, [new Uint8Array(bytes), options], { arguments: { copy: true } });
+```
+
+- **Kept:** every path from `/`, file bytes, empty directories, any name a JS
+  string holds (lone surrogates included), `mtime`, `atime`, `ctime`,
+  `birthtime`. **Renewed:** `ino`, as after a copy. rifty's FS has no
+  symlinks, hard links, modes or owners, so there is nothing of them to keep.
+- **Format:** versioned and template-bound; a later rifty reads every
+  version released before it, an older one refuses a newer version
+  (`ERR_FS_SNAPSHOT_VERSION`). Restore requires the template it was made
+  with (`ERR_FS_SNAPSHOT_TEMPLATE`). The same tree gives the same bytes.
+- **Restore** checks every byte before it writes anything, then replaces the
+  whole FS. A refused blob (`ERR_FS_SNAPSHOT_CORRUPT` — truncated, a flipped
+  byte, a bad path, a duplicate…; `ERR_FS_SNAPSHOT_TOO_LARGE` before reading)
+  leaves the FS as it was. Error text carries no blob bytes.
+- **After guest code** the realm is the guest's: `snapshot` may return
+  anything. Treat it as untrusted bytes and accept them only through
+  `restoreFs`, which relies on nothing the writer promises.
+- **Memory:** about 2 × the snapshot size at the peak of either direction;
+  size `memoryLimit` for it. `maxBytes` is required both ways.
+
+Cost (M3 Pro, Node 24.16.0, isolated-vm 7.0.2, median of 5,
+`node --no-node-snapshot scripts/measure-snapshot.mjs`):
+
+| tree | blob | Node snapshot / restore | isolate restore / snapshot | ivm copy in / out | smallest `memoryLimit` (restore, then snapshot) |
+|---|---|---|---|---|---|
+| 10 files, 958 kB | 962 kB | 0.8 / 0.8 ms | 2.2 / 1.1 ms | 0.1 / 0.1 ms | 19 MiB (empty guest 15) |
+| 23 654 files, 100.6 MB | 102.9 MB | 143 / 164 ms | 174 / 132 ms | 9.9 / 5.6 ms | 231 MiB |
 
 ## What you own
 

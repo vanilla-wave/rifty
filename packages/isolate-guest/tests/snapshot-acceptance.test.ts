@@ -1,8 +1,7 @@
 /**
  * Acceptance carrier, goal `isolate-host-fs-snapshot` (scenario steps 1–4,
  * I1–I6): the built guest bundle in real isolated-vm 7.0.2 and rifty
- * `MemoryFs` in this Node realm, no sandbox API. RED until the codec lands
- * (`carrier` = `it.fails`), then plain `it`.
+ * `MemoryFs` in this Node realm, no sandbox API.
  */
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -12,7 +11,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { FsSnapshotError, restoreFs, snapshotFs } from '../src/index.ts';
 import { BUILD_TREE, LIST_TREE, type Row, drive, listFs, withoutMode } from './snapshot-support.ts';
 
-const carrier = it.fails;
+const carrier = it;
 
 const TEMPLATE = { id: 'docs-libs', version: '2026.11.1' };
 const OPTIONS = { template: TEMPLATE, maxBytes: 1 << 20 };

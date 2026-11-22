@@ -80,6 +80,12 @@ surface and its gaps are the rows above. Tests: `packages/isolate-guest/tests/`
 | README example embedder on isolated-vm 7.0.2: parity corpus vs `node -e`; `import()` and uncopyable rejections as `runCode` | ✅ | `embedder.test.ts` |
 | Optional `GuestHost.allowSharedArrayBuffer` before loading the bundle | ✅ | Same per-guest policy in the README embedder. `embedder.test.ts` |
 | Hostile bridge arguments, throwing embedder hooks, `close()`, `exitStatus` | ✅ | `host-bridge.test.ts` |
+| FS snapshot: `GuestEntry.snapshot`/`restore`, `snapshotFs`/`restoreFs` in the isolate and the consumer's realm (ADR-0567) | ✅ | Paths, bytes, empty dirs, any JS-string name, `mtime`/`atime`/`ctime`/`birthtime`, `readdir` order round-trip, both realms both ways; same tree → same bytes. `snapshot-acceptance.test.ts`, `snapshot-codec.test.ts` |
+| FS snapshot: `ino` | ⚠️ | Renewed by restore, as after a copy (Node over a persistent disk keeps it): rifty's inode counter is per realm |
+| FS snapshot: symlinks, hard links, modes, owners | ❌ | rifty's FS has none (ADR-0050): `fs.symlinkSync`/`linkSync`/`chmodSync` are absent functions there (`TypeError: … is not a function`), modes are fixed 0o100666/0o40777; nothing of them to keep |
+| FS snapshot: restore of untrusted bytes (truncated, flipped byte, bad checksum, other version or template, bad path, duplicate, unknown kind, over `maxBytes`) | ✅ | Named `ERR_FS_SNAPSHOT_*` before anything is written; FS unchanged; no blob text in the error. `snapshot-codec.test.ts` |
+| FS snapshot taken after guest code ran | ⚠️ | Guest-authored bytes: the guest can make `snapshot` return anything (it shares the realm); bounded by `memoryLimit`, accepted only through `restoreFs` |
+| FS snapshot: restore after `run` was called | ❌ | `ERR_FS_SNAPSHOT_NOT_FRESH`: only a fresh isolate takes a snapshot |
 | isolated-vm 6.2.0 | ⚠️ | No `onUnhandledRejection`: an unhandled rejection rejects the embedder's call instead of failing the run with Node's diagnostic — or, after a GC collected the promise, the call settles normally (row "Unhandled rejection whose promise the GC collects"; measured on 7.0.2 without the hook, same code in 6.2.0). No `importModuleDynamically`: `import()` rejects `Not supported` in the guest, and a `.catch` keeps the run alive (it can exit 0) |
 | Other V8 embedders | ⚠️ | Untested; the contract (package README §Contract) is embedder-neutral |
 | Limits, kill, process boundary, escape posture | ❌ | Not provided by the export; the embedder's duty (package README §What you own) |

@@ -24,8 +24,9 @@ import {
 } from '@riftydev/runtime-js/internal';
 import { createModuleLoader } from '@riftydev/runtime-js/loader';
 import { syncMirror } from '@riftydev/vfs';
-import { installMemoryFs } from '@riftydev/vfs/internal';
+import { type MemoryFsSync, installMemoryFs } from '@riftydev/vfs/internal';
 import { GUEST_DIRS, UNCOPYABLE_REJECTION } from '../contract.ts';
+import { FsSnapshotError, type SnapshotOptions, restoreFs, snapshotFs } from '../snapshot.ts';
 import { bindNotImplemented } from './loud.ts';
 // Evaluated before every runtime module: the build injects it first (scripts/build-runtime.mjs).
 import {
@@ -40,6 +41,12 @@ import {
 bindNotImplemented(NotImplementedError);
 
 const CWD = '/workspace';
+// The realm's FS exists from load, so a restore before `run` is the tree `run` sees (ADR-0567 §6).
+installMemoryFs();
+const guestFs = syncMirror() as MemoryFsSync;
+for (const dir of GUEST_DIRS) guestFs.mkdirSync(dir, { recursive: true });
+/** Guest code has started in this realm: no restore from here on. */
+let started = false;
 /**
  * Builtin modules `node -e` exposes as lazy globals (Node v24.16.0
  * `Object.getOwnPropertyNames(globalThis)` getters under `[eval]`); `process`
@@ -218,6 +225,7 @@ function fatal(error: unknown): void {
  * natural `exit()`, as `node` does. Resolves with the status, a primitive only.
  */
 function runToExit(launch: () => Promise<void>): Promise<number> {
+  started = true;
   // Resolved with a primitive only, so resolving it does no lookup the guest
   // can poison (the thenable check runs only for objects). The child judges
   // the number in its own realm (ADR-0557 §6).
@@ -312,8 +320,6 @@ function resolvePosix(base: string, p: string): string {
 
 /** Installs the runtime for one run; before any guest code. */
 function setUp(): void {
-  installMemoryFs();
-  for (const dir of GUEST_DIRS) syncMirror().mkdirSync(dir, { recursive: true });
   installProcessGlobals();
   installTimerGlobals();
   (globalThis as { Buffer?: unknown }).Buffer = Buffer;
@@ -354,7 +360,19 @@ function rejection(copied: unknown): void {
   if (!handleRealmUnhandledRejection(reason, undefined)) fatal(reason);
 }
 
+/** The realm's whole FS; whenever no guest code runs. After guest code ran, the result is guest-authored. */
+function snapshot(options: SnapshotOptions): Uint8Array {
+  return snapshotFs(guestFs, options);
+}
+
+/** Replace the realm's FS; only in a fresh isolate (module cache, fds and cwd would keep the old tree). */
+function restore(bytes: Uint8Array, options: SnapshotOptions): void {
+  if (started)
+    throw new FsSnapshotError('ERR_FS_SNAPSHOT_NOT_FRESH', 'restore runs only before guest code');
+  restoreFs(guestFs, bytes, options);
+}
+
 Object.defineProperty(globalThis, '__riftyGuest', {
-  value: Object.freeze({ run, runFile, fire: fireTimer, rejection }),
+  value: Object.freeze({ run, runFile, fire: fireTimer, rejection, snapshot, restore }),
   configurable: true,
 });

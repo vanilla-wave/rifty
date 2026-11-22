@@ -1,4 +1,3 @@
-import { NotImplementedError } from './errors.ts';
 import type { ReplicaAdmissionEvent } from './opfs-replica-types.ts';
 import type { FsStat } from './stat-metadata.ts';
 /**
@@ -87,9 +86,7 @@ export class MemoryFsSync implements FsSync {
       readonly birthtimeMs: number;
     },
   ): void {
-    void path;
-    void stat;
-    throw new NotImplementedError('vfs.MemoryFsSync.restoreStatSync');
+    this.#backend.restoreStat(normalizeAbsolute(path), stat);
   }
 
   copyFileSync(src: string, dst: string): void {
