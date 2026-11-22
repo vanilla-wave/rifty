@@ -102,9 +102,9 @@ probes: `docs/backlog/distribution/reference/isolate-host-sandbox-step0.md`. -->
   queued or later rejects `ERR_ISOLATE_HOST_SANDBOX_DESTROYED`.
 - I6. Bounded: each run has `runCode`'s limits (time, isolate memory, output
   cap; whether restore and snapshot count against `timeoutMs` is stated); a
-  sandbox's files are bounded by a per-sandbox cap that guest writes hit as a
-  full disk at the write and host writes as a rejection, sized so that a state
-  within it can always be restored and captured; each host file op is bounded
+  sandbox's state is bounded by one cap, one rule: a run whose end state is
+  over it (or cannot be captured) is I1's named result, a host write that
+  would pass it rejects; each host file op is bounded
   by a per-file limit; the consumer process survives every outcome; an idle
   sandbox holds no process and no isolate, its memory in the consumer is
   measured and documented (the number of live sandboxes is the consumer's to
@@ -131,7 +131,7 @@ probes: `docs/backlog/distribution/reference/isolate-host-sandbox-step0.md`. -->
 challenge: 2026-11-22 — 6 problems (fresh critic over the requirements, the manager's hand-off and decisions, goal, map, carrier, step 0, ADR-0568 draft, ADR-0567 draft; verified, dispositions below)
 
 1. The state model is a user fork the manager carries; nothing recorded it — recorded as `owner: user` in map `## Open questions` with the user's own words (restore once per agent run) and the template-scale cost; the default runs on the manager's delegation (pool-goal precedent), "reversible" dropped from the claim that settles it; I1 states that a sandbox is lost only with its consumer.
-2. An ending only this model has — the end state cannot be captured or restored — was missing: added to I1 (named loud result, state of before), the cap made a rule in I6, `timeoutMs` coverage of restore/snapshot to be stated.
+2. An ending only this model has — the end state cannot be captured or restored — was missing: added to I1 (named loud result, state of before), one cap in I6 (the codec's count, manager 2026-11-22), `timeoutMs` coverage of restore/snapshot to be stated.
 3. Live-sandbox count and the consumer-side footprint were unanswered: I6 names a per-sandbox cap, a measured consumer footprint per idle sandbox, the count as the consumer's.
 4. Template-scale cost was marked open though ADR-0567 measured it: numbers in ADR-0568 §Alternatives and in the user fork.
 5. The host-disk rejection leaned on «Владелец ФС живёт в том же realm» (whose stated reason is SAB): it now rests on «харденинг нужен только на внешнем шве: выставленные хостовые функции…»; host ops run on rifty's own `MemoryFsSync` («никакой второй независимой реализации»).
@@ -146,6 +146,8 @@ challenge: 2026-11-22 — 6 problems (fresh critic over the requirements, the ma
 - 2026-11-22 — manager default (reversible; the manager brings the fork to the user, whose recorded decisions it upholds — requirements §Решения «Владелец ФС живёт в том же realm, что и гость (внутри isolate)», «харденинг нужен только на внешнем шве»): rifty's filesystem stays in the guest's realm inside the isolate; only bytes and plain data cross the boundary. Under it the sandbox between operations is bytes in the consumer; a run is a stateless pool call: fresh isolate, filesystem restored from the bytes, `node <path>`, filesystem back to bytes, which replace the state. The FS codec is the snapshot goal's; no second codec.
 - 2026-11-22 — the step-0 alternative "a directory on the host disk" (it would keep a killed run's partial writes and cost nothing per run at template scale) is not built: under it every guest `fs` call becomes an exposed host function behind a jail of our own over `node:fs` (links, name normalization, OS stat values and error texts with host paths, quota as disk accounting) — against requirements §Решения «харденинг нужен только на внешнем шве: выставленные хостовые функции…» — and the guest's fs leaves rifty's VFS. Both models, with their costs, go to the ADR's critic and to the user's fork (map `## Open questions`).
 - 2026-11-22 — manager: the cut is accepted — Node-faithful diagnostics of `node file.js` (positions +2, `file:line` header with caret, footer, `SyntaxError` for `ModuleLoadError`, the `Cannot find module` header) is a separate runtime-js goal in a parallel thread; their text gaps are pinned ⚠️ here citing it. `require.main === module` false is behavior, not diagnostics: this goal stays `draft` until its corpus row is green against real Node (fixed by the neighbour thread), and the same holds for anything found in the class "a run silently does something else". ESM entries are a loud `NotImplementedError` (agreed).
+- 2026-11-22 — manager (delegation, 2026-11-22): `ready` on the manager's delegation, as the pool goal; the state-model fork stays with the user (map `owner: user`). The `require.main` corpus row green against real Node gates the PR leaving draft and the goal's close, not implementation.
+- 2026-11-22 — manager: one size mechanism — the snapshot codec counts and refuses before allocating (ADR-0567); a guest-side quota (full disk at the write) is not built unless the contract proves undeliverable without it (`REV-7`).
 - 2026-11-22 — must not change (regression guard, not an invariant: true on main): `runCode`'s API, results, corpus parity and pool behavior (ADR-0557, ADR-0563, ADR-0566); its suite stays green unmodified.
 - 2026-11-22 — host file ops in the consumer run on rifty's own VFS (`MemoryFsSync` over the decoded state), not a second tree with hand-made errors (requirements §Решения «никакой второй независимой реализации»).
 - 2026-11-22 — tier: robust — the value is fault behavior over persistent state (every ending of a run × the state, concurrency, destroy, worker loss): each reachable axis × operation gets an honest outcome and a fault test.

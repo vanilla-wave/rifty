@@ -34,12 +34,12 @@ ROADMAP M14 (I9).
   `node:fs` load-bearing (ADR-0568 §Alternatives). The answer decides I1's
   rollback clause and the per-run cost; nothing closes on it before it.
 
-- The per-sandbox cap (I6): the isolate limit alone does not hold it — a
-  guest fits 51 MiB of files at limit 64 (step 0), while capture peaks at
-  ~2 × S (ADR-0567 P2) and host writes meet no isolate — so a cap exists;
-  owner: agent — its default, its relation to `memoryLimitMb` (a run whose
-  limit cannot hold the state is refused or named) and the guest-side full-disk
-  error (`ENOSPC`/`EDQUOT`) measured on the landed codec.
+- The per-sandbox cap (I6): one number, the codec's `maxBytes` count
+  (ADR-0567 refuses before allocating); the isolate limit alone does not hold
+  the state (a guest fits 51 MiB of files at limit 64, step 0, capture peaks
+  at ~2 × S, ADR-0567 P2) — owner: agent — its default, its relation to
+  `memoryLimitMb` (a capture that runs out of isolate memory is the same named
+  result, not `memory`), measured on the landed codec.
 - Codec cost per run on a small FS and in the consumer realm; the
   consumer's memory per idle sandbox — owner: agent — measure on the landed
   seam (template scale is already measured, see the state-model line).

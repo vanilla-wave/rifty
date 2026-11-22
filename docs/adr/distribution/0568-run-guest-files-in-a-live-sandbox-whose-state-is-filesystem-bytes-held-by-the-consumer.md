@@ -73,11 +73,13 @@ Draft — open items are marked *open*.
    `ERR_ISOLATE_HOST_SANDBOX_DESTROYED`, cancels a run in flight (its
    isolate is disposed as at a deadline) and drops the state.
 6. **Limits.** Per run: `runCode`'s. Host file op: `maxFileBytes` per call.
-   The sandbox's files: a per-sandbox cap (*open:* default, relation to
-   `memoryLimitMb`): the isolate limit alone does not hold it — a guest fits
-   51 MiB of files at limit 64 (step 0) while capture peaks at ~2 × S
-   (ADR-0567 P2), and host writes meet no isolate. Guest writes past it fail
-   at the write like a full disk; host writes past it reject.
+   The sandbox's state: one cap, the codec's `maxBytes` count (ADR-0567
+   refuses before allocating): an end state over it, or one the isolate runs
+   out of memory capturing, is the named capture result of §3; a host write
+   that would pass it rejects. No second quota inside the guest's FS (`REV-7`,
+   manager 2026-11-22). The isolate limit alone does not bound the state: a
+   guest fits 51 MiB of files at limit 64 (step 0) while capture peaks at
+   ~2 × S (ADR-0567 P2). *open:* the default.
 7. **Trust.** Snapshot bytes from a run were produced in the guest's realm:
    hostile input, bounded by a frame limit and validated by the codec before
    they become state. The bridge copies a view's range only, both directions.
@@ -105,11 +107,28 @@ Draft — open items are marked *open*.
   writes kept). Density: an idle sandbox = its directory; a run = a solo
   worker (no rerun: not idempotent). Cost: per syscall. Not built (manager
   default, 2026-11-22).
+- **A′. A live isolate per agent run, bytes only as a restore point.**
+  Closest to the requirements' wording (one instance per agent run, restore
+  once). Not chosen: a run must be a fresh realm (globals, module cache,
+  timers of one `node` process never reach the next — I2), which a live
+  isolate gives only by a new context per run over the same heap; a lost
+  worker's run cannot be rerun idempotently; a sandbox pins a worker slot
+  while idle; a heap-limit or catastrophic end takes the files back to the
+  last restore point anyway. For the consumer the contract is the same: one
+  sandbox per agent run; restore per run is internal. Revisit with the
+  template goal.
 - **C. In-memory VFS in a per-sandbox worker or long-lived isolate.**
   Rejected: catastrophic OOM / ICU retention / heap-limit disposal lose the
   files (step 0 S1).
 
 ## Consequences
+
+- Cost per run today (no template; the state is the agent's files): ADR-0567
+  measured 3 ms export and 4 ms import for 52 files / 410 kB. While the
+  immutable template layer is part of a run's state, a run costs ~1.15 s of
+  codec and an isolate of ~205 MiB before guest code (23 654 files, 95 MB):
+  the template goal must keep that layer out of the per-run state or bring
+  this fork back to the user.
 
 - An idle sandbox holds no process or isolate; a forgotten one is ordinary
   garbage.
