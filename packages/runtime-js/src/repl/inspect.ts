@@ -245,7 +245,8 @@ function formatObject(
   if (keys.length > MAX_OBJECT_KEYS) items.push(`... ${keys.length - MAX_OBJECT_KEYS} more keys`);
   context.ancestors.delete(obj);
   const prefix = ctor ? `${ctor} ` : '';
-  return `${referencePrefix(obj, context)}${prefix}{ ${items.join(', ')} }`;
+  const body = items.length === 0 ? '{}' : `{ ${items.join(', ')} }`;
+  return `${referencePrefix(obj, context)}${prefix}${body}`;
 }
 
 function formatMap(

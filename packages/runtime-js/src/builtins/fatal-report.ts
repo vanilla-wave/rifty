@@ -289,15 +289,10 @@ function propValue(value: unknown, indent: number, state: InspectState, depth: n
     return Array.isArray(value) ? '[Array]' : `[${constructorName(value) ?? 'Object'}]`;
   if (isErrorLike(value)) return inspectError(value, indent, state, depth);
   // Node groups more than 6 entries into columns (rifty's inspect layout then).
-  if (
-    Array.isArray(value) &&
-    value.length <= 6 &&
-    value.every((v, i) => {
-      const d = objectGetOwnPropertyDescriptor(value, i);
-      return d !== undefined && 'value' in d && (typeof v !== 'object' || v === null);
-    })
-  ) {
-    const items = value.map((v) => inspect(v));
+  // Elements are read by descriptor only: an accessor element never runs.
+  const primitives = Array.isArray(value) && value.length <= 6 ? primitiveElements(value) : null;
+  if (primitives !== null) {
+    const items = primitives.map((v) => inspect(v));
     const start = items.length + indent + 1 + 10;
     const total = items.reduce((sum, item) => sum + item.length, items.length + start);
     if (items.length === 0) return '[]';
@@ -306,6 +301,18 @@ function propValue(value: unknown, indent: number, state: InspectState, depth: n
     return `[\n${pad}  ${items.join(`,\n${pad}  `)}\n${pad}]`;
   }
   return inspect(value, { depth: REPORT_DEPTH - depth });
+}
+
+/** A dense array's elements when each is an own data primitive, else null. */
+function primitiveElements(array: readonly unknown[]): unknown[] | null {
+  const out: unknown[] = [];
+  for (let i = 0; i < array.length; i += 1) {
+    const d = objectGetOwnPropertyDescriptor(array, i);
+    if (d === undefined || !('value' in d)) return null;
+    if (typeof d.value === 'object' && d.value !== null) return null;
+    out.push(d.value);
+  }
+  return out;
 }
 
 /** Node `getConstructorName` without running guest getters: the first own data `constructor`. */

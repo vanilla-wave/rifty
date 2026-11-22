@@ -217,6 +217,10 @@ it.each([
     "const e = new Error('x');\ne.detail = { get ran() { console.log('RAN'); return 1; }, a: { get bad() { throw new Error('g'); } } };\ne.holes = new Array(1e5);\nthrow e;\n",
   ],
   [
+    'an array element getter',
+    "const e = new Error('x');\ne.list = [1, 2];\nObject.defineProperty(e.list, 0, { get() { console.log('RAN'); throw new Error('g'); } });\nthrow e;\n",
+  ],
+  [
     'a cause chain deeper than the report inspects',
     "let e = new Error('leaf');\nfor (let i = 0; i < 5000; i++) e = new Error('e' + i, { cause: e });\nthrow e;\n",
   ],

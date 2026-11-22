@@ -365,7 +365,7 @@ describe('post-guest paths: what the host owes whatever the guest replaced', () 
     for (const [code, stderr] of [
       ["throw 'oops'", `oops\n${hint}\nNode.js v24.0.0\n`],
       ['throw 5', `5\n${hint}\nNode.js v24.0.0\n`],
-      ['throw Object.create(null)', '{  }\n\nNode.js v24.0.0\n'],
+      ['throw Object.create(null)', '{}\n\nNode.js v24.0.0\n'],
     ] as const) {
       const result = await runCode(code);
       expect({ code, stderr: result.stderr, exitCode: result.exitCode }).toEqual({
