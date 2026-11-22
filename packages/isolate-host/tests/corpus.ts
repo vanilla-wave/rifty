@@ -266,7 +266,7 @@ export const CORPUS: readonly Row[] = [
     label: 'exit-in-exit-listener-at-natural-exit-queued-microtask',
     code: "process.on('exit', () => { Promise.resolve().then(() => console.log('late')); process.exit(3) })",
     ceiling:
-      'output of work queued before an exit() inside a natural exit\'s listener still prints (runtime-js/node-eval-work-queued-at-exit-runs)',
+      "output of work queued before an exit() inside a natural exit's listener still prints (runtime-js/node-eval-work-queued-at-exit-runs)",
   },
   {
     label: 'exit-in-next-tick',
