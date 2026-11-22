@@ -150,12 +150,12 @@ ADR-0563 §3): a third more bytes and one more pass each way, kept because a
 binary request frame is a wire change no part of this contract needs.
 
 Every host op that writes measures the state cap by encoding the whole state
-once, so its cost follows the state's size, not the op's. Measured
-(M3 Pro, built package, machine load 125–142 on 12 cores — expect several
-times less on an idle machine), for one `writeFile` / one state intake after a
-run: 1 MB state 1 / 8 ms; 16 MB 156 / 193 ms; 56 MB near the cap 574 / 510 ms;
-the densest state at the cap (119 472 empty directories) 1 211 / 1 136 ms; the
-deepest (a 1 153-level chain) 902 / 899 ms. `list` and `remove` stay under 5 ms.
+once, so its cost follows the state's size, not the op's. Measured (M3 Pro,
+built package, machine load ~10 on 12 cores), one `writeFile` / one state
+intake after a run: 1 MB state 1 / 2 ms; 16 MB 19 / 19 ms; 56 MB near the cap
+69 / 67 ms; the densest state the default cap admits (119 472 empty
+directories) 114 / 139 ms; the deepest (a 1 153-level chain) 93 / 113 ms;
+100 one-byte writes near the cap ~6.6 s. `list` and `remove` stay under 5 ms.
 The worst host op and the worst intake are of one order.
 
 Every error the sandbox API throws or rejects with names only sandbox paths, and its
