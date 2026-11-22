@@ -82,17 +82,17 @@ challenge: 2026-11-22 — inherits the goal premise check (`goal.md` §Challenge
 
 | axis × operation | honest outcome | artifact / fault target | trace |
 |---|---|---|---|
-| run ends on its own (exit N, throw, rejection) × state | state = the run's end state | rows 1, 3, 9 | I1 |
-| run killed (timeout, heap, catastrophic OOM) × state | state of before, run's own result | row 2 | I1 |
-| worker SIGKILL × run in flight | one transparent rerun from the same bytes; no double effect | row 13 | I1 |
-| worker lost twice × run | `ERR_ISOLATE_HOST_WORKER_LOST`, state of before | core unit | I1 |
-| end state over cap / uncapturable / guest-broken snapshot × run | result + `stateRefused`, state of before | row 10; core unit (OOM in capture, poisoned codec) | I1, I7 |
-| hostile state bytes or frames from a worker × consumer decode | validated before use; worker violation path (ADR-0563 §3) | core unit (replaced `dist/child.js`) | I7 |
-| host op / run × issued unawaited | call order, one at a time | row 4 | I4 |
-| destroy × run in flight / queued op / host op in flight | all reject DESTROYED; isolate gone | row 5; core unit (host op in flight, isolate gone) | I5 |
-| model-chosen path (NUL, `..`, special names, deep) × host op | sandbox paths only; loud refusal | rows 6, 11 | I3, I7 |
-| size × host op / state | `ERR_FS_FILE_TOO_LARGE` / `ERR_ISOLATE_HOST_SANDBOX_FULL` | row 10 | I6 |
-| bytes host → isolate (restore) × view of a larger buffer | only the view's range crosses | core unit | I7 |
+| run ends on its own (exit N, throw, rejection) × state | state = the run's end state | rows 1, 3, 9 | → I1 |
+| run killed (timeout, heap, catastrophic OOM) × state | state of before, run's own result | row 2 | → I1 |
+| worker SIGKILL × run in flight | one transparent rerun from the same bytes; no double effect | row 13 | → I1 |
+| worker lost twice × run | `ERR_ISOLATE_HOST_WORKER_LOST`, state of before | core unit | → I1 |
+| end state over cap / uncapturable / guest-broken snapshot × run | result + `stateRefused`, state of before | row 10; core unit (OOM in capture, poisoned codec) | → I1, → I7 |
+| hostile state bytes or frames from a worker × consumer decode | validated before use; worker violation path (ADR-0563 §3) | core unit (replaced `dist/child.js`) | → I7 |
+| host op / run × issued unawaited | call order, one at a time | row 4 | → I4 |
+| destroy × run in flight / queued op / host op in flight | all reject DESTROYED; isolate gone | row 5; core unit (host op in flight, isolate gone) | → I5 |
+| model-chosen path (NUL, `..`, special names, deep) × host op | sandbox paths only; loud refusal | rows 6, 11 | → I3, → I7 |
+| size × host op / state | `ERR_FS_FILE_TOO_LARGE` / `ERR_ISOLATE_HOST_SANDBOX_FULL` | row 10 | → I6 |
+| bytes host → isolate (restore) × view of a larger buffer | only the view's range crosses | core unit | → I7 |
 
 ## Out of scope
 
