@@ -56,6 +56,36 @@ const DEP_FACTS = `module.exports = {
 
 const LEAF = 'exports.where = [__filename.slice(__dirname.length), require.main === module];\n';
 
+/** Sources whose meaning depends on the start of the file; `forms.js` requires each. */
+const FIRST_LINE_FORMS: Readonly<Record<string, string>> = {
+  'forms.js': `const out = {};
+for (const name of ['ws', 'cmt', 'mlcmt', 'line2', 'open', 'bang', 'bom', 'strict', 'strict-cmt', 'late', 'bang-ws', 'bom-bang', 'midline']) {
+  globalThis.ran = false;
+  try {
+    out[name] = require('./first/' + name).v;
+  } catch (e) {
+    out[name] = e.name + ': ' + e.message + (globalThis.ran ? ' (ran)' : '');
+  }
+}
+module.exports = JSON.stringify(out);
+`,
+  'first/ws.js': '   --> legacy\nexports.v = "ws";\n',
+  'first/cmt.js': '/* a */ --> legacy\nexports.v = "cmt";\n',
+  'first/mlcmt.js': '/* a\n */ --> legacy\nexports.v = "mlcmt";\n',
+  'first/line2.js': 'exports.v = "line2";\n--> legacy\n',
+  'first/open.js': '<!-- legacy\nexports.v = "open" <!-- trailing\n;\n',
+  'first/bang.js': '#!/usr/bin/env node\nexports.v = "bang";\n',
+  'first/bom.js': '\uFEFFexports.v = "bom";\n',
+  'first/strict.js': '"use strict";\nexports.v = (function () { return this; })() === undefined;\n',
+  'first/strict-cmt.js':
+    '/* c */ "use strict";\nexports.v = (function () { return this; })() === undefined;\n',
+  'first/late.js':
+    'var a;\n"use strict";\nexports.v = (function () { return this; })() === undefined;\n',
+  'first/bang-ws.js': ' #!/usr/bin/env node\nglobalThis.ran = true;\n',
+  'first/bom-bang.js': '\uFEFF#!/usr/bin/env node\nglobalThis.ran = true;\n',
+  'first/midline.js': 'globalThis.ran = true;\nx = 1 --> 0;\n',
+};
+
 const entryFiles = {
   'lib/dep.js': DEP_FACTS,
   'lib/sub/leaf.js': LEAF,
@@ -121,6 +151,15 @@ console.log(first.n, second.n, first === second, require.cache[key].exports === 
 `,
       'counter.js':
         'globalThis.loads = (globalThis.loads || 0) + 1;\nexports.n = globalThis.loads;\n',
+    },
+    argv: ['main.js'],
+  },
+  {
+    // The wrapper must not change what a file's start means (N3 class).
+    name: 'first-line-html-close',
+    files: {
+      'main.js': '--> legacy comment\nconsole.log("ok", require("./forms"));\n',
+      ...FIRST_LINE_FORMS,
     },
     argv: ['main.js'],
   },
@@ -217,6 +256,69 @@ export const fatalPrograms: readonly NodeFileProgram[] = [
       'main.js':
         "function load() {\n  throw new Error('inner');\n}\ntry {\n  load();\n} catch (err) {\n  throw new Error('outer', { cause: err });\n}\n",
     },
+    argv: ['main.js'],
+  },
+  {
+    name: 'rejection-with-props-cause-subclass',
+    files: {
+      'main.js':
+        "class Bad extends Error {}\nconst e = new Bad('r', { cause: new Error('c') });\ne.code = 'E_X';\nPromise.reject(e);\n",
+    },
+    argv: ['main.js'],
+  },
+  {
+    name: 'rejection-fs-enoent',
+    files: { 'main.js': "require('fs').promises.readFile('missing.txt');\n" },
+    argv: ['main.js'],
+  },
+  {
+    name: 'rejection-after-stack-read',
+    files: {
+      'main.js':
+        "(async () => {\n  try {\n    throw new Error('x');\n  } catch (e) {\n    console.log('failed:', String(e.stack).split('\\n')[0]);\n    throw e;\n  }\n})();\n",
+    },
+    argv: ['main.js'],
+  },
+  {
+    name: 'error-hostile-props',
+    files: {
+      'main.js': `const e = new Error('x');
+e.detail = { get ran() { console.log('GETTER RAN'); return 1; }, a: { get bad() { throw new Error('g'); } } };
+e.holes = new Array(1e5);
+e.list = Array.from({ length: 150 }, (_, i) => i);
+throw e;
+`,
+    },
+    argv: ['main.js'],
+  },
+  {
+    name: 'error-deep-cause',
+    files: {
+      'main.js':
+        "let e = new Error('leaf');\nfor (let i = 0; i < 5000; i++) e = new Error('e' + i, { cause: e });\nthrow e;\n",
+    },
+    argv: ['main.js'],
+  },
+  {
+    name: 'error-throwing-proxy-cause',
+    files: {
+      'main.js':
+        "const trap = () => {\n  throw new Error('trap');\n};\nthrow new Error('x', { cause: new Proxy({}, { get: trap, ownKeys: trap, getPrototypeOf: trap }) });\n",
+    },
+    argv: ['main.js'],
+  },
+  {
+    name: 'error-throwing-stack-getter',
+    files: {
+      'main.js':
+        "const e = new Error('x');\nObject.defineProperty(e, 'stack', { get() { throw new Error('boom'); } });\nthrow e;\n",
+    },
+    argv: ['main.js'],
+  },
+  { name: 'throw-null', files: { 'main.js': 'const a = 1;\nthrow null;\n' }, argv: ['main.js'] },
+  {
+    name: 'throw-in-direct-eval',
+    files: { 'main.js': 'eval(\'function f() {\\n  throw new Error("ev");\\n}\\nf();\');\n' },
     argv: ['main.js'],
   },
   {
@@ -328,6 +430,11 @@ export const fatalPrograms: readonly NodeFileProgram[] = [
   {
     name: 'syntax-error-dependency',
     files: { 'main.js': "require('./lib/broken');\n", 'lib/broken.js': 'function (\n' },
+    argv: ['main.js'],
+  },
+  {
+    name: 'syntax-error-missing-paren',
+    files: { 'main.js': 'const a = 1;\nfoo((a) });\n' },
     argv: ['main.js'],
   },
   { name: 'module-not-found-entry', files: {}, argv: ['missing.js'] },
@@ -473,6 +580,13 @@ interface Expectation {
   not: { toEqual(expected: unknown): void };
 }
 
+/**
+ * A Node-format report header's first line (`<file>:<line>` alone, unindented). rifty
+ * prints none on any host (ADR-0445 2026-11-22): JS cannot read V8's message
+ * location, so a printed one could only be inferred.
+ */
+export const NODE_HEADER = /^\S+:\d+$/mu;
+
 /** One row's assertion against its pin; `assert` is vitest's or playwright's (soft) expect. */
 export function nodeFileVerdict(
   assert: (actual: unknown, message?: string) => Expectation,
@@ -486,6 +600,9 @@ export function nodeFileVerdict(
   const label = `${host} ${row.program.name}`;
   const pin = nodeFilePins[host][row.program.name];
   if (pin === undefined) throw new Error(`${label}: no pin in node-file-pins.json`);
+  assert(NODE_HEADER.exec(row.actual.stderr)?.[0] ?? null, `${label}: no Node header`).toEqual(
+    null,
+  );
   if (pin === 'node') {
     assert(row.actual, `${label} vs Node`).toEqual(row.expected);
     return;

@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- `runCode` stderr for a fatal error is Node's report (header where the source proves the throw site, inspected error, user frames at Node's positions, `Node.js` trailer), including a file `require`d from the code; parity `tests/node-file.test.ts`.
+- `runCode` stderr for a fatal error is Node's report without its `<file>:<line>` header (inspected error, user frames at Node's positions, `Node.js` trailer), including a file `require`d from the code; parity `tests/node-file.test.ts`. An unhandled rejection's reason still reaches it as isolated-vm's copy (no own props, `[cause]` or subclass name; compat isolate-host.md).
 - Add the per-call `allowSharedArrayBuffer` option to `runCode`. False removes the global for feature detection. Shared wasm backing buffers throw the named gap on access. Default true (ADR-0566).
 
 - Known gaps declared (no behavior change): an unhandled rejection whose promise the GC collects before its task ends is lost — `exitCode: 0`, empty stderr where Node exits 1 (isolated-vm weak record, https://github.com/laverdet/isolated-vm/issues/589); `process.exit()` from a microtask of the code's synchronous run ends as `timeout`. README gives the guest-side workaround (handle every promise, set `process.exitCode`).

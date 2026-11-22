@@ -30,7 +30,7 @@ import {
   projectNodeEvalError,
 } from '../module-loader/loader.ts';
 import { formatNodeEvalPrintValue } from '../repl/inspect.ts';
-import { setFatalEvalSource, setFatalOrigin } from './fatal-report.ts';
+import { setFatalEvalSource } from './fatal-report.ts';
 import { refreshRuntimeJsProcessBuiltin } from './index.ts';
 import { importNodeMain } from './node-entry-main.ts';
 import {
@@ -230,25 +230,15 @@ export async function runNodeEntry(opts: RunNodeEntryOptions): Promise<void> {
         const output = await formatNodeEvalPrintValue(completion);
         terminalProcess.writeStdout(`${output}\n`);
       },
-      projectUnhandled: (reason, origin) => {
-        setFatalOrigin(
-          reason,
-          origin === 'uncaught-error' ? 'uncaughtException' : 'unhandledRejection',
-        );
-        return projectNodeEvalError(
+      projectUnhandled: (reason, origin) =>
+        projectNodeEvalError(
           reason,
           opts.source,
           origin === 'uncaught-error' ? 'uncaught' : 'unhandled',
           compiler,
-        );
-      },
-      terminateUnhandled: (reason, origin) => {
-        terminalProcess.writeStderr(
-          fatalReportText(
-            reason,
-            origin === 'rejection' ? 'unhandledRejection' : 'uncaughtException',
-          ),
-        );
+        ),
+      terminateUnhandled: (reason) => {
+        terminalProcess.writeStderr(fatalReportText(reason));
         try {
           const returned = terminalProcess.exit(1);
           throw new Error(`node eval process.exit(1) returned ${String(returned)}`);

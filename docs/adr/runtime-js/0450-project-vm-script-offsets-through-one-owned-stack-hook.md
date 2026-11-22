@@ -178,4 +178,26 @@ format, receiver `Error`), and freezes every `CallSite.prototype` method
   can no `}` of it close the wrapper. Syntax errors are diagnosed without
   evaluating any text. Carriers: `cjs-factory.test.ts` (no line of an
   escaping source runs), `node-file-parity` rows `stray-*`, `wrapper-escape`.
+- 2026-11-22 — correction (external review round 2, N3): behind the shared-line
+  prefix a file's start is no longer the start of input, so a legal leading
+  `-->` comment (after whitespace or one-line block comments) became an
+  operator and the file was refused. Such a `-->` is rewritten to `//>` (the
+  same comment, same length) in the evaluated text only; validation still
+  sees the source as is. Class swept against Node: `-->` (bare, after spaces,
+  after a block comment, after a multi-line one), `<!--`, `#!`, ` #!`, BOM,
+  BOM + `#!` (the loader now keeps a CJS file's BOM as Node reads it, so this
+  fails as Node's does), the directive prologue: entry row
+  `first-line-html-close`, `cjs-factory.test.ts`. A guest reading the module
+  function's text (`arguments.callee.toString()`) sees `//>`.
+- 2026-11-22 — cost, recorded as measured (no cheaper route without evaluating
+  the source was found by the author or either reviewer): every module is now
+  compiled twice (Function over the source alone, then the wrapped eval);
+  main compiled once except a `"use strict"`-led file. CPU, Node 24.16.0,
+  macOS: (a) author, compile only, 3061 real npm CJS files from this repo's
+  `node_modules` (27.7 MB): 552 → 716 ms median of 10 (+30%; host load ~100);
+  (b) external reviewer Opus, compile on 3061 real modules: 403 → 869 ms;
+  (c) external reviewer Sol, synthetic 3061-module tree (`module.exports = n`):
+  load 94 → 125 ms (+33%), compile 24.7 → 47.2 ms; (d) author, same synthetic
+  tree, load 110–112 → 118–122 ms (+7–10%). The 2026-11-22 line's +5% and the
+  2026-10-20 line's "ordinary require uses one Function" are superseded.
 

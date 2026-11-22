@@ -9,7 +9,7 @@
  * another bundle than the process: they reach its state through the
  * `Symbol.for` slot, never a module-local import.
  */
-import { FATAL_TRAILER, type FatalOrigin, formatFatalReport } from './fatal-report.ts';
+import { FATAL_TRAILER, formatFatalReport, formatFatalStack } from './fatal-report.ts';
 import { readActiveNodeProcessBootstrap } from './process-bootstrap-identity.ts';
 
 const NODE_PROCESS_LIFECYCLE = Symbol.for('rifty.runtime-js.process-lifecycle.v1');
@@ -84,8 +84,6 @@ export class NodeProcessExit {
   #terminal: RiftyProcessExitSignal | null = null;
   /** `exitCode` as the fatal `'exit'` listeners left it; null before `beginFatal`. */
   #fatalExitCode: { readonly value: number | undefined } | null = null;
-  /** The dispatched origin: a rejection's report header is its error's top frame. */
-  #fatalOrigin: FatalOrigin = 'uncaughtException';
 
   constructor(host: NodeProcessExitHost) {
     this.#host = host;
@@ -112,9 +110,8 @@ export class NodeProcessExit {
   }
 
   /** No listener: Node sets `exitCode = 1` and emits `'exit'` 1 behind `_exiting`. */
-  beginFatal(origin: FatalOrigin = 'uncaughtException'): void {
+  beginFatal(): void {
     if (this.#exiting) return;
-    this.#fatalOrigin = origin;
     this.#exiting = true;
     try {
       this.#host.writeExitCode(1);
@@ -135,7 +132,7 @@ export class NodeProcessExit {
   fatal(error: unknown): never {
     if (this.#terminal !== null) throw this.#terminal;
     if (this.#fatalExitCode !== null) this.#host.writeExitCode(this.#fatalExitCode.value);
-    this.#host.writeStderr(fatalReportText(error, this.#fatalOrigin));
+    this.#host.writeStderr(fatalReportText(error));
     return this.#terminate(toUint8ExitCode(this.#host.readExitCode() ?? 1), { cause: error });
   }
 
@@ -152,7 +149,6 @@ export class NodeProcessExit {
     this.#exiting = false;
     this.#terminal = null;
     this.#fatalExitCode = null;
-    this.#fatalOrigin = 'uncaughtException';
   }
 
   /**
@@ -246,7 +242,7 @@ export function dispatchUncaughtException(
       throw signal;
     }
   }
-  active.exit.beginFatal(origin);
+  active.exit.beginFatal();
   return { kind: 'unhandled', error };
 }
 
@@ -426,16 +422,16 @@ function noSideEffectsToString(value: unknown): string {
 }
 
 /**
- * Node's fatal report; where a guest value or guest-replaced intrinsics break
- * it, the value's side-effect-free text and the trailer — never a stack, so no
- * rifty frame or host path reaches the output, and a failure is never silent.
+ * Node's fatal report; where inspecting a guest value throws, its stack alone
+ * (Node's fallback); without one, the value's side-effect-free text and the
+ * trailer — no rifty frame or host path reaches the output, a failure is never silent.
  */
-export function fatalReportText(error: unknown, origin?: FatalOrigin): string {
+export function fatalReportText(error: unknown): string {
   try {
-    return formatFatalReport(error, origin);
+    return formatFatalReport(error);
   } catch {
     try {
-      return `${noSideEffectsToString(error)}\n${FATAL_TRAILER}`;
+      return formatFatalStack(error) ?? `${noSideEffectsToString(error)}\n${FATAL_TRAILER}`;
     } catch {
       return `Uncaught exception\n${FATAL_TRAILER}`;
     }

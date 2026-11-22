@@ -1,15 +1,15 @@
 /**
- * Node v24's fatal report (`src/node_errors.cc` ReportFatalException): the
- * `<file>:<line>` header with source line and caret, the error as
- * `inspect(error, { customInspect: false })` prints it, the `--trace-uncaught`
- * hint for a primitive, and the `Node.js <version>` trailer. The one text
- * every host prints for a fatal error (goal node-file-entry-parity I2–I4).
+ * Node v24's fatal report (`src/node_errors.cc` ReportFatalException) without
+ * its `<file>:<line>` header: the error as `inspect(error, { customInspect:
+ * false })` prints it, the `--trace-uncaught` hint for a primitive, and the
+ * `Node.js <version>` trailer. The one text every host prints for a fatal
+ * error (goal node-file-entry-parity I2–I4). The header is V8's message
+ * location, which JS cannot read: never printed (compat process.md "Fatal
+ * error stderr bytes"; only `-e`'s own `[eval]` decoration carries one).
  *
  * Frames: rifty's own runtime frames are dropped — a frame is kept when its
  * location is guest code (`[eval]`, a file in the guest VFS) or a V8 builtin
- * called from guest code. Header: V8's message location, which JS cannot read
- * for a synchronous throw; it is printed only where the source proves it
- * (`throwSiteHeader`), else omitted (compat process.md "Fatal error stderr bytes").
+ * called from guest code.
  */
 import { syncMirror } from '@riftydev/vfs';
 import type { Node as AcornNode } from 'acorn';
@@ -20,8 +20,6 @@ import { NODE_PROCESS_IDENTITY } from './process-identity.ts';
 
 /** Node's `\nNode.js <version>\n` (`extra_info_on_fatal_exception`). */
 export const FATAL_TRAILER = `\nNode.js ${NODE_PROCESS_IDENTITY.version}\n`;
-
-export type FatalOrigin = 'uncaughtException' | 'unhandledRejection';
 
 const HINT = '(Use `node --trace-uncaught ...` to show where the exception was thrown)';
 const FRAME = /^\s+at /u;
@@ -35,26 +33,7 @@ const objectGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
 const objectKeys = Object.keys;
 const objectGetPrototypeOf = Object.getPrototypeOf;
 
-const headers = new WeakMap<object, string>();
-const origins = new WeakMap<object, FatalOrigin>();
-
-/** The dispatch that made `reason` fatal, for a host that prints it later (isolate guest). */
-export function setFatalOrigin(reason: unknown, origin: FatalOrigin): void {
-  if ((typeof reason === 'object' && reason !== null) || typeof reason === 'function')
-    origins.set(reason, origin);
-}
-
-/** Whether `error` already carries its report header (a compile error's). */
-export function hasFatalHeader(error: object): boolean {
-  return headers.has(error);
-}
-
-/** Node's `arrow_message_private_symbol`: a header known when the error arose (compile errors). */
-export function setFatalHeader(error: object, header: string): void {
-  headers.set(error, header);
-}
-
-/** Node `IsExceptionDecorated`: the error's stack already carries its header. */
+/** Node `IsExceptionDecorated`: the error's stack already carries its header (`-e`). */
 export function markFatalDecorated(error: object): void {
   decorated.add(error);
 }
@@ -198,8 +177,11 @@ const EVAL_NAMED = /^(\s+at )(async )?(new )?(?:([^\s()]+)\.)?eval(?: \[as ([^\]
 function asNodeFrame(frame: string): string {
   if (frame.includes('(eval at ')) {
     // rifty's Function routing is the origin V8 records: not a guest place.
+    // A module compiled from a string records its eval origin without a position.
     return frame.replace(/eval at ([^\s(),]+) \(([^()]+)\)/gu, (whole, name: string, at: string) =>
-      frameKind(`    at x (${at})`) === 'runtime' ? `eval at ${name}` : whole,
+      frameKind(`    at x (${/:\d+:\d+$/u.test(at) ? at : `${at}:1:1`})`) === 'runtime'
+        ? `eval at ${name}`
+        : whole,
     );
   }
   const location = frameLocation(frame);
@@ -262,51 +244,20 @@ export function firstGuestFrame(stack: string): string | null {
   return guestStack(stack).frames.find((frame) => frameKind(frame) === 'user') ?? null;
 }
 
-interface HeaderSite {
-  readonly file: string;
-  readonly source: string;
-  readonly line: number;
-  readonly column: number;
-}
+const STACK_THREW = Symbol('stack threw');
 
-/**
- * Node's header, where JS can know it. An unhandled rejection's is V8's
- * message built from the error itself (`Exception::CreateMessage`): the top
- * frame of its captured stack — printed when that frame is guest code whose
- * coordinates are Node's (a CJS factory or `-e`). A synchronous throw's is
- * V8's throw site, which no frame or source records: none (compat process.md
- * "Fatal error stderr bytes").
- */
-function headerSite(raw: string, origin: FatalOrigin): HeaderSite | null {
-  if (origin !== 'unhandledRejection') return null;
-  const line = raw.split('\n').find((text) => FRAME.test(text));
-  if (line === undefined) return null;
-  const tail = frameTail(line);
-  const top = tail === '' ? line : line.slice(0, -tail.length);
-  if (frameKind(top) !== 'user') return null;
-  const location = frameLocation(asNodeFrame(top));
-  if (location === null) return null;
-  if (location.file !== '[eval]' && cjsLineOnePrefix(location.file) === undefined) return null;
-  const source = readGuestSource(location.file);
-  if (source === null) return null;
-  return { file: location.file, source, line: location.line, column: location.column - 1 };
-}
-
-/** Node `GetErrorSource`: `<file>:<line>\n<source line>\n<caret>\n`. */
-function headerText(site: HeaderSite): string {
-  const text = site.source.split(/\r\n|[\n\r\u2028\u2029]/u)[site.line - 1] ?? '';
-  let pad = '';
-  for (let i = 0; i < site.column && i < text.length; i += 1) pad += text[i] === '\t' ? '\t' : ' ';
-  return `${site.file}:${site.line}\n${text}\n${pad}^\n`;
-}
-
-function stackOf(error: object): string | null {
+function readStack(error: object): string | null | typeof STACK_THREW {
   try {
     const stack = (error as { stack?: unknown }).stack;
     return typeof stack === 'string' ? stack : null;
   } catch {
-    return null;
+    return STACK_THREW;
   }
+}
+
+function stackOf(error: object): string | null {
+  const stack = readStack(error);
+  return stack === STACK_THREW ? null : stack;
 }
 
 /** Node `IsNativeError`: only an Error is reported as one; any other object is inspected. */
@@ -325,14 +276,27 @@ interface InspectState {
   circular: boolean;
 }
 
-/** Node's inspect of a value inside an error's props block, at `indent` columns. */
-function propValue(value: unknown, indent: number, state: InspectState): string {
+/** Node's report inspects at `depth: max(inspect.defaultOptions.depth, 5)`. */
+const REPORT_DEPTH = 5;
+
+/** Node's inspect of a value inside an error's props block, at `indent` columns, `depth` deep. */
+function propValue(value: unknown, indent: number, state: InspectState, depth: number): string {
   if (typeof value === 'object' && value !== null && state.ancestors.includes(value)) {
     state.circular = true;
     return '[Circular *1]';
   }
-  if (isErrorLike(value)) return inspectError(value, indent, state);
-  if (Array.isArray(value) && value.every((v) => typeof v !== 'object' || v === null)) {
+  if (depth > REPORT_DEPTH && typeof value === 'object' && value !== null)
+    return Array.isArray(value) ? '[Array]' : `[${constructorName(value) ?? 'Object'}]`;
+  if (isErrorLike(value)) return inspectError(value, indent, state, depth);
+  // Node groups more than 6 entries into columns (rifty's inspect layout then).
+  if (
+    Array.isArray(value) &&
+    value.length <= 6 &&
+    value.every((v, i) => {
+      const d = objectGetOwnPropertyDescriptor(value, i);
+      return d !== undefined && 'value' in d && (typeof v !== 'object' || v === null);
+    })
+  ) {
     const items = value.map((v) => inspect(v));
     const start = items.length + indent + 1 + 10;
     const total = items.reduce((sum, item) => sum + item.length, items.length + start);
@@ -341,7 +305,7 @@ function propValue(value: unknown, indent: number, state: InspectState): string 
     const pad = ' '.repeat(indent);
     return `[\n${pad}  ${items.join(`,\n${pad}  `)}\n${pad}]`;
   }
-  return inspect(value);
+  return inspect(value, { depth: REPORT_DEPTH - depth });
 }
 
 /** Node `getConstructorName` without running guest getters: the first own data `constructor`. */
@@ -376,7 +340,7 @@ function improveStack(stack: string, error: object): string {
 }
 
 /** Node `formatError` + `reduceToSingleString`; accessors read as `[Getter]`, never run. */
-function inspectError(error: object, indent: number, state: InspectState): string {
+function inspectError(error: object, indent: number, state: InspectState, depth: number): string {
   const raw = stackOf(error) ?? (reflectApply(errorToString, error, []) as string);
   state.ancestors.push(error);
   // Frames are projected once, over the whole report (`guestStack`).
@@ -404,14 +368,14 @@ function inspectError(error: object, indent: number, state: InspectState): strin
     const value = descriptor.value;
     if ((key === 'name' || key === 'message') && typeof value === 'string' && raw.includes(value))
       continue;
-    entries.push(`${key}: ${propValue(value, indent + 2, state)}`);
+    entries.push(`${key}: ${propValue(value, indent + 2, state, depth + 1)}`);
   }
   const hidden = ['cause', 'errors'] as const;
   for (let k = 0; k < hidden.length; k += 1) {
     const key = hidden[k] as (typeof hidden)[number];
     const descriptor = objectGetOwnPropertyDescriptor(error, key);
     if (descriptor?.enumerable === false && 'value' in descriptor) {
-      entries.push(`[${key}]: ${propValue(descriptor.value, indent + 2, state)}`);
+      entries.push(`[${key}]: ${propValue(descriptor.value, indent + 2, state, depth + 1)}`);
     }
   }
   state.ancestors.pop();
@@ -428,30 +392,23 @@ function primitiveText(value: unknown): string {
 }
 
 /** The whole fatal report for `error`, ending in the trailer's newline. */
-export function formatFatalReport(error: unknown, explicit?: FatalOrigin): string {
-  const origin =
-    explicit ??
-    ((typeof error === 'object' && error !== null && origins.get(error)) || 'uncaughtException');
-  const trailer = FATAL_TRAILER;
+export function formatFatalReport(error: unknown): string {
   if (!isErrorLike(error)) {
     const body =
-      typeof error === 'object' || typeof error === 'function'
+      (typeof error === 'object' && error !== null) || typeof error === 'function'
         ? guestStack(inspect(error)).text
         : `${primitiveText(error)}\n${HINT}`;
-    return `${body}\n${trailer}`;
+    return `${body}\n${FATAL_TRAILER}`;
   }
-  const raw = stackOf(error) ?? '';
-  // Thrown inside rifty's runtime (Node: inside its own `node:` source): V8's
-  // message names that source, which has no guest counterpart — no header.
-  // The first frame that is not a V8 builtin (`JSON.parse` called by rifty's JSON loader).
-  const top = raw.split('\n').find((line) => FRAME.test(line) && frameKind(line) !== 'builtin');
-  const internal = top !== undefined && frameKind(top) === 'runtime';
-  const known = headers.get(error);
-  const site =
-    decorated.has(error) || internal || known !== undefined ? null : headerSite(raw, origin);
-  const arrow = decorated.has(error)
-    ? undefined
-    : (known ?? (site === null ? undefined : headerText(site)));
-  const header = arrow === undefined ? '' : `${arrow}\n`;
-  return `${header}${guestStack(inspectError(error, 0, { ancestors: [], circular: false })).text}\n${trailer}`;
+  // Node: a `stack` that throws when read leaves the error's own text and the hint.
+  if (readStack(error) === STACK_THREW)
+    return `${reflectApply(errorToString, error, []) as string}\n${HINT}\n${FATAL_TRAILER}`;
+  return `${guestStack(inspectError(error, 0, { ancestors: [], circular: false }, 0)).text}\n${FATAL_TRAILER}`;
+}
+
+/** Node's fallback where inspecting the error fails (a throwing Proxy trap): its stack alone. */
+export function formatFatalStack(error: unknown): string | null {
+  if (!isErrorLike(error)) return null;
+  const stack = stackOf(error);
+  return stack === null ? null : `${guestStack(stack).text}\n${FATAL_TRAILER}`;
 }

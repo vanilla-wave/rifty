@@ -13,6 +13,20 @@ export function cjsLineOnePrefix(filename: string): number | undefined {
   return lineOnePrefix.get(filename);
 }
 
+/**
+ * A first-line `-->` (behind whitespace or one-line block comments) is a
+ * comment only at the start of input or after a line terminator; behind the
+ * shared-line prefix it would be an operator. `//>` is the same comment.
+ */
+const LEADING_HTML_CLOSE =
+  /^(?:[\t\v\f \u00a0\ufeff\p{Zs}]|\/\*(?:[^*\n\r\u2028\u2029]|\*(?!\/))*\*\/)*-->/u;
+
+function asWrappedBody(source: string): string {
+  const lead = LEADING_HTML_CLOSE.exec(source)?.[0];
+  if (lead === undefined) return source;
+  return `${source.slice(0, lead.length - 3)}//>${source.slice(lead.length)}`;
+}
+
 /** Node's CommonJS wrapper parameters, in its order. */
 const NODE_WRAPPER = 'exports,require,module,__filename,__dirname';
 const NODE_PARAMS = NODE_WRAPPER.split(',');
@@ -36,15 +50,15 @@ export function compileCjsFactory(
   // then are its braces its own, so no `}` of it can close the wrapper and
   // run a line outside it. The wrapper text is never part of this check.
   new Function(...NODE_PARAMS, `${source}${sourceURL}`);
+  const body = asWrappedBody(source);
   if (/[\r\n\u2028\u2029]/.test(filename)) {
-    return new Function(
-      ...helpers,
-      `return function(${NODE_WRAPPER}){${source}\n}${sourceURL}`,
-    ) as (...helperValues: unknown[]) => Factory;
+    return new Function(...helpers, `return function(${NODE_WRAPPER}){${body}\n}${sourceURL}`) as (
+      ...helperValues: unknown[]
+    ) => Factory;
   }
   // Anonymous + strict keeps function-name bindings and callee reflection out.
   const prefix = `(function(${helpers.join(',')}){return function(${NODE_WRAPPER}){`;
-  const outer = indirectEval(`${prefix}${source}\n}})${sourceURL}`) as (
+  const outer = indirectEval(`${prefix}${body}\n}})${sourceURL}`) as (
     ...helperValues: unknown[]
   ) => Factory;
   lineOnePrefix.set(filename, prefix.length);

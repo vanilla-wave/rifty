@@ -191,9 +191,8 @@ sample. Node v24.16.0 facts: evidence §O1–§O3.
   callback) runs the fatal terminal in the trap at once, as a rejection does,
   not the default Worker report; the COI kernel child and the no-COI child
   Worker run it at the entry catch, as the no-COI command does. The terminal
-  prints Node's ReportFatalException shape (`builtins/fatal-report.ts`: header,
-  inspected error, user frames, trailer), with the dispatch origin choosing the
-  header (a rejection's error frame, a throw's statement). Goal
+  prints Node's ReportFatalException shape (`builtins/fatal-report.ts`:
+  inspected error, user frames, trailer; header: see the corrections below). Goal
   `node-file-entry-parity`; carriers `tests/{no-coi,browser-unit}/node-file-parity.spec.ts`.
 - 2026-11-22 — fatal report header, by construction (manager contract after
   external review round 1). Node's header is V8's message location. For an
@@ -210,4 +209,17 @@ sample. Node v24.16.0 facts: evidence §O1–§O3.
   (`Unexpected token 'X'`, or the end of input), else none. Carriers:
   `fatal-header-generator.test.ts` (360 generated programs, a printed header
   equals Node's), `fatal-report.test.ts`.
+- 2026-11-22 — correction to the line above (manager decision after external
+  review round 2): no header anywhere. Both remaining inferences printed false
+  ones — a rejection's source read from the VFS at report time (a file
+  rewritten since), the error's frame after its `stack` was read (Node then
+  names `node:internal/process/promises`), BOM and frame-like messages
+  shifting the caret; acorn's stop token vs V8's message (`foo((a) });`).
+  The report is the inspected error, frames and trailer; a compile error's
+  stack carries `(rifty parser position: <file>:<line>:<column>)`, named
+  rifty's parser, never Node's caret. A header as Node's needs an
+  engine-level message location: `backlog/runtime-js/sync-uncaught-header-throw-site-source`.
+  Carriers assert none on every row (`NODE_HEADER`); the dispatch origin no
+  longer reaches the report. `-e`'s `[eval]` decoration predates this
+  decision and is not changed (`backlog/runtime-js/node-eval-header-from-throw-statement`).
 

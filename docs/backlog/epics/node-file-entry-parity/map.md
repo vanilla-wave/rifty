@@ -6,9 +6,15 @@
    corpus, `tests/no-coi/node-file-parity.spec.ts` (no-COI SDK) and
    `tests/browser-unit/node-file-parity.spec.ts` (COI Workbench); committed RED,
    open rows marked expected-failure. → I1–I4
-5. **header residue** — rows `throw-non-error-*` (no stack locates the throw),
-   `syntax-error-dependency` (acorn vs V8 caret): declared compat rows
-   (process.md "Fatal error stderr bytes"); reopen only with a provable rule. → I2
+5. **header residue** — no header on any path (ADR-0445 2026-11-22 correction,
+   manager decision after external review round 2): every row whose Node
+   report has one is pinned without it; carriers assert none (`NODE_HEADER`).
+   Reopen only from an engine-level source:
+   `runtime-js/sync-uncaught-header-throw-site-source`. → I2
+5c. `distribution/isolate-host-rejection-reason-copy` — isolate rejection
+   report built from isolated-vm's copy (props, `[cause]`, class lost); fix is
+   a native patch (ADR). Rows `rejection-with-props-cause-subclass`,
+   `rejection-fs-enoent`. → I2 I4
 5b. **queued work at a fatal** — rows `fatal-with-queued-timer`,
    `rejection-with-queued-work`: due timers still run; owner: exit lifecycle
    (manager thread / PR #416 seam). → I2

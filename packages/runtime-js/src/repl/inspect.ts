@@ -18,6 +18,26 @@ const PromiseConstructorPrimordial = Promise;
 const promiseThenPrimordial = Promise.prototype.then;
 const promiseResolvePrimordial = Promise.resolve;
 const reflectApplyPrimordial = Reflect.apply;
+const getOwnPropertyDescriptorPrimordial = Object.getOwnPropertyDescriptor;
+const getPrototypeOfPrimordial = Object.getPrototypeOf;
+
+/** Node's default (`getters: false`): an accessor reads as `[Getter]`, never runs. */
+function accessorText(descriptor: PropertyDescriptor): string | null {
+  if (descriptor.get === undefined && descriptor.set === undefined) return null;
+  if (descriptor.get !== undefined && descriptor.set !== undefined) return '[Getter/Setter]';
+  return descriptor.get !== undefined ? '[Getter]' : '[Setter]';
+}
+
+/** The first data `constructor` up the chain, read without running a getter. */
+function constructorNameOf(obj: object): string {
+  for (let o: object | null = obj; o !== null; o = getPrototypeOfPrimordial(o)) {
+    const ctor = getOwnPropertyDescriptorPrimordial(o, 'constructor')?.value;
+    if (typeof ctor !== 'function') continue;
+    const name = getOwnPropertyDescriptorPrimordial(ctor, 'name')?.value;
+    return typeof name === 'string' ? name : '';
+  }
+  return '';
+}
 
 interface InspectContext {
   readonly ancestors: WeakSet<object>;
@@ -177,10 +197,25 @@ function formatArray(
   if (circular !== null) return circular;
   if (depth > maxDepth) return '[Array]';
   context.ancestors.add(arr);
-  const items = arr
-    .slice(0, MAX_ARRAY_ITEMS)
-    .map((v) => inspectValue(v, depth + 1, context, maxDepth));
-  if (arr.length > MAX_ARRAY_ITEMS) items.push(`... ${arr.length - MAX_ARRAY_ITEMS} more items`);
+  const items: string[] = [];
+  let i = 0;
+  while (i < arr.length && items.length < MAX_ARRAY_ITEMS) {
+    const descriptor = getOwnPropertyDescriptorPrimordial(arr, i);
+    if (descriptor === undefined) {
+      // Node: a run of holes is one `<N empty items>` entry.
+      let end = i + 1;
+      while (end < arr.length && getOwnPropertyDescriptorPrimordial(arr, end) === undefined)
+        end += 1;
+      items.push(`<${end - i} empty item${end - i > 1 ? 's' : ''}>`);
+      i = end;
+      continue;
+    }
+    items.push(
+      accessorText(descriptor) ?? inspectValue(descriptor.value, depth + 1, context, maxDepth),
+    );
+    i += 1;
+  }
+  if (i < arr.length) items.push(`... ${arr.length - i} more item${arr.length - i > 1 ? 's' : ''}`);
   context.ancestors.delete(arr);
   return `${referencePrefix(arr, context)}[ ${items.join(', ')} ]`;
 }
@@ -196,10 +231,16 @@ function formatObject(
   if (depth > maxDepth) return '[Object]';
   context.ancestors.add(obj);
   const keys = Object.keys(obj);
-  const ctor = obj.constructor && obj.constructor.name !== 'Object' ? obj.constructor.name : '';
+  const name = constructorNameOf(obj);
+  const ctor = name !== 'Object' ? name : '';
   const items = keys.slice(0, MAX_OBJECT_KEYS).map((k) => {
-    const v = (obj as Record<string, unknown>)[k];
-    return `${k}: ${inspectValue(v, depth + 1, context, maxDepth)}`;
+    const descriptor = getOwnPropertyDescriptorPrimordial(obj, k);
+    const text =
+      descriptor === undefined
+        ? 'undefined'
+        : (accessorText(descriptor) ??
+          inspectValue(descriptor.value, depth + 1, context, maxDepth));
+    return `${k}: ${text}`;
   });
   if (keys.length > MAX_OBJECT_KEYS) items.push(`... ${keys.length - MAX_OBJECT_KEYS} more keys`);
   context.ancestors.delete(obj);

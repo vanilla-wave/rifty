@@ -26,7 +26,7 @@ All pure-JS, no platform dep. `process.stdout.isTTY=false` (process.ts:102) → 
 | toUSVString v11 | lone-surrogate→U+FFFD regex | low |
 | isArray/_extend v0.6 (deprecated) | Array.isArray / own-enum copy; warn via deprecate() (util.ts:184) | low |
 
-**Excluded** (the silent-divergence BUGS — inspect options-misread + single-quote, util.format %c — are already fixed; that item is closed). This item still owns the inspect option-fidelity SURFACE: Node-default depth (2), colors, showHidden (non-enumerable + symbol keys), getters, sorted, breakLength, numericSeparator, maxArrayLength, maxStringLength (rifty truncates in-structure strings at 120 + `…`; Node's default is 10000), inspect.custom, defaultOptions. `formatWithOptions` is shipped for the existing `inspect` contract, including `depth`; it inherits these tracked option gaps and is not a claim that they are complete.
+**Excluded** (the silent-divergence BUGS — inspect options-misread + single-quote, util.format %c — are already fixed; that item is closed). This item still owns the inspect option-fidelity SURFACE: Node-default depth (2), colors, showHidden (non-enumerable + symbol keys), the `getters: true` option (the default since 2026-11-22: an accessor reads `[Getter]`/`[Setter]`/`[Getter/Setter]`, never runs; a run of array holes reads `<N empty items>` — PR #421), sorted, breakLength, numericSeparator, maxArrayLength, maxStringLength (rifty truncates in-structure strings at 120 + `…`; Node's default is 10000), inspect.custom, defaultOptions. `formatWithOptions` is shipped for the existing `inspect` contract, including `depth`; it inherits these tracked option gaps and is not a claim that they are complete.
 
 ## Options or Next
 

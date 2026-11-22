@@ -1,7 +1,7 @@
 /**
- * The fatal report against live Node (goal node-file-entry-parity I2): a
- * synchronous throw prints Node's report without its header (V8's throw site
- * is not readable from JS, compat process.md), frames and props as Node's.
+ * The fatal report against live Node (goal node-file-entry-parity I2): Node's
+ * report without its header (V8's message location is not readable from JS,
+ * ADR-0445 2026-11-22, compat process.md), frames and props as Node's.
  */
 import { MemoryFsSync, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach, expect, it } from 'vitest';
@@ -11,6 +11,7 @@ import {
   runNodeFileOracle,
 } from '../../../tests/browser-unit/fixtures/node-file-programs.ts';
 import { formatFatalReport } from '../src/builtins/fatal-report.ts';
+import { fatalReportText } from '../src/builtins/process-lifecycle-events.ts';
 import { createModuleLoader } from '../src/module-loader/loader.ts';
 
 afterEach(() => resetSyncMirror());
@@ -22,7 +23,8 @@ function riftyReport(source: string): string {
   try {
     createModuleLoader(vfs, { cwd: '/p' }).require('./main.js', '/p/x.js');
   } catch (error) {
-    return formatFatalReport(error);
+    // What every host prints: the report, or its fallback.
+    return fatalReportText(error);
   }
   throw new Error('program did not throw');
 }
@@ -91,7 +93,7 @@ it.each([
     'a closure may throw the built error later',
     "const e = new Error('x');\nconst later = () => { throw e; };\nlater();\n",
   ],
-])('%s: no header (Node has one JS cannot prove)', async (_, source) => {
+])('%s: Node bytes but the header', async (_, source) => {
   const { node, rifty } = await againstNode(source);
   expect(headerOf(node)).toMatch(/^<root>\/main\.js:\d+\n/u);
   expect(rifty).toBe(node.slice(node.indexOf('\n\n') + 2));
@@ -141,7 +143,7 @@ it.each([
     'a promise executor held the error before the rethrow',
     "let saved;\nnew Promise(() => {\n  throw (saved = new Error('x'));\n}).catch(() => {});\nthrow saved;\n",
   ],
-])('%s: no header', async (_, source) => {
+])('%s: Node bytes but the header', async (_, source) => {
   const { node, rifty } = await againstNode(source);
   expect(headerOf(node)).toMatch(/^<root>\/main\.js:5\n/u);
   expect(rifty).toBe(node.slice(node.indexOf('\n\n') + 2));
@@ -168,7 +170,7 @@ it("a nested error's frames are projected like the report's own, its props and b
   expect(limited).toMatch(/code: 7 \}\n\nNode\.js/u);
 });
 
-it('a promise reaction may have held the error: no header', async () => {
+it('a rejection held by a promise reaction: Node bytes but the header', async () => {
   const head = "const p = Promise.resolve().then(() => {\n  throw new Error('x');\n});\n";
   const oracle = await runNodeFileOracle({
     name: 'unit',
@@ -211,6 +213,22 @@ it.each([
   ],
   ['a subclass carrying the name', "class MyError extends Error {}\nthrow new MyError('m');\n"],
   [
+    'nested getters, holes and a long list',
+    "const e = new Error('x');\ne.detail = { get ran() { console.log('RAN'); return 1; }, a: { get bad() { throw new Error('g'); } } };\ne.holes = new Array(1e5);\nthrow e;\n",
+  ],
+  [
+    'a cause chain deeper than the report inspects',
+    "let e = new Error('leaf');\nfor (let i = 0; i < 5000; i++) e = new Error('e' + i, { cause: e });\nthrow e;\n",
+  ],
+  [
+    'a cause whose Proxy traps throw',
+    "const trap = () => {\n  throw new Error('trap');\n};\nthrow new Error('x', { cause: new Proxy({}, { get: trap, ownKeys: trap, getPrototypeOf: trap }) });\n",
+  ],
+  [
+    'a stack getter that throws',
+    "const e = new Error('x');\nObject.defineProperty(e, 'stack', { get() { throw new Error('boom'); } });\nthrow e;\n",
+  ],
+  [
     'a hand-written stack',
     "const e = new Error('x');\ne.stack = 'Error: x\\n    at fake (z.js:1:1)';\nthrow e;\n",
   ],
@@ -225,4 +243,9 @@ it('code compiled from a string keeps its frame, never a rifty path', () => {
   );
   expect(report).toContain('    at eval (eval at <anonymous>, <anonymous>:4:7)\n');
   expect(report).not.toMatch(/function-import-routing|\/src\//u);
+});
+
+it("a direct eval frame names its module as origin, without Node's position", () => {
+  const report = riftyReport('eval(\'function f() {\\n  throw new Error("ev");\\n}\\nf();\');\n');
+  expect(report).toContain('    at f (eval at <anonymous> (/p/main.js), <anonymous>:2:9)\n');
 });

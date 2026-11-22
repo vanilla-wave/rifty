@@ -14,7 +14,6 @@
  */
 
 import { setKernelDrainHook } from '@riftydev/kernel';
-import { setFatalOrigin } from '../builtins/fatal-report.ts';
 import {
   dispatchUncaughtException,
   dispatchUnhandledRejection,
@@ -515,9 +514,8 @@ export function handleRealmUnhandledRejection(reason: unknown, promise: unknown)
   const outcome = isRiftyProcessExit(reason) ? null : dispatchUnhandledRejection(reason, promise);
   if (outcome?.kind === 'handled' || outcome?.kind === 'exited') return true;
   // Node's fatal reason: an `Error` as is, any other value wrapped as
-  // `UnhandledPromiseRejection` by the dispatch; its report heads the error's frame.
+  // `UnhandledPromiseRejection` by the dispatch.
   const fatalReason = outcome?.kind === 'unhandled' ? outcome.error : reason;
-  setFatalOrigin(fatalReason, 'unhandledRejection');
   if (beginNodeEvalUnhandled(fatalReason, 'rejection')) return true;
   const fatal = outcome?.kind === 'unhandled' ? terminateFatal(outcome.error) : null;
   recordRejection(fatal ?? reason);

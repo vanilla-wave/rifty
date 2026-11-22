@@ -11,9 +11,11 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 import {
+  entryPrograms,
   fatalPrograms,
+  nodeFileDump,
   nodeFileExpected,
   nodeFileNormalized,
   nodeFileVerdict,
@@ -23,11 +25,17 @@ import { runCode } from '../src/index.ts';
 const GUEST_ROOT = '/workspace';
 const RIFTY_VERSION = 'v24.0.0';
 
-/** Rows whose program shape `node -e require(...)` can carry (CJS file entries). */
-const programs = fatalPrograms.filter(
-  (program) =>
-    !program.argv[0]?.endsWith('.mjs') && program.files[program.argv[0] ?? ''] !== undefined,
-);
+/**
+ * Rows whose program shape `node -e require(...)` can carry (CJS file
+ * entries); of the entry rows only the one that does not read its entry facts.
+ */
+const programs = [
+  ...entryPrograms.filter((program) => program.name === 'first-line-html-close'),
+  ...fatalPrograms.filter(
+    (program) =>
+      !program.argv[0]?.endsWith('.mjs') && program.files[program.argv[0] ?? ''] !== undefined,
+  ),
+];
 
 function codeFor(files: Readonly<Record<string, string>>, main: string): string {
   return `const fs = require('fs'); for (const [p, c] of Object.entries(${JSON.stringify(files)})) { fs.mkdirSync(require('path').dirname(p), { recursive: true }); fs.writeFileSync(p, c); } require('./${main}');`;
@@ -63,6 +71,8 @@ function withoutEvalWrapper(stderr: string): string {
 }
 
 describe('node -e require(file) fatal report matches Node (isolate guest)', () => {
+  const rows: unknown[] = [];
+  afterAll(() => nodeFileDump('isolate', rows));
   for (const program of programs) {
     it(program.name, async () => {
       const code = codeFor(program.files, program.argv[0] ?? '');
@@ -74,6 +84,7 @@ describe('node -e require(file) fatal report matches Node (isolate guest)', () =
       const result = await runCode(code);
       expect(result.termination).toBeUndefined();
       const actual = nodeFileNormalized(result, GUEST_ROOT);
+      rows.push({ program, expected, actual });
       nodeFileVerdict(expect, 'isolate', { program, expected, actual });
     });
   }

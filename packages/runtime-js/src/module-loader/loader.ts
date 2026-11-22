@@ -1,7 +1,7 @@
 import { NotImplementedError } from '@riftydev/io';
 import { type FsSync, joinPath } from '@riftydev/vfs';
 import { type Node as AcornNode, parse as acornParse } from 'acorn';
-import { firstGuestFrame, hasFatalHeader, markFatalDecorated } from '../builtins/fatal-report.ts';
+import { firstGuestFrame, markFatalDecorated } from '../builtins/fatal-report.ts';
 import { loadBuiltin } from '../builtins/index.ts';
 import { __setCreateRequireImpl } from '../builtins/module.ts';
 import { nodeMainImports } from '../builtins/node-entry-main.ts';
@@ -10,6 +10,7 @@ import { createRequirePath } from '../internal/create-require-path.ts';
 import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
 import { readRuntimeGlobal } from '../internal/worker-globals.ts';
 import { createCjsInteropAuthority } from './cjs-interop-authority.ts';
+import { isCjsSyntaxError } from './cjs-syntax-error.ts';
 import {
   type CjsExtensionHook,
   type CjsExtensions,
@@ -337,8 +338,8 @@ export function projectNodeEvalError(
   origin: 'sync' | 'unhandled' | 'uncaught' = 'sync',
   compiler?: NodeEvalCompiler,
 ): unknown {
-  // A compile error of a required file already carries Node's header.
-  if (!(error instanceof Error) || hasFatalHeader(error)) return error;
+  // A required file's compile error names that file, not `[eval]`.
+  if (!(error instanceof Error) || isCjsSyntaxError(error)) return error;
   const firstLine =
     (error.stack ?? `${error.name}: ${error.message}`).split('\n')[0] ?? error.message;
   if (error instanceof SyntaxError) {

@@ -54,3 +54,27 @@ it.each([
   expect(() => compileCjsFactory([], source, '/app/broken.cjs')()).toThrow(SyntaxError);
   expect(Reflect.get(globalThis, '__riftyRan')).toBeUndefined();
 });
+
+it.each([
+  ['--> legacy\nreturn 1;'],
+  ['   --> legacy\nreturn 1;'],
+  ['/* a */ --> legacy\nreturn 1;'],
+  ['﻿--> legacy\nreturn 1;'],
+  ['/* a\n */ --> legacy\nreturn 1;'],
+  ['<!-- legacy\nreturn 1 <!-- tail\n;'],
+  ['x = 1 --> 0;\nreturn x;'],
+  [' #!/usr/bin/env node\nreturn 1;'],
+  ['"--> no"; return 1;'],
+])('first-line form %j: accepted and run as compileFunction does', (source) => {
+  const parameters = ['exports', 'require', 'module', '__filename', '__dirname'];
+  const run = (compile: () => (...a: unknown[]) => unknown) => {
+    try {
+      return { value: compile()({}, () => undefined, {}, '/f.js', '/') };
+    } catch (error) {
+      return { error: (error as Error).name };
+    }
+  };
+  expect(run(() => compileCjsFactory([], source, '/app/first.cjs')() as never)).toEqual(
+    run(() => compileFunction(source, parameters) as never),
+  );
+});
