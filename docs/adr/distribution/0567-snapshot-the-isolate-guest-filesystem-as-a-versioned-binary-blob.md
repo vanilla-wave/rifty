@@ -139,4 +139,5 @@ Rejected (P1, template scale, S ≈ 95 MB):
 - A snapshot from an isolate that ran guest code is guest-authored: CRC and
   structure checks keep it consistent, not truthful.
 - Not the user's words: format, CRC-32, renewed `ino`, replace-on-fresh-only
-  and exact template match are agent decisions (goal `isolate-host-fs-snapshot` Decisions).
+  and exact template match are agent decisions; the 16 383-unit name cap and
+  I1's narrowing to it are the manager's decision by delegation (goal `isolate-host-fs-snapshot` Decisions).

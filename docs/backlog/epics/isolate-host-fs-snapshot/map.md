@@ -2,14 +2,7 @@
 
 ## Items
 
-1. `distribution/isolate-host-fs-snapshot-acceptance` — **acceptance carrier** —
-   scenario steps 1–4 as one test file over the real guest bundle in real
-   isolated-vm and in the Node realm, committed RED/expected-failure. No
-   product capability by itself.
-2. `distribution/isolate-host-fs-snapshot-codec` — format v1 codec
-   (ADR-0567), FS adapter, `GuestEntry.snapshot`/`restore`, fault matrix,
-   published cost (I1–I6). Hypothesis until the carrier hits it; expected the
-   only wall.
+None: the carrier and the codec landed on the goal branch (Final+GREEN PASS @ 6c765ddbe). Next: CLOSE, after the manager's external review (manager, 2026-11-22).
 
 ## Open questions
 

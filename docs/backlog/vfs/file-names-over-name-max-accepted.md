@@ -3,7 +3,7 @@ area: vfs
 status: draft
 title: rifty's FS accepts file names Node refuses with ENAMETOOLONG
 created: 2026-11-22
-why: a Node program that hits NAME_MAX gets ENAMETOOLONG; in rifty the same call succeeds, and such a name also cannot be snapshotted (ADR-0567 caps names at 16 383 code units)
+why: a Node program that hits NAME_MAX gets ENAMETOOLONG; in rifty the same call succeeds, and a name over 16 383 code units also cannot be snapshotted (ADR-0567)
 user_story: As a developer running Node code in rifty, I want a too-long file name to fail with ENAMETOOLONG as in Node, but today rifty creates it
 sources: [ADR-0567, docs/backlog/epics/isolate-host-fs-snapshot/goal.md, docs/public/compat/isolate-host.md]
 code: [packages/vfs/src/memory-backend.ts, packages/runtime-js/src/builtins/fs.ts]
@@ -22,11 +22,17 @@ Probe 2026-11-22, `fs.writeFileSync(dir + '/' + name, '')`:
 |---|---|---|
 | 255 × `a` | ok | ok |
 | 256 × `a` | `ENAMETOOLONG` | ok |
-| 86 × `€` (258 UTF-8 bytes) | ok (APFS counts characters) | ok |
-| 16 384 × `a` | — | ok |
+| 86 × `€` (258 UTF-8 bytes) | ok | ok |
+| 255 × `€` (765 UTF-8 bytes) | ok | — |
+| 256 × `€` | `ENAMETOOLONG` | — |
+| 128 × `𝄞` (256 UTF-16 units, 128 code points) | `ENAMETOOLONG` | — |
+| 16 384 × `a` | `ENAMETOOLONG` | ok |
 
-Linux NAME_MAX (ext4: 255 bytes) not measured here — the reference platform
-and the unit (bytes vs characters) are an open fork for whoever picks this up.
+On APFS the measured limit is 255 UTF-16 code units (not bytes, not code
+points).
+
+Linux not measured here. Open fork for whoever picks this up: the reference
+platform, and so the unit (UTF-8 bytes, UTF-16 units or code points).
 
 Link: ADR-0567 caps snapshot names at 16 383 code units (V8 hashes longer
 strings by length alone); a guest run that creates a longer name cannot save

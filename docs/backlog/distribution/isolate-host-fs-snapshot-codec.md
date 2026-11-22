@@ -65,7 +65,7 @@ challenge: 2026-11-22 — reuses the goal's premise check (goal `## Challenge`)
 | restore × other/none/unexpected template | `ERR_FS_SNAPSHOT_TEMPLATE`; matching template restores | codec, acceptance step 4 | → I2 |
 | restore × CRC-valid structural defects: no/second/file root, duplicate path, dir+file at a path, relative, `..`/`.`/empty segment, trailing `/`, NUL, missing/file parent, child before parent, unknown kind (no symlinks), NaN/∞ time, fractional/negative size, size past end (2^50, not allocated), path/template length past end, bytes after `end` | `_CORRUPT`, target unchanged | codec `hostile bytes` table | → I3 |
 | restore × siblings out of order, re-entry into a closed directory, a name over 16 383 code units | `_CORRUPT` | codec `hostile bytes` table | → I3 |
-| restore × 2000 equal-length paths over 16 383 units (~65 MB) | decodes within 3× a same-size control (no hash flooding; was ~10×) | codec `equal-length paths over 16 383 units…` | → I3 |
+| restore × 2000 equal-length paths over 16 383 units (~65 MB) | restore time for 2000 entries < 3 × that for 1000, best of 3 (no hash flooding; the quadratic reader gave 3.9–4.4) | codec `equal-length paths over 16 383 units…` | → I3 |
 | snapshot × a name of 16 383 / 16 384 code units | round-trips / `_TOO_LARGE` | codec `a name of 16 383 code units…` | → I3 |
 | any refusal × error text | `<code>: ` + printable ASCII, no blob text (`SECRET` marker in paths and in the blob's template absent) | codec `refused()` | → I3 |
 | consumer realm × snapshot of a realm the guest altered (`DataView`/`Uint8Array`/`Array.prototype.sort`/`charCodeAt`/global `Uint8Array` replaced) | `restoreFs` refuses with `FsSnapshotError` (no `SECRET`) or yields a tree that snapshots again | acceptance `a snapshot from a realm the guest altered…` | → I3, I4 |
@@ -86,4 +86,5 @@ challenge: 2026-11-22 — reuses the goal's premise check (goal `## Challenge`)
 - 2026-11-22 — `it.fails` marks RED rows; IMPLEMENT flips them to `it`.
 - 2026-11-22 — after Contract+RED: the outside-target RED's bound tightened from `≤ first + 9` to the exact `first + 8` (target() 4 incl. its root, restore 3, probe 1) — stricter, same row.
 - 2026-11-22 — Final+GREEN round 1 (blocker, I3): the decoder's path-keyed Map was quadratic on equal-length paths over 16 383 units (V8 length-only hash) → parent/order checks on the walk's stack, names capped at 16 383 code units both ways (the vfs directory Map is keyed by names); REDs added; packed-export pin `embedder.test.ts` updated to the ADR-0558 2026-11-22 surface (PR-4).
+- re-cut: 2026-11-22 — the hash-flooding row's carrier is a scaling ratio (2000 vs 1000 entries) instead of a same-size control (Final+GREEN verify: the control margin was the constant, not the ratio) — trace: none
 - 2026-11-22 — I6 floor measured as a sandbox run goes (restore → `run` → snapshot): 223 MiB at template scale; snapshot straight after restore can need ~3 × S (garbage blob), stated in README/ADR.
