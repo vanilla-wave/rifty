@@ -81,7 +81,10 @@ async function tree(sb: Sandbox, dir = W): Promise<FileTree> {
 function errorView(stderr: string): { error: string | undefined; files: string[] } {
   const lines = stderr.split('\n');
   const error = lines.find((l) => /^[A-Za-z]*Error\b/.test(l));
-  const files = lines.flatMap((l) => /\((\/workspace\/[^:)]+):\d+:\d+\)$/.exec(l)?.[1] ?? []);
+  // `at f (/workspace/a.js:1:2)` or, for an anonymous frame, `at /workspace/a.js:1:2`.
+  const files = lines.flatMap(
+    (l) => /^\s+at (?:.*\()?(\/workspace\/[^:)]+):\d+:\d+\)?$/.exec(l)?.[1] ?? [],
+  );
   return { error, files };
 }
 
@@ -361,6 +364,14 @@ require('fs').mkdirSync('empty/inner', { recursive: true });`,
     runs: [['p.js'], ['q.js']],
   },
   {
+    label: 'a throw from queueMicrotask after a write',
+    files: {
+      'm.js':
+        "require('fs').writeFileSync('m', '1'); queueMicrotask(() => { throw new Error('mt') })",
+    },
+    runs: [['m.js']],
+  },
+  {
     label: 'relative require, JSON, __filename, __dirname, argv, require.main, relative paths',
     files: {
       'main.js': `const conf = require('./conf.json'); const lib = require('./lib/x');
@@ -434,6 +445,59 @@ describe('node <path> corpus in sequences (scenario 2, 5, I2)', () => {
       }
     });
   }
+});
+
+describe('declared: work queued at exit (compat ⚠️)', () => {
+  // Thread #416: work already queued when `process.exit()` runs still runs here
+  // (backlog runtime-js/node-eval-work-queued-at-exit-runs); in a sandbox it can write
+  // a file Node never writes, and that file is kept.
+  const QUEUED: Record<string, string> = {
+    'a microtask queued beside the exiting one': `const fs = require('fs');
+Promise.resolve().then(() => process.exit(0));
+Promise.resolve().then(() => fs.writeFileSync('late', '1'));`,
+    'a timer queued beside the exiting one': `const fs = require('fs');
+setTimeout(() => process.exit(0), 0);
+setTimeout(() => fs.writeFileSync('late', '1'), 0);`,
+  };
+  for (const [label, code] of Object.entries(QUEUED)) {
+    carrier(`${label} still writes its file (Node: never)`, async () => {
+      const o = nodeSequence([{ files: { 'q.js': code }, run: ['q.js'] }])[0];
+      expect(Object.keys(o?.files ?? {})).toEqual([`${W}/q.js`]);
+      const sb = await createSandbox();
+      try {
+        await sb.writeFile('q.js', code);
+        expect(await sb.exec('q.js')).toEqual({ stdout: '', stderr: '', exitCode: 0 });
+        expect((await sb.list()).map((e) => e.name)).toEqual(['late', 'q.js']);
+      } finally {
+        await sb.destroy();
+      }
+    });
+  }
+});
+
+describe('declared: a run Node ends at once but this host only at its deadline (compat ⚠️)', () => {
+  carrier(
+    'an uncaught throw followed by an endless microtask chain: timeout, its writes rolled back',
+    async () => {
+      const code =
+        "require('fs').writeFileSync('w', '1'); (function f() { queueMicrotask(f) })(); throw new Error('boom')";
+      // Node exits 1 at once and keeps `w`.
+      const o = nodeSequence([{ files: { 'c.js': code }, run: ['c.js'] }])[0];
+      expect(o?.exitCode).toBe(1);
+      expect(Object.keys(o?.files ?? {})).toContain(`${W}/w`);
+      const sb = await createSandbox();
+      try {
+        await sb.writeFile('c.js', code);
+        expect(await sb.exec('c.js', { timeoutMs: 2000 })).toMatchObject({
+          exitCode: null,
+          termination: 'timeout',
+        });
+        expect((await sb.list()).map((e) => e.name)).toEqual(['c.js']);
+      } finally {
+        await sb.destroy();
+      }
+    },
+  );
 });
 
 describe('limits are loud (scenario 8, I6)', () => {

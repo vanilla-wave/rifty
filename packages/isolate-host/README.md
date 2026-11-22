@@ -91,6 +91,76 @@ one warm idle one holds a call. A call that timed out counts as in flight until
 its isolate stops (at most ~1 s more for a guest that ignores termination). Size the cgroup for your peak of concurrent
 calls times their workers' ceilings.
 
+## Sandbox: files and `node <path>` runs (ADR-0568)
+
+One sandbox for one agent run: the host writes the model's files, runs one as
+`node <path> [args]`, reads what it wrote (bytes, a PDF included), fixes and
+runs again.
+
+```js
+import { createSandbox } from '@riftydev/isolate-host';
+
+const sandbox = await createSandbox();
+await sandbox.writeFile('main.js', `
+  const fs = require('fs');
+  fs.mkdirSync('out', { recursive: true });
+  fs.writeFileSync(process.argv[2], Buffer.concat([Buffer.from('%PDF-1.4\\n'), Buffer.from([0, 255])]));
+  console.log('wrote', process.argv[2]);
+`);
+const result = await sandbox.exec('main.js', { args: ['out/report.pdf'] });
+// → { stdout: 'wrote out/report.pdf\n', stderr: '', exitCode: 0 }
+const pdf = await sandbox.readFile('out/report.pdf'); // Uint8Array, straight from the sandbox
+await sandbox.destroy();
+```
+
+`createSandbox(options?) → Promise<Sandbox>`
+
+| option | default | meaning |
+|---|---|---|
+| `snapshot` | — | bytes of `sandbox.snapshot()`: the new sandbox starts with those files |
+| `maxFileBytes` | 64 MiB | largest file one `readFile`/`writeFile` moves (`ERR_FS_FILE_TOO_LARGE`) |
+| `maxFsBytes` | 256 MiB | largest state, counted as snapshot bytes: a host write past it rejects `ERR_ISOLATE_HOST_SANDBOX_FULL`, a run whose end state is past it gets `stateRefused` |
+| `template` | — | not implemented: `NotImplementedError('isolate-host.sandbox-template')` |
+
+A fresh sandbox holds the empty directories `/workspace` (the cwd) and `/tmp`
+(rifty's `os.tmpdir()`). Paths: a relative path resolves against
+`/workspace`; `..` never leaves the sandbox's own `/`; a NUL is
+`ERR_INVALID_ARG_VALUE`. Errors have Node's shape (`code`, `syscall`, `path`,
+`ENOENT: no such file or directory, open '/workspace/x'`) and name only
+sandbox paths. rifty's FS has no links: every entry is a file or a directory.
+
+| method | does |
+|---|---|
+| `writeFile(path, data)` | `Uint8Array` or UTF-8 string; parents created |
+| `readFile(path)` | `Uint8Array` (a copy) |
+| `list(path = '/workspace')` | `{ name, type: 'file' \| 'directory', size }[]`, by name |
+| `remove(path)` | a file or a directory tree |
+| `exec(path, options?)` | `node <path> [args]` in `/workspace`: `runCode`'s options plus `args` (strings); `env`, `cwd`, `stdin` are `NotImplementedError('isolate-host.sandbox-exec-<option>')`. The path is one file, never a shell command |
+| `snapshot()` | the files as bytes (ADR-0567), taken between operations |
+| `destroy()` | the run in flight and everything after reject `ERR_ISOLATE_HOST_SANDBOX_DESTROYED`; the state is dropped |
+
+Operations on one sandbox take effect one at a time, in call order, also when
+you do not await them; sandboxes do not wait for each other. A run's
+`timeoutMs` counts from when it starts, after earlier operations.
+
+`exec` returns `runCode`'s result, plus `stateRefused` when the run ended on
+its own but its files were not kept. What survives a run:
+
+| the run | the files after it |
+|---|---|
+| exits (any code, `process.exit`, an uncaught throw or rejection) | as the run left them |
+| `termination: 'timeout'` or `'memory'` | as before the run: a killed run's writes are rolled back (Node keeps them) |
+| its worker lost (rerun once, alone; then `ERR_ISOLATE_HOST_WORKER_LOST`) | as before the run; the rerun starts from the same files |
+| `stateRefused` (`ERR_FS_SNAPSHOT_TOO_LARGE`, `ERR_ISOLATE_HOST_SANDBOX_CAPTURE`, a refusal of the codec; `ERR_ISOLATE_HOST_SANDBOX_RESTORE`: the files did not fit the run's isolate, no guest code ran, `exitCode: null`) | as before the run |
+
+Each run is a fresh isolate, like a new `node` process: only files carry over.
+Between operations a sandbox holds no process and no isolate, only its files
+in your process's memory (about their size); a sandbox you drop is ordinary
+garbage. The number of live sandboxes is yours to cap.
+
+If your result type has `exitCode: number`, map a killed run yourself from
+`termination` (`exitCode: null` is never a guest's status).
+
 ## What the guest gets
 
 The guest gets rifty's Node environment, which is not real Node: `require`,
