@@ -1,9 +1,9 @@
 {
   "overall_verdict": "pass",
-  "merge_call": "Mergeable once PR CI at HEAD is green; verdict re-bound to 3e5403f6e after the verify passes over cross-review round 3 (one mark on the result channel's end: no placement, never idle; F1 bound reds readably; idle case event-ordered).",
+  "merge_call": "Mergeable once PR CI at HEAD is green; verdict re-bound to 0804a773f after the verify pass over cross-review round 4 and the merge of main c2621b50c (PR #416).",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "3e5403f6e044a587e92f16f7028e2e21c878bc46",
-  "unit_goal_source": "PR #420 (branch t3/isolate-host-suite-flake), standalone rifty-fix unit. Observed baseline: the finding backlog distribution/isolate-host-tests-flake-under-extreme-load (deleted by this PR; read at BASE 50c9d8bf1) — guest-export clock tolerance, pool-faults interval churn, protocol closed-then-exit red under load. BASE 50c9d8bf1, HEAD 3e5403f6e044a587e92f16f7028e2e21c878bc46. Passes: b1ca3e5f0 (2 blockers: removed period parity row, compat line 9 — fixed), d98cd3fa8 PASS, external cross-review round 1 at bb022938b (B1: deadline after one poll admitted late results — reverted), 375d1bd21 PASS, dd429db50 PASS, external cross-review round 2 at 325f22022 (no blocker; F1 carrier budget-dependent, placement window during the grace decision — both fixed), b959f129e PASS, external cross-review round 3 at 12151aea5 (no blocker; window from channel end reached placement and idle accounting — closed by one mark on 'end'; F1 bound spun), ba2d16844 PASS, 3e5403f6e PASS.",
+  "reviewed_sha": "0804a773fc1c3e66502606f9510d5b122d833f06",
+  "unit_goal_source": "PR #420 (branch t3/isolate-host-suite-flake), standalone rifty-fix unit. Observed baseline: the finding backlog distribution/isolate-host-tests-flake-under-extreme-load (deleted by this PR; read at BASE 50c9d8bf1) — guest-export clock tolerance, pool-faults interval churn, protocol closed-then-exit red under load. BASE 50c9d8bf1, HEAD 0804a773fc1c3e66502606f9510d5b122d833f06. Passes: b1ca3e5f0 (2 blockers: removed period parity row, compat line 9 — fixed), d98cd3fa8 PASS, external cross-review round 1 at bb022938b (B1: deadline after one poll admitted late results — reverted), 375d1bd21 PASS, dd429db50 PASS, external cross-review round 2 at 325f22022 (no blocker; F1 carrier budget-dependent, placement window during the grace decision — both fixed), b959f129e PASS, external cross-review round 3 at 12151aea5 (no blocker; window from channel end reached placement and idle accounting — closed by one mark on 'end'; F1 bound spun), ba2d16844 PASS, 3e5403f6e PASS, external cross-review round 4 at d057830c9 (no blocker; placement carrier's own EOF-vs-exit race removed, residual record completed), merge of main c2621b50c, 0804a773f PASS.",
   "unit_residuals": [],
   "goal_residuals": [],
   "goal_complete": false,
@@ -21,7 +21,7 @@
       "source": "acceptance",
       "trace": "ADR-0563 §6 + Corrections 2026-11-22",
       "status": "pass",
-      "citation": "packages/isolate-host/tests/protocol.test.ts:184-199; packages/isolate-host/src/pool.ts:173-183",
+      "citation": "packages/isolate-host/tests/protocol.test.ts:185-204; packages/isolate-host/src/pool.ts:173-183",
       "note": ""
     },
     {
@@ -29,7 +29,7 @@
       "source": "acceptance",
       "trace": "ADR-0563 §6 + Corrections 2026-11-22",
       "status": "pass",
-      "citation": "packages/isolate-host/tests/protocol.test.ts:308-329; packages/isolate-host/src/pool.ts:130,174,342",
+      "citation": "packages/isolate-host/tests/protocol.test.ts:309-328; packages/isolate-host/src/pool.ts:130,174,342",
       "note": ""
     },
     {
@@ -37,7 +37,7 @@
       "source": "acceptance",
       "trace": "ADR-0563 §2 + §6 + Corrections 2026-11-22",
       "status": "pass",
-      "citation": "packages/isolate-host/tests/protocol.test.ts:331-367; packages/isolate-host/src/pool.ts:404",
+      "citation": "packages/isolate-host/tests/protocol.test.ts:330-368; packages/isolate-host/src/pool.ts:404",
       "note": ""
     },
     {
@@ -45,7 +45,7 @@
       "source": "acceptance",
       "trace": "ADR-0563 §4",
       "status": "pass",
-      "citation": "packages/isolate-host/tests/protocol.test.ts:205-228; packages/isolate-host/src/pool.ts:85",
+      "citation": "packages/isolate-host/tests/protocol.test.ts:206-229; packages/isolate-host/src/pool.ts:85",
       "note": ""
     },
     {
@@ -53,7 +53,7 @@
       "source": "acceptance",
       "trace": "ADR-0563 §6 (F1)",
       "status": "pass",
-      "citation": "packages/isolate-host/tests/protocol.test.ts:230-288",
+      "citation": "packages/isolate-host/tests/protocol.test.ts:231-290",
       "note": ""
     },
     {
@@ -61,7 +61,7 @@
       "source": "acceptance",
       "trace": "ADR-0563 Corrections 2026-11-22 (compat ⚠️ row)",
       "status": "pass",
-      "citation": "packages/isolate-host/tests/protocol.test.ts (case 'a starved consumer: a result sent before the deadline but read after it is timeout'); docs/public/compat/isolate-host.md:15",
+      "citation": "packages/isolate-host/tests/protocol.test.ts:370-397; docs/public/compat/isolate-host.md (starved-consumer ⚠️ row)",
       "note": ""
     },
     {
@@ -69,7 +69,7 @@
       "source": "acceptance",
       "trace": "ADR-0563 Corrections 2026-11-22 (compat ⚠️ row)",
       "status": "pass",
-      "citation": "packages/isolate-host/tests/protocol.test.ts (case 'a starved consumer: a worker lost before the deadline but read after it is timeout, no rerun'); docs/public/compat/isolate-host.md:15",
+      "citation": "packages/isolate-host/tests/protocol.test.ts:399-428; docs/public/compat/isolate-host.md (starved-consumer ⚠️ row)",
       "note": ""
     },
     {
@@ -85,7 +85,7 @@
       "source": "acceptance",
       "trace": "ADR-0558 (Decisions 2026-11-19 §3, 2026-11-22)",
       "status": "pass",
-      "citation": "packages/isolate-host/tests/corpus.ts:147-152; packages/isolate-guest/tests/host-bridge.test.ts:425",
+      "citation": "packages/isolate-host/tests/corpus.ts:155 (row interval-keeps-its-period); packages/isolate-guest/tests/host-bridge.test.ts:425",
       "note": ""
     }
   ],
