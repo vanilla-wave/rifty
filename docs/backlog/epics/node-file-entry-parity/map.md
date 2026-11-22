@@ -24,12 +24,15 @@
    hypothesis). → I2 I3
 ## Open questions
 
-- A synchronous throw prints no `<file>:<line>` header (V8's throw site is not
-  readable from JS; after external review round 1 the manager thread set the
-  contract: header only by construction, else none — ADR-0445 2026-11-22). I2
-  admits it as a named compat row; whether the scenario accepts headerless
-  synchronous reports (the first frame still names file:line:col) is the
-  user's — owner: user — evidence: `fatal-report.test.ts`, compat process.md.
+- No Node-format header (`<file>:<line>`, source line, caret) on any path — a
+  throw, an unhandled rejection, a compile error (JS cannot read V8's message
+  location; manager decision after external review round 2, ADR-0445
+  2026-11-22 correction); a compile error names its place on a separate line
+  with rifty's parser position (`(rifty parser position: <file>:<line>:<col>)`).
+  I2 admits it as a named compat row; whether the scenario accepts headerless
+  reports (the first frame or the parser line still names file:line) is the
+  user's — owner: user — evidence: `fatal-report.test.ts`, the `NODE_HEADER`
+  assertion on every carrier row, compat process.md.
 
 - Isolate ESM entry `TypeError: URLConstructor is not a constructor`: runtime-js
   builds `import.meta.url` with the guest-visible `URL`, which the isolate
