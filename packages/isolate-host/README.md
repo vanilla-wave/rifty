@@ -158,6 +158,12 @@ Between operations a sandbox holds no process and no isolate, only its files
 in your process's memory (about their size); a sandbox you drop is ordinary
 garbage. The number of live sandboxes is yours to cap.
 
+Cost (M3 Pro, Node 24.16.0, medians, built package): `createSandbox` 0.01 ms; a warm
+`exec` 17 ms with one small file, 21 ms with 66 files (~180 KiB), 265 ms with a 20 MiB
+file (its state goes to the run and back as bytes); `writeFile` 10 KiB 0.14 ms on a small
+sandbox, 24 ms on a 20 MiB one (each host write checks the state cap by measuring a snapshot);
+an idle sandbox ~1.6 KiB plus its files.
+
 If your result type has `exitCode: number`, map a killed run yourself from
 `termination` (`exitCode: null` is never a guest's status).
 
