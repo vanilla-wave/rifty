@@ -10,9 +10,9 @@ import {
   nodeFileExpected,
   nodeFileNormalized,
   runNodeFileOracle,
-} from '../../../../tests/browser-unit/fixtures/node-file-programs.ts';
-import { createModuleLoader } from '../module-loader/loader.ts';
-import { formatFatalReport } from './fatal-report.ts';
+} from '../../../tests/browser-unit/fixtures/node-file-programs.ts';
+import { createModuleLoader } from '../src/module-loader/loader.ts';
+import { formatFatalReport } from '../src/builtins/fatal-report.ts';
 
 afterEach(() => resetSyncMirror());
 
