@@ -74,6 +74,8 @@ export interface NodeProcessExitHost {
   writeStderr(text: string): void;
   /** Request the kernel exit for `signal` (eval-owned or control port; the port sends once). */
   requestExit(signal: RiftyProcessExitSignal): void;
+  /** A control port can carry the exit; without one only the drain ends the process. */
+  hasExitControl(): boolean;
 }
 
 /** One process's exit state: Node's `_exiting`. */
@@ -97,6 +99,10 @@ export class NodeProcessExit {
   /** The first requested terminal; null while the process lives. */
   get terminal(): RiftyProcessExitSignal | null {
     return this.#terminal;
+  }
+
+  get hasExitControl(): boolean {
+    return this.#host.hasExitControl();
   }
 
   /** Node `per_thread.js` `exit()`: the status is read after the listeners. */
@@ -168,7 +174,7 @@ export class NodeProcessExit {
 
 type NodeProcessExitLike = Pick<
   NodeProcessExit,
-  'exiting' | 'terminal' | 'beginFatal' | 'fatal' | 'listenerThrew' | 'reset'
+  'exiting' | 'terminal' | 'hasExitControl' | 'beginFatal' | 'fatal' | 'listenerThrew' | 'reset'
 >;
 
 export function attachNodeProcessExit(process: object, exit: NodeProcessExit): void {
@@ -199,6 +205,14 @@ export function isNodeProcessExiting(process: unknown): boolean {
  */
 export function readNodeProcessTerminal(target?: unknown): RiftyProcessExitSignal | null {
   return lifecycleTarget(target)?.exit.terminal ?? null;
+}
+
+/**
+ * The active runtime process has no control port (an in-process host: isolate
+ * guest, no-COI command): its terminal ends it only through its drain.
+ */
+export function isDrainOnlyNodeProcess(): boolean {
+  return lifecycleTarget(undefined)?.exit.hasExitControl === false;
 }
 
 /** Reset a reused in-process `NodeProcess` to an unset, not-exiting invocation. */

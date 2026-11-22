@@ -17,6 +17,7 @@ import { setKernelDrainHook } from '@riftydev/kernel';
 import {
   dispatchUncaughtException,
   dispatchUnhandledRejection,
+  isDrainOnlyNodeProcess,
   isRiftyProcessExit,
   readNodeProcessTerminal,
   takeUndispatchedRethrow,
@@ -227,7 +228,9 @@ function completeNodeEvalTerminalWithoutDrain(
   record: NodeEvalLifecycleRecord,
   pending: NodeEvalPendingTerminal,
 ): void {
-  if (state.nodeEvalDirectTerminalPending) return;
+  // No control port (an in-process host) = no physical direct terminal: the
+  // claim stays pending, and the drain the host opens next settles with it.
+  if (state.nodeEvalDirectTerminalPending || isDrainOnlyNodeProcess()) return;
   state.nodeEvalDirectTerminalPending = true;
   const flush = flushNodeEvalDrainLifecycle(record);
   void reflectApplyPrimordial(promiseThenPrimordial, flush, [

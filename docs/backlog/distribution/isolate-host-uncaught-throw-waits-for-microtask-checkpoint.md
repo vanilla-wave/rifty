@@ -19,7 +19,9 @@ returns to the host, and this one never drains. Node's `process.reallyExit`
 leaves from inside the handler. Ending the isolate from the child on the
 fatal path was removed in cross-review 2 with `bridge.done` (a guest could
 call it); any fix must not give the guest a way to end its own run as a
-host-reported status. Bounded by I4; a fidelity gap, compat ⚠️.
+host-reported status. 2026-11-22: same for `exit(3)` before the chain (`timeout`, Node 3); thrown from a microtask of the synchronous
+run the diagnostic is not written either (the claim waits for the drain's tick); bounded form:
+`runtime-js/node-eval-work-queued-at-exit-runs`. Bounded by I4; a fidelity gap, compat ⚠️.
 
 ## Challenge
 

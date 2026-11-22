@@ -376,6 +376,21 @@ describe('post-guest paths: what the host owes whatever the guest replaced', () 
     }
   });
 
+  it("a throw queued by a natural exit's 'exit' listener prints Node's report; an explicit exit drops it", async () => {
+    const natural = await runCode(
+      "process.on('exit', () => queueMicrotask(() => { throw new Error('L') }))",
+    );
+    // Node: the same report after its `[eval]:1` header, status 1 (status: declared ceiling).
+    expect(natural).toMatchObject({
+      stderr: 'Error: L\n    at [eval]:1:55\n\nNode.js v24.0.0\n',
+      exitCode: 0,
+    });
+    const explicit = await runCode(
+      "queueMicrotask(() => { throw new Error('AFTER') }); process.exit(3)",
+    );
+    expect(explicit).toMatchObject({ stderr: '', exitCode: 3 });
+  });
+
   it('the host helpers the hooks match are named so in the built bundle', () => {
     const bundle = readFileSync(new URL('../dist/guest.js', import.meta.url), 'utf8');
     for (const name of HOST_FRAMES)
