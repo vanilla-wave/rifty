@@ -11,8 +11,8 @@ import {
   nodeFileNormalized,
   runNodeFileOracle,
 } from '../../../tests/browser-unit/fixtures/node-file-programs.ts';
-import { createModuleLoader } from '../src/module-loader/loader.ts';
 import { formatFatalReport } from '../src/builtins/fatal-report.ts';
+import { createModuleLoader } from '../src/module-loader/loader.ts';
 
 afterEach(() => resetSyncMirror());
 
@@ -76,6 +76,10 @@ it.each([
     "function fail(e) { throw e; }\nconst e = new Error('x');\nfail(e);\n",
   ],
   [
+    'the built error leaves through an alias past an unrun throw',
+    "const e = new Error('x');\nconst box = [e];\nif (box.length === 0) throw e;\nthrow box[0];\n",
+  ],
+  [
     'a closure may throw the built error later',
     "const e = new Error('x');\nconst later = () => { throw e; };\nlater();\n",
   ],
@@ -83,4 +87,27 @@ it.each([
   const { node, rifty } = await againstNode(source);
   expect(headerOf(node)).toMatch(/^<root>\/main\.js:\d+\n/u);
   expect(rifty).toBe(node.slice(node.indexOf('\n\n') + 2));
+});
+
+it("a CJS top-level frame reads Node's name in the guest's own err.stack", async () => {
+  const source = "const n = 1;\nconsole.log(new Error('s').stack.split('\\n')[1]);\n";
+  const oracle = await runNodeFileOracle({
+    name: 'unit',
+    files: { 'main.js': source },
+    argv: ['main.js'],
+  });
+  const vfs = new MemoryFsSync();
+  vfs.loadFixture({ '/p/main.js': source });
+  setSyncMirror(vfs);
+  const lines: string[] = [];
+  const log = console.log;
+  console.log = (line: string) => lines.push(line);
+  try {
+    createModuleLoader(vfs, { cwd: '/p' }).require('./main.js', '/p/x.js');
+  } finally {
+    console.log = log;
+  }
+  expect(`${lines.join('\n').replaceAll('/p', '<root>')}\n`).toBe(
+    nodeFileNormalized(oracle, oracle.root).stdout,
+  );
 });
