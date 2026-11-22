@@ -138,9 +138,10 @@ Known differences:
   tells it from a clean exit, and an `unhandledRejection` listener does not
   fire. In guest code, handle every promise: end each chain and the async
   entry point with `.catch((e) => { console.error(e); process.exitCode = 1 })`.
-- `process.exit()` from a promise callback or `queueMicrotask` queued by the
-  code's synchronous run ends as `termination: 'timeout'`; from a later task
-  it exits as in Node. Set `process.exitCode` instead.
+- Work already queued when `process.exit()` runs (another microtask, a timer
+  already due) still runs: its output is dropped and the status is the exit's,
+  but it takes its time: an endless one ends the call as `timeout`, one that
+  allocates past the heap limit as `termination: 'memory'`.
 - An `unref()`'d timer may still fire during the few ms the run takes to
   confirm its loop is idle.
 - An `unhandledRejection` listener receives a copy of the reason, and
