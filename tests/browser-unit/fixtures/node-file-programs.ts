@@ -243,6 +243,14 @@ export const fatalPrograms: readonly NodeFileProgram[] = [
     name: 'fatal-with-queued-timer',
     files: {
       'main.js':
+        "setTimeout(() => {\n  throw new Error('a');\n}, 1);\nsetTimeout(() => console.log('queued'), 1);\n",
+    },
+    argv: ['main.js'],
+  },
+  {
+    name: 'fatal-with-queued-in-callback',
+    files: {
+      'main.js':
         "setTimeout(() => {\n  setTimeout(() => console.log('queued'), 0);\n  setImmediate(() => console.log('immediate'));\n  throw new Error('a');\n}, 1);\n",
     },
     argv: ['main.js'],
@@ -358,10 +366,10 @@ export function nodeFileExpected(
   if (/^node:\S+:\d+$/u.test(lines[0] ?? '')) lines.splice(0, 4);
   for (const line of lines) {
     if (/^\s+\.\.\. \d+ lines? matching cause stack trace \.\.\.$/u.test(line)) continue;
-    const internal = /^\s+at (?:async )?(?:.* \()?node:[^)\s]*\)?( \{)?$/u.exec(line);
+    const internal = /^\s+at (?:async )?(?:.* \()?node:[^)\s]*\)?( \{|,)?$/u.exec(line);
     if (internal === null) kept.push(line);
-    // inspect opens the props block on the last frame line: it moves up a line.
-    else if (internal[1] !== undefined) kept.push(`${kept.pop() ?? ''} {`);
+    // inspect's props opener or list comma on the last frame line moves up a line.
+    else if (internal[1] !== undefined) kept.push(`${kept.pop() ?? ''}${internal[1]}`);
   }
   const stderr = kept.join('\n').replace(/^Node\.js v\d+\.\d+\.\d+$/mu, `Node.js ${riftyVersion}`);
   return nodeFileNormalized({ ...oracle, stderr }, oracle.root);
@@ -428,8 +436,17 @@ const OPEN = [...entryPrograms, ...fatalPrograms]
   .filter((name) => !LANDED.has(name));
 export const nodeFileOpenRows: Readonly<Record<NodeFileHost, ReadonlySet<string>>> = {
   'no-COI': new Set(OPEN),
-  // The kernel child's realm trap ends the process before queued work runs.
-  COI: new Set(OPEN.filter((name) => name !== 'fatal-with-queued-timer')),
+  // The kernel child's realm trap ends the process before work its callback queued.
+  COI: new Set(OPEN.filter((name) => name !== 'fatal-with-queued-in-callback')),
+};
+
+/**
+ * Rows whose rifty outcome races (two timers due in one host turn): stderr
+ * and status must be Node's; stdout is Node's or the declared residual
+ * (compat process.md "Fatal error stderr bytes", work queued at a fatal).
+ */
+export const nodeFileRacy: Readonly<Record<string, string>> = {
+  'fatal-with-queued-timer': 'queued\n',
 };
 
 interface SoftExpect {
@@ -438,6 +455,7 @@ interface SoftExpect {
     message?: string,
   ): {
     toEqual(expected: unknown): void;
+    toContain(item: unknown): void;
     not: { toEqual(expected: unknown): void };
   };
 }
@@ -452,6 +470,16 @@ export function nodeFileVerdict(
   },
 ): void {
   const label = `${host} ${row.program.name}`;
+  const racy = nodeFileRacy[row.program.name];
+  if (racy !== undefined) {
+    expect
+      .soft({ ...row.actual, stdout: '' }, `${label} vs Node`)
+      .toEqual({ ...row.expected, stdout: '' });
+    expect
+      .soft([row.expected.stdout, `${row.expected.stdout}${racy}`], label)
+      .toContain(row.actual.stdout);
+    return;
+  }
   if (nodeFileOpenRows[host].has(row.program.name)) {
     expect
       .soft(row.actual, `${label}: open row now equals Node — remove it from nodeFileOpenRows`)

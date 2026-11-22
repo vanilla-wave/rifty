@@ -17,9 +17,9 @@ import { cjsLineOnePrefix } from '../module-loader/cjs-factory.ts';
 import { inspect } from '../repl/inspect.ts';
 import {
   bindingThrowSite,
-  catchingFunction,
   catchingTries,
   enclosing,
+  innermostFunction,
   offsetOf,
   parseProgram,
   rethrowSite,
@@ -33,6 +33,7 @@ const FRAME = /^\s+at /u;
 const decorated = new WeakSet<object>();
 const reflectApply = Reflect.apply;
 const errorToString = Error.prototype.toString;
+const objectToString = Object.prototype.toString;
 const objectGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
 const objectKeys = Object.keys;
 
@@ -125,14 +126,29 @@ function frameKind(frame: string): FrameKind {
 }
 
 /** The stack with rifty-runtime frames dropped; a builtin frame stays when guest code called it. */
+/** Text after a frame's closing `)` (or its bare `file:line:col`), with balanced parens. */
+function frameTail(line: string): string {
+  let depth = 0;
+  for (let i = line.indexOf(' at ') + 4; i < line.length; i += 1) {
+    const c = line[i];
+    if (c === '(') depth += 1;
+    else if (c === ')') {
+      depth -= 1;
+      if (depth === 0) return line.slice(i + 1);
+    }
+  }
+  if (depth !== 0) return '';
+  const bare = /^(\s+at (?:async )?\S+:\d+:\d+)(.*)$/u.exec(line);
+  return bare?.[2] ?? '';
+}
+
 function guestStack(stack: string): { readonly text: string; readonly frames: string[] } {
   // Every frame line of the text, a nested error's included (an inspected
   // prop, `[errors]`, an object holding an error).
-  // A frame line inside inspect output may end with its props opener or a comma.
+  // A frame line inside inspect output may carry inspect text after the frame
+  // (` {`, `,`, ` }`, `, code: 7 }`): split it off and keep it.
   const lines = stack.split('\n');
-  const suffixes = lines.map((line) =>
-    FRAME.test(line) ? (/(?: \{|,)$/u.exec(line)?.[0] ?? '') : '',
-  );
+  const suffixes = lines.map((line) => (FRAME.test(line) ? frameTail(line) : ''));
   for (let i = 0; i < lines.length; i += 1) {
     const suffix = suffixes[i] as string;
     if (suffix !== '') lines[i] = (lines[i] as string).slice(0, -suffix.length);
@@ -274,8 +290,10 @@ function headerSite(frames: readonly string[], origin: FatalOrigin): HeaderSite 
   };
   // The last catch the error passed: the outermost catching `try` of the
   // outermost frame inside one. It must provably rethrow, else no header.
-  // A promise (an async function, generator, executor or reaction) catches
-  // what its code throws; the later rethrow site is not on this stack.
+  // The error must have run from its task's root to here on this stack: the
+  // bottom user frame is a module's top level or a timer callback, and no
+  // promise (async function, executor) sits on it. A promise reaction or a
+  // runtime-invoked callback may have held the error for a later rethrow.
   for (let f = 0; f < frames.length; f += 1) {
     if (/^\s+at (?:async |new Promise \(|Promise\.)/u.test(frames[f] as string)) return null;
   }
@@ -287,7 +305,11 @@ function headerSite(frames: readonly string[], origin: FatalOrigin): HeaderSite 
         ? null
         : offsetOf(parsed.source, location.line, location.column - 1);
     if (parsed === null || at === null) return null;
-    if (catchingFunction(enclosing(parsed.root, at))) return null;
+    const fn = innermostFunction(enclosing(parsed.root, at));
+    if (fn !== null && (fn as { async?: boolean }).async === true) return null;
+    const root = f === user.length - 1;
+    if (root && fn !== null && !/^\s+at Timeout\._onTimeout \(/u.test(user[f] as string))
+      return null;
   }
   let lastCatch: { readonly file: string; readonly node: AcornNode } | null = null;
   for (let f = user.length - 1; f >= 0 && lastCatch === null; f -= 1) {
@@ -343,7 +365,13 @@ function stackOf(error: object): string | null {
 
 /** Node `IsNativeError`: only an Error is reported as one; any other object is inspected. */
 function isErrorLike(value: unknown): value is object {
-  return value instanceof Error;
+  if (value instanceof Error) return true;
+  // Another realm's Error (a vm context) carries the [[ErrorData]] brand too.
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    reflectApply(objectToString, value, []) === '[object Error]'
+  );
 }
 
 /** Node's inspect of a value inside an error's props block, at `indent` columns. */

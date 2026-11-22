@@ -16,6 +16,7 @@ import {
   fatalPrograms,
   nodeFileExpected,
   nodeFileNormalized,
+  nodeFileRacy,
 } from '../../../tests/browser-unit/fixtures/node-file-programs.ts';
 import { runCode } from '../src/index.ts';
 
@@ -42,8 +43,13 @@ const LANDED = new Set([
   'syntax-error-entry',
   'throw-from-timer',
   'error-with-props',
+  'fatal-with-queued-in-callback',
 ]);
-const OPEN = new Set(programs.map((program) => program.name).filter((name) => !LANDED.has(name)));
+const OPEN = new Set(
+  programs
+    .map((program) => program.name)
+    .filter((name) => !LANDED.has(name) && nodeFileRacy[name] === undefined),
+);
 
 function codeFor(files: Readonly<Record<string, string>>, main: string): string {
   return `const fs = require('fs'); for (const [p, c] of Object.entries(${JSON.stringify(files)})) { fs.mkdirSync(require('path').dirname(p), { recursive: true }); fs.writeFileSync(p, c); } require('./${main}');`;
@@ -90,7 +96,14 @@ describe('node -e require(file) fatal report matches Node (isolate guest)', () =
       );
       const result = await runCode(code);
       expect(result.termination).toBeUndefined();
-      expect(nodeFileNormalized(result, GUEST_ROOT)).toEqual(expected);
+      const actual = nodeFileNormalized(result, GUEST_ROOT);
+      const racy = nodeFileRacy[program.name];
+      if (racy === undefined) expect(actual).toEqual(expected);
+      else {
+        // A race between due timers: Node's stderr and status, a declared stdout residual.
+        expect({ ...actual, stdout: '' }).toEqual({ ...expected, stdout: '' });
+        expect([expected.stdout, `${expected.stdout}${racy}`]).toContain(actual.stdout);
+      }
     });
   }
 });

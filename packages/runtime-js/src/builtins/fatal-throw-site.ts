@@ -61,13 +61,13 @@ export function enclosing(root: AcornNode, offset: number): Node[] {
 
 const isFunction = (node: Node): boolean => /Function/u.test(node.type);
 
-/** The innermost function at `chain`'s end is async or a generator: a promise holds its throws. */
-export function catchingFunction(chain: readonly Node[]): boolean {
+/** The innermost function at `chain`'s end; null at a module's top level. */
+export function innermostFunction(chain: readonly Node[]): Node | null {
   for (let i = chain.length - 1; i >= 0; i -= 1) {
     const node = chain[i] as Node;
-    if (isFunction(node)) return node.async === true || node.generator === true;
+    if (isFunction(node)) return node;
   }
-  return false;
+  return null;
 }
 
 /** The catching `try` statements whose block encloses the end of `chain`, outermost first. */

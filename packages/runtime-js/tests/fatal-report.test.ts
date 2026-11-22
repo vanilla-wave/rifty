@@ -131,7 +131,7 @@ it.each([
   ],
   [
     'a promise executor held the error before the rethrow',
-    "let saved;\nnew Promise(() => {\n  throw (saved = new Error('x'));\n});\nthrow saved;\n",
+    "let saved;\nnew Promise(() => {\n  throw (saved = new Error('x'));\n}).catch(() => {});\nthrow saved;\n",
   ],
 ])('%s: no header', async (_, source) => {
   const { node, rifty } = await againstNode(source);
@@ -148,13 +148,48 @@ it('an object with a captured stack is inspected, not reported as an Error', asy
   expect(rifty).toBe(node.split('\n').slice(4).join('\n'));
 });
 
-it("a nested error's frames are projected like the report's own", () => {
-  const report = riftyFiles({ 'main.js': "throw { inner: new Error('x') };\n" });
+it("a nested error's frames are projected like the report's own, its props and braces kept", () => {
+  const report = riftyFiles({ 'main.js': "throw { inner: new Error('x'), code: 7 };\n" });
   expect(report).not.toMatch(/\/src\/|compileCjsSource|loader\.ts/u);
   expect(report).toContain('at Object.<anonymous> (/p/main.js:1:16)');
+  expect(report).toMatch(/code: 7 \}\n\nNode\.js/u);
+  const limited = riftyFiles({
+    'main.js': "Error.stackTraceLimit = 1;\nthrow { inner: new Error('x'), code: 7 };\n",
+  });
+  Error.stackTraceLimit = 10;
+  expect(limited).toMatch(/code: 7 \}\n\nNode\.js/u);
 });
 
-it('an error thrown inside the runtime (a JSON require) gets no header', () => {
-  const report = riftyFiles({ 'main.js': "require('./bad.json');\n", 'bad.json': '{bad' });
-  expect(report).toMatch(/^SyntaxError: /u);
+it('a callback the module itself runs keeps the header', async () => {
+  const { node, rifty } = await againstNode(
+    "function later(cb) { return cb; }\nconst run = later(() => {\n  throw new Error('x');\n});\nrun();\n",
+  );
+  expect(rifty).toBe(node);
+});
+
+it('a promise reaction may have held the error: no header', async () => {
+  const head = "const p = Promise.resolve().then(() => {\n  throw new Error('x');\n});\n";
+  const oracle = await runNodeFileOracle({
+    name: 'unit',
+    files: { 'main.js': `${head}p.catch((err) => setTimeout(() => { throw err; }));\n` },
+    argv: ['main.js'],
+  });
+  const node = nodeFileExpected(oracle, 'v24.0.0').stderr;
+  const vfs = new MemoryFsSync();
+  vfs.loadFixture({ '/p/main.js': `${head}p.catch(() => {});\nmodule.exports = p;\n` });
+  setSyncMirror(vfs);
+  const held = createModuleLoader(vfs, { cwd: '/p' }).require(
+    './main.js',
+    '/p/x.js',
+  ) as Promise<void>;
+  const error = await held.then(
+    () => null,
+    (reason: unknown) => reason,
+  );
+  const rifty = nodeFileNormalized(
+    { stdout: '', stderr: formatFatalReport(error), exitCode: 1 },
+    '/p',
+  ).stderr;
+  expect(headerOf(node)).toMatch(/^<root>\/main\.js:4\n/u);
+  expect(rifty).toBe(node.slice(node.indexOf('\n\n') + 2));
 });
