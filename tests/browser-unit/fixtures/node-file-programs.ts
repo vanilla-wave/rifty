@@ -255,6 +255,14 @@ export const fatalPrograms: readonly NodeFileProgram[] = [
     argv: ['main.js'],
   },
   {
+    name: 'listener-logs-and-rethrows',
+    files: {
+      'main.js':
+        "process.on('uncaughtException', (err) => {\n  console.log('log');\n  throw err;\n});\nsetTimeout(() => {\n  throw new Error('a');\n}, 1);\n",
+    },
+    argv: ['main.js'],
+  },
+  {
     name: 'fatal-with-queued-timer',
     files: {
       'main.js':

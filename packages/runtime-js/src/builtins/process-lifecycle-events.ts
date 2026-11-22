@@ -9,7 +9,7 @@
  * another bundle than the process: they reach its state through the
  * `Symbol.for` slot, never a module-local import.
  */
-import { type FatalOrigin, formatFatalReport } from './fatal-report.ts';
+import { type FatalOrigin, clearFatalTaskRoot, formatFatalReport } from './fatal-report.ts';
 import { readActiveNodeProcessBootstrap } from './process-bootstrap-identity.ts';
 
 const NODE_PROCESS_LIFECYCLE = Symbol.for('rifty.runtime-js.process-lifecycle.v1');
@@ -235,9 +235,15 @@ export function dispatchUncaughtException(
   const active = lifecycleTarget(target);
   if (active === null) return NO_PROCESS;
   try {
-    active.process.emit('uncaughtExceptionMonitor', error, origin);
-    if (active.process.emit('uncaughtException', error, origin)) return HANDLED;
+    // A listener that sees the error may keep and throw it again: a later
+    // throw of it is not this task root's (no header proof, fatal-report.ts).
+    if (active.process.emit('uncaughtExceptionMonitor', error, origin)) clearFatalTaskRoot(error);
+    if (active.process.emit('uncaughtException', error, origin)) {
+      clearFatalTaskRoot(error);
+      return HANDLED;
+    }
   } catch (thrown) {
+    clearFatalTaskRoot(error);
     if (isRiftyProcessExit(thrown)) return { kind: 'exited', signal: thrown };
     try {
       active.exit.listenerThrew(thrown);

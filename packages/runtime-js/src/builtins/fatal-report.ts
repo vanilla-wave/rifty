@@ -49,6 +49,11 @@ export function markFatalTaskRoot(error: unknown): void {
   if (typeof error === 'object' && error !== null) roots.add(error);
 }
 
+/** A listener received `error`: its mark proves no later throw of it. */
+export function clearFatalTaskRoot(error: unknown): void {
+  if (typeof error === 'object' && error !== null) roots.delete(error);
+}
+
 /** The name the timer dispatch frame carries, so a caught error can tell it ran under it. */
 export const TIMER_DISPATCH_NAME = '__riftyTimerDispatch';
 const origins = new WeakMap<object, FatalOrigin>();
