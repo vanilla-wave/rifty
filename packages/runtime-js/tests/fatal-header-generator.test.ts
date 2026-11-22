@@ -129,7 +129,10 @@ async function rifty(program: Program): Promise<string> {
   let reason: unknown;
   const scope = globalThis as { __collect?: (p: unknown) => void };
   scope.__collect = (p) => {
-    if (p instanceof Promise) p.catch((error: unknown) => (reason = error));
+    if (p instanceof Promise)
+      p.catch((error: unknown) => {
+        reason = error;
+      });
   };
   try {
     createModuleLoader(vfs, { cwd: '/p' }).require('./main.js', '/p/x.js');
@@ -137,7 +140,7 @@ async function rifty(program: Program): Promise<string> {
     reason = error;
   }
   await new Promise((resolve) => setTimeout(resolve, 0));
-  delete scope.__collect;
+  scope.__collect = undefined;
   const report = formatFatalReport(
     reason,
     program.rejection ? 'unhandledRejection' : 'uncaughtException',
@@ -165,3 +168,60 @@ it(`${programs.length} generated programs: a printed header is Node's`, async ()
   // Rejections whose error frame is guest code do print one (not vacuous).
   expect(printed).toBeGreaterThan(120);
 }, 600_000);
+
+/** Compile failures, entry and required: a printed header is Node's. */
+const BROKEN = [
+  'const a = 1;\nlet x = ;\n',
+  'function (\n',
+  'const a = {\n  b: 1\n',
+  'if (x {\n}\n',
+  'const a = 1;\nconst a = 2;\n',
+  'let y = "unterminated;\n',
+  'foo(;\n',
+  'console.log((a + 2);\n',
+  'function a() {\n}}\nconsole.log("top");\n',
+  'this is not valid javascript at all\n',
+  'const x = 1\nconst y = 2 3;\n',
+  'return 5;\nconst =;\n',
+  '\tconst\t= 1;\n',
+  'let let = 1;\n',
+  'class { }\n',
+  'obj = { a: 1,, b: 2 };\n',
+  'await x;\n',
+  'const s = `unterminated\n',
+];
+
+it(`${BROKEN.length * 2} compile failures: a printed header is Node's`, async () => {
+  const wrong: string[] = [];
+  let printed = 0;
+  for (const [index, source] of BROKEN.entries()) {
+    for (const required of [false, true]) {
+      const files: Record<string, string> = required
+        ? { 'main.js': "const n = 1;\nrequire('./lib');\n", 'lib.js': source }
+        : { 'main.js': source };
+      const oracle = await runNodeFileOracle({ name: `broken-${index}`, files, argv: ['main.js'] });
+      const node = nodeFileExpected(oracle, 'v24.0.0').stderr;
+      const vfs = new MemoryFsSync();
+      vfs.loadFixture(Object.fromEntries(Object.entries(files).map(([k, v]) => [`/p/${k}`, v])));
+      setSyncMirror(vfs);
+      let reason: unknown;
+      try {
+        createModuleLoader(vfs, { cwd: '/p' }).require('./main.js', '/p/x.js');
+      } catch (error) {
+        reason = error;
+      }
+      const ours = header(
+        nodeFileNormalized({ stdout: '', stderr: formatFatalReport(reason), exitCode: 1 }, '/p')
+          .stderr,
+      );
+      if (ours === null) continue;
+      printed += 1;
+      if (ours !== header(node))
+        wrong.push(
+          `${JSON.stringify(source)} required=${required}\n--- node\n${node}\n--- rifty\n${ours}`,
+        );
+    }
+  }
+  expect(wrong).toEqual([]);
+  expect(printed).toBeGreaterThan(8);
+}, 300_000);

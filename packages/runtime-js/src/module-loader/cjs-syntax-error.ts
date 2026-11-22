@@ -74,7 +74,7 @@ function syntaxHeader(
     column = 0;
   } else {
     // Only a message naming the token acorn stopped at locates it as V8 does.
-    const named = /^Unexpected token '(.+)'$/u.exec(message)?.[1];
+    const named = /^Unexpected (?:token|identifier) '(.+)'$/u.exec(message)?.[1];
     let token: string | null = null;
     try {
       const t = acornTokenizer(source.slice(pos), { ecmaVersion: 'latest' }).getToken();
