@@ -26,6 +26,11 @@ export interface Row {
  */
 export const GC_CHURN = 'for (let i = 0; i < 2e6; i++) globalThis.gcChurn = { i };';
 
+const NATURAL_EXIT_QUEUED =
+  "at a natural exit only the output of the first microtask hop an 'exit' listener queues is kept; a status change there is lost (distribution/isolate-host-natural-exit-listener-queued-work)";
+const NATURAL_EXIT_TICK =
+  "a nextTick an 'exit' listener queues at a natural exit runs; Node runs none (distribution/isolate-host-natural-exit-listener-queued-work)";
+
 export const CORPUS: readonly Row[] = [
   {
     label: 'console-log-values',
@@ -200,6 +205,110 @@ export const CORPUS: readonly Row[] = [
     evalError: true,
     ceiling:
       'a rejection inside an exit listener exits 0 (distribution/isolate-host-rejection-in-exit-listener-exits-0)',
+  },
+  // A terminal from work the synchronous run queued, before any later task.
+  { label: 'exit-in-then', code: 'Promise.resolve().then(() => process.exit(3))' },
+  {
+    label: 'exit-after-async-main',
+    code: "async function main() { console.log('work') } main().then(() => process.exit(0))",
+  },
+  {
+    label: 'exit-in-catch',
+    code: "Promise.reject(new Error('x')).catch(() => process.exit(1))",
+  },
+  { label: 'exit-in-finally', code: 'Promise.resolve().finally(() => process.exit(4))' },
+  { label: 'exit-in-queue-microtask', code: 'queueMicrotask(() => process.exit(3))' },
+  {
+    label: 'exit-in-nested-microtasks',
+    code: 'Promise.resolve().then(() => Promise.resolve().then(() => queueMicrotask(() => process.exit(5))))',
+  },
+  {
+    label: 'exit-in-microtask-with-live-handles',
+    code: "setTimeout(() => console.log('late'), 50); setInterval(() => {}, 1000); Promise.resolve().then(() => process.exit(2))",
+  },
+  {
+    label: 'exit-in-microtask-with-ripe-timers',
+    code: "setTimeout(() => console.log('timer'), 0); setInterval(() => console.log('interval'), 1); setImmediate(() => console.log('immediate')); Promise.resolve().then(() => process.exit(2))",
+  },
+  {
+    label: 'exit-in-microtask-after-output',
+    code: "process.on('exit', (c) => console.log('exit', c)); console.log('before'); console.error('err'); Promise.resolve().then(() => { process.exit(6); console.log('after-exit') })",
+  },
+  {
+    label: 'exit-in-microtask-exit-code',
+    code: 'process.exitCode = 9; Promise.resolve().then(() => process.exit())',
+  },
+  {
+    label: 'exit-in-microtask-skips-queued-microtask',
+    code: "Promise.resolve().then(() => process.exit(0)); Promise.resolve().then(() => console.log('queued'))",
+  },
+  {
+    label: 'exit-in-microtask-skips-queued-stderr',
+    code: "Promise.resolve().then(() => process.exit(1)); Promise.resolve().then(() => console.error('queued'))",
+  },
+  {
+    label: 'exit-listener-queues-microtask',
+    code: "process.on('exit', () => queueMicrotask(() => console.log('late'))); Promise.resolve().then(() => process.exit(0))",
+  },
+  // At a natural exit Node still runs what its 'exit' listeners queue; after exit() it does not.
+  {
+    label: 'exit-listener-microtask-natural',
+    code: "process.on('exit', () => { console.log('exit'); Promise.resolve().then(() => console.log('late')) })",
+  },
+  {
+    label: 'exit-listener-queue-microtask-stderr-natural',
+    code: "process.on('exit', () => queueMicrotask(() => console.error('late')))",
+  },
+  {
+    label: 'exit-listener-async-natural',
+    code: "process.on('exit', async () => { console.log('a'); await null; console.log('b') })",
+  },
+  {
+    label: 'exit-listener-microtask-explicit',
+    code: "process.on('exit', () => { console.log('exit'); Promise.resolve().then(() => console.log('late')) }); Promise.resolve().then(() => process.exit(3))",
+  },
+  {
+    label: 'exit-in-exit-listener-at-natural-exit-queued-microtask',
+    code: "process.on('exit', () => { Promise.resolve().then(() => console.log('late')); process.exit(3) })",
+    ceiling:
+      "output of work queued before an exit() inside a natural exit's listener still prints (runtime-js/node-eval-work-queued-at-exit-runs)",
+  },
+  {
+    label: 'exit-listener-microtask-chain-natural',
+    code: "process.on('exit', () => { Promise.resolve().then(() => console.log('a1')).then(() => console.log('a2')).then(() => console.log('a3')) })",
+    ceiling: NATURAL_EXIT_QUEUED,
+  },
+  {
+    label: 'exit-listener-next-tick-natural',
+    code: "process.on('exit', () => process.nextTick(() => console.log('nt')))",
+    ceiling: NATURAL_EXIT_TICK,
+  },
+  {
+    label: 'exit-listener-microtask-exit-code-natural',
+    code: "process.on('exit', () => { Promise.resolve().then(() => { process.exitCode = 6 }) })",
+    ceiling: NATURAL_EXIT_QUEUED,
+  },
+  {
+    label: 'exit-listener-microtask-after-fatal',
+    code: "process.on('exit', () => queueMicrotask(() => console.log('late'))); setTimeout(() => { throw new Error('x') }, 1)",
+    evalError: true,
+    ceiling:
+      "a microtask an 'exit' listener queues on a fatal still prints (runtime-js/node-eval-queued-exit-overrides-pending-fatal)",
+  },
+  {
+    label: 'exit-in-next-tick',
+    code: "process.nextTick(() => process.exit(4)); process.nextTick(() => console.log('queued'))",
+  },
+  {
+    label: 'throw-in-queue-microtask',
+    code: "queueMicrotask(() => { throw new Error('qm') })",
+    evalError: true,
+  },
+  {
+    label: 'throw-primitive-in-queue-microtask',
+    code: 'queueMicrotask(() => { throw 1 })',
+    evalError: true,
+    ceiling: 'uncaught non-Error throw rendering (runtime-js/node-eval-non-error-throw-rendering)',
   },
   {
     label: 'throw-in-timer',
