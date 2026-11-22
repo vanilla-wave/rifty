@@ -1,0 +1,133 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Mergeable once PR CI is green at 78613de7e. The blocker is fixed: the compat claim is trimmed to the single-hop form that holds, and later hops, status writes, nextTick and the fatal-listener microtask are declared with ceiling rows that fail for their stated reasons in every lane. Remaining: the time-cost NOTE and one ceiling-label nit.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "6b39c772178826412aae3871cb4f4b360d3f60eb",
+  "unit_goal_source": "PR #416 (observed-defect fix, no contract doc), verify pass at 78613de7e (this round: 52157a679..78613de7e; earlier rounds 0d36886af..52157a679 with external-review findings S1/S2 routed into the unit). Baseline: the deleted finding record distribution/isolate-host-queuemicrotask-throw-times-out as of 50c9d8bf1 (git show 50c9d8bf1:<that record>), plus the removed/changed rows of docs/public/compat/isolate-host.md at 50c9d8bf1. BASE 50c9d8bf1. Oracle: node -e v24.16.0. Re-bound by the driver to 6b39c7721 (manager-authorized after external round 2 @ 3a1c1e5fd): texts, finding records and corpus ceiling labels only, no product or assertion change.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "exit(n) from then/catch/finally/queueMicrotask/nextTick/async main of the synchronous -e run exits n as node -e, output kept (baseline: was termination 'timeout')",
+      "source": "acceptance",
+      "trace": "baseline isolate-host-queuemicrotask-throw-times-out@50c9d8bf1+ADR-0557",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/corpus.ts:210",
+      "note": ""
+    },
+    {
+      "row": "No rifty-internal 'process exit requires an active control port' text or guest-bundle frames in the guest's stderr for these exits",
+      "source": "acceptance",
+      "trace": "baseline isolate-host-queuemicrotask-throw-times-out@50c9d8bf1+ADR-0557",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/corpus.ts:210",
+      "note": ""
+    },
+    {
+      "row": "An uncaught Error thrown from a queueMicrotask callback exits 1 with the [eval] diagnostic (baseline: diagnostic, then timeout)",
+      "source": "acceptance",
+      "trace": "baseline isolate-host-queuemicrotask-throw-times-out@50c9d8bf1+ADR-0557",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/corpus.ts:303",
+      "note": ""
+    },
+    {
+      "row": "Guest fd 1/2 bytes written after an explicit terminal are dropped at the default output sink (output before/inside exit() and 'exit' listeners kept)",
+      "source": "acceptance",
+      "trace": "ADR-0557",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/corpus.ts:230",
+      "note": ""
+    },
+    {
+      "row": "At a natural exit, the output of the first microtask hop an 'exit' listener queues is kept as in Node; a status change there, later hops and a queued nextTick are declared ceilings (ADR-0557 2026-11-22 line, compat isolate-host.md:29-30)",
+      "source": "acceptance",
+      "trace": "ADR-0557",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/corpus.ts:255",
+      "note": ""
+    },
+    {
+      "row": "No-COI project command: the same pre-drain eval exit ends with Node's status (was a hang); each declared queued-at-exit form pinned exactly (status + extra L| rows)",
+      "source": "acceptance",
+      "trace": "ADR-0342+ADR-0445",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-process-exit-status.spec.ts:98",
+      "note": ""
+    },
+    {
+      "row": "Kernel children (control port) keep the direct-terminal path unchanged",
+      "source": "acceptance",
+      "trace": "ADR-0342",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/ipc/install-process-ipc.test.ts",
+      "note": ""
+    },
+    {
+      "row": "TypeScript worker byte/digest pin re-pinned after the runtime chunk change",
+      "source": "frozen-artifact",
+      "trace": "ADR-0391",
+      "status": "pass",
+      "citation": "tools/checks/esbuild-legacy-retirement.mjs:105",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/runtime-js/node-eval-work-queued-at-exit-runs.md:26",
+          "evidence": "Code read: corpus rows assert only stdout/stderr/exitCode; git grep finds no long-job or endless-chain row after exit() in packages/isolate-host/tests or packages/isolate-guest/tests.",
+          "summary": "Kept as NOTE from the earlier pass: compat and the README declare the time cost of queued work after exit() (a long job delays the result; an endless one is timeout, a heavy one is memory), but no ceiling row pins it.",
+          "authority": ""
+        },
+        {
+          "severity": "nit",
+          "location": "packages/isolate-host/tests/corpus.ts:30",
+          "evidence": "Ceilings stripped in the scratch copy: `exit-listener-next-tick-natural` fails with stdout 'nt\\n' vs '' (runCode lanes and embedder).",
+          "summary": "The shared ceiling label NATURAL_EXIT_QUEUED ('only the first microtask hop ... counts') does not describe the nextTick row, which fails because a tick prints where Node runs none. The finding record names that cause correctly; the label could say so too.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

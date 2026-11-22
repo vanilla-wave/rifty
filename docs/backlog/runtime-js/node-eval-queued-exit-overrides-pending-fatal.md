@@ -23,7 +23,8 @@ nothing); an `'exit'` listener sees 1 while the status ends 0; exits from
 owns the run; the next queued callback's `exit(0)` becomes the terminal. The
 browser `node -e` path shares the lifecycle (unprobed there); the sibling
 `late-unhandled-rejection-drain` is the same outcome through Chromium's
-`unhandledrejection` task. Pinned in `packages/isolate-host/tests/parity.test.ts`.
+`unhandledrejection` task. Pinned in `packages/isolate-host/tests/parity.test.ts`. 2026-11-22 (PR #416): a microtask an `'exit'` listener
+queues on a fatal still prints (corpus ceiling `exit-listener-microtask-after-fatal`).
 
 ## Challenge
 
