@@ -116,9 +116,11 @@ describe('state that cannot be kept (Fault matrix)', () => {
   carrier('a state its run cannot restore is refused before any guest code', async () => {
     const sb = await createSandbox();
     try {
-      await sb.writeFile('big', new Uint8Array(30 << 20).fill(1));
+      // 60 MiB of state cannot enter a 64 MiB isolate (step 0: 51 MiB of files fit at most).
+      await sb.writeFile('big1', new Uint8Array(30 << 20).fill(1));
+      await sb.writeFile('big2', new Uint8Array(30 << 20).fill(2));
       await sb.writeFile('a.js', "console.log('ran')");
-      expect(await sb.exec('a.js', { memoryLimitMb: 8 })).toEqual({
+      expect(await sb.exec('a.js', { memoryLimitMb: 64 })).toEqual({
         stdout: '',
         stderr: '',
         exitCode: null,
@@ -139,6 +141,7 @@ describe('state that cannot be kept (Fault matrix)', () => {
         await sb.writeFile(
           'poison.js',
           `require('fs').writeFileSync('p', 'x');
+console.log('poisoned');
 for (const C of [Uint8Array, DataView, Map, Set, String, Array]) for (const k of Object.getOwnPropertyNames(C.prototype)) { try { C.prototype[k] = function () { throw new Error('poisoned') } } catch {} }
 console.log('poisoned');`,
         );

@@ -345,6 +345,13 @@ class Worker {
   }
 }
 
+let shared: Pool | undefined;
+/** One pool per consumer process, created by the first call (`runCode` and sandbox runs). */
+export function sharedPool(): Pool {
+  shared ??= new Pool();
+  return shared;
+}
+
 export class Pool {
   readonly #workers: Worker[] = [];
   #nextId = 1;

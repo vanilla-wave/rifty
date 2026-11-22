@@ -230,6 +230,9 @@ importers:
       '@riftydev/isolate-guest':
         specifier: workspace:*
         version: link:../isolate-guest
+      '@riftydev/vfs':
+        specifier: workspace:*
+        version: link:../vfs
       esbuild:
         specifier: 0.28.0
         version: 0.28.0
