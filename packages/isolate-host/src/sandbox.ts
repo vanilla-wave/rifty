@@ -90,7 +90,10 @@ const DESCRIPTION: Record<string, string> = {
   ENOTDIR: 'not a directory',
   ENOTEMPTY: 'directory not empty',
   EINVAL: 'invalid argument',
+  ENAMETOOLONG: 'name too long',
 };
+/** The snapshot format's longest name (ADR-0567): a longer one could never be kept. */
+const MAX_NAME = 16_383;
 
 const coded = <E extends Error>(error: E, code: string): E & { code: string } =>
   Object.assign(error, { code });
@@ -143,6 +146,14 @@ function sandboxPath(p: unknown, name = 'path'): string {
   return `/${parts.join('/')}`;
 }
 
+/** A sandbox path for `syscall`; a name the snapshot cannot hold is Node's `ENAMETOOLONG`. */
+function opPath(p: unknown, syscall: string): string {
+  const path = sandboxPath(p);
+  if (path.split('/').some((name) => name.length > MAX_NAME))
+    throw fsError('ENAMETOOLONG', syscall, path);
+  return path;
+}
+
 const destroyedError = (): Error =>
   coded(new Error('isolate-host sandbox: destroyed'), 'ERR_ISOLATE_HOST_SANDBOX_DESTROYED');
 
@@ -179,7 +190,7 @@ class LiveSandbox implements Sandbox {
 
   writeFile(path: string, data: Uint8Array | string): Promise<void> {
     return this.#op((fs) => {
-      const target = sandboxPath(path);
+      const target = opPath(path, 'open');
       if (typeof data !== 'string' && !(data instanceof Uint8Array))
         throw coded(
           new TypeError('The "data" argument must be a string or a Uint8Array'),
@@ -217,7 +228,7 @@ class LiveSandbox implements Sandbox {
 
   readFile(path: string): Promise<Uint8Array> {
     return this.#op((fs) => {
-      const target = sandboxPath(path);
+      const target = opPath(path, 'open');
       const stat = vfs('open', target, () => fs.statSync(target));
       if (stat.isDirectory) throw fsError('EISDIR', 'read', target);
       if ((stat.size ?? 0) > this.maxFileBytes) throw tooLarge(stat.size ?? 0, this.maxFileBytes);
@@ -227,7 +238,7 @@ class LiveSandbox implements Sandbox {
 
   list(path: string = WORKSPACE): Promise<SandboxEntry[]> {
     return this.#op((fs) => {
-      const dir = sandboxPath(path);
+      const dir = opPath(path, 'scandir');
       const entries = vfs('scandir', dir, () => fs.readdirSync(dir));
       return entries
         .map(({ name, isDirectory }) => ({
@@ -241,7 +252,7 @@ class LiveSandbox implements Sandbox {
 
   remove(path: string): Promise<void> {
     return this.#op((fs) => {
-      const target = sandboxPath(path);
+      const target = opPath(path, 'rm');
       if (!fs.existsSync(target)) throw fsError('ENOENT', 'rm', target);
       vfs('rm', target, () => fs.rmSync(target, { recursive: true }));
     });

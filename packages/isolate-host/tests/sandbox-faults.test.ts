@@ -507,3 +507,32 @@ describe('sandboxes are independent (S7)', () => {
     }
   });
 });
+
+describe('names the snapshot cannot hold (Fault matrix, ADR-0567 16 383 code units)', () => {
+  carrier(
+    'a host write of a longer name is refused at once; a guest-made one refuses its run’s state',
+    async () => {
+      const sb = await createSandbox();
+      try {
+        const long = 'n'.repeat(16_384);
+        await expect(sb.writeFile(long, 'x')).rejects.toMatchObject({
+          code: 'ENAMETOOLONG',
+          syscall: 'open',
+        });
+        await sb.writeFile('n'.repeat(16_383), 'x');
+        await sb.writeFile('g.js', `require('fs').writeFileSync('${'m'.repeat(16_384)}', 'x')`);
+        expect(await sb.exec('g.js')).toEqual({
+          stdout: '',
+          stderr: '',
+          exitCode: 0,
+          stateRefused: 'ERR_FS_SNAPSHOT_TOO_LARGE',
+        });
+        expect((await sb.list()).map((e) => e.name.length).sort((a, b) => a - b)).toEqual([
+          4, 16_383,
+        ]);
+      } finally {
+        await sb.destroy();
+      }
+    },
+  );
+});

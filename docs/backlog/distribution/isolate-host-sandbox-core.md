@@ -71,6 +71,7 @@ path is only for frames an honest worker never sends.
 | run past `timeoutMs` × its isolate | `timeout`; isolate disposed | `sandbox-faults` "past timeoutMs" | → I6 |
 | a run queued behind another × its deadline | counted from leaving the queue | `sandbox-faults` "leaves the queue" | → I6 |
 | a spinning run in sandbox A × a run in sandbox B | B returns first (per-sandbox order only) | `sandbox-faults` "independent" | → ADR-0568 |
+| a name over 16 383 code units (ADR-0567) × host op / guest write | host op: Node's `ENAMETOOLONG` at once; a run that made one: `stateRefused: 'ERR_FS_SNAPSHOT_TOO_LARGE'`, state of before | `sandbox-faults` "names the snapshot cannot hold" | → I6, I7 |
 | state bytes worker → isolate × view of a larger buffer | an exact copy crosses | `protocol.test.ts` "decodeState" | → I7 |
 
 ## Out of scope
@@ -82,3 +83,4 @@ The goal's `## Out of scope`; the four codec-dependent REDs turn green on the sn
 - ready-verdict: 2026-11-22 — Contract+RED @ 16b7ab607 (verify pass; first pass @ 0c90e7f79 BLOCKER, 7 fixed; JSON on PR #419)
 - 2026-11-22 — exec state frame: worker → consumer one `state` frame per exec call, before its terminal `exit`; payload ≤ `maxFsBytes`.
 - 2026-11-22 — stdout writes already cross as exact copies: a guest writing 20 one-byte views of a filled 150 MiB buffer peaks its worker at 288 MiB, the same as without the writes (probe on 50c9d8bf1).
+- re-cut: 2026-11-22 — added the long-name row after the codec's Final+GREEN round 1 bounded names (manager, PR #418 @ 62a73512e); RED shown red (host write gave `ERR_ISOLATE_HOST_SANDBOX_FULL`) before the fix — trace: I6, I7
