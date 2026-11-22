@@ -24,7 +24,6 @@ import {
   KIND,
   MAX_ERROR_TEXT,
   RECYCLE_RSS_BYTES,
-  REFUSED,
   type RunRequest,
   STUCK_GRACE_MS,
   type WorkerRequest,
@@ -79,6 +78,8 @@ interface Live {
   status: number;
   /** End a sandbox run whose state was not restored or captured. */
   refuse(reason: number): void;
+  /** A sandbox run's state fate (a `state` or `refused` frame) went out. */
+  stateSent: boolean;
 }
 const live = new Map<number, Live>();
 /** Largest sum of live calls' `memoryLimitMb` since the worker was last idle. */
@@ -197,16 +198,24 @@ async function run(request: RunRequest): Promise<void> {
     stateWork: undefined,
     holdsState: request.sandbox !== undefined,
     status: 1,
+    stateSent: false,
     refuse(reason) {
       if (state.reported) return;
       flush();
-      send(KIND.refused, id, Uint8Array.of(reason));
+      if (!state.stateSent) send(KIND.refused, id, Uint8Array.of(reason));
+      state.stateSent = true;
       state.report(KIND.exit, Uint8Array.of(state.status));
     },
     /** The call's one terminal frame; the isolate ends with it. */
     report(kind, payload) {
       if (state.reported) return;
       flush();
+      // One rule for every way a sandbox run ends here (the import() gap, a broken guest
+      // tail, …): an `exit` carries its state's fate; without a capture, the state of before.
+      if (kind === KIND.exit && request.sandbox && !state.stateSent && !state.cancelled) {
+        send(KIND.refused, id, Uint8Array.of(1));
+        state.stateSent = true;
+      }
       state.reported = true;
       closeBridge();
       // Retire first (call 0, order-free): the consumer stops placing calls here
@@ -311,27 +320,27 @@ async function run(request: RunRequest): Promise<void> {
     );
     state.status = exitStatus(code);
     if (sandbox && snapshot && !state.reported) {
-      // The end state, taken in the guest's realm: its bytes and its errors are
-      // the guest's, so the consumer validates the bytes and only a size
-      // refusal keeps its name (ADR-0568 §3).
+      // The end state, taken in the guest's realm: its bytes and its errors are the
+      // guest's. The reason is what this worker measured, never the guest's text: bytes
+      // over the cap are TOO_LARGE, anything else (a throw, not bytes) is CAPTURE
+      // (ADR-0568 §3). The copy out is bounded by the isolate's memory, the frame by the cap.
       state.stateWork = 1;
-      let refused = 1;
       let bytes: unknown;
       try {
         bytes = await snapshot.apply(undefined, [snapshotOptions], {
           arguments: { copy: true },
           result: { copy: true },
         });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : '';
-        if (!isolate.isDisposed && message.startsWith(`${REFUSED[2]}:`)) refused = 2;
+      } catch {
+        bytes = undefined;
       }
       if (bytes instanceof Uint8Array && bytes.byteLength <= sandbox.maxFsBytes) {
         if (!state.reported) {
           flush();
           send(KIND.state, id, bytes);
+          state.stateSent = true;
         }
-      } else if (!state.cancelled) state.refuse(refused);
+      } else if (!state.cancelled) state.refuse(bytes instanceof Uint8Array ? 2 : 1);
     }
     state.unwound = true;
     state.report(KIND.exit, Uint8Array.of(state.status));

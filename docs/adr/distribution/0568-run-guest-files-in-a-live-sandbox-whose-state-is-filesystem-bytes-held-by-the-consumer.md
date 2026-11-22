@@ -64,8 +64,14 @@ view's whole backing buffer; rifty's program entry has diagnostic gaps and no
    (whole-run rollback; Node keeps partial writes — compat ⚠️). A run that
    ended on its own but whose end state is not kept — over the cap, out of
    isolate memory while capturing, a snapshot its own guest broke — resolves
-   its own result plus `stateRefused: <code>` (the codec's
-   `ERR_FS_SNAPSHOT_*`, or the capture's own code), state unchanged: a result
+   its own result plus `stateRefused: <code>`, state unchanged. The code is
+   what the trusted side measured: the worker names `CAPTURE` for a capture
+   that threw or returned no bytes (never reading the guest's text) and
+   `ERR_FS_SNAPSHOT_TOO_LARGE` for bytes over `maxFsBytes`; the consumer names
+   its codec's refusal of the bytes. Every way the worker ends a sandbox run
+   itself (the `import()` gap, a broken guest tail) goes through one terminal
+   that sends the state's fate first (refused `CAPTURE` when nothing was
+   captured): a result
    of the guest's run, never a rejection (a guest cannot pose as
    infrastructure). A state its run cannot restore is the same field, before
    any guest code: `{stdout: '', stderr: '', exitCode: null, stateRefused}` —
@@ -96,8 +102,13 @@ view's whole backing buffer; rifty's program entry has diagnostic gaps and no
    ~2 × S (ADR-0567 P2). Defaults: `maxFsBytes` 64 MiB (a run needs ~2.3 × its
    state of isolate; `memoryLimitMb` defaults to 256), `maxFileBytes` 32 MiB.
 7. **Trust.** Snapshot bytes from a run were produced in the guest's realm:
-   hostile input, bounded by a frame limit and validated by the codec before
-   they become state. The bridge copies a view's range only, both directions.
+   hostile input, validated by the codec before they become state. Bounds:
+   the copy out of the isolate is bounded by the run's `memoryLimitMb` (it is
+   taken before its type and length are judged), the frame by `maxFsBytes`.
+   Into the isolate the state crosses as an exact buffer. Host bytes in and
+   out (`writeFile`, `readFile`, `snapshot()`, `createSandbox({snapshot})`)
+   are exact copies, sizes checked before the copy. Errors leaving the API
+   carry their first line as `stack`.
    Text crossing to the host: host-op errors are built in the consumer from
    a code and a sandbox path (`code`, `syscall`, `path`, message); a run's
    text is its own stdout/stderr; `stateRefused` is a fixed code chosen by the

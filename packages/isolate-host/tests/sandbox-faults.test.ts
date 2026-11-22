@@ -18,6 +18,7 @@ const carrier = it;
 interface Sandbox {
   writeFile(path: string, data: Uint8Array | string): Promise<void>;
   readFile(path: string): Promise<Uint8Array>;
+  remove(path: string): Promise<void>;
   list(path?: string): Promise<readonly { name: string; type: string; size: number }[]>;
   exec(path: string, options?: Record<string, unknown>): Promise<Record<string, unknown>>;
   snapshot(): Promise<Uint8Array>;
@@ -535,7 +536,7 @@ describe('names the snapshot cannot hold (Fault matrix, ADR-0567 16 383 code uni
           stdout: '',
           stderr: '',
           exitCode: 0,
-          stateRefused: 'ERR_FS_SNAPSHOT_TOO_LARGE',
+          stateRefused: 'ERR_ISOLATE_HOST_SANDBOX_CAPTURE',
         });
         expect((await sb.list()).map((e) => e.name.length).sort((a, b) => a - b)).toEqual([
           4, 16_383,
@@ -633,4 +634,100 @@ describe('snapshot bytes are never aliased (codec review, manager 2026-11-22)', 
       await b.destroy();
     }
   });
+});
+
+describe('every early end of a sandbox run carries its state fate (audit, manager 2026-11-22)', () => {
+  // `import()` ends a run from inside the isolate (ADR-0557 gap): before, a sandbox run ended so
+  // was read as a protocol violation and took its worker's neighbours with it.
+  // rifty's loader serves `import()` written in a file (corpus rows); source compiled by
+  // `vm` reaches the isolate's native hook, the declared gap that ends the run.
+  const FORMS: Record<string, Record<string, string>> = {
+    'vm.runInThisContext': {
+      'i.js':
+        "require('fs').writeFileSync('w', '1'); require('vm').runInThisContext(\"import('./x.js')\")",
+      'x.js': 'module.exports = 7',
+    },
+    'vm in a timer': {
+      'i.js':
+        "require('fs').writeFileSync('w', '1'); setTimeout(() => require('vm').runInThisContext(\"import('./x.js')\"), 5)",
+      'x.js': 'module.exports = 7',
+    },
+  };
+  for (const [form, files] of Object.entries(FORMS)) {
+    carrier(`import() — ${form}: the run's own result, its neighbour exact`, async () => {
+      const { value } = await consumer(`
+        const neighbour = settle(runCode("setTimeout(() => console.log('n'), 1500)", { timeoutMs: 20000 }));
+        const sb = await createSandbox();
+        for (const [name, data] of Object.entries(${JSON.stringify(files)})) await sb.writeFile(name, data);
+        const exec = await settle(sb.exec('i.js', { timeoutMs: 10000 }));
+        out({ exec, neighbour: await neighbour, names: (await sb.list()).map((e) => e.name) });`);
+      const v = value as { exec: Record<string, unknown>; neighbour: unknown; names: string[] };
+      expect(v.neighbour).toEqual({ stdout: 'n\n', stderr: '', exitCode: 0 });
+      expect(v.exec.rejected).toBeUndefined();
+      expect(v.exec.exitCode).toBe(1);
+      expect(String(v.exec.stderr)).toContain('isolate-host.dynamic-import');
+      // Ended by the gap, not on its own: the state of before, named by the trusted side.
+      expect(v.exec.stateRefused).toBe('ERR_ISOLATE_HOST_SANDBOX_CAPTURE');
+      expect(v.names).not.toContain('w');
+    });
+  }
+});
+
+describe('Buffer inputs and outputs are copies (audit, manager 2026-11-22)', () => {
+  carrier(
+    'a pooled Buffer, a view with an offset, readFile and snapshot() share no memory',
+    async () => {
+      const sb = await createSandbox();
+      try {
+        const pooled = Buffer.from('abc');
+        await sb.writeFile('p', pooled);
+        pooled[0] = 0x7a;
+        const big = Buffer.alloc(64, 1);
+        const view = big.subarray(10, 13);
+        await sb.writeFile('v', view);
+        big.fill(9);
+        const read = await sb.readFile('p');
+        read[1] = 0x7a;
+        expect(Buffer.from(await sb.readFile('p')).toString()).toBe('abc');
+        expect([...(await sb.readFile('v'))]).toEqual([1, 1, 1]);
+        expect((await sb.readFile('p')).buffer.byteLength).toBe(3);
+        const snap = await sb.snapshot();
+        const again = await createSandbox({ snapshot: Buffer.from(snap) });
+        expect(Buffer.from(await again.readFile('p')).toString()).toBe('abc');
+        await again.destroy();
+      } finally {
+        await sb.destroy();
+      }
+    },
+  );
+});
+
+describe('host errors carry no consumer frames or paths (audit, manager 2026-11-22)', () => {
+  carrier(
+    'message, code, syscall, path and stack of each refusal name only sandbox paths',
+    async () => {
+      const host = [process.cwd(), fileURLToPath(new URL('..', import.meta.url)), tmpdir()];
+      const sb = await createSandbox({ maxFileBytes: 4 });
+      const errors: unknown[] = [];
+      const grab = async (p: Promise<unknown>) => errors.push(await p.catch((e: unknown) => e));
+      await grab(sb.readFile('nope'));
+      await grab(sb.writeFile('a\0b', 'x'));
+      await grab(sb.writeFile('big', 'xxxxx'));
+      await grab(sb.writeFile('n'.repeat(16_384), 'x'));
+      await grab(sb.remove('nope'));
+      await grab(sb.exec('a.js', { env: {} }));
+      await sb.destroy();
+      await grab(sb.readFile('x'));
+      for (const e of errors) {
+        expect(e).toBeInstanceOf(Error);
+        const text = JSON.stringify({
+          ...(e as object),
+          message: (e as Error).message,
+          stack: (e as Error).stack,
+        });
+        for (const h of host) expect(text).not.toContain(h);
+        expect((e as Error).stack).not.toMatch(/\n\s+at /);
+      }
+    },
+  );
 });

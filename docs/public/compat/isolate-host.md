@@ -64,6 +64,8 @@ sequence against live `node <path>` over the same files), `sandbox-faults.test.t
 | State too large for the run's isolate | ⚠️ | `{stdout: '', stderr: '', exitCode: null, stateRefused: 'ERR_ISOLATE_HOST_SANDBOX_RESTORE'}`; no guest code runs |
 | `fs.stat().ino` across runs | ⚠️ | Renumbered at each run's restore (the snapshot keeps the four times, not `ino`, ADR-0567); Node keeps it |
 | Text of an uncaught-error report (positions, `file:line` header with caret, `Node.js v…` footer, `SyntaxError` as `ModuleLoadError`, the `Cannot find module` header) | ⚠️ | Error line and file names as Node's; the rest is the runtime-js diagnostics goal's (`node-file-entry-parity`) |
+| `import()` of a CommonJS file from a file (top level, async, `eval`, `new Function`, a timer) | ✅ | rifty's loader serves it; corpus row |
+| `import()` in source compiled by `vm` | ❌ | The `import()` gap ends the run (exit 1, `isolate-host.dynamic-import`), its writes rolled back: `stateRefused: 'ERR_ISOLATE_HOST_SANDBOX_CAPTURE'` |
 | ES modules: `.mjs`, `"type": "module"`, ESM syntax in a typeless `.js` | ❌ | `NotImplementedError('isolate-host.esm')`: rifty's ESM loader needs `URL`, a ceiling here |
 | `fs.symlink*`/`link*` | ❌ | `NotImplementedError('fs.<name>')`: rifty's FS has no links (ADR-0050) |
 | `exec` options `env`, `cwd`, `stdin`; `createSandbox({ template })` | ❌ | `NotImplementedError('isolate-host.sandbox-exec-<option>')`, `NotImplementedError('isolate-host.sandbox-template')` |

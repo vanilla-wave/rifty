@@ -77,7 +77,7 @@ calls share a worker process.
   framing them, the consumer decodes them with the snapshot codec (ADR-0567) before they become
   the sandbox's state, and any refusal is that run's own `stateRefused` — never a rejection that
   reads as infrastructure. Host file ops resolve model-chosen paths inside the sandbox's own `/`
-  and name only sandbox paths in errors. Sandboxes share no FS: each run restores its own. `ino`
+  and name only sandbox paths in errors (fields and `stack`). Sandboxes share no FS: each run restores its own. `ino`
   values come from the run's own fresh isolate (not kept by the snapshot), so they carry nothing
   from other sandboxes. Not protected: the consumer's memory holds every live sandbox's files and
   decodes each run's state on its event loop — cap the number of sandboxes and `maxFsBytes`.

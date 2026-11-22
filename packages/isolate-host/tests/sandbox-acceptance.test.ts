@@ -438,6 +438,19 @@ try { fs.writeFileSync('a\\0b', 'x'); console.log('nul ok'); } catch (e) { conso
     runs: [['t.js'], ['next.js']],
   },
   {
+    label: 'import() of a CommonJS file: top level, async, eval, new Function, a timer',
+    files: {
+      'x.js': 'module.exports = 7',
+      'i.js': `const show = (m) => console.log(m.default);
+import('./x.js').then(show);
+(async () => show(await import('./x.js')))();
+eval("import('./x.js')").then(show);
+new Function("return import('./x.js')")().then(show);
+setTimeout(() => import('./x.js').then(show), 5);`,
+    },
+    runs: [['i.js']],
+  },
+  {
     label: 'missing module',
     files: { 'main.js': "require('./nope')\n" },
     runs: [['main.js'], ['missing.js']],
@@ -547,7 +560,7 @@ describe('limits are loud (scenario 8, I6)', () => {
       expect(filled).toMatchObject({
         stdout: 'done\n',
         exitCode: 0,
-        stateRefused: 'ERR_FS_SNAPSHOT_TOO_LARGE',
+        stateRefused: 'ERR_ISOLATE_HOST_SANDBOX_CAPTURE',
       });
       expect((await sb.list()).map((e) => e.name)).toEqual([...before, 'fill.js'].sort());
       // Both views agree after the refusal: the next run does not see `huge` either.

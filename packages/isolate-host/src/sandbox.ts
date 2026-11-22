@@ -104,6 +104,18 @@ const MAX_NAME = 16_383;
 const coded = <E extends Error>(error: E, code: string): E & { code: string } =>
   Object.assign(error, { code });
 
+/**
+ * Every error leaving the sandbox API: its fields name only sandbox paths, and its
+ * `stack` is its first line — no frame or path of this process reaches the model.
+ */
+function bare(error: unknown): unknown {
+  if (error instanceof Error) error.stack = `${error.name}: ${error.message}`;
+  return error;
+}
+
+/** An exact copy of any typed bytes (a `Buffer` slice would share memory). */
+const copyOf = (bytes: Uint8Array): Uint8Array => new Uint8Array(bytes);
+
 function notImplemented(feature: string, hint: string): Error {
   const error = new Error(`Not implemented: ${feature} (${hint})`);
   error.name = 'NotImplementedError';
@@ -187,10 +199,14 @@ class LiveSandbox implements Sandbox {
 
   /** One operation, after every earlier one (ADR-0568 §4). */
   #op<T>(fn: (fs: Fs) => T | Promise<T>): Promise<T> {
-    const next = this.#tail.then(() => {
-      if (this.#fs === undefined || this.#destroyed) throw destroyedError();
-      return fn(this.#fs);
-    });
+    const next = this.#tail
+      .then(() => {
+        if (this.#fs === undefined || this.#destroyed) throw destroyedError();
+        return fn(this.#fs);
+      })
+      .catch((error: unknown) => {
+        throw bare(error);
+      });
     this.#tail = next.catch(() => {});
     return next;
   }
@@ -203,9 +219,11 @@ class LiveSandbox implements Sandbox {
           new TypeError('The "data" argument must be a string or a Uint8Array'),
           'ERR_INVALID_ARG_TYPE',
         );
-      // An exact copy: the caller's buffer may change after the call.
-      const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : data.slice();
-      if (bytes.byteLength > this.maxFileBytes) throw tooLarge(bytes.byteLength, this.maxFileBytes);
+      // The size first (a refused input costs no copy), then an exact copy: the caller's
+      // buffer may change after the call.
+      const size = typeof data === 'string' ? Buffer.byteLength(data) : data.byteLength;
+      if (size > this.maxFileBytes) throw tooLarge(size, this.maxFileBytes);
+      const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : copyOf(data);
       const parent = target.slice(0, target.lastIndexOf('/')) || '/';
       const previous =
         fs.existsSync(target) && fs.statSync(target).isFile
@@ -239,7 +257,7 @@ class LiveSandbox implements Sandbox {
       const stat = vfs('open', target, () => fs.statSync(target));
       if (stat.isDirectory) throw fsError('EISDIR', 'read', target);
       if ((stat.size ?? 0) > this.maxFileBytes) throw tooLarge(stat.size ?? 0, this.maxFileBytes);
-      return vfs('open', target, () => fs.readFileBytesSync(target)).slice();
+      return copyOf(vfs('open', target, () => fs.readFileBytesSync(target)));
     });
   }
 
@@ -317,7 +335,7 @@ class LiveSandbox implements Sandbox {
   }
 
   snapshot(): Promise<Uint8Array> {
-    return this.#op((fs) => this.codec.snapshotFs(fs, this.#options));
+    return this.#op((fs) => copyOf(this.codec.snapshotFs(fs, this.#options)));
   }
 
   destroy(): Promise<void> {
@@ -356,7 +374,13 @@ function firstMissingDir(fs: Fs, dir: string): string | undefined {
   return hi <= parts.length ? at(hi) : undefined;
 }
 
-export async function createSandbox(options: SandboxOptions = {}): Promise<Sandbox> {
+export function createSandbox(options: SandboxOptions = {}): Promise<Sandbox> {
+  return open(options).catch((error: unknown) => {
+    throw bare(error);
+  });
+}
+
+async function open(options: SandboxOptions): Promise<Sandbox> {
   if ('template' in options)
     throw notImplemented(
       'isolate-host.sandbox-template',
@@ -372,7 +396,12 @@ export async function createSandbox(options: SandboxOptions = {}): Promise<Sandb
         new TypeError('The "options.snapshot" property must be a Uint8Array'),
         'ERR_INVALID_ARG_TYPE',
       );
-    c.restoreFs(fs, options.snapshot.slice(), { template: null, maxBytes: maxFsBytes });
+    if (options.snapshot.byteLength > maxFsBytes)
+      throw coded(
+        new RangeError(`isolate-host sandbox: the snapshot is over maxFsBytes (${maxFsBytes})`),
+        'ERR_FS_SNAPSHOT_TOO_LARGE',
+      );
+    c.restoreFs(fs, copyOf(options.snapshot), { template: null, maxBytes: maxFsBytes });
   } else for (const dir of c.GUEST_DIRS) fs.mkdirSync(dir, { recursive: true });
   return new LiveSandbox(c, fs, maxFileBytes, maxFsBytes);
 }

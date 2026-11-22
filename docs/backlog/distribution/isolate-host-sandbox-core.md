@@ -76,6 +76,9 @@ path is only for frames an honest worker never sends.
 | guest-made NaN/Infinity times or a NUL name × the next run's restore | as Node: the calls throw (`ERR_INVALID_ARG_TYPE`, `ERR_INVALID_ARG_VALUE`), nothing unrestorable is written | `sandbox-acceptance` corpus "utimes with NaN…" | → I1, I2 |
 | snapshot bytes in / out × the caller's buffer | copies both ways | `sandbox-faults` "never aliased" | → I3 |
 | guest error text from a broken capture × host | never crosses: a fixed code | `sandbox-faults` "throws" (`evil /secret/path`) | → I7 |
+| the worker ends a sandbox run itself (the `import()` gap via `vm`, plain and in a timer) next to a neighbour | the run's result (exit 1, the gap text, `stateRefused` CAPTURE); never a protocol violation; neighbour exact | `sandbox-faults` "every early end" | → I1, I7 |
+| host bytes in/out × a pooled `Buffer`, a view with an offset, `readFile`/`snapshot()` results | exact copies, no shared memory | `sandbox-faults` "Buffer inputs" | → I3 |
+| every host-op refusal × its error object | fields and `stack` name only sandbox paths; `stack` is the first line | `sandbox-faults` "no consumer frames" | → I7 |
 | state bytes worker → isolate × view of a larger buffer | an exact copy crosses | `protocol.test.ts` "decodeState" | → I7 |
 
 ## Out of scope
@@ -91,3 +94,4 @@ The goal's `## Out of scope`; the four codec-dependent REDs turn green on the sn
 - re-cut: 2026-11-22 — the guest-authored row widened after Contract+RED to accept a codec whose capture resists the poison (state kept, never a rejection) — the reviewer's concern; no defect hidden: the real codec takes the refused/timeout branch for all four poisons — trace: I1, I7
 - re-cut: 2026-11-22 — Final+GREEN round 1 blockers: destroy resolves once the run has left its worker; boot `memory` stays `memory`. Rows added: destroy read at resolution, boot memory, buffer copies, stateless exit violation, refused write leaves no new directories (each RED shown red: mutants N1–N7) — trace: I1, I3, I5, I7
 - re-cut: 2026-11-22 — codec external review (manager): rows for the restore boundary, guest-made NaN/Infinity/NUL, snapshot aliasing, guest error text; the NUL row was red (rifty created the name; fixed at `fs-path.ts`, Node's `nullCheck`) — trace: I1, I2, I3, I7
+- re-cut: 2026-11-22 — boundary audits (manager): one terminal for sandbox runs (the `import()` gap no longer reads as a protocol violation), reason codes measured by the trusted side (`TOO_LARGE` only for measured bytes, a throwing capture is `CAPTURE`), exact copies for `Buffer` inputs/outputs, sizes before copies, bare `stack`; REDs shown red (A1–A3 mutants, and the rows failed before the fix) — trace: I1, I3, I7
