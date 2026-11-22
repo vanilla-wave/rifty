@@ -1,8 +1,8 @@
 {
   "overall_verdict": "pass",
-  "merge_call": "Merge on green PR CI at HEAD after replacing the committed ebf3ac2b1 verdict (docs/backlog/runtime-js/reference/pr-421-final-green.json) with this one: no blockers; 100 probe programs + 360 generated + 36 compile-generator: no wrong header; remaining differences are pinned rows, declared compat rows and goal residuals (goal not complete).",
+  "merge_call": "Merge on green PR CI at HEAD with this verdict committed at docs/backlog/runtime-js/reference/pr-421-final-green.json: no blockers; 100 probe programs + 360 generated + 36 compile-generator: no wrong header; remaining differences are pinned rows, declared compat rows and goal residuals (goal not complete).",
   "checkpoint": "Final+GREEN",
-  "unit_goal_source": "docs/backlog/epics/node-file-entry-parity/goal.md (I1-I4, User scenario, P1/P2) + map.md + ledger.md; PR #421 @ 3db0191ae (delta verify after PASS @ 696c70a2c; manager contract ADR-0445 2026-11-22); BASE 50c9d8bf1; baseline = carrier RED rows on main 50c9d8bf1",
+  "unit_goal_source": "docs/backlog/epics/node-file-entry-parity/goal.md (I1-I4, User scenario, P1/P2) + map.md + ledger.md; PR #421 @ 239b60e7c (pin-only delta after PASS @ 3db0191ae: typescript-worker exact SHA-256 + ADR-0391 line; docs verdict/ledger); BASE 50c9d8bf1; baseline = carrier RED rows on main 50c9d8bf1",
   "unit_residuals": [],
   "goal_residuals": [
     {
@@ -100,9 +100,9 @@
       "findings": [
         {
           "severity": "concern",
-          "location": "docs/backlog/runtime-js/reference/pr-421-final-green.json",
-          "evidence": "git -C /tmp/rev421 log --oneline ebf3ac2b1..3db0191ae: a3cd6a501 committed the verdict bound to ebf3ac2b1; product changed after it.",
-          "summary": "The committed landing verdict is stale (REV-8): replace it with this 696c70a2c verdict before merge, or check:pass-binding reads the old sha.",
+          "location": "tools/checks/esbuild-legacy-retirement.mjs:105; docs/adr/distribution/0391-attest-copyable-runtime-asset-exceptions-to-the-esbuild-retirement-gate.md",
+          "evidence": "cd /tmp/rev421 @ 239b60e7c: git diff --stat 3db0191ae..HEAD → 4 files (ADR-0391 line, ledger, verdict json, retirement check pin); pnpm build:libs exit 0; pnpm check:esbuild-legacy-retirement exit 0 \"10 paths, 25 references, and exact emitted inventory verified\".",
+          "summary": "Delta since PASS @ 3db0191ae is the typescript-worker exact pin (bb5aceee… → aa805e86…, size unchanged) plus docs; the rebuilt worker matches the new pin. No product or test change.",
           "authority": ""
         }
       ]
@@ -175,5 +175,5 @@
       ]
     }
   ],
-  "reviewed_sha": "3db0191ae4d5c6f20ba677ad10f506cd3486b6d2"
+  "reviewed_sha": "239b60e7cdf51ad8d5a5cc55e011e802a0b50910"
 }
