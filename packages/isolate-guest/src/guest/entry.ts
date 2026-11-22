@@ -213,7 +213,11 @@ function fatal(error: unknown): void {
   nativeExit();
 }
 
-function run(source: string): Promise<number> {
+/**
+ * One run of the runtime: `launch` starts the entry, then the drain and the
+ * natural `exit()`, as `node` does. Resolves with the status, a primitive only.
+ */
+function runToExit(launch: () => Promise<void>): Promise<number> {
   // Resolved with a primitive only, so resolving it does no lookup the guest
   // can poison (the thenable check runs only for objects). The child judges
   // the number in its own realm (ADR-0557 §6).
@@ -221,14 +225,7 @@ function run(source: string): Promise<number> {
     const finish = (caught: unknown): void => resolve(settle(caught));
     try {
       setUp();
-      const entry = runNodeEntry({
-        kind: 'eval',
-        vfs: syncMirror(),
-        cwd: CWD,
-        source,
-        print: false,
-        explicitCommonJs: false,
-      });
+      const entry = launch();
       // Guest code has run from here: no `await`, which looks up the guest's
       // `constructor`/`then` (`onSettled`).
       onSettled(
@@ -255,6 +252,60 @@ function run(source: string): Promise<number> {
       finish(caught);
     }
   });
+}
+
+function run(source: string): Promise<number> {
+  return runToExit(() =>
+    runNodeEntry({
+      kind: 'eval',
+      vfs: syncMirror(),
+      cwd: CWD,
+      source,
+      print: false,
+      explicitCommonJs: false,
+    }),
+  );
+}
+
+/**
+ * `node <path> [args]` (ADR-0568): rifty's program entry over this realm's
+ * FS. An ES module entry is a declared gap: rifty's ESM loader needs `URL`,
+ * a ceiling global here.
+ */
+function runFile(path: string, args: readonly string[]): Promise<number> {
+  return runToExit(() => {
+    const entryPath = resolvePosix(CWD, path);
+    riftyProcess.argv = [riftyProcess.execPath, entryPath, ...args];
+    if (isEsmEntry(entryPath)) throw esmGap();
+    return runNodeEntry({ vfs: syncMirror(), entryPath, cwd: CWD });
+  });
+}
+
+const esmGap = (): NotImplementedError =>
+  new NotImplementedError(
+    'isolate-host.esm',
+    'ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568',
+  );
+
+/** The entry resolves as an ES module (`.mjs`, `"type": "module"`). A miss is the loader's own error. */
+function isEsmEntry(entryPath: string): boolean {
+  try {
+    const loader = createModuleLoader(syncMirror(), { cwd: CWD });
+    return loader.resolver.resolve(entryPath, { fromFile: entryPath, esm: true }).kind === 'esm';
+  } catch {
+    return false;
+  }
+}
+
+/** POSIX `path.resolve(base, p)` for an absolute `base`. */
+function resolvePosix(base: string, p: string): string {
+  const parts: string[] = [];
+  for (const seg of `${p.startsWith('/') ? '' : base}/${p}`.split('/')) {
+    if (seg === '' || seg === '.') continue;
+    if (seg === '..') parts.pop();
+    else parts.push(seg);
+  }
+  return `/${parts.join('/')}`;
 }
 
 /** Installs the runtime for one run; before any guest code. */
@@ -303,6 +354,6 @@ function rejection(copied: unknown): void {
 }
 
 Object.defineProperty(globalThis, '__riftyGuest', {
-  value: Object.freeze({ run, fire: fireTimer, rejection }),
+  value: Object.freeze({ run, runFile, fire: fireTimer, rejection }),
   configurable: true,
 });

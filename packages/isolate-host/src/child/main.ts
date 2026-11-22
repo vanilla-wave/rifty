@@ -24,6 +24,7 @@ import {
   KIND,
   MAX_ERROR_TEXT,
   RECYCLE_RSS_BYTES,
+  REFUSED,
   type RunRequest,
   STUCK_GRACE_MS,
   type WorkerRequest,
@@ -60,6 +61,8 @@ interface Live {
   reported: boolean;
   cancelled: boolean;
   unwound: boolean;
+  /** A sandbox run's restore or capture is in the isolate: its end there is a refused state, not `memory`. */
+  stateWork: boolean;
   report(kind: number, payload: Uint8Array): void;
 }
 const live = new Map<number, Live>();
@@ -76,7 +79,8 @@ setInterval(() => {
   // Its own heap limit disposed this isolate: a certain culprit, even while a
   // builtin keeps its thread (step 0: the run may not settle for seconds).
   for (const call of live.values()) {
-    if (call.isolate.isDisposed && !call.disposedHere) call.report(KIND.memory, new Uint8Array(0));
+    if (call.isolate.isDisposed && !call.disposedHere && !call.stateWork)
+      call.report(KIND.memory, new Uint8Array(0));
   }
   const rss = process.memoryUsage.rss();
   // Idle above the watermark: retire, never die under a call the consumer may be placing.
@@ -168,6 +172,7 @@ async function run(request: RunRequest): Promise<void> {
     reported: false,
     cancelled: false,
     unwound: false,
+    stateWork: false,
     /** The call's one terminal frame; the isolate ends with it. */
     report(kind, payload) {
       if (state.reported) return;
@@ -239,17 +244,63 @@ async function run(request: RunRequest): Promise<void> {
     const guest = await jail.get('__riftyGuest', { reference: true });
     guestFire.ref = await guest.get('fire', { reference: true });
     rejection = await guest.get('rejection', { reference: true });
-    const start = await guest.get('run', { reference: true });
+    const sandbox = request.sandbox;
+    const start = await guest.get(sandbox ? 'runFile' : 'run', { reference: true });
+    const snapshotOptions = { template: null, maxBytes: sandbox?.maxFsBytes ?? 0 };
+    const snapshot = sandbox ? await guest.get('snapshot', { reference: true }) : undefined;
+    if (sandbox) {
+      const restore = await guest.get('restore', { reference: true });
+      state.stateWork = true;
+      try {
+        // A fresh exact buffer: isolated-vm copies a view's whole backing store.
+        const bytes = Uint8Array.from(Buffer.from(sandbox.state, 'base64'));
+        await restore.apply(undefined, [bytes, snapshotOptions], { arguments: { copy: true } });
+      } catch {
+        // Before any guest code: the bundle's own refusal, or the isolate's memory.
+        if (state.cancelled) throw new Error('cancelled');
+        flush();
+        send(KIND.refused, id, Uint8Array.of(0));
+        state.unwound = true;
+        state.report(KIND.exit, Uint8Array.of(1));
+        return;
+      }
+      state.stateWork = false;
+    }
     await jail.delete('__riftyGuest');
     // From here a failure is the guest's run, not this worker's wiring.
     started = true;
     // The status crosses as ONE PRIMITIVE and is judged HERE, in the worker's
     // realm (ADR-0557 §6): a number resolves a promise with no lookup in the
     // guest realm, so a poisoned prototype there cannot rewrite it.
-    const code: unknown = await start.apply(undefined, [request.code], {
-      arguments: { copy: true },
-      result: { promise: true, copy: true },
-    });
+    const code: unknown = await start.apply(
+      undefined,
+      sandbox ? [sandbox.path, [...sandbox.args]] : [request.code],
+      {
+        arguments: { copy: true },
+        result: { promise: true, copy: true },
+      },
+    );
+    if (sandbox && snapshot && !state.reported) {
+      // The end state, taken in the guest's realm: its bytes and its errors are
+      // the guest's, so the consumer validates the bytes and only a size
+      // refusal keeps its name (ADR-0568 §3).
+      state.stateWork = true;
+      let refused = 1;
+      let bytes: unknown;
+      try {
+        bytes = await snapshot.apply(undefined, [snapshotOptions], {
+          arguments: { copy: true },
+          result: { copy: true },
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '';
+        if (!isolate.isDisposed && message.startsWith(`${REFUSED[2]}:`)) refused = 2;
+      }
+      flush();
+      if (bytes instanceof Uint8Array && bytes.byteLength <= sandbox.maxFsBytes && !state.cancelled)
+        send(KIND.state, id, bytes);
+      else if (!state.cancelled) send(KIND.refused, id, Uint8Array.of(refused));
+    }
     state.unwound = true;
     state.report(KIND.exit, Uint8Array.of(exitStatus(code)));
   } catch (error) {

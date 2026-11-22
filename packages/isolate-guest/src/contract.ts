@@ -30,6 +30,11 @@ export interface GuestHost extends HostFunctions {
 export interface GuestEntry {
   /** Run `code` like `node -e`, once. Resolves with the exit status (judge it with `exitStatus`). */
   run(code: string): Promise<number>;
+  /**
+   * `node <path> [args]` over this realm's FS, cwd `/workspace`, once, instead
+   * of `run` (ADR-0568). Resolves with the exit status (judge it with `exitStatus`).
+   */
+  runFile(path: string, args: readonly string[]): Promise<number>;
   /** Host timer `id` expired. */
   fire(id: number): void;
   /** An unhandled rejection the embedder saw: a copy of the reason, or `UNCOPYABLE_REJECTION`. */

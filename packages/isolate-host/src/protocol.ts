@@ -8,9 +8,11 @@
  *   output: [fd 1|2][truncated 0|1][bytes…]   exit: [code]
  *   memory: (empty)   error: utf8 text (≤ MAX_ERROR_TEXT)
  *   retire: (empty, call 0) — send this worker no new call
+ *   state: snapshot bytes (≤ the call's maxFsBytes) — a sandbox run's end state (ADR-0568)
+ *   refused: [reason] — a sandbox run's state was not restored or captured (REFUSED)
  *
- * Per call: output frames, then exactly one terminal frame (exit, memory or
- * error); for a call the consumer cancelled it only ends its addressing. Truncation rides output frames only
+ * Per call: output frames, for a sandbox run at most one state or refused
+ * frame, then exactly one terminal frame (exit, memory or error); for a call the consumer cancelled it only ends its addressing. Truncation rides output frames only
  * (a flip with no new bytes is its own frame): a terminal frame is always
  * preceded by the flush of what came before.
  */
@@ -23,6 +25,17 @@ export interface RunRequest {
   readonly maxOutputBytes: number;
   /** Set on a solo worker's only call: the worker's exhaustion is attributed to it. */
   readonly solo?: true;
+  /** A sandbox run (ADR-0568): `node <path> [args]` over `state` instead of `code`. */
+  readonly sandbox?: SandboxRun;
+}
+
+export interface SandboxRun {
+  readonly path: string;
+  readonly args: readonly string[];
+  /** The sandbox's state, ADR-0567 snapshot bytes, base64. */
+  readonly state: string;
+  /** The snapshot codec's bound, both directions. */
+  readonly maxFsBytes: number;
 }
 
 /** The consumer settled `call` at its deadline: dispose its isolate. */
@@ -35,7 +48,21 @@ export type WorkerRequest = RunRequest | CancelRequest;
 
 export const FRAME_CHANNEL_FD = 3;
 export const MAX_ERROR_TEXT = 4096;
-export const KIND = { output: 1, exit: 2, memory: 3, error: 4, retire: 5 } as const;
+export const KIND = {
+  output: 1,
+  exit: 2,
+  memory: 3,
+  error: 4,
+  retire: 5,
+  state: 6,
+  refused: 7,
+} as const;
+/** `refused` payload byte → the result's `stateRefused` code (ADR-0568 §3). */
+export const REFUSED = [
+  'ERR_ISOLATE_HOST_SANDBOX_RESTORE',
+  'ERR_ISOLATE_HOST_SANDBOX_CAPTURE',
+  'ERR_FS_SNAPSHOT_TOO_LARGE',
+] as const;
 export const HEADER = 9;
 /** Calls the consumer places on one worker at once (pool ADR). */
 export const SHARD = 4;

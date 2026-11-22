@@ -14,8 +14,10 @@ import {
   FrameReader,
   KIND,
   MAX_ERROR_TEXT,
+  REFUSED,
   type RunRequest,
   SHARD,
+  type SandboxRun,
   type WorkerRequest,
 } from './protocol.ts';
 
@@ -32,6 +34,9 @@ export interface Result {
   readonly exitCode: number | null;
   readonly termination?: Termination;
   readonly truncated?: true;
+  /** A sandbox run's end state (ADR-0568), validated by the sandbox before use. */
+  readonly state?: Uint8Array;
+  readonly stateRefused?: (typeof REFUSED)[number];
 }
 export interface CallSpec {
   readonly allowSharedArrayBuffer: boolean;
@@ -39,6 +44,7 @@ export interface CallSpec {
   readonly timeoutMs: number;
   readonly memoryLimitMb: number;
   readonly maxOutputBytes: number;
+  readonly sandbox?: SandboxRun;
 }
 
 /** Accepted output, copied into one growable buffer: never a view into a received chunk. */
@@ -67,6 +73,9 @@ class Call {
   /** What the consumer accepted in this attempt: the state each frame is judged against. */
   kept = 0;
   truncated = false;
+  /** A sandbox run's `state` frame, or its `refused` reason, of this attempt. */
+  state: Uint8Array | undefined;
+  refused: number | undefined;
   attempts = 0;
   settled = false;
   /** Settled here at the deadline; the worker still owes its terminal frame. */
@@ -90,15 +99,21 @@ class Call {
     this.err = new FdBytes();
     this.kept = 0;
     this.truncated = false;
+    this.state = undefined;
+    this.refused = undefined;
     this.attempts++;
   }
   result(exitCode: number | null, termination?: Termination): Result {
+    const refused = this.refused === undefined ? undefined : REFUSED[this.refused];
     return {
       stdout: this.out.text(),
       stderr: this.err.text(),
-      exitCode,
+      // A state the run could not restore: no guest code ran.
+      exitCode: this.refused === 0 ? null : exitCode,
       ...(termination === undefined ? {} : { termination }),
       ...(this.truncated ? { truncated: true as const } : {}),
+      ...(this.state === undefined ? {} : { state: this.state }),
+      ...(refused === undefined ? {} : { stateRefused: refused }),
     };
   }
   resolveWith(result: Result): void {
@@ -213,6 +228,7 @@ class Worker {
       memoryLimitMb,
       maxOutputBytes,
       ...(this.solo ? { solo: true as const } : {}),
+      ...(call.spec.sandbox ? { sandbox: call.spec.sandbox } : {}),
     };
     this.send(request);
   }
@@ -236,6 +252,14 @@ class Worker {
     switch (kind) {
       case KIND.output:
         return 2 + (call.spec.maxOutputBytes - call.kept);
+      case KIND.state:
+      case KIND.refused: {
+        const sandbox = call.spec.sandbox;
+        if (sandbox === undefined) return `state frame for call ${id}, not a sandbox run`;
+        if (call.state !== undefined || call.refused !== undefined)
+          return `second state frame for call ${id}`;
+        return kind === KIND.state ? sandbox.maxFsBytes : 1;
+      }
       case KIND.exit:
         return 1;
       case KIND.memory:
@@ -269,7 +293,25 @@ class Worker {
       if (!call.cancelled) (fd === 2 ? call.err : call.out).append(bytes);
       return undefined;
     }
+    if (kind === KIND.state) {
+      call.state = p;
+      return undefined;
+    }
+    if (kind === KIND.refused) {
+      if (p.byteLength !== 1 || (p[0] as number) >= REFUSED.length) return 'refused payload';
+      call.refused = p[0];
+      return undefined;
+    }
     if (kind === KIND.exit && p.byteLength !== 1) return 'exit payload';
+    // An honest worker ends a sandbox run it was not told to cancel with its state.
+    if (
+      kind === KIND.exit &&
+      call.spec.sandbox !== undefined &&
+      !call.cancelled &&
+      call.state === undefined &&
+      call.refused === undefined
+    )
+      return 'sandbox run ended without its state';
     this.calls.delete(id);
     if (kind === KIND.exit) call.resolveWith(call.result(p[0] as number));
     else if (kind === KIND.memory) call.resolveWith(call.result(null, 'memory'));
@@ -307,11 +349,16 @@ export class Pool {
   readonly #workers: Worker[] = [];
   #nextId = 1;
 
-  run(spec: CallSpec): Promise<Result> {
+  /** `abort(error)` (a destroyed sandbox): reject with `error` now; the isolate is disposed as at a deadline. */
+  run(spec: CallSpec, onAbort?: (abort: (error: Error) => void) => void): Promise<Result> {
     return new Promise<Result>((resolve, reject) => {
       const id = this.#nextId;
       this.#nextId = id === MAX_CALL_ID ? 1 : id + 1;
       const call = new Call(id, spec, resolve, reject, (c) => this.#deadline(c));
+      onAbort?.((error) => {
+        call.rejectWith(error);
+        this.#cancel(call);
+      });
       call.restart();
       try {
         this.#placeFresh(call);
@@ -366,6 +413,11 @@ export class Pool {
     if (call.lost !== undefined)
       call.rejectWith(lostError(`${call.lost}; its rerun did not finish within timeoutMs`));
     else call.resolveWith(call.result(null, 'timeout'));
+    this.#cancel(call);
+  }
+
+  /** The call is settled here: its worker disposes its isolate. */
+  #cancel(call: Call): void {
     const worker = call.worker;
     if (worker === undefined || worker.dead || !worker.calls.has(call.id)) return;
     call.cancelled = true;
