@@ -220,7 +220,7 @@ function hostileStatePackage(name: string, size: number, frames: number, fill: n
 
 const VIOLATION = { rejected: expect.stringMatching(/^isolate-host child protocol violation: /) };
 const HOSTILE_BODY = `const run = await settle(runCode('1'));
-  const sb = await createSandbox({ maxFsBytes: 1024 });
+  const sb = await createSandbox({ maxFsBytes: 8192 });
   await sb.writeFile('a', 'kept');
   const exec = await settle(sb.exec('a'));
   out({ run, exec, kept: Buffer.from(await sb.readFile('a')).toString() });`;
@@ -230,7 +230,7 @@ describe('a hostile worker and state frames (Fault matrix)', () => {
     'a state frame for a runCode call, or past maxFsBytes, is a protocol violation',
     async () => {
       const { value } = await consumer(HOSTILE_BODY, {
-        entry: hostileStatePackage('oversized', 2048, 1, 0),
+        entry: hostileStatePackage('oversized', 16384, 1, 0),
       });
       expect(value).toMatchObject({ run: VIOLATION, exec: VIOLATION, kept: 'kept' });
     },
