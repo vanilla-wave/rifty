@@ -1,0 +1,283 @@
+/**
+ * Acceptance carrier of goal `isolate-host-live-sandbox` (its `## User
+ * scenario` as tests). The oracle is real `node <path> [args]`, run in sequence
+ * over the same files in a fresh temporary directory read as `/workspace`
+ * (`support.ts` nodeSequence). RED: every case is `it.fails` until the sandbox
+ * lands; the API is typed here from the goal's contract, not imported.
+ */
+import { describe, expect, it } from 'vitest';
+import * as pkg from '../src/index.ts';
+import { type FileTree, type NodeStep, nodeSequence } from './support.ts';
+
+/** RED until the sandbox lands; flips to `it` with the implementation. */
+const carrier = it.fails;
+
+interface ExecResult {
+  readonly stdout: string;
+  readonly stderr: string;
+  readonly exitCode: number | null;
+  readonly termination?: 'timeout' | 'memory';
+  readonly truncated?: true;
+}
+interface Entry {
+  readonly name: string;
+  readonly type: 'file' | 'directory';
+  readonly size: number;
+}
+interface Sandbox {
+  writeFile(path: string, data: Uint8Array | string): Promise<void>;
+  readFile(path: string): Promise<Uint8Array>;
+  list(path?: string): Promise<readonly Entry[]>;
+  remove(path: string): Promise<void>;
+  exec(
+    path: string,
+    options?: { args?: readonly string[]; timeoutMs?: number; memoryLimitMb?: number },
+  ): Promise<ExecResult>;
+  snapshot(): Promise<Uint8Array>;
+  destroy(): Promise<void>;
+}
+const createSandbox = (options?: { snapshot?: Uint8Array }): Promise<Sandbox> =>
+  (pkg as unknown as { createSandbox: (o?: unknown) => Promise<Sandbox> }).createSandbox(options);
+
+const W = '/workspace';
+const bytes = (...b: number[]) => new Uint8Array(b);
+
+/** Every file under `dir`, recursively, as the host API sees it. */
+async function tree(sb: Sandbox, dir = W): Promise<FileTree> {
+  const out: Record<string, string> = {};
+  for (const e of await sb.list(dir)) {
+    const path = `${dir}/${e.name}`;
+    if (e.type === 'directory') Object.assign(out, await tree(sb, path));
+    else out[path] = Buffer.from(await sb.readFile(path)).toString('base64');
+  }
+  return out;
+}
+
+/**
+ * The part of an uncaught-error report this goal owns: the error line and the
+ * user files its frames name, in order. Positions, the `file:line` header and
+ * the footer belong to the runtime-js diagnostics goal (pinned ⚠️ there).
+ */
+function errorView(stderr: string): { error: string | undefined; files: string[] } {
+  const lines = stderr.split('\n');
+  const error = lines.find((l) => /^[A-Za-z]*Error\b/.test(l));
+  const files = lines.flatMap((l) => /\((\/workspace\/[^:)]+):\d+:\d+\)$/.exec(l)?.[1] ?? []);
+  return { error, files };
+}
+
+const BUGGY = `const fs = require('fs');
+const input = fs.readFileSync(__dirname + '/input.bin');
+const pdf = makePdf(input);
+fs.writeFileSync(process.argv[2], pdf);
+`;
+const FIXED = `const fs = require('fs');
+const { makePdf } = require('./lib/pdf');
+const input = fs.readFileSync(__dirname + '/input.bin');
+fs.mkdirSync(require('path').dirname(process.argv[2]), { recursive: true });
+fs.writeFileSync(process.argv[2], makePdf(input));
+console.log('wrote', process.argv[2], require.main === module);
+`;
+const PDF_LIB = `exports.makePdf = (input) => Buffer.concat([
+  Buffer.from('%PDF-1.4\\n'), input, Buffer.from([0, 0xff, 0x80]), Buffer.from('\\n%%EOF\\n'),
+]);
+`;
+const INPUT = bytes(0, 1, 2, 0xfe, 0xff, 0x0a, 0x0d, 0x80);
+
+describe('write → run → error → fix → run (scenario 1–3)', () => {
+  carrier('the model fixes its error and the host reads the binary result', async () => {
+    const steps: NodeStep[] = [
+      { files: { 'main.js': BUGGY, 'input.bin': INPUT }, run: ['main.js', 'out/report.pdf'] },
+      { files: { 'main.js': FIXED, 'lib/pdf.js': PDF_LIB }, run: ['main.js', 'out/report.pdf'] },
+    ];
+    const oracle = nodeSequence(steps);
+    const sb = await createSandbox();
+    try {
+      await sb.writeFile('main.js', BUGGY);
+      await sb.writeFile(`${W}/input.bin`, INPUT);
+      const failed = await sb.exec('main.js', { args: ['out/report.pdf'] });
+      expect(failed.exitCode).toBe(1);
+      expect(failed.stdout).toBe(oracle[0]?.stdout);
+      expect(errorView(failed.stderr)).toEqual(errorView(oracle[0]?.stderr ?? ''));
+      expect(errorView(failed.stderr).error).toBe('ReferenceError: makePdf is not defined');
+
+      await sb.writeFile('main.js', FIXED);
+      await sb.writeFile('lib/pdf.js', PDF_LIB);
+      const ok = await sb.exec('main.js', { args: ['out/report.pdf'] });
+      expect(ok).toEqual({ stdout: oracle[1]?.stdout, stderr: oracle[1]?.stderr, exitCode: 0 });
+      expect(ok.stdout).toBe('wrote out/report.pdf true\n');
+      expect(await tree(sb)).toEqual(oracle[1]?.files);
+      const pdf = await sb.readFile('out/report.pdf');
+      expect(Buffer.from(pdf).toString('base64')).toBe(oracle[1]?.files[`${W}/out/report.pdf`]);
+    } finally {
+      await sb.destroy();
+    }
+  });
+});
+
+describe('an endless loop and eaten memory are ordinary errors (scenario 4, I1)', () => {
+  carrier('timeout and memory leave the files of before the run; the next fix runs', async () => {
+    const sb = await createSandbox();
+    try {
+      await sb.writeFile('keep.txt', 'kept');
+      await sb.writeFile('loop.js', "require('fs').writeFileSync('partial', 'x'); for (;;) {}");
+      const before = await tree(sb);
+      const loop = await sb.exec('loop.js', { timeoutMs: 1500 });
+      expect(loop).toMatchObject({ exitCode: null, termination: 'timeout' });
+      expect(await tree(sb)).toEqual(before);
+      for (const code of [
+        "const a = []; for (;;) a.push({ x: Math.random(), s: 'y'.repeat(100) })",
+        'new Array(2 ** 28).fill(0)',
+      ]) {
+        await sb.writeFile('mem.js', `require('fs').writeFileSync('partial', 'x'); ${code}`);
+        const mem = await sb.exec('mem.js', { memoryLimitMb: 64, timeoutMs: 60_000 });
+        expect(mem).toMatchObject({ exitCode: null, termination: 'memory' });
+        expect(Object.keys(await tree(sb))).not.toContain(`${W}/partial`);
+      }
+      await sb.writeFile('fixed.js', "console.log(require('fs').readFileSync('keep.txt', 'utf8'))");
+      expect(await sb.exec('fixed.js')).toEqual({ stdout: 'kept\n', stderr: '', exitCode: 0 });
+    } finally {
+      await sb.destroy();
+    }
+  }, 120_000);
+});
+
+describe('only files carry between runs (scenario 5, I2)', () => {
+  carrier('a sequence of runs equals the same sequence of node processes', async () => {
+    const steps: NodeStep[] = [
+      {
+        files: {
+          'm.js': 'module.exports = { count: 0 };',
+          'a.js': `globalThis.leak = 1; process.exitCode = 3; process.chdir('/');
+process.on('exit', () => console.log('bye'));
+require('./m').count++; setTimeout(() => {}, 10);
+require('fs').writeFileSync(__dirname + '/n.txt', String(require('./m').count));`,
+          'b.js': `console.log(typeof leak, process.exitCode, require('./m').count,
+  require('fs').readFileSync('n.txt', 'utf8'), process.listenerCount('exit'), process.cwd());`,
+        },
+        run: ['a.js'],
+      },
+      { files: {}, run: ['b.js'] },
+    ];
+    const oracle = nodeSequence(steps);
+    const sb = await createSandbox();
+    try {
+      for (const [name, data] of Object.entries(steps[0]?.files ?? {}))
+        await sb.writeFile(name, data);
+      for (const [i, step] of steps.entries()) {
+        const [path, ...args] = step.run;
+        const r = await sb.exec(path as string, { args });
+        expect(r).toEqual({
+          stdout: oracle[i]?.stdout,
+          stderr: oracle[i]?.stderr,
+          exitCode: oracle[i]?.exitCode,
+        });
+        expect(await tree(sb)).toEqual(oracle[i]?.files);
+      }
+    } finally {
+      await sb.destroy();
+    }
+  });
+});
+
+describe('operations take effect one at a time in call order (scenario 6, I4)', () => {
+  carrier('writes and runs issued without awaiting apply in order', async () => {
+    const sb = await createSandbox();
+    try {
+      const [, first, , second, last] = await Promise.all([
+        sb.writeFile('v.js', "console.log('v1')"),
+        sb.exec('v.js'),
+        sb.writeFile('v.js', "console.log('v2'); require('fs').writeFileSync('w', 'run2')"),
+        sb.exec('v.js'),
+        sb.readFile('w'),
+      ]);
+      expect(first).toEqual({ stdout: 'v1\n', stderr: '', exitCode: 0 });
+      expect(second).toEqual({ stdout: 'v2\n', stderr: '', exitCode: 0 });
+      expect(Buffer.from(last).toString()).toBe('run2');
+    } finally {
+      await sb.destroy();
+    }
+  });
+});
+
+describe('destroy is loud and total (scenario 7, I5)', () => {
+  carrier('a run and queued operations in flight reject DESTROYED, later ones too', async () => {
+    const sb = await createSandbox();
+    await sb.writeFile('spin.js', 'for (;;) {}');
+    const running = sb.exec('spin.js', { timeoutMs: 30_000 });
+    const queued = sb.writeFile('after.txt', 'x');
+    const destroyed = sb.destroy();
+    const code = { code: 'ERR_ISOLATE_HOST_SANDBOX_DESTROYED' };
+    await expect(running).rejects.toMatchObject(code);
+    await expect(queued).rejects.toMatchObject(code);
+    await destroyed;
+    await expect(sb.readFile('spin.js')).rejects.toMatchObject(code);
+    await expect(sb.exec('spin.js')).rejects.toMatchObject(code);
+  });
+});
+
+describe('host refusals are loud and name only sandbox paths (scenario 8, I6, I7)', () => {
+  carrier('missing file, invalid path; another sandbox is invisible', async () => {
+    const a = await createSandbox();
+    const b = await createSandbox();
+    try {
+      const missing = await a.readFile('nope/out.pdf').catch((e: unknown) => e);
+      expect(missing).toMatchObject({ code: 'ENOENT', path: `${W}/nope/out.pdf` });
+      expect(String((missing as Error).message)).not.toContain(process.cwd());
+      await expect(a.writeFile('bad\0name', 'x')).rejects.toMatchObject({
+        code: 'ERR_INVALID_ARG_VALUE',
+      });
+      await a.writeFile('secret.txt', 'canary-a');
+      await b.writeFile(
+        'peek.js',
+        "const fs = require('fs'); console.log(fs.existsSync('/workspace/secret.txt'), JSON.stringify(fs.readdirSync('/workspace')))",
+      );
+      expect(await b.exec('peek.js')).toEqual({
+        stdout: 'false ["peek.js"]\n',
+        stderr: '',
+        exitCode: 0,
+      });
+    } finally {
+      await a.destroy();
+      await b.destroy();
+    }
+  });
+});
+
+describe('snapshot round trip (scenario 9, I10)', () => {
+  carrier('a sandbox created from a snapshot runs over the same files', async () => {
+    const sb = await createSandbox();
+    await sb.writeFile('main.js', "require('fs').writeFileSync('made.bin', Buffer.from([7, 0, 255]))");
+    expect((await sb.exec('main.js')).exitCode).toBe(0);
+    const files = await tree(sb);
+    const snapshot = await sb.snapshot();
+    await sb.destroy();
+    const again = await createSandbox({ snapshot });
+    try {
+      expect(await tree(again)).toEqual(files);
+      await again.writeFile('read.js', "console.log([...require('fs').readFileSync('made.bin')])");
+      expect(await again.exec('read.js')).toEqual({
+        stdout: '[ 7, 0, 255 ]\n',
+        stderr: '',
+        exitCode: 0,
+      });
+    } finally {
+      await again.destroy();
+    }
+  });
+});
+
+describe('ESM entries are a loud gap (I2)', () => {
+  carrier('an ESM entry fails with the named gap; real node runs it', async () => {
+    const step: NodeStep = { files: { 'main.mjs': 'console.log(1)' }, run: ['main.mjs'] };
+    expect(nodeSequence([step])[0]?.exitCode).toBe(0);
+    const sb = await createSandbox();
+    try {
+      await sb.writeFile('main.mjs', 'console.log(1)');
+      const r = await sb.exec('main.mjs');
+      expect(r.exitCode).toBe(1);
+      expect(r.stderr).toContain('Not implemented: isolate-host.esm');
+    } finally {
+      await sb.destroy();
+    }
+  });
+});

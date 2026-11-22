@@ -161,9 +161,12 @@ hypervisor and deploy stay outside rifty; the consumer supplies the outer bounda
   embedders are declared ceilings in `docs/public/compat/isolate-host.md`.
 - Worker pool — done: up to 4 calls per long-lived worker, neighbour-safe limits, lost-worker
   reruns; warm call 13 ms, 8 concurrent calls 414 MiB (was 137 ms, 1118 MiB) — ADR-0563 (PR #412).
-- Directions (not fitted): B — live sandbox: host binary file ops, `exec node <path>`; C — FS
-  snapshot export/import + library template; D — agent tool set over the host. Shim
-  completion (URL, structuredClone, web streams, AbortController, EventTarget — requirements'
-  shim list, ceilings in A) rides B. Also: an `AbortSignal` option, a concurrency limit
+- B — live sandbox, in progress: host binary file ops, `exec node <path>`, sandbox snapshot —
+  goal `isolate-host-live-sandbox`, ADR-0568 (draft). FS snapshot format and codec — goal of its
+  own, ADR-0567.
+- Directions (not fitted): C — library template; D — agent tool set over the host; E — guest
+  Web API shim (URL, structuredClone, web streams, AbortController, EventTarget — requirements'
+  shim list, ceilings in A; ESM entries need `URL` too); F — Node-faithful `node file.js`
+  diagnostics (runtime-js, its own goal). Also: an `AbortSignal` option, a concurrency limit
   (semaphore) and per-tenant worker affinity in `runCode` — the consumer caps concurrency and
   separates tenants by process itself today.
