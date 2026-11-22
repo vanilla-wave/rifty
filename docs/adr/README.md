@@ -429,6 +429,7 @@ ADRs are immutable while active, except dated lines under `## Decisions` / `§Co
 | 0558 | Export the isolate guest bundle and bridge contract as an unstable package |
 | 0563 | Run runCode in a pool of long-lived worker processes, each hosting many isolates |
 | 0566 | Select guest SharedArrayBuffer access per isolate call |
+| 0567 | Snapshot the isolate guest filesystem as a versioned binary blob |
 
 ## Superseded (removed)
 
