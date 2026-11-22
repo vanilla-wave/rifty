@@ -76,10 +76,13 @@ probes: `docs/backlog/distribution/reference/isolate-host-sandbox-step0.md`. -->
   `memory`) or rejects (its worker lost) leaves exactly the files of before
   it: whole-run rollback, never a partial state (Node would keep the partial
   writes: declared, compat ⚠️). The host and the next run see that state.
-  A run whose end state cannot be captured or restored (too large for its
-  isolate or the bound, a guest that broke its own snapshot) is a named, loud
-  result, neither a lost worker nor `memory`/`timeout` blamed on the guest,
-  and leaves the state of before it. Under this model a sandbox is lost only
+  A run that ended on its own but whose end state cannot be kept (over the
+  cap, too large for its isolate to capture, a guest that broke its own
+  snapshot) resolves with its own output and exit code plus a field naming
+  why its state was refused, and leaves the state of before it: a result of
+  the guest's run, never a rejection that reads as infrastructure (I7). A
+  state the run cannot restore is refused before any guest code, named the
+  same way. Under this model a sandbox is lost only
   with its consumer process (the requirements' rollback to the last saved
   archive).
 - I2. `node <path>` fidelity in sequences: a sequence of `exec(path, {args})`
@@ -100,8 +103,9 @@ probes: `docs/backlog/distribution/reference/isolate-host-sandbox-step0.md`. -->
 - I5. End of life is loud and total: once `destroy()` resolves, no isolate of
   the sandbox runs and its state is unreachable; every operation in flight,
   queued or later rejects `ERR_ISOLATE_HOST_SANDBOX_DESTROYED`.
-- I6. Bounded: each run has `runCode`'s limits (time, isolate memory, output
-  cap; whether restore and snapshot count against `timeoutMs` is stated); a
+- I6. Bounded: each run has `runCode`'s limits and hardening (time, isolate
+  memory, output cap, no network); its `timeoutMs` runs from the moment it
+  leaves the queue and covers restore, the run and the capture; a
   sandbox's state is bounded by one cap, one rule: a run whose end state is
   over it (or cannot be captured) is I1's named result, a host write that
   would pass it rejects; each host file op is bounded
@@ -140,16 +144,16 @@ challenge: 2026-11-22 — 6 problems (fresh critic over the requirements, the ma
 ## Decisions
 
 - 2026-11-22 — user (requirements `2026-11-17-rifty-isolate-requirements.md` §API исполнения, §Жизненный цикл, via the manager thread `4056a9e7`): host file ops read/list/write/change without binary loss; `exec` narrowly `node <path>`; one instance through write → exec → error → fix → exec; binary result read by the host straight from the sandbox at a model-chosen path, the host checking path and size; realm-level destroy; consumer docs. Acceptance: «агент пишет JS, видит результат, сам исправляет ошибку». The form `create/files/exec/snapshot/destroy` is a proposal; the API is the ADR's.
-- 2026-11-22 — manager (hand-off): the library template, Web API shims, npm publication, the `process.exit()`-from-microtask fix and the suite flake are outside this goal; the API keeps a place for `snapshot` and creation from a snapshot without implementing them.
+- 2026-11-22 — manager (hand-off): the library template, Web API shims, npm publication, the `process.exit()`-from-microtask fix and the suite flake are outside this goal; the API keeps a place for `snapshot` and creation from a snapshot without implementing them (superseded for `snapshot`/creation from a snapshot by the packaging line below).
 - 2026-11-22 — manager (packaging): the snapshot goal (thread `isolate-host-fs-snapshot`, branch `t3/isolate-host-fs-snapshot`) owns the format and the codec in both realms and merges first; this goal builds on its branch once its seam is stable (sha from the manager), writes no codec and ships no stand-in for it. Moved here: the sandbox's `snapshot()`, creation from a snapshot, the point-of-rest rule and the end-to-end acceptance «write → run → snapshot → destroy → create from snapshot → the run sees the files» (I9). Merge order: codec, this goal; `require.main` arrives from the runtime-js thread.
 - 2026-11-22 — manager (user delegated): a killed run's result stays `exitCode: null` + `termination` (ADR-0557 dated line 2026-11-22); `exec` returns `runCode`'s shape for the same outcomes.
 - 2026-11-22 — manager default (reversible; the manager brings the fork to the user, whose recorded decisions it upholds — requirements §Решения «Владелец ФС живёт в том же realm, что и гость (внутри isolate)», «харденинг нужен только на внешнем шве»): rifty's filesystem stays in the guest's realm inside the isolate; only bytes and plain data cross the boundary. Under it the sandbox between operations is bytes in the consumer; a run is a stateless pool call: fresh isolate, filesystem restored from the bytes, `node <path>`, filesystem back to bytes, which replace the state. The FS codec is the snapshot goal's; no second codec.
 - 2026-11-22 — the step-0 alternative "a directory on the host disk" (it would keep a killed run's partial writes and cost nothing per run at template scale) is not built: under it every guest `fs` call becomes an exposed host function behind a jail of our own over `node:fs` (links, name normalization, OS stat values and error texts with host paths, quota as disk accounting) — against requirements §Решения «харденинг нужен только на внешнем шве: выставленные хостовые функции…» — and the guest's fs leaves rifty's VFS. Both models, with their costs, go to the ADR's critic and to the user's fork (map `## Open questions`).
-- 2026-11-22 — manager: the cut is accepted — Node-faithful diagnostics of `node file.js` (positions +2, `file:line` header with caret, footer, `SyntaxError` for `ModuleLoadError`, the `Cannot find module` header) is a separate runtime-js goal in a parallel thread; their text gaps are pinned ⚠️ here citing it. `require.main === module` false is behavior, not diagnostics: this goal stays `draft` until its corpus row is green against real Node (fixed by the neighbour thread), and the same holds for anything found in the class "a run silently does something else". ESM entries are a loud `NotImplementedError` (agreed).
+- 2026-11-22 — manager: the cut is accepted — Node-faithful diagnostics of `node file.js` (positions +2, `file:line` header with caret, footer, `SyntaxError` for `ModuleLoadError`, the `Cannot find module` header) is a separate runtime-js goal in a parallel thread; their text gaps are pinned ⚠️ here citing it. `require.main === module` false is behavior, not diagnostics: this goal's PR does not leave draft and the goal does not close until its corpus row is green against real Node (fixed by the neighbour thread); the same holds for anything found in the class "a run silently does something else". ESM entries are a loud `NotImplementedError` (agreed).
 - 2026-11-22 — manager (delegation, 2026-11-22): `ready` on the manager's delegation, as the pool goal; the state-model fork stays with the user (map `owner: user`). The `require.main` corpus row green against real Node gates the PR leaving draft and the goal's close, not implementation.
 - 2026-11-22 — manager: one size mechanism — the snapshot codec counts and refuses before allocating (ADR-0567); a guest-side quota (full disk at the write) is not built unless the contract proves undeliverable without it (`REV-7`).
 - 2026-11-22 — must not change (regression guard, not an invariant: true on main): `runCode`'s API, results, corpus parity and pool behavior (ADR-0557, ADR-0563, ADR-0566); its suite stays green unmodified.
 - 2026-11-22 — host file ops in the consumer run on rifty's own VFS (`MemoryFsSync` over the decoded state), not a second tree with hand-made errors (requirements §Решения «никакой второй независимой реализации»).
 - 2026-11-22 — tier: robust — the value is fault behavior over persistent state (every ending of a run × the state, concurrency, destroy, worker loss): each reachable axis × operation gets an honest outcome and a fault test.
 - rejected route: files in a long-lived isolate or a per-sandbox worker (in-memory VFS kept alive between runs) — violates I1: a heap-limit or catastrophic disposal takes the files; `new Array(2 ** 28).fill(0)` is V8's catastrophic OOM and an ICU flood keeps the worker above its ceiling after its isolate is gone (step 0 S1).
-- rejected route: build `runCode` on the sandbox — no consumer need, and it adds a state round trip to every `runCode` call (I8 keeps `runCode` as on main).
+- rejected route: build `runCode` on the sandbox — no consumer need, and it adds a state round trip to every `runCode` call — violates Outcome «`runCode` does not change».

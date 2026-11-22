@@ -19,7 +19,7 @@ Goal scenario steps 1–9 as tests in
 same Node executable over one fresh temporary directory, empty env, its real
 path read as `/workspace`. The API is typed in the test from the goal's
 contract until it exists. Committed RED: every case `it.fails`, failing at
-`createSandbox` (run 2026-11-22: 8 expected failures pass). Error reports are
+`createSandbox` (run 2026-11-22: 18 expected failures pass). Error reports are
 compared through `errorView` — the error line and the user files its frames
 name, in order; positions and Node's header/footer are the runtime-js
 diagnostics goal's.
@@ -45,24 +45,55 @@ challenge: 2026-11-22 — inherits the goal premise check (`goal.md` §Challenge
 4. `writeFile(v1)`, `exec`, `writeFile(v2)`, `exec`, `readFile` issued without
    awaiting: `v1`, `v2`, then the second run's file → I4
 5. `destroy()` during a busy run with a write queued behind it: both reject
-   `ERR_ISOLATE_HOST_SANDBOX_DESTROYED`, as do later `readFile`/`exec` → I5
+   `ERR_ISOLATE_HOST_SANDBOX_DESTROYED` (settled together, no unhandled
+   rejection), as do later `readFile`/`exec` → I5
 6. `readFile` of a missing path → `code: 'ENOENT'`, `path:
    '/workspace/nope/out.pdf'`, no host cwd in the message; a NUL in a path →
    `ERR_INVALID_ARG_VALUE`; sandbox B's guest does not see A's
-   `secret.txt` (`false ["peek.js"]`) → I6, I7
+   `secret.txt` (`false ["peek.js"]`) → I7
 7. Write, run (creates `made.bin`), `snapshot()`, destroy, `createSandbox({
    snapshot })`: same tree; a run there reads `made.bin` → I9
 8. An ESM entry (`main.mjs`; node runs it, exit 0) → exit 1 with
    `Not implemented: isolate-host.esm` on stderr → I2
+9. Corpus, each row a run sequence vs node over the same files: relative
+   `require`, JSON, `__filename`, `__dirname`, `argv` (a spaced arg, a flag),
+   `require.main` / `module.id`, `path.relative`, a file the next run reads;
+   `if (require.main === module) main()` by `cli.js` and `./cli.js`; an
+   uncaught throw in a dependency and an async-main rejection (`errorView`
+   equal); a syntax error in the entry and in a dependency, a missing module
+   and entry (exit and stdout equal, stderr names node's file — the text is
+   the diagnostics goal's ⚠️) → I2
+10. `maxFileBytes` 1024, `maxFsBytes` 64 KiB: a 1025-byte host write and a
+    host read of a 2000-byte guest file reject `ERR_FS_FILE_TOO_LARGE`; a run
+    writing 100 KiB resolves `exit 0`, its stdout, `stateRefused:
+    'ERR_FS_SNAPSHOT_TOO_LARGE'`, files as before plus nothing of it; host
+    1 KiB writes meet `ERR_ISOLATE_HOST_SANDBOX_FULL` before 64 → I6, I1
+11. Names with a space, accents, a newline, a 10-deep directory and an empty
+    file round-trip host → guest; a guest write to `/tmp` is read by the host
+    at `../../tmp/t.txt`; `../../../etc/passwd` is the sandbox's own
+    `/etc/passwd` (ENOENT); `list` sizes; `remove` of a tree and a file, a
+    second `remove` ENOENT → I3, I7
+12. `fs.symlinkSync` in a run fails loudly (exit 1, names it); the sandbox
+    holds only files → I2, I7
+13. A run whose workers are all SIGKILLed while it is in flight resolves
+    exactly once (`done`), and its `appendFileSync` landed once → I1
+
+## Fault matrix
+
+| axis × operation | honest outcome | artifact / fault target | trace |
+|---|---|---|---|
+| run ends on its own (exit N, throw, rejection) × state | state = the run's end state | rows 1, 3, 9 | I1 |
+| run killed (timeout, heap, catastrophic OOM) × state | state of before, run's own result | row 2 | I1 |
+| worker SIGKILL × run in flight | one transparent rerun from the same bytes; no double effect | row 13 | I1 |
+| worker lost twice × run | `ERR_ISOLATE_HOST_WORKER_LOST`, state of before | core unit | I1 |
+| end state over cap / uncapturable / guest-broken snapshot × run | result + `stateRefused`, state of before | row 10; core unit (OOM in capture, poisoned codec) | I1, I7 |
+| hostile state bytes or frames from a worker × consumer decode | validated before use; worker violation path (ADR-0563 §3) | core unit (replaced `dist/child.js`) | I7 |
+| host op / run × issued unawaited | call order, one at a time | row 4 | I4 |
+| destroy × run in flight / queued op / host op in flight | all reject DESTROYED; isolate gone | row 5; core unit (host op in flight, isolate gone) | I5 |
+| model-chosen path (NUL, `..`, special names, deep) × host op | sandbox paths only; loud refusal | rows 6, 11 | I3, I7 |
+| size × host op / state | `ERR_FS_FILE_TOO_LARGE` / `ERR_ISOLATE_HOST_SANDBOX_FULL` | row 10 | I6 |
+| bytes host → isolate (restore) × view of a larger buffer | only the view's range crosses | core unit | I7 |
 
 ## Out of scope
 
-The goal's `## Out of scope`. Fault-matrix rows (worker loss, hostile
-frames/state bytes, size limits, view-range copies, the run sequence corpus)
-live in the units the carrier exposes, each with its own carrier.
-
-## Decisions
-
-- 2026-11-22 — RED typed against a local `Sandbox` interface (the goal's API),
-  so the carrier type-checks before the export exists; the implementation
-  replaces it with the package's types.
+The goal's `## Out of scope`.

@@ -6,7 +6,16 @@
    the `## User scenario` as tests over the real built package, real workers
    and real `node <path>` sequences (I1–I7, I9);
    `packages/isolate-host/tests/sandbox-acceptance.test.ts`, committed RED
-   (`it.fails`).
+   (`it.fails`): the fix loop, endings, sequence freshness and the `node
+   <path>` corpus (I2), order, destroy, limits, names/paths/remove, links,
+   lost-worker rerun, canary, snapshot round trip, ESM gap.
+2. `distribution/isolate-host-sandbox-core` — **the sandbox** (seeded at
+   PICKUP, draft until then) — the wall the carrier hits first: it carries the
+   carrier's `## Fault matrix` rows below the scenario level (hostile state
+   bytes and frames, restore/snapshot failures and `NOT_FRESH`, destroy during
+   a host op, view-range copies host → isolate, the isolate of a destroyed or
+   timed-out run gone, packed consumer with the codec bundled) — after the
+   codec seam (#418).
 
 Wall hypotheses the carrier is expected to hit (units only when the run hits
 them): the guest's `node <path>` entry beside `run(code)` (ESM entry as a loud
@@ -16,7 +25,7 @@ it, decode in the consumer realm; the wire carrying state bytes both ways
 at a time, destroy, host file ops over the decoded state, limits); bytes
 crossing the bridge as their view's range (step 0 S2); the corpus of run
 sequences against `node <path>` (I2); ADR, README, compat, trust-model,
-ROADMAP M14 (I9).
+ROADMAP M14 (I8).
 
 ## Open questions
 

@@ -31,12 +31,16 @@ Draft — open items are marked *open*.
 1. **API** (`src/index.ts`, plain data and bytes only, so it can move behind
    an RPC):
    - `createSandbox(options?) → Promise<Sandbox>`; `options.snapshot`
-     (bytes, ADR-0567 format) restores; `options.template` →
+     (bytes, ADR-0567 format) restores; `maxFileBytes` (per host file op,
+     `ERR_FS_FILE_TOO_LARGE`), `maxFsBytes` (the state cap, a host write past
+     it `ERR_ISOLATE_HOST_SANDBOX_FULL`); `options.template` →
      `NotImplementedError('isolate-host.sandbox-template')`.
    - `writeFile(path, data: Uint8Array | string)` (string = UTF-8, parents
      created), `readFile(path) → Uint8Array`, `list(path = '/workspace') →
      {name, type: 'file' | 'directory', size}[]` sorted by name, `remove(path)`
-     (a file or a directory tree). A relative path resolves against
+     (a file or a directory tree). rifty's FS has no links (ADR-0050:
+     `fs.symlinkSync`/`linkSync` absent in the guest, compat ❌), so every
+     entry is a file or a directory. A relative path resolves against
      `/workspace`; a NUL or a non-string → `ERR_INVALID_ARG_VALUE` /
      `ERR_INVALID_ARG_TYPE`; failures are Node-shaped (`code`, `syscall`,
      `path`, message) naming only sandbox paths.
@@ -59,14 +63,20 @@ Draft — open items are marked *open*.
    bytes as a frame before the terminal frame. On a terminal `exit` the
    consumer validates and decodes the bytes and they replace the state; on
    `timeout`, `memory` or a rejection the state stays as before the run
-   (whole-run rollback; Node keeps partial writes — compat ⚠️). A run whose
-   end state cannot be captured or restored rejects with a named code of its
-   own (*open:* name), state unchanged. The run's
+   (whole-run rollback; Node keeps partial writes — compat ⚠️). A run that
+   ended on its own but whose end state is not kept — over the cap, out of
+   isolate memory while capturing, a snapshot its own guest broke — resolves
+   its own result plus `stateRefused: <code>` (the codec's
+   `ERR_FS_SNAPSHOT_*`, or the capture's own code), state unchanged: a result
+   of the guest's run, never a rejection (a guest cannot pose as
+   infrastructure). A state its run cannot restore is the same field, before
+   any guest code. The run's
    input is bytes, so ADR-0563 §6's rerun of a lost worker's calls stays
    idempotent and applies unchanged.
 4. **One operation at a time.** Each sandbox runs its operations in call
    order, one at a time (a run replaces the whole state, so a host write
-   during it would be lost). A run's `timeoutMs` counts from its start.
+   during it would be lost). A run's `timeoutMs` counts from the moment it
+   leaves the queue and covers restore, the run and the capture.
    *open:* mechanism sweep (`fault-classes.md` §Class-kill) before the
    per-sandbox FIFO lands.
 5. **destroy** rejects queued and later operations

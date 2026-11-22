@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import * as pkg from '../src/index.ts';
-import { type FileTree, type NodeStep, nodeSequence } from './support.ts';
+import { type FileTree, type NodeStep, childPids, nodeSequence, waitFor } from './support.ts';
 
 /** RED until the sandbox lands; flips to `it` with the implementation. */
 const carrier = it.fails;
@@ -18,6 +18,8 @@ interface ExecResult {
   readonly exitCode: number | null;
   readonly termination?: 'timeout' | 'memory';
   readonly truncated?: true;
+  /** The run ended on its own but its end state was not kept (the reason's code); the state is as before it. */
+  readonly stateRefused?: string;
 }
 interface Entry {
   readonly name: string;
@@ -36,7 +38,14 @@ interface Sandbox {
   snapshot(): Promise<Uint8Array>;
   destroy(): Promise<void>;
 }
-const createSandbox = (options?: { snapshot?: Uint8Array }): Promise<Sandbox> =>
+interface SandboxOptions {
+  readonly snapshot?: Uint8Array;
+  /** Per host file op. */
+  readonly maxFileBytes?: number;
+  /** The sandbox's whole state (the snapshot codec's count). */
+  readonly maxFsBytes?: number;
+}
+const createSandbox = (options?: SandboxOptions): Promise<Sandbox> =>
   (pkg as unknown as { createSandbox: (o?: unknown) => Promise<Sandbox> }).createSandbox(options);
 
 const W = '/workspace';
@@ -115,30 +124,37 @@ describe('write → run → error → fix → run (scenario 1–3)', () => {
 });
 
 describe('an endless loop and eaten memory are ordinary errors (scenario 4, I1)', () => {
-  carrier('timeout and memory leave the files of before the run; the next fix runs', async () => {
-    const sb = await createSandbox();
-    try {
-      await sb.writeFile('keep.txt', 'kept');
-      await sb.writeFile('loop.js', "require('fs').writeFileSync('partial', 'x'); for (;;) {}");
-      const before = await tree(sb);
-      const loop = await sb.exec('loop.js', { timeoutMs: 1500 });
-      expect(loop).toMatchObject({ exitCode: null, termination: 'timeout' });
-      expect(await tree(sb)).toEqual(before);
-      for (const code of [
-        "const a = []; for (;;) a.push({ x: Math.random(), s: 'y'.repeat(100) })",
-        'new Array(2 ** 28).fill(0)',
-      ]) {
-        await sb.writeFile('mem.js', `require('fs').writeFileSync('partial', 'x'); ${code}`);
-        const mem = await sb.exec('mem.js', { memoryLimitMb: 64, timeoutMs: 60_000 });
-        expect(mem).toMatchObject({ exitCode: null, termination: 'memory' });
-        expect(Object.keys(await tree(sb))).not.toContain(`${W}/partial`);
+  carrier(
+    'timeout and memory leave the files of before the run; the next fix runs',
+    async () => {
+      const sb = await createSandbox();
+      try {
+        await sb.writeFile('keep.txt', 'kept');
+        await sb.writeFile('loop.js', "require('fs').writeFileSync('partial', 'x'); for (;;) {}");
+        const before = await tree(sb);
+        const loop = await sb.exec('loop.js', { timeoutMs: 1500 });
+        expect(loop).toMatchObject({ exitCode: null, termination: 'timeout' });
+        expect(await tree(sb)).toEqual(before);
+        for (const code of [
+          "const a = []; for (;;) a.push({ x: Math.random(), s: 'y'.repeat(100) })",
+          'new Array(2 ** 28).fill(0)',
+        ]) {
+          await sb.writeFile('mem.js', `require('fs').writeFileSync('partial', 'x'); ${code}`);
+          const mem = await sb.exec('mem.js', { memoryLimitMb: 64, timeoutMs: 60_000 });
+          expect(mem).toMatchObject({ exitCode: null, termination: 'memory' });
+          expect(Object.keys(await tree(sb))).not.toContain(`${W}/partial`);
+        }
+        await sb.writeFile(
+          'fixed.js',
+          "console.log(require('fs').readFileSync('keep.txt', 'utf8'))",
+        );
+        expect(await sb.exec('fixed.js')).toEqual({ stdout: 'kept\n', stderr: '', exitCode: 0 });
+      } finally {
+        await sb.destroy();
       }
-      await sb.writeFile('fixed.js', "console.log(require('fs').readFileSync('keep.txt', 'utf8'))");
-      expect(await sb.exec('fixed.js')).toEqual({ stdout: 'kept\n', stderr: '', exitCode: 0 });
-    } finally {
-      await sb.destroy();
-    }
-  }, 120_000);
+    },
+    120_000,
+  );
 });
 
 describe('only files carry between runs (scenario 5, I2)', () => {
@@ -207,8 +223,9 @@ describe('destroy is loud and total (scenario 7, I5)', () => {
     const queued = sb.writeFile('after.txt', 'x');
     const destroyed = sb.destroy();
     const code = { code: 'ERR_ISOLATE_HOST_SANDBOX_DESTROYED' };
-    await expect(running).rejects.toMatchObject(code);
-    await expect(queued).rejects.toMatchObject(code);
+    const [run, write] = await Promise.allSettled([running, queued]);
+    expect(run).toMatchObject({ status: 'rejected', reason: code });
+    expect(write).toMatchObject({ status: 'rejected', reason: code });
     await destroyed;
     await expect(sb.readFile('spin.js')).rejects.toMatchObject(code);
     await expect(sb.exec('spin.js')).rejects.toMatchObject(code);
@@ -246,7 +263,10 @@ describe('host refusals are loud and name only sandbox paths (scenario 8, I6, I7
 describe('snapshot round trip (scenario 9, I9)', () => {
   carrier('a sandbox created from a snapshot runs over the same files', async () => {
     const sb = await createSandbox();
-    await sb.writeFile('main.js', "require('fs').writeFileSync('made.bin', Buffer.from([7, 0, 255]))");
+    await sb.writeFile(
+      'main.js',
+      "require('fs').writeFileSync('made.bin', Buffer.from([7, 0, 255]))",
+    );
     expect((await sb.exec('main.js')).exitCode).toBe(0);
     const files = await tree(sb);
     const snapshot = await sb.snapshot();
@@ -280,4 +300,204 @@ describe('ESM entries are a loud gap (I2)', () => {
       await sb.destroy();
     }
   });
+});
+
+/** Scenario 1–2 corpus: each row is a two-run sequence over the same files, compared with node's. */
+interface CorpusRow {
+  readonly label: string;
+  readonly files: Readonly<Record<string, string>>;
+  readonly runs: readonly (readonly string[])[];
+  /** Only the diagnostic text differs from node's: the runtime-js diagnostics goal's (⚠️). */
+  readonly diagnosticText?: true;
+}
+const CORPUS: readonly CorpusRow[] = [
+  {
+    label: 'relative require, JSON, __filename, __dirname, argv, require.main, relative paths',
+    files: {
+      'main.js': `const conf = require('./conf.json'); const lib = require('./lib/x');
+console.log(conf.name, lib.v, __filename, __dirname, JSON.stringify(process.argv.slice(1)), require.main === module, module.id);
+require('fs').writeFileSync('rel/out.txt', require('path').relative(__dirname, __filename));`,
+      'conf.json': '{"name":"c"}',
+      'lib/x.js': 'exports.v = require.main === module ? "main" : "dep";',
+      'rel/.keep': '',
+      'second.js': "console.log(require('fs').readFileSync('rel/out.txt', 'utf8'))",
+    },
+    runs: [['main.js', 'a b', '--flag'], ['second.js']],
+  },
+  {
+    label: 'if (require.main === module) main()',
+    files: {
+      'cli.js': "function main() { console.log('ran') }\nif (require.main === module) main();\n",
+    },
+    runs: [['cli.js'], ['./cli.js']],
+  },
+  {
+    label: 'uncaught throw in a dependency names both files',
+    files: {
+      'main.js': "require('./dep');\n",
+      'dep.js': "function f() { throw new TypeError('bad thing') }\nf();\n",
+    },
+    runs: [['main.js'], ['main.js']],
+  },
+  {
+    label: 'unhandled rejection of an async main',
+    files: { 'main.js': "async function main() { throw new Error('boom') }\nmain();\n" },
+    runs: [['main.js']],
+  },
+  {
+    label: 'syntax error in the entry, then in a dependency',
+    files: { 'a.js': 'const a = ;\n', 'b.js': "require('./dep')\n", 'dep.js': 'let x = {\n' },
+    runs: [['a.js'], ['b.js']],
+    diagnosticText: true,
+  },
+  {
+    label: 'missing module',
+    files: { 'main.js': "require('./nope')\n" },
+    runs: [['main.js'], ['missing.js']],
+    diagnosticText: true,
+  },
+];
+
+describe('node <path> corpus in sequences (scenario 2, 5, I2)', () => {
+  for (const row of CORPUS) {
+    carrier(row.label, async () => {
+      const oracle = nodeSequence(
+        row.runs.map((run, i) => ({ files: i === 0 ? row.files : {}, run })),
+      );
+      const sb = await createSandbox();
+      try {
+        for (const [name, data] of Object.entries(row.files)) await sb.writeFile(name, data);
+        for (const [i, [path, ...args]] of row.runs.entries()) {
+          const r = await sb.exec(path as string, { args });
+          const o = oracle[i] as (typeof oracle)[number];
+          expect(r.stdout).toBe(o.stdout);
+          expect(r.exitCode).toBe(o.exitCode);
+          if (o.exitCode === 0) expect(r.stderr).toBe(o.stderr);
+          else if (row.diagnosticText) {
+            // The run fails as node's does and names the file; the text is the diagnostics goal's.
+            const named = /\/workspace\/[\w.]+/.exec(o.stderr)?.[0] ?? `${W}/${path}`;
+            expect(r.stderr).toContain(named);
+          } else expect(errorView(r.stderr)).toEqual(errorView(o.stderr));
+          expect(await tree(sb)).toEqual(o.files);
+        }
+      } finally {
+        await sb.destroy();
+      }
+    });
+  }
+});
+
+describe('limits are loud (scenario 8, I6)', () => {
+  carrier('per-file limit on host ops, one state cap for host writes and run results', async () => {
+    const sb = await createSandbox({ maxFileBytes: 1024, maxFsBytes: 64 * 1024 });
+    try {
+      await expect(sb.writeFile('big.bin', new Uint8Array(1025))).rejects.toMatchObject({
+        code: 'ERR_FS_FILE_TOO_LARGE',
+      });
+      await sb.writeFile('make.js', "require('fs').writeFileSync('g.bin', Buffer.alloc(2000, 1))");
+      expect(await sb.exec('make.js')).toEqual({ stdout: '', stderr: '', exitCode: 0 });
+      expect((await sb.list()).find((e) => e.name === 'g.bin')?.size).toBe(2000);
+      await expect(sb.readFile('g.bin')).rejects.toMatchObject({ code: 'ERR_FS_FILE_TOO_LARGE' });
+      const before = (await sb.list()).map((e) => e.name);
+      await sb.writeFile(
+        'fill.js',
+        "console.log('done'); require('fs').writeFileSync('huge', Buffer.alloc(100 * 1024))",
+      );
+      const filled = await sb.exec('fill.js');
+      expect(filled).toMatchObject({
+        stdout: 'done\n',
+        exitCode: 0,
+        stateRefused: 'ERR_FS_SNAPSHOT_TOO_LARGE',
+      });
+      expect((await sb.list()).map((e) => e.name)).toEqual([...before, 'fill.js'].sort());
+      for (let i = 0; i < 64; i++) {
+        const r = await sb.writeFile(`part${i}.bin`, new Uint8Array(1024)).catch((e: unknown) => e);
+        if (r !== undefined) {
+          expect(r).toMatchObject({ code: 'ERR_ISOLATE_HOST_SANDBOX_FULL' });
+          return;
+        }
+      }
+      throw new Error('64 × 1 KiB host writes never met the 64 KiB cap');
+    } finally {
+      await sb.destroy();
+    }
+  });
+});
+
+describe('host file ops: names, paths, remove (scenario 8, I3, I7)', () => {
+  carrier('special names round-trip; paths never leave the sandbox; remove and sizes', async () => {
+    const sb = await createSandbox();
+    try {
+      const names = ['a b.txt', 'ü-é.txt', 'line\nbreak', 'deep/x/y/z/w/v/u/t/s/r/q.txt'];
+      for (const n of names) await sb.writeFile(n, n);
+      await sb.writeFile('empty', new Uint8Array(0));
+      await sb.writeFile(
+        'ls.js',
+        `const fs = require('fs');
+console.log(JSON.stringify(${JSON.stringify(names)}.map((n) => fs.readFileSync(n, 'utf8') === n)), fs.statSync('empty').size);
+fs.writeFileSync('/tmp/t.txt', 'tmp');`,
+      );
+      expect(await sb.exec('ls.js')).toEqual({
+        stdout: '[true,true,true,true] 0\n',
+        stderr: '',
+        exitCode: 0,
+      });
+      expect(Buffer.from(await sb.readFile('../../tmp/t.txt')).toString()).toBe('tmp');
+      expect(await sb.readFile('empty')).toEqual(new Uint8Array(0));
+      const escape = await sb.readFile('../../../etc/passwd').catch((e: unknown) => e);
+      expect(escape).toMatchObject({ code: 'ENOENT', path: '/etc/passwd' });
+      expect((await sb.list()).find((e) => e.name === 'a b.txt')).toEqual({
+        name: 'a b.txt',
+        type: 'file',
+        size: 7,
+      });
+      await sb.remove('deep');
+      await sb.remove('empty');
+      expect((await sb.list()).map((e) => e.name)).not.toContain('deep');
+      await expect(sb.remove('deep')).rejects.toMatchObject({ code: 'ENOENT', path: `${W}/deep` });
+    } finally {
+      await sb.destroy();
+    }
+  });
+
+  carrier('no links exist in a sandbox: symlink and link are a loud gap (ADR-0050)', async () => {
+    const sb = await createSandbox();
+    try {
+      await sb.writeFile(
+        'ln.js',
+        "require('fs').writeFileSync('a', 'x'); require('fs').symlinkSync('a', 'b')",
+      );
+      const r = await sb.exec('ln.js');
+      expect(r.exitCode).toBe(1);
+      expect(r.stderr).toContain('symlinkSync');
+      expect((await sb.list()).map((e) => e.type)).toEqual(['file', 'file']);
+    } finally {
+      await sb.destroy();
+    }
+  });
+});
+
+describe('a lost worker does not repeat a run (I1)', () => {
+  carrier(
+    'a run whose worker is killed reruns from the same state: its append lands once',
+    async () => {
+      const sb = await createSandbox();
+      try {
+        await sb.writeFile('log.txt', 'start\n');
+        await sb.writeFile(
+          'slow.js',
+          "require('fs').appendFileSync('log.txt', 'run\\n'); setTimeout(() => console.log('done'), 1500)",
+        );
+        const running = sb.exec('slow.js', { timeoutMs: 20_000 });
+        // Every worker of this consumer: the call, placed at once, is on one of them; any
+        // kill before the guest's 1.5 s timer fires loses it in flight.
+        const pids = await waitFor(() => (childPids().length > 0 ? childPids() : undefined), 5000);
+        for (const pid of pids) process.kill(pid, 'SIGKILL');
+        expect(await running).toEqual({ stdout: 'done\n', stderr: '', exitCode: 0 });
+        expect(Buffer.from(await sb.readFile('log.txt')).toString()).toBe('start\nrun\n');
+      } finally {
+        await sb.destroy();
+      }
+    },
+  );
 });
