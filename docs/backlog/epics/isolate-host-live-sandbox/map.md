@@ -3,19 +3,13 @@
 ## Items
 
 1. `distribution/isolate-host-sandbox-acceptance` — **acceptance carrier** —
-   the `## User scenario` as tests over the real built package, real workers
-   and real `node <path>` sequences (I1–I7, I9);
-   `packages/isolate-host/tests/sandbox-acceptance.test.ts`, committed RED
-   (`it.fails`): the fix loop, endings, sequence freshness and the `node
-   <path>` corpus (I2), order, destroy, limits, names/paths/remove, links,
-   lost-worker rerun, canary, snapshot round trip, ESM gap.
-2. `distribution/isolate-host-sandbox-core` — **the sandbox** (seeded at
-   PICKUP, draft until then) — the wall the carrier hits first: it carries the
-   carrier's `## Fault matrix` rows below the scenario level (hostile state
-   bytes and frames, restore/snapshot failures and `NOT_FRESH`, destroy during
-   a host op, view-range copies host → isolate, the isolate of a destroyed or
-   timed-out run gone, packed consumer with the codec bundled) — after the
-   codec seam (#418).
+   the `## User scenario` as tests vs real `node <path>` sequences;
+   committed RED (`it.fails`).
+2. `distribution/isolate-host-sandbox-core` — **the sandbox** — the wall the
+   carrier hits first; carries the Fault matrix rows below the scenario
+   level — after the codec seam (#418).
+3. `runtime-js/fs-link-apis-not-implemented` — **`fs.symlink*`/`link*`/`readlink*`
+   absent → `NotImplementedError` + compat ❌** — carrier row 12.
 
 Wall hypotheses the carrier is expected to hit (units only when the run hits
 them): the guest's `node <path>` entry beside `run(code)` (ESM entry as a loud
@@ -28,20 +22,6 @@ sequences against `node <path>` (I2); ADR, README, compat, trust-model,
 ROADMAP M14 (I8).
 
 ## Open questions
-
-- State model — owner: user (fork carried by the manager, 2026-11-22; the
-  manager's default, bytes held by the consumer, is in force meanwhile on the
-  manager's delegation). The user's words: «в пределах одного прогона агента
-  один экземпляр живёт через write → exec → ошибка → fix → exec. Следующий
-  прогон… новый экземпляр из шаблона + восстановленных файлов» — a restore
-  once per agent run; the default restores and captures on every exec, rolls
-  back a killed run's partial writes, and at template scale pays ~1.15 s of
-  codec per exec plus ~95 MB each way and ≥ ~205 MiB of isolate before guest
-  code (ADR-0567 P1/P2: export 0.62 s, import 0.53 s, floor 205 MiB at
-  S = 90.7 MiB) unless a template layer avoids it. The host-disk alternative
-  keeps partial writes and costs nothing per exec, but makes a jail over
-  `node:fs` load-bearing (ADR-0568 §Alternatives). The answer decides I1's
-  rollback clause and the per-run cost; nothing closes on it before it.
 
 - The per-sandbox cap (I6): one number, the codec's `maxBytes` count
   (ADR-0567 refuses before allocating); the isolate limit alone does not hold

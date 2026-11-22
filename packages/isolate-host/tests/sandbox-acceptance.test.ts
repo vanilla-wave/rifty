@@ -7,7 +7,14 @@
  */
 import { describe, expect, it } from 'vitest';
 import * as pkg from '../src/index.ts';
-import { type FileTree, type NodeStep, childPids, nodeSequence, waitFor } from './support.ts';
+import {
+  type FileTree,
+  type NodeStep,
+  childPids,
+  nodeSequence,
+  rssKb,
+  waitFor,
+} from './support.ts';
 
 /** RED until the sandbox lands; flips to `it` with the implementation. */
 const carrier = it.fails;
@@ -469,7 +476,7 @@ fs.writeFileSync('/tmp/t.txt', 'tmp');`,
       );
       const r = await sb.exec('ln.js');
       expect(r.exitCode).toBe(1);
-      expect(r.stderr).toContain('symlinkSync');
+      expect(r.stderr).toContain('Not implemented: fs.symlinkSync');
       expect((await sb.list()).map((e) => e.type)).toEqual(['file', 'file']);
     } finally {
       await sb.destroy();
@@ -484,17 +491,22 @@ describe('a lost worker does not repeat a run (I1)', () => {
       const sb = await createSandbox();
       try {
         await sb.writeFile('log.txt', 'start\n');
+        // After its append the guest holds 300 MiB: a worker past 400 MiB RSS is one that ran
+        // the append (the event the kill waits for); then it waits for its timer.
         await sb.writeFile(
           'slow.js',
-          "require('fs').appendFileSync('log.txt', 'run\\n'); setTimeout(() => console.log('done'), 1500)",
+          "require('fs').appendFileSync('log.txt', 'run\\n'); globalThis.hold = new Uint8Array(300 << 20).fill(1); setTimeout(() => console.log('done'), 3000)",
         );
-        const running = sb.exec('slow.js', { timeoutMs: 20_000 });
-        // Every worker of this consumer: the call, placed at once, is on one of them; any
-        // kill before the guest's 1.5 s timer fires loses it in flight.
-        const pids = await waitFor(() => (childPids().length > 0 ? childPids() : undefined), 5000);
-        for (const pid of pids) process.kill(pid, 'SIGKILL');
+        const running = sb.exec('slow.js', { timeoutMs: 30_000, memoryLimitMb: 512 });
+        const culprit = await waitFor(
+          () => childPids().find((pid) => (rssKb(pid) ?? 0) > 400 * 1024),
+          10_000,
+        );
+        process.kill(culprit, 'SIGKILL');
         expect(await running).toEqual({ stdout: 'done\n', stderr: '', exitCode: 0 });
         expect(Buffer.from(await sb.readFile('log.txt')).toString()).toBe('start\nrun\n');
+        // The rerun happened: the killed worker is gone and the run resolved anyway.
+        expect(childPids()).not.toContain(culprit);
       } finally {
         await sb.destroy();
       }

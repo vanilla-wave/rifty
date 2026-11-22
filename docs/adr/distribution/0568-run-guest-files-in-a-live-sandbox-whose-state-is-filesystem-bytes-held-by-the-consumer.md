@@ -39,7 +39,8 @@ Draft — open items are marked *open*.
      created), `readFile(path) → Uint8Array`, `list(path = '/workspace') →
      {name, type: 'file' | 'directory', size}[]` sorted by name, `remove(path)`
      (a file or a directory tree). rifty's FS has no links (ADR-0050:
-     `fs.symlinkSync`/`linkSync` absent in the guest, compat ❌), so every
+     `fs.symlinkSync`/`linkSync` are absent in rifty's fs today — a
+     `TypeError`, to become `NotImplementedError` + compat ❌, map item 3), so every
      entry is a file or a directory. A relative path resolves against
      `/workspace`; a NUL or a non-string → `ERR_INVALID_ARG_VALUE` /
      `ERR_INVALID_ARG_TYPE`; failures are Node-shaped (`code`, `syscall`,
@@ -70,7 +71,7 @@ Draft — open items are marked *open*.
    `ERR_FS_SNAPSHOT_*`, or the capture's own code), state unchanged: a result
    of the guest's run, never a rejection (a guest cannot pose as
    infrastructure). A state its run cannot restore is the same field, before
-   any guest code. The run's
+   any guest code: `{stdout: '', stderr: '', exitCode: null, stateRefused}`. The run's
    input is bytes, so ADR-0563 §6's rerun of a lost worker's calls stays
    idempotent and applies unchanged.
 4. **One operation at a time.** Each sandbox runs its operations in call
