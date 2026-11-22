@@ -183,6 +183,7 @@ describe('the packed export (ADR-0558 §1)', () => {
         env,
       });
       expect(JSON.parse(out)).toEqual({
+        // ADR-0558 dated lines 2026-11-22: the snapshot exports (ADR-0567), GUEST_DIRS (ADR-0568).
         exports: [
           'FsSnapshotError',
           'GUEST_DIRS',

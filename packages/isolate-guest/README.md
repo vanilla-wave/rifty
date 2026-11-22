@@ -244,15 +244,21 @@ await guest.restore.apply(undefined, [new Uint8Array(bytes), options], { argumen
   anything. Treat it as untrusted bytes and accept them only through
   `restoreFs`, which relies on nothing the writer promises.
 - **Memory:** about 2 × the snapshot size at the peak of either direction;
-  size `memoryLimit` for it. `maxBytes` is required both ways.
+  size `memoryLimit` for it. A snapshot right after a restore, with no guest
+  code between, can need ~3 × (the restored blob is not yet collected:
+  measured 231–322 MiB at template scale). `maxBytes` is required both ways.
+- **Names** are limited to 16 383 code units: V8 hashes longer strings by
+  length alone, so equal-length longer names would make directory maps
+  quadratic. A longer name is refused at snapshot (`ERR_FS_SNAPSHOT_TOO_LARGE`)
+  and at restore (`ERR_FS_SNAPSHOT_CORRUPT`).
 
 Cost (M3 Pro, Node 24.16.0, isolated-vm 7.0.2, median of 5,
 `node --no-node-snapshot scripts/measure-snapshot.mjs`):
 
-| tree | blob | Node snapshot / restore | isolate restore / snapshot | ivm copy in / out | smallest `memoryLimit` (restore, then snapshot) |
+| tree | blob | Node snapshot / restore | isolate restore / snapshot | ivm copy in / out | smallest `memoryLimit`: restore → `run` → snapshot |
 |---|---|---|---|---|---|
-| 10 files, 958 kB | 962 kB | 0.8 / 0.8 ms | 2.2 / 1.1 ms | 0.1 / 0.1 ms | 19 MiB (empty guest 15) |
-| 23 654 files, 100.6 MB | 102.9 MB | 143 / 164 ms | 174 / 132 ms | 9.9 / 5.6 ms | 231 MiB |
+| 10 files, 958 kB | 962 kB | 0.8 / 0.8 ms | 2.3 / 1.2 ms | 0.1 / 0.2 ms | 19 MiB (empty guest 15) |
+| 23 654 files, 100.6 MB | 102.9 MB | 142 / 161 ms | 173 / 138 ms | 10 / 5.2 ms | 223 MiB |
 
 ## What you own
 

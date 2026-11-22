@@ -224,6 +224,49 @@ describe('format v1 layout (ADR-0567 §1, §2)', () => {
   });
 });
 
+describe('long names (ADR-0567 §5, I3)', () => {
+  carrier('a name of 16 383 code units round-trips; a longer one is refused at snapshot', () => {
+    const fs = createMemoryFs().fsSync;
+    fs.writeFileSync(`/${'n'.repeat(16_383)}`, new Uint8Array([1]));
+    const back = createMemoryFs().fsSync;
+    restoreFs(back, snapshotFs(fs, OPTIONS), OPTIONS);
+    expect(listFs(back)).toEqual(listFs(fs));
+    fs.writeFileSync(`/${'m'.repeat(16_384)}`, new Uint8Array([1]));
+    expect(() => snapshotFs(fs, OPTIONS)).toThrow(/^ERR_FS_SNAPSHOT_TOO_LARGE: /);
+  });
+
+  carrier(
+    'equal-length paths over 16 383 units decode as fast as short ones (no hash flooding)',
+    () => {
+      // V8 hashes strings over 16 383 units by length only: a Map keyed by such
+      // paths is quadratic. 2000 entries, ~65 MB either way; the control has
+      // short paths and the same bytes as content.
+      const deep = `/${'d'.repeat(16_380)}`;
+      const hostile = encode([
+        root,
+        dir(deep),
+        ...Array.from({ length: 2000 }, (_, i) => file(`${deep}/f${String(i).padStart(4, '0')}`)),
+      ]);
+      const control = encode([
+        root,
+        ...Array.from({ length: 2000 }, (_, i) =>
+          file(`/f${String(i).padStart(4, '0')}`, 'x'.repeat(32_768)),
+        ),
+      ]);
+      const options = { template: null, maxBytes: 1 << 30 };
+      const time = (bytes: Uint8Array) => {
+        const started = performance.now();
+        restoreFs(createMemoryFs().fsSync, bytes, options);
+        return performance.now() - started;
+      };
+      time(control);
+      const controlMs = time(control);
+      // Quadratic here measured ~10x the control at this size (Final+GREEN probe).
+      expect(time(hostile)).toBeLessThan(3 * controlMs + 1000);
+    },
+  );
+});
+
 describe('limits (ADR-0567 §7, I4)', () => {
   carrier(
     'snapshot: a blob of exactly maxBytes passes, one byte less is refused before allocating',
@@ -338,6 +381,9 @@ describe('hostile bytes (ADR-0567 §5, I2, I3)', () => {
     ['parent missing', [root, file('/nope/SECRET')]],
     ['parent is a file', [root, file('/f'), file('/f/SECRET')]],
     ['child before its parent', [root, file('/w/SECRET'), dir('/w')]],
+    ['siblings out of code-unit order', [root, file('/b'), file('/a')]],
+    ['back into a closed directory', [root, dir('/a'), dir('/b'), file('/a/x')]],
+    ['a name over 16 383 code units', [root, file(`/${'n'.repeat(16_384)}`)]],
     ['unknown kind (no symlinks in v1)', [root, { kind: 3, path: '/link' }]],
     ['NaN time', [root, { ...file('/a'), times: [Number.NaN, 0, 0, 0] }]],
     ['infinite time', [root, { ...file('/a'), times: [0, 0, Number.POSITIVE_INFINITY, 0] }]],
