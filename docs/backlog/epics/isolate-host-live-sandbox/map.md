@@ -26,10 +26,10 @@ external review.
   merge main when it lands.
 - Behavior divergences pinned ⚠️ in the carrier (not diagnostic text): work queued when
   `process.exit()` runs still runs and a file it writes is kept; an uncaught throw followed by an
-  endless microtask chain ends as `timeout` with its writes rolled back — owner: thread #416
-  (manager) — the PR leaves draft and the goal closes only when they are green against Node, or
-  the manager records them as declared ceilings (goal §Decisions, class "a run silently does
-  something else").
+  endless microtask chain ends as `timeout` with its writes rolled back — owner: thread #416 — the
+  manager's rule (2026-11-22): "green against Node, or ⚠️ citing the runtime-js item" and "a compat
+  row saying the run's files are rolled back"; both are pinned that way, so they no longer gate
+  draft; a #416 fix flips their carrier red, then to parity rows.
 - The codec seam (`t3/isolate-host-fs-snapshot`) — owner: snapshot thread —
   the manager sends the sha once its shape is stable; build on that branch.
 
