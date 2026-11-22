@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `process.exit(n)` from a promise callback, `queueMicrotask` or `nextTick` of the code's synchronous run (`main().then(() => process.exit(0))`) exits n as in Node, and an uncaught throw from `queueMicrotask` exits 1 with its diagnostic; before, both ended as `termination: 'timeout'`, the exit with rifty's internal `process exit requires an active control port` text on stderr. Still a gap: work already queued at the exit runs and prints (`backlog/runtime-js/node-eval-work-queued-at-exit-runs`).
 - Add the per-call `allowSharedArrayBuffer` option to `runCode`. False removes the global for feature detection. Shared wasm backing buffers throw the named gap on access. Default true (ADR-0566).
 
 - Known gaps declared (no behavior change): an unhandled rejection whose promise the GC collects before its task ends is lost — `exitCode: 0`, empty stderr where Node exits 1 (isolated-vm weak record, https://github.com/laverdet/isolated-vm/issues/589); `process.exit()` from a microtask of the code's synchronous run ends as `timeout`. README gives the guest-side workaround (handle every promise, set `process.exitCode`).

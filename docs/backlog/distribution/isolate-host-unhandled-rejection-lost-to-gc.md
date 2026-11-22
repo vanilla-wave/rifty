@@ -58,8 +58,7 @@ the embedder's `PromiseRejectCallback` sees them, and isolated-vm owns it. The f
 in isolated-vm, shipped to consumers. Every isolated-vm embedder of `@riftydev/isolate-guest` has it.
 
 Neighbours checked, different causes (their diagnostic is written, so no report is lost; the
-lifecycle after it misbehaves): `isolate-host-queuemicrotask-throw-times-out`,
-`isolate-host-uncaught-throw-waits-for-microtask-checkpoint`; `runtime-js/node-eval-unhandled-rejection-timing`
+lifecycle after it misbehaves): `isolate-host-uncaught-throw-waits-for-microtask-checkpoint`; `runtime-js/node-eval-unhandled-rejection-timing`
 and `late-unhandled-rejection-drain` are rifty lifecycle/browser paths.
 
 Pinned: `packages/isolate-host/tests/corpus.ts` rows `reject-then-gc`, `reject-new-promise-then-gc`,

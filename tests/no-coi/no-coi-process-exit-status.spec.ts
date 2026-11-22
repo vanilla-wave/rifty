@@ -86,9 +86,10 @@ const evalFatalMicrotask = {
   fatal: 'FATAL-MICRO',
 };
 // An exit from a microtask the synchronous eval queued ends before any later
-// task: the 'exit' listener once, no code after exit(), no queued timer.
+// task: the 'exit' listener once, no code after exit(), a pending timer never
+// runs (a 0 ms one still does: backlog runtime-js/node-eval-work-queued-at-exit-runs).
 const EVAL_MICROTASK_EXIT =
-  "process.on('exit',(c)=>console.log('L|exit',c));setTimeout(()=>console.log('L|timer'),0);console.log('L|before');Promise.resolve().then(()=>{process.exit(3);console.log('L|after')})";
+  "process.on('exit',(c)=>console.log('L|exit',c));setTimeout(()=>console.log('L|timer'),50);console.log('L|before');Promise.resolve().then(()=>{process.exit(3);console.log('L|after')})";
 const evalMicrotaskExit = {
   name: 'eval-microtask-exit',
   files: {},

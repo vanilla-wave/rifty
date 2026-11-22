@@ -26,6 +26,9 @@ export interface Row {
  */
 export const GC_CHURN = 'for (let i = 0; i < 2e6; i++) globalThis.gcChurn = { i };';
 
+const QUEUED_AT_EXIT =
+  'work already queued at exit() still runs (runtime-js/node-eval-work-queued-at-exit-runs)';
+
 export const CORPUS: readonly Row[] = [
   {
     label: 'console-log-values',
@@ -218,8 +221,13 @@ export const CORPUS: readonly Row[] = [
     code: 'Promise.resolve().then(() => Promise.resolve().then(() => queueMicrotask(() => process.exit(5))))',
   },
   {
-    label: 'exit-in-microtask-with-pending-timers',
+    label: 'exit-in-microtask-with-live-handles',
+    code: "setTimeout(() => console.log('late'), 50); setInterval(() => {}, 1000); Promise.resolve().then(() => process.exit(2))",
+  },
+  {
+    label: 'exit-in-microtask-with-ripe-timers',
     code: "setTimeout(() => console.log('timer'), 0); setInterval(() => console.log('interval'), 1); setImmediate(() => console.log('immediate')); Promise.resolve().then(() => process.exit(2))",
+    ceiling: QUEUED_AT_EXIT,
   },
   {
     label: 'exit-in-microtask-after-output',
@@ -232,6 +240,8 @@ export const CORPUS: readonly Row[] = [
   {
     label: 'exit-in-microtask-skips-queued-microtask',
     code: "Promise.resolve().then(() => process.exit(0)); Promise.resolve().then(() => console.log('queued'))",
+
+    ceiling: QUEUED_AT_EXIT,
   },
   {
     label: 'exit-in-next-tick',
@@ -246,6 +256,7 @@ export const CORPUS: readonly Row[] = [
     label: 'throw-primitive-in-queue-microtask',
     code: 'queueMicrotask(() => { throw 1 })',
     evalError: true,
+    ceiling: 'uncaught non-Error throw rendering (runtime-js/node-eval-non-error-throw-rendering)',
   },
   {
     label: 'throw-in-timer',

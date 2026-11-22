@@ -52,16 +52,6 @@ describe('declared gaps and their workarounds (compat ⚠️)', () => {
     expect(result.stderr.split('\n')[0]).toBe('Error: rej');
     expect(raw.stderr.split('\n')[0]).toBe('Error: rej');
   });
-
-  it('process.exit() from a microtask of the synchronous run ends as timeout (Node exits with its code)', async () => {
-    // Nothing ends such a run: `timeout` in 160/160 runs, 16 concurrent under load.
-    const code = 'Promise.resolve().then(() => process.exit(3))';
-    expect(nodeEval(code).code).toBe(3);
-    const result = await runCode(code, { timeoutMs: 2000 });
-    expect(result.termination).toBe('timeout');
-    expect(result.exitCode).toBeNull();
-    expect(result.stderr).toContain('Error: process exit requires an active control port');
-  });
 });
 
 /**
