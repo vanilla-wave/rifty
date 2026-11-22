@@ -466,7 +466,7 @@ describe("attribution of a worker's RSS (ADR-0563 §5, §6)", () => {
   );
 });
 
-describe('a guest that never ends and churns host timers (ADR-0563 §7, §4)', () => {
+describe('a guest that never ends and churns host timers (ADR-0563 §7, §6)', () => {
   carrier(
     'intervals created and cleared in a loop: its own end (memory alone), neighbours exact',
     async () => {

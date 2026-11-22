@@ -92,6 +92,7 @@ class Call {
     private readonly reject: (e: Error) => void,
     onDeadline: (call: Call) => void,
   ) {
+    // Fired, then settled by the poll: onDeadline still runs, and finds nothing to settle or cancel.
     this.deadline = judgeAfter(spec.timeoutMs, () => onDeadline(this));
   }
   /** A fresh attempt: nothing of the previous one reaches the result. */

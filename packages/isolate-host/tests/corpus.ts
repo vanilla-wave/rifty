@@ -144,10 +144,12 @@ export const CORPUS: readonly Row[] = [
     label: 'slow-interval-keeps-pace',
     code: 'let n = 0; const t0 = Date.now(); const iv = setInterval(() => { n++; const e = Date.now() + 10; while (Date.now() < e); }, 1); setTimeout(() => { clearInterval(iv); console.log(Date.now() - t0 < 3000, n < 150) }, 1000)',
   },
-  // Node's interval period (re-armed from the tick's start, not the callback's end) is not
-  // a parity row: past the host's delivery latency the two differ by nothing observable
-  // (a stalled worker gives 342 ms gaps for both). Carrier: the bridge on a fake host
-  // clock, `packages/isolate-guest/tests/host-bridge.test.ts`.
+  {
+    // Node re-arms from the tick's start: a 150 ms callback every 200 ms starts ~200 ms apart
+    // (re-arming from its end: ~350). Gaps, not counts: a loaded machine stretches both alike.
+    label: 'interval-keeps-its-period',
+    code: 'const s = []; const iv = setInterval(() => { s.push(Date.now()); if (s.length === 4) { clearInterval(iv); const g = [s[2] - s[1], s[3] - s[2]].sort((a, b) => a - b); console.log(g[0] < 275) } const e = Date.now() + 150; while (Date.now() < e); }, 200)',
+  },
   {
     // Never early: Node's `setInterval(f, 10)` averages ≥ 10 ms between ticks (~11.5 here).
     label: 'interval-never-early',

@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- A call's deadline and a closed result channel's grace decide after reading what the worker already sent: a consumer that was not scheduled no longer reports `timeout` for a result already in its pipe, nor a worker's own exit as forced (`… after closing its result channel without a result`) (ADR-0563 Corrections 2026-11-22). Tests: the clock, closed-channel and interval-churn cases no longer depend on host load; the interval-period parity row moved to the bridge on a fake clock (ADR-0558 Decisions 2026-11-22).
+- A call's deadline and a closed result channel's grace decide after reading what the worker already sent: a consumer that was not scheduled no longer reports `timeout` for a result already in its pipe, nor a worker's own exit as forced (`… after closing its result channel without a result`) (ADR-0563 Corrections 2026-11-22). Tests: the clock, closed-channel and interval-churn cases no longer depend on host load; the interval-period bridge test runs on a fake host clock.
 - Add the per-call `allowSharedArrayBuffer` option to `runCode`. False removes the global for feature detection. Shared wasm backing buffers throw the named gap on access. Default true (ADR-0566).
 
 - Known gaps declared (no behavior change): an unhandled rejection whose promise the GC collects before its task ends is lost — `exitCode: 0`, empty stderr where Node exits 1 (isolated-vm weak record, https://github.com/laverdet/isolated-vm/issues/589); `process.exit()` from a microtask of the code's synchronous run ends as `timeout`. README gives the guest-side workaround (handle every promise, set `process.exitCode`).
