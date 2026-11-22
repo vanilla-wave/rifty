@@ -392,10 +392,12 @@ describe('the state changes only at a terminal exit (Fault matrix)', () => {
     cpSync(join(PACKAGE_DIR, 'dist'), join(dir, 'dist'), { recursive: true });
     cpSync(join(PACKAGE_DIR, 'package.json'), join(dir, 'package.json'));
     symlinkSync(join(PACKAGE_DIR, 'node_modules'), join(dir, 'node_modules'));
-    // Echoes the request's own state back (a valid snapshot), then dies before any terminal frame.
+    // Sends a valid snapshot of another tree (`blob`, written by the consumer below) as the
+    // call's end state, then dies before any terminal frame.
+    const blob = join(dir, 'other.snapshot');
     writeFileSync(
       join(dir, 'dist', 'child.js'),
-      `import { writeSync } from 'node:fs';
+      `import { readFileSync, writeSync } from 'node:fs';
        const f = (kind, call, b) => { const h = new Uint8Array(9); const v = new DataView(h.buffer);
          v.setUint32(0, b.length); h[4] = kind; v.setUint32(5, call); writeSync(3, h); if (b.length) writeSync(3, b); };
        let pending = '';
@@ -404,7 +406,7 @@ describe('the state changes only at a terminal exit (Fault matrix)', () => {
          for (let nl; (nl = pending.indexOf('\\n')) >= 0; ) {
            const req = JSON.parse(pending.slice(0, nl)); pending = pending.slice(nl + 1);
            if (req.type !== 'run' || !req.sandbox) continue;
-           f(6, req.call, Buffer.from(req.sandbox.state, 'base64'));
+           f(6, req.call, readFileSync(${JSON.stringify(blob)}));
            process.kill(process.pid, 'SIGKILL');
          }
        });
@@ -412,7 +414,10 @@ describe('the state changes only at a terminal exit (Fault matrix)', () => {
        setInterval(() => {}, 1000);`,
     );
     const { value } = await consumer(
-      `const sb = await createSandbox();
+      `const other = await createSandbox();
+       await other.writeFile('extra', 'x');
+       (await import('node:fs')).writeFileSync(${JSON.stringify(blob)}, await other.snapshot());
+       const sb = await createSandbox();
        await sb.writeFile('a', 'kept');
        const exec = await settle(sb.exec('a'));
        out({ exec, names: (await sb.list()).map((e) => e.name) });`,
