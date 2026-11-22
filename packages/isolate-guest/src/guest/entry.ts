@@ -198,6 +198,9 @@ function writeDiagnostic(error: unknown): void {
   }
 }
 
+/** The drain settled with no terminal: the run ends as Node's natural exit. */
+let naturalExit = false;
+
 /** The runtime's own `process.exit`, captured before guest code can replace it. */
 let nativeExit: () => void = () => {
   throw new Error('isolate-host guest: exit before the runtime was installed');
@@ -241,6 +244,7 @@ function run(source: string): Promise<number> {
                 // The runtime's own exit: a guest-replaced `process.exit` must
                 // not change this run's status (Node's natural exit does not
                 // call it either).
+                naturalExit = true;
                 nativeExit();
                 throw new Error('isolate-host guest: process.exit() returned');
               } catch (caught) {
@@ -266,8 +270,9 @@ function setUp(): void {
   (globalThis as { Buffer?: unknown }).Buffer = Buffer;
   // Node writes nothing after exit(); work this realm already queued still runs
   // (backlog runtime-js/node-eval-work-queued-at-exit-runs), its output is dropped.
+  // A natural exit is not one: Node still runs what its 'exit' listeners queue.
   setDefaultProcessOutputSink((fd, bytes) => {
-    if (readNodeProcessTerminal(riftyProcess) === null) bridge.write(fd, bytes);
+    if (naturalExit || readNodeProcessTerminal(riftyProcess) === null) bridge.write(fd, bytes);
   });
   // Node's global console is `require('console')`: util.format over process.stdout/stderr.
   (globalThis as { console?: unknown }).console = nodeConsole;
