@@ -481,8 +481,9 @@ describe('a guest that never ends and churns host timers (ADR-0563 §7, §4)', (
         `{ memoryLimitMb: 64, timeoutMs: ${MAX_TIMEOUT_MS} }`,
         `{ memoryLimitMb: 16, timeoutMs: ${MAX_TIMEOUT_MS} }`,
         3,
-        // A culprit that never ends red here, not at a deadline nobody reaches.
-        150_000,
+        // A culprit that never ends reds here, not at a deadline nobody reaches. On the
+        // loaded stand (48 `yes`, load 60–320) the case took 30–85 s.
+        240_000,
         true,
       );
       expect(v.culprit).toEqual({
@@ -499,7 +500,7 @@ describe('a guest that never ends and churns host timers (ADR-0563 §7, §4)', (
       expect(v.neighbours).toEqual(NEIGHBOURS);
       expect(v.next).toEqual(NEXT);
     },
-    180_000,
+    250_000,
   );
 });
 
