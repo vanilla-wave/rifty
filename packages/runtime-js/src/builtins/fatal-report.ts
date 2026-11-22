@@ -293,11 +293,8 @@ interface HeaderSite {
  * is V8's own throw (not an error construction). Any user frame inside a
  * catching `try` may mean a rethrow elsewhere: no header.
  */
-function headerSite(
-  frames: readonly string[],
-  origin: FatalOrigin,
-  rooted: boolean,
-): HeaderSite | null {
+function headerSite(raw: string, origin: FatalOrigin, rooted: boolean): HeaderSite | null {
+  const frames = guestStack(raw).frames;
   const user = frames.filter((frame) => frameKind(frame) === 'user');
   const top = user[0] === undefined ? null : frameLocation(user[0]);
   // Only CJS factories and `-e` keep Node's coordinates (ESM: compat modules.md).
@@ -323,6 +320,21 @@ function headerSite(
   // entry's evaluation, a timer dispatch), created during it. A promise
   // (async function, executor) on its own stack may still have held it.
   if (!rooted) return null;
+  // Between creation and the root escape nothing may have held the error:
+  // rifty code between two user frames may catch (`assert.throws`) unless it
+  // only ran a module's top level (the require path); any `finally` may
+  // swallow (`return`/`break`). Unproven → no header (compat).
+  const rawFrames = raw.split('\n').filter((line) => FRAME.test(line));
+  let callee: string | null = null;
+  let gap = false;
+  for (let f = 0; f < rawFrames.length; f += 1) {
+    const kind = frameKind(rawFrames[f] as string);
+    if (kind === 'runtime' && callee !== null) gap = true;
+    if (kind !== 'user') continue;
+    if (gap && !atModuleTop(callee as string)) return null;
+    callee = asNodeFrame(rawFrames[f] as string);
+    gap = false;
+  }
   for (let f = 0; f < frames.length; f += 1) {
     if (/^\s+at (?:async |new Promise \(|Promise\.)/u.test(frames[f] as string)) return null;
   }
@@ -334,8 +346,10 @@ function headerSite(
         ? null
         : offsetOf(parsed.source, location.line, location.column - 1);
     if (parsed === null || at === null) return null;
-    const fn = innermostFunction(enclosing(parsed.root, at));
+    const chain = enclosing(parsed.root, at);
+    const fn = innermostFunction(chain);
     if (fn !== null && (fn as { async?: boolean }).async === true) return null;
+    if (chain.some((node) => node.type === 'TryStatement' && node.finalizer != null)) return null;
   }
   let lastCatch: { readonly file: string; readonly node: AcornNode } | null = null;
   for (let f = user.length - 1; f >= 0 && lastCatch === null; f -= 1) {
@@ -370,6 +384,18 @@ function headerSite(
   if (chain.some((node) => node.start === offset && node.type === 'NewExpression'))
     return site(top.file, bindingThrowSite(chain, offset));
   return { file: top.file, source, line: top.line, column: top.column - 1 };
+}
+
+/** The frame runs a module's top level (no enclosing function in its source). */
+function atModuleTop(frame: string): boolean {
+  const location = frameLocation(frame);
+  const source = location === null ? null : readGuestSource(location.file);
+  const root = source === null || location === null ? null : parseProgram(source, location.file);
+  const at =
+    source === null || location === null
+      ? null
+      : offsetOf(source, location.line, location.column - 1);
+  return root !== null && at !== null && innermostFunction(enclosing(root, at)) === null;
 }
 
 /** Node `GetErrorSource`: `<file>:<line>\n<source line>\n<caret>\n`. */
@@ -474,7 +500,7 @@ export function formatFatalReport(error: unknown, explicit?: FatalOrigin): strin
   const site =
     decorated.has(error) || internal || known !== undefined
       ? null
-      : headerSite(guestStack(raw).frames, origin, roots.has(error));
+      : headerSite(raw, origin, roots.has(error));
   const arrow = decorated.has(error)
     ? undefined
     : (known ?? (site === null ? undefined : headerText(site)));

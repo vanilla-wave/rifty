@@ -84,6 +84,14 @@ it.each([
     "const e = new Error('x');\nconst box = [e];\nif (box.length === 0) throw e;\nthrow box[0];\n",
   ],
   [
+    'a finally swallowed the first throw',
+    "let saved;\nfunction f() {\n  try {\n    throw (saved = new Error('x'));\n  } finally {\n    return;\n  }\n}\nf();\nthrow saved;\n",
+  ],
+  [
+    'a runtime function caught the first throw',
+    "const assert = require('node:assert');\nlet saved;\nassert.throws(() => {\n  throw (saved = new Error('x'));\n});\nthrow saved;\n",
+  ],
+  [
     'a closure may throw the built error later',
     "const e = new Error('x');\nconst later = () => { throw e; };\nlater();\n",
   ],
