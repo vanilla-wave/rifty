@@ -309,7 +309,8 @@ describe('consumer treats the child channel as hostile', () => {
   it('a worker whose result channel ended takes no new call: the call gets a fresh worker, not a spent rerun', async () => {
     const entry = hostilePackage(
       'placement after channel end',
-      ANSWER(`if (r.solo) process.kill(process.pid, 'SIGKILL');
+      // A solo answers 4, a fresh worker 9: which one served `second` is in its result.
+      ANSWER(`if (r.solo) f(2, [4]);
         else if (r.code === 'first') closeSync(3);
         else f(2, [9]);`),
     );
@@ -321,13 +322,7 @@ describe('consumer treats the child channel as hostile', () => {
       { entry: pathToFileURL(entry).href },
     );
     expect(value).toEqual({
-      // Its solo kills itself; whether its exit beat the grace is not this case's claim.
-      first: {
-        rejected: expect.stringMatching(
-          /^isolate-host child exited unexpectedly \(code null, signal SIGKILL\)/,
-        ),
-        code: 'ERR_ISOLATE_HOST_WORKER_LOST',
-      },
+      first: { stdout: '', stderr: '', exitCode: 4 },
       second: { stdout: '', stderr: '', exitCode: 9 },
     });
   });
