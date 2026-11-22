@@ -60,6 +60,8 @@ async function withNeighbours(
      out({ shared: pids.length, retired, probe, culprit: { ...culprit, ms }, neighbours: results, next: await settle(runCode('console.log(6 * 7)')), ...(${sampleWorkers} ? { workers: seen.size } : {}) });`,
     { timeoutMs: harnessMs },
   );
+  const harness = (value as { harnessError?: string } | null)?.harnessError;
+  if (harness !== undefined) throw new Error(`withNeighbours: ${harness}`);
   return value as Outcome;
 }
 

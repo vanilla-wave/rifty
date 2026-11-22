@@ -198,9 +198,68 @@ describe('consumer treats the child channel as hostile', () => {
     expect(report.rejected).toBe('isolate-host child exited unexpectedly (code 7, signal null)');
   });
 
-  it('a result sent before the deadline wins over it, however late the consumer reads it', () => {
-    // A preempted consumer: from the call on it does not run until the child has
-    // written its exit frame and the deadline is due; the frame waits unread.
+  // A starved consumer judges its deadline by what it reads first, not by when the
+  // child sent it: reading late cannot tell a frame sent in time from one sent after
+  // (backlog distribution/isolate-host-starved-deadline-outcome). Pinned both ways.
+  it('a starved consumer: a result sent after the deadline loses to it (timeout)', () => {
+    const sent = join(work, 'late-frame-sent');
+    const entry = hostilePackage(
+      'result after a starved deadline',
+      // Its timer starts after the call did: the frame leaves after the 1500 ms deadline.
+      `setTimeout(() => { f(2, [5]); writeFileSync(${JSON.stringify(sent)}, '') }, 1600)`,
+    );
+    const report = consume(
+      entry,
+      '{ timeoutMs: 1500, maxOutputBytes: 1024 }',
+      [],
+      `const { existsSync } = await import('node:fs');
+       queueMicrotask(() => {
+         const end = Date.now() + 10000;
+         while (!existsSync(${JSON.stringify(sent)})) if (Date.now() > end) throw new Error('no frame');
+       });`,
+    ) as { resolved?: unknown };
+    expect(report.resolved).toEqual({
+      stdout: '',
+      stderr: '',
+      exitCode: null,
+      termination: 'timeout',
+    });
+  });
+
+  it('a starved consumer: a rerun that finishes after the deadline is a lost call (F1)', () => {
+    const started = join(work, 'starved-rerun-started');
+    const sent = join(work, 'starved-rerun-sent');
+    const entry = hostilePackage(
+      'rerun after a starved deadline',
+      // First attempt: dies at once (channel and exit together). Its solo rerun answers late.
+      `if (!String(d).includes('"solo":true')) process.kill(process.pid, 'SIGKILL');
+       writeFileSync(${JSON.stringify(started)}, '');
+       setTimeout(() => { f(2, [5]); writeFileSync(${JSON.stringify(sent)}, '') }, 1600)`,
+    );
+    const report = consume(
+      entry,
+      '{ timeoutMs: 1500, maxOutputBytes: 1024 }',
+      [],
+      `const { existsSync } = await import('node:fs');
+       // Stalled from the check phase: the next turn runs its due deadline before its poll.
+       const poll = setInterval(() => {
+         if (!existsSync(${JSON.stringify(started)})) return;
+         clearInterval(poll);
+         setImmediate(() => {
+           const end = Date.now() + 10000;
+           while (!existsSync(${JSON.stringify(sent)})) if (Date.now() > end) throw new Error('no frame');
+         });
+       }, 10);`,
+    ) as { rejected?: string };
+    expect(report.rejected).toBe(
+      'isolate-host child exited unexpectedly (code null, signal SIGKILL); its rerun did not finish within timeoutMs',
+    );
+  });
+
+  it('a starved consumer: a result sent before the deadline but read after it is timeout (declared, compat ⚠️)', () => {
+    // From the call on the consumer does not run until the child has written its exit
+    // frame and the deadline is due; the frame waits unread. Node has no such deadline:
+    // the honest outcome is the result; today it is `timeout`.
     const marker = join(work, 'exit-frame-written');
     const entry = hostilePackage(
       'result before a starved deadline',
@@ -218,7 +277,12 @@ describe('consumer treats the child channel as hostile', () => {
          while (performance.now() < due + 5);
        });`,
     ) as { resolved?: unknown };
-    expect(report.resolved).toEqual({ stdout: '', stderr: '', exitCode: 5 });
+    expect(report.resolved).toEqual({
+      stdout: '',
+      stderr: '',
+      exitCode: null,
+      termination: 'timeout',
+    });
   });
 
   it('a channel closed without a result is its own outcome, not the deadline', () => {

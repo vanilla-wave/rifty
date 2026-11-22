@@ -25,16 +25,6 @@ const WORKER_ENTRY = fileURLToPath(new URL('../dist/child.js', import.meta.url))
 export const CHANNEL_END_GRACE_MS = 50;
 const MAX_CALL_ID = 2 ** 32 - 1;
 
-/**
- * A consumer timer proves nothing about its worker: a loop turn runs due timers
- * before I/O, so what the worker sent in time (a result, its exit) may still be
- * unread — a preempted consumer finds both due at once. `judge` runs after one
- * poll has read it.
- */
-function judgeAfter(ms: number, judge: () => void): NodeJS.Timeout {
-  return setTimeout(() => setImmediate(judge), ms);
-}
-
 export type Termination = 'timeout' | 'memory';
 export interface Result {
   readonly stdout: string;
@@ -92,8 +82,7 @@ class Call {
     private readonly reject: (e: Error) => void,
     onDeadline: (call: Call) => void,
   ) {
-    // Fired, then settled by the poll: onDeadline still runs, and finds nothing to settle or cancel.
-    this.deadline = judgeAfter(spec.timeoutMs, () => onDeadline(this));
+    this.deadline = setTimeout(() => onDeadline(this), spec.timeoutMs);
   }
   /** A fresh attempt: nothing of the previous one reaches the result. */
   restart(): void {
@@ -175,13 +164,21 @@ class Worker {
       if (bad !== null) this.#violated(bad);
     });
     // A closed channel is a lost worker, unless its own exit explains it first.
+    // Judged after one poll past the grace: a loop turn runs due timers before I/O,
+    // so a preempted consumer finds the grace due and an exit that came in time still
+    // unread. (Not the deadline: reading late, it cannot tell a frame sent in time
+    // from one sent after — backlog distribution/isolate-host-starved-deadline-outcome.)
     frames?.on('end', () => {
-      judgeAfter(CHANNEL_END_GRACE_MS, () => {
-        if (!this.dead && this.ended === undefined) {
-          this.ended = { lost: 'after closing its result channel without a result' };
-          this.kill();
-        }
-      }).unref();
+      setTimeout(
+        () =>
+          setImmediate(() => {
+            if (!this.dead && this.ended === undefined) {
+              this.ended = { lost: 'after closing its result channel without a result' };
+              this.kill();
+            }
+          }),
+        CHANNEL_END_GRACE_MS,
+      ).unref();
     });
     // Exited, its stdio still draining: no new call goes here.
     child.on('exit', () => {
