@@ -44,6 +44,7 @@ const LANDED = new Set([
   'throw-from-timer',
   'error-with-props',
   'fatal-with-queued-in-callback',
+  'throw-from-named-timer',
 ]);
 const OPEN = new Set(
   programs

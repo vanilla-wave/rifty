@@ -240,6 +240,21 @@ export const fatalPrograms: readonly NodeFileProgram[] = [
     argv: ['main.js'],
   },
   {
+    name: 'throw-from-named-timer',
+    files: {
+      'main.js': "function tick() {\n  throw new Error('tick');\n}\nsetTimeout(tick, 1);\n",
+    },
+    argv: ['main.js'],
+  },
+  {
+    name: 'rethrow-after-import',
+    files: {
+      'main.js': "import('./dep.js').catch((err) => setTimeout(() => {\n  throw err;\n}, 1));\n",
+      'dep.js': "const a = 1;\nthrow new Error('dep');\n",
+    },
+    argv: ['main.js'],
+  },
+  {
     name: 'fatal-with-queued-timer',
     files: {
       'main.js':
@@ -404,6 +419,7 @@ export type NodeFileHost = 'no-COI' | 'COI';
  * other row must equal Node. Shrinks to empty as the goal's map lands.
  */
 const LANDED = new Set([
+  'throw-from-named-timer',
   'fatal-with-queued-exit-zero',
   'throw-from-timer',
   'error-with-props',

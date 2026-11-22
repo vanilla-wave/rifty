@@ -38,6 +38,19 @@ const objectGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
 const objectKeys = Object.keys;
 
 const headers = new WeakMap<object, string>();
+const roots = new WeakSet<object>();
+
+/**
+ * The runtime caught `error` thrown synchronously out of a task root it runs
+ * (the entry's evaluation, a timer dispatch) and created during it: only then
+ * can its own stack prove V8's throw site.
+ */
+export function markFatalTaskRoot(error: unknown): void {
+  if (typeof error === 'object' && error !== null) roots.add(error);
+}
+
+/** The name the timer dispatch frame carries, so a caught error can tell it ran under it. */
+export const TIMER_DISPATCH_NAME = '__riftyTimerDispatch';
 const origins = new WeakMap<object, FatalOrigin>();
 
 /** The dispatch that made `reason` fatal, for a host that prints it later (isolate guest). */
@@ -268,7 +281,11 @@ interface HeaderSite {
  * is V8's own throw (not an error construction). Any user frame inside a
  * catching `try` may mean a rethrow elsewhere: no header.
  */
-function headerSite(frames: readonly string[], origin: FatalOrigin): HeaderSite | null {
+function headerSite(
+  frames: readonly string[],
+  origin: FatalOrigin,
+  rooted: boolean,
+): HeaderSite | null {
   const user = frames.filter((frame) => frameKind(frame) === 'user');
   const top = user[0] === undefined ? null : frameLocation(user[0]);
   // Only CJS factories and `-e` keep Node's coordinates (ESM: compat modules.md).
@@ -290,10 +307,10 @@ function headerSite(frames: readonly string[], origin: FatalOrigin): HeaderSite 
   };
   // The last catch the error passed: the outermost catching `try` of the
   // outermost frame inside one. It must provably rethrow, else no header.
-  // The error must have run from its task's root to here on this stack: the
-  // bottom user frame is a module's top level or a timer callback, and no
-  // promise (async function, executor) sits on it. A promise reaction or a
-  // runtime-invoked callback may have held the error for a later rethrow.
+  // The runtime marked the error as thrown out of a task root it runs (the
+  // entry's evaluation, a timer dispatch), created during it. A promise
+  // (async function, executor) on its own stack may still have held it.
+  if (!rooted) return null;
   for (let f = 0; f < frames.length; f += 1) {
     if (/^\s+at (?:async |new Promise \(|Promise\.)/u.test(frames[f] as string)) return null;
   }
@@ -307,9 +324,6 @@ function headerSite(frames: readonly string[], origin: FatalOrigin): HeaderSite 
     if (parsed === null || at === null) return null;
     const fn = innermostFunction(enclosing(parsed.root, at));
     if (fn !== null && (fn as { async?: boolean }).async === true) return null;
-    const root = f === user.length - 1;
-    if (root && fn !== null && !/^\s+at Timeout\._onTimeout \(/u.test(user[f] as string))
-      return null;
   }
   let lastCatch: { readonly file: string; readonly node: AcornNode } | null = null;
   for (let f = user.length - 1; f >= 0 && lastCatch === null; f -= 1) {
@@ -448,7 +462,7 @@ export function formatFatalReport(error: unknown, explicit?: FatalOrigin): strin
   const site =
     decorated.has(error) || internal || known !== undefined
       ? null
-      : headerSite(guestStack(raw).frames, origin);
+      : headerSite(guestStack(raw).frames, origin, roots.has(error));
   const arrow = decorated.has(error)
     ? undefined
     : (known ?? (site === null ? undefined : headerText(site)));

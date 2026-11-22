@@ -30,7 +30,7 @@ import {
   projectNodeEvalError,
 } from '../module-loader/loader.ts';
 import { formatNodeEvalPrintValue } from '../repl/inspect.ts';
-import { setFatalEvalSource, setFatalOrigin } from './fatal-report.ts';
+import { markFatalTaskRoot, setFatalEvalSource, setFatalOrigin } from './fatal-report.ts';
 import { refreshRuntimeJsProcessBuiltin } from './index.ts';
 import { importNodeMain } from './node-entry-main.ts';
 import {
@@ -216,6 +216,8 @@ export async function runNodeEntry(opts: RunNodeEntryOptions): Promise<void> {
         compiler,
       }).run(opts.source);
     } catch (thrown) {
+      // Thrown out of the eval script's synchronous run: a task root.
+      markFatalTaskRoot(thrown);
       const error = asNodePrintedError(thrown);
       // ADR-0445: a listener-handled eval throw continues with no `-p` result.
       const outcome = dispatchUncaughtException(error, 'uncaughtException');
@@ -288,6 +290,8 @@ export async function runNodeEntry(opts: RunNodeEntryOptions): Promise<void> {
     }
     await importNodeMain(loader, opts.entryPath, opts.entryPath, publishMainModule);
   } catch (err) {
+    // Out of the entry's (or a preload's) evaluation: a task root.
+    markFatalTaskRoot(err);
     // A missing entry (`node ./nope.js`) or an uncaught nested-require miss
     // surfaces real Node's `Error: Cannot find module … { code, requireStack }`
     // on the child stderr instead of rifty's ModuleLoadError name + frames

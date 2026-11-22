@@ -11,7 +11,7 @@ import {
   nodeFileNormalized,
   runNodeFileOracle,
 } from '../../../tests/browser-unit/fixtures/node-file-programs.ts';
-import { formatFatalReport } from '../src/builtins/fatal-report.ts';
+import { formatFatalReport, markFatalTaskRoot } from '../src/builtins/fatal-report.ts';
 import { createModuleLoader } from '../src/module-loader/loader.ts';
 
 afterEach(() => resetSyncMirror());
@@ -23,6 +23,8 @@ function riftyReport(source: string): string {
   try {
     createModuleLoader(vfs, { cwd: '/p' }).require('./main.js', '/p/x.js');
   } catch (error) {
+    // As runNodeEntry's catch: out of the entry's evaluation, a task root.
+    markFatalTaskRoot(error);
     return formatFatalReport(error);
   }
   throw new Error('program did not throw');
@@ -119,6 +121,8 @@ function riftyFiles(files: Record<string, string>): string {
   try {
     createModuleLoader(vfs, { cwd: '/p' }).require('./main.js', '/p/x.js');
   } catch (error) {
+    // As runNodeEntry's catch: out of the entry's evaluation, a task root.
+    markFatalTaskRoot(error);
     return formatFatalReport(error);
   }
   throw new Error('program did not throw');

@@ -9,6 +9,38 @@ import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-
 
 type ImmediateHandle = { readonly id: number };
 const reflectApply = Reflect.apply;
+
+/**
+ * A timer's host callback, named so its frame marks the dispatch: an error
+ * the callback throws that was created under this frame is a task root's
+ * (the fatal report may prove its header); a held one is not.
+ */
+const DISPATCH_FRAME = new RegExp(`\\n\\s+at (?:\\S+\\.)?${TIMER_DISPATCH_NAME}[ (]`, 'u');
+
+function timerDispatch(run: (...a: unknown[]) => void): (...a: unknown[]) => void {
+  const dispatch = (...a: unknown[]): void => {
+    try {
+      run(...a);
+    } catch (error) {
+      const stack = typeof error === 'object' && error !== null ? stackText(error) : '';
+      if (DISPATCH_FRAME.test(stack)) markFatalTaskRoot(error);
+      throw error;
+    }
+  };
+  Object.defineProperty(dispatch, 'name', { value: TIMER_DISPATCH_NAME });
+  return dispatch;
+}
+
+function stackText(error: object): string {
+  try {
+    const stack = (error as { stack?: unknown }).stack;
+    return typeof stack === 'string' ? stack : '';
+  } catch {
+    return '';
+  }
+}
+import { TIMER_DISPATCH_NAME, markFatalTaskRoot } from './fatal-report.ts';
+
 type HostTimeout = ReturnType<typeof globalThis.setTimeout>;
 type HostInterval = ReturnType<typeof globalThis.setInterval>;
 type HostTimer = HostTimeout | HostInterval;
@@ -144,11 +176,11 @@ export function setTimeout(
   // Use a box so the inner callback can reference the handle (self-ref timeout pattern).
   const box: { handle: Timeout | null } = { handle: null };
   const raw = hostSetTimeout(
-    (...a: unknown[]) => {
+    timerDispatch((...a: unknown[]) => {
       const handle = box.handle;
       if (!handle?.fireTimeout()) return;
       reflectApply(handle._onTimeout, handle, a);
-    },
+    }),
     ms,
     ...args,
   );
@@ -182,11 +214,11 @@ export function setInterval(
 ): Timeout {
   const box: { handle: Timeout | null } = { handle: null };
   const raw = hostSetInterval(
-    (...a: unknown[]) => {
+    timerDispatch((...a: unknown[]) => {
       const handle = box.handle;
       if (!handle?.shouldRunInterval()) return;
       reflectApply(handle._onTimeout, handle, a);
-    },
+    }),
     ms,
     ...args,
   );
