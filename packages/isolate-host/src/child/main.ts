@@ -186,7 +186,9 @@ async function run(request: RunRequest): Promise<void> {
     reported: false,
     cancelled: false,
     unwound: false,
-    stateWork: undefined,
+    // A sandbox run is in its restore until guest code starts: its state, decoded in this
+    // realm and copied into the isolate, is what such a run spends first.
+    stateWork: request.sandbox ? 0 : undefined,
     status: 1,
     refuse(reason) {
       if (state.reported) return;
@@ -271,7 +273,6 @@ async function run(request: RunRequest): Promise<void> {
     const snapshot = sandbox ? await guest.get('snapshot', { reference: true }) : undefined;
     if (sandbox) {
       const restore = await guest.get('restore', { reference: true });
-      state.stateWork = 0;
       try {
         const bytes = decodeState(sandbox.state);
         await restore.apply(undefined, [bytes, snapshotOptions], { arguments: { copy: true } });
@@ -328,8 +329,10 @@ async function run(request: RunRequest): Promise<void> {
     state.unwound = true;
     // Cancelled: the consumer already settled it; this terminal frame only ends its addressing.
     if (state.cancelled) state.report(KIND.exit, Uint8Array.of(1));
-    else if (isolate.isDisposed && !state.disposedHere)
-      state.report(KIND.memory, new Uint8Array(0));
+    else if (isolate.isDisposed && !state.disposedHere) {
+      if (state.stateWork === undefined) state.report(KIND.memory, new Uint8Array(0));
+      else state.refuse(state.stateWork);
+    }
     // The guest's own tail broke (its realm is the guest's to break): a failed run.
     else if (started) state.report(KIND.exit, Uint8Array.of(1));
     else {

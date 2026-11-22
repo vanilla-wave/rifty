@@ -13,7 +13,7 @@ import * as pkg from '../src/index.ts';
 import { consumer } from './support.ts';
 
 /** RED until the sandbox lands; flips to `it` with the implementation. */
-const carrier = it.fails;
+const carrier = it;
 
 interface Sandbox {
   writeFile(path: string, data: Uint8Array | string): Promise<void>;

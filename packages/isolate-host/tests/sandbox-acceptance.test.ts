@@ -19,7 +19,7 @@ import {
 } from './support.ts';
 
 /** RED until the sandbox lands; flips to `it` with the implementation. */
-const carrier = it.fails;
+const carrier = it;
 
 interface ExecResult {
   readonly stdout: string;

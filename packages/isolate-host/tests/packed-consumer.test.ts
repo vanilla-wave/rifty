@@ -54,8 +54,7 @@ it('packed tarball installs and runs under plain node', () => {
   });
 }, 240_000);
 
-// RED until the README carries the sandbox snippet and the codec lands.
-it.fails(
+it(
   'the packed tarball runs the README sandbox snippet (ADR-0568)',
   () => {
     // Reuses the install of the previous case when present; installs otherwise.
