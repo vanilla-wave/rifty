@@ -1,0 +1,177 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Merge on green PR CI at HEAD: no blockers; every probed program (51 across 6 sets) prints Node's header or none — never a wrong line; remaining differences are declared compat rows and goal residuals (goal not complete).",
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "docs/backlog/epics/node-file-entry-parity/goal.md (I1-I4, User scenario, P1/P2) + map.md + ledger.md; PR #421 @ ebf3ac2b1 (sixth verify pass; prior reviews eb2bc6937, 0fedcbac8, cc8ef8fee, b8b7beabe, 073432517, fc34e0d75); BASE 50c9d8bf1; baseline = carrier RED rows on main 50c9d8bf1",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I2",
+      "location": "tests/browser-unit/fixtures/node-file-programs.ts:398-450",
+      "summary": "Open/declared rows: queued work at a fatal (fatal-with-queued-timer racy on COI/isolate, open on no-COI; fatal-with-queued-in-callback open on no-COI; rejection-with-queued-work), syntax-error-dependency, throw-non-error-*, esm-throw, esm-syntax-error; map items 5, 5b, 6, 8."
+    },
+    {
+      "clause": "I4",
+      "location": "packages/isolate-host/tests/node-file.test.ts:32-50",
+      "summary": "Isolate rows still it.fails (non-Error throws, syntax-error-dependency, module-not-found-*, queued work, rethrow-in-catch, throw-in-callback); now under the carrier map item per ledger 2026-11-22."
+    },
+    {
+      "clause": "I3 (frames at Node's name)",
+      "location": "docs/public/compat/process.md:66",
+      "summary": "setImmediate/nextTick/setInterval callback frame names differ from Node (declared, open)."
+    },
+    {
+      "clause": "I2 / Outcome",
+      "location": "docs/public/compat/process.md:66; docs/public/compat/isolate-host.md",
+      "summary": "Declared, open: no header for throws from callbacks rifty invokes (setImmediate, nextTick, EventEmitter listeners, stream/fs/I/O callbacks), import()-evaluated modules, listener rethrows (Node keeps an entry-thrown one's original line), a `try … finally` around a user frame, a rifty runtime frame between user frames (assert.throws), timer throws past the 10-frame budget, a queueMicrotask throw; EventEmitter \"Emitted 'error' event at:\" block, JSON require message prefix, nested-value inspect layout, isolate [errors]/non-Error rejection copy."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "I1 entry semantics on the entry corpus",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/node-file-programs.ts:65-146; tests/no-coi/node-file-parity.spec.ts:23 and tests/browser-unit/node-file-parity.spec.ts:35 (both green @ebf3ac2b1, scratch)",
+      "note": ""
+    },
+    {
+      "row": "I2 fatal corpus stderr bytes + status equal Node under one normalization and P1/P2",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/node-file-programs.ts:149-305,359-376,452-490",
+      "note": ""
+    },
+    {
+      "row": "I2 an open row is a named compat row with its cause",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "docs/public/compat/process.md:66; tests/browser-unit/fixtures/node-file-programs.ts:436-450 (nodeFileRacy)",
+      "note": ""
+    },
+    {
+      "row": "I3 no rifty-runtime frame or path; printed frames at Node's line, column and name",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/runtime-js/tests/fatal-report.test.ts:151-160; tests/browser-unit/fixtures/node-file-programs.ts:149-305",
+      "note": ""
+    },
+    {
+      "row": "I4 one implementation: I1-I3 on no-COI + COI; isolate guest prints the same report",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/node-file.test.ts:87-107 (22 tests green @ebf3ac2b1)",
+      "note": ""
+    },
+    {
+      "row": "Oracle: live node v24.16.0, one path normalization, P1/P2 on Node side only",
+      "source": "frozen-artifact",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/node-file-programs.ts:359-397; packages/isolate-host/tests/node-file.test.ts:74-80",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tests/browser-unit/fixtures/node-file-programs.ts:436-490",
+          "evidence": "COI dump @cc8ef8fee (/tmp/nf-review/dump-coi/node-file-COI.json): fatal-with-queued-timer expected stdout \"\" actual \"queued\\n\", status 1.",
+          "summary": "Previous Regressions blocker 1 RESOLVED: original program restored, declared racy in compat. Residual: a racy row accepts both outcomes, so unlike an open row it cannot announce when the race is fixed.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/src/builtins/fatal-report.ts:41-53; packages/runtime-js/src/builtins/node-entry.ts:219,293; packages/runtime-js/src/builtins/timers.ts:19-33",
+          "evidence": "scratch worktree /tmp/rev421 @ b8b7beabe: cp /tmp/nf-review/scripts/<zz-probe4|zz-probe5>.test.ts packages/isolate-host/tests/zz-probe.test.ts && pnpm exec vitest run --project isolate-host packages/isolate-host/tests/zz-probe.test.ts && node --experimental-strip-types /tmp/nf-review/scripts/cmp.mts; header classifier: node --experimental-strip-types /tmp/nf-review/scripts/hdr.mts /tmp/nf-review/probes-diff-*-b8b7beabe.txt. Y_dynamic_import_rethrow, Y3_require_in_then, Y4_timer_saved_assign, A/A2/T/U/U2: no header (honest); Y6_named_timer, N_nested_timer_fn, Y7_interval_named, Y8_timer_try_rethrow, V_sync_generator: header equal to Node.",
+          "summary": "Previous REV-7 blocker RESOLVED: the header now needs a runtime-recorded task root (entry/eval catch, timer dispatch frame) instead of frame-text inference; every promise-held probe prints no header. The mark lifecycle is the remaining defect (Bugs).",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/src/module-loader/cjs-factory.ts:239-255",
+          "evidence": "",
+          "summary": "Unchanged: double compile per CJS module, +5% CPU recorded; not re-measured.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/src/builtins/fatal-report.ts headerSite (task-root mark + finally/runtime-gap trim)",
+          "evidence": "scratch worktree /tmp/rev421 @ ebf3ac2b1: for f in zz-probe zz-probe2 zz-probe4 zz-probe5 zz-probe6 zz-probe7: cp /tmp/nf-review/scripts/$f.test.ts packages/isolate-host/tests/zz-probe.test.ts && pnpm exec vitest run --project isolate-host packages/isolate-host/tests/zz-probe.test.ts && node --experimental-strip-types /tmp/nf-review/scripts/cmp.mts > /tmp/nf-review/probes-diff-$f-ebf3ac2b1.txt; node --experimental-strip-types /tmp/nf-review/scripts/hdr.mts /tmp/nf-review/probes-diff-*-ebf3ac2b1.txt. Z1-Z5 now print no header (previous blocker RESOLVED); zz-probe7 (iterator-close swallow, assert.throws(() => require()), forEach in a timer, f.call, a dependency function, bound timer callback) equal Node; AF_emitter_listener (sync EventEmitter listener throw at entry) Node header main.js:4, rifty none. Classifier over all sets: 0 WRONG, rest SAME / header-equal / absent.",
+          "summary": "Header promise trimmed per REV-7: no wrong header in any probe. Cost: a synchronous EventEmitter listener throw (very common) and every callback rifty invokes lose Node's header (declared in process.md:66). A runtime-known root for emit() (like the timer dispatch) would win those back — goal residual.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/src/builtins/process-lifecycle-events.ts:238-247; packages/runtime-js/src/builtins/timers.ts:18",
+          "evidence": "Y2, Y11, Y13 (entry-thrown error, listener rethrows): Node keeps the original throw line, rifty none; Y9 deep timer: Node header, rifty none (both declared).",
+          "summary": "Declared headerless cases where Node has a header.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/tests/fatal-report.test.ts; packages/isolate-host/tests/node-file.test.ts; tests/no-coi/no-coi-fatal-stderr.spec.ts",
+          "evidence": "cd /tmp/rev421 @ ebf3ac2b1: unit (fatal-report, module-loader, node-entry, timers, process-lifecycle, conformance cjs-compile-error) 32 files / 261 tests exit 0; isolate-host node-file + guest-seam + parity 250 tests exit 0; no-COI node-file-parity + no-coi-fatal-stderr 8 passed; COI node-file-parity 1 passed.",
+          "summary": "All carriers green at HEAD (row throw-in-dependency keeps its header via the require-path exemption).",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/public/compat/process.md:66",
+          "evidence": "scratch worktree /tmp/rev421 @ ebf3ac2b1: cp /tmp/nf-review/scripts/zz-probe.test.ts packages/isolate-host/tests/zz-probe.test.ts && pnpm exec vitest run --project isolate-host packages/isolate-host/tests/zz-probe.test.ts && node --experimental-strip-types /tmp/nf-review/scripts/cmp.mts (carrier nodeFileExpected + [eval]-wrapper projection on live node v24.16.0; outputs /tmp/nf-review/probes-diff{,-x,-y}-ebf3ac2b1.txt). P_immediate / Q_nexttick: Node prints a header, rifty none (declared \"runtime-invoked callback\").",
+          "summary": "Headers are now absent for setImmediate, nextTick and every I/O callback throw (declared). Common agent path (fs/http callback throws) loses the line Node names; worth a goal residual toward a runtime-known task root.",
+          "authority": ""
+        }
+      ]
+    }
+  ],
+  "reviewed_sha": "ebf3ac2b1f830c9d6352dfaee9d1fa6f9b98cf4f"
+}
