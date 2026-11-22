@@ -243,7 +243,7 @@ export const fatalPrograms: readonly NodeFileProgram[] = [
     name: 'fatal-with-queued-timer',
     files: {
       'main.js':
-        "setTimeout(() => {\n  throw new Error('a');\n}, 1);\nsetTimeout(() => console.log('queued'), 1);\n",
+        "setTimeout(() => {\n  setTimeout(() => console.log('queued'), 0);\n  setImmediate(() => console.log('immediate'));\n  throw new Error('a');\n}, 1);\n",
     },
     argv: ['main.js'],
   },
@@ -428,7 +428,8 @@ const OPEN = [...entryPrograms, ...fatalPrograms]
   .filter((name) => !LANDED.has(name));
 export const nodeFileOpenRows: Readonly<Record<NodeFileHost, ReadonlySet<string>>> = {
   'no-COI': new Set(OPEN),
-  COI: new Set(OPEN),
+  // The kernel child's realm trap ends the process before queued work runs.
+  COI: new Set(OPEN.filter((name) => name !== 'fatal-with-queued-timer')),
 };
 
 interface SoftExpect {

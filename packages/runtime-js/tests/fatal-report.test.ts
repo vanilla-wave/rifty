@@ -111,3 +111,50 @@ it("a CJS top-level frame reads Node's name in the guest's own err.stack", async
     nodeFileNormalized(oracle, oracle.root).stdout,
   );
 });
+
+function riftyFiles(files: Record<string, string>): string {
+  const vfs = new MemoryFsSync();
+  vfs.loadFixture(Object.fromEntries(Object.entries(files).map(([k, v]) => [`/p/${k}`, v])));
+  setSyncMirror(vfs);
+  try {
+    createModuleLoader(vfs, { cwd: '/p' }).require('./main.js', '/p/x.js');
+  } catch (error) {
+    return formatFatalReport(error);
+  }
+  throw new Error('program did not throw');
+}
+
+it.each([
+  [
+    'an async function held the error before the rethrow',
+    "let saved;\n(async () => {\n  throw (saved = new Error('x'));\n})().catch(() => {});\nthrow saved;\n",
+  ],
+  [
+    'a promise executor held the error before the rethrow',
+    "let saved;\nnew Promise(() => {\n  throw (saved = new Error('x'));\n});\nthrow saved;\n",
+  ],
+])('%s: no header', async (_, source) => {
+  const { node, rifty } = await againstNode(source);
+  expect(headerOf(node)).toMatch(/^<root>\/main\.js:5\n/u);
+  expect(rifty).toBe(node.slice(node.indexOf('\n\n') + 2));
+});
+
+it('an object with a captured stack is inspected, not reported as an Error', async () => {
+  const source =
+    "class AppError {\n  constructor(m) {\n    this.message = m;\n    Error.captureStackTrace(this);\n  }\n}\nthrow new AppError('x');\n";
+  const { node, rifty } = await againstNode(source);
+  // Node's non-Error header (blank, `<file>:<line>`, source, caret) is not provable.
+  expect(node.split('\n').slice(0, 2)).toEqual(['', '<root>/main.js:7']);
+  expect(rifty).toBe(node.split('\n').slice(4).join('\n'));
+});
+
+it("a nested error's frames are projected like the report's own", () => {
+  const report = riftyFiles({ 'main.js': "throw { inner: new Error('x') };\n" });
+  expect(report).not.toMatch(/\/src\/|compileCjsSource|loader\.ts/u);
+  expect(report).toContain('at Object.<anonymous> (/p/main.js:1:16)');
+});
+
+it('an error thrown inside the runtime (a JSON require) gets no header', () => {
+  const report = riftyFiles({ 'main.js': "require('./bad.json');\n", 'bad.json': '{bad' });
+  expect(report).toMatch(/^SyntaxError: /u);
+});

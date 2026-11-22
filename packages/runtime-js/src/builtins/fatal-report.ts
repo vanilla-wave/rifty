@@ -17,6 +17,7 @@ import { cjsLineOnePrefix } from '../module-loader/cjs-factory.ts';
 import { inspect } from '../repl/inspect.ts';
 import {
   bindingThrowSite,
+  catchingFunction,
   catchingTries,
   enclosing,
   offsetOf,
@@ -125,24 +126,48 @@ function frameKind(frame: string): FrameKind {
 
 /** The stack with rifty-runtime frames dropped; a builtin frame stays when guest code called it. */
 function guestStack(stack: string): { readonly text: string; readonly frames: string[] } {
+  // Every frame line of the text, a nested error's included (an inspected
+  // prop, `[errors]`, an object holding an error).
+  // A frame line inside inspect output may end with its props opener or a comma.
   const lines = stack.split('\n');
-  const first = lines.findIndex((line) => FRAME.test(line));
-  if (first === -1) return { text: stack, frames: [] };
-  const head = lines.slice(0, first);
-  const kinds = lines.slice(first).map((line) => [line, frameKind(line)] as const);
-  const frames: string[] = [];
-  for (let i = 0; i < kinds.length; i += 1) {
-    const entry = kinds[i] as (typeof kinds)[number];
-    const line = entry[0];
-    const kind = entry[1];
-    if (kind === 'runtime') continue;
-    if (kind === 'builtin') {
-      const caller = kinds.slice(i + 1).find(([, k]) => k !== 'builtin');
-      if (caller?.[1] !== 'user') continue;
-    }
-    frames.push(kind === 'user' ? asNodeFrame(line) : line);
+  const suffixes = lines.map((line) =>
+    FRAME.test(line) ? (/(?: \{|,)$/u.exec(line)?.[0] ?? '') : '',
+  );
+  for (let i = 0; i < lines.length; i += 1) {
+    const suffix = suffixes[i] as string;
+    if (suffix !== '') lines[i] = (lines[i] as string).slice(0, -suffix.length);
   }
-  return { text: head.concat(frames).join('\n'), frames };
+  const kinds = lines.map((line) => (FRAME.test(line) ? frameKind(line) : null));
+  const out: string[] = [];
+  const frames: string[] = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i] as string;
+    const kind = kinds[i];
+    if (kind === null || kind === undefined) {
+      out.push(line);
+      continue;
+    }
+    let caller: FrameKind | null | undefined = 'user';
+    if (kind === 'builtin') {
+      caller = null;
+      for (let k = i + 1; k < kinds.length && kinds[k] !== null; k += 1) {
+        if (kinds[k] !== 'builtin') {
+          caller = kinds[k];
+          break;
+        }
+      }
+    }
+    const suffix = suffixes[i] as string;
+    if (kind === 'runtime' || caller !== 'user') {
+      // The opener or comma of a dropped last frame moves up a line.
+      if (suffix !== '' && out.length > 0) out.push(`${out.pop() as string}${suffix}`);
+      continue;
+    }
+    const frame = kind === 'user' ? asNodeFrame(line) : line;
+    out.push(`${frame}${suffix}`);
+    frames.push(frame);
+  }
+  return { text: out.join('\n'), frames };
 }
 
 const EVAL_NAMED = /^(\s+at )(async )?(new )?(?:([^\s()]+)\.)?eval(?: \[as ([^\]]+)\])? \((.*)\)$/u;
@@ -249,6 +274,21 @@ function headerSite(frames: readonly string[], origin: FatalOrigin): HeaderSite 
   };
   // The last catch the error passed: the outermost catching `try` of the
   // outermost frame inside one. It must provably rethrow, else no header.
+  // A promise (an async function, generator, executor or reaction) catches
+  // what its code throws; the later rethrow site is not on this stack.
+  for (let f = 0; f < frames.length; f += 1) {
+    if (/^\s+at (?:async |new Promise \(|Promise\.)/u.test(frames[f] as string)) return null;
+  }
+  for (let f = 0; f < user.length; f += 1) {
+    const location = frameLocation(user[f] as string);
+    const parsed = location === null ? null : program(location.file);
+    const at =
+      parsed === null || location === null
+        ? null
+        : offsetOf(parsed.source, location.line, location.column - 1);
+    if (parsed === null || at === null) return null;
+    if (catchingFunction(enclosing(parsed.root, at))) return null;
+  }
   let lastCatch: { readonly file: string; readonly node: AcornNode } | null = null;
   for (let f = user.length - 1; f >= 0 && lastCatch === null; f -= 1) {
     const location = frameLocation(user[f] as string);
@@ -301,11 +341,9 @@ function stackOf(error: object): string | null {
   }
 }
 
+/** Node `IsNativeError`: only an Error is reported as one; any other object is inspected. */
 function isErrorLike(value: unknown): value is object {
-  return (
-    value instanceof Error ||
-    (typeof value === 'object' && value !== null && stackOf(value) !== null)
-  );
+  return value instanceof Error;
 }
 
 /** Node's inspect of a value inside an error's props block, at `indent` columns. */
@@ -326,7 +364,8 @@ function propValue(value: unknown, indent: number): string {
 /** Node `formatError` + `reduceToSingleString` for an error at `indent` columns. */
 function inspectError(error: object, indent: number): string {
   const raw = stackOf(error) ?? (reflectApply(errorToString, error, []) as string);
-  let base = guestStack(raw).text;
+  // Frames are projected once, over the whole report (`guestStack`).
+  let base = raw;
   // Node brackets a stackless error; a runtime-decorated stack is not one.
   if (!/\n\s+at /u.test(raw) && !decorated.has(error)) base = `[${base}]`;
   if (indent > 0) base = base.replaceAll('\n', `\n${' '.repeat(indent)}`);
@@ -367,14 +406,15 @@ export function formatFatalReport(error: unknown, explicit?: FatalOrigin): strin
   if (!isErrorLike(error)) {
     const body =
       typeof error === 'object' || typeof error === 'function'
-        ? inspect(error)
+        ? guestStack(inspect(error)).text
         : `${primitiveText(error)}\n${HINT}`;
     return `${body}\n${trailer}`;
   }
   const raw = stackOf(error) ?? '';
   // Thrown inside rifty's runtime (Node: inside its own `node:` source): V8's
   // message names that source, which has no guest counterpart — no header.
-  const top = raw.split('\n').find((line) => FRAME.test(line));
+  // The first frame that is not a V8 builtin (`JSON.parse` called by rifty's JSON loader).
+  const top = raw.split('\n').find((line) => FRAME.test(line) && frameKind(line) !== 'builtin');
   const internal = top !== undefined && frameKind(top) === 'runtime';
   const known = headers.get(error);
   const site =
@@ -385,5 +425,5 @@ export function formatFatalReport(error: unknown, explicit?: FatalOrigin): strin
     ? undefined
     : (known ?? (site === null ? undefined : headerText(site)));
   const header = arrow === undefined ? '' : `${arrow}\n`;
-  return `${header}${inspectError(error, 0)}\n${trailer}`;
+  return `${header}${guestStack(inspectError(error, 0)).text}\n${trailer}`;
 }
