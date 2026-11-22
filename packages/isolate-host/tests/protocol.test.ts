@@ -81,12 +81,12 @@ function consume(entry: string, options: string, flags: string[] = [], before = 
       async (r) => console.log(JSON.stringify({ resolved: r, ms: Date.now() - t, held: await globalThis.held })),
       async (e) => console.log(JSON.stringify({ rejected: e.message, ms: Date.now() - t, held: await globalThis.held })),
     );`;
-  return JSON.parse(
-    execFileSync(process.execPath, [...flags, '--input-type=module', '-e', script], {
-      encoding: 'utf8',
-      timeout: 30_000,
-    }),
-  );
+  const stdout = execFileSync(process.execPath, [...flags, '--input-type=module', '-e', script], {
+    encoding: 'utf8',
+    timeout: 30_000,
+  });
+  // The last line: an uncaught throw after the call settled is printed after its result.
+  return JSON.parse(stdout.trim().split('\n').at(-1) ?? '');
 }
 
 /**
@@ -279,10 +279,12 @@ describe('consumer treats the child channel as hostile', () => {
          };
          setImmediate(step);
        });`,
-    ) as { rejected?: string };
-    expect(report.rejected).toBe(
-      'isolate-host child exited unexpectedly (code null, signal SIGKILL); its rerun did not finish within timeoutMs',
     );
+    expect(report).toEqual({
+      rejected:
+        'isolate-host child exited unexpectedly (code null, signal SIGKILL); its rerun did not finish within timeoutMs',
+      ms: expect.any(Number),
+    });
   });
 
   // From its channel's end the worker can answer nothing: it takes no call and is never
@@ -336,7 +338,7 @@ describe('consumer treats the child channel as hostile', () => {
        process.on('SIGUSR1', () => { for (const c of calls) { C = id(c); f(2, [0]); } closeSync(3); });
        ${ANSWER(`if (r.code === 'bad') { calls.push(r.call); if (calls.length === 4) writeFileSync(${marker('bad')}, String(process.pid)); }
          else if (r.code === 'healthy') {
-           process.on('SIGUSR2', () => { C = id(r.call); f(2, [0]); writeFileSync(${marker('sent')}, ''); });
+           process.on('SIGUSR2', () => { C = id(r.call); f(2, [0]); });
            writeFileSync(${marker('healthy')}, String(process.pid));
          } else { writeFileSync(${marker('next')}, String(process.pid)); f(2, [0]); }`)}`,
     );
@@ -346,9 +348,16 @@ describe('consumer treats the child channel as hostile', () => {
        const calls = [...Array.from({ length: 4 }, () => settle(runCode('bad'))), settle(runCode('healthy'))];
        await waitFor(() => (existsSync(${marker('bad')}) && existsSync(${marker('healthy')}) ? true : undefined), 20000);
        const healthy = pid(${marker('healthy')});
-       ${AT_CHANNEL_END(`process.kill(healthy, 'SIGUSR2');
-         const end = Date.now() + 10000;
-         while (!existsSync(${marker('sent')})) if (Date.now() > end) throw new Error('no frame');`)}
+       // At A's channel end B answers, and A's grace runs only once B's call settled:
+       // B goes idle inside A's window, whatever the timing.
+       const arm = globalThis.setTimeout;
+       let held = false;
+       globalThis.setTimeout = (fn, ms, ...args) => {
+         if (ms !== ${CHANNEL_END_GRACE_MS} || held) return arm(fn, ms, ...args);
+         held = true;
+         process.kill(healthy, 'SIGUSR2');
+         return arm(() => void calls[4].then(() => fn(...args)), ms);
+       };
        process.kill(pid(${marker('bad')}), 'SIGUSR1');
        const results = await Promise.all(calls);
        const next = await settle(runCode('next'));
