@@ -1,9 +1,9 @@
 {
   "overall_verdict": "pass",
-  "merge_call": "Mergeable once PR CI at HEAD is green; verdict re-bound to dd429db50 after the verify pass over cross-review round 1 (deadline back to F1, starved-deadline carriers both ways, the gap declared).",
+  "merge_call": "Mergeable once PR CI at HEAD is green; verdict re-bound to b959f129e after the verify pass over cross-review round 2 (F1 starved carrier by events, no start in the budget; a worker whose grace ran out takes no new call).",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "dd429db506ea2b4ef1d552019f8d02a3956f84f9",
-  "unit_goal_source": "PR #420 (branch t3/isolate-host-suite-flake), standalone rifty-fix unit. Observed baseline: the finding backlog distribution/isolate-host-tests-flake-under-extreme-load (deleted by this PR; read at BASE 50c9d8bf1) — guest-export clock tolerance, pool-faults interval churn, protocol closed-then-exit red under load. BASE 50c9d8bf1, HEAD dd429db506ea2b4ef1d552019f8d02a3956f84f9. Passes: b1ca3e5f0 (2 blockers: removed period parity row, compat line 9 — fixed), d98cd3fa8 PASS, external cross-review round 1 at bb022938b (B1: deadline after one poll admitted late results — reverted), 375d1bd21 PASS, dd429db50 PASS.",
+  "reviewed_sha": "b959f129e333cd5e42773664b143614299fb390e",
+  "unit_goal_source": "PR #420 (branch t3/isolate-host-suite-flake), standalone rifty-fix unit. Observed baseline: the finding backlog distribution/isolate-host-tests-flake-under-extreme-load (deleted by this PR; read at BASE 50c9d8bf1) — guest-export clock tolerance, pool-faults interval churn, protocol closed-then-exit red under load. BASE 50c9d8bf1, HEAD b959f129e333cd5e42773664b143614299fb390e. Passes: b1ca3e5f0 (2 blockers: removed period parity row, compat line 9 — fixed), d98cd3fa8 PASS, external cross-review round 1 at bb022938b (B1: deadline after one poll admitted late results — reverted), 375d1bd21 PASS, dd429db50 PASS, external cross-review round 2 at 325f22022 (no blocker; F1 carrier budget-dependent, placement window during the grace decision — both fixed), b959f129e PASS.",
   "unit_residuals": [],
   "goal_residuals": [],
   "goal_complete": false,
@@ -21,7 +21,15 @@
       "source": "acceptance",
       "trace": "ADR-0563 §6 + Corrections 2026-11-22",
       "status": "pass",
-      "citation": "packages/isolate-host/tests/protocol.test.ts:184-199; packages/isolate-host/src/pool.ts:167-182",
+      "citation": "packages/isolate-host/tests/protocol.test.ts:184-199; packages/isolate-host/src/pool.ts:173-182",
+      "note": ""
+    },
+    {
+      "row": "A worker whose closed-channel grace ran out takes no new call while its loss is judged (a call placed in that window does not spend its rerun on a dead worker)",
+      "source": "acceptance",
+      "trace": "ADR-0563 §6 + Corrections 2026-11-22",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/protocol.test.ts:283-323; packages/isolate-host/src/pool.ts:130,175,342",
       "note": ""
     },
     {
@@ -33,11 +41,11 @@
       "note": ""
     },
     {
-      "row": "F1: a rerun keeps the original deadline; out of budget it is a lost call, not a result (starved consumer)",
+      "row": "F1: a rerun keeps the original deadline; out of budget it is a lost call, not a result (starved consumer, order imposed by events)",
       "source": "acceptance",
       "trace": "ADR-0563 §6 (F1)",
       "status": "pass",
-      "citation": "packages/isolate-host/tests/protocol.test.ts:229-257",
+      "citation": "packages/isolate-host/tests/protocol.test.ts:229-281",
       "note": ""
     },
     {
@@ -45,7 +53,7 @@
       "source": "acceptance",
       "trace": "ADR-0563 Corrections 2026-11-22 (compat ⚠️ row)",
       "status": "pass",
-      "citation": "packages/isolate-host/tests/protocol.test.ts:259-286; docs/public/compat/isolate-host.md:15",
+      "citation": "packages/isolate-host/tests/protocol.test.ts:325-352; docs/public/compat/isolate-host.md:15",
       "note": ""
     },
     {
@@ -53,7 +61,7 @@
       "source": "acceptance",
       "trace": "ADR-0563 Corrections 2026-11-22 (compat ⚠️ row)",
       "status": "pass",
-      "citation": "packages/isolate-host/tests/protocol.test.ts:288-316; docs/public/compat/isolate-host.md:15",
+      "citation": "packages/isolate-host/tests/protocol.test.ts:354-383; docs/public/compat/isolate-host.md:15",
       "note": ""
     },
     {
@@ -61,7 +69,7 @@
       "source": "acceptance",
       "trace": "ADR-0563 Corrections 2026-11-19 (round 2 carriers)",
       "status": "pass",
-      "citation": "packages/isolate-host/tests/pool-faults.test.ts:471-506",
+      "citation": "packages/isolate-host/tests/pool-faults.test.ts:471-504",
       "note": ""
     },
     {
@@ -107,15 +115,7 @@
     {
       "axis": "Regressions",
       "verdict": "pass",
-      "findings": [
-        {
-          "severity": "concern",
-          "location": "packages/isolate-host/tests/protocol.test.ts:241-252",
-          "evidence": "",
-          "summary": "Accepted NOTE: the F1 starved case discriminates only when the stall begins before the deadline; on a slow solo spawn a mutant can survive that run; it never false-reds.",
-          "authority": ""
-        }
-      ]
+      "findings": []
     },
     {
       "axis": "Ecosystem UX",
