@@ -203,8 +203,9 @@ describe('format v1 layout (ADR-0567 §1, §2)', () => {
     const first = other.statSync('/probe1').metadata?.ino as number;
     restoreFs(target(), blob, OPTIONS);
     other.writeFileSync('/probe2', new Uint8Array(0));
-    // Only the nodes restore created moved the realm's counter (3 entries + a re-created root child at most).
-    expect(other.statSync('/probe2').metadata?.ino).toBeLessThanOrEqual(first + 1 + 8);
+    // v1 carries no `ino`, so no blob value can reach the realm's counter by construction;
+    // it moves only by the nodes created: target() 3, restore 3, probe2 1.
+    expect(other.statSync('/probe2').metadata?.ino).toBe(first + 7);
     other.rmSync('/probe1', {});
     other.rmSync('/probe2', {});
     expect(listFs(other).map(({ path, bytes }) => ({ path, bytes }))).toEqual(

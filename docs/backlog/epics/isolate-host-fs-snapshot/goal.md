@@ -1,6 +1,6 @@
 ---
 kind: epic
-status: draft
+status: ready
 title: Isolate guest FS snapshot — versioned blob, codec in isolate and consumer realm
 created: 2026-11-22
 value: A Node service can turn a rifty guest's files into opaque bytes and back into a fresh guest, so the next turn (or the next run) continues on the same files.
@@ -93,6 +93,8 @@ challenge: 2026-11-22 — 2 problems (fresh critic), both resolved before ready:
 1. A restored `ino` moved the realm-wide inode counter of every MemoryFs in the consumer's realm (`vfs/src/stat-metadata.ts:8`): a hostile blob could break other tenants' snapshots → `ino` is renewed on restore (ADR-0567 §1), I1 restated.
 2. Snapshot-side promises (exact buffer, `maxBytes` before allocation) cannot hold after guest code replaced intrinsics → stated for an unaltered realm; after guest code the result is guest-authored, bounded by the isolate limit, accepted only via restore (I4, ADR-0567 §8); fault row added.
 Advisory taken: tar's UTF-8 names cannot hold lone surrogates (ADR rejection); I6 now carries a budget; faster CRC at IMPLEMENT.
+
+final-check: 2026-11-22 — PASS (fresh read-only RDY-6 pass over goal, map, drafts, ADR-0567, probes; 8 findings on 46ea96074 closed at 2328d67ea; one advisory: the outside-target RED's bound, tightened).
 
 ## Decisions
 
