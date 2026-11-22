@@ -245,6 +245,29 @@ export const CORPUS: readonly Row[] = [
     label: 'exit-listener-queues-microtask',
     code: "process.on('exit', () => queueMicrotask(() => console.log('late'))); Promise.resolve().then(() => process.exit(0))",
   },
+  // At a natural exit Node still runs what its 'exit' listeners queue; after exit() it does not.
+  {
+    label: 'exit-listener-microtask-natural',
+    code: "process.on('exit', () => { console.log('exit'); Promise.resolve().then(() => console.log('late')) })",
+  },
+  {
+    label: 'exit-listener-queue-microtask-stderr-natural',
+    code: "process.on('exit', () => queueMicrotask(() => console.error('late')))",
+  },
+  {
+    label: 'exit-listener-async-natural',
+    code: "process.on('exit', async () => { console.log('a'); await null; console.log('b') })",
+  },
+  {
+    label: 'exit-listener-microtask-explicit',
+    code: "process.on('exit', () => { console.log('exit'); Promise.resolve().then(() => console.log('late')) }); Promise.resolve().then(() => process.exit(3))",
+  },
+  {
+    label: 'exit-in-exit-listener-at-natural-exit-queued-microtask',
+    code: "process.on('exit', () => { Promise.resolve().then(() => console.log('late')); process.exit(3) })",
+    ceiling:
+      'output of work queued before an exit() inside a natural exit\'s listener still prints (runtime-js/node-eval-work-queued-at-exit-runs)',
+  },
   {
     label: 'exit-in-next-tick',
     code: "process.nextTick(() => process.exit(4)); process.nextTick(() => console.log('queued'))",
