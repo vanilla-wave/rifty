@@ -46,7 +46,9 @@ describe('browser-unsuppliable Node members are named loud throws', () => {
   });
 
   it('fs link members throw NotImplementedError: the VFS has no links (ADR-0050, ADR-0568)', async () => {
-    const fs = loadBuiltin('node:fs') as Record<string, unknown> & { promises: Record<string, unknown> };
+    const fs = loadBuiltin('node:fs') as Record<string, unknown> & {
+      promises: Record<string, unknown>;
+    };
     for (const name of ['symlinkSync', 'linkSync', 'symlink', 'link'])
       expectNamedThrow(() => member(fs, name)('a', 'b'), `fs.${name}`);
     for (const name of ['symlink', 'link'])

@@ -11,7 +11,10 @@ import { nodeEval } from './support.ts';
 
 describe('package surface (ADR-0557 §1)', () => {
   it('the package root exports runCode and createSandbox only (ADR-0568)', async () => {
-    expect(Object.keys(await import('../src/index.ts'))).toEqual(['createSandbox', 'runCode']);
+    expect(Object.keys(await import('../src/index.ts')).sort()).toEqual([
+      'createSandbox',
+      'runCode',
+    ]);
   });
 });
 

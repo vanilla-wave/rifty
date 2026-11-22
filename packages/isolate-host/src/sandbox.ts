@@ -31,8 +31,10 @@ interface SnapshotOptions {
 }
 // `src/` in the workspace and `dist/` when packed are both one level under the package root.
 let codec: Promise<Codec> | undefined;
-const loadCodec = (): Promise<Codec> =>
-  (codec ??= import(new URL('../dist/codec.js', import.meta.url).href) as Promise<Codec>);
+function loadCodec(): Promise<Codec> {
+  codec ??= import(new URL('../dist/codec.js', import.meta.url).href) as Promise<Codec>;
+  return codec;
+}
 
 export interface SandboxOptions {
   /** Bytes of `sandbox.snapshot()` (ADR-0567): the new sandbox starts with their files. */
