@@ -85,6 +85,16 @@ const evalFatalMicrotask = {
   line: `node -e "Promise.resolve().then(()=>{process.exitCode=5});throw new Error('FATAL-MICRO')"`,
   fatal: 'FATAL-MICRO',
 };
+// An exit from a microtask the synchronous eval queued ends before any later
+// task: the 'exit' listener once, no code after exit(), no queued timer.
+const EVAL_MICROTASK_EXIT =
+  "process.on('exit',(c)=>console.log('L|exit',c));setTimeout(()=>console.log('L|timer'),0);console.log('L|before');Promise.resolve().then(()=>{process.exit(3);console.log('L|after')})";
+const evalMicrotaskExit = {
+  name: 'eval-microtask-exit',
+  files: {},
+  nodeArgv: ['-e', EVAL_MICROTASK_EXIT],
+  line: `node -e "${EVAL_MICROTASK_EXIT}"`,
+};
 // Node reads the status after its report: a write the report's own `stack`
 // getter makes counts, on the entry terminal and the rejection trap alike.
 const GETTER = (marker: string) =>
@@ -133,6 +143,7 @@ const commandCases: readonly ProcessLifecycleCase[] = [
   fatalEntryTimer,
   exitEntryTimer,
   evalFatalMicrotask,
+  evalMicrotaskExit,
   fatalStackGetter,
   rejectionStackGetter,
   fatalSilencedStderr,

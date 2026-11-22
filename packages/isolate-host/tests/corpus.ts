@@ -201,6 +201,52 @@ export const CORPUS: readonly Row[] = [
     ceiling:
       'a rejection inside an exit listener exits 0 (distribution/isolate-host-rejection-in-exit-listener-exits-0)',
   },
+  // A terminal from work the synchronous run queued, before any later task.
+  { label: 'exit-in-then', code: 'Promise.resolve().then(() => process.exit(3))' },
+  {
+    label: 'exit-after-async-main',
+    code: "async function main() { console.log('work') } main().then(() => process.exit(0))",
+  },
+  {
+    label: 'exit-in-catch',
+    code: "Promise.reject(new Error('x')).catch(() => process.exit(1))",
+  },
+  { label: 'exit-in-finally', code: 'Promise.resolve().finally(() => process.exit(4))' },
+  { label: 'exit-in-queue-microtask', code: 'queueMicrotask(() => process.exit(3))' },
+  {
+    label: 'exit-in-nested-microtasks',
+    code: 'Promise.resolve().then(() => Promise.resolve().then(() => queueMicrotask(() => process.exit(5))))',
+  },
+  {
+    label: 'exit-in-microtask-with-pending-timers',
+    code: "setTimeout(() => console.log('timer'), 0); setInterval(() => console.log('interval'), 1); setImmediate(() => console.log('immediate')); Promise.resolve().then(() => process.exit(2))",
+  },
+  {
+    label: 'exit-in-microtask-after-output',
+    code: "process.on('exit', (c) => console.log('exit', c)); console.log('before'); console.error('err'); Promise.resolve().then(() => { process.exit(6); console.log('after-exit') })",
+  },
+  {
+    label: 'exit-in-microtask-exit-code',
+    code: 'process.exitCode = 9; Promise.resolve().then(() => process.exit())',
+  },
+  {
+    label: 'exit-in-microtask-skips-queued-microtask',
+    code: "Promise.resolve().then(() => process.exit(0)); Promise.resolve().then(() => console.log('queued'))",
+  },
+  {
+    label: 'exit-in-next-tick',
+    code: "process.nextTick(() => process.exit(4)); process.nextTick(() => console.log('queued'))",
+  },
+  {
+    label: 'throw-in-queue-microtask',
+    code: "queueMicrotask(() => { throw new Error('qm') })",
+    evalError: true,
+  },
+  {
+    label: 'throw-primitive-in-queue-microtask',
+    code: 'queueMicrotask(() => { throw 1 })',
+    evalError: true,
+  },
   {
     label: 'throw-in-timer',
     code: "setTimeout(() => { throw new Error('late') }, 1)",
