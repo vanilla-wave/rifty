@@ -81,6 +81,27 @@ describe('node:fs refuses a NUL in a path, as Node (isolate sandbox corpus, ADR-
   });
 });
 
+describe('node:fs.utimesSync times as Node 24.16.0 stores them (fs-times.ts)', () => {
+  it('an invalid Date keeps the time, a huge one saturates, a negative number is now; all finite', () => {
+    // Node 24.16.0 (darwin-arm64): new Date(NaN) leaves mtime as it was (libuv UTIME_OMIT);
+    // 1e306 s → 9223372036854.775 ms; -1e306 → now; NaN/Infinity numbers → ERR_INVALID_ARG_TYPE.
+    fs.mkdirSync('/workspace', { recursive: true });
+    fs.writeFileSync('/workspace/t', 'x');
+    fs.utimesSync('/workspace/t', 1000, 2000);
+    fs.utimesSync('/workspace/t', new Date(Number.NaN), new Date(Number.NaN));
+    expect(fs.statSync('/workspace/t').mtimeMs).toBe(2_000_000);
+    fs.utimesSync('/workspace/t', 1e306, 1e306);
+    expect(fs.statSync('/workspace/t').mtimeMs).toBe(9223372036854.775);
+    const before = Date.now();
+    fs.utimesSync('/workspace/t', -1e306, -1e306);
+    expect(fs.statSync('/workspace/t').mtimeMs).toBeGreaterThanOrEqual(before);
+    for (const v of [Number.NaN, Number.POSITIVE_INFINITY])
+      expect(() => fs.utimesSync('/workspace/t', v, v)).toThrow(
+        expect.objectContaining({ code: 'ERR_INVALID_ARG_TYPE' }),
+      );
+  });
+});
+
 describe('node:fs.cp dereference (loud gap under no-symlink, ADR-0050)', () => {
   it('cpSync({ dereference: true }) throws NotImplementedError (Node supports it)', () => {
     writeFileSync('/d_src.txt', 'x');

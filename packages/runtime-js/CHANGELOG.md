@@ -1,5 +1,6 @@
 # Changelog
 
+- `fs.utimes*`/`futimes*` store Node 24.16.0's times: an invalid `Date` keeps the time (it stored NaN), a negative number is now, a huge time saturates at 2^63 ns (it stored Infinity-scale values); parity `fs/path-nul-and-utimes-edge-times`.
 - A NUL in an fs path throws Node's `ERR_INVALID_ARG_VALUE` (`The argument 'path' must be a string, Uint8Array, or URL without null bytes. Received '…'`) instead of creating the name; `existsSync` answers `false` for such a path, as Node.
 - `fs.symlink`/`symlinkSync`/`link`/`linkSync` and `fs.promises.symlink`/`link` are named loud members: a call throws `NotImplementedError('fs.<name>')` instead of `TypeError: … is not a function` (the VFS has no links, ADR-0050; ADR-0443 correction 2026-11-22).
 - `node <file>` runs its CommonJS entry as Node's main module: `require.main` (also through `createRequire`) and `process.mainModule` are the entry module, its `id` is `.` and `parent` null; a reused in-process process drops a previous run's `mainModule`. An ES module entry leaves both unset, as Node. Loader-internal `importNodeMain`; a 3061-module require load measures unchanged (median 104 vs 103 ms).
