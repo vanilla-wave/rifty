@@ -1,17 +1,17 @@
 {
   "overall_verdict": "pass",
-  "merge_call": "Mergeable once PR CI at HEAD d98cd3fa8 is green (gh pr checks 420 still pending at review time); fill the PR body with baseline/RED/stand artifacts before ready, as the coordinator stated.",
+  "merge_call": "Mergeable once PR CI at HEAD is green; verdict re-bound to dd429db50 after the verify pass over cross-review round 1 (deadline back to F1, starved-deadline carriers both ways, the gap declared).",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "d98cd3fa8f05452ef697f6031637d252e0d446a2",
-  "unit_goal_source": "PR #420 (branch t3/isolate-host-suite-flake), standalone rifty-fix unit. Observed baseline: the finding backlog distribution/isolate-host-tests-flake-under-extreme-load (deleted by this PR; read at BASE 50c9d8bf1) — guest-export.test.ts:19 clock tolerance, pool-faults.test.ts:462 interval churn (culprit exitCode undefined), protocol.test.ts:167 closed-then-exit (code null, signal SIGKILL … after closing its result channel without a result). BASE 50c9d8bf1, HEAD d98cd3fa8f05452ef697f6031637d252e0d446a2 (verify pass over fixes b1ca3e5f0..d98cd3fa8; first pass at b1ca3e5f0: blockers on the removed period parity row and compat line 9, both fixed).",
+  "reviewed_sha": "dd429db506ea2b4ef1d552019f8d02a3956f84f9",
+  "unit_goal_source": "PR #420 (branch t3/isolate-host-suite-flake), standalone rifty-fix unit. Observed baseline: the finding backlog distribution/isolate-host-tests-flake-under-extreme-load (deleted by this PR; read at BASE 50c9d8bf1) — guest-export clock tolerance, pool-faults interval churn, protocol closed-then-exit red under load. BASE 50c9d8bf1, HEAD dd429db506ea2b4ef1d552019f8d02a3956f84f9. Passes: b1ca3e5f0 (2 blockers: removed period parity row, compat line 9 — fixed), d98cd3fa8 PASS, external cross-review round 1 at bb022938b (B1: deadline after one poll admitted late results — reverted), 375d1bd21 PASS, dd429db50 PASS.",
   "unit_residuals": [],
   "goal_residuals": [],
   "goal_complete": false,
   "coverage": [
     {
-      "row": "Baseline: the guest clock is the wall clock and starts at the call's start, not the worker's (green under load)",
+      "row": "Baseline: the guest clock is the wall clock and starts at the call's start (green under load)",
       "source": "acceptance",
-      "trace": "ADR-0558 (Decisions 2026-11-18, clock origin at bridge setup)",
+      "trace": "ADR-0558 (Decisions 2026-11-18)",
       "status": "pass",
       "citation": "packages/isolate-host/tests/guest-export.test.ts:19-33",
       "note": ""
@@ -21,66 +21,106 @@
       "source": "acceptance",
       "trace": "ADR-0563 §6 + Corrections 2026-11-22",
       "status": "pass",
-      "citation": "packages/isolate-host/tests/protocol.test.ts:184-199",
+      "citation": "packages/isolate-host/tests/protocol.test.ts:184-199; packages/isolate-host/src/pool.ts:167-182",
       "note": ""
     },
     {
-      "row": "A result frame sent before the deadline wins over the deadline, however late the consumer reads it",
+      "row": "The consumer owns the deadline: at timeoutMs it resolves timeout; a result sent after the deadline does not win (starved consumer)",
       "source": "acceptance",
-      "trace": "ADR-0563 §4 + Corrections 2026-11-22",
+      "trace": "ADR-0563 §4",
       "status": "pass",
-      "citation": "packages/isolate-host/tests/protocol.test.ts:201-222",
+      "citation": "packages/isolate-host/tests/protocol.test.ts:204-227; packages/isolate-host/src/pool.ts:85",
       "note": ""
     },
     {
-      "row": "Interval create/clear loop next to three neighbours: culprit memory (solo rerun after a no-culprit loss), neighbours exact once",
+      "row": "F1: a rerun keeps the original deadline; out of budget it is a lost call, not a result (starved consumer)",
+      "source": "acceptance",
+      "trace": "ADR-0563 §6 (F1)",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/protocol.test.ts:229-257",
+      "note": ""
+    },
+    {
+      "row": "Declared gap: with a starved consumer, a result sent before the deadline but read after it is timeout",
+      "source": "acceptance",
+      "trace": "ADR-0563 Corrections 2026-11-22 (compat ⚠️ row)",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/protocol.test.ts:259-286; docs/public/compat/isolate-host.md:15",
+      "note": ""
+    },
+    {
+      "row": "Declared gap: with a starved consumer, a worker lost before the deadline but read after it is timeout, no rerun",
+      "source": "acceptance",
+      "trace": "ADR-0563 Corrections 2026-11-22 (compat ⚠️ row)",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/protocol.test.ts:288-316; docs/public/compat/isolate-host.md:15",
+      "note": ""
+    },
+    {
+      "row": "Interval create/clear loop next to three neighbours: culprit memory, neighbours exact once",
       "source": "acceptance",
       "trace": "ADR-0563 Corrections 2026-11-19 (round 2 carriers)",
       "status": "pass",
-      "citation": "packages/isolate-host/tests/pool-faults.test.ts:469-504",
+      "citation": "packages/isolate-host/tests/pool-faults.test.ts:471-506",
       "note": ""
     },
     {
-      "row": "A repeating timer keeps Node's period from the tick's start, not from the callback's end",
+      "row": "A repeating timer keeps Node's period from the tick's start",
       "source": "acceptance",
       "trace": "ADR-0558 (Decisions 2026-11-19 §3, 2026-11-22)",
       "status": "pass",
-      "citation": "packages/isolate-host/tests/corpus.ts:147-152 (real-Node parity row, runCode + embedder); packages/isolate-guest/tests/host-bridge.test.ts:425 (deterministic twin)",
+      "citation": "packages/isolate-host/tests/corpus.ts:147-152; packages/isolate-guest/tests/host-bridge.test.ts:425",
       "note": ""
     }
   ],
   "axes": [
-    { "axis": "Completeness", "verdict": "pass", "findings": [] },
-    { "axis": "Mission and architecture", "verdict": "pass", "findings": [] },
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
     {
       "axis": "Goal drift",
       "verdict": "pass",
-      "findings": [
-        {
-          "severity": "nit",
-          "location": "docs/backlog/distribution/isolate-host-time-phase-rows-under-load.md:19",
-          "evidence": "",
-          "summary": "Title says three rows; the Owner line still says 'trigger: either red in CI' — should be 'any'.",
-          "authority": ""
-        }
-      ]
+      "findings": []
     },
-    { "axis": "Approach cost", "verdict": "pass", "findings": [] },
-    { "axis": "Scope", "verdict": "pass", "findings": [] },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
     {
       "axis": "Bugs",
       "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
       "findings": [
         {
-          "severity": "nit",
-          "location": "packages/isolate-host/src/pool.ts:95",
+          "severity": "concern",
+          "location": "packages/isolate-host/tests/protocol.test.ts:241-252",
           "evidence": "",
-          "summary": "Comment says onDeadline 'finds nothing to settle or cancel'; on a worker already ended by #violated the call stays in worker.calls, so #deadline still sends a harmless cancel to the killed worker. Wording overstates.",
+          "summary": "Accepted NOTE: the F1 starved case discriminates only when the stall begins before the deadline; on a slow solo spawn a mutant can survive that run; it never false-reds.",
           "authority": ""
         }
       ]
     },
-    { "axis": "Regressions", "verdict": "pass", "findings": [] },
-    { "axis": "Ecosystem UX", "verdict": "pass", "findings": [] }
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
   ]
 }
