@@ -5,6 +5,8 @@
  * (CRC from `node:zlib`): it pins the format and forges blobs a correct writer
  * never makes.
  */
+import { readFileSync } from 'node:fs';
+import { runInNewContext } from 'node:vm';
 import { crc32 } from 'node:zlib';
 import { createMemoryFs } from '@riftydev/vfs/internal';
 import { describe, expect, it } from 'vitest';
@@ -28,6 +30,12 @@ interface Rec {
 }
 
 const OPTIONS: SnapshotOptions = { template: null, maxBytes: 1 << 24 };
+/** Budget an entry takes from `maxBytes` beyond its bytes (ADR-0567 §7). */
+const ENTRY_COST = 384;
+/** The golden blob's tree (listFs form), fixed when the fixture was written. */
+const GOLDEN_TREE = JSON.parse(
+  readFileSync(new URL('./fixtures/snapshot-v1.json', import.meta.url), 'utf8'),
+) as unknown;
 const MAGIC = [0x52, 0x49, 0x46, 0x54, 0x59, 0x46, 0x53, 0x00];
 
 /** ADR-0567 §1, written by hand. `tail` lands between `end` and the CRC. */
@@ -267,17 +275,145 @@ describe('long names (ADR-0567 §5, I3)', () => {
   });
 });
 
+describe('the writer never emits what the reader refuses (ADR-0567 §5, I3)', () => {
+  // States rifty's FS holds that the format cannot carry (Node never produces them:
+  // backlog runtime-js/utimes-time-values-differ-from-node, runtime-js/fs-paths-with-nul-accepted).
+  const odd: readonly [string, (fs: ReturnType<typeof createMemoryFs>['fsSync']) => void][] = [
+    ['NaN time', (fs) => fs.utimes('/a', Number.NaN, 1)],
+    ['infinite time', (fs) => fs.utimes('/a', 1, Number.POSITIVE_INFINITY)],
+    ['time 1e306', (fs) => fs.utimes('/a', 1e306, 1)],
+    ['time past the Date range', (fs) => fs.utimes('/a', 1, 8.64e15 + 1)],
+    ['NUL in a name', (fs) => fs.writeFileSync('/a\0b', new Uint8Array(0))],
+    [
+      'a name over 16 383 code units',
+      (fs) => fs.writeFileSync(`/${'n'.repeat(16_384)}`, new Uint8Array(0)),
+    ],
+    ['the Date range edge', (fs) => fs.utimes('/a', -8.64e15, 8.64e15)],
+    [
+      'negative zero and sub-ms times',
+      (fs) =>
+        fs.restoreStatSync('/a', { mtimeMs: -0, atimeMs: 1.25, ctimeMs: 0.5, birthtimeMs: -1.5 }),
+    ],
+  ];
+  for (const [label, alter] of odd) {
+    carrier(`${label}: snapshot refuses by name, or its blob restores`, () => {
+      const fs = createMemoryFs().fsSync;
+      fs.writeFileSync('/a', new Uint8Array([1]));
+      alter(fs);
+      let bytes: Uint8Array | undefined;
+      try {
+        bytes = snapshotFs(fs, OPTIONS);
+      } catch (error) {
+        expect(error).toBeInstanceOf(FsSnapshotError);
+        expect((error as FsSnapshotError).code).toBe('ERR_FS_SNAPSHOT_UNREPRESENTABLE');
+        return;
+      }
+      const back = createMemoryFs().fsSync;
+      restoreFs(back, bytes, OPTIONS);
+      expect(listFs(back)).toEqual(listFs(fs));
+    });
+  }
+
+  carrier('the states the format cannot carry are refused, the edge ones restore', () => {
+    const outcome = (alter: (fs: ReturnType<typeof createMemoryFs>['fsSync']) => void) => {
+      const fs = createMemoryFs().fsSync;
+      fs.writeFileSync('/a', new Uint8Array([1]));
+      alter(fs);
+      try {
+        snapshotFs(fs, OPTIONS);
+        return 'ok';
+      } catch (error) {
+        return (error as FsSnapshotError).code;
+      }
+    };
+    expect(odd.map(([label, alter]) => [label, outcome(alter)])).toEqual([
+      ['NaN time', 'ERR_FS_SNAPSHOT_UNREPRESENTABLE'],
+      ['infinite time', 'ERR_FS_SNAPSHOT_UNREPRESENTABLE'],
+      ['time 1e306', 'ERR_FS_SNAPSHOT_UNREPRESENTABLE'],
+      ['time past the Date range', 'ERR_FS_SNAPSHOT_UNREPRESENTABLE'],
+      ['NUL in a name', 'ERR_FS_SNAPSHOT_UNREPRESENTABLE'],
+      ['a name over 16 383 code units', 'ERR_FS_SNAPSHOT_UNREPRESENTABLE'],
+      ['the Date range edge', 'ok'],
+      ['negative zero and sub-ms times', 'ok'],
+    ]);
+  });
+});
+
+describe('restore input (ADR-0567 §6)', () => {
+  carrier('file bytes are owned copies, also from a Buffer blob', () => {
+    const fs = createMemoryFs().fsSync;
+    fs.writeFileSync('/a', new Uint8Array([1, 2, 3]));
+    const blob = Buffer.from(snapshotFs(fs, OPTIONS));
+    const back = createMemoryFs().fsSync;
+    restoreFs(back, blob, OPTIONS);
+    blob.fill(0);
+    const data = back.readFileBytesSync('/a');
+    expect([...data]).toEqual([1, 2, 3]);
+    expect(data.buffer.byteLength).toBe(3);
+  });
+
+  carrier('a Uint8Array from another realm is accepted; a non-Uint8Array is a TypeError', () => {
+    const fs = createMemoryFs().fsSync;
+    fs.writeFileSync('/a', new Uint8Array([4]));
+    const bytes = snapshotFs(fs, OPTIONS);
+    const foreign = runInNewContext(
+      '(b) => new Uint8Array(b)',
+      {},
+    )(Array.from(bytes)) as Uint8Array;
+    const back = createMemoryFs().fsSync;
+    restoreFs(back, foreign, OPTIONS);
+    expect([...back.readFileBytesSync('/a')]).toEqual([4]);
+    for (const wrong of [new Uint16Array(4), new DataView(new ArrayBuffer(4)), [1, 2], 'x'])
+      expect(() => restoreFs(createMemoryFs().fsSync, wrong as never, OPTIONS)).toThrow(TypeError);
+  });
+
+  carrier(
+    'dense blobs: each entry counts ENTRY_COST against maxBytes, checked before writing',
+    () => {
+      // 50 000 empty dirs: ~2.5 MB of bytes, ~19 MB of budget.
+      const fs = createMemoryFs().fsSync;
+      for (let i = 0; i < 50_000; i++) fs.mkdirSync(`/${i.toString(36)}`, { recursive: false });
+      const blob = snapshotFs(fs, { template: null, maxBytes: 1 << 30 });
+      const budget = blob.length + 50_001 * ENTRY_COST;
+      expect(() => snapshotFs(fs, { template: null, maxBytes: budget - 1 })).toThrow(
+        /^ERR_FS_SNAPSHOT_TOO_LARGE: /,
+      );
+      refused(blob, 'ERR_FS_SNAPSHOT_TOO_LARGE', { template: null, maxBytes: budget - 1 });
+      restoreFs(createMemoryFs().fsSync, blob, { template: null, maxBytes: budget });
+    },
+  );
+});
+
+describe('golden v1 blob (ADR-0567 §3: every later reader reads it)', () => {
+  // Written by the v1 writer on 2026-11-22. Never regenerate: a reader that fails here broke v1.
+  const golden = new Uint8Array(
+    readFileSync(new URL('./fixtures/snapshot-v1.bin', import.meta.url)),
+  );
+  const template = { id: 'golden', version: '1' };
+
+  carrier('restores to its recorded tree', () => {
+    const fs = createMemoryFs().fsSync;
+    restoreFs(fs, golden, { template, maxBytes: 1 << 20 });
+    expect(listFs(fs)).toEqual(GOLDEN_TREE);
+  });
+});
+
 describe('limits (ADR-0567 §7, I4)', () => {
   carrier(
     'snapshot: a blob of exactly maxBytes passes, one byte less is refused before allocating',
     () => {
       const fs = createMemoryFs().fsSync;
       fs.writeFileSync('/big', new Uint8Array(10_000));
+      // The budget is the blob's bytes plus ENTRY_COST per entry (ADR-0567 §7): root + /big.
       const size = snapshotFs(fs, OPTIONS).length;
-      expect(snapshotFs(fs, { template: null, maxBytes: size }).length).toBe(size);
-      expect(() => snapshotFs(fs, { template: null, maxBytes: size - 1 })).toThrow(
+      const budget = size + 2 * ENTRY_COST;
+      expect(snapshotFs(fs, { template: null, maxBytes: budget }).length).toBe(size);
+      expect(() => snapshotFs(fs, { template: null, maxBytes: budget - 1 })).toThrow(
         /^ERR_FS_SNAPSHOT_TOO_LARGE: /,
       );
+      const blob = snapshotFs(fs, OPTIONS);
+      restoreFs(createMemoryFs().fsSync, blob, { template: null, maxBytes: budget });
+      refused(blob, 'ERR_FS_SNAPSHOT_TOO_LARGE', { template: null, maxBytes: budget - 1 });
     },
   );
 
@@ -342,7 +478,8 @@ describe('hostile bytes (ADR-0567 §5, I2, I3)', () => {
     expect(() => restoreFs(fs, encode([root], { version: 2 }), OPTIONS)).toThrow(
       /^ERR_FS_SNAPSHOT_VERSION: .*\b2\b.*\b1\b/,
     );
-    refused(encode([root], { version: 0 }), 'ERR_FS_SNAPSHOT_VERSION');
+    // No version 0 was ever released: not a snapshot.
+    refused(encode([root], { version: 0 }), 'ERR_FS_SNAPSHOT_CORRUPT');
   });
 
   carrier('another template, none, or one where none was expected', () => {
@@ -366,7 +503,13 @@ describe('hostile bytes (ADR-0567 §5, I2, I3)', () => {
     restoreFs(fs, withT, { template: t, maxBytes: 1 << 20 });
   });
 
-  const structural: readonly (readonly [string, readonly Rec[], (readonly number[])?])[] = [
+  // [label, records, bytes after `end`, the refusal's detail when another check would also refuse]
+  const structural: readonly (readonly [
+    string,
+    readonly Rec[],
+    (readonly number[] | undefined)?,
+    RegExp?,
+  ])[] = [
     ['no root entry', [dir('/w')]],
     ['root as a file', [file('/')]],
     ['root twice', [root, dir('/')]],
@@ -378,7 +521,7 @@ describe('hostile bytes (ADR-0567 §5, I2, I3)', () => {
     ['empty segment', [root, dir('/w'), file('/w//SECRET')]],
     ['trailing slash', [root, dir('/w/')]],
     ['NUL in a name', [root, file('/SECRET\0x')]],
-    ['parent missing', [root, file('/nope/SECRET')]],
+    ['parent missing', [root, file('/nope/SECRET')], undefined, /outside its parent directory/],
     ['parent is a file', [root, file('/f'), file('/f/SECRET')]],
     ['child before its parent', [root, file('/w/SECRET'), dir('/w')]],
     ['siblings out of code-unit order', [root, file('/b'), file('/a')]],
@@ -387,13 +530,21 @@ describe('hostile bytes (ADR-0567 §5, I2, I3)', () => {
     ['unknown kind (no symlinks in v1)', [root, { kind: 3, path: '/link' }]],
     ['NaN time', [root, { ...file('/a'), times: [Number.NaN, 0, 0, 0] }]],
     ['infinite time', [root, { ...file('/a'), times: [0, 0, Number.POSITIVE_INFINITY, 0] }]],
-    ['size not an integer', [root, { ...file('/a', 'xy'), size: 1.5 }]],
+    ['size not an integer', [root, { ...file('/a', 'xy'), size: 1.5 }], undefined, /bad file size/],
+    [
+      'time past the Date range',
+      [root, { ...file('/a'), times: [8.64e15 + 1, 0, 0, 0] }],
+      undefined,
+      /time/,
+    ],
     ['negative size', [root, { ...file('/a'), size: -1 }]],
     ['bytes after end', [root], [0x53, 0x45, 0x43]],
   ];
-  for (const [label, recs, tail] of structural) {
+  for (const [label, recs, tail, detail] of structural) {
     carrier(`${label} — refused, nothing written`, () => {
       refused(encode(recs, { tail }), 'ERR_FS_SNAPSHOT_CORRUPT');
+      if (detail)
+        expect(() => restoreFs(target(), encode(recs, { tail }), OPTIONS)).toThrow(detail);
     });
   }
 

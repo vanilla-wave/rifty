@@ -136,6 +136,52 @@ describe('guest FS snapshot — scenario', () => {
     expect(fits?.error).toBeDefined();
   });
 
+  carrier(
+    'restore that runs out of memory while writing leaves an unusable isolate (I3, I4)',
+    () => {
+      // An honest 40 MB blob of two 20 MiB files under a 64 MiB isolate: the
+      // blob fits, a file's copy does not — the failure comes after the write
+      // phase began (the old tree is already gone).
+      const fs = createMemoryFs().fsSync;
+      fs.mkdirSync('/workspace', { recursive: false });
+      fs.writeFileSync('/workspace/a', new Uint8Array(20 * MiB).fill(1));
+      fs.writeFileSync('/workspace/b', new Uint8Array(20 * MiB).fill(2));
+      const options = { ...OPTIONS, maxBytes: 1 << 30 };
+      const file = join(work, 'two-files.blob');
+      writeFileSync(file, snapshotFs(fs, options));
+      const [, refused, ran, snap, again] = drive([
+        { op: 'isolate', memoryLimit: 64 },
+        { op: 'restore', file, options },
+        { op: 'run', code: LIST_TREE },
+        { op: 'snapshot', options },
+        { op: 'restore', file, options },
+      ]);
+      expect(refused?.error).toMatch(/^ERR_FS_SNAPSHOT_INCOMPLETE: /);
+      expect(ran?.error).toMatch(/^ERR_FS_SNAPSHOT_INCOMPLETE: /);
+      expect(snap?.error).toMatch(/^ERR_FS_SNAPSHOT_INCOMPLETE: /);
+      expect(again?.error).toMatch(/^ERR_FS_SNAPSHOT_INCOMPLETE: /);
+    },
+  );
+
+  carrier('a tree the format cannot carry is refused at snapshot, by name (I3)', () => {
+    for (const code of [
+      "fs.utimesSync('/workspace/f', new Date(NaN), new Date(NaN))",
+      'fs.utimesSync("/workspace/f", 1e306, 1e306)',
+      "fs.writeFileSync('/workspace/a\\0b', 'x')",
+    ]) {
+      const [, ran, snap] = drive([
+        { op: 'isolate' },
+        {
+          op: 'run',
+          code: `const fs = require('fs'); fs.writeFileSync('/workspace/f', 'x'); ${code}`,
+        },
+        { op: 'snapshot', options: OPTIONS },
+      ]);
+      expect(ran?.exitCode, code).toBe(0);
+      expect(snap?.error, code).toMatch(/^ERR_FS_SNAPSHOT_UNREPRESENTABLE: /);
+    }
+  });
+
   carrier('restore over maxBytes is refused before the blob is read (I4)', () => {
     const file = join(work, 'big.blob');
     writeFileSync(file, Buffer.alloc(60 * MiB, 0x41));

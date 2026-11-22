@@ -133,7 +133,8 @@ Rejected (P1, template scale, S ≈ 95 MB):
 - Measured on landed code (isolate-guest README §Snapshot, M3 Pro): 23 654
   files / 100.6 MB — snapshot 138 ms and restore 173 ms in the isolate, 142 /
   161 ms in Node, ivm copy ≤ 10 ms, smallest `memoryLimit` for restore → run →
-  snapshot 223 MiB; 10 files / 958 kB — ≤ 2.3 ms each way, 19 MiB.
+  snapshot 223 MiB; 10 files / 958 kB — ≤ 2.3 ms each way, 19 MiB. Not
+  measured on Linux.
 - The consumer stores ~S bytes per snapshot; gzip, if wanted, is the host's
   (template scale 95 → 18 MB).
 - A snapshot from an isolate that ran guest code is guest-authored: CRC and

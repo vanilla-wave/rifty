@@ -253,7 +253,7 @@ await guest.restore.apply(undefined, [new Uint8Array(bytes), options], { argumen
   and at restore (`ERR_FS_SNAPSHOT_CORRUPT`).
 
 Cost (M3 Pro, Node 24.16.0, isolated-vm 7.0.2, median of 5,
-`node --no-node-snapshot scripts/measure-snapshot.mjs`):
+`node --no-node-snapshot scripts/measure-snapshot.mjs`; not measured on Linux):
 
 | tree | blob | Node snapshot / restore | isolate restore / snapshot | ivm copy in / out | smallest `memoryLimit`: restore → `run` → snapshot |
 |---|---|---|---|---|---|

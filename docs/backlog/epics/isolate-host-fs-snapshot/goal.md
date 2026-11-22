@@ -33,7 +33,7 @@ no sandbox API (that lives in the sandbox goal).
    embedder calls `snapshot({template, maxBytes})` and gets bytes.
 2. The isolate is disposed. A new isolate is created; the embedder calls
    `restore(bytes, {template, maxBytes})` before guest code. Guest code prints
-   the same listing: identical to step 1.
+   the same listing: identical to step 1 except `ino`, which is renewed (I1).
 3. The consumer's realm restores the same bytes into a rifty `MemoryFs` and
    sees the same tree; a tree it builds there and snapshots restores in an
    isolate the same way.
@@ -100,6 +100,7 @@ final-check: 2026-11-22 — PASS (fresh read-only RDY-6 pass over goal, map, dra
 ## Decisions
 
 - amend: 2026-11-22 — manager decision by delegation, not the user's words: «I1 сужается до имён ≤ 16 383 code units … линейный разбор враждебных байтов в доверенном realm, I3, важнее имён, которых в Node не бывает» — I1 names capped at 16 383 code units (V8 hashes longer strings by length alone: 76 MiB of such paths decoded in 22 s, Final+GREEN probe); reversible (a reader accepting more is compatible); rifty accepting names over NAME_MAX is a vfs parity gap, `backlog/vfs/file-names-over-name-max-accepted` — once closed, the cap is unreachable for an honest tree.
+- amend: 2026-11-22 — manager decision by delegation, not the user's words (same decision as the I1 name cap): scenario step 2 reads «identical to step 1 except `ino`», matching I1 and the Outcome (`ino` renewed, ADR-0567 §1).
 - tier: robust — the bytes are guest-authored and come back from storage: every reachable defect × {snapshot, restore} × {isolate, consumer realm} has a named outcome and a fault test; no crash-atomic storage promise (the consumer owns storage).
 - 2026-11-22 — manager: one goal = one PR; this goal lands first and standalone; embedding in the sandbox API, the rest-point rule and the sandbox-level e2e belong to the sandbox goal's PR.
 - 2026-11-22 — manager: the codec runs in two realms (isolate and the consumer's Node realm); the decoder trusts no property only an honest encoder guarantees.
