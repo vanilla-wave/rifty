@@ -75,8 +75,17 @@ challenge: 2026-11-22 — inherits the goal premise check (`goal.md` §Challenge
     second `remove` ENOENT → I3, I7
 12. `fs.symlinkSync` in a run fails loudly (exit 1, names it); the sandbox
     holds only files → I2, I7
-13. A run whose workers are all SIGKILLed while it is in flight resolves
-    exactly once (`done`), and its `appendFileSync` landed once → I1
+13. A run whose worker is SIGKILLed after its append (the worker past 400 MiB
+    RSS: the guest holds 300 MiB right after it) resolves exactly once
+    (`done`) on another worker, and its `appendFileSync` landed once → I1
+14. Corpus rows for the endings: a write then `process.exit(N)` —
+    synchronous, from a timer, from a promise callback, from `queueMicrotask`
+    — and a write from an `'exit'` listener equal node's run by run (manager
+    gate 2026-11-22: `-e` ends the microtask forms as `timeout`, thread #416);
+    no `node -e` builtin-module globals in a file (`typeof fs`), a
+    `stdout.write` without a newline, an empty directory kept between runs;
+    ESM as `.mjs`, `"type": "module"` and ESM syntax in a typeless `.js` →
+    the named gap → I1, I2
 
 ## Fault matrix
 
@@ -87,9 +96,9 @@ challenge: 2026-11-22 — inherits the goal premise check (`goal.md` §Challenge
 | worker SIGKILL × run in flight | one transparent rerun from the same bytes; no double effect | row 13 | → I1 |
 | worker lost twice × run | `ERR_ISOLATE_HOST_WORKER_LOST`, state of before | core unit | → I1 |
 | end state over cap / uncapturable / guest-broken snapshot × run | result + `stateRefused`, state of before | row 10; core unit (OOM in capture, poisoned codec) | → I1, → I7 |
-| hostile state bytes or frames from a worker × consumer decode | validated before use; worker violation path (ADR-0563 §3) | core unit (replaced `dist/child.js`) | → I7 |
+| guest-authored or hostile state bytes × consumer | judged before use: a frame an honest worker never sends is a violation; bytes under the cap the codec refuses are `stateRefused` | core unit Fault matrix | → I7 |
 | host op / run × issued unawaited | call order, one at a time | row 4 | → I4 |
-| destroy × run in flight / queued op / host op in flight | all reject DESTROYED; isolate gone | row 5; core unit (host op in flight, isolate gone) | → I5 |
+| destroy × run in flight / queued op | all reject DESTROYED; isolate disposed | row 5; core unit "destroy during a run" | → I5 |
 | model-chosen path (NUL, `..`, special names, deep) × host op | sandbox paths only; loud refusal | rows 6, 11 | → I3, → I7 |
 | size × host op / state | `ERR_FS_FILE_TOO_LARGE` / `ERR_ISOLATE_HOST_SANDBOX_FULL` | row 10 | → I6 |
 | bytes host → isolate (restore) × view of a larger buffer | only the view's range crosses | core unit | → I7 |

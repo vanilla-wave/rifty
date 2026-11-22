@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
-import { FrameReader, HEADER, KIND, frame } from '../src/protocol.ts';
+import { FrameReader, HEADER, KIND, decodeState, frame } from '../src/protocol.ts';
 
 const PACKAGE_DIR = fileURLToPath(new URL('..', import.meta.url));
 const work = mkdtempSync(join(tmpdir(), 'isolate-host-hostile-'));
@@ -249,5 +249,18 @@ describe('FrameReader framing is independent of how the bytes are chunked', () =
   it('refuses a frame for a call the judge does not know, before its payload arrives', () => {
     const hostile = frame(KIND.exit, 8, Uint8Array.of(0));
     expect(feed([hostile.slice(0, HEADER)])).toEqual({ frames: [], violations: ['call 8'] });
+  });
+});
+
+describe('a sandbox state crosses into the isolate as exactly its bytes (ADR-0568, I7)', () => {
+  it('decodeState returns a buffer of the state alone, never a view of a larger one', () => {
+    // A small Buffer.from() is a view into Node's shared 8 KiB pool: isolated-vm would copy the pool.
+    for (const size of [0, 1, 100, 5000, 70_000]) {
+      const bytes = Uint8Array.from({ length: size }, (_, i) => i % 251);
+      const out = decodeState(Buffer.from(bytes).toString('base64'));
+      expect(out).toEqual(bytes);
+      expect(out.byteOffset).toBe(0);
+      expect(out.buffer.byteLength).toBe(size);
+    }
   });
 });

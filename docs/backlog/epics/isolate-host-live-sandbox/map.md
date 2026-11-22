@@ -8,9 +8,6 @@
 2. `distribution/isolate-host-sandbox-core` — **the sandbox** — the wall the
    carrier hits first; carries the Fault matrix rows below the scenario
    level — after the codec seam (#418).
-3. `runtime-js/fs-link-apis-not-implemented` — **`fs.symlink*`/`link*`/`readlink*`
-   absent → `NotImplementedError` + compat ❌** — carrier row 12.
-
 Wall hypotheses the carrier is expected to hit (units only when the run hits
 them): the guest's `node <path>` entry beside `run(code)` (ESM entry as a loud
 gap); the snapshot goal's codec seam — restore before the run, snapshot after

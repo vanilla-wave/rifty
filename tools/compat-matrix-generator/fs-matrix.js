@@ -103,6 +103,11 @@ export const fsMatrix = {
       "Present, every call throws: own enumerable member with Node's descriptor, so `import { statfsSync } from 'node:fs'` links (vitest 4.1.11 `cli-api`). A call throws `NotImplementedError('fs.statfsSync')` — no browser source for host filesystem statistics, never a fabricated value; `typeof` feature detection sees a function (ADR-0443). `statfs` / `promises.statfs` stay link-time misses. Parity: `modules/builtin-loud-members-link`",
     ],
     [
+      '`symlink`/`symlinkSync`/`link`/`linkSync`, `promises.symlink`/`link`',
+      '❌',
+      "Present, every call throws `NotImplementedError('fs.<name>')`: the VFS has no links (ADR-0050), so a program names the gap instead of `TypeError: … is not a function` (ADR-0443 claim: model-written programs in the isolate sandbox, ADR-0568). `readlink` answers `EINVAL` as for any non-link",
+    ],
+    [
       'Durable `fsync` / inode-like open-unlink semantics',
       '❌',
       'Tracked as VFS fd durability residual',

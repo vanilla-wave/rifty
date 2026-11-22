@@ -28,6 +28,7 @@ import {
   type RunRequest,
   STUCK_GRACE_MS,
   type WorkerRequest,
+  decodeState,
   frame,
   rssCeilingBytes,
 } from '../protocol.ts';
@@ -61,9 +62,16 @@ interface Live {
   reported: boolean;
   cancelled: boolean;
   unwound: boolean;
-  /** A sandbox run's restore or capture is in the isolate: its end there is a refused state, not `memory`. */
-  stateWork: boolean;
+  /**
+   * A sandbox run's restore (0) or capture (1) is in the isolate: its end
+   * there is that refused state (`REFUSED`), not `memory`.
+   */
+  stateWork: 0 | 1 | undefined;
   report(kind: number, payload: Uint8Array): void;
+  /** The run's exit status once it ended (a capture refused after it keeps it). */
+  status: number;
+  /** End a sandbox run whose state was not restored or captured. */
+  refuse(reason: number): void;
 }
 const live = new Map<number, Live>();
 /** Largest sum of live calls' `memoryLimitMb` since the worker was last idle. */
@@ -79,7 +87,7 @@ setInterval(() => {
   // Its own heap limit disposed this isolate: a certain culprit, even while a
   // builtin keeps its thread (step 0: the run may not settle for seconds).
   for (const call of live.values()) {
-    if (call.isolate.isDisposed && !call.disposedHere && !call.stateWork)
+    if (call.isolate.isDisposed && !call.disposedHere && call.stateWork === undefined)
       call.report(KIND.memory, new Uint8Array(0));
   }
   const rss = process.memoryUsage.rss();
@@ -97,7 +105,11 @@ setInterval(() => {
   if (rss > rssCeilingBytes([busyAllowanceMb])) {
     // A solo worker's only call: the crossing is its own (ADR-0563 §6). Anywhere
     // else nobody is blamed: the consumer reruns each call alone.
-    for (const call of live.values()) if (call.solo) call.report(KIND.memory, new Uint8Array(0));
+    for (const call of live.values()) {
+      if (!call.solo) continue;
+      if (call.stateWork === undefined) call.report(KIND.memory, new Uint8Array(0));
+      else call.refuse(call.stateWork);
+    }
     dieAfterFlush();
   }
 }, 25);
@@ -172,7 +184,14 @@ async function run(request: RunRequest): Promise<void> {
     reported: false,
     cancelled: false,
     unwound: false,
-    stateWork: false,
+    stateWork: undefined,
+    status: 1,
+    refuse(reason) {
+      if (state.reported) return;
+      flush();
+      send(KIND.refused, id, Uint8Array.of(reason));
+      state.report(KIND.exit, Uint8Array.of(state.status));
+    },
     /** The call's one terminal frame; the isolate ends with it. */
     report(kind, payload) {
       if (state.reported) return;
@@ -250,21 +269,18 @@ async function run(request: RunRequest): Promise<void> {
     const snapshot = sandbox ? await guest.get('snapshot', { reference: true }) : undefined;
     if (sandbox) {
       const restore = await guest.get('restore', { reference: true });
-      state.stateWork = true;
+      state.stateWork = 0;
       try {
-        // A fresh exact buffer: isolated-vm copies a view's whole backing store.
-        const bytes = Uint8Array.from(Buffer.from(sandbox.state, 'base64'));
+        const bytes = decodeState(sandbox.state);
         await restore.apply(undefined, [bytes, snapshotOptions], { arguments: { copy: true } });
       } catch {
         // Before any guest code: the bundle's own refusal, or the isolate's memory.
         if (state.cancelled) throw new Error('cancelled');
-        flush();
-        send(KIND.refused, id, Uint8Array.of(0));
         state.unwound = true;
-        state.report(KIND.exit, Uint8Array.of(1));
+        state.refuse(0);
         return;
       }
-      state.stateWork = false;
+      state.stateWork = undefined;
     }
     await jail.delete('__riftyGuest');
     // From here a failure is the guest's run, not this worker's wiring.
@@ -280,11 +296,12 @@ async function run(request: RunRequest): Promise<void> {
         result: { promise: true, copy: true },
       },
     );
+    state.status = exitStatus(code);
     if (sandbox && snapshot && !state.reported) {
       // The end state, taken in the guest's realm: its bytes and its errors are
       // the guest's, so the consumer validates the bytes and only a size
       // refusal keeps its name (ADR-0568 §3).
-      state.stateWork = true;
+      state.stateWork = 1;
       let refused = 1;
       let bytes: unknown;
       try {
@@ -296,13 +313,15 @@ async function run(request: RunRequest): Promise<void> {
         const message = error instanceof Error ? error.message : '';
         if (!isolate.isDisposed && message.startsWith(`${REFUSED[2]}:`)) refused = 2;
       }
-      flush();
-      if (bytes instanceof Uint8Array && bytes.byteLength <= sandbox.maxFsBytes && !state.cancelled)
-        send(KIND.state, id, bytes);
-      else if (!state.cancelled) send(KIND.refused, id, Uint8Array.of(refused));
+      if (bytes instanceof Uint8Array && bytes.byteLength <= sandbox.maxFsBytes) {
+        if (!state.reported) {
+          flush();
+          send(KIND.state, id, bytes);
+        }
+      } else if (!state.cancelled) state.refuse(refused);
     }
     state.unwound = true;
-    state.report(KIND.exit, Uint8Array.of(exitStatus(code)));
+    state.report(KIND.exit, Uint8Array.of(state.status));
   } catch (error) {
     state.unwound = true;
     // Cancelled: the consumer already settled it; this terminal frame only ends its addressing.

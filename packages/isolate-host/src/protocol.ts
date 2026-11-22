@@ -143,3 +143,15 @@ export class FrameReader {
     return null;
   }
 }
+
+/**
+ * A sandbox run's state from its request, as a buffer of exactly its bytes:
+ * isolated-vm copies a view's whole backing store into the isolate (ADR-0568,
+ * step 0 S2), and `Buffer.from` may hand out a view of a shared pool.
+ */
+export function decodeState(base64: string): Uint8Array {
+  const view = Buffer.from(base64, 'base64');
+  const exact = new Uint8Array(view.byteLength);
+  exact.set(view);
+  return exact;
+}

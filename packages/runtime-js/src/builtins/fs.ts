@@ -22,7 +22,7 @@ import {
 import { Dirent, type StatOptions, Stats } from './fs-stats.ts';
 import { closeStdin, readStdin, readStdinSync, statStdin, writeStdio } from './fs-stdio.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
-import { statfsSync } from './loud-members.ts';
+import { link, linkSync, statfsSync, symlink, symlinkSync } from './loud-members.ts';
 import { runNodeCallback } from './process-lifecycle-events.ts';
 
 type Callback<T> = (err: NodeJS.ErrnoException | null, value?: T) => void;
@@ -1154,6 +1154,12 @@ export const promises = {
   async lstat(p: string, opts?: StatOptions): Promise<Stats> {
     return lstatImpl(p, opts, 'fs.promises.lstat.bigint');
   },
+  async symlink(...args: unknown[]): Promise<never> {
+    return symlink(...args);
+  },
+  async link(...args: unknown[]): Promise<never> {
+    return link(...args);
+  },
   async readlink(p: string): Promise<string> {
     return readlinkSync(p);
   },
@@ -1552,6 +1558,8 @@ const fs = {
   lstat,
   realpath,
   readlink,
+  symlink,
+  link,
   access,
   copyFile,
   rename,
@@ -1588,6 +1596,8 @@ const fs = {
   openAsBlob,
   lstatSync,
   readlinkSync,
+  symlinkSync,
+  linkSync,
   realpathSync,
   constants,
   Stats,

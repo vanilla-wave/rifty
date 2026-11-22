@@ -42,20 +42,39 @@ challenge: 2026-11-22 — inherits the goal premise check (`goal.md` §Challenge
    `snapshot` → rejects `ERR_FS_SNAPSHOT_CORRUPT` → I6, I8
 4. `snapshot()` issued behind a running exec holds the files of that run's
    end, and an exec issued behind `snapshot()` does not change it → I9, I4
-5. A packed consumer (`npm pack` of both packages, fresh install) runs
-   `createSandbox` → write → exec → readFile (`packed-consumer.test.ts`) → I8
+5. A packed consumer (`pnpm pack`, fresh install, plain `node`) runs the
+   README's sandbox snippet: `createSandbox` → write → exec → readFile
+   (`packed-consumer.test.ts`) → I8
+6. Every result is plain data or `Uint8Array` (`sandbox-faults` "plain data")
+   → I8
 
 ## Fault matrix
+
+One rule for guest-authored values: the end state is made in the guest's
+realm, so the worker judges its type and size before any frame and the
+consumer decodes it before it becomes state; whatever that realm does —
+over the cap, not bytes, a throw, a hang — is that call's own result
+(`stateRefused`, or `timeout` for a hang) with the state of before, and a
+neighbour on the same worker gets its exact result. The protocol-violation
+path is only for frames an honest worker never sends.
 
 | axis × operation | honest outcome | artifact / fault target | trace |
 |---|---|---|---|
 | worker lost twice × run | rejects `ERR_ISOLATE_HOST_WORKER_LOST`; state of before | `sandbox-faults` "lost twice" | → I1 |
-| end state too large to capture in its isolate × run | its own stdout/exit + `stateRefused: 'ERR_ISOLATE_HOST_SANDBOX_CAPTURE'`; state of before | `sandbox-faults` "capture out of memory" | → I1 |
-| state too large to restore in the run's isolate × run | `{stdout: '', stderr: '', exitCode: null, stateRefused: 'ERR_ISOLATE_HOST_SANDBOX_RESTORE'}`; state unchanged | `sandbox-faults` "restore refused" | → I1 |
-| guest replaces intrinsics the codec uses × capture | the exec resolves (never rejects, never `WORKER_LOST`); the sandbox goes on with a state that decodes | `sandbox-faults` "poisoned capture" | → I1, I7 |
-| hostile worker: `state` frame for a `runCode` call, twice, oversized | `isolate-host child protocol violation`; state unchanged | `sandbox-faults` "hostile state frame" (replaced `dist/child.js`) | → I7 |
-| run past `timeoutMs` / destroyed × its isolate | disposed as a `runCode` call at its deadline (ADR-0563 §4) | inherited: `pool-faults.test.ts` time rows (same cancel path) | → I5, I6 |
-| state bytes worker → isolate × view of a larger buffer | only the range crosses: the worker hands the isolate an exact copy | code review mutant (subarray vs slice) | → I7 |
+| worker sends the end state, then dies before its terminal frame | lost, rerun, lost: `WORKER_LOST`; state unchanged (state changes only at a terminal `exit`) | `sandbox-faults` "state frame and dies" | → I1 |
+| end state too large to capture in its isolate × run | own stdout/exit + `stateRefused: 'ERR_ISOLATE_HOST_SANDBOX_CAPTURE'`; state of before; both views agree | `sandbox-faults` "capture out of memory" | → I1 |
+| state too large to restore in the run's isolate × run | `{stdout: '', stderr: '', exitCode: null, stateRefused: 'ERR_ISOLATE_HOST_SANDBOX_RESTORE'}`; state unchanged; next run fine | `sandbox-faults` "restore refused" | → I1 |
+| deadline during the restore of a large state | `timeout`; state unchanged; next run fine | `sandbox-faults` "deadline during restore" | → I1, I6 |
+| guest realm makes the capture over the cap / not bytes / throw / hang, next to a neighbour | `stateRefused` / `timeout`; state of before; neighbour exact; worker kept | `sandbox-faults` "guest-authored end state" ×4 | → I1, I7 |
+| guest replaces intrinsics its capture uses × capture | the exec resolves, the sandbox goes on | `sandbox-faults` "poisoned capture" | → I1, I7 |
+| hostile worker: `state` frame for a `runCode` call, oversized, twice | `isolate-host child protocol violation`; state unchanged | `sandbox-faults` "hostile worker" ×2 | → I7 |
+| hostile worker: corrupt state bytes under the cap | `stateRefused: 'ERR_FS_SNAPSHOT_CORRUPT'`; state unchanged | `sandbox-faults` "corrupt state bytes" | → I7 |
+| `createSandbox({ snapshot })` corrupt / over `maxFsBytes` | rejects the codec's code | `sandbox-faults` "creation from a snapshot" | → I9, I7 |
+| destroy during a run in its isolate | rejects DESTROYED; the isolate disposed (worker gives its memory back) | `sandbox-faults` "destroy during a run" | → I5 |
+| run past `timeoutMs` × its isolate | `timeout`; isolate disposed | `sandbox-faults` "past timeoutMs" | → I6 |
+| a run queued behind another × its deadline | counted from leaving the queue | `sandbox-faults` "leaves the queue" | → I6 |
+| a spinning run in sandbox A × a run in sandbox B | B returns first (per-sandbox order only) | `sandbox-faults` "independent" | → I4 |
+| state bytes worker → isolate × view of a larger buffer | an exact copy crosses | `protocol.test.ts` "decodeState" | → I7 |
 
 ## Decisions
 

@@ -114,7 +114,7 @@ describe('state that cannot be kept (Fault matrix)', () => {
   );
 
   carrier('a state its run cannot restore is refused before any guest code', async () => {
-    const sb = await createSandbox();
+    const sb = await createSandbox({ maxFileBytes: 32 << 20 });
     try {
       // 60 MiB of state cannot enter a 64 MiB isolate (step 0: 51 MiB of files fit at most).
       await sb.writeFile('big1', new Uint8Array(30 << 20).fill(1));
@@ -187,9 +187,12 @@ const PACKAGE_DIR = fileURLToPath(new URL('..', import.meta.url));
 const work = mkdtempSync(join(tmpdir(), 'isolate-host-hostile-state-'));
 afterAll(() => rmSync(work, { recursive: true, force: true }));
 
-/** A package copy whose worker answers every call with a `state` frame (kind 6) of `size` bytes, then exit 0. */
-function hostileStatePackage(size: number): string {
-  const dir = join(work, `pkg-${size}`);
+/**
+ * A package copy whose worker answers every call with `frames` `state` frames
+ * (kind 6) of `size` bytes each (`fill`), then exit 0.
+ */
+function hostileStatePackage(name: string, size: number, frames: number, fill: number): string {
+  const dir = join(work, `pkg-${name}`);
   cpSync(join(PACKAGE_DIR, 'dist'), join(dir, 'dist'), { recursive: true });
   cpSync(join(PACKAGE_DIR, 'package.json'), join(dir, 'package.json'));
   symlinkSync(join(PACKAGE_DIR, 'node_modules'), join(dir, 'node_modules'));
@@ -204,7 +207,8 @@ function hostileStatePackage(size: number): string {
        for (let nl; (nl = pending.indexOf('\\n')) >= 0; ) {
          const req = JSON.parse(pending.slice(0, nl)); pending = pending.slice(nl + 1);
          if (req.type !== 'run') continue;
-         f(6, req.call, new Uint8Array(${size})); f(2, req.call, Uint8Array.of(0));
+         for (let i = 0; i < ${frames}; i++) f(6, req.call, new Uint8Array(${size}).fill(${fill}));
+         f(2, req.call, Uint8Array.of(0));
        }
      });
      process.stdin.on('end', () => process.exit(0));
@@ -213,22 +217,280 @@ function hostileStatePackage(size: number): string {
   return pathToFileURL(join(dir, 'dist', 'index.js')).href;
 }
 
+const VIOLATION = { rejected: expect.stringMatching(/^isolate-host child protocol violation: /) };
+const HOSTILE_BODY = `const run = await settle(runCode('1'));
+  const sb = await createSandbox({ maxFsBytes: 1024 });
+  await sb.writeFile('a', 'kept');
+  const exec = await settle(sb.exec('a'));
+  out({ run, exec, kept: Buffer.from(await sb.readFile('a')).toString() });`;
+
 describe('a hostile worker and state frames (Fault matrix)', () => {
   carrier(
     'a state frame for a runCode call, or past maxFsBytes, is a protocol violation',
     async () => {
-      const { value } = await consumer(
-        `const run = await settle(runCode('1'));
-       const sb = await createSandbox({ maxFsBytes: 1024 });
-       await sb.writeFile('a', 'kept');
-       const exec = await settle(sb.exec('a'));
-       out({ run, exec, kept: Buffer.from(await sb.readFile('a')).toString() });`,
-        { entry: hostileStatePackage(2048) },
-      );
-      const violation = {
-        rejected: expect.stringMatching(/^isolate-host child protocol violation: /),
-      };
-      expect(value).toMatchObject({ run: violation, exec: violation, kept: 'kept' });
+      const { value } = await consumer(HOSTILE_BODY, {
+        entry: hostileStatePackage('oversized', 2048, 1, 0),
+      });
+      expect(value).toMatchObject({ run: VIOLATION, exec: VIOLATION, kept: 'kept' });
     },
   );
+
+  carrier('two state frames for one call are a protocol violation', async () => {
+    const { value } = await consumer(HOSTILE_BODY, {
+      entry: hostileStatePackage('twice', 16, 2, 0),
+    });
+    expect(value).toMatchObject({ exec: VIOLATION, kept: 'kept' });
+  });
+
+  carrier('corrupt state bytes under the cap are refused by the codec, never adopted', async () => {
+    const { value } = await consumer(HOSTILE_BODY, {
+      entry: hostileStatePackage('corrupt', 64, 1, 7),
+    });
+    expect(value).toMatchObject({
+      exec: { stdout: '', stderr: '', exitCode: 0, stateRefused: 'ERR_FS_SNAPSHOT_CORRUPT' },
+      kept: 'kept',
+    });
+  });
+});
+
+/** Every value is plain data: plain objects, arrays, primitives, `Uint8Array`; no accessor. */
+function assertPlain(value: unknown, at = 'value'): void {
+  if (value === null || typeof value !== 'object') {
+    expect(typeof value, at).not.toBe('function');
+    return;
+  }
+  if (value instanceof Uint8Array) {
+    expect(Object.getPrototypeOf(value), at).toBe(Uint8Array.prototype);
+    return;
+  }
+  const proto = Object.getPrototypeOf(value);
+  expect(proto === Object.prototype || proto === Array.prototype, `${at} is plain`).toBe(true);
+  for (const [key, d] of Object.entries(Object.getOwnPropertyDescriptors(value))) {
+    if (Array.isArray(value) && key === 'length') continue;
+    expect('value' in d, `${at}.${key} is a data property`).toBe(true);
+    assertPlain(d.value, `${at}.${key}`);
+  }
+}
+
+describe('plain data (Acceptance 2)', () => {
+  carrier('every result is plain data or bytes', async () => {
+    const sb = await createSandbox({ maxFsBytes: 1 << 20 });
+    try {
+      await sb.writeFile('a.js', "require('fs').writeFileSync('b', 'x'); console.log(1)");
+      assertPlain(await sb.exec('a.js'), 'exec');
+      assertPlain(await sb.list(), 'list');
+      assertPlain(await sb.readFile('b'), 'readFile');
+      assertPlain(await sb.snapshot(), 'snapshot');
+      assertPlain(await sb.writeFile('c', 'y'), 'writeFile');
+      await sb.writeFile('big.js', "require('fs').writeFileSync('h', Buffer.alloc(2 << 20))");
+      assertPlain(await sb.exec('big.js'), 'refused exec');
+    } finally {
+      await sb.destroy();
+    }
+  });
+});
+
+describe('the isolate of a run ends with it (Fault matrix)', () => {
+  // The guest holds 300 MiB, then waits: its worker past 400 MiB RSS is the event that it runs.
+  const HOLD = 'globalThis.hold = new Uint8Array(300 << 20).fill(1); for (;;) {}';
+  const body = (end: string) => `
+    const sb = await createSandbox();
+    await sb.writeFile('hold.js', ${JSON.stringify(HOLD)});
+    const running = settle(sb.exec('hold.js', { memoryLimitMb: 512, timeoutMs: ${end === 'timeout' ? 2000 : 60000} }));
+    const rss = (pid) => Number(execFileSync('ps', ['-o', 'rss=', '-p', String(pid)], { encoding: 'utf8' }).trim() || 0);
+    const pid = await waitFor(() => children().find((p) => rss(p) > 400 * 1024), 15000);
+    ${end === 'destroy' ? 'const destroyed = sb.destroy();' : ''}
+    const result = await running;
+    ${end === 'destroy' ? 'await destroyed;' : ''}
+    // Disposed: its worker gives the 300 MiB back (or is gone).
+    const freed = await waitFor(() => { try { return rss(pid) < 300 * 1024 ? true : undefined } catch { return true } }, 10000).catch(() => false);
+    out({ result, freed });`;
+
+  carrier('destroy during a run rejects it and disposes its isolate', async () => {
+    const { value } = await consumer(body('destroy'));
+    expect(value).toEqual({
+      result: {
+        rejected: 'isolate-host sandbox: destroyed',
+        code: 'ERR_ISOLATE_HOST_SANDBOX_DESTROYED',
+      },
+      freed: true,
+    });
+  });
+
+  carrier('a run past timeoutMs ends as timeout and its isolate is disposed', async () => {
+    const { value } = await consumer(body('timeout'));
+    expect(value).toEqual({
+      result: { stdout: '', stderr: '', exitCode: null, termination: 'timeout' },
+      freed: true,
+    });
+  });
+
+  carrier('timeoutMs runs from the moment a run leaves the queue', async () => {
+    const sb = await createSandbox();
+    try {
+      await sb.writeFile('wait.js', 'setTimeout(() => {}, 2500)');
+      await sb.writeFile('quick.js', 'console.log(1)');
+      const [first, second] = await Promise.all([
+        sb.exec('wait.js', { timeoutMs: 10_000 }),
+        // Queued ~2.5 s behind the first: a deadline counted from this call would pass first.
+        sb.exec('quick.js', { timeoutMs: 2000 }),
+      ]);
+      expect(first).toEqual({ stdout: '', stderr: '', exitCode: 0 });
+      expect(second).toEqual({ stdout: '1\n', stderr: '', exitCode: 0 });
+    } finally {
+      await sb.destroy();
+    }
+  });
+});
+
+/**
+ * B1: the end state is authored by the guest. Whatever its realm makes of the
+ * capture — bytes over the cap, not bytes, a throw, a hang — is that call's
+ * result (`stateRefused`, or `timeout` for a hang), the state of before stays,
+ * and a neighbour call on the same worker gets its exact result.
+ */
+describe('a guest-authored end state is judged as that call’s result (Fault matrix)', () => {
+  const POISON: Record<string, string> = {
+    'over the cap': `const U = Uint8Array; globalThis.Uint8Array = new Proxy(U, { construct: (t, [n, ...r]) => typeof n === 'number' ? new U(n + 70000) : new U(n, ...r) });`,
+    'not bytes': `const U = Uint8Array; globalThis.Uint8Array = new Proxy(U, { construct: (t, a) => (typeof a[0] === 'number' ? {} : new U(...a)) });`,
+    throws: `for (const k of Object.getOwnPropertyNames(DataView.prototype)) if (k.startsWith('set')) DataView.prototype[k] = () => { throw new Error('poisoned') };`,
+    hangs: `for (const k of Object.getOwnPropertyNames(DataView.prototype)) if (k.startsWith('set')) DataView.prototype[k] = () => { for (;;) {} };`,
+  };
+  for (const [label, poison] of Object.entries(POISON)) {
+    carrier(label, async () => {
+      const { value } = await consumer(`
+        const neighbour = settle(runCode("setTimeout(() => console.log('n'), 1500)", { timeoutMs: 20000 }));
+        const sb = await createSandbox({ maxFsBytes: 64 * 1024 });
+        await sb.writeFile('keep', 'k');
+        await sb.writeFile('p.js', ${JSON.stringify(`require('fs').writeFileSync('new', 'x'); console.log('ran'); ${poison}`)});
+        const exec = await settle(sb.exec('p.js', { timeoutMs: 3000 }));
+        const shared = children().length;
+        out({ exec, neighbour: await neighbour, shared, names: (await sb.list()).map((e) => e.name),
+          next: await settle(sb.exec('p.js', { timeoutMs: 3000 })).then((r) => r.stdout) });`);
+      const v = value as {
+        exec: Record<string, unknown>;
+        neighbour: unknown;
+        shared: number;
+        names: string[];
+      };
+      expect(v.neighbour).toEqual({ stdout: 'n\n', stderr: '', exitCode: 0 });
+      expect(v.shared).toBe(1);
+      expect(v.exec.stdout).toBe('ran\n');
+      expect(v.exec.rejected).toBeUndefined();
+      if (label === 'hangs')
+        expect(v.exec).toMatchObject({ exitCode: null, termination: 'timeout' });
+      else
+        expect(v.exec).toMatchObject({ exitCode: 0, stateRefused: expect.stringMatching(/^ERR_/) });
+      expect(v.names).toEqual(['keep', 'p.js']);
+    });
+  }
+});
+
+describe('the state changes only at a terminal exit (Fault matrix)', () => {
+  carrier('a worker that sends a state frame and dies changes nothing', async () => {
+    const dir = join(work, 'pkg-state-then-die');
+    cpSync(join(PACKAGE_DIR, 'dist'), join(dir, 'dist'), { recursive: true });
+    cpSync(join(PACKAGE_DIR, 'package.json'), join(dir, 'package.json'));
+    symlinkSync(join(PACKAGE_DIR, 'node_modules'), join(dir, 'node_modules'));
+    // Echoes the request's own state back (a valid snapshot), then dies before any terminal frame.
+    writeFileSync(
+      join(dir, 'dist', 'child.js'),
+      `import { writeSync } from 'node:fs';
+       const f = (kind, call, b) => { const h = new Uint8Array(9); const v = new DataView(h.buffer);
+         v.setUint32(0, b.length); h[4] = kind; v.setUint32(5, call); writeSync(3, h); if (b.length) writeSync(3, b); };
+       let pending = '';
+       process.stdin.setEncoding('utf8').on('data', (d) => {
+         pending += d;
+         for (let nl; (nl = pending.indexOf('\\n')) >= 0; ) {
+           const req = JSON.parse(pending.slice(0, nl)); pending = pending.slice(nl + 1);
+           if (req.type !== 'run' || !req.sandbox) continue;
+           f(6, req.call, Buffer.from(req.sandbox.state, 'base64'));
+           process.kill(process.pid, 'SIGKILL');
+         }
+       });
+       process.stdin.on('end', () => process.exit(0));
+       setInterval(() => {}, 1000);`,
+    );
+    const { value } = await consumer(
+      `const sb = await createSandbox();
+       await sb.writeFile('a', 'kept');
+       const exec = await settle(sb.exec('a'));
+       out({ exec, names: (await sb.list()).map((e) => e.name) });`,
+      { entry: pathToFileURL(join(dir, 'dist', 'index.js')).href },
+    );
+    expect(value).toEqual({
+      exec: {
+        rejected: expect.stringMatching(/exited unexpectedly/),
+        code: 'ERR_ISOLATE_HOST_WORKER_LOST',
+      },
+      names: ['a'],
+    });
+  });
+
+  carrier(
+    'a deadline that falls during the restore of a large state is a timeout; state unchanged',
+    async () => {
+      const sb = await createSandbox({ maxFileBytes: 32 << 20 });
+      try {
+        await sb.writeFile('big', new Uint8Array(30 << 20).fill(3));
+        await sb.writeFile('a.js', "require('fs').writeFileSync('new', 'x')");
+        expect(await sb.exec('a.js', { timeoutMs: 1 })).toEqual({
+          stdout: '',
+          stderr: '',
+          exitCode: null,
+          termination: 'timeout',
+        });
+        expect((await sb.list()).map((e) => e.name)).toEqual(['a.js', 'big']);
+        expect((await sb.exec('a.js')).exitCode).toBe(0);
+        expect((await sb.list()).map((e) => e.name)).toEqual(['a.js', 'big', 'new']);
+      } finally {
+        await sb.destroy();
+      }
+    },
+  );
+});
+
+describe('creation from a snapshot refuses bad bytes (Fault matrix)', () => {
+  carrier(
+    'corrupt, oversized and foreign-template bytes reject with the codec’s code',
+    async () => {
+      const sb = await createSandbox();
+      await sb.writeFile('f', 'x'.repeat(5000));
+      const good = await sb.snapshot();
+      await sb.destroy();
+      await expect(
+        createSandbox({ snapshot: good.slice(0, good.length - 1) }),
+      ).rejects.toMatchObject({
+        code: 'ERR_FS_SNAPSHOT_CORRUPT',
+      });
+      await expect(createSandbox({ snapshot: good, maxFsBytes: 1024 })).rejects.toMatchObject({
+        code: 'ERR_FS_SNAPSHOT_TOO_LARGE',
+      });
+      const again = await createSandbox({ snapshot: good });
+      expect((await again.list()).map((e) => e.name)).toEqual(['f']);
+      await again.destroy();
+    },
+  );
+});
+
+describe('sandboxes are independent (S7)', () => {
+  carrier('a spinning run in one sandbox does not hold another’s', async () => {
+    const a = await createSandbox();
+    const b = await createSandbox();
+    try {
+      await a.writeFile('spin.js', 'for (;;) {}');
+      await b.writeFile('quick.js', 'console.log(1)');
+      const spinning = a.exec('spin.js', { timeoutMs: 20_000 });
+      const first = await Promise.race([
+        b.exec('quick.js').then(() => 'b'),
+        spinning.then(() => 'a'),
+      ]);
+      expect(first).toBe('b');
+      await a.destroy();
+      await spinning.catch(() => {});
+    } finally {
+      await a.destroy();
+      await b.destroy();
+    }
+  });
 });

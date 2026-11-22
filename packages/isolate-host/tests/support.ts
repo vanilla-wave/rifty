@@ -139,7 +139,7 @@ export function alive(pid: number): boolean {
   }
 }
 
-/** Sandbox files by absolute `/workspace/…` path, bytes as base64. */
+/** Sandbox entries by absolute `/workspace/…` path: file bytes as base64, a directory as `<path>/` → `'dir'`. */
 export type FileTree = Readonly<Record<string, string>>;
 /** One step of a sandbox oracle: write `files` (relative to the workspace), then `node <run…>`. */
 export interface NodeStep {
@@ -156,8 +156,10 @@ export interface NodeStepOutcome {
 function readTree(root: string, dir: string, out: Record<string, string>): void {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     const path = join(dir, e.name);
-    if (e.isDirectory()) readTree(root, path, out);
-    else out[`/workspace${path.slice(root.length)}`] = readFileSync(path).toString('base64');
+    if (e.isDirectory()) {
+      out[`/workspace${path.slice(root.length)}/`] = 'dir';
+      readTree(root, path, out);
+    } else out[`/workspace${path.slice(root.length)}`] = readFileSync(path).toString('base64');
   }
 }
 

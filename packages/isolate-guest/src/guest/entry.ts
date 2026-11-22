@@ -255,16 +255,18 @@ function runToExit(launch: () => Promise<void>): Promise<number> {
 }
 
 function run(source: string): Promise<number> {
-  return runToExit(() =>
-    runNodeEntry({
+  return runToExit(() => {
+    // `node -e` only: a file's realm has no builtin-module globals.
+    installEvalBuiltinGlobals();
+    return runNodeEntry({
       kind: 'eval',
       vfs: syncMirror(),
       cwd: CWD,
       source,
       print: false,
       explicitCommonJs: false,
-    }),
-  );
+    });
+  });
 }
 
 /**
@@ -335,7 +337,6 @@ function setUp(): void {
     });
   }
   installCeilingGlobals();
-  installEvalBuiltinGlobals();
   setProcessCwd(CWD);
   nativeExit = riftyProcess.exit.bind(riftyProcess) as () => void;
 }

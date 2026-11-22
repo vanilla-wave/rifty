@@ -1,5 +1,6 @@
 # Changelog
 
+- `fs.symlink`/`symlinkSync`/`link`/`linkSync` and `fs.promises.symlink`/`link` are named loud members: a call throws `NotImplementedError('fs.<name>')` instead of `TypeError: … is not a function` (the VFS has no links, ADR-0050; ADR-0443 correction 2026-11-22).
 - `node <file>` runs its CommonJS entry as Node's main module: `require.main` (also through `createRequire`) and `process.mainModule` are the entry module, its `id` is `.` and `parent` null; a reused in-process process drops a previous run's `mainModule`. An ES module entry leaves both unset, as Node. Loader-internal `importNodeMain`; a 3061-module require load measures unchanged (median 104 vs 103 ms).
 - `./internal` exports `formatThrown`, the fatal report's text for a thrown value, so the isolate host prints a guest's uncaught throw as rifty's fatal exit does (ADR-0557 §6).
 - `./internal` exports `captureNodeProcessGlobals(evaluates)` for a host running Node processes in place in a reused realm: hides the console `require` mirror for the process and, for `-e`/`-p`, snapshots the globals Node's `[eval]` defines (`require`, `module`, `exports`, `__filename`, `__dirname`; one list with the installer); its restore returns the realm and names a binding it could not return.

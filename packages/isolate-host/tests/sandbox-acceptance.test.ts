@@ -5,6 +5,8 @@
  * (`support.ts` nodeSequence). RED: every case is `it.fails` until the sandbox
  * lands; the API is typed here from the goal's contract, not imported.
  */
+import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import * as pkg from '../src/index.ts';
 import {
@@ -63,8 +65,10 @@ async function tree(sb: Sandbox, dir = W): Promise<FileTree> {
   const out: Record<string, string> = {};
   for (const e of await sb.list(dir)) {
     const path = `${dir}/${e.name}`;
-    if (e.type === 'directory') Object.assign(out, await tree(sb, path));
-    else out[path] = Buffer.from(await sb.readFile(path)).toString('base64');
+    if (e.type === 'directory') {
+      out[`${path}/`] = 'dir';
+      Object.assign(out, await tree(sb, path));
+    } else out[path] = Buffer.from(await sb.readFile(path)).toString('base64');
   }
   return out;
 }
@@ -246,7 +250,8 @@ describe('host refusals are loud and name only sandbox paths (scenario 8, I6, I7
     try {
       const missing = await a.readFile('nope/out.pdf').catch((e: unknown) => e);
       expect(missing).toMatchObject({ code: 'ENOENT', path: `${W}/nope/out.pdf` });
-      expect(String((missing as Error).message)).not.toContain(process.cwd());
+      for (const host of [process.cwd(), tmpdir(), fileURLToPath(new URL('..', import.meta.url))])
+        expect(String((missing as Error).message)).not.toContain(host);
       await expect(a.writeFile('bad\0name', 'x')).rejects.toMatchObject({
         code: 'ERR_INVALID_ARG_VALUE',
       });
@@ -294,19 +299,26 @@ describe('snapshot round trip (scenario 9, I9)', () => {
 });
 
 describe('ESM entries are a loud gap (I2)', () => {
-  carrier('an ESM entry fails with the named gap; real node runs it', async () => {
-    const step: NodeStep = { files: { 'main.mjs': 'console.log(1)' }, run: ['main.mjs'] };
-    expect(nodeSequence([step])[0]?.exitCode).toBe(0);
-    const sb = await createSandbox();
-    try {
-      await sb.writeFile('main.mjs', 'console.log(1)');
-      const r = await sb.exec('main.mjs');
-      expect(r.exitCode).toBe(1);
-      expect(r.stderr).toContain('Not implemented: isolate-host.esm');
-    } finally {
-      await sb.destroy();
-    }
-  });
+  const FORMS: Record<string, Record<string, string>> = {
+    '.mjs': { 'main.mjs': 'console.log(1)' },
+    '"type": "module"': { 'main.js': 'console.log(1)', 'package.json': '{"type":"module"}' },
+    'ESM syntax in a typeless .js': { 'main.js': "import fs from 'fs'; console.log(typeof fs)" },
+  };
+  for (const [form, files] of Object.entries(FORMS)) {
+    carrier(`${form}: the named gap; real node runs it`, async () => {
+      const entry = Object.keys(files)[0] as string;
+      expect(nodeSequence([{ files, run: [entry] }])[0]?.exitCode).toBe(0);
+      const sb = await createSandbox();
+      try {
+        for (const [name, data] of Object.entries(files)) await sb.writeFile(name, data);
+        const r = await sb.exec(entry);
+        expect(r.exitCode).toBe(1);
+        expect(r.stderr).toContain('Not implemented: isolate-host.esm');
+      } finally {
+        await sb.destroy();
+      }
+    });
+  }
 });
 
 /** Scenario 1–2 corpus: each row is a two-run sequence over the same files, compared with node's. */
@@ -318,6 +330,36 @@ interface CorpusRow {
   readonly diagnosticText?: true;
 }
 const CORPUS: readonly CorpusRow[] = [
+  {
+    label:
+      'no node -e builtin-module globals in a file; stdout.write without a newline; an empty directory',
+    files: {
+      'main.js': `process.stdout.write(typeof fs + ' ' + typeof path + ' ' + typeof crypto.randomUUID);
+require('fs').mkdirSync('empty/inner', { recursive: true });`,
+      'next.js': "console.log(require('fs').readdirSync('empty'))",
+    },
+    runs: [['main.js'], ['next.js']],
+  },
+  {
+    label: 'process.exit(N) after a write: synchronous, then from a timer',
+    files: {
+      'sync.js': "require('fs').writeFileSync('s', '1'); process.exit(3)",
+      'timer.js': "require('fs').writeFileSync('t', '1'); setTimeout(() => process.exit(4), 10)",
+      'listener.js': "process.on('exit', () => require('fs').writeFileSync('l', '1'))",
+    },
+    runs: [['sync.js'], ['timer.js'], ['listener.js']],
+  },
+  {
+    // Manager gate (2026-11-22): `process.exit` from a microtask ends as `timeout` in `-e`
+    // (compat ⚠️, thread #416), which here would roll the run's files back.
+    label: 'process.exit(N) after a write: from a promise callback, then from queueMicrotask',
+    files: {
+      'p.js':
+        "require('fs').writeFileSync('p', '1'); Promise.resolve().then(() => process.exit(5))",
+      'q.js': "require('fs').writeFileSync('q', '1'); queueMicrotask(() => process.exit(6))",
+    },
+    runs: [['p.js'], ['q.js']],
+  },
   {
     label: 'relative require, JSON, __filename, __dirname, argv, require.main, relative paths',
     files: {
@@ -417,10 +459,19 @@ describe('limits are loud (scenario 8, I6)', () => {
         stateRefused: 'ERR_FS_SNAPSHOT_TOO_LARGE',
       });
       expect((await sb.list()).map((e) => e.name)).toEqual([...before, 'fill.js'].sort());
+      // Both views agree after the refusal: the next run does not see `huge` either.
+      await sb.writeFile('see.js', "console.log(require('fs').existsSync('huge'))");
+      expect((await sb.exec('see.js')).stdout).toBe('false\n');
       for (let i = 0; i < 64; i++) {
         const r = await sb.writeFile(`part${i}.bin`, new Uint8Array(1024)).catch((e: unknown) => e);
         if (r !== undefined) {
+          // Some writes fit (the cap is not maxFileBytes), the refused one left nothing.
+          expect(i).toBeGreaterThan(8);
           expect(r).toMatchObject({ code: 'ERR_ISOLATE_HOST_SANDBOX_FULL' });
+          const names = (await sb.list()).map((e) => e.name);
+          expect(names).not.toContain(`part${i}.bin`);
+          await sb.remove('part0.bin');
+          await sb.writeFile(`part${i}.bin`, new Uint8Array(1024));
           return;
         }
       }
@@ -460,7 +511,9 @@ fs.writeFileSync('/tmp/t.txt', 'tmp');`,
       });
       await sb.remove('deep');
       await sb.remove('empty');
-      expect((await sb.list()).map((e) => e.name)).not.toContain('deep');
+      const left = (await sb.list()).map((e) => e.name);
+      expect(left).not.toContain('deep');
+      expect(left).not.toContain('empty');
       await expect(sb.remove('deep')).rejects.toMatchObject({ code: 'ENOENT', path: `${W}/deep` });
     } finally {
       await sb.destroy();
