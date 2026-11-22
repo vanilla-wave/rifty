@@ -23,10 +23,11 @@ rejection 1, natural `exitCode`, on both hosts.
 Still not Node's status (probe 2026-09-25, `sandbox.project().run` / `runBin`),
 all loud:
 
-- No-listener uncaught throw (`setTimeout(() => { throw … })`): ADR-0445 rule
-  3 keeps the realm's default report, so the toolchain Worker crashes —
-  command `failed`, `Worker crashed: Uncaught Error: …`, replaced; runBin
-  rejects. Node: stderr + 1.
+- No-listener uncaught throw (`setTimeout(() => { throw … })`): closed for
+  the project command 2026-11-22 (ADR-0445 correction: the realm trap runs the
+  fatal terminal) — `exited`, status 1, Node's report on stderr, realm kept;
+  carrier `tests/no-coi/node-file-parity.spec.ts` row `throw-from-timer`.
+  runBin not re-measured.
 - `node -e` fatal rejection or throw: the eval lifecycle rejects the drain
   with its projected error (not an exit signal) → `failed`, empty stderr,
   replaced. Node: stderr + 1.

@@ -136,10 +136,8 @@ function asNodePrintedError(err: unknown): unknown {
       code?: string;
       requireStack?: readonly string[];
     };
-    const stack = err.stack ?? '';
-    out.stack = stack.startsWith(`${err.name}: `)
-      ? `Error: ${stack.slice(err.name.length + 2)}`
-      : `Error: ${err.message}`;
+    // V8 wrote `Error:` there: ModuleLoadError names itself after capture.
+    out.stack = err.stack ?? `Error: ${err.message}`;
     out.code = err.code;
     out.requireStack = err.requireStack;
     return out;
