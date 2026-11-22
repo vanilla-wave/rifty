@@ -51,7 +51,7 @@ challenge: 2026-11-22 — inherits the goal premise check (`goal.md` §Challenge
    `ERR_INVALID_ARG_VALUE`; sandbox B's guest does not see A's
    `secret.txt` (`false ["peek.js"]`) → I6, I7
 7. Write, run (creates `made.bin`), `snapshot()`, destroy, `createSandbox({
-   snapshot })`: same tree; a run there reads `made.bin` → I10
+   snapshot })`: same tree; a run there reads `made.bin` → I9
 8. An ESM entry (`main.mjs`; node runs it, exit 0) → exit 1 with
    `Not implemented: isolate-host.esm` on stderr → I2
 

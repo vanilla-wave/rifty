@@ -243,7 +243,7 @@ describe('host refusals are loud and name only sandbox paths (scenario 8, I6, I7
   });
 });
 
-describe('snapshot round trip (scenario 9, I10)', () => {
+describe('snapshot round trip (scenario 9, I9)', () => {
   carrier('a sandbox created from a snapshot runs over the same files', async () => {
     const sb = await createSandbox();
     await sb.writeFile('main.js', "require('fs').writeFileSync('made.bin', Buffer.from([7, 0, 255]))");

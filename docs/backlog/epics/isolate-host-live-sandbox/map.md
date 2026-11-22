@@ -4,7 +4,7 @@
 
 1. `distribution/isolate-host-sandbox-acceptance` — **acceptance carrier** —
    the `## User scenario` as tests over the real built package, real workers
-   and real `node <path>` sequences (I1–I7, I10);
+   and real `node <path>` sequences (I1–I7, I9);
    `packages/isolate-host/tests/sandbox-acceptance.test.ts`, committed RED
    (`it.fails`).
 
@@ -20,16 +20,29 @@ ROADMAP M14 (I9).
 
 ## Open questions
 
-- The bound on a sandbox's files: the isolate's `memoryLimitMb` already
-  stops a guest's FS growth (step 0: 51 MiB of 1 MiB files at limit 64 →
-  `RangeError: Array buffer allocation failed`; appends and many small files →
-  `memory`), but the snapshot after the run needs room too, and host writes
-  are not bounded by any isolate — owner: agent — measure restore/snapshot
-  with the codec near the limit; name the rule in the ADR (a quota only if the
-  isolate limit does not hold it).
-- Codec cost per run (small FS; the requirements' template scale 23 654
-  files / 95 MB) and in the consumer realm — owner: agent — the snapshot
-  thread's numbers via the manager, then a measure on the landed seam.
+- State model — owner: user (fork carried by the manager, 2026-11-22; the
+  manager's default, bytes held by the consumer, is in force meanwhile on the
+  manager's delegation). The user's words: «в пределах одного прогона агента
+  один экземпляр живёт через write → exec → ошибка → fix → exec. Следующий
+  прогон… новый экземпляр из шаблона + восстановленных файлов» — a restore
+  once per agent run; the default restores and captures on every exec, rolls
+  back a killed run's partial writes, and at template scale pays ~1.15 s of
+  codec per exec plus ~95 MB each way and ≥ ~205 MiB of isolate before guest
+  code (ADR-0567 P1/P2: export 0.62 s, import 0.53 s, floor 205 MiB at
+  S = 90.7 MiB) unless a template layer avoids it. The host-disk alternative
+  keeps partial writes and costs nothing per exec, but makes a jail over
+  `node:fs` load-bearing (ADR-0568 §Alternatives). The answer decides I1's
+  rollback clause and the per-run cost; nothing closes on it before it.
+
+- The per-sandbox cap (I6): the isolate limit alone does not hold it — a
+  guest fits 51 MiB of files at limit 64 (step 0), while capture peaks at
+  ~2 × S (ADR-0567 P2) and host writes meet no isolate — so a cap exists;
+  owner: agent — its default, its relation to `memoryLimitMb` (a run whose
+  limit cannot hold the state is refused or named) and the guest-side full-disk
+  error (`ENOSPC`/`EDQUOT`) measured on the landed codec.
+- Codec cost per run on a small FS and in the consumer realm; the
+  consumer's memory per idle sandbox — owner: agent — measure on the landed
+  seam (template scale is already measured, see the state-model line).
 - State bytes on the consumer → worker wire (JSON + base64 vs binary
   request frames) — owner: agent — measure at the wire wall.
 - `require.main === module` is `false` in rifty's program entry (step 0 S3) —

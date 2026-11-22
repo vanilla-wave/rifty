@@ -13,8 +13,11 @@ narrowly `node <path>`, one instance through write → exec → error → fix �
 exec, the host reading a binary result at a model-chosen path, realm-level
 destroy, consumer docs; proposed form `create(template, snapshot?) / files /
 exec / snapshot / destroy` over RPC. Recorded user decisions the model must
-keep: «Владелец ФС живёт в том же realm, что и гость (внутри isolate)» and
-«харденинг нужен только на внешнем шве». Step 0
+keep: «харденинг нужен только на внешнем шве: выставленные хостовые функции,
+исходящий RPC, spawn наружу, передача результата» and «Владелец ФС живёт в том
+же realm, что и гость (внутри isolate)» (stated as the reason SAB is not
+needed). The state model is a user fork carried by the manager; this ADR
+records the manager's default. Step 0
 (`docs/backlog/distribution/reference/isolate-host-sandbox-step0.md`):
 `new Array(2 ** 28).fill(0)` ends in V8's catastrophic OOM, an ICU flood
 keeps the worker above its ceiling after its isolate is disposed; ivm copies a
@@ -46,8 +49,9 @@ Draft — open items are marked *open*.
    - `snapshot() → Uint8Array` (ADR-0567 bytes, at a point of rest),
      `destroy()`.
 2. **State.** Between operations a sandbox is its snapshot bytes in the
-   consumer's process (ADR-0567 codec, decoded in the consumer realm for host
-   file ops). rifty's filesystem exists only in a guest's isolate, during a
+   consumer's process (ADR-0567 codec, decoded in the consumer realm into
+   rifty's own `MemoryFsSync` for host file ops — no second implementation).
+   A sandbox is lost only with its consumer process. rifty's filesystem exists only in a guest's isolate, during a
    run. No process or isolate is held by an idle sandbox.
 3. **A run** is one call on the ADR-0563 pool: a fresh isolate restores the
    state before any guest code, runs the file through rifty's program entry,
@@ -55,7 +59,9 @@ Draft — open items are marked *open*.
    bytes as a frame before the terminal frame. On a terminal `exit` the
    consumer validates and decodes the bytes and they replace the state; on
    `timeout`, `memory` or a rejection the state stays as before the run
-   (whole-run rollback; Node keeps partial writes — compat ⚠️). The run's
+   (whole-run rollback; Node keeps partial writes — compat ⚠️). A run whose
+   end state cannot be captured or restored rejects with a named code of its
+   own (*open:* name), state unchanged. The run's
    input is bytes, so ADR-0563 §6's rerun of a lost worker's calls stays
    idempotent and applies unchanged.
 4. **One operation at a time.** Each sandbox runs its operations in call
@@ -67,9 +73,11 @@ Draft — open items are marked *open*.
    `ERR_ISOLATE_HOST_SANDBOX_DESTROYED`, cancels a run in flight (its
    isolate is disposed as at a deadline) and drops the state.
 6. **Limits.** Per run: `runCode`'s. Host file op: `maxFileBytes` per call.
-   The sandbox's files: *open* — the isolate limit stops a guest's growth
-   (step 0), the snapshot after the run and host writes need a rule; a quota
-   only if the isolate limit cannot hold it.
+   The sandbox's files: a per-sandbox cap (*open:* default, relation to
+   `memoryLimitMb`): the isolate limit alone does not hold it — a guest fits
+   51 MiB of files at limit 64 (step 0) while capture peaks at ~2 × S
+   (ADR-0567 P2), and host writes meet no isolate. Guest writes past it fail
+   at the write like a full disk; host writes past it reject.
 7. **Trust.** Snapshot bytes from a run were produced in the guest's realm:
    hostile input, bounded by a frame limit and validated by the codec before
    they become state. The bridge copies a view's range only, both directions.
@@ -83,8 +91,11 @@ Draft — open items are marked *open*.
   across the isolate; the codec decodes guest-produced bytes in the consumer.
   Lost per outcome: a killed or lost run's partial writes (rollback). Density:
   an idle sandbox = its bytes; a run = a pool slot (4 per worker). Cost per
-  run: restore + snapshot (O(files)); at the requirements' template scale
-  (23 654 files, 95 MB) *open*, pending ADR-0567's numbers.
+  run: restore + snapshot, linear in the files; at the requirements' template
+  scale (23 654 files, 95 MB): export 0.62 s + import 0.53 s in the isolate,
+  ~95 MB each way on the wire, a consumer-side decode, and an isolate floor of
+  ~205 MiB before guest code (ADR-0567 P1/P2) — unless a template layer keeps
+  the immutable part out of the per-run state (the template goal's).
 - **B. A directory on the host disk per sandbox, reached through the bridge.**
   Seam: every guest `fs` call becomes a host `node:fs` call with a
   guest-chosen path, so a jail over `node:fs` becomes load-bearing (links,
