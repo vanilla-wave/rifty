@@ -238,6 +238,10 @@ export const CORPUS: readonly Row[] = [
     code: "Promise.resolve().then(() => process.exit(0)); Promise.resolve().then(() => console.log('queued'))",
   },
   {
+    label: 'exit-in-microtask-skips-queued-stderr',
+    code: "Promise.resolve().then(() => process.exit(1)); Promise.resolve().then(() => console.error('queued'))",
+  },
+  {
     label: 'exit-listener-queues-microtask',
     code: "process.on('exit', () => queueMicrotask(() => console.log('late'))); Promise.resolve().then(() => process.exit(0))",
   },
