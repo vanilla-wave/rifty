@@ -25,7 +25,7 @@ import {
 import { createModuleLoader } from '@riftydev/runtime-js/loader';
 import { syncMirror } from '@riftydev/vfs';
 import { installMemoryFs } from '@riftydev/vfs/internal';
-import { UNCOPYABLE_REJECTION } from '../contract.ts';
+import { GUEST_DIRS, UNCOPYABLE_REJECTION } from '../contract.ts';
 import { bindNotImplemented } from './loud.ts';
 // Evaluated before every runtime module: the build injects it first (scripts/build-runtime.mjs).
 import {
@@ -313,7 +313,7 @@ function resolvePosix(base: string, p: string): string {
 /** Installs the runtime for one run; before any guest code. */
 function setUp(): void {
   installMemoryFs();
-  syncMirror().mkdirSync(CWD, { recursive: true });
+  for (const dir of GUEST_DIRS) syncMirror().mkdirSync(dir, { recursive: true });
   installProcessGlobals();
   installTimerGlobals();
   (globalThis as { Buffer?: unknown }).Buffer = Buffer;

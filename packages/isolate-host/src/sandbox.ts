@@ -21,6 +21,7 @@ interface Fs {
 }
 interface Codec {
   MemoryFsSync: new () => Fs;
+  GUEST_DIRS: readonly string[];
   snapshotFs(fs: Fs, options: SnapshotOptions): Uint8Array;
   restoreFs(fs: Fs, bytes: Uint8Array, options: SnapshotOptions): void;
 }
@@ -343,10 +344,6 @@ export async function createSandbox(options: SandboxOptions = {}): Promise<Sandb
         'ERR_INVALID_ARG_TYPE',
       );
     c.restoreFs(fs, options.snapshot.slice(), { template: null, maxBytes: maxFsBytes });
-  } else {
-    // A machine's `node` finds both: the cwd and `os.tmpdir()` (rifty's is `/tmp`).
-    fs.mkdirSync(WORKSPACE, { recursive: true });
-    fs.mkdirSync('/tmp', { recursive: true });
-  }
+  } else for (const dir of c.GUEST_DIRS) fs.mkdirSync(dir, { recursive: true });
   return new LiveSandbox(c, fs, maxFileBytes, maxFsBytes);
 }

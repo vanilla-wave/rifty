@@ -160,6 +160,10 @@ export const CORPUS: readonly Row[] = [
     code: "let n = 0; const ts = []; for (let i = 0; i < 20000; i++) ts.push(setInterval(() => { n++ }, 1)); setTimeout(() => { ts.forEach(clearInterval); console.log('done', n > 0) }, 1000)",
   },
   {
+    label: 'os-tmpdir-is-writable',
+    code: "const fs = require('fs'), p = require('path').join(require('os').tmpdir(), 'x-' + process.pid); fs.writeFileSync(p, 'tmp'); console.log(fs.readFileSync(p, 'utf8')); fs.rmSync(p)",
+  },
+  {
     label: 'builtin-module-globals',
     code: "console.log(path.join('a', 'b'), typeof fs.readFileSync, util.format('%d', 1), path === require('path'), typeof crypto.createHash); path = 5; console.log(path)",
   },

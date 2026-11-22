@@ -26,8 +26,6 @@ view's whole backing buffer; rifty's program entry has diagnostic gaps and no
 
 ## Decision
 
-Draft — open items are marked *open*.
-
 1. **API** (`src/index.ts`, plain data and bytes only, so it can move behind
    an RPC):
    - `createSandbox(options?) → Promise<Sandbox>`; `options.snapshot`
@@ -78,8 +76,9 @@ Draft — open items are marked *open*.
    order, one at a time (a run replaces the whole state, so a host write
    during it would be lost). A run's `timeoutMs` counts from the moment it
    leaves the queue and covers restore, the run and the capture.
-   *open:* mechanism sweep (`fault-classes.md` §Class-kill) before the
-   per-sandbox FIFO lands.
+   Mechanism sweep (`fault-classes.md` §Class-kill): no ordering mechanism
+   exists in `isolate-host`; the queue is one promise chain per sandbox, the
+   only state owner. Sandboxes do not wait for each other.
 5. **destroy** rejects queued and later operations
    `ERR_ISOLATE_HOST_SANDBOX_DESTROYED`, cancels a run in flight (its
    isolate is disposed as at a deadline) and drops the state.
@@ -90,11 +89,17 @@ Draft — open items are marked *open*.
    that would pass it rejects. No second quota inside the guest's FS (`REV-7`,
    manager 2026-11-22). The isolate limit alone does not bound the state: a
    guest fits 51 MiB of files at limit 64 (step 0) while capture peaks at
-   ~2 × S (ADR-0567 P2). *open:* the default.
+   ~2 × S (ADR-0567 P2). Defaults: `maxFsBytes` 256 MiB (the default isolate
+   heap), `maxFileBytes` 64 MiB.
 7. **Trust.** Snapshot bytes from a run were produced in the guest's realm:
    hostile input, bounded by a frame limit and validated by the codec before
    they become state. The bridge copies a view's range only, both directions.
-   *open:* text crossing to the host.
+   Text crossing to the host: host-op errors are built in the consumer from
+   a code and a sandbox path (`code`, `syscall`, `path`, message); a run's
+   text is its own stdout/stderr; `stateRefused` is a fixed code chosen by the
+   worker or the consumer (`ERR_ISOLATE_HOST_SANDBOX_RESTORE`,
+   `ERR_ISOLATE_HOST_SANDBOX_CAPTURE`, `ERR_FS_SNAPSHOT_TOO_LARGE`, or the
+   consumer codec's `ERR_FS_SNAPSHOT_*`).
 8. **`runCode`** is untouched: same API, results, corpus, pool behavior. A
    sandbox run is a pool call with state in and out, not a second lifecycle.
 
@@ -134,12 +139,14 @@ Draft — open items are marked *open*.
 
 ## Consequences
 
-- Cost per run today (no template; the state is the agent's files): ADR-0567
-  measured 3 ms export and 4 ms import for 52 files / 410 kB. While the
-  immutable template layer is part of a run's state, a run costs ~1.15 s of
-  codec and an isolate of ~205 MiB before guest code (23 654 files, 95 MB):
-  the template goal must keep that layer out of the per-run state or bring
-  this fork back to the user.
+- Cost per run (ADR-0567's codec, M3 Pro, median of 5, the snapshot thread's
+  measure): 10 files / 958 kB — consumer snapshot + restore 0.8 + 0.8 ms,
+  isolate restore + snapshot 2.2 + 1.1 ms, isolate peak 19 MiB (empty guest
+  15). Template scale (23 654 files / 100.6 MB): consumer 143 + 164 ms, isolate
+  174 + 132 ms, an isolate limit of at least 231 MiB (≈ 2.3 × S) before guest
+  code. While an immutable template layer is part of a run's state, every run
+  pays that: the template goal must keep the layer out of the per-run state or
+  bring this fork back to the user.
 
 - An idle sandbox holds no process or isolate; a forgotten one is ordinary
   garbage.
@@ -147,3 +154,15 @@ Draft — open items are marked *open*.
 - Every run pays restore + snapshot, linear in the sandbox's files.
 - Decisions recorded on ADR-0558 (guest contract: a program entry, restore and
   snapshot) and ADR-0563 (a call with state frames).
+
+## Not the user's words
+
+Manager decisions by delegation (2026-11-22), shown to the user, unanswered when written; a user
+answer lands as a dated correction here: the state model (bytes held by the consumer, a restore and
+a capture per run, a killed run rolled back) over a host-disk directory; one size mechanism (the
+codec's count, no quota inside the guest FS); the killed-run shape `exitCode: null` + `termination`
+(ADR-0557 dated line 2026-11-22).
+
+Agent decisions: the API names and defaults, `stateRefused` as a result field, one operation at a
+time per sandbox with the deadline from dequeue, `/workspace` and `/tmp` in a fresh FS, `env`/`cwd`/
+`stdin` as loud gaps.

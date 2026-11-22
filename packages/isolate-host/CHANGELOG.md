@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `createSandbox(options?)` (ADR-0568): a live sandbox for one agent run — host `writeFile`/`readFile`/`list`/`remove` (bytes exact, paths resolved in the sandbox, `maxFileBytes`, `maxFsBytes`), `exec(path, {args, …runCode options})` runs `node <path> [args]` with `runCode`'s result plus `stateRefused`, `snapshot()` (ADR-0567 bytes) and `createSandbox({ snapshot })`, `destroy()`. Files are rifty's in-memory FS, restored into each run's fresh isolate and captured after it; a killed or lost run leaves the files of before it. Operations on one sandbox run one at a time in call order. The package root exports `createSandbox` beside `runCode`.
 - Add the per-call `allowSharedArrayBuffer` option to `runCode`. False removes the global for feature detection. Shared wasm backing buffers throw the named gap on access. Default true (ADR-0566).
 
 - Known gaps declared (no behavior change): an unhandled rejection whose promise the GC collects before its task ends is lost — `exitCode: 0`, empty stderr where Node exits 1 (isolated-vm weak record, https://github.com/laverdet/isolated-vm/issues/589); `process.exit()` from a microtask of the code's synchronous run ends as `timeout`. README gives the guest-side workaround (handle every promise, set `process.exitCode`).

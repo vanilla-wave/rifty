@@ -49,5 +49,11 @@ export interface GuestEntry {
 export const UNCOPYABLE_REJECTION = 'isolate-host:uncopyable-rejection-reason';
 
 /** The stderr line (prefixed `Error: `) a guest `import()` ends its run with. */
+/**
+ * The directories a fresh guest FS holds: the cwd and rifty's `os.tmpdir()`,
+ * both present for any `node` on a machine. A sandbox's first state too (ADR-0568).
+ */
+export const GUEST_DIRS: readonly string[] = ['/workspace', '/tmp'];
+
 export const IMPORT_GAP =
   'Not implemented: isolate-host.dynamic-import (import() is not available in the rifty isolate host; use require(), ADR-0557)';

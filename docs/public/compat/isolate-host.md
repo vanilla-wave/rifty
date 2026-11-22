@@ -1,4 +1,4 @@
-# Isolate host (`@riftydev/isolate-host`, ADR-0557, ADR-0563)
+# Isolate host (`@riftydev/isolate-host`, ADR-0557, ADR-0563, ADR-0568)
 
 `runCode(code)` runs `code` like `node -e <code>` on Node 24. Tests:
 `packages/isolate-host/tests/` (vitest project `isolate-host`). The oracle is a live `node -e`
@@ -45,6 +45,28 @@ child.
 | Uncaught non-`Error` throw (`throw 'oops'`, `throw 5`, `throw {…}`) | ⚠️ | stderr is rifty's fatal text for the value (`oops`, `5`, `[object Object]`), without Node's `[eval]` header, inspect form or `--trace-uncaught` hint; thrown from a timer or async function it arrives wrapped as `Error: oops` with a bundle frame. `backlog/runtime-js/node-eval-non-error-throw-rendering` |
 | `unhandledRejection` listener arguments | ⚠️ | The reason is an isolated-vm copy, and `promise` is `undefined`; a non-`Error` reason arrives as a generic `Error` |
 | Identity: `process.version`, `os.platform()`, `process.cwd()` (`/workspace`), `process.argv`, `process.env` (empty), stdin | ⚠️ | rifty's, not the host's |
+
+## Sandbox (`createSandbox`, ADR-0568)
+
+`exec(path, {args})` runs `path` like `node <path> [args]` in `/workspace`. The guest surface and
+its gaps are the rows above, except where named here. Tests: `sandbox-acceptance.test.ts` (each run
+sequence against live `node <path>` over the same files), `sandbox-faults.test.ts`.
+
+| Surface | Status | Notes |
+|---|---|---|
+| Run sequences: relative `require`, JSON, `__filename`/`__dirname`, `argv`, `require.main`, relative paths, files the next run reads, only files carrying over | ✅ | Corpus in `sandbox-acceptance.test.ts`; no `node -e` builtin-module globals in a file |
+| Host `writeFile`/`readFile`/`list`/`remove`, binary, `/workspace`-relative paths | ✅ | Errors in Node's shape with sandbox paths only; `maxFileBytes`, `maxFsBytes` |
+| Endings: exit, `process.exit` (sync, timer, promise callback, `queueMicrotask`), uncaught throw/rejection | ✅ | The files are those the run left |
+| Killed run (`timeout`, `memory`) or lost worker | ⚠️ | The files are those of before the run: its writes are rolled back (Node keeps them). A lost worker's run reruns once from the same files |
+| Work queued when `process.exit()` runs (a microtask or 0 ms timer beside the exiting one) | ⚠️ | Still runs, and a file it writes is kept (Node: never runs). `backlog/runtime-js/node-eval-work-queued-at-exit-runs` |
+| Uncaught throw followed by an endless microtask chain | ⚠️ | `timeout`, its writes rolled back (Node: exit 1 at once, writes kept) |
+| End state over `maxFsBytes`, too large to capture, or broken by its own guest | ⚠️ | The run's result plus `stateRefused`; files as before the run (Node would fail the write itself, `ENOSPC`) |
+| State too large for the run's isolate | ⚠️ | `{stdout: '', stderr: '', exitCode: null, stateRefused: 'ERR_ISOLATE_HOST_SANDBOX_RESTORE'}`; no guest code runs |
+| `fs.stat().ino` across runs | ⚠️ | Renumbered at each run's restore (the snapshot keeps the four times, not `ino`, ADR-0567); Node keeps it |
+| Text of an uncaught-error report (positions, `file:line` header with caret, `Node.js v…` footer, `SyntaxError` as `ModuleLoadError`, the `Cannot find module` header) | ⚠️ | Error line and file names as Node's; the rest is the runtime-js diagnostics goal's (`node-file-entry-parity`) |
+| ES modules: `.mjs`, `"type": "module"`, ESM syntax in a typeless `.js` | ❌ | `NotImplementedError('isolate-host.esm')`: rifty's ESM loader needs `URL`, a ceiling here |
+| `fs.symlink*`/`link*` | ❌ | `NotImplementedError('fs.<name>')`: rifty's FS has no links (ADR-0050) |
+| `exec` options `env`, `cwd`, `stdin`; `createSandbox({ template })` | ❌ | `NotImplementedError('isolate-host.sandbox-exec-<option>')`, `NotImplementedError('isolate-host.sandbox-template')` |
 
 ## Custom embedder (`@riftydev/isolate-guest`, ADR-0558)
 
