@@ -359,7 +359,7 @@ export type NodeFileHost = 'no-COI' | 'COI';
  * must still differ (a fix that lands makes it fail until removed here); every
  * other row must equal Node. Shrinks to empty as the goal's map lands.
  */
-const LANDED = new Set<string>();
+const LANDED = new Set(['entry-main-guard', 'entry-cjs-extension', 'entry-directory']);
 const OPEN = [...entryPrograms, ...fatalPrograms]
   .map((program) => program.name)
   .filter((name) => !LANDED.has(name));

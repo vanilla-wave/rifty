@@ -99,6 +99,29 @@ export interface NodeEvalScriptRunner {
   run(source: string): unknown;
 }
 
+type NodeMainImport = (
+  specifier: string,
+  from: string,
+  onMain: (module: CjsModule) => void,
+) => Promise<Record<string, unknown>>;
+const nodeMainImports = new WeakMap<ModuleLoader, NodeMainImport>();
+
+/**
+ * Node `executeUserEntryPoint`: import `specifier` as the process's main. A
+ * CommonJS entry becomes Node's main module (`require.main`, `id` '.', parent
+ * null; `onMain` publishes `process.mainModule` before it runs).
+ */
+export function importNodeMain(
+  loader: ModuleLoader,
+  specifier: string,
+  from: string,
+  onMain: (module: CjsModule) => void,
+): Promise<Record<string, unknown>> {
+  const run = nodeMainImports.get(loader);
+  if (run === undefined) throw new TypeError('importNodeMain needs a createModuleLoader loader');
+  return run(specifier, from, onMain);
+}
+
 interface ModuleLoaderCore {
   readonly loader: ModuleLoader;
   runNodeEvalScript(
@@ -438,6 +461,8 @@ function createModuleLoaderCore(
   builtinOverrides?: ReadonlyMap<string, Record<string, unknown>>,
 ): ModuleLoaderCore {
   const registry = new ModuleRegistry();
+  let mainModule: CjsModule | undefined;
+  let pendingMain: { readonly id: string; onMain(module: CjsModule): void } | undefined;
   // Node's replaceable `.js` translator publishes a CJS `require.cache`
   // projection even when the same file already has an independent ESM job.
   // Keeping that projection separate prevents import-first ESM records from
@@ -535,6 +560,17 @@ function createModuleLoaderCore(
     resolve(specifier: string, fromFile: string, esm: boolean): ResolvedModule {
       return resolver.resolve(specifier, { fromFile, esm });
     },
+    claimMain(id: string): ((module: CjsModule) => void) | undefined {
+      const claim = pendingMain;
+      if (claim?.id !== id) return undefined;
+      pendingMain = undefined;
+      // Node Module._load(isMain): process.mainModule, then `id` '.'.
+      return (module) => {
+        mainModule = module;
+        (module as { id: string }).id = '.';
+        claim.onMain(module);
+      };
+    },
     loadSync(resolved: ResolvedModule, parent?: CjsModule): unknown {
       if (resolved.kind === 'builtin') {
         return loadBuiltinForLoader(resolved.id);
@@ -618,7 +654,8 @@ function createModuleLoaderCore(
     // intentionally not claimed as Node-compatible until backed by registry.
     req.cache = Object.create(null) as Record<string, unknown>;
     req.extensions = cjsExtensions;
-    req.main = undefined;
+    // Node makeRequireFunction: `require.main` is process.mainModule at creation.
+    req.main = mainModule;
     return req;
   }
 
@@ -672,6 +709,22 @@ function createModuleLoaderCore(
     registry,
     resolver,
   };
+
+  nodeMainImports.set(loader, (specifier, from, onMain) => {
+    keepaliveRef();
+    try {
+      const resolved = resolver.resolve(specifier, { fromFile: from, esm: true });
+      // Claimed synchronously by the CJS execution; an ES module entry never is.
+      pendingMain = { id: resolved.id, onMain };
+      const loaded = deps.loadAsyncResolved(resolved);
+      pendingMain = undefined;
+      return loaded.finally(keepaliveUnref);
+    } catch (error) {
+      pendingMain = undefined;
+      keepaliveUnref();
+      throw error;
+    }
+  });
 
   return {
     loader,

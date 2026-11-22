@@ -82,6 +82,8 @@ export interface CjsLoaderDeps {
   loadSync(resolved: ResolvedModule, parent?: CjsModule): unknown;
   loadAsync(id: string): Promise<Record<string, unknown>>;
   resolve(specifier: string, fromFile: string, esm: boolean): ResolvedModule;
+  /** The entry `id` runs as Node's main module: returns its installer once. */
+  claimMain?(id: string): ((module: CjsModule) => void) | undefined;
 }
 
 export type CjsExtensionHook = (this: CjsExtensions, module: CjsModule, filename: string) => void;
@@ -91,7 +93,7 @@ export type CjsRequire = ((specifier: string) => unknown) & {
   resolve(specifier: string): string;
   cache: Record<string, unknown>;
   extensions: CjsExtensions;
-  main: undefined;
+  main: CjsModule | undefined;
 };
 
 /**
@@ -1824,7 +1826,7 @@ function moduleLookupPaths(filename: string): string[] {
 function initialiseCjsRecord(
   record: ModuleRecord,
   deps: CjsLoaderDeps,
-  parent: CjsModule | undefined,
+  parent: CjsModule | null | undefined,
   identity: {
     readonly filename: string;
     readonly path: string;
@@ -1939,9 +1941,11 @@ export function executeCjs(
   }
 
   const record = existing ?? registry.getOrCreate(resolved.id, resolved.kind);
-  const moduleObject = initialiseCjsRecord(record, deps, parent);
+  const asMain = deps.claimMain?.(resolved.id);
+  const moduleObject = initialiseCjsRecord(record, deps, asMain === undefined ? parent : null);
+  asMain?.(moduleObject);
   record.state = 'loading';
-  attachCjsChild(parent, moduleObject);
+  if (asMain === undefined) attachCjsChild(parent, moduleObject);
 
   try {
     const selection = selectCjsExtension(resolved.id, deps);
@@ -1961,7 +1965,7 @@ export function executeCjs(
     assertCjsExtensionHook(selection.hook, selection.key);
     reflectApplyPrimordial(selection.hook, deps.extensions, [moduleObject, resolved.id]);
   } catch (error) {
-    failCjsRecord(registry, record, error);
+    failCjsRecord(registry, record, error, resolved.id);
   }
 
   // Exports may have been reassigned (`module.exports = ...`); re-point.
@@ -1971,7 +1975,12 @@ export function executeCjs(
   return moduleObject.exports;
 }
 
-function failCjsRecord(registry: ModuleRegistry, record: ModuleRecord, error: unknown): never {
+function failCjsRecord(
+  registry: ModuleRegistry,
+  record: ModuleRecord,
+  error: unknown,
+  key: string,
+): never {
   record.state = 'errored';
   // Same rule as the other loader-private fields: recorded, never enumerated.
   Object.defineProperty(record, 'error', {
@@ -1981,7 +1990,7 @@ function failCjsRecord(registry: ModuleRegistry, record: ModuleRecord, error: un
     configurable: true,
   });
   detachFailedCjsChild(record.parent ?? undefined, record as CjsModule);
-  if (registry.get(record.id) === record) registry.invalidate(record.id);
+  if (registry.get(key) === record) registry.invalidate(key);
   throw error;
 }
 

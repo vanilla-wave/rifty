@@ -26,6 +26,7 @@ import {
   type ModuleLoader,
   createModuleLoader,
   createNodeEvalScriptRunner,
+  importNodeMain,
   prepareNodeEvalCompiler,
   projectNodeEvalError,
 } from '../module-loader/loader.ts';
@@ -35,6 +36,20 @@ import { type UncaughtOrigin, dispatchUncaughtException } from './process-lifecy
 
 const utf8 = new TextDecoder();
 const reflectApplyPrimordial = Reflect.apply;
+const reflectDefinePropertyPrimordial = Reflect.defineProperty;
+const reflectDeletePropertyPrimordial = Reflect.deleteProperty;
+
+/** Node Module._load(isMain): `process.mainModule` is a plain own data property. */
+function publishMainModule(module: object): void {
+  const process = (globalThis as { process?: object }).process;
+  if (process === undefined) return;
+  reflectDefinePropertyPrimordial(process, 'mainModule', {
+    value: module,
+    writable: true,
+    enumerable: true,
+    configurable: true,
+  });
+}
 
 interface NodeEvalTerminalProcess {
   writeStdout(chunk: string): void;
@@ -196,6 +211,9 @@ function exportedPromise(ns: Record<string, unknown>): PromiseLike<unknown> | nu
 /** Import the resolved Node entry (or a `.bin` launcher's target) via the loader. */
 export async function runNodeEntry(opts: RunNodeEntryOptions): Promise<void> {
   refreshRuntimeJsProcessBuiltin();
+  // A reused in-process process (no-COI) starts without a previous run's main.
+  const process = (globalThis as { process?: object }).process;
+  if (process !== undefined) reflectDeletePropertyPrimordial(process, 'mainModule');
   if (opts.kind === 'eval') {
     // Capture the installed process capabilities before guest code can replace
     // `process`, its streams, or their methods. Late eval terminals are runtime
@@ -271,12 +289,12 @@ export async function runNodeEntry(opts: RunNodeEntryOptions): Promise<void> {
       }
       entrySpecifier = target;
       // Resolve the launcher target against the shim's own path, then run it.
-      const ns = await loader.import(target, opts.entryPath);
+      const ns = await importNodeMain(loader, target, opts.entryPath, publishMainModule);
       const pending = exportedPromise(ns);
       if (pending) await pending;
       return;
     }
-    await loader.import(opts.entryPath, opts.entryPath);
+    await importNodeMain(loader, opts.entryPath, opts.entryPath, publishMainModule);
   } catch (err) {
     // A missing entry (`node ./nope.js`) or an uncaught nested-require miss
     // surfaces real Node's `Error: Cannot find module … { code, requireStack }`
