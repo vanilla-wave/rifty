@@ -126,6 +126,8 @@ class Worker {
   retiring = false;
   dead = false;
   exited = false;
+  /** Its closed channel's grace ran out: no new call goes here while its loss is judged. */
+  graceOver = false;
   /**
    * Why the consumer itself ended this worker; unset = an exit nobody asked for.
    * `done`: nothing left on it (idle, retired, solo finished).
@@ -169,16 +171,15 @@ class Worker {
     // unread. (Not the deadline: reading late, it cannot tell a frame sent in time
     // from one sent after — backlog distribution/isolate-host-starved-deadline-outcome.)
     frames?.on('end', () => {
-      setTimeout(
-        () =>
-          setImmediate(() => {
-            if (!this.dead && this.ended === undefined) {
-              this.ended = { lost: 'after closing its result channel without a result' };
-              this.kill();
-            }
-          }),
-        CHANNEL_END_GRACE_MS,
-      ).unref();
+      setTimeout(() => {
+        this.graceOver = true;
+        setImmediate(() => {
+          if (!this.dead && this.ended === undefined) {
+            this.ended = { lost: 'after closing its result channel without a result' };
+            this.kill();
+          }
+        });
+      }, CHANNEL_END_GRACE_MS).unref();
     });
     // Exited, its stdio still draining: no new call goes here.
     child.on('exit', () => {
@@ -334,7 +335,13 @@ export class Pool {
   #placeFresh(call: Call): void {
     const worker =
       this.#workers.find(
-        (w) => !w.solo && !w.retiring && !w.exited && w.ended === undefined && w.calls.size < SHARD,
+        (w) =>
+          !w.solo &&
+          !w.retiring &&
+          !w.exited &&
+          !w.graceOver &&
+          w.ended === undefined &&
+          w.calls.size < SHARD,
       ) ?? this.#spawn(false);
     worker.place(call);
   }

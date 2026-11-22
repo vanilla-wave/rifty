@@ -34,9 +34,7 @@ async function withNeighbours(
   culprit: string,
   options: string,
   neighbourOptions = '{}',
-  count = 3,
-  harnessMs = 90_000,
-  sampleWorkers = false,
+  { count = 3, harnessMs = 90_000, sampleWorkers = false } = {},
 ): Promise<Outcome> {
   const { value } = await consumer(
     `const neighbours = Array.from({ length: ${count} }, (_, i) =>
@@ -134,7 +132,9 @@ describe('time on a shared worker (ADR-0563 §4)', () => {
       // Neighbours (b at 3.5 s) at 5000 ms: a rerun after the worker's loss (≥ 1.8 s)
       // could not finish in time, so they must finish where they are. Two of them:
       // the shared worker keeps a free slot for the probe unless it retires.
-      const v = await withNeighbours(code, '{ timeoutMs: 1500 }', '{ timeoutMs: 5000 }', 2);
+      const v = await withNeighbours(code, '{ timeoutMs: 1500 }', '{ timeoutMs: 5000 }', {
+        count: 2,
+      });
       const { ms, ...culprit } = v.culprit;
       expect(culprit).toEqual({
         stdout: 'c\n',
@@ -482,11 +482,9 @@ describe('a guest that never ends and churns host timers (ADR-0563 §7, §6)', (
         // 256 + 3 × (64 + 3 × 16) = 592 MiB, not 1024: the same path, reached sooner.
         `{ memoryLimitMb: 64, timeoutMs: ${MAX_TIMEOUT_MS} }`,
         `{ memoryLimitMb: 16, timeoutMs: ${MAX_TIMEOUT_MS} }`,
-        3,
-        // A culprit that never ends reds here, not at a deadline nobody reaches. On the
-        // loaded stand (48 `yes`, load 60–320) the case took 30–85 s.
-        240_000,
-        true,
+        // A culprit that never ends reds at the harness bound, not at a deadline nobody
+        // reaches. On the loaded stand (48 `yes`, load 4–320) the case took 28–85 s.
+        { harnessMs: 240_000, sampleWorkers: true },
       );
       expect(v.culprit).toEqual({
         stdout: '',

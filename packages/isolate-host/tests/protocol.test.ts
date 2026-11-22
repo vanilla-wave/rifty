@@ -77,8 +77,8 @@ function consume(entry: string, options: string, flags: string[] = [], before = 
     process.on('uncaughtException', (e) => { console.log(JSON.stringify({ uncaught: e.message })); process.exit(0); });
     ${before}
     runCode('1', ${options}).then(
-      (r) => console.log(JSON.stringify({ resolved: r, ms: Date.now() - t, held: globalThis.held })),
-      (e) => console.log(JSON.stringify({ rejected: e.message, ms: Date.now() - t })),
+      async (r) => console.log(JSON.stringify({ resolved: r, ms: Date.now() - t, held: await globalThis.held })),
+      async (e) => console.log(JSON.stringify({ rejected: e.message, ms: Date.now() - t, held: await globalThis.held })),
     );`;
   return JSON.parse(
     execFileSync(process.execPath, [...flags, '--input-type=module', '-e', script], {
@@ -227,33 +227,99 @@ describe('consumer treats the child channel as hostile', () => {
   });
 
   it('a starved consumer: a rerun that finishes after the deadline is a lost call (F1)', () => {
-    const started = join(work, 'starved-rerun-started');
+    // Order imposed, no start in the budget: the call lands on a warm worker the consumer
+    // kills at once; its solo rerun may boot as slowly as it likes while the consumer
+    // stalls (from the check phase: the next turn runs the due deadline before its poll),
+    // and answers only on the consumer's cue, after the deadline. The 3000 ms bound only
+    // has to cover the consumer's own turn that reads the kill and spawns the solo.
+    const ready = join(work, 'starved-rerun-ready');
     const sent = join(work, 'starved-rerun-sent');
     const entry = hostilePackage(
       'rerun after a starved deadline',
-      // First attempt: dies at once (channel and exit together). Its solo rerun answers late.
-      `if (!String(d).includes('"solo":true')) process.kill(process.pid, 'SIGKILL');
-       writeFileSync(${JSON.stringify(started)}, '');
-       setTimeout(() => { f(2, [5]); writeFileSync(${JSON.stringify(sent)}, '') }, 1600)`,
+      `const answer = (r) => {
+         C = [r.call >>> 24, (r.call >>> 16) & 255, (r.call >>> 8) & 255, r.call & 255];
+         if (r.solo) {
+           process.on('SIGUSR2', () => { f(2, [5]); writeFileSync(${JSON.stringify(sent)}, '') });
+           writeFileSync(${JSON.stringify(ready)}, '');
+         } else if (r.code === 'prime') f(2, [0]);
+       };
+       answer(JSON.parse(String(d).split('\\n')[0]));
+       process.stdin.on('data', (more) => answer(JSON.parse(String(more).split('\\n')[0])))`,
     );
     const report = consume(
       entry,
-      '{ timeoutMs: 1500, maxOutputBytes: 1024 }',
+      '{ timeoutMs: 3000, maxOutputBytes: 1024 }',
       [],
-      `const { existsSync } = await import('node:fs');
-       // Stalled from the check phase: the next turn runs its due deadline before its poll.
-       const poll = setInterval(() => {
-         if (!existsSync(${JSON.stringify(started)})) return;
-         clearInterval(poll);
-         setImmediate(() => {
-           const end = Date.now() + 10000;
-           while (!existsSync(${JSON.stringify(sent)})) if (Date.now() > end) throw new Error('no frame');
-         });
-       }, 10);`,
+      `const { execFileSync } = await import('node:child_process');
+       const { existsSync } = await import('node:fs');
+       const kids = (zombie) => execFileSync('ps', ['-A', '-o', 'pid=,ppid=,stat=,command='], { encoding: 'utf8' })
+         .split('\\n').map((l) => /^\\s*(\\d+)\\s+(\\d+)\\s+(\\S+)\\s+(.*)$/.exec(l))
+         .filter((m) => m && Number(m[2]) === process.pid && (zombie ? m[3].startsWith('Z') : m[4].includes('child.js') && !m[3].startsWith('Z')))
+         .map((m) => Number(m[1]));
+       const end = Date.now() + 20000;
+       const until = (ok, what) => { while (!ok()) if (Date.now() > end) throw new Error('no ' + what); };
+       await runCode('prime', { timeoutMs: 60000 });
+       const [warm] = kids(false);
+       queueMicrotask(() => {
+         const due = performance.now() + 3000;
+         process.kill(warm, 'SIGKILL');
+         until(() => kids(true).includes(warm), 'exit');
+         const step = () => {
+           const solo = kids(false).find((p) => p !== warm);
+           if (solo === undefined) return void setImmediate(step);
+           until(() => existsSync(${JSON.stringify(ready)}), 'ready');
+           until(() => performance.now() >= due + 5, 'deadline');
+           process.kill(solo, 'SIGUSR2');
+           until(() => existsSync(${JSON.stringify(sent)}), 'frame');
+         };
+         setImmediate(step);
+       });`,
     ) as { rejected?: string };
     expect(report.rejected).toBe(
       'isolate-host child exited unexpectedly (code null, signal SIGKILL); its rerun did not finish within timeoutMs',
     );
+  });
+
+  it('a worker whose closed-channel grace ran out takes no new call while its loss is judged', () => {
+    // The consumer reads the grace as due together with a call placed in the same timer
+    // phase (a timer 1 ms after the grace's); the worker has exited, unread. That call
+    // must go to a fresh worker, not spend its one rerun on a known-dead one.
+    const entry = hostilePackage(
+      'placement after a grace',
+      `const answer = (r) => {
+         C = [r.call >>> 24, (r.call >>> 16) & 255, (r.call >>> 8) & 255, r.call & 255];
+         if (r.solo) process.kill(process.pid, 'SIGKILL');
+         else if (r.code === '1') { process.on('SIGUSR2', () => process.exit(7)); closeSync(3); }
+         else f(2, [9]);
+       };
+       answer(JSON.parse(String(d).split('\\n')[0]));
+       process.stdin.on('data', (more) => answer(JSON.parse(String(more).split('\\n')[0])))`,
+    );
+    const report = consume(
+      entry,
+      '{ timeoutMs: 5000, maxOutputBytes: 1024 }',
+      [],
+      `const { execFileSync } = await import('node:child_process');
+       const kids = () => execFileSync('ps', ['-A', '-o', 'pid=,ppid=,stat=,command='], { encoding: 'utf8' })
+         .split('\\n').map((l) => /^\\s*(\\d+)\\s+(\\d+)\\s+(\\S+)\\s+(.*)$/.exec(l))
+         .filter((m) => m && Number(m[2]) === process.pid);
+       const arm = globalThis.setTimeout;
+       let cued = false;
+       globalThis.setTimeout = (fn, ms, ...args) => {
+         const timer = arm(fn, ms, ...args);
+         if (ms === ${CHANNEL_END_GRACE_MS} && !cued) {
+           cued = true;
+           const due = performance.now() + ms + 1;
+           arm(() => { globalThis.held = runCode('second', { timeoutMs: 5000 }).then((r) => r, (e) => ({ rejected: e.message })); }, ms + 1);
+           for (const m of kids()) if (m[4].includes('child.js')) process.kill(Number(m[1]), 'SIGUSR2');
+           const end = Date.now() + 10000;
+           while (!kids().some((m) => m[3].startsWith('Z'))) if (Date.now() > end) throw new Error('no exit');
+           while (performance.now() < due + 5);
+         }
+         return timer;
+       };`,
+    ) as { held?: unknown };
+    expect(report.held).toEqual({ stdout: '', stderr: '', exitCode: 9 });
   });
 
   it('a starved consumer: a result sent before the deadline but read after it is timeout (declared, compat ⚠️)', () => {
