@@ -29,10 +29,10 @@ import {
   prepareNodeEvalCompiler,
   projectNodeEvalError,
 } from '../module-loader/loader.ts';
-import { importNodeMain } from '../module-loader/node-main.ts';
 import { formatNodeEvalPrintValue } from '../repl/inspect.ts';
 import { setFatalEvalSource, setFatalOrigin } from './fatal-report.ts';
 import { refreshRuntimeJsProcessBuiltin } from './index.ts';
+import { importNodeMain } from './node-entry-main.ts';
 import {
   type UncaughtOrigin,
   dispatchUncaughtException,

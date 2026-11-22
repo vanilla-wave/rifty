@@ -4,6 +4,7 @@ import { type Node as AcornNode, parse as acornParse } from 'acorn';
 import { firstGuestFrame, hasFatalHeader, markFatalDecorated } from '../builtins/fatal-report.ts';
 import { loadBuiltin } from '../builtins/index.ts';
 import { __setCreateRequireImpl } from '../builtins/module.ts';
+import { nodeMainImports } from '../builtins/node-entry-main.ts';
 import { setSameRealmWorkerModuleImporter } from '../builtins/worker_threads.ts';
 import { createRequirePath } from '../internal/create-require-path.ts';
 import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
@@ -20,7 +21,6 @@ import {
 import { ModuleLoadError } from './errors.ts';
 import { type TransformResult, transformEsm } from './esm-ast.ts';
 import { type TransformSourceHook, executeEsm, requireEsm } from './esm-job.ts';
-import { nodeMainImports } from './node-main.ts';
 import { type CjsModule, ModuleRegistry, createModuleRecord } from './registry.ts';
 import type { PathAliases, ResolvedModule } from './resolver.ts';
 import { type Resolver, createResolver } from './resolver.ts';

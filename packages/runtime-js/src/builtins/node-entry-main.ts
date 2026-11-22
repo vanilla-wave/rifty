@@ -1,5 +1,5 @@
-import type { ModuleLoader } from './loader.ts';
-import type { CjsModule } from './registry.ts';
+import type { ModuleLoader } from '../module-loader/loader.ts';
+import type { CjsModule } from '../module-loader/registry.ts';
 
 type NodeMainImport = (
   specifier: string,
