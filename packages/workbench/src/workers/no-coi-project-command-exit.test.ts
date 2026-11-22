@@ -162,7 +162,7 @@ throw e;`,
 
     const result = await run('node fatal.cjs');
     expect(result).toMatchObject({ status: 'exited', exitCode: 1 });
-    expect(result.stderr).toMatch(/^\/project\/fatal\.cjs:2\n[^]*\n\nError: entry\n {4}at /u);
+    expect(result.stderr).toMatch(/^\/project\/fatal\.cjs:2\n[\s\S]*\n\nError: entry\n {4}at /u);
   });
 
   it('ends a no-listener entry throw with the exitCode its exit listener sets', async () => {

@@ -353,7 +353,7 @@ describe('worker_threads Worker keepalive holds (ADR-0446)', () => {
             events: ['owner-exit:1'],
             reported: 0,
           });
-          expect(stderr).toMatch(/^\w*Error: [^]*\n\nNode\.js v24\.0\.0\n$/u);
+          expect(stderr).toMatch(/^\w*Error: [\s\S]*\n\nNode\.js v24\.0\.0\n$/u);
           await started.worker.terminate();
         });
       } finally {
