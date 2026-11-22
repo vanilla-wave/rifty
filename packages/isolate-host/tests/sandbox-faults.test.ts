@@ -361,7 +361,7 @@ describe('a guest-authored end state is judged as that call’s result (Fault ma
   const POISON: Record<string, string> = {
     'over the cap': `const U = Uint8Array; globalThis.Uint8Array = new Proxy(U, { construct: (t, [n, ...r]) => typeof n === 'number' ? new U(n + 70000) : new U(n, ...r) });`,
     'not bytes': `const U = Uint8Array; globalThis.Uint8Array = new Proxy(U, { construct: (t, a) => (typeof a[0] === 'number' ? {} : new U(...a)) });`,
-    throws: `for (const k of Object.getOwnPropertyNames(DataView.prototype)) if (k.startsWith('set')) DataView.prototype[k] = () => { throw new Error('poisoned') };`,
+    throws: `for (const k of Object.getOwnPropertyNames(DataView.prototype)) if (k.startsWith('set')) DataView.prototype[k] = () => { throw new Error('evil /secret/path') };`,
     hangs: `for (const k of Object.getOwnPropertyNames(DataView.prototype)) if (k.startsWith('set')) DataView.prototype[k] = () => { for (;;) {} };`,
   };
   for (const [label, poison] of Object.entries(POISON)) {
@@ -385,6 +385,8 @@ describe('a guest-authored end state is judged as that call’s result (Fault ma
       expect(v.shared).toBe(1);
       expect(v.exec.stdout).toBe('ran\n');
       expect(v.exec.rejected).toBeUndefined();
+      // The guest's own error text never reaches the host: the code is the trusted side's.
+      expect(JSON.stringify(v.exec)).not.toContain('evil');
       // A codec whose capture resists the poison keeps the run's end state: honest too.
       const kept = v.exec.exitCode === 0 && v.exec.stateRefused === undefined;
       if (kept) expect(v.names).toEqual(['keep', 'new', 'p.js']);
@@ -572,6 +574,63 @@ describe('boot memory and buffer ownership (Final+GREEN findings)', () => {
       expect([...(await sb.readFile('f'))]).toEqual([1, 2, 3]);
     } finally {
       await sb.destroy();
+    }
+  });
+});
+
+describe('restore at the memory boundary (codec review, manager 2026-11-22)', () => {
+  carrier(
+    'a run either sees all of its files or none: a failed restore never runs guest code',
+    async () => {
+      const sb = await createSandbox();
+      try {
+        for (let i = 0; i < 24; i++) await sb.writeFile(`f${i}`, new Uint8Array(1 << 20).fill(i));
+        await sb.writeFile('count.js', "console.log(require('fs').readdirSync('.').length)");
+        const seen = new Set<string>();
+        for (let mb = 24; mb <= 96; mb += 8) {
+          const r = await sb.exec('count.js', { memoryLimitMb: mb });
+          if (r.stateRefused !== undefined) {
+            expect(r).toEqual({
+              stdout: '',
+              stderr: '',
+              exitCode: null,
+              stateRefused: 'ERR_ISOLATE_HOST_SANDBOX_RESTORE',
+            });
+            seen.add('refused');
+          } else if (r.termination === 'memory') seen.add('memory');
+          else {
+            expect(r).toEqual({ stdout: '25\n', stderr: '', exitCode: 0 });
+            seen.add('ran');
+          }
+        }
+        // The sweep crosses the boundary, and the state is intact after every refusal.
+        expect(seen.has('ran')).toBe(true);
+        expect(seen.has('refused') || seen.has('memory')).toBe(true);
+        expect((await sb.exec('count.js')).stdout).toBe('25\n');
+      } finally {
+        await sb.destroy();
+      }
+    },
+  );
+});
+
+describe('snapshot bytes are never aliased (codec review, manager 2026-11-22)', () => {
+  carrier('createSandbox({ snapshot }) copies its input; snapshot() hands out a copy', async () => {
+    const a = await createSandbox();
+    await a.writeFile('f', 'one');
+    const bytes = await a.snapshot();
+    const b = await createSandbox({ snapshot: bytes });
+    try {
+      bytes.fill(0);
+      expect(await text(b, 'f')).toBe('one');
+      const first = await b.snapshot();
+      first.fill(0);
+      const again = await b.snapshot();
+      expect(again.some((x) => x !== 0)).toBe(true);
+      expect(await text(b, 'f')).toBe('one');
+    } finally {
+      await a.destroy();
+      await b.destroy();
     }
   });
 });

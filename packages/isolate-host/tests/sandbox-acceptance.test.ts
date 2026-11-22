@@ -421,6 +421,19 @@ require('fs').writeFileSync('rel/out.txt', require('path').relative(__dirname, _
     diagnosticText: true,
   },
   {
+    // Codec review (manager 2026-11-22): a guest-made NaN/Infinity time or NUL name must
+    // never become a state the next run cannot restore. Node refuses all three.
+    label: 'utimes with NaN or Infinity and a NUL in a name, then a run over the same files',
+    files: {
+      't.js': `const fs = require('fs');
+fs.writeFileSync('f', 'x');
+for (const v of [NaN, Infinity]) { try { fs.utimesSync('f', v, v); console.log('ok', v); } catch (e) { console.log('err', v, e.code); } }
+try { fs.writeFileSync('a\\0b', 'x'); console.log('nul ok'); } catch (e) { console.log('nul err', e.code); }`,
+      'next.js': "console.log(require('fs').readdirSync('.').sort().join(','))",
+    },
+    runs: [['t.js'], ['next.js']],
+  },
+  {
     label: 'missing module',
     files: { 'main.js': "require('./nope')\n" },
     runs: [['main.js'], ['missing.js']],

@@ -672,7 +672,13 @@ export function statSync(
 }
 
 export function existsSync(p: string): boolean {
-  return syncMirror().existsSync(resolvePath(p));
+  let np: string;
+  try {
+    np = resolvePath(p);
+  } catch {
+    return false; // Node: an invalid path (a NUL, a non-path) does not exist
+  }
+  return syncMirror().existsSync(np);
 }
 
 // Remove-family kind gates (review 2026-07-05 handoff r3): the generic VFS

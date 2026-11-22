@@ -59,6 +59,28 @@ function errorOf(fn: () => void): NodeJS.ErrnoException {
   throw new Error('expected throw');
 }
 
+describe('node:fs refuses a NUL in a path, as Node (isolate sandbox corpus, ADR-0568)', () => {
+  it('writeFileSync/readFileSync/mkdirSync: ERR_INVALID_ARG_VALUE with Node 24.16.0 text, nothing written', () => {
+    // Node 24.16.0: The argument 'path' must be a string, Uint8Array, or URL without null bytes. Received 'a\x00b'
+    for (const call of [
+      () => fs.writeFileSync('/workspace/a\0b', 'x'),
+      () => fs.readFileSync('/workspace/a\0b'),
+      () => fs.mkdirSync('/workspace/a\0b'),
+    ]) {
+      expect(call).toThrow(
+        expect.objectContaining({
+          code: 'ERR_INVALID_ARG_VALUE',
+          message:
+            "The argument 'path' must be a string, Uint8Array, or URL without null bytes. Received '/workspace/a\\x00b'",
+        }),
+      );
+    }
+    expect(fs.existsSync('/workspace/a')).toBe(false);
+    // Node: existsSync answers false for a path it would refuse.
+    expect(fs.existsSync('/workspace/a\0b')).toBe(false);
+  });
+});
+
 describe('node:fs.cp dereference (loud gap under no-symlink, ADR-0050)', () => {
   it('cpSync({ dereference: true }) throws NotImplementedError (Node supports it)', () => {
     writeFileSync('/d_src.txt', 'x');

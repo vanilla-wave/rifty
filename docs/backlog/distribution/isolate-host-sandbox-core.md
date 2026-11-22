@@ -72,6 +72,10 @@ path is only for frames an honest worker never sends.
 | a run queued behind another × its deadline | counted from leaving the queue | `sandbox-faults` "leaves the queue" | → I6 |
 | a spinning run in sandbox A × a run in sandbox B | B returns first (per-sandbox order only) | `sandbox-faults` "independent" | → ADR-0568 |
 | a name over 16 383 code units (ADR-0567) × host op / guest write | host op: Node's `ENAMETOOLONG` at once; a run that made one: `stateRefused: 'ERR_FS_SNAPSHOT_TOO_LARGE'`, state of before | `sandbox-faults` "names the snapshot cannot hold" | → I6, I7 |
+| a run's state × the run's memory limit swept across the restore boundary | the run sees all its files or no guest code runs (`RESTORE`/`memory`); state intact | `sandbox-faults` "restore at the memory boundary" | → I1 |
+| guest-made NaN/Infinity times or a NUL name × the next run's restore | as Node: the calls throw (`ERR_INVALID_ARG_TYPE`, `ERR_INVALID_ARG_VALUE`), nothing unrestorable is written | `sandbox-acceptance` corpus "utimes with NaN…" | → I1, I2 |
+| snapshot bytes in / out × the caller's buffer | copies both ways | `sandbox-faults` "never aliased" | → I3 |
+| guest error text from a broken capture × host | never crosses: a fixed code | `sandbox-faults` "throws" (`evil /secret/path`) | → I7 |
 | state bytes worker → isolate × view of a larger buffer | an exact copy crosses | `protocol.test.ts` "decodeState" | → I7 |
 
 ## Out of scope
@@ -86,3 +90,4 @@ The goal's `## Out of scope`; the four codec-dependent REDs turn green on the sn
 - re-cut: 2026-11-22 — added the long-name row after the codec's Final+GREEN round 1 bounded names (manager, PR #418 @ 62a73512e); RED shown red (host write gave `ERR_ISOLATE_HOST_SANDBOX_FULL`) before the fix — trace: I6, I7
 - re-cut: 2026-11-22 — the guest-authored row widened after Contract+RED to accept a codec whose capture resists the poison (state kept, never a rejection) — the reviewer's concern; no defect hidden: the real codec takes the refused/timeout branch for all four poisons — trace: I1, I7
 - re-cut: 2026-11-22 — Final+GREEN round 1 blockers: destroy resolves once the run has left its worker; boot `memory` stays `memory`. Rows added: destroy read at resolution, boot memory, buffer copies, stateless exit violation, refused write leaves no new directories (each RED shown red: mutants N1–N7) — trace: I1, I3, I5, I7
+- re-cut: 2026-11-22 — codec external review (manager): rows for the restore boundary, guest-made NaN/Infinity/NUL, snapshot aliasing, guest error text; the NUL row was red (rifty created the name; fixed at `fs-path.ts`, Node's `nullCheck`) — trace: I1, I2, I3, I7
