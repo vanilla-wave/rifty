@@ -1,6 +1,6 @@
 # ADR 0567: Snapshot the isolate guest filesystem as a versioned binary blob
 
-Status: Proposed
+Status: Accepted
 Date: 2026-11
 
 > TL;DR: The guest's whole in-memory FS becomes one opaque byte string — rifty's own binary format v1 (records + CRC-32), template-bound, read forever by later rifty; a pure-JS codec reads and writes it in the isolate and in the consumer's realm; restore replaces the FS of a fresh isolate before any guest code, all or nothing.
@@ -121,11 +121,13 @@ Rejected (P1, template scale, S ≈ 95 MB):
 
 ## Consequences
 
-- Measured on the prototype (P1): template scale export 0.62 s, import 0.53 s;
-  small workspace (52 files, 410 kB) 3 / 4 ms; landed numbers replace these.
+- Measured on landed code (isolate-guest README §Snapshot, M3 Pro): 23 654
+  files / 100.6 MB — snapshot 132 ms and restore 174 ms in the isolate, 143 /
+  164 ms in Node, ivm copy ≤ 10 ms, smallest `memoryLimit` 231 MiB; 10 files /
+  958 kB — ≤ 2.2 ms each way, 19 MiB.
 - The consumer stores ~S bytes per snapshot; gzip, if wanted, is the host's
   (template scale 95 → 18 MB).
 - A snapshot from an isolate that ran guest code is guest-authored: CRC and
   structure checks keep it consistent, not truthful.
-- Not the user's words: format, CRC-32, replace-on-fresh-only and exact template
-  match are agent decisions (goal `isolate-host-fs-snapshot` Decisions).
+- Not the user's words: format, CRC-32, renewed `ino`, replace-on-fresh-only
+  and exact template match are agent decisions (goal `isolate-host-fs-snapshot` Decisions).

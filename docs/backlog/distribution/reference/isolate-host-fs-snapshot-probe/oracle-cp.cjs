@@ -17,6 +17,9 @@ setTimeout(() => {
     const b = fs.statSync(path.join(dst, rel));
     console.log(rel, JSON.stringify(Object.fromEntries(fields.map((k) => [k, a[k] === b[k]]))));
   }
-  console.log('readdir', JSON.stringify(fs.readdirSync(src)) === JSON.stringify(fs.readdirSync(dst)));
+  console.log(
+    'readdir',
+    JSON.stringify(fs.readdirSync(src)) === JSON.stringify(fs.readdirSync(dst)),
+  );
   fs.rmSync(base, { recursive: true, force: true });
 }, 50);

@@ -24,8 +24,9 @@ import {
 } from '@riftydev/runtime-js/internal';
 import { createModuleLoader } from '@riftydev/runtime-js/loader';
 import { syncMirror } from '@riftydev/vfs';
-import { installMemoryFs } from '@riftydev/vfs/internal';
+import { type MemoryFsSync, installMemoryFs } from '@riftydev/vfs/internal';
 import { UNCOPYABLE_REJECTION } from '../contract.ts';
+import { FsSnapshotError, type SnapshotOptions, restoreFs, snapshotFs } from '../snapshot.ts';
 import { bindNotImplemented } from './loud.ts';
 // Evaluated before every runtime module: the build injects it first (scripts/build-runtime.mjs).
 import {
@@ -40,6 +41,12 @@ import {
 bindNotImplemented(NotImplementedError);
 
 const CWD = '/workspace';
+// The realm's FS exists from load, so a restore before `run` is the tree `run` sees (ADR-0567 §6).
+installMemoryFs();
+const guestFs = syncMirror() as MemoryFsSync;
+guestFs.mkdirSync(CWD, { recursive: true });
+/** Guest code has started in this realm: no restore from here on. */
+let started = false;
 /**
  * Builtin modules `node -e` exposes as lazy globals (Node v24.16.0
  * `Object.getOwnPropertyNames(globalThis)` getters under `[eval]`); `process`
@@ -214,6 +221,7 @@ function fatal(error: unknown): void {
 }
 
 function run(source: string): Promise<number> {
+  started = true;
   // Resolved with a primitive only, so resolving it does no lookup the guest
   // can poison (the thenable check runs only for objects). The child judges
   // the number in its own realm (ADR-0557 §6).
@@ -259,8 +267,6 @@ function run(source: string): Promise<number> {
 
 /** Installs the runtime for one run; before any guest code. */
 function setUp(): void {
-  installMemoryFs();
-  syncMirror().mkdirSync(CWD, { recursive: true });
   installProcessGlobals();
   installTimerGlobals();
   (globalThis as { Buffer?: unknown }).Buffer = Buffer;
@@ -302,7 +308,19 @@ function rejection(copied: unknown): void {
   if (!handleRealmUnhandledRejection(reason, undefined)) fatal(reason);
 }
 
+/** The realm's whole FS; whenever no guest code runs. After guest code ran, the result is guest-authored. */
+function snapshot(options: SnapshotOptions): Uint8Array {
+  return snapshotFs(guestFs, options);
+}
+
+/** Replace the realm's FS; only in a fresh isolate (module cache, fds and cwd would keep the old tree). */
+function restore(bytes: Uint8Array, options: SnapshotOptions): void {
+  if (started)
+    throw new FsSnapshotError('ERR_FS_SNAPSHOT_NOT_FRESH', 'restore runs only before guest code');
+  restoreFs(guestFs, bytes, options);
+}
+
 Object.defineProperty(globalThis, '__riftyGuest', {
-  value: Object.freeze({ run, fire: fireTimer, rejection }),
+  value: Object.freeze({ run, fire: fireTimer, rejection, snapshot, restore }),
   configurable: true,
 });

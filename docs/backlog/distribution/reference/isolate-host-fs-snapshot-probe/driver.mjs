@@ -1,9 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
-import ivm from '../../../../../packages/isolate-host/node_modules/isolated-vm/isolated-vm.js';
 import { createHostBridge } from '../../../../../packages/isolate-guest/dist/index.js';
+import ivm from '../../../../../packages/isolate-host/node_modules/isolated-vm/isolated-vm.js';
 
-const [packFile, memoryLimit, only] = [process.argv[2], Number(process.argv[3] ?? 2048), process.argv[4]];
+const [packFile, memoryLimit, only] = [
+  process.argv[2],
+  Number(process.argv[3] ?? 2048),
+  process.argv[4],
+];
 const bundle = readFileSync(new URL('./spike.js', import.meta.url), 'utf8');
 async function isolateWith() {
   const isolate = new ivm.Isolate({ memoryLimit });
@@ -22,20 +26,28 @@ const heap = (i) => {
   return Math.round((s.used_heap_size + s.externally_allocated_size) / 1048576);
 };
 const pack = readFileSync(packFile);
-const formats = only ? only.split(',') : ['bin-sha', 'bin-crc', 'bin-none', 'tar', 'tar-times', 'json'];
+const formats = only
+  ? only.split(',')
+  : ['bin-sha', 'bin-crc', 'bin-none', 'tar', 'tar-times', 'json'];
 for (const fmt of formats) {
   const runs = [];
   for (let r = 0; r < 3; r++) {
     const { isolate, context } = await isolateWith();
-    await context.evalClosure('globalThis.__pack = $0;', [
-      new Uint8Array(pack.buffer.slice(pack.byteOffset, pack.byteOffset + pack.byteLength)),
-    ], { arguments: { copy: true } });
+    await context.evalClosure(
+      'globalThis.__pack = $0;',
+      [new Uint8Array(pack.buffer.slice(pack.byteOffset, pack.byteOffset + pack.byteLength))],
+      { arguments: { copy: true } },
+    );
     await context.eval('spike.load(globalThis.__pack); globalThis.__pack = null; undefined');
     const h0 = heap(isolate);
     const d0 = await context.eval('spike.digest()');
     const [kind, hash] = fmt.split('-');
     const call =
-      kind === 'bin' ? `spike.exportBin('${hash}')` : kind === 'tar' ? `spike.exportTar(${hash === 'times'})` : 'spike.exportJson()';
+      kind === 'bin'
+        ? `spike.exportBin('${hash}')`
+        : kind === 'tar'
+          ? `spike.exportTar(${hash === 'times'})`
+          : 'spike.exportJson()';
     let t = Date.now();
     await context.eval(`globalThis.__blob = ${call}; undefined`);
     const tExport = Date.now() - t;
@@ -47,10 +59,16 @@ for (const fmt of formats) {
     isolate.dispose();
     const b = await isolateWith();
     t = Date.now();
-    await b.context.evalClosure('globalThis.__blob = $0; undefined', [blob], { arguments: { copy: true } });
+    await b.context.evalClosure('globalThis.__blob = $0; undefined', [blob], {
+      arguments: { copy: true },
+    });
     const tCopyIn = Date.now() - t;
     const imp =
-      kind === 'bin' ? `spike.importBin(__blob, '${hash}', false)` : kind === 'tar' ? 'spike.importTar(__blob)' : 'spike.importJson(__blob)';
+      kind === 'bin'
+        ? `spike.importBin(__blob, '${hash}', false)`
+        : kind === 'tar'
+          ? 'spike.importTar(__blob)'
+          : 'spike.importJson(__blob)';
     t = Date.now();
     await b.context.eval(`${imp}; undefined`);
     const tImport = Date.now() - t;
@@ -58,7 +76,18 @@ for (const fmt of formats) {
     const d1 = await b.context.eval('spike.digest()');
     b.isolate.dispose();
     const g = gzipSync(blob);
-    runs.push({ tExport, tImport, tCopyOut, tCopyIn, size: blob.length, gzip: g.length, hBefore: h0, hExport, hImport, same: d0 === d1 });
+    runs.push({
+      tExport,
+      tImport,
+      tCopyOut,
+      tCopyIn,
+      size: blob.length,
+      gzip: g.length,
+      hBefore: h0,
+      hExport,
+      hImport,
+      same: d0 === d1,
+    });
   }
   const med = (k) => runs.map((x) => x[k]).sort((a, b) => a - b)[1];
   console.log(

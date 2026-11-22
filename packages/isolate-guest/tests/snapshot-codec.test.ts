@@ -3,7 +3,7 @@
  * `isolate-host-fs-snapshot` I1–I5), in the consumer's Node realm over rifty
  * `MemoryFs`. `encode` below is an independent writer of the ADR's byte layout
  * (CRC from `node:zlib`): it pins the format and forges blobs a correct writer
- * never makes. RED until the codec lands (`red` = `it.fails`), then plain `it`.
+ * never makes.
  */
 import { crc32 } from 'node:zlib';
 import { createMemoryFs } from '@riftydev/vfs/internal';
@@ -17,7 +17,7 @@ import {
 } from '../src/index.ts';
 import { listFs } from './snapshot-support.ts';
 
-const red = it.fails;
+const carrier = it;
 
 interface Rec {
   kind: number;
@@ -124,7 +124,7 @@ function refused(bytes: Uint8Array, code: string, options: SnapshotOptions = OPT
 }
 
 describe('format v1 layout (ADR-0567 §1, §2)', () => {
-  red(
+  carrier(
     'a tree writes exactly the ADR bytes: root first, pre-order, code-unit order, full stat',
     () => {
       const fs = createMemoryFs().fsSync;
@@ -151,7 +151,7 @@ describe('format v1 layout (ADR-0567 §1, §2)', () => {
     },
   );
 
-  red(
+  carrier(
     'the same tree gives the same bytes, whatever the creation order; snapshot changes nothing (I5)',
     () => {
       const build = (order: readonly string[]) => {
@@ -178,7 +178,7 @@ describe('format v1 layout (ADR-0567 §1, §2)', () => {
     },
   );
 
-  red(
+  carrier(
     'restore replaces the whole target with exactly the snapshot tree, stat included (I1)',
     () => {
       const source = createMemoryFs().fsSync;
@@ -194,7 +194,7 @@ describe('format v1 layout (ADR-0567 §1, §2)', () => {
     },
   );
 
-  red('a restore changes nothing outside its target (I3)', () => {
+  carrier('a restore changes nothing outside its target (I3)', () => {
     const other = createMemoryFs().fsSync;
     other.writeFileSync('/mine', new Uint8Array([9]));
     const before = listFs(other);
@@ -204,8 +204,8 @@ describe('format v1 layout (ADR-0567 §1, §2)', () => {
     restoreFs(target(), blob, OPTIONS);
     other.writeFileSync('/probe2', new Uint8Array(0));
     // v1 carries no `ino`, so no blob value can reach the realm's counter by construction;
-    // it moves only by the nodes created: target() 3, restore 3, probe2 1.
-    expect(other.statSync('/probe2').metadata?.ino).toBe(first + 7);
+    // it moves only by the nodes created: target() 4 (its root too), restore 3, probe2 1.
+    expect(other.statSync('/probe2').metadata?.ino).toBe(first + 8);
     other.rmSync('/probe1', {});
     other.rmSync('/probe2', {});
     expect(listFs(other).map(({ path, bytes }) => ({ path, bytes }))).toEqual(
@@ -213,7 +213,7 @@ describe('format v1 layout (ADR-0567 §1, §2)', () => {
     );
   });
 
-  red('100 000 siblings round-trip: no quadratic pass over a directory (I3)', () => {
+  carrier('100 000 siblings round-trip: no quadratic pass over a directory (I3)', () => {
     const wide = createMemoryFs().fsSync;
     for (let i = 0; i < 100_000; i++) wide.writeFileSync(`/f${i}`, new Uint8Array(0));
     const options = { template: null, maxBytes: 1 << 30 };
@@ -225,7 +225,7 @@ describe('format v1 layout (ADR-0567 §1, §2)', () => {
 });
 
 describe('limits (ADR-0567 §7, I4)', () => {
-  red(
+  carrier(
     'snapshot: a blob of exactly maxBytes passes, one byte less is refused before allocating',
     () => {
       const fs = createMemoryFs().fsSync;
@@ -238,19 +238,19 @@ describe('limits (ADR-0567 §7, I4)', () => {
     },
   );
 
-  red('restore: length over maxBytes is refused first, even for garbage', () => {
+  carrier('restore: length over maxBytes is refused first, even for garbage', () => {
     refused(new Uint8Array(100).fill(0x41), 'ERR_FS_SNAPSHOT_TOO_LARGE', {
       template: null,
       maxBytes: 99,
     });
   });
 
-  red('a claimed file size past the bytes present is refused, not allocated', () => {
+  carrier('a claimed file size past the bytes present is refused, not allocated', () => {
     const bytes = encode([root, { kind: 2, path: '/f', size: 2 ** 50 }]);
     refused(bytes, 'ERR_FS_SNAPSHOT_CORRUPT');
   });
 
-  red('invalid options are TypeErrors', () => {
+  carrier('invalid options are TypeErrors', () => {
     const fs = createMemoryFs().fsSync;
     for (const options of [
       { template: null, maxBytes: 0 },
@@ -270,12 +270,12 @@ describe('limits (ADR-0567 §7, I4)', () => {
 describe('hostile bytes (ADR-0567 §5, I2, I3)', () => {
   const valid = () => encode([root, dir('/w'), file('/w/a', 'SECRET-a')]);
 
-  red('every truncation is refused', () => {
+  carrier('every truncation is refused', () => {
     const bytes = valid();
     for (let n = 0; n < bytes.length; n++) refused(bytes.subarray(0, n), 'ERR_FS_SNAPSHOT_CORRUPT');
   });
 
-  red('every flipped bit is refused; in the version field as a version', () => {
+  carrier('every flipped bit is refused; in the version field as a version', () => {
     const bytes = valid();
     for (let i = 0; i < bytes.length; i++) {
       for (let bit = 0; bit < 8; bit++) {
@@ -286,7 +286,7 @@ describe('hostile bytes (ADR-0567 §5, I2, I3)', () => {
     }
   });
 
-  red('a wrong checksum, a foreign magic and an empty blob are corrupt', () => {
+  carrier('a wrong checksum, a foreign magic and an empty blob are corrupt', () => {
     refused(encode([root], { crc: 0 }), 'ERR_FS_SNAPSHOT_CORRUPT');
     const foreign = valid();
     foreign[0] = 0x50;
@@ -294,7 +294,7 @@ describe('hostile bytes (ADR-0567 §5, I2, I3)', () => {
     refused(new Uint8Array(0), 'ERR_FS_SNAPSHOT_CORRUPT');
   });
 
-  red('another format version names both numbers', () => {
+  carrier('another format version names both numbers', () => {
     const fs = target();
     expect(() => restoreFs(fs, encode([root], { version: 2 }), OPTIONS)).toThrow(
       /^ERR_FS_SNAPSHOT_VERSION: .*\b2\b.*\b1\b/,
@@ -302,7 +302,7 @@ describe('hostile bytes (ADR-0567 §5, I2, I3)', () => {
     refused(encode([root], { version: 0 }), 'ERR_FS_SNAPSHOT_VERSION');
   });
 
-  red('another template, none, or one where none was expected', () => {
+  carrier('another template, none, or one where none was expected', () => {
     const t = { id: 'tpl', version: '1' };
     // The blob's own template is guest text: never echoed.
     const guestT = encode([root], { template: { id: 'SECRET-id', version: 'SECRET-v' } });
@@ -346,12 +346,12 @@ describe('hostile bytes (ADR-0567 §5, I2, I3)', () => {
     ['bytes after end', [root], [0x53, 0x45, 0x43]],
   ];
   for (const [label, recs, tail] of structural) {
-    red(`${label} — refused, nothing written`, () => {
+    carrier(`${label} — refused, nothing written`, () => {
       refused(encode(recs, { tail }), 'ERR_FS_SNAPSHOT_CORRUPT');
     });
   }
 
-  red('a path or template length past the end is refused', () => {
+  carrier('a path or template length past the end is refused', () => {
     const bytes = encode([root, file('/a')]);
     // Header 13 B, root record 1 + 4 + 2 + 32 = 39 B: the second path length is at 53.
     const view = new DataView(bytes.buffer);

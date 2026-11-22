@@ -1,12 +1,12 @@
 // Does a guest output view cross the bridge as its range or as its whole backing buffer?
 import { readFileSync } from 'node:fs';
-import ivm from '../../../../../packages/isolate-host/node_modules/isolated-vm/isolated-vm.js';
 import { createHostBridge } from '../../../../../packages/isolate-guest/dist/index.js';
+import ivm from '../../../../../packages/isolate-host/node_modules/isolated-vm/isolated-vm.js';
 
 const bundle = readFileSync('../../../../../packages/isolate-guest/dist/guest.js', 'utf8');
 const seen = [];
 const { functions, timeOrigin, close } = createHostBridge({
-  write: (fd, bytes) => seen.push([bytes.byteLength, bytes.buffer.byteLength]),
+  write: (_fd, bytes) => seen.push([bytes.byteLength, bytes.buffer.byteLength]),
   fire: () => {},
 });
 const isolate = new ivm.Isolate({ memoryLimit: 512 });
@@ -23,7 +23,19 @@ const rss0 = process.memoryUsage().rss;
 const t = Date.now();
 const code =
   'const big = new Uint8Array(256 * 1024 * 1024); for (let i = 0; i < 8; i++) process.stdout.write(big.subarray(i, i + 1)); fs.writeSync(1, Buffer.from(big.buffer, 0, 1))';
-start.apply(undefined, [code], { arguments: { copy: true }, result: { promise: true, copy: true } }).then((s) => console.log("status", s), (e) => console.log("rej", e.message)); await new Promise((r) => setTimeout(r, 4000));
-console.log(JSON.stringify(seen), 'ms', Date.now() - t, 'host rss +MiB', Math.round((process.memoryUsage().rss - rss0) / 1048576));
+start
+  .apply(undefined, [code], { arguments: { copy: true }, result: { promise: true, copy: true } })
+  .then(
+    (s) => console.log('status', s),
+    (e) => console.log('rej', e.message),
+  );
+await new Promise((r) => setTimeout(r, 4000));
+console.log(
+  JSON.stringify(seen),
+  'ms',
+  Date.now() - t,
+  'host rss +MiB',
+  Math.round((process.memoryUsage().rss - rss0) / 1048576),
+);
 close();
 isolate.dispose();

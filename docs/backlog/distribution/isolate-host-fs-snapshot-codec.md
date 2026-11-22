@@ -1,6 +1,6 @@
 ---
 area: distribution
-status: draft
+status: ready
 title: Guest FS snapshot codec v1 in the isolate and the consumer realm
 created: 2026-11-22
 why: the goal's one expected wall — no export/import of the guest FS exists
@@ -79,4 +79,5 @@ challenge: 2026-11-22 — reuses the goal's premise check (goal `## Challenge`)
 
 ## Decisions
 
+- ready-verdict: 2026-11-22 — Contract+RED @ 2328d67ea
 - 2026-11-22 — `it.fails` marks RED rows; IMPLEMENT flips them to `it`.

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- FS snapshot (ADR-0567): `snapshotFs`/`restoreFs`/`FsSnapshotError` — the guest's whole in-memory FS as one versioned, template-bound blob (format v1, CRC-32), one pure-JS module for the isolate and the consumer's realm; `GuestEntry` gains `snapshot(options)` and `restore(bytes, options)` (before `run` only). The guest FS is now installed when the bundle loads, not in `run` (same observable `run`).
+
 - Add optional `allowSharedArrayBuffer` on the pre-load `GuestHost` record. False removes the global for feature detection. Shared wasm backing buffers throw the named gap on access. Default true (ADR-0566).
 
 - README: isolated-vm 7.0.2 loses an unhandled rejection a GC collects before its task ends (exit 0, no diagnostic; https://github.com/laverdet/isolated-vm/issues/589); without `onUnhandledRejection` the same loss makes the call settle normally instead of rejecting.
