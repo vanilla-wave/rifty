@@ -16,7 +16,11 @@ export interface SnapshotTemplate {
 export interface SnapshotOptions {
   /** Recorded at snapshot; restore requires the same (both `null`, or equal strings). */
   readonly template: SnapshotTemplate | null;
-  /** Largest blob, in bytes, either direction accepts. */
+  /**
+   * Budget either direction accepts: the blob's bytes + 384 per entry + 8 per
+   * code unit of each entry's path + 80 per level of its depth (ADR-0567 §7).
+   * Bounds memory (limit under 2 × maxBytes + 16 MiB) and time.
+   */
   readonly maxBytes: number;
 }
 
@@ -94,6 +98,18 @@ const MAX_NAME_UNITS = 16_383;
  * dense in entries stays within ~2 × `maxBytes` like one dense in bytes.
  */
 const ENTRY_COST = 384;
+/**
+ * Budget per code unit of an entry's path: decoding, checking and hashing a
+ * long name costs tens of ns a unit (measured, ADR-0567 §7).
+ */
+const PATH_COST = 8;
+/**
+ * Budget per level of an entry's depth: each FS call resolves the path from
+ * `/` segment by segment (~1 µs a level across restore's calls, measured).
+ * With PATH_COST, no tree shape costs more time per budget byte than flat
+ * entries (ADR-0567 §7).
+ */
+const DEPTH_COST = 80;
 /** The Date range, ms: a time a `fs.Stats` Date can hold. */
 const MAX_TIME = 8.64e15;
 
@@ -195,43 +211,70 @@ function timesOf(s: ReturnType<SnapshotFs['statSync']>): SnapshotStat {
   return stat;
 }
 
+/** Budget one entry takes beyond its bytes, for a path of `units` code units (ADR-0567 §7). */
+const entryCost = (units: number, depth: number): number =>
+  ENTRY_COST + PATH_COST * units + DEPTH_COST * depth;
+
 /** The whole tree of `fs` as one blob (ADR-0567 §1). Throws `ERR_FS_SNAPSHOT_TOO_LARGE` before allocating. */
 export function snapshotFs(fs: SnapshotFs, options: SnapshotOptions): Uint8Array {
   const { template, maxBytes } = checkOptions(options);
+  try {
+    return writeSnapshot(fs, template, maxBytes);
+  } catch (error) {
+    // An allocation the isolate's memory limit refused: a refusal, not a crash; the FS is untouched.
+    if (error instanceof RangeError)
+      throw new FsSnapshotError(
+        'ERR_FS_SNAPSHOT_TOO_LARGE',
+        'out of memory building the snapshot (size the memory limit for about 2 × maxBytes)',
+      );
+    throw error;
+  }
+}
+
+function writeSnapshot(
+  fs: SnapshotFs,
+  template: SnapshotTemplate | null,
+  maxBytes: number,
+): Uint8Array {
   let size =
     HEADER +
     (template === null ? 0 : 4 + 2 * (template.id.length + template.version.length)) +
     1 +
     CRC_BYTES;
+  // Budget charged beyond the bytes: per entry and per code unit of its path.
+  let charges = 0;
   const tooLarge = () =>
     new FsSnapshotError(
       'ERR_FS_SNAPSHOT_TOO_LARGE',
-      `the tree needs more than maxBytes ${maxBytes} (bytes + ${ENTRY_COST} per entry)`,
+      `the tree needs more than maxBytes ${maxBytes} (bytes + ${ENTRY_COST} per entry + ${PATH_COST} per path code unit + ${DEPTH_COST} per level of depth)`,
     );
   const entries: Entry[] = [];
   // Pre-order, siblings in code-unit order; iterative (no recursion on depth).
-  const stack: string[] = ['/'];
+  // A pending child holds its parent's path (shared) and its own name.
+  const stack: { path: string; depth: number }[] = [{ path: '/', depth: 0 }];
   while (stack.length > 0) {
-    const path = stack.pop() as string;
+    const { path, depth } = stack.pop() as (typeof stack)[number];
     const s = fs.statSync(path);
     if (s.isDirectory) {
       entries.push({ kind: DIR, path, stat: timesOf(s), data: null });
       size += RECORD + 2 * path.length;
       const names = fs.readdirSync(path).map((d) => d.name);
-      for (const name of names)
-        if (!validName(name))
+      for (const child of names)
+        if (!validName(child))
           throw unrepresentable(
             `a name that is empty, '.', '..', holds '/' or NUL, or exceeds ${MAX_NAME_UNITS} code units`,
           );
       names.sort();
       const prefix = path === '/' ? '/' : `${path}/`;
-      for (let i = names.length - 1; i >= 0; i--) stack.push(prefix + (names[i] as string));
+      for (let i = names.length - 1; i >= 0; i--)
+        stack.push({ path: prefix + (names[i] as string), depth: depth + 1 });
     } else {
       const data = fs.readFileBytesSync(path);
       entries.push({ kind: FILE, path, stat: timesOf(s), data });
       size += RECORD + 2 * path.length + 8 + data.byteLength;
     }
-    if (size + entries.length * ENTRY_COST > maxBytes) throw tooLarge();
+    charges += entryCost(path.length, depth);
+    if (size + charges > maxBytes) throw tooLarge();
   }
   const out = new Uint8Array(size);
   const view = new DataView(out.buffer);
@@ -331,6 +374,17 @@ function decode(bytes: Uint8Array, expected: SnapshotTemplate | null, maxBytes: 
   // The open directories of the pre-order walk, each with its last child name:
   // parent and order checks without a Map keyed by guest strings.
   const open: { path: string; last: string | null }[] = [];
+  // Each entry costs memory and time beyond its bytes: per entry, per path unit
+  // and per level, all charged before anything is written.
+  let charges = 0;
+  const charge = (cost: number, at: number) => {
+    charges += cost;
+    if (length + charges > maxBytes)
+      throw new FsSnapshotError(
+        'ERR_FS_SNAPSHOT_TOO_LARGE',
+        `the snapshot needs more than maxBytes ${maxBytes} (bytes + ${ENTRY_COST} per entry + ${PATH_COST} per path code unit + ${DEPTH_COST} per level of depth) at byte ${at}`,
+      );
+  };
   const out: Decoded[] = [];
   for (;;) {
     need(1);
@@ -341,6 +395,10 @@ function decode(bytes: Uint8Array, expected: SnapshotTemplate | null, maxBytes: 
     need(4);
     const units = view.getUint32(o, true);
     o += 4;
+    // Charge the entry and its path before the path is decoded or split: a
+    // record the budget refuses allocates nothing (depth is charged once known).
+    need(2 * units);
+    charge(entryCost(units, 0), at);
     const path = text(units);
     if (out.length === 0) {
       if (path !== '/' || kind !== DIR)
@@ -358,6 +416,7 @@ function decode(bytes: Uint8Array, expected: SnapshotTemplate | null, maxBytes: 
       if (frame.last !== null && !(name > frame.last))
         throw corrupt('duplicate or out-of-order name', at);
       frame.last = name;
+      charge(DEPTH_COST * open.length, at);
     }
     need(32);
     const times: number[] = [];
@@ -379,12 +438,6 @@ function decode(bytes: Uint8Array, expected: SnapshotTemplate | null, maxBytes: 
       end = o;
     }
     if (kind === DIR) open.push({ path, last: null });
-    // Each entry costs memory and time beyond its bytes: charged before it is written.
-    if (length + (out.length + 1) * ENTRY_COST > maxBytes)
-      throw new FsSnapshotError(
-        'ERR_FS_SNAPSHOT_TOO_LARGE',
-        `the snapshot needs more than maxBytes ${maxBytes} (bytes + ${ENTRY_COST} per entry)`,
-      );
     const [mtimeMs, atimeMs, ctimeMs, birthtimeMs] = times as [number, number, number, number];
     out.push({ kind, path, stat: { mtimeMs, atimeMs, ctimeMs, birthtimeMs }, start, end });
   }

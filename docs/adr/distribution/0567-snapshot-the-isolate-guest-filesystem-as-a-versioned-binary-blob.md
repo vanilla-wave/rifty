@@ -96,16 +96,22 @@ Probes: `docs/backlog/distribution/reference/isolate-host-fs-snapshot-fit-probes
 7. **Limits.** `maxBytes` is a required argument of both directions (an
    invalid `maxBytes` or template is a `TypeError`: a caller bug, not a
    refusal); export
-   sums the size first and refuses before allocating, and refuses a name over
-   16 383 code units (`ERR_FS_SNAPSHOT_TOO_LARGE`); restore checks the
+   sums the size first and refuses before allocating, and refuses what restore
+   would (`ERR_FS_SNAPSHOT_UNREPRESENTABLE`, §6); restore checks the
    blob's length before reading it. `maxBytes` is a budget: bytes + 384 per
-   entry, charged by both directions (restore during validation, before
-   writing). Cost is per byte and per entry: peak memory ≈ 2 × bytes +
-   ~670 B × entries + 15 MiB, restore ≈ 1.1 µs × entries + ~1.6 ms per MB
-   (measured, isolate-guest README), so any blob within a budget peaks under
-   2 × `maxBytes` + 15 MiB — the trusted side's worst case is bounded by what
-   it passed (densest blob in 64 MiB: 155 001 entries, 119 MiB, 179 ms;
-   without the entry charge a 16 MiB blob of empty dirs needed 512 MiB). A
+   entry + 8 per code unit of each entry's path + 80 per level of its depth
+   (every FS call resolves a path from `/`, segment by segment, and long
+   names cost per unit to decode and hash), charged by both directions
+   (restore during validation, before writing). So any blob within a budget M
+   needs a memory limit under 2 × M + 16 MiB (≈ 2 × bytes + ~680 B × entries
+   + 15 MiB) and ~2 ms per MiB of M, flat, deep, long-named or mixed — the
+   trusted side's worst case is bounded by what it passed (64 MiB, measured
+   in isolate-guest README: flat 122 665 entries 95 MiB / 116 ms, deepest
+   chain 120 ms, long names 79 ms; before the entry charge a 16 MiB blob of
+   empty dirs needed 512 MiB, before the depth and path charges a 64 MiB
+   chain took 2.6 s and 65 MB of 16 383-unit paths 2.8 s). An allocation the
+   limit refuses at snapshot is `ERR_FS_SNAPSHOT_TOO_LARGE`, the FS untouched;
+   an isolate the limit kills outright is the embedder's memory termination. A
    snapshot right after a restore with no guest code between can need ~3 × the
    bytes: the restored blob is not yet collected (231–322 MiB at 98 MiB). A
    consumer sizes `memoryLimitMb` for 2 × `maxBytes`.
@@ -141,7 +147,7 @@ Rejected (P1, template scale, S ≈ 95 MB):
   and no checksum can guard against the guest, who authored the bytes;
 - file bytes as views into the blob on restore: pins the blob for the life of
   any file, and export needs 2 × S anyway;
-- a streaming export to cut the 2 × S peak: machinery the contract does not
+- a streaming export to cut the 2 × S memory limit: machinery the contract does not
   need yet (`REV-7`).
 
 ## Consequences

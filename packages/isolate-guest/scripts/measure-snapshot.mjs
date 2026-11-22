@@ -239,11 +239,13 @@ for (let i = 0; template.length < TEMPLATE_FILES; i++) {
 console.log(
   `node ${process.version}, isolated-vm ${createRequire(join(root, '../isolate-host/package.json'))('isolated-vm/package.json').version}`,
 );
-for (const [label, files] of [
-  ['small', small],
-  ['template scale', template],
-])
-  console.log(JSON.stringify(await measure(label, files)));
+const ONLY_BUDGET = process.argv.includes('--budget-only');
+if (!ONLY_BUDGET)
+  for (const [label, files] of [
+    ['small', small],
+    ['template scale', template],
+  ])
+    console.log(JSON.stringify(await measure(label, files)));
 
 /**
  * The densest blob a budget admits (empty directories, short names): the worst
@@ -251,23 +253,42 @@ for (const [label, files] of [
  * heap (run with `--expose-gc` for a clean heap figure); isolate: restore time
  * and memory floor.
  */
-async function measureDense(maxBytes) {
-  const options = { template: null, maxBytes };
-  const fs = createMemoryFs().fsSync;
-  let n = 0;
-  for (;;) {
-    fs.mkdirSync(`/${n.toString(36)}`, { recursive: false });
-    n++;
-    if (n % 5000 === 0) {
-      try {
-        snapshotFs(fs, options);
-      } catch {
-        break;
-      }
+/** The largest `grow(k)` tree that snapshots within the budget (bisection on k). */
+function largest(grow, max, options) {
+  let lo = 1;
+  let hi = max;
+  let blob = snapshotFs(grow(1), options);
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    try {
+      blob = snapshotFs(grow(mid), options);
+      lo = mid;
+    } catch {
+      hi = mid;
     }
   }
-  for (let i = n - 5000; i < n; i++) fs.rmSync(`/${i.toString(36)}`, { recursive: true });
-  const blob = snapshotFs(fs, options);
+  return blob;
+}
+const flatDirs = (k) => {
+  const fs = createMemoryFs().fsSync;
+  for (let i = 0; i < k; i++) fs.mkdirSync(`/${i.toString(36)}`, { recursive: false });
+  return fs;
+};
+const chain = (depth, leaves = 0) => {
+  const fs = createMemoryFs().fsSync;
+  let path = '';
+  for (let i = 0; i < depth; i++) {
+    path += '/a';
+    fs.mkdirSync(path, { recursive: false });
+  }
+  for (let i = 0; i < leaves; i++) fs.mkdirSync(`${path}/${i.toString(36)}`, { recursive: false });
+  return fs;
+};
+
+async function measureDense(label, maxBytes, grow, max) {
+  const options = { template: null, maxBytes };
+  const blob = largest(grow, max, options);
+  const n = new DataView(blob.buffer).getUint32(0, true) && countEntries(blob);
   globalThis.gc?.();
   const heap0 = process.memoryUsage().heapUsed;
   let t = performance.now();
@@ -297,12 +318,67 @@ async function measureDense(maxBytes) {
     else lo = mid;
   }
   return {
-    label: `densest within maxBytes ${maxBytes >> 20} MiB`,
-    entries: n - 5000 + 1,
+    label: `${label} within maxBytes ${maxBytes >> 20} MiB`,
+    entries: n,
     blobBytes: blob.length,
     ms: { nodeRestore, isoRestore },
     nodeRetainedHeapMiB: nodeHeapMiB,
     isolateRestoreFloorMiB: hi,
   };
 }
-console.log(JSON.stringify(await measureDense(64 << 20)));
+/** Entries in a v1 blob without a template: walk the records. */
+function countEntries(blob) {
+  const view = new DataView(blob.buffer, blob.byteOffset, blob.byteLength);
+  let o = 13;
+  let n = 0;
+  for (;;) {
+    const kind = blob[o++];
+    if (kind === 0) return n;
+    n++;
+    const units = view.getUint32(o, true);
+    o += 4 + 2 * units + 32;
+    if (kind === 2) o += 8 + view.getFloat64(o, true);
+  }
+}
+for (const [label, grow, max] of ONLY_BUDGET
+  ? []
+  : [
+      ['flat empty dirs', flatDirs, 400_000],
+      ['deepest chain /a/a/…', chain, 20_000],
+      ['chain of 300 + leaves at its bottom', (k) => chain(300, k), 400_000],
+      [
+        'files with 16 383-unit names under a dir with one too',
+        (k) => {
+          const fs = createMemoryFs().fsSync;
+          const deep = `/${'d'.repeat(16_383)}`;
+          fs.mkdirSync(deep, { recursive: false });
+          for (let i = 0; i < k; i++)
+            fs.writeFileSync(
+              `${deep}/${String(i).padStart(5, '0')}${'n'.repeat(16_378)}`,
+              new Uint8Array(0),
+            );
+          return fs;
+        },
+        4_000,
+      ],
+    ])
+  console.log(JSON.stringify(await measureDense(label, 64 << 20, grow, max)));
+// Budget the template-scale tree needs: bytes + 384 per entry + 8 per path unit + 80 per level.
+{
+  const entries = new Map([['/', 0]]);
+  for (const [path] of template) {
+    const parts = path.split('/').slice(1);
+    for (let i = 1; i <= parts.length; i++) entries.set(`/${parts.slice(0, i).join('/')}`, i);
+  }
+  const depthSum = [...entries.values()].reduce((a, b) => a + b, 0);
+  const unitSum = [...entries.keys()].reduce((a, p) => a + p.length, 0);
+  const blob = snapshotFs(treeOf(template), { template: null, maxBytes: 1 << 30 });
+  console.log(
+    JSON.stringify({
+      label: 'template-scale budget',
+      entries: entries.size,
+      blobBytes: blob.length,
+      budgetBytes: blob.length + 384 * entries.size + 8 * unitSum + 80 * depthSum,
+    }),
+  );
+}

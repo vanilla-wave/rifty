@@ -6,8 +6,7 @@ None: the carrier and the codec landed on the goal branch (Final+GREEN PASS @ 6c
 
 ## Open questions
 
-- I1 says «for any name rifty's FS holds» and the same `fs.statSync` after restore; the landed codec refuses at snapshot names over 16 383 code units or with NUL and times not finite or outside the Date range (`ERR_FS_SNAPSHOT_UNREPRESENTABLE`), and renews `ino` — narrow I1 to that, or require more? — owner: user — asked by the manager 2026-11-22; evidence: ADR-0567 §1, §6, compat rows (Final+GREEN probe: equal-length names over 16 383 units decode quadratically, 76 MiB in 22 s).
-- Scenario step 2 says «identical to step 1», while `ino` is renewed (ADR-0567 §1) — accept «except `ino`»? — owner: user — asked by the manager 2026-11-22.
+- I1 «for any name rifty's FS holds»: the codec also refuses at snapshot names with NUL and times not finite or outside the Date range (`ERR_FS_SNAPSHOT_UNREPRESENTABLE`); rifty stops producing both once PR #419 lands (runtime `nullCheck`, `fs-times.ts`) — narrow I1 for them meanwhile? — owner: user — not yet asked; evidence: compat row, codec `the writer never emits what the reader refuses`.
 - Outcome says «never a partial tree»; a restore that runs out of memory while writing leaves a partial FS in an isolate that then refuses `run`/`snapshot`/`restore` (`ERR_FS_SNAPSHOT_INCOMPLETE`) — accept «all of the tree, or the isolate is thrown away»? — owner: user — asked by the manager 2026-11-22; evidence: acceptance `restore that runs out of memory while writing…`.
 - Does the packaged `isolate-host` need the codec at runtime (today `@riftydev/isolate-guest` is its devDependency, bundled into the child only)? — owner: agent — the sandbox goal decides; noted to the manager 2026-11-22.
 

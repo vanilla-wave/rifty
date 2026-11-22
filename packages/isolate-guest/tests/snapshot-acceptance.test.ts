@@ -209,9 +209,50 @@ describe('guest FS snapshot — scenario', () => {
         { op: 'restore', file, options },
         { op: 'run', code: "console.log(require('fs').readdirSync('/').length)" },
       ]);
-      expect(n).toBeGreaterThan(70_000);
+      expect(n).toBeGreaterThan(60_000);
       expect(restored).toMatchObject({ ok: true });
       expect(listed?.stdout).toBe(`${n - 1000}\n`);
+    },
+  );
+
+  carrier(
+    'a snapshot dense in long two-byte names fits 2 × maxBytes + 16 MiB of isolate memory (I4)',
+    () => {
+      // Empty files with 16 383-unit names of a two-byte character: 390 fill a 64 MiB
+      // budget (~32 KB of bytes + 8 per path unit, per entry and per level).
+      const options = { ...OPTIONS, maxBytes: 64 * MiB };
+      const build = `const fs = require('fs'); const tail = 'ж'.repeat(16_379);
+      for (let i = 0; i < 390; i++) fs.writeFileSync('/workspace/' + String(i).padStart(4, '0') + tail, '');`;
+      const [, built, snap] = drive([
+        { op: 'isolate', memoryLimit: 2 * 64 + 16 },
+        { op: 'run', code: build },
+        { op: 'snapshot', options },
+      ]);
+      expect(built?.exitCode).toBe(0);
+      expect(snap?.error).toBeUndefined();
+      expect(snap?.exact).toBe(true);
+    },
+  );
+
+  carrier(
+    'a snapshot that runs out of isolate memory is a named error; the FS is intact (I4)',
+    () => {
+      // A budget larger than the memory limit allows (the README's sizing broken):
+      // a 50 MiB tree fits a 96 MiB isolate, its blob does not.
+      const options = { ...OPTIONS, maxBytes: 1 << 30 };
+      const [, built, snap, again] = drive([
+        { op: 'isolate', memoryLimit: 96 },
+        {
+          op: 'run',
+          code: "require('fs').writeFileSync('/workspace/big', new Uint8Array(50 * 1024 * 1024))",
+        },
+        { op: 'snapshot', options },
+        // The FS is still there: the same refusal again, not a broken realm.
+        { op: 'snapshot', options },
+      ]);
+      expect(built?.exitCode).toBe(0);
+      expect(snap?.error).toMatch(/^ERR_FS_SNAPSHOT_TOO_LARGE: out of memory/);
+      expect(again?.error).toMatch(/^ERR_FS_SNAPSHOT_TOO_LARGE: out of memory/);
     },
   );
 
