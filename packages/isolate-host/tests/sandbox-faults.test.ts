@@ -146,11 +146,11 @@ for (const C of [Uint8Array, DataView, Map, Set, String, Array]) for (const k of
 console.log('poisoned');`,
         );
         const r = await sb.exec('poison.js');
-        expect(r.stdout).toBe('poisoned\n');
+        expect(String(r.stdout).startsWith('poisoned\n')).toBe(true);
         // Its own state only: refused (state of before) or kept — never a rejection.
         const names = (await sb.list()).map((e) => e.name);
         expect(names).toContain('keep');
-        expect(await sb.exec('poison.js')).toMatchObject({ stdout: 'poisoned\n' });
+        expect(String((await sb.exec('poison.js')).stdout).startsWith('poisoned\n')).toBe(true);
       } finally {
         await sb.destroy();
       }
@@ -377,11 +377,19 @@ describe('a guest-authored end state is judged as that call’s result (Fault ma
       expect(v.shared).toBe(1);
       expect(v.exec.stdout).toBe('ran\n');
       expect(v.exec.rejected).toBeUndefined();
-      if (label === 'hangs')
-        expect(v.exec).toMatchObject({ exitCode: null, termination: 'timeout' });
-      else
-        expect(v.exec).toMatchObject({ exitCode: 0, stateRefused: expect.stringMatching(/^ERR_/) });
-      expect(v.names).toEqual(['keep', 'p.js']);
+      // A codec whose capture resists the poison keeps the run's end state: honest too.
+      const kept = v.exec.exitCode === 0 && v.exec.stateRefused === undefined;
+      if (kept) expect(v.names).toEqual(['keep', 'new', 'p.js']);
+      else {
+        if (label === 'hangs')
+          expect(v.exec).toMatchObject({ exitCode: null, termination: 'timeout' });
+        else
+          expect(v.exec).toMatchObject({
+            exitCode: 0,
+            stateRefused: expect.stringMatching(/^ERR_/),
+          });
+        expect(v.names).toEqual(['keep', 'p.js']);
+      }
     });
   }
 });

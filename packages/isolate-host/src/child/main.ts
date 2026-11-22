@@ -146,7 +146,9 @@ async function run(request: RunRequest): Promise<void> {
     memoryLimit: request.memoryLimitMb,
     // V8 cannot recover this process: report the culprit, then the consumer reruns the rest.
     onCatastrophicError: () => {
-      state.report(KIND.memory, new Uint8Array(0));
+      // A sandbox run's restore or capture that kills V8 is its refused state (ADR-0568 §3).
+      if (state.stateWork === undefined) state.report(KIND.memory, new Uint8Array(0));
+      else state.refuse(state.stateWork);
       dieAfterFlush();
     },
     // `import()` is a gap this host cannot serve, and a rejection the guest may

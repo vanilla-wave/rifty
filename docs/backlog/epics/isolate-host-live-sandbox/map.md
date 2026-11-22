@@ -35,6 +35,12 @@ ROADMAP M14 (I8).
   owner: runtime-js thread (manager) — this goal's PR stays out of ready and
   the goal does not close until its corpus row is green against real Node;
   merge main when it lands.
+- Behavior divergences pinned ⚠️ in the carrier (not diagnostic text): work queued when
+  `process.exit()` runs still runs and a file it writes is kept; an uncaught throw followed by an
+  endless microtask chain ends as `timeout` with its writes rolled back — owner: thread #416
+  (manager) — the PR leaves draft and the goal closes only when they are green against Node, or
+  the manager records them as declared ceilings (goal §Decisions, class "a run silently does
+  something else").
 - The codec seam (`t3/isolate-host-fs-snapshot`) — owner: snapshot thread —
   the manager sends the sha once its shape is stable; build on that branch.
 

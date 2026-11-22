@@ -1,6 +1,6 @@
 ---
 area: distribution
-status: draft
+status: ready
 title: Isolate host sandbox core — createSandbox, host file ops, exec over the snapshot codec, one operation at a time, destroy
 created: 2026-11-22
 why: The first wall of goal isolate-host-live-sandbox — the acceptance carrier fails at `createSandbox`.
@@ -29,8 +29,7 @@ challenge: 2026-11-22 — inherits the goal premise check (`goal.md` §Challenge
 
 ## Acceptance
 
-1. Carrier rows 1–11 and 13 of `isolate-host-sandbox-acceptance` pass
-   (`it`), row 12 waits for `runtime-js/fs-link-apis-not-implemented` → I1–I7, I9
+1. Carrier rows 1–14 of `isolate-host-sandbox-acceptance` pass (`it`) → I1–I7, I9
 2. The package root exports exactly `createSandbox` and `runCode`; every
    argument and result of the sandbox is plain data or `Uint8Array`
    (`sandbox-faults.test.ts` "surface") → I8
@@ -45,8 +44,6 @@ challenge: 2026-11-22 — inherits the goal premise check (`goal.md` §Challenge
 5. A packed consumer (`pnpm pack`, fresh install, plain `node`) runs the
    README's sandbox snippet: `createSandbox` → write → exec → readFile
    (`packed-consumer.test.ts`) → I8
-6. Every result is plain data or `Uint8Array` (`sandbox-faults` "plain data")
-   → I8
 
 ## Fault matrix
 
@@ -65,7 +62,7 @@ path is only for frames an honest worker never sends.
 | end state too large to capture in its isolate × run | own stdout/exit + `stateRefused: 'ERR_ISOLATE_HOST_SANDBOX_CAPTURE'`; state of before; both views agree | `sandbox-faults` "capture out of memory" | → I1 |
 | state too large to restore in the run's isolate × run | `{stdout: '', stderr: '', exitCode: null, stateRefused: 'ERR_ISOLATE_HOST_SANDBOX_RESTORE'}`; state unchanged; next run fine | `sandbox-faults` "restore refused" | → I1 |
 | deadline during the restore of a large state | `timeout`; state unchanged; next run fine | `sandbox-faults` "deadline during restore" | → I1, I6 |
-| guest realm makes the capture over the cap / not bytes / throw / hang, next to a neighbour | `stateRefused` / `timeout`; state of before; neighbour exact; worker kept | `sandbox-faults` "guest-authored end state" ×4 | → I1, I7 |
+| guest realm makes the capture over the cap / not bytes / throw / hang, next to a neighbour | `stateRefused` / `timeout` with the state of before, or (a codec whose captures resist the poison) the run's state kept; never a rejection; neighbour exact; worker kept | `sandbox-faults` "guest-authored end state" ×4 | → I1, I7 |
 | guest replaces intrinsics its capture uses × capture | the exec resolves, the sandbox goes on | `sandbox-faults` "poisoned capture" | → I1, I7 |
 | hostile worker: `state` frame for a `runCode` call, oversized, twice | `isolate-host child protocol violation`; state unchanged | `sandbox-faults` "hostile worker" ×2 | → I7 |
 | hostile worker: corrupt state bytes under the cap | `stateRefused: 'ERR_FS_SNAPSHOT_CORRUPT'`; state unchanged | `sandbox-faults` "corrupt state bytes" | → I7 |
@@ -73,10 +70,15 @@ path is only for frames an honest worker never sends.
 | destroy during a run in its isolate | rejects DESTROYED; the isolate disposed (worker gives its memory back) | `sandbox-faults` "destroy during a run" | → I5 |
 | run past `timeoutMs` × its isolate | `timeout`; isolate disposed | `sandbox-faults` "past timeoutMs" | → I6 |
 | a run queued behind another × its deadline | counted from leaving the queue | `sandbox-faults` "leaves the queue" | → I6 |
-| a spinning run in sandbox A × a run in sandbox B | B returns first (per-sandbox order only) | `sandbox-faults` "independent" | → I4 |
+| a spinning run in sandbox A × a run in sandbox B | B returns first (per-sandbox order only) | `sandbox-faults` "independent" | → ADR-0568 |
 | state bytes worker → isolate × view of a larger buffer | an exact copy crosses | `protocol.test.ts` "decodeState" | → I7 |
+
+## Out of scope
+
+The goal's `## Out of scope`; the four codec-dependent REDs turn green on the snapshot goal's codec, not on a stand-in.
 
 ## Decisions
 
+- ready-verdict: 2026-11-22 — Contract+RED @ 16b7ab607 (verify pass; first pass @ 0c90e7f79 BLOCKER, 7 fixed; JSON on PR #419)
 - 2026-11-22 — exec state frame: worker → consumer one `state` frame per exec call, before its terminal `exit`; payload ≤ `maxFsBytes`.
 - 2026-11-22 — stdout writes already cross as exact copies: a guest writing 20 one-byte views of a filled 150 MiB buffer peaks its worker at 288 MiB, the same as without the writes (probe on 50c9d8bf1).
