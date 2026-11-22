@@ -32,6 +32,9 @@ Where it shows:
   one allocating past the heap limit ends as `termination: 'memory'`; and an `exit()` inside an `'exit'` listener at
   a natural exit still prints the microtask queued before it (corpus ceiling
   `exit-in-exit-listener-at-natural-exit-queued-microtask`).
+- Isolate host, the diagnostic of an uncaught throw from queued work: `queueMicrotask(() => { throw new Error('AFTER') });
+  process.exit(3)` → stderr `Error: AFTER`, exit 3 (Node: empty stderr); the guest's `writeDiagnostic` → `writeHost`
+  bypasses the output drop (same at `50c9d8bf1`).
 - No-COI project command (status Node's, extra output pinned exactly in `declared:` rows of
   `tests/no-coi/no-coi-process-exit-status.spec.ts`): after an `exit()` from a microtask of `-e`, a 0 ms timer, a
   `setImmediate`, an fs callback, a timer and a microtask an `'exit'` listener queues; after a synchronous `exit()` or

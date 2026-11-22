@@ -27,7 +27,9 @@ export interface Row {
 export const GC_CHURN = 'for (let i = 0; i < 2e6; i++) globalThis.gcChurn = { i };';
 
 const NATURAL_EXIT_QUEUED =
-  "at a natural exit only the first microtask hop an 'exit' listener queues counts (distribution/isolate-host-natural-exit-listener-queued-work)";
+  "at a natural exit only the output of the first microtask hop an 'exit' listener queues is kept; a status change there is lost (distribution/isolate-host-natural-exit-listener-queued-work)";
+const NATURAL_EXIT_TICK =
+  "a nextTick an 'exit' listener queues at a natural exit runs; Node runs none (distribution/isolate-host-natural-exit-listener-queued-work)";
 
 export const CORPUS: readonly Row[] = [
   {
@@ -279,7 +281,7 @@ export const CORPUS: readonly Row[] = [
   {
     label: 'exit-listener-next-tick-natural',
     code: "process.on('exit', () => process.nextTick(() => console.log('nt')))",
-    ceiling: NATURAL_EXIT_QUEUED,
+    ceiling: NATURAL_EXIT_TICK,
   },
   {
     label: 'exit-listener-microtask-exit-code-natural',

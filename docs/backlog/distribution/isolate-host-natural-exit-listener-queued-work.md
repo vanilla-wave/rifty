@@ -14,8 +14,12 @@ PR #416 verify review 2026-11-22, `node -e` v24.16.0, natural exit (no `exit()`)
 
 - `.then` chain a1→a2→a3 queued in an `'exit'` listener: Node all three, host `a1`; an async listener with three
   `await`s: Node `a b c d`, host `a b`.
-- `process.exitCode = 6`, `exit(5)` or a throw in a listener-queued microtask: Node 6 / 5 / 1 with the diagnostic;
-  host 0, stderr empty. Same at `50c9d8bf1`.
+- `process.exitCode = 6`, `exit(5)` or a throw in a listener-queued microtask, the first hop included
+  (`Promise.resolve().then(() => process.exit(4))`: Node 4, host 0): Node 6 / 5 / 1 with the `[eval]:1` diagnostic;
+  host 0, stderr empty (a throw via `queueMicrotask`: stderr `Error: L`). Same at `50c9d8bf1`.
+- An `exit()` or throw inside a listener at a natural exit: the microtask queued before it still prints — the runtime
+  does not report that the exit happened during `emit('exit')`, so the guest's output drop (`entry.ts`) keeps the
+  natural-exit allowance. Corpus ceiling `exit-in-exit-listener-at-natural-exit-queued-microtask`.
 - `process.nextTick` queued in a listener: Node prints nothing, host `nt` (same at `50c9d8bf1`).
 
 Cause (first two): `child/main.ts` takes the status at the reaction to the guest's `run()` promise
@@ -23,7 +27,10 @@ Cause (first two): `child/main.ts` takes the status at the reaction to the guest
 run after the result is reported and their output and status are lost. The `nextTick` form: rifty runs the tick
 queue from a microtask; Node's natural exit runs no tick queue after `'exit'`. Corpus ceilings
 `exit-listener-microtask-chain-natural`, `exit-listener-microtask-exit-code-natural`,
-`exit-listener-next-tick-natural` (`packages/isolate-host/tests/corpus.ts`, both lanes).
+`exit-listener-next-tick-natural` (`packages/isolate-host/tests/corpus.ts`, both lanes). The status of the first hop is
+lost too: `settle()` reads it synchronously, before that hop. Fix direction: stop rifty's dispatchers after the
+terminal, or let the host take the result only after the isolate's microtask checkpoint ends. Kernel children
+(output of a listener microtask after `exit()`): not checked.
 
 ## Challenge
 
