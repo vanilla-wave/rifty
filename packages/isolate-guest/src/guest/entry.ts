@@ -264,7 +264,11 @@ function setUp(): void {
   installProcessGlobals();
   installTimerGlobals();
   (globalThis as { Buffer?: unknown }).Buffer = Buffer;
-  setDefaultProcessOutputSink((fd, bytes) => bridge.write(fd, bytes));
+  // Node writes nothing after exit(); work this realm already queued still runs
+  // (backlog runtime-js/node-eval-work-queued-at-exit-runs), its output is dropped.
+  setDefaultProcessOutputSink((fd, bytes) => {
+    if (readNodeProcessTerminal(riftyProcess) === null) bridge.write(fd, bytes);
+  });
   // Node's global console is `require('console')`: util.format over process.stdout/stderr.
   (globalThis as { console?: unknown }).console = nodeConsole;
   setUncaughtHandler((error) => {

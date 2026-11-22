@@ -12,7 +12,6 @@ import { NodeProcess } from '../builtins/process.ts';
 import { awaitDrain, handleRealmUncaughtError, resetKeepalive } from './event-loop-keepalive.ts';
 
 const originalProcess = Object.getOwnPropertyDescriptor(globalThis, 'process');
-
 afterEach(() => {
   resetKeepalive();
   setActiveNodeProcessBootstrap(null);
@@ -20,7 +19,7 @@ afterEach(() => {
 });
 
 /** The no-spec process an in-process host runs: no kernel stdio, no control port. */
-function portlessProcess(stderr: string[]): void {
+function portlessProcess(stderr: string[]): NodeProcess {
   const process = new NodeProcess();
   process.stderr.write = (chunk: string | Uint8Array): boolean => {
     stderr.push(String(chunk));
@@ -32,6 +31,7 @@ function portlessProcess(stderr: string[]): void {
     writable: true,
   });
   setActiveNodeProcessBootstrap(process);
+  return process;
 }
 
 const evalEntry = (source: string) =>
@@ -45,13 +45,15 @@ const evalEntry = (source: string) =>
   });
 
 describe('eval terminal before the drain of a port-less process', () => {
-  it('an exit() from a microtask of the synchronous run settles the later drain with its code', async () => {
+  it('an exit() after the eval returned and before its drain settles that drain with its code', async () => {
     const stderr: string[] = [];
-    portlessProcess(stderr);
-    // The host opens its drain after the entry settles, as the isolate guest and no-COI do.
-    const drain = evalEntry('Promise.resolve().then(() => process.exit(3))').then(() =>
-      awaitDrain({ capMs: 1000 }),
-    );
+    const process = portlessProcess(stderr);
+    // The host opens its drain after the entry settles, as the isolate guest and no-COI do;
+    // a microtask the eval queued runs in between (corpus `exit-in-*` rows run that guest code).
+    const drain = evalEntry('1').then(() => {
+      expect(() => process.exit(3)).toThrow(expect.objectContaining({ exitCode: 3 }));
+      return awaitDrain({ capMs: 1000 });
+    });
     await expect(drain).rejects.toMatchObject({ code: 'RIFTY_PROCESS_EXIT', exitCode: 3 });
     expect(stderr.join('')).toBe('');
   });

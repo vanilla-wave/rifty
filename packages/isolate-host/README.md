@@ -139,7 +139,8 @@ Known differences:
   fire. In guest code, handle every promise: end each chain and the async
   entry point with `.catch((e) => { console.error(e); process.exitCode = 1 })`.
 - Work already queued when `process.exit()` runs (another microtask, a timer
-  already due) still runs and prints; the status is the exit's.
+  already due) still runs: its output is dropped and the status is the exit's,
+  but it takes its time, and an endless one ends the call as `timeout`.
 - An `unref()`'d timer may still fire during the few ms the run takes to
   confirm its loop is idle.
 - An `unhandledRejection` listener receives a copy of the reason, and

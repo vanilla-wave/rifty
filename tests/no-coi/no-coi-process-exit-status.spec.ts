@@ -86,16 +86,25 @@ const evalFatalMicrotask = {
   fatal: 'FATAL-MICRO',
 };
 // An exit from a microtask the synchronous eval queued ends before any later
-// task: the 'exit' listener once, no code after exit(), a pending timer never
-// runs (a 0 ms one still does: backlog runtime-js/node-eval-work-queued-at-exit-runs).
-const EVAL_MICROTASK_EXIT =
-  "process.on('exit',(c)=>console.log('L|exit',c));setTimeout(()=>console.log('L|timer'),50);console.log('L|before');Promise.resolve().then(()=>{process.exit(3);console.log('L|after')})";
-const evalMicrotaskExit = {
-  name: 'eval-microtask-exit',
+// task: the 'exit' listener once, no code after exit(), a pending timer never runs.
+const microtaskExit = (delay: number) =>
+  `process.on('exit',(c)=>console.log('L|exit',c));setTimeout(()=>console.log('L|timer'),${delay});console.log('L|before');Promise.resolve().then(()=>{process.exit(3);console.log('L|after')})`;
+const evalCase = (name: string, source: string): ProcessLifecycleCase => ({
+  name,
   files: {},
-  nodeArgv: ['-e', EVAL_MICROTASK_EXIT],
-  line: `node -e "${EVAL_MICROTASK_EXIT}"`,
-};
+  nodeArgv: ['-e', source],
+  line: `node -e "${source}"`,
+});
+const evalMicrotaskExit = evalCase('eval-microtask-exit', microtaskExit(50));
+// Declared gap: a 0 ms timer queued before the exit still runs
+// (backlog runtime-js/node-eval-work-queued-at-exit-runs).
+const evalMicrotaskExitRipeTimer = evalCase('eval-microtask-exit-ripe-timer', microtaskExit(0));
+// A file entry has no eval lifecycle: the same exits from its microtasks.
+const fileMicrotaskExit = program('file-microtask-exit', microtaskExit(50));
+const fileQueueMicrotaskExit = program(
+  'file-queue-microtask-exit',
+  "console.log('L|before');queueMicrotask(()=>process.exit(4))",
+);
 // Node reads the status after its report: a write the report's own `stack`
 // getter makes counts, on the entry terminal and the rejection trap alike.
 const GETTER = (marker: string) =>
@@ -145,6 +154,8 @@ const commandCases: readonly ProcessLifecycleCase[] = [
   exitEntryTimer,
   evalFatalMicrotask,
   evalMicrotaskExit,
+  fileMicrotaskExit,
+  fileQueueMicrotaskExit,
   fatalStackGetter,
   rejectionStackGetter,
   fatalSilencedStderr,
@@ -202,8 +213,11 @@ async function expectNodeStatus(
   ).toEqual({ exit: oracle.code, rows: lifecycleRows(oracle.stdout), fatal: true });
 }
 
-for (const testCase of commandCases) {
-  test(`project command reports Node's status: ${testCase.name}`, async ({ page }) => {
+const commandCeilings: ReadonlySet<string> = new Set([evalMicrotaskExitRipeTimer.name]);
+
+for (const testCase of [...commandCases, evalMicrotaskExitRipeTimer]) {
+  const run = commandCeilings.has(testCase.name) ? test.fail : test;
+  run(`project command reports Node's status: ${testCase.name}`, async ({ page }) => {
     test.setTimeout(120_000);
     await page.goto('/no-coi-harness.html');
     const observed = await page.evaluate(

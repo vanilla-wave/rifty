@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- `run()` settles for `process.exit(n)` or an uncaught throw from a microtask of the guest's synchronous run (exit n / 1); before it never settled.
+- `run()` settles for `process.exit(n)` or an uncaught throw from a microtask of the guest's synchronous run (exit n / 1); before it never settled. Guest stdout/stderr written after the process's exit is dropped (Node prints nothing after `exit()`).
 - Add optional `allowSharedArrayBuffer` on the pre-load `GuestHost` record. False removes the global for feature detection. Shared wasm backing buffers throw the named gap on access. Default true (ADR-0566).
 
 - README: isolated-vm 7.0.2 loses an unhandled rejection a GC collects before its task ends (exit 0, no diagnostic; https://github.com/laverdet/isolated-vm/issues/589); without `onUnhandledRejection` the same loss makes the call settle normally instead of rejecting.
