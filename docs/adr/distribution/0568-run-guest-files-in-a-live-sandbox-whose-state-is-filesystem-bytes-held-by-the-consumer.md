@@ -16,8 +16,7 @@ exec / snapshot / destroy` over RPC. Recorded user decisions the model must
 keep: «харденинг нужен только на внешнем шве: выставленные хостовые функции,
 исходящий RPC, spawn наружу, передача результата» and «Владелец ФС живёт в том
 же realm, что и гость (внутри isolate)» (stated as the reason SAB is not
-needed). The state model is a user fork carried by the manager; this ADR
-records the manager's default. Step 0
+needed). The state model's host-disk alternative was rejected by the user (§Not the user's words). Step 0
 (`docs/backlog/distribution/reference/isolate-host-sandbox-step0.md`):
 `new Array(2 ** 28).fill(0)` ends in V8's catastrophic OOM, an ICU flood
 keeps the worker above its ceiling after its isolate is disposed; ivm copies a
@@ -129,8 +128,8 @@ view's whole backing buffer; rifty's program entry has diagnostic gaps and no
   quota as disk accounting); the guest leaves rifty's VFS for an OS-dependent
   one. Lost per outcome: nothing a killed process would not lose (partial
   writes kept). Density: an idle sandbox = its directory; a run = a solo
-  worker (no rerun: not idempotent). Cost: per syscall. Not built (manager
-  default, 2026-11-22).
+  worker (no rerun: not idempotent). Cost: per syscall. Rejected by the user,
+  2026-11-22: «все правильно, не нужно давать настоящую fs».
 - **A′. A live isolate per agent run, bytes only as a restore point.**
   Closest to the requirements' wording (one instance per agent run, restore
   once). Not chosen: a run must be a fresh realm (globals, module cache,
@@ -165,11 +164,14 @@ view's whole backing buffer; rifty's program entry has diagnostic gaps and no
 
 ## Not the user's words
 
-Manager decisions by delegation (2026-11-22), shown to the user, unanswered when written; a user
-answer lands as a dated correction here: the state model (bytes held by the consumer, a restore and
-a capture per run, a killed run rolled back) over a host-disk directory; one size mechanism (the
-codec's count, no quota inside the guest FS); the killed-run shape `exitCode: null` + `termination`
-(ADR-0557 dated line 2026-11-22).
+The user, 2026-11-22 (asked whether the guest should get a directory on the host disk): «все
+правильно, не нужно давать настоящую fs» — no real filesystem for the guest; alternative B is the
+user's rejection.
+
+Manager decisions by delegation (2026-11-22), not the user's words: a restore and a capture per run
+with a killed run rolled back, and the per-run cost while a template layer is part of the state; one
+size mechanism (the codec's count, no quota inside the guest FS); the killed-run shape `exitCode:
+null` + `termination` (ADR-0557 dated line 2026-11-22).
 
 Agent decisions: the API names and defaults, `stateRefused` as a result field, one operation at a
 time per sandbox with the deadline from dequeue, `/workspace` and `/tmp` in a fresh FS, `env`/`cwd`/
