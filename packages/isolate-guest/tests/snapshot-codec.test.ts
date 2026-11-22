@@ -591,8 +591,10 @@ describe('the budget bounds time as well as memory (ADR-0567 §7, I3)', () => {
 });
 
 describe('random trees: snapshot refuses by name or restores byte for byte (ADR-0567 §5)', () => {
-  // A fixed-seed generator (mulberry32) over what rifty's FS holds: odd and long
-  // names, NUL, deep paths, odd times, binary contents.
+  // A fixed-seed generator (mulberry32) over what rifty's FS holds. Most trees
+  // are representable and non-trivial (tens of entries, depth, files and dirs,
+  // odd names); one in five gets one state the format cannot carry, and the
+  // refusal must name exactly that.
   const rng = (start: number) => {
     let seed = start;
     return () => {
@@ -602,87 +604,99 @@ describe('random trees: snapshot refuses by name or restores byte for byte (ADR-
       return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
   };
-  const NAMES = [
+  const PARTS = [
     'a',
     'B',
     'é',
     '😀',
     '\uD800',
+    '\uDFFF',
     ' ',
     'x\ny',
-    '\0',
     '.git',
-    'n'.repeat(16_383),
-    'm'.repeat(16_384),
     '__proto__',
     'constructor',
+    'z'.repeat(300),
   ];
-  const TIMES = [
-    0,
-    -0,
-    1.25,
-    -1e12,
-    8.64e15,
-    -8.64e15,
-    8.64e15 + 1,
-    Number.NaN,
-    Number.POSITIVE_INFINITY,
-    1e306,
-    1_700_000_000_000,
+  const TIMES = [0, -0, 1.25, -1e12, 8.64e15, -8.64e15, 1_700_000_000_000.5];
+  const BAD: readonly [
+    string,
+    (fs: ReturnType<typeof createMemoryFs>['fsSync'], dir: string) => void,
+  ][] = [
+    [
+      'NUL in a name',
+      (fs, dir) => fs.writeFileSync(`${dir === '/' ? '' : dir}/bad\0name`, new Uint8Array(0)),
+    ],
+    [
+      'a name over 16 383 code units',
+      (fs, dir) =>
+        fs.writeFileSync(`${dir === '/' ? '' : dir}/${'m'.repeat(16_384)}`, new Uint8Array(0)),
+    ],
+    ['a time outside the Date range', (fs, dir) => fs.utimes(dir, 1, 8.64e15 + 1)],
+    ['a NaN time', (fs, dir) => fs.utimes(dir, Number.NaN, 1)],
   ];
-  carrier('300 trees', () => {
+  carrier('200 trees', () => {
     const next = rng(20261122);
     const pick = <T>(xs: readonly T[]): T => xs[Math.floor(next() * xs.length)] as T;
-    const outcomes = new Set<string>();
-    for (let t = 0; t < 300; t++) {
+    const counts = { restored: 0, refused: 0, entries: 0, deepest: 0, files: 0, dirs: 0 };
+    for (let t = 0; t < 200; t++) {
       const fs = createMemoryFs().fsSync;
       const dirs = ['/'];
-      for (let i = 0, n = 1 + Math.floor(next() * 12); i < n; i++) {
+      for (let i = 0, n = 20 + Math.floor(next() * 40); i < n; i++) {
         const parent = pick(dirs);
-        const name = pick(NAMES) + (next() < 0.5 ? String(i) : '');
+        const name = `${pick(PARTS)}${pick(PARTS)}${i}`;
         const path = parent === '/' ? `/${name}` : `${parent}/${name}`;
-        try {
-          if (next() < 0.4) {
-            fs.mkdirSync(path, { recursive: false });
-            dirs.push(path);
-          } else {
-            fs.writeFileSync(
-              path,
-              new Uint8Array(
-                Array.from({ length: Math.floor(next() * 64) }, () => Math.floor(next() * 256)),
-              ),
-            );
-          }
-          if (next() < 0.5)
-            fs.restoreStatSync(path, {
-              mtimeMs: pick(TIMES),
-              atimeMs: pick(TIMES),
-              ctimeMs: pick(TIMES),
-              birthtimeMs: pick(TIMES),
-            });
-        } catch {
-          // A name the FS itself refuses (an existing path): skip it.
+        if (next() < 0.35) {
+          fs.mkdirSync(path, { recursive: false });
+          dirs.push(path);
+          counts.dirs++;
+        } else {
+          const bytes = Array.from({ length: Math.floor(next() * 64) }, () =>
+            Math.floor(next() * 256),
+          );
+          fs.writeFileSync(path, new Uint8Array(bytes));
+          counts.files++;
         }
+        if (next() < 0.5)
+          fs.restoreStatSync(path, {
+            mtimeMs: pick(TIMES),
+            atimeMs: pick(TIMES),
+            ctimeMs: pick(TIMES),
+            birthtimeMs: pick(TIMES),
+          });
+        counts.deepest = Math.max(counts.deepest, path.split('/').length - 1);
       }
+      counts.entries += listFs(fs).length;
+      const bad = next() < 0.2 ? pick(BAD) : undefined;
+      if (bad) bad[1](fs, pick(dirs));
       let blob: Uint8Array;
       try {
-        blob = snapshotFs(fs, OPTIONS);
+        blob = snapshotFs(fs, { template: null, maxBytes: 1 << 26 });
       } catch (error) {
-        expect(error).toBeInstanceOf(FsSnapshotError);
-        expect(['ERR_FS_SNAPSHOT_UNREPRESENTABLE', 'ERR_FS_SNAPSHOT_TOO_LARGE']).toContain(
-          (error as FsSnapshotError).code,
-        );
-        outcomes.add((error as FsSnapshotError).code);
+        // Refused only when the tree holds the state, and by its name.
+        expect(bad?.[0], `tree ${t}: ${String(error)}`).toBeDefined();
+        expect((error as FsSnapshotError).code).toBe('ERR_FS_SNAPSHOT_UNREPRESENTABLE');
+        expect((error as Error).message).toMatch(bad?.[0].includes('name') ? /name/ : /time/);
+        counts.refused++;
         continue;
       }
+      expect(bad, `tree ${t} holds ${bad?.[0]} yet snapshotted`).toBeUndefined();
       const back = createMemoryFs().fsSync;
-      restoreFs(back, blob, OPTIONS);
+      restoreFs(back, blob, { template: null, maxBytes: 1 << 26 });
       expect(listFs(back)).toEqual(listFs(fs));
-      expect(Buffer.from(snapshotFs(back, OPTIONS)).equals(Buffer.from(blob))).toBe(true);
-      outcomes.add('restored');
+      expect(
+        Buffer.from(snapshotFs(back, { template: null, maxBytes: 1 << 26 })).equals(
+          Buffer.from(blob),
+        ),
+      ).toBe(true);
+      counts.restored++;
     }
-    // The generator reaches both sides.
-    expect([...outcomes].sort()).toEqual(['ERR_FS_SNAPSHOT_UNREPRESENTABLE', 'restored']);
+    expect(counts.restored).toBeGreaterThan(140);
+    expect(counts.refused).toBeGreaterThan(20);
+    expect(counts.entries / 200).toBeGreaterThan(20);
+    expect(counts.deepest).toBeGreaterThan(4);
+    expect(counts.dirs).toBeGreaterThan(1000);
+    expect(counts.files).toBeGreaterThan(1000);
   });
 });
 
@@ -828,6 +842,12 @@ describe('hostile bytes (ADR-0567 §5, I2, I3)', () => {
       /time/,
     ],
     ['negative size', [root, { ...file('/a'), size: -1 }], undefined, /bad file size/],
+    [
+      'size −0 (restores as +0: not byte-exact)',
+      [root, { ...file('/a'), size: -0 }],
+      undefined,
+      /bad file size/,
+    ],
     ['bytes after end', [root], [0x53, 0x45, 0x43]],
   ];
   for (const [label, recs, tail, detail] of structural) {
