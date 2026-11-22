@@ -125,7 +125,8 @@ const rows: readonly FatalRow[] = [
     // (ADR-0445 2026-11-22): rifty's parser position line instead.
     residual: {
       header: null,
-      error: "SyntaxError: Unexpected token ';'\n    (rifty parser position: <root>/syntax.cjs:2:9)",
+      error:
+        "SyntaxError: Unexpected token ';'\n    (rifty parser position: <root>/syntax.cjs:2:9)",
       stack: false,
     },
   },
