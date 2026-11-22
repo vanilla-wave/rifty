@@ -146,7 +146,7 @@ export function createCjsInteropAuthority(options: {
     if (!record || record.state !== 'loaded' || record.kind === 'esm') {
       throw new Error(`CJS import did not produce a loaded record: ${resolved.id}`);
     }
-    return cjsNamespaceFor(record, primedNamespaces.get(record.id), knownNames(resolved));
+    return cjsNamespaceFor(record, primedNamespaces.get(resolved.id), knownNames(resolved));
   }
 
   function importCjs(
