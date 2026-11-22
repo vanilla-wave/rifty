@@ -28,6 +28,7 @@ const PromiseConstructorPrimordial = Promise;
 const promiseResolvePrimordial = Promise.resolve;
 const promiseThenPrimordial = Promise.prototype.then;
 const reflectApplyPrimordial = Reflect.apply;
+const queueMicrotaskPrimordial = globalThis.queueMicrotask;
 
 interface KeepaliveState {
   refCount: number;
@@ -480,6 +481,7 @@ interface RejectionTarget {
 interface ErrorEventLike {
   readonly error?: unknown;
   readonly message?: unknown;
+  readonly defaultPrevented?: boolean;
   preventDefault?(): void;
 }
 interface ErrorTarget {
@@ -488,19 +490,29 @@ interface ErrorTarget {
 
 /**
  * A realm-uncaught error (ADR-0445): process listeners first; unhandled → the
- * eval terminal claim, else the default Worker report. True = cancel the report.
+ * eval terminal claim, else the process's fatal terminal (Node's report, one
+ * exit request), run now or by `defer`; no process → the default Worker report.
+ * True = cancel the report.
  */
-export function handleRealmUncaughtError(reason: unknown): boolean {
+export function handleRealmUncaughtError(
+  reason: unknown,
+  defer?: (terminal: () => void) => void,
+): boolean {
   if (isRiftyProcessExit(reason)) return true;
   const outcome = takeUndispatchedRethrow(reason)
     ? null
     : dispatchUncaughtException(reason, 'uncaughtException');
   if (outcome?.kind === 'handled' || outcome?.kind === 'exited') return true;
   if (beginNodeEvalUnhandled(reason, 'uncaught-error')) return true;
-  // As a rejection: the fatal terminal runs now (Node's report, one exit request).
-  const fatal = outcome?.kind === 'unhandled' ? terminateFatal(outcome.error) : null;
-  if (fatal !== null) recordRejection(fatal);
-  return fatal !== null;
+  if (outcome?.kind !== 'unhandled') return false;
+  const error = outcome.error;
+  const terminal = () => {
+    const fatal = terminateFatal(error);
+    if (fatal !== null) recordRejection(fatal);
+  };
+  if (defer === undefined) terminal();
+  else defer(terminal);
+  return true;
 }
 
 /**
@@ -536,7 +548,22 @@ export function installUnhandledErrorTrap(
         : typeof event.message === 'string'
           ? new Error(event.message)
           : new Error('Worker terminated by an uncaught error');
-    if (handleRealmUncaughtError(reason)) event.preventDefault?.();
+    // ADR-0340: a global error another 'error' listener cancels stays
+    // nonterminal, so the fatal terminal runs after the dispatch, unless canceled.
+    const prevent = event.preventDefault;
+    let canceled = event.defaultPrevented === true;
+    if (typeof prevent === 'function') {
+      event.preventDefault = () => {
+        canceled = true;
+        reflectApplyPrimordial(prevent, event, []);
+      };
+    }
+    const claimed = handleRealmUncaughtError(reason, (terminal) =>
+      queueMicrotaskPrimordial(() => {
+        if (!canceled) terminal();
+      }),
+    );
+    if (claimed && typeof prevent === 'function') reflectApplyPrimordial(prevent, event, []);
   });
 }
 

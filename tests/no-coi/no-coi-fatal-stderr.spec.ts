@@ -1,5 +1,6 @@
 import { stripVTControlCharacters } from 'node:util';
 import { expect, test } from '@playwright/test';
+import { nodeFileRoot } from '../browser-unit/fixtures/node-file-programs.ts';
 import {
   type ProcessLifecycleCase,
   runLifecycleOracle,
@@ -148,12 +149,8 @@ const rows: readonly FatalRow[] = [
     files: {},
     nodeArgv: ['-e', "require('missing-pkg')"],
     line: `node -e "require('missing-pkg')"`,
-    // Node's header names its own loader source (`node:internal/…`); inspect
-    // breaks Node's long temp path onto lines, not the short `/fatal-stderr` one.
-    residual: {
-      header: null,
-      props: "code: 'MODULE_NOT_FOUND',\nrequireStack: [ '<root>/[eval]' ]",
-    },
+    // Node's header names its own loader source (`node:internal/…`).
+    residual: { header: null },
   },
   {
     name: 'non-error-throw',
@@ -168,6 +165,8 @@ for (const row of rows) {
   test(`project command prints Node's sync fatal report: ${row.name}`, async ({ page }) => {
     test.setTimeout(120_000);
     const oracle = await runLifecycleOracle(row);
+    // As long as the oracle's dir, so inspect breaks printed paths alike.
+    const projectRoot = nodeFileRoot('/', ROOT.slice(1), oracle.root);
     await page.goto('/no-coi-harness.html');
     const observed = await page.evaluate(
       async ({ root, projectRoot, files, line }) => {
@@ -197,7 +196,7 @@ for (const row of rows) {
       },
       {
         root: process.cwd().replaceAll('\\', '/'),
-        projectRoot: ROOT,
+        projectRoot,
         files: row.files,
         line: row.line ?? `node ${row.nodeArgv.join(' ')}`,
       },
@@ -207,7 +206,7 @@ for (const row of rows) {
       contentType: 'application/json',
     });
     const node = fatalShape(oracle.stderr, oracle.root);
-    const rifty = fatalShape(observed.stderr, ROOT);
+    const rifty = fatalShape(observed.stderr, projectRoot);
     const label = `${row.name} vs Node ${oracle.version}\n--- node\n${oracle.stderr}\n--- rifty\n${observed.stderr}`;
     const declared = row.residual as Readonly<Record<string, unknown>>;
     const compared = (shape: FatalShape) =>

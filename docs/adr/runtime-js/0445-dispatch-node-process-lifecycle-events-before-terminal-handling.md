@@ -222,4 +222,9 @@ sample. Node v24.16.0 facts: evidence §O1–§O3.
   Carriers assert none on every row (`NODE_HEADER`); the dispatch origin no
   longer reaches the report. `-e`'s `[eval]` decoration predates this
   decision and is not changed (`backlog/runtime-js/node-eval-header-from-throw-statement`).
+- 2026-11-23 — rule 3's realm-uncaught terminal (2026-11-22) runs after the
+  `error` dispatch (a microtask), so a global error another listener cancels
+  stays nonterminal (ADR-0340); before, it ended the process inside the trap
+  (CI on Linux, PR #421; `kernel-process-terminal-drain-real-worker.spec.ts`).
+  The child writes Node's report to its own stderr, sequenced after stdout.
 

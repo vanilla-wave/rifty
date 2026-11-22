@@ -538,9 +538,13 @@ export function nodeFileExpected(
  */
 export function nodeFileRoot(parent: string, name: string, oracleRoot: string): string {
   const width = oracleRoot.length - parent.length;
-  if (width < name.length)
-    throw new Error(`oracle root ${oracleRoot} is shorter than ${parent}${name}`);
-  return `${parent}${name.padEnd(width, '_')}`;
+  // A short oracle dir (Linux `/tmp/…`) fits no row name: a stable token of it.
+  let hash = 5381;
+  for (const char of name) hash = (hash * 33 + (char.codePointAt(0) ?? 0)) >>> 0;
+  const id = name.length <= width ? name : `r${hash.toString(36)}`;
+  if (width < id.length)
+    throw new Error(`oracle root ${oracleRoot} is shorter than ${parent}${id}`);
+  return `${parent}${id.padEnd(width, '_')}`;
 }
 
 export function nodeFileNormalized(outcome: NodeFileOutcome, root: string): NodeFileOutcome {
