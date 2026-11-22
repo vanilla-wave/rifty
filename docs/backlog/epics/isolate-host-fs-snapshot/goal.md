@@ -54,7 +54,8 @@ no sandbox API (that lives in the sandbox goal).
 1. I1. Round trip: after restore, guest code sees for every path the same
    kind, bytes, `readdirSync` order and `fs.statSync` (`size`, `nlink`,
    `mode`, `mtimeMs`, `atimeMs`, `ctimeMs`, `birthtimeMs`) as before snapshot,
-   for any name rifty's FS holds; between the isolate and the consumer's realm
+   for any name rifty's FS holds of at most 16 383 code units (a longer name
+   is refused loudly both ways); between the isolate and the consumer's realm
    in both directions. `ino` is renewed, as after a copy (ADR-0567 §1); what
    a snapshot does not keep (`ino`; links, modes, owners — absent from rifty's
    FS) is named in `docs/public/compat/isolate-host.md`.
@@ -98,6 +99,7 @@ final-check: 2026-11-22 — PASS (fresh read-only RDY-6 pass over goal, map, dra
 
 ## Decisions
 
+- amend: 2026-11-22 — manager decision by delegation, not the user's words: «I1 сужается до имён ≤ 16 383 code units … линейный разбор враждебных байтов в доверенном realm, I3, важнее имён, которых в Node не бывает» — I1 names capped at 16 383 code units (V8 hashes longer strings by length alone: 76 MiB of such paths decoded in 22 s, Final+GREEN probe); reversible (a reader accepting more is compatible); rifty accepting names over NAME_MAX is a vfs parity gap, `backlog/vfs/file-names-over-name-max-accepted` — once closed, the cap is unreachable for an honest tree.
 - tier: robust — the bytes are guest-authored and come back from storage: every reachable defect × {snapshot, restore} × {isolate, consumer realm} has a named outcome and a fault test; no crash-atomic storage promise (the consumer owns storage).
 - 2026-11-22 — manager: one goal = one PR; this goal lands first and standalone; embedding in the sandbox API, the rest-point rule and the sandbox-level e2e belong to the sandbox goal's PR.
 - 2026-11-22 — manager: the codec runs in two realms (isolate and the consumer's Node realm); the decoder trusts no property only an honest encoder guarantees.

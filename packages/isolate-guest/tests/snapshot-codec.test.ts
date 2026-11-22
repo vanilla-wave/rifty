@@ -225,6 +225,11 @@ describe('format v1 layout (ADR-0567 §1, §2)', () => {
 });
 
 describe('long names (ADR-0567 §5, I3)', () => {
+  carrier('restore: a blob name of 16 383 code units is accepted, 16 384 refused', () => {
+    restoreFs(createMemoryFs().fsSync, encode([root, file(`/${'n'.repeat(16_383)}`)]), OPTIONS);
+    refused(encode([root, file(`/${'n'.repeat(16_384)}`)]), 'ERR_FS_SNAPSHOT_CORRUPT');
+  });
+
   carrier('a name of 16 383 code units round-trips; a longer one is refused at snapshot', () => {
     const fs = createMemoryFs().fsSync;
     fs.writeFileSync(`/${'n'.repeat(16_383)}`, new Uint8Array([1]));
@@ -235,36 +240,31 @@ describe('long names (ADR-0567 §5, I3)', () => {
     expect(() => snapshotFs(fs, OPTIONS)).toThrow(/^ERR_FS_SNAPSHOT_TOO_LARGE: /);
   });
 
-  carrier(
-    'equal-length paths over 16 383 units decode as fast as short ones (no hash flooding)',
-    () => {
-      // V8 hashes strings over 16 383 units by length only: a Map keyed by such
-      // paths is quadratic. 2000 entries, ~65 MB either way; the control has
-      // short paths and the same bytes as content.
-      const deep = `/${'d'.repeat(16_380)}`;
-      const hostile = encode([
+  carrier('equal-length paths over 16 383 units decode in linear time (no hash flooding)', () => {
+    // V8 hashes strings over 16 383 units by length only: a Map keyed by such
+    // paths is quadratic. A linear reader doubles its time with the entries;
+    // a quadratic one quadruples it (measured: 2000 entries 1.7 s, 4000 5.4 s).
+    const deep = `/${'d'.repeat(16_380)}`;
+    const blob = (n: number) =>
+      encode([
         root,
         dir(deep),
-        ...Array.from({ length: 2000 }, (_, i) => file(`${deep}/f${String(i).padStart(4, '0')}`)),
+        ...Array.from({ length: n }, (_, i) => file(`${deep}/f${String(i).padStart(4, '0')}`)),
       ]);
-      const control = encode([
-        root,
-        ...Array.from({ length: 2000 }, (_, i) =>
-          file(`/f${String(i).padStart(4, '0')}`, 'x'.repeat(32_768)),
-        ),
-      ]);
-      const options = { template: null, maxBytes: 1 << 30 };
-      const time = (bytes: Uint8Array) => {
+    const options = { template: null, maxBytes: 1 << 30 };
+    const best = (bytes: Uint8Array) => {
+      let ms = Number.POSITIVE_INFINITY;
+      for (let r = 0; r < 3; r++) {
         const started = performance.now();
         restoreFs(createMemoryFs().fsSync, bytes, options);
-        return performance.now() - started;
-      };
-      time(control);
-      const controlMs = time(control);
-      // Quadratic here measured ~10x the control at this size (Final+GREEN probe).
-      expect(time(hostile)).toBeLessThan(3 * controlMs + 1000);
-    },
-  );
+        ms = Math.min(ms, performance.now() - started);
+      }
+      return ms;
+    };
+    const one = best(blob(1000));
+    const two = best(blob(2000));
+    expect(two / one).toBeLessThan(3);
+  });
 });
 
 describe('limits (ADR-0567 §7, I4)', () => {

@@ -40,7 +40,7 @@ Probes: `docs/backlog/distribution/reference/isolate-host-fs-snapshot-fit-probes
    16 383 code units: V8 hashes longer strings by length alone, so
    equal-length longer names make any Map of them quadratic (Final+GREEN
    probe: 76 MiB of such paths decoded in 22 s). Paths are canonical absolute JS strings stored as code
-   units, so any name rifty's FS holds round-trips (lone surrogates included,
+   units, so any name rifty's FS holds up to the cap below round-trips (lone surrogates included,
    P4). The snapshot is the sandbox's disk between runs, not a copy of it, so
    the four times come back verbatim — `ctime`/`birthtime` included, which a
    copy onto a real filesystem would renew (P4 oracle). `ino` is renewed, as
