@@ -92,7 +92,14 @@ view's whole backing buffer; rifty's program entry has diagnostic gaps and no
    `ERR_ISOLATE_HOST_SANDBOX_DESTROYED`, cancels a run in flight (its
    isolate is disposed as at a deadline) and drops the state; it resolves once
    that run has left its worker (its terminal frame, or the worker's end).
-6. **Limits.** Per run: `runCode`'s. Host file op: `maxFileBytes` per call.
+6. **Limits.** Per run: `runCode`'s; `timeoutMs` covers restore, run and
+   capture in the worker, not the consumer's encode before and decode after
+   (each about one snapshot/restore of the state). Host file op:
+   `maxFileBytes` per call; every writing host op costs one encoding of the
+   whole state (the cap check) — measured with the README's table, of one
+   order with the intake of a run's state. `maxFsBytes` is in the codec's
+   budget units (ADR-0567), and a run needs `memoryLimitMb` ≥ 2 × it + 16 MiB:
+   the defaults 64 / 256 hold.
    The sandbox's state: one cap, the codec's `maxBytes` count (ADR-0567
    refuses before allocating): an end state over it, or one the isolate runs
    out of memory capturing, is the named capture result of §3; a host write
@@ -164,7 +171,9 @@ view's whole backing buffer; rifty's program entry has diagnostic gaps and no
   174 + 132 ms, an isolate limit of at least 231 MiB (≈ 2.3 × S) before guest
   code. While an immutable template layer is part of a run's state, every run
   pays that: the template goal must keep the layer out of the per-run state or
-  bring this fork back to the user.
+  bring this fork back to the user. The same holds for host writes: each
+  encodes the whole state for its cap check, so with a template layer in the
+  state every host write would cost hundreds of milliseconds.
 
 - An idle sandbox holds no process or isolate; a forgotten one is ordinary
   garbage.

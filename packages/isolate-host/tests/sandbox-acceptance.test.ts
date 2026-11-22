@@ -451,6 +451,16 @@ setTimeout(() => import('./x.js').then(show), 5);`,
     runs: [['i.js']],
   },
   {
+    // Thread #416 (manager 2026-11-22): a microtask queued by an 'exit' listener runs on a
+    // natural exit (Node prints and writes) and does not after an explicit exit().
+    label: "an 'exit' listener queues a microtask that writes: natural exit",
+    files: {
+      'nat.js': `const fs = require('fs');
+process.on('exit', () => { queueMicrotask(() => { fs.writeFileSync('late', '1'); console.log('micro') }); console.log('listener') });`,
+    },
+    runs: [['nat.js']],
+  },
+  {
     label: 'missing module',
     files: { 'main.js': "require('./nope')\n" },
     runs: [['main.js'], ['missing.js']],
@@ -513,6 +523,28 @@ setTimeout(() => fs.writeFileSync('late', '1'), 0);`,
       }
     });
   }
+});
+
+describe('declared: an exit-listener microtask after an explicit exit() (compat ⚠️)', () => {
+  // Thread #416 (backlog distribution/isolate-host-natural-exit-listener-queued-work,
+  // runtime-js/node-eval-work-queued-at-exit-runs): its output is dropped as in Node,
+  // but the microtask still runs, and the file it writes is kept.
+  carrier("the output matches Node's, the file Node never writes is kept", async () => {
+    const code = `const fs = require('fs');
+process.on('exit', () => { queueMicrotask(() => { fs.writeFileSync('late', '1'); console.log('micro') }); console.log('listener') });
+process.exit(0);`;
+    const o = nodeSequence([{ files: { 'exp.js': code }, run: ['exp.js'] }])[0];
+    expect(o?.stdout).toBe('listener\n');
+    expect(Object.keys(o?.files ?? {})).toEqual([`${W}/exp.js`]);
+    const sb = await createSandbox();
+    try {
+      await sb.writeFile('exp.js', code);
+      expect(await sb.exec('exp.js')).toEqual({ stdout: 'listener\n', stderr: '', exitCode: 0 });
+      expect((await sb.list()).map((e) => e.name)).toEqual(['exp.js', 'late']);
+    } finally {
+      await sb.destroy();
+    }
+  });
 });
 
 describe('declared: a run Node ends at once but this host only at its deadline (compat ⚠️)', () => {

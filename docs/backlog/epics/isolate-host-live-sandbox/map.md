@@ -33,6 +33,12 @@ external review.
 - The codec seam (`t3/isolate-host-fs-snapshot`) — owner: snapshot thread —
   the manager sends the sha once its shape is stable; build on that branch.
 
+## Closes elsewhere
+
+- The `isolate-host-fs-snapshot` goal's residual "a snapshot refuses NUL names and times outside
+  Date" is closed in rifty's fs by this branch: `fs-path.ts` (Node's `nullCheck`) and
+  `fs-times.ts` (utimes as Node 24.16.0) — rifty's FS no longer holds such values.
+
 ## Out of scope
 
 - The library template (`createSandbox({ template })` → `NotImplementedError('isolate-host.sandbox-template')`).

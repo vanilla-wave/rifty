@@ -119,7 +119,7 @@ await sandbox.destroy();
 |---|---|---|
 | `snapshot` | — | bytes of `sandbox.snapshot()`: the new sandbox starts with those files |
 | `maxFileBytes` | 32 MiB | largest file one `readFile`/`writeFile` moves (`ERR_FS_FILE_TOO_LARGE`) |
-| `maxFsBytes` | 64 MiB | largest state, counted as snapshot bytes: a host write past it rejects `ERR_ISOLATE_HOST_SANDBOX_FULL`, a run whose end state is past it gets `stateRefused`. A run needs an isolate of about 2.3 × its state (`memoryLimitMb` 256 holds about 100 MiB); raise both together |
+| `maxFsBytes` | 64 MiB | largest state, in the snapshot codec's budget units (ADR-0567: blob bytes + 384 per entry + 8 per path code unit + 80 per depth level): a host write past it rejects `ERR_ISOLATE_HOST_SANDBOX_FULL`, a run whose end state is past it gets `stateRefused`. A run needs an isolate of at least 2 × `maxFsBytes` + 16 MiB (the default 256 holds the default 64 MiB); raise both together |
 | `template` | — | not implemented: `NotImplementedError('isolate-host.sandbox-template')` |
 
 A fresh sandbox holds the empty directories `/workspace` (the cwd) and `/tmp`
@@ -141,7 +141,22 @@ sandbox paths. rifty's FS has no links: every entry is a file or a directory.
 
 Operations on one sandbox take effect one at a time, in call order, also when
 you do not await them; sandboxes do not wait for each other. A run's
-`timeoutMs` counts from when it starts, after earlier operations.
+`timeoutMs` counts from when it starts, after earlier operations, and covers
+the worker's restore, the run and the capture. Outside it, on your event loop:
+encoding the state before the run and decoding the run's state after it —
+each about one snapshot or restore of the whole state (table below). The state
+travels to the worker as base64 inside the JSON-line request (the wire of
+ADR-0563 §3): a third more bytes and one more pass each way, kept because a
+binary request frame is a wire change no part of this contract needs.
+
+Every host op that writes measures the state cap by encoding the whole state
+once, so its cost follows the state's size, not the op's. Measured
+(M3 Pro, built package, machine load 125–142 on 12 cores — expect several
+times less on an idle machine), for one `writeFile` / one state intake after a
+run: 1 MB state 1 / 8 ms; 16 MB 156 / 193 ms; 56 MB near the cap 574 / 510 ms;
+the densest state at the cap (119 472 empty directories) 1 211 / 1 136 ms; the
+deepest (a 1 153-level chain) 902 / 899 ms. `list` and `remove` stay under 5 ms.
+The worst host op and the worst intake are of one order.
 
 Every error the sandbox API throws or rejects with names only sandbox paths, and its
 `stack` is its first line only (no frame or path of your process). `stateRefused` codes are
@@ -155,7 +170,7 @@ its own but its files were not kept. What survives a run:
 | exits (any code, `process.exit`, an uncaught throw or rejection) | as the run left them |
 | `termination: 'timeout'` or `'memory'` | as before the run: a killed run's writes are rolled back (Node keeps them) |
 | its worker lost (rerun once, alone; then `ERR_ISOLATE_HOST_WORKER_LOST`) | as before the run; the rerun starts from the same files |
-| `stateRefused` (`ERR_ISOLATE_HOST_SANDBOX_CAPTURE`: the run's end state was not captured — over `maxFsBytes`, out of isolate memory, a guest that broke its own capture, or a run the `import()` gap ended; `ERR_FS_SNAPSHOT_TOO_LARGE`: the captured bytes were over `maxFsBytes`; another `ERR_FS_SNAPSHOT_*`: the consumer's codec refused the bytes; `ERR_ISOLATE_HOST_SANDBOX_RESTORE`: the files did not fit the run's isolate or its worker, no guest code ran, `exitCode: null`; an isolate too small for the runtime itself is `termination: 'memory'`, as for `runCode`) | as before the run |
+| `stateRefused` (`ERR_ISOLATE_HOST_SANDBOX_CAPTURE`: the run's end state was not captured — most often it outgrew `maxFsBytes` or the run's isolate memory (fewer or smaller files, or raise `maxFsBytes` and `memoryLimitMb` together), else the run hit the `import()` gap or broke its own capture (rewrite that code); `ERR_FS_SNAPSHOT_TOO_LARGE`: the captured bytes were over `maxFsBytes`; another `ERR_FS_SNAPSHOT_*`: the consumer's codec refused the bytes; `ERR_ISOLATE_HOST_SANDBOX_RESTORE`: the files did not fit the run's isolate or its worker, no guest code ran, `exitCode: null`; an isolate too small for the runtime itself is `termination: 'memory'`, as for `runCode`) | as before the run |
 
 Each run is a fresh isolate, like a new `node` process: only files carry over.
 Between operations a sandbox holds no process and no isolate, only its files

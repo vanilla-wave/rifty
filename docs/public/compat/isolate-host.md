@@ -60,6 +60,7 @@ sequence against live `node <path>` over the same files), `sandbox-faults.test.t
 | Killed run (`timeout`, `memory`) or lost worker | ⚠️ | The files are those of before the run: its writes are rolled back (Node keeps them). A lost worker's run reruns once from the same files |
 | Work queued when `process.exit()` runs (a microtask or 0 ms timer beside the exiting one) | ⚠️ | Still runs, and a file it writes is kept (Node: never runs). `backlog/runtime-js/node-eval-work-queued-at-exit-runs` |
 | Uncaught throw followed by an endless microtask chain | ⚠️ | `timeout`, its writes rolled back (Node: exit 1 at once, writes kept) |
+| A microtask an `'exit'` listener queues, after an explicit `process.exit()` | ⚠️ | Its output is dropped as in Node, but it runs and a file it writes is kept (Node: never runs). `backlog/distribution/isolate-host-natural-exit-listener-queued-work` |
 | End state over `maxFsBytes`, too large to capture, or broken by its own guest | ⚠️ | The run's result plus `stateRefused`; files as before the run (Node would fail the write itself, `ENOSPC`) |
 | State too large for the run's isolate | ⚠️ | `{stdout: '', stderr: '', exitCode: null, stateRefused: 'ERR_ISOLATE_HOST_SANDBOX_RESTORE'}`; no guest code runs |
 | `fs.stat().ino` across runs | ⚠️ | Renumbered at each run's restore (the snapshot keeps the four times, not `ino`, ADR-0567); Node keeps it |
