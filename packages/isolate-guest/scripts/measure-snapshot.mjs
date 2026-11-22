@@ -244,3 +244,65 @@ for (const [label, files] of [
   ['template scale', template],
 ])
   console.log(JSON.stringify(await measure(label, files)));
+
+/**
+ * The densest blob a budget admits (empty directories, short names): the worst
+ * case a consumer pays for bytes a guest wrote. Node: restore time and retained
+ * heap (run with `--expose-gc` for a clean heap figure); isolate: restore time
+ * and memory floor.
+ */
+async function measureDense(maxBytes) {
+  const options = { template: null, maxBytes };
+  const fs = createMemoryFs().fsSync;
+  let n = 0;
+  for (;;) {
+    fs.mkdirSync(`/${n.toString(36)}`, { recursive: false });
+    n++;
+    if (n % 5000 === 0) {
+      try {
+        snapshotFs(fs, options);
+      } catch {
+        break;
+      }
+    }
+  }
+  for (let i = n - 5000; i < n; i++) fs.rmSync(`/${i.toString(36)}`, { recursive: true });
+  const blob = snapshotFs(fs, options);
+  globalThis.gc?.();
+  const heap0 = process.memoryUsage().heapUsed;
+  let t = performance.now();
+  const kept = createMemoryFs().fsSync;
+  restoreFs(kept, blob, options);
+  const nodeRestore = ms(t);
+  globalThis.gc?.();
+  const nodeHeapMiB = Math.round((process.memoryUsage().heapUsed - heap0) / 1048576);
+  const { guest, dispose } = await isolate(4096);
+  t = performance.now();
+  await guest.restore.apply(undefined, [blob, options], { arguments: { copy: true } });
+  const isoRestore = ms(t);
+  dispose();
+  let lo = 16;
+  let hi = 4096;
+  while (hi - lo > 4) {
+    const mid = Math.floor((lo + hi) / 2);
+    const x = await isolate(mid);
+    let ok = true;
+    try {
+      await x.guest.restore.apply(undefined, [blob, options], { arguments: { copy: true } });
+    } catch {
+      ok = false;
+    }
+    x.dispose();
+    if (ok) hi = mid;
+    else lo = mid;
+  }
+  return {
+    label: `densest within maxBytes ${maxBytes >> 20} MiB`,
+    entries: n - 5000 + 1,
+    blobBytes: blob.length,
+    ms: { nodeRestore, isoRestore },
+    nodeRetainedHeapMiB: nodeHeapMiB,
+    isolateRestoreFloorMiB: hi,
+  };
+}
+console.log(JSON.stringify(await measureDense(64 << 20)));

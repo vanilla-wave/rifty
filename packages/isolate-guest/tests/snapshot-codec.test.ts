@@ -245,7 +245,7 @@ describe('long names (ADR-0567 §5, I3)', () => {
     restoreFs(back, snapshotFs(fs, OPTIONS), OPTIONS);
     expect(listFs(back)).toEqual(listFs(fs));
     fs.writeFileSync(`/${'m'.repeat(16_384)}`, new Uint8Array([1]));
-    expect(() => snapshotFs(fs, OPTIONS)).toThrow(/^ERR_FS_SNAPSHOT_TOO_LARGE: /);
+    expect(() => snapshotFs(fs, OPTIONS)).toThrow(/^ERR_FS_SNAPSHOT_UNREPRESENTABLE: /);
   });
 
   carrier('equal-length paths over 16 383 units decode in linear time (no hash flooding)', () => {
@@ -277,7 +277,7 @@ describe('long names (ADR-0567 §5, I3)', () => {
 
 describe('the writer never emits what the reader refuses (ADR-0567 §5, I3)', () => {
   // States rifty's FS holds that the format cannot carry (Node never produces them:
-  // backlog runtime-js/utimes-time-values-differ-from-node, runtime-js/fs-paths-with-nul-accepted).
+  // backlog runtime-js/utimes-time-values-differ-from-node; NUL: fixed in runtime-js fs-path by the sandbox goal).
   const odd: readonly [string, (fs: ReturnType<typeof createMemoryFs>['fsSync']) => void][] = [
     ['NaN time', (fs) => fs.utimes('/a', Number.NaN, 1)],
     ['infinite time', (fs) => fs.utimes('/a', 1, Number.POSITIVE_INFINITY)],
@@ -460,7 +460,9 @@ describe('hostile bytes (ADR-0567 §5, I2, I3)', () => {
       for (let bit = 0; bit < 8; bit++) {
         const copy = bytes.slice();
         copy[i] = (copy[i] as number) ^ (1 << bit);
-        refused(copy, i >= 8 && i < 12 ? 'ERR_FS_SNAPSHOT_VERSION' : 'ERR_FS_SNAPSHOT_CORRUPT');
+        // Version 1 with its low bit flipped is version 0: never released, not a snapshot.
+        const version = i >= 8 && i < 12 && !(i === 8 && bit === 0);
+        refused(copy, version ? 'ERR_FS_SNAPSHOT_VERSION' : 'ERR_FS_SNAPSHOT_CORRUPT');
       }
     }
   });

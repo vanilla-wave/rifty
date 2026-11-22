@@ -63,12 +63,14 @@ Probes: `docs/backlog/distribution/reference/isolate-host-fs-snapshot-fit-probes
    paths (a new version if records change).
 5. **Reading untrusted bytes.** One linear pass validates the whole blob before
    anything is written: size over `maxBytes` (`ERR_FS_SNAPSHOT_TOO_LARGE`, first,
-   before any other read) → magic → version → CRC → structure (truncated record,
+   before any other read) → magic → version (0 is not a snapshot: `_CORRUPT`)
+   → CRC → structure (truncated record,
    unknown kind, non-canonical path — relative, empty/`.`/`..`/overlong
    segment, trailing `/`, NUL, `/` itself —, a name not after its previous
    sibling (duplicate or out of order), parent not the open directory of the
-   walk (absent, a file, closed), non-finite
-   time, size not a safe integer or past the end, bytes after `end`) →
+   walk (absent, a file, closed), a time not finite or outside the Date
+   range (±8.64e15 ms), size not a safe integer or past the end, the entry
+   budget past `maxBytes` (§7), bytes after `end`) →
    template. Every refusal is `FsSnapshotError` with `code` and a fixed message
    carrying numbers only (offset, sizes, versions) — never blob text — so an
    error never brings guest bytes into host text. Work and memory are bounded
@@ -76,8 +78,17 @@ Probes: `docs/backlog/distribution/reference/isolate-host-fs-snapshot-fit-probes
    against the bytes present, no recursion, no Map keyed by blob strings
    (parents and order are checked on the walk's stack of open directories).
 6. **Restore** decodes fully, then replaces the whole target FS: a refused
-   blob leaves it as it was. File bytes are copied out
-   of the blob (a view would pin the whole blob per file). In the guest bundle,
+   blob leaves it as it was. A failure after writing began (memory) is
+   `ERR_FS_SNAPSHOT_INCOMPLETE`: the target is partial and the caller
+   discards it; in the guest bundle the isolate then refuses `run`,
+   `snapshot` and `restore` with that code — all of the tree, or an isolate
+   thrown away, never a partial tree that runs (no second tree for an atomic
+   swap: discarding needs none). File bytes are owned copies of the blob's
+   range, whatever the input's class (a view would pin the whole blob per
+   file); any realm's `Uint8Array` is accepted. Snapshot refuses what restore
+   would refuse (`ERR_FS_SNAPSHOT_UNREPRESENTABLE`: a name over the cap or
+   with NUL, a time not finite or outside the Date range), so a writer never
+   emits an unrestorable blob. In the guest bundle,
    `GuestEntry.restore` runs only before any guest code in that isolate, else
    `ERR_FS_SNAPSHOT_NOT_FRESH` (module cache, fds and cwd keep the old tree);
    `GuestEntry.snapshot` runs whenever no guest code runs — after the run
@@ -87,12 +98,17 @@ Probes: `docs/backlog/distribution/reference/isolate-host-fs-snapshot-fit-probes
    refusal); export
    sums the size first and refuses before allocating, and refuses a name over
    16 383 code units (`ERR_FS_SNAPSHOT_TOO_LARGE`); restore checks the
-   blob's length before reading it. Peak memory ≈ 2 × S in either realm, for
-   snapshot (tree + blob) and for restore (blob + copies) (P2 in the isolate:
-   205 / 197 MiB for S = 90.7 MiB; FS alone 111). A snapshot right after a
-   restore with no guest code between can need ~3 × S: the restored blob is
-   not yet collected (231–322 MiB at S = 98 MiB). A consumer sizes
-   `memoryLimitMb` for 2 × S.
+   blob's length before reading it. `maxBytes` is a budget: bytes + 384 per
+   entry, charged by both directions (restore during validation, before
+   writing). Cost is per byte and per entry: peak memory ≈ 2 × bytes +
+   ~670 B × entries + 15 MiB, restore ≈ 1.1 µs × entries + ~1.6 ms per MB
+   (measured, isolate-guest README), so any blob within a budget peaks under
+   2 × `maxBytes` + 15 MiB — the trusted side's worst case is bounded by what
+   it passed (densest blob in 64 MiB: 155 001 entries, 119 MiB, 179 ms;
+   without the entry charge a 16 MiB blob of empty dirs needed 512 MiB). A
+   snapshot right after a restore with no guest code between can need ~3 × the
+   bytes: the restored blob is not yet collected (231–322 MiB at 98 MiB). A
+   consumer sizes `memoryLimitMb` for 2 × `maxBytes`.
 8. **Where.** One pure-JS module in `@riftydev/isolate-guest` (root exports
    `snapshotFs(fs, options)`, `restoreFs(fs, bytes, options)`,
    `FsSnapshotError`; ADR-0558, unstable) over a structural FS interface that

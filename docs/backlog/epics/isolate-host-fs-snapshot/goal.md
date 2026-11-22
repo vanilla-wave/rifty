@@ -54,8 +54,9 @@ no sandbox API (that lives in the sandbox goal).
 1. I1. Round trip: after restore, guest code sees for every path the same
    kind, bytes, `readdirSync` order and `fs.statSync` (`size`, `nlink`,
    `mode`, `mtimeMs`, `atimeMs`, `ctimeMs`, `birthtimeMs`) as before snapshot,
-   for any name rifty's FS holds of at most 16 383 code units (a longer name
-   is refused loudly both ways); between the isolate and the consumer's realm
+   for any name rifty's FS holds of at most 16 383 code units without NUL and
+   times within the Date range (anything else is refused loudly at snapshot,
+   by name); between the isolate and the consumer's realm
    in both directions. `ino` is renewed, as after a copy (ADR-0567 §1); what
    a snapshot does not keep (`ino`; links, modes, owners — absent from rifty's
    FS) is named in `docs/public/compat/isolate-host.md`.
@@ -75,7 +76,9 @@ no sandbox API (that lives in the sandbox goal).
    during a run either), else a named error; snapshot works after guest code
    has run (the run ended, isolate alive) — its result is then guest-authored
    bytes, bounded by the isolate memory limit and accepted only via restore
-   (ADR-0567 §8).
+   (ADR-0567 §8); a restore that fails while writing ends with a named
+   error and leaves an isolate that refuses `run`, `snapshot` and `restore`;
+   `maxBytes` bounds memory and time per byte and per entry (ADR-0567 §7).
 5. I5. The same tree gives the same bytes; snapshot changes nothing in the tree.
 6. I6. Cost, measured on landed code and published (isolate-guest README) for
    a small workspace (~10 files, ~1 MB) and the requirements' template scale
@@ -101,6 +104,7 @@ final-check: 2026-11-22 — PASS (fresh read-only RDY-6 pass over goal, map, dra
 
 - amend: 2026-11-22 — manager decision by delegation, not the user's words: «I1 сужается до имён ≤ 16 383 code units … линейный разбор враждебных байтов в доверенном realm, I3, важнее имён, которых в Node не бывает» — I1 names capped at 16 383 code units (V8 hashes longer strings by length alone: 76 MiB of such paths decoded in 22 s, Final+GREEN probe); reversible (a reader accepting more is compatible); rifty accepting names over NAME_MAX is a vfs parity gap, `backlog/vfs/file-names-over-name-max-accepted` — once closed, the cap is unreachable for an honest tree.
 - amend: 2026-11-22 — manager decision by delegation, not the user's words (same decision as the I1 name cap): scenario step 2 reads «identical to step 1 except `ino`», matching I1 and the Outcome (`ino` renewed, ADR-0567 §1).
+- amend: 2026-11-22 — manager decision by delegation, not the user's words (external review round 1, B1/S1/S3): «запись началась — isolate либо получил всё дерево, либо непригоден»; «снимок именованно отказывает во всём, что декодер не примет»; «худший случай доверенной стороны ограничен тем, что она сама передала» — I1 also excludes NUL names and non-finite or out-of-Date-range times (refused at snapshot, `ERR_FS_SNAPSHOT_UNREPRESENTABLE`); I4 gains: a restore failing while writing is `ERR_FS_SNAPSHOT_INCOMPLETE` and the isolate then refuses `run`/`snapshot`/`restore`; `maxBytes` is a budget of bytes + a fixed charge per entry, bounding the trusted side's memory and time.
 - tier: robust — the bytes are guest-authored and come back from storage: every reachable defect × {snapshot, restore} × {isolate, consumer realm} has a named outcome and a fault test; no crash-atomic storage promise (the consumer owns storage).
 - 2026-11-22 — manager: one goal = one PR; this goal lands first and standalone; embedding in the sandbox API, the rest-point rule and the sandbox-level e2e belong to the sandbox goal's PR.
 - 2026-11-22 — manager: the codec runs in two realms (isolate and the consumer's Node realm); the decoder trusts no property only an honest encoder guarantees.

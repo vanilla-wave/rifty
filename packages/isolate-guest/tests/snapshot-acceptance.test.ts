@@ -182,6 +182,39 @@ describe('guest FS snapshot — scenario', () => {
     }
   });
 
+  carrier(
+    'the densest blob within maxBytes restores under 2 × maxBytes of isolate memory (I4)',
+    () => {
+      // Empty directories with short names: the most entries a 32 MiB budget admits.
+      const budget = 32 * MiB;
+      const options = { template: null, maxBytes: budget };
+      const fs = createMemoryFs().fsSync;
+      let n = 0;
+      for (;;) {
+        fs.mkdirSync(`/${n.toString(36)}`, { recursive: false });
+        n++;
+        if (n % 1000 === 0) {
+          try {
+            snapshotFs(fs, options);
+          } catch {
+            break;
+          }
+        }
+      }
+      for (let i = n - 1000; i < n; i++) fs.rmSync(`/${i.toString(36)}`, { recursive: true });
+      const file = join(work, 'dense.blob');
+      writeFileSync(file, snapshotFs(fs, options));
+      const [, restored, listed] = drive([
+        { op: 'isolate', memoryLimit: 2 * 32 + 16 },
+        { op: 'restore', file, options },
+        { op: 'run', code: "console.log(require('fs').readdirSync('/').length)" },
+      ]);
+      expect(n).toBeGreaterThan(70_000);
+      expect(restored).toMatchObject({ ok: true });
+      expect(listed?.stdout).toBe(`${n - 1000}\n`);
+    },
+  );
+
   carrier('restore over maxBytes is refused before the blob is read (I4)', () => {
     const file = join(work, 'big.blob');
     writeFileSync(file, Buffer.alloc(60 * MiB, 0x41));
