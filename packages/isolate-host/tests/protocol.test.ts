@@ -285,6 +285,36 @@ describe('consumer treats the child channel as hostile', () => {
     });
   });
 
+  it('a starved consumer: a worker lost before the deadline but read after it is timeout, no rerun (declared, compat ⚠️)', () => {
+    // The child dies at once (channel and exit together); the consumer does not run
+    // until it is a zombie and the deadline is due. The honest outcome is a lost worker
+    // and its rerun; today the deadline is read first.
+    const entry = hostilePackage(
+      'lost before a starved deadline',
+      "process.kill(process.pid, 'SIGKILL')",
+    );
+    const report = consume(
+      entry,
+      '{ timeoutMs: 1500, maxOutputBytes: 1024 }',
+      [],
+      `const { execFileSync } = await import('node:child_process');
+       const zombie = () => execFileSync('ps', ['-A', '-o', 'ppid=,stat='], { encoding: 'utf8' })
+         .split('\\n').some((l) => { const [ppid, stat] = l.trim().split(/\\s+/); return Number(ppid) === process.pid && stat?.startsWith('Z'); });
+       queueMicrotask(() => {
+         const due = performance.now() + 1500;
+         const end = Date.now() + 10000;
+         while (!zombie()) if (Date.now() > end) throw new Error('no exit');
+         while (performance.now() < due + 5);
+       });`,
+    ) as { resolved?: unknown };
+    expect(report.resolved).toEqual({
+      stdout: '',
+      stderr: '',
+      exitCode: null,
+      termination: 'timeout',
+    });
+  });
+
   it('a channel closed without a result is its own outcome, not the deadline', () => {
     // The child closes fd 3 and lives on; the call must not wait for timeoutMs.
     const entry = hostilePackage('channel closed', 'closeSync(3)');
