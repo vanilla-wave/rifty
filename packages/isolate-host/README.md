@@ -118,8 +118,8 @@ await sandbox.destroy();
 | option | default | meaning |
 |---|---|---|
 | `snapshot` | — | bytes of `sandbox.snapshot()`: the new sandbox starts with those files |
-| `maxFileBytes` | 64 MiB | largest file one `readFile`/`writeFile` moves (`ERR_FS_FILE_TOO_LARGE`) |
-| `maxFsBytes` | 256 MiB | largest state, counted as snapshot bytes: a host write past it rejects `ERR_ISOLATE_HOST_SANDBOX_FULL`, a run whose end state is past it gets `stateRefused` |
+| `maxFileBytes` | 32 MiB | largest file one `readFile`/`writeFile` moves (`ERR_FS_FILE_TOO_LARGE`) |
+| `maxFsBytes` | 64 MiB | largest state, counted as snapshot bytes: a host write past it rejects `ERR_ISOLATE_HOST_SANDBOX_FULL`, a run whose end state is past it gets `stateRefused`. A run needs an isolate of about 2.3 × its state (`memoryLimitMb` 256 holds about 100 MiB); raise both together |
 | `template` | — | not implemented: `NotImplementedError('isolate-host.sandbox-template')` |
 
 A fresh sandbox holds the empty directories `/workspace` (the cwd) and `/tmp`
@@ -132,7 +132,7 @@ sandbox paths. rifty's FS has no links: every entry is a file or a directory.
 | method | does |
 |---|---|
 | `writeFile(path, data)` | `Uint8Array` or UTF-8 string; parents created |
-| `readFile(path)` | `Uint8Array` (a copy) |
+| `readFile(path)` | `Uint8Array`, a copy (and `writeFile` copies its input) |
 | `list(path = '/workspace')` | `{ name, type: 'file' \| 'directory', size }[]`, by name |
 | `remove(path)` | a file or a directory tree |
 | `exec(path, options?)` | `node <path> [args]` in `/workspace`: `runCode`'s options plus `args` (strings); `env`, `cwd`, `stdin` are `NotImplementedError('isolate-host.sandbox-exec-<option>')`. The path is one file, never a shell command |
@@ -151,7 +151,7 @@ its own but its files were not kept. What survives a run:
 | exits (any code, `process.exit`, an uncaught throw or rejection) | as the run left them |
 | `termination: 'timeout'` or `'memory'` | as before the run: a killed run's writes are rolled back (Node keeps them) |
 | its worker lost (rerun once, alone; then `ERR_ISOLATE_HOST_WORKER_LOST`) | as before the run; the rerun starts from the same files |
-| `stateRefused` (`ERR_FS_SNAPSHOT_TOO_LARGE`, `ERR_ISOLATE_HOST_SANDBOX_CAPTURE`, a refusal of the codec; `ERR_ISOLATE_HOST_SANDBOX_RESTORE`: the files did not fit the run's isolate, no guest code ran, `exitCode: null`) | as before the run |
+| `stateRefused` (`ERR_FS_SNAPSHOT_TOO_LARGE`, `ERR_ISOLATE_HOST_SANDBOX_CAPTURE`, a refusal of the codec; `ERR_ISOLATE_HOST_SANDBOX_RESTORE`: the files did not fit the run's isolate or its worker, no guest code ran, `exitCode: null`; an isolate too small for the runtime itself is `termination: 'memory'`, as for `runCode`) | as before the run |
 
 Each run is a fresh isolate, like a new `node` process: only files carry over.
 Between operations a sandbox holds no process and no isolate, only its files
@@ -170,9 +170,11 @@ If your result type has `exitCode: number`, map a killed run yourself from
 ## What the guest gets
 
 The guest gets rifty's Node environment, which is not real Node: `require`,
-`fs` over an empty in-memory filesystem (cwd `/workspace`), `Buffer`,
-`process`, timers, `console`, the builtin modules as globals (`path`, `fs`, …,
-as `node -e` provides), `TextEncoder`/`TextDecoder` (UTF-8),
+`fs` over an in-memory filesystem (`runCode`: the empty directories `/workspace`,
+the cwd, and `/tmp`, rifty's `os.tmpdir()`; a sandbox run: the sandbox's files),
+`Buffer`, `process`, timers, `console`, the builtin modules as globals for
+`runCode` only (`path`, `fs`, …, as `node -e` provides; a file run has none, as
+`node <file>`), `TextEncoder`/`TextDecoder` (UTF-8),
 `atob`/`btoa`, `crypto.getRandomValues`/`randomUUID` and `performance.now`.
 Parity with `node -e` on Node 24 is tested on a corpus of model-style
 snippets (`tests/parity.test.ts`).

@@ -67,6 +67,13 @@ interface Live {
    * there is that refused state (`REFUSED`), not `memory`.
    */
   stateWork: 0 | 1 | undefined;
+  /**
+   * A sandbox run before its guest code: this worker holds its state (the
+   * request and its decoded bytes), so an exhaustion of the process is the
+   * state's — a refused restore. Its isolate's own heap limit in the bundle's
+   * boot stays `memory`, as for `runCode`.
+   */
+  holdsState: boolean;
   report(kind: number, payload: Uint8Array): void;
   /** The run's exit status once it ended (a capture refused after it keeps it). */
   status: number;
@@ -107,8 +114,9 @@ setInterval(() => {
     // else nobody is blamed: the consumer reruns each call alone.
     for (const call of live.values()) {
       if (!call.solo) continue;
-      if (call.stateWork === undefined) call.report(KIND.memory, new Uint8Array(0));
-      else call.refuse(call.stateWork);
+      if (call.stateWork !== undefined) call.refuse(call.stateWork);
+      else if (call.holdsState) call.refuse(0);
+      else call.report(KIND.memory, new Uint8Array(0));
     }
     dieAfterFlush();
   }
@@ -186,9 +194,8 @@ async function run(request: RunRequest): Promise<void> {
     reported: false,
     cancelled: false,
     unwound: false,
-    // A sandbox run is in its restore until guest code starts: its state, decoded in this
-    // realm and copied into the isolate, is what such a run spends first.
-    stateWork: request.sandbox ? 0 : undefined,
+    stateWork: undefined,
+    holdsState: request.sandbox !== undefined,
     status: 1,
     refuse(reason) {
       if (state.reported) return;
@@ -273,6 +280,8 @@ async function run(request: RunRequest): Promise<void> {
     const snapshot = sandbox ? await guest.get('snapshot', { reference: true }) : undefined;
     if (sandbox) {
       const restore = await guest.get('restore', { reference: true });
+      // Decoding and copying the state into the isolate is the restore.
+      state.stateWork = 0;
       try {
         const bytes = decodeState(sandbox.state);
         await restore.apply(undefined, [bytes, snapshotOptions], { arguments: { copy: true } });
@@ -288,6 +297,7 @@ async function run(request: RunRequest): Promise<void> {
     await jail.delete('__riftyGuest');
     // From here a failure is the guest's run, not this worker's wiring.
     started = true;
+    state.holdsState = false;
     // The status crosses as ONE PRIMITIVE and is judged HERE, in the worker's
     // realm (ADR-0557 §6): a number resolves a promise with no lookup in the
     // guest realm, so a poisoned prototype there cannot rewrite it.

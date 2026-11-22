@@ -37,8 +37,8 @@ view's whole backing buffer; rifty's program entry has diagnostic gaps and no
      created), `readFile(path) → Uint8Array`, `list(path = '/workspace') →
      {name, type: 'file' | 'directory', size}[]` sorted by name, `remove(path)`
      (a file or a directory tree). rifty's FS has no links (ADR-0050:
-     `fs.symlinkSync`/`linkSync` are absent in rifty's fs today — a
-     `TypeError`, to become `NotImplementedError` + compat ❌, map item 3), so every
+     `fs.symlink*`/`link*` throw `NotImplementedError`, ADR-0443 correction
+     2026-11-22), so every
      entry is a file or a directory. A relative path resolves against
      `/workspace`; a NUL or a non-string → `ERR_INVALID_ARG_VALUE` /
      `ERR_INVALID_ARG_TYPE`; failures are Node-shaped (`code`, `syscall`,
@@ -69,7 +69,11 @@ view's whole backing buffer; rifty's program entry has diagnostic gaps and no
    `ERR_FS_SNAPSHOT_*`, or the capture's own code), state unchanged: a result
    of the guest's run, never a rejection (a guest cannot pose as
    infrastructure). A state its run cannot restore is the same field, before
-   any guest code: `{stdout: '', stderr: '', exitCode: null, stateRefused}`. The run's
+   any guest code: `{stdout: '', stderr: '', exitCode: null, stateRefused}` —
+   the isolate's memory while the state is decoded and copied in, or the
+   worker's RSS crossing before guest code (the worker then holds the state);
+   the isolate's own heap limit during the bundle's boot stays `memory`, as
+   for `runCode`. The run's
    input is bytes, so ADR-0563 §6's rerun of a lost worker's calls stays
    idempotent and applies unchanged.
 4. **One operation at a time.** Each sandbox runs its operations in call
@@ -81,7 +85,8 @@ view's whole backing buffer; rifty's program entry has diagnostic gaps and no
    only state owner. Sandboxes do not wait for each other.
 5. **destroy** rejects queued and later operations
    `ERR_ISOLATE_HOST_SANDBOX_DESTROYED`, cancels a run in flight (its
-   isolate is disposed as at a deadline) and drops the state.
+   isolate is disposed as at a deadline) and drops the state; it resolves once
+   that run has left its worker (its terminal frame, or the worker's end).
 6. **Limits.** Per run: `runCode`'s. Host file op: `maxFileBytes` per call.
    The sandbox's state: one cap, the codec's `maxBytes` count (ADR-0567
    refuses before allocating): an end state over it, or one the isolate runs
@@ -89,8 +94,8 @@ view's whole backing buffer; rifty's program entry has diagnostic gaps and no
    that would pass it rejects. No second quota inside the guest's FS (`REV-7`,
    manager 2026-11-22). The isolate limit alone does not bound the state: a
    guest fits 51 MiB of files at limit 64 (step 0) while capture peaks at
-   ~2 × S (ADR-0567 P2). Defaults: `maxFsBytes` 256 MiB (the default isolate
-   heap), `maxFileBytes` 64 MiB.
+   ~2 × S (ADR-0567 P2). Defaults: `maxFsBytes` 64 MiB (a run needs ~2.3 × its
+   state of isolate; `memoryLimitMb` defaults to 256), `maxFileBytes` 32 MiB.
 7. **Trust.** Snapshot bytes from a run were produced in the guest's realm:
    hostile input, bounded by a frame limit and validated by the codec before
    they become state. The bridge copies a view's range only, both directions.
@@ -100,7 +105,10 @@ view's whole backing buffer; rifty's program entry has diagnostic gaps and no
    worker or the consumer (`ERR_ISOLATE_HOST_SANDBOX_RESTORE`,
    `ERR_ISOLATE_HOST_SANDBOX_CAPTURE`, `ERR_FS_SNAPSHOT_TOO_LARGE`, or the
    consumer codec's `ERR_FS_SNAPSHOT_*`).
-8. **`runCode`** is untouched: same API, results, corpus, pool behavior. A
+8. **`runCode`** keeps its API, results, corpus and pool behavior, with one
+   change shared with sandboxes (2026-11-22): a fresh guest FS also holds
+   `/tmp`, rifty's `os.tmpdir()` (`GUEST_DIRS`), so writing there works as in
+   Node (corpus `os-tmpdir-is-writable`). A
    sandbox run is a pool call with state in and out, not a second lifecycle.
 
 ## Alternatives (for the critic; surfaces, not a verdict)

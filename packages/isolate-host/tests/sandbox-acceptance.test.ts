@@ -534,6 +534,13 @@ describe('limits are loud (scenario 8, I6)', () => {
           expect(r).toMatchObject({ code: 'ERR_ISOLATE_HOST_SANDBOX_FULL' });
           const names = (await sb.list()).map((e) => e.name);
           expect(names).not.toContain(`part${i}.bin`);
+          // A refused write into new directories leaves none of them.
+          await expect(
+            sb.writeFile(`new/a/b/part${i}.bin`, new Uint8Array(1024)),
+          ).rejects.toMatchObject({
+            code: 'ERR_ISOLATE_HOST_SANDBOX_FULL',
+          });
+          expect((await sb.list()).map((e) => e.name)).not.toContain('new');
           await sb.remove('part0.bin');
           await sb.writeFile(`part${i}.bin`, new Uint8Array(1024));
           return;

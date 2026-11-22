@@ -138,6 +138,8 @@ function lostError(message: string): Error {
 class Worker {
   /** Calls placed here that have no terminal frame yet. */
   readonly calls = new Map<number, Call>();
+  /** Who waits for a call to leave this worker (its terminal frame, or the worker's end). */
+  readonly #released = new Map<number, (() => void)[]>();
   retiring = false;
   dead = false;
   exited = false;
@@ -207,9 +209,34 @@ class Worker {
               ),
         );
       this.calls.clear();
+      this.#releaseAll();
     });
     // 'close', not 'exit': every frame the worker wrote is read before its loss is judged.
     child.on('close', (code, signal) => this.#exited(code, signal));
+  }
+
+  /** Resolves once call `id` has left this worker: its isolate is gone with it. */
+  released(id: number): Promise<void> {
+    if (!this.calls.has(id) || this.dead) return Promise.resolve();
+    return new Promise((resolve) => {
+      // The worker is unref'd: someone awaiting this keeps the consumer alive until then.
+      const hold = setInterval(() => {}, 2 ** 30);
+      const list = this.#released.get(id) ?? [];
+      list.push(() => {
+        clearInterval(hold);
+        resolve();
+      });
+      this.#released.set(id, list);
+    });
+  }
+
+  #release(id: number): void {
+    for (const resolve of this.#released.get(id) ?? []) resolve();
+    this.#released.delete(id);
+  }
+
+  #releaseAll(): void {
+    for (const id of [...this.#released.keys()]) this.#release(id);
   }
 
   send(request: WorkerRequest): void {
@@ -313,6 +340,7 @@ class Worker {
     )
       return 'sandbox run ended without its state';
     this.calls.delete(id);
+    this.#release(id);
     if (kind === KIND.exit) call.resolveWith(call.result(p[0] as number));
     else if (kind === KIND.memory) call.resolveWith(call.result(null, 'memory'));
     else if (kind === KIND.error)
@@ -334,6 +362,7 @@ class Worker {
     if (this.dead) return;
     this.dead = true;
     this.pool.forget(this);
+    this.#releaseAll();
     const ended = this.ended;
     if (ended !== undefined && 'violation' in ended) return;
     // Everything still unsettled here was lost with this worker.
@@ -356,15 +385,20 @@ export class Pool {
   readonly #workers: Worker[] = [];
   #nextId = 1;
 
-  /** `abort(error)` (a destroyed sandbox): reject with `error` now; the isolate is disposed as at a deadline. */
-  run(spec: CallSpec, onAbort?: (abort: (error: Error) => void) => void): Promise<Result> {
+  /**
+   * `abort(error)` (a destroyed sandbox): reject with `error` now and dispose
+   * the isolate as at a deadline; resolves once the call has left its worker.
+   */
+  run(spec: CallSpec, onAbort?: (abort: (error: Error) => Promise<void>) => void): Promise<Result> {
     return new Promise<Result>((resolve, reject) => {
       const id = this.#nextId;
       this.#nextId = id === MAX_CALL_ID ? 1 : id + 1;
       const call = new Call(id, spec, resolve, reject, (c) => this.#deadline(c));
       onAbort?.((error) => {
         call.rejectWith(error);
+        const worker = call.worker;
         this.#cancel(call);
+        return worker === undefined ? Promise.resolve() : worker.released(call.id);
       });
       call.restart();
       try {

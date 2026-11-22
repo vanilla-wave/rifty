@@ -39,9 +39,13 @@ function loadCodec(): Promise<Codec> {
 export interface SandboxOptions {
   /** Bytes of `sandbox.snapshot()` (ADR-0567): the new sandbox starts with their files. */
   readonly snapshot?: Uint8Array;
-  /** Largest file one `readFile`/`writeFile` moves. Default 64 MiB. */
+  /** Largest file one `readFile`/`writeFile` moves. Default 32 MiB. */
   readonly maxFileBytes?: number;
-  /** Largest state (snapshot bytes) the sandbox keeps. Default 256 MiB. */
+  /**
+   * Largest state (snapshot bytes) the sandbox keeps. Default 64 MiB: a run
+   * needs an isolate of about 2.3 × its state (ADR-0567), and `memoryLimitMb`
+   * defaults to 256.
+   */
   readonly maxFsBytes?: number;
 }
 
@@ -166,7 +170,8 @@ const isCodec = (error: unknown): error is { code: string } =>
 class LiveSandbox implements Sandbox {
   #fs: Fs | undefined;
   #tail: Promise<unknown> = Promise.resolve();
-  #abort: ((error: Error) => void) | undefined;
+  #abort: ((error: Error) => Promise<void>) | undefined;
+  #ended: Promise<void> = Promise.resolve();
   #destroyed = false;
   readonly #options: SnapshotOptions;
 
@@ -318,10 +323,11 @@ class LiveSandbox implements Sandbox {
   destroy(): Promise<void> {
     if (!this.#destroyed) {
       this.#destroyed = true;
-      this.#abort?.(destroyedError());
+      // Resolves once the run in flight has left its worker: its isolate is gone.
+      this.#ended = this.#abort?.(destroyedError()) ?? Promise.resolve();
       this.#fs = undefined;
     }
-    return this.#tail.then(() => {});
+    return this.#tail.then(() => this.#ended);
   }
 }
 
@@ -346,8 +352,8 @@ export async function createSandbox(options: SandboxOptions = {}): Promise<Sandb
       'isolate-host.sandbox-template',
       'a sandbox starts empty or from its own snapshot, ADR-0568',
     );
-  const maxFileBytes = Math.floor(limit('maxFileBytes', options.maxFileBytes, 64 << 20, 0));
-  const maxFsBytes = Math.floor(limit('maxFsBytes', options.maxFsBytes, 256 << 20, 0));
+  const maxFileBytes = Math.floor(limit('maxFileBytes', options.maxFileBytes, 32 << 20, 0));
+  const maxFsBytes = Math.floor(limit('maxFsBytes', options.maxFsBytes, 64 << 20, 0));
   const c = await loadCodec();
   const fs = new c.MemoryFsSync();
   if (options.snapshot !== undefined) {

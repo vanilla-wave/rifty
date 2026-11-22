@@ -235,6 +235,13 @@ describe('a hostile worker and state frames (Fault matrix)', () => {
     },
   );
 
+  carrier('a sandbox run that ends without its state is a protocol violation', async () => {
+    const { value } = await consumer(HOSTILE_BODY, {
+      entry: hostileStatePackage('stateless', 0, 0, 0),
+    });
+    expect(value).toMatchObject({ exec: VIOLATION, kept: 'kept' });
+  });
+
   carrier('two state frames for one call are a protocol violation', async () => {
     const { value } = await consumer(HOSTILE_BODY, {
       entry: hostileStatePackage('twice', 16, 2, 0),
@@ -301,10 +308,11 @@ describe('the isolate of a run ends with it (Fault matrix)', () => {
     const pid = await waitFor(() => children().find((p) => rss(p) > 400 * 1024), 15000);
     ${end === 'destroy' ? 'const destroyed = sb.destroy();' : ''}
     const result = await running;
-    ${end === 'destroy' ? 'await destroyed;' : ''}
+    // I5: once destroy() resolves, the isolate is gone — read at that moment, no wait.
+    ${end === 'destroy' ? 'await destroyed; let atResolve; try { atResolve = rss(pid) < 300 * 1024 } catch { atResolve = true }' : 'const atResolve = true;'}
     // Disposed: its worker gives the 300 MiB back (or is gone).
     const freed = await waitFor(() => { try { return rss(pid) < 300 * 1024 ? true : undefined } catch { return true } }, 10000).catch(() => false);
-    out({ result, freed });`;
+    out({ result, freed: freed && atResolve });`;
 
   carrier('destroy during a run rejects it and disposes its isolate', async () => {
     const { value } = await consumer(body('destroy'));
@@ -535,4 +543,35 @@ describe('names the snapshot cannot hold (Fault matrix, ADR-0567 16 383 code uni
       }
     },
   );
+});
+
+describe('boot memory and buffer ownership (Final+GREEN findings)', () => {
+  carrier('an isolate too small for the runtime itself ends as memory, as runCode', async () => {
+    const sb = await createSandbox();
+    try {
+      await sb.writeFile('a.js', '1');
+      expect(await sb.exec('a.js', { memoryLimitMb: 8 })).toEqual({
+        stdout: '',
+        stderr: '',
+        exitCode: null,
+        termination: 'memory',
+      });
+    } finally {
+      await sb.destroy();
+    }
+  });
+
+  carrier('host buffers are copies both ways: changing them later changes no file', async () => {
+    const sb = await createSandbox();
+    try {
+      const mine = new Uint8Array([1, 2, 3]);
+      await sb.writeFile('f', mine);
+      mine[0] = 9;
+      const read = await sb.readFile('f');
+      read[1] = 9;
+      expect([...(await sb.readFile('f'))]).toEqual([1, 2, 3]);
+    } finally {
+      await sb.destroy();
+    }
+  });
 });
