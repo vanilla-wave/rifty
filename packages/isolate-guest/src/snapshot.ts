@@ -80,6 +80,12 @@ const HEADER = 13;
 const RECORD = 37;
 const CRC_BYTES = 4;
 const MAX_TEMPLATE_UNITS = 0xffff;
+/**
+ * Longest name V8 hashes by its content: longer strings hash by length alone,
+ * so equal-length long names would make every Map of names quadratic (in this
+ * decoder and in rifty's directory maps).
+ */
+const MAX_NAME_UNITS = 16_383;
 
 // CRC-32 (ISO-HDLC, zlib's `crc32`), slicing-by-8: one 8 KiB table built at load.
 const CRC_TABLE = new Uint32Array(8 * 256);
@@ -176,6 +182,12 @@ export function snapshotFs(fs: SnapshotFs, options: SnapshotOptions): Uint8Array
       entries.push({ kind: DIR, path, stat: timesOf(s), data: null });
       size += RECORD + 2 * path.length;
       const names = fs.readdirSync(path).map((d) => d.name);
+      for (const name of names)
+        if (name.length > MAX_NAME_UNITS)
+          throw new FsSnapshotError(
+            'ERR_FS_SNAPSHOT_TOO_LARGE',
+            `a name longer than ${MAX_NAME_UNITS} code units`,
+          );
       names.sort();
       const prefix = path === '/' ? '/' : `${path}/`;
       for (let i = names.length - 1; i >= 0; i--) stack.push(prefix + (names[i] as string));
@@ -279,7 +291,9 @@ function decode(bytes: Uint8Array, expected: SnapshotTemplate | null): Decoded[]
     const id = text(u16());
     template = { id, version: text(u16()) };
   } else if (flag !== 0) throw corrupt('bad template flag', o - 1);
-  const kinds = new Map<string, number>();
+  // The open directories of the pre-order walk, each with its last child name:
+  // parent and order checks without a Map keyed by guest strings.
+  const open: { path: string; last: string | null }[] = [];
   const out: Decoded[] = [];
   for (;;) {
     need(1);
@@ -296,10 +310,17 @@ function decode(bytes: Uint8Array, expected: SnapshotTemplate | null): Decoded[]
         throw corrupt('the first entry is not the root directory', at);
     } else {
       if (!isCanonical(path)) throw corrupt('non-canonical path', at);
-      if (kinds.has(path)) throw corrupt('duplicate path', at);
       const cut = path.lastIndexOf('/');
-      if (kinds.get(cut === 0 ? '/' : path.slice(0, cut)) !== DIR)
-        throw corrupt('parent is not an earlier directory', at);
+      const parent = cut === 0 ? '/' : path.slice(0, cut);
+      while (open.length > 0 && (open[open.length - 1] as { path: string }).path !== parent)
+        open.pop();
+      const frame = open[open.length - 1];
+      if (frame === undefined) throw corrupt('entry outside its parent directory', at);
+      const name = path.slice(cut + 1);
+      // Strictly increasing names per directory: duplicates and disorder alike.
+      if (frame.last !== null && !(name > frame.last))
+        throw corrupt('duplicate or out-of-order name', at);
+      frame.last = name;
     }
     need(32);
     const times: number[] = [];
@@ -320,7 +341,7 @@ function decode(bytes: Uint8Array, expected: SnapshotTemplate | null): Decoded[]
       o += size;
       end = o;
     }
-    kinds.set(path, kind);
+    if (kind === DIR) open.push({ path, last: null });
     const [mtimeMs, atimeMs, ctimeMs, birthtimeMs] = times as [number, number, number, number];
     out.push({ kind, path, stat: { mtimeMs, atimeMs, ctimeMs, birthtimeMs }, start, end });
   }
@@ -338,11 +359,12 @@ function decode(bytes: Uint8Array, expected: SnapshotTemplate | null): Decoded[]
   return out;
 }
 
-/** Absolute, not `/`, no empty / `.` / `..` segment, no NUL. */
+/** Absolute, not `/`, no empty / `.` / `..` / overlong segment, no NUL. */
 function isCanonical(path: string): boolean {
   if (path.length < 2 || path.charCodeAt(0) !== 0x2f || path.includes('\0')) return false;
   for (const segment of path.slice(1).split('/'))
-    if (segment === '' || segment === '.' || segment === '..') return false;
+    if (segment === '' || segment === '.' || segment === '..' || segment.length > MAX_NAME_UNITS)
+      return false;
   return true;
 }
 

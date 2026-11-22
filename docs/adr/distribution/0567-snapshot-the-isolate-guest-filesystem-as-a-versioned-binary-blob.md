@@ -36,7 +36,10 @@ Probes: `docs/backlog/distribution/reference/isolate-host-fs-snapshot-fit-probes
    ```
 
    Entries: `/` first, then every directory and file, pre-order, siblings in
-   code-unit order. Paths are canonical absolute JS strings stored as code
+   code-unit order — the reader requires that order. A name is at most
+   16 383 code units: V8 hashes longer strings by length alone, so
+   equal-length longer names make any Map of them quadratic (Final+GREEN
+   probe: 76 MiB of such paths decoded in 22 s). Paths are canonical absolute JS strings stored as code
    units, so any name rifty's FS holds round-trips (lone surrogates included,
    P4). The snapshot is the sandbox's disk between runs, not a copy of it, so
    the four times come back verbatim — `ctime`/`birthtime` included, which a
@@ -61,14 +64,17 @@ Probes: `docs/backlog/distribution/reference/isolate-host-fs-snapshot-fit-probes
 5. **Reading untrusted bytes.** One linear pass validates the whole blob before
    anything is written: size over `maxBytes` (`ERR_FS_SNAPSHOT_TOO_LARGE`, first,
    before any other read) → magic → version → CRC → structure (truncated record,
-   unknown kind, non-canonical path — relative, empty/`.`/`..` segment, trailing
-   `/`, NUL, `/` itself —, duplicate path, parent absent or a file, non-finite
+   unknown kind, non-canonical path — relative, empty/`.`/`..`/overlong
+   segment, trailing `/`, NUL, `/` itself —, a name not after its previous
+   sibling (duplicate or out of order), parent not the open directory of the
+   walk (absent, a file, closed), non-finite
    time, size not a safe integer or past the end, bytes after `end`) →
    template. Every refusal is `FsSnapshotError` with `code` and a fixed message
    carrying numbers only (offset, sizes, versions) — never blob text — so an
    error never brings guest bytes into host text. Work and memory are bounded
    by the blob's length: no allocation from a claimed size before it is checked
-   against the bytes present, no recursion.
+   against the bytes present, no recursion, no Map keyed by blob strings
+   (parents and order are checked on the walk's stack of open directories).
 6. **Restore** decodes fully, then replaces the whole target FS: a refused
    blob leaves it as it was. File bytes are copied out
    of the blob (a view would pin the whole blob per file). In the guest bundle,
@@ -79,10 +85,13 @@ Probes: `docs/backlog/distribution/reference/isolate-host-fs-snapshot-fit-probes
 7. **Limits.** `maxBytes` is a required argument of both directions (an
    invalid `maxBytes` or template is a `TypeError`: a caller bug, not a
    refusal); export
-   sums the size first and refuses before allocating; restore checks the
+   sums the size first and refuses before allocating, and refuses a name over
+   16 383 code units (`ERR_FS_SNAPSHOT_TOO_LARGE`); restore checks the
    blob's length before reading it. Peak memory ≈ 2 × S in either realm, for
    snapshot (tree + blob) and for restore (blob + copies) (P2 in the isolate:
-   205 / 197 MiB for S = 90.7 MiB; FS alone 111). A consumer sizes
+   205 / 197 MiB for S = 90.7 MiB; FS alone 111). A snapshot right after a
+   restore with no guest code between can need ~3 × S: the restored blob is
+   not yet collected (231–322 MiB at S = 98 MiB). A consumer sizes
    `memoryLimitMb` for 2 × S.
 8. **Where.** One pure-JS module in `@riftydev/isolate-guest` (root exports
    `snapshotFs(fs, options)`, `restoreFs(fs, bytes, options)`,
@@ -122,9 +131,9 @@ Rejected (P1, template scale, S ≈ 95 MB):
 ## Consequences
 
 - Measured on landed code (isolate-guest README §Snapshot, M3 Pro): 23 654
-  files / 100.6 MB — snapshot 132 ms and restore 174 ms in the isolate, 143 /
-  164 ms in Node, ivm copy ≤ 10 ms, smallest `memoryLimit` 231 MiB; 10 files /
-  958 kB — ≤ 2.2 ms each way, 19 MiB.
+  files / 100.6 MB — snapshot 138 ms and restore 173 ms in the isolate, 142 /
+  161 ms in Node, ivm copy ≤ 10 ms, smallest `memoryLimit` for restore → run →
+  snapshot 223 MiB; 10 files / 958 kB — ≤ 2.3 ms each way, 19 MiB.
 - The consumer stores ~S bytes per snapshot; gzip, if wanted, is the host's
   (template scale 95 → 18 MB).
 - A snapshot from an isolate that ran guest code is guest-authored: CRC and

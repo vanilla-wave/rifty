@@ -10,8 +10,8 @@
  * with copies of real files when the store holds fewer). For each: blob
  * bytes; snapshot and restore in the consumer's Node realm and in a real
  * isolated-vm isolate (in-isolate time, then the ivm copy of the blob); the
- * smallest isolate `memoryLimit` at which restore, and snapshot after it,
- * still succeed. Median of 5 for times.
+ * smallest isolate `memoryLimit` at which restore, and restore → `run` →
+ * snapshot (a sandbox run), still succeed. Median of 5 for times.
  */
 import { lstatSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -89,7 +89,11 @@ function treeOf(files) {
 }
 
 async function isolate(memoryLimit) {
-  const { functions, timeOrigin, close } = createHostBridge({ write: () => {}, fire: () => {} });
+  const guest = {};
+  const { functions, timeOrigin, close } = createHostBridge({
+    write: () => {},
+    fire: (id) => guest.fire.apply(undefined, [id]),
+  });
   const iso = new ivm.Isolate({ memoryLimit });
   const context = await iso.createContext();
   const names = Object.keys(functions);
@@ -99,10 +103,12 @@ async function isolate(memoryLimit) {
   );
   await (await iso.compileScript(bundle, { filename: 'rifty-isolate-guest.js' })).run(context);
   const entry = await context.global.get('__riftyGuest', { reference: true });
-  const guest = {
+  Object.assign(guest, {
+    fire: await entry.get('fire', { reference: true }),
+    run: await entry.get('run', { reference: true }),
     snapshot: await entry.get('snapshot', { reference: true }),
     restore: await entry.get('restore', { reference: true }),
-  };
+  });
   const dispose = () => {
     close();
     if (!iso.isDisposed) iso.dispose();
@@ -110,6 +116,8 @@ async function isolate(memoryLimit) {
   return { guest, dispose };
 }
 
+/** The guest code between restore and snapshot (argv: `RUN=<code>`); default an empty program. */
+const RUN = process.argv.find((a) => a.startsWith('RUN='))?.slice(4) ?? '0';
 const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
 const ms = (t) => Number((performance.now() - t).toFixed(1));
 
@@ -165,11 +173,17 @@ async function measure(label, files) {
         await guest.restore.apply(undefined, [new Uint8Array(blob), options], {
           arguments: { copy: true },
         });
-        if (phase === 'snapshot')
+        // As a sandbox run goes: restore → guest code → snapshot.
+        if (phase === 'snapshot') {
+          await guest.run.apply(undefined, [RUN], {
+            arguments: { copy: true },
+            result: { promise: true, copy: true },
+          });
           await guest.snapshot.apply(undefined, [options], {
             arguments: { copy: true },
             result: { reference: true },
           });
+        }
       } catch {
         ok = false;
       }
@@ -203,7 +217,7 @@ async function measure(label, files) {
     memoryLimitMiB: {
       emptyGuest: empty,
       restore: await floor('restore'),
-      restoreThenSnapshot: await floor('snapshot'),
+      restoreRunSnapshot: await floor('snapshot'),
     },
   };
 }
