@@ -47,7 +47,8 @@ challenge: 2026-11-22 — reuses the goal's premise check (goal `## Challenge`)
 5. Determinism: two snapshots of one tree are equal; trees equal by content/stat but built in another order give the same bytes; snapshot leaves the listing unchanged. `snapshot-codec.test.ts` → I5
 6. Restore replaces the whole target (its own files gone), four times verbatim via vfs `restoreStatSync` (`restore-stat.test.ts`: `ino` untouched; codec test). → I1
 7. 100 000 siblings snapshot and restore to the same bytes (no quadratic directory pass). → I3
-8. Cost published: `packages/isolate-guest/scripts/measure-snapshot.mjs` reports bytes, snapshot/restore ms in both realms and the isolate memory floor for ~10 files/~1 MB and 23 654 files/~95 MB; the numbers land in the isolate-guest README §Snapshot and meet the I6 budget (≤ 2 s per direction, ≤ 2 × S + 64 MiB at template scale, M3 Pro). → I6
+8. Cost published: `packages/isolate-guest/scripts/measure-snapshot.mjs` reports bytes, snapshot/restore ms in both realms and the isolate memory floor for ~10 files/~1 MB and 23 654 files/~95 MB; the numbers (and the ivm copy cost) land in the isolate-guest README §Snapshot and meet the I6 budget (≤ 2 s per direction, ≤ 2 × S + 64 MiB at template scale, M3 Pro). → I6
+9. Compat names what a snapshot does not keep (`ino` renewed; no links/modes/owners in rifty's FS) and the snapshot surface rows (`docs/public/compat/isolate-host.md` §Custom embedder). → I1
 
 ## Fault matrix
 
@@ -68,7 +69,8 @@ challenge: 2026-11-22 — reuses the goal's premise check (goal `## Challenge`)
 | restore in the isolate × refused blob | named error across ivm; guest then sees the fresh tree | acceptance step 4 | → I3 |
 | GuestEntry.restore × during a run (timer pending) and after it (valid blob) | `ERR_FS_SNAPSHOT_NOT_FRESH` | acceptance `restore during or after…` | → I4 |
 | GuestEntry.snapshot × after guest code ran | bytes (exact buffer) | acceptance steps 1, I4 case | → I4 |
-| options × invalid `maxBytes`/template | `TypeError` both directions | codec `invalid options` | → I3 |
+| options × invalid `maxBytes`/template | `TypeError` both directions | codec `invalid options` | → ADR-0567 |
+| consumer realm × restore into one `MemoryFs` × another `MemoryFs` of the realm | the other's tree unchanged; its next inode moves only by the entries restore created | codec `a restore changes nothing outside its target` | → I3 |
 
 ## Out of scope
 

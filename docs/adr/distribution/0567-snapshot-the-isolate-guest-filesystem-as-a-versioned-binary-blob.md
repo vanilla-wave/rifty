@@ -76,7 +76,9 @@ Probes: `docs/backlog/distribution/reference/isolate-host-fs-snapshot-fit-probes
    `ERR_FS_SNAPSHOT_NOT_FRESH` (module cache, fds and cwd keep the old tree);
    `GuestEntry.snapshot` runs whenever no guest code runs — after the run
    ended included. Who enforces "no exec in flight" is the sandbox's.
-7. **Limits.** `maxBytes` is a required argument of both directions; export
+7. **Limits.** `maxBytes` is a required argument of both directions (an
+   invalid `maxBytes` or template is a `TypeError`: a caller bug, not a
+   refusal); export
    sums the size first and refuses before allocating; restore checks the
    blob's length before reading it. Peak memory ≈ 2 × S in either realm, for
    snapshot (tree + blob) and for restore (blob + copies) (P2 in the isolate:

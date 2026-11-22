@@ -19,4 +19,4 @@ Node realm. Committed RED, marked expected-failure until the codec lands.
 
 ## Challenge
 
-challenge: pending — reuses the goal's premise check
+challenge: 2026-11-22 — reuses the goal's premise check (goal `## Challenge`)

@@ -13,7 +13,7 @@ tier: robust
 rifty turns the guest's in-memory FS into one opaque, versioned,
 template-bound byte string and back, with one pure-JS codec that runs inside
 the bare isolate and in the consumer's own Node realm. Restored, the files look
-to guest code exactly as before: same paths, bytes and `fs.stat`. Bytes the
+to guest code exactly as before: same paths, bytes and `fs.stat` except `ino`. Bytes the
 consumer hands back — once written by an isolate that ran hostile code — are
 validated in one linear pass before anything is written; any defect is a named
 error, never a partial tree. The live sandbox (goal of the sibling thread)
@@ -55,7 +55,9 @@ no sandbox API (that lives in the sandbox goal).
    kind, bytes, `readdirSync` order and `fs.statSync` (`size`, `nlink`,
    `mode`, `mtimeMs`, `atimeMs`, `ctimeMs`, `birthtimeMs`) as before snapshot,
    for any name rifty's FS holds; between the isolate and the consumer's realm
-   in both directions. `ino` is renewed, as after a copy (ADR-0567 §1).
+   in both directions. `ino` is renewed, as after a copy (ADR-0567 §1); what
+   a snapshot does not keep (`ino`; links, modes, owners — absent from rifty's
+   FS) is named in `docs/public/compat/isolate-host.md`.
 2. I2. One opaque blob carries a format version and the template
    `{id, version}` or none; a reader refuses a version it does not know and a
    template other than the caller's, each with its named error; later rifty
@@ -63,7 +65,9 @@ no sandbox API (that lives in the sandbox goal).
 3. I3. Hostile bytes: every defect in scenario step 4 is refused with a named
    error whose text carries no blob bytes; the target FS is exactly as before;
    decoding takes time and memory linear in the blob's length, with `maxBytes`
-   checked before any allocation — in the isolate and in the consumer's realm.
+   checked before any allocation — in the isolate and in the consumer's realm;
+   a restore changes nothing outside its target FS (no other `MemoryFs` of the
+   consumer's realm, no realm-wide state a blob value could set).
 4. I4. Limits: in an unaltered realm a snapshot over `maxBytes` is refused
    before its bytes are allocated, and restore refuses a blob over `maxBytes`
    before reading it; restore runs only before guest code in that isolate (not
@@ -77,8 +81,11 @@ no sandbox API (that lives in the sandbox goal).
    (23 654 files, ~95 MB), both realms: bytes, snapshot and restore time, peak
    isolate memory. Budget on the dev machine (M3 Pro) at template scale: each
    direction ≤ 2 s (the requirements' one-pass unpack: 0.33–0.39 s vs 18 s
-   with validation), peak isolate memory ≤ 2 × S + 64 MiB. An honest
-   snapshot crosses the ivm boundary as an exact-length buffer.
+   with validation), peak isolate memory ≤ 2 × S + 64 MiB. Both run
+   synchronously inside the embedder's call, so that call's deadline bounds
+   them (the sandbox's deadline is the sandbox goal's). An honest snapshot
+   crosses the ivm boundary as an exact-length buffer; the copy's cost is
+   published with the rest.
 
 ## Challenge
 

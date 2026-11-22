@@ -194,6 +194,24 @@ describe('format v1 layout (ADR-0567 §1, §2)', () => {
     },
   );
 
+  red('a restore changes nothing outside its target (I3)', () => {
+    const other = createMemoryFs().fsSync;
+    other.writeFileSync('/mine', new Uint8Array([9]));
+    const before = listFs(other);
+    const blob = encode([root, dir('/w'), file('/w/a', 'x'), file('/w/b', 'y')]);
+    other.writeFileSync('/probe1', new Uint8Array(0));
+    const first = other.statSync('/probe1').metadata?.ino as number;
+    restoreFs(target(), blob, OPTIONS);
+    other.writeFileSync('/probe2', new Uint8Array(0));
+    // Only the nodes restore created moved the realm's counter (3 entries + a re-created root child at most).
+    expect(other.statSync('/probe2').metadata?.ino).toBeLessThanOrEqual(first + 1 + 8);
+    other.rmSync('/probe1', {});
+    other.rmSync('/probe2', {});
+    expect(listFs(other).map(({ path, bytes }) => ({ path, bytes }))).toEqual(
+      before.map(({ path, bytes }) => ({ path, bytes })),
+    );
+  });
+
   red('100 000 siblings round-trip: no quadratic pass over a directory (I3)', () => {
     const wide = createMemoryFs().fsSync;
     for (let i = 0; i < 100_000; i++) wide.writeFileSync(`/f${i}`, new Uint8Array(0));
