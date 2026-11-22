@@ -3,7 +3,7 @@ kind: epic
 status: ready
 title: "`node <file>` behaves and reports errors like real Node"
 created: 2026-11-22
-value: A program run as `node <file>` sees Node's entry identity, and its fatal error reads as Node's — right file, right line, the source line — so an agent can fix it.
+value: A program run as `node <file>` sees Node's entry identity, and its fatal error reads as Node's — right file and line in Node's frames, the source line where Node's header is provable — so an agent can fix it.
 user_story: As a service running model-written JS in rifty (browser or V8 isolate), I want `node <file>` to behave and fail like Node, but today `require.main === module` is false and a fatal error prints shifted lines, rifty frames and no source header.
 tier: works
 ---
@@ -11,9 +11,11 @@ tier: works
 ## Outcome
 
 A Node program started as `node <file>` in rifty observes what Node gives an
-entry and its dependencies, and dies with Node's stderr bytes and status. The
-user scenario: an agent writes JS, runs it, reads the error, fixes it — the
-diagnostic must name the right file, line and source line. One implementation
+entry and its dependencies, and dies with Node's status and Node's stderr
+bytes except where a named compat row says otherwise. The user scenario: an
+agent writes JS, runs it, reads the error, fixes it — the diagnostic names the
+right file and line (Node's frames), and the source line with its caret where
+Node's header is provable; never a wrong one. One implementation
 in `runtime-js` serves every host that runs a file: the no-COI SDK, the COI
 Workbench kernel child and the isolate guest bundle (ADR-0557). What cannot be
 made Node's is a named compat row with its cause, never a silent difference.
@@ -28,9 +30,11 @@ made Node's is a named compat row with its cause, never a silent difference.
 3. The program dies (throw in the entry or a dependency, from a timer or an
    async function, unhandled rejection, non-`Error` value, syntax error,
    missing module, error with `cause` or own props). The host reads stderr and
-   the exit status: Node's report — `<file>:<line>` header, source line, caret,
-   the inspected error with user frames at Node's positions, `Node.js` trailer.
-4. The agent fixes the named line and reruns.
+   the exit status: Node's report — the inspected error with user frames at
+   Node's positions, `Node.js` trailer, and the `<file>:<line>` header with
+   source line and caret where it is provable (an unhandled rejection's error
+   frame, a compile error naming its token); a synchronous throw has none.
+4. The agent fixes the line the first frame (or the header) names and reruns.
 
 Oracle: live `node <file>` v24.16.0 over the same files in a temp dir; one path
 normalization (temp dir ↔ project root). Two declared projections, applied to
@@ -91,6 +95,15 @@ rifty's own runtime code shared by all hosts, a host-side rewrite would fork
 the formatter per host (`sibling-drift`).
 
 ## Decisions
+
+- amend: 2026-11-22 — manager thread (delegated by the user, reported to the
+  user): after external review round 1, header only by construction; the
+  rollback rule set in advance was taken — no synchronous-throw header —
+  because V8's throw site is not readable from JS in general and a false
+  header is worse than none — changed: Outcome and scenario steps 3–4 (the
+  header where provable; the first frame names file and line); I2 unchanged
+  (the headerless synchronous report is a named compat row, process.md "Fatal
+  error stderr bytes"); remainder: `backlog/runtime-js/sync-uncaught-header-throw-site-source`.
 
 - Module loading is a hot path: every loader change carries a before/after
   measurement of a require-heavy load (3061-module CJS tree, 15 runs, median)

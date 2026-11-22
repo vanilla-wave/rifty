@@ -18,13 +18,6 @@
    hypothesis). → I2 I3
 ## Open questions
 
-- A synchronous throw prints no `<file>:<line>` header (V8's throw site is not
-  readable from JS; after external review round 1 the manager thread set the
-  contract: header only by construction, else none — ADR-0445 2026-11-22). I2
-  admits it as a named compat row; whether the scenario accepts headerless
-  synchronous reports (the first frame still names file:line:col) is the
-  user's — owner: user — evidence: `fatal-report.test.ts`, compat process.md.
-
 - Isolate ESM entry `TypeError: URLConstructor is not a constructor`: runtime-js
   builds `import.meta.url` with the guest-visible `URL`, which the isolate
   replaces with its ceiling — owner: agent — a string file-URL encoder in
