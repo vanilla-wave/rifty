@@ -411,6 +411,16 @@ require('fs').writeFileSync('rel/out.txt', require('path').relative(__dirname, _
     diagnosticText: true,
   },
   {
+    // Manager 2026-11-22: a regression on the diagnostics branch compiled this silently, exit 0.
+    label: 'an extra closing brace is a SyntaxError: exit 1, no line of the file runs',
+    files: {
+      'brace.js':
+        'function a() {\n  console.log("a");\n}}\nconsole.log("top");\nfunction b() {\n  return 1;\n}\n',
+    },
+    runs: [['brace.js']],
+    diagnosticText: true,
+  },
+  {
     label: 'missing module',
     files: { 'main.js': "require('./nope')\n" },
     runs: [['main.js'], ['missing.js']],
