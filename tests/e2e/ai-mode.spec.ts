@@ -984,16 +984,23 @@ test('native compaction marker survives settlement; overflow offers larger model
     await send(page, 'continue after compaction');
     await expect(panel).toHaveAttribute('data-status', 'context-exceeded');
     expect(small.requests).toHaveLength(7);
-    await expect(panel.getByTestId('ai-continuation')).toHaveCount(2);
+    // Pi CLI 1.6.0 reports the second overflow of one episode as a failed recovery.
+    await expect(panel.getByTestId('ai-continuation')).toHaveCount(3);
+    await expect(panel.getByTestId('ai-continuation').nth(2)).toContainText(
+      'Context overflow recovery failed after one compact-and-retry attempt',
+    );
     await panel.getByRole('button', { name: 'Continue with large', exact: true }).click();
     await expect(panel).toHaveAttribute('data-status', 'done');
     await expect(panel).toContainText('Continued with retained summary.');
     expect(JSON.stringify(large.requests[0]?.body.messages)).toContain('Recovery summary');
     const trace = await exported(page);
-    expect(trace.transcript[0]?.role).toBe('compactionSummary');
+    // Pi 1.x history starts with the compaction's prompt state, then the summary.
+    expect(trace.transcript.filter(({ role }) => role !== 'system')[0]?.role).toBe(
+      'compactionSummary',
+    );
     expect(trace.usage.totalTokens).toBeGreaterThan(20003);
     expect(trace.events.filter(({ event }) => event.type === 'retry')).toHaveLength(0);
-    await expect(panel.getByTestId('ai-continuation')).toHaveCount(2);
+    await expect(panel.getByTestId('ai-continuation')).toHaveCount(3);
   } finally {
     await small.close();
     await large.close();

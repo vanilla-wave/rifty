@@ -416,7 +416,10 @@ export function bundleViolations(file, source, loadSourceMap = () => null) {
       member.object?.type === 'CallExpression' &&
       member.object.callee.type === 'MemberExpression' &&
       propertyName(member.object.callee) === 'getBracketPairsInRange';
-    if (METHODS.has(method) && !bracketIterable) report(member, method);
+    // pi-schema 1.6.0's schema compiler calls its own `union` method on `this`; a
+    // Set.prototype.union call needs a Set receiver, never a class's own `this`.
+    const ownUnion = method === 'union' && member.object?.type === 'ThisExpression';
+    if (METHODS.has(method) && !bracketIterable && !ownUnion) report(member, method);
     if (method !== 'with') return;
     if (
       member.object?.type === 'MemberExpression' &&

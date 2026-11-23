@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+- `check:es-floor` admits `union` called on `this` (pi-schema 1.6.0's compiler method, never `Set.prototype.union`); a Set or other receiver still fails (test added).
+
 - Root dev `ws` 8.18.3 → 8.23.0: pi-ai 1.6.0's openai 7.59 peers `ws@^8.21.0`; the packed agent host's npm install failed `ETARGET` without it.
 
 - Add manual `rifty-manager` skill: threads do the work, the chat leads each PR through an outside `cross-review` to merge. While invoked it overrides three process defaults: the author thread hands back before CLOSE (§Route "never return control between stages"), a user fork merges on the manager's recorded reversible default (`STOP-1` "nothing closes on it"), and posts to other repos join `DEC-3` confirm-first.

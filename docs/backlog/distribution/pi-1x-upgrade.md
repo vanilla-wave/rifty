@@ -39,7 +39,7 @@ agent-bench core-v1 series shows no lost passes attributable to the upgrade.
 
 ## Acceptance
 
-1. Continuation, retry, overflow, recoverable length and threshold compaction equal the real CLI 1.6.0 `AgentSession` on 14 scripted scenarios (requests, retries, compaction numbers, transcript incl. system positions, file-operation lists). `tools/agent-bench/src/continuation-parity.test.ts` → ADR-0569
+1. Continuation, retry, overflow, recoverable length and threshold compaction equal the real CLI 1.6.0 `AgentSession` on 15 scripted scenarios (requests, retries, compaction numbers, transcript incl. system positions, file-operation lists). `tools/agent-bench/src/continuation-parity.test.ts` → ADR-0569
 2. A `Type.Object` consumer tool reaches the wire as on pi 0.85.1 (minus pi 1.x `strict: false`) and accepts/rejects/coerces 8 argument cases exactly as the captured 0.85.1 probe; `Refine`/`Codec`/`BigInt` parameters throw `NotImplementedError` at creation. `packages/agent/src/typebox-tools.test.ts` → ADR-0570
 3. Stop mid-batch in Chromium: the skipped call gets an error result, no side effect, next run continues. `tests/browser-unit/agent-core.spec.ts` → ADR-0424
 4. The shared prompt recipe reaches the CLI 1.6.0 wire as the current system message; skills and `project_context` blocks are byte-identical to CLI 1.6.0. `prompt-recipe-parity.test.ts`, `project-resources.test.ts` → ADR-0440

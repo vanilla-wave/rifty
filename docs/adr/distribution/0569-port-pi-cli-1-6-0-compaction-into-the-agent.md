@@ -45,7 +45,7 @@ journal (`session.ts`) beside the receipts, cleared by reset.
 4. Classifier (`isContextOverflow`, `isRecoverableLength`), retry and the loop stay
    native pi-ai/agent-core; no copy.
 5. Oracle: `tools/agent-bench/src/continuation-parity.test.ts` runs the real CLI
-   1.6.0 `AgentSession` and rifty over the same provider (14 scenarios); token
+   1.6.0 `AgentSession` and rifty over the same provider (15 scenarios); token
    numbers equal with the system section sizes equalized; system message
    positions and CLI file-operation lists compared. A copy tested only against itself does not count.
 6. Kill condition: an upstream pi release exporting compaction/projection from a

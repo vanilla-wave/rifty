@@ -81,7 +81,8 @@ type Scenario =
   | 'retry-overflow-tail'
   | 'abort-backoff'
   | 'length-recovery'
-  | 'file-ops';
+  | 'file-ops'
+  | 'length-twice';
 async function run(kind: 'native' | 'rifty', scenario: Scenario, riftyPrompt = '') {
   const dir = await mkdtemp(join(tmpdir(), 'rifty-continuation-parity-'));
   let conversationPrompt: string | undefined;
@@ -158,7 +159,10 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario, riftyPrompt = '
       );
     if (scenario === 'silent-overflow' && !summary) Object.assign(response, answer('Done', 40000));
     // Pi 1.x: a length stop below the model's output limit gets one compact-and-continue.
-    if (scenario === 'length-recovery' && !summary && count === 1)
+    if (
+      (scenario === 'length-recovery' && !summary && count === 1) ||
+      (scenario === 'length-twice' && !summary)
+    )
       Object.assign(response, answer('Truncated', 10, 'length'));
     if (scenario === 'overflow-episodes' && !summary && (count === 1 || count === 3))
       Object.assign(response, answer('maximum context length is 5000 tokens', 10, 'error'));
@@ -222,6 +226,8 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario, riftyPrompt = '
     {
       ...answer('', 10, 'toolUse'),
       content: [
+        // Summaries omit thinking (CLI 1.6.0 serializeConversation).
+        { type: 'thinking', thinking: 'private reasoning' },
         { type: 'toolCall', id: 'r1', name: 'read', arguments: { path: '/c.ts' } },
         { type: 'toolCall', id: 'r2', name: 'read', arguments: { path: '/a.ts' } },
         { type: 'toolCall', id: 'w1', name: 'write', arguments: { path: '/b.ts' } },
@@ -248,7 +254,8 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario, riftyPrompt = '
             scenario === 'overflow-episodes' ||
             scenario === 'silent-overflow' ||
             scenario === 'retry-overflow-tail' ||
-            scenario === 'length-recovery'
+            scenario === 'length-recovery' ||
+            scenario === 'length-twice'
           ? lowUsage(seed())
           : [];
   let messages: readonly AgentMessage[];
@@ -393,7 +400,7 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario, riftyPrompt = '
       retries,
       compactions,
       reportedCompactions: eventMetrics(compactionEvents, model.contextWindow, 'done').compactions,
-      ...(scenario === 'retry-overflow-tail'
+      ...(scenario === 'retry-overflow-tail' || scenario === 'length-twice'
         ? { failure: (compactionEvents.at(-1) as { errorMessage?: string }).errorMessage }
         : {}),
       messages: normalized(placed),
@@ -419,6 +426,7 @@ it.each<Scenario>([
   'abort-backoff',
   'length-recovery',
   'file-ops',
+  'length-twice',
 ])(
   'matches actual Pi CLI 1.6.0: %s',
   async (scenario) => {
@@ -434,6 +442,14 @@ it.each<Scenario>([
     if (scenario === 'after-tool' || scenario === 'overflow-episodes')
       expect(rifty.effects).toBe(1);
     if (scenario === 'partial') expect(rifty.effects).toBe(0);
+    if (scenario === 'length-twice')
+      expect(rifty).toMatchObject({
+        failure: 'Truncated response recovery failed after one compact-and-retry attempt.',
+      });
+    if (scenario === 'file-ops') {
+      expect(JSON.stringify(rifty.requests)).not.toContain('private reasoning');
+      expect(JSON.stringify(native.requests)).not.toContain('private reasoning');
+    }
     if (scenario === 'file-ops')
       expect(JSON.stringify(rifty.messages)).toContain(
         '<read-files>\\n/c.ts\\n</read-files>\\n\\n<modified-files>\\n/a.ts\\n/b.ts\\n</modified-files>',

@@ -452,7 +452,9 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
         checkImages(images);
         await archive?.begin();
         // CLI `_prepareRun`: check the last response, aborted included; never continue here.
-        const previous = agent.state.messages.findLast((message) => message.role === 'assistant');
+        const previous = [...agent.state.messages]
+          .reverse()
+          .find((message) => message.role === 'assistant');
         if (previous && continuation.compaction.enabled) await checkCompaction(previous);
         const update = refresh();
         if (!runController.signal.aborted)
