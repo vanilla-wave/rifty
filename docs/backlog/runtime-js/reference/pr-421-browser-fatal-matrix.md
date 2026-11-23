@@ -84,3 +84,7 @@ HEAD vs a fresh `f5c232b3d` build, narrowed normalization: no-COI 109 cells,
 7 internal frame line, 3 `-e` timer frame name (exception 2). 218 cells,
 differences beyond the two exceptions: 0.
 
+
+## Rerun after review round 7 (projection, 2026-11-23)
+
+HEAD vs the `f5c232b3d` build: no-COI 109 cells, 102 equal, 7 exception 1; COI 109 cells, 99 equal, 7 exception 1, 3 exception 2. 218 cells, differences beyond the two exceptions: 0.
