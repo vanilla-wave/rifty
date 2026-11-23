@@ -10,6 +10,8 @@ code: [packages/runtime-js/src/internal/event-loop-keepalive.ts, packages/runtim
 
 ## Context
 
+Sandbox (ADR-0568): a member of the lifecycle class, compat ⚠️ (row "A run's lifecycle and exit status", measured in `reference/isolate-host-sandbox-lifecycle-class.md`). Owner: runtime-js. Trigger: primordials for the runtime's post-guest paths, or a guest found breaking its own status this way.
+
 Measured in the isolate host (ADR-0557) @ 2cbb37c50, each against `node -e`:
 `Map.prototype.get = () => { throw new Error('boom') }; console.log(1)` → the
 run never drains (`termination: 'timeout'`), Node exits 0;

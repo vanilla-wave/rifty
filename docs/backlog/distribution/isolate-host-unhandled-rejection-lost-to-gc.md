@@ -11,6 +11,8 @@ code: [packages/isolate-host/src/child/main.ts, packages/isolate-guest/README.md
 
 ## Context
 
+Sandbox (ADR-0568): a member of the lifecycle class, compat ⚠️ (row "A run's lifecycle and exit status", measured in `reference/isolate-host-sandbox-lifecycle-class.md`). Owner: distribution (isolate host). Trigger: an isolated-vm release fixing laverdet/isolated-vm#589, or a sandbox consumer reading exit 0 for it.
+
 Found in cross-review round 2 of PR #412 (2026-11-19, macOS arm64, Node v24.16.0, isolated-vm 7.0.2):
 `Promise.reject(new Error('x')); const e = Date.now() + 10; while (Date.now() < e);` → `node -e` exit 1
 with the diagnostic, `runCode` exit 0, stderr `''`; with `+ 2`, exit 1.

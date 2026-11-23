@@ -10,6 +10,8 @@ code: [packages/runtime-js/src/builtins/process-lifecycle-events.ts, packages/ru
 
 ## Context
 
+Sandbox (ADR-0568): a member of the lifecycle class, compat ⚠️ (row "A run's lifecycle and exit status", measured in `reference/isolate-host-sandbox-lifecycle-class.md`). Owner: runtime-js. Trigger: the next change to `'exit'` listener dispatch, or a sandbox consumer whose exit code an `'exit'` listener sets.
+
 REV-12 discoveries of `runtime-js/reference/process-lifecycle-events-exit-code-evidence.md`
 (vitest-run-in-browser item 7; unit Out of scope: "A throw from an `'exit'`
 listener … not claimed" (Node o39) and "A no-listener throw whose `'exit'`

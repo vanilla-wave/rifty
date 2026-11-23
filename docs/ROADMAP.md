@@ -173,8 +173,9 @@ hypervisor and deploy stay outside rifty; the consumer supplies the outer bounda
   [args]` with `runCode`'s limits, one sandbox through write → run → error → fix (every run end
   keeps the sandbox; killed runs roll back), `snapshot()` / create-from-snapshot, `destroy()`
   after which no isolate of the sandbox runs and no operation still in flight resolves —
-  ADR-0568, ADR-0567 codec (PR #419, #418). Three behavior divergences around `process.exit()`
-  and a fatal throw stay compat ⚠️ (the user's «ок» to the manager's recommendation, ADR-0568). Open as backlog: a byte request frame (`distribution/isolate-host-binary-request-frame`),
+  ADR-0568, ADR-0567 codec (PR #419, #418). A run diverges from Node where `runCode` does, with
+  extra files kept, the whole run rolled back, or an exit code not Node's (compat ⚠️, the lifecycle
+  class). Open as backlog: a byte request frame (`distribution/isolate-host-binary-request-frame`),
   host-write cost O(state) (`distribution/isolate-host-sandbox-write-cost-per-state`), keeping a
   killed run's writes (`distribution/isolate-host-sandbox-killed-run-partial-writes`).
 - Directions (not fitted): C — library template (`createSandbox({ template })`, a loud gap

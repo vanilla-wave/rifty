@@ -592,6 +592,59 @@ describe('declared: a run Node ends at once but this host only at its deadline (
   );
 });
 
+describe('declared: the run ends where runCode does, with its file outcome (compat ⚠️)', () => {
+  // The lifecycle class (ADR-0568, reference isolate-host-sandbox-lifecycle-class): one
+  // representative per outcome; extra files kept is the "work queued at exit" row above.
+  carrier(
+    'exit(3), then an endless queued microtask: timeout, its writes rolled back',
+    async () => {
+      const code =
+        "require('fs').writeFileSync('w', '1'); queueMicrotask(() => { for (;;) {} }); process.exit(3)";
+      // Node exits 3 inside exit() and keeps `w`.
+      const o = nodeSequence([{ files: { 'x.js': code }, run: ['x.js'] }])[0];
+      expect(o?.exitCode).toBe(3);
+      expect(Object.keys(o?.files ?? {})).toContain(`${W}/w`);
+      const sb = await createSandbox();
+      try {
+        await sb.writeFile('x.js', code);
+        expect(await sb.exec('x.js', { timeoutMs: 2000 })).toMatchObject({
+          exitCode: null,
+          termination: 'timeout',
+        });
+        expect((await sb.list()).map((e) => e.name)).toEqual(['x.js']);
+      } finally {
+        await sb.destroy();
+      }
+    },
+  );
+  const STATUS: Record<string, { code: string; node: number; here: number }> = {
+    'a rejection inside an exit listener: 0 where Node exits 1': {
+      code: "require('fs').writeFileSync('w', '1'); process.on('exit', () => { Promise.reject(new Error('r')) })",
+      node: 1,
+      here: 0,
+    },
+    'process.exitCode set by an exit listener after an uncaught throw: 1 where Node exits 5': {
+      code: "require('fs').writeFileSync('w', '1'); process.on('exit', () => { process.exitCode = 5 }); throw new Error('x')",
+      node: 5,
+      here: 1,
+    },
+  };
+  for (const [label, { code, node, here }] of Object.entries(STATUS)) {
+    carrier(`${label}; the files are Node's`, async () => {
+      const o = nodeSequence([{ files: { 's.js': code }, run: ['s.js'] }])[0];
+      expect(o?.exitCode).toBe(node);
+      const sb = await createSandbox();
+      try {
+        await sb.writeFile('s.js', code);
+        expect((await sb.exec('s.js')).exitCode).toBe(here);
+        expect(await tree(sb)).toEqual(o?.files);
+      } finally {
+        await sb.destroy();
+      }
+    });
+  }
+});
+
 describe('limits are loud (scenario 8, I6)', () => {
   carrier('per-file limit on host ops, one state cap for host writes and run results', async () => {
     const sb = await createSandbox({ maxFileBytes: 1024, maxFsBytes: 64 * 1024 });

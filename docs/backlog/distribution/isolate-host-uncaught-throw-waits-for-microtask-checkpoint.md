@@ -10,7 +10,7 @@ code: [packages/isolate-guest/src/guest/entry.ts, packages/isolate-host/src/chil
 
 ## Context
 
-Sandbox (ADR-0568): kept as compat ⚠️ — the user answered «ок» to the manager's recommendation to accept the three divergences, 2026-11-23; reading it as acceptance is the manager's (ADR-0568 §Not the user's words). Owner: distribution (isolate host). Trigger: an isolated-vm release that leaves the microtask checkpoint on termination, or a sandbox consumer losing a run's writes to this timeout.
+Sandbox (ADR-0568): a member of the lifecycle class, compat ⚠️ (row "A run's lifecycle and exit status", measured in `reference/isolate-host-sandbox-lifecycle-class.md`). Owner: distribution (isolate host). Trigger: an isolated-vm release that leaves the microtask checkpoint on termination, or a sandbox consumer losing a run's writes to this timeout.
 
 Measured @ 1d3fc3c43, `node -e` v24.16.0 against `runCode(code, { timeoutMs: 3000 })`:
 `setTimeout(() => { const f = () => queueMicrotask(f); f(); throw new Error('x') })`

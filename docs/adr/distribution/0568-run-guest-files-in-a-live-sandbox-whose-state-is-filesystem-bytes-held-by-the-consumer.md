@@ -196,19 +196,22 @@ view's whole backing buffer; rifty's program entry has diagnostic gaps and no
   worker's run cannot be rerun idempotently; a sandbox pins a worker slot
   while idle; a heap-limit or catastrophic end takes the files back to the
   last restore point anyway. For the consumer the contract is the same: one
-  sandbox per agent run; restore per run is internal. Revisit with the
-  template goal.
+  sandbox per agent run; restore per run is internal (the manager's reading
+  of the user's words, §Not the user's words). Revisit with the template goal.
 - **C. In-memory VFS in a per-sandbox worker or long-lived isolate.**
   Rejected: catastrophic OOM / ICU retention / heap-limit disposal lose the
   files (step 0 S1).
+- **D. Build `runCode` on the sandbox.** Rejected: no consumer needs it, and
+  it adds a state round trip to every `runCode` call — against «`runCode`
+  does not change» (the goal's Outcome).
 
 ## Invariants and scenario
 
 The goal's `## User scenario` and `## Invariants`, verbatim (the goal closed
 2026-11-23; tests cite them as "scenario N" and I1–I9). What the goal decided or
 the code refined since is not folded in: the user's words and the manager's
-reading are in §Not the user's words (2026-11-23: three behavior divergences kept
-as compat ⚠️), the code's refinements in §Decision (§5: an operation not yet
+reading are in §Not the user's words (behavior divergences from Node, the
+lifecycle class), the code's refinements in §Decision (§5: an operation not yet
 settled when `destroy()` is called rejects; §6: `timeoutMs` covers the consumer's
 encode; a refused host write leaves the files as they were, times included).
 Carriers: `packages/isolate-host/tests/sandbox-acceptance.test.ts` (scenario,
@@ -339,12 +342,19 @@ The user, 2026-11-23, asked by the manager «Песочница: принять 
 three — (1) work queued at `process.exit()` runs and its file stays in the state; (2) a microtask
 from an `'exit'` handler after an explicit `exit()` runs and may write a file; (3) an uncaught
 throw with an endless microtask chain ends as a timeout with its writes rolled back, Node exits 1
-with them kept: «ок». The manager reads it as accepting the recommendation (the manager's reading,
-not the user's words): the three stay compat ⚠️ and are fixed through their backlog records
-(`runtime-js/node-eval-work-queued-at-exit-runs`,
-`distribution/isolate-host-natural-exit-listener-queued-work`,
-`distribution/isolate-host-uncaught-throw-waits-for-microtask-checkpoint`; lead
-`distribution/isolate-host-sandbox-capture-at-process-terminal`).
+with them kept: «ок». The manager's reading, not the user's words: «ок» accepts the
+recommendation; the three stay declared ⚠️ and the goal's decision line «the same holds for
+anything found in the class "a run silently does something else"» no longer gates the close for
+them. Their records: (1), (2) `runtime-js/node-eval-work-queued-at-exit-runs` (and the untried
+lead `distribution/isolate-host-sandbox-capture-at-process-terminal`); (3)
+`distribution/isolate-host-uncaught-throw-waits-for-microtask-checkpoint`. The question covered
+three members of a wider class (`docs/backlog/distribution/reference/isolate-host-sandbox-lifecycle-class.md`).
+
+The user, 2026-11-17 (requirements, quoted in the goal's state-model line): «в пределах одного
+прогона агента один экземпляр живёт через write → exec → ошибка → fix → exec. Следующий прогон…
+новый экземпляр из шаблона + восстановленных файлов». The manager's reading, not the user's words
+(2026-11-22): one sandbox per agent run is the contract kept; a restore per run is internal to it
+(alternative A′).
 
 Manager decisions by delegation (2026-11-22), not the user's words: a restore and a capture per run
 with a killed run rolled back, and the per-run cost while a template layer is part of the state; one

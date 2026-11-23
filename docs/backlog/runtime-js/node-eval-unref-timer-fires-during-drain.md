@@ -10,6 +10,8 @@ code: [packages/runtime-js/src/internal/event-loop-keepalive.ts, packages/runtim
 
 ## Context
 
+Sandbox (ADR-0568): a member of the lifecycle class, compat ⚠️ (row "A run's lifecycle and exit status", measured in `reference/isolate-host-sandbox-lifecycle-class.md`). Owner: runtime-js. Trigger: the next change to the drain's idleness check, or a sandbox consumer finding files from an `unref()`'d timer.
+
 Node v24.16.0: `node -e "setInterval(() => console.log('fired'), 1).unref()"` → no
 output, status 0. Isolate host (ADR-0557) prints `fired` 2–3 times (10/10
 runs @ 09337abe3); `setTimeout(f, 5).unref()` no longer fires there. Found by

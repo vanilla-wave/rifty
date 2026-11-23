@@ -10,7 +10,7 @@ code: [packages/isolate-host/src/child/main.ts, packages/isolate-guest/src/guest
 
 ## Context
 
-Sandbox (ADR-0568): kept as compat ⚠️ — the user answered «ок» to the manager's recommendation to accept the three divergences, 2026-11-23; reading it as acceptance is the manager's (ADR-0568 §Not the user's words). Owner: distribution (isolate host). Trigger: the capture-at-terminal probe (`distribution/isolate-host-sandbox-capture-at-process-terminal`), or a sandbox consumer finding a file written by an `'exit'` listener's microtask.
+Sandbox (ADR-0568): a member of the lifecycle class, compat ⚠️ (row "A run's lifecycle and exit status", measured in `reference/isolate-host-sandbox-lifecycle-class.md`). Owner: distribution (isolate host). Trigger: the capture-at-terminal probe (`distribution/isolate-host-sandbox-capture-at-process-terminal`), or a sandbox consumer finding a file written by an `'exit'` listener's microtask.
 
 PR #416 verify review 2026-11-22, `node -e` v24.16.0, natural exit (no `exit()`):
 

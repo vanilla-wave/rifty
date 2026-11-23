@@ -353,7 +353,7 @@ describe('the isolate of a run ends with it', () => {
 });
 
 /**
- * B1: the end state is authored by the guest. Whatever its realm makes of the
+ * The end state is authored by the guest. Whatever its realm makes of the
  * capture — bytes over the cap, not bytes, a throw, a hang — is that call's
  * result (`stateRefused`, or `timeout` for a hang), the state of before stays,
  * and a neighbour call on the same worker gets its exact result.
@@ -497,7 +497,7 @@ describe('creation from a snapshot refuses bad bytes', () => {
   );
 });
 
-describe('sandboxes are independent (scenario 8, I7)', () => {
+describe('sandboxes do not wait for each other (README §Sandbox)', () => {
   carrier('a spinning run in one sandbox does not hold another’s', async () => {
     const a = await createSandbox();
     const b = await createSandbox();
@@ -1195,5 +1195,21 @@ describe('a refused write leaves the state as it was, times included (Greptile, 
     } finally {
       await sb.destroy();
     }
+  });
+});
+
+describe('an idle sandbox holds no process of its own (I6; its isolates end with their runs, above)', () => {
+  carrier('ten sandboxes that each ran once leave one warm worker, none of their own', async () => {
+    const { value } = await consumer(`
+      const boxes = [];
+      for (let i = 0; i < 10; i++) {
+        const sb = await createSandbox();
+        await sb.writeFile('a.js', 'console.log(1)');
+        await sb.exec('a.js');
+        boxes.push(sb);
+      }
+      await sleep(200);
+      out({ workers: children().length, live: boxes.length });`);
+    expect(value).toEqual({ workers: 1, live: 10 });
   });
 });
