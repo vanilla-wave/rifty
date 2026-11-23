@@ -4,13 +4,13 @@ status: draft
 title: "Browser hosts: an uncaught throw from a timer or callback (and a COI entry throw) prints Node's fatal report"
 created: 2026-11-23
 why: On the COI kernel child and the no-COI child Worker such a throw prints the browser's text with rifty's runtime frames and served URLs (main's behaviour), and on the no-COI SDK command it ends silent with no status; Node prints its fatal report and exits 1
-sources: [docs/backlog/epics/node-file-entry-parity/map.md, docs/adr/runtime-js/0445-dispatch-node-process-lifecycle-events-before-terminal-handling.md, docs/adr/kernel/0340-sequenced-worker-stdio-reconstructs-cross-port-write-order.md]
+sources: [docs/adr/runtime-js/0571-prove-node-file-entry-and-fatal-report-parity-against-live-node-node-s-report-in-the-isolate-guest-only.md, docs/adr/runtime-js/0445-dispatch-node-process-lifecycle-events-before-terminal-handling.md, docs/adr/kernel/0340-sequenced-worker-stdio-reconstructs-cross-port-write-order.md]
 code: [packages/runtime-js/src/internal/event-loop-keepalive.ts, packages/kernel/src/process-manager.ts, packages/workbench/src/workers/node-entry-bootstrap.ts]
 ---
 
 ## Context
 
-PR #421 (goal node-file-entry-parity) moved this path to the runtime's report
+PR #421 (ADR-0571) moved this path to the runtime's report
 twice and rolled it back after two regressions (ADR-0445 2026-11-23 lines);
 the goal map keeps it as item 5d with an `owner: user` question.
 

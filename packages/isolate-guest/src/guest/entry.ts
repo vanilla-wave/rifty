@@ -344,7 +344,7 @@ function resolvePosix(base: string, p: string): string {
 
 /** Installs the runtime for one run; before any guest code. */
 function setUp(): void {
-  // The isolate host prints Node's fatal report (goal node-file-entry-parity).
+  // The isolate host prints Node's fatal report (ADR-0571).
   installNodeFatalReport();
   installProcessGlobals();
   installTimerGlobals();

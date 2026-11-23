@@ -4,7 +4,7 @@ status: draft
 title: "Telling rifty's exit signal from a guest error reads the error's `code` through its getters"
 created: 2026-11-23
 why: A guest error with an accessor on `code` runs that getter when it is thrown fatally (stdout `RAN`), where Node never reads it; every host
-sources: [docs/public/compat/process.md, docs/backlog/epics/node-file-entry-parity/ledger.md]
+sources: [docs/public/compat/process.md, docs/adr/runtime-js/0571-prove-node-file-entry-and-fatal-report-parity-against-live-node-node-s-report-in-the-isolate-guest-only.md]
 code: [packages/runtime-js/src/builtins/process-lifecycle-events.ts, packages/runtime-js/src/builtins/node-entry.ts]
 ---
 

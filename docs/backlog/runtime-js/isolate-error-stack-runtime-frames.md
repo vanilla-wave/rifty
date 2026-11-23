@@ -10,8 +10,8 @@ code: [packages/isolate-guest/src/guest/entry.ts, packages/runtime-js/src/builti
 
 ## Context
 
-Found by the PR #421 external review (round 1), outside goal
-`node-file-entry-parity` (its I3 covers the fatal report only; that report
+Found by the PR #421 external review (round 1), outside the scope of
+ADR-0571 (its frame contract covers the fatal report only; that report
 already drops runtime frames — compat process.md "Fatal error stderr bytes").
 Reproduced by this capture (Node v24.16.0 vs `runCode` from
 `packages/isolate-host/dist`, built 2026-11-22 21:14),

@@ -4,13 +4,13 @@ status: draft
 title: "A CommonJS or ES module that fails to compile throws Node's SyntaxError, not the loader's ModuleLoadError wrapper"
 created: 2026-11-18
 why: Node throws V8's `SyntaxError: <message>` (catchable as `SyntaxError`, printed with a `<file>:<line>` header and caret); rifty throws `ModuleLoadError` (`SYNTAX_ERROR`) whose message embeds the path and, for ESM, the loader parser's message
-sources: [docs/public/compat/process.md, tests/no-coi/no-coi-fatal-stderr.spec.ts, docs/backlog/epics/node-file-entry-parity/goal.md]
+sources: [docs/public/compat/process.md, tests/no-coi/no-coi-fatal-stderr.spec.ts, docs/adr/runtime-js/0571-prove-node-file-entry-and-fatal-report-parity-against-live-node-node-s-report-in-the-isolate-guest-only.md]
 code: [packages/runtime-js/src/module-loader/cjs.ts, packages/runtime-js/src/module-loader/errors.ts, packages/runtime-js/src/module-loader/esm-ast.ts]
 ---
 
 ## Context
 
-2026-11-23 — user (goal `node-file-entry-parity` amend, asked by the manager: «Отчёт об ошибке без заголовка Node; у синтаксической ошибки — только имя файла: „ок“ или отдельная задача»): «давай положим в бэклог на всякий». Deferred, not dropped: owner — runtime-js (fatal report / module loader); trigger — a user request, or a source that gives a place and message without inference (an engine-level message location, or for a syntax error rifty's own parser giving message and position together).
+2026-11-23 — user (ADR-0571 §The user's words, asked by the manager: «Отчёт об ошибке без заголовка Node; у синтаксической ошибки — только имя файла: „ок“ или отдельная задача»): «давай положим в бэклог на всякий». Deferred, not dropped: owner — runtime-js (fatal report / module loader); trigger — a user request, or a source that gives a place and message without inference (an engine-level message location, or for a syntax error rifty's own parser giving message and position together).
 
 PR #406 outside finding 3. Source `const a = 1;\nlet x = ;\n`, Node v24.16.0,
 probe 2026-11-18:
@@ -40,7 +40,7 @@ Neighbour: `sync-uncaught-header-throw-site-source` owns the printed header. Fau
 Can rifty throw V8's own `SyntaxError` (V8's message, e.g. `Unexpected token ';'`)
 for both loaders and still name the module (Node names it only in the header)?
 
-## Dead ends (PR #421, goal node-file-entry-parity, three review rounds)
+## Dead ends (PR #421, three review rounds)
 
 The CJS side was tried and rolled back to main's `ModuleLoadError` (manager
 decision after external review round 3, 2026-11-23); every attempt rebuilt

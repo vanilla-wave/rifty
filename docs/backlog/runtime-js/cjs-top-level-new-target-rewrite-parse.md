@@ -10,8 +10,8 @@ code: [packages/runtime-js/src/module-loader/cjs.ts]
 
 ## Context
 
-Found by the PR #421 external review (round 3), outside goal
-`node-file-entry-parity`. Reproduced by this capture (2026-11-23).
+Found by the PR #421 external review (round 3), outside the scope of
+ADR-0571. Reproduced by this capture (2026-11-23).
 
 | `x.cjs` body | Node v24.16.0 (`node x.cjs` and `require('./x.cjs')`) | rifty isolate `require('./x.cjs')` |
 |---|---|---|

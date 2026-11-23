@@ -10,8 +10,8 @@ code: [packages/runtime-js/src/module-loader/loader.ts]
 
 ## Context
 
-`projectNodeEvalError` reads `stack` as a string. Found by the PR #421 external review (round 1, Node v24.16.0), outside goal
-`node-file-entry-parity`; not reproduced by this capture beyond the reviewer's run.
+`projectNodeEvalError` reads `stack` as a string. Found by the PR #421 external review (round 1, Node v24.16.0), outside the scope of
+ADR-0571; not reproduced by this capture beyond the reviewer's run.
 
 Same seam, internal review round 2 (PR #421, probe H4, isolate `-e` rows): an
 error whose `stack` getter throws reports the getter's own error instead of the

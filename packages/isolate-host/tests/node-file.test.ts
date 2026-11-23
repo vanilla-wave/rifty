@@ -1,5 +1,5 @@
 /**
- * Goal node-file-entry-parity I4, isolate guest bundle: a fatal program file
+ * ADR-0571 (Decision 2–3), isolate guest bundle: a fatal program file
  * `require`d from `runCode` (`node -e`) prints the same report as live
  * `node -e` over the same files. The files are written by the code itself, so
  * both sides run the identical source; `<root>` is the oracle temp dir

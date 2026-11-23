@@ -10,8 +10,8 @@ code: [packages/runtime-js/src/module-loader/cjs.ts]
 
 ## Context
 
-`executeCjs` reloads only a deleted *loaded* record; a loading one is returned as is. Found by the PR #421 external review (round 1, Node v24.16.0), outside goal
-`node-file-entry-parity`; not reproduced by this capture beyond the reviewer's run.
+`executeCjs` reloads only a deleted *loaded* record; a loading one is returned as is. Found by the PR #421 external review (round 1, Node v24.16.0), outside the scope of
+ADR-0571; not reproduced by this capture beyond the reviewer's run.
 
 ## Challenge
 

@@ -11,7 +11,7 @@ import {
   runNodeFileOracle,
 } from './fixtures/node-file-programs.ts';
 
-// Goal node-file-entry-parity acceptance carrier, COI Workbench host (kernel
+// ADR-0571 acceptance carrier, COI Workbench host (kernel
 // child): each program in its own project dir `nf/<name>`. The shell has no
 // `2>`, so a rifty `node` runner spawns `node <argv>` there with piped stdio
 // (as the oracle) and prints both streams, status and its root as one JSON

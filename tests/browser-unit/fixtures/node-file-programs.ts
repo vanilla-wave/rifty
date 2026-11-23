@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
-// Goal node-file-entry-parity: `node <file>` programs run verbatim in live Node
+// ADR-0571: `node <file>` programs run verbatim in live Node
 // (temp dir) and in rifty (`<root>` = the project root). Two surfaces: what the
 // entry and its dependencies see (entry semantics), and what a fatal error
 // writes to stderr with which status (fatal diagnostics).
@@ -516,7 +516,7 @@ export async function runNodeFileOracle(
 /**
  * The one normalization: the oracle temp dir and the rifty project root both
  * read `<root>`. Two declared projections of the ORACLE only (goal
- * node-file-entry-parity §Decisions): (1) Node's own `node:*` source has no
+ * ADR-0571 Decision 2): (1) Node's own `node:*` source has no
  * rifty counterpart — its frames are deleted, a report header naming it
  * (`node:…:N`, source, caret, blank) is deleted, the `... N lines matching
  * cause stack trace ...` line the frames feed is deleted, and an inspect props

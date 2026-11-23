@@ -10,8 +10,8 @@ code: [packages/isolate-guest/src/guest/entry.ts, packages/isolate-guest/src/con
 
 ## Context
 
-Found by the PR #421 external review (round 1), outside goal
-`node-file-entry-parity`; declared ⚠️ in compat isolate-host.md
+Found by the PR #421 external review (round 1), outside the scope of
+ADR-0571; declared ⚠️ in compat isolate-host.md
 "`unhandledRejection` listener arguments", no backlog item until now.
 Reproduced by this capture (Node v24.16.0 vs `runCode` from
 `packages/isolate-host/dist`, built 2026-11-22 21:14):

@@ -1,5 +1,5 @@
 /**
- * The fatal report against live Node (goal node-file-entry-parity I2): Node's
+ * The fatal report against live Node (ADR-0571): Node's
  * report without its header (V8's message location is not readable from JS,
  * ADR-0445 2026-11-22, compat process.md), frames and props as Node's.
  */

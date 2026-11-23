@@ -4,14 +4,14 @@ status: draft
 title: "In the isolate guest a required typeless `.js` that Node loads as an ES module loads as in Node"
 created: 2026-11-22
 why: Node 24 detects ESM syntax or a redeclared CJS binding (`let require = 1`) in a typeless `.js` and loads it as ESM; the isolate guest throws `TypeError: URLConstructor is not a constructor`
-sources: [PR-421-external-review-round-1, docs/backlog/epics/node-file-entry-parity/map.md]
+sources: [PR-421-external-review-round-1, docs/adr/runtime-js/0571-prove-node-file-entry-and-fatal-report-parity-against-live-node-node-s-report-in-the-isolate-guest-only.md]
 code: [packages/runtime-js/src/internal/posix-file-url.ts, packages/runtime-js/src/module-loader/resolver.ts, packages/isolate-guest/src/guest/web-shim.ts]
 ---
 
 ## Context
 
-Found by the PR #421 external review (round 1), outside goal
-`node-file-entry-parity`. Reproduced by this capture: Node v24.16.0 vs
+Found by the PR #421 external review (round 1), outside the scope of
+ADR-0571. Reproduced by this capture: Node v24.16.0 vs
 `runCode` from `packages/isolate-host/dist` (built 2026-11-22 21:14, no later
 source commit before HEAD f7710274d). Each program writes the file, then
 `try { require(file) } catch (e) { print e.name: e.message }`:
@@ -32,7 +32,7 @@ import.meta.url;` and of `throw new Error('esm');` all fail `TypeError:
 URLConstructor is not a constructor` at the `require` call, exit 1 — the module
 body never runs; Node prints `{"a":1}` / its file URL. So every ES module
 reached by `require` in the isolate hits it, not only detected `.js` files
-(goal node-file-entry-parity map: deferred).
+(deferred, ADR-0571).
 
 Cause (read, not instrumented): `URLConstructor = globalThis.URL` is captured
 at runtime-js module load, where the isolate has no `URL` (ceiling global,

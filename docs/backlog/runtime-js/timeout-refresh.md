@@ -10,8 +10,8 @@ code: [packages/runtime-js/src/builtins/timers.ts]
 
 ## Context
 
-Found by the PR #421 external review (round 1), outside goal
-`node-file-entry-parity`. Reproduced by this capture:
+Found by the PR #421 external review (round 1), outside the scope of
+ADR-0571. Reproduced by this capture:
 
 ```
 $ node -e 'const t=setTimeout(()=>console.log("fired", Date.now()-s>=40),30);const s=Date.now();console.log(typeof t.refresh, t.refresh()===t);setTimeout(()=>t.refresh(),20)'

@@ -11,8 +11,8 @@ code: [packages/isolate-guest/src/guest/entry.ts]
 
 ## Context
 
-Found by the PR #421 external review (round 1); manager decision: outside goal
-`node-file-entry-parity`, own draft. Reproduced by this capture (Node v24.16.0
+Found by the PR #421 external review (round 1); manager decision: outside the scope of
+ADR-0571, own draft. Reproduced by this capture (Node v24.16.0
 vs `runCode` from `packages/isolate-host/dist`, built 2026-11-22 21:14):
 
 ```

@@ -11,7 +11,7 @@ import {
 } from '../browser-unit/fixtures/node-file-programs.ts';
 import { expect, test } from './fixtures/test.ts';
 
-// Goal node-file-entry-parity acceptance carrier, no-COI SDK host: one
+// ADR-0571 acceptance carrier, no-COI SDK host: one
 // sandbox, each program in its own project root, run as
 // `project({ root }).run('node <argv>')` against live `node <argv>` over the
 // same files. Comparison: `nodeFileVerdict`. COI twin:
