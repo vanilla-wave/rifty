@@ -121,7 +121,7 @@ await sandbox.destroy();
 |---|---|---|
 | `snapshot` | — | bytes of `sandbox.snapshot()`: the new sandbox starts with those files |
 | `maxFileBytes` | 32 MiB | largest file one `readFile`/`writeFile` moves (`ERR_FS_FILE_TOO_LARGE`) |
-| `maxFsBytes` | 64 MiB | largest state, in the snapshot codec's budget units (ADR-0567: blob bytes + 384 per entry + 8 per path code unit + 80 per depth level): a host write past it rejects `ERR_ISOLATE_HOST_SANDBOX_FULL`, a run whose end state is past it gets `stateRefused`. A run needs an isolate of at least 2 × `maxFsBytes` + 16 MiB (the default 256 holds the default 64 MiB); raise both together. Below the budget of an empty sandbox (its two directories) `createSandbox` rejects `ERR_OUT_OF_RANGE` |
+| `maxFsBytes` | 64 MiB | largest state, in the snapshot codec's budget units (ADR-0567: blob bytes + 384 per entry + 8 per path code unit + 80 per depth level): a host write past it rejects `ERR_ISOLATE_HOST_SANDBOX_FULL` and leaves the files as they were, times included, a run whose end state is past it gets `stateRefused`. A run needs an isolate of at least 2 × `maxFsBytes` + 16 MiB (the default 256 holds the default 64 MiB); raise both together. Below the budget of an empty sandbox (its two directories) `createSandbox` rejects `ERR_OUT_OF_RANGE` |
 | `template` | — | not implemented: `NotImplementedError('isolate-host.sandbox-template')` |
 
 A fresh sandbox holds the empty directories `/workspace` (the cwd) and `/tmp`

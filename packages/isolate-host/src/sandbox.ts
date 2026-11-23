@@ -17,7 +17,21 @@ interface Fs {
   readdirSync(path: string): readonly { name: string; isFile: boolean; isDirectory: boolean }[];
   mkdirSync(path: string, options: { recursive?: boolean }): void;
   rmSync(path: string, options: { recursive?: boolean; force?: boolean }): void;
-  statSync(path: string): { isFile: boolean; isDirectory: boolean; size?: number };
+  statSync(path: string): {
+    isFile: boolean;
+    isDirectory: boolean;
+    size?: number;
+    mtime?: number;
+    atime?: number;
+    metadata?: { ctime: number; birthtime: number };
+  };
+  restoreStatSync(path: string, stat: EntryTimes): void;
+}
+interface EntryTimes {
+  readonly mtimeMs: number;
+  readonly atimeMs: number;
+  readonly ctimeMs: number;
+  readonly birthtimeMs: number;
 }
 interface Codec {
   MemoryFsSync: new () => Fs;
@@ -274,6 +288,9 @@ class LiveSandbox implements Sandbox {
     return this.#op(({ fs }) => {
       const target = opPath(path, 'open');
       const parent = target.slice(0, target.lastIndexOf('/')) || '/';
+      // A refused write leaves the state as it was, times included: those of the target and
+      // of every existing directory above it, taken before anything reads or writes.
+      const kept = existingChain(fs, target).map((p) => [p, timesOf(fs, p)] as const);
       const previous =
         fs.existsSync(target) && fs.statSync(target).isFile
           ? fs.readFileBytesSync(target)
@@ -288,6 +305,7 @@ class LiveSandbox implements Sandbox {
         if (previous === undefined) fs.rmSync(target, { force: true });
         else fs.writeFileSync(target, previous);
         if (created !== undefined) fs.rmSync(created, { recursive: true, force: true });
+        for (const [p, times] of kept) fs.restoreStatSync(p, times);
         if (isCodec(error) && error.code === REFUSED[2])
           throw coded(
             new RangeError(
@@ -429,6 +447,31 @@ function tooLarge(size: number, max: number): Error {
  * path is monotone (present, then absent), so a binary search keeps a deep
  * path at O(depth · log depth) VFS lookups instead of O(depth²).
  */
+/** `/`, each existing directory down to `path`, and `path` itself when it exists. */
+function existingChain(fs: Fs, path: string): string[] {
+  const chain = ['/'];
+  const parts = path.split('/').filter(Boolean);
+  for (let n = 1; n <= parts.length; n++) {
+    const p = `/${parts.slice(0, n).join('/')}`;
+    if (!fs.existsSync(p)) break;
+    chain.push(p);
+  }
+  return chain;
+}
+
+/** The four times of an entry, as the snapshot keeps them (ADR-0567). */
+function timesOf(fs: Fs, path: string): EntryTimes {
+  const { mtime, atime, metadata } = fs.statSync(path);
+  if (mtime === undefined || atime === undefined || metadata === undefined)
+    throw new TypeError('isolate-host sandbox: the FS does not report entry times');
+  return {
+    mtimeMs: mtime,
+    atimeMs: atime,
+    ctimeMs: metadata.ctime,
+    birthtimeMs: metadata.birthtime,
+  };
+}
+
 function firstMissingDir(fs: Fs, dir: string): string | undefined {
   const parts = dir.split('/').filter(Boolean);
   const at = (n: number): string => `/${parts.slice(0, n).join('/')}`;

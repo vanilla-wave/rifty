@@ -1171,3 +1171,28 @@ describe('external review round 3 (manager 2026-11-23)', () => {
     },
   );
 });
+
+describe('a refused write leaves the state as it was, times included (Greptile, PR #419)', () => {
+  carrier('overwrite, new file, new directories: the next run sees the same times', async () => {
+    const sb = await createSandbox({ maxFsBytes: 64 << 10 });
+    try {
+      await sb.writeFile('d/f', 'old');
+      await sb.writeFile(
+        'st.js',
+        "const fs = require('fs'); console.log(JSON.stringify(process.argv.slice(2).map((p) => { const s = fs.statSync(p); return [p, s.mtimeMs, s.ctimeMs, s.atimeMs, s.birthtimeMs, s.size]; })), JSON.stringify(fs.readdirSync('d')))",
+      );
+      const seen = async () =>
+        (await sb.exec('st.js', { args: ['d', 'd/f', '/workspace'] })).stdout;
+      const before = await seen();
+      await new Promise((r) => setTimeout(r, 20));
+      const big = new Uint8Array(70 << 10);
+      for (const path of ['d/f', 'd/new', 'd/x/y/z', 'e/f'])
+        await expect(sb.writeFile(path, big)).rejects.toMatchObject({
+          code: 'ERR_ISOLATE_HOST_SANDBOX_FULL',
+        });
+      expect(await seen()).toBe(before);
+    } finally {
+      await sb.destroy();
+    }
+  });
+});
