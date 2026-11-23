@@ -425,7 +425,7 @@ ADRs are immutable while active, except dated lines under `## Decisions` / `§Co
 | 0532 | Commit evaluation summaries as text core only |
 | 0535 | Judge app tasks against a prompt-stated contract |
 | 0546 | Produce browser-compatible Brotli dependency snapshots |
-| 0547 | Compact prepared dependency snapshots |
+| 0547 | Frozen prepared dependency snapshots |
 | 0557 | Run guest code in a disposable child process holding a rifty V8 isolate (isolated-vm) |
 | 0558 | Export the isolate guest bundle and bridge contract as an unstable package |
 | 0563 | Run runCode in a pool of long-lived worker processes, each hosting many isolates |

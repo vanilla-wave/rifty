@@ -11,7 +11,7 @@ import { applyNoCoiSnapshot } from './no-coi-snapshot-application.ts';
 import { installToolchainPackages } from './no-coi-toolchain-install.ts';
 import { type ExactFsTree, snapshotExactFsTree } from './test-fixtures/durable-owner-fs.ts';
 
-const registryUrl = 'https://compact-install-registry.test';
+const registryUrl = 'https://frozen-install-registry.test';
 const assetUrl = 'https://host.test/lightning.tar.gz';
 const fixtureRoot = new URL('../../../../tools/shadow-registry/src/fixtures/', import.meta.url);
 const tarballUrl = `${registryUrl}/lightningcss-wasm/-/lightningcss-wasm-1.32.0.tgz`;
@@ -82,7 +82,7 @@ async function registry() {
   return { requests, assets };
 }
 
-async function applied(profile: 'replay' | 'compact') {
+async function applied(profile: 'replay' | 'frozen') {
   const network = await registry();
   const lock = JSON.parse(
     await readFile(
@@ -94,12 +94,12 @@ async function applied(profile: 'replay' | 'compact') {
     ),
   ) as { readonly packages: Readonly<Record<string, unknown>> };
   const manifest = {
-    name: 'compact-install',
+    name: 'frozen-install',
     version: '1.0.0',
     dependencies: { lightningcss: '^1.32.0' },
   };
   const produced = await produceDependencySnapshot({
-    templateId: 'compact-install',
+    templateId: 'frozen-install',
     registryUrl,
     packageJsonText: serializePackageJson(manifest),
     packageLockText: JSON.stringify({
@@ -124,7 +124,7 @@ async function applied(profile: 'replay' | 'compact') {
   await applyNoCoiSnapshot(
     {
       cwd: '/project',
-      snapshot: { assetUrl, snapshotId: produced.snapshotId, templateId: 'compact-install' },
+      snapshot: { assetUrl, snapshotId: produced.snapshotId, templateId: 'frozen-install' },
     },
     { fs, flush: async () => undefined },
   );
@@ -145,31 +145,35 @@ function npmInstall(...specs: string[]) {
   return { request: parsed.request, context };
 }
 
+/** Same cold-cache text as the Vite carrier, for the LightningCSS pin. */
+const coldShadowPin =
+  /^EBROKENLOCK: package-lock\.json installs lightningcss@\S+ from its substitute (lightningcss-wasm@\S+) \(shadow recipe \S+\), but the tarball cache holds no intact \1\. Lockfile replay takes substitute bytes only from the tarball cache and never downloads them\. To reinstall this lockfile exactly, restore those bytes to the tarball cache; or delete package-lock\.json and run install again to re-resolve through the registry \(installed versions may change\)\.$/;
+
 describe('explicit install after a prepared snapshot (ADR-0547 install semantics)', () => {
-  it('compact on a cold shared cache: shadow-pinned install fails loudly, fetches no tarball, leaves the tree', async () => {
-    const { fs, vfs, requests } = await applied('compact');
+  it('frozen on a cold shared cache: shadow-pinned install fails loudly, fetches no tarball, leaves the tree', async () => {
+    const { fs, vfs, requests } = await applied('frozen');
     expect(fs.existsSync(TARBALL_CACHE_ROOT)).toBe(false);
     const before = digestTree(snapshotExactFsTree(fs));
     await expect(installToolchainPackages({ cwd: '/project', registryUrl }, vfs)).rejects.toThrow(
-      /^EBROKENLOCK: shadow recipe \S+ is missing its pinned cache bytes$/,
+      coldShadowPin,
     );
     expect(requests, 'no registry/network fallback although the registry is live').toEqual([]);
     expect(digestTree(snapshotExactFsTree(fs)), 'applied tree and lock unchanged').toEqual(before);
   }, 30_000);
 
-  it('compact: adding an unrelated package still fails on the lock-replayed shadow pin', async () => {
-    const { vfs, requests } = await applied('compact');
+  it('frozen: adding an unrelated package still fails on the lock-replayed shadow pin', async () => {
+    const { vfs, requests } = await applied('frozen');
     await expect(
       installToolchainPackages({ cwd: '/project', registryUrl }, vfs, npmInstall('ms@2.0.0')),
-    ).rejects.toThrow(/^EBROKENLOCK: shadow recipe \S+ is missing its pinned cache bytes$/);
+    ).rejects.toThrow(coldShadowPin);
     expect(
       requests.filter((url) => url.includes('lightningcss')),
       'the replayed pin is never fetched',
     ).toEqual([]);
   }, 30_000);
 
-  it('compact: naming the substituted root re-resolves it through the registry', async () => {
-    const { vfs, requests } = await applied('compact');
+  it('frozen: naming the substituted root re-resolves it through the registry', async () => {
+    const { vfs, requests } = await applied('frozen');
     const result = await installToolchainPackages(
       { cwd: '/project', registryUrl },
       vfs,

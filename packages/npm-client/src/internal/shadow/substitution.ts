@@ -229,12 +229,37 @@ function brokenShadowReplayCache(pin: ResolvedPin, detail: string): Error {
   );
 }
 
+/** Cold cache, not a broken lock: names the source, why it is not fetched, and both exits. */
+function missingShadowReplayBytes(
+  pin: ResolvedPin,
+  shadow: NonNullable<ResolvedPin['shadow']>,
+  source: { readonly name: string; readonly version: string },
+): Error {
+  const substitute = `${source.name}@${source.version}`;
+  return Object.assign(
+    new Error(
+      [
+        `EBROKENLOCK: package-lock.json installs ${shadow.trigger.name}@${shadow.trigger.version} from its substitute ${substitute} (shadow recipe ${shadow.recipe.id}), but the tarball cache holds no intact ${substitute}.`,
+        'Lockfile replay takes substitute bytes only from the tarball cache and never downloads them.',
+        'To reinstall this lockfile exactly, restore those bytes to the tarball cache;',
+        'or delete package-lock.json and run install again to re-resolve through the registry (installed versions may change).',
+      ].join(' '),
+    ),
+    {
+      code: 'EBROKENLOCK' as const,
+      packageName: pin.name,
+      reason: 'shadow-replay-cache-miss' as const,
+    },
+  );
+}
+
 export async function readRegistryShadowReplayCache(
   pin: ResolvedPin,
   fetchCtx: FetchAndUnpackCtx,
 ): Promise<FetchAndUnpackResult> {
-  const acquisition = pin.shadow?.acquisition;
-  if (pin.origin !== 'lockfile' || acquisition?.kind !== 'registry') {
+  const shadow = pin.shadow;
+  const acquisition = shadow?.acquisition;
+  if (shadow === undefined || pin.origin !== 'lockfile' || acquisition?.kind !== 'registry') {
     throw new TypeError('registry shadow replay cache requires a lockfile acquisition');
   }
   throwIfAborted(fetchCtx.signal);
@@ -245,7 +270,7 @@ export async function readRegistryShadowReplayCache(
   }
   const bytes = await fetchCtx.cache.get(acquisition.name, acquisition.version, integrity);
   throwIfAborted(fetchCtx.signal);
-  if (bytes === null) throw brokenShadowReplayCache(pin, 'is missing its pinned cache bytes');
+  if (bytes === null) throw missingShadowReplayBytes(pin, shadow, acquisition);
   const actual = await computeIntegrity(bytes, algorithm);
   throwIfAborted(fetchCtx.signal);
   if (actual !== integrity) {

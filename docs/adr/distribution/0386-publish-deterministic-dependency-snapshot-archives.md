@@ -36,4 +36,4 @@ no arbitrary installed-tree import or new package compatibility is implied.
 
 ## Corrections
 
-- 2026-10-23 — ADR-0547 adds compact tar v5 with an explicit profile and no replay namespace; v4 remains unchanged.
+- 2026-10-23 — ADR-0547 adds frozen tar v5 with an explicit profile and no replay namespace; v4 remains unchanged.

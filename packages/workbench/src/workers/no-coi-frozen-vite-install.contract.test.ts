@@ -2,11 +2,15 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { gunzipSync } from 'node:zlib';
 import { TARBALL_CACHE_ROOT } from '@riftydev/npm-client';
+import { RegistryClient } from '@riftydev/npm-client';
 import type { CommandContext } from '@riftydev/shell';
+import { Shell } from '@riftydev/shell';
 import { MemoryFsSync, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { parseNpmInstallRequest } from '../glue/npm-shell-command.ts';
+import { createTestNpmPackageAcquisitionAuthority } from '../glue/npm-shell-command.test-fixture.ts';
+import { createNpmShellCommand, parseNpmInstallRequest } from '../glue/npm-shell-command.ts';
 import { SyncMirrorVfs } from '../glue/sync-mirror-vfs.ts';
+import { runNoCoiProjectCommand } from './no-coi-project-command.ts';
 import { applyNoCoiSnapshot } from './no-coi-snapshot-application.ts';
 import { installToolchainPackages } from './no-coi-toolchain-install.ts';
 import { type ExactFsTree, snapshotExactFsTree } from './test-fixtures/durable-owner-fs.ts';
@@ -88,7 +92,7 @@ async function registry() {
   return { requests, assets };
 }
 
-async function applied(profile: 'replay' | 'compact') {
+async function applied(profile: 'replay' | 'frozen') {
   const network = await registry();
   const baked = JSON.parse(
     gunzipSync(
@@ -101,7 +105,7 @@ async function applied(profile: 'replay' | 'compact') {
       : {
           ...baked,
           version: 5,
-          profile: 'compact',
+          profile: 'frozen',
           tarballCache: { version: 1, root: TARBALL_CACHE_ROOT, files: [] },
         };
   const bytes = new TextEncoder().encode(JSON.stringify(source));
@@ -137,7 +141,19 @@ function npm(...specs: string[]) {
   return { request: parsed.request, context };
 }
 
-describe('Vite 7.3.6 after compact on a cold cache: no npm reinstall route while the lock is kept (ADR-0547)', () => {
+/** Exact text a terminal/SDK reader gets; cause and both exits are carried below (ADR-0547). */
+const coldShadowPin = {
+  code: 'EBROKENLOCK',
+  reason: 'shadow-replay-cache-miss',
+  message:
+    'EBROKENLOCK: package-lock.json installs esbuild@0.28.0 from its substitute esbuild-wasm@0.28.0 ' +
+    '(shadow recipe rifty.shadow-substitution.esbuild.v2), but the tarball cache holds no intact esbuild-wasm@0.28.0. ' +
+    'Lockfile replay takes substitute bytes only from the tarball cache and never downloads them. ' +
+    'To reinstall this lockfile exactly, restore those bytes to the tarball cache; ' +
+    'or delete package-lock.json and run install again to re-resolve through the registry (installed versions may change).',
+};
+
+describe('Vite 7.3.6 after a frozen snapshot on a cold cache: no npm reinstall route while the lock is kept (ADR-0547)', () => {
   it.each([
     ['install over the lock', [] as string[], 11],
     ['npm install esbuild (the transitive shadow pin)', ['esbuild'], 11],
@@ -145,7 +161,7 @@ describe('Vite 7.3.6 after compact on a cold cache: no npm reinstall route while
   ] as const)(
     '%s fails EBROKENLOCK on esbuild; ordinary tarballs reach the shared cache, project tree unchanged',
     async (_label, specs, ordinary) => {
-      const { fs, vfs, requests } = await applied('compact');
+      const { fs, vfs, requests } = await applied('frozen');
       const before = digestTree(snapshotExactFsTree(fs), '/project/');
       await expect(
         installToolchainPackages(
@@ -153,9 +169,7 @@ describe('Vite 7.3.6 after compact on a cold cache: no npm reinstall route while
           vfs,
           ...(specs.length === 0 ? [] : [npm(...specs)]),
         ),
-      ).rejects.toThrow(
-        /^EBROKENLOCK: shadow recipe rifty\.shadow-substitution\.esbuild\.v2 is missing its pinned cache bytes$/,
-      );
+      ).rejects.toMatchObject(coldShadowPin);
       const fetched = requests.filter((url) => url.endsWith('.tgz'));
       expect(fetched, 'ordinary lock/request tarballs fetched before the refusal').toHaveLength(
         ordinary,
@@ -174,8 +188,73 @@ describe('Vite 7.3.6 after compact on a cold cache: no npm reinstall route while
     60_000,
   );
 
+  it('terminal `npm install` prints the same cause and exits, exit 1 (no-COI project command)', async () => {
+    const { fs, vfs, requests } = await applied('frozen');
+    let stdout = '';
+    let stderr = '';
+    const result = await runNoCoiProjectCommand(
+      { project: { root: '/project' }, command: 'npm install', cwd: '/project', env: {} },
+      new AbortController().signal,
+      {
+        fs,
+        flush: async () => 'memory',
+        effects: () => 'unknown',
+        onOutput(chunk, stream) {
+          if (stream === 'stdout') stdout += chunk;
+          else stderr += chunk;
+        },
+        // The toolchain owner's hook minus its stamp claim (no-coi-toolchain-owner.ts).
+        async install(args, context) {
+          const parsed = parseNpmInstallRequest(args);
+          if (parsed.status !== 'ready') throw new Error(parsed.message);
+          await installToolchainPackages({ cwd: context.cwd, registryUrl }, vfs, {
+            request: parsed.request,
+            context,
+          });
+          return 0;
+        },
+      },
+    );
+    expect({ status: result.status, exitCode: result.exitCode, stderr }).toEqual({
+      status: 'exited',
+      exitCode: 1,
+      stderr: `npm: ${coldShadowPin.message}\n`,
+    });
+    // Progress lines for the ordinary pins fetched first; no success summary.
+    expect(stdout).toMatch(/^npm: installing all from package\.json…\n(?:npm: \+ \S+\n)+$/u);
+    expect(requests.filter((url) => url.includes('esbuild'))).toEqual([]);
+  }, 60_000);
+
+  it('package-authority terminal maps the cold cache to the installer text, not "lockfile is broken"', async () => {
+    const { vfs, requests } = await applied('frozen');
+    const deps = {
+      vfs,
+      registry: new RegistryClient({ baseUrl: registryUrl }),
+      runtimeTier: 'no-coi' as const,
+    };
+    const shell = new Shell({ cwd: '/project' });
+    shell.registerCommand(
+      'npm',
+      createNpmShellCommand({
+        ...deps,
+        packageAcquisitionAuthority: createTestNpmPackageAcquisitionAuthority(deps),
+      }),
+    );
+    let stderr = '';
+    const result = await shell.run('npm install', {
+      onChunk: (chunk, stream) => {
+        if (stream === 'stderr') stderr += chunk;
+      },
+    });
+    expect({ exitCode: result.exitCode, stderr }).toEqual({
+      exitCode: 1,
+      stderr: `npm: ${coldShadowPin.message}\n`,
+    });
+    expect(requests.filter((url) => url.includes('esbuild'))).toEqual([]);
+  }, 60_000);
+
   it('deleting package-lock.json re-resolves from the registry and installs (pins may move)', async () => {
-    const { fs, vfs, requests } = await applied('compact');
+    const { fs, vfs, requests } = await applied('frozen');
     fs.rmSync('/project/package-lock.json', { force: true });
     const result = await installToolchainPackages({ cwd: '/project', registryUrl }, vfs);
     expect(result.packages).toBeGreaterThan(0);

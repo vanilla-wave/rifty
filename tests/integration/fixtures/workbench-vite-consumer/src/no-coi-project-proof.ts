@@ -7,7 +7,7 @@ let held = false;
 let applyState = 'idle';
 
 const api = {
-  async boot(workerUrl: string, namespace: string, fault?: 'hold' | 'quota') {
+  async boot(workerUrl: string, namespace: string, fault?: 'hold' | 'quota', registryUrl?: string) {
     const selectedUrl = fault
       ? URL.createObjectURL(
           new Blob(
@@ -65,7 +65,10 @@ const api = {
         serviceWorkerUrl: new URL('sw.js', new URL(workerUrl, location.href)).href,
         storage: { namespace, persistence: 'required' },
         startupTimeoutMs: 60_000,
-        toolchain: { workerUrl: selectedUrl },
+        toolchain: {
+          workerUrl: selectedUrl,
+          ...(registryUrl === undefined ? {} : { registryUrl }),
+        },
       });
     } finally {
       globalThis.Worker = NativeWorker;
@@ -120,6 +123,18 @@ const api = {
   },
   state: () => ({ held, applyState }),
   open: () => sandbox.toolchain.open({ cwd: '/project' }),
+  /** Both public install surfaces; failures return what the embedder/terminal user reads. */
+  async terminal(command: string) {
+    const { status, exitCode, stdout, stderr } = await sandbox
+      .project({ root: '/project' })
+      .run(command).completion;
+    return { status, exitCode, stdout, stderr };
+  },
+  install: (registryUrl: string) =>
+    sandbox.toolchain.install({ cwd: '/project', registryUrl }).then(
+      () => ({ ok: true }),
+      (error: Error) => ({ ok: false, message: error.message }),
+    ),
   write: (path: string, content: string) => sandbox.fs.writeFile(`/project${path}`, content),
   read: (path: string) => sandbox.fs.readFile(`/project${path}`, 'utf8'),
   async evaluate(source: string) {

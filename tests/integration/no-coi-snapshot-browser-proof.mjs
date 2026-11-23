@@ -4,7 +4,11 @@ import { resolve } from 'node:path';
 import { withClientServer } from './client-bundle-browser-proof.mjs';
 
 /** Packed public producer/SDK and copied worker; headerless native OPFS throughout. */
-export async function provePackedNoCoiSnapshots(root, profile = 'snapshot') {
+export async function provePackedNoCoiSnapshots(
+  root,
+  profile = 'snapshot',
+  registryOrigin = undefined,
+) {
   const entry = (await readdir(resolve(root, 'dist/assets'))).find((name) =>
     /^noCoiProject-.*\.js$/u.test(name),
   );
@@ -22,7 +26,7 @@ export async function provePackedNoCoiSnapshots(root, profile = 'snapshot') {
     context.on('request', (request) => {
       if (/npm-registry|registry\.npmjs|eddy/iu.test(request.url()))
         acquisition.push(request.url());
-      if (/producer-vite-(?:snapshot|update|compact)\.tar\.gz/u.test(request.url()))
+      if (/producer-vite-(?:snapshot|update|frozen)\.tar\.gz/u.test(request.url()))
         snapshots.push(request.url());
     });
     const descriptor = {
@@ -40,7 +44,12 @@ export async function provePackedNoCoiSnapshots(root, profile = 'snapshot') {
         method,
         args,
       });
-    const boot = async (page, namespace = `packed-sdk-${profile}`, fault = undefined) => {
+    const boot = async (
+      page,
+      namespace = `packed-sdk-${profile}`,
+      fault = undefined,
+      registryUrl = undefined,
+    ) => {
       await page.goto(base);
       await page.evaluate((entry) => import(entry), `/dist/assets/${entry}`);
       assert.deepEqual(
@@ -50,6 +59,7 @@ export async function provePackedNoCoiSnapshots(root, profile = 'snapshot') {
           `${base}/dist/rifty/no-coi-toolchain-worker.js`,
           namespace,
           fault,
+          registryUrl,
         ),
         { coi: false, backend: 'opfs' },
       );
@@ -61,7 +71,7 @@ export async function provePackedNoCoiSnapshots(root, profile = 'snapshot') {
       await invoke(page, 'seedCache');
       const cacheBefore = await invoke(page, 'cacheTree');
       await invoke(page, 'apply', descriptor);
-      if (profile === 'compact') assert.deepEqual(await invoke(page, 'cacheTree'), cacheBefore);
+      if (profile === 'frozen') assert.deepEqual(await invoke(page, 'cacheTree'), cacheBefore);
       let build = await invoke(page, 'build');
       assert.equal(build.exitCode, 0);
       assert.match(build.js, /packed-sdk-initial/u);
@@ -73,10 +83,10 @@ export async function provePackedNoCoiSnapshots(root, profile = 'snapshot') {
       );
       const dependency = `${await invoke(page, 'read', '/node_modules/vite/package.json')}\n `;
       await invoke(page, 'write', '/node_modules/vite/package.json', dependency);
-      if (profile === 'compact') assert.deepEqual(await invoke(page, 'cacheTree'), cacheBefore);
+      if (profile === 'frozen') assert.deepEqual(await invoke(page, 'cacheTree'), cacheBefore);
       await invoke(page, 'dispose');
-      // Replay keeps the baseline same-page reopen; compact proves the closed-page reopen (I2).
-      if (profile === 'compact') {
+      // Replay keeps the baseline same-page reopen; frozen proves the closed-page reopen (I2).
+      if (profile === 'frozen') {
         await page.close();
         page = await context.newPage();
       }
@@ -92,7 +102,7 @@ export async function provePackedNoCoiSnapshots(root, profile = 'snapshot') {
       assert.equal(await invoke(page, 'read', '/node_modules/vite/package.json'), dependency);
       await invoke(page, 'apply', descriptor, true);
       assert.equal((await invoke(page, 'build')).exitCode, 0);
-      if (profile === 'compact') assert.deepEqual(await invoke(page, 'cacheTree'), cacheBefore);
+      if (profile === 'frozen') assert.deepEqual(await invoke(page, 'cacheTree'), cacheBefore);
       assert.notEqual(changed.snapshotId, descriptor.snapshotId);
       await assert.rejects(invoke(page, 'apply', changed), /conflict/iu);
       await invoke(page, 'apply', changed, true);
@@ -162,8 +172,46 @@ export async function provePackedNoCoiSnapshots(root, profile = 'snapshot') {
       console.log(
         `Packed no-COI SDK: Chromium/${browser.version()}, ${profile}, real Vite 7.3.6 apply/build/edit/reopen/force/update/native interruption+quota; zero registry/Eddy requests`,
       );
+      if (profile === 'frozen')
+        await proveColdFrozenInstall(context, boot, invoke, descriptor, registryOrigin);
     } finally {
       await context.close();
     }
   });
+}
+
+/** Cold cache after frozen apply: what the terminal user and the SDK caller read (ADR-0547). */
+async function proveColdFrozenInstall(context, boot, invoke, descriptor, registryOrigin) {
+  assert(registryOrigin, 'frozen cold-install proof needs the packed registry');
+  const registryRequests = [];
+  const page = await context.newPage();
+  context.on('request', (request) => {
+    if (request.url().startsWith(registryOrigin)) registryRequests.push(request.url());
+  });
+  await boot(page, 'packed-sdk-cold-install-frozen', undefined, registryOrigin);
+  await invoke(page, 'seed');
+  await invoke(page, 'apply', descriptor);
+  const lock = JSON.parse(await invoke(page, 'read', '/package-lock.json')).packages;
+  const trigger = lock['node_modules/esbuild'];
+  const substitute = `esbuild-wasm@${lock['node_modules/esbuild-wasm'].version}`;
+  const expected = [
+    `EBROKENLOCK: package-lock.json installs esbuild@${trigger.version} from its substitute ${substitute} (shadow recipe ${trigger.riftyShadowRecipe}), but the tarball cache holds no intact ${substitute}.`,
+    'Lockfile replay takes substitute bytes only from the tarball cache and never downloads them.',
+    'To reinstall this lockfile exactly, restore those bytes to the tarball cache;',
+    'or delete package-lock.json and run install again to re-resolve through the registry (installed versions may change).',
+  ].join(' ');
+  const terminal = await invoke(page, 'terminal', 'npm install');
+  assert.equal(terminal.exitCode, 1, terminal.stderr);
+  assert.equal(terminal.stderr, `npm: ${expected}\n`);
+  const sdk = await invoke(page, 'install', registryOrigin);
+  assert.deepEqual(sdk, { ok: false, message: expected });
+  assert.deepEqual(
+    registryRequests.filter((url) => url.includes('esbuild-wasm')),
+    [],
+    'substitute bytes are never downloaded',
+  );
+  await invoke(page, 'dispose');
+  await page.close();
+  console.log(`Frozen cold-cache install, terminal stderr: ${terminal.stderr.trimEnd()}`);
+  console.log(`Frozen cold-cache install, toolchain.install rejection: ${sdk.message}`);
 }

@@ -236,14 +236,15 @@ and `payload/node_modules/`. `rifty/manifest.json` and `rifty/replay-cache/` are
 control data, never project files. SnapshotId hashes decoded tar; gzip delivery
 with or without HTTP Content-Encoding works. Legacy v3 JSON/gzip remains readable.
 
-Set `profile: 'compact'` for prepared environments that build installed dependencies
-without reinstalling. Compact v5 omits replay archives; the prepared payload stays
+Set `profile: 'frozen'` for prepared environments that build installed dependencies
+as is, without reinstalling. Frozen v5 omits replay archives; the prepared payload stays
 intact. Default (or `profile: 'replay'`) retains v4 exact replay closure/SRI.
-Updated readers accept both; older readers reject compact before application.
-Compact adds no install ban, reinstall guarantee or registry fallback: for Vite 7 with
+Updated readers accept both; older readers reject frozen before application.
+Frozen adds no install ban, reinstall guarantee or registry fallback: for Vite 7 with
 its substituted `esbuild`, on a cold shared cache and with the lockfile kept, `npm install`
-fails `EBROKENLOCK`; reinstall exactly from a replay snapshot or a warm cache. Outcomes:
-ADR-0547 §Consequences.
+fails `EBROKENLOCK` naming the substitute, why it is not downloaded and both exits —
+reinstall exactly from a replay snapshot or a warm cache, or delete `package-lock.json`
+to re-resolve (versions may change). Outcomes: ADR-0547 §Consequences.
 
 For Brotli, pass `encoding: 'br'` to the same call and save `archive` as
 `dependencies.tar.br`. `contentEncoding` is `'br'` or `'gzip'`; omitted

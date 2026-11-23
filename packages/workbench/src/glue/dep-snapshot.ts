@@ -7,7 +7,7 @@
  *
  * Snapshot v3 carries the exact package.json text, install-artifact identity,
  * and integrity-verified cache closure that produced the tree (ADR-0346).
- * V4 tar envelopes normalize to v3; compact v5 omits replay archives explicitly.
+ * V4 tar envelopes normalize to v3; frozen v5 omits replay archives explicitly.
  */
 import {
   TARBALL_CACHE_ROOT,
@@ -46,17 +46,17 @@ interface DepSnapshotPayload {
   readonly nodeModules: WorkspaceArchiveV1;
 }
 
-/** Legacy replay model and explicitly incompatible compact format. */
+/** Legacy replay model and explicitly incompatible frozen format. */
 export type DepSnapshot = DepSnapshotPayload &
   (
     | { readonly version: 3; readonly profile?: never }
-    | { readonly version: 5; readonly profile: 'compact' }
+    | { readonly version: 5; readonly profile: 'frozen' }
   );
 
 export interface PreparedDepSnapshotRestore {
   /** Lockfile of the verified, tier-projected payload this plan writes. */
   readonly lockfile: string;
-  /** Absent for compact v5: no replay cache to stage or persist (ADR-0547). */
+  /** Absent for frozen v5: no replay cache to stage or persist (ADR-0547). */
   readonly applyCache?: () => void;
   applyPayload(): void;
   apply(): void;
@@ -157,7 +157,7 @@ function validateDepSnapshot(value: unknown): DepSnapshot {
   if (parsed.version !== 3 && parsed.version !== 5) {
     throw new Error(`Unsupported dep snapshot version ${parsed.version}`);
   }
-  if (parsed.version === 5 ? parsed.profile !== 'compact' : parsed.profile !== undefined) {
+  if (parsed.version === 5 ? parsed.profile !== 'frozen' : parsed.profile !== undefined) {
     throw new Error('Malformed dep snapshot profile');
   }
   if (
@@ -320,7 +320,7 @@ function buildReplayCacheArchive(fs: WorkspaceArchiveFs, lockfile: string): Work
   return { version: 1, root: TARBALL_CACHE_ROOT, files };
 }
 
-/** Replay requires the exact SRI closure; compact validates the lock without archives. */
+/** Replay requires the exact SRI closure; frozen validates the lock without archives. */
 export async function verifyDepSnapshotReplayCache(snapshot: DepSnapshot): Promise<void> {
   validateDepSnapshot(snapshot);
   if (
@@ -338,7 +338,7 @@ export async function verifyDepSnapshotReplayCache(snapshot: DepSnapshot): Promi
         (!Array.isArray(snapshot.tarballCache.directories) ||
           snapshot.tarballCache.directories.length !== 0))
     ) {
-      throw new Error('Compact dep snapshot must not contain replay cache entries');
+      throw new Error('Frozen dep snapshot must not contain replay cache entries');
     }
     return;
   }

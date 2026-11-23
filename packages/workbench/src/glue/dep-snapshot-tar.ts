@@ -225,7 +225,7 @@ export function decodeDepSnapshotTar(bytes: Uint8Array): unknown {
     !('version' in manifest) ||
     (manifest.version !== 4 && manifest.version !== 5) ||
     (manifest.version === 5
-      ? !('profile' in manifest) || manifest.profile !== 'compact'
+      ? !('profile' in manifest) || manifest.profile !== 'frozen'
       : 'profile' in manifest) ||
     Object.keys(manifest).some(
       (key) =>
@@ -248,7 +248,7 @@ export function decodeDepSnapshotTar(bytes: Uint8Array): unknown {
         entry.path === 'rifty/replay-cache' || entry.path.startsWith('rifty/replay-cache/'),
     )
   ) {
-    fail('compact snapshot contains replay cache namespace');
+    fail('frozen snapshot contains replay cache namespace');
   }
   return {
     ...manifest,
@@ -319,7 +319,7 @@ export function encodeDepSnapshotTar(snapshot: DepSnapshot): Uint8Array {
   ] as const) {
     if (snapshot.version === 5 && prefix === 'rifty/replay-cache') {
       if (archive.files.length || (archive.directories?.length ?? 0))
-        fail('compact snapshot contains replay cache entries');
+        fail('frozen snapshot contains replay cache entries');
       continue;
     }
     for (const path of archive.directories ?? []) add(`${prefix}/${path}`, undefined, true);

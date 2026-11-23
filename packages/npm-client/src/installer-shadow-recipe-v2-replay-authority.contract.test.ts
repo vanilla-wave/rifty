@@ -647,7 +647,8 @@ async function expectReplayFailureBeforePublication(
   cache: PreseededCache,
   label: string,
   expectedCacheGets: readonly string[],
-): Promise<void> {
+  reason = 'shadow-trace-drift',
+): Promise<unknown> {
   const vfs = new MemoryVfs();
   const lockBefore = await seedProject(vfs, fixture, lock);
   const registry = new DenyAllRegistry();
@@ -672,10 +673,7 @@ async function expectReplayFailureBeforePublication(
 
   expect.soft(outcome.status, `${label}: outcome`).toBe('rejected');
   const error = outcome.status === 'rejected' ? outcome.error : undefined;
-  expect.soft(replayError(error), `${label}: rejection`).toEqual({
-    code: 'EBROKENLOCK',
-    reason: 'shadow-trace-drift',
-  });
+  expect.soft(replayError(error), `${label}: rejection`).toEqual({ code: 'EBROKENLOCK', reason });
   expect.soft(registry.packumentReads, `${label}: packuments`).toEqual([]);
   expect.soft(registry.tarballReads, `${label}: tarballs`).toEqual([]);
   expect.soft(cache.gets, `${label}: cache gets`).toEqual(expectedCacheGets);
@@ -688,6 +686,7 @@ async function expectReplayFailureBeforePublication(
     .soft(await vfs.readFile('/project/package-lock.json'), `${label}: lock`)
     .toEqual(lockBefore);
   await expect.soft(vfs.exists('/project/node_modules'), `${label}: tree`).resolves.toBe(false);
+  return error;
 }
 
 function lightningTraceFact(lock: ReplayLock): ReplayFact {
@@ -1145,13 +1144,26 @@ describe('shadow recipe v2 replay authority', () => {
         expect(await computeIntegrity(bytes)).not.toBe(fixture.acquisition.integrity);
         cache.replace(fixture.acquisition, bytes);
       }
-      await expectReplayFailureBeforePublication(
+      const error = await expectReplayFailureBeforePublication(
         fixture,
         structuredClone(fixture.lock),
         cache,
         `${scope} ${fault} parent`,
         fixture.expectedCacheGets,
+        // A cold cache is not lock drift: its own reason and a cause/exit text (ADR-0547).
+        fault === 'missing' ? 'shadow-replay-cache-miss' : 'shadow-trace-drift',
       );
+      if (fault === 'missing') {
+        const substitute = `${fixture.acquisition.name}@${fixture.acquisition.version}`;
+        expect((error as Error).message).toBe(
+          [
+            `EBROKENLOCK: package-lock.json installs lightningcss@1.32.0 from its substitute ${substitute} (shadow recipe ${LIGHTNING_RECIPE.id}), but the tarball cache holds no intact ${substitute}.`,
+            'Lockfile replay takes substitute bytes only from the tarball cache and never downloads them.',
+            'To reinstall this lockfile exactly, restore those bytes to the tarball cache;',
+            'or delete package-lock.json and run install again to re-resolve through the registry (installed versions may change).',
+          ].join(' '),
+        );
+      }
     },
   );
 

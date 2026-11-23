@@ -84,56 +84,56 @@ await writeFile(
 console.log('Packed Vite producer: caller npm lock, Vite 7.3.6 tar.gz and identities');
 
 // Same caller inputs and installed payload; only replay transport changes.
-const compact = await produceDependencySnapshot({
+const frozen = await produceDependencySnapshot({
   packageJsonText,
   packageLockText,
   registryUrl,
   templateId,
-  profile: 'compact',
+  profile: 'frozen',
 });
-const compactPath = resolve('dist/producer-vite-compact.tar.gz');
-await writeFile(compactPath, compact.archive);
-const compactControl = JSON.parse(
-  execFileSync('tar', ['-xzOf', compactPath, 'rifty/manifest.json'], { encoding: 'utf8' }),
+const frozenPath = resolve('dist/producer-vite-frozen.tar.gz');
+await writeFile(frozenPath, frozen.archive);
+const frozenControl = JSON.parse(
+  execFileSync('tar', ['-xzOf', frozenPath, 'rifty/manifest.json'], { encoding: 'utf8' }),
 );
-assert.equal(compactControl.version, 5, 'compact requires an incompatible-reader version');
-assert.equal(compactControl.profile, 'compact');
+assert.equal(frozenControl.version, 5, 'frozen requires an incompatible-reader version');
+assert.equal(frozenControl.profile, 'frozen');
 const entries = (path) =>
   execFileSync('tar', ['-tzf', path], { encoding: 'utf8' }).trim().split('\n');
 assert(
-  !entries(compactPath).some((path) => path.startsWith('rifty/replay-cache')),
-  'compact carries no replay archive namespace',
+  !entries(frozenPath).some((path) => path.startsWith('rifty/replay-cache')),
+  'frozen carries no replay archive namespace',
 );
 const payloadEntries = entries(archivePath).filter((path) => path.startsWith('payload/'));
 assert.deepEqual(
-  entries(compactPath).filter((path) => path.startsWith('payload/')),
+  entries(frozenPath).filter((path) => path.startsWith('payload/')),
   payloadEntries,
 );
 const compareRoot = resolve('producer-payload-comparison');
 for (const [name, archive] of [
   ['replay', archivePath],
-  ['compact', compactPath],
+  ['frozen', frozenPath],
 ]) {
   await mkdir(resolve(compareRoot, name), { recursive: true });
   execFileSync('tar', ['-xzf', archive, '-C', resolve(compareRoot, name)]);
 }
 for (const path of payloadEntries.filter((path) => !path.endsWith('/'))) {
   assert.deepEqual(
-    await readFile(resolve(compareRoot, 'compact', path)),
+    await readFile(resolve(compareRoot, 'frozen', path)),
     await readFile(resolve(compareRoot, 'replay', path)),
     path,
   );
 }
-assert(compact.archive.length < snapshot.archive.length, 'same-input compact gzip must be smaller');
+assert(frozen.archive.length < snapshot.archive.length, 'same-input frozen gzip must be smaller');
 await writeFile(
-  resolve('dist/producer-vite-compact.json'),
+  resolve('dist/producer-vite-frozen.json'),
   JSON.stringify({
-    snapshotId: compact.snapshotId,
+    snapshotId: frozen.snapshotId,
     templateId,
   }),
 );
 console.log(
-  `Compact Vite pair: replay ${snapshot.archive.length} B, compact ${compact.archive.length} B`,
+  `Frozen Vite pair: replay ${snapshot.archive.length} B, frozen ${frozen.archive.length} B`,
 );
 
 const originalManifest = JSON.parse(packageJsonText);
