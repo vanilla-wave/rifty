@@ -4,12 +4,15 @@ import {
   type Context,
   type Model,
   type SimpleStreamOptions,
-  Type,
   createAssistantMessageEventStream,
   createModels,
   createProvider,
+  getCurrentTools,
 } from '@earendil-works/pi-ai';
+import { Type } from 'typebox';
 import { describe, expect, it } from 'vitest';
+import { contextView } from './fixtures/context-view.ts';
+import { conversation } from './fixtures/conversation.ts';
 import { createAgentSession } from './session.ts';
 import type { AgentSessionOptions } from './types.ts';
 
@@ -86,9 +89,8 @@ function fixture(
         streamSimple: (selected, context, options) => {
           requests.push({
             context: {
-              ...context,
-              messages: structuredClone(context.messages),
-              tools: context.tools?.map(({ name, description, parameters }) => ({
+              ...contextView(context),
+              tools: getCurrentTools(context.messages).map(({ name, description, parameters }) => ({
                 name,
                 description,
                 parameters,
@@ -99,7 +101,7 @@ function fixture(
           });
           const stream = createAssistantMessageEventStream();
           void Promise.resolve().then(async () => {
-            const response = await reply(context, options ?? {}, requests.length);
+            const response = await reply(contextView(context), options ?? {}, requests.length);
             stream.push({ type: 'start', partial: response });
             stream.push(
               response.stopReason === 'error' || response.stopReason === 'aborted'
@@ -271,6 +273,9 @@ describe('native continuation boundary', () => {
     try {
       await session.send('continue');
       expect(requests.map((r) => summaryRequest(r.context))).toEqual([true, false]);
+      // CLI 1.6.0 summary requests: no maxTokens (#9512), no cache write.
+      expect(requests[0]?.options).not.toHaveProperty('maxTokens');
+      expect(requests[0]?.options.cacheRetention).toBe('none');
       const trace = await session.exportTrace();
       expect(trace.transcript[0]).toMatchObject({
         role: 'compactionSummary',
@@ -338,7 +343,7 @@ describe('native continuation boundary', () => {
     try {
       await session.send('continue');
       expect(requests).toHaveLength(1);
-      expect((await session.exportTrace()).transcript).toHaveLength(8);
+      expect(conversation((await session.exportTrace()).transcript)).toHaveLength(8);
     } finally {
       await session.dispose();
     }
@@ -377,7 +382,89 @@ describe('native continuation boundary', () => {
       await session.send('continue');
       expect(requests.map((r) => summaryRequest(r.context))).toEqual([false, true, false]);
       expect(session.status()).toBe('context-exceeded');
-      expect((await session.exportTrace()).transcript[0]?.role).toBe('compactionSummary');
+      expect(conversation((await session.exportTrace()).transcript)[0]?.role).toBe(
+        'compactionSummary',
+      );
+    } finally {
+      await session.dispose();
+    }
+  });
+  it('[fault: torn-state] restored prompt state before a summary still lets overflow recovery omit the attempt', async () => {
+    // Review of PR #423: two restored system messages before the summary used to
+    // misalign agent state and journal projection, leaving the attempt in context.
+    let overflowed = false;
+    const { session, requests } = fixture(
+      (c) => {
+        if (summaryRequest(c)) return answer('Recovered summary');
+        if (overflowed) return answer('Done');
+        overflowed = true;
+        return answer('maximum context length is 5000 tokens', 10, 'error');
+      },
+      {
+        initialMessages: [
+          { role: 'system', content: '', sections: { prompt: 'Old prompt.' }, timestamp: 0 },
+          { role: 'system', content: '', sections: { prompt: 'Newer prompt.' }, timestamp: 1 },
+          {
+            role: 'compactionSummary',
+            summary: 'Earlier work',
+            tokensBefore: 40000,
+            timestamp: 2,
+          } as AgentMessage,
+          ...history().map((m) =>
+            m.role === 'assistant'
+              ? { ...m, usage: answer().usage, timestamp: 3 }
+              : { ...m, timestamp: 3 },
+          ),
+        ],
+      },
+    );
+    try {
+      await session.send('continue');
+      expect(session.status(), session.detail()).toBe('done');
+      expect(requests.map((r) => summaryRequest(r.context))).toEqual([false, true, false]);
+      expect(JSON.stringify(requests.at(-1)?.context.messages)).not.toContain(
+        'maximum context length is 5000 tokens',
+      );
+    } finally {
+      await session.dispose();
+    }
+  });
+  it('[fault: unbounded-read] a tool-call budget abort ends on an aborted response and skips post-run compaction', async () => {
+    const { session, requests } = fixture(
+      (c, _options, count) =>
+        summaryRequest(c)
+          ? answer('Saved old context')
+          : {
+              ...answer('', 20000 + count, 'toolUse'),
+              content: [{ type: 'toolCall', id: `call-${count}`, name: 'effect', arguments: {} }],
+            },
+      {
+        initialMessages: history().slice(0, 4),
+        maxToolCalls: 1,
+        tools: [
+          {
+            name: 'effect',
+            label: 'Effect',
+            description: 'External effect',
+            parameters: Type.Object({}),
+            execute: async () => ({
+              content: [{ type: 'text', text: 'settled' }],
+              details: undefined,
+            }),
+          },
+        ],
+      },
+    );
+    try {
+      await session.send('work');
+      expect(session.status()).toBe('budget-exceeded');
+      // Only the pre-prompt compaction; the aborted run ends on an aborted response, not a
+      // toolResult, and gets no post-run check (CLI: abort requested).
+      expect(requests.map((r) => summaryRequest(r.context))).toEqual([true, false, false]);
+      expect((await session.exportTrace()).transcript.at(-1)).toMatchObject({
+        role: 'assistant',
+        stopReason: 'aborted',
+      });
     } finally {
       await session.dispose();
     }
@@ -459,7 +546,12 @@ describe('native continuation boundary', () => {
       const ended = trace.events.flatMap(({ event }) =>
         event.type === 'agent' && event.event.type === 'agent_end' ? event.event.messages : [],
       );
-      expect(ended.map((m) => m.role)).toEqual(['user', 'assistant', 'toolResult', 'assistant']);
+      expect(conversation(ended).map((m) => m.role)).toEqual([
+        'user',
+        'assistant',
+        'toolResult',
+        'assistant',
+      ]);
     } finally {
       await session.dispose();
     }
@@ -537,7 +629,7 @@ describe('native continuation boundary', () => {
       try {
         await session.send('continue');
         const trace = await session.exportTrace();
-        expect(trace.transcript[0]).toMatchObject({
+        expect(conversation(trace.transcript)[0]).toMatchObject({
           role: 'compactionSummary',
           details: { readFiles: ['/tracked.ts'], modifiedFiles: [] },
         });

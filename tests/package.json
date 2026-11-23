@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@earendil-works/pi-ai": "0.85.1",
+    "@earendil-works/pi-ai": "1.6.0",
     "@esbuild/wasi-preview1": "0.28.0",
     "@riftydev/agent": "workspace:*",
     "@riftydev/net": "workspace:*",

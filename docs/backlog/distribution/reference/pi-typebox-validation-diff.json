@@ -1,0 +1,514 @@
+{
+  "probe": "node probe.mjs <pi-ai dir> <typebox dir>: pi-ai validateToolArguments on Type.Object({ v: <case> }); typebox 1.3.7 + pi-ai 0.85.1 (origin/main 11b9397ee) vs typebox 1.3.27 + pi-ai 1.6.0",
+  "date": "2026-11-23",
+  "node": "v24.16.0",
+  "rows": [
+    {
+      "case": "refine",
+      "input": "/a",
+      "pi0851": {
+        "accepted": true,
+        "args": {
+          "v": "/a"
+        }
+      },
+      "pi160": {
+        "accepted": true,
+        "args": {
+          "v": "/a"
+        }
+      },
+      "change": "same"
+    },
+    {
+      "case": "refine",
+      "input": "rel",
+      "pi0851": {
+        "accepted": false
+      },
+      "pi160": {
+        "accepted": true,
+        "args": {
+          "v": "rel"
+        }
+      },
+      "change": "silent-loss"
+    },
+    {
+      "case": "codec",
+      "input": "12",
+      "pi0851": {
+        "accepted": true,
+        "args": {
+          "v": "12"
+        }
+      },
+      "pi160": {
+        "accepted": true,
+        "args": {
+          "v": "12"
+        }
+      },
+      "change": "same"
+    },
+    {
+      "case": "codec",
+      "input": "x",
+      "pi0851": {
+        "accepted": true,
+        "args": {
+          "v": "x"
+        }
+      },
+      "pi160": {
+        "accepted": true,
+        "args": {
+          "v": "x"
+        }
+      },
+      "change": "same"
+    },
+    {
+      "case": "bigint",
+      "input": "1",
+      "pi0851": {
+        "accepted": true,
+        "args": {
+          "v": "1n"
+        }
+      },
+      "pi160": {
+        "accepted": true,
+        "args": {
+          "v": "1n"
+        }
+      },
+      "change": "same"
+    },
+    {
+      "case": "bigint",
+      "input": 1,
+      "pi0851": {
+        "accepted": true,
+        "args": {
+          "v": "1n"
+        }
+      },
+      "pi160": {
+        "accepted": true,
+        "args": {
+          "v": "1n"
+        }
+      },
+      "change": "same"
+    },
+    {
+      "case": "undef",
+      "input": null,
+      "pi0851": {
+        "accepted": true,
+        "args": {
+          "v": "<undefined>"
+        }
+      },
+      "pi160": {
+        "accepted": true,
+        "args": {
+          "v": "<undefined>"
+        }
+      },
+      "change": "same"
+    },
+    {
+      "case": "undef",
+      "input": "x",
+      "pi0851": {
+        "accepted": false
+      },
+      "pi160": {
+        "accepted": false
+      },
+      "change": "same"
+    },
+    {
+      "case": "void",
+      "input": null,
+      "pi0851": {
+        "accepted": true,
+        "args": {
+          "v": "<undefined>"
+        }
+      },
+      "pi160": {
+        "accepted": false
+      },
+      "change": "loud"
+    },
+    {
+      "case": "void",
+      "input": "x",
+      "pi0851": {
+        "accepted": false
+      },
+      "pi160": {
+        "accepted": false
+      },
+      "change": "same"
+    },
+    {
+      "case": "unionUndef",
+      "input": "a",
+      "pi0851": {
+        "accepted": true,
+        "args": {
+          "v": "a"
+        }
+      },
+      "pi160": {
+        "accepted": true,
+        "args": {
+          "v": "a"
+        }
+      },
+      "change": "same"
+    },
+    {
+      "case": "unionUndef",
+      "input": 1,
+      "pi0851": {
+        "accepted": true,
+        "args": {
+          "v": "1"
+        }
+      },
+      "pi160": {
+        "accepted": true,
+        "args": {
+          "v": "1"
+        }
+      },
+      "change": "same"
+    },
+    {
+      "case": "optional",
+      "input": "a",
+      "pi0851": {
+        "accepted": true,
+        "args": {
+          "v": "a"
+        }
+      },
+      "pi160": {
+        "accepted": true,
+        "args": {
+          "v": "a"
+        }
+      },
+      "change": "same"
+    },
+    {
+      "case": "optional",
+      "input": 1,
+      "pi0851": {
+        "accepted": true,
+        "args": {
+          "v": "1"
+        }
+      },
+      "pi160": {
+        "accepted": true,
+        "args": {
+          "v": "1"
+        }
+      },
+      "change": "same"
+    },
+    {
+      "case": "symbol",
+      "input": "x",
+      "pi0851": {
+        "accepted": false
+      },
+      "pi160": {
+        "accepted": false
+      },
+      "change": "same"
+    },
+    {
+      "case": "fn",
+      "input": "x",
+      "pi0851": {
+        "accepted": false
+      },
+      "pi160": {
+        "accepted": false
+      },
+      "change": "same"
+    },
+    {
+      "case": "ctor",
+      "input": "x",
+      "pi0851": {
+        "accepted": false
+      },
+      "pi160": {
+        "accepted": false
+      },
+      "change": "same"
+    },
+    {
+      "case": "email",
+      "input": "a@b.co",
+      "pi0851": {
+        "accepted": true,
+        "args": {
+          "v": "a@b.co"
+        }
+      },
+      "pi160": {
+        "accepted": true,
+        "args": {
+          "v": "a@b.co"
+        }
+      },
+      "change": "same"
+    },
+    {
+      "case": "email",
+      "input": "nope",
+      "pi0851": {
+        "accepted": false
+      },
+      "pi160": {
+        "accepted": false
+      },
+      "change": "same"
+    },
+    {
+      "case": "customFmt",
+      "input": "ab",
+      "pi0851": {
+        "accepted": true,
+        "args": {
+          "v": "ab"
+        }
+      },
+      "pi160": {
+        "accepted": true,
+        "args": {
+          "v": "ab"
+        }
+      },
+      "change": "same"
+    },
+    {
+      "case": "customFmt",
+      "input": "abc",
+      "pi0851": {
+        "accepted": false
+      },
+      "pi160": {
+        "accepted": true,
+        "args": {
+          "v": "abc"
+        }
+      },
+      "change": "silent-loss"
+    },
+    {
+      "case": "unknownFmt",
+      "input": "ab",
+      "pi0851": {
+        "accepted": true,
+        "args": {
+          "v": "ab"
+        }
+      },
+      "pi160": {
+        "accepted": true,
+        "args": {
+          "v": "ab"
+        }
+      },
+      "change": "same"
+    },
+    {
+      "case": "examples",
+      "input": "a",
+      "pi0851": {
+        "accepted": true,
+        "args": {
+          "v": "a"
+        }
+      },
+      "pi160": {
+        "accepted": true,
+        "args": {
+          "v": "a"
+        }
+      },
+      "change": "same"
+    },
+    {
+      "case": "examples",
+      "input": 1,
+      "pi0851": {
+        "accepted": true,
+        "args": {
+          "v": "1"
+        }
+      },
+      "pi160": {
+        "accepted": true,
+        "args": {
+          "v": "1"
+        }
+      },
+      "change": "same"
+    },
+    {
+      "case": "propNamedRefine",
+      "input": {
+        "~refine": "a"
+      },
+      "pi0851": {
+        "accepted": true,
+        "args": {
+          "v": {
+            "~refine": "a"
+          }
+        }
+      },
+      "pi160": {
+        "accepted": true,
+        "args": {
+          "v": {
+            "~refine": "a"
+          }
+        }
+      },
+      "change": "same"
+    },
+    {
+      "case": "propNamedRefine",
+      "input": {
+        "~refine": 1
+      },
+      "pi0851": {
+        "accepted": true,
+        "args": {
+          "v": {
+            "~refine": "1"
+          }
+        }
+      },
+      "pi160": {
+        "accepted": true,
+        "args": {
+          "v": {
+            "~refine": "1"
+          }
+        }
+      },
+      "change": "same"
+    },
+    {
+      "case": "pattern",
+      "input": "ab",
+      "pi0851": {
+        "accepted": true,
+        "args": {
+          "v": "ab"
+        }
+      },
+      "pi160": {
+        "accepted": true,
+        "args": {
+          "v": "ab"
+        }
+      },
+      "change": "same"
+    },
+    {
+      "case": "pattern",
+      "input": "b",
+      "pi0851": {
+        "accepted": false
+      },
+      "pi160": {
+        "accepted": false
+      },
+      "change": "same"
+    },
+    {
+      "case": "date",
+      "input": "2020-01-01",
+      "pi0851": {
+        "accepted": true,
+        "args": {
+          "v": "2020-01-01"
+        }
+      },
+      "pi160": {
+        "accepted": true,
+        "args": {
+          "v": "2020-01-01"
+        }
+      },
+      "change": "same"
+    },
+    {
+      "case": "uint8",
+      "input": "x",
+      "pi0851": {
+        "accepted": true,
+        "args": {
+          "v": "x"
+        }
+      },
+      "pi160": {
+        "accepted": true,
+        "args": {
+          "v": "x"
+        }
+      },
+      "change": "same"
+    },
+    {
+      "case": "patternProps",
+      "input": {
+        "axb": 1
+      },
+      "pi0851": {
+        "accepted": true,
+        "args": {
+          "v": {
+            "axb": 1
+          }
+        }
+      },
+      "pi160": {
+        "accepted": true,
+        "args": {
+          "v": {
+            "axb": 1
+          }
+        }
+      },
+      "change": "same"
+    },
+    {
+      "case": "patternProps",
+      "input": {
+        "axb": "x"
+      },
+      "pi0851": {
+        "accepted": false
+      },
+      "pi160": {
+        "accepted": false
+      },
+      "change": "same"
+    }
+  ]
+}

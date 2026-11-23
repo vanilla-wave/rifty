@@ -35,3 +35,5 @@ docs/backlog/distribution/reference/agent-history-evidence.md.
 ## Corrections
 
 2026-09-27 — ADR-0473 additionally admits one leading native compaction summary with details; restoredMessageCount counts originally admitted messages, not a retained prefix after compaction; usage includes only current-session requests.
+
+2026-11-23 — Pi 1.x histories carry `system` prompt-state messages; restore admits them and a leading summary after them (ADR-0569).
