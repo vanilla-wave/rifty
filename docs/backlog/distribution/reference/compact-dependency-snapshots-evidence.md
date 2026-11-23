@@ -67,5 +67,5 @@ Verify-pass PASS at 8a993dd5108a73cf72d5e910d6bd9aea6083db24 after merging
 landed Brotli: 73 focused tests, all 28 `pr:check` gates and full packed
 acceptance PASS. Compact+Brotli native decompression equals compact gzip's
 decoded v5 TAR and snapshot identity. Same gzip sizes above reproduced.
-The separate worker-retirement CI finding remains undiagnosed:
-`kernel/workbench-vite-worker-retirement-ci.md`; no runtime/assertion change.
+The separate worker-retirement CI red was a Chromium nested-Worker notice
+drop, repaired on main by PR #392 (ADR-0548); no compact change.
