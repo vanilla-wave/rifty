@@ -94,7 +94,8 @@ describe('node:fs.utimesSync times as Node 24.16.0 stores them (fs-times.ts)', (
     fs.utimesSync('/workspace/t', 1e306, 1e306);
     expect(fs.statSync('/workspace/t').mtimeMs).toBe(9223372036854.775);
     for (const v of ['-1e306', '1e306', '-9.3e12', new Date(-8.64e15)]) {
-      fs.utimesSync('/workspace/t', v, v);
+      // Node's TimeLike takes a numeric string; rifty's signature types only number | Date.
+      fs.utimesSync('/workspace/t', v as number | Date, v as number | Date);
       expect(Math.abs(fs.statSync('/workspace/t').mtimeMs)).toBe(9223372036854.775);
     }
     const before = Date.now();
