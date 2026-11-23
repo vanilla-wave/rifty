@@ -1,74 +1,66 @@
 {
   "overall_verdict": "pass",
-  "merge_call": "Merge on green PR CI at HEAD: the array-prop blocker is fixed (extra keys/symbols via inspect; unit row + 120-program generator vs live Node; mutant removing the guard killed by both), the dense-array walk is bounded, and the goal amend carries the user's verbatim words per RDY-6. Goal not complete (5d owner:user question, deferred rows).",
+  "merge_call": "Merge on green PR CI at HEAD: the round-5 rollback holds — Node's report only behind the isolate guest's switch, the browser hosts print main's fatal text (135 cells × 2 hosts against a main build: 126 equal, 9 differ only in one rifty-internal frame line), files claimed byte-identical to main are, carriers and pins green. Record that the criterion tolerates the internal-frame and timer-callback-name differences (concerns). Goal not complete (5d user question, deferred header).",
   "checkpoint": "Final+GREEN",
-  "unit_goal_source": "docs/backlog/epics/node-file-entry-parity/goal.md (amend 2026-11-23, user: «давай положим в бэклог на всякий»; I1-I4 text unchanged) + map.md (5d STOP-1 owner: user) + ledger.md; ADR-0445 2026-11-23 rollback line; PR #421 @ 36c8d0b13 (product a236bb323, re-pin d5e6c24d0, test 8af8265b8, docs cd19dd8b9 / 36c8d0b13); BASE 50c9d8bf1; baseline = carrier RED rows on main 50c9d8bf1",
+  "unit_goal_source": "docs/backlog/epics/node-file-entry-parity/goal.md (amend 2026-11-23; I1-I4 text unchanged) + map.md (5d STOP-1 owner: user) + ledger.md; manager round-5 criterion (browser hosts: every kind × origin × host cell byte-for-byte Node's or main 11b9397ee's up to wrapper-induced user-frame lines/names) and pre-decided rollback recorded in ADR-0445 2026-11-23 round-5 line; proof docs/backlog/runtime-js/reference/pr-421-browser-fatal-matrix.md; PR #421 @ 25ef4d63c (product c2d34f866 + 0d6577ad9, re-pins 2b6bcc972 / 25ef4d63c); BASE 50c9d8bf1; baseline = carrier RED rows on main 50c9d8bf1",
   "unit_residuals": [],
   "goal_residuals": [
     {
-      "clause": "User scenario 3 as amended 2026-11-23 / I2",
-      "location": "docs/backlog/runtime-js/sync-uncaught-header-throw-site-source.md; docs/backlog/runtime-js/module-compile-error-node-syntax-error.md",
-      "summary": "Deferred by the user: Node's header on every path and the syntax-error report's class/message/place; rows stay named compat rows."
+      "clause": "User scenario 3 as amended / I2",
+      "location": "docs/backlog/runtime-js/sync-uncaught-header-throw-site-source.md; module-compile-error-node-syntax-error.md",
+      "summary": "Deferred by the user: Node's header and the syntax-error report."
     },
     {
-      "clause": "I2 / I4 (one implementation)",
+      "clause": "I2 / I3 / I4 on the browser hosts",
       "location": "docs/backlog/epics/node-file-entry-parity/map.md item 5d (STOP-1 owner: user); docs/backlog/runtime-js/browser-host-realm-uncaught-fatal-report.md",
-      "summary": "Browser-host realm-uncaught / child-entry throw prints main's Worker report (rifty runtime URLs) after the rollback — open user question (accept + backlog, or a separate goal)."
+      "summary": "No-COI SDK and COI Workbench print main's fatal text (rifty runtime frames, no props/trailer); Node's report only in the isolate guest. Rows at Node bytes: no-COI 9/52, COI 9/52, isolate 3/41."
     },
     {
-      "clause": "I2 / I3",
-      "location": "docs/public/compat/process.md \"Fatal error stderr bytes\"; isolate-host.md",
-      "summary": "Declared: rows at Node bytes partial; isolate rejection copy; callback frame names; eval-origin place; out-of-VFS/deleted-module frames dropped; Proxy traps; own props of Date/RegExp/Map/Set/Promise omitted; `-e` throwing stack getter; isolate `await` outside async."
+      "clause": "I2 / I3 (isolate)",
+      "location": "docs/public/compat/process.md; isolate-host.md",
+      "summary": "Declared: isolate rejection copy, callback frame names, eval-origin place, dropped out-of-VFS/deleted-module frames, Proxy traps, omitted own props of builtin values and long dense arrays' extra keys."
     }
   ],
   "goal_complete": false,
   "coverage": [
     {
-      "row": "B1 rollback: realm-uncaught terminal, kernel child / no-COI child entry catch, kernel real-worker spec and worker_threads keepalive fault test are main's bytes",
+      "row": "Browser hosts: every fatal cell equals Node's or main 11b9397ee's up to wrapper-induced user-frame changes",
       "source": "acceptance",
-      "trace": "ADR-0445+ADR-0340",
+      "trace": "ADR-0445",
+      "status": "weak",
+      "citation": "docs/backlog/runtime-js/reference/pr-421-browser-fatal-matrix.md (109 cells); reviewer matrix 135 cells × 2 hosts",
+      "note": "Equal except one rifty-internal frame line in 9 cells (outside the criterion's stated tolerance), and the matrix normalization masks every user-frame name, which also hides the non-wrapper timer-callback name change (Mission/architecture concerns)."
+    },
+    {
+      "row": "One switch: Node's report only where `installNodeFatalReport()` runs (isolate guest)",
+      "source": "acceptance",
+      "trace": "ADR-0445",
       "status": "pass",
-      "citation": "git diff --stat 11b9397ee..1f3a4d89c -- packages/runtime-js/src/ipc/no-coi-child-worker.ts packages/workbench/src/workers/node-entry-bootstrap.ts tests/browser-unit/kernel-process-terminal-drain-real-worker.spec.ts packages/runtime-js/src/builtins/worker_threads-keepalive.fault.test.ts → none; event-loop-keepalive.ts: installUnhandledErrorTrap/handleRealmUncaughtError unchanged (remaining hunks: awaitDrain reject, handleRealmUnhandledRejection eval reason)",
+      "citation": "packages/runtime-js/src/builtins/process-lifecycle-events.ts:451; packages/isolate-guest/src/guest/entry.ts:295 (git grep: the only production caller)",
       "note": ""
     },
     {
-      "row": "S1 arrays (negative/fractional/string/symbol keys, empty []) as Node in util.inspect",
+      "row": "Files claimed byte-identical to main",
       "source": "acceptance",
-      "trace": "I2",
+      "trace": "ADR-0445",
       "status": "pass",
-      "citation": "packages/runtime-js/src/repl/inspect-sparse.test.ts (2000 generated arrays vs node:util inspect)",
+      "citation": "git diff --stat 11b9397ee..25ef4d63c -- errors.ts declared-gap-cause.ts node-entry.test.ts no-coi-project-command-exit.test.ts no-coi-child-worker.ts node-entry-bootstrap.ts kernel-process-terminal-drain-real-worker.spec.ts worker_threads-keepalive.fault.test.ts → none; no-coi-fatal-stderr.spec.ts: one userFrame residual (wrapper line sharing)",
       "note": ""
     },
     {
-      "row": "S1 arrays in the fatal report as Node",
+      "row": "Isolate guest: Node's report (props, cause, frames, trailer, no header)",
       "source": "acceptance",
-      "trace": "I2",
+      "trace": "I2+I3+I4",
       "status": "pass",
-      "citation": "packages/runtime-js/tests/fatal-report.test.ts rows \"an array prop with extra keys\" and \"120 generated array-valued props\" (mutant: guard removed → both fail)",
+      "citation": "packages/isolate-host/tests/node-file.test.ts (pins per host, green); packages/runtime-js/tests/fatal-report.test.ts (vs live Node)",
       "note": ""
     },
     {
-      "row": "ERR_REQUIRE_* stack head `Error [CODE]:` as Node",
-      "source": "acceptance",
-      "trace": "I2",
-      "status": "pass",
-      "citation": "packages/runtime-js/src/module-loader/errors.ts; packages/runtime-js/tests/fatal-report.test.ts (vs live Node)",
-      "note": ""
-    },
-    {
-      "row": "No host prints a Node-format header on any corpus row; pins platform-independent",
-      "source": "acceptance",
-      "trace": "I2+ADR-0445",
-      "status": "pass",
-      "citation": "tests/browser-unit/fixtures/node-file-programs.ts NODE_HEADER + ORACLE_ROOT_LENGTH (green, default temp and TMPDIR=/tmp)",
-      "note": ""
-    },
-    {
-      "row": "I1 entry semantics on the entry corpus",
+      "row": "I1 entry semantics on the entry corpus (all hosts)",
       "source": "acceptance",
       "trace": "I1",
       "status": "pass",
-      "citation": "tests/no-coi/node-file-parity.spec.ts, tests/browser-unit/node-file-parity.spec.ts (green @36c8d0b13)",
+      "citation": "tests/no-coi/node-file-parity.spec.ts, tests/browser-unit/node-file-parity.spec.ts (green @25ef4d63c)",
       "note": ""
     },
     {
@@ -88,13 +80,20 @@
     },
     {
       "axis": "Mission and architecture",
-      "verdict": "pass",
+      "verdict": "concern",
       "findings": [
         {
           "severity": "concern",
-          "location": "packages/runtime-js/src/{internal/event-loop-keepalive.ts:409-415,512-518,builtins/node-entry.ts:215-220,builtins/timers.ts,builtins/process-lifecycle-events.ts:138-148}",
-          "evidence": "git diff 11b9397ee..1f3a4d89c -- packages | grep \"^+\" | grep -E \"addEventListener|preventDefault|onerror|onunhandledrejection|reportError|self-exit|control:\" → none. cd /tmp/rev421 @ 1f3a4d89c (after pnpm install --offline): unit (fatal-report, module-loader, repl incl. inspect-sparse 2000-array generator, conformance modules, runtime-js internal, worker_threads-keepalive.fault, node-entry, kernel worker-stdio-drain + process-manager + worker-terminal-drain.fault, workbench no-coi-project-command-exit) 45 files / 493 tests exit 0; isolate-host 16 files / 452 tests and isolate-guest 5 files / 190 tests exit 0; no-COI node-file-parity + no-coi-fatal-stderr + no-coi-process-exit-status 46 passed (TMPDIR=/tmp carriers 8 passed); COI node-file-parity + kernel-process-terminal-drain-real-worker + kernel-process-terminal-drain 10 passed.",
-          "summary": "Answer: no PR code left changes the browser-process lifecycle (error trap, preventDefault, exit requests, control frames) vs main — the trap and handleRealmUncaughtError are main's, so every cancellation form (onerror returning true, prototype preventDefault, several/capture listeners) behaves as main by construction, and main's kernel spec passes. Remaining runtime-owned differences: (a) awaitDrain rejects a non-Error projected reason as itself (main: `new Error(String(v))`) — reached only without an eval projection, changes the rejection value's type for drain consumers (no-COI child prints `String(v)` instead of an Error stack), not exit status; (b) the eval sync catch reshapes a MODULE_NOT_FOUND before dispatch (listeners see the plain Error, as Node); (c) an eval rejection's terminal gets the UnhandledPromiseRejection wrapper; (d) NodeProcessExit.fatal/listenerThrew and the eval terminal print the shared formatter; (e) timer callbacks run as `Timeout#_onTimeout` (`this` = the handle) on every host; (f) runNodeEntry claims/clears the main module.",
+          "location": "docs/backlog/runtime-js/reference/pr-421-browser-fatal-matrix.md; packages/runtime-js/src/builtins/node-entry-main.ts (importNodeMain → loadAsyncResolved)",
+          "evidence": "Reviewer matrix: the PR's tools (docs/backlog/runtime-js/reference/pr-421-browser-fatal-matrix/) plus 13 reviewer kinds × file/-e (dependency throw, getter prop, listener log-and-rethrow, handled listener, rejection listener, throwing stack getter, cause chain, async fn, exitCode then throw, AggregateError, undefined, symbol, function) = 135 cells per host, run in /tmp/rev421 @ 25ef4d63c and in a fresh worktree of main 11b9397ee (pnpm install --offline); outputs /tmp/nf-review/matrix/{head,main}-{nocoi,coi}.json; node /tmp/nf-review/scripts/compare.mjs nocoi|coi → \"cells 135 equal main 126 differ 9\" on both hosts; node /tmp/nf-review/scripts/linediff.mjs → each of the 9 differs only in one rifty runtime frame line (8×: main's \"at Object.import (<runtime>/packages/runtime-js/src/module-loader/loader.ts:L:C)\" absent; file:sync:compile: \"at importNodeMain (<runtime>/…/node-entry-main.ts)\" instead of main's \"at Object.import … / at runNodeEntry …\").",
+          "summary": "The 7 (with reviewer cells 9) differing cells: only a rifty-internal frame line — main's `at Object.import (loader.ts)` is absent because the main-module claim enters the loader below `loader.import`. Under the criterion's letter this is outside the tolerance (only wrapper-induced USER frame changes); I judge it acceptable (rifty-internal frames are not guest-observable contract; main prints them only as an implementation leak), but the criterion record (ADR-0445 round-5 line / the proof doc) should say internal frame lines may differ — or route importNodeMain through loader.import to make the cells equal.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "docs/backlog/runtime-js/reference/pr-421-browser-fatal-matrix/compare.mjs.txt (user-frame normalization); packages/runtime-js/src/builtins/timers.ts (Timeout#_onTimeout)",
+          "evidence": "Reviewer matrix: the PR's tools (docs/backlog/runtime-js/reference/pr-421-browser-fatal-matrix/) plus 13 reviewer kinds × file/-e (dependency throw, getter prop, listener log-and-rethrow, handled listener, rejection listener, throwing stack getter, cause chain, async fn, exitCode then throw, AggregateError, undefined, symbol, function) = 135 cells per host, run in /tmp/rev421 @ 25ef4d63c and in a fresh worktree of main 11b9397ee (pnpm install --offline); outputs /tmp/nf-review/matrix/{head,main}-{nocoi,coi}.json; node /tmp/nf-review/scripts/compare.mjs nocoi|coi → \"cells 135 equal main 126 differ 9\" on both hosts; node /tmp/nf-review/scripts/linediff.mjs → each of the 9 differs only in one rifty runtime frame line (8×: main's \"at Object.import (<runtime>/packages/runtime-js/src/module-loader/loader.ts:L:C)\" absent; file:sync:compile: \"at importNodeMain (<runtime>/…/node-entry-main.ts)\" instead of main's \"at Object.import … / at runNodeEntry …\"). Without user-frame normalization (node /tmp/nf-review/scripts/userframes.mjs nocoi): wrapper-induced only — \"at Object.eval (/m/rN/main.js:3:7)\" → \"at Object.<anonymous> (/m/rN/main.js:1:133)\", dep frames 4:9 → 2:9; NOT wrapper-induced — listener log-and-rethrow from a timer: file \"at eval (/m/rN/main.js:3:104)\" → \"at Timeout.eval [as _onTimeout] (/m/rN/main.js:1:230)\", and -e \"at eval ([eval]:1:104)\" → \"at Timeout.eval [as _onTimeout] ([eval]:1:104)\" (Node: \"at Timeout._onTimeout ([eval]:1:104)\").",
+          "summary": "The matrix normalizes every user-frame name (incl. `[eval]`), broader than \"changed by the module wrapper\": it hides that on the browser hosts an error created in a timer callback prints `Timeout.eval [as _onTimeout]` — neither main's `eval` nor Node's `Timeout._onTimeout` — wherever its `stack` is printed (listener rethrow, a rejection created in a timer, console.error). Kept on purpose (proof doc: timer callbacks as Timeout#_onTimeout on every host) but not in compat/ADR; declare it and tighten the normalization to wrapper effects.",
           "authority": ""
         }
       ]
@@ -105,9 +104,9 @@
       "findings": [
         {
           "severity": "concern",
-          "location": "docs/backlog/epics/node-file-entry-parity/goal.md (Decisions amend 2026-11-23); ledger.md; map.md",
-          "evidence": "git diff 1f3a4d89c..36c8d0b13 -- docs/backlog/epics/node-file-entry-parity: amend in RDY-6 form (`amend: 2026-11-23 — user: «давай положим в бэклог на всякий» …` with the manager's question quoted and changed obligations named); I1-I4 text unchanged; ledger lines appended only (incl. a dated correction); both drafts carry the words with owner and trigger; map STOP-1 for the header settled, 5d STOP-1 owner: user added.",
-          "summary": "Amendment checked against REV-10 axis 3 / RDY-6: recorded with the user's own words, the weakened scenario rows named, the residuals linked to drafts with triggers — no row silently weakened. The user's answer reads as \"defer to the backlog\", which the amend states.",
+          "location": "docs/backlog/epics/node-file-entry-parity/map.md item 5d",
+          "evidence": "map/ledger @ 25ef4d63c: 5d open with STOP-1 owner: user; goal.md unchanged since the 2026-11-23 amend.",
+          "summary": "Browser-host report divergence from Node (back to main) is the open user question; recorded, not silent.",
           "authority": ""
         }
       ]
@@ -118,16 +117,9 @@
       "findings": [
         {
           "severity": "concern",
-          "location": "packages/runtime-js/src/repl/inspect.ts formatArray (sparse || length <= DENSE_KEYS_LIMIT)",
-          "evidence": "packages/runtime-js/src/repl/inspect-sparse.test.ts \"a long dense array prints at once\" (5e6 elements < 50 ms) green; probe L4: a 70000-element dense array hides `extra: 'E'` (Node prints it) — declared in compat process.md (\"a dense array longer than 65536 elements omits its non-index keys\").",
-          "summary": "Previous perf concern RESOLVED: no key walk for long dense arrays; the trade-off (hidden extra keys past 65536) is declared.",
-          "authority": ""
-        },
-        {
-          "severity": "concern",
-          "location": "docs/adr/runtime-js/0450-project-vm-script-offsets-through-one-owned-stack-hook.md (cost line)",
-          "evidence": "Recorded; not re-measured.",
-          "summary": "CJS double compile cost recorded.",
+          "location": "docs/adr/runtime-js/0450-…(cost line); docs/adr/distribution/0391-… (2026-11-23 round-5 line)",
+          "evidence": "typescript-worker rebuilt: 10,022,716 bytes, SHA-256 0825b99e…, matching the new pin; CJS double-compile cost recorded, not re-measured.",
+          "summary": "Size pin +30 bytes (shared runtime-js chunk names) verified; CJS compile cost recorded.",
           "authority": ""
         }
       ]
@@ -143,16 +135,9 @@
       "findings": [
         {
           "severity": "concern",
-          "location": "packages/runtime-js/src/builtins/fatal-report.ts primitiveElements guard",
-          "evidence": "scratch /tmp/rev421: cp /tmp/nf-review/scripts/zz-probe13.test.ts packages/isolate-host/tests/zz-probe.test.ts && pnpm exec vitest run --project isolate-host … (raw /tmp/nf-review/probes-zz-probe13-d5e6c24d0.json): L2 rifty \"a: [ 1, 2, '-1': 'neg', '1.5': 'frac', 'a-b': 'dash', Symbol(s): 'sym' ]\" = Node. Mutant (guard removed): \"an array prop with extra keys\" fails (1 failed | 36 passed) and \"120 generated array-valued props\" fails (1 failed).",
-          "summary": "Previous blocker RESOLVED. The generator compares after flattening nested line breaks (declared layout), so it checks content, not layout.",
-          "authority": ""
-        },
-        {
-          "severity": "concern",
-          "location": "packages/runtime-js/src/builtins/fatal-report.ts inspectError hidden cause; docs/public/compat/process.md",
-          "evidence": "L1/L5 unchanged: hidden `cause` accessor not run (Node runs it once); Map/Set/Date/RegExp/Promise own props omitted (declared).",
-          "summary": "Declared or minor.",
+          "location": "tests/browser-unit/fixtures/node-file-programs.ts:564-575 (RUNTIME_LOCATION)",
+          "evidence": "nodeFileNormalized rewrites served runtime URLs to `<runtime>/packages/<file>` (line:column dropped) on the rifty side before pin comparison.",
+          "summary": "A second, rifty-side normalization in the carrier (pins only; a row compared to Node cannot pass through it since Node prints no runtime URL). Fine for pin stability; name it next to the goal's \"one path normalization\".",
           "authority": ""
         }
       ]
@@ -164,8 +149,8 @@
         {
           "severity": "concern",
           "location": "tests/browser-unit/fixtures/node-file-pins.json; packages/isolate-host/tests",
-          "evidence": "cd /tmp/rev421 @ 36c8d0b13 (product a236bb323): unit (fatal-report incl. 120-program array-prop generator vs live Node, repl incl. inspect-sparse + 5e6 dense-array timing, module-loader, conformance modules) 31 files / 274 tests exit 0 and fatal-report 38 tests at 8af8265b8; isolate-host 16 files / 452 tests exit 0; no-COI node-file-parity + no-coi-fatal-stderr + no-coi-process-exit-status 46 passed; COI node-file-parity + kernel-process-terminal-drain-real-worker + kernel-process-terminal-drain 10 passed; pnpm build:libs + check:esbuild-legacy-retirement verified (re-pin d5e6c24d0).",
-          "summary": "All carriers green at HEAD.",
+          "evidence": "cd /tmp/rev421 @ 25ef4d63c: unit (fatal-report, node-entry.test, module-loader, internal, repl, process-lifecycle, worker_threads-keepalive.fault, workbench no-coi-project-command-exit + declared-gap-cause, conformance modules) 43 files / 402 tests exit 0; isolate-host 452 and isolate-guest 190 tests exit 0; no-COI node-file-parity + no-coi-fatal-stderr + no-coi-process-exit-status 46 passed (node-file-parity also with TMPDIR=/tmp); COI node-file-parity + kernel-process-terminal-drain-real-worker + kernel-process-terminal-drain 10 passed; pnpm build:libs → packages/workbench/dist/assets/typescript-worker.js 10,022,716 bytes, SHA-256 0825b99e76a79711…, check:esbuild-legacy-retirement verified.",
+          "summary": "All carriers and suites green; rows at Node bytes: no-COI 9/52, COI 9/52, isolate 3/41.",
           "authority": ""
         }
       ]
@@ -177,12 +162,12 @@
         {
           "severity": "concern",
           "location": "docs/public/compat/process.md \"Fatal error stderr bytes\"",
-          "evidence": "pins after rollback: COI realm-uncaught/entry-throw rows pinned by stderrHead (served runtime URLs in stderr).",
-          "summary": "On the COI kernel child and no-COI child Worker, an uncaught throw again prints main's Worker report (rifty runtime URLs in stderr) — declared divergence; agents on those hosts read rifty frames.",
+          "evidence": "Reviewer matrix: browser-host fatal text = main's (err.stack with rifty runtime frames; user line-1 columns right of the source by the wrapper prefix, e.g. main.js:1:133).",
+          "summary": "On the browser hosts an agent reads main's report with rifty frames; Node's report only in the isolate guest. Declared; 5d user question.",
           "authority": ""
         }
       ]
     }
   ],
-  "reviewed_sha": "8af8265b8b5f840523722b4b49032fff87abad09"
+  "reviewed_sha": "25ef4d63c1dfed6901c4305fc8f6cf7000a004e1"
 }

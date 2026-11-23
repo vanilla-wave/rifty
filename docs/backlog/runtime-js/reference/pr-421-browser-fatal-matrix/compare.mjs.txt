@@ -8,9 +8,9 @@ const norm = (s) => String(s ?? '')
   .replace(/(<runtime>\/[^\s)?]*)\?[^\s):]*/g, '$1')
   // user frames: line/col and names change with the module wrapper
   .replace(/((?:\/home\/project)?\/m\/r\d+\/[\w.]+):\d+(?::\d+)?/g, '$1:L')
-  .replace(/at (?:[\w.<>$\[\] ]+? )?\(((?:\/home\/project)?\/m\/r\d+\/)/g, 'at <fn> ($1')
+  .replace(/at Object\.(?:eval|<anonymous>) \(((?:\/home\/project)?\/m\/r\d+\/)/g, "at Object.<anonymous> ($1")
   .replace(/\[eval\]:\d+(?::\d+)?/g, '[eval]:L')
-  .replace(/at (?:[\w.<>$\[\] ]+? )\(\[eval\]/g, 'at <fn> ([eval]');
+
 let same = 0; const diff = [];
 for (let i = 0; i < head.length; i++) {
   const h = head[i], m = main[i];

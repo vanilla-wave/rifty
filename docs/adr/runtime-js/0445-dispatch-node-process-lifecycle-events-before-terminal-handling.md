@@ -250,3 +250,10 @@ sample. Node v24.16.0 facts: evidence §O1–§O3.
   (`err.stack`), the eval terminal, the drain's non-Error rejection
   (`new Error(String(x))`), `MODULE_NOT_FOUND`'s printed form, the eval
   projection. Proof: `docs/backlog/runtime-js/reference/pr-421-browser-fatal-matrix.md`.
+  Criterion exceptions, named: rifty's own runtime frame lines (their set
+  follows the runtime's call path — the main-module claim enters the loader
+  below `loader.import`; main prints them only as a leak), and a timer
+  callback's frame name (`Timeout.eval [as _onTimeout]` in `-e` code, main
+  `eval`, Node `Timeout._onTimeout`) from `Timeout#_onTimeout`, Node's `this`.
+  Carrier pins read a served runtime location as `<runtime>/packages/<file>`,
+  a rifty-side normalization next to the one path normalization.
