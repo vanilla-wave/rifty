@@ -677,6 +677,7 @@ Moved (redirect to the live path):
 - `docs/perf/` → `docs/backlog/perf/reference/`
 - `docs/backlog/tests/` → `docs/backlog/toolchain-build/reference/`
 - `docs/PUBLISHING.md` → `docs/public/publishing.md`
+- `docs/adr/distribution/0547-compact-prepared-dependency-snapshots.md` → `docs/adr/distribution/0547-frozen-prepared-dependency-snapshots.md` (profile renamed 2026-11-23; cited by the PR #388 verdict)
 - `docs/hosting-netlify.md` → `docs/public/hosting-netlify.md`
 
 Removed, no successor (resolve to git history):
