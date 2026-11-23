@@ -1,1 +1,0 @@
-# Ledger — compact-dependency-snapshots

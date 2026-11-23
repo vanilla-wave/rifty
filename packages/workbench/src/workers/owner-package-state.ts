@@ -5,7 +5,7 @@ import {
 import type { CommandContext } from '@riftydev/shell';
 import { normalizePath } from '@riftydev/vfs';
 import {
-  type DepSnapshotV3,
+  type DepSnapshot,
   fetchVerifiedDepSnapshot,
   prepareDepSnapshotRestore,
 } from '../glue/dep-snapshot.ts';
@@ -289,7 +289,7 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
         });
       },
       planSnapshotRestore: async ({ project, snapshot }) => {
-        const payload = snapshot.payload as DepSnapshotV3 | undefined;
+        const payload = snapshot.payload as DepSnapshot | undefined;
         if (!payload) return { status: 'rejected', reason: 'snapshot-payload-missing' };
         try {
           // One replay-cache verification of the source, then the COI projection.
@@ -306,10 +306,12 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
             packages: payload.packages,
             shadowPlan: planShadowSubstitutionsFromLockfile(lockfile),
             apply: async () => {
-              prepared.applyCache();
-              const report = await options.flush();
-              if (report !== undefined && report.total > 0)
-                throw new Error('Snapshot replay cache persistence failed');
+              if (prepared.applyCache) {
+                prepared.applyCache();
+                const report = await options.flush();
+                if (report !== undefined && report.total > 0)
+                  throw new Error('Snapshot replay cache persistence failed');
+              }
               prepared.applyPayload();
               seedTemplateNodeModulesFiles(
                 options.fsSync,

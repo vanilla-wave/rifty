@@ -1,0 +1,232 @@
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { mkdir, readFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { gunzipSync } from 'node:zlib';
+import { TARBALL_CACHE_ROOT } from '@riftydev/npm-client';
+import { MemoryFsSync } from '@riftydev/vfs/internal';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { applyNoCoiSnapshot } from '../workers/no-coi-snapshot-application.ts';
+import { snapshotExactFsTree } from '../workers/test-fixtures/durable-owner-fs.ts';
+import { bakeSavedSnapshotFixture } from '../workers/test-fixtures/snapshot-saved-state.ts';
+import { decodeDepSnapshotTar } from './dep-snapshot-tar.ts';
+import {
+  parseDepSnapshot,
+  serializeDepSnapshot,
+  serializeDepSnapshotTar,
+  sha256Identity,
+  verifyDepSnapshotReplayCache,
+} from './dep-snapshot.ts';
+
+const compact = (value: object) => ({
+  ...value,
+  version: 5,
+  profile: 'compact',
+  tarballCache: { version: 1, root: TARBALL_CACHE_ROOT, files: [] },
+});
+const roots: string[] = [];
+afterEach(() => {
+  vi.unstubAllGlobals();
+  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+});
+
+type TarFault =
+  | 'none'
+  | 'v4-compact-marker'
+  | 'v5-no-profile'
+  | 'v5-unknown-profile'
+  | 'replay-entry'
+  | 'replay-dir';
+
+/** Re-pack a producer-valid compact tar with system tar after one control-data edit. */
+async function repackCompactTar(
+  tar: Uint8Array,
+  fault: TarFault,
+): Promise<Uint8Array<ArrayBuffer>> {
+  const root = mkdtempSync(join(tmpdir(), 'rifty-compact-tar-'));
+  roots.push(root);
+  writeFileSync(join(root, 'in.tar'), tar);
+  const extracted = join(root, 'extracted');
+  const tree = join(root, 'tree');
+  await mkdir(extracted);
+  execFileSync('tar', ['-xf', join(root, 'in.tar'), '-C', extracted]);
+  const entries = execFileSync('tar', ['-tf', join(root, 'in.tar')], { encoding: 'utf8' })
+    .split('\n')
+    .filter(Boolean);
+  // Fresh files: re-packing the extracted copy makes bsdtar 3.5.3 (macOS) emit
+  // `LIBARCHIVE.creationtime`, a PAX field the codec rejects.
+  for (const entry of entries) {
+    const path = entry.replace(/\/$/, '');
+    if (statSync(join(extracted, path)).isDirectory())
+      await mkdir(join(tree, path), { recursive: true });
+    else writeFileSync(join(tree, path), readFileSync(join(extracted, path)));
+  }
+  const manifestPath = join(tree, 'rifty/manifest.json');
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as Record<string, unknown>;
+  if (fault === 'v4-compact-marker') manifest.version = 4;
+  if (fault === 'v5-no-profile') manifest.profile = undefined; // JSON.stringify drops the key
+  if (fault === 'v5-unknown-profile') manifest.profile = 'mystery';
+  writeFileSync(manifestPath, JSON.stringify(manifest));
+  if (fault === 'replay-entry' || fault === 'replay-dir') {
+    await mkdir(join(tree, 'rifty/replay-cache'));
+    entries.push('rifty/replay-cache');
+  }
+  if (fault === 'replay-entry') {
+    writeFileSync(join(tree, 'rifty/replay-cache/extra.tgz'), 'smuggled');
+    entries.push('rifty/replay-cache/extra.tgz');
+  }
+  // Top-level dirs are implicit; GNU tar would name their PAX headers `./PaxHeaders/…`.
+  const members = entries.filter((entry) => entry.replace(/\/$/, '').includes('/'));
+  execFileSync(
+    'tar',
+    ['--format=pax', '--no-recursion', '-cf', join(root, 'out.tar'), '-C', tree, ...members],
+    { env: { ...process.env, COPYFILE_DISABLE: '1' } },
+  );
+  return new Uint8Array(readFileSync(join(root, 'out.tar')));
+}
+
+describe('compact snapshot admission (I1–I3)', () => {
+  it('roundtrips explicit compact JSON and tar without replay; retains the complete prepared payload', async () => {
+    const { payload } = await bakeSavedSnapshotFixture();
+    const source = parseDepSnapshot(JSON.stringify(compact(payload)));
+    expect(JSON.parse(serializeDepSnapshot(source))).toEqual(compact(payload));
+    const decoded = parseDepSnapshot(
+      JSON.stringify(decodeDepSnapshotTar(serializeDepSnapshotTar(source))),
+    );
+    expect(decoded.nodeModules.files).toEqual(source.nodeModules.files);
+    expect(decoded).toMatchObject({
+      version: 5,
+      profile: 'compact',
+      tarballCache: { files: [] },
+    });
+  });
+  it('admits a compact shadow tree without its ordinary exact replay closure', async () => {
+    const legacy = JSON.parse(
+      gunzipSync(
+        await readFile(
+          new URL(
+            '../../../../apps/playground/public/snapshots/vite-node-modules.json.gz',
+            import.meta.url,
+          ),
+        ),
+      ).toString(),
+    );
+    expect(legacy.tarballCache.files.length).toBeGreaterThan(0);
+    await expect(
+      verifyDepSnapshotReplayCache(parseDepSnapshot(JSON.stringify(compact(legacy)))),
+    ).resolves.toBeUndefined();
+    await expect(
+      verifyDepSnapshotReplayCache({ ...legacy, tarballCache: compact(legacy).tarballCache }),
+    ).rejects.toThrow(/closure|missing/i);
+  });
+  it('applies compact through the no-COI owner without any shared-cache mutation', async () => {
+    const { payload, descriptor } = await bakeSavedSnapshotFixture();
+    const bytes = new TextEncoder().encode(JSON.stringify(compact(payload)));
+    vi.stubGlobal('fetch', async () => new Response(bytes));
+    const fs = new MemoryFsSync();
+    fs.mkdirSync('/project', { recursive: true });
+    fs.mkdirSync(TARBALL_CACHE_ROOT, { recursive: true });
+    fs.writeFileSync(`${TARBALL_CACHE_ROOT}/sentinel`, new TextEncoder().encode('warm'));
+    const writes = vi.spyOn(fs, 'writeFileSync');
+    const mkdirs = vi.spyOn(fs, 'mkdirSync');
+    const flush = vi.fn(async () => undefined);
+    await applyNoCoiSnapshot(
+      { cwd: '/project', snapshot: { ...descriptor, snapshotId: await sha256Identity(bytes) } },
+      { fs, flush },
+    );
+    expect(
+      new TextDecoder().decode(fs.readFileBytesSync('/project/node_modules/ms/package.json')),
+    ).toContain('2.0.0');
+    expect(writes.mock.calls.filter(([path]) => path.startsWith(TARBALL_CACHE_ROOT))).toEqual([]);
+    expect(mkdirs.mock.calls.filter(([path]) => path.startsWith(TARBALL_CACHE_ROOT))).toEqual([]);
+    expect(new TextDecoder().decode(fs.readFileBytesSync(`${TARBALL_CACHE_ROOT}/sentinel`))).toBe(
+      'warm',
+    );
+    expect(flush).toHaveBeenCalledTimes(1);
+  });
+  for (const fault of [
+    'none',
+    'v4-compact-marker',
+    'v5-no-profile',
+    'v5-unknown-profile',
+    'replay-entry',
+    'replay-dir',
+  ] as const) {
+    it(`system-tar compact envelope ${fault === 'none' ? 'applies' : `rejects ${fault} before mutation`} (I3)`, async () => {
+      const { payload, descriptor } = await bakeSavedSnapshotFixture();
+      const bytes = await repackCompactTar(
+        serializeDepSnapshotTar(parseDepSnapshot(JSON.stringify(compact(payload)))),
+        fault,
+      );
+      vi.stubGlobal('fetch', async () => new Response(bytes));
+      const fs = new MemoryFsSync();
+      fs.mkdirSync('/project', { recursive: true });
+      fs.writeFileSync('/project/keep', new TextEncoder().encode('saved'));
+      const before = snapshotExactFsTree(fs);
+      const flush = vi.fn(async () => undefined);
+      const applied = applyNoCoiSnapshot(
+        { cwd: '/project', snapshot: { ...descriptor, snapshotId: await sha256Identity(bytes) } },
+        { fs, flush },
+      );
+      if (fault === 'none') {
+        await applied;
+        expect(
+          new TextDecoder().decode(fs.readFileBytesSync('/project/node_modules/ms/package.json')),
+        ).toContain('2.0.0');
+        expect(fs.existsSync(TARBALL_CACHE_ROOT)).toBe(false);
+        return;
+      }
+      await expect(applied).rejects.toThrow(/dependency snapshot manifest|replay cache namespace/);
+      expect(snapshotExactFsTree(fs)).toEqual(before);
+      expect(flush).not.toHaveBeenCalled();
+    });
+  }
+  for (const fault of [
+    'unknown-profile',
+    'legacy-profile',
+    'replay-smuggling',
+    'malformed-lock',
+    'incompatible',
+    'unsafe-path',
+  ]) {
+    it(`rejects ${fault} before application (I3)`, async () => {
+      const { payload, descriptor } = await bakeSavedSnapshotFixture();
+      const value = compact(payload);
+      if (fault === 'unknown-profile') value.profile = 'mystery';
+      if (fault === 'legacy-profile') value.version = 3;
+      if (fault === 'replay-smuggling')
+        Object.assign(value.tarballCache, {
+          files: [{ path: 'extra', encoding: 'base64', content: btoa('extra') }],
+        });
+      if (fault === 'malformed-lock') Object.assign(value, { lockfile: '{broken' });
+      if (fault === 'incompatible')
+        Object.assign(value, { installArtifactIdentity: `sha256:${'0'.repeat(64)}` });
+      if (fault === 'unsafe-path')
+        Object.assign(value, {
+          nodeModules: {
+            ...payload.nodeModules,
+            files: [{ path: '../outside', encoding: 'base64', content: btoa('bad') }],
+          },
+        });
+      const bytes = new TextEncoder().encode(JSON.stringify(value));
+      vi.stubGlobal('fetch', async () => new Response(bytes));
+      const fs = new MemoryFsSync();
+      fs.mkdirSync('/project', { recursive: true });
+      fs.writeFileSync('/project/keep', new TextEncoder().encode('saved'));
+      const before = snapshotExactFsTree(fs);
+      const flush = vi.fn(async () => undefined);
+      await expect(
+        applyNoCoiSnapshot(
+          {
+            cwd: '/project',
+            snapshot: { ...descriptor, snapshotId: await sha256Identity(bytes) },
+          },
+          { fs, flush },
+        ),
+      ).rejects.toThrow();
+      expect(snapshotExactFsTree(fs)).toEqual(before);
+      expect(flush).not.toHaveBeenCalled();
+    });
+  }
+});
