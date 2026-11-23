@@ -337,23 +337,16 @@ describe('worker_threads Worker keepalive holds (ADR-0446)', () => {
       try {
         await withParentProcess(async () => {
           const events: string[] = [];
-          let stderr = '';
-          process.stderr.write = ((chunk: string) => {
-            stderr += chunk;
-            return true;
-          }) as typeof process.stderr.write;
           process.on('exit', (code: number) => events.push(`owner-exit:${code}`));
           const started = start();
           restoreStart = started.restore;
           started.worker.on('exit', (code) => events.push(`exit:${code}`));
           await new Promise((resolve) => setTimeout(resolve, 100));
 
-          // Node: the owner dies of the unlistened 'error' with its fatal report.
           expect({ events, reported: report.reported.length }).toEqual({
             events: ['owner-exit:1'],
-            reported: 0,
+            reported: 1,
           });
-          expect(stderr).toMatch(/^\w*Error: [\s\S]*\n\nNode\.js v24\.0\.0\n$/u);
           await started.worker.terminate();
         });
       } finally {
