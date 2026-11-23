@@ -3043,8 +3043,6 @@ describe('npm-shell-command — cwd package identity', () => {
       type: 'project-switch',
       from: projectA,
       to: projectB,
-      resetPackages: true,
-      packageJsonText: packageJsonB,
     });
     const sink = { write: (_chunk: string | Uint8Array): void => {} };
     const context: CommandContext = { cwd: root, env: {}, stdout: sink, stderr: sink };

@@ -122,9 +122,6 @@ export interface ProjectSwitchCommand {
   readonly type: 'project-switch';
   readonly from: PackageAcquisitionProject | null;
   readonly to: PackageAcquisitionProject;
-  /** Revoke and replace dependency-owned state at the destination root. */
-  readonly resetPackages?: boolean;
-  readonly packageJsonText?: string;
 }
 
 export interface ActivateAndEnsurePackagesCommand {

@@ -30,8 +30,6 @@ interface BootstrapConfigBase {
   readonly installDeps: Readonly<Record<string, string>>;
   readonly packageJson: string;
   readonly seedFiles: Readonly<Record<string, string>>;
-  readonly bakedNodeModulesUrl?: string;
-  readonly bakedNodeModulesTemplateId?: string;
 }
 
 export interface ViteBootstrapConfig extends BootstrapConfigBase {
@@ -87,9 +85,10 @@ interface ProjectSpecBase {
   readonly estimatedBootSeconds: number;
   /**
    * Same-origin URL of the baked node_modules snapshot (ADR-0135), produced by
-   * `pnpm snapshots:bake`. When set and no install stamp matches, the worker
-   * restores this tree instead of running `install()`. Runtime-asset
-   * availability is separate (ADR-0320). Absent → install as usual.
+   * `pnpm snapshots:bake`. When set, the project's first materialization
+   * restores this tree instead of running `install()`; a later stamp miss never
+   * restores it (ADR-0135 correction 2026-11-17). Runtime-asset availability is
+   * separate (ADR-0320). Absent → install as usual.
    */
   readonly bakedNodeModulesUrl?: string;
   /** SHA-256 of the exact uncompressed serialized v3 snapshot bytes. */
@@ -298,10 +297,6 @@ export function resolveBootstrapConfig(
     packageVersion: pkg.version,
     installDeps: spec.install,
     packageJson: pkg.json,
-    ...(spec.bakedNodeModulesUrl ? { bakedNodeModulesUrl: spec.bakedNodeModulesUrl } : {}),
-    ...(spec.bakedNodeModulesTemplateId
-      ? { bakedNodeModulesTemplateId: spec.bakedNodeModulesTemplateId }
-      : {}),
   };
   if (
     spec.runtime === 'node-server' ||
