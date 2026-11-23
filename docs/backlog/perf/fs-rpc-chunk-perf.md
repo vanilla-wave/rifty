@@ -42,30 +42,31 @@ O(N²)→O(N) is real — the quadratic is handler naivety, not inherent to chun
 
 `reference/pr-384-no-coi-resource-prototype-evidence.md` (distribution): one
 installed 13.27 MiB `esbuild.wasm` read in a no-COI native child 141.9 → 41.2 ms
-(3.44×) with range reads on the owner; child command with three reads 1.83 →
-0.59 s (shared with the recovery-image change). Code-derived on main: 54 sync
-XHR round trips (head + 53 chunks of ≤256 KiB) and, on the no-COI owner, two
-wrapper layers (`InstallClaimFs`, `NoCoiProjectFs`) each `.slice()` the whole
-file per call → ≈1.4 GiB memcpy per read. The `.slice()` exists for alias protection
-(claims ADR-0392/0261, readonly policy); a detached `slice(off, off+len)` keeps
-it. Child `fs.readSync(fd, …)` (`builtins/fs.ts`) fetches the whole file per
-call — same fix applies. Route 2's single-in-flight premise is an SAB-ring
-fact; on the no-COI SW route several children each issue sync XHR
-(inference from ADR-0539's design, not its text), so path+mtime buffers
-interleave and need concurrent eviction — weakens Route 2.
+(3.44×) when the two owner wrappers return a detached range instead of each
+copying the whole file; the store still read the whole file per chunk, so a
+store-level range read was not measured. Child command with three reads
+1.83 → 0.59 s (shared with the recovery-image change). Code-derived on main: 54
+sync XHR round trips (head + 53 chunks of ≤256 KiB) and, on the no-COI owner,
+two wrapper layers (`InstallClaimFs`, `NoCoiProjectFs`) each `.slice()` the
+whole file per call → ≈1.4 GiB memcpy per read. The `.slice()` exists for alias
+protection (claims ADR-0392/0261, readonly policy); a detached
+`slice(off, off+len)` keeps it. Child `fs.readSync(fd, …)` (`builtins/fs.ts`)
+fetches the whole file per call — same fix applies; `readFileSync(fd)` loops
+`readSync` in 16 KiB steps → ~850 whole-file fetches for a 13 MiB file.
+Route 2's single-in-flight premise is an SAB-ring fact; on the no-COI SW route
+several children each issue sync XHR (inference from ADR-0539's design, not
+its text), so path+mtime buffers interleave and need concurrent eviction —
+weakens Route 2.
 
-## Decisions
-
-- 2026-10-26 — direction: Route 1 — `readFileRangeSync(path, offset, length)`
-  as a real `FsSync` method (≈8 prod implementers, ~8 test fakes; vfs-core
-  contract → ADR at pickup); wrappers return a detached range; `readFileHead`/
-  `readChunk` consume it; wire protocol and version unchanged. Not the
-  prototype's optional duck-typed method on two wrappers: `SyncRpcFsSync` and
-  child `fs.readSync(fd)` need the same range read, and a required method makes
-  a missing implementer a type error, not an unnoticed O(N²) path (the
-  `isChunkedReadSource` duck-type precedent is the ADR's to weigh). `writeChunk`
-  O(N²) + base64 inflation stay in this item, not in that first unit.
-- 2026-10-26 — order: after `distribution/no-coi-command-snapshot-transfer`.
+Agent recommendation (2026-10-26, not user-decided; settled at pickup): Route 1
+read half first — a range read on `FsSync` (`readFileRangeSync(path, offset,
+length)` or Route 1's `readBytesAt`; vfs-core contract → ADR; ≈8 prod
+implementers, ~8 test fakes); wrappers return a detached range;
+`readFileHead`/`readChunk`, `SyncRpcFsSync` and child `fs.readSync(fd)` consume
+it; wire protocol unchanged. Required vs optional method (the prototype's
+optional wrapper method; `isChunkedReadSource` duck-type precedent) is the
+ADR's call. `writeChunk` O(N²) + base64 inflation stay in this item. Order:
+after `distribution/no-coi-command-snapshot-transfer`.
 
 ## Reversibility
 

@@ -28,16 +28,22 @@ completion 968 ms → 0.8 ms without the OPFS image; repeat `vite build` via SDK
 + GC 179 → 103 MiB; after dispose with retained handle 83 → 7 MiB (both
 mechanisms measured together; `echo` isolates this one). The former trigger
 (tree >100 MB or memory complaint) is reconsidered on this evidence: ~1 s per
-agent tool call on a 79 MB tree is user-visible.
+agent tool call on a 79 MB tree is user-visible. The two series differ in
+date and harness; 3.5× the bytes cost ~80× the time, so how the cost scales
+(bytes, file count, walk) is not established.
 
 ## Options or Next
 
 - Take the file image only when `runtimeBackend === 'memory'`; OPFS skips the
   tree walk (no files, no directories — only the restore branch the decision
-  below turns into a loud failure reads them); host skips `applyRecoveryFsOperation` for an
-  OPFS state; dispose releases `activation`/`residentRequest`. Smallest honest
-  change; prototype shape in PR 384 (minus its Symbol switch and optional
-  wrapper methods).
+  below turns into a loud failure reads them); host skips
+  `applyRecoveryFsOperation` for an OPFS state; dispose releases
+  `activation`/`residentRequest`. Smallest honest change; prototype shape in
+  PR 384 (minus its Symbol switch and optional wrapper methods).
+- Order (agent recommendation, settled at pickup): own unit, before
+  `perf/fs-rpc-chunk-perf` — the larger gain (`echo` isolates ~1 s/command)
+  and independent of the range-read API choice; PR 384 numbers are the
+  baseline reference, re-measured at pickup.
 - Incremental image from the paths the command's policy view touched: a second
   mechanism; needs a forcing constraint (`fault-classes.md` §Class-kill).
 - Memory backend keeps today's per-command image and cost (no persistence to
@@ -48,26 +54,25 @@ agent tool call on a 79 MB tree is user-visible.
   naming that direction, 0377 stays with a dated §Corrections pointer
   (`DEC-2`/`DEC-5`) in the implementing unit;
   `tests/no-coi/no-coi-dev-hmr.spec.ts` "successive OPFS-memory-OPFS restarts
-  restore the latest acknowledged bytes": its OPFS→memory leg re-targets to the
-  loud failure, its memory→OPFS leg keeps a restore test.
+  restore the latest acknowledged bytes" runs one chain
+  `['opfs','memory','opfs','opfs']`: the OPFS→memory step re-targets to the
+  loud failure, which ends that chain, so memory→OPFS restore needs its own
+  test starting on memory.
   Entry points reaching the failure (all via `replaceWorker` →
   `restoreToolchainState`): `restart()`, `stopResident()`, project command
   Stop/`requiresTermination` fallback (`sandbox-project.ts` → `replace`).
   Reach: `storage.persistence:'preferred'` only (`'required'` throws at boot,
   `'ephemeral'` is always memory). `packages/rifty/README.md` "OPFS init
   failure falls back to in-memory" narrows for restart — doc row at pickup.
+  Open at pickup: sandbox state after the loud failure and the re-install
+  path; host `snapshotToolchainState` (`host.ts`) copies the image again per
+  restart (memory path keeps it).
   Related: `no-coi-activation-bindings-shrink` (unused `bindings` field).
 
 ## Decisions
 
 - 2026-09-11 — capture; trigger: tree >100 MB or memory complaint.
-- 2026-10-26 — user: OPFS→memory flip on Worker restart (OPFS failed to reopen
-  → memory fallback) after the image is gone = loud failure, restart rejects
-  "recovery requires OPFS; re-install", visible to the SDK; no silent
-  degradation, no page-side bytes kept for that branch. Alternative (keep the
-  image for flip recovery) rejected: forfeits the whole gain.
-- 2026-10-26 — direction: build as its own unit, before `perf/fs-rpc-chunk-perf`;
-  PR 384 numbers are the baseline reference, re-measured at pickup.
+- 2026-10-26 — user: OPFS→memory flip on restart without the image = loud failure ("recovery requires OPFS; re-install", exit/error event visible to the SDK); keeping the image for it rejected (forfeits this item's gain).
 
 ## Reversibility
 
