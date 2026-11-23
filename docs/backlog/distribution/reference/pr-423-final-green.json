@@ -1,8 +1,8 @@
 {
   "overall_verdict": "concern",
-  "merge_call": "PASS at 637e9122e. The 8988843ec blocker is fixed: agent state is now set to the journal projection at construction (session.ts:424). The new fault test fails at 8988843ec ('Cannot continue from message role: assistant') and passes at HEAD. Local runs: vitest agent + agent-bench 361/361, es-floor 102/102, typecheck + lint clean, browser-unit agent-archive/core/snapshot/ui-terminal 38/38, chromium-heavy ai-mode 22/22. Before merge: commit the re-bound landing verdict, because CI at 8988843ec failed check:pass-binding on the stale pr-423-final-green.json (REV-8); wait for green PR CI at HEAD; and get the user's confirmation of ADR-0569/0570.",
+  "merge_call": "PASS at 2413ccd3f (product/test/gate code as reviewed at 637e9122e; 637e9122e..2413ccd3f adds only the csv rifty-lane request diagnostic record, a README line on restoredMessageCount (resolves the nit) and the committed verdict JSON). The 8988843ec blocker is fixed: agent state is now set to the journal projection at construction (session.ts:424). The new fault test fails at 8988843ec ('Cannot continue from message role: assistant') and passes at HEAD. Local runs: vitest agent + agent-bench 361/361, es-floor 102/102, typecheck + lint clean, browser-unit agent-archive/core/snapshot/ui-terminal 38/38, chromium-heavy ai-mode 22/22. Before merge: commit the re-bound landing verdict, because CI at 8988843ec failed check:pass-binding on the stale pr-423-final-green.json (REV-8); wait for green PR CI at HEAD; and get the user's confirmation of ADR-0569/0570.",
   "checkpoint": "Final+GREEN",
-  "unit_goal_source": "docs/backlog/distribution/pi-1x-upgrade.md (status ready) at 637e9122e; BASE 11b9397ee (origin/main merge-base); ADR-0569, ADR-0570, ADR-0482 + corrections in ADR-0424/0436/0440/0466/0472/0473/0474/0475; PR #423 body; prior PASS e3027ed02, BLOCK 8988843ec",
+  "unit_goal_source": "docs/backlog/distribution/pi-1x-upgrade.md (status ready) at 2413ccd3f (code reviewed at 637e9122e; later commits records/docs only); BASE 11b9397ee (origin/main merge-base); ADR-0569, ADR-0570, ADR-0482 + corrections in ADR-0424/0436/0440/0466/0472/0473/0474/0475; PR #423 body; prior PASS e3027ed02, BLOCK 8988843ec",
   "unit_residuals": [],
   "goal_residuals": [],
   "goal_complete": false,
@@ -226,12 +226,6 @@
           "location": "tools/checks/es-floor.mjs:411",
           "evidence": "es-floor.test.ts adds a Set subclass case (still rejected); check:es-floor over 352 built bundles exit 0",
           "summary": "The narrowed `this.union` allowance (enclosing class must define instance `union`) addresses my earlier concern. Residual: a class that defines `union` and also extends Set would still pass, which is acceptable."
-        },
-        {
-          "severity": "nit",
-          "location": "packages/agent/src/session.ts:424",
-          "evidence": "probe: initialMessages [system, system, compactionSummary, user, assistant] -> exportTrace before send: 4 messages (system,compactionSummary,user,assistant), restoredMessageCount 5",
-          "summary": "For a restored history with 2 or more system messages before a summary, the trace collapses them as the CLI does, so transcript length is below restoredMessageCount. This is consistent with the ADR-0466 2026-09-27 correction (the count is of admitted messages, not a retained prefix), but `transcript.slice(restoredMessageCount)` skips one new message for that shape. Consider a README note."
         }
       ]
     },
@@ -260,5 +254,5 @@
       ]
     }
   ],
-  "reviewed_sha": "637e9122e7966e2175edbd4ecca3b58f55b9d146"
+  "reviewed_sha": "2413ccd3f643c30a6eac2331988e721e9c2806c0"
 }
