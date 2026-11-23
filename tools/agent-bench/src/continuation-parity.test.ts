@@ -86,8 +86,38 @@ type Scenario =
   | 'length-tool-stop'
   | 'restored-length-tool'
   | 'resend'
-  | 'resend-length';
+  | 'resend-length'
+  | 'usage-stop-resend'
+  | `rand:${number}`;
+// Seeded random traces (external review of PR #423): steps per conversation request.
+function rng(seed: number) {
+  let x = (seed * 2654435761) >>> 0 || 1;
+  return () => {
+    x ^= x << 13;
+    x >>>= 0;
+    x ^= x >>> 17;
+    x ^= x << 5;
+    x >>>= 0;
+    return x / 4294967296;
+  };
+}
+function plan(seed: number) {
+  const r = rng(seed);
+  const kinds = ['stop', 'tool', 'length', 'lengthtool', '429', 'overflow', 'silent'] as const;
+  const steps = Array.from({ length: 40 }, () => kinds[Math.floor(r() * kinds.length)]!);
+  const sumFail = Array.from({ length: 20 }, () => r() < 0.15);
+  return {
+    steps,
+    sumFail,
+    init: Math.floor(r() * 3),
+    prompts: 1 + Math.floor(r() * 3),
+    stop: r() < 0.4,
+    keep: [3, 30, 20000][Math.floor(r() * 3)]!,
+  };
+}
 async function run(kind: 'native' | 'rifty', scenario: Scenario, riftyPrompt = '') {
+  const P = scenario.startsWith('rand:') ? plan(Number(scenario.slice(5))) : undefined;
+  let summaries = 0;
   const dir = await mkdtemp(join(tmpdir(), 'rifty-continuation-parity-'));
   let conversationPrompt: string | undefined;
   const requests: {
@@ -125,6 +155,35 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario, riftyPrompt = '
     });
     if (!summary) count++;
     const response = summary ? answer('Saved old context') : answer('Done');
+    if (P && summary && P.sumFail[summaries++ % 20])
+      Object.assign(response, answer('invalid credentials', 10, 'error'));
+    if (P && !summary) {
+      const step = P.steps[(count - 1) % 40];
+      if (step === 'tool')
+        Object.assign(response, {
+          ...answer('', 10, 'toolUse'),
+          // Distinct arguments: rifty's repeated-call notice (ADR-0475) is not a CLI behavior.
+          content: [{ type: 'toolCall', id: `c${count}`, name: 'effect', arguments: { n: count } }],
+        });
+      if (step === 'length') Object.assign(response, answer('Truncated', 10, 'length'));
+      if (step === 'lengthtool')
+        Object.assign(response, {
+          ...answer('', 10, 'length'),
+          content: [{ type: 'toolCall', id: `l${count}`, name: 'effect', arguments: { n: count } }],
+        });
+      if (step === '429') Object.assign(response, answer('429 rate limit', 7, 'error'));
+      if (step === 'overflow')
+        Object.assign(response, answer('maximum context length is 5000 tokens', 10, 'error'));
+      if (step === 'silent') Object.assign(response, answer('Done', 40000));
+    }
+    // Silent usage overflow, failing summaries, then a stopped 429 retry: the later omission
+    // makes the first answer's usage stale for the next pre-prompt check (CLI usage gating).
+    if (scenario === 'usage-stop-resend' && summary)
+      Object.assign(response, answer('invalid credentials', 10, 'error'));
+    if (scenario === 'usage-stop-resend' && !summary && count === 1)
+      Object.assign(response, answer('Done', 40000));
+    if (scenario === 'usage-stop-resend' && !summary && count === 2)
+      Object.assign(response, answer('429 rate limit', 7, 'error'));
     if (
       (scenario === 'retry-two' && count <= 2) ||
       scenario === 'abort-backoff' ||
@@ -297,12 +356,23 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario, riftyPrompt = '
                 },
               ] as Message[])
             : [];
-  const stopsOnRetry = scenario === 'abort-backoff' || scenario === 'length-tool-stop';
+  if (P)
+    initialMessages.splice(0, Number.POSITIVE_INFINITY, ...[[], seed(), lowUsage(seed())][P.init]!);
+  if (scenario === 'usage-stop-resend')
+    initialMessages.splice(0, Number.POSITIVE_INFINITY, ...lowUsage(seed()));
+  const stopsOnRetry = P
+    ? P.stop
+    : scenario === 'abort-backoff' ||
+      scenario === 'length-tool-stop' ||
+      scenario === 'usage-stop-resend';
   // A second prompt after the first run settles (stopped or failed recovery).
-  const prompts =
-    scenario === 'length-tool-stop' || scenario === 'resend' || scenario === 'resend-length'
-      ? ['continue', 'again']
-      : ['continue'];
+  const prompts = P
+    ? ['continue', 'again', 'more'].slice(0, P.prompts)
+    : scenario === 'usage-stop-resend'
+      ? ['continue', 'again', 'more']
+      : scenario === 'length-tool-stop' || scenario === 'resend' || scenario === 'resend-length'
+        ? ['continue', 'again']
+        : ['continue'];
   let messages: readonly AgentMessage[];
   try {
     if (kind === 'native') {
@@ -316,8 +386,13 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario, riftyPrompt = '
         compaction: {
           enabled: true,
           reserveTokens: 16384,
-          keepRecentTokens:
-            scenario === 'overflow-episodes' ? 3 : scenario === 'retry-overflow-tail' ? 30 : 20000,
+          keepRecentTokens: P
+            ? P.keep
+            : scenario === 'overflow-episodes'
+              ? 3
+              : scenario === 'retry-overflow-tail'
+                ? 30
+                : 20000,
         },
       });
       const resourceLoader = new DefaultResourceLoader({
@@ -398,8 +473,13 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario, riftyPrompt = '
         tools,
         retry: { baseDelayMs: stopsOnRetry ? 2000 : 1 },
         compaction: {
-          keepRecentTokens:
-            scenario === 'overflow-episodes' ? 3 : scenario === 'retry-overflow-tail' ? 30 : 20000,
+          keepRecentTokens: P
+            ? P.keep
+            : scenario === 'overflow-episodes'
+              ? 3
+              : scenario === 'retry-overflow-tail'
+                ? 30
+                : 20000,
         },
       });
       switchModel = () => session.setModel('large');
@@ -440,11 +520,18 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario, riftyPrompt = '
     const normalized = (value: unknown) =>
       JSON.parse(
         JSON.stringify(value, (key, value) =>
-          ['timestamp', 'details', 'durationMs'].includes(key)
+          // Rand traces: rifty's receipts (below) also enter token estimates; fixed scenarios
+          // keep exact numbers.
+          [
+            'timestamp',
+            'details',
+            'durationMs',
+            ...(P ? ['tokensBefore', 'tokensAfter'] : []),
+          ].includes(key)
             ? undefined
             : // ADR-0475: rifty prefixes failed tool text with its budget receipt line.
               key === 'text' && typeof value === 'string'
-              ? value.replace(/^\{"status":"failed","callsLeft":\d+,"msLeft":\d+\}\n/, '')
+              ? value.replace(/\{"status":"failed","callsLeft":\d+,"msLeft":\d+\}\n/g, '')
               : value,
         ),
       );
@@ -456,7 +543,9 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario, riftyPrompt = '
       prompt: conversationPrompt,
       requests: requests.map((r) => ({ ...r, messages: normalized(r.messages) })),
       retries,
-      compactions,
+      compactions: P
+        ? compactions.map(({ reason, success }) => ({ reason, success }))
+        : compactions,
       reportedCompactions: eventMetrics(compactionEvents, model.contextWindow, 'done').compactions,
       ...(scenario === 'retry-overflow-tail' || scenario === 'length-twice'
         ? { failure: (compactionEvents.at(-1) as { errorMessage?: string }).errorMessage }
@@ -489,6 +578,10 @@ it.each<Scenario>([
   'restored-length-tool',
   'resend',
   'resend-length',
+  'usage-stop-resend',
+  // Fixed seeds: deterministic random traces over stop/tool/length/429/overflow/silent steps,
+  // summary failures, restores, re-sends and stops during backoff.
+  ...Array.from({ length: 40 }, (_, index) => `rand:${index + 1}` as const),
 ])(
   'matches actual Pi CLI 1.6.0: %s',
   async (scenario) => {

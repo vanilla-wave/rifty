@@ -5,13 +5,36 @@ import * as Format from 'typebox/format';
 // pi 0.85.1 applied, two now silently stop: refinements and Format.Set checks
 // (differential probe: docs/backlog/distribution/reference/pi-typebox-validation-diff.json).
 // Everything else validates as before or now rejects loudly. ADR-0570 §3.
-const builtInFormats = new Set<unknown>(
-  Object.entries(Format).flatMap(([name, value]) => (name.startsWith('Is') ? [value] : [])),
+// TypeBox's own checker under its own name (IsDateTime → date-time, IsIPv4 → ipv4): those
+// are the standard formats pi-schema also checks. An alias of a built-in is still custom.
+const builtInFormats = new Map<string, unknown>(
+  Object.entries(Format).flatMap(([name, value]) =>
+    name.startsWith('Is')
+      ? [
+          [
+            name
+              .slice(2)
+              .replace(/IPv(\d)/, 'Ipv$1')
+              .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+              .toLowerCase(),
+            value,
+          ],
+        ]
+      : [],
+  ),
 );
-const schemaMaps = ['properties', 'patternProperties', '$defs', 'definitions', 'dependentSchemas'];
+const schemaMaps = [
+  'properties',
+  'patternProperties',
+  '$defs',
+  'definitions',
+  'dependentSchemas',
+  'dependencies',
+];
 const schemaLists = ['anyOf', 'allOf', 'oneOf', 'prefixItems'];
 const schemaValues = [
   'items',
+  'additionalItems',
   'additionalProperties',
   'unevaluatedProperties',
   'unevaluatedItems',
@@ -33,7 +56,7 @@ function lost(schema: unknown): string | undefined {
     return 'Type.Refine';
   if (typeof node.format === 'string') {
     const check = Format.Get(node.format);
-    if (check && !builtInFormats.has(check)) return `Format.Set('${node.format}')`;
+    if (check && builtInFormats.get(node.format) !== check) return `Format.Set('${node.format}')`;
   }
   const children = [
     ...schemaMaps.flatMap((key) =>

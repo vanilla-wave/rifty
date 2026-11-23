@@ -47,7 +47,7 @@ journal (`session.ts`) beside the receipts, cleared by reset.
 4. Classifier (`isContextOverflow`, `isRecoverableLength`), retry and the loop stay
    native pi-ai/agent-core; no copy.
 5. Oracle: `tools/agent-bench/src/continuation-parity.test.ts` runs the real CLI
-   1.6.0 `AgentSession` and rifty over the same provider (19 scenarios); token
+   1.6.0 `AgentSession` and rifty over the same provider (20 scenarios + 40 seeded random traces); token
    numbers equal with the system section sizes equalized; system message
    positions and CLI file-operation lists compared. A copy tested only against itself does not count.
 6. Kill condition: an upstream pi release exporting compaction/projection from a
@@ -68,6 +68,10 @@ independently; fixes taken: journal overturn named, file-op parity scenario adde
 
 ## Consequences
 
+- Known place: `entryIdOf` maps a message to its journal entry by position (agent state ==
+  projection, installed at creation, after compaction and omission), where the CLI keeps an
+  identity map; a future state writer that breaks the invariant breaks the mapping (the
+  omission throws, as in the CLI).
 - Rifty owns ~840 lines of upstream algorithm (`pi-cli/`); drift is caught only by the parity suite.
 - Public: `CompactionSummaryMessage` type and its `CustomAgentMessages` augmentation
   ship from `@riftydev/agent`; transcripts carry `system` messages (pi 1.x history).

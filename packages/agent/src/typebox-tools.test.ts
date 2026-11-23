@@ -70,6 +70,25 @@ const customFormat = () => {
 it.each([
   ['Type.Refine', () => Type.Refine(Type.String(), (value) => value.startsWith('/'))],
   ["Format.Set('rifty-even')", customFormat],
+  [
+    "Format.Set('work-email')",
+    () => {
+      // An alias of a built-in checker is unknown to pi-schema by name.
+      Format.Set('work-email', Format.IsEmail);
+      return Type.String({ format: 'work-email' });
+    },
+  ],
+  [
+    'Type.Refine',
+    () => ({
+      ...Type.Object({}),
+      dependencies: { a: Type.Refine(Type.Object({}), () => false) },
+    }),
+  ],
+  [
+    'Type.Refine',
+    () => ({ type: 'array', additionalItems: Type.Refine(Type.String(), () => false) }),
+  ],
 ])('a %s tool parameter fails loudly at session creation', (kind, schema) => {
   expect(() => session(Type.Object({ path: schema() }))).toThrow(
     `Not implemented: agent.tool-schema-typebox-only (Tool probe: ${kind}`,

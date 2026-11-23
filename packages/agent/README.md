@@ -114,7 +114,9 @@ conversation/project reset. `exportTrace().restoredMessageCount` counts original
 until reset, independent of compaction and of prompt-state folding (several restored `system`
 messages before a summary merge into one, as in the pi CLI), so it is not a transcript offset; events, timings, aggregate usage and per-run limits describe
 only new runs. Reset clears that count. Persist native messages rather than the diagnostic
-trace when exact history matters.
+trace when exact history matters. A pi CLI `session.messages` history restores too, but its
+summary carries no file-operation `details` (the CLI keeps them on the session entry), so the
+next compaction starts its file lists empty.
 
 The session owns its host handle. The Workbench adapter opens/closes one
 dedicated terminal unless the caller supplies a terminal (caller-owned).

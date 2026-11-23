@@ -429,6 +429,46 @@ describe('native continuation boundary', () => {
       await session.dispose();
     }
   });
+  it('[fault: unbounded-read] a tool-call budget abort ends on an aborted response and skips post-run compaction', async () => {
+    const { session, requests } = fixture(
+      (c, _options, count) =>
+        summaryRequest(c)
+          ? answer('Saved old context')
+          : {
+              ...answer('', 20000 + count, 'toolUse'),
+              content: [{ type: 'toolCall', id: `call-${count}`, name: 'effect', arguments: {} }],
+            },
+      {
+        initialMessages: history().slice(0, 4),
+        maxToolCalls: 1,
+        tools: [
+          {
+            name: 'effect',
+            label: 'Effect',
+            description: 'External effect',
+            parameters: Type.Object({}),
+            execute: async () => ({
+              content: [{ type: 'text', text: 'settled' }],
+              details: undefined,
+            }),
+          },
+        ],
+      },
+    );
+    try {
+      await session.send('work');
+      expect(session.status()).toBe('budget-exceeded');
+      // Only the pre-prompt compaction; the aborted run ends on an aborted response, not a
+      // toolResult, and gets no post-run check (CLI: abort requested).
+      expect(requests.map((r) => summaryRequest(r.context))).toEqual([true, false, false]);
+      expect((await session.exportTrace()).transcript.at(-1)).toMatchObject({
+        role: 'assistant',
+        stopReason: 'aborted',
+      });
+    } finally {
+      await session.dispose();
+    }
+  });
   it('[fault: torn-state] stop during summary installs no partial summary or later request', async () => {
     let entered!: () => void;
     const started = new Promise<void>((r) => {

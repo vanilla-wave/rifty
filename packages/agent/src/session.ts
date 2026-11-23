@@ -241,7 +241,12 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
       if (next.role === 'assistant') break;
       if (next.role === 'toolResult' && calls.has(next.toolCallId)) results.push(next);
     }
-    const ids = [message, ...results].map(entryIdOf);
+    const targets = [message, ...results];
+    const ids = targets.map(entryIdOf);
+    if (ids.some((id, index) => id === undefined && agent.state.messages.includes(targets[index]!)))
+      throw new Error(
+        'Cannot persist recovery omission because a projected message has no source entry',
+      );
     for (const id of ids) journalOmit(id);
     agent.state.messages = buildProjection(journal).messages;
   }
@@ -252,28 +257,18 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
     if (compaction && last.timestamp <= new Date(compaction.timestamp).getTime()) return 'done';
     const sameModel = last.model === model.id && last.provider === model.provider;
     const projection = buildProjection(journal);
+    // Agent state is the projection, so `last` is projected and never the target of an
+    // omission; a compaction after it was caught by the stale guard. Of the CLI's gating only
+    // the usage check remains reachable: a later omission makes `last`'s usage stale.
     const entryId = entryIdOf(last);
-    const assistantIsProjected =
-      entryId === undefined ||
-      projection.entries.some(
-        (entry) =>
-          entry.sourceEntry.id === entryId &&
-          entry.messages.some((message) => message.role === 'assistant'),
-      );
     const position = entryId === undefined ? -1 : journal.findIndex(({ id }) => id === entryId);
-    const after = position >= 0 ? journal.slice(position + 1) : [];
-    const retainedForExplicitRecovery =
-      entryId === undefined ||
-      (!after.some(({ type }) => type === 'compaction') &&
-        !after.some((entry) => entry.type === 'context_edit' && entry.targetId === entryId));
     const usageMatchesProjection =
-      assistantIsProjected && !after.some(({ type }) => type === 'context_edit');
+      position < 0 || !journal.slice(position + 1).some(({ type }) => type === 'context_edit');
     const contextOverflow =
       sameModel &&
-      ((last.stopReason === 'error' && isContextOverflow(last) && retainedForExplicitRecovery) ||
+      ((last.stopReason === 'error' && isContextOverflow(last)) ||
         (usageMatchesProjection && isContextOverflow(last, model.contextWindow)));
-    const recoverableLength =
-      sameModel && assistantIsProjected && isRecoverableLength(last, model.maxTokens);
+    const recoverableLength = sameModel && isRecoverableLength(last, model.maxTokens);
     if (contextOverflow || recoverableLength) {
       if (last.stopReason === 'stop') {
         await compactHistory('overflow');

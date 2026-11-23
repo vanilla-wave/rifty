@@ -39,7 +39,7 @@ agent-bench core-v1 series shows no lost passes attributable to the upgrade.
 
 ## Acceptance
 
-1. Continuation, retry, overflow, recoverable length and threshold compaction equal the real CLI 1.6.0 `AgentSession` on 19 scripted scenarios (requests, retries, compaction numbers, transcript incl. system positions, file-operation lists). `tools/agent-bench/src/continuation-parity.test.ts` → ADR-0569
+1. Continuation, retry, overflow, recoverable length and threshold compaction equal the real CLI 1.6.0 `AgentSession` on 20 scripted scenarios plus 40 seeded random traces (requests, retries, compaction numbers, transcript incl. system positions, file-operation lists). `tools/agent-bench/src/continuation-parity.test.ts` → ADR-0569
 2. A `Type.Object` consumer tool reaches the wire as on pi 0.85.1 (minus pi 1.x `strict: false`) and accepts/rejects/coerces 8 argument cases exactly as the captured 0.85.1 probe; `Refine` and `Format.Set` parameters (the probe's silent losses) throw `NotImplementedError` at creation. `packages/agent/src/typebox-tools.test.ts` → ADR-0570
 3. Stop mid-batch in Chromium: the skipped call gets an error result, no side effect, next run continues. `tests/browser-unit/agent-core.spec.ts` → ADR-0424
 4. The shared prompt recipe reaches the CLI 1.6.0 wire as the current system message; skills and `project_context` blocks are byte-identical to CLI 1.6.0. `prompt-recipe-parity.test.ts`, `project-resources.test.ts` → ADR-0440
@@ -70,3 +70,4 @@ agent-bench core-v1 series shows no lost passes attributable to the upgrade.
 re-cut: 2026-11-23 — Acceptance 6 drops "archive" from restorable histories; fault-matrix archive row states system prompt state is not archived — trace: none
 re-cut: 2026-11-23 — Acceptance 1 grows to 15 scenarios; Acceptance 2 adds TypeBox-only loud throws; Acceptance 5 (prompt-state) and 8 (lost-pass rule) added after the Contract+RED review — trace: none
 re-cut: 2026-11-23 — review of PR #423: Acceptance 1 grows to 19 scenarios (recovery-omission pairs, re-send after failed recovery); Acceptance 2 guard narrowed to the probe's silent losses (Refine, Format.Set); Acceptance 5 adds foreign sections — trace: none
+re-cut: 2026-11-23 — review round 2: Acceptance 1 adds `usage-stop-resend` and 40 seeded random traces (token numbers compared in scripted scenarios only); Acceptance 2 guard also refuses built-in-checker aliases — trace: none
