@@ -112,11 +112,12 @@ Probes: `docs/backlog/distribution/reference/isolate-host-fs-snapshot-fit-probes
    chain took 2.6 s and 65 MB of 16 383-unit paths 2.8 s). An allocation the
    limit refuses at snapshot is `ERR_FS_SNAPSHOT_TOO_LARGE`, the FS untouched;
    an isolate the limit kills outright is the embedder's memory termination. A
-   consumer sizes `memoryLimitMb` for 2 × `maxBytes` + 16 MiB. One sequence can
-   need more under machine load: a snapshot straight after a restore with no
-   guest code between, while the restored blob is not yet collected (template
-   scale, 98 MiB: 225 MiB at rest, 232–277 MiB under 12 busy loops; restore →
-   run → snapshot 225 MiB either way — `distribution/isolate-host-fs-snapshot-restore-then-snapshot-peak`).
+   consumer sizes `memoryLimitMb` for 2 × `maxBytes` + 16 MiB — except a
+   snapshot straight after a restore with no guest code between, which needs up
+   to ~3 × the bytes while the restored blob is not yet collected (measured at
+   rest: one 96 MiB file 300 MiB against 206 for restore → run → snapshot;
+   template scale, 98 MiB, 225–311 against 225 —
+   `distribution/isolate-host-fs-snapshot-restore-then-snapshot-peak`).
 8. **Where.** One pure-JS module in `@riftydev/isolate-guest` (root exports
    `snapshotFs(fs, options)`, `restoreFs(fs, bytes, options)`,
    `FsSnapshotError`; ADR-0558, unstable) over a structural FS interface that
@@ -173,7 +174,8 @@ Rejected (P1, template scale, S ≈ 95 MB):
   failure the instance is thrown away»: `## Decisions` below.
 - Manager's reading, 2026-11-23, not the user's words: the goal's I6 memory
   budget holds on the scenario's sequence restore → run → snapshot (225 MiB
-  ≤ 2 × S + 64 = 260); the heavier snapshot straight after a restore is not a
+  ≤ 2 × S + 64 = 260); the heavier snapshot straight after a restore (up to
+  ~3 × the bytes) is not a
   user fork — CLOSE §1 «composed actions are proven on one representative real
   program/state; no full cross-product», and RDY-6 «a difference is a user fork
   only when it is reachable, materially affects the requested value and
@@ -183,7 +185,9 @@ Rejected (P1, template scale, S ≈ 95 MB):
 
 ## Goal invariants (exported from goal `isolate-host-fs-snapshot` at its close)
 
-- I1 — round trip: after restore guest code sees the same kind, bytes, `readdirSync` order and `fs.statSync` (`ino` aside) for every path, both realms, both directions; what is not kept is named in compat.
+Its Outcome, User scenario and invariants verbatim: the goal's `goal.md` in git at commit `f757909c4` (epics backlog, directory `isolate-host-fs-snapshot`; removed at close).
+
+- I1 — round trip: after restore guest code sees the same kind, bytes, `readdirSync` order and `fs.statSync` (`ino` aside) for every path, «for any name rifty's FS holds», both realms, both directions; what is not kept is named in compat.
 - I2 — one blob with a format version and the template; other versions and templates refused by name; later rifty reads every earlier version.
 - I3 — hostile bytes refused by name, no blob text, target unchanged, linear in the blob, `maxBytes` before allocation, nothing outside the target touched.
 - I4 — limits: snapshot over `maxBytes` refused before allocating, restore before reading; restore only before guest code; snapshot after guest code is guest-authored, accepted only via restore.

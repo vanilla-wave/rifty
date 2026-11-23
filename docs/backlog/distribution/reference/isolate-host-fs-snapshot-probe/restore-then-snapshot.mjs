@@ -2,7 +2,8 @@
 // between, against restore → run('0') → snapshot, at the requirements' template
 // scale (the dataset of packages/isolate-guest/scripts/measure-snapshot.mjs).
 // From this directory, after `pnpm --dir ../../../../../packages/isolate-guest run build`:
-//   node --no-node-snapshot restore-then-snapshot.mjs [rounds]
+//   node --no-node-snapshot restore-then-snapshot.mjs [rounds] [--one-file]
+// `--one-file`: the same bytes as one file (a budget that is almost all bytes).
 import { lstatSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
@@ -14,7 +15,8 @@ const { build } = createRequire(join(pkg, 'package.json'))('esbuild');
 const { createHostBridge } = await import(pathToFileURL(join(pkg, 'dist/index.js')).href);
 const ivm = createRequire(join(pkg, '../isolate-host/package.json'))('isolated-vm');
 const bundle = readFileSync(join(pkg, 'dist/guest.js'), 'utf8');
-const rounds = Number(process.argv[2] ?? 3);
+const rounds = Number(process.argv.find((a) => /^\d+$/.test(a)) ?? 3);
+const oneFile = process.argv.includes('--one-file');
 
 const realmFile = join(tmpdir(), `restore-then-snapshot-${process.pid}.mjs`);
 await build({
@@ -68,10 +70,14 @@ for (let i = 0; files.length < 23_654; i++) {
   files.push([path.replace('/workspace/node_modules/', '/workspace/node_modules/.copy/'), data]);
 }
 const fs = createMemoryFs().fsSync;
-for (const [path, data] of files) {
-  fs.mkdirSync(path.slice(0, path.lastIndexOf('/')), { recursive: true });
-  fs.writeFileSync(path, new Uint8Array(data));
-}
+if (oneFile) {
+  fs.mkdirSync('/workspace', { recursive: true });
+  fs.writeFileSync('/workspace/one.bin', new Uint8Array(Buffer.concat(files.map(([, d]) => d))));
+} else
+  for (const [path, data] of files) {
+    fs.mkdirSync(path.slice(0, path.lastIndexOf('/')), { recursive: true });
+    fs.writeFileSync(path, new Uint8Array(data));
+  }
 const options = { template: null, maxBytes: 1 << 30 };
 const blob = snapshotFs(fs, options);
 
@@ -124,7 +130,7 @@ async function floor(withRun) {
   return hi;
 }
 console.log(
-  `node ${process.version}; blob ${blob.length} B (${(blob.length / 1048576).toFixed(1)} MiB), ${files.length} files`,
+  `node ${process.version}; blob ${blob.length} B (${(blob.length / 1048576).toFixed(1)} MiB), ${oneFile ? '1 file' : `${files.length} files`}`,
 );
 for (let r = 0; r < rounds; r++)
   console.log(

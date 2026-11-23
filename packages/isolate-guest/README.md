@@ -265,9 +265,10 @@ await guest.restore.apply(undefined, [new Uint8Array(bytes), options], { argumen
   entries + 15 MiB — under 2 × `maxBytes` + 16 MiB for any blob a budget
   admits. Time: the densest blob a budget admits takes ~2 ms per MiB of
   budget in either realm, flat, deep, long-named or mixed (table below). A
-  snapshot straight after a restore, with no guest code between, can need
-  more under machine load while the restored blob is not yet collected
-  (template scale: 225 MiB at rest, 232–277 MiB under 12 busy loops —
+  snapshot straight after a restore, with no guest code between, needs up to
+  ~3 × the bytes while the restored blob is not yet collected (at rest: one
+  96 MiB file 300 MiB against 206 for restore → `run` → snapshot; template
+  scale 225–311 against 225 —
   `docs/backlog/distribution/reference/isolate-host-fs-snapshot-probe/restore-then-snapshot.mjs`).
   An allocation the limit
   refuses is `ERR_FS_SNAPSHOT_TOO_LARGE` (snapshot) or `_INCOMPLETE`

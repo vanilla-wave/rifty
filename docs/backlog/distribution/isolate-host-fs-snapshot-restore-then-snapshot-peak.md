@@ -1,10 +1,10 @@
 ---
 area: distribution
 status: draft
-title: Snapshot straight after a restore needs more isolate memory under load
+title: Snapshot straight after a restore needs up to ~3 × the bytes of isolate memory
 created: 2026-11-23
-why: with no guest code between restore and snapshot, the restored blob may not be collected yet; under machine load the isolate then can need more than restore → run → snapshot, up to ~3 × the blob (reasoned)
-user_story: As an embedder that snapshots an isolate right after restoring it, I want the documented memory limit to hold, but today under load the snapshot can need ~1.2 × the floor of the sandbox's restore → run → snapshot
+why: with no guest code between restore and snapshot the restored blob is not collected yet, so tree, garbage blob and the new snapshot are alive at once — beyond the documented 2 × maxBytes + 16 MiB
+user_story: As an embedder that snapshots an isolate right after restoring it, I want the documented memory limit to hold, but today a one-file 96 MiB tree needs 300 MiB there against 206 for restore → run → snapshot
 blocked_by: []
 sources: [ADR-0567, packages/isolate-guest/README.md]
 code: [packages/isolate-guest/src/snapshot.ts, packages/isolate-guest/src/guest/entry.ts]
@@ -12,29 +12,29 @@ code: [packages/isolate-guest/src/snapshot.ts, packages/isolate-guest/src/guest/
 
 ## Context
 
-Probe 2026-11-23, M3 Pro, Node v24.16.0, isolated-vm 7.0.2, template-scale
-tree (23 654 files, blob 98.1 MiB), smallest isolate `memoryLimit` (MiB):
+Probe 2026-11-23, M3 Pro, Node v24.16.0, isolated-vm 7.0.2; smallest isolate
+`memoryLimit` (MiB), template-scale bytes (23 654 real files):
 
 ```
 cd docs/backlog/distribution/reference/isolate-host-fs-snapshot-probe
-node --no-node-snapshot restore-then-snapshot.mjs 3
+node --no-node-snapshot restore-then-snapshot.mjs 3             # 23 654 files
+node --no-node-snapshot restore-then-snapshot.mjs 3 --one-file  # the same bytes, one file
 ```
 
-| machine | restore → snapshot | restore → `run('0')` → snapshot |
+| tree (load) | restore → snapshot | restore → `run('0')` → snapshot |
 |---|---|---|
-| at rest (load ~2), 3 rounds | 225, 225, 225 | 225, 225, 225 |
-| 12 busy loops (load ~26), 2 rounds | 277, 232 | 225, 225 |
+| 23 654 files, 98.1 MiB (load ~3) | 225, 232, 311 | 225, 225, 225 |
+| 23 654 files (12 busy loops, load ~26) | 277, 232 | 225, 225 |
+| one file, 95.9 MiB (load ~3) | 300, 300, 300 | 206, 206, 206 |
 
-Against the goal's I6 budget 2 × S + 64 = 260 MiB: the scenario's sequence (a
-sandbox always runs guest code between) stays at 225; straight after a
-restore, 277 under load exceeds it. Against ADR-0567 §7's sizing rule
-(2 × `maxBytes` + 16 MiB; this tree's minimal budget is 135.6 MiB → 287 MiB)
-it still fits here, but a blob whose budget is mostly bytes (one large file,
-`maxBytes` ≈ S) may need up to ~3 × S on this sequence — tree, uncollected
-blob and the new snapshot alive at once (reasoned, not measured). Straight after a
-restore, the copied blob is garbage the GC has not collected yet; under load
-it lags. Earlier figures 231–322 MiB (measure-snapshot runs under load 57–155,
-pre-budget code) are superseded by this probe.
+Straight after a restore the copied blob is garbage V8 has not collected:
+tree, blob and the new snapshot are alive together, ~3 × the bytes. Guest code
+between (a sandbox always runs it) gives the GC its chance. Against the goal's
+I6 budget (2 × S + 64 = 260 MiB at 98 MiB) the scenario's sequence holds;
+this one does not. Against ADR-0567 §7's rule (2 × `maxBytes` + 16 MiB) a
+budget that is almost all bytes (one large file) is exceeded by ~95 MiB.
+Earlier figures 231–322 MiB (measure-snapshot runs under load 57–155,
+pre-budget code) are superseded.
 
 Manager's reading 2026-11-23 (ADR-0567 «Not the user's words»): not a user
 fork — no requested action needs this sequence.
