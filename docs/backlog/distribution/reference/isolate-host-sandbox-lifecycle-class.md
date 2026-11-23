@@ -38,6 +38,9 @@ Command (repo root, after `pnpm --filter @riftydev/isolate-host build`):
 | an unhandledRejection listener for a rejection inside an exit listener | 0, a | 0 | 0, a,l | files Node writes missing |
 | a due timer an 'exit' listener arms at a natural exit | 0, a | 0 | 0, a | as Node |
 | beforeExit listener | 0, a | 0 | 0, a,be | files Node writes missing |
+| exit(2) from nextTick, a timer already due | 2, a,t | 2 | 2, a | extra files kept |
+| exit(2) from setImmediate, a timer already due | 2, a,t | 2 | 2, a,t | as Node |
+| exit(2) from a timer, another timer already due | 2, a,t | 2 | 2, a | extra files kept |
 | uncaught throw then an endless queued timer | 1, a | 1 | 1, a | as Node |
 | uncaught throw + endless microtask chain | memory, — | memory | 1, a | whole run rolled back |
 | exitCode in an exit listener after an uncaught throw | 1, a | 1 | 5, a | exit code not Node's |
@@ -46,7 +49,8 @@ Command (repo root, after `pnpm --filter @riftydev/isolate-host build`):
 
 Files Node writes are missing in two rows (`'beforeExit'` is never emitted, process.md ❌; an
 `unhandledRejection` listener never runs for a rejection made inside an `'exit'` listener), in both
-hosts. Every divergence is at a place `runCode` diverges too; the sandbox's status is `runCode`'s on every
+hosts. Work already due when `exit()` is called from any callback still runs in both hosts — the untried
+lead `runtime-js/host-deliveries-stop-at-process-terminal`. Every divergence is at a place `runCode` diverges too; the sandbox's status is `runCode`'s on every
 row but one — a timer due beside a fatal thrown from another timer: `runCode` takes its `exit(0)`
 (0), the sandbox keeps the fatal's 1 (Node's; the terminal is already recorded) and its file.
 
@@ -65,3 +69,10 @@ timer beside `exit()` left its file in some runs.
 Not in this class: the pool rows (a lost worker, a starved deadline, an adaptive culprit) end the
 run killed or lost — the sandbox row "Killed run … or lost worker" (rolled back); `import()` has its
 own sandbox rows.
+
+Not in this class either, and **sandbox only**: a guest that replaced intrinsics the state capture
+uses (`DataView.prototype.setUint32`, …) runs its own code after the run's status is out. Its output
+is dropped since PR #424 (it printed `AFTER`), but it can leave any tree the codec accepts — a
+`setUint16` that turns `a` into `b` leaves `/workspbce` and no `/workspace`, exit 0, no
+`stateRefused` — and an endless one ends the run `timeout`, its writes rolled back (Node: exit 0,
+files kept). Compat Sandbox row "The guest's realm while its state is captured".

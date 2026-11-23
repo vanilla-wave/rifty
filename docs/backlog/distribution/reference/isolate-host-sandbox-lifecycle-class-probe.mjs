@@ -105,6 +105,18 @@ const CASES = [
   ],
   ['beforeExit listener', `${W} w('a'); process.on('beforeExit', () => w('be'))`],
   [
+    'exit(2) from nextTick, a timer already due',
+    `${W} w('a'); setTimeout(() => w('t'), 0); const e = Date.now() + 5; while (Date.now() < e); process.nextTick(() => process.exit(2))`,
+  ],
+  [
+    'exit(2) from setImmediate, a timer already due',
+    `${W} w('a'); setTimeout(() => w('t'), 0); const e = Date.now() + 5; while (Date.now() < e); setImmediate(() => process.exit(2))`,
+  ],
+  [
+    'exit(2) from a timer, another timer already due',
+    `${W} w('a'); setTimeout(() => process.exit(2), 0); setTimeout(() => w('t'), 0)`,
+  ],
+  [
     'uncaught throw then an endless queued timer',
     `${W} w('a'); setTimeout(() => { for (;;) {} }, 0); throw new Error('x')`,
   ],

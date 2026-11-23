@@ -162,6 +162,12 @@ view's whole backing buffer; rifty's program entry has diagnostic gaps and no
    worker or the consumer (`ERR_ISOLATE_HOST_SANDBOX_RESTORE`,
    `ERR_ISOLATE_HOST_SANDBOX_CAPTURE`, `ERR_FS_SNAPSHOT_TOO_LARGE`, or the
    consumer codec's `ERR_FS_SNAPSHOT_*`).
+   The capture runs in the guest's realm after the run's status is out: a guest
+   that replaced intrinsics the codec uses runs its own code there, can leave any
+   tree the codec accepts (no `stateRefused`) or hang the run (`timeout`). Its power
+   is its own files, as through `fs`; the trusted side's checks, the host and other
+   sandboxes hold (PR #424 cross-review round 2; compat Sandbox row "The guest's
+   realm while its state is captured").
 8. **`runCode`** keeps its API, results, corpus and pool behavior, with one
    change shared with sandboxes (2026-11-22): a fresh guest FS also holds
    `/tmp`, rifty's `os.tmpdir()` (`GUEST_DIRS`), so writing there works as in
@@ -367,6 +373,14 @@ accepts the recommendation — the whole class, with its three outcomes for file
 and exit status", backlog), not fixed in the sandbox now. A second reading the phrase allows,
 named by the manager: keep the goal open and merge only the docs.
 
+Manager's reading, 2026-11-23, not the user's words: I1 «leaves exactly the files it had at its end»
+reads as «the files its own code left — through `fs`, or by breaking the runtime in its own realm»
+(a guest that replaced intrinsics the capture uses, §7). Grounds: `RDY-6` — reachable, and not
+material to the value asked for (the guest has the same power over its own files through `fs`;
+I7 holds, the host and other sandboxes untouched); precedent: the `runCode` goal closed with the
+same open class ("Guest code replacing JS intrinsics"). And: the premise «те же, что у `runCode`»
+the user answered does not hold for this member (sandbox only); the manager tells the user.
+
 The user, 2026-11-17 (requirements, quoted in the goal's state-model line): «в пределах одного
 прогона агента один экземпляр живёт через write → exec → ошибка → fix → exec. Следующий прогон…
 новый экземпляр из шаблона + восстановленных файлов». The manager's reading, not the user's words
@@ -384,6 +398,6 @@ time per sandbox with the deadline from dequeue, `/workspace` and `/tmp` in a fr
 
 ## Corrections
 
-- 2026-11-23 — §3 (PR #424): a run's end state is captured after the guest's run settled, and a timer the guest queued could still fire in between (the host timer is in flight when the result is): its writes were captured, an endless one made the run a `timeout`. The guest's run phase (`running` → `natural` → `ended`, `isolate-guest` `entry.ts`) is the one state for its consumers: output follows the runtime's terminal (dropped after `exit()` or a fatal terminal, kept for a natural exit's listener work), while every host delivery — `fire` (a timer's expiry) and `rejection` (an unhandled rejection isolated-vm reports after the checkpoint) — passes one gate and runs nothing once the phase leaves `running`, i.e. once the run's status is out (the host's other calls are the launch, `run`/`runFile`, and state, `snapshot`/`restore`; cross-review round 1 found `rejection` ungated). The two moments differ: the terminal is recorded at `exit()` or at a fatal thrown in a callback, before the status is out (callbacks due in that turn still run, their output dropped); a fatal thrown by the entry's synchronous run records none. Microtasks of the same checkpoint and callbacks due before the status is out still run (compat Sandbox row "A run's lifecycle and exit status"). RED `sandbox-acceptance` "nothing of the guest runs after its run has ended".
+- 2026-11-23 — §3 (PR #424): a run's end state is captured after the guest's run settled, and a timer the guest queued could still fire in between (the host timer is in flight when the result is): its writes were captured, an endless one made the run a `timeout`. The guest's run phase (`running` → `natural` → `ended`, `isolate-guest` `entry.ts`) is the one state for its consumers: output follows the runtime's terminal (dropped after `exit()` or a fatal terminal, kept for a natural exit's listener work), while every host delivery — `fire` (a timer's expiry) and `rejection` (an unhandled rejection isolated-vm reports after the checkpoint) — passes one gate and runs nothing once the phase leaves `running`, i.e. once the run's status is out (the host's other calls are the launch, `run`/`runFile`, and state, `snapshot`/`restore`; cross-review round 1 found `rejection` ungated). The gate closes once the run leaves `running` (a natural exit included). The run's output is fixed at the same point: what the guest's realm prints while its state is captured is dropped (child `write` during the capture). RED `sandbox-acceptance` "nothing of the guest runs after its run has ended", "no host delivery reaches the guest after its run has ended", "the guest's realm while its state is captured". The two moments differ: the terminal is recorded at `exit()` or at a fatal thrown in a callback, before the status is out (callbacks due in that turn still run, their output dropped); a fatal thrown by the entry's synchronous run records none. Microtasks of the same checkpoint and callbacks due before the status is out still run (compat Sandbox row "A run's lifecycle and exit status"). RED `sandbox-acceptance` "nothing of the guest runs after its run has ended".
 
 - 2026-11-23 — Consequences «an isolate limit of at least 231 MiB (≈ 2.3 × S) before guest code»: superseded by ADR-0567 §7 (goal `isolate-host-fs-snapshot` close, PR #422) — a run's restore → run → snapshot needs 223–225 MiB at template scale; only a snapshot straight after a restore with no guest code between needs up to ~3 × the bytes (`distribution/isolate-host-fs-snapshot-restore-then-snapshot-peak`).

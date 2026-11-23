@@ -10,7 +10,7 @@ code: [packages/runtime-js/src/internal/event-loop-keepalive.ts, packages/runtim
 
 ## Context
 
-Sandbox (ADR-0568): a member of the lifecycle class, compat ⚠️ (row "A run's lifecycle and exit status", measured in `reference/isolate-host-sandbox-lifecycle-class.md`). Owner: runtime-js. Trigger: the next process-exit change in runtime-js, or a sandbox consumer finding a file written after `process.exit()`.
+Sandbox (ADR-0568): a member of the lifecycle class, compat ⚠️ (row "A run's lifecycle and exit status", measured in `reference/isolate-host-sandbox-lifecycle-class.md`). Owner: runtime-js. Trigger: the next process-exit change in runtime-js, or a sandbox consumer finding a file written after `process.exit()`. Lead with the same mechanism: `runtime-js/host-deliveries-stop-at-process-terminal` (stop host deliveries at the terminal).
 
 Measured 2026-11-22 (PR #416), `node -e` v24.16.0 runs none of it. Who dispatches what still runs after `exit()`:
 

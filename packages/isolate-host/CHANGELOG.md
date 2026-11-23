@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Sandbox: a run's output is fixed when its status is out — what the guest's realm prints while its end state is captured (code reached through intrinsics it replaced) is not the run's output.
 - Sandbox: an unhandled rejection delivered after the run ended no longer runs its listener or adds a report (an endless listener no longer makes the run a rolled-back `timeout`); a timer, interval or `setImmediate` still pending when the run's status is out (queued before an uncaught throw of the entry, or beside its `process.exit()`) no longer runs after the run ended: no output, no file, and an endless one no longer turns the run into a `timeout` that rolls its writes back (it ran while the end state was being captured). `runCode` is unchanged.
 - Sandbox: an operation whose promise has not settled when `destroy()` is called rejects `ERR_ISOLATE_HOST_SANDBOX_DESTROYED` (a host op or a run already done could still resolve with the destroyed sandbox's data a microtask later).
 - Sandbox: a host write refused with `ERR_ISOLATE_HOST_SANDBOX_FULL` restores the times of the file and of every directory above it too (the rollback left new `mtime`/`ctime` for the next run to see).

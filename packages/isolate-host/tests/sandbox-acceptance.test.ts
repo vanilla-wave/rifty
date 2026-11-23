@@ -743,6 +743,66 @@ describe('no host delivery reaches the guest after its run has ended (ADR-0568 �
   }
 });
 
+describe("the guest's realm while its state is captured (compat ⚠️ sandbox only)", () => {
+  // The capture runs in the guest's realm (ADR-0568 §7): code reached through a replaced
+  // intrinsic the codec uses runs after the run's status is out.
+  carrier("what it prints there is not the run's output", async () => {
+    const code =
+      "const fs = require('fs'); fs.writeFileSync('a', '1'); const original = DataView.prototype.setUint32; DataView.prototype.setUint32 = function (...args) { DataView.prototype.setUint32 = original; console.log('AFTER'); fs.writeFileSync('after', '1'); return Reflect.apply(original, this, args) }";
+    const o = nodeSequence([{ files: { 'c.js': code }, run: ['c.js'] }])[0];
+    const sb = await createSandbox();
+    try {
+      await sb.writeFile('c.js', code);
+      const r = await sb.exec('c.js');
+      expect(r).toEqual({ stdout: o?.stdout, stderr: o?.stderr, exitCode: o?.exitCode });
+      expect(await tree(sb)).toEqual(o?.files);
+    } finally {
+      await sb.destroy();
+    }
+  });
+  carrier(
+    'declared: a replaced intrinsic can leave any tree the codec accepts, with no stateRefused',
+    async () => {
+      const code =
+        "require('fs').writeFileSync('a', 'x'); const o = DataView.prototype.setUint16; DataView.prototype.setUint16 = function (off, v, le) { return o.call(this, off, v === 97 ? 98 : v, le) }";
+      const o = nodeSequence([{ files: { 'keep.txt': 'k', 'c.js': code }, run: ['c.js'] }])[0];
+      expect(o?.exitCode).toBe(0);
+      expect(Object.keys(o?.files ?? {})).toContain(`${W}/keep.txt`);
+      const sb = await createSandbox();
+      try {
+        await sb.writeFile('keep.txt', 'k');
+        await sb.writeFile('c.js', code);
+        expect(await sb.exec('c.js')).toEqual({ stdout: '', stderr: '', exitCode: 0 });
+        // Every 'a' (97) in the state's paths became 'b': /workspace is gone.
+        await expect(sb.list()).rejects.toMatchObject({ code: 'ENOENT' });
+        expect((await sb.list('/')).map((e) => e.name)).toEqual(['tmp', 'workspbce']);
+      } finally {
+        await sb.destroy();
+      }
+    },
+  );
+  carrier(
+    'declared: an endless replaced intrinsic ends the run timeout, its writes rolled back',
+    async () => {
+      const code =
+        "require('fs').writeFileSync('a', '1'); DataView.prototype.setUint32 = function () { for (;;) {} }";
+      const o = nodeSequence([{ files: { 'c.js': code }, run: ['c.js'] }])[0];
+      expect(o?.exitCode).toBe(0);
+      const sb = await createSandbox();
+      try {
+        await sb.writeFile('c.js', code);
+        expect(await sb.exec('c.js', { timeoutMs: 2000 })).toMatchObject({
+          exitCode: null,
+          termination: 'timeout',
+        });
+        expect((await sb.list()).map((e) => e.name)).toEqual(['c.js']);
+      } finally {
+        await sb.destroy();
+      }
+    },
+  );
+});
+
 describe('limits are loud (scenario 8, I6)', () => {
   carrier('per-file limit on host ops, one state cap for host writes and run results', async () => {
     const sb = await createSandbox({ maxFileBytes: 1024, maxFsBytes: 64 * 1024 });
