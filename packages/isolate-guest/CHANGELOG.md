@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- `GuestEntry.fire` runs nothing once the run's status is out: a timer, interval or `setImmediate` the guest queued no longer runs after the run ended (an uncaught throw, `process.exit()` from the entry, a natural exit), as in Node. `run` results are unchanged (`runCode` disposed the isolate there); a snapshot taken after the run no longer sees such a callback's writes.
+- `GuestEntry.fire` runs nothing once the run's status is out: a timer, interval or `setImmediate` still pending when the run's status is out no longer runs (after an uncaught throw or `process.exit()` of the entry, a natural exit), as in Node; one already due before it still runs. `run` results are unchanged (`runCode` disposed the isolate there); a snapshot taken after the run no longer sees such a callback's writes.
 - A fresh guest FS holds `/tmp` beside `/workspace` (`GUEST_DIRS`): rifty's `os.tmpdir()` is `/tmp`, and writing there failed with `ENOENT` where Node writes (`runCode` corpus `os-tmpdir-is-writable`).
 - `GuestEntry.runFile(path, args)`: `node <path> [args]` over the realm's FS with cwd `/workspace`, instead of `run` (ADR-0568). An ES module entry (`.mjs`, `"type": "module"`, ESM syntax in a typeless `.js`) throws `NotImplementedError('isolate-host.esm')`. A file run has no `node -e` builtin-module globals (`typeof fs` is `'undefined'`, as in Node).
 - The guest prints a fatal error as the runtime's Node report (`fatalReportText`): inspected error, user frames, trailer, no header. An uncaught throw from work queued before an explicit `exit()` prints nothing (Node); one from work a natural exit's `'exit'` listener queued prints that report.

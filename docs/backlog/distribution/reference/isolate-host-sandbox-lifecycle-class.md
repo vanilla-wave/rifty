@@ -28,13 +28,19 @@ Command (repo root, after `pnpm --filter @riftydev/isolate-host build`):
 | work queued at an uncaught throw, exit(0) in a timer | 1, a | 1 | 1, a | as Node |
 | work queued at an uncaught throw, exit(0) in a microtask | 0, a,q | 0 | 1, a | extra files kept; exit code not Node's |
 | work queued at an uncaught throw, exit(0) in an fs callback | 0, a,q,z | 0 | 1, a,z | extra files kept; exit code not Node's |
+| a timer due beside a fatal thrown from a timer, exit(0) in it | 1, a,q | 0 | 1, a | extra files kept |
+| an endless timer due beside a fatal thrown from a timer | timeout, — | timeout | 1, a | whole run rolled back |
+| an interval queued before an uncaught throw | 1, a | 1 | 1, a | as Node |
+| setImmediate queued before an uncaught throw | 1, a | 1 | 1, a | as Node |
 | uncaught throw then an endless queued timer | 1, a | 1 | 1, a | as Node |
 | uncaught throw + endless microtask chain | memory, — | memory | 1, a | whole run rolled back |
 | exitCode in an exit listener after an uncaught throw | 1, a | 1 | 5, a | exit code not Node's |
 | throw in an exit listener | 1, a | 1 | 3, a | exit code not Node's |
 | rejection in an exit listener | 0, a | 0 | 1, a | exit code not Node's |
 
-Every row: the sandbox's status is `runCode`'s; every divergence is inherited from `runCode`.
+Every divergence is at a place `runCode` diverges too; the sandbox's status is `runCode`'s on every
+row but one — a timer due beside a fatal thrown from another timer: `runCode` takes its `exit(0)`
+(0), the sandbox keeps the fatal's 1 (Node's; the terminal is already recorded) and its file.
 
 ## Before PR #424 (main `f3861a3cd`)
 

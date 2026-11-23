@@ -68,6 +68,22 @@ const CASES = [
     `${W} w('a'); fs.writeFile('z', '1', () => { w('q'); process.exit(0) }); throw new Error('x')`,
   ],
   [
+    'a timer due beside a fatal thrown from a timer, exit(0) in it',
+    `${W} w('a'); setTimeout(() => { throw new Error('x') }, 0); setTimeout(() => { w('q'); process.exit(0) }, 0)`,
+  ],
+  [
+    'an endless timer due beside a fatal thrown from a timer',
+    `${W} w('a'); setTimeout(() => { throw new Error('x') }, 0); setTimeout(() => { for (;;) {} }, 0)`,
+  ],
+  [
+    'an interval queued before an uncaught throw',
+    `${W} w('a'); setInterval(() => w('iv'), 0); throw new Error('x')`,
+  ],
+  [
+    'setImmediate queued before an uncaught throw',
+    `${W} w('a'); setImmediate(() => w('im')); throw new Error('x')`,
+  ],
+  [
     'uncaught throw then an endless queued timer',
     `${W} w('a'); setTimeout(() => { for (;;) {} }, 0); throw new Error('x')`,
   ],

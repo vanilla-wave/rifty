@@ -657,6 +657,14 @@ describe('nothing of the guest runs after its run has ended (ADR-0568 §3)', () 
       code: "require('fs').writeFileSync('w', '1'); setTimeout(() => { for (;;) {} }, 0); throw new Error('x')",
       exitCode: 1,
     },
+    'an interval queued before an uncaught throw: never ticks': {
+      code: "require('fs').writeFileSync('w', '1'); setInterval(() => require('fs').writeFileSync('iv', '1'), 0); throw new Error('x')",
+      exitCode: 1,
+    },
+    'setImmediate queued before an uncaught throw: never runs': {
+      code: "require('fs').writeFileSync('w', '1'); setImmediate(() => require('fs').writeFileSync('im', '1')); throw new Error('x')",
+      exitCode: 1,
+    },
     'a 0 ms timer beside process.exit(3): never runs': {
       code: "require('fs').writeFileSync('w', '1'); setTimeout(() => require('fs').writeFileSync('late', '1'), 0); process.exit(3)",
       exitCode: 3,
