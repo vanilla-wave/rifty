@@ -1,9 +1,9 @@
 {
   "overall_verdict": "pass",
-  "merge_call": "Goal complete: I1-I6 and scenario proven end to end; verify pass @62b02763c closes the restore->snapshot memory blocker (reproduced 300/206 one file, 232/307 vs 225 template) and the reference concerns; commit this verdict, push, merge on green CI at HEAD (PR-6).",
+  "merge_call": "Goal complete: I1-I6 and scenario proven end to end (carriers green @6c048372c, product unchanged since); verify @282fa3d69: invariants exported verbatim (diff vs f757909c4 goal.md empty), ADR-0568 correction, memory caveat true (reproduced 300/206 one file, 232/307 vs 225 template); commit this verdict, push, merge on green CI at HEAD (PR-6).",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "62b02763cff5dbb662547f0667fe081ef9a926fc",
-  "unit_goal_source": "PR #422 (docs-only CLOSE of goal isolate-host-fs-snapshot), diff b4a8dfde7..62b02763c (verify of 6c048372c..62b02763c); goal text at git f757909c4 (goal/map/ledger, deleted by this PR): Outcome, scenario 1-4, I1-I6, three amend: lines; ADR-0567; delivered PR #418 (codec), PR #419 (NUL/time residual).",
+  "reviewed_sha": "282fa3d699fd20ca39e0db9560b7aec16adfce9d",
+  "unit_goal_source": "PR #422 (docs-only CLOSE of goal isolate-host-fs-snapshot), diff b4a8dfde7..282fa3d69 (verify of 62b02763c..282fa3d69); goal text at git f757909c4 (goal/map/ledger, deleted by this PR): Outcome, scenario 1-4, I1-I6, three amend: lines; ADR-0567; delivered PR #418 (codec), PR #419 (NUL/time residual).",
   "unit_residuals": [],
   "goal_residuals": [],
   "goal_complete": true,
@@ -77,7 +77,7 @@
       "source": "acceptance",
       "trace": "I6",
       "status": "pass",
-      "citation": "packages/isolate-guest/scripts/measure-snapshot.mjs:229; packages/isolate-guest/README.md:286",
+      "citation": "packages/isolate-guest/scripts/measure-snapshot.mjs:229; packages/isolate-guest/README.md:286 (small tree), :287 (template scale)",
       "note": ""
     }
   ],
@@ -119,16 +119,8 @@
     },
     {
       "axis": "Ecosystem UX",
-      "verdict": "concern",
-      "findings": [
-        {
-          "severity": "nit",
-          "location": "docs/backlog/distribution/isolate-host-fs-snapshot-restore-then-snapshot-peak.md:32",
-          "evidence": "",
-          "summary": "«Against the goal's I6 budget» names no goal; I6 now lives in ADR-0567 «Goal invariants» (the record's sources cite ADR-0567) — optional pointer.",
-          "authority": ""
-        }
-      ]
+      "verdict": "pass",
+      "findings": []
     }
   ]
 }
