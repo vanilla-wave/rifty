@@ -3,17 +3,19 @@
 Each `runCode` lifecycle/status row of `docs/public/compat/isolate-host.md` as one
 `node p.js` program, run once in a sandbox (`exec('p.js', { timeoutMs: 3000, memoryLimitMb: 128 })`),
 once as `runCode(code)` with the same limits (`node -e`; its files are not observable) and once
-by live `node p.js` in a temp dir (Node v24.16.0, darwin-arm64, main `f3861a3cd` product).
-Files: what the state or the directory holds besides `p.js`; every program but the `unref()`
-one writes `a` first. Two runs; the only difference between them is noted.
+by live `node p.js` in a temp dir (Node v24.16.0, darwin-arm64). Files: what the state or the
+directory holds besides `p.js`; every program but the `unref()` one writes `a` first. Two runs
+each; the differences between runs are noted.
 
 Command (repo root, after `pnpm --filter @riftydev/isolate-host build`):
 `node docs/backlog/distribution/reference/isolate-host-sandbox-lifecycle-class-probe.mjs`
 
+## After PR #424 (the guest's run phase gates `fire`)
+
 | case | sandbox: exit / end, files | `runCode`: exit / end | Node: exit, files | sandbox outcome |
 |---|---|---|---|---|
 | uncopyable rejection reason | 1, a | 1 | 1, a | as Node |
-| unref() timer | 0, tick1,tick2,tick3 (2nd run: tick1,tick2) | 0 | 0, — | extra files kept |
+| unref() timer | 0, tick1,tick2 | 0 | 0, — | extra files kept |
 | GC-lost rejection | 0, a | 0 | 1, a | exit code not Node's |
 | work queued at exit() | 3, a,late | 3 | 3, a | extra files kept |
 | exit() then endless queued work | timeout, — | timeout | 3, a | whole run rolled back |
@@ -23,23 +25,26 @@ Command (repo root, after `pnpm --filter @riftydev/isolate-host build`):
 | unhandled rejection with a timer pending | 0, a,t | 0 | 1, a | extra files kept; exit code not Node's |
 | intrinsic replaced (Reflect.get) | 1, a | 1 | 0, a | exit code not Node's |
 | exit signal caught and mutated | 0, a | 0 | 3, a | exit code not Node's |
-| work queued at an uncaught throw, exit(0) in a timer | 1, a,q | 1 | 1, a | extra files kept — **sandbox only** |
+| work queued at an uncaught throw, exit(0) in a timer | 1, a | 1 | 1, a | as Node |
 | work queued at an uncaught throw, exit(0) in a microtask | 0, a,q | 0 | 1, a | extra files kept; exit code not Node's |
 | work queued at an uncaught throw, exit(0) in an fs callback | 0, a,q,z | 0 | 1, a,z | extra files kept; exit code not Node's |
-| uncaught throw then an endless queued timer | timeout, — | 1 | 1, a | whole run rolled back — **sandbox only** |
+| uncaught throw then an endless queued timer | 1, a | 1 | 1, a | as Node |
 | uncaught throw + endless microtask chain | memory, — | memory | 1, a | whole run rolled back |
 | exitCode in an exit listener after an uncaught throw | 1, a | 1 | 5, a | exit code not Node's |
 | throw in an exit listener | 1, a | 1 | 3, a | exit code not Node's |
 | rejection in an exit listener | 0, a | 0 | 1, a | exit code not Node's |
 
-**Sandbox only** (not inherited from `runCode`): a timer queued before an uncaught throw fires after
-the guest's run has ended, in both hosts (worker trace); `runCode` disposes the isolate at the result,
-so nothing of it is seen, while a sandbox captures its state after the run and waits for the callback — `setTimeout(() => console.log('ran'), 0); throw new Error('x')`:
-`runCode` exit 1, stdout empty (as Node); the sandbox exit 1, stdout `ran`. A finite such timer
-leaves its files, an endless one ends the run `timeout` (writes rolled back) where `runCode` and
-Node exit 1. Every other row: the sandbox's status is `runCode`'s.
+Every row: the sandbox's status is `runCode`'s; every divergence is inherited from `runCode`.
 
-Not in this class: the pool rows (a lost worker, a starved deadline, an adaptive culprit) end
-the run killed or lost — the sandbox row "Killed run … or lost worker" (rolled back); `import()` has
-its own sandbox rows. The 0 ms timer queued beside `exit()` ran in one of the two runs of "work queued
-at exit()" in an earlier measurement of the same day: its file is kept only sometimes.
+## Before PR #424 (main `f3861a3cd`)
+
+Two rows were the sandbox's own: a timer queued before an uncaught throw fired after the guest's
+run had ended (the host timer was in flight when the result was) — `runCode` disposed the isolate
+at the result, so nothing of it was seen, while a sandbox captured its state after the run and
+waited for the callback. A finite such timer left its file (`a,q` where Node has `a`), an endless
+one ended the run `timeout` with every write rolled back (Node and `runCode`: exit 1). The 0 ms
+timer beside `exit()` left its file in some runs.
+
+Not in this class: the pool rows (a lost worker, a starved deadline, an adaptive culprit) end the
+run killed or lost — the sandbox row "Killed run … or lost worker" (rolled back); `import()` has its
+own sandbox rows.

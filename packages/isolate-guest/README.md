@@ -155,7 +155,8 @@ your own, you must perform them yourself.
 
 The `write` hook must be synchronous: a promise it returns is not awaited, and
 its rejection is yours. The `fire` hook returns a promise that settles once the
-guest ran the callback (isolated-vm: `Reference.apply`, not `applyIgnored`).
+guest ran the callback (isolated-vm: `Reference.apply`, not `applyIgnored`); a `fire` after the
+run's status is out runs nothing, so a snapshot taken after the run sees the run's own end.
 A repeating timer re-arms only after it settles, so expiries never pile up
 behind a busy guest, and its next expiry keeps Node's period from the tick's
 start (an overrun ticks again at once). A hook that returns no promise

@@ -1213,3 +1213,24 @@ describe('an idle sandbox holds no process of its own (I6; its isolates end with
     expect(value).toEqual({ workers: 1, live: 10 });
   });
 });
+
+describe('a run that ended leaves its worker clean (ADR-0568 §3)', () => {
+  carrier(
+    'after an endless timer queued before a throw, the next call on that worker is exact',
+    async () => {
+      const { value } = await consumer(`
+      const sb = await createSandbox();
+      await sb.writeFile('t.js', "setTimeout(() => { for (;;) {} }, 0); throw new Error('x')");
+      const r = await sb.exec('t.js', { timeoutMs: 5000 });
+      const before = children();
+      const next = await runCode('console.log(1)');
+      out({ exitCode: r.exitCode, termination: r.termination ?? null, next, sameWorker: children().every((p) => before.includes(p)) });`);
+      expect(value).toEqual({
+        exitCode: 1,
+        termination: null,
+        next: { stdout: '1\n', stderr: '', exitCode: 0 },
+        sameWorker: true,
+      });
+    },
+  );
+});

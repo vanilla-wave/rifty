@@ -35,7 +35,7 @@ export interface GuestEntry {
    * of `run` (ADR-0568). Resolves with the exit status (judge it with `exitStatus`).
    */
   runFile(path: string, args: readonly string[]): Promise<number>;
-  /** Host timer `id` expired. */
+  /** Host timer `id` expired; once the run's status is out it runs nothing (the process is gone). */
   fire(id: number): void;
   /** An unhandled rejection the embedder saw: a copy of the reason, or `UNCOPYABLE_REJECTION`. */
   rejection(reason: unknown): void;

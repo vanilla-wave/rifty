@@ -645,6 +645,47 @@ describe('declared: the run ends where runCode does, with its file outcome (comp
   }
 });
 
+describe('nothing of the guest runs after its run has ended (ADR-0568 §3)', () => {
+  // A timer the guest queued fires after the run ended (host timer, in flight); `runCode`
+  // disposes the isolate at the result, a sandbox captures its state after it.
+  const ROWS: Record<string, { code: string; exitCode: number }> = {
+    'a timer queued before an uncaught throw: no output, no file': {
+      code: "require('fs').writeFileSync('w', '1'); setTimeout(() => { console.log('ran'); require('fs').writeFileSync('late', '1') }, 0); throw new Error('x')",
+      exitCode: 1,
+    },
+    'an endless timer queued before an uncaught throw: exit 1 at once, the writes kept': {
+      code: "require('fs').writeFileSync('w', '1'); setTimeout(() => { for (;;) {} }, 0); throw new Error('x')",
+      exitCode: 1,
+    },
+    'a 0 ms timer beside process.exit(3): never runs': {
+      code: "require('fs').writeFileSync('w', '1'); setTimeout(() => require('fs').writeFileSync('late', '1'), 0); process.exit(3)",
+      exitCode: 3,
+    },
+  };
+  for (const [label, { code, exitCode }] of Object.entries(ROWS)) {
+    carrier(label, async () => {
+      const o = nodeSequence([{ files: { 't.js': code }, run: ['t.js'] }])[0];
+      expect(o?.exitCode).toBe(exitCode);
+      // The same files every time: the 0 ms timer was kept only sometimes before.
+      for (let i = 0; i < 3; i++) {
+        const sb = await createSandbox();
+        try {
+          await sb.writeFile('t.js', code);
+          const r = await sb.exec('t.js', { timeoutMs: 5000 });
+          expect({ exitCode: r.exitCode, termination: r.termination, stdout: r.stdout }).toEqual({
+            exitCode,
+            termination: undefined,
+            stdout: o?.stdout,
+          });
+          expect(await tree(sb)).toEqual(o?.files);
+        } finally {
+          await sb.destroy();
+        }
+      }
+    });
+  }
+});
+
 describe('limits are loud (scenario 8, I6)', () => {
   carrier('per-file limit on host ops, one state cap for host writes and run results', async () => {
     const sb = await createSandbox({ maxFileBytes: 1024, maxFsBytes: 64 * 1024 });
