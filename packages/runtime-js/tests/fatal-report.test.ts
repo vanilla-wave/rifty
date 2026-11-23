@@ -295,3 +295,46 @@ it('a non-enumerable `cause` accessor prints `[cause]: [Getter]` and never runs'
   expect(report).toMatch(/\{\n {2}\[cause\]: \[Getter\]\n\}/u);
   expect(Reflect.get(globalThis, '__riftyCauseRan')).toBeUndefined();
 });
+
+/** Arrays with holes and extra keys as prop values, at any depth (generator vs live Node). */
+function arrayValueSource(seed: number): string {
+  let s = seed;
+  const next = (n: number) => {
+    s = (s * 1103515245 + 12345) >>> 0;
+    return s % n;
+  };
+  const array = (): string => {
+    const length = [0, 1, 2, 3, 5][next(5)] as number;
+    const parts = [`const a = new Array(${length});`];
+    for (let i = 0; i < length; i += 1) if (next(3) > 0) parts.push(`a[${i}] = ${next(10)};`);
+    const keys = ["'-1'", "'1.5'", "'x'", "'a-b'", "Symbol('s')"];
+    for (let k = next(3); k > 0; k -= 1) parts.push(`a[${keys[next(keys.length)]}] = ${next(10)};`);
+    return `(() => { ${parts.join(' ')} return a; })()`;
+  };
+  const value = (depth: number): string => {
+    const pick = depth === 0 ? 0 : next(3);
+    if (pick === 0) return array();
+    if (pick === 1) return `{ k: ${value(depth - 1)} }`;
+    return `[${value(depth - 1)}]`;
+  };
+  return `const e = new Error('x');\ne.p = ${value(next(4))};\nthrow e;\n`;
+}
+
+it('120 generated array-valued props: Node bytes but the header', async () => {
+  const wrong: string[] = [];
+  let extraKeys = 0;
+  for (let seed = 1; seed <= 120; seed += 1) {
+    const source = arrayValueSource(seed);
+    const { node, rifty } = await againstNode(source);
+    expect(node).toMatch(/^Error: x\n/mu);
+    if (/'-1'|'1\.5'|x: |'a-b'|Symbol\(s\)/u.test(node)) extraKeys += 1;
+    // Line breaking of nested values is rifty's declared layout: compare the content.
+    const flat = (text: string) => text.replace(/\s*\n\s+(?!at )/gu, ' ');
+    const expected = node.slice(node.indexOf('\n\n') + 2);
+    if (flat(rifty) !== flat(expected))
+      wrong.push(`${source}\n--- node\n${node}\n--- rifty\n${rifty}`);
+  }
+  expect(wrong.slice(0, 3)).toEqual([]);
+  // Not vacuous: the programs die of the generated error, extra keys included.
+  expect(extraKeys).toBeGreaterThan(40);
+}, 300_000);
