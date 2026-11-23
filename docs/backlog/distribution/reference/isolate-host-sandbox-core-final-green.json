@@ -2,8 +2,8 @@
   "overall_verdict": "concern",
   "merge_call": "Final+GREEN PASS re-bound at 4c2878684 (landing verdict); merge only on green PR CI at HEAD after CLOSE.",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "4c2878684123c8c21c75f053223b8d625e13b131",
-  "unit_goal_source": "docs/backlog/distribution/isolate-host-sandbox-core.md (ready, re-cut 2026-11-22 ×4; Acceptance 1 = docs/backlog/distribution/isolate-host-sandbox-acceptance.md rows 1-14); Contract+RED PASS @ 16b7ab607; BASE 50c9d8bf1; verify passes c505b857f -> 30c8c1ff1 -> 525aaf075; r4 at c0ad781f2; r5 at d78411460; r6 at 7650df442; r7 at 214bbf1c4; r8 at ebecf5eb7; r9 at 4ea5736b5; this pass 4ea5736b5..4c2878684 (hostile gone carriers, tests + docs) (merges of main 11b9397ee: #418 codec, #416, #420); goal docs/backlog/epics/isolate-host-live-sandbox/goal.md",
+  "reviewed_sha": "a59996a0ce511330d6a56adfbac03f0642d53a88",
+  "unit_goal_source": "docs/backlog/distribution/isolate-host-sandbox-core.md (ready, re-cut 2026-11-22 ×4; Acceptance 1 = docs/backlog/distribution/isolate-host-sandbox-acceptance.md rows 1-14); Contract+RED PASS @ 16b7ab607; BASE 50c9d8bf1; verify passes c505b857f -> 30c8c1ff1 -> 525aaf075; r4 at c0ad781f2; r5 at d78411460; r6 at 7650df442; r7 at 214bbf1c4; r8 at ebecf5eb7; r9 at 4ea5736b5; r10 at 4c2878684; this pass 85be2cd39..a59996a0c (Linux CI test-only fix) (merges of main 11b9397ee: #418 codec, #416, #420); goal docs/backlog/epics/isolate-host-live-sandbox/goal.md",
   "unit_residuals": [],
   "goal_residuals": [
     {
@@ -643,13 +643,6 @@
       "findings": [
         {
           "severity": "concern",
-          "location": "packages/isolate-host/tests/sandbox-faults.test.ts:1102",
-          "evidence": "Z4 run 1: \"a destroy in flight leaves no hold on the run: its state is collectable\" failed; rerun of the same mutant 124/124",
-          "summary": "The --expose-gc collectability carrier failed once under an unrelated mutant: possibly GC-timing flaky; watch it on CI.",
-          "authority": ""
-        },
-        {
-          "severity": "concern",
           "location": "packages/isolate-host/src/pool.ts:501",
           "evidence": "",
           "summary": "If the state encode throws at placement after #placeFresh spawned a new worker for it, that worker stays idle and unsettled until another settle; harmless (one warm worker) but not ended.",
@@ -680,6 +673,13 @@
           "location": "tools/checks/esbuild-legacy-retirement.mjs:105",
           "evidence": "scratch at 1ce7263df: isolate-host 711/711; at 4ea5736b5: workbench build + esbuild-legacy-retirement pass, runtime-js fs.test.ts 33/33",
           "summary": "Re-pin is the built output; the fs.test.ts cast is type-only.",
+          "authority": ""
+        },
+        {
+          "severity": "nit",
+          "location": "packages/isolate-host/tests/sandbox-faults.test.ts:1120",
+          "evidence": "scratch at a59996a0c: -t \"every end of a run|no hold on the run\" 7/7 pass",
+          "summary": "PR-4: every-end exit/refused runs now live 1.5 s (same end kinds); the GC hold check polls gc()+100 ms up to 20x and takes the min against the unchanged 8 MiB bound — a real hold never drops, so it still discriminates. GC-flake concern closed.",
           "authority": ""
         }
       ]
