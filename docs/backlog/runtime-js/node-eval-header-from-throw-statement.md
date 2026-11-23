@@ -10,7 +10,7 @@ code: [packages/runtime-js/src/module-loader/loader.ts]
 
 ## Context
 
-Pre-existing on main; the file-entry report prints no synchronous header since 2026-11-22 (ADR-0445 line), the `-e` projection still does. Found by the PR #421 external review (round 1, Node v24.16.0), outside the scope of
+Pre-existing on main; the file-entry report prints no synchronous header since 2026-11-22 (ADR-0445 line), the `-e` projection still does. Found by the PR #421 external review (round 1, Node v24.16.0), not in the corpus of
 ADR-0571; not reproduced by this capture beyond the reviewer's run.
 
 ## Challenge

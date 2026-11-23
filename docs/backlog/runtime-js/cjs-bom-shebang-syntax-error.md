@@ -10,7 +10,7 @@ code: [packages/runtime-js/src/module-loader/cjs.ts]
 
 ## Context
 
-Node strips the BOM, then a hashbang is only valid at offset 0; rifty strips both. Found by the PR #421 external review (round 1, Node v24.16.0), outside the scope of
+Node strips the BOM, then a hashbang is only valid at offset 0; rifty strips both. Found by the PR #421 external review (round 1, Node v24.16.0), not in the corpus of
 ADR-0571; not reproduced by this capture beyond the reviewer's run.
 
 ## Challenge

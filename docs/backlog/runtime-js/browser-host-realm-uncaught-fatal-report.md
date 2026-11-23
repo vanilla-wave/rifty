@@ -12,7 +12,7 @@ code: [packages/runtime-js/src/internal/event-loop-keepalive.ts, packages/kernel
 
 PR #421 (ADR-0571) moved this path to the runtime's report
 twice and rolled it back after two regressions (ADR-0445 2026-11-23 lines);
-the goal map keeps it as item 5d with an `owner: user` question.
+the user accepted and deferred it (below).
 
 Facts established:
 - **Who writes the report.** main: the browser's default report — the Worker
@@ -46,8 +46,13 @@ the parent's default report is suppressed exactly when the child reports (one
 report, one exit, ADR-0340 intact)? E.g. never cancel in the trap; the parent
 holds its print until the child's report or its absence is known — a
 coordination mechanism, so `docs/process/rules/fault-classes.md` §Class-kill
-inventory first. User decision pending (goal map 5d: accept and defer, or a
-separate goal).
+inventory first.
+
+2026-11-23 — user, to the manager's question (ADR-0571 "The user's words"):
+«ок, не выглядит серьезным, если не так, поправь» — accepted and deferred.
+Owner: runtime-js (browser-host fatal path). Trigger: an agent or embedder
+report of a browser-host fatal that differs from Node in a way that blocks a
+fix, or the next change to the realm trap (ADR-0340).
 
 ## Challenge
 

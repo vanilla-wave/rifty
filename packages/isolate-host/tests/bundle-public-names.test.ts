@@ -23,7 +23,9 @@ for (const id of builtinModules) {
     if (typeof value === 'function' && /^[A-Z]/u.test(value.name)) publicNames.add(value.name);
 }
 
-// The npm `buffer` polyfill inside a Workbench dependency, not the guest's `buffer`.
+// isomorphic-git's bundled npm `buffer` in a Workbench chunk, not the guest's:
+// `Buffer.name`, `constructor.name` and a method frame read `Buffer` on every
+// host (corpus row `throw-in-buffer-method`).
 const VENDOR = /required by `buffer` v5\.x/u;
 
 function renamed(file: string): string[] {

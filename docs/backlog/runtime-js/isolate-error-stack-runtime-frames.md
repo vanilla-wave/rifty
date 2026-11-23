@@ -10,7 +10,7 @@ code: [packages/isolate-guest/src/guest/entry.ts, packages/runtime-js/src/builti
 
 ## Context
 
-Found by the PR #421 external review (round 1), outside the scope of
+Found by the PR #421 external review (round 1), not in the corpus of
 ADR-0571 (its frame contract covers the fatal report only; that report
 already drops runtime frames — compat process.md "Fatal error stderr bytes").
 Reproduced by this capture (Node v24.16.0 vs `runCode` from
@@ -34,7 +34,7 @@ Two gaps: rifty's runtime frames (bundle name and line leak the host; they
 also spend the `Error.stackTraceLimit` budget), and the user frame named
 `at eval (…)` / `at eval (<anonymous>)` where Node has `at [eval]:1:15`.
 Node's `node:internal` frames have no rifty counterpart (forging them is a
-rejected route in the goal). Other hosts (no-COI SDK, COI Workbench) not
+rejected route, ADR-0571). Other hosts (no-COI SDK, COI Workbench) not
 checked by this capture. No compat row yet. Fault class: `sibling-drift`
 between the fatal-report frame projection and the guest-visible `stack`.
 
@@ -47,8 +47,8 @@ lying). Settles by Node's observable `stack` + a realm-wide hook's cost
 ## Acceptance
 
 1. Isolate parity (`packages/isolate-host/tests`, oracle live `node -e`):
-   `console.error(err)` and `console.log(err.stack)` equal Node's under the
-   goal's `node:*` frame projection — user frame `at [eval]:1:15`, no
+   `console.error(err)` and `console.log(err.stack)` equal Node's under
+   ADR-0571's P1 projection (Node's `node:*` frames deleted) — user frame `at [eval]:1:15`, no
    `rifty-isolate-guest.js` frame. → scenario
 
 External review round 5 of PR #421 (2026-11-23, not reproduced here): in the

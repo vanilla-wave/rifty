@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `runCode` fatal frames: a `setImmediate`, `nextTick`, cleared-interval or EventEmitter-listener throw and the caller of `new Function` read Node's names and columns (`Immediate.<anonymous>`, `EventEmitter.onX`); a throwing `stack` getter prints Node's report. Still not Node's: the `eval at …` origin of string-compiled code (compat process.md "Fatal error stderr bytes").
 - Sandbox: an operation whose promise has not settled when `destroy()` is called rejects `ERR_ISOLATE_HOST_SANDBOX_DESTROYED` (a host op or a run already done could still resolve with the destroyed sandbox's data a microtask later).
 - Sandbox: a host write refused with `ERR_ISOLATE_HOST_SANDBOX_FULL` restores the times of the file and of every directory above it too (the rollback left new `mtime`/`ctime` for the next run to see).
 - Sandbox (external review round 3): `destroy()` waits for every call the sandbox placed through one event registered when the call is created (a destroy between a run's result and `exec`'s continuation returned while the isolate still ran); an isolate still on its worker 1 s after its result retires that worker (a worker that never reports `gone` holds nothing forever); a call that ends stopped sends its terminal frame and `gone` in one write (warm `runCode` under load no longer spawns cold workers for it); a request that cannot be sent whole rejects its call with the error (docs said rerun).

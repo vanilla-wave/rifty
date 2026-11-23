@@ -51,7 +51,9 @@ Probe 2026-11-23 (ADR-0571 carrier row `esm-throw`,
 `const a = 1;\nthrow new Error('esm');` as `main.mjs`, no-COI SDK and COI,
 Node v24.16.0): rifty `at eval (<root>/main.mjs:7:7)` (COI also `at
 Generator.next (<anonymous>)`), Node `at file://<root>/main.mjs:2:7` — line +5,
-the frame named `eval`, a path instead of a `file://` URL. Deferred from that
-goal (manager decision; compat modules.md "ESM stack positions", process.md
-"Fatal error stderr bytes").
+the frame named `eval`, a path instead of a `file://` URL. Deferred from PR #421
+by the manager (not the user's words; compat modules.md "ESM stack positions",
+process.md "Fatal error stderr bytes"). Owner: runtime-js (ESM loader
+rewrite). Trigger: an agent or source-map consumer misled by an ESM frame, or
+the next change to the ESM rewrite.
 

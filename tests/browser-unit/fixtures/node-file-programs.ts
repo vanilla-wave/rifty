@@ -371,6 +371,15 @@ throw e;
     argv: ['main.js'],
   },
   {
+    // The guest's Buffer names: a bundler rename (`Buffer2`) would show here.
+    name: 'throw-in-buffer-method',
+    files: {
+      'main.js':
+        "const b = Buffer.from('a');\nconsole.log(Buffer.name, b.constructor.name);\nBuffer.prototype.boom = function () {\n  throw new Error('buf');\n};\nb.boom();\n",
+    },
+    argv: ['main.js'],
+  },
+  {
     name: 'throw-in-direct-eval',
     files: { 'main.js': 'eval(\'function f() {\\n  throw new Error("ev");\\n}\\nf();\');\n' },
     argv: ['main.js'],

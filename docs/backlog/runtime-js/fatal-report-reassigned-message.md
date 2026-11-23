@@ -10,7 +10,7 @@ code: [packages/runtime-js/src/builtins/fatal-report.ts]
 
 ## Context
 
-Node's inspect rebuilds the header when `message` is no longer in `stack`; rifty prints `stack` as captured. Found by the PR #421 external review (round 1, Node v24.16.0), outside the scope of
+Node's inspect rebuilds the header when `message` is no longer in `stack`; rifty prints `stack` as captured. Found by the PR #421 external review (round 1, Node v24.16.0), not in the corpus of
 ADR-0571; not reproduced by this capture beyond the reviewer's run.
 
 ## Challenge

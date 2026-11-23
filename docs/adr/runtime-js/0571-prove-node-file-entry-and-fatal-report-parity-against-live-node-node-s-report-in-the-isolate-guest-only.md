@@ -3,7 +3,7 @@
 Status: Accepted
 Date: 2026-11
 
-> TL;DR: `node <file>` gets Node's entry identity on every host, proven row by row against live Node; Node's fatal report (no header) prints in the isolate guest only, the browser hosts keep main's fatal text, and every row that is not Node's bytes is an exact pin with a named compat row.
+> TL;DR: `node <file>` gets Node's entry identity on the no-COI SDK and the COI Workbench, proven row by row against live Node; Node's fatal report (no header) prints in the isolate guest only, the browser hosts keep main's fatal text, and every row that is not Node's bytes is an exact pin with a named compat row.
 
 ## Context
 
@@ -18,7 +18,8 @@ and the browser lifecycle each failed review more than once and were narrowed
 
 ## Decision
 
-1. **Entry identity, every host.** A CommonJS entry is Node's main module
+1. **Entry identity** (proven on the no-COI SDK and the COI Workbench; the
+   isolate carrier runs files `require`d from `-e`, no entry row). A CommonJS entry is Node's main module
    (`require.main`, `process.mainModule`, `id` `.`, `parent` null),
    `require.cache` is the live record map, the wrapper receives Node's five
    arguments, an ES module entry reads `import.meta.main` and Node's
@@ -39,7 +40,13 @@ and the browser lifecycle each failed review more than once and were narrowed
    output pinned in `node-file-pins.json`, which must still differ from Node;
    every pinned row is a named compat row (process.md "Fatal error stderr
    bytes", modules.md, isolate-host.md). Every row asserts no Node-format
-   header (`NODE_HEADER`).
+   header (`NODE_HEADER`). The fatal corpus holds one row per way rifty calls
+   user code (timer, interval, immediate, `nextTick`, microtask, promise
+   reaction, emitter listener, fs callback, `new Function`, direct and
+   indirect `eval`): frame names, lines, columns. A builtin's name is the
+   source name Node prints: `packages/isolate-host/tests/bundle-public-names.test.ts`
+   fails on a bundler-renamed Node builtin name (`EventEmitter2`) in the guest
+   bundle and the Workbench's (PR #425).
 3. **Node's fatal report in the isolate guest only** (ADR-0445 2026-11-23
    lines): `builtins/fatal-report.ts` behind one switch the guest entry calls
    (`installNodeFatalReport()`); the no-COI SDK and the COI Workbench print
@@ -81,18 +88,25 @@ point); forging Node's `node:internal` frames (no fake implementation).
 
 ## Not the user's words
 
-Manager's reading, 2026-11-23, not the user's words: two isolate frame
-differences are outside the report's frame contract — `RDY-6`: a difference
+Manager's reading, 2026-11-23, not the user's words (the string-compiled
+class widened to indirect `eval` and `new Function` after PR #425's mechanism
+rows): two classes of isolate frame difference are outside the report's frame contract — `RDY-6`: a difference
 is a user fork only when it materially affects the requested value, and the
 value is a report whose place is the first frame and whose user frames stand
 at Node's line, column and name, which holds in both:
 - an `[eval]` frame below a callback or catch that Node's 10-frame
   `Error.stackTraceLimit` cuts after its own `node:internal` frames — a real
-  `-e` frame, one more at the bottom (rows `rethrow-in-catch`,
-  `throw-in-callback`; `backlog/runtime-js/fatal-report-eval-frame-beyond-node-limit`);
-- a direct `eval` frame's origin without the call's `:line:col` — the eval'd
-  code's own frame keeps its position (row `throw-in-direct-eval`;
-  `backlog/runtime-js/fatal-report-direct-eval-call-position`).
+  `-e` frame, one more at the bottom (e.g. rows `rethrow-in-catch`,
+  `throw-in-callback`, `throw-in-emitter-listener`; `backlog/runtime-js/fatal-report-eval-frame-beyond-node-limit`);
+- code compiled from a string: its own frame and every file frame are Node's,
+  but the `eval at …` origin lacks the compile site's position — direct and
+  indirect `eval`: V8 prints none for a caller itself compiled from a string,
+  as every rifty CJS module is (rows `throw-in-direct-eval`,
+  `throw-in-indirect-eval`; `backlog/runtime-js/fatal-report-direct-eval-call-position`);
+  `new Function`: the file too — rifty's cause, not V8's: the constructor is
+  routed through a helper so `import()` works in the body, and V8 names the
+  helper as the origin; a fix needs its own contract (row
+  `throw-in-new-function`; `backlog/runtime-js/new-function-eval-origin`).
 
 Also not the user's: the browser-host fatal path's rollbacks to main (review
 rounds 4 and 5, ADR-0445 2026-11-23) were options the manager decided in

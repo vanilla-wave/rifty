@@ -10,7 +10,7 @@ code: [packages/isolate-guest/src/guest/entry.ts, packages/isolate-guest/src/con
 
 ## Context
 
-Found by the PR #421 external review (round 1), outside the scope of
+Found by the PR #421 external review (round 1), not in the corpus of
 ADR-0571; declared ⚠️ in compat isolate-host.md
 "`unhandledRejection` listener arguments", no backlog item until now.
 Reproduced by this capture (Node v24.16.0 vs `runCode` from

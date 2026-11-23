@@ -1,7 +1,7 @@
 ---
 area: runtime-js
 status: draft
-title: "A direct `eval` frame names its module without the call's `:line:col`"
+title: "A direct or indirect `eval` frame names its module without the call's `:line:col`"
 created: 2026-11-23
 why: A CommonJS module is itself eval-compiled in rifty, so V8 records a direct `eval`'s origin as the module's sourceURL without a position; Node prints `eval at <anonymous> (<file>:1:1)`
 sources: [docs/public/compat/process.md, docs/adr/runtime-js/0450-project-vm-script-offsets-through-one-owned-stack-hook.md]
@@ -16,8 +16,12 @@ Error("ev");\n}\nf();')` in `main.js`; pins in
 <anonymous> (<root>/main.js), <anonymous>:2:9)`, Node v24.16.0 `(eval at
 <anonymous> (<root>/main.js:1:1), <anonymous>:2:9)`. The frame of the eval'd
 code keeps its own position; only the call site's position is missing.
-Accepted as outside the fatal report's frame contract by the manager's reading
-(ADR-0571, 2026-11-23), not the user's words. Same on `err.stack` (compat
+Same for an indirect `(0, eval)(…)` (row `throw-in-indirect-eval`: `(eval at
+<anonymous> (<root>/main.js), <anonymous>:1:7)`, Node `(… (<root>/main.js:1:10),
+…)`). V8 prints no call position when the calling script is itself compiled
+from a string, as every rifty CJS module is (a browser realm has no other
+compile path). Accepted as outside the fatal report's frame contract by
+the manager's reading (ADR-0571, 2026-11-23), not the user's words. Same on `err.stack` (compat
 modules.md "CJS stack positions").
 
 Owner: runtime-js (CJS factory / fatal report); trigger: a CJS compile path

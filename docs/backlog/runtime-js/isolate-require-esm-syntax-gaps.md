@@ -10,7 +10,7 @@ code: [packages/runtime-js/src/internal/posix-file-url.ts, packages/runtime-js/s
 
 ## Context
 
-Found by the PR #421 external review (round 1), outside the scope of
+Found by the PR #421 external review (round 1), not in the corpus of
 ADR-0571. Reproduced by this capture: Node v24.16.0 vs
 `runCode` from `packages/isolate-host/dist` (built 2026-11-22 21:14, no later
 source commit before HEAD f7710274d). Each program writes the file, then
@@ -37,10 +37,13 @@ reached by `require` in the isolate hits it, not only detected `.js` files
 Cause (read, not instrumented): `URLConstructor = globalThis.URL` is captured
 at runtime-js module load, where the isolate has no `URL` (ceiling global,
 installed after load, `web-shim.ts` `CEILING_GLOBALS`); the ESM path builds a
-file URL with it. Same mechanism as the goal map's open question on the
-isolate ESM entry (`import.meta.url`). Fault class: `sibling-drift` — one
+file URL with it. Same mechanism as the isolate ESM entry's ❌ (compat
+isolate-host.md "ES modules"). Fault class: `sibling-drift` — one
 runtime path behaves per host on a host-provided global; the leaked internal
 name is not a named gap.
+
+Owner: runtime-js with isolate-guest (the ceiling `URL`). Trigger: the
+isolate ESM ❌ lifting, or an agent run that hits `URLConstructor`.
 
 Compat: no row in `docs/public/compat/isolate-host.md` for a required ESM
 `.js`; to add with the fix or as ❌ when the gap is declared.

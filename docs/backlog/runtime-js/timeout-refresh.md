@@ -10,7 +10,7 @@ code: [packages/runtime-js/src/builtins/timers.ts]
 
 ## Context
 
-Found by the PR #421 external review (round 1), outside the scope of
+Found by the PR #421 external review (round 1), not in the corpus of
 ADR-0571. Reproduced by this capture:
 
 ```

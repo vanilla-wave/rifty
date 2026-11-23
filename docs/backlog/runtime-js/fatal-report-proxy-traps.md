@@ -10,7 +10,7 @@ code: [packages/runtime-js/src/builtins/fatal-report.ts, packages/runtime-js/src
 
 ## Context
 
-Found by the PR #421 external review (round 3), outside the scope of
+Found by the PR #421 external review (round 3), not in the corpus of
 ADR-0571. Reproduced by this capture (2026-11-23):
 `H = { <trap>(){ for(;;); } }`, `P = new Proxy({a:1}, H)`; shapes prop
 `e = new Error('boom'); e.p = P; throw e`, cause `throw new Error('boom',
