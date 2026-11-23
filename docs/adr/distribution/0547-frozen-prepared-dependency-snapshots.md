@@ -98,7 +98,7 @@ The refusal text names only the lockless exit.
   intact copy of it`; replay never downloads substitutes, so the lock cannot be
   reinstalled exactly there; exit: delete `package-lock.json` and install again
   (re-resolves, versions may change). A host-only replay-snapshot exit was
-  dropped from the text (it fails on a changed project, §Consequences
+  dropped from the text (it can conflict on a changed project, §Consequences
   2026-11-23 PR #426): its route lives in §Consequences. Eddy-staged lock (no
   file on disk): the cache lost its intact copy after Eddy seeded it; exit: run
   install again. Each exit is executed by its carrier (Vite node carriers,

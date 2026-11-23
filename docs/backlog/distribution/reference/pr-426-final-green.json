@@ -1,9 +1,9 @@
 {
   "overall_verdict": "pass",
-  "merge_call": "Verify pass #2 on ef6051a0f: S2 and the 'no intact' precision fix hold; Eddy error keeps the original as cause; new backlog draft passes the RDY-6 check with two minor edits advised. No blocker. Merge on green PR CI at HEAD after re-binding the committed pr-426-final-green.json to this verdict at the HEAD sha (REV-8, PR-6).",
+  "merge_call": "Verify pass #3 on 4a2aa77a1 (narrow delta ef6051a0f..4a2aa77a1: ADR-0547 §Consequences PR #426 paragraph, substitution.ts, draft edits, verdict rebind): both round-3 findings hold; no blocker. Merge on green PR CI at HEAD after re-binding the committed pr-426-final-green.json to this verdict at the HEAD sha (REV-8, PR-6).",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "ef6051a0fd3427da93150769f060b19434ba4ba3",
-  "unit_goal_source": "PR #426 standalone unit, no backlog contract; verify pass #2 after cross-review round 2 reception (§Review run step 2). Authority: user decisions on ADR-0547 (PR #388) «отправь сессию переименовать на frozen» and «давай тоже сделаем» (docs/adr/distribution/0547-frozen-prepared-dependency-snapshots.md:79-108); manager error-text rule (each named exit runnable by its reader; host-only exits labelled) and manager decision S2 (REV-7: drop the Host exit sentence and hostShadowReplayCacheMiss; SDK reads the terminal text without `npm: `; exact-reinstall route with its condition in ADR-0547 §Consequences; READMEs quote verbatim; SDK exit proven in packed Chromium via SDK fs delete + toolchain.install); reason shadow-replay-cache-miss kept by manager. Baseline: PR #388 behavior at BASE 23ed6b44556c. Delta reviewed: 7ea60ff0b..ef6051a0f (full unit 23ed6b44556c..ef6051a0f).",
+  "reviewed_sha": "4a2aa77a1f0d8b14cd3de0f50629b1ff97ca70cc",
+  "unit_goal_source": "PR #426 standalone unit, no backlog contract; verify pass #3 after cross-review round 3 reception (manager-accepted: ADR condition restated by the ADR-0420 applySnapshot conflict rule, carried facts named by carrier, no refusal->apply order asserted, tests unchanged; Eddy re-thrown error without cause) (§Review run step 2). Authority: user decisions on ADR-0547 (PR #388) «отправь сессию переименовать на frozen» and «давай тоже сделаем» (docs/adr/distribution/0547-frozen-prepared-dependency-snapshots.md:79-108); manager error-text rule (each named exit runnable by its reader; host-only exits labelled) and manager decision S2 (REV-7: drop the Host exit sentence and hostShadowReplayCacheMiss; SDK reads the terminal text without `npm: `; exact-reinstall route with its condition in ADR-0547 §Consequences; READMEs quote verbatim; SDK exit proven in packed Chromium via SDK fs delete + toolchain.install); reason shadow-replay-cache-miss kept by manager. Baseline: PR #388 behavior at BASE 23ed6b44556c. Delta reviewed: ef6051a0f..4a2aa77a1 (full unit 23ed6b44556c..4a2aa77a1).",
   "unit_residuals": [],
   "goal_residuals": [],
   "goal_complete": false,
@@ -29,7 +29,7 @@
       "source": "acceptance",
       "trace": "ADR-0547",
       "status": "pass",
-      "citation": "packages/npm-client/src/internal/shadow/substitution.ts:274; packages/workbench/src/workers/no-coi-frozen-vite-install.contract.test.ts:161-169,230-260; packages/workbench/src/workers/no-coi-frozen-install.contract.test.ts:149-150; tests/integration/no-coi-snapshot-browser-proof.mjs:213-218; /tmp/frozen-packed4.log:205-206",
+      "citation": "packages/npm-client/src/internal/shadow/substitution.ts:270; packages/workbench/src/workers/no-coi-frozen-vite-install.contract.test.ts:161-169,230-260; packages/workbench/src/workers/no-coi-frozen-install.contract.test.ts:149-150; tests/integration/no-coi-snapshot-browser-proof.mjs:213-218; /tmp/frozen-packed4.log:205-206",
       "note": ""
     },
     {
@@ -41,19 +41,19 @@
       "note": ""
     },
     {
-      "row": "ADR-0547 §Consequences (PR #426) condition: replay-profile snapshot applies without force only on an unchanged project and then toolchain.install is byte-exact; package.json edit or whitespace-only lock change conflicts; force reverts the edit",
+      "row": "ADR-0547 §Consequences (PR #426): replay route application follows the ADR-0420 applySnapshot conflict rule (default conflict, force overwrites); carried facts only: untouched applied tree applies without force and install is byte-exact (vitest + Chromium); package.json edit or whitespace-only lock change conflicts and force reverts the package.json edit (vitest)",
       "source": "acceptance",
       "trace": "ADR-0547",
       "status": "pass",
-      "citation": "docs/adr/distribution/0547-frozen-prepared-dependency-snapshots.md:70-76; packages/workbench/src/workers/no-coi-frozen-vite-install.contract.test.ts:311-347; tests/integration/no-coi-snapshot-browser-proof.mjs:239-249",
+      "citation": "docs/adr/distribution/0547-frozen-prepared-dependency-snapshots.md:70-78; docs/adr/distribution/0420-apply-no-coi-snapshots-through-the-sdk.md:17; packages/workbench/src/workers/no-coi-frozen-vite-install.contract.test.ts:311-347; tests/integration/no-coi-snapshot-browser-proof.mjs:239-249",
       "note": ""
     },
     {
-      "row": "Eddy-staged lock: true statement ('lost its intact copy after Eddy seeded it'), exit 'run install again' executed (installs from Eddy, zero registry reads); original error kept as cause",
+      "row": "Eddy-staged lock: true statement (lost its intact copy after Eddy seeded it), exit run install again executed (installs from Eddy, zero registry reads); re-thrown error carries no cause, so the disk text with its delete-package-lock.json advice is not attached on this path",
       "source": "acceptance",
       "trace": "ADR-0547",
       "status": "pass",
-      "citation": "packages/npm-client/src/internal/shadow/substitution.ts:282-294; packages/npm-client/src/installer.ts:413; services/eddy/tests/client-roundtrip.test.ts:151-154,1196-1197,1213-1236",
+      "citation": "packages/npm-client/src/internal/shadow/substitution.ts:242-249,278-289; packages/npm-client/src/installer.ts:413; services/eddy/tests/client-roundtrip.test.ts:151-154,1196-1197,1213-1236",
       "note": ""
     },
     {
@@ -68,16 +68,8 @@
   "axes": [
     {
       "axis": "Completeness",
-      "verdict": "concern",
-      "findings": [
-        {
-          "severity": "concern",
-          "location": "docs/backlog/distribution/sdk-install-error-structured-reason.md:15-25",
-          "evidence": "packages/runtime-js/src/protocol.ts:67-76 defines SerializedRuntimeError (host-fs.ts:8 only imports it); toolchain owner posts serializeRuntimeError (packages/runtime-js/src/worker-fs-rpc.ts:209-232, no-coi-toolchain-owner.ts:437); git ls-files docs/backlog (non-reference) -> playground/structured-execution-diagnostics.md is the only neighbour",
-          "summary": "RDY-6 written-result check of the new draft: facts hold (fields name/message/stack/code/path/feature/cause/effects; reason/packageName dropped; unchanged since BASE), dedupe holds. Two edits advised: cite protocol.ts:67 as the type's home instead of host-fs.ts, and name the neighbouring playground/structured-execution-diagnostics (different surface: page PTY diagnostics) in the dedupe line. Owner/trigger present; question correctly agent-owned with ADR on public fields (DEC-1).",
-          "authority": ""
-        }
-      ]
+      "verdict": "pass",
+      "findings": []
     },
     {
       "axis": "Mission and architecture",
@@ -87,7 +79,15 @@
     {
       "axis": "Goal drift",
       "verdict": "pass",
-      "findings": []
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "docs/adr/distribution/0547-frozen-prepared-dependency-snapshots.md:101; packages/rifty/README.md:208-209; packages/workbench/README.md:249-250",
+          "evidence": "",
+          "summary": "The §Decisions line still gives the drop reason as it fails on a changed project and both READMEs say route and its condition: ADR-0547 §Consequences; the paragraph now defers the condition to ADR-0420 and names only carried cases (a deleted lock applies). Reads fine via the citation; changed project is broader than the carried package.json edit.",
+          "authority": ""
+        }
+      ]
     },
     {
       "axis": "Approach cost",
@@ -113,16 +113,23 @@
       "findings": [
         {
           "severity": "concern",
-          "location": "packages/npm-client/src/internal/shadow/substitution.ts:275",
+          "location": "packages/npm-client/src/internal/shadow/substitution.ts:271",
           "evidence": "",
           "summary": "'so this lockfile cannot be reinstalled exactly here' is read by the SDK host too, who does have an exact route (ADR-0547:70-76, unchanged project + replay snapshot). True of the current cache state, and the README points to the route, so advisory; 'with this cache' would be more precise.",
           "authority": ""
         },
         {
           "severity": "concern",
-          "location": "packages/npm-client/src/internal/shadow/substitution.ts:256-280",
+          "location": "packages/npm-client/src/internal/shadow/substitution.ts:252-276",
           "evidence": "",
           "summary": "N4 carried: with several cold shadow pins only the first is named.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "packages/npm-client/src/internal/shadow/substitution.ts:278-289",
+          "evidence": "",
+          "summary": "NOTE carried by manager: the re-thrown Eddy error has a fresh stack and no cause; the original throw site is lost for debugging. Accepted trade-off (the original message carries advice false on the Eddy path).",
           "authority": ""
         }
       ]
