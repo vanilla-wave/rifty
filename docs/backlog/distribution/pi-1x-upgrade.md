@@ -44,7 +44,7 @@ agent-bench core-v1 series shows no lost passes attributable to the upgrade.
 3. Stop mid-batch in Chromium: the skipped call gets an error result, no side effect, next run continues. `tests/browser-unit/agent-core.spec.ts` → ADR-0424
 4. The shared prompt recipe reaches the CLI 1.6.0 wire as the current system message; skills and `project_context` blocks are byte-identical to CLI 1.6.0. `prompt-recipe-parity.test.ts`, `project-resources.test.ts` → ADR-0440
 5. A changed prompt appends one `system` update before the next user message; the wire sends only the current prompt. `prompt-state.test.ts` → ADR-0569
-6. Histories with pi 1.x `system` messages (events, trace, archive) restore through `initialMessages`, including a summary after prompt state. `history.test.ts`, `continuation.fault.test.ts`, browser `agent-core.spec.ts` → ADR-0466
+6. Histories with pi 1.x `system` messages (events, trace) restore through `initialMessages`, including a summary after prompt state. `history.test.ts`, `continuation.fault.test.ts`, browser `agent-core.spec.ts` → ADR-0466
 7. Packed consumer installs, typechecks and builds with pi 1.6.0 tarballs; client bundle budgets hold. `pnpm test:client-bundles` → ADR-0436
 8. core-v1 eval series on 1.6.0 vs a fresh 0.85.1 baseline on the same endpoint/limits; every FAIL classified per `tools/agent-bench/README.md`; a lost pass classed `rifty-runtime`/`rifty-tooling` and caused by the upgrade blocks landing. Summary in `tools/agent-bench/reports/summaries/` → ADR-0472
 
@@ -56,7 +56,7 @@ agent-bench core-v1 series shows no lost passes attributable to the upgrade.
 | Stop × retry backoff | synthetic aborted message dropped, attempt kept omitted | parity `abort-backoff` | → ADR-0473 |
 | provider 429/5xx × retries | attempts persisted then omitted; backoff schedule as CLI | parity `retry-two`, `retry-exhaust`, `partial` | → ADR-0473 |
 | overflow × twice in one episode | one compact-and-continue, then CLI recovery-failed event, `context-exceeded` | parity `overflow-episodes`, `retry-overflow-tail` | → ADR-0569 |
-| archive × history with `system` messages | written and re-read; restore admits them | `history.test.ts`, browser history spec | → ADR-0466 |
+| archive × run with a prompt update | `system` prompt state is not archived (conversation only); restore of trace/event histories admits it | `agent-archive.spec.ts`, `history.test.ts`, browser history spec | → ADR-0466 |
 
 ## Out of scope
 

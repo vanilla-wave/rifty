@@ -54,10 +54,7 @@ test('a session restored from host history archives only its own messages', asyn
   const continued = records.find((row: { text: string }) => !row.text.includes('cookie-saffron'));
   const conversation = JSON.parse(JSON.parse(continued.text).payload);
   expect(conversation.restoredMessageCount).toBe(resumed.restored);
-  // Pi 1.x history records the resumed run's prompt state before the user message.
-  expect(
-    conversation.messages.filter(({ role }: { role: string }) => role !== 'system')[0].role,
-  ).toBe('user');
+  expect(conversation.messages[0].role).toBe('user');
   expect(JSON.stringify(conversation.messages)).toContain('Continue with the same auth');
   const trace = await page.evaluate(
     async (url) => (await import(/* @vite-ignore */ url)).search('cookie-saffron'),

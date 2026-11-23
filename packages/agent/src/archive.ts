@@ -141,9 +141,7 @@ export function createArchive(
         data.messages.some(
           (message) =>
             !message ||
-            !['system', 'user', 'assistant', 'toolResult', 'compactionSummary'].includes(
-              message.role,
-            ) ||
+            !['user', 'assistant', 'toolResult', 'compactionSummary'].includes(message.role) ||
             !Number.isFinite(message.timestamp),
         )
       )
@@ -262,7 +260,8 @@ export function createArchive(
           : event.type === 'retry' && event.phase === 'start' && event.source === 'assistant'
             ? event.message
             : undefined;
-      if (started && message) {
+      // Prompt state (pi 1.x system messages) is re-derived each run, not conversation.
+      if (started && message && message.role !== 'system') {
         conversation.messages.push(structuredClone(message));
         void save();
       }
