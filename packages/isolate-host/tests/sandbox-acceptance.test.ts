@@ -748,7 +748,7 @@ describe("the guest's realm while its state is captured (compat ⚠️ sandbox o
   // intrinsic the codec uses runs after the run's status is out.
   carrier("what it prints there is not the run's output", async () => {
     const code =
-      "const fs = require('fs'); fs.writeFileSync('a', '1'); const original = DataView.prototype.setUint32; DataView.prototype.setUint32 = function (...args) { DataView.prototype.setUint32 = original; console.log('AFTER'); fs.writeFileSync('after', '1'); return Reflect.apply(original, this, args) }";
+      "const fs = require('fs'); fs.writeFileSync('a', '1'); const original = DataView.prototype.setUint32; DataView.prototype.setUint32 = function (...args) { DataView.prototype.setUint32 = original; console.log('AFTER'); console.error('AFTER'); fs.writeFileSync('after', '1'); return Reflect.apply(original, this, args) }";
     const o = nodeSequence([{ files: { 'c.js': code }, run: ['c.js'] }])[0];
     const sb = await createSandbox();
     try {

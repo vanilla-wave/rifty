@@ -169,7 +169,7 @@ hypervisor and deploy stay outside rifty; the consumer supplies the outer bounda
   after a restore (`distribution/isolate-host-fs-snapshot-restore-then-snapshot-peak`); the
   16 383-unit name cap stays reachable from guest code until rifty refuses names over NAME_MAX
   (`vfs/file-names-over-name-max-accepted`).
-- B — done: live sandbox — `createSandbox()` with host binary file ops, `exec` = `node <path>
+- B — delivered (PR #419, #424); the goal `isolate-host-live-sandbox` stays open on one unit, a run's end state captured where the guest's code cannot reach (`distribution/isolate-host-sandbox-capture-outside-guest-realm`): live sandbox — `createSandbox()` with host binary file ops, `exec` = `node <path>
   [args]` with `runCode`'s limits, one sandbox through write → run → error → fix (every run end
   keeps the sandbox; killed runs roll back), `snapshot()` / create-from-snapshot, `destroy()`
   after which no isolate of the sandbox runs and no operation still in flight resolves —

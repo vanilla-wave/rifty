@@ -23,4 +23,4 @@ Owner: distribution (isolate host). Trigger: the next change to `Worker.place`, 
 
 ## Challenge
 
-challenge: 2026-11-23 — none yet (factual capture at the live-sandbox goal's close, ADR-0568)
+challenge: 2026-11-23 — none yet (factual capture, live-sandbox goal, ADR-0568)

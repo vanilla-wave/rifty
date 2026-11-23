@@ -1,0 +1,29 @@
+# Map — isolate-host-live-sandbox
+
+## Items
+
+1. `distribution/isolate-host-sandbox-capture-outside-guest-realm` — draft (PICKUP compiles it,
+   `RDY-1`): a run's end state captured where the guest's code cannot reach, so a guest that broke
+   its own snapshot gets `stateRefused` and the state of before (I1). The closing review of PR #424
+   (2026-11-23) did not accept the reading «the files its own code left» as compatible with I1's
+   letter; the goal closes when this unit lands or the user narrows I1.
+
+## Open questions
+
+None: the `owner: user` question on behavior divergences was answered 2026-11-23 (goal.md `amend:` lines; the second covers the lifecycle class).
+
+## Closes elsewhere
+
+- The `isolate-host-fs-snapshot` goal's residual "a snapshot refuses NUL names and times outside
+  Date" is closed in rifty's fs by this branch: `fs-path.ts` (Node's `nullCheck`) and
+  `fs-times.ts` (utimes as Node 24.16.0) — rifty's FS no longer holds such values.
+
+## Out of scope
+
+- The library template (`createSandbox({ template })` → `NotImplementedError('isolate-host.sandbox-template')`).
+- Web API shims (`URL`, `structuredClone`, web streams, `AbortController`, `EventTarget`): loud ceilings as in `runCode`; their own ROADMAP direction.
+- ESM: an ESM entry or module (`.mjs`, `"type": "module"`, ESM syntax in a typeless `.js`) → `NotImplementedError('isolate-host.esm')` + compat ❌.
+- `exec` options `env`, `cwd`, `stdin` → `NotImplementedError('isolate-host.sandbox-exec-<option>')`; shell syntax (the path is one file path, never parsed).
+- Keeping a killed run's partial writes (whole-run rollback, compat ⚠️); a host-disk directory model (not built, ADR critic only).
+- Text of `node file.js` diagnostics (positions, header, caret, footer, `SyntaxError` shape, `Cannot find module` header): the runtime-js diagnostics goal; pinned ⚠️ here.
+- npm publication; RPC transport; per-tenant worker affinity; `process.exit()` from a microtask and the suite flake (neighbour threads).
