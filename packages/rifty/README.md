@@ -196,6 +196,14 @@ await sandbox.toolchain.applySnapshot({
 });
 ```
 
+The producer's `profile: 'compact'` omits replay archives while retaining prepared
+Vite/esbuild dependencies. Apply, saved open and explicit reapply use the same APIs;
+compact neither writes nor purges the shared replay cache. Update the Workbench
+producer/copied Worker before using v5. Compact promises no reinstall: for Vite 7 with
+its substituted `esbuild`, on a cold shared cache and with the lockfile kept, `npm install`
+fails `EBROKENLOCK`; reinstall exactly from a replay snapshot or a warm cache. Outcomes:
+ADR-0547 §Consequences.
+
 No registry URL is needed. Every application validates the bounded input and
 identities, including same-ID/forced calls. Default conflicts reject before
 payload/cache writes; force replaces only payload targets, including descendants

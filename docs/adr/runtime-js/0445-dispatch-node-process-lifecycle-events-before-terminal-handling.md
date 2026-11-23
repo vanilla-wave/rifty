@@ -187,3 +187,76 @@ sample. Node v24.16.0 facts: evidence §O1–§O3.
   TriggerUncaughtException @v24.16.0 (`ReportFatalException`, then
   `env->Exit(env->exit_code(kGenericUserError))`); proof
   `tests/no-coi/no-coi-fatal-stderr.spec.ts`, `no-coi-process-exit-status.spec.ts`.
+- 2026-11-22 — rule 3's realm-uncaught path: a no-listener error (timer, I/O
+  callback) runs the fatal terminal in the trap at once, as a rejection does,
+  not the default Worker report; the COI kernel child and the no-COI child
+  Worker run it at the entry catch, as the no-COI command does. The terminal
+  prints Node's ReportFatalException shape (`builtins/fatal-report.ts`:
+  inspected error, user frames, trailer; header: see the corrections below). Goal
+  `node-file-entry-parity`; carriers `tests/{no-coi,browser-unit}/node-file-parity.spec.ts`.
+- 2026-11-22 — fatal report header, by construction (manager contract after
+  external review round 1). Node's header is V8's message location. For an
+  unhandled rejection it is `Exception::CreateMessage(error)`: the top frame
+  of the error's own captured stack — rifty prints it when that frame
+  (unfiltered, so no builtin or runtime frame above it) is guest code whose
+  coordinates are Node's: a CJS factory (native lines, line-1 columns
+  projected) or `-e`. ES module frames are shifted, a builtin top frame names
+  V8's own script: none. For a synchronous throw it is the propagating throw
+  statement; no frame, CallSite or source records it (creation ≠ throw: a
+  kept, rethrown, swallowed or caught-by-runtime error differs, and three
+  rule lists failed review), so none is printed. A compile error's is V8's
+  parse position: printed where V8's message names the token acorn stops at
+  (`Unexpected token 'X'`, or the end of input), else none. Carriers:
+  `fatal-header-generator.test.ts` (360 generated programs, a printed header
+  equals Node's), `fatal-report.test.ts`.
+- 2026-11-22 — correction to the line above (manager decision after external
+  review round 2): no header anywhere. Both remaining inferences printed false
+  ones — a rejection's source read from the VFS at report time (a file
+  rewritten since), the error's frame after its `stack` was read (Node then
+  names `node:internal/process/promises`), BOM and frame-like messages
+  shifting the caret; acorn's stop token vs V8's message (`foo((a) });`).
+  The report is the inspected error, frames and trailer; a compile error's
+  stack carries `(rifty parser position: <file>:<line>:<column>)`, named
+  rifty's parser, never Node's caret. A header as Node's needs an
+  engine-level message location: `backlog/runtime-js/sync-uncaught-header-throw-site-source`.
+  Carriers assert none on every row (`NODE_HEADER`); the dispatch origin no
+  longer reaches the report. `-e`'s `[eval]` decoration predates this
+  decision and is not changed (`backlog/runtime-js/node-eval-header-from-throw-statement`).
+- 2026-11-23 — rule 3's realm-uncaught terminal (2026-11-22) runs after the
+  `error` dispatch (a microtask), so a global error another listener cancels
+  stays nonterminal (ADR-0340); before, it ended the process inside the trap
+  (CI on Linux, PR #421; `kernel-process-terminal-drain-real-worker.spec.ts`).
+  The child writes Node's report to its own stderr, sequenced after stdout.
+- 2026-11-23 — correction (manager decision after external review round 3):
+  a CJS compile error is main's again — `ModuleLoadError: Failed to compile
+  CJS module <file>: <message>` — not V8's `SyntaxError` with rifty's parser
+  position: acorn's position and the wrapper-relative `new Function` message
+  both mislead (`backlog/runtime-js/module-compile-error-node-syntax-error`,
+  dead ends). The source is still validated alone (nothing runs, ADR-0450).
+- 2026-11-23 — rollback (manager decision after external review round 4; the
+  browser-process lifecycle is outside the goal, whose target is the isolate):
+  the 2026-11-22 rule-3 realm-uncaught terminal and its 2026-11-23 deferral are
+  withdrawn, and the COI kernel child / no-COI child Worker entry catch is
+  main's again — a global error canceled by any form (`onerror` returning
+  true, `Event.prototype.preventDefault.call`) is nonterminal as ADR-0340
+  says, by main's code. The runtime's report stays where it owns the fatal
+  path: the isolate guest, `NodeProcessExit.fatal` (rejections, the no-COI
+  project command's entry throw), the eval terminal. Realm-uncaught and COI
+  entry-throw rows are declared (compat process.md "Fatal error stderr bytes").
+- 2026-11-23 — round 5 (manager decision, pre-decided rollback): Node's report
+  stays in the isolate guest only, behind one switch its entry calls
+  (`installNodeFatalReport()`); without it every fatal text on the no-COI SDK
+  and the COI Workbench is main's — `NodeProcessExit.fatal`/`listenerThrew`
+  (`err.stack`), the eval terminal, the drain's non-Error rejection
+  (`new Error(String(x))`), `MODULE_NOT_FOUND`'s printed form, the eval
+  projection. Proof: `docs/backlog/runtime-js/reference/pr-421-browser-fatal-matrix.md`.
+  Criterion exceptions, named: rifty's own runtime frame lines (their set
+  follows the runtime's call path — the main-module claim enters the loader
+  below `loader.import`; main prints them only as a leak), and a timer
+  callback's frame name (`Timeout.eval [as _onTimeout]` in `-e` code, main
+  `eval`, Node `Timeout._onTimeout`) from `Timeout#_onTimeout`, Node's `this`
+  — printed in COI `-e` reports and in the no-COI SDK result's `error.stack`
+  (9 cells, external review round 6); `throw this` in a timer callback throws
+  the `Timeout` (Node's object; main the Worker global).
+  Carrier pins read a served runtime location as `<runtime>/packages/<file>`,
+  a rifty-side normalization next to the one path normalization.

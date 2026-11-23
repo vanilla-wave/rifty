@@ -161,9 +161,25 @@ hypervisor and deploy stay outside rifty; the consumer supplies the outer bounda
   embedders are declared ceilings in `docs/public/compat/isolate-host.md`.
 - Worker pool — done: up to 4 calls per long-lived worker, neighbour-safe limits, lost-worker
   reruns; warm call 13 ms, 8 concurrent calls 414 MiB (was 137 ms, 1118 MiB) — ADR-0563 (PR #412).
-- Directions (not fitted): B — live sandbox: host binary file ops, `exec node <path>`; C — FS
-  snapshot export/import + library template; D — agent tool set over the host. Shim
-  completion (URL, structuredClone, web streams, AbortController, EventTarget — requirements'
-  shim list, ceilings in A) rides B. Also: an `AbortSignal` option, a concurrency limit
+- FS snapshot — done: the guest's whole FS as one versioned, template-bound blob; one pure-JS
+  codec in the isolate and the consumer's realm; hostile bytes refused in one linear pass within a
+  budget that bounds the trusted side's memory and time — ADR-0567 (PR #418, #422). Deferred as
+  backlog: keeping `ino` (`distribution/isolate-host-fs-snapshot-keep-ino`), atomic restore over a
+  live FS (`distribution/isolate-host-fs-snapshot-atomic-restore`), the heavier snapshot straight
+  after a restore (`distribution/isolate-host-fs-snapshot-restore-then-snapshot-peak`); the
+  16 383-unit name cap stays reachable from guest code until rifty refuses names over NAME_MAX
+  (`vfs/file-names-over-name-max-accepted`).
+- B — delivered (PR #419); the goal `isolate-host-live-sandbox` stays open on one user question: live sandbox — `createSandbox()` with host binary file ops, `exec` = `node <path>
+  [args]` with `runCode`'s limits, one sandbox through write → run → error → fix (every run end
+  keeps the sandbox; killed runs roll back), `snapshot()` / create-from-snapshot, `destroy()`
+  after which no isolate runs and no op resolves — ADR-0568, ADR-0567 codec (PR #419, #418).
+  Open as backlog: a byte request frame (`distribution/isolate-host-binary-request-frame`),
+  host-write cost O(state) (`distribution/isolate-host-sandbox-write-cost-per-state`), keeping a
+  killed run's writes (`distribution/isolate-host-sandbox-killed-run-partial-writes`).
+- Directions (not fitted): C — library template (`createSandbox({ template })`, a loud gap
+  today); D — agent tool set over the host (sandbox `env`/`cwd`/`stdin`, shell syntax); E — guest
+  Web API shim (URL, structuredClone, web streams, AbortController, EventTarget — requirements'
+  shim list, ceilings in A; ESM entries need `URL` too); F — Node-faithful `node file.js`
+  diagnostics (runtime-js, its own goal). Also: an `AbortSignal` option, a concurrency limit
   (semaphore) and per-tenant worker affinity in `runCode` — the consumer caps concurrency and
   separates tenants by process itself today.

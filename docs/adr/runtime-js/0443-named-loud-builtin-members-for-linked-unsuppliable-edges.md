@@ -72,3 +72,4 @@ and the ADR-0348 note/README row admission wording fixed in place.
 ## Corrections
 
 - 2026-10-20 — child_process.execFileSync added as a named loud member; stock esbuild-wasm chooses it when worker threads are disabled (esbuild-upstream-twin I2).
+- 2026-11-22 — `fs.symlink`/`symlinkSync`/`link`/`linkSync` and `fs.promises.symlink`/`link` added as named loud members; claimed consumer: model-written programs in the isolate sandbox (ADR-0568), which got `TypeError: … is not a function`. The VFS has no links (ADR-0050).

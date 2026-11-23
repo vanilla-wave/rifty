@@ -50,6 +50,33 @@ it('packed tarball installs and runs under plain node', () => {
     stdout: '42\n',
     stderr: '',
     exitCode: 0,
-    exports: ['runCode'],
+    exports: ['createSandbox', 'runCode'],
+  });
+}, 240_000);
+
+it('the packed tarball runs the README sandbox snippet (ADR-0568)', () => {
+  // Reuses the install of the previous case when present; installs otherwise.
+  const app = join(work, 'app');
+  const packDir = join(work, 'pack');
+  const tarball = readdirSync(packDir).find((f) => f.endsWith('.tgz'));
+  expect(tarball).toBeDefined();
+  const readme = readFileSync(join(PACKAGE_DIR, 'README.md'), 'utf8');
+  const snippet = [...readme.matchAll(/```js\n([\s\S]*?)```/g)]
+    .map((m) => m[1] as string)
+    .find((s) => s.includes('createSandbox'));
+  expect(snippet).toContain("import { createSandbox } from '@riftydev/isolate-host';");
+  // The snippet's contract: it leaves `result` (the fixed run) and `pdf` (the bytes it read).
+  writeFileSync(
+    join(app, 'sandbox.js'),
+    `${snippet}\nconsole.log(JSON.stringify({ result, pdf: Buffer.from(pdf).toString('latin1').slice(0, 8) }));\n`,
+  );
+  const out = execFileSync(process.execPath, ['sandbox.js'], {
+    cwd: app,
+    encoding: 'utf8',
+    env: { PATH: process.env.PATH ?? '' },
+  });
+  expect(JSON.parse(out)).toEqual({
+    result: { stdout: expect.any(String), stderr: '', exitCode: 0 },
+    pdf: '%PDF-1.4',
   });
 }, 240_000);

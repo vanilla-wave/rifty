@@ -21,3 +21,7 @@ code: [packages/vfs/src, packages/runtime-js/src/builtins, packages/runtime-js/s
 Observed while diagnosing rooted Vite, then proven non-causal. Cross-reload
 OPFS timestamp durability, ctime, birthtime, and `O_NOATIME` stay out of scope.
 Adding required public VFS fields needs refinement and an ADR before implementation.
+
+## Observed 2026-11-23
+
+In the isolate sandbox (PR #419 external review): reading a file does not advance its `atime`. Oracle caveat: Node v24.16.0 on darwin did not advance it on a read either (reviewer probe; relatime-like mount behaviour) — the oracle is platform- and mount-dependent.

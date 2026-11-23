@@ -8,7 +8,7 @@ import {
   createPackageAcquisitionAuthority,
 } from '../workers/package-acquisition-authority.ts';
 import {
-  type DepSnapshotV3,
+  type DepSnapshot,
   prepareDepSnapshotRestore,
   fetchDepSnapshot as realFetchDepSnapshot,
 } from './dep-snapshot.ts';
@@ -59,7 +59,7 @@ export interface EnsureProjectDepsOptions {
   readonly install?: () => Promise<InstallResult>;
   readonly log: (line: string) => void;
   /** Test seam; defaults to fetch + gunzip + parse. */
-  readonly fetchSnapshot?: (url: string) => Promise<DepSnapshotV3 | null>;
+  readonly fetchSnapshot?: (url: string) => Promise<DepSnapshot | null>;
   /**
    * Drains the realm's OPFS write-through and reports persist failures
    * (ADR-0187 Corrected). NEVER awaited on the boot critical path — it promotes
@@ -121,7 +121,7 @@ export function createTestProjectPackageAcquisitionAuthority(
       },
       planSnapshotRestore: async ({ project, snapshot }) => {
         try {
-          const payload = snapshot.payload as DepSnapshotV3;
+          const payload = snapshot.payload as DepSnapshot;
           const prepared = await prepareDepSnapshotRestore(opts.fsSync, project.root, payload);
           const lockfile =
             payload.lockfile.length === 0

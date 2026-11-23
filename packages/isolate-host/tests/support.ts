@@ -1,8 +1,16 @@
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import type { NodeCliEvalRawOutcome } from '../../../tools/node-parity-runner/src/node-cli-eval.ts';
 
 /** The live oracle: `node -e <code>` by this very Node executable, empty env, fresh cwd. */
@@ -81,11 +89,16 @@ const DIST_INDEX = new URL('../dist/index.js', import.meta.url).href;
  */
 export async function consumer(
   body: string,
-  { entry = DIST_INDEX, naturalExit = false, timeoutMs = 60_000 } = {},
+  {
+    entry = DIST_INDEX,
+    naturalExit = false,
+    timeoutMs = 60_000,
+    flags = [] as readonly string[],
+  } = {},
 ): Promise<{ value: unknown; exitCode: number | null; signal: string | null; ms: number }> {
   const script = `import { execFileSync } from 'node:child_process';
     import { readFileSync } from 'node:fs';
-    const { runCode } = await import(${JSON.stringify(entry)});
+    const { runCode, createSandbox } = await import(${JSON.stringify(entry)});
     const children = () => execFileSync('ps', ['-A', '-o', 'pid=,ppid=,command='], { encoding: 'utf8' })
       .split('\\n').map((l) => /^\\s*(\\d+)\\s+(\\d+)\\s+(.*)$/.exec(l))
       // Workers only: a just-forked \`ps\` still shows its parent's command line until it execs.
@@ -104,7 +117,7 @@ export async function consumer(
     catch (e) { out({ harnessError: String(e && e.stack || e) }); }
     ${naturalExit ? '' : 'process.exit(0);'}`;
   const started = Date.now();
-  const child = spawn(process.execPath, ['--input-type=module', '-e', script], {
+  const child = spawn(process.execPath, [...flags, '--input-type=module', '-e', script], {
     stdio: ['ignore', 'pipe', 'inherit'],
   });
   let stdout = '';
@@ -134,5 +147,60 @@ export function alive(pid: number): boolean {
     return true;
   } catch {
     return false;
+  }
+}
+
+/** Sandbox entries by absolute `/workspace/…` path: file bytes as base64, a directory as `<path>/` → `'dir'`. */
+export type FileTree = Readonly<Record<string, string>>;
+/** One step of a sandbox oracle: write `files` (relative to the workspace), then `node <run…>`. */
+export interface NodeStep {
+  readonly files: Readonly<Record<string, string | Uint8Array>>;
+  readonly run: readonly string[];
+}
+export interface NodeStepOutcome {
+  readonly stdout: string;
+  readonly stderr: string;
+  readonly exitCode: number | null;
+  readonly files: FileTree;
+}
+
+function readTree(root: string, dir: string, out: Record<string, string>): void {
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, e.name);
+    if (e.isDirectory()) {
+      out[`/workspace${path.slice(root.length)}/`] = 'dir';
+      readTree(root, path, out);
+    } else out[`/workspace${path.slice(root.length)}`] = readFileSync(path).toString('base64');
+  }
+}
+
+/**
+ * The live oracle of a sandbox: consecutive `node <path> [args]` processes of
+ * this very Node executable over one fresh temporary directory, empty env,
+ * cwd = that directory; its real path reads as `/workspace` in the output.
+ */
+export function nodeSequence(steps: readonly NodeStep[]): NodeStepOutcome[] {
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'isolate-host-sandbox-oracle-')));
+  const norm = (s: string): string => s.split(dir).join('/workspace');
+  try {
+    return steps.map((step) => {
+      for (const [rel, data] of Object.entries(step.files)) {
+        const file = join(dir, rel);
+        mkdirSync(dirname(file), { recursive: true });
+        writeFileSync(file, data);
+      }
+      const r = spawnSync(process.execPath, [...step.run], {
+        cwd: dir,
+        env: {},
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        timeout: 30_000,
+      });
+      const files: Record<string, string> = {};
+      readTree(dir, dir, files);
+      return { stdout: norm(r.stdout), stderr: norm(r.stderr), exitCode: r.status, files };
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 }

@@ -10,8 +10,11 @@ import { CORPUS, GC_CHURN, parityView } from './corpus.ts';
 import { nodeEval } from './support.ts';
 
 describe('package surface (ADR-0557 §1)', () => {
-  it("runCode is the package root's only runtime export", async () => {
-    expect(Object.keys(await import('../src/index.ts'))).toEqual(['runCode']);
+  it('the package root exports runCode and createSandbox only (ADR-0568)', async () => {
+    expect(Object.keys(await import('../src/index.ts')).sort()).toEqual([
+      'createSandbox',
+      'runCode',
+    ]);
   });
 });
 

@@ -108,6 +108,21 @@ export const fsMatrix = {
       "Present, every call throws: own enumerable member with Node's descriptor, so `import { statfsSync } from 'node:fs'` links (vitest 4.1.11 `cli-api`). A call throws `NotImplementedError('fs.statfsSync')` — no browser source for host filesystem statistics, never a fabricated value; `typeof` feature detection sees a function (ADR-0443). `statfs` / `promises.statfs` stay link-time misses. Parity: `modules/builtin-loud-members-link`",
     ],
     [
+      'A NUL in a path; `utimes` edge times',
+      '✅',
+      "A NUL throws Node's `ERR_INVALID_ARG_VALUE` (`existsSync` answers `false`); `utimes` as Node 24.16.0: an invalid `Date` keeps the time, a negative number is now, a NaN/Infinity number is `ERR_INVALID_ARG_TYPE` — no non-finite time is stored. Parity: `fs/path-nul-and-utimes-edge-times`",
+    ],
+    [
+      '`utimes` with a time past 2^63 ns',
+      '⚠️',
+      "Node's darwin answer on every host: saturates at ±2^63 ns, its sign as libuv's (a string below −2^63 s wraps to the top). Node on Linux refuses with `EINVAL`, rifty stores the time. Parity compares it exactly on darwin hosts only: `fs/path-nul-and-utimes-edge-times`",
+    ],
+    [
+      '`symlink`/`symlinkSync`/`link`/`linkSync`, `promises.symlink`/`link`',
+      '❌',
+      "Present, every call throws `NotImplementedError('fs.<name>')`: the VFS has no links (ADR-0050), so a program names the gap instead of `TypeError: … is not a function` (ADR-0443 claim: model-written programs in the isolate sandbox, ADR-0568). `readlink` answers `EINVAL` as for any non-link",
+    ],
+    [
       'Durable `fsync` / inode-like open-unlink semantics',
       '❌',
       'Tracked as VFS fd durability residual',

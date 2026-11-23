@@ -16,16 +16,17 @@ import {
 } from '@riftydev/runtime-js/builtins/process';
 import { installTimerGlobals } from '@riftydev/runtime-js/builtins/timers';
 import {
-  formatThrown,
+  fatalReportText,
   handleRealmUncaughtError,
   handleRealmUnhandledRejection,
+  installNodeFatalReport,
   readNodeProcessTerminal,
   setDefaultProcessOutputSink,
 } from '@riftydev/runtime-js/internal';
 import { createModuleLoader } from '@riftydev/runtime-js/loader';
 import { syncMirror } from '@riftydev/vfs';
 import { type MemoryFsSync, installMemoryFs } from '@riftydev/vfs/internal';
-import { UNCOPYABLE_REJECTION } from '../contract.ts';
+import { GUEST_DIRS, UNCOPYABLE_REJECTION } from '../contract.ts';
 import { FsSnapshotError, type SnapshotOptions, restoreFs, snapshotFs } from '../snapshot.ts';
 import { bindNotImplemented } from './loud.ts';
 // Evaluated before every runtime module: the build injects it first (scripts/build-runtime.mjs).
@@ -44,7 +45,7 @@ const CWD = '/workspace';
 // The realm's FS exists from load, so a restore before `run` is the tree `run` sees (ADR-0567 §6).
 installMemoryFs();
 const guestFs = syncMirror() as MemoryFsSync;
-guestFs.mkdirSync(CWD, { recursive: true });
+for (const dir of GUEST_DIRS) guestFs.mkdirSync(dir, { recursive: true });
 /** Guest code has started in this realm: no restore from here on. */
 let started = false;
 /** A restore failed after it began writing: the FS is partial, the isolate is done (ADR-0567 §6). */
@@ -213,10 +214,10 @@ function esmGapOf(caught: unknown): Error | null {
   }
 }
 
-/** Write the guest's error with the runtime's own fatal text (`formatThrown`); never throws. */
+/** Write the guest's error as the runtime's fatal report (`fatalReportText`); never throws. */
 function writeDiagnostic(error: unknown): void {
   try {
-    writeHost(2, `${formatThrown(error)}\n`);
+    writeHost(2, fatalReportText(error));
   } catch {
     // The guest broke its own diagnostic: nothing is written, the status still crosses.
   }
@@ -236,11 +237,16 @@ let nativeExit: () => void = () => {
  * text and lets the drain end the run.
  */
 function fatal(error: unknown): void {
-  writeDiagnostic(error);
+  // After an explicit exit() Node prints nothing more (its output drop, above).
+  if (readNodeProcessTerminal(riftyProcess) === null) writeDiagnostic(error);
   nativeExit();
 }
 
-function run(source: string): Promise<number> {
+/**
+ * One run of the runtime: `launch` starts the entry, then the drain and the
+ * natural `exit()`, as `node` does. Resolves with the status, a primitive only.
+ */
+function runToExit(launch: () => Promise<void>): Promise<number> {
   refuseIfBroken();
   started = true;
   // Resolved with a primitive only, so resolving it does no lookup the guest
@@ -250,14 +256,7 @@ function run(source: string): Promise<number> {
     const finish = (caught: unknown): void => resolve(settle(caught));
     try {
       setUp();
-      const entry = runNodeEntry({
-        kind: 'eval',
-        vfs: syncMirror(),
-        cwd: CWD,
-        source,
-        print: false,
-        explicitCommonJs: false,
-      });
+      const entry = launch();
       // Guest code has run from here: no `await`, which looks up the guest's
       // `constructor`/`then` (`onSettled`).
       onSettled(
@@ -287,8 +286,66 @@ function run(source: string): Promise<number> {
   });
 }
 
+function run(source: string): Promise<number> {
+  return runToExit(() => {
+    // `node -e` only: a file's realm has no builtin-module globals.
+    installEvalBuiltinGlobals();
+    return runNodeEntry({
+      kind: 'eval',
+      vfs: syncMirror(),
+      cwd: CWD,
+      source,
+      print: false,
+      explicitCommonJs: false,
+    });
+  });
+}
+
+/**
+ * `node <path> [args]` (ADR-0568): rifty's program entry over this realm's
+ * FS. An ES module entry is a declared gap: rifty's ESM loader needs `URL`,
+ * a ceiling global here.
+ */
+function runFile(path: string, args: readonly string[]): Promise<number> {
+  return runToExit(() => {
+    const entryPath = resolvePosix(CWD, path);
+    riftyProcess.argv = [riftyProcess.execPath, entryPath, ...args];
+    if (isEsmEntry(entryPath)) throw esmGap();
+    return runNodeEntry({ vfs: syncMirror(), entryPath, cwd: CWD });
+  });
+}
+
+const esmGap = (): NotImplementedError =>
+  new NotImplementedError(
+    'isolate-host.esm',
+    'ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568',
+  );
+
+/** The entry resolves as an ES module (`.mjs`, `"type": "module"`). A miss is the loader's own error. */
+function isEsmEntry(entryPath: string): boolean {
+  try {
+    const loader = createModuleLoader(syncMirror(), { cwd: CWD });
+    return loader.resolver.resolve(entryPath, { fromFile: entryPath, esm: true }).kind === 'esm';
+  } catch {
+    return false;
+  }
+}
+
+/** POSIX `path.resolve(base, p)` for an absolute `base`. */
+function resolvePosix(base: string, p: string): string {
+  const parts: string[] = [];
+  for (const seg of `${p.startsWith('/') ? '' : base}/${p}`.split('/')) {
+    if (seg === '' || seg === '.') continue;
+    if (seg === '..') parts.pop();
+    else parts.push(seg);
+  }
+  return `/${parts.join('/')}`;
+}
+
 /** Installs the runtime for one run; before any guest code. */
 function setUp(): void {
+  // The isolate host prints Node's fatal report (goal node-file-entry-parity).
+  installNodeFatalReport();
   installProcessGlobals();
   installTimerGlobals();
   (globalThis as { Buffer?: unknown }).Buffer = Buffer;
@@ -301,7 +358,11 @@ function setUp(): void {
   // Node's global console is `require('console')`: util.format over process.stdout/stderr.
   (globalThis as { console?: unknown }).console = nodeConsole;
   setUncaughtHandler((error) => {
-    if (!handleRealmUncaughtError(error)) fatal(error);
+    // Work a natural exit's 'exit' listeners queued: Node still reports its
+    // throw (the run's status is already reported, backlog
+    // distribution/isolate-host-natural-exit-listener-queued-work).
+    if (naturalExit) writeDiagnostic(error);
+    else if (!handleRealmUncaughtError(error)) fatal(error);
   });
   for (const name of EGRESS_MODULES) {
     registerBuiltin(name, () => {
@@ -317,7 +378,6 @@ function setUp(): void {
     });
   }
   installCeilingGlobals();
-  installEvalBuiltinGlobals();
   setProcessCwd(CWD);
   nativeExit = riftyProcess.exit.bind(riftyProcess) as () => void;
 }
@@ -358,6 +418,6 @@ function restore(bytes: Uint8Array, options: SnapshotOptions): void {
 }
 
 Object.defineProperty(globalThis, '__riftyGuest', {
-  value: Object.freeze({ run, fire: fireTimer, rejection, snapshot, restore }),
+  value: Object.freeze({ run, runFile, fire: fireTimer, rejection, snapshot, restore }),
   configurable: true,
 });

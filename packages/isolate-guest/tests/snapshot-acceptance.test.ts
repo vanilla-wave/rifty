@@ -163,12 +163,16 @@ describe('guest FS snapshot — scenario', () => {
     },
   );
 
-  carrier('a tree the format cannot carry is refused at snapshot, by name (I3)', () => {
-    for (const code of [
-      "fs.utimesSync('/workspace/f', new Date(NaN), new Date(NaN))",
-      'fs.utimesSync("/workspace/f", 1e306, 1e306)',
-      "fs.writeFileSync('/workspace/a\\0b', 'x')",
-    ]) {
+  carrier('a tree the format cannot carry cannot be made through rifty fs (I3)', () => {
+    // rifty's fs stores Node's values (ADR-0568 goal: `fs-path.ts` refuses a NUL as Node's
+    // nullCheck, `fs-times.ts` keeps or saturates utimes as Node 24.16.0), so no guest run
+    // can leave the format an unrepresentable name or time; the codec's own refusal of such
+    // trees is `snapshot-codec.test.ts`'s.
+    for (const [code, exitCode] of [
+      ["fs.utimesSync('/workspace/f', new Date(NaN), new Date(NaN))", 0],
+      ['fs.utimesSync("/workspace/f", 1e306, 1e306)', 0],
+      ["fs.writeFileSync('/workspace/a\\0b', 'x')", 1],
+    ] as const) {
       const [, ran, snap] = drive([
         { op: 'isolate' },
         {
@@ -177,8 +181,8 @@ describe('guest FS snapshot — scenario', () => {
         },
         { op: 'snapshot', options: OPTIONS },
       ]);
-      expect(ran?.exitCode, code).toBe(0);
-      expect(snap?.error, code).toMatch(/^ERR_FS_SNAPSHOT_UNREPRESENTABLE: /);
+      expect(ran?.exitCode, code).toBe(exitCode);
+      expect(snap?.error, code).toBeUndefined();
     }
   });
 

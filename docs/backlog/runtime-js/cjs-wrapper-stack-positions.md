@@ -26,7 +26,7 @@ same filename and visible CallSite metadata. Chromium148 getScriptHash is empty.
 The existing compiler remains for other source shapes; no approximate mapping.
 
 Dedup: loader-guest-source-url-override concerns filename comments;
-cjs-wrapper-arguments-shape concerns factory arguments. Neither owns positions.
+neither owns positions.
 Fault: provenance-lie at the CJS compilation boundary. Compat explicitly ⚠️.
 
 ## Next
@@ -79,3 +79,14 @@ top-level frame `eval`: `'use strict';\nthrow new Error('s');` keeps Node's
 position but reads `at Object.eval (/project/strict.cjs:2:7)` (RDY-6 reviewer
 probe, scratch; Node v24.16.0 `at Object.<anonymous> (…/strict.cjs:2:7)`), so
 this item owns the name for every CJS source.
+
+## Landed — 2026-11-22
+
+Goal `node-file-entry-parity` (ADR-0450 2026-11-22): every CJS source shares
+line 1 with the wrapper prefix — native line numbers, top-level frame
+`Object.<anonymous>`; the fatal report projects line-1 columns and V8's
+`eval` name. Remaining here (compat modules.md "CJS stack positions"): in
+`err.stack` and CallSites line-1 columns sit right by the prefix and
+anonymous functions read `eval`. Next: only an owned stack hook (rejected
+2026-10-20) moves those; trigger: a guest-visible consumer (source maps of a
+one-line bundle) needing them.

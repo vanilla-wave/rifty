@@ -1,0 +1,189 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Merge on green PR CI at HEAD: the message-line mark is per report and removed exactly, so a guest's U+FFFF survives (probe and unit row vs live Node; mutant killed); every other probe byte-identical to the previous head; all lanes green. Goal not complete (5d user question, deferred header).",
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "docs/backlog/epics/node-file-entry-parity/goal.md (amend 2026-11-23) + map.md (5d STOP-1 owner: user) + ledger.md; manager round-5 criterion with its two named exceptions (ADR-0445 2026-11-23 lines: exception 1 rifty-internal frame line, exception 2 timer callback frame name / `this`); proof docs/backlog/runtime-js/reference/pr-421-browser-fatal-matrix.md (round-6 rerun vs main f5c232b3d); PR #421 @ ac0176e2c (product 86e4744a5, re-pin ac0176e2c); BASE 50c9d8bf1; baseline = carrier RED rows on main 50c9d8bf1",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "User scenario 3 as amended / I2",
+      "location": "docs/backlog/runtime-js/sync-uncaught-header-throw-site-source.md; module-compile-error-node-syntax-error.md",
+      "summary": "Deferred by the user: Node's header and the syntax-error report."
+    },
+    {
+      "clause": "I2 / I3 / I4 on the browser hosts",
+      "location": "docs/backlog/epics/node-file-entry-parity/map.md item 5d (STOP-1 owner: user); docs/backlog/runtime-js/browser-host-realm-uncaught-fatal-report.md",
+      "summary": "No-COI SDK and COI Workbench print main's fatal text (rifty runtime frames, no props/trailer); Node's report only in the isolate guest. Rows at Node bytes: no-COI 9/52, COI 9/52, isolate 3/41."
+    },
+    {
+      "clause": "I2 / I3 (isolate)",
+      "location": "docs/public/compat/process.md; isolate-host.md",
+      "summary": "Declared: isolate rejection copy, callback frame names, eval-origin place, dropped out-of-VFS/deleted-module frames, Proxy traps, omitted own props of builtin values and long dense arrays' extra keys."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Browser hosts: every fatal cell equals Node's or main's, up to wrapper-induced user-frame changes and the two named exceptions",
+      "source": "acceptance",
+      "trace": "ADR-0445",
+      "status": "pass",
+      "citation": "docs/backlog/runtime-js/reference/pr-421-browser-fatal-matrix.md (218 cells); reviewer matrix 143 cells × 2 hosts vs main f5c232b3d",
+      "note": ""
+    },
+    {
+      "row": "One switch: Node's report only where `installNodeFatalReport()` runs (isolate guest)",
+      "source": "acceptance",
+      "trace": "ADR-0445",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/builtins/process-lifecycle-events.ts:451; packages/isolate-guest/src/guest/entry.ts:295 (git grep: the only production caller)",
+      "note": ""
+    },
+    {
+      "row": "Files claimed byte-identical to main",
+      "source": "acceptance",
+      "trace": "ADR-0445",
+      "status": "pass",
+      "citation": "git diff --stat 11b9397ee..25ef4d63c -- errors.ts declared-gap-cause.ts node-entry.test.ts no-coi-project-command-exit.test.ts no-coi-child-worker.ts node-entry-bootstrap.ts kernel-process-terminal-drain-real-worker.spec.ts worker_threads-keepalive.fault.test.ts → none; no-coi-fatal-stderr.spec.ts: one userFrame residual (wrapper line sharing)",
+      "note": ""
+    },
+    {
+      "row": "Isolate: a loader error (MODULE_NOT_FOUND, compile error, ERR_REQUIRE_ASYNC_MODULE) prints one head + props from every origin",
+      "source": "acceptance",
+      "trace": "I2+I4",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/guest-seam.test.ts \"a loader error prints the same wherever it is thrown\" (RED with fatal-report.ts + node-entry.ts of 25ef4d63c: 2 failed | 1 passed)",
+      "note": ""
+    },
+    {
+      "row": "Isolate: a loader error's report is the same object projected (guest props kept, no getter runs) at any depth",
+      "source": "acceptance",
+      "trace": "I2+I4",
+      "status": "pass",
+      "citation": "packages/runtime-js/tests/fatal-report.test.ts \"a loader error with a guest accessor on `code` or `requireStack`: the report runs neither\" (mutant: [[Get]] read of `code` → 1 failed | 38 passed); packages/isolate-host/tests/guest-seam.test.ts six-origin rows",
+      "note": ""
+    },
+    {
+      "row": "Isolate guest: Node's report (props, cause, frames, trailer, no header)",
+      "source": "acceptance",
+      "trace": "I2+I3+I4",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/node-file.test.ts (pins per host, green); packages/runtime-js/tests/fatal-report.test.ts (vs live Node)",
+      "note": ""
+    },
+    {
+      "row": "I1 entry semantics on the entry corpus (all hosts)",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/no-coi/node-file-parity.spec.ts, tests/browser-unit/node-file-parity.spec.ts (green @6dc8096be)",
+      "note": ""
+    },
+    {
+      "row": "Oracle: live node v24.16.0, one path normalization, P1/P2 on Node side only",
+      "source": "frozen-artifact",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/node-file-programs.ts nodeFileExpected/nodeFileNormalized",
+      "note": ""
+    },
+    {
+      "row": "Message lines that read like frames are never taken for frames; keys quoted as Node",
+      "source": "acceptance",
+      "trace": "I2+I3",
+      "status": "pass",
+      "citation": "packages/runtime-js/tests/fatal-report.test.ts \"message lines that read like frames, top-level and as a cause\", \"a key that needs quotes\" (mutant skipping the mark killed)",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/epics/node-file-entry-parity/map.md item 5d",
+          "evidence": "map/ledger @ 25ef4d63c: 5d open with STOP-1 owner: user; goal.md unchanged since the 2026-11-23 amend.",
+          "summary": "Browser-host report divergence from Node (back to main) is the open user question; recorded, not silent.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/adr/distribution/0391-… ; tools/checks/esbuild-legacy-retirement.mjs",
+          "evidence": "pnpm build:libs → check:esbuild-legacy-retirement \"10 paths, 25 references, and exact emitted inventory verified\".",
+          "summary": "typescript-worker re-pin verified; CJS double compile cost recorded.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/src/builtins/fatal-report.ts newMessageLine / unmark",
+          "evidence": "scratch /tmp/rev421 @ ac0176e2c: cp /tmp/nf-review/scripts/zz-probe16.test.ts packages/isolate-host/tests/zz-probe.test.ts && pnpm exec vitest run --project isolate-host … (live node v24.16.0; raw /tmp/nf-review/probes-zz-probe16-ac0176e2c.json, diff probes-diff-zz-probe16-ac0176e2c.txt). M4 `keep \\uffff char\\n    at here`: rifty now \"Error: keep \\uffff char\\n    at here\\n…\" = Node (header aside); the other 7 zz-probe16 rifty stderr byte-identical to cbfa28db0. Unit (scratch, removed): prop `note = 'x\\uffffy'` kept. Mutant (unmark also strips bare U+FFFF): new row \"a guest's own U+FFFF, in the message and a prop\" fails.",
+          "summary": "Previous blocker RESOLVED. The mark is built with the module-load `Math.random` but `Number.prototype.toString` / `String.prototype.slice` are read at report time — a guest that replaces them can make the mark predictable or throw (the report then falls back); that is the declared guest-replaced-intrinsics class.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "docs/backlog/runtime-js/fatal-report-reassigned-message.md",
+          "evidence": "scratch /tmp/rev421 @ ac0176e2c: cp /tmp/nf-review/scripts/zz-probe16.test.ts packages/isolate-host/tests/zz-probe.test.ts && pnpm exec vitest run --project isolate-host … (live node v24.16.0; raw /tmp/nf-review/probes-zz-probe16-ac0176e2c.json, diff probes-diff-zz-probe16-ac0176e2c.txt). M5 message reassigned after construction: rifty prints the stack's old message (Node the new).",
+          "summary": "Declared draft; unchanged.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/isolate-host/tests; tests/browser-unit/fixtures/node-file-pins.json",
+          "evidence": "cd /tmp/rev421 @ ac0176e2c: unit (fatal-report, module-loader, repl, conformance modules) 279 tests exit 0; isolate-host 460 tests exit 0; no-COI node-file-parity + no-coi-fatal-stderr passed; COI node-file-parity passed; pnpm build:libs + check:esbuild-legacy-retirement verified (re-pin ac0176e2c).",
+          "summary": "All carriers green.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/public/compat/process.md \"Fatal error stderr bytes\"",
+          "evidence": "Reviewer matrix: browser-host fatal text = main's (err.stack with rifty runtime frames; user line-1 columns right of the source by the wrapper prefix, e.g. main.js:1:133).",
+          "summary": "On the browser hosts an agent reads main's report with rifty frames; Node's report only in the isolate guest. Declared; 5d user question.",
+          "authority": ""
+        }
+      ]
+    }
+  ],
+  "reviewed_sha": "ac0176e2c9329138f839934b361d6fd323809b11"
+}

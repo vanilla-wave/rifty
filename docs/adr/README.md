@@ -425,11 +425,13 @@ ADRs are immutable while active, except dated lines under `## Decisions` / `§Co
 | 0532 | Commit evaluation summaries as text core only |
 | 0535 | Judge app tasks against a prompt-stated contract |
 | 0546 | Produce browser-compatible Brotli dependency snapshots |
+| 0547 | Compact prepared dependency snapshots |
 | 0557 | Run guest code in a disposable child process holding a rifty V8 isolate (isolated-vm) |
 | 0558 | Export the isolate guest bundle and bridge contract as an unstable package |
 | 0563 | Run runCode in a pool of long-lived worker processes, each hosting many isolates |
 | 0566 | Select guest SharedArrayBuffer access per isolate call |
 | 0567 | Snapshot the isolate guest filesystem as a versioned binary blob |
+| 0568 | Run guest files in a live sandbox whose state is filesystem bytes held by the consumer |
 | 0569 | Port pi CLI 1.6.0 compaction into the agent |
 | 0570 | Depend on typebox directly for the public Type export |
 
