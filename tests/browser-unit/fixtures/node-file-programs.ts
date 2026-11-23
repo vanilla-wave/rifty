@@ -317,6 +317,60 @@ throw e;
   },
   { name: 'throw-null', files: { 'main.js': 'const a = 1;\nthrow null;\n' }, argv: ['main.js'] },
   {
+    // Each way rifty calls user code: the frames' names, lines and columns.
+    name: 'throw-from-interval',
+    files: { 'main.js': "const h = setInterval(() => {\n  clearInterval(h);\n  throw new Error('interval');\n}, 0);\n" },
+    argv: ['main.js'],
+  },
+  {
+    // Each way rifty calls user code: the frames' names, lines and columns.
+    name: 'throw-from-immediate',
+    files: { 'main.js': "setImmediate(() => {\n  throw new Error('immediate');\n});\n" },
+    argv: ['main.js'],
+  },
+  {
+    // Each way rifty calls user code: the frames' names, lines and columns.
+    name: 'throw-from-next-tick',
+    files: { 'main.js': "process.nextTick(() => {\n  throw new Error('tick');\n});\n" },
+    argv: ['main.js'],
+  },
+  {
+    // Each way rifty calls user code: the frames' names, lines and columns.
+    name: 'throw-from-queue-microtask',
+    files: { 'main.js': "queueMicrotask(() => {\n  throw new Error('microtask');\n});\n" },
+    argv: ['main.js'],
+  },
+  {
+    // Each way rifty calls user code: the frames' names, lines and columns.
+    name: 'throw-from-promise-reaction',
+    files: { 'main.js': "Promise.resolve().then(() => {\n  throw new Error('reaction');\n});\n" },
+    argv: ['main.js'],
+  },
+  {
+    // Each way rifty calls user code: the frames' names, lines and columns.
+    name: 'throw-in-emitter-listener',
+    files: { 'main.js': "const EventEmitter = require('events');\nconst e = new EventEmitter();\ne.on('x', function onX() {\n  throw new Error('listener');\n});\ne.emit('x');\n" },
+    argv: ['main.js'],
+  },
+  {
+    // Each way rifty calls user code: the frames' names, lines and columns.
+    name: 'throw-in-fs-callback',
+    files: { 'main.js': "require('fs').readFile(__filename, () => {\n  throw new Error('fs');\n});\n" },
+    argv: ['main.js'],
+  },
+  {
+    // Each way rifty calls user code: the frames' names, lines and columns.
+    name: 'throw-in-new-function',
+    files: { 'main.js': "new Function('throw new Error(\"fn\")')();\n" },
+    argv: ['main.js'],
+  },
+  {
+    // Each way rifty calls user code: the frames' names, lines and columns.
+    name: 'throw-in-indirect-eval',
+    files: { 'main.js': "(0, eval)('throw new Error(\"indirect\")');\n" },
+    argv: ['main.js'],
+  },
+  {
     name: 'throw-in-direct-eval',
     files: { 'main.js': 'eval(\'function f() {\\n  throw new Error("ev");\\n}\\nf();\');\n' },
     argv: ['main.js'],

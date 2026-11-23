@@ -237,14 +237,19 @@ function initialiseOwnListenerState(target: EventEmitter): void {
 }
 
 export const EventEmitter = /* @__PURE__ */ (() => {
-  const CallableEventEmitter = function EventEmitter(this: EventEmitter): void {
-    // Listener state stays lazy so this also supports prototype mixins whose
-    // constructors never call EventEmitter, matching Node's EventEmitter.init.
-    // What init does NOT tolerate is a receiver that merely INHERITS a store:
-    // `Foo.prototype = new EventEmitter()` would otherwise share one listener
-    // map across every instance. Claim an own, empty one instead.
-    initialiseOwnListenerState(this);
-  };
+  // Named by its property key, not a binding: a function expression named
+  // `EventEmitter` shadows this module's export, so a bundler renames it
+  // (`EventEmitter2`) and V8 prints that name in frames.
+  const CallableEventEmitter = {
+    EventEmitter: function (this: EventEmitter): void {
+      // Listener state stays lazy so this also supports prototype mixins whose
+      // constructors never call EventEmitter, matching Node's EventEmitter.init.
+      // What init does NOT tolerate is a receiver that merely INHERITS a store:
+      // `Foo.prototype = new EventEmitter()` would otherwise share one listener
+      // map across every instance. Claim an own, empty one instead.
+      initialiseOwnListenerState(this);
+    },
+  }.EventEmitter;
 
   CallableEventEmitter.prototype = EventEmitterPrototype.prototype;
   // Node's events.js: `on = addListener`, `off = removeListener` — one function

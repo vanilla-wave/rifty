@@ -7,7 +7,17 @@
 
 import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
 
-type ImmediateHandle = { readonly id: number };
+/** Node's `Immediate`: the callback's `this`; `_onImmediate` is null once run or cleared. */
+class Immediate {
+  _onImmediate: ((...a: unknown[]) => void) | null;
+  constructor(
+    readonly id: number,
+    callback: (...a: unknown[]) => void,
+  ) {
+    this._onImmediate = callback;
+  }
+}
+type ImmediateHandle = Immediate;
 const reflectApply = Reflect.apply;
 
 type HostTimeout = ReturnType<typeof globalThis.setTimeout>;
@@ -54,8 +64,8 @@ export function onTimerScopeDispose(handle: unknown, dispose: () => void): () =>
 }
 
 class Timeout {
-  /** The callback, as Node's `Timeout#_onTimeout`. */
-  _onTimeout: (...a: unknown[]) => void = () => {};
+  /** The callback, as Node's `Timeout#_onTimeout`; null once cleared (Node's clearTimeout). */
+  _onTimeout: ((...a: unknown[]) => void) | null = () => {};
   private active = true;
   private refed = true;
   private readonly primitiveId = nextTimerId++;
@@ -83,6 +93,8 @@ class Timeout {
   }
 
   clear(): void {
+    // Node's clearTimeout: a cleared handle's frame then reads `Timeout.<anonymous>`.
+    this._onTimeout = null;
     if (this.active) {
       this.active = false;
       if (this.refed) keepaliveUnref();
@@ -147,7 +159,7 @@ export function setTimeout(
   const raw = hostSetTimeout(
     (...a: unknown[]) => {
       const handle = box.handle;
-      if (!handle?.fireTimeout()) return;
+      if (!handle?.fireTimeout() || handle._onTimeout === null) return;
       reflectApply(handle._onTimeout, handle, a);
     },
     ms,
@@ -185,7 +197,7 @@ export function setInterval(
   const raw = hostSetInterval(
     (...a: unknown[]) => {
       const handle = box.handle;
-      if (!handle?.shouldRunInterval()) return;
+      if (!handle?.shouldRunInterval() || handle._onTimeout === null) return;
       reflectApply(handle._onTimeout, handle, a);
     },
     ms,
@@ -221,7 +233,18 @@ export function clearInterval(handle: unknown): void {
 // needed). MessageChannel (not setTimeout(0)) keeps setImmediate ahead of a
 // setTimeout(0) task; the no-MessageChannel fallback uses setTimeout(0) and is
 // realm-specific (jsdom/node test envs without a check phase).
-const immediates = new Map<number, { fn: (...args: unknown[]) => void; args: unknown[] }>();
+const immediates = new Map<number, { handle: Immediate; args: unknown[] }>();
+
+/** Node's processImmediate: `immediate._onImmediate(...argv)`, then `_onImmediate = null`. */
+function runImmediate(item: { handle: Immediate; args: unknown[] }): void {
+  const callback = item.handle._onImmediate;
+  if (callback === null) return;
+  try {
+    reflectApply(callback, item.handle, item.args);
+  } finally {
+    item.handle._onImmediate = null;
+  }
+}
 let nextImmediateId = 1;
 
 const channel: MessageChannel | null =
@@ -249,7 +272,7 @@ if (channel) {
     immediates.delete(id);
     keepaliveUnref();
     if (immediates.size === 0) unrefImmediateHost?.();
-    item.fn(...item.args);
+    runImmediate(item);
   };
   unrefImmediateHost?.();
 }
@@ -259,7 +282,8 @@ export function setImmediate(
   ...args: unknown[]
 ): ImmediateHandle {
   const id = nextImmediateId++;
-  immediates.set(id, { fn, args });
+  const handle = new Immediate(id, fn);
+  immediates.set(id, { handle, args });
   if (immediates.size === 1) refImmediateHost?.();
   keepaliveRef();
   if (channel) channel.port2.postMessage(null);
@@ -269,13 +293,14 @@ export function setImmediate(
       if (!item) return; // cleared before its timer fired
       immediates.delete(id);
       keepaliveUnref();
-      item.fn(...item.args);
+      runImmediate(item);
     }, 0);
-  return { id };
+  return handle;
 }
 
 export function clearImmediate(handle: ImmediateHandle | undefined): void {
   if (!handle) return;
+  if (handle instanceof Immediate) handle._onImmediate = null;
   if (immediates.delete(handle.id)) keepaliveUnref();
   if (immediates.size === 0) unrefImmediateHost?.();
 }

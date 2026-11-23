@@ -104,7 +104,7 @@ const rows: readonly FatalRow[] = [
     nodeArgv: ['fail.cjs'],
     // main's report; the module wrapper shares line 1 (ADR-0450 2026-11-22): native
     // line, Node's name, line-1 column right of the source by the prefix.
-    residual: { ...UNPRINTED, userFrame: 'at Object.<anonymous> (<root>/fail.cjs:1:133)' },
+    residual: { ...UNPRINTED, userFrame: 'at Object.<anonymous> (<root>/fail.cjs:1:126)' },
   },
   {
     name: 'eval-throw',

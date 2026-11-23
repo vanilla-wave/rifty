@@ -339,6 +339,15 @@ export function projectNodeEvalError(
   compiler?: NodeEvalCompiler,
 ): unknown {
   if (!(error instanceof Error)) return error;
+  // The isolate's report reads a throwing `stack` as Node does (the error's
+  // own text and the hint): leave such an error to it, read once, guarded.
+  if (nodeFatalReportInstalled()) {
+    try {
+      void error.stack;
+    } catch {
+      return error;
+    }
+  }
   const firstLine =
     (error.stack ?? `${error.name}: ${error.message}`).split('\n')[0] ?? error.message;
   if (error instanceof SyntaxError) {

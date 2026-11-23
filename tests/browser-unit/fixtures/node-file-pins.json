@@ -11,7 +11,7 @@
     "esm-entry-facts": "node",
     "throw-top-level": {
       "stdout": "",
-      "stderr": "Error: boom\n    at Object.<anonymous> (<root>/main.js:1:133)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at executeCjs (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n    at loadedNamespace (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.importCjs (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.loadAsyncResolved (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n",
+      "stderr": "Error: boom\n    at Object.<anonymous> (<root>/main.js:1:126)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at executeCjs (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n    at loadedNamespace (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.importCjs (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.loadAsyncResolved (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n",
       "exitCode": 1
     },
     "throw-nested-function": {
@@ -76,7 +76,7 @@
     },
     "rejection-fs-enoent": {
       "stdout": "",
-      "stderr": "Error: ENOENT: no such file or directory, open 'missing.txt'\n    at fsError (<runtime>/packages/runtime-js/src/builtins/fs-errors.ts)\n    at toNodeFsError (<runtime>/packages/runtime-js/src/builtins/fs-errors.ts)\n    at withSyscall (<runtime>/packages/runtime-js/src/builtins/fs-errors.ts)\n    at readFileSync (<runtime>/packages/runtime-js/src/builtins/fs.ts)\n    at Object.readFile (<runtime>/packages/runtime-js/src/builtins/fs.ts)\n    at Object.<anonymous> (<root>/main.js:1:150)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at executeCjs (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n",
+      "stderr": "Error: ENOENT: no such file or directory, open 'missing.txt'\n    at fsError (<runtime>/packages/runtime-js/src/builtins/fs-errors.ts)\n    at toNodeFsError (<runtime>/packages/runtime-js/src/builtins/fs-errors.ts)\n    at withSyscall (<runtime>/packages/runtime-js/src/builtins/fs-errors.ts)\n    at readFileSync (<runtime>/packages/runtime-js/src/builtins/fs.ts)\n    at Object.readFile (<runtime>/packages/runtime-js/src/builtins/fs.ts)\n    at Object.<anonymous> (<root>/main.js:1:143)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at executeCjs (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n",
       "exitCode": 1
     },
     "rejection-after-stack-read": {
@@ -86,7 +86,7 @@
     },
     "error-hostile-props": {
       "stdout": "",
-      "stderr": "Error: x\n    at Object.<anonymous> (<root>/main.js:1:137)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at executeCjs (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n    at loadedNamespace (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.importCjs (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.loadAsyncResolved (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n",
+      "stderr": "Error: x\n    at Object.<anonymous> (<root>/main.js:1:130)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at executeCjs (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n    at loadedNamespace (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.importCjs (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.loadAsyncResolved (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n",
       "exitCode": 1
     },
     "error-deep-cause": {
@@ -109,14 +109,59 @@
       "stderr": "null\n",
       "exitCode": 1
     },
+    "throw-from-interval": {
+      "stdout": "",
+      "stderr": "",
+      "exitCode": null
+    },
+    "throw-from-immediate": {
+      "stdout": "",
+      "stderr": "",
+      "exitCode": null
+    },
+    "throw-from-next-tick": {
+      "stdout": "",
+      "stderr": "",
+      "exitCode": null
+    },
+    "throw-from-queue-microtask": {
+      "stdout": "",
+      "stderr": "",
+      "exitCode": null
+    },
+    "throw-from-promise-reaction": {
+      "stdout": "",
+      "stderr": "Error: reaction\n    at eval (<root>/main.js:2:9)\n    at wrapF (<runtime>/packages/runtime-js/src/builtins/process.ts)\n",
+      "exitCode": 1
+    },
+    "throw-in-emitter-listener": {
+      "stdout": "",
+      "stderr": "Error: listener\n    at EventEmitter.onX (<root>/main.js:4:9)\n    at EventEmitter.emit (<runtime>/packages/io/src/event-emitter.ts)\n    at Object.<anonymous> (<root>/main.js:6:3)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at executeCjs (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n    at loadedNamespace (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.importCjs (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n",
+      "exitCode": 1
+    },
+    "throw-in-fs-callback": {
+      "stdout": "",
+      "stderr": "",
+      "exitCode": null
+    },
+    "throw-in-new-function": {
+      "stdout": "",
+      "stderr": "Error: fn\n    at eval (eval at <anonymous> (<runtime>/packages/runtime-js/src/module-loader/function-import-routing.ts), <anonymous>:3:7)\n    at Object.<anonymous> (<root>/main.js:1:157)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at executeCjs (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n    at loadedNamespace (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.importCjs (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.loadAsyncResolved (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n",
+      "exitCode": 1
+    },
+    "throw-in-indirect-eval": {
+      "stdout": "",
+      "stderr": "Error: indirect\n    at eval (eval at <anonymous> (<root>/main.js), <anonymous>:1:7)\n    at eval (<anonymous>)\n    at Object.<anonymous> (<root>/main.js:1:129)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at executeCjs (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n    at loadedNamespace (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.importCjs (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n",
+      "exitCode": 1
+    },
     "throw-in-direct-eval": {
       "stdout": "",
-      "stderr": "Error: ev\n    at f (eval at <anonymous> (<root>/main.js), <anonymous>:2:9)\n    at eval (eval at <anonymous> (<root>/main.js), <anonymous>:4:1)\n    at Object.<anonymous> (<root>/main.js:1:127)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at executeCjs (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n    at loadedNamespace (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.importCjs (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n",
+      "stderr": "Error: ev\n    at f (eval at <anonymous> (<root>/main.js), <anonymous>:2:9)\n    at eval (eval at <anonymous> (<root>/main.js), <anonymous>:4:1)\n    at Object.<anonymous> (<root>/main.js:1:120)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at executeCjs (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n    at loadedNamespace (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.importCjs (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n",
       "exitCode": 1
     },
     "error-with-props": {
       "stdout": "",
-      "stderr": "TypeError: x\n    at Object.<anonymous> (<root>/main.js:1:139)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at executeCjs (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n    at loadedNamespace (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.importCjs (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.loadAsyncResolved (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n",
+      "stderr": "TypeError: x\n    at Object.<anonymous> (<root>/main.js:1:132)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at executeCjs (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n    at loadedNamespace (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.importCjs (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.loadAsyncResolved (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n",
       "exitCode": 1
     },
     "rethrow-in-catch": {
@@ -126,7 +171,7 @@
     },
     "throw-in-callback": {
       "stdout": "",
-      "stderr": "Error: item 2\n    at eval (<root>/main.js:2:22)\n    at Array.forEach (<anonymous>)\n    at Object.<anonymous> (<root>/main.js:1:134)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at executeCjs (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n    at loadedNamespace (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.importCjs (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n",
+      "stderr": "Error: item 2\n    at eval (<root>/main.js:2:22)\n    at Array.forEach (<anonymous>)\n    at Object.<anonymous> (<root>/main.js:1:127)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at executeCjs (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n    at loadedNamespace (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.importCjs (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n",
       "exitCode": 1
     },
     "throw-from-named-timer": {
@@ -166,7 +211,7 @@
     },
     "rejection-with-queued-work": {
       "stdout": "tick\nqueued\n",
-      "stderr": "Error: r\n    at Object.<anonymous> (<root>/main.js:1:142)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at executeCjs (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n    at loadedNamespace (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.importCjs (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.loadAsyncResolved (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n",
+      "stderr": "Error: r\n    at Object.<anonymous> (<root>/main.js:1:135)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at executeCjs (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n    at loadedNamespace (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.importCjs (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.loadAsyncResolved (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n",
       "exitCode": 1
     },
     "syntax-error-entry": {
@@ -191,7 +236,7 @@
     },
     "syntax-error-dependency": {
       "stdout": "",
-      "stderr": "ModuleLoadError: Failed to compile CJS module <root>/lib/broken.js: Function statements require a function name\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at executeCjs (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.loadSync (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at req (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at Object.<anonymous> (<root>/main.js:1:127)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n",
+      "stderr": "ModuleLoadError: Failed to compile CJS module <root>/lib/broken.js: Function statements require a function name\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at executeCjs (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.loadSync (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at req (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at Object.<anonymous> (<root>/main.js:1:120)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n",
       "exitCode": 1
     },
     "syntax-error-missing-paren": {
@@ -237,7 +282,7 @@
     "esm-entry-facts": "node",
     "throw-top-level": {
       "stdout": "",
-      "stderr": "Error: boom\n    at Object.<anonymous> (<root>/main.js:1:133)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at executeCjs (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n    at loadedNamespace (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.importCjs (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.loadAsyncResolved (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n",
+      "stderr": "Error: boom\n    at Object.<anonymous> (<root>/main.js:1:126)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at executeCjs (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n    at loadedNamespace (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.importCjs (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.loadAsyncResolved (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n",
       "exitCode": 1
     },
     "throw-nested-function": {
@@ -302,7 +347,7 @@
     },
     "rejection-fs-enoent": {
       "stdout": "",
-      "stderr": "Error: ENOENT: no such file or directory, open 'missing.txt'\n    at fsError (<runtime>/packages/runtime-js/src/builtins/fs-errors.ts)\n    at toNodeFsError (<runtime>/packages/runtime-js/src/builtins/fs-errors.ts)\n    at withSyscall (<runtime>/packages/runtime-js/src/builtins/fs-errors.ts)\n    at readFileSync (<runtime>/packages/runtime-js/src/builtins/fs.ts)\n    at Object.readFile (<runtime>/packages/runtime-js/src/builtins/fs.ts)\n    at Object.<anonymous> (<root>/main.js:1:150)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at executeCjs (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n",
+      "stderr": "Error: ENOENT: no such file or directory, open 'missing.txt'\n    at fsError (<runtime>/packages/runtime-js/src/builtins/fs-errors.ts)\n    at toNodeFsError (<runtime>/packages/runtime-js/src/builtins/fs-errors.ts)\n    at withSyscall (<runtime>/packages/runtime-js/src/builtins/fs-errors.ts)\n    at readFileSync (<runtime>/packages/runtime-js/src/builtins/fs.ts)\n    at Object.readFile (<runtime>/packages/runtime-js/src/builtins/fs.ts)\n    at Object.<anonymous> (<root>/main.js:1:143)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at executeCjs (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n",
       "exitCode": 1
     },
     "rejection-after-stack-read": {
@@ -312,7 +357,7 @@
     },
     "error-hostile-props": {
       "stdout": "",
-      "stderr": "Error: x\n    at Object.<anonymous> (<root>/main.js:1:137)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at executeCjs (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n    at loadedNamespace (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.importCjs (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.loadAsyncResolved (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n",
+      "stderr": "Error: x\n    at Object.<anonymous> (<root>/main.js:1:130)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at executeCjs (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n    at loadedNamespace (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.importCjs (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.loadAsyncResolved (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n",
       "exitCode": 1
     },
     "error-deep-cause": {
@@ -335,14 +380,59 @@
       "stderr": "null\n",
       "exitCode": 1
     },
+    "throw-from-interval": {
+      "stdout": "",
+      "stderr": "Uncaught Error: interval (<root>/main.js:3)\n",
+      "exitCode": 1
+    },
+    "throw-from-immediate": {
+      "stdout": "",
+      "stderr": "Uncaught Error: immediate (<root>/main.js:2)\n",
+      "exitCode": 1
+    },
+    "throw-from-next-tick": {
+      "stdout": "",
+      "stderr": "Uncaught Error: tick (<runtime>/packages/runtime-js/src/builtins/process-lifecycle-events.ts)\n",
+      "exitCode": 1
+    },
+    "throw-from-queue-microtask": {
+      "stdout": "",
+      "stderr": "Uncaught Error: microtask (<root>/main.js:2)\n",
+      "exitCode": 1
+    },
+    "throw-from-promise-reaction": {
+      "stdout": "",
+      "stderr": "Error: reaction\n    at eval (<root>/main.js:2:9)\n    at wrapF (<runtime>/packages/runtime-js/src/builtins/process.ts)\n",
+      "exitCode": 1
+    },
+    "throw-in-emitter-listener": {
+      "stdout": "",
+      "stderr": "Error: listener\n    at EventEmitter.onX (<root>/main.js:4:9)\n    at EventEmitter.emit (<runtime>/packages/io/src/event-emitter.ts)\n    at Object.<anonymous> (<root>/main.js:6:3)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at executeCjs (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n    at loadedNamespace (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.importCjs (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n",
+      "exitCode": 1
+    },
+    "throw-in-fs-callback": {
+      "stdout": "",
+      "stderr": "Uncaught Error: fs (<runtime>/packages/runtime-js/src/builtins/process-lifecycle-events.ts)\n",
+      "exitCode": 1
+    },
+    "throw-in-new-function": {
+      "stdout": "",
+      "stderr": "Error: fn\n    at eval (eval at <anonymous> (<runtime>/packages/runtime-js/src/module-loader/function-import-routing.ts), <anonymous>:3:7)\n    at Object.<anonymous> (<root>/main.js:1:157)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at executeCjs (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n    at loadedNamespace (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.importCjs (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.loadAsyncResolved (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n",
+      "exitCode": 1
+    },
+    "throw-in-indirect-eval": {
+      "stdout": "",
+      "stderr": "Error: indirect\n    at eval (eval at <anonymous> (<root>/main.js), <anonymous>:1:7)\n    at eval (<anonymous>)\n    at Object.<anonymous> (<root>/main.js:1:129)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at executeCjs (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n    at loadedNamespace (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.importCjs (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n",
+      "exitCode": 1
+    },
     "throw-in-direct-eval": {
       "stdout": "",
-      "stderr": "Error: ev\n    at f (eval at <anonymous> (<root>/main.js), <anonymous>:2:9)\n    at eval (eval at <anonymous> (<root>/main.js), <anonymous>:4:1)\n    at Object.<anonymous> (<root>/main.js:1:127)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at executeCjs (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n    at loadedNamespace (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.importCjs (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n",
+      "stderr": "Error: ev\n    at f (eval at <anonymous> (<root>/main.js), <anonymous>:2:9)\n    at eval (eval at <anonymous> (<root>/main.js), <anonymous>:4:1)\n    at Object.<anonymous> (<root>/main.js:1:120)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at executeCjs (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n    at loadedNamespace (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.importCjs (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n",
       "exitCode": 1
     },
     "error-with-props": {
       "stdout": "",
-      "stderr": "TypeError: x\n    at Object.<anonymous> (<root>/main.js:1:139)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at executeCjs (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n    at loadedNamespace (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.importCjs (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.loadAsyncResolved (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n",
+      "stderr": "TypeError: x\n    at Object.<anonymous> (<root>/main.js:1:132)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at executeCjs (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n    at loadedNamespace (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.importCjs (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.loadAsyncResolved (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n",
       "exitCode": 1
     },
     "rethrow-in-catch": {
@@ -352,7 +442,7 @@
     },
     "throw-in-callback": {
       "stdout": "",
-      "stderr": "Error: item 2\n    at eval (<root>/main.js:2:22)\n    at Array.forEach (<anonymous>)\n    at Object.<anonymous> (<root>/main.js:1:134)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at executeCjs (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n    at loadedNamespace (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.importCjs (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n",
+      "stderr": "Error: item 2\n    at eval (<root>/main.js:2:22)\n    at Array.forEach (<anonymous>)\n    at Object.<anonymous> (<root>/main.js:1:127)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at executeCjs (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n    at loadedNamespace (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.importCjs (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n",
       "exitCode": 1
     },
     "throw-from-named-timer": {
@@ -392,7 +482,7 @@
     },
     "rejection-with-queued-work": {
       "stdout": "tick\nqueued\n",
-      "stderr": "Error: r\n    at Object.<anonymous> (<root>/main.js:1:142)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at executeCjs (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n    at loadedNamespace (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.importCjs (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.loadAsyncResolved (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n",
+      "stderr": "Error: r\n    at Object.<anonymous> (<root>/main.js:1:135)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at executeCjs (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n    at loadedNamespace (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.importCjs (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.loadAsyncResolved (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n",
       "exitCode": 1
     },
     "syntax-error-entry": {
@@ -417,7 +507,7 @@
     },
     "syntax-error-dependency": {
       "stdout": "",
-      "stderr": "ModuleLoadError: Failed to compile CJS module <root>/lib/broken.js: Function statements require a function name\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at executeCjs (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.loadSync (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at req (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at Object.<anonymous> (<root>/main.js:1:127)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n",
+      "stderr": "ModuleLoadError: Failed to compile CJS module <root>/lib/broken.js: Function statements require a function name\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at executeCjs (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.loadSync (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at req (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at Object.<anonymous> (<root>/main.js:1:120)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n",
       "exitCode": 1
     },
     "syntax-error-missing-paren": {
@@ -537,12 +627,57 @@
     },
     "error-throwing-stack-getter": {
       "stdout": "",
-      "stderr": "Error: boom\n    at Error.get (<root>/main.js:2:51)\n\nNode.js v24.0.0\n",
+      "stderr": "Error: x\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v24.0.0\n",
       "exitCode": 1
     },
     "throw-null": {
       "stdout": "",
       "stderr": "null\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "throw-from-interval": {
+      "stdout": "",
+      "stderr": "Error: interval\n    at Timeout.<anonymous> (<root>/main.js:3:9)\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "throw-from-immediate": {
+      "stdout": "",
+      "stderr": "Error: immediate\n    at Immediate.<anonymous> (<root>/main.js:2:9)\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "throw-from-next-tick": {
+      "stdout": "",
+      "stderr": "Error: tick\n    at <root>/main.js:2:9\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "throw-from-queue-microtask": {
+      "stdout": "",
+      "stderr": "Error: microtask\n    at <root>/main.js:2:9\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "throw-from-promise-reaction": {
+      "stdout": "",
+      "stderr": "Error: reaction\n    at <root>/main.js:2:9\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "throw-in-emitter-listener": {
+      "stdout": "",
+      "stderr": "Error: listener\n    at EventEmitter.onX (<root>/main.js:4:9)\n    at Object.<anonymous> (<root>/main.js:6:3)\n    at [eval]:1:322\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "throw-in-fs-callback": {
+      "stdout": "",
+      "stderr": "Error: fs\n    at <root>/main.js:2:9\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "throw-in-new-function": {
+      "stdout": "",
+      "stderr": "Error: fn\n    at eval (eval at <anonymous>, <anonymous>:3:7)\n    at Object.<anonymous> (<root>/main.js:1:38)\n    at [eval]:1:215\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "throw-in-indirect-eval": {
+      "stdout": "",
+      "stderr": "Error: indirect\n    at eval (eval at <anonymous> (<root>/main.js), <anonymous>:1:7)\n    at eval (<anonymous>)\n    at Object.<anonymous> (<root>/main.js:1:10)\n    at [eval]:1:216\n\nNode.js v24.0.0\n",
       "exitCode": 1
     },
     "throw-in-direct-eval": {

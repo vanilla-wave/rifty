@@ -57,17 +57,21 @@ function createOwnedHttpBuiltin(owner: PortRegistrationOwner): Record<string, un
 }
 
 function createOwnedNetBuiltin(owner: PortRegistrationOwner): Record<string, unknown> {
-  class Server extends BaseNetServer {
-    constructor(handler?: (socket: HttpFramedSocket) => void) {
-      super(handler);
-      bindPortRegistrationOwner(this, owner);
-    }
-  }
+  // Named by its property key: a class named `Server` shadows the imported
+  // one, so a bundler renames it (`Server2`) and V8 prints that in frames.
+  const Server = {
+    Server: class extends BaseNetServer {
+      constructor(handler?: (socket: HttpFramedSocket) => void) {
+        super(handler);
+        bindPortRegistrationOwner(this, owner);
+      }
+    },
+  }.Server;
   Object.defineProperty(Server, 'name', {
     value: BaseNetServer.name,
     configurable: true,
   });
-  function createServer(handler?: (socket: HttpFramedSocket) => void): Server {
+  function createServer(handler?: (socket: HttpFramedSocket) => void): InstanceType<typeof Server> {
     return new Server(handler);
   }
   return { ...net, createServer, Server } as Record<string, unknown>;
