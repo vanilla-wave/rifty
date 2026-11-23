@@ -31,8 +31,8 @@ times.
 
 Prior ruling it reopens: ADR-0567 «Rejected» (keeping `ino` in v1) and the
 closed goal `isolate-host-fs-snapshot`'s `rejected route: keeping ino — violates I3` (I3: ADR-0567 «Goal invariants»); the user's deferral keeps
-the question open. Dedup (`grep -rliw 'ino\|inode' docs/backlog`): this goal's
-own documents; `npm-client/reference/esbuild-upstream-twin-refine-evidence-2026-10-16.md`
+the question open. Dedup (`grep -rliw 'ino\|inode' docs/backlog`, at capture): the snapshot
+goal's own documents (since removed); `npm-client/reference/esbuild-upstream-twin-refine-evidence-2026-10-16.md`
 and `vfs/fs-sync-fd-api-and-fsync-durability.md` (fds, another concern) — no
 duplicate.
 

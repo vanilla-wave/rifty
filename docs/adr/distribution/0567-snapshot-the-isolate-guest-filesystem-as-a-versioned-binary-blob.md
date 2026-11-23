@@ -116,7 +116,7 @@ Probes: `docs/backlog/distribution/reference/isolate-host-fs-snapshot-fit-probes
    snapshot straight after a restore with no guest code between, which needs up
    to ~3 × the bytes while the restored blob is not yet collected (measured at
    rest: one 96 MiB file 300 MiB against 206 for restore → run → snapshot;
-   template scale, 98 MiB, 225–311 against 225 —
+   template scale, 98 MiB, 225–311 against 225, the worst of three noisy runs —
    `distribution/isolate-host-fs-snapshot-restore-then-snapshot-peak`).
 8. **Where.** One pure-JS module in `@riftydev/isolate-guest` (root exports
    `snapshotFs(fs, options)`, `restoreFs(fs, bytes, options)`,
@@ -158,7 +158,7 @@ Rejected (P1, template scale, S ≈ 95 MB):
 - Measured on landed code (isolate-guest README §Snapshot, M3 Pro): 23 654
   files / 100.6 MB — snapshot 138 ms and restore 173 ms in the isolate, 142 /
   161 ms in Node, ivm copy ≤ 10 ms, smallest `memoryLimit` for restore → run →
-  snapshot 223 MiB; 10 files / 958 kB — ≤ 2.3 ms each way, 19 MiB. Not
+  snapshot 223 MiB (225 on the probe's grid); 10 files / 958 kB — ≤ 2.3 ms each way, 19 MiB. Not
   measured on Linux.
 - The consumer stores ~S bytes per snapshot; gzip, if wanted, is the host's
   (template scale 95 → 18 MB).
@@ -173,26 +173,58 @@ Rejected (P1, template scale, S ≈ 95 MB):
   manager's wording «a partial tree is never passed off as whole: after the
   failure the instance is thrown away»: `## Decisions` below.
 - Manager's reading, 2026-11-23, not the user's words: the goal's I6 memory
-  budget holds on the scenario's sequence restore → run → snapshot (225 MiB
-  ≤ 2 × S + 64 = 260); the heavier snapshot straight after a restore (up to
+  budget holds on the scenario's sequence restore → run → snapshot (223–225 MiB,
+  the two scripts' bisection grids, ≤ 2 × S + 64 = 260); the heavier snapshot straight after a restore (up to
   ~3 × the bytes) is not a
-  user fork — CLOSE §1 «composed actions are proven on one representative real
-  program/state; no full cross-product», and RDY-6 «a difference is a user fork
-  only when it is reachable, materially affects the requested value and
-  nothing accepted settles it»: that snapshot returns the bytes just restored,
+  user fork — RDY-6 «a difference is a user fork only when it is reachable,
+  materially affects the requested value and nothing accepted settles it», with
+  CLOSE §1 «every invariant executed on the real scenario» met on the
+  scenario's sequence: that snapshot returns the bytes just restored,
   no requested action needs it, and a sandbox always runs guest code between.
   Recorded: `distribution/isolate-host-fs-snapshot-restore-then-snapshot-peak`.
 
 ## Goal invariants (exported from goal `isolate-host-fs-snapshot` at its close)
 
-Its Outcome, User scenario and invariants verbatim: the goal's `goal.md` in git at commit `f757909c4` (epics backlog, directory `isolate-host-fs-snapshot`; removed at close).
+Verbatim from the goal's `goal.md` in git at commit `f757909c4` (epics backlog,
+directory `isolate-host-fs-snapshot`; removed at close), its Outcome and User
+scenario there too. The user's amendments: `## Decisions`; the manager's
+readings: «Not the user's words» above.
 
-- I1 — round trip: after restore guest code sees the same kind, bytes, `readdirSync` order and `fs.statSync` (`ino` aside) for every path, «for any name rifty's FS holds», both realms, both directions; what is not kept is named in compat.
-- I2 — one blob with a format version and the template; other versions and templates refused by name; later rifty reads every earlier version.
-- I3 — hostile bytes refused by name, no blob text, target unchanged, linear in the blob, `maxBytes` before allocation, nothing outside the target touched.
-- I4 — limits: snapshot over `maxBytes` refused before allocating, restore before reading; restore only before guest code; snapshot after guest code is guest-authored, accepted only via restore.
-- I5 — the same tree gives the same bytes; snapshot changes nothing.
-- I6 — cost published for ~10 files / ~1 MB and 23 654 files / ~95 MB, both realms; at template scale each direction ≤ 2 s, memory ≤ 2 × S + 64 MiB (M3 Pro).
+1. I1. Round trip: after restore, guest code sees for every path the same
+   kind, bytes, `readdirSync` order and `fs.statSync` (`size`, `nlink`,
+   `mode`, `mtimeMs`, `atimeMs`, `ctimeMs`, `birthtimeMs`) as before snapshot,
+   for any name rifty's FS holds; between the isolate and the consumer's realm
+   in both directions. `ino` is renewed, as after a copy (ADR-0567 §1); what
+   a snapshot does not keep (`ino`; links, modes, owners — absent from rifty's
+   FS) is named in `docs/public/compat/isolate-host.md`.
+2. I2. One opaque blob carries a format version and the template
+   `{id, version}` or none; a reader refuses a version it does not know and a
+   template other than the caller's, each with its named error; later rifty
+   reads every format version released before it (ADR-0567).
+3. I3. Hostile bytes: every defect in scenario step 4 is refused with a named
+   error whose text carries no blob bytes; the target FS is exactly as before;
+   decoding takes time and memory linear in the blob's length, with `maxBytes`
+   checked before any allocation — in the isolate and in the consumer's realm;
+   a restore changes nothing outside its target FS (no other `MemoryFs` of the
+   consumer's realm, no realm-wide state a blob value could set).
+4. I4. Limits: in an unaltered realm a snapshot over `maxBytes` is refused
+   before its bytes are allocated, and restore refuses a blob over `maxBytes`
+   before reading it; restore runs only before guest code in that isolate (not
+   during a run either), else a named error; snapshot works after guest code
+   has run (the run ended, isolate alive) — its result is then guest-authored
+   bytes, bounded by the isolate memory limit and accepted only via restore
+   (ADR-0567 §8).
+5. I5. The same tree gives the same bytes; snapshot changes nothing in the tree.
+6. I6. Cost, measured on landed code and published (isolate-guest README) for
+   a small workspace (~10 files, ~1 MB) and the requirements' template scale
+   (23 654 files, ~95 MB), both realms: bytes, snapshot and restore time, peak
+   isolate memory. Budget on the dev machine (M3 Pro) at template scale: each
+   direction ≤ 2 s (the requirements' one-pass unpack: 0.33–0.39 s vs 18 s
+   with validation), peak isolate memory ≤ 2 × S + 64 MiB. Both run
+   synchronously inside the embedder's call, so that call's deadline bounds
+   them (the sandbox's deadline is the sandbox goal's). An honest snapshot
+   crosses the ivm boundary as an exact-length buffer; the copy's cost is
+   published with the rest.
 
 ## Decisions
 

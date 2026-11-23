@@ -27,10 +27,13 @@ node --no-node-snapshot restore-then-snapshot.mjs 3 --one-file  # the same bytes
 | 23 654 files (12 busy loops, load ~26) | 277, 232 | 225, 225 |
 | one file, 95.9 MiB (load ~3) | 300, 300, 300 | 206, 206, 206 |
 
-Straight after a restore the copied blob is garbage V8 has not collected:
+Each bisection point is tried once and GC is not deterministic: the
+template row's 311 is the worst of three noisy runs; the steady confirmation
+is the one-file row, 300 three times. Straight after a restore the copied
+blob is garbage V8 has not collected:
 tree, blob and the new snapshot are alive together, ~3 × the bytes. Guest code
-between (a sandbox always runs it) gives the GC its chance. Against the goal's
-I6 budget (2 × S + 64 = 260 MiB at 98 MiB) the scenario's sequence holds;
+between (a sandbox always runs it) gives the GC its chance. Against I6's
+budget (ADR-0567 «Goal invariants») (2 × S + 64 = 260 MiB at 98 MiB) the scenario's sequence holds;
 this one does not. Against ADR-0567 §7's rule (2 × `maxBytes` + 16 MiB) a
 budget that is almost all bytes (one large file) is exceeded by ~95 MiB.
 Earlier figures 231–322 MiB (measure-snapshot runs under load 57–155,
