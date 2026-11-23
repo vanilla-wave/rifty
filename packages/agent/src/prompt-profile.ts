@@ -9,7 +9,7 @@ export interface AgentPromptProfile {
 }
 
 const profile: AgentPromptProfile = Object.freeze({
-  id: 'pi-0.85.1+rifty-adapter-v2',
+  id: 'pi-1.6.0+rifty-adapter-v2',
   recipe:
     'Locate the relevant files and read enough surrounding code to understand the behavior. Reproduce a reported failure, or inspect the existing behavior before changing it. Make the smallest exact change that addresses the request, following the project instructions. Then rerun the relevant test, command, build, or preview check and inspect its actual result. If a check fails, use its feedback to investigate and correct the cause. Check edge cases and nearby behavior affected by the change. When a tool or verification step is unavailable, state that limitation clearly and use the available evidence; do not claim an unperformed check succeeded.',
   intro:

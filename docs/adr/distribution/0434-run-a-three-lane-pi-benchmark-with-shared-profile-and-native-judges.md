@@ -72,3 +72,5 @@ custom-prompt tail order now apply to every consumer.
 
 2026-10-05 — ADR-0505 supersedes only decision6's unsupported node-endpoint/no-COI
 exclusion for new selected series. Historical reports and the42-run baseline remain.
+
+2026-11-23 — Native lane runs Pi CLI 1.6.0 (agent-bench pin).

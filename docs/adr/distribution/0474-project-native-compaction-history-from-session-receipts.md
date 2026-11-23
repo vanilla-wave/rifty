@@ -35,3 +35,7 @@ Harness migration requires unnecessary history/event/model adapters. Differentia
 suite checks retained context, summary requests, counts, events and tool effects.
 
 Scope: clarification of ADR-0473's ephemeral projection, not a second conversation owner.
+
+## Corrections
+
+2026-11-23 — Journal follows CLI 1.6.0: discarded attempts persist as messages plus null `context_edit` omissions, prompt-state system messages included; "no persistent second message array" overturned by ADR-0569 (the CLI input needs entry ids receipts do not carry).

@@ -1,0 +1,128 @@
+{
+  "probe": "pnpm exec tsx probe.mts <repo> (body in packages/agent/src/typebox-tools.test.ts)",
+  "source": "origin/main 11b9397ee",
+  "pi": "0.85.1",
+  "node": "v24.16.0",
+  "result": {
+    "status": "done",
+    "wireTool": {
+      "type": "function",
+      "function": {
+        "name": "probe",
+        "description": "Probe tool",
+        "parameters": {
+          "type": "object",
+          "required": ["path"],
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "count": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "strict": false
+      }
+    },
+    "outcomes": [
+      {
+        "args": {
+          "path": "a",
+          "count": 2
+        },
+        "result": {
+          "isError": false,
+          "text": "ok"
+        }
+      },
+      {
+        "args": {
+          "path": 1
+        },
+        "result": {
+          "isError": false,
+          "text": "ok"
+        }
+      },
+      {
+        "args": {
+          "count": 1
+        },
+        "result": {
+          "isError": true,
+          "text": "{\"status\":\"failed\",\"callsLeft\":98,\"msLeft\":599986}\nValidation failed for tool \"probe\":\n  - path: must have required properties path\n\nReceived arguments:\n{\n  \"count\": 1\n}"
+        }
+      },
+      {
+        "args": {
+          "path": "a",
+          "count": -1
+        },
+        "result": {
+          "isError": true,
+          "text": "{\"status\":\"failed\",\"callsLeft\":98,\"msLeft\":599986}\nValidation failed for tool \"probe\":\n  - count: must be >= 0\n\nReceived arguments:\n{\n  \"path\": \"a\",\n  \"count\": -1\n}"
+        }
+      },
+      {
+        "args": {
+          "path": "a",
+          "count": "3"
+        },
+        "result": {
+          "isError": false,
+          "text": "ok"
+        }
+      },
+      {
+        "args": {
+          "path": "a",
+          "count": 1.5
+        },
+        "result": {
+          "isError": false,
+          "text": "ok"
+        }
+      },
+      {
+        "args": {
+          "path": "a",
+          "extra": true
+        },
+        "result": {
+          "isError": false,
+          "text": "ok"
+        }
+      },
+      {
+        "args": {},
+        "result": {
+          "isError": true,
+          "text": "{\"status\":\"failed\",\"callsLeft\":95,\"msLeft\":599983}\nValidation failed for tool \"probe\":\n  - path: must have required properties path\n\nReceived arguments:\n{}"
+        }
+      }
+    ],
+    "executed": [
+      {
+        "path": "a",
+        "count": 2
+      },
+      {
+        "path": "1"
+      },
+      {
+        "path": "a",
+        "count": 3
+      },
+      {
+        "path": "a",
+        "count": 1
+      },
+      {
+        "path": "a",
+        "extra": true
+      }
+    ]
+  }
+}

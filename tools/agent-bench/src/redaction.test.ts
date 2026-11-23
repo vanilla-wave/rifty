@@ -1,6 +1,6 @@
-import { Type } from '@earendil-works/pi-ai';
 import { expect, it } from 'vitest';
 import {
+  Type,
   createAgentSession,
   createModels,
   createOpenAIProvider,

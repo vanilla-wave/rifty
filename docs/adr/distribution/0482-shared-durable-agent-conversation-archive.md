@@ -55,3 +55,7 @@ contract; ADR-0474 compaction remains a context projection.
 
 Source inventory and browser RED/probes:
 `docs/backlog/distribution/reference/agent-session-archive-evidence.md`.
+
+## Corrections
+
+2026-11-23 — pi 1.x `system` prompt-state messages (prompt and tool declarations, re-derived each run) are not archived; the archive keeps the conversation (ADR-0569).

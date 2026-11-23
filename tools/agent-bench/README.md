@@ -90,7 +90,7 @@ native-codex setup failure as a record.
   consumer; real installed dependency tarballs supply pinned packages. Shipped
   runtime assets, no source aliases or COI headers; host starts resident Vite only
   after agent work.
-- local-reference: fresh native npm/Node project, pinned Pi CLI 0.85.1, native
+- local-reference: fresh native npm/Node project, pinned Pi CLI 1.6.0, native
   read/bash/edit/write tools; project lives outside the checkout; native children
   omit inherited `NODE_PATH`.
 - native-codex: `codex exec --json`, fresh ephemeral session, ignored user
