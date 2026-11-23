@@ -360,8 +360,17 @@ function nodeInternalHead(stack: string, error: object): string {
   return stack.replace(/^((?:\[eval\]:\d+\n[^\n]*\n *\^\n\n)?)Error: /u, `$1Error [${code}]: `);
 }
 
-/** Marks a message line that reads like a frame; removed once frames are projected. */
-const MESSAGE_LINE = '\uFFFF';
+/**
+ * Marks a message line that reads like a frame; removed once frames are
+ * projected. Fresh per report and unguessable, so no guest text can hold it
+ * and only inserted marks are removed.
+ */
+const randomPrimordial = Math.random;
+let messageLine = '';
+function newMessageLine(): string {
+  messageLine = `\uFFFF${randomPrimordial().toString(36).slice(2)}${randomPrimordial().toString(36).slice(2)}\uFFFF`;
+  return messageLine;
+}
 
 /**
  * The stack starts with the error's name and its whole message; frames follow.
@@ -380,10 +389,10 @@ function protectMessage(stack: string, error: object): string {
   const at = stack.indexOf(message);
   if (at === -1) return stack;
   const end = at + message.length;
-  return `${stack.slice(0, at)}${message.replace(/\n(?=\s+at )/gu, `\n${MESSAGE_LINE}`)}${stack.slice(end)}`;
+  return `${stack.slice(0, at)}${message.replace(/\n(?=\s+at )/gu, `\n${messageLine}`)}${stack.slice(end)}`;
 }
 
-const unmark = (text: string) => text.replaceAll(MESSAGE_LINE, '');
+const unmark = (text: string) => text.replaceAll(messageLine, '');
 
 /** Node `improveStack`: `NotFound [Error]: …` when the class name hides the error's name. */
 function improveStack(stack: string, error: object): string {
@@ -479,6 +488,7 @@ function primitiveText(value: unknown): string {
 
 /** The whole fatal report for `error`, ending in the trailer's newline. */
 export function formatFatalReport(error: unknown): string {
+  newMessageLine();
   if (!isErrorLike(error)) {
     const body =
       (typeof error === 'object' && error !== null) || typeof error === 'function'
@@ -494,6 +504,7 @@ export function formatFatalReport(error: unknown): string {
 
 /** Node's fallback where inspecting the error fails (a throwing Proxy trap): its stack alone. */
 export function formatFatalStack(error: unknown): string | null {
+  newMessageLine();
   if (!isErrorLike(error)) return null;
   const stack = stackOf(error);
   return stack === null

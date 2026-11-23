@@ -230,6 +230,10 @@ it.each([
     'message lines that read like frames, top-level and as a cause',
     "const e = new Error('first\\n    at config file');\ne.cause = new Error('c\\n    at x (y.js:1:1)', { cause: new Error('d\\n  at z') });\nthrow e;\n",
   ],
+  [
+    "a guest's own U+FFFF, in the message and a prop",
+    "const e = new Error('keep \\uFFFF char\\n    at here');\ne.note = 'x\\uFFFFy';\nthrow e;\n",
+  ],
   ['a key that needs quotes', "const e = new Error('x');\ne['my key'] = 2;\ne.ok = 1;\nthrow e;\n"],
   ['symbol-keyed props', "const e = new Error('x');\ne[Symbol('k')] = 1;\ne.a = 2;\nthrow e;\n"],
   [
