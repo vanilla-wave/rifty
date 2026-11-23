@@ -1,0 +1,117 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Mergeable: no blockers; land once PR CI is green at HEAD eb80a87 (PR-6) and this landing verdict is committed as docs/backlog/playground/reference/pr-398-final-green.json (REV-8; not present at HEAD yet); remaining concerns are advisory NOTEs.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "eb80a875b9573f21cda45595fbe6abec95a6db30",
+  "unit_goal_source": "PR #398 https://github.com/vanilla-wave/rifty/pull/398; observed baseline: OwnerPackageState.restore/transition (stamp-miss -> snapshot restore via ensureProjectDependencies) existed with no production caller, and first-materialization restore (owner-package-state.ts planSnapshotRestore) plus no-COI applyNoCoiSnapshot each verified the replay cache twice; BASE 11b9397eee2e8d820c7e2215d5c3e126eaed5348; HEAD eb80a875b9573f21cda45595fbe6abec95a6db30. No ready contract document: direct user request, standalone unit.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Playground first materialization restores the baked snapshot verifying the replay cache once (was twice) and keeps its COI projection",
+      "source": "acceptance",
+      "trace": "scenario+ADR-0394",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-first-materialization.contract.test.ts:1872",
+      "note": ""
+    },
+    {
+      "row": "No-COI applySnapshot applies a real baked snapshot verifying the replay cache once (was twice, projected twice) and lands the no-COI projection",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/no-coi-snapshot-application.test.ts:15",
+      "note": ""
+    },
+    {
+      "row": "Ordinary saved open never fetches or restores the snapshot",
+      "source": "acceptance",
+      "trace": "scenario+ADR-0415",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-saved-state.contract.test.ts:126",
+      "note": ""
+    },
+    {
+      "row": "Interrupted first materialization (create, close, reload) still restores the snapshot automatically",
+      "source": "acceptance",
+      "trace": "scenario+ADR-0394",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-initial-admission.contract.test.ts:69",
+      "note": ""
+    },
+    {
+      "row": "Dev-server child bootstrap cfg rejects the retired own bakedNodeModulesUrl field",
+      "source": "acceptance",
+      "trace": "ADR-0135",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/dev-server-child-config.test.ts:288",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/adr/playground/0165-multi-project-management-with-durable-scratch.md:73",
+          "evidence": "git grep -F '.transition(' 11b9397ee -- packages -> only owner-package-state.test.ts:619,820; no production caller at BASE",
+          "summary": "Carried from c193 (unchanged at HEAD). ADR-0165 decision 5's mandated dev-boot cleanup on root/projectId change is retired by a dated correction line, not by the DEC-2 overturn route (critic + successor ADR). Production behavior is unchanged from baseline because its only caller (owner transition) was already dead at BASE, so this is a question of record form, not a violation.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "packages/workbench/src/workers/owner-package-state.ts:478",
+          "evidence": "",
+          "summary": "Carried from c193 (unchanged at HEAD). The owner adapter's resetPackages branch throws NotImplementedError only after the authority has already run invalidatePackageTrees, applied the mutation transitions and durably revoked the stamp (package-acquisition-authority.ts:631-636), so effects land before the throw. No production sender exists, and docs/backlog/playground/package-acquisition-test-only-dispatch-routes.md records the issue. Deleting the route, as that item proposes, removes the gap.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "packages/workbench/CHANGELOG.md:17",
+          "evidence": "",
+          "summary": "Carried from c193. The '11-47 ms' saving in the CHANGELOG and PR body has no committed measurement artifact. It is a performance note, not a parity claim. The equivalence argument holds when read: reprojection keeps acquisition and tarballCache, so replay requirements are identical.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}
