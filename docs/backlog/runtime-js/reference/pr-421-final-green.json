@@ -1,79 +1,66 @@
 {
   "overall_verdict": "pass",
-  "merge_call": "Merge on green PR CI at HEAD: round-3 contract holds — the CJS compile error object is byte-identical to main's (17 sources, executed side by side), B2/N3 kept, carriers platform-independent, the realm-uncaught terminal honours a canceled global error (mutant killed), #416 rows green; remaining differences are pinned rows, declared compat rows and goal residuals (goal not complete; STOP-1 awaits the user).",
+  "merge_call": "Merge on green PR CI at HEAD: the array-prop blocker is fixed (extra keys/symbols via inspect; unit row + 120-program generator vs live Node; mutant removing the guard killed by both), the dense-array walk is bounded, and the goal amend carries the user's verbatim words per RDY-6. Goal not complete (5d owner:user question, deferred rows).",
   "checkpoint": "Final+GREEN",
-  "unit_goal_source": "docs/backlog/epics/node-file-entry-parity/goal.md (as reviewed at 239b60e7c, unchanged; I1-I4, User scenario, P1/P2) + map.md (STOP-1 owner: user, names all three paths) + ledger.md; manager round-3 contract (CJS compile error back to main's; constant oracle root; cancelable realm-uncaught terminal; inspect getters/customInspect/sparse; #416 merge) recorded in ADR-0445 2026-11-23 lines; PR #421 @ a620f0c6c (merge 3b1707213 of main c2621b50c = PR #416); BASE 50c9d8bf1; baseline = carrier RED rows on main 50c9d8bf1",
+  "unit_goal_source": "docs/backlog/epics/node-file-entry-parity/goal.md (amend 2026-11-23, user: «давай положим в бэклог на всякий»; I1-I4 text unchanged) + map.md (5d STOP-1 owner: user) + ledger.md; ADR-0445 2026-11-23 rollback line; PR #421 @ 36c8d0b13 (product a236bb323, re-pin d5e6c24d0, test 8af8265b8, docs cd19dd8b9 / 36c8d0b13); BASE 50c9d8bf1; baseline = carrier RED rows on main 50c9d8bf1",
   "unit_residuals": [],
   "goal_residuals": [
     {
-      "clause": "User scenario 3 (`<file>:<line>` header) / I2",
-      "location": "docs/backlog/runtime-js/sync-uncaught-header-throw-site-source.md; map.md Open questions (STOP-1, owner: user)",
-      "summary": "No Node header on any path; a compile error names the file only (main's ModuleLoadError message). Needs an engine-level message location, or the user's words on STOP-1."
+      "clause": "User scenario 3 as amended 2026-11-23 / I2",
+      "location": "docs/backlog/runtime-js/sync-uncaught-header-throw-site-source.md; docs/backlog/runtime-js/module-compile-error-node-syntax-error.md",
+      "summary": "Deferred by the user: Node's header on every path and the syntax-error report's class/message/place; rows stay named compat rows."
     },
     {
-      "clause": "I2 / I4",
-      "location": "tests/browser-unit/fixtures/node-file-pins.json; docs/backlog/distribution/isolate-host-rejection-reason-copy.md",
-      "summary": "Rows at Node bytes: no-COI 14/52, COI 14/52, isolate 3/41; isolate rejection loses props/[cause]/class (native fix, ADR); compile errors keep main's loader form (`backlog/runtime-js/module-compile-error-node-syntax-error`, dead ends recorded)."
+      "clause": "I2 / I4 (one implementation)",
+      "location": "docs/backlog/epics/node-file-entry-parity/map.md item 5d (STOP-1 owner: user); docs/backlog/runtime-js/browser-host-realm-uncaught-fatal-report.md",
+      "summary": "Browser-host realm-uncaught / child-entry throw prints main's Worker report (rifty runtime URLs) after the rollback — open user question (accept + backlog, or a separate goal)."
     },
     {
-      "clause": "I3",
-      "location": "docs/public/compat/process.md \"Fatal error stderr bytes\"",
-      "summary": "Declared: callback frame names, eval-origin place, hand-written frames at URLs / absolute paths outside the VFS and frames of a module deleted before the report dropped, Proxy traps run (backlog/runtime-js/fatal-report-proxy-traps), frame budget."
-    },
-    {
-      "clause": "I2 / Outcome",
-      "location": "docs/public/compat/process.md; docs/public/compat/isolate-host.md; backlog/runtime-js/node-eval-non-string-stack.md",
-      "summary": "Declared: nested-value layout (own props of Date/RegExp/Buffer and nested symbol keys omitted, >30 items capped), EventEmitter \"Emitted 'error' event at:\", JSON require message prefix, `-e` throwing `stack` getter, isolate `await` outside async as the ESM gap, natural-exit listener-queued throw status 0."
+      "clause": "I2 / I3",
+      "location": "docs/public/compat/process.md \"Fatal error stderr bytes\"; isolate-host.md",
+      "summary": "Declared: rows at Node bytes partial; isolate rejection copy; callback frame names; eval-origin place; out-of-VFS/deleted-module frames dropped; Proxy traps; own props of Date/RegExp/Map/Set/Promise omitted; `-e` throwing stack getter; isolate `await` outside async."
     }
   ],
   "goal_complete": false,
   "coverage": [
     {
-      "row": "CJS compile error = main's (class ModuleLoadError, code SYNTAX_ERROR, message naming the file); conformance test = main's bytes",
-      "source": "acceptance",
-      "trace": "ADR-0445",
-      "status": "pass",
-      "citation": "tests/conformance/modules/cjs-compile-error.test.ts (git diff 50c9d8bf1..a620f0c6c → empty); side-by-side probe /tmp/nf-review/scripts/zz-cjs-err.test.ts on main 50c9d8bf1 and HEAD: 17 sources, {ctor,name,code,message,specifier,importer,keys} identical",
-      "note": ""
-    },
-    {
-      "row": "B2: a source that is not a function body runs no line; N3 first-line class as Node",
-      "source": "acceptance",
-      "trace": "ADR-0450",
-      "status": "pass",
-      "citation": "packages/runtime-js/src/module-loader/cjs-factory.test.ts; tests/conformance/modules/cjs-first-line.test.ts; entry row first-line-html-close (pinned \"node\" all hosts)",
-      "note": ""
-    },
-    {
-      "row": "No host prints a Node-format header on any corpus row",
-      "source": "acceptance",
-      "trace": "I2+ADR-0445",
-      "status": "pass",
-      "citation": "tests/browser-unit/fixtures/node-file-programs.ts NODE_HEADER in nodeFileVerdict (green all hosts @a620f0c6c)",
-      "note": ""
-    },
-    {
-      "row": "Carrier roots equal length by construction; pins platform-independent",
-      "source": "frozen-artifact",
-      "trace": "scenario",
-      "status": "pass",
-      "citation": "tests/browser-unit/fixtures/node-file-programs.ts ORACLE_ROOT_LENGTH + nodeFileRoot; tests/no-coi/no-coi-fatal-stderr.spec.ts padded projectRoot (green with TMPDIR=/tmp and default macOS temp)",
-      "note": ""
-    },
-    {
-      "row": "A canceled global error stays nonterminal (ADR-0340); an uncanceled one runs the child's fatal terminal after dispatch",
+      "row": "B1 rollback: realm-uncaught terminal, kernel child / no-COI child entry catch, kernel real-worker spec and worker_threads keepalive fault test are main's bytes",
       "source": "acceptance",
       "trace": "ADR-0445+ADR-0340",
       "status": "pass",
-      "citation": "tests/browser-unit/kernel-process-terminal-drain-real-worker.spec.ts:295 (mutant: terminal run inside the trap → this row fails, 1 failed | 3 passed)",
+      "citation": "git diff --stat 11b9397ee..1f3a4d89c -- packages/runtime-js/src/ipc/no-coi-child-worker.ts packages/workbench/src/workers/node-entry-bootstrap.ts tests/browser-unit/kernel-process-terminal-drain-real-worker.spec.ts packages/runtime-js/src/builtins/worker_threads-keepalive.fault.test.ts → none; event-loop-keepalive.ts: installUnhandledErrorTrap/handleRealmUncaughtError unchanged (remaining hunks: awaitDrain reject, handleRealmUnhandledRejection eval reason)",
       "note": ""
     },
     {
-      "row": "S-a: the fatal report never runs a getter (incl. Buffer/Date/RegExp, array elements); frames kept or declared",
+      "row": "S1 arrays (negative/fractional/string/symbol keys, empty []) as Node in util.inspect",
       "source": "acceptance",
-      "trace": "I3+ADR-0445",
+      "trace": "I2",
       "status": "pass",
-      "citation": "packages/runtime-js/tests/fatal-report.test.ts (array element, Buffer getter rows)",
+      "citation": "packages/runtime-js/src/repl/inspect-sparse.test.ts (2000 generated arrays vs node:util inspect)",
+      "note": ""
+    },
+    {
+      "row": "S1 arrays in the fatal report as Node",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "packages/runtime-js/tests/fatal-report.test.ts rows \"an array prop with extra keys\" and \"120 generated array-valued props\" (mutant: guard removed → both fail)",
+      "note": ""
+    },
+    {
+      "row": "ERR_REQUIRE_* stack head `Error [CODE]:` as Node",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/module-loader/errors.ts; packages/runtime-js/tests/fatal-report.test.ts (vs live Node)",
+      "note": ""
+    },
+    {
+      "row": "No host prints a Node-format header on any corpus row; pins platform-independent",
+      "source": "acceptance",
+      "trace": "I2+ADR-0445",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/node-file-programs.ts NODE_HEADER + ORACLE_ROOT_LENGTH (green, default temp and TMPDIR=/tmp)",
       "note": ""
     },
     {
@@ -81,15 +68,7 @@
       "source": "acceptance",
       "trace": "I1",
       "status": "pass",
-      "citation": "tests/no-coi/node-file-parity.spec.ts, tests/browser-unit/node-file-parity.spec.ts (green @a620f0c6c)",
-      "note": ""
-    },
-    {
-      "row": "I4 one implementation across no-COI, COI, isolate",
-      "source": "acceptance",
-      "trace": "I4",
-      "status": "pass",
-      "citation": "packages/isolate-host/tests/node-file.test.ts (pins per host, green)",
+      "citation": "tests/no-coi/node-file-parity.spec.ts, tests/browser-unit/node-file-parity.spec.ts (green @36c8d0b13)",
       "note": ""
     },
     {
@@ -105,20 +84,20 @@
     {
       "axis": "Completeness",
       "verdict": "pass",
-      "findings": [
-        {
-          "severity": "concern",
-          "location": "docs/public/compat/process.md \"Fatal error stderr bytes\" (\"A CJS compile failure is main's loader error, unchanged\")",
-          "evidence": "Side-by-side (main 50c9d8bf1 vs HEAD, /tmp/nf-review/cjs-err-{revmain,rev421}.json): error objects identical. Printed: pin syntax-error-entry \"ModuleLoadError: Failed to compile CJS module <root>/main.js: Unexpected token ';' {\\n  code: 'SYNTAX_ERROR',\\n  specifier: '<root>/main.js',\\n  importer: '<root>/main.js',\\n  requireStack: undefined\\n}\\n\\nNode.js v24.0.0\\n\"; main printed err.stack (message line + rifty runtime frames, no props, no trailer).",
-          "summary": "Answer to the manager's question: about the syntax error itself the PR says nothing main doesn't (same class, code, message, specifier/importer). What differs is the surrounding report: the props block (incl. `requireStack: undefined`), the trailer and dropped runtime frames — the PR's one report for every error, acceptable, but \"unchanged\" reads as unchanged bytes; say \"main's error object, printed through the one report (props block, trailer)\". Intended differences from main beyond the report: `\\uFEFF#!` now fails as in Node (main stripped the BOM and ran it) — declared ADR-0450 N3.",
-          "authority": ""
-        }
-      ]
+      "findings": []
     },
     {
       "axis": "Mission and architecture",
       "verdict": "pass",
-      "findings": []
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/src/{internal/event-loop-keepalive.ts:409-415,512-518,builtins/node-entry.ts:215-220,builtins/timers.ts,builtins/process-lifecycle-events.ts:138-148}",
+          "evidence": "git diff 11b9397ee..1f3a4d89c -- packages | grep \"^+\" | grep -E \"addEventListener|preventDefault|onerror|onunhandledrejection|reportError|self-exit|control:\" → none. cd /tmp/rev421 @ 1f3a4d89c (after pnpm install --offline): unit (fatal-report, module-loader, repl incl. inspect-sparse 2000-array generator, conformance modules, runtime-js internal, worker_threads-keepalive.fault, node-entry, kernel worker-stdio-drain + process-manager + worker-terminal-drain.fault, workbench no-coi-project-command-exit) 45 files / 493 tests exit 0; isolate-host 16 files / 452 tests and isolate-guest 5 files / 190 tests exit 0; no-COI node-file-parity + no-coi-fatal-stderr + no-coi-process-exit-status 46 passed (TMPDIR=/tmp carriers 8 passed); COI node-file-parity + kernel-process-terminal-drain-real-worker + kernel-process-terminal-drain 10 passed.",
+          "summary": "Answer: no PR code left changes the browser-process lifecycle (error trap, preventDefault, exit requests, control frames) vs main — the trap and handleRealmUncaughtError are main's, so every cancellation form (onerror returning true, prototype preventDefault, several/capture listeners) behaves as main by construction, and main's kernel spec passes. Remaining runtime-owned differences: (a) awaitDrain rejects a non-Error projected reason as itself (main: `new Error(String(v))`) — reached only without an eval projection, changes the rejection value's type for drain consumers (no-COI child prints `String(v)` instead of an Error stack), not exit status; (b) the eval sync catch reshapes a MODULE_NOT_FOUND before dispatch (listeners see the plain Error, as Node); (c) an eval rejection's terminal gets the UnhandledPromiseRejection wrapper; (d) NodeProcessExit.fatal/listenerThrew and the eval terminal print the shared formatter; (e) timer callbacks run as `Timeout#_onTimeout` (`this` = the handle) on every host; (f) runNodeEntry claims/clears the main module.",
+          "authority": ""
+        }
+      ]
     },
     {
       "axis": "Goal drift",
@@ -126,9 +105,9 @@
       "findings": [
         {
           "severity": "concern",
-          "location": "docs/backlog/epics/node-file-entry-parity/map.md Open questions",
-          "evidence": "map @ a620f0c6c: STOP-1 line names \"a throw, an unhandled rejection, a compile error … a compile error prints main's ModuleLoadError … (file named, no line)\".",
-          "summary": "STOP-1 now names the current state (previous concern resolved); goal.md unchanged, ledger append-only.",
+          "location": "docs/backlog/epics/node-file-entry-parity/goal.md (Decisions amend 2026-11-23); ledger.md; map.md",
+          "evidence": "git diff 1f3a4d89c..36c8d0b13 -- docs/backlog/epics/node-file-entry-parity: amend in RDY-6 form (`amend: 2026-11-23 — user: «давай положим в бэклог на всякий» …` with the manager's question quoted and changed obligations named); I1-I4 text unchanged; ledger lines appended only (incl. a dated correction); both drafts carry the words with owner and trigger; map STOP-1 for the header settled, 5d STOP-1 owner: user added.",
+          "summary": "Amendment checked against REV-10 axis 3 / RDY-6: recorded with the user's own words, the weakened scenario rows named, the residuals linked to drafts with triggers — no row silently weakened. The user's answer reads as \"defer to the backlog\", which the amend states.",
           "authority": ""
         }
       ]
@@ -139,9 +118,16 @@
       "findings": [
         {
           "severity": "concern",
-          "location": "docs/adr/runtime-js/0450-project-vm-script-offsets-through-one-owned-stack-hook.md (cost line); packages/runtime-js/CHANGELOG.md",
-          "evidence": "Recorded: compile +30% (3061 real modules), external 403→869 ms, load +33% synthetic; not re-measured.",
-          "summary": "Every CJS module compiled twice (B2 safety); recorded.",
+          "location": "packages/runtime-js/src/repl/inspect.ts formatArray (sparse || length <= DENSE_KEYS_LIMIT)",
+          "evidence": "packages/runtime-js/src/repl/inspect-sparse.test.ts \"a long dense array prints at once\" (5e6 elements < 50 ms) green; probe L4: a 70000-element dense array hides `extra: 'E'` (Node prints it) — declared in compat process.md (\"a dense array longer than 65536 elements omits its non-index keys\").",
+          "summary": "Previous perf concern RESOLVED: no key walk for long dense arrays; the trade-off (hidden extra keys past 65536) is declared.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "docs/adr/runtime-js/0450-project-vm-script-offsets-through-one-owned-stack-hook.md (cost line)",
+          "evidence": "Recorded; not re-measured.",
+          "summary": "CJS double compile cost recorded.",
           "authority": ""
         }
       ]
@@ -149,15 +135,7 @@
     {
       "axis": "Scope",
       "verdict": "pass",
-      "findings": [
-        {
-          "severity": "concern",
-          "location": "tests/browser-unit/kernel-process-terminal-drain-real-worker.spec.ts:261-292; packages/kernel/src/{worker-stdio-drain.ts:195-230,process-manager.ts:740-760,1005-1025}",
-          "evidence": "git diff --stat 50c9d8bf1..a620f0c6c -- packages/kernel tests/browser-unit/kernel-process-terminal-drain.spec.ts packages/runtime-js/src/builtins/worker_threads.test.ts packages/runtime-wasi → none. cd /tmp/rev421 @ a620f0c6c: unit (fatal-report, module-loader, repl incl. inspect-sparse, conformance cjs-compile-error + cjs-first-line, runtime-js internal, kernel worker-stdio-drain + process-manager + worker-terminal-drain.fault, worker_threads) 43 files / 467 tests exit 0; isolate-host all 16 files / 446 tests exit 0; no-COI node-file-parity + no-coi-fatal-stderr + no-coi-process-exit-status 46 passed; COI node-file-parity + kernel-process-terminal-drain-real-worker + kernel-process-terminal-drain 10 passed; with TMPDIR=/tmp (short, Linux-like oracle temp dir) no-COI carriers 8 passed and isolate node-file 41 passed against the same pins.",
-          "summary": "Answer on the controlFrames pin: intended and recorded (ADR-0445 2026-11-22 rule 3 line: a no-listener realm-uncaught error runs the child's fatal terminal, not the default Worker report; 2026-11-23 line: after the error dispatch, cancelable). Producer: the child's worker-stdio writer emits one `control:stdio-order` frame per committed stdout/stderr chunk (order = chunks committed on both streams); consumer: ProcessManager `_startIpc` → outputReceiver.acceptOrderFrame releases chunks in that order. Change: the report is now a child stderr chunk (frame 2, order 1, contiguous after stdout 0) instead of parent-side `_workerError` text pushed on stderr without a frame; exit 1 is the child's exit request after the dispatch microtask (ErrorEvent canceled) instead of the parent's uncanceled-ErrorEvent failure; still one exit, one terminate. Protocol code untouched; the other specs on it (kernel-process-terminal-drain.spec.ts, worker-stdio-drain/process-manager/terminal-drain fault tests, worker_threads) pass unedited.",
-          "authority": ""
-        }
-      ]
+      "findings": []
     },
     {
       "axis": "Bugs",
@@ -165,16 +143,16 @@
       "findings": [
         {
           "severity": "concern",
-          "location": "packages/runtime-js/src/repl/inspect.ts (accessorText getters option; formatArray; formatObject)",
-          "evidence": "scratch worktree /tmp/rev421 @ a620f0c6c: cp /tmp/nf-review/scripts/zz-probe12.test.ts packages/isolate-host/tests/zz-probe.test.ts && pnpm exec vitest run --project isolate-host packages/isolate-host/tests/zz-probe.test.ts (live node v24.16.0 vs isolate guest; raw /tmp/nf-review/probes-zz-probe12-a620f0c6c.json). K8 util.inspect(getters:true): Node multi-line with \"[Getter: <Inspection threw (Error: bad\\n at …)>]\", rifty \"{ a: [Getter: 1], b: [Getter: <Inspection threw (bad)>], c: [Setter] }\". K5/K6/K3: Date/RegExp/Buffer getters never run in the report (no RAN) but their own props are omitted (Node \"1970-01-01T00:00:00.000Z { x: [Getter] }\"). K1 sparse arrays incl. new Array(2**32-1) equal Node; a dense array >30 items is capped (Node groups 100). K2 array extra keys and K11 nested symbol keys omitted. K4 console.log(Buffer) runs its getter as Node does.",
-          "summary": "Round-3 inspect fixes hold (no getter runs in the report; sparse arrays as Node). Remaining inspect layout gaps are pre-existing or under the declared nested-value row; getters:true text differs (new surface, minor).",
+          "location": "packages/runtime-js/src/builtins/fatal-report.ts primitiveElements guard",
+          "evidence": "scratch /tmp/rev421: cp /tmp/nf-review/scripts/zz-probe13.test.ts packages/isolate-host/tests/zz-probe.test.ts && pnpm exec vitest run --project isolate-host … (raw /tmp/nf-review/probes-zz-probe13-d5e6c24d0.json): L2 rifty \"a: [ 1, 2, '-1': 'neg', '1.5': 'frac', 'a-b': 'dash', Symbol(s): 'sym' ]\" = Node. Mutant (guard removed): \"an array prop with extra keys\" fails (1 failed | 36 passed) and \"120 generated array-valued props\" fails (1 failed).",
+          "summary": "Previous blocker RESOLVED. The generator compares after flattening nested line breaks (declared layout), so it checks content, not layout.",
           "authority": ""
         },
         {
           "severity": "concern",
-          "location": "packages/runtime-js/src/builtins/fatal-report.ts frameKind",
-          "evidence": "scratch worktree /tmp/rev421 @ a620f0c6c: cp /tmp/nf-review/scripts/zz-probe12.test.ts packages/isolate-host/tests/zz-probe.test.ts && pnpm exec vitest run --project isolate-host packages/isolate-host/tests/zz-probe.test.ts (live node v24.16.0 vs isolate guest; raw /tmp/nf-review/probes-zz-probe12-a620f0c6c.json). K12 a module deleted before the report: Node keeps \"at exports.f (<root>/gone.js:1:27)\", rifty drops it (declared).",
-          "summary": "Declared frame drop; noted.",
+          "location": "packages/runtime-js/src/builtins/fatal-report.ts inspectError hidden cause; docs/public/compat/process.md",
+          "evidence": "L1/L5 unchanged: hidden `cause` accessor not run (Node runs it once); Map/Set/Date/RegExp/Promise own props omitted (declared).",
+          "summary": "Declared or minor.",
           "authority": ""
         }
       ]
@@ -185,9 +163,9 @@
       "findings": [
         {
           "severity": "concern",
-          "location": "packages/isolate-guest/src/guest/entry.ts naturalExit branch; packages/isolate-host/tests/{corpus.ts,parity.test.ts,guest-seam.test.ts}; tests/no-coi/no-coi-process-exit-status.spec.ts",
-          "evidence": "git diff --stat c2621b50c..a620f0c6c -- tests/no-coi/no-coi-process-exit-status.spec.ts packages/isolate-host/tests/corpus.ts packages/isolate-host/tests/parity.test.ts → none (unedited vs #416). cd /tmp/rev421 @ a620f0c6c: unit (fatal-report, module-loader, repl incl. inspect-sparse, conformance cjs-compile-error + cjs-first-line, runtime-js internal, kernel worker-stdio-drain + process-manager + worker-terminal-drain.fault, worker_threads) 43 files / 467 tests exit 0; isolate-host all 16 files / 446 tests exit 0; no-COI node-file-parity + no-coi-fatal-stderr + no-coi-process-exit-status 46 passed; COI node-file-parity + kernel-process-terminal-drain-real-worker + kernel-process-terminal-drain 10 passed; with TMPDIR=/tmp (short, Linux-like oracle temp dir) no-COI carriers 8 passed and isolate node-file 41 passed against the same pins. Probe sets zz-probe10/11 re-run: same outcome classes as at bd6fbf022.",
-          "summary": "#416 rows green unedited after the merge; the two merge-time behaviour changes (explicit-exit queued throw prints nothing; natural-exit listener-queued throw prints the report, status 0 declared) carry guest-seam rows and compat lines.",
+          "location": "tests/browser-unit/fixtures/node-file-pins.json; packages/isolate-host/tests",
+          "evidence": "cd /tmp/rev421 @ 36c8d0b13 (product a236bb323): unit (fatal-report incl. 120-program array-prop generator vs live Node, repl incl. inspect-sparse + 5e6 dense-array timing, module-loader, conformance modules) 31 files / 274 tests exit 0 and fatal-report 38 tests at 8af8265b8; isolate-host 16 files / 452 tests exit 0; no-COI node-file-parity + no-coi-fatal-stderr + no-coi-process-exit-status 46 passed; COI node-file-parity + kernel-process-terminal-drain-real-worker + kernel-process-terminal-drain 10 passed; pnpm build:libs + check:esbuild-legacy-retirement verified (re-pin d5e6c24d0).",
+          "summary": "All carriers green at HEAD.",
           "authority": ""
         }
       ]
@@ -199,12 +177,12 @@
         {
           "severity": "concern",
           "location": "docs/public/compat/process.md \"Fatal error stderr bytes\"",
-          "evidence": "pins: rows at Node bytes no-COI 14/52, COI 14/52, isolate 3/41.",
-          "summary": "Agents never see Node's source line + caret; a compile error names the file but no line (main's form). Declared; goal residual, user decision pending (STOP-1).",
+          "evidence": "pins after rollback: COI realm-uncaught/entry-throw rows pinned by stderrHead (served runtime URLs in stderr).",
+          "summary": "On the COI kernel child and no-COI child Worker, an uncaught throw again prints main's Worker report (rifty runtime URLs in stderr) — declared divergence; agents on those hosts read rifty frames.",
           "authority": ""
         }
       ]
     }
   ],
-  "reviewed_sha": "a620f0c6c5cc3958d50046777175bfe60eab9836"
+  "reviewed_sha": "8af8265b8b5f840523722b4b49032fff87abad09"
 }
