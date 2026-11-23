@@ -281,16 +281,16 @@ describe('snapshot first acquisition admission survives the catalog lifetime', (
   it.each([
     [
       'replay bytes',
-      /^snapshot-restore-plan-failed: Compact dep snapshot must not contain replay cache entries$/,
+      /^snapshot-restore-plan-failed: Frozen dep snapshot must not contain replay cache entries$/,
     ],
     ['an unsafe payload path', /^snapshot-restore-plan-failed: .*unsafe archive path/i],
   ] as const)(
-    '[fault: poisoned-cache] rejects a compact v5 carrying %s before any cache, tree or claim write',
+    '[fault: poisoned-cache] rejects a frozen v5 carrying %s before any cache, tree or claim write',
     async (fault, reason) => {
-      const compact = {
+      const frozen = {
         ...fixture.payload,
         version: 5,
-        profile: 'compact',
+        profile: 'frozen',
         tarballCache: {
           version: 1,
           root: TARBALL_CACHE_ROOT,
@@ -308,11 +308,11 @@ describe('snapshot first acquisition admission survives the catalog lifetime', (
             }
           : {}),
       } as const;
-      const bytes = new TextEncoder().encode(JSON.stringify(compact));
+      const bytes = new TextEncoder().encode(JSON.stringify(frozen));
       const descriptor = {
         snapshotId: `sha256:${createHash('sha256').update(bytes).digest('hex')}`,
         templateId: fixture.payload.templateId,
-        assetUrl: 'https://host.test/poisoned-compact.json',
+        assetUrl: 'https://host.test/poisoned-frozen.json',
       };
       const requests: string[] = [];
       const fetch = async (input: string | URL | Request): Promise<Response> => {

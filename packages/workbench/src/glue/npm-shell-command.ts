@@ -958,6 +958,7 @@ function reportInstallError(err: unknown, ctx: CommandContext): number {
     secondVersion?: string;
     expected?: string;
     actual?: string;
+    reason?: string;
   };
   if (e.code === 'EVERSIONCONFLICT') {
     ctx.stderr.write(
@@ -973,6 +974,11 @@ function reportInstallError(err: unknown, ctx: CommandContext): number {
         e.expected ?? '?'
       }, got ${e.actual ?? '?'}\n`,
     );
+    return 1;
+  }
+  // A cold replay cache is not a broken lock; the installer message names cause and exits.
+  if (e.code === 'EBROKENLOCK' && e.reason === 'shadow-replay-cache-miss') {
+    ctx.stderr.write(`npm: ${e.message}\n`);
     return 1;
   }
   if (e.code === 'EBROKENLOCK') {
