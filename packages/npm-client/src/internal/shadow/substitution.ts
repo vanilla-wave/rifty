@@ -229,12 +229,72 @@ function brokenShadowReplayCache(pin: ResolvedPin, detail: string): Error {
   );
 }
 
+interface ShadowReplayCacheMiss {
+  readonly packageName: string;
+  readonly locked: string;
+  readonly substitute: string;
+  readonly recipeId: string;
+}
+
+/** Facts of errors minted here, so the installer can restate them for an Eddy-staged lock. */
+const shadowReplayCacheMisses = new WeakMap<Error, ShadowReplayCacheMiss>();
+
+function shadowReplayCacheMissError(miss: ShadowReplayCacheMiss, message: string): Error {
+  const error = Object.assign(new Error(message), {
+    code: 'EBROKENLOCK' as const,
+    packageName: miss.packageName,
+    reason: 'shadow-replay-cache-miss' as const,
+  });
+  shadowReplayCacheMisses.set(error, miss);
+  return error;
+}
+
+const REPLAY_TAKES_CACHE_ONLY =
+  'Lockfile replay takes substitutes only from that cache and never downloads them';
+
+/** Cold cache, not a broken lock: names the pin, why it is not fetched, and the reader's exit. */
+function missingShadowReplayBytes(
+  pin: ResolvedPin,
+  shadow: NonNullable<ResolvedPin['shadow']>,
+  source: { readonly name: string; readonly version: string },
+): Error {
+  const miss = {
+    packageName: pin.name,
+    locked: `${shadow.trigger.name}@${shadow.trigger.version}`,
+    substitute: `${source.name}@${source.version}`,
+    recipeId: shadow.recipe.id,
+  };
+  return shadowReplayCacheMissError(
+    miss,
+    [
+      `EBROKENLOCK: package-lock.json installs ${miss.locked} from its substitute ${miss.substitute} (shadow recipe ${miss.recipeId}), but the tarball cache holds no intact copy of it.`,
+      `${REPLAY_TAKES_CACHE_ONLY}, so this lockfile cannot be reinstalled exactly here.`,
+      'To install anyway, delete package-lock.json and run install again: it re-resolves through the registry, and installed versions may change.',
+    ].join(' '),
+  );
+}
+
+/** Eddy stages its lock in memory (ADR-0182): same cause, no file to delete; null for other errors. */
+export function eddyShadowReplayCacheMiss(error: unknown): Error | null {
+  if (!(error instanceof Error)) return null;
+  const miss = shadowReplayCacheMisses.get(error);
+  if (miss === undefined) return null;
+  return shadowReplayCacheMissError(
+    miss,
+    [
+      `EBROKENLOCK: the lockfile Eddy resolved installs ${miss.locked} from its substitute ${miss.substitute} (shadow recipe ${miss.recipeId}), but the tarball cache lost its intact copy after Eddy seeded it.`,
+      `${REPLAY_TAKES_CACHE_ONLY}. No project file was written; run install again to seed the cache from Eddy again.`,
+    ].join(' '),
+  );
+}
+
 export async function readRegistryShadowReplayCache(
   pin: ResolvedPin,
   fetchCtx: FetchAndUnpackCtx,
 ): Promise<FetchAndUnpackResult> {
-  const acquisition = pin.shadow?.acquisition;
-  if (pin.origin !== 'lockfile' || acquisition?.kind !== 'registry') {
+  const shadow = pin.shadow;
+  const acquisition = shadow?.acquisition;
+  if (shadow === undefined || pin.origin !== 'lockfile' || acquisition?.kind !== 'registry') {
     throw new TypeError('registry shadow replay cache requires a lockfile acquisition');
   }
   throwIfAborted(fetchCtx.signal);
@@ -245,7 +305,7 @@ export async function readRegistryShadowReplayCache(
   }
   const bytes = await fetchCtx.cache.get(acquisition.name, acquisition.version, integrity);
   throwIfAborted(fetchCtx.signal);
-  if (bytes === null) throw brokenShadowReplayCache(pin, 'is missing its pinned cache bytes');
+  if (bytes === null) throw missingShadowReplayBytes(pin, shadow, acquisition);
   const actual = await computeIntegrity(bytes, algorithm);
   throwIfAborted(fetchCtx.signal);
   if (actual !== integrity) {

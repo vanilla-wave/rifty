@@ -19,10 +19,10 @@ import {
   verifyDepSnapshotReplayCache,
 } from './dep-snapshot.ts';
 
-const compact = (value: object) => ({
+const frozen = (value: object) => ({
   ...value,
   version: 5,
-  profile: 'compact',
+  profile: 'frozen',
   tarballCache: { version: 1, root: TARBALL_CACHE_ROOT, files: [] },
 });
 const roots: string[] = [];
@@ -33,18 +33,16 @@ afterEach(() => {
 
 type TarFault =
   | 'none'
-  | 'v4-compact-marker'
+  | 'v4-frozen-marker'
   | 'v5-no-profile'
   | 'v5-unknown-profile'
+  | 'v5-retired-compact-profile'
   | 'replay-entry'
   | 'replay-dir';
 
-/** Re-pack a producer-valid compact tar with system tar after one control-data edit. */
-async function repackCompactTar(
-  tar: Uint8Array,
-  fault: TarFault,
-): Promise<Uint8Array<ArrayBuffer>> {
-  const root = mkdtempSync(join(tmpdir(), 'rifty-compact-tar-'));
+/** Re-pack a producer-valid frozen tar with system tar after one control-data edit. */
+async function repackFrozenTar(tar: Uint8Array, fault: TarFault): Promise<Uint8Array<ArrayBuffer>> {
+  const root = mkdtempSync(join(tmpdir(), 'rifty-frozen-tar-'));
   roots.push(root);
   writeFileSync(join(root, 'in.tar'), tar);
   const extracted = join(root, 'extracted');
@@ -64,9 +62,11 @@ async function repackCompactTar(
   }
   const manifestPath = join(tree, 'rifty/manifest.json');
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as Record<string, unknown>;
-  if (fault === 'v4-compact-marker') manifest.version = 4;
+  if (fault === 'v4-frozen-marker') manifest.version = 4;
   if (fault === 'v5-no-profile') manifest.profile = undefined; // JSON.stringify drops the key
   if (fault === 'v5-unknown-profile') manifest.profile = 'mystery';
+  // Never-published pre-rename value (ADR-0547 2026-11-23): an unknown profile like any other.
+  if (fault === 'v5-retired-compact-profile') manifest.profile = 'compact';
   writeFileSync(manifestPath, JSON.stringify(manifest));
   if (fault === 'replay-entry' || fault === 'replay-dir') {
     await mkdir(join(tree, 'rifty/replay-cache'));
@@ -86,22 +86,22 @@ async function repackCompactTar(
   return new Uint8Array(readFileSync(join(root, 'out.tar')));
 }
 
-describe('compact snapshot admission (I1–I3)', () => {
-  it('roundtrips explicit compact JSON and tar without replay; retains the complete prepared payload', async () => {
+describe('frozen snapshot admission (I1–I3)', () => {
+  it('roundtrips explicit frozen JSON and tar without replay; retains the complete prepared payload', async () => {
     const { payload } = await bakeSavedSnapshotFixture();
-    const source = parseDepSnapshot(JSON.stringify(compact(payload)));
-    expect(JSON.parse(serializeDepSnapshot(source))).toEqual(compact(payload));
+    const source = parseDepSnapshot(JSON.stringify(frozen(payload)));
+    expect(JSON.parse(serializeDepSnapshot(source))).toEqual(frozen(payload));
     const decoded = parseDepSnapshot(
       JSON.stringify(decodeDepSnapshotTar(serializeDepSnapshotTar(source))),
     );
     expect(decoded.nodeModules.files).toEqual(source.nodeModules.files);
     expect(decoded).toMatchObject({
       version: 5,
-      profile: 'compact',
+      profile: 'frozen',
       tarballCache: { files: [] },
     });
   });
-  it('admits a compact shadow tree without its ordinary exact replay closure', async () => {
+  it('admits a frozen shadow tree without its ordinary exact replay closure', async () => {
     const legacy = JSON.parse(
       gunzipSync(
         await readFile(
@@ -114,15 +114,15 @@ describe('compact snapshot admission (I1–I3)', () => {
     );
     expect(legacy.tarballCache.files.length).toBeGreaterThan(0);
     await expect(
-      verifyDepSnapshotReplayCache(parseDepSnapshot(JSON.stringify(compact(legacy)))),
+      verifyDepSnapshotReplayCache(parseDepSnapshot(JSON.stringify(frozen(legacy)))),
     ).resolves.toBeUndefined();
     await expect(
-      verifyDepSnapshotReplayCache({ ...legacy, tarballCache: compact(legacy).tarballCache }),
+      verifyDepSnapshotReplayCache({ ...legacy, tarballCache: frozen(legacy).tarballCache }),
     ).rejects.toThrow(/closure|missing/i);
   });
-  it('applies compact through the no-COI owner without any shared-cache mutation', async () => {
+  it('applies frozen through the no-COI owner without any shared-cache mutation', async () => {
     const { payload, descriptor } = await bakeSavedSnapshotFixture();
-    const bytes = new TextEncoder().encode(JSON.stringify(compact(payload)));
+    const bytes = new TextEncoder().encode(JSON.stringify(frozen(payload)));
     vi.stubGlobal('fetch', async () => new Response(bytes));
     const fs = new MemoryFsSync();
     fs.mkdirSync('/project', { recursive: true });
@@ -147,16 +147,17 @@ describe('compact snapshot admission (I1–I3)', () => {
   });
   for (const fault of [
     'none',
-    'v4-compact-marker',
+    'v4-frozen-marker',
     'v5-no-profile',
     'v5-unknown-profile',
+    'v5-retired-compact-profile',
     'replay-entry',
     'replay-dir',
   ] as const) {
-    it(`system-tar compact envelope ${fault === 'none' ? 'applies' : `rejects ${fault} before mutation`} (I3)`, async () => {
+    it(`system-tar frozen envelope ${fault === 'none' ? 'applies' : `rejects ${fault} before mutation`} (I3)`, async () => {
       const { payload, descriptor } = await bakeSavedSnapshotFixture();
-      const bytes = await repackCompactTar(
-        serializeDepSnapshotTar(parseDepSnapshot(JSON.stringify(compact(payload)))),
+      const bytes = await repackFrozenTar(
+        serializeDepSnapshotTar(parseDepSnapshot(JSON.stringify(frozen(payload)))),
         fault,
       );
       vi.stubGlobal('fetch', async () => new Response(bytes));
@@ -184,6 +185,7 @@ describe('compact snapshot admission (I1–I3)', () => {
   }
   for (const fault of [
     'unknown-profile',
+    'retired-compact-profile',
     'legacy-profile',
     'replay-smuggling',
     'malformed-lock',
@@ -192,8 +194,9 @@ describe('compact snapshot admission (I1–I3)', () => {
   ]) {
     it(`rejects ${fault} before application (I3)`, async () => {
       const { payload, descriptor } = await bakeSavedSnapshotFixture();
-      const value = compact(payload);
+      const value = frozen(payload);
       if (fault === 'unknown-profile') value.profile = 'mystery';
+      if (fault === 'retired-compact-profile') value.profile = 'compact';
       if (fault === 'legacy-profile') value.version = 3;
       if (fault === 'replay-smuggling')
         Object.assign(value.tarballCache, {

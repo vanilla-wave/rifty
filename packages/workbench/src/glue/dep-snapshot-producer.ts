@@ -33,8 +33,8 @@ export interface ProduceDependencySnapshotOptions {
   readonly packageLockText: string;
   readonly registryUrl: string;
   readonly templateId: string;
-  /** Replay by default; compact omits acquisition archives, not installed dependencies. */
-  readonly profile?: 'replay' | 'compact';
+  /** Replay by default; frozen omits acquisition archives, not installed dependencies. */
+  readonly profile?: 'replay' | 'frozen';
 }
 
 export interface ProducedDependencySnapshot {
@@ -138,7 +138,7 @@ export async function produceDependencySnapshot(
   if (
     options.profile !== undefined &&
     options.profile !== 'replay' &&
-    options.profile !== 'compact'
+    options.profile !== 'frozen'
   ) {
     throw new TypeError('Unsupported dependency snapshot profile');
   }
@@ -177,11 +177,11 @@ export async function produceDependencySnapshot(
   });
   await verifyDepSnapshotReplayCache(snapshot);
   const selected: DepSnapshot =
-    options.profile === 'compact'
+    options.profile === 'frozen'
       ? {
           ...snapshot,
           version: 5,
-          profile: 'compact',
+          profile: 'frozen',
           tarballCache: { version: 1, root: snapshot.tarballCache.root, files: [] },
         }
       : snapshot;
