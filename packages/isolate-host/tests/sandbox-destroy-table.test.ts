@@ -15,6 +15,10 @@ import { childPids } from './support.ts';
 
 interface Sandbox {
   writeFile(path: string, data: string): Promise<void>;
+  readFile(path: string): Promise<Uint8Array>;
+  list(path?: string): Promise<unknown[]>;
+  remove(path: string): Promise<void>;
+  snapshot(): Promise<Uint8Array>;
   exec(path: string, options?: Record<string, unknown>): Promise<Record<string, unknown>>;
   destroy(): Promise<void>;
 }
@@ -96,6 +100,43 @@ async function killRunning(times: number): Promise<void> {
   }
 }
 
+/**
+ * The caller's side of I5: an operation whose promise had not settled when `destroy()`
+ * was called rejects `ERR_ISOLATE_HOST_SANDBOX_DESTROYED`; one that had keeps its result.
+ * "Had settled" exactly: its reaction (registered at the call) runs before a microtask
+ * queued at the destroy call only if the promise settled before that call.
+ */
+function referee() {
+  let called = false;
+  let marked = false;
+  let settledFirst: boolean | undefined;
+  return {
+    watch(op: Promise<unknown>): void {
+      const done = () => {
+        settledFirst = !called || !marked;
+      };
+      op.then(done, done);
+    },
+    destroy(sb: Sandbox): Promise<void> {
+      called = true;
+      queueMicrotask(() => {
+        marked = true;
+      });
+      return sb.destroy();
+    },
+    /** What the caller must have got: `true` = the op's own outcome, `false` = DESTROYED. */
+    get settledFirst(): boolean | undefined {
+      return settledFirst;
+    },
+  };
+}
+const DESTROYED = 'ERR_ISOLATE_HOST_SANDBOX_DESTROYED';
+const outcomeOf = (op: Promise<unknown>): Promise<{ value?: unknown; rejected?: string }> =>
+  op.then(
+    (value) => ({ value }),
+    (e: { code?: string }) => ({ rejected: e.code }),
+  );
+
 async function destroyAt(
   end: End,
   moment: (typeof MOMENTS)[number] | 'before start' | 'in flight',
@@ -105,16 +146,17 @@ async function destroyAt(
   const pool = sharedPool();
   const run = pool.run;
   let destroying: Promise<void> | undefined;
+  const ref = referee();
   if (typeof moment === 'number') {
     const at = () => {
       if (moment === 0) {
-        destroying = sb.destroy();
+        destroying = ref.destroy(sb);
         return;
       }
       let p = Promise.resolve();
       for (let i = 1; i < moment; i++) p = p.then(() => {});
       void p.then(() => {
-        destroying = sb.destroy();
+        destroying = ref.destroy(sb);
       });
     };
     pool.run = (spec: CallSpec, onStart?: (h: CallHandle) => void) => {
@@ -124,20 +166,21 @@ async function destroyAt(
     };
   }
   try {
-    const exec = sb.exec('r.js', end.options).then(
-      (r) => r,
-      (e: { code?: string }) => ({ rejected: e.code }),
-    );
-    if (moment === 'before start') destroying = sb.destroy();
+    const raw = sb.exec('r.js', end.options);
+    ref.watch(raw);
+    const exec = outcomeOf(raw);
+    if (moment === 'before start') destroying = ref.destroy(sb);
     if (moment === 'in flight') {
       await sleep(300);
-      destroying = sb.destroy();
+      destroying = ref.destroy(sb);
     }
     if (end.kills !== undefined) await killRunning(end.kills);
     const outcome = await exec;
-    if (moment === 'after await') destroying = sb.destroy();
+    if (moment === 'after await') destroying = ref.destroy(sb);
     await destroying;
     const burned = await burnedAfter(500);
+    // In flight at the destroy → DESTROYED; settled before it → its own outcome.
+    expect(outcome.rejected === DESTROYED, JSON.stringify(outcome)).toBe(!ref.settledFirst);
     return { outcome, burned };
   } finally {
     pool.run = run;
@@ -160,5 +203,39 @@ describe('after destroy() no isolate of the sandbox runs: every end × every mom
       it(`${name} × destroy ${typeof moment === 'number' ? `${moment} microtask(s) after the result` : moment}`, async () => {
         const { outcome, burned } = await destroyAt(end, moment);
         expect(burned, JSON.stringify(outcome)).toBeLessThan(0.1);
+      });
+});
+
+/** Every host operation, at every microtask from its call: nothing of a destroyed sandbox reaches its caller. */
+const HOST_OPS: Readonly<Record<string, (sb: Sandbox) => Promise<unknown>>> = {
+  writeFile: (sb) => sb.writeFile('w', 'x'),
+  readFile: (sb) => sb.readFile('f'),
+  list: (sb) => sb.list(),
+  remove: (sb) => sb.remove('g'),
+  snapshot: (sb) => sb.snapshot(),
+};
+describe('every operation × destroy 0–5 microtasks after its call: DESTROYED unless it had settled (I5)', () => {
+  for (const [name, op] of Object.entries(HOST_OPS))
+    for (const k of [0, 1, 2, 3, 4, 5])
+      it(`${name} × destroy ${k} microtask(s) after the call`, async () => {
+        const sb = await createSandbox();
+        await sb.writeFile('f', 'data');
+        await sb.writeFile('g', 'gone');
+        const ref = referee();
+        const call = op(sb);
+        ref.watch(call);
+        let destroying: Promise<void> | undefined;
+        if (k === 0) destroying = ref.destroy(sb);
+        else {
+          let p = Promise.resolve();
+          for (let i = 1; i < k; i++) p = p.then(() => {});
+          void p.then(() => {
+            destroying = ref.destroy(sb);
+          });
+        }
+        const outcome = await outcomeOf(call);
+        await sleep(0);
+        await destroying;
+        expect(outcome.rejected === DESTROYED, JSON.stringify(outcome)).toBe(!ref.settledFirst);
       });
 });

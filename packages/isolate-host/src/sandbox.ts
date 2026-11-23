@@ -263,9 +263,17 @@ class LiveSandbox implements Sandbox {
         if (this.#box === undefined || this.#destroyed) throw destroyedError();
         return fn(this.#box);
       })
-      .catch((error: unknown) => {
-        throw bare(error);
-      });
+      // The last link, in the microtask that settles the caller's promise: an op still
+      // in flight when destroy() was called rejects, whatever it had done (ADR-0568 §5).
+      .then(
+        (value) => {
+          if (this.#destroyed) throw bare(destroyedError());
+          return value;
+        },
+        (error: unknown) => {
+          throw bare(this.#destroyed ? destroyedError() : error);
+        },
+      );
     this.#tail = next.then(settle, settle);
     return next;
   }
@@ -401,8 +409,6 @@ class LiveSandbox implements Sandbox {
           // Whatever the end — a destroy in flight too: no stale hold on the call (and its state).
           this.#run = undefined;
         });
-      // destroy() between the result and this continuation: in flight, so it rejects.
-      if (this.#destroyed) throw destroyedError();
       const { state: end, stateRefused, ...run } = result;
       if (stateRefused !== undefined) return { ...run, stateRefused };
       // Killed (timeout, memory): the state of before the run (ADR-0568 §3).

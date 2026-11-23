@@ -105,7 +105,12 @@ view's whole backing buffer; rifty's program entry has diagnostic gaps and no
    (ADR-0563 §4's stuck grace) retires that worker, which ends once its calls
    are settled. Carried as a table: every end × every destroy moment (before
    start, in flight, 0–3 microtasks after the result, after `await`), observed
-   on the workers' CPU (`tests/sandbox-destroy-table.test.ts`). Decided
+   on the workers' CPU (`tests/sandbox-destroy-table.test.ts`). Every operation
+   whose promise has not settled when `destroy()` is called rejects `DESTROYED`:
+   one re-check in the last link of the operation queue, in the microtask that
+   settles the caller's promise (round 4: a host op or a run already done could
+   still hand the caller its data a microtask later); the table asserts what the
+   caller got per operation and moment. Decided
    rollback (manager 2026-11-23): one more hole in this invariant (round 4)
    and it is rewritten weaker — after `destroy()` the state is unreachable and
    no new run starts; the last run's isolate may still stop for up to N ms —

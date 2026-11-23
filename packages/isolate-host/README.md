@@ -139,7 +139,7 @@ sandbox paths. rifty's FS has no links: every entry is a file or a directory.
 | `remove(path)` | a file or a directory tree |
 | `exec(path, options?)` | `node <path> [args]` in `/workspace`: `runCode`'s options plus `args` (strings); `env`, `cwd`, `stdin` are `NotImplementedError('isolate-host.sandbox-exec-<option>')`. The path is one file, never a shell command |
 | `snapshot()` | the files as bytes (ADR-0567), taken between operations |
-| `destroy()` | the run in flight and everything after reject `ERR_ISOLATE_HOST_SANDBOX_DESTROYED`; the state is dropped; resolves once no isolate of the sandbox runs (whenever it is called, also in the microtasks around a run's result) |
+| `destroy()` | every operation whose promise has not settled yet (a run, a host op) and everything after reject `ERR_ISOLATE_HOST_SANDBOX_DESTROYED`; the state is dropped; resolves once no isolate of the sandbox runs (whenever it is called, also in the microtasks around a run's result) |
 
 Operations on one sandbox take effect one at a time, in call order, also when
 you do not await them; sandboxes do not wait for each other. A run's
