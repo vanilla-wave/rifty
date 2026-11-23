@@ -11,8 +11,8 @@ code: [packages/isolate-host/src/pool.ts, packages/isolate-host/src/child/main.t
 ## Context
 
 Measured 2026-11-23 (M3 Pro, load ~20): after streaming the base64 in pieces and
-encoding per attempt, the consumer's peak per run is ≈ 4 × S + 8 MiB (S = 56 MB:
-212 MiB one run, 925 MiB four). The queued base64 is ≈ 1.33 × S of that; a byte
+encoding per attempt, the consumer's peak per run is at most 5 × S + 16 MiB (S = 56 MB:
+212–255 MiB one run, 884–925 MiB four). The queued base64 is ≈ 1.33 × S of that; a byte
 frame would cut it to S and drop the encode/decode passes. Not built: it is a
 wire change no part of the sandbox contract needs.
 
