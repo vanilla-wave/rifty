@@ -58,10 +58,12 @@ the shared cache and are never fetched. Real Vite 7.3.6 after compact on a cold
 cache, live registry (`no-coi-compact-vite-install.contract.test.ts`): install
 over the lock, `npm install esbuild` and adding `ms` each fail `EBROKENLOCK …
 esbuild.v2 is missing its pinned cache bytes`; the ordinary tarballs fetched
-first (11, or 12 with `ms`) stay in the shared cache; the project tree is
-unchanged. Mechanism (`no-coi-compact-install.contract.test.ts`, one direct
-LightningCSS pin): naming a substituted *direct* dependency re-resolves it
-through the registry (ADR-0361 request admission) — no route for Vite while its
-lock is kept, since `esbuild` stays lock-replayed. Deleting `package-lock.json`
-re-resolves from the registry (fetches `esbuild-wasm`; pins may move). A replay
-snapshot or warm cache restores the exact install.
+first (11, or 12 with `ms`) stay in the shared cache; project files stay
+byte-exact (installer level; directories, `installManifest` and the stamp not
+observed). Mechanism (`no-coi-compact-install.contract.test.ts`, one LightningCSS
+pin): naming in `npm install` a dependency of the root `package.json` whose lock
+pin is shadow-substituted re-resolves it through the registry (ADR-0361 request
+admission) — no route for Vite 7 while its lock is kept, since `esbuild` is
+transitive and stays lock-replayed. Deleting `package-lock.json` re-resolves from
+the registry (fetches `esbuild-wasm`; pins may move). A replay snapshot or warm
+cache restores the exact install. Vite 8 is not covered by these carriers.

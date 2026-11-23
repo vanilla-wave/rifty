@@ -85,26 +85,11 @@ tests unchanged; workbench glue+workers 112 files / 2005 tests PASS.
 
 ## Cross-review round 1 reception (2026-11-23)
 
-- Install after compact (S1), worker level: `applyNoCoiSnapshot` (the no-COI
-  owner's apply, not `sandbox.toolchain.applySnapshot`) + `installToolchainPackages`
-  (the owner's installer call), live registry stub over original npm archives.
-  Mechanism, one direct LightningCSS pin (`no-coi-compact-install.contract.test.ts`):
-  lock install → `EBROKENLOCK … missing its pinned cache bytes`, zero requests,
-  tree/lock byte-exact; `npm install ms` → same, pin never fetched;
-  `npm install lightningcss` re-resolves through the registry; replay installs.
-- Goal scenario, committed Vite 7.3.6 snapshot made compact
-  (`no-coi-compact-vite-install.contract.test.ts`): lock install, `npm install
-  esbuild`, `npm install ms@2.0.0` → each `EBROKENLOCK: shadow recipe
-  rifty.shadow-substitution.esbuild.v2 is missing its pinned cache bytes`;
-  11 / 11 / 12 ordinary tarballs fetched first and left in the shared cache
-  (`npm install esbuild` also reads the `esbuild-wasm` packument, never its
-  tarball); project tree byte-exact. Replay control: lock install succeeds,
-  12 packages, no `esbuild-wasm` request. Lockless: deleting `package-lock.json`
-  → plain install re-resolves, fetches the `esbuild-wasm` packument + tarball and
-  succeeds. So while the lock is kept no npm route reinstalls Vite after compact
-  on a cold cache. READMEs/ADR-0547 state exactly this. Stamp: the owner demotes before the
-  installer and promotes only on success (`no-coi-toolchain-owner.ts`); not
-  re-pinned here. Follow-up question: `npm-client/shadow-pin-replay-bytes-cold-cache`.
+- Install after compact (S1, cross-review rounds 1–3): outcomes are owned by
+  ADR-0547 §Consequences; carriers `no-coi-compact-vite-install.contract.test.ts`
+  (committed Vite 7.3.6 made compact) and `no-coi-compact-install.contract.test.ts`
+  (LightningCSS mechanism), worker level (`applyNoCoiSnapshot` +
+  `installToolchainPackages`) over a stubbed registry — no real network.
 - COI apply flush assertion narrowed to the live project `node_modules/`;
   mutant "flush on the compact no-cache branch" now RED.
 - Browser proof: replay keeps the baseline same-page reopen; compact keeps the

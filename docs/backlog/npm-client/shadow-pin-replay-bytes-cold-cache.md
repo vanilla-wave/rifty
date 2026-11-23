@@ -3,7 +3,7 @@ area: npm-client
 status: draft
 title: What should install do when a lock's shadow-substituted pin has no replay bytes in a cold cache?
 created: 2026-11-23
-why: After a compact v5 snapshot (or any cold shared cache) an install over a lock with shadow-substituted pins, or adding an unrelated package, fails `EBROKENLOCK … missing its pinned cache bytes` even with a live registry; the lock-replayed pin is never fetched and a compact Vite project has no npm reinstall route while its lock is kept — loud and accepted by ADR-0547, but the message names no remedy and the network question is undecided.
+why: After a compact v5 snapshot on a cold shared cache, install over a lock with a shadow-substituted pin fails `EBROKENLOCK … missing its pinned cache bytes` (outcomes: ADR-0547 §Consequences) — loud and accepted, but the message names no remedy and a lock-preserving network route is undecided.
 user_story: As an editor developer using a compact prepared Vite snapshot, I want `npm install` (or adding a package) to either succeed or tell me what to do, but today it fails with EBROKENLOCK naming a shadow recipe.
 sources: [PR-388, docs/adr/distribution/0547-compact-prepared-dependency-snapshots.md, docs/adr/playground/0346-baked-dependency-snapshots-carry-replay-tarball-cache.md, docs/adr/npm-client/0361-lock-replay-admits-the-attested-recipe-pin-request-admission-unchanged.md, docs/backlog/playground/snapshot-carries-substituted-bytes-twice.md]
 code:
@@ -22,24 +22,13 @@ a lock pin whose acquisition is a shadow substitution
 `readRegistryShadowReplayCache`) reads its bytes only from the shared tarball
 cache (`internal/shadow/substitution.ts`, "is missing its pinned cache bytes").
 Replay snapshots carry exactly those bytes; compact v5 omits them by design.
-Real LightningCSS → `lightningcss-wasm@1.32.0` after compact, registry live
-(`no-coi-compact-install.contract.test.ts`): plain install over the lock →
-`EBROKENLOCK`, zero requests; `npm install ms` → fetches `ms`, then the same
-`EBROKENLOCK`; `npm install lightningcss` → the named direct root re-resolves
-through the registry (ADR-0361 request admission) and succeeds; replay →
-install succeeds from cache. So with the lock kept, a registry route exists only
-when the substituted package is a direct dependency named in the request; the
-lock-replayed pin refuses network (zero-registry-read replay, originally
-ADR-0335, grafted into ADR-0361; ADR-0346).
-
-Real Vite 7.3.6, `esbuild` transitive (`no-coi-compact-vite-install.contract.test.ts`):
-lock install, `npm install esbuild` and `npm install ms@2.0.0` all fail
-`EBROKENLOCK … esbuild.v2 is missing its pinned cache bytes` after fetching
-11 / 11 / 12 ordinary tarballs into the shared cache; project tree unchanged.
-Deleting `package-lock.json` makes a plain install re-resolve: it fetches the
-`esbuild-wasm` packument and tarball from the registry and succeeds, without
-lock exactness (pins may move). Verified: while the lock is kept, no npm route
-reinstalls a compact Vite project on a cold cache.
+Outcomes after compact on a cold cache (Vite 7.3.6 and a LightningCSS
+mechanism case, including the direct-request and lockless registry routes) are
+owned by ADR-0547 §Consequences and its carriers
+`no-coi-compact-vite-install.contract.test.ts` /
+`no-coi-compact-install.contract.test.ts`. The lock-replayed pin refuses network
+by the zero-registry-read replay rule (originally ADR-0335, grafted into
+ADR-0361; ADR-0346).
 
 Accepted today (ADR-0547, goal compact-dependency-snapshots decision
 2026-10-23): no install ban, no network fallback, no reinstall promise. Docs
@@ -57,9 +46,8 @@ replay deduplication, not the cold-cache error.
    the wording is the only change.
 2. **owner: user** — should a lock-replayed shadow pin ever acquire its
    source from a connected registry on a cold cache, keeping the lock's exact
-   pin? Today the registry is reached only by an explicit request for a
-   *direct* substituted root, or by dropping the lock (re-resolution, pins may
-   move); Vite's transitive `esbuild` has no lock-preserving route. This changes observable
+   pin? Today's registry routes (none preserve the lock for Vite 7): ADR-0547
+   §Consequences. This changes observable
    install scope and the replay-integrity authority (ADR-0346/0361); it is the
    user's call, not a direction this draft proposes.
 
