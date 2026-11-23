@@ -1,6 +1,6 @@
 # ADR 0568: Run guest files in a live sandbox whose state is filesystem bytes held by the consumer
 
-Status: Proposed
+Status: Accepted
 Date: 2026-11
 
 > TL;DR: `createSandbox()` gives the consumer a sandbox whose files are snapshot bytes it holds; the host edits them directly, and `exec(path)` is one ordinary pool call — a fresh isolate restores the bytes, runs `node <path>`, and hands back new bytes that replace the state only if the run ended on its own.
@@ -110,12 +110,11 @@ view's whole backing buffer; rifty's program entry has diagnostic gaps and no
    one re-check in the last link of the operation queue, in the microtask that
    settles the caller's promise (round 4: a host op or a run already done could
    still hand the caller its data a microtask later); the table asserts what the
-   caller got per operation and moment. Decided
-   rollback (manager 2026-11-23): one more hole in this invariant (round 4)
-   and it is rewritten weaker — after `destroy()` the state is unreachable and
-   no new run starts; the last run's isolate may still stop for up to N ms —
-   with the number, a compat row and a question to the user (it narrows «после
-   destroy от песочницы ничего не остаётся»).
+   caller got per operation and moment. A rollback was decided for round 4
+   (manager 2026-11-23: another hole in isolate stopping → I5 rewritten weaker,
+   with a number, a compat row and a user question); round 4 confirmed the
+   isolate half by three independent runs and found the outcome half (fixed
+   above), so the rollback was not taken.
 6. **Limits.** Per run: `runCode`'s; `timeoutMs` covers the consumer's encode
    (done before the call registers, so a throw there settles the call and
    leaves no phantom), the worker's restore, run and capture — not the
