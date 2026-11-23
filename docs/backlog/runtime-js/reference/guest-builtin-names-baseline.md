@@ -1,27 +1,195 @@
 # Baseline — builtin names the isolate guest prints (PR #425, 2026-11-23)
 
-Observed at 61c69cab8 (isolate-host `runCode`, guest bundle built from that
-tree) against live Node v24.16.0. Reproduce: for each program, `runCode(code)`
-(`packages/isolate-host`) and `node -e code` in an empty temp dir with
+RED for unit `runtime-js/guest-builtin-names`. Observed on PR #425's tree
+(isolate-host `runCode`, guest bundle built from it) against live Node
+v24.16.0. Reproduce: for each program, `runCode(code)` (`packages/isolate-host`)
+and `node -e code` in an empty temp dir with
 `code = "require('fs').writeFileSync('m.js', " + JSON.stringify(program) +
-"); require('./m.js');"`, compare stderr after the path normalization. The
-sweep: one `-e` program collecting `{ '<module>.<key>': fn.name }` over
-`require('module').builtinModules` (no `_`, no `internal`) and the listed
-globals, printed as JSON, compared key by key.
-
-## Fatal report (RED for unit `runtime-js/guest-builtin-names`)
-
-| program (`m.js`) | Node v24.16.0 | isolate |
-|---|---|---|
-| `r.on('data', function onData() { throw … })` on a `new Readable({ read() {} })` | `at Readable.onData (<root>/m.js:3:40)` | `at publishedConstructor.onData (<root>/m.js:3:40)` |
-| `new Writable({ write(c, e, cb) { throw … } }).write('x')` | `at Writable.write [as _write] (<root>/m.js:2:51)` | `at publishedConstructor.write [as _write] (<root>/m.js:2:51)` |
-| `throw new TextEncoder()` | `TextEncoder { Symbol(encoder): true }` | `TextEncoder2 {}` |
-| `throw Object.assign(new Error('y'), { dec: new TextDecoder() })` | `dec: TextDecoder {` + Node's symbol state, one per line | `dec: TextDecoder2 {}` |
+"); require('./m.js');"`; outputs below verbatim (temp dir → `<root>`).
 
 Cause: a constructor's source (SFI) name is what V8 and inspect print. The
 streams' constructors are one generic `function publishedConstructor`
-(`packages/io/src/streams/callable-constructor.ts:29`); the bundler renames a
+(`packages/io/src/streams/callable-constructor.ts`); the bundler renames a
 class or function named like another binding (`TextEncoder2 = class`).
+
+## Fatal report
+
+### program
+```js
+const { Readable } = require('stream');
+const r = new Readable({ read() {} });
+r.on('data', function onData() { throw new Error('rd'); });
+r.push('x');
+```
+Node v24.16.0 (`node:*` frames dropped):
+```
+<root>/m.js:3
+r.on('data', function onData() { throw new Error('rd'); });
+                                 ^
+
+Error: rd
+    at Readable.onData (<root>/m.js:3:40)
+
+Node.js v24.16.0
+```
+isolate:
+```
+Error: rd
+    at publishedConstructor.onData (<root>/m.js:3:40)
+
+Node.js v24.0.0
+```
+
+### program
+```js
+const { Writable } = require('stream');
+const wr = new Writable({ write(c, e, cb) { throw new Error('wr'); } });
+wr.write('x');
+```
+Node v24.16.0 (`node:*` frames dropped):
+```
+<root>/m.js:2
+const wr = new Writable({ write(c, e, cb) { throw new Error('wr'); } });
+                                            ^
+
+Error: wr
+    at Writable.write [as _write] (<root>/m.js:2:51)
+    at Object.<anonymous> (<root>/m.js:3:4)
+
+Node.js v24.16.0
+```
+isolate:
+```
+Error: wr
+    at publishedConstructor.write [as _write] (<root>/m.js:2:51)
+    at Object.<anonymous> (<root>/m.js:3:4)
+
+Node.js v24.0.0
+```
+
+### program
+```js
+const { Transform } = require('stream');
+const t = new Transform({ transform(c, e, cb) { throw new Error('tr'); } });
+t.write('x');
+```
+Node v24.16.0 (`node:*` frames dropped):
+```
+<root>/m.js:2
+const t = new Transform({ transform(c, e, cb) { throw new Error('tr'); } });
+                                                ^
+
+Error: tr
+    at Transform.transform [as _transform] (<root>/m.js:2:55)
+    at Object.<anonymous> (<root>/m.js:3:3)
+
+Node.js v24.16.0
+```
+isolate:
+```
+Error: tr
+    at publishedConstructor.transform (<root>/m.js:2:55)
+    at Object.<anonymous> (<root>/m.js:3:3)
+
+Node.js v24.0.0
+```
+
+### program
+```js
+const { PassThrough } = require('stream');
+const p = new PassThrough();
+p.on('data', function onData() { throw new Error('pt'); });
+p.write('x');
+```
+Node v24.16.0 (`node:*` frames dropped):
+```
+<root>/m.js:3
+p.on('data', function onData() { throw new Error('pt'); });
+                                 ^
+
+Error: pt
+    at PassThrough.onData (<root>/m.js:3:40)
+
+Node.js v24.16.0
+```
+isolate:
+```
+Error: pt
+    at publishedConstructor.onData (<root>/m.js:3:40)
+
+Node.js v24.0.0
+```
+
+### program
+```js
+throw new TextEncoder();
+```
+Node v24.16.0 (`node:*` frames dropped):
+```
+<root>/m.js:1
+throw new TextEncoder();
+^
+
+TextEncoder { Symbol(encoder): true }
+
+Node.js v24.16.0
+```
+isolate:
+```
+TextEncoder2 {}
+
+Node.js v24.0.0
+```
+
+### program
+```js
+throw Object.assign(new Error('y'), { dec: new TextDecoder() });
+```
+Node v24.16.0 (`node:*` frames dropped):
+```
+<root>/m.js:1
+throw Object.assign(new Error('y'), { dec: new TextDecoder() });
+^
+
+Error: y
+    at Object.<anonymous> (<root>/m.js:1:21)
+    at [eval]:1:108
+  dec: TextDecoder {
+    Symbol(decoder): true,
+    Symbol(flags): 0,
+    Symbol(encoding): 'utf-8',
+    Symbol(kIgnoreBOM): false,
+    Symbol(kFatal): false,
+    Symbol(kUTF8FastPath): true,
+    Symbol(handle): undefined,
+    Symbol(single-byte): undefined,
+    Symbol(chunk): null,
+    Symbol(BOM seen): false
+  }
+}
+
+Node.js v24.16.0
+```
+isolate:
+```
+Error: y
+    at Object.<anonymous> (<root>/m.js:1:21)
+    at [eval]:1:108 {
+  dec: TextDecoder2 {}
+}
+
+Node.js v24.0.0
+```
+
+## Workbench bundles (not swept for reachability)
+
+`packages/workbench/dist/assets/*.js` (2026-11-23): `class Server2` (the
+`net.createServer()` class, `packages/net/src/register-builtins.ts`; its
+PR #425 fix was withdrawn — no CI lane builds these bundles), `var Worker2 =
+class`, `function setTimeout2`, and isomorphic-git's bundled npm `buffer@6.0.3`
+`function Buffer2`. Whether the guest of the no-COI SDK or the COI Workbench
+reaches any of them in a prod build is not established (the browser carriers
+run the dev server).
 
 ## `.name` sweep (isolate, every builtin module export and listed globals)
 

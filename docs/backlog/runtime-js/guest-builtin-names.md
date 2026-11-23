@@ -14,7 +14,7 @@ code: [packages/io/src/streams/callable-constructor.ts, packages/isolate-host/te
 
 Observed defect (RDY-8: contract = live Node v24.16.0; baseline and RED in
 `runtime-js/reference/guest-builtin-names-baseline.md`), found by the CLOSE
-review of PR #425 after the `EventEmitter2`/`Stream2`/`Server2` fix. One fault
+review of PR #425 after the `EventEmitter2`/`Stream2` fix. One fault
 class, `sibling-drift` between a builtin's source name and Node's public name:
 V8 frames and inspect print the constructor's source name. Two producers: the
 generic stream constructor (`function publishedConstructor`, one for
@@ -49,7 +49,11 @@ challenge: 2026-11-23 — inherits the goal premise check (`goal.md` §Challenge
   (`path.dirname` `dirname2`, `setTimeout` `setTimeout2`, rifty's own names
   where Node has `wrappedFn`): `runtime-js/builtin-function-names`, compat
   isolate-host.md "Builtin function names".
-- The browser hosts' bundles (`Worker2`, `setTimeout2` in Workbench chunks):
-  their fatal path prints as main (goal amend 2026-11-23).
+- The browser hosts' bundles (`Server2`, `Worker2`, `setTimeout2`,
+  isomorphic-git's `Buffer2` in Workbench chunks; baseline §Workbench): their
+  fatal path prints as main (goal amend 2026-11-23). PR #425's `Server` fix
+  was withdrawn there: its check scanned these bundles only when built, and
+  no CI lane builds them. A check that covers them proves a vendor name
+  unreachable by the guest (prod build), never by a text window around it.
 
 ## Decisions

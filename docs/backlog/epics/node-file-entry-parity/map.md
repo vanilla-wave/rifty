@@ -3,11 +3,12 @@
 ## Items
 
 1. **acceptance carrier** — delivered: `tests/browser-unit/fixtures/node-file-programs.ts`
-   (9 entry + 53 fatal rows, one fatal row per way rifty calls user code,
+   (9 entry + 58 fatal rows, a fatal row for each listed way rifty calls user code,
    live Node oracle, root length equal by construction),
    `tests/no-coi/node-file-parity.spec.ts`,
    `tests/browser-unit/node-file-parity.spec.ts`,
-   `packages/isolate-host/tests/node-file.test.ts` (its 51 fatal rows): every
+   `packages/isolate-host/tests/node-file.test.ts` (55 fatal rows and the entry
+   row `first-line-html-close`): every
    row Node's bytes or its pin in `node-file-pins.json` (a named compat row),
    no Node header on any row. Removed at CLOSE. → I1–I4
 2. **builtin names in the isolate report** — ready (observed defect, RED in

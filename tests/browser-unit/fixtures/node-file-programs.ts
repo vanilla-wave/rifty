@@ -379,12 +379,54 @@ throw e;
     argv: ['main.js'],
   },
   {
-    // The guest's Buffer names: a bundler rename (`Buffer2`) would show here.
+    // The guest's Buffer names (isolate guest bundle; the browser carriers run the dev server).
     name: 'throw-in-buffer-method',
     files: {
       'main.js':
         "const b = Buffer.from('a');\nconsole.log(Buffer.name, b.constructor.name);\nBuffer.prototype.boom = function () {\n  throw new Error('buf');\n};\nb.boom();\n",
     },
+    argv: ['main.js'],
+  },
+  {
+    // Node's listOnTimeout destroys a timer whose `_onTimeout` was nulled.
+    name: 'interval-nulled-on-timeout',
+    files: {
+      'main.js':
+        "let n = 0;\nconst f = function () {\n  if (++n === 3) {\n    clearInterval(h);\n    console.log('done', n);\n  }\n};\nconst h = setInterval(f, 1);\nh._onTimeout = null;\nsetTimeout(() => {\n  h._onTimeout = f;\n  console.log('back');\n}, 20);\n",
+    },
+    argv: ['main.js'],
+  },
+  {
+    // Inside its own callback Node keeps `_onImmediate` until it returns.
+    name: 'clear-immediate-in-own-callback',
+    files: {
+      'main.js':
+        'const h = setImmediate(function () {\n  clearImmediate(h);\n  console.log(this._onImmediate === null);\n});\n',
+    },
+    argv: ['main.js'],
+  },
+  {
+    // `stack` read once before the report: a getter throwing on a later read.
+    name: 'throw-stack-getter-second-read',
+    files: {
+      'main.js':
+        "const e = new Error('original');\nlet n = 0;\nObject.defineProperty(e, 'stack', {\n  get() {\n    if (n++) throw new Error('getter');\n    return 'Error: original\\n    at here';\n  },\n});\nthrow e;\n",
+    },
+    argv: ['main.js'],
+  },
+  {
+    // The `Function` helper name must not be a binding the file declares (escaped).
+    name: 'function-helper-escaped-name',
+    files: {
+      'main.js':
+        "const \\u0024r000000 = 7;\nconsole.log(Function('return 5')(), \\u0024r000000);\n",
+    },
+    argv: ['main.js'],
+  },
+  {
+    // A shorthand `{ Function }` key is expanded by the rewrite (declared column).
+    name: 'throw-in-shorthand-function',
+    files: { 'main.js': 'const o = { Function }; new o.Function(\'throw new Error("x")\')();\n' },
     argv: ['main.js'],
   },
   {

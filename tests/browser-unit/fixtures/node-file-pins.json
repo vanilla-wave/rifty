@@ -159,6 +159,19 @@
       "stderr": "Error: buf\n    at Buffer.boom (<root>/main.js:4:9)\n    at Object.<anonymous> (<root>/main.js:6:3)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at executeCjs (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n    at loadedNamespace (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.importCjs (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.loadAsyncResolved (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n",
       "exitCode": 1
     },
+    "interval-nulled-on-timeout": "node",
+    "clear-immediate-in-own-callback": "node",
+    "throw-stack-getter-second-read": {
+      "stdout": "",
+      "stderr": "Error: original\n    at here\n",
+      "exitCode": 1
+    },
+    "function-helper-escaped-name": "node",
+    "throw-in-shorthand-function": {
+      "stdout": "",
+      "stderr": "Error: x\n    at eval (eval at <anonymous> (<runtime>/packages/runtime-js/src/module-loader/function-import-routing.ts), <anonymous>:3:7)\n    at Object.<anonymous> (<root>/main.js:1:192)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at executeCjs (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n    at loadedNamespace (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.importCjs (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.loadAsyncResolved (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n",
+      "exitCode": 1
+    },
     "throw-in-direct-eval": {
       "stdout": "",
       "stderr": "Error: ev\n    at f (eval at <anonymous> (<root>/main.js), <anonymous>:2:9)\n    at eval (eval at <anonymous> (<root>/main.js), <anonymous>:4:1)\n    at Object.<anonymous> (<root>/main.js:1:120)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at executeCjs (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n    at loadedNamespace (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.importCjs (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n",
@@ -435,6 +448,19 @@
       "stderr": "Error: buf\n    at Buffer.boom (<root>/main.js:4:9)\n    at Object.<anonymous> (<root>/main.js:6:3)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at executeCjs (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n    at loadedNamespace (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.importCjs (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.loadAsyncResolved (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n",
       "exitCode": 1
     },
+    "interval-nulled-on-timeout": "node",
+    "clear-immediate-in-own-callback": "node",
+    "throw-stack-getter-second-read": {
+      "stdout": "",
+      "stderr": "Error: original\n    at here\n",
+      "exitCode": 1
+    },
+    "function-helper-escaped-name": "node",
+    "throw-in-shorthand-function": {
+      "stdout": "",
+      "stderr": "Error: x\n    at eval (eval at <anonymous> (<runtime>/packages/runtime-js/src/module-loader/function-import-routing.ts), <anonymous>:3:7)\n    at Object.<anonymous> (<root>/main.js:1:192)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at executeCjs (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n    at loadedNamespace (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.importCjs (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.loadAsyncResolved (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n",
+      "exitCode": 1
+    },
     "throw-in-direct-eval": {
       "stdout": "",
       "stderr": "Error: ev\n    at f (eval at <anonymous> (<root>/main.js), <anonymous>:2:9)\n    at eval (eval at <anonymous> (<root>/main.js), <anonymous>:4:1)\n    at Object.<anonymous> (<root>/main.js:1:120)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at executeCjs (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n    at loadedNamespace (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.importCjs (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n",
@@ -693,6 +719,15 @@
     "throw-in-buffer-method": {
       "stdout": "Buffer Buffer\n",
       "stderr": "Error: buf\n    at Buffer.boom (<root>/main.js:4:9)\n    at Object.<anonymous> (<root>/main.js:6:3)\n    at [eval]:1:328\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
+    "interval-nulled-on-timeout": "node",
+    "clear-immediate-in-own-callback": "node",
+    "throw-stack-getter-second-read": "node",
+    "function-helper-escaped-name": "node",
+    "throw-in-shorthand-function": {
+      "stdout": "",
+      "stderr": "Error: x\n    at eval (eval at <anonymous>, <anonymous>:3:7)\n    at Object.<anonymous> (<root>/main.js:1:73)\n    at [eval]:1:240\n\nNode.js v24.0.0\n",
       "exitCode": 1
     },
     "throw-in-direct-eval": {

@@ -339,17 +339,16 @@ export function projectNodeEvalError(
   compiler?: NodeEvalCompiler,
 ): unknown {
   if (!(error instanceof Error)) return error;
-  // The isolate's report reads a throwing `stack` as Node does (the error's
-  // own text and the hint): leave such an error to it, read once, guarded.
-  if (nodeFatalReportInstalled()) {
-    try {
-      void error.stack;
-    } catch {
-      return error;
-    }
+  // `stack` is read once. The isolate's report reads a throwing `stack` as Node
+  // does (the error's own text and the hint): leave such an error to it.
+  let ownStack: string | undefined;
+  try {
+    ownStack = error.stack;
+  } catch (thrown) {
+    if (nodeFatalReportInstalled()) return error;
+    throw thrown;
   }
-  const firstLine =
-    (error.stack ?? `${error.name}: ${error.message}`).split('\n')[0] ?? error.message;
+  const firstLine = (ownStack ?? `${error.name}: ${error.message}`).split('\n')[0] ?? error.message;
   if (error instanceof SyntaxError) {
     const prelude = nodeEvalSyntaxPrelude(source, error, compiler);
     if (prelude !== null) {
@@ -358,7 +357,7 @@ export function projectNodeEvalError(
       return error;
     }
   }
-  const stack = error.stack ?? firstLine;
+  const stack = ownStack ?? firstLine;
   // A file's frame leads (a required module threw): the isolate's report heads it.
   if (nodeFatalReportInstalled() && !(firstGuestFrame(stack)?.includes('[eval]') ?? true))
     return error;

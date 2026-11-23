@@ -4,11 +4,21 @@ export interface Edit {
   readonly text: string;
 }
 
+/** `source` with `\u` escapes decoded: an escaped identifier names the same binding. */
+function decodedNames(source: string): string {
+  if (!source.includes('\\u')) return source;
+  return source.replace(/\\u(?:\{([0-9a-fA-F]+)\}|([0-9a-fA-F]{4}))/gu, (escape, braced, plain) => {
+    const code = Number.parseInt((braced ?? plain) as string, 16);
+    return code <= 0x10ffff ? String.fromCodePoint(code) : escape;
+  });
+}
+
 export function uniqueHelperName(
-  source: string,
+  sourceText: string,
   base: string,
   reserved: ReadonlySet<string> = new Set(),
 ): string {
+  const source = decodedNames(sourceText);
   let candidate = base;
   let suffix = 0;
   while (reserved.has(candidate) || source.includes(candidate)) {
@@ -24,10 +34,11 @@ export function uniqueHelperName(
  * frames point there).
  */
 export function sameLengthHelperName(
-  source: string,
+  sourceText: string,
   length: number,
   reserved: ReadonlySet<string> = new Set(),
 ): string {
+  const source = decodedNames(sourceText);
   for (let n = 0; ; n += 1) {
     const candidate = `$r${n.toString(36).padStart(length - 2, '0')}`;
     if (!reserved.has(candidate) && !source.includes(candidate)) return candidate;

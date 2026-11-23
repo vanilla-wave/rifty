@@ -197,7 +197,9 @@ export function setInterval(
   const raw = hostSetInterval(
     (...a: unknown[]) => {
       const handle = box.handle;
-      if (!handle?.shouldRunInterval() || handle._onTimeout === null) return;
+      if (!handle?.shouldRunInterval()) return;
+      // Node's listOnTimeout destroys a timer whose `_onTimeout` was nulled.
+      if (handle._onTimeout === null) return handle.clear();
       reflectApply(handle._onTimeout, handle, a);
     },
     ms,
@@ -300,8 +302,11 @@ export function setImmediate(
 
 export function clearImmediate(handle: ImmediateHandle | undefined): void {
   if (!handle) return;
-  if (handle instanceof Immediate) handle._onImmediate = null;
-  if (immediates.delete(handle.id)) keepaliveUnref();
+  // Only a pending one: inside its own callback Node keeps `_onImmediate` until it returns.
+  if (immediates.delete(handle.id)) {
+    if (handle instanceof Immediate) handle._onImmediate = null;
+    keepaliveUnref();
+  }
   if (immediates.size === 0) unrefImmediateHost?.();
 }
 

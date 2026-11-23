@@ -137,7 +137,8 @@ the formatter per host (`sibling-drift`).
   manager's: «no-COI: команда с uncaught-ошибкой из колбэка теряет код выхода
   и stderr. Оставить в backlog или отдельная починка после этапа?», with
   `exitCode: null`, `WORKER_CRASHED`, the same on main, the PR #421 fix rolled
-  back) — I3 and I4 hold for the isolate guest: on the no-COI SDK and the COI
+  back) — the manager's reading of those words, not the user's: I3 and I4
+  hold for the isolate guest: on the no-COI SDK and the COI
   Workbench every fatal path prints as main (rifty frames and served runtime
   URLs; a no-COI command whose callback throws ends `failed`, `exitCode` null,
   stderr empty), named compat rows; deferred to

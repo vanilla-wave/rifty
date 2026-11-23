@@ -1,14 +1,13 @@
 /**
  * A bundler renames a function or class whose name shadows another binding
- * (`EventEmitter2`, `Stream2`, `Server2`), and V8 prints that name in frames
- * and `constructor` lookups the guest sees. A `function`/`class` declaration
- * in the guest bundle (and the Workbench's browser bundles, when built) named
- * after a Node builtin export plus a numeric suffix fails here. Bound class
- * expressions (`TextEncoder2 = class`) and lowercase names are not seen yet
- * (`backlog/runtime-js/guest-builtin-names`). Fix: name the function by a
- * property key (ADR-0571).
+ * (`EventEmitter2`, `Stream2`), and V8 prints that name in frames the guest
+ * sees. A `function`/`class` declaration in the isolate guest bundle named
+ * after a Node builtin export plus a numeric suffix fails here. Not checked
+ * yet: bound class expressions (`TextEncoder2 = class`), lowercase names and
+ * the Workbench's browser bundles (`backlog/runtime-js/guest-builtin-names`).
+ * Fix: name the function by a property key (ADR-0571).
  */
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { builtinModules, createRequire } from 'node:module';
 import { expect, it } from 'vitest';
 
@@ -25,30 +24,19 @@ for (const id of builtinModules) {
     if (typeof value === 'function' && /^[A-Z]/u.test(value.name)) publicNames.add(value.name);
 }
 
-// isomorphic-git's bundled npm `buffer` in a Workbench chunk, not the guest's:
-// `Buffer.name`, `constructor.name` and a method frame read `Buffer` on every
-// host (corpus row `throw-in-buffer-method`).
-const VENDOR = /required by `buffer` v5\.x/u;
-
 function renamed(file: string): string[] {
   const text = readFileSync(file, 'utf8');
   const out: string[] = [];
   for (const m of text.matchAll(/\b(?:function|class)\s+([A-Z][A-Za-z]*?)(\d+)\b/gu)) {
     if (!publicNames.has(m[1] as string)) continue;
-    if (VENDOR.test(text.slice(Math.max(0, m.index - 3000), m.index + 3000))) continue;
     out.push(`${file.split('/').slice(-3).join('/')}: ${m[0]}`);
   }
   return out;
 }
 
-it('no Node builtin name is renamed by the bundler in guest-reachable bundles', () => {
+it('no Node builtin name is renamed by the bundler in the isolate guest bundle', () => {
   const guest = new URL('../../isolate-guest/dist/guest.js', import.meta.url).pathname;
   expect(existsSync(guest), 'build the isolate guest first').toBe(true);
-  const files = [guest];
-  const assets = new URL('../../workbench/dist/assets/', import.meta.url).pathname;
-  if (existsSync(assets))
-    for (const name of readdirSync(assets))
-      if (name.endsWith('.js')) files.push(`${assets}${name}`);
   expect(publicNames.has('EventEmitter')).toBe(true);
-  expect(files.flatMap(renamed)).toEqual([]);
+  expect(renamed(guest)).toEqual([]);
 });

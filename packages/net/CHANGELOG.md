@@ -2,8 +2,6 @@
 
 ## [Unreleased]
 
-- A `net.createServer()` server's class reads `Server` in frames and `constructor.name` (the isolate guest bundle printed `Server2`, ADR-0571).
-
 - External HTTP(S) egress uses the runtime's native-compatible network boundary, preserving ADR-0181 inputs while sharing Fetch's single response body/ref owner (ADR-0541).
 
 - Cross-realm, ws-bridge and http port channels open the native `BroadcastChannel` (`openHostBroadcastChannel`), so they never hold a guest event loop (ADR-0529).

@@ -100,9 +100,10 @@ Node's side only (`nodeFileExpected` in the carrier fixture):
    it yet (`backlog/runtime-js/guest-builtin-names`). A builtin's name is the
    source name Node prints: `packages/isolate-host/tests/bundle-public-names.test.ts`
    fails on a `function`/`class` declaration named a Node builtin export plus
-   a digit (`EventEmitter2`) in the guest bundle and the Workbench's (PR #425);
-   bound class expressions (`TextEncoder2 = class`), lowercase exports and the
-   generic stream constructor are open (`backlog/runtime-js/guest-builtin-names`).
+   a digit (`EventEmitter2`) in the isolate guest bundle (PR #425); bound class
+   expressions (`TextEncoder2 = class`), lowercase exports, the generic stream
+   constructor and the Workbench's bundles (`Server2`; no CI lane builds them)
+   are open (`backlog/runtime-js/guest-builtin-names`).
 3. **Node's fatal report in the isolate guest only** (ADR-0445 2026-11-23
    lines): `builtins/fatal-report.ts` behind one switch the guest entry calls
    (`installNodeFatalReport()`); the no-COI SDK and the COI Workbench print
