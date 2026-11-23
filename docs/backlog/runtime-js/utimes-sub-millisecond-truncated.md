@@ -5,7 +5,7 @@ title: fs.utimesSync drops sub-millisecond precision Node keeps
 created: 2026-11-22
 why: Node keeps sub-millisecond utimes times (100 ns measured on APFS); rifty cuts them to whole milliseconds, so `stat().mtimeMs` differs after `utimesSync`
 user_story: As a developer running Node code in rifty, I want `fs.utimesSync(p, 1.0005, 1.0005)` to report `mtimeMs` 1000.499999 as in Node, but today rifty reports 1000
-sources: [docs/backlog/epics/isolate-host-fs-snapshot/goal.md]
+sources: [ADR-0567]
 code: [packages/runtime-js/src/builtins/fs.ts, packages/vfs/src/memory-backend.ts]
 ---
 

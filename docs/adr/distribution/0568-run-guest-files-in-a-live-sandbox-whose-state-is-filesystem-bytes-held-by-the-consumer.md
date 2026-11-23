@@ -233,3 +233,7 @@ null` + `termination` (ADR-0557 dated line 2026-11-22).
 Agent decisions: the API names and defaults, `stateRefused` as a result field, one operation at a
 time per sandbox with the deadline from dequeue, `/workspace` and `/tmp` in a fresh FS, `env`/`cwd`/
 `stdin` as loud gaps.
+
+## Corrections
+
+- 2026-11-23 — Consequences «an isolate limit of at least 231 MiB (≈ 2.3 × S) before guest code»: superseded by ADR-0567 §7 (goal `isolate-host-fs-snapshot` close, PR #422) — a run's restore → run → snapshot needs 223–225 MiB at template scale; only a snapshot straight after a restore with no guest code between needs up to ~3 × the bytes (`distribution/isolate-host-fs-snapshot-restore-then-snapshot-peak`).

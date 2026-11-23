@@ -14,7 +14,9 @@ runs as a small PR on the user's words.
 
 - The `isolate-host-fs-snapshot` goal's residual "a snapshot refuses NUL names and times outside
   Date" is closed in rifty's fs by this branch: `fs-path.ts` (Node's `nullCheck`) and
-  `fs-times.ts` (utimes as Node 24.16.0) — rifty's FS no longer holds such values.
+  `fs-times.ts` (utimes as Node 24.16.0) — guest `node:fs` and the sandbox's host ops no longer
+  create such values (a consumer writing a `MemoryFsSync` directly still can; the snapshot refuses
+  it by name).
 
 ## Out of scope
 
