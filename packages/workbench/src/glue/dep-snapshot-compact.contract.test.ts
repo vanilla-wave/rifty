@@ -1,4 +1,8 @@
-import { readFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { mkdir, readFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import { TARBALL_CACHE_ROOT } from '@riftydev/npm-client';
 import { MemoryFsSync } from '@riftydev/vfs/internal';
@@ -21,7 +25,56 @@ const compact = (value: object) => ({
   profile: 'compact',
   tarballCache: { version: 1, root: TARBALL_CACHE_ROOT, files: [] },
 });
-afterEach(() => vi.unstubAllGlobals());
+const roots: string[] = [];
+afterEach(() => {
+  vi.unstubAllGlobals();
+  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+});
+
+type TarFault =
+  | 'none'
+  | 'v4-compact-marker'
+  | 'v5-no-profile'
+  | 'v5-unknown-profile'
+  | 'replay-entry';
+
+/** Re-pack a producer-valid compact tar with system tar after one control-data edit. */
+async function repackCompactTar(tar: Uint8Array, fault: TarFault): Promise<Uint8Array> {
+  const root = mkdtempSync(join(tmpdir(), 'rifty-compact-tar-'));
+  roots.push(root);
+  writeFileSync(join(root, 'in.tar'), tar);
+  const extracted = join(root, 'extracted');
+  const tree = join(root, 'tree');
+  await mkdir(extracted);
+  execFileSync('tar', ['-xf', join(root, 'in.tar'), '-C', extracted]);
+  const entries = execFileSync('tar', ['-tf', join(root, 'in.tar')], { encoding: 'utf8' })
+    .split('\n')
+    .filter(Boolean);
+  // Fresh files: extracted timestamps make bsdtar emit PAX fields the codec refuses.
+  for (const entry of entries) {
+    const path = entry.replace(/\/$/, '');
+    if (statSync(join(extracted, path)).isDirectory())
+      await mkdir(join(tree, path), { recursive: true });
+    else writeFileSync(join(tree, path), readFileSync(join(extracted, path)));
+  }
+  const manifestPath = join(tree, 'rifty/manifest.json');
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as Record<string, unknown>;
+  if (fault === 'v4-compact-marker') manifest.version = 4;
+  if (fault === 'v5-no-profile') manifest.profile = undefined; // JSON.stringify drops the key
+  if (fault === 'v5-unknown-profile') manifest.profile = 'mystery';
+  writeFileSync(manifestPath, JSON.stringify(manifest));
+  if (fault === 'replay-entry') {
+    await mkdir(join(tree, 'rifty/replay-cache'));
+    writeFileSync(join(tree, 'rifty/replay-cache/extra.tgz'), 'smuggled');
+    entries.push('rifty/replay-cache', 'rifty/replay-cache/extra.tgz');
+  }
+  execFileSync(
+    'tar',
+    ['--format=pax', '--no-recursion', '-cf', join(root, 'out.tar'), '-C', tree, ...entries],
+    { env: { ...process.env, COPYFILE_DISABLE: '1' } },
+  );
+  return new Uint8Array(readFileSync(join(root, 'out.tar')));
+}
 
 describe('compact snapshot admission (I1–I3)', () => {
   it('roundtrips explicit compact JSON and tar without replay; retains the complete prepared payload', async () => {
@@ -77,6 +130,42 @@ describe('compact snapshot admission (I1–I3)', () => {
     );
     expect(flush).toHaveBeenCalledTimes(1);
   });
+  for (const fault of [
+    'none',
+    'v4-compact-marker',
+    'v5-no-profile',
+    'v5-unknown-profile',
+    'replay-entry',
+  ] as const) {
+    it(`system-tar compact envelope ${fault === 'none' ? 'applies' : `rejects ${fault} before mutation`} (I3)`, async () => {
+      const { payload, descriptor } = await bakeSavedSnapshotFixture();
+      const bytes = await repackCompactTar(
+        serializeDepSnapshotTar(parseDepSnapshot(JSON.stringify(compact(payload)))),
+        fault,
+      );
+      vi.stubGlobal('fetch', async () => new Response(bytes));
+      const fs = new MemoryFsSync();
+      fs.mkdirSync('/project', { recursive: true });
+      fs.writeFileSync('/project/keep', new TextEncoder().encode('saved'));
+      const before = snapshotExactFsTree(fs);
+      const flush = vi.fn(async () => undefined);
+      const applied = applyNoCoiSnapshot(
+        { cwd: '/project', snapshot: { ...descriptor, snapshotId: await sha256Identity(bytes) } },
+        { fs, flush },
+      );
+      if (fault === 'none') {
+        await applied;
+        expect(
+          new TextDecoder().decode(fs.readFileBytesSync('/project/node_modules/ms/package.json')),
+        ).toContain('2.0.0');
+        expect(fs.existsSync(TARBALL_CACHE_ROOT)).toBe(false);
+        return;
+      }
+      await expect(applied).rejects.toThrow(/dependency snapshot manifest|replay cache namespace/);
+      expect(snapshotExactFsTree(fs)).toEqual(before);
+      expect(flush).not.toHaveBeenCalled();
+    });
+  }
   for (const fault of [
     'unknown-profile',
     'legacy-profile',

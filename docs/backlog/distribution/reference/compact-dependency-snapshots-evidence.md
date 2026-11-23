@@ -48,6 +48,27 @@ packages/workbench/src/glue/dep-snapshot-tar.test.ts` — 73 PASS. Compact perfo
 zero cache mkdir/write/flush; corrupt profile/cache/lock/path/identity rejects
 before FS/flush. Ordinary replay closure/SRI and legacy codec remain covered.
 
+## Re-run on main merge (2026-11-23)
+
+Tree: PR #388 after merging origin/main `11b9397ee` (332 commits incl. ADR-0548
+retirement repair, Brotli quality 11, isolate host). Node v24.16.0, Chromium
+148.0.7778.96.
+
+- `node tests/integration/workbench-packed-consumer.mjs --keep` PASS: 16
+  first-party + 180 external tarballs; ordinary and compact no-COI journeys,
+  Pi agent, reference host registry=true/false, snapshot-only, scoped preview.
+- Same-input Vite 7.3.6 gzip: replay 9,770,971 B, compact 6,025,348 B, saved
+  3,745,623 B (38.33%); extracted payloads equal (fixture assert).
+- Added I3 carriers: system-tar compact envelope (valid control applies; v4 +
+  marker, v5 without/unknown profile, v5 replay namespace reject before FS or
+  flush) and COI owner compact apply with zero replay-cache access. Mutants
+  (decoder marker/namespace check off; COI cache-import skip off) go RED.
+- Sweep: new snapshot readers on main since 8874e47d6 — none; existing readers
+  are the codec (`dep-snapshot*.ts`, v5-aware) and
+  `tools/shadow-registry/src/snapshot-artifact-check.ts` (rejects non-v3).
+  `apps/playground/tools/bake-dep-snapshots.ts` re-reads only its own committed
+  replay JSON; no compact input reaches it.
+
 ## Boundaries
 
 No saved-state migration, new install policy, registry fallback or offline

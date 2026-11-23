@@ -34,6 +34,11 @@ with `Unsupported dep snapshot version 5`; v3 with an unknown compact marker
 is accepted for a real ms tree. Old tar decoder accepts only manifest v4.
 The packed same-input Vite 7.3.6 pair and no-COI journey carry I1–I2.
 Existing replay closure/SRI and malformed-container suites retain I3.
+2026-11-23 — I3 tar carriers: system-tar v5 without/unknown profile, v4 with a
+compact marker and a v5 replay namespace reject before mutation
+(`dep-snapshot-compact.contract.test.ts`). COI owner apply (permitted, not
+required by the goal) proves the same no replay-cache access
+(`workbench-snapshot-apply-validation.contract.test.ts`).
 
 ## Alternatives
 

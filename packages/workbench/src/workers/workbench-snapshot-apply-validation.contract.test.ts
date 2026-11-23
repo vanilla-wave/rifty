@@ -39,9 +39,13 @@ const decoder = new TextDecoder();
 type Fault = 'corrupt-replay-cache' | 'missing-replay-cache' | 'incompatible-install-artifact';
 let valid: SavedSnapshotFixture;
 let cacheApplication: SavedSnapshotFixture;
+let compactApplication: SavedSnapshotFixture;
 let invalid: Readonly<Record<Fault, SavedSnapshotFixture>>;
 
-async function produceLightningSnapshot(version = '1.0.0'): Promise<SavedSnapshotFixture> {
+async function produceLightningSnapshot(
+  version = '1.0.0',
+  profile: 'replay' | 'compact' = 'replay',
+): Promise<SavedSnapshotFixture> {
   const fixtureRoot = new URL('../../../../tools/shadow-registry/src/fixtures/', import.meta.url);
   const metadata = JSON.parse(
     await readFile(new URL('lightningcss-wasm-1.32.0-registry.json', fixtureRoot), 'utf8'),
@@ -98,11 +102,21 @@ async function produceLightningSnapshot(version = '1.0.0'): Promise<SavedSnapsho
       requires: true,
       packages: { '': manifest, 'node_modules/lightningcss': nativePin },
     }),
+    profile,
   });
   expect(requests).toEqual([`${registryUrl}/lightningcss-wasm`, tarballUrl]);
   const payload = parseDepSnapshot(
     JSON.stringify(decodeDepSnapshotTar(new Uint8Array(gunzipSync(produced.archive)))),
   );
+  const descriptor = {
+    snapshotId: produced.snapshotId,
+    templateId: payload.templateId,
+    assetUrl: `https://host.test/lightning-${profile}-${version}.tar.gz`,
+  };
+  if (profile === 'compact') {
+    expect(payload).toMatchObject({ version: 5, profile: 'compact', tarballCache: { files: [] } });
+    return { ...produced, payload, descriptor };
+  }
   expect(payload.tarballCache.files).toHaveLength(1);
   const cached = payload.tarballCache.files[0];
   expect(cached).toBeDefined();
@@ -113,15 +127,7 @@ async function produceLightningSnapshot(version = '1.0.0'): Promise<SavedSnapsho
       tarball,
     ),
   ).toBe(0);
-  return {
-    ...produced,
-    payload,
-    descriptor: {
-      snapshotId: produced.snapshotId,
-      templateId: payload.templateId,
-      assetUrl: `https://host.test/lightning-valid-${version}.tar.gz`,
-    },
-  };
+  return { ...produced, payload, descriptor };
 }
 
 function invalidArtifact(fault: Fault): SavedSnapshotFixture {
@@ -160,6 +166,7 @@ function invalidArtifact(fault: Fault): SavedSnapshotFixture {
 beforeAll(async () => {
   valid = await produceLightningSnapshot();
   cacheApplication = await produceLightningSnapshot('1.0.1');
+  compactApplication = await produceLightningSnapshot('1.0.1', 'compact');
   expect(cacheApplication.payload.lockfile).not.toBe(valid.payload.lockfile);
   invalid = {
     'corrupt-replay-cache': invalidArtifact('corrupt-replay-cache'),
@@ -270,6 +277,46 @@ class ReplayCacheBoundaryFs extends DurableOwnerFs {
     if (this.cachePath !== undefined && this.durableSnapshot().files[this.cachePath] !== undefined)
       this.cacheDurable = true;
     return result;
+  }
+}
+
+/** Records every owner-graph access to the shared replay cache once armed. */
+class CacheAccessFs extends DurableOwnerFs {
+  armed = false;
+  readonly accesses: string[] = [];
+
+  #touch(operation: string, path: string): void {
+    const root = valid.payload.tarballCache.root;
+    if (this.armed && (path === root || path.startsWith(`${root}/`)))
+      this.accesses.push(`${operation} ${path}`);
+  }
+  override existsSync(path: string): boolean {
+    this.#touch('exists', path);
+    return super.existsSync(path);
+  }
+  override statSync(path: string) {
+    this.#touch('stat', path);
+    return super.statSync(path);
+  }
+  override readdirSync(path: string) {
+    this.#touch('readdir', path);
+    return super.readdirSync(path);
+  }
+  override readFileBytesSync(path: string): Uint8Array {
+    this.#touch('read', path);
+    return super.readFileBytesSync(path);
+  }
+  override mkdirSync(path: string, options: { recursive?: boolean }): void {
+    this.#touch('mkdir', path);
+    super.mkdirSync(path, options);
+  }
+  override writeFileSync(path: string, bytes: Uint8Array): void {
+    this.#touch('write', path);
+    super.writeFileSync(path, bytes);
+  }
+  override rmSync(path: string, options: { recursive?: boolean; force?: boolean }): void {
+    this.#touch('rm', path);
+    super.rmSync(path, options);
   }
 }
 
@@ -407,6 +454,50 @@ describe('I8 explicit snapshot apply validates the artifact before effects over 
       });
       expectExactTree(withoutCache(fs.liveSnapshot()), withoutCache(before));
       expectExactTree(withoutCache(fs.durableSnapshot()), withoutCache(before));
+    } finally {
+      await opened?.close();
+      await h.owner.close();
+      await h.packages.quiesce();
+    }
+  }, 30_000);
+  it('COI owner applies compact v5 without touching the shared replay cache (ADR-0547)', async () => {
+    const fs = new CacheAccessFs();
+    const h = await seedWarmOwner(compactApplication, fs);
+    const cacheRoot = valid.payload.tarballCache.root;
+    const cacheOnly = (tree: ExactFsTree): ExactFsTree => ({
+      directories: tree.directories.filter(
+        (path) => path === cacheRoot || path.startsWith(`${cacheRoot}/`),
+      ),
+      files: Object.fromEntries(
+        Object.entries(tree.files).filter(([path]) => path.startsWith(`${cacheRoot}/`)),
+      ),
+    });
+    const cacheBefore = cacheOnly(fs.durableSnapshot());
+    expect(Object.keys(cacheBefore.files)).toHaveLength(1);
+    let opened: OpenedPlaygroundProject | undefined;
+    try {
+      fs.armed = true;
+      opened = await h.owner.openProject(
+        savedSnapshotDefinition('scratch', compactApplication.descriptor, {
+          packageJsonText: compactApplication.payload.packageJsonText,
+          source,
+          application: { mode: 'apply-snapshot', conflict: 'overwrite' },
+        }),
+      );
+      await h.authority.flush();
+      fs.armed = false;
+      expect(opened.acquisition).toMatchObject({
+        kind: 'ready',
+        provenance: { outcome: 'snapshot', snapshotId: compactApplication.snapshotId },
+      });
+      expect(fs.accesses, 'no shared replay-cache read, write or removal').toEqual([]);
+      expect(h.network.requests, 'only the selected asset').toEqual([
+        compactApplication.descriptor.assetUrl,
+      ]);
+      expect(decoder.decode(fs.readFileBytesSync(`${h.root}/package-lock.json`))).toBe(
+        compactApplication.payload.lockfile,
+      );
+      expectExactTree(cacheOnly(fs.durableSnapshot()), cacheBefore);
     } finally {
       await opened?.close();
       await h.owner.close();
