@@ -75,8 +75,11 @@ export async function provePackedNoCoiSnapshots(root, profile = 'snapshot') {
       await invoke(page, 'write', '/node_modules/vite/package.json', dependency);
       if (profile === 'compact') assert.deepEqual(await invoke(page, 'cacheTree'), cacheBefore);
       await invoke(page, 'dispose');
-      await page.close();
-      page = await context.newPage();
+      // Replay keeps the baseline same-page reopen; compact proves the closed-page reopen (I2).
+      if (profile === 'compact') {
+        await page.close();
+        page = await context.newPage();
+      }
       const acquired = snapshots.length;
       await boot(page);
       await invoke(page, 'open');

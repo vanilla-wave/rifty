@@ -83,6 +83,20 @@ replay bytes or an unsafe payload path is rejected before any cache, tree or
 claim write; dropping the compact empty-cache check goes RED. #398's replay
 tests unchanged; workbench glue+workers 112 files / 2005 tests PASS.
 
+## Cross-review round 1 reception (2026-11-23)
+
+- Install after compact (S1): `no-coi-compact-install.contract.test.ts` — real
+  SDK apply + `installToolchainPackages` with a live registry: compact →
+  `EBROKENLOCK: shadow recipe … is missing its pinned cache bytes`, zero
+  requests, tree/lock byte-exact; replay → install succeeds, no tarball fetch.
+  READMEs/ADR-0547 now state this. Stamp: the owner demotes before the
+  installer and promotes only on success (`no-coi-toolchain-owner.ts`); not
+  re-pinned here. Follow-up question: `npm-client/shadow-pin-replay-bytes-cold-cache`.
+- COI apply flush assertion narrowed to the live project `node_modules/`;
+  mutant "flush on the compact no-cache branch" now RED.
+- Browser proof: replay keeps the baseline same-page reopen; compact keeps the
+  closed-page reopen (I2).
+
 ## Boundaries
 
 No saved-state migration, new install policy, registry fallback or offline

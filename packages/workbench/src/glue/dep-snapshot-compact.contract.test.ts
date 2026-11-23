@@ -54,7 +54,8 @@ async function repackCompactTar(
   const entries = execFileSync('tar', ['-tf', join(root, 'in.tar')], { encoding: 'utf8' })
     .split('\n')
     .filter(Boolean);
-  // Fresh files: extracted timestamps make bsdtar emit PAX fields the codec refuses.
+  // Fresh files: re-packing the extracted copy makes bsdtar 3.5.3 (macOS) emit
+  // `LIBARCHIVE.creationtime`, a PAX field the codec rejects.
   for (const entry of entries) {
     const path = entry.replace(/\/$/, '');
     if (statSync(join(extracted, path)).isDirectory())

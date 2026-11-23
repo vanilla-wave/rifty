@@ -295,6 +295,8 @@ class CacheAccessFs extends DurableOwnerFs {
   /** Armed package-state flushes, each: was the payload already written? */
   readonly flushes: boolean[] = [];
   payloadWritten = false;
+  /** Live project `node_modules/` prefix; catalog backups elsewhere do not count. */
+  payloadRoot = '';
 
   #touch(operation: string, path: string): void {
     const root = valid.payload.tarballCache.root;
@@ -323,7 +325,8 @@ class CacheAccessFs extends DurableOwnerFs {
   }
   override writeFileSync(path: string, bytes: Uint8Array): void {
     this.#touch('write', path);
-    if (this.armed && path.includes('/node_modules/')) this.payloadWritten = true;
+    if (this.armed && this.payloadRoot !== '' && path.startsWith(this.payloadRoot))
+      this.payloadWritten = true;
     super.writeFileSync(path, bytes);
   }
 
@@ -489,6 +492,7 @@ describe('I8 explicit snapshot apply validates the artifact before effects over 
     expect(Object.keys(cacheBefore.files)).toHaveLength(1);
     let opened: OpenedPlaygroundProject | undefined;
     try {
+      fs.payloadRoot = `${h.root}/node_modules/`;
       fs.armed = true;
       opened = await h.owner.openProject(
         savedSnapshotDefinition('scratch', compactApplication.descriptor, {
@@ -532,8 +536,11 @@ describe('I8 explicit snapshot apply validates the artifact before effects over 
     let opened: OpenedPlaygroundProject | undefined;
     try {
       await h.owner.createScratch({ definition });
+      const root = '/.rifty/workbench/v2/projects/scratch/tree';
+      fs.payloadRoot = `${root}/node_modules/`;
       fs.armed = true;
       opened = await h.owner.openProject(definition);
+      expect(opened.projectRoot).toBe(root);
       await h.composition.authority.flush();
       fs.armed = false;
       expect(opened.acquisition).toMatchObject({
