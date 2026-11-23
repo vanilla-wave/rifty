@@ -161,7 +161,7 @@ hypervisor and deploy stay outside rifty; the consumer supplies the outer bounda
   embedders are declared ceilings in `docs/public/compat/isolate-host.md`.
 - Worker pool — done: up to 4 calls per long-lived worker, neighbour-safe limits, lost-worker
   reruns; warm call 13 ms, 8 concurrent calls 414 MiB (was 137 ms, 1118 MiB) — ADR-0563 (PR #412).
-- B — done: live sandbox — `createSandbox()` with host binary file ops, `exec` = `node <path>
+- B — delivered (PR #419); the goal `isolate-host-live-sandbox` stays open on one user question: live sandbox — `createSandbox()` with host binary file ops, `exec` = `node <path>
   [args]` with `runCode`'s limits, one sandbox through write → run → error → fix (every run end
   keeps the sandbox; killed runs roll back), `snapshot()` / create-from-snapshot, `destroy()`
   after which no isolate runs and no op resolves — ADR-0568, ADR-0567 codec (PR #419, #418).

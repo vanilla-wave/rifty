@@ -3,35 +3,12 @@
 ## Items
 
 None left to build: the acceptance carrier and `distribution/isolate-host-sandbox-core` landed
-on the goal branch (Final+GREEN PASS @ 30c8c1ff1). What still gates leaving draft and CLOSE is in
-`## Open questions` (owned outside this branch) — CLOSE runs on the manager's message after the
-external review.
+(PR #419, external review rounds 1–4). CLOSE waits on the one `owner: user` question below; it
+runs as a small PR on the user's words.
 
 ## Open questions
 
-- The per-sandbox cap (I6): one number, the codec's `maxBytes` count
-  (ADR-0567 refuses before allocating); the isolate limit alone does not hold
-  the state (a guest fits 51 MiB of files at limit 64, step 0, capture peaks
-  at ~2 × S, ADR-0567 P2) — owner: agent — its default, its relation to
-  `memoryLimitMb` (a capture that runs out of isolate memory is the same named
-  result, not `memory`), measured on the landed codec.
-- Codec cost per run on a small FS and in the consumer realm; the
-  consumer's memory per idle sandbox — owner: agent — measure on the landed
-  seam (template scale is already measured, see the state-model line).
-- State bytes on the consumer → worker wire (JSON + base64 vs binary
-  request frames) — owner: agent — measure at the wire wall.
-- `require.main === module` is `false` in rifty's program entry (step 0 S3) —
-  owner: runtime-js thread (manager) — this goal's PR stays out of ready and
-  the goal does not close until its corpus row is green against real Node;
-  merge main when it lands.
-- Behavior divergences pinned ⚠️ in the carrier (not diagnostic text): work queued when
-  `process.exit()` runs still runs and a file it writes is kept; an uncaught throw followed by an
-  endless microtask chain ends as `timeout` with its writes rolled back — owner: thread #416 — the
-  manager's rule (2026-11-22): "green against Node, or ⚠️ citing the runtime-js item" and "a compat
-  row saying the run's files are rolled back"; both are pinned that way, so they no longer gate
-  draft; a #416 fix flips their carrier red, then to parity rows.
-- The codec seam (`t3/isolate-host-fs-snapshot`) — owner: snapshot thread —
-  the manager sends the sha once its shape is stable; build on that branch.
+- Три поведенческих расхождения с Node остаются в песочнице объявленными ⚠️: (1) работа, уже стоявшая в очереди на момент `process.exit()`, исполняется, и записанный ею файл остаётся в состоянии; (2) микрозадача из `'exit'`-listener'а после явного `exit()` исполняется и может записать файл; (3) uncaught throw с бесконечной цепочкой микрозадач заканчивается таймаутом с откатом записей, Node выходит с кодом 1 и записи сохраняет. Принять цель с ними и чинить по записям backlog — или держать цель открытой до починки — owner: user — asked by the manager 2026-11-23 (the goal's decision «the same holds for anything found in the class "a run silently does something else"» narrows I2 only in the user's words, `RDY-6`); evidence: `sandbox-acceptance` declared rows; backlog `runtime-js/node-eval-work-queued-at-exit-runs`, `distribution/isolate-host-natural-exit-listener-queued-work`, `distribution/isolate-host-uncaught-throw-waits-for-microtask-checkpoint`, lead `distribution/isolate-host-sandbox-capture-at-process-terminal`. Everything else of the goal is delivered and proven (CLOSE review 2026-11-23 @ 35fb53023: the only blocker is this gate).
 
 ## Closes elsewhere
 
