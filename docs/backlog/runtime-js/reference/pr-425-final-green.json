@@ -1,9 +1,9 @@
 {
   "overall_verdict": "concern",
-  "merge_call": "Merge PR #425 as fixes + docs on green PR CI at HEAD f20128624 (re-commit this verdict as the landing record, REV-8). Round-1 fixes F2/F3/F4/F5 hold vs live Node (own mutants: each reverted fix turns exactly its row red); F1/F7 withdrawal leaves no over-claim; all carriers green in scratch @ 5a3f932a6. goal_complete false (item 2 `runtime-js/guest-builtin-names`).",
+  "merge_call": "Merge PR #425 as fixes + docs on green PR CI at HEAD ef4a07b1c (re-commit this verdict as the landing record, REV-8). Round-1 fixes F2/F3/F4/F5 hold vs live Node (own mutants: each reverted fix turns exactly its row red); F1/F7 withdrawal leaves no over-claim; all carriers green in scratch @ 5a3f932a6. goal_complete false (item 2 `runtime-js/guest-builtin-names`).",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "f20128624aabc31d0b695e053dd5e506919c4bac",
-  "unit_goal_source": "docs/backlog/epics/node-file-entry-parity/goal.md + map.md (item 2 ready) + ledger.md @ f20128624; PR #425 as fixes + docs, delta reviewed 50205d5bf..5a3f932a6 (e5948ec06 cross-review round 1, 5a3f932a6 typescript-worker re-pin, f20128624 docs: stack-getter read count declared) over the prior verdict tree a09e091b9; BASE origin/main f3861a3cd; observed baseline = carrier rows + live Node v24.16.0; agent RED /tmp/nf-r4/red re-executed as own mutants",
+  "reviewed_sha": "ef4a07b1c8b4dcbacb4da65fa3ab923e71a3184a",
+  "unit_goal_source": "docs/backlog/epics/node-file-entry-parity/goal.md + map.md (item 2 ready) + ledger.md @ ef4a07b1c; PR #425 as fixes + docs, delta reviewed 50205d5bf..5a3f932a6 (e5948ec06 cross-review round 1, 5a3f932a6 typescript-worker re-pin, f20128624 docs: stack-getter read count declared, f2989ecaf landing verdict, ef4a07b1c map/ledger: item 2 waits for the user's word, order of work) over the prior verdict tree a09e091b9; BASE origin/main f3861a3cd; observed baseline = carrier rows + live Node v24.16.0; agent RED /tmp/nf-r4/red re-executed as own mutants",
   "unit_residuals": [],
   "goal_residuals": [
     {
