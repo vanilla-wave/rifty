@@ -95,6 +95,14 @@ const CASES = [
     'an unhandledRejection listener after an uncaught throw',
     `${W} w('a'); process.on('unhandledRejection', () => w('late')); globalThis.p = Promise.reject(new Error('r')); throw new Error('x')`,
   ],
+  [
+    'an unhandledRejection listener for a rejection inside an exit listener',
+    `${W} w('a'); process.on('unhandledRejection', () => w('l')); process.on('exit', () => { Promise.reject(new Error('r')) })`,
+  ],
+  [
+    "a due timer an 'exit' listener arms at a natural exit",
+    `${W} w('a'); process.on('exit', () => { setTimeout(() => w('t'), 0); const e = Date.now() + 20; while (Date.now() < e); })`,
+  ],
   ['beforeExit listener', `${W} w('a'); process.on('beforeExit', () => w('be'))`],
   [
     'uncaught throw then an endless queued timer',

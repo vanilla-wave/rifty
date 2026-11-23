@@ -665,6 +665,10 @@ describe('nothing of the guest runs after its run has ended (ADR-0568 §3)', () 
       code: "require('fs').writeFileSync('w', '1'); setImmediate(() => require('fs').writeFileSync('im', '1')); throw new Error('x')",
       exitCode: 1,
     },
+    "a due timer an 'exit' listener arms at a natural exit: never runs": {
+      code: "const fs = require('fs'); fs.writeFileSync('w', '1'); process.on('exit', () => { setTimeout(() => { console.log('T'); fs.writeFileSync('t', '1') }, 0); const e = Date.now() + 20; while (Date.now() < e); })",
+      exitCode: 0,
+    },
     'a 0 ms timer beside process.exit(3): never runs': {
       // The timer is due before exit(3) (a 20 ms busy wait): its expiry is in flight at the end.
       code: "require('fs').writeFileSync('w', '1'); setTimeout(() => require('fs').writeFileSync('late', '1'), 0); const e = Date.now() + 20; while (Date.now() < e); process.exit(3)",

@@ -35,14 +35,18 @@ Command (repo root, after `pnpm --filter @riftydev/isolate-host build`):
 | exit(2) from a promise callback, a timer already due | 2, a,t | 2 | 2, a | extra files kept |
 | exit(2) from a promise callback, an endless timer already due | timeout, — | timeout | 2, a | whole run rolled back |
 | an unhandledRejection listener after an uncaught throw | 1, a | 1 | 1, a | as Node |
-| beforeExit listener | 0, a | 0 | 0, a,be | files Node writes missing (`'beforeExit'` never emitted, process.md) |
+| an unhandledRejection listener for a rejection inside an exit listener | 0, a | 0 | 0, a,l | files Node writes missing |
+| a due timer an 'exit' listener arms at a natural exit | 0, a | 0 | 0, a | as Node |
+| beforeExit listener | 0, a | 0 | 0, a,be | files Node writes missing |
 | uncaught throw then an endless queued timer | 1, a | 1 | 1, a | as Node |
 | uncaught throw + endless microtask chain | memory, — | memory | 1, a | whole run rolled back |
 | exitCode in an exit listener after an uncaught throw | 1, a | 1 | 5, a | exit code not Node's |
 | throw in an exit listener | 1, a | 1 | 3, a | exit code not Node's |
 | rejection in an exit listener | 0, a | 0 | 1, a | exit code not Node's |
 
-Every divergence is at a place `runCode` diverges too; the sandbox's status is `runCode`'s on every
+Files Node writes are missing in two rows (`'beforeExit'` is never emitted, process.md ❌; an
+`unhandledRejection` listener never runs for a rejection made inside an `'exit'` listener), in both
+hosts. Every divergence is at a place `runCode` diverges too; the sandbox's status is `runCode`'s on every
 row but one — a timer due beside a fatal thrown from another timer: `runCode` takes its `exit(0)`
 (0), the sandbox keeps the fatal's 1 (Node's; the terminal is already recorded) and its file.
 
@@ -53,7 +57,8 @@ rejection reported after the run ran its `unhandledRejection` listener in the ca
 endless listener: `timeout`, writes rolled back). A timer queued before an uncaught throw fired after the guest's
 run had ended (the host timer was in flight when the result was) — `runCode` disposed the isolate
 at the result, so nothing of it was seen, while a sandbox captured its state after the run and
-waited for the callback. A finite such timer left its file (`a,q` where Node has `a`), an endless
+waited for the callback; a due timer an `'exit'` listener armed at a natural exit ran the same way
+(output `T`, file `t`; Node: neither). A finite such timer left its file (`a,q` where Node has `a`), an endless
 one ended the run `timeout` with every write rolled back (Node and `runCode`: exit 1). The 0 ms
 timer beside `exit()` left its file in some runs.
 
