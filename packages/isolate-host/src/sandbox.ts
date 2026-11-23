@@ -442,11 +442,6 @@ function tooLarge(size: number, max: number): Error {
   );
 }
 
-/**
- * The highest directory `mkdir -p dir` would create, if any. Existence along a
- * path is monotone (present, then absent), so a binary search keeps a deep
- * path at O(depth · log depth) VFS lookups instead of O(depth²).
- */
 /** `/`, each existing directory down to `path`, and `path` itself when it exists. */
 function existingChain(fs: Fs, path: string): string[] {
   const chain = ['/'];
@@ -472,6 +467,11 @@ function timesOf(fs: Fs, path: string): EntryTimes {
   };
 }
 
+/**
+ * The highest directory `mkdir -p dir` would create, if any. Existence along a
+ * path is monotone (present, then absent), so a binary search keeps a deep
+ * path at O(depth · log depth) VFS lookups instead of O(depth²).
+ */
 function firstMissingDir(fs: Fs, dir: string): string | undefined {
   const parts = dir.split('/').filter(Boolean);
   const at = (n: number): string => `/${parts.slice(0, n).join('/')}`;
