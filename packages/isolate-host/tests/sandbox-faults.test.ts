@@ -982,7 +982,12 @@ describe('destroy waits for the isolate on every end of a run (ADR-0568 §5, I5)
   const HOLD = 'globalThis.hold = new Uint8Array(300 << 20).fill(1);';
   const SORT = 'const a = Array.from({ length: 3e6 }, () => Math.random());';
   const ENDS: Record<string, { code: string; options: string; awaitRun: boolean }> = {
-    exit: { code: `${HOLD} console.log(1)`, options: '{ memoryLimitMb: 512 }', awaitRun: true },
+    // Each run lives long enough (≥ 1.5 s) for the probe to find its worker by RSS.
+    exit: {
+      code: `${HOLD} setTimeout(() => console.log(1), 1500)`,
+      options: '{ memoryLimitMb: 512 }',
+      awaitRun: true,
+    },
     timeout: {
       code: `${HOLD} ${SORT} for (;;) a.sort()`,
       options: '{ memoryLimitMb: 512, timeoutMs: 1500 }',
@@ -994,7 +999,7 @@ describe('destroy waits for the isolate on every end of a run (ADR-0568 §5, I5)
       awaitRun: true,
     },
     'refused state': {
-      code: `${HOLD} require('fs').writeFileSync('big', Buffer.alloc(200 << 10))`,
+      code: `${HOLD} setTimeout(() => require('fs').writeFileSync('big', Buffer.alloc(200 << 10)), 1500)`,
       options: '{ memoryLimitMb: 512 }',
       awaitRun: true,
     },
@@ -1110,8 +1115,11 @@ describe('external review round 2 (manager 2026-11-23)', () => {
        await sleep(300);
        await sb.destroy();
        await running;
-       await sleep(50);
-       out({ held: (used() - base) / 2 ** 20, alive: typeof sb });`,
+       // V8 sweeps freed ArrayBuffers on a background thread after gc(): poll until it has
+       // (a real hold never drops; the inputs and the FS's copies are 64 MiB of garbage).
+       let held = Infinity;
+       for (let i = 0; i < 20 && held >= 8; i++) { await sleep(100); held = Math.min(held, (used() - base) / 2 ** 20); }
+       out({ held, alive: typeof sb });`,
       { flags: ['--expose-gc'] },
     );
     expect((value as { held: number }).held).toBeLessThan(8);
