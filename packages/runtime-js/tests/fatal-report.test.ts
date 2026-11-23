@@ -256,7 +256,7 @@ it("a direct eval frame names its module as origin, without Node's position", ()
 });
 
 it.each([
-  ['Buffer', 'Buffer.from([1])'],
+  ['Buffer', "require('buffer').Buffer.from([1])"],
   ['Date', 'new Date(0)'],
   ['RegExp', '/r/'],
 ])('a %s prop: its own getter never runs', (_, make) => {
