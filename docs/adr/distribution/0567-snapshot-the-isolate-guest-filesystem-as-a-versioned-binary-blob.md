@@ -3,7 +3,7 @@
 Status: Accepted
 Date: 2026-11
 
-> TL;DR: The guest's whole in-memory FS becomes one opaque byte string — rifty's own binary format v1 (records + CRC-32), template-bound, read forever by later rifty; a pure-JS codec reads and writes it in the isolate and in the consumer's realm; restore replaces the FS of a fresh isolate before any guest code, all or nothing.
+> TL;DR: The guest's whole in-memory FS becomes one opaque byte string — rifty's own binary format v1 (records + CRC-32), template-bound, read forever by later rifty; a pure-JS codec reads and writes it in the isolate and in the consumer's realm; restore validates every byte, then replaces the FS of a fresh isolate before any guest code; a restore that fails while writing names its failure and the instance is thrown away — the guest bundle refuses to run or snapshot it; in the consumer's realm discarding the target is the caller's.
 
 ## Context
 
@@ -112,9 +112,12 @@ Probes: `docs/backlog/distribution/reference/isolate-host-fs-snapshot-fit-probes
    chain took 2.6 s and 65 MB of 16 383-unit paths 2.8 s). An allocation the
    limit refuses at snapshot is `ERR_FS_SNAPSHOT_TOO_LARGE`, the FS untouched;
    an isolate the limit kills outright is the embedder's memory termination. A
-   snapshot right after a restore with no guest code between can need ~3 × the
-   bytes: the restored blob is not yet collected (231–322 MiB at 98 MiB). A
-   consumer sizes `memoryLimitMb` for 2 × `maxBytes` + 16 MiB.
+   consumer sizes `memoryLimitMb` for 2 × `maxBytes` + 16 MiB — except a
+   snapshot straight after a restore with no guest code between, which needs up
+   to ~3 × the bytes while the restored blob is not yet collected (measured at
+   rest: one 96 MiB file 300 MiB against 206 for restore → run → snapshot;
+   template scale, 98 MiB, 225–311 against 225, the worst of three noisy runs —
+   `distribution/isolate-host-fs-snapshot-restore-then-snapshot-peak`).
 8. **Where.** One pure-JS module in `@riftydev/isolate-guest` (root exports
    `snapshotFs(fs, options)`, `restoreFs(fs, bytes, options)`,
    `FsSnapshotError`; ADR-0558, unstable) over a structural FS interface that
@@ -155,7 +158,7 @@ Rejected (P1, template scale, S ≈ 95 MB):
 - Measured on landed code (isolate-guest README §Snapshot, M3 Pro): 23 654
   files / 100.6 MB — snapshot 138 ms and restore 173 ms in the isolate, 142 /
   161 ms in Node, ivm copy ≤ 10 ms, smallest `memoryLimit` for restore → run →
-  snapshot 223 MiB; 10 files / 958 kB — ≤ 2.3 ms each way, 19 MiB. Not
+  snapshot 223 MiB (225 on the probe's grid); 10 files / 958 kB — ≤ 2.3 ms each way, 19 MiB. Not
   measured on Linux.
 - The consumer stores ~S bytes per snapshot; gzip, if wanted, is the host's
   (template scale 95 → 18 MB).
@@ -163,7 +166,70 @@ Rejected (P1, template scale, S ≈ 95 MB):
   structure checks keep it consistent, not truthful.
 - Not the user's words: format, CRC-32, replace-on-fresh-only and exact
   template match are agent decisions; the `_UNREPRESENTABLE` refusals of NUL
-  and out-of-range times and «all of the tree or the isolate is thrown away»
-  are the manager's decisions by delegation, open for the user (goal map).
-  The user's words (2026-11-22, goal `amend:` lines): the 16 383-unit name
-  cap («ок»), `ino` renewed for now («давая в бэклог положим») (goal `isolate-host-fs-snapshot` Decisions).
+  and out-of-range times are the manager's decision by delegation — guest
+  `node:fs` and the sandbox's host ops no longer create either (PR #419); a
+  consumer writing a `MemoryFsSync` directly still can, and snapshot refuses it
+  by name. The user's words on the name cap and on `ino`, and his «ок» to the
+  manager's wording «a partial tree is never passed off as whole: after the
+  failure the instance is thrown away»: `## Decisions` below.
+- Manager's reading, 2026-11-23, not the user's words: the goal's I6 memory
+  budget holds on the scenario's sequence restore → run → snapshot (223–225 MiB,
+  the two scripts' bisection grids, ≤ 2 × S + 64 = 260); the heavier snapshot straight after a restore (up to
+  ~3 × the bytes) is not a
+  user fork — RDY-6 «a difference is a user fork only when it is reachable,
+  materially affects the requested value and nothing accepted settles it», with
+  CLOSE §1 «every invariant executed on the real scenario» met on the
+  scenario's sequence: that snapshot returns the bytes just restored,
+  no requested action needs it, and a sandbox always runs guest code between.
+  Recorded: `distribution/isolate-host-fs-snapshot-restore-then-snapshot-peak`.
+
+## Goal invariants (exported from goal `isolate-host-fs-snapshot` at its close)
+
+Verbatim from the goal's `goal.md` in git at commit `f757909c4` (epics backlog,
+directory `isolate-host-fs-snapshot`; removed at close), its Outcome and User
+scenario there too. The user's amendments: `## Decisions`; the manager's
+readings: «Not the user's words» above.
+
+1. I1. Round trip: after restore, guest code sees for every path the same
+   kind, bytes, `readdirSync` order and `fs.statSync` (`size`, `nlink`,
+   `mode`, `mtimeMs`, `atimeMs`, `ctimeMs`, `birthtimeMs`) as before snapshot,
+   for any name rifty's FS holds; between the isolate and the consumer's realm
+   in both directions. `ino` is renewed, as after a copy (ADR-0567 §1); what
+   a snapshot does not keep (`ino`; links, modes, owners — absent from rifty's
+   FS) is named in `docs/public/compat/isolate-host.md`.
+2. I2. One opaque blob carries a format version and the template
+   `{id, version}` or none; a reader refuses a version it does not know and a
+   template other than the caller's, each with its named error; later rifty
+   reads every format version released before it (ADR-0567).
+3. I3. Hostile bytes: every defect in scenario step 4 is refused with a named
+   error whose text carries no blob bytes; the target FS is exactly as before;
+   decoding takes time and memory linear in the blob's length, with `maxBytes`
+   checked before any allocation — in the isolate and in the consumer's realm;
+   a restore changes nothing outside its target FS (no other `MemoryFs` of the
+   consumer's realm, no realm-wide state a blob value could set).
+4. I4. Limits: in an unaltered realm a snapshot over `maxBytes` is refused
+   before its bytes are allocated, and restore refuses a blob over `maxBytes`
+   before reading it; restore runs only before guest code in that isolate (not
+   during a run either), else a named error; snapshot works after guest code
+   has run (the run ended, isolate alive) — its result is then guest-authored
+   bytes, bounded by the isolate memory limit and accepted only via restore
+   (ADR-0567 §8).
+5. I5. The same tree gives the same bytes; snapshot changes nothing in the tree.
+6. I6. Cost, measured on landed code and published (isolate-guest README) for
+   a small workspace (~10 files, ~1 MB) and the requirements' template scale
+   (23 654 files, ~95 MB), both realms: bytes, snapshot and restore time, peak
+   isolate memory. Budget on the dev machine (M3 Pro) at template scale: each
+   direction ≤ 2 s (the requirements' one-pass unpack: 0.33–0.39 s vs 18 s
+   with validation), peak isolate memory ≤ 2 × S + 64 MiB. Both run
+   synchronously inside the embedder's call, so that call's deadline bounds
+   them (the sandbox's deadline is the sandbox goal's). An honest snapshot
+   crosses the ivm boundary as an exact-length buffer; the copy's cost is
+   published with the rest.
+
+## Decisions
+
+The user's words on the goal's narrowings, relayed by the manager (exported from goal `isolate-host-fs-snapshot` at its close):
+
+- 2026-11-22 — user: «ок» (to the manager's: «Скрипт создаёт файл, у которого одно имя (не путь) длиннее 16 383 символов. Снимок такое дерево не примет, и запуск не сохранит своё состояние, с именованной ошибкой. Настоящий Node такой файл не создаст вовсе: ОС ограничивает имя 255 байтами. Задеты только программы, которые в Node и так падают. Цель обещала „любое имя“») — I1's «any name rifty's FS holds» covers names of at most 16 383 code units (the user's words say «символов»; the cap counts UTF-16 code units, so a name of 8 192–16 383 non-BMP characters is refused too — the manager's reading, not the user's words); a longer name is refused at snapshot by name (`ERR_FS_SNAPSHOT_UNREPRESENTABLE`, ADR-0567 §1), because longer names make decoding quadratic.
+- 2026-11-22 — user: «давая в бэклог положим» (to the manager's: «Первый запуск читает `fs.statSync('a.txt').ino` и получает, скажем, 17. Во втором запуске у того же файла будет другое число; на настоящем диске оно сохранилось бы. Задеты программы, которые запоминают `ino` между запусками, чтобы узнавать файл, — например, свои кэши. Размер, времена и содержимое совпадают точно. Цель обещала „`stat` идентичен“») — I1's and scenario step 2's identical `fs.statSync` exclude `ino` here; keeping it is deferred to `backlog/distribution/isolate-host-fs-snapshot-keep-ino` (a per-realm inode counter makes a restored `ino` everyone's in the consumer realm).
+- 2026-11-23 — user: «ок» (to the manager's recommendation: «Оставить как есть и принять формулировку „частичное дерево никогда не выдаётся за целое: после сбоя экземпляр выбрасывается“. Атомарность в кодеке записать в backlog с условием взятия: появился embedder, которому нужно восстановление поверх живой ФС»; asked after the user's «вот тут давай аккуратно разберемся. Во время реализации fs не очень приятно ходили по граблям пытаясь обеспечить точный статус файлов. Давай поймем что покупаем и какой ценой») — the Outcome's «never a partial tree» reads: a partial tree is never passed off as whole; a restore that fails while writing is `ERR_FS_SNAPSHOT_INCOMPLETE` and the instance is thrown away (ADR-0567 §6). Atomic restore deferred: `backlog/distribution/isolate-host-fs-snapshot-atomic-restore`.
