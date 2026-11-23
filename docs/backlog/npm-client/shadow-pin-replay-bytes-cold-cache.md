@@ -17,7 +17,7 @@ code:
 Observed 2026-11-23 (PR #388 cross-review, carrier
 `packages/workbench/src/workers/no-coi-compact-install.contract.test.ts`):
 a lock pin whose acquisition is a shadow substitution
-(`acquisition.kind === 'registry'`, `installer-walk.ts` → 
+(`acquisition.kind === 'registry'`, `installer-walk.ts` →
 `readRegistryShadowReplayCache`) reads its bytes only from the shared tarball
 cache (`internal/shadow/substitution.ts`, "is missing its pinned cache bytes").
 Replay snapshots carry exactly those bytes; compact v5 omits them by design.

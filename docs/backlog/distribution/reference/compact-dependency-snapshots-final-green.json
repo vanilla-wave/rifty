@@ -1,19 +1,35 @@
 {
   "overall_verdict": "pass",
-  "merge_call": "Final+GREEN verify-pass PASS at 11f893f17 after merging #398: no merge defect; compact skips the cache on both tiers; the replay path verifies once; the v5 poisoned-cache carriers discriminate; no blockers. Merge only after re-binding the landing artifact to 11f893f17 (d4e7009b8 binds 00b1e62a3, and the merge plus the test commit change product/test paths), pushing, and green PR CI at that HEAD (the Linux/GNU tar system-tar cases have still only run on macOS).",
+  "merge_call": "Merge on green PR CI at HEAD bb0713bbd; no blocker, no open concern. Prior C1 (docs overclaim) and C2 (carrier timeout) fixed and verified by mutants; packed consumer on 4e0df60c7 PASS (/tmp/compact-388-packed-3.log:203-204, EXIT 0; bb0713bbd changes only docs + this unit carrier). Local pr:check verdict is the driver's.",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "11f893f17586d9fa45dc6339d89a6cfd32418100",
-  "unit_goal_source": "PR #388; goal compact-dependency-snapshots (closed in-branch, read at d693c59dd~1) I1-I3 + ADR-0547; BASE f5c232b3dee1a19c640cb0cdf176a58d103cadc0 (merge-base with origin/main after #398); verify pass of 00b1e62a361385c230c8249a7d9b73b339237c40..11f893f17586d9fa45dc6339d89a6cfd32418100 (binding d4e7009b8, merge e24d16ad3 of origin/main #398, v5 poisoned-cache test commit 11f893f17)",
+  "reviewed_sha": "bb0713bbd9b9c995db7498349230ff77760b8411",
+  "unit_goal_source": "PR #388; goal compact-dependency-snapshots (closed in-branch, read at d693c59dd~1) I1-I3 + User scenario 4 + ADR-0547; BASE f5c232b3dee1a19c640cb0cdf176a58d103cadc0 (merge-base with origin/main); verify pass of 183cdb74d..bb0713bbd (cross-review round 1 reception S1/N1/N3/N4 at 4e0df60c7 + verify-5 reception C1/C2 at bb0713bbd); last verified 11f893f17 (landing verdict compact-dependency-snapshots-final-green.json)",
   "unit_residuals": [],
   "goal_residuals": [],
   "goal_complete": true,
   "coverage": [
     {
+      "row": "Explicit install after compact keeps existing semantics: lock-replayed shadow pin on a cold cache is never fetched; plain install (zero requests) and adding an unrelated package fail EBROKENLOCK with tree/lock unchanged; naming the substituted direct dependency re-resolves through the registry (ADR-0361 request admission); replay snapshot restores install from cache",
+      "source": "acceptance",
+      "trace": "scenario + ADR-0547",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/no-coi-compact-install.contract.test.ts:149; packages/workbench/src/workers/no-coi-compact-install.contract.test.ts:160; packages/workbench/src/workers/no-coi-compact-install.contract.test.ts:171; packages/workbench/src/workers/no-coi-compact-install.contract.test.ts:182 (real producer + applyNoCoiSnapshot + installToolchainPackages via parseNpmInstallRequest; only global fetch stubbed with real lightningcss-wasm and ms-2.0.0 fixture bytes. Mutants at bb0713bbd: A lockfile shadow pin -> fetchAndUnpackToCache (installer-walk.ts:358) -> :149 and :160 RED \"promise resolved\"; B root updateNames ignored (installer-sources.ts:97) -> :171 RED EBROKENLOCK; B2 updateNames not passed (npm-shell-command.ts:716) -> :171 RED; 4e0df60c7 mutants compact-keeps-cache -> :149 RED, replay skips cache -> :182 RED; baseline 4/4 PASS)",
+      "note": ""
+    },
+    {
+      "row": "Replay leg of the packed browser proof keeps the BASE same-page dispose/reopen; compact leg keeps the closed-page reopen",
+      "source": "frozen-artifact",
+      "trace": "I2 + I3",
+      "status": "pass",
+      "citation": "tests/integration/no-coi-snapshot-browser-proof.mjs:78 (vs origin/main f5c232b3d the replay leg keeps the BASE same-page reopen; added checks only strengthen); packed run at 4e0df60c7: /tmp/compact-388-packed-3.log:203 (snapshot) + :204 (compact), EXIT 0 at :228; file unchanged in 4e0df60c7..bb0713bbd",
+      "note": ""
+    },
+    {
       "row": "Same-input public compact v5 keeps the prepared payload (incl. esbuild-wasm), has no replay namespace and a smaller gzip than replay",
       "source": "acceptance",
       "trace": "I1",
       "status": "pass",
-      "citation": "tests/integration/fixtures/workbench-vite-consumer/produce-vite-snapshot.mjs:87; /tmp/compact-388-packed-2.log:204; kept rifty-workbench-packed-consumer-2IiuPJ/consumer/dist: compact 6025348 B vs replay 9770971 B, manifest {version:5,profile:compact}, 0 rifty/replay-cache entries",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/produce-vite-snapshot.mjs:87; /tmp/compact-388-packed-2.log:204; kept rifty-workbench-packed-consumer-2IiuPJ/consumer/dist: compact 6025348 B vs replay 9770971 B, manifest {version:5,profile:compact}, 0 rifty/replay-cache entries (carried from 11f893f17 verdict; REV-1, unchanged in 183cdb74d..4e0df60c7)",
       "note": ""
     },
     {
@@ -21,7 +37,7 @@
       "source": "acceptance",
       "trace": "I2",
       "status": "pass",
-      "citation": "tests/integration/no-coi-snapshot-browser-proof.mjs:64; tests/integration/no-coi-snapshot-browser-proof.mjs:92; /tmp/compact-388-packed-2.log:204 (EXIT 0 on the merged tree); packages/workbench/src/glue/dep-snapshot-compact.contract.test.ts:117 (K4 apply cache-import on -> RED at 11f893f17)",
+      "citation": "tests/integration/no-coi-snapshot-browser-proof.mjs:64; tests/integration/no-coi-snapshot-browser-proof.mjs:92; /tmp/compact-388-packed-2.log:204 (EXIT 0 on the merged tree); packages/workbench/src/glue/dep-snapshot-compact.contract.test.ts:117 (K4 apply cache-import on -> RED at 11f893f17) (carried from 11f893f17 verdict; REV-1, unchanged in 183cdb74d..4e0df60c7)",
       "note": ""
     },
     {
@@ -29,7 +45,7 @@
       "source": "acceptance",
       "trace": "ADR-0547 + I2",
       "status": "pass",
-      "citation": "packages/workbench/src/workers/owner-package-state.ts:309; packages/workbench/src/glue/dep-snapshot.ts:233; packages/workbench/src/workers/workbench-snapshot-apply-validation.contract.test.ts:521; packages/workbench/src/workers/workbench-snapshot-apply-validation.contract.test.ts:544 (K2 restore cache-import on -> RED; K3 old unconditional flush -> RED)",
+      "citation": "packages/workbench/src/workers/owner-package-state.ts:309; packages/workbench/src/workers/workbench-snapshot-apply-validation.contract.test.ts:525; packages/workbench/src/workers/workbench-snapshot-apply-validation.contract.test.ts:551 (mutant `else await options.flush()` after the applyCache branch in owner-package-state.ts -> RED with both the 183cdb74d and 4e0df60c7 assertion; narrowing did not weaken it; projectRoot now pinned)",
       "note": ""
     },
     {
@@ -37,7 +53,7 @@
       "source": "acceptance",
       "trace": "ADR-0547",
       "status": "pass",
-      "citation": "packages/workbench/src/workers/workbench-snapshot-apply-validation.contract.test.ts:476; packages/workbench/src/workers/workbench-snapshot-apply-validation.contract.test.ts:507 (K4 -> RED)",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-apply-validation.contract.test.ts:479; packages/workbench/src/workers/workbench-snapshot-apply-validation.contract.test.ts:511 (payloadRoot narrowed to live project node_modules/; mutant `if (!cache) { await options.flush(); return; }` in dep-snapshot-application.ts:84 -> RED at 4e0df60c7, PASSES against the 183cdb74d assertion = old check was vacuous, N1 confirmed fixed)",
       "note": ""
     },
     {
@@ -45,7 +61,7 @@
       "source": "fault-matrix",
       "trace": "I3",
       "status": "pass",
-      "citation": "packages/workbench/src/workers/workbench-snapshot-initial-admission.contract.test.ts:288; packages/workbench/src/glue/dep-snapshot.ts:334; packages/workbench/src/glue/dep-snapshot.ts:341 (K1 v5 empty-cache check off -> 2 RED; K6 v5 skips all cache checks -> 2 RED; K5 no verification in preflight -> 12 RED)",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-initial-admission.contract.test.ts:288; packages/workbench/src/glue/dep-snapshot.ts:334; packages/workbench/src/glue/dep-snapshot.ts:341 (K1 v5 empty-cache check off -> 2 RED; K6 v5 skips all cache checks -> 2 RED; K5 no verification in preflight -> 12 RED) (carried from 11f893f17 verdict; REV-1, unchanged in 183cdb74d..4e0df60c7)",
       "note": ""
     },
     {
@@ -53,7 +69,7 @@
       "source": "fault-matrix",
       "trace": "I3 + ADR-0547",
       "status": "pass",
-      "citation": "packages/workbench/src/glue/dep-snapshot-compact.contract.test.ts:150; packages/workbench/src/glue/dep-snapshot-tar.ts:248 (M1/M3/M6 RED at 00b1e62a3; the file is unchanged since). Linux/GNU tar pending PR CI",
+      "citation": "packages/workbench/src/glue/dep-snapshot-compact.contract.test.ts:150; packages/workbench/src/glue/dep-snapshot-tar.ts:248 (M1/M3/M6 RED at 00b1e62a3; the file is unchanged since). Linux/GNU tar pending PR CI (carried from 11f893f17 verdict; REV-1, unchanged in 183cdb74d..4e0df60c7)",
       "note": ""
     },
     {
@@ -61,7 +77,7 @@
       "source": "acceptance",
       "trace": "I3",
       "status": "pass",
-      "citation": "packages/workbench/src/glue/dep-snapshot.ts:249; packages/workbench/src/workers/workbench-first-materialization.contract.test.ts:1872; packages/workbench/src/workers/no-coi-snapshot-application.test.ts:37; packages/workbench/src/workers/no-coi-snapshot-application.test.ts:80; packages/workbench/src/workers/workbench-snapshot-initial-admission.contract.test.ts:190; packages/workbench/src/glue/dep-snapshot.test.ts:363; packages/workbench/src/glue/dep-snapshot.test.ts:470 (double-verify mutants in the restore and apply preparers -> the one-verification tests RED; K5 -> RED)",
+      "citation": "packages/workbench/src/glue/dep-snapshot.ts:249; packages/workbench/src/workers/workbench-first-materialization.contract.test.ts:1872; packages/workbench/src/workers/no-coi-snapshot-application.test.ts:37; packages/workbench/src/workers/no-coi-snapshot-application.test.ts:80; packages/workbench/src/workers/workbench-snapshot-initial-admission.contract.test.ts:190; packages/workbench/src/glue/dep-snapshot.test.ts:363; packages/workbench/src/glue/dep-snapshot.test.ts:470 (double-verify mutants in the restore and apply preparers -> the one-verification tests RED; K5 -> RED) (carried from 11f893f17 verdict; REV-1, unchanged in 183cdb74d..4e0df60c7)",
       "note": ""
     },
     {
@@ -69,7 +85,7 @@
       "source": "acceptance",
       "trace": "I3",
       "status": "pass",
-      "citation": "docs/adr/distribution/0547-compact-prepared-dependency-snapshots.md:31; tools/shadow-registry/src/snapshot-artifact-check.ts:72; #398 adds no snapshot reader (all prod callers of verifyDepSnapshotReplayCache/prepareDepSnapshotForRuntimeTier at 11f893f17: dep-snapshot.ts:211, dep-snapshot-application.ts:34, producer, bake and artifact-check tools)",
+      "citation": "docs/adr/distribution/0547-compact-prepared-dependency-snapshots.md:31; tools/shadow-registry/src/snapshot-artifact-check.ts:72; #398 adds no snapshot reader (all prod callers of verifyDepSnapshotReplayCache/prepareDepSnapshotForRuntimeTier at 11f893f17: dep-snapshot.ts:211, dep-snapshot-application.ts:34, producer, bake and artifact-check tools) (carried from 11f893f17 verdict; REV-1, unchanged in 183cdb74d..4e0df60c7)",
       "note": ""
     },
     {
@@ -77,7 +93,7 @@
       "source": "public-api",
       "trace": "ADR-0547 + I1",
       "status": "pass",
-      "citation": "packages/workbench/src/glue/dep-snapshot-producer.test.ts:121; packages/workbench/src/glue/dep-snapshot-producer.test.ts:134; packages/workbench/src/glue/dep-snapshot-producer.ts:138",
+      "citation": "packages/workbench/src/glue/dep-snapshot-producer.test.ts:121; packages/workbench/src/glue/dep-snapshot-producer.test.ts:134; packages/workbench/src/glue/dep-snapshot-producer.ts:138 (carried from 11f893f17 verdict; REV-1, unchanged in 183cdb74d..4e0df60c7)",
       "note": ""
     },
     {
@@ -85,30 +101,15 @@
       "source": "frozen-artifact",
       "trace": "I1 + I3",
       "status": "pass",
-      "citation": "docs/backlog/distribution/reference/compact-dependency-snapshots-evidence.md:60; docs/backlog/distribution/reference/compact-dependency-snapshots-evidence.md:75; scratch glue+workers at 11f893f17: 112 files / 2005 tests PASS; packed-2 kept sizes equal the documented 9,770,971 / 6,025,348",
+      "citation": "docs/backlog/distribution/reference/compact-dependency-snapshots-evidence.md:60; docs/backlog/distribution/reference/compact-dependency-snapshots-evidence.md:75; scratch glue+workers at 11f893f17: 112 files / 2005 tests PASS; packed-2 kept sizes equal the documented 9,770,971 / 6,025,348 (carried from 11f893f17 verdict; REV-1, unchanged in 183cdb74d..4e0df60c7)",
       "note": ""
     }
   ],
   "axes": [
     {
       "axis": "Completeness",
-      "verdict": "concern",
-      "findings": [
-        {
-          "severity": "concern",
-          "location": "docs/backlog/distribution/reference/compact-dependency-snapshots-final-green.json:5",
-          "evidence": "d4e7009b8 binds 00b1e62a3; e24d16ad3 (merge) and 11f893f17 then change packages/** (tools/checks/pass-binding.mjs:1-9 requires docs-only after reviewed_sha). The system-tar cases have never run on Linux since the 00b1e62a3 fix.",
-          "summary": "Merge mechanics (driver-owned): re-bind to 11f893f17, push, merge only on green PR CI at that HEAD.",
-          "authority": ""
-        },
-        {
-          "severity": "nit",
-          "location": "apps/playground/tools/bake-dep-snapshots.ts:50",
-          "evidence": "Unchanged by #398; it still reads only its own v3 output.",
-          "summary": "Residual ruling (REV-12) unchanged: NOTE.",
-          "authority": ""
-        }
-      ]
+      "verdict": "pass",
+      "findings": []
     },
     {
       "axis": "Mission and architecture",
@@ -118,7 +119,15 @@
     {
       "axis": "Goal drift",
       "verdict": "pass",
-      "findings": []
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "docs/adr/distribution/0547-compact-prepared-dependency-snapshots.md:55",
+          "evidence": "",
+          "summary": "Dated ADR line is correct DEC-2 form; no goal/ledger edit in the delta; scenario 4 product behavior unchanged (docs+tests only).",
+          "authority": ""
+        }
+      ]
     },
     {
       "axis": "Approach cost",
@@ -136,9 +145,9 @@
       "findings": [
         {
           "severity": "nit",
-          "location": "packages/workbench/src/glue/dep-snapshot.ts:233",
-          "evidence": "git show --cc e24d16ad3: dep-snapshot.ts combines #398 `lockfile: snapshot.lockfile` (the projected lock) with the optional applyCache; owner-package-state.ts takes #398's single prepareDepSnapshotRestore(payload,{runtimeTier:'coi'}) plus the guarded flush; project-deps.ts == origin/main (0-line diff), and the fetchSnapshot DepSnapshot type moves into project-deps.test-fixture.ts. Name-only diff of the old unit (11b9397ee..00b1e62a3) vs the new unit (f5c232b3d..11f893f17): only project-deps.ts (moved by #398) and the new initial-admission test differ. tsc -p packages/workbench exit 0; no DepSnapshotV3 left.",
-          "summary": "No merge defect or lost behavior on either side.",
+          "location": "packages/rifty/README.md:203",
+          "evidence": "mutants A/B/B2 above; carrier :149/:160/:171",
+          "summary": "Prior C1 fixed: rifty README:203-208, workbench README:243-247, ADR-0547:56-61 and evidence doc now state exactly the behaviour the four carrier cases pin (never-fetched lock-replayed pin; plain/unrelated-add EBROKENLOCK; named direct dependency re-resolves); transitive Vite esbuild not claimed.",
           "authority": ""
         }
       ]
@@ -149,22 +158,22 @@
       "findings": [
         {
           "severity": "nit",
-          "location": "packages/workbench/src/workers/workbench-snapshot-initial-admission.contract.test.ts:281",
-          "evidence": "git diff f5c232b3d 11f893f17: no-coi-snapshot-application.test.ts and workbench-first-materialization.contract.test.ts 0 lines; initial-admission is +89 lines with 0 removed; dep-snapshot.test.ts and project-deps.test.ts differ only by the DepSnapshotV3 -> DepSnapshot type rename (no runtime or assertion change, already part of the reviewed unit).",
-          "summary": "PR-4: #398's poisoned-cache and one-verification tests are byte-identical to origin/main apart from the type-only rename; nothing weakened.",
+          "location": "packages/workbench/src/workers/no-coi-compact-install.contract.test.ts:158",
+          "evidence": "",
+          "summary": "Prior C2 fixed: all four cases carry 30_000 timeouts.",
           "authority": ""
         }
       ]
     },
     {
       "axis": "Ecosystem UX",
-      "verdict": "concern",
+      "verdict": "pass",
       "findings": [
         {
-          "severity": "concern",
-          "location": "packages/workbench/src/glue/dep-snapshot-tar.ts:162",
-          "evidence": "Carried from the 00b1e62a3 pass: CI run 45105481072 GNU tar ./PaxHeaders/<top-level> is rejected by safePath; unchanged by #398.",
-          "summary": "Pre-existing, outside REV-1, loud: the decoder rejects a GNU tar repack that includes top-level directories. Advisory; backlog only if third-party repacking becomes a scenario.",
+          "severity": "nit",
+          "location": "packages/workbench/src/glue/dep-snapshot-compact.contract.test.ts:57",
+          "evidence": "mutant: tree = extracted, no fresh copies -> 6 RED \"unsupported or duplicate PAX field \\\"LIBARCHIVE.creationtime\\\"\" on bsdtar 3.5.3 - libarchive 3.7.4 (macOS)",
+          "summary": "N4 comment is accurate.",
           "authority": ""
         }
       ]
