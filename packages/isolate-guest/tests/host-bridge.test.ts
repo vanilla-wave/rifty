@@ -7,7 +7,7 @@
  */
 import { setFlagsFromString } from 'node:v8';
 import { runInNewContext } from 'node:vm';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 const carrier = it;
 
@@ -403,23 +403,29 @@ describe('interval backpressure (Node: an interval re-arms after its callback ra
   carrier(
     'an interval keeps its period from the tick start (Node), not from the callback end',
     async () => {
-      const { createHostBridge } = await load();
-      const starts: number[] = [];
-      const { functions, close } = createHostBridge({
-        write: () => {},
-        // The guest "runs" each callback for 150 ms of a 200 ms period.
-        fire: () => {
-          starts.push(performance.now());
-          return new Promise<void>((resolve) => setTimeout(resolve, 150));
-        },
-      });
-      functions.timerStart(1, 200, true);
-      for (const until = Date.now() + 10_000; starts.length < 3 && Date.now() < until; )
-        await sleep(20);
-      close();
-      // From the start the gap is ~200 ms, from the end ~350; 275 leaves room for a loaded scheduler.
-      expect(starts.length).toBe(3);
-      expect((starts[2] as number) - (starts[1] as number)).toBeLessThan(275);
+      // The host clock is the bridge's outer boundary: faked, so the period is exact
+      // under any load (on a real clock it is not observable past the delivery latency).
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] });
+      try {
+        const { createHostBridge } = await load();
+        const starts: number[] = [];
+        const { functions, close } = createHostBridge({
+          write: () => {},
+          // The guest "runs" each callback for 150 ms of a 200 ms period.
+          fire: () => {
+            starts.push(performance.now());
+            return new Promise<void>((resolve) => setTimeout(resolve, 150));
+          },
+        });
+        const t0 = performance.now();
+        functions.timerStart(1, 200, true);
+        await vi.advanceTimersByTimeAsync(1000);
+        close();
+        // From the start: a tick every 200 ms; from the end it would be every 350.
+        expect(starts.map((t) => t - t0)).toEqual([200, 400, 600, 800, 1000]);
+      } finally {
+        vi.useRealTimers();
+      }
     },
   );
 

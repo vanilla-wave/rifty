@@ -21,6 +21,8 @@ interface Outcome {
   next: unknown;
   /** A call placed 1200 ms after the culprit settled: its result, and whether a new worker took it. */
   probe: { result: unknown; newWorker: boolean };
+  /** Distinct workers seen while the culprit ran (`sampleWorkers` only). */
+  workers?: number;
 }
 
 /**
@@ -32,7 +34,7 @@ async function withNeighbours(
   culprit: string,
   options: string,
   neighbourOptions = '{}',
-  count = 3,
+  { count = 3, harnessMs = 90_000, sampleWorkers = false } = {},
 ): Promise<Outcome> {
   const { value } = await consumer(
     `const neighbours = Array.from({ length: ${count} }, (_, i) =>
@@ -40,19 +42,24 @@ async function withNeighbours(
      await sleep(300);
      const t0 = now();
      const running = settle(runCode(${JSON.stringify(culprit)}, ${options}));
+     const seen = new Set();
+     const sampler = ${sampleWorkers} ? setInterval(() => children().forEach((p) => seen.add(p)), 100) : undefined;
      await sleep(150);
      const pids = children();
      const culprit = await running;
      const ms = now() - t0;
+     clearInterval(sampler);
      await sleep(1200);
      const probing = settle(runCode("console.log('p')"));
      const newWorker = children().some((p) => !pids.includes(p));
      const probe = { result: await probing, newWorker };
      const results = await Promise.all(neighbours);
      const retired = await waitFor(() => (children().includes(pids[0]) ? undefined : true), 3000).catch(() => false);
-     out({ shared: pids.length, retired, probe, culprit: { ...culprit, ms }, neighbours: results, next: await settle(runCode('console.log(6 * 7)')) });`,
-    { timeoutMs: 90_000 },
+     out({ shared: pids.length, retired, probe, culprit: { ...culprit, ms }, neighbours: results, next: await settle(runCode('console.log(6 * 7)')), ...(${sampleWorkers} ? { workers: seen.size } : {}) });`,
+    { timeoutMs: harnessMs },
   );
+  const harness = (value as { harnessError?: string } | null)?.harnessError;
+  if (harness !== undefined) throw new Error(`withNeighbours: ${harness}`);
   return value as Outcome;
 }
 
@@ -61,6 +68,8 @@ const NEIGHBOURS = [0, 1, 2].map(neighbour);
 const NEXT = { stdout: '42\n', stderr: '', exitCode: 0 };
 /** The rejection a consumer can retry on: a call lost with its worker (manager decision F1). */
 const LOST = 'ERR_ISOLATE_HOST_WORKER_LOST';
+/** `runCode`'s largest `timeoutMs`: a deadline no scenario reaches. */
+const MAX_TIMEOUT_MS = 2 ** 31 - 1;
 
 describe('memory on a shared worker (ADR-0563 §5)', () => {
   carrier(
@@ -123,7 +132,9 @@ describe('time on a shared worker (ADR-0563 §4)', () => {
       // Neighbours (b at 3.5 s) at 5000 ms: a rerun after the worker's loss (≥ 1.8 s)
       // could not finish in time, so they must finish where they are. Two of them:
       // the shared worker keeps a free slot for the probe unless it retires.
-      const v = await withNeighbours(code, '{ timeoutMs: 1500 }', '{ timeoutMs: 5000 }', 2);
+      const v = await withNeighbours(code, '{ timeoutMs: 1500 }', '{ timeoutMs: 5000 }', {
+        count: 2,
+      });
       const { ms, ...culprit } = v.culprit;
       expect(culprit).toEqual({
         stdout: 'c\n',
@@ -457,26 +468,39 @@ describe("attribution of a worker's RSS (ADR-0563 §5, §6)", () => {
   );
 });
 
-describe('a guest that never ends and churns host timers (ADR-0563 §7, §4)', () => {
+describe('a guest that never ends and churns host timers (ADR-0563 §7, §6)', () => {
   carrier(
-    'intervals created and cleared in a loop: its own end (timeout as Node, or memory alone), neighbours exact',
+    'intervals created and cleared in a loop: its own end (memory alone), neighbours exact',
     async () => {
       const v = await withNeighbours(
         'for (;;) { const t = []; for (let i = 0; i < 4096; i++) t.push(setInterval(() => {}, 1)); t.forEach(clearInterval) }',
-        // Its memory grows slowly: lost late on the shared worker, its solo rerun needs
-        // budget left (F1) to meet its own end.
-        '{ memoryLimitMb: 64, timeoutMs: 60000 }',
-        '{ memoryLimitMb: 64 }',
+        // Its memory grows slowly outside its heap: the shared worker is lost at its RSS
+        // ceiling with no culprit, its solo rerun crosses its own and is `memory`. How late
+        // the loss comes grows with the host's load, not with the pool; under F1 a rerun past
+        // any finite deadline is LOST (compat ⚠️, pinned by the "rerun that cannot finish"
+        // row), so no call here has one. Neighbours at 16 MiB keep the shared ceiling at
+        // 256 + 3 × (64 + 3 × 16) = 592 MiB, not 1024: the same path, reached sooner.
+        `{ memoryLimitMb: 64, timeoutMs: ${MAX_TIMEOUT_MS} }`,
+        `{ memoryLimitMb: 16, timeoutMs: ${MAX_TIMEOUT_MS} }`,
+        // A culprit that never ends reds at the harness bound, not at a deadline nobody
+        // reaches. On the loaded stand (48 `yes`, load 4–320) the case took 28–85 s.
+        { harnessMs: 240_000, sampleWorkers: true },
       );
-      // Node runs it forever: `timeout` is faithful; `memory` is its own exhaustion, met alone.
-      expect(v.culprit.exitCode).toBeNull();
-      expect(['timeout', 'memory']).toContain(v.culprit.termination);
-      expect(v.culprit).not.toHaveProperty('rejected');
+      expect(v.culprit).toEqual({
+        stdout: '',
+        stderr: '',
+        exitCode: null,
+        termination: 'memory',
+        ms: expect.any(Number),
+      });
+      // Its end came from a solo: the shared worker was lost, not the culprit blamed there.
+      // (A neighbour still running at the loss reruns too, so more than 2 is possible.)
+      expect(v.workers).toBeGreaterThanOrEqual(2);
       expect(v.shared).toBe(1);
       expect(v.neighbours).toEqual(NEIGHBOURS);
       expect(v.next).toEqual(NEXT);
     },
-    180_000,
+    250_000,
   );
 });
 
