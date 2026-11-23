@@ -35,9 +35,12 @@ export interface GuestEntry {
    * of `run` (ADR-0568). Resolves with the exit status (judge it with `exitStatus`).
    */
   runFile(path: string, args: readonly string[]): Promise<number>;
-  /** Host timer `id` expired. */
+  /** Host timer `id` expired; once the run leaves `running` (its status out, a natural exit included) it runs nothing. */
   fire(id: number): void;
-  /** An unhandled rejection the embedder saw: a copy of the reason, or `UNCOPYABLE_REJECTION`. */
+  /**
+   * An unhandled rejection the embedder saw: a copy of the reason, or `UNCOPYABLE_REJECTION`;
+   * like `fire`, it runs nothing once the run leaves `running`.
+   */
   rejection(reason: unknown): void;
   /** The realm's whole FS as a snapshot (ADR-0567); whenever no guest code runs, after `run` included. */
   snapshot(options: SnapshotOptions): Uint8Array;

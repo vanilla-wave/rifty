@@ -10,6 +10,8 @@ code: [packages/runtime-js/src/builtins/process-lifecycle-events.ts, packages/ru
 
 ## Context
 
+Sandbox (ADR-0568): a member of the lifecycle class, compat ⚠️ (row "A run's lifecycle and exit status", measured in `reference/isolate-host-sandbox-lifecycle-class.md`). Owner: runtime-js. Trigger: the next change to the exit signal's brand, or a guest found forging it.
+
 `isRiftyProcessExit` (`process-lifecycle-events.ts:50`) matches any value with
 `code === 'RIFTY_PROCESS_EXIT'` and a numeric `exitCode`; the keepalive
 (`handleRealmUncaughtError`) and the kernel worker entry use the same shape.

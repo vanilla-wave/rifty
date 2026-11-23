@@ -1,9 +1,8 @@
 /**
- * Acceptance carrier of goal `isolate-host-live-sandbox` (its `## User
- * scenario` as tests). The oracle is real `node <path> [args]`, run in sequence
- * over the same files in a fresh temporary directory read as `/workspace`
- * (`support.ts` nodeSequence). RED: every case is `it.fails` until the sandbox
- * lands; the API is typed here from the goal's contract, not imported.
+ * Acceptance carrier of the live sandbox (ADR-0568 §Invariants and scenario: its
+ * scenario as tests, I1–I9). The oracle is real `node <path> [args]`, run in
+ * sequence over the same files in a fresh temporary directory read as
+ * `/workspace` (`support.ts` nodeSequence); the API is typed here, not imported.
  */
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -19,7 +18,7 @@ import {
   waitFor,
 } from './support.ts';
 
-/** RED until the sandbox lands; flips to `it` with the implementation. */
+/** The carrier rows (landed; were `it.fails` while the sandbox did not exist). */
 const carrier = it;
 
 interface ExecResult {
@@ -578,6 +577,218 @@ describe('declared: a run Node ends at once but this host only at its deadline (
       const o = nodeSequence([{ files: { 'c.js': code }, run: ['c.js'] }])[0];
       expect(o?.exitCode).toBe(1);
       expect(Object.keys(o?.files ?? {})).toContain(`${W}/w`);
+      const sb = await createSandbox();
+      try {
+        await sb.writeFile('c.js', code);
+        expect(await sb.exec('c.js', { timeoutMs: 2000 })).toMatchObject({
+          exitCode: null,
+          termination: 'timeout',
+        });
+        expect((await sb.list()).map((e) => e.name)).toEqual(['c.js']);
+      } finally {
+        await sb.destroy();
+      }
+    },
+  );
+});
+
+describe('declared: the run ends where runCode does, with its file outcome (compat ⚠️)', () => {
+  // The lifecycle class (ADR-0568, reference isolate-host-sandbox-lifecycle-class): one
+  // representative per outcome; extra files kept is the "work queued at exit" row above.
+  carrier(
+    'exit(3), then an endless queued microtask: timeout, its writes rolled back',
+    async () => {
+      const code =
+        "require('fs').writeFileSync('w', '1'); queueMicrotask(() => { for (;;) {} }); process.exit(3)";
+      // Node exits 3 inside exit() and keeps `w`.
+      const o = nodeSequence([{ files: { 'x.js': code }, run: ['x.js'] }])[0];
+      expect(o?.exitCode).toBe(3);
+      expect(Object.keys(o?.files ?? {})).toContain(`${W}/w`);
+      const sb = await createSandbox();
+      try {
+        await sb.writeFile('x.js', code);
+        expect(await sb.exec('x.js', { timeoutMs: 2000 })).toMatchObject({
+          exitCode: null,
+          termination: 'timeout',
+        });
+        expect((await sb.list()).map((e) => e.name)).toEqual(['x.js']);
+      } finally {
+        await sb.destroy();
+      }
+    },
+  );
+  const STATUS: Record<string, { code: string; node: number; here: number }> = {
+    'a rejection inside an exit listener: 0 where Node exits 1': {
+      code: "require('fs').writeFileSync('w', '1'); process.on('exit', () => { Promise.reject(new Error('r')) })",
+      node: 1,
+      here: 0,
+    },
+    'process.exitCode set by an exit listener after an uncaught throw: 1 where Node exits 5': {
+      code: "require('fs').writeFileSync('w', '1'); process.on('exit', () => { process.exitCode = 5 }); throw new Error('x')",
+      node: 5,
+      here: 1,
+    },
+  };
+  for (const [label, { code, node, here }] of Object.entries(STATUS)) {
+    carrier(`${label}; the files are Node's`, async () => {
+      const o = nodeSequence([{ files: { 's.js': code }, run: ['s.js'] }])[0];
+      expect(o?.exitCode).toBe(node);
+      const sb = await createSandbox();
+      try {
+        await sb.writeFile('s.js', code);
+        expect((await sb.exec('s.js')).exitCode).toBe(here);
+        expect(await tree(sb)).toEqual(o?.files);
+      } finally {
+        await sb.destroy();
+      }
+    });
+  }
+});
+
+describe('nothing of the guest runs after its run has ended (ADR-0568 §3)', () => {
+  // A timer the guest queued fires after the run ended (host timer, in flight); `runCode`
+  // disposes the isolate at the result, a sandbox captures its state after it.
+  const ROWS: Record<string, { code: string; exitCode: number }> = {
+    'a timer queued before an uncaught throw: no output, no file': {
+      code: "require('fs').writeFileSync('w', '1'); setTimeout(() => { console.log('ran'); require('fs').writeFileSync('late', '1') }, 0); throw new Error('x')",
+      exitCode: 1,
+    },
+    'an endless timer queued before an uncaught throw: exit 1 at once, the writes kept': {
+      code: "require('fs').writeFileSync('w', '1'); setTimeout(() => { for (;;) {} }, 0); throw new Error('x')",
+      exitCode: 1,
+    },
+    'an interval queued before an uncaught throw: never ticks': {
+      code: "require('fs').writeFileSync('w', '1'); setInterval(() => require('fs').writeFileSync('iv', '1'), 0); throw new Error('x')",
+      exitCode: 1,
+    },
+    'setImmediate queued before an uncaught throw: never runs': {
+      code: "require('fs').writeFileSync('w', '1'); setImmediate(() => require('fs').writeFileSync('im', '1')); throw new Error('x')",
+      exitCode: 1,
+    },
+    "a due timer an 'exit' listener arms at a natural exit: never runs": {
+      code: "const fs = require('fs'); fs.writeFileSync('w', '1'); process.on('exit', () => { setTimeout(() => { console.log('T'); fs.writeFileSync('t', '1') }, 0); const e = Date.now() + 20; while (Date.now() < e); })",
+      exitCode: 0,
+    },
+    'a 0 ms timer beside process.exit(3): never runs': {
+      // The timer is due before exit(3) (a 20 ms busy wait): its expiry is in flight at the end.
+      code: "require('fs').writeFileSync('w', '1'); setTimeout(() => require('fs').writeFileSync('late', '1'), 0); const e = Date.now() + 20; while (Date.now() < e); process.exit(3)",
+      exitCode: 3,
+    },
+  };
+  for (const [label, { code, exitCode }] of Object.entries(ROWS)) {
+    carrier(label, async () => {
+      const o = nodeSequence([{ files: { 't.js': code }, run: ['t.js'] }])[0];
+      expect(o?.exitCode).toBe(exitCode);
+      // The same files every time: the 0 ms timer was kept only sometimes before.
+      for (let i = 0; i < 3; i++) {
+        const sb = await createSandbox();
+        try {
+          await sb.writeFile('t.js', code);
+          const r = await sb.exec('t.js', { timeoutMs: 5000 });
+          expect({ exitCode: r.exitCode, termination: r.termination, stdout: r.stdout }).toEqual({
+            exitCode,
+            termination: undefined,
+            stdout: o?.stdout,
+          });
+          expect(await tree(sb)).toEqual(o?.files);
+        } finally {
+          await sb.destroy();
+        }
+      }
+    });
+  }
+});
+
+describe('no host delivery reaches the guest after its run has ended (ADR-0568 §3)', () => {
+  // isolated-vm reports an unhandled rejection after the microtask checkpoint: the host
+  // delivers it while the sandbox captures the state (`runCode` has disposed the isolate).
+  const LISTENER =
+    "const fs = require('fs'); fs.writeFileSync('kept', '1'); process.on('unhandledRejection', () => { console.log('LATE'); fs.writeFileSync('late', '1') }); globalThis.p = Promise.reject(new Error('r'));";
+  const ROWS: Record<string, { code: string; report: boolean }> = {
+    'an unhandledRejection listener after an uncaught throw: not run': {
+      code: `${LISTENER} throw new Error('x')`,
+      report: true,
+    },
+    'an endless unhandledRejection listener after an uncaught throw: exit 1 at once, writes kept': {
+      code: "const fs = require('fs'); fs.writeFileSync('kept', '1'); process.on('unhandledRejection', () => { for (;;) {} }); globalThis.p = Promise.reject(new Error('r')); throw new Error('x')",
+      report: true,
+    },
+    // A guard row, not a RED one: green with the base entry.ts too.
+    'a rejected async call before an uncaught throw: only the throw is reported': {
+      code: "async function f() { throw new Error('p') } f(); throw new Error('x')",
+      report: true,
+    },
+    'an endless unhandledRejection listener beside process.exit(3): exit 3 at once': {
+      code: "const fs = require('fs'); fs.writeFileSync('kept', '1'); process.on('unhandledRejection', () => { for (;;) {} }); globalThis.p = Promise.reject(new Error('r')); process.exit(3)",
+      report: false,
+    },
+  };
+  for (const [label, { code, report }] of Object.entries(ROWS)) {
+    carrier(label, async () => {
+      const o = nodeSequence([{ files: { 'r.js': code }, run: ['r.js'] }])[0];
+      const sb = await createSandbox();
+      try {
+        await sb.writeFile('r.js', code);
+        const r = await sb.exec('r.js', { timeoutMs: 5000 });
+        expect({ exitCode: r.exitCode, termination: r.termination, stdout: r.stdout }).toEqual({
+          exitCode: o?.exitCode,
+          termination: undefined,
+          stdout: o?.stdout,
+        });
+        expect(r.stderr).toBe(report ? nodeReport(o?.stderr ?? '') : o?.stderr);
+        expect(await tree(sb)).toEqual(o?.files);
+      } finally {
+        await sb.destroy();
+      }
+    });
+  }
+});
+
+describe("the guest's realm while its state is captured (compat ⚠️ sandbox only)", () => {
+  // The capture runs in the guest's realm (ADR-0568 §7): code reached through a replaced
+  // intrinsic the codec uses runs after the run's status is out.
+  carrier("what it prints there is not the run's output", async () => {
+    const code =
+      "const fs = require('fs'); fs.writeFileSync('a', '1'); const original = DataView.prototype.setUint32; DataView.prototype.setUint32 = function (...args) { DataView.prototype.setUint32 = original; console.log('AFTER'); console.error('AFTER'); fs.writeFileSync('after', '1'); return Reflect.apply(original, this, args) }";
+    const o = nodeSequence([{ files: { 'c.js': code }, run: ['c.js'] }])[0];
+    const sb = await createSandbox();
+    try {
+      await sb.writeFile('c.js', code);
+      const r = await sb.exec('c.js');
+      expect(r).toEqual({ stdout: o?.stdout, stderr: o?.stderr, exitCode: o?.exitCode });
+      expect(await tree(sb)).toEqual(o?.files);
+    } finally {
+      await sb.destroy();
+    }
+  });
+  carrier(
+    'declared: a replaced intrinsic can leave any tree the codec accepts, with no stateRefused',
+    async () => {
+      const code =
+        "require('fs').writeFileSync('a', 'x'); const o = DataView.prototype.setUint16; DataView.prototype.setUint16 = function (off, v, le) { return o.call(this, off, v === 97 ? 98 : v, le) }";
+      const o = nodeSequence([{ files: { 'keep.txt': 'k', 'c.js': code }, run: ['c.js'] }])[0];
+      expect(o?.exitCode).toBe(0);
+      expect(Object.keys(o?.files ?? {})).toContain(`${W}/keep.txt`);
+      const sb = await createSandbox();
+      try {
+        await sb.writeFile('keep.txt', 'k');
+        await sb.writeFile('c.js', code);
+        expect(await sb.exec('c.js')).toEqual({ stdout: '', stderr: '', exitCode: 0 });
+        // Every 'a' (97) in the state's paths became 'b': /workspace is gone.
+        await expect(sb.list()).rejects.toMatchObject({ code: 'ENOENT' });
+        expect((await sb.list('/')).map((e) => e.name)).toEqual(['tmp', 'workspbce']);
+      } finally {
+        await sb.destroy();
+      }
+    },
+  );
+  carrier(
+    'declared: an endless replaced intrinsic ends the run timeout, its writes rolled back',
+    async () => {
+      const code =
+        "require('fs').writeFileSync('a', '1'); DataView.prototype.setUint32 = function () { for (;;) {} }";
+      const o = nodeSequence([{ files: { 'c.js': code }, run: ['c.js'] }])[0];
+      expect(o?.exitCode).toBe(0);
       const sb = await createSandbox();
       try {
         await sb.writeFile('c.js', code);

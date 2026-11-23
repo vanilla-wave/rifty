@@ -10,6 +10,8 @@ code: [packages/runtime-js/src/internal/event-loop-keepalive.ts]
 
 ## Context
 
+Sandbox (ADR-0568): a member of the lifecycle class, compat ⚠️ (row "A run's lifecycle and exit status", measured in `reference/isolate-host-sandbox-lifecycle-class.md`). Owner: runtime-js. Trigger: the next change to the eval lifecycle's rejection check, or a sandbox consumer finding a file written after an unhandled rejection.
+
 Node v24.16.0, `node -e "const p = Promise.reject(new Error('x')); setTimeout(() => p.catch(() => console.log('late-caught')), 1)"`
 (or `setImmediate`) → stdout empty, `[eval]` diagnostic, status 1 (at 10 ms both agree). rifty (isolate host, ADR-0557;
 the eval drain lifecycle is shared with the browser `node -e` path) prints

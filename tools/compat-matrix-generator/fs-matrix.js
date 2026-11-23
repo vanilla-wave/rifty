@@ -46,6 +46,11 @@ export const fsMatrix = {
     ['Path resolution with `process.cwd()`', '✅', 'Relative fs paths anchor at runtime cwd'],
     ['Callback `readFile` / `writeFile`', '✅', 'Node-style error-first callbacks'],
     [
+      'Callback `fs.appendFile` / `fs.rm`',
+      '❌',
+      '`undefined`: a call is `TypeError: fs.appendFile is not a function` (measured 2026-11-23 in the isolate host); the sync and `fs.promises` forms exist. `backlog/runtime-js/fs-callback-append-file-rm-missing`',
+    ],
+    [
       '`fs.promises` file ops',
       '✅',
       '`readFile`, `writeFile`, `appendFile`, `readdir`, `copyFile`, `rename`, `rm`, `access`',

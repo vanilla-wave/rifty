@@ -119,6 +119,8 @@ function installProcessExitErrorTrap(): void {
   });
 }
 
+const reflectApply = Reflect.apply;
+
 function drainNextTicks(): void {
   // Re-read `.length` each iteration so items enqueued mid-drain (nextTick from
   // inside nextTick) are processed — same as the old shift()-until-empty loop.
@@ -127,7 +129,8 @@ function drainNextTicks(): void {
     const item = nextTickQueue[drainHead++];
     if (!item) continue;
     try {
-      item.fn(...item.args);
+      // Node calls a tick callback plainly: its frame has no receiver name.
+      reflectApply(item.fn, undefined, item.args);
     } catch (err) {
       // Surface on the ACTIVE realm process (the one user code attached handlers
       // to): the seeded NodeProcess in a kernel child, else the REPL singleton.

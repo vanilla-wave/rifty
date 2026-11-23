@@ -11,7 +11,7 @@ import {
 } from '../browser-unit/fixtures/node-file-programs.ts';
 import { expect, test } from './fixtures/test.ts';
 
-// Goal node-file-entry-parity acceptance carrier, no-COI SDK host: one
+// ADR-0571 acceptance carrier, no-COI SDK host: one
 // sandbox, each program in its own project root, run as
 // `project({ root }).run('node <argv>')` against live `node <argv>` over the
 // same files. Comparison: `nodeFileVerdict`. COI twin:
@@ -50,7 +50,8 @@ test('node <file> matches Node (no-COI SDK)', async ({ page }) => {
           if (version === '') {
             version = (await project.run('node -p process.version').completion).stdout.trim();
           }
-          const done = await project.run(`node ${program.argv.join(' ')}`).completion;
+          const done = await project.run(`node ${program.line ?? program.argv.join(' ')}`)
+            .completion;
           results.push({
             root: projectRoot,
             outcome: { stdout: done.stdout, stderr: done.stderr, exitCode: done.exitCode },

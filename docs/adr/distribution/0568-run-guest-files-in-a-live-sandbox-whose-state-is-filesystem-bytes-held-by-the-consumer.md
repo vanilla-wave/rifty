@@ -7,7 +7,8 @@ Date: 2026-11
 
 ## Context
 
-Goal `isolate-host-live-sandbox`. User requirements (2026-11-17, via the
+The live-sandbox goal `isolate-host-live-sandbox` (its invariants and scenario: §Invariants and
+scenario below). User requirements (2026-11-17, via the
 manager): host file ops read/list/write/change without binary loss, `exec`
 narrowly `node <path>`, one instance through write → exec → error → fix →
 exec, the host reading a binary result at a model-chosen path, realm-level
@@ -140,7 +141,9 @@ view's whole backing buffer; rifty's program entry has diagnostic gaps and no
    The sandbox's state: one cap, the codec's `maxBytes` count (ADR-0567
    refuses before allocating): an end state over it, or one the isolate runs
    out of memory capturing, is the named capture result of §3; a host write
-   that would pass it rejects. No second quota inside the guest's FS (`REV-7`,
+   that would pass it rejects and leaves the files as they were, times included
+   (the four times of the target and of every directory above it, restored on
+   the rollback; PR #419, Greptile). No second quota inside the guest's FS (`REV-7`,
    manager 2026-11-22). The isolate limit alone does not bound the state: a
    guest fits 51 MiB of files at limit 64 (step 0) while capture peaks at
    ~2 × S (ADR-0567 P2). Defaults: `maxFsBytes` 64 MiB (a run needs ~2.3 × its
@@ -159,6 +162,13 @@ view's whole backing buffer; rifty's program entry has diagnostic gaps and no
    worker or the consumer (`ERR_ISOLATE_HOST_SANDBOX_RESTORE`,
    `ERR_ISOLATE_HOST_SANDBOX_CAPTURE`, `ERR_FS_SNAPSHOT_TOO_LARGE`, or the
    consumer codec's `ERR_FS_SNAPSHOT_*`).
+   The capture runs in the guest's realm after the run's status is out: a guest
+   that replaced intrinsics the codec uses runs its own code there, can leave any
+   tree the codec accepts (no `stateRefused`) or hang the run (`timeout`). Its power
+   is its own files, as through `fs`; the trusted side's checks, the host and other
+   sandboxes hold (PR #424 cross-review round 2; compat Sandbox row "The guest's
+   realm while its state is captured"). Against I1 for a guest that broke its own snapshot:
+   open, `distribution/isolate-host-sandbox-capture-outside-guest-realm`.
 8. **`runCode`** keeps its API, results, corpus and pool behavior, with one
    change shared with sandboxes (2026-11-22): a fresh guest FS also holds
    `/tmp`, rifty's `os.tmpdir()` (`GUEST_DIRS`), so writing there works as in
@@ -193,11 +203,120 @@ view's whole backing buffer; rifty's program entry has diagnostic gaps and no
   worker's run cannot be rerun idempotently; a sandbox pins a worker slot
   while idle; a heap-limit or catastrophic end takes the files back to the
   last restore point anyway. For the consumer the contract is the same: one
-  sandbox per agent run; restore per run is internal. Revisit with the
-  template goal.
+  sandbox per agent run; restore per run is internal (the manager's reading
+  of the user's words, §Not the user's words). Revisit with the template goal.
 - **C. In-memory VFS in a per-sandbox worker or long-lived isolate.**
   Rejected: catastrophic OOM / ICU retention / heap-limit disposal lose the
   files (step 0 S1).
+- **D. Build `runCode` on the sandbox.** Rejected: no consumer needs it, and
+  it adds a state round trip to every `runCode` call — against «`runCode`
+  does not change» (the goal's Outcome).
+
+## Invariants and scenario
+
+The goal's `## User scenario` and `## Invariants`, verbatim (tests cite them as
+"scenario N" and I1–I9). What the goal decided or
+the code refined since is not folded in: the user's words and the manager's
+reading are in §Not the user's words (behavior divergences from Node, the
+lifecycle class), the code's refinements in §Decision (§5: an operation not yet
+settled when `destroy()` is called rejects; §6: `timeoutMs` covers the consumer's
+encode; a refused host write leaves the files as they were, times included).
+Carriers: `packages/isolate-host/tests/sandbox-acceptance.test.ts` (scenario,
+corpus vs live Node), `sandbox-faults.test.ts`, `sandbox-destroy-table.test.ts`,
+`protocol.test.ts`.
+
+### User scenario
+
+1. The agent's host creates a sandbox and writes `/workspace/main.js` (the
+   model's code) and an input file with binary bytes.
+2. It runs `exec('main.js')`. The code has a bug: the result is exit 1 with
+   the error on stderr, as `node main.js` reports it in a directory holding
+   the same files.
+3. The model fixes the file; the host writes it; `exec('main.js', {args})`
+   now writes `out.pdf` (binary) at a path the model chose and exits 0. The
+   host reads `out.pdf`: the bytes real `node main.js` writes from the same
+   files.
+4. Another fix introduces an endless loop, then a memory blow-up: the runs
+   end `termination: 'timeout'` and `'memory'`; the sandbox and its files are
+   still there; the next fix runs clean.
+5. Between runs nothing but files carries over: globals, module cache,
+   timers, `process.exitCode`, listeners and the cwd of one run are not seen
+   by the next — as with consecutive `node main.js` processes.
+6. Writes of the host and runs of the guest on one sandbox, issued without
+   waiting for each other, take effect one at a time in call order.
+7. The host destroys the sandbox, also in the middle of a run: the run and
+   anything still pending reject with a distinct code, and nothing of the
+   sandbox remains.
+8. A model-chosen path or size the host refuses (a file over the per-file
+   limit, an invalid path) is a loud Node-shaped error that names only
+   sandbox paths; the guest of one sandbox cannot see another sandbox's
+   files.
+9. Before destroying, the host takes `snapshot()`; a sandbox created later
+   from those bytes runs `main.js` and sees the same files.
+10. The service owner reads the package README: how to connect, the API, the
+   limits, what is not there.
+
+### Invariants
+
+- I1. No ending of a run loses the sandbox. A run that ends on its own —
+  exit 0 or N, `process.exit`, an uncaught throw or rejection — leaves
+  exactly the files it had at its end. A run that is killed (`timeout`,
+  `memory`) or rejects (its worker lost) leaves exactly the files of before
+  it: whole-run rollback, never a partial state (Node would keep the partial
+  writes: declared, compat ⚠️). The host and the next run see that state.
+  A run that ended on its own but whose end state cannot be kept (over the
+  cap, too large for its isolate to capture, a guest that broke its own
+  snapshot) resolves with its own output and exit code plus a field naming
+  why its state was refused, and leaves the state of before it: a result of
+  the guest's run, never a rejection that reads as infrastructure (I7). A
+  state the run cannot restore is refused before any guest code, named the
+  same way (empty output, `exitCode: null`). Under this model a sandbox is lost only
+  with its consumer process (the requirements' rollback to the last saved
+  archive).
+- I2. `node <path>` fidelity in sequences: a sequence of `exec(path, {args})`
+  over one sandbox gives, run by run, the stdout, stderr, exit code and files
+  of the same sequence of `node <path> [args]` processes over the same files in
+  a temporary directory (its path read as `/workspace`): relative `require`,
+  JSON, `__filename`, `__dirname`, `process.argv`, `require.main`, relative
+  paths, uncaught errors with file-path frames, a syntax error in the entry
+  and in a dependency. Only files carry from one run to the next. A
+  divergence is loud (`NotImplementedError` + compat row) or, for the text of
+  a diagnostic only, a pinned ⚠️ row owned by the runtime-js diagnostics goal;
+  a run never silently does something else (exit 0 where Node does work).
+- I3. Host file ops are exact: `writeFile`/`readFile`/`list`/`remove` move
+  bytes unchanged (binary, empty, large up to the limit), see exactly what
+  the guest's runs left and are seen by the next run.
+- I4. One operation at a time: operations on one sandbox issued without
+  awaiting each other take effect one at a time in call order.
+- I5. End of life is loud and total: once `destroy()` resolves, no isolate of
+  the sandbox runs and its state is unreachable; every operation in flight,
+  queued or later rejects `ERR_ISOLATE_HOST_SANDBOX_DESTROYED`.
+- I6. Bounded: each run has `runCode`'s limits and hardening (time, isolate
+  memory, output cap, no network); its `timeoutMs` runs from the moment it
+  leaves the queue and covers restore, the run and the capture; a
+  sandbox's state is bounded by one cap, one rule: a run whose end state is
+  over it (or cannot be captured) is I1's named result, a host write that
+  would pass it rejects; each host file op is bounded
+  by a per-file limit; the consumer process survives every outcome; an idle
+  sandbox holds no process and no isolate, its memory in the consumer is
+  measured and documented (the number of live sandboxes is the consumer's to
+  cap), and a sandbox the consumer drops leaves nothing behind.
+- I7. Trust boundary, decided on the host side: model-chosen paths and bytes
+  of host file ops stay inside the sandbox's own files; bytes a run hands back
+  are hostile input to the consumer and are validated before they become the
+  sandbox's state; a guest of one sandbox cannot read or write another
+  sandbox's files (canary); an error reaching the host names only sandbox
+  paths and carries no host text; the guest cannot make its run read as an
+  infrastructure failure; bytes cross the bridge as their view's range only.
+- I8. Plain-data API, documented: every argument and result of the sandbox
+  API is a string, number, boolean, plain object/array or `Uint8Array`; the
+  package README documents connection, the API, limits and gaps; compat rows
+  name every gap.
+- I9. Snapshot round trip: `snapshot()` taken with no run in flight
+  returns bytes (the snapshot goal's format) holding exactly the sandbox's
+  files; `createSandbox({ snapshot })` from them gives a sandbox whose host
+  ops and runs see the same files; it waits its turn behind earlier
+  operations (I4) and never captures a run's partial state.
 
 ## Consequences
 
@@ -225,6 +344,51 @@ The user, 2026-11-22 (asked whether the guest should get a directory on the host
 правильно, не нужно давать настоящую fs» — no real filesystem for the guest; alternative B is the
 user's rejection.
 
+The user, 2026-11-23, asked by the manager «Песочница: принять три расхождения с Node как
+объявленные ⚠️ или держать цель открытой до починки? Рекомендую принять.» after a table of the
+three — (1) work queued at `process.exit()` runs and its file stays in the state; (2) a microtask
+from an `'exit'` handler after an explicit `exit()` runs and may write a file; (3) an uncaught
+throw with an endless microtask chain ends as a timeout with its writes rolled back, Node exits 1
+with them kept: «ок». The manager's reading, not the user's words: «ок» accepts the
+recommendation; the three stay declared ⚠️ and the goal's decision line «the same holds for
+anything found in the class "a run silently does something else"» no longer gates the close for
+them. Their records: (1), (2) `runtime-js/node-eval-work-queued-at-exit-runs` (and the untried
+lead `distribution/isolate-host-sandbox-capture-at-process-terminal`); (3)
+`distribution/isolate-host-uncaught-throw-waits-for-microtask-checkpoint`. The question covered
+three members of a wider class (`docs/backlog/distribution/reference/isolate-host-sandbox-lifecycle-class.md`).
+
+The user, 2026-11-23, second answer — the external review of PR #424 showed the first «ок» covered
+three members of a class: a sandbox run inherits every lifecycle divergence `runCode` declares in
+compat. The question as the user saw it: that history; the three outcomes measured in
+`docs/backlog/distribution/reference/isolate-host-sandbox-lifecycle-class.md` (extra files kept;
+the whole run rolled back; another exit code — `process.exit(3)` + a microtask, `exit(3)` + an
+endless microtask, a reject in an `'exit'` handler: 0 against 1); «Самое весомое для агента —
+третий исход: в редких случаях программа читается как успешная (код 0), хотя в Node упала бы»;
+the choice «Принять: цель закрывается, случаи остаются объявленными ⚠️ в compat с записями в
+backlog.» / «Держать открытой: документ цели остаётся открытым до починки, #424 вливается как
+документы.» / «Рекомендую принять: это свойства рантайма в isolate, те же, что у `runCode`;
+чинятся в жизненном цикле `runtime-js`, а не в песочнице.» The user's answer, a comment on the
+last sentence: «ок, давай только доки оставим». The manager's reading, not the user's words: «ок»
+accepts the recommendation — the whole class, with its three outcomes for files and status — and
+«давай только доки оставим» keeps the cases declared in the docs (compat row "A run's lifecycle
+and exit status", backlog), not fixed in the sandbox now. A second reading the phrase allows,
+named by the manager: keep the goal open and merge only the docs.
+
+Manager's reading, 2026-11-23, not the user's words, proposed and not accepted: I1 «leaves exactly the
+files it had at its end» read as «the files its own code left — through `fs`, or by breaking the
+runtime in its own realm» (grounds offered: `RDY-6`, the `runCode` goal's precedent). The closing
+review of PR #424 held it against I1's letter («a guest that broke its own snapshot … a field
+naming why its state was refused, and leaves the state of before»): a narrowing that needs the
+user's words. The goal stays open on capturing the state where the guest's code cannot reach
+(`distribution/isolate-host-sandbox-capture-outside-guest-realm`). The premise «те же, что у
+`runCode`» the user answered does not hold for this member (sandbox only).
+
+The user, 2026-11-17 (requirements, quoted in the goal's state-model line): «в пределах одного
+прогона агента один экземпляр живёт через write → exec → ошибка → fix → exec. Следующий прогон…
+новый экземпляр из шаблона + восстановленных файлов». The manager's reading, not the user's words
+(2026-11-22): one sandbox per agent run is the contract kept; a restore per run is internal to it
+(alternative A′).
+
 Manager decisions by delegation (2026-11-22), not the user's words: a restore and a capture per run
 with a killed run rolled back, and the per-run cost while a template layer is part of the state; one
 size mechanism (the codec's count, no quota inside the guest FS); the killed-run shape `exitCode:
@@ -235,5 +399,7 @@ time per sandbox with the deadline from dequeue, `/workspace` and `/tmp` in a fr
 `stdin` as loud gaps.
 
 ## Corrections
+
+- 2026-11-23 — §3 (PR #424): a run's end state is captured after the guest's run settled, and a timer the guest queued could still fire in between (the host timer is in flight when the result is): its writes were captured, an endless one made the run a `timeout`. The guest's run phase (`running` → `natural` → `ended`, `isolate-guest` `entry.ts`) is the one state for its consumers: output follows the runtime's terminal (dropped after `exit()` or a fatal terminal, kept for a natural exit's listener work), while every host delivery — `fire` (a timer's expiry) and `rejection` (an unhandled rejection isolated-vm reports after the checkpoint) — passes one gate and runs nothing once the phase leaves `running`, i.e. once the run's status is out (the host's other calls are the launch, `run`/`runFile`, and state, `snapshot`/`restore`; cross-review round 1 found `rejection` ungated). The gate closes once the run leaves `running` (a natural exit included). The run's output is fixed at the same point: what the guest's realm prints while its state is captured is dropped (child `write` during the capture). RED `sandbox-acceptance` "nothing of the guest runs after its run has ended", "no host delivery reaches the guest after its run has ended", "the guest's realm while its state is captured". The two moments differ: the terminal is recorded at `exit()` or at a fatal thrown in a callback, before the status is out (callbacks due in that turn still run, their output dropped); a fatal thrown by the entry's synchronous run records none. Microtasks of the same checkpoint and callbacks due before the status is out still run (compat Sandbox row "A run's lifecycle and exit status").
 
 - 2026-11-23 — Consequences «an isolate limit of at least 231 MiB (≈ 2.3 × S) before guest code»: superseded by ADR-0567 §7 (goal `isolate-host-fs-snapshot` close, PR #422) — a run's restore → run → snapshot needs 223–225 MiB at template scale; only a snapshot straight after a restore with no guest code between needs up to ~3 × the bytes (`distribution/isolate-host-fs-snapshot-restore-then-snapshot-peak`).

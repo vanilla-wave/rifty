@@ -1,8 +1,7 @@
 /**
- * Sandbox rows below the scenario level (ADR-0568; unit
- * `distribution/isolate-host-sandbox-core` Fault matrix and Acceptance 2–4).
- * Kill scenarios run in their own consumer process over the built package, so
- * its child pids are its workers. RED: `it.fails` until the sandbox lands.
+ * Sandbox fault rows below the scenario level (I1–I9: ADR-0568 §Invariants and
+ * scenario). Kill scenarios run in their own consumer process over the built
+ * package, so its child pids are its workers.
  */
 import { cpSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -13,7 +12,7 @@ import * as pkg from '../src/index.ts';
 import { Pool, sharedPool } from '../src/pool.ts';
 import { childPids, consumer } from './support.ts';
 
-/** RED until the sandbox lands; flips to `it` with the implementation. */
+/** The carrier rows (landed; were `it.fails` while the sandbox did not exist). */
 const carrier = it;
 
 interface Sandbox {
@@ -29,7 +28,7 @@ const createSandbox = (options?: Record<string, unknown>): Promise<Sandbox> =>
   (pkg as unknown as { createSandbox: (o?: unknown) => Promise<Sandbox> }).createSandbox(options);
 const text = async (sb: Sandbox, path: string) => Buffer.from(await sb.readFile(path)).toString();
 
-describe('surface (Acceptance 2–3)', () => {
+describe('surface (I8)', () => {
   carrier('the package root exports createSandbox and runCode', () => {
     expect(Object.keys(pkg).sort()).toEqual(['createSandbox', 'runCode']);
   });
@@ -64,7 +63,7 @@ describe('surface (Acceptance 2–3)', () => {
   });
 });
 
-describe('snapshot at a point of rest (Acceptance 4)', () => {
+describe('snapshot at a point of rest (I9)', () => {
   carrier(
     'snapshot() behind a run holds its end; a run behind snapshot() does not change it',
     async () => {
@@ -90,7 +89,7 @@ describe('snapshot at a point of rest (Acceptance 4)', () => {
   );
 });
 
-describe('state that cannot be kept (Fault matrix)', () => {
+describe('state that cannot be kept', () => {
   carrier(
     'an end state too large to capture in its isolate is refused, named; state of before',
     async () => {
@@ -160,7 +159,7 @@ console.log('poisoned');`,
   );
 });
 
-describe('a worker lost twice (Fault matrix)', () => {
+describe('a worker lost twice', () => {
   carrier('rejects WORKER_LOST and leaves the state of before', async () => {
     const { value } = await consumer(`
       const sb = await createSandbox();
@@ -226,7 +225,7 @@ const HOSTILE_BODY = `const run = await settle(runCode('1'));
   const exec = await settle(sb.exec('a'));
   out({ run, exec, kept: Buffer.from(await sb.readFile('a')).toString() });`;
 
-describe('a hostile worker and state frames (Fault matrix)', () => {
+describe('a hostile worker and state frames', () => {
   carrier(
     'a state frame for a runCode call, or past maxFsBytes, is a protocol violation',
     async () => {
@@ -281,7 +280,7 @@ function assertPlain(value: unknown, at = 'value'): void {
   }
 }
 
-describe('plain data (Acceptance 2)', () => {
+describe('plain data (I8)', () => {
   carrier('every result is plain data or bytes', async () => {
     const sb = await createSandbox({ maxFsBytes: 1 << 20 });
     try {
@@ -299,7 +298,7 @@ describe('plain data (Acceptance 2)', () => {
   });
 });
 
-describe('the isolate of a run ends with it (Fault matrix)', () => {
+describe('the isolate of a run ends with it', () => {
   // The guest holds 300 MiB, then waits: its worker past 400 MiB RSS is the event that it runs.
   const HOLD = 'globalThis.hold = new Uint8Array(300 << 20).fill(1); for (;;) {}';
   const body = (end: string) => `
@@ -354,12 +353,12 @@ describe('the isolate of a run ends with it (Fault matrix)', () => {
 });
 
 /**
- * B1: the end state is authored by the guest. Whatever its realm makes of the
+ * The end state is authored by the guest. Whatever its realm makes of the
  * capture — bytes over the cap, not bytes, a throw, a hang — is that call's
  * result (`stateRefused`, or `timeout` for a hang), the state of before stays,
  * and a neighbour call on the same worker gets its exact result.
  */
-describe('a guest-authored end state is judged as that call’s result (Fault matrix)', () => {
+describe('a guest-authored end state is judged as that call’s result', () => {
   const POISON: Record<string, string> = {
     'over the cap': `const U = Uint8Array; globalThis.Uint8Array = new Proxy(U, { construct: (t, [n, ...r]) => typeof n === 'number' ? new U(n + 70000) : new U(n, ...r) });`,
     'not bytes': `const U = Uint8Array; globalThis.Uint8Array = new Proxy(U, { construct: (t, a) => (typeof a[0] === 'number' ? {} : new U(...a)) });`,
@@ -406,7 +405,7 @@ describe('a guest-authored end state is judged as that call’s result (Fault ma
   }
 });
 
-describe('the state changes only at a terminal exit (Fault matrix)', () => {
+describe('the state changes only at a terminal exit', () => {
   carrier('a worker that sends a state frame and dies changes nothing', async () => {
     const dir = join(work, 'pkg-state-then-die');
     cpSync(join(PACKAGE_DIR, 'dist'), join(dir, 'dist'), { recursive: true });
@@ -475,7 +474,7 @@ describe('the state changes only at a terminal exit (Fault matrix)', () => {
   );
 });
 
-describe('creation from a snapshot refuses bad bytes (Fault matrix)', () => {
+describe('creation from a snapshot refuses bad bytes', () => {
   carrier(
     'corrupt, oversized and foreign-template bytes reject with the codec’s code',
     async () => {
@@ -498,7 +497,7 @@ describe('creation from a snapshot refuses bad bytes (Fault matrix)', () => {
   );
 });
 
-describe('sandboxes are independent (S7)', () => {
+describe('sandboxes do not wait for each other (README §Sandbox)', () => {
   carrier('a spinning run in one sandbox does not hold another’s', async () => {
     const a = await createSandbox();
     const b = await createSandbox();
@@ -520,7 +519,7 @@ describe('sandboxes are independent (S7)', () => {
   });
 });
 
-describe('names the snapshot cannot hold (Fault matrix, ADR-0567 16 383 code units)', () => {
+describe('names the snapshot cannot hold (ADR-0567 16 383 code units)', () => {
   carrier(
     'a host write of a longer name is refused at once; a guest-made one refuses its run’s state',
     async () => {
@@ -549,7 +548,7 @@ describe('names the snapshot cannot hold (Fault matrix, ADR-0567 16 383 code uni
   );
 });
 
-describe('boot memory and buffer ownership (Final+GREEN findings)', () => {
+describe('boot memory and buffer ownership (PR #419 review)', () => {
   carrier('an isolate too small for the runtime itself ends as memory, as runCode', async () => {
     const sb = await createSandbox();
     try {
@@ -769,7 +768,7 @@ function closingChannelPackage(name: string, blob: string, afterState: boolean):
   return pathToFileURL(join(dir, 'dist', 'index.js')).href;
 }
 
-describe('a result channel closed in the middle of a sandbox run (Fault matrix)', () => {
+describe('a result channel closed in the middle of a sandbox run', () => {
   for (const afterState of [true, false]) {
     carrier(
       `closed ${afterState ? 'after the state frame, before exit' : 'before any frame'}`,
@@ -799,7 +798,7 @@ describe('a result channel closed in the middle of a sandbox run (Fault matrix)'
   }
 });
 
-describe("runCode's hardening and options through exec (FIT S6, S10)", () => {
+describe("runCode's hardening and options through exec (I6)", () => {
   carrier(
     'no network or child processes; output cap, shared buffers and limits as runCode',
     async () => {
@@ -868,7 +867,7 @@ describe("runCode's hardening and options through exec (FIT S6, S10)", () => {
   );
 });
 
-describe('destroy of a light run on a shared worker (Final+GREEN r2 concern)', () => {
+describe('destroy of a light run on a shared worker (PR #419 review)', () => {
   carrier(
     'resolves once the cancelled run’s terminal frame arrives; the worker stays',
     async () => {
@@ -899,11 +898,11 @@ describe('external review round 1 (manager 2026-11-23)', () => {
     // holds 300 MiB, so its worker's RSS tells whether it is still there.
     const { value } = await consumer(`
       const sb = await createSandbox();
-      await sb.writeFile('s.js', "globalThis.h = new Uint8Array(300 << 20).fill(1); const a = Array.from({ length: 3e6 }, () => Math.random()); for (;;) a.sort()");
+      await sb.writeFile('s.js', "globalThis.h = new Uint8Array(300 << 20).fill(1); const a = Array.from({ length: 5e6 }, () => Math.random()); for (;;) a.sort()");
       const rss = (pid) => Number(execFileSync('ps', ['-o', 'rss=', '-p', String(pid)], { encoding: 'utf8' }).trim() || 0);
-      // Deadline inside the first sort (~5 s on an M3): the 300 MiB is held by then even
-      // on a loaded host (at 1500 ms, load 74 had not filled it yet).
-      const r = await sb.exec('s.js', { timeoutMs: 3500, memoryLimitMb: 512 });
+      // Deadline inside the first sort of 5e6 doubles (~9 s on an M3; later sorts of the
+      // sorted array are fast): the 300 MiB is held by then even on a loaded host.
+      const r = await sb.exec('s.js', { timeoutMs: 4000, memoryLimitMb: 768 });
       const pid = children().find((p) => rss(p) > 400 * 1024);
       await sb.destroy();
       let atResolve; try { atResolve = pid === undefined || rss(pid) < 300 * 1024 } catch { atResolve = true }
@@ -1197,4 +1196,41 @@ describe('a refused write leaves the state as it was, times included (Greptile, 
       await sb.destroy();
     }
   });
+});
+
+describe('an idle sandbox holds no process of its own (I6; its isolates end with their runs, above)', () => {
+  carrier('ten sandboxes that each ran once leave one warm worker, none of their own', async () => {
+    const { value } = await consumer(`
+      const boxes = [];
+      for (let i = 0; i < 10; i++) {
+        const sb = await createSandbox();
+        await sb.writeFile('a.js', 'console.log(1)');
+        await sb.exec('a.js');
+        boxes.push(sb);
+      }
+      await sleep(200);
+      out({ workers: children().length, live: boxes.length });`);
+    expect(value).toEqual({ workers: 1, live: 10 });
+  });
+});
+
+describe('a run that ended leaves its worker clean (ADR-0568 §3)', () => {
+  carrier(
+    'after an endless timer queued before a throw, the next call on that worker is exact',
+    async () => {
+      const { value } = await consumer(`
+      const sb = await createSandbox();
+      await sb.writeFile('t.js', "setTimeout(() => { for (;;) {} }, 0); throw new Error('x')");
+      const r = await sb.exec('t.js', { timeoutMs: 5000 });
+      const before = children();
+      const next = await runCode('console.log(1)');
+      out({ exitCode: r.exitCode, termination: r.termination ?? null, next, sameWorker: children().every((p) => before.includes(p)) });`);
+      expect(value).toEqual({
+        exitCode: 1,
+        termination: null,
+        next: { stdout: '1\n', stderr: '', exitCode: 0 },
+        sameWorker: true,
+      });
+    },
+  );
 });

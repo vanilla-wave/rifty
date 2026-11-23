@@ -444,7 +444,7 @@ function formatThrown(error: unknown): string {
 let nodeFatalReport = false;
 
 /**
- * The isolate guest's one switch (ADR-0557, goal node-file-entry-parity): its
+ * The isolate guest's one switch (ADR-0557, ADR-0571): its
  * fatal text is Node's report (`builtins/fatal-report.ts`). The browser hosts
  * keep main's text (ADR-0445 2026-11-23 rollback).
  */

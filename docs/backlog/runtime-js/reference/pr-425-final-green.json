@@ -1,0 +1,180 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Merge PR #425 as fixes + docs on green PR CI at HEAD df7284b69 (re-commit this verdict as the landing record, REV-8). Round 3 changes texts, one docstring, rows and pins only (git diff 3d497c0c5 e6b1b959c -- packages/runtime-js/src: comment only); the `Timeout` state gaps are one declared class (`runtime-js/timeout-state-not-node`, owner/trigger, measured table re-probed); all carriers green in scratch @ df7284b69. goal_complete false (item 2 `runtime-js/guest-builtin-names`).",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "df7284b69d3542564c27eaa8b27c22ec910810ba",
+  "unit_goal_source": "docs/backlog/epics/node-file-entry-parity/goal.md + map.md (item 2 ready, waits for the user's word) + ledger.md @ df7284b69; PR #425 as fixes + docs, delta reviewed 3d497c0c5..df7284b69 (e6b1b959c cross-review round 3: texts, timers.ts docstring, rows, pins; merge of origin/main 983ae4718 #426, overlapping only docs/adr/README.md, 0571 row kept); BASE origin/main 983ae4718; observed baseline = carrier rows + live Node v24.16.0 (`require('timers').clearTimeout.toString()`, `--expose-internals` listOnTimeout); agent RED /tmp/nf-r4/red re-executed as own mutants",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I2 I3 (isolate)",
+      "location": "docs/backlog/runtime-js/guest-builtin-names.md (map item 2, ready)",
+      "summary": "Stream callback frames `publishedConstructor.*`; `TextEncoder2`/`TextDecoder2`/`DOMException2` in the report; a bundle check that also sees bound class expressions and lowercase names. RED baseline: docs/backlog/runtime-js/reference/guest-builtin-names-baseline.md."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "I1 entry semantics on the entry corpus (no-COI SDK, COI Workbench)",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "scratch /tmp/close425e @ df7284b69: no-COI node-file-parity + no-coi-fatal-stderr 8 passed; COI browser-unit node-file-parity 1 passed",
+      "note": ""
+    },
+    {
+      "row": "I2 every fatal row Node's bytes or an exact pin with a named compat row; no Node header",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/node-file-pins.json (round 3 adds rows only); isolate node-file 61 + bundle-public-names = 62 passed @ df7284b69",
+      "note": ""
+    },
+    {
+      "row": "I3 isolate: the listed ways rifty calls user code at Node's frame name/line/column",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "rows throw-from-{timer,interval,immediate,next-tick,queue-microtask,promise-reaction}, throw-in-{emitter-listener,fs-callback,new-function,direct-eval,indirect-eval,buffer-method}; stream callbacks open in item 2 (ADR-0571 Decision 2 says so)",
+      "note": ""
+    },
+    {
+      "row": "Observed defects of the PR (Immediate `this`/name, plain nextTick, cleared-interval frame, `new Function` caller column, throwing `stack` getter on `-e`, EventEmitter2/Stream2 frames)",
+      "source": "baseline",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "own mutants @ 61c69cab8 (5 failed | 46 passed, each its row) and event-emitter.ts @ e2ce4b722 (bundle check + throw-in-emitter-listener red); code unchanged since except timers.ts clear path",
+      "note": ""
+    },
+    {
+      "row": "Round-1 defects: nulled interval destroyed, clearImmediate in own callback, `-e` projection reads `stack` once, `\\u`-escaped helper names",
+      "source": "baseline",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "own mutants @ 5a3f932a6 → exactly rows interval-nulled-on-timeout, clear-immediate-in-own-callback, throw-stack-getter-second-read, function-helper-escaped-name red; rows still green @ 104c4e802",
+      "note": ""
+    },
+    {
+      "row": "Round-2: a Timeout handle clears as Node's clearTimeout (unenrolled only while `_onTimeout` is set, after writing null) and a timer with no `_onTimeout` at its tick is destroyed unrun, no write (listOnTimeout)",
+      "source": "baseline",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "node v24.16.0 clearTimeout/listOnTimeout source read by the reviewer; own mutants: dispatch writes null → interval-getter-null-on-timeout red (@104c4e802); clearTimer without the `_onTimeout` guard → interval-cleared-after-null and the new interval-setter-clears-itself red (2 failed | 59 passed @ df7284b69)",
+      "note": ""
+    },
+    {
+      "row": "Bundle check scans the isolate guest bundle, loud when unbuilt; no line claims Workbench coverage or a `Server` fix",
+      "source": "acceptance",
+      "trace": "ADR-0571",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/bundle-public-names.test.ts; ADR-0571 Decision 2; compat process.md \"Builtin names in the browser hosts' production bundles\" ⚠️ (Workbench `Server2`, `Worker2`, `setTimeout2`, `Buffer2` unproven, owner/trigger in guest-builtin-names); packages/net/src equal to main",
+      "note": ""
+    },
+    {
+      "row": "Browser-host `-e` row via the shell form (`line`): no-COI `node <line>`, COI `cd <dir> && node <line>` with Node's stdout asserted empty",
+      "source": "frozen-artifact",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/browser-unit/node-file-parity.spec.ts, tests/no-coi/node-file-parity.spec.ts; row eval-stack-getter-second-read pinned on both browser hosts (declared exception, compat process.md \"Fatal error stderr bytes\")",
+      "note": ""
+    },
+    {
+      "row": "Oracle: live node v24.16.0, one normalization, P1/P2 on Node's side",
+      "source": "frozen-artifact",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/node-file-programs.ts nodeFileExpected/nodeFileNormalized (unchanged; rows and optional `line` added)",
+      "note": ""
+    },
+    {
+      "row": "Changed pins vs e2ce4b722 move toward Node or have a cause in this PR",
+      "source": "frozen-artifact",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "16 browser-host pins `main.js:1:N` → `1:N-7` (helper name 15 → 8 chars); later rounds add rows only",
+      "note": ""
+    },
+    {
+      "row": "`Timeout` state gaps declared as one class with measured cells (numeric-id registry and lifetime, non-function `_onTimeout`, string id, plain object, getter without setter, refresh, Immediate fields)",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "docs/backlog/runtime-js/timeout-state-not-node.md (owner/trigger, fix direction: one unit); compat process.md \"`Timeout` state\" ⚠️; rows timer-not-cleared-by-unrelated-number, numeric-clear-inside-callback pinned on 3 hosts; reviewer re-probe isolate vs node v24.16.0: `t._onTimeout = 42` Node `TypeError: timer._onTimeout is not a function`, rifty `TypeError: Function.prototype.apply was called on 42…`; getter-only function: both `Cannot set property _onTimeout … only a getter`, Node at `clearTimeout (node:timers:138:22)`, rifty at the caller; falsy getter: both `ok`, exit 0 (no-COI non-function cell not re-probed)",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/epics/node-file-entry-parity/goal.md (amend 2026-11-23, 5d)",
+          "evidence": "label «the manager's reading of those words, not the user's» added at the manager's request (round 1); obligations unchanged",
+          "summary": "A ready goal.md edited without the user's words; labelling only (more honest).",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tests/browser-unit/node-file-parity.spec.ts",
+          "evidence": "`line` rows run in the COI shell: stdout and stderr arrive as one stream; the spec asserts Node's stdout is '' and treats the whole output as stderr.",
+          "summary": "Honest for a stderr-only row and the row is pinned exactly; it cannot tell a stderr line printed to stdout. Keep `line` to stderr-only rows (the assertion enforces it) until `runtime-js/coi-spawn-node-eval-flag` lets the runner spawn `-e`.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "packages/runtime-js/src/builtins/timers.ts (clearTimer)",
+          "evidence": "string id, plain object and numeric-id lifecycle re-probed vs node v24.16.0 (see coverage row `Timeout` state)",
+          "summary": "RESOLVED @ e6b1b959c: string ids, plain objects and numeric ids declared as one class (`runtime-js/timeout-state-not-node`, compat process.md \"`Timeout` state\" ⚠️); clearTimer docstring and runtime-js CHANGELOG say handles only.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tools/node-parity-runner/cases/worker_threads/exec-argv-startup.case.ts",
+          "evidence": "drain-cap flake under load recorded in the ledger since 2026-11-22, before this PR's timers changes",
+          "summary": "Not attributable to this PR; CI at HEAD decides.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

@@ -4,7 +4,12 @@ import type { ImportExpression, Program } from 'acorn';
 import { parse as acornParse } from 'acorn';
 import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
 import { compileCjsFactory } from './cjs-factory.ts';
-import { type Edit, applyEdits, uniqueHelperName } from './cjs-source-rewrite.ts';
+import {
+  type Edit,
+  applyEdits,
+  sameLengthHelperName,
+  uniqueHelperName,
+} from './cjs-source-rewrite.ts';
 import { rewriteDirectEvalImportCallArgument } from './direct-eval-import.ts';
 import { ModuleLoadError } from './errors.ts';
 import { createFunctionImportRouting } from './function-import-routing.ts';
@@ -1747,9 +1752,10 @@ function compileCjsSource(
 
   const routedConstructors = createFunctionImportRouting(dynamicImport, filename);
   const dynamicImportHelperName = uniqueHelperName(sourceText, '__riftyDynamicImport');
-  const functionHelperName = uniqueHelperName(
+  // As long as `Function`: the caller's columns on that line stay Node's.
+  const functionHelperName = sameLengthHelperName(
     sourceText,
-    '__riftyFunction',
+    'Function'.length,
     new Set([dynamicImportHelperName]),
   );
   const globalKeyHelperName = uniqueHelperName(

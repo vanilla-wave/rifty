@@ -1,0 +1,290 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Final+GREEN PASS at 0ce236c53 for the observed-defect fixes (host deliveries gated on the run phase; output fixed at the status): B2(1) row RED->GREEN, mutants M1 (drop check) and M2 (fd 1 only) killed at 8d00404c1; sandbox-acceptance 48/48 at 0ce236c53; isolate-host 844/844 at 82d39db66 (82d39db66..0ce236c53: docs + test text only, no product code); backlog/docs/compat-drift/contract-drift OK. Goal isolate-host-live-sandbox stays open on draft unit distribution/isolate-host-sandbox-capture-outside-guest-realm; goal_complete false. Merge only on green PR CI at the pushed head.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "0ce236c539a1aba22a2511d8daab08430643754d",
+  "unit_goal_source": "PR #424 observed-defect fixes (rifty-fix, RDY-8): cross-review round 1 @ d3171889e (deliveries gate) and round 2 @ d2fc38351 B2 (output during the state capture), S-A, S-B, nits; changed tree d2fc38351..0ce236c53 (3b9321daa, merge of origin/main 4bb219d25 #425, CLOSE rollback 8d00404c1, cross-review round 3 fixes 0ce236c53; #419 landing verdict restored byte-for-byte from origin/main); baseline = live node + packages/isolate-host/src/child/main.ts of d2fc38351 in a scratch worktree. Goal isolate-host-live-sandbox (not closed): goal.md at HEAD identical to 2bff8d26c; map ## Items = one draft unit; ADR-0568 §Invariants and scenario, §Not the user's words, §Corrections 2026-11-23.",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "summary": "Draft unit distribution/isolate-host-sandbox-capture-outside-guest-realm (on the goal's map, owner: the goal): I1 'a guest that broke its own snapshot' → stateRefused + state of before is false today for a capture whose bytes pass the codec (sandbox-acceptance 'declared: a replaced intrinsic can leave any tree the codec accepts, with no stateRefused'). Goal closes when it lands or the user narrows I1.",
+      "authority": "I1"
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "B2(1): what the guest's realm prints while its state is captured is not the run's output (= live node)",
+      "source": "acceptance",
+      "trace": "ADR-0568",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts \"the guest's realm while its state is captured (compat ⚠️ sandbox only)\" > \"what it prints there is not the run's output\" (:749)",
+      "note": "RED: M1 (drop `if (state.stateWork === 1) return;`, = main.ts of d2fc38351) -> stdout 'AFTER\\n' vs node ''; M2 (`&& fd === 1`) -> stderr 'AFTER\\n' (program now also console.error, 8d00404c1); GREEN at HEAD. One output point, packages/isolate-host/src/child/main.ts:270; guest writes are sync callbacks, so output before the status is never dropped."
+    },
+    {
+      "row": "B2(2) declared: a replaced setUint16 leaves /workspbce, exit 0, no stateRefused",
+      "source": "acceptance",
+      "trace": "ADR-0568",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts \"the guest's realm while its state is captured (compat ⚠️ sandbox only)\" > 'declared: a replaced intrinsic can leave any tree the codec accepts, with no stateRefused' (:763)",
+      "note": "Pins a declared divergence (compat isolate-host.md row 'The guest's realm while its state is captured'); the I1 clause it contradicts is the goal residual (draft unit on the map), not claimed here."
+    },
+    {
+      "row": "B2(3) declared: an endless replaced setUint32 ends timeout, writes rolled back",
+      "source": "acceptance",
+      "trace": "ADR-0568",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts \"the guest's realm while its state is captured (compat ⚠️ sandbox only)\" > 'declared: an endless replaced intrinsic ends the run timeout, its writes rolled back' (:784)",
+      "note": "Green at HEAD; I1 killed-run clause holds (timeout -> files of before)."
+    },
+    {
+      "row": "S-A: exit(2) from nextTick / setImmediate / a timer beside a due timer — class table rows match the probe",
+      "source": "acceptance",
+      "trace": "ADR-0568",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/isolate-host-sandbox-lifecycle-class.md '## After PR #424' rows 'exit(2) from nextTick, a timer already due', 'exit(2) from setImmediate, a timer already due', 'exit(2) from a timer, another timer already due'",
+      "note": "Probe isolate-host-sandbox-lifecycle-class-probe.mjs re-run by the reviewer at HEAD: sandbox 2,a,t / 2,a,t / 2,a,t; node 2,a / 2,a,t / 2,a; runCode 2 — equals the table."
+    },
+    {
+      "row": "Scenario 1–3: write main.js + binary input; buggy run = node's exit 1 + stderr; fixed run writes out.pdf = node's bytes",
+      "source": "acceptance",
+      "trace": "scenario 1-3 / I2 / I3",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts 'write → run → error → fix → run (scenario 1–3)' > 'the model fixes its error and the host reads the binary result' (:95)"
+    },
+    {
+      "row": "Scenario 4: endless loop and memory blow-up end timeout/memory, files kept, next fix runs",
+      "source": "acceptance",
+      "trace": "scenario 4 / I1",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts 'an endless loop and eaten memory are ordinary errors (scenario 4, I1)' > 'timeout and memory leave the files of before the run; the next fix runs' (:127)"
+    },
+    {
+      "row": "Scenario 5: only files carry over between runs",
+      "source": "acceptance",
+      "trace": "scenario 5 / I2",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts 'only files carry between runs (scenario 5, I2)' > 'a sequence of runs equals the same sequence of node processes' (:160)"
+    },
+    {
+      "row": "Scenario 6: host writes and runs issued without waiting take effect in call order",
+      "source": "acceptance",
+      "trace": "scenario 6 / I4",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts 'operations take effect one at a time in call order (scenario 6, I4)' > 'writes and runs issued without awaiting apply in order' (:198)"
+    },
+    {
+      "row": "Scenario 7: destroy mid-run rejects run and pending with a distinct code; nothing remains",
+      "source": "acceptance",
+      "trace": "scenario 7 / I5",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts 'destroy is loud and total (scenario 7, I5)' > 'a run and queued operations in flight reject DESTROYED, later ones too' (:218)"
+    },
+    {
+      "row": "Scenario 8: refused path/size is a loud Node-shaped error naming sandbox paths; another sandbox invisible",
+      "source": "acceptance",
+      "trace": "scenario 8 / I6 / I7",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts 'host refusals are loud and name only sandbox paths (scenario 8, I6, I7)' > 'missing file, invalid path; another sandbox is invisible' (:235); 'limits are loud (scenario 8, I6)' > 'per-file limit on host ops, one state cap for host writes and run results' (:807)"
+    },
+    {
+      "row": "Scenario 9: snapshot() before destroy; a sandbox created from it runs main.js over the same files",
+      "source": "acceptance",
+      "trace": "scenario 9 / I9",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts 'snapshot round trip (scenario 9, I9)' > 'a sandbox created from a snapshot runs over the same files' (:264)"
+    },
+    {
+      "row": "Scenario 10: README — connect, API, limits, gaps; its sandbox snippet runs from the packed tarball",
+      "source": "acceptance",
+      "trace": "scenario 10 / I8",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/packed-consumer.test.ts 'the packed tarball runs the README sandbox snippet (ADR-0568)' (:57); packages/isolate-host/README.md '## Sandbox: files and `node <path>` runs (ADR-0568)' (:94)",
+      "note": "README 'What survives a run' row now points to the capture compat row (8d00404c1)."
+    },
+    {
+      "row": "I1 (a): a run that ends on its own leaves exactly the files it had at its end (exit 0/N, process.exit, throw, rejection)",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts 'node <path> corpus in sequences (scenario 2, 5, I2)' rows (:494) vs live node; 'nothing of the guest runs after its run has ended (ADR-0568 §3)' (:648) and 'no host delivery reaches the guest after its run has ended (ADR-0568 §3)' (:702)",
+      "note": "Lifecycle-class divergences declared ⚠️ under the user's 2026-11-23 answers (ADR-0568 §Not the user's words)."
+    },
+    {
+      "row": "I1 (b): killed (timeout, memory) or lost worker leaves the files of before: whole-run rollback",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts 'an endless loop and eaten memory are ordinary errors (scenario 4, I1)' > 'timeout and memory leave the files of before the run; the next fix runs' (:127); 'a lost worker does not repeat a run (I1)' > 'a run whose worker is killed reruns from the same state: its append lands once' (:916); packages/isolate-host/tests/sandbox-faults.test.ts 'a worker lost twice' > 'rejects WORKER_LOST and leaves the state of before' (:163)"
+    },
+    {
+      "row": "I1 (c): end state over the cap / too large to capture / capture throws → own output + exit + stateRefused, state of before; unrestorable state refused before guest code",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-faults.test.ts 'state that cannot be kept' > 'an end state too large to capture in its isolate is refused, named; state of before' (:94), 'a state its run cannot restore is refused before any guest code' (:117), 'a guest that breaks the intrinsics its capture uses gets a result, not a rejection' (:137); packages/isolate-host/tests/sandbox-acceptance.test.ts 'limits are loud (scenario 8, I6)' > 'per-file limit on host ops, one state cap for host writes and run results' (:807)",
+      "note": "Holds for a capture that throws or yields bytes over the cap / failing the codec; a codec-valid broken capture is the goal residual."
+    },
+    {
+      "row": "I2: node <path> fidelity in sequences (require, JSON, __filename, argv, require.main, frames, syntax errors); ESM loud",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts 'node <path> corpus in sequences (scenario 2, 5, I2)' (:492); 'only files carry between runs (scenario 5, I2)' (:160); 'ESM entries are a loud gap (I2)' (:289)"
+    },
+    {
+      "row": "I3: host file ops exact (binary, empty, large), see what runs left",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts 'host file ops: names, paths, remove (scenario 8, I3, I7)' > 'special names round-trip; paths never leave the sandbox; remove and sizes' (:860); packages/isolate-host/tests/sandbox-faults.test.ts 'a 1 MiB random file round-trips host → run → host byte for byte' (:840)"
+    },
+    {
+      "row": "I4: one operation at a time in call order",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts 'writes and runs issued without awaiting apply in order' (:198); packages/isolate-host/tests/sandbox-faults.test.ts 'snapshot at a point of rest (I9)' > 'snapshot() behind a run holds its end; a run behind snapshot() does not change it' (:68)"
+    },
+    {
+      "row": "I5: after destroy() no isolate runs; every op in flight/queued/later rejects DESTROYED",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-destroy-table.test.ts 'after destroy() no isolate of the sandbox runs: every end × every moment (I5)' (:190), 'every operation × destroy 0–5 microtasks after its call: DESTROYED unless it had settled (I5)' (:217); packages/isolate-host/tests/sandbox-acceptance.test.ts (:218)"
+    },
+    {
+      "row": "I6: runCode's limits; timeoutMs from dequeue over restore/run/capture; one cap; per-file limit; idle sandbox holds no process/isolate; dropped sandbox leaves nothing",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-faults.test.ts \"runCode's hardening and options through exec (I6)\" > 'no network or child processes; output cap, shared buffers and limits as runCode' (:803), 'a sandbox the consumer drops keeps nothing alive: the consumer exits on its own' (:855); 'timeoutMs runs from the moment a run leaves the queue' (:337); 'a deadline that falls during the restore of a large state is a timeout; state unchanged' (:455); 'an idle sandbox holds no process of its own (I6; its isolates end with their runs, above)' > 'ten sandboxes that each ran once leave one warm worker, none of their own' (:1202); packages/isolate-host/tests/sandbox-acceptance.test.ts (:807)"
+    },
+    {
+      "row": "I7: trust boundary host-side: paths stay in sandbox, run bytes validated, canary, sandbox-only paths, no infra-read, view range only",
+      "source": "acceptance",
+      "trace": "I7",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts 'missing file, invalid path; another sandbox is invisible' (:235); packages/isolate-host/tests/sandbox-faults.test.ts 'corrupt state bytes under the cap are refused by the codec, never adopted' (:253), 'message, code, syscall, path and stack of each refusal name only sandbox paths' (:707), \"a guest-authored end state is judged as that call’s result\" (:361); packages/isolate-host/tests/protocol.test.ts 'a sandbox state crosses into the isolate as exactly its bytes (ADR-0568, I7)' > 'decodeState returns a buffer of the state alone, never a view of a larger one' (:549)"
+    },
+    {
+      "row": "I8: plain-data API; README documents connection, API, limits, gaps; compat rows name every gap",
+      "source": "acceptance",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-faults.test.ts 'plain data (I8)' > 'every result is plain data or bytes' (:284); 'surface (I8)' > 'the package root exports createSandbox and runCode' (:32), 'exec and createSandbox refuse what they do not do, loudly' (:36); packages/isolate-host/tests/packed-consumer.test.ts (:57)"
+    },
+    {
+      "row": "I9: snapshot() at rest = exactly the files; createSandbox({snapshot}) sees them; waits its turn; never a partial state",
+      "source": "acceptance",
+      "trace": "I9",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts 'snapshot round trip (scenario 9, I9)' > 'a sandbox created from a snapshot runs over the same files' (:264); packages/isolate-host/tests/sandbox-faults.test.ts 'snapshot() behind a run holds its end; a run behind snapshot() does not change it' (:68), 'creation from a snapshot refuses bad bytes' > 'corrupt, oversized and foreign-template bytes reject with the codec’s code' (:479)"
+    },
+    {
+      "row": "Regression guard (goal 'must not change'): runCode API, results, corpus vs node -e, pool",
+      "source": "acceptance",
+      "trace": "ADR-0557+ADR-0563",
+      "status": "pass",
+      "citation": "isolate-host vitest project: 25 files, 844/844 passed at 82d39db66 (reviewer run, scratch worktree); 82d39db66..0ce236c53 touches no product code; sandbox-acceptance 48/48 at 0ce236c53"
+    },
+    {
+      "row": "ADR-0568 §Invariants and scenario verbatim vs goal.md @ 2bff8d26c",
+      "source": "acceptance",
+      "trace": "ADR-0568",
+      "status": "pass",
+      "citation": "docs/adr/distribution/0568-run-guest-files-in-a-live-sandbox-whose-state-is-filesystem-bytes-held-by-the-consumer.md '### User scenario', '### Invariants' (:227, :258)",
+      "note": "Whitespace-normalized compare vs goal.md @ 2bff8d26c: identical; goal.md at HEAD byte-identical to 2bff8d26c."
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "packages/isolate-host/tests/sandbox-acceptance.test.ts:749",
+          "evidence": "M1 and M2 each 1 failed; HEAD 48/48.",
+          "summary": "Output fixed at the status: stdout and stderr both pinned vs live node.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "packages/isolate-host/README.md:173",
+          "evidence": "8d00404c1 README row.",
+          "summary": "README outcome table now names the capture member; compat and README agree (I8).",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "docs/backlog/epics/isolate-host-live-sandbox/map.md:5",
+          "evidence": "goal.md = 2bff8d26c; ADR-0568 §Not the user's words records the reading as proposed, not accepted.",
+          "summary": "CLOSE rolled back: I1 unchanged, its open clause carried by a draft unit on the goal's map with owner/trigger; no claim of goal completion.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "packages/isolate-host/src/child/main.ts:270",
+          "evidence": "",
+          "summary": "REV-7 holds: one guard on the existing stateWork owner; one delivered gate in entry.ts.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "docs/public/compat/fs.md:23",
+          "evidence": "",
+          "summary": "REV-12 capture outside the goal: callback fs.appendFile/fs.rm undefined → ❌ + backlog runtime-js/fs-callback-append-file-rm-missing with owner and trigger.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/isolate-host/src/child/main.ts:270",
+          "evidence": "HEAD 0ce236c53 not pushed at review.",
+          "summary": "PR CI has not run at HEAD; merge only on green `gh pr checks` at the pushed head (DoD).",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

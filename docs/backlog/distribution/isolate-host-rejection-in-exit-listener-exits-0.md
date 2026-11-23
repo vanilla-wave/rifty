@@ -10,6 +10,8 @@ code: [packages/isolate-host/src/child/main.ts, packages/isolate-guest/src/guest
 
 ## Context
 
+Sandbox (ADR-0568): a member of the lifecycle class, compat ⚠️ (row "A run's lifecycle and exit status", measured in `reference/isolate-host-sandbox-lifecycle-class.md`). Owner: distribution (isolate host). Trigger: the next change to how the isolate host reports a run's end, or a sandbox consumer reading exit 0 for it.
+
 Found 2026-11-19 while checking `isolate-host-unhandled-rejection-lost-to-gc` (macOS arm64, Node v24.16.0,
 isolated-vm 7.0.2 @ f405533a7):
 

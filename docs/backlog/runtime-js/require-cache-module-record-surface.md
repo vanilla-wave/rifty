@@ -29,7 +29,7 @@ separate loader ceiling; this cache facade cannot relabel or silently bypass it.
 
 ## Landed — 2026-11-22
 
-Goal `node-file-entry-parity`: `require.cache` is the loader's CJS record
+ADR-0571: `require.cache` is the loader's CJS record
 object (delete reloads, an assigned entry is returned). Remaining: ES modules
 loaded by `require(esm)` are absent from it, and the failed-require
 self-import ceiling above.

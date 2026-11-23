@@ -20,6 +20,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat / exact-vers
 | Encoding reads | ✅ | utf8, utf16le, latin1/ascii, hex parity cases |
 | Path resolution with `process.cwd()` | ✅ | Relative fs paths anchor at runtime cwd |
 | Callback `readFile` / `writeFile` | ✅ | Node-style error-first callbacks |
+| Callback `fs.appendFile` / `fs.rm` | ❌ | `undefined`: a call is `TypeError: fs.appendFile is not a function` (measured 2026-11-23 in the isolate host); the sync and `fs.promises` forms exist. `backlog/runtime-js/fs-callback-append-file-rm-missing` |
 | `fs.promises` file ops | ✅ | `readFile`, `writeFile`, `appendFile`, `readdir`, `copyFile`, `rename`, `rm`, `access` |
 | fd table | ✅ | `open`/`close`/`read`/`write`/`fstat`/`ftruncate`; sequential and positional IO |
 | `fs` on stdio descriptors 0–2 | ⚠️ | COI: `read`/`readSync`/`readFileSync(0)`, `fstatSync(0)` (FIFO/character mode), `closeSync(0)` and `write`/`writeSync(1\|2)` use raw descriptors; writes bypass replaced `process.stdout.write`. Pipe positions throw `ESPIPE`. Kernel pull stdin (ADR-0542); `tests/browser-unit/fs-stdio-fds.spec.ts`, `tests/browser-unit/file-stdout.spec.ts`. |
