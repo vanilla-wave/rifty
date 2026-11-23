@@ -10,7 +10,7 @@ None: the carrier and the codec landed on the goal branch (Final+GREEN PASS @ 6c
 
 ## Closed elsewhere
 
-- I1 «for any name rifty's FS holds» — closed 2026-11-23 by PR #419 (goal `isolate-host-live-sandbox`): rifty's FS no longer holds NUL names (`runtime-js/fs-path.ts`, Node's `nullCheck`) nor non-finite or out-of-Date times (`builtins/fs-times.ts`, utimes as Node 24.16.0).
+- I1 «for any name rifty's FS holds» — closed 2026-11-23 by PR #419 (ADR-0568): rifty's FS no longer holds NUL names (`runtime-js/fs-path.ts`, Node's `nullCheck`) nor non-finite or out-of-Date times (`builtins/fs-times.ts`, utimes as Node 24.16.0).
 - The packaged `isolate-host` carries the codec at runtime: bundled into `dist/codec.js` (`src/codec.ts`, ADR-0568 §2), no `@riftydev/*` dependency — decided by the sandbox goal (PR #419).
 
 ## Out of scope

@@ -20,4 +20,4 @@ after writing its output loses that output today.
 
 ## Challenge
 
-challenge: 2026-11-23 — none yet (factual capture at the isolate-host-live-sandbox CLOSE)
+challenge: 2026-11-23 — none yet (factual capture at the live-sandbox goal's close, ADR-0568)

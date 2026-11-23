@@ -21,4 +21,4 @@ code: [packages/isolate-host/src/pool.ts, packages/isolate-host/src/child/main.t
 
 ## Challenge
 
-challenge: 2026-11-23 — none yet (factual capture at the isolate-host-live-sandbox CLOSE)
+challenge: 2026-11-23 — none yet (factual capture at the live-sandbox goal's close, ADR-0568)

@@ -20,7 +20,7 @@ as in Node, where no process exists at that point. Open questions: `finally`
 blocks run while the exit signal unwinds; the memory held during the drain; the
 uncaught-throw-plus-endless-microtask-chain divergence
 (`isolate-host-uncaught-throw-waits-for-microtask-checkpoint`) is not cured by
-this (the isolate never leaves the checkpoint). Not to be built before a probe.
+this (the isolate never leaves the checkpoint). Not to be built before a probe. Owner: distribution (isolate host). Trigger: the first fix of either divergence it may cover.
 
 ## Challenge
 

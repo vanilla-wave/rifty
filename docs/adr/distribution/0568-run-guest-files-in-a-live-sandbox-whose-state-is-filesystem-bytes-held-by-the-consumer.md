@@ -7,7 +7,8 @@ Date: 2026-11
 
 ## Context
 
-Goal `isolate-host-live-sandbox`. User requirements (2026-11-17, via the
+The live-sandbox goal (closed 2026-11-23; its invariants and scenario are §Invariants and
+scenario below). User requirements (2026-11-17, via the
 manager): host file ops read/list/write/change without binary loss, `exec`
 narrowly `node <path>`, one instance through write → exec → error → fix →
 exec, the host reading a binary result at a model-chosen path, realm-level
@@ -199,6 +200,56 @@ view's whole backing buffer; rifty's program entry has diagnostic gaps and no
   Rejected: catastrophic OOM / ICU retention / heap-limit disposal lose the
   files (step 0 S1).
 
+## Invariants and scenario
+
+Exported from the goal at its close (2026-11-23); tests cite them as I1–I9 and
+"scenario N". Carriers: `packages/isolate-host/tests/sandbox-acceptance.test.ts`
+(scenario, corpus vs live Node), `sandbox-faults.test.ts`,
+`sandbox-destroy-table.test.ts`, `protocol.test.ts`.
+
+Scenario: (1) the host creates a sandbox and writes `/workspace/main.js` and a
+binary input; (2) `exec('main.js')` fails as `node main.js` does over the same
+files; (3) the model fixes it, the run writes `out.pdf` at a path it chose, the
+host reads the bytes real `node` writes; (4) an endless loop and a memory
+blow-up end `timeout` and `memory`, the files stay, the next fix runs clean;
+(5) only files carry from one run to the next; (6) host writes and runs issued
+without awaiting take effect one at a time in call order; (7) `destroy()`, also
+mid-run: pending work rejects with a distinct code, nothing of the sandbox
+remains; (8) a refused path or size is a Node-shaped error naming only sandbox
+paths, and sandboxes do not see each other's files; (9) `snapshot()`, then a
+sandbox created from it sees the same files; (10) the README tells the service
+owner how to connect, the API, the limits and the gaps.
+
+- I1. No ending of a run loses the sandbox: a run that ends on its own leaves
+  the files it had at its end; a killed run (`timeout`, `memory`) or one whose
+  worker is lost leaves the files of before it (whole-run rollback, compat ⚠️);
+  an end state that cannot be kept is the run's own result plus `stateRefused`,
+  the state of before kept; a state that cannot be restored is refused before
+  any guest code (`exitCode: null`).
+- I2. `node <path>` fidelity in sequences: run by run, stdout, stderr, exit code
+  and files of the same sequence of `node <path> [args]` processes over the same
+  files. A divergence is loud (`NotImplementedError` + compat row), a pinned ⚠️
+  diagnostic text, or one of the three behavior divergences the user accepted
+  as ⚠️ (§Not the user's words, 2026-11-23).
+- I3. Host file ops move bytes unchanged, see exactly what the runs left and are
+  seen by the next run; a refused write leaves the files as they were, times
+  included.
+- I4. Operations on one sandbox take effect one at a time, in call order.
+- I5. Once `destroy()` resolves, no isolate of the sandbox runs and its state is
+  unreachable; every operation not yet settled, queued or later rejects
+  `ERR_ISOLATE_HOST_SANDBOX_DESTROYED` (§5).
+- I6. Bounded: `runCode`'s limits per run (`timeoutMs` from dequeue, covering
+  the consumer's encode, restore, run and capture); one state cap; a per-file
+  limit for host ops; the consumer survives every outcome; an idle sandbox
+  holds no process or isolate.
+- I7. Trust: model-chosen paths and bytes stay inside the sandbox; bytes a run
+  hands back are validated before they become state; no sandbox reads
+  another's files; host errors name only sandbox paths; the guest cannot make
+  its run read as an infrastructure failure.
+- I8. Plain-data API, documented in the README; compat rows name every gap.
+- I9. `snapshot()` holds exactly the files; `createSandbox({ snapshot })` gives a
+  sandbox whose ops and runs see them, in its turn, never a run's partial state.
+
 ## Consequences
 
 - Cost per run (ADR-0567's codec, M3 Pro, median of 5, the snapshot thread's
@@ -224,6 +275,18 @@ view's whole backing buffer; rifty's program entry has diagnostic gaps and no
 The user, 2026-11-22 (asked whether the guest should get a directory on the host disk): «все
 правильно, не нужно давать настоящую fs» — no real filesystem for the guest; alternative B is the
 user's rejection.
+
+The user, 2026-11-23, asked by the manager «Песочница: принять три расхождения с Node как
+объявленные ⚠️ или держать цель открытой до починки? Рекомендую принять.» after a table of the
+three — (1) work queued at `process.exit()` runs and its file stays in the state; (2) a microtask
+from an `'exit'` handler after an explicit `exit()` runs and may write a file; (3) an uncaught
+throw with an endless microtask chain ends as a timeout with its writes rolled back, Node exits 1
+with them kept: «ок». The manager reads it as accepting the recommendation (the manager's reading,
+not the user's words): the three stay compat ⚠️ and are fixed through their backlog records
+(`runtime-js/node-eval-work-queued-at-exit-runs`,
+`distribution/isolate-host-natural-exit-listener-queued-work`,
+`distribution/isolate-host-uncaught-throw-waits-for-microtask-checkpoint`; lead
+`distribution/isolate-host-sandbox-capture-at-process-terminal`).
 
 Manager decisions by delegation (2026-11-22), not the user's words: a restore and a capture per run
 with a killed run rolled back, and the per-run cost while a template layer is part of the state; one

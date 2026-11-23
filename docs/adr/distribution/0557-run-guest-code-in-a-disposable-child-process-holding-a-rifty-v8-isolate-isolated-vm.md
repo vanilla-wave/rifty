@@ -164,7 +164,7 @@ memory invariant — pending the user, not built.
 
 Manager decisions by delegation (2026-11-18), on which the user has not spoken: option A (a child process per call) over B (in-process, weaker memory promise); the killed-run shape `exitCode: null` + `termination`, not checked against the consumer's own type; the requirements' Web API list (`URL`, `structuredClone`, web streams, `AbortController`, `Event`…) as loud ceilings (§5), not shimmed; and the post-guest boundary at the child (§Corrections).
 
-- 2026-11-22 — the user handed the killed-run shape question to the manager; the manager confirmed `exitCode: null` + `termination` (Node's `child_process` reports `code: null` + a signal; an invented exit code would misstate the result). Reversible until publication. The sandbox exec of goal `isolate-host-live-sandbox` returns the same shape for the same outcomes.
+- 2026-11-22 — the user handed the killed-run shape question to the manager; the manager confirmed `exitCode: null` + `termination` (Node's `child_process` reports `code: null` + a signal; an invented exit code would misstate the result). Reversible until publication. The sandbox `exec` (ADR-0568) returns the same shape for the same outcomes.
 
 ## Consequences
 

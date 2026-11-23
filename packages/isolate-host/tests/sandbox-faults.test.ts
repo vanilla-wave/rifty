@@ -1,8 +1,7 @@
 /**
- * Sandbox rows below the scenario level (ADR-0568; unit
- * `distribution/isolate-host-sandbox-core` Fault matrix and Acceptance 2–4).
- * Kill scenarios run in their own consumer process over the built package, so
- * its child pids are its workers. RED: `it.fails` until the sandbox lands.
+ * Sandbox fault rows below the scenario level (I1–I9: ADR-0568 §Invariants and
+ * scenario). Kill scenarios run in their own consumer process over the built
+ * package, so its child pids are its workers.
  */
 import { cpSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -13,7 +12,7 @@ import * as pkg from '../src/index.ts';
 import { Pool, sharedPool } from '../src/pool.ts';
 import { childPids, consumer } from './support.ts';
 
-/** RED until the sandbox lands; flips to `it` with the implementation. */
+/** The carrier rows (landed; were `it.fails` while the sandbox did not exist). */
 const carrier = it;
 
 interface Sandbox {
@@ -29,7 +28,7 @@ const createSandbox = (options?: Record<string, unknown>): Promise<Sandbox> =>
   (pkg as unknown as { createSandbox: (o?: unknown) => Promise<Sandbox> }).createSandbox(options);
 const text = async (sb: Sandbox, path: string) => Buffer.from(await sb.readFile(path)).toString();
 
-describe('surface (Acceptance 2–3)', () => {
+describe('surface (I8)', () => {
   carrier('the package root exports createSandbox and runCode', () => {
     expect(Object.keys(pkg).sort()).toEqual(['createSandbox', 'runCode']);
   });
@@ -64,7 +63,7 @@ describe('surface (Acceptance 2–3)', () => {
   });
 });
 
-describe('snapshot at a point of rest (Acceptance 4)', () => {
+describe('snapshot at a point of rest (I9)', () => {
   carrier(
     'snapshot() behind a run holds its end; a run behind snapshot() does not change it',
     async () => {
@@ -90,7 +89,7 @@ describe('snapshot at a point of rest (Acceptance 4)', () => {
   );
 });
 
-describe('state that cannot be kept (Fault matrix)', () => {
+describe('state that cannot be kept', () => {
   carrier(
     'an end state too large to capture in its isolate is refused, named; state of before',
     async () => {
@@ -160,7 +159,7 @@ console.log('poisoned');`,
   );
 });
 
-describe('a worker lost twice (Fault matrix)', () => {
+describe('a worker lost twice', () => {
   carrier('rejects WORKER_LOST and leaves the state of before', async () => {
     const { value } = await consumer(`
       const sb = await createSandbox();
@@ -226,7 +225,7 @@ const HOSTILE_BODY = `const run = await settle(runCode('1'));
   const exec = await settle(sb.exec('a'));
   out({ run, exec, kept: Buffer.from(await sb.readFile('a')).toString() });`;
 
-describe('a hostile worker and state frames (Fault matrix)', () => {
+describe('a hostile worker and state frames', () => {
   carrier(
     'a state frame for a runCode call, or past maxFsBytes, is a protocol violation',
     async () => {
@@ -281,7 +280,7 @@ function assertPlain(value: unknown, at = 'value'): void {
   }
 }
 
-describe('plain data (Acceptance 2)', () => {
+describe('plain data (I8)', () => {
   carrier('every result is plain data or bytes', async () => {
     const sb = await createSandbox({ maxFsBytes: 1 << 20 });
     try {
@@ -299,7 +298,7 @@ describe('plain data (Acceptance 2)', () => {
   });
 });
 
-describe('the isolate of a run ends with it (Fault matrix)', () => {
+describe('the isolate of a run ends with it', () => {
   // The guest holds 300 MiB, then waits: its worker past 400 MiB RSS is the event that it runs.
   const HOLD = 'globalThis.hold = new Uint8Array(300 << 20).fill(1); for (;;) {}';
   const body = (end: string) => `
@@ -359,7 +358,7 @@ describe('the isolate of a run ends with it (Fault matrix)', () => {
  * result (`stateRefused`, or `timeout` for a hang), the state of before stays,
  * and a neighbour call on the same worker gets its exact result.
  */
-describe('a guest-authored end state is judged as that call’s result (Fault matrix)', () => {
+describe('a guest-authored end state is judged as that call’s result', () => {
   const POISON: Record<string, string> = {
     'over the cap': `const U = Uint8Array; globalThis.Uint8Array = new Proxy(U, { construct: (t, [n, ...r]) => typeof n === 'number' ? new U(n + 70000) : new U(n, ...r) });`,
     'not bytes': `const U = Uint8Array; globalThis.Uint8Array = new Proxy(U, { construct: (t, a) => (typeof a[0] === 'number' ? {} : new U(...a)) });`,
@@ -406,7 +405,7 @@ describe('a guest-authored end state is judged as that call’s result (Fault ma
   }
 });
 
-describe('the state changes only at a terminal exit (Fault matrix)', () => {
+describe('the state changes only at a terminal exit', () => {
   carrier('a worker that sends a state frame and dies changes nothing', async () => {
     const dir = join(work, 'pkg-state-then-die');
     cpSync(join(PACKAGE_DIR, 'dist'), join(dir, 'dist'), { recursive: true });
@@ -475,7 +474,7 @@ describe('the state changes only at a terminal exit (Fault matrix)', () => {
   );
 });
 
-describe('creation from a snapshot refuses bad bytes (Fault matrix)', () => {
+describe('creation from a snapshot refuses bad bytes', () => {
   carrier(
     'corrupt, oversized and foreign-template bytes reject with the codec’s code',
     async () => {
@@ -498,7 +497,7 @@ describe('creation from a snapshot refuses bad bytes (Fault matrix)', () => {
   );
 });
 
-describe('sandboxes are independent (S7)', () => {
+describe('sandboxes are independent (scenario 8, I7)', () => {
   carrier('a spinning run in one sandbox does not hold another’s', async () => {
     const a = await createSandbox();
     const b = await createSandbox();
@@ -520,7 +519,7 @@ describe('sandboxes are independent (S7)', () => {
   });
 });
 
-describe('names the snapshot cannot hold (Fault matrix, ADR-0567 16 383 code units)', () => {
+describe('names the snapshot cannot hold (ADR-0567 16 383 code units)', () => {
   carrier(
     'a host write of a longer name is refused at once; a guest-made one refuses its run’s state',
     async () => {
@@ -549,7 +548,7 @@ describe('names the snapshot cannot hold (Fault matrix, ADR-0567 16 383 code uni
   );
 });
 
-describe('boot memory and buffer ownership (Final+GREEN findings)', () => {
+describe('boot memory and buffer ownership (PR #419 review)', () => {
   carrier('an isolate too small for the runtime itself ends as memory, as runCode', async () => {
     const sb = await createSandbox();
     try {
@@ -769,7 +768,7 @@ function closingChannelPackage(name: string, blob: string, afterState: boolean):
   return pathToFileURL(join(dir, 'dist', 'index.js')).href;
 }
 
-describe('a result channel closed in the middle of a sandbox run (Fault matrix)', () => {
+describe('a result channel closed in the middle of a sandbox run', () => {
   for (const afterState of [true, false]) {
     carrier(
       `closed ${afterState ? 'after the state frame, before exit' : 'before any frame'}`,
@@ -799,7 +798,7 @@ describe('a result channel closed in the middle of a sandbox run (Fault matrix)'
   }
 });
 
-describe("runCode's hardening and options through exec (FIT S6, S10)", () => {
+describe("runCode's hardening and options through exec (I6)", () => {
   carrier(
     'no network or child processes; output cap, shared buffers and limits as runCode',
     async () => {
@@ -868,7 +867,7 @@ describe("runCode's hardening and options through exec (FIT S6, S10)", () => {
   );
 });
 
-describe('destroy of a light run on a shared worker (Final+GREEN r2 concern)', () => {
+describe('destroy of a light run on a shared worker (PR #419 review)', () => {
   carrier(
     'resolves once the cancelled run’s terminal frame arrives; the worker stays',
     async () => {

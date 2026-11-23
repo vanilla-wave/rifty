@@ -10,6 +10,8 @@ code: [packages/isolate-guest/src/guest/entry.ts, packages/isolate-host/src/chil
 
 ## Context
 
+Sandbox (ADR-0568): accepted as compat ⚠️ by the user 2026-11-23 (ADR-0568 §Not the user's words). Owner: distribution (isolate host). Trigger: an isolated-vm release that leaves the microtask checkpoint on termination, or a sandbox consumer losing a run's writes to this timeout.
+
 Measured @ 1d3fc3c43, `node -e` v24.16.0 against `runCode(code, { timeoutMs: 3000 })`:
 `setTimeout(() => { const f = () => queueMicrotask(f); f(); throw new Error('x') })`
 → Node exit 1 with the `Error: x` diagnostic; host `{exitCode: null,

@@ -1,9 +1,8 @@
 /**
- * Acceptance carrier of goal `isolate-host-live-sandbox` (its `## User
- * scenario` as tests). The oracle is real `node <path> [args]`, run in sequence
- * over the same files in a fresh temporary directory read as `/workspace`
- * (`support.ts` nodeSequence). RED: every case is `it.fails` until the sandbox
- * lands; the API is typed here from the goal's contract, not imported.
+ * Acceptance carrier of the live sandbox (ADR-0568 §Invariants and scenario: its
+ * scenario as tests, I1–I9). The oracle is real `node <path> [args]`, run in
+ * sequence over the same files in a fresh temporary directory read as
+ * `/workspace` (`support.ts` nodeSequence); the API is typed here, not imported.
  */
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -19,7 +18,7 @@ import {
   waitFor,
 } from './support.ts';
 
-/** RED until the sandbox lands; flips to `it` with the implementation. */
+/** The carrier rows (landed; were `it.fails` while the sandbox did not exist). */
 const carrier = it;
 
 interface ExecResult {

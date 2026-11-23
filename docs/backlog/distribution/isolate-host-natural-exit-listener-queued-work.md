@@ -10,6 +10,8 @@ code: [packages/isolate-host/src/child/main.ts, packages/isolate-guest/src/guest
 
 ## Context
 
+Sandbox (ADR-0568): accepted as compat ⚠️ by the user 2026-11-23 (ADR-0568 §Not the user's words). Owner: distribution (isolate host). Trigger: the capture-at-terminal probe (`distribution/isolate-host-sandbox-capture-at-process-terminal`), or a sandbox consumer finding a file written by an `'exit'` listener's microtask.
+
 PR #416 verify review 2026-11-22, `node -e` v24.16.0, natural exit (no `exit()`):
 
 - `.then` chain a1→a2→a3 queued in an `'exit'` listener: Node all three, host `a1`; an async listener with three

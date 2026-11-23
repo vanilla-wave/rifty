@@ -10,6 +10,8 @@ code: [packages/runtime-js/src/internal/event-loop-keepalive.ts, packages/runtim
 
 ## Context
 
+Sandbox (ADR-0568): accepted as compat ⚠️ by the user 2026-11-23 (ADR-0568 §Not the user's words). Owner: runtime-js (the process-lifecycle thread, #416). Trigger: the next process-exit change in runtime-js, or a sandbox consumer finding a file written after `process.exit()`.
+
 Measured 2026-11-22 (PR #416), `node -e` v24.16.0 runs none of it. Who dispatches what still runs after `exit()`:
 
 - V8: microtasks of the same checkpoint (`Promise.resolve().then(() => process.exit(0)); Promise.resolve().then(f)`),

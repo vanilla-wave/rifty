@@ -1,6 +1,6 @@
 # isolate-host live sandbox — step 0 probes (2026-11-22)
 
-Goal `isolate-host-live-sandbox` FIT evidence. Apple M3 Pro, macOS 26.6.2 arm64,
+Live-sandbox goal FIT evidence (the goal closed 2026-11-23; ADR-0568). Apple M3 Pro, macOS 26.6.2 arm64,
 Node v24.16.0, isolated-vm 7.0.2, tree 50c9d8bf1. Throwaway scripts run from
 `packages/isolate-host` (so `isolated-vm` resolves), removed after the run.
 
