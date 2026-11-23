@@ -14,6 +14,21 @@ import { getProcessCwd } from './process.ts';
 export type PathLike = string | URL | Uint8Array;
 
 export function pathToString(p: PathLike): string {
+  const str = pathText(p);
+  // Node's `nullCheck`: a NUL never reaches the filesystem (ERR_INVALID_ARG_VALUE).
+  if (str.includes('\0')) {
+    const shown = `'${str.replaceAll('\\', '\\\\').replaceAll("'", "\\'").replaceAll('\0', '\\x00')}'`;
+    throw Object.assign(
+      new TypeError(
+        `The argument 'path' must be a string, Uint8Array, or URL without null bytes. Received ${shown}`,
+      ),
+      { code: 'ERR_INVALID_ARG_VALUE' },
+    );
+  }
+  return str;
+}
+
+function pathText(p: PathLike): string {
   if (typeof p === 'string') return p;
   if (p instanceof URLConstructor) return fileURLToPathPosix(p);
   if (p instanceof Uint8Array) return bytesToString(p, 'utf8'); // a leading BOM is a name char

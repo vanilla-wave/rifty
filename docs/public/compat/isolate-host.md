@@ -1,4 +1,4 @@
-# Isolate host (`@riftydev/isolate-host`, ADR-0557, ADR-0563)
+# Isolate host (`@riftydev/isolate-host`, ADR-0557, ADR-0563, ADR-0568)
 
 `runCode(code)` runs `code` like `node -e <code>` on Node 24. Tests:
 `packages/isolate-host/tests/` (vitest project `isolate-host`). The oracle is a live `node -e`
@@ -52,6 +52,31 @@ child.
 | `unhandledRejection` listener arguments | ⚠️ | The reason is an isolated-vm copy, and `promise` is `undefined`; a non-`Error` reason arrives as a generic `Error` |
 | Identity: `process.version`, `os.platform()`, `process.cwd()` (`/workspace`), `process.argv`, `process.env` (empty), stdin | ⚠️ | rifty's, not the host's |
 
+## Sandbox (`createSandbox`, ADR-0568)
+
+`exec(path, {args})` runs `path` like `node <path> [args]` in `/workspace`. The guest surface and
+its gaps are the rows above, except where named here. Tests: `sandbox-acceptance.test.ts` (each run
+sequence against live `node <path>` over the same files), `sandbox-faults.test.ts`.
+
+| Surface | Status | Notes |
+|---|---|---|
+| Run sequences: relative `require`, JSON, `__filename`/`__dirname`, `argv`, `require.main`, relative paths, files the next run reads, only files carrying over | ✅ | Corpus in `sandbox-acceptance.test.ts`; no `node -e` builtin-module globals in a file |
+| Host `writeFile`/`readFile`/`list`/`remove`, binary, `/workspace`-relative paths | ✅ | Errors in Node's shape with sandbox paths only; `maxFileBytes`, `maxFsBytes` |
+| Endings: exit, `process.exit` (sync, timer, promise callback, `queueMicrotask`), uncaught throw/rejection | ✅ | The files are those the run left |
+| Killed run (`timeout`, `memory`) or lost worker | ⚠️ | The files are those of before the run: its writes are rolled back (Node keeps them). A lost worker's run reruns once from the same files |
+| Work queued when `process.exit()` runs (a microtask or 0 ms timer beside the exiting one) | ⚠️ | Still runs, and a file it writes is kept (Node: never runs). `backlog/runtime-js/node-eval-work-queued-at-exit-runs` |
+| Uncaught throw followed by an endless microtask chain | ⚠️ | `timeout`, its writes rolled back (Node: exit 1 at once, writes kept) — `backlog/distribution/isolate-host-uncaught-throw-waits-for-microtask-checkpoint` |
+| A microtask an `'exit'` listener queues, after an explicit `process.exit()` | ⚠️ | Its output is dropped as in Node, but it runs and a file it writes is kept (Node: never runs). `backlog/distribution/isolate-host-natural-exit-listener-queued-work` |
+| End state over `maxFsBytes`, too large to capture, or broken by its own guest | ⚠️ | The run's result plus `stateRefused`; files as before the run (Node would fail the write itself, `ENOSPC`) |
+| State too large for the run's isolate | ⚠️ | `{stdout: '', stderr: '', exitCode: null, stateRefused: 'ERR_ISOLATE_HOST_SANDBOX_RESTORE'}`; no guest code runs |
+| `fs.stat().ino` across runs | ⚠️ | Renumbered at each run's restore (the snapshot keeps the four times, not `ino`, ADR-0567); Node keeps it |
+| Text of an uncaught-error report of a sandbox run (`node <path>`) | ⚠️ | Node's report as process.md "Fatal error stderr bytes" describes it, checked byte-for-byte against live Node in `sandbox-acceptance` (errors, frames, props, `Cannot find module` with its frame; a deeper `require` chain lists only the immediate requirer under `Require stack`, process.md "`Error: Cannot find module`"): no `<file>:<line>` header with caret (JS cannot read V8's message location), trailer `Node.js v24.0.0` (`backlog/runtime-js/process-versions-node-honesty`); a compile error is `ModuleLoadError: Failed to compile CJS module <file>: <message>`, its message V8's for the wrapped source (`backlog/runtime-js/module-compile-error-node-syntax-error`, pinned per row) |
+| `import()` of a CommonJS file from a file (top level, async, `eval`, `new Function`, a timer) | ✅ | rifty's loader serves it; corpus row |
+| `import()` in source compiled by `vm` | ❌ | The `import()` gap ends the run (exit 1, `isolate-host.dynamic-import`), its writes rolled back: `stateRefused: 'ERR_ISOLATE_HOST_SANDBOX_CAPTURE'` |
+| ES modules: `.mjs`, `"type": "module"`, ESM syntax in a typeless `.js` | ❌ | `NotImplementedError('isolate-host.esm')`: rifty's ESM loader needs `URL`, a ceiling here |
+| `fs.symlink*`/`link*` | ❌ | `NotImplementedError('fs.<name>')`: rifty's FS has no links (ADR-0050) |
+| `exec` options `env`, `cwd`, `stdin`; `createSandbox({ template })` | ❌ | `NotImplementedError('isolate-host.sandbox-exec-<option>')`, `NotImplementedError('isolate-host.sandbox-template')` |
+
 ## Custom embedder (`@riftydev/isolate-guest`, ADR-0558)
 
 The same guest bundle in an isolate the consumer creates itself. The guest
@@ -66,9 +91,9 @@ surface and its gaps are the rows above. Tests: `packages/isolate-guest/tests/`
 | Hostile bridge arguments, throwing embedder hooks, `close()`, `exitStatus` | ✅ | `host-bridge.test.ts` |
 | FS snapshot: `GuestEntry.snapshot`/`restore`, `snapshotFs`/`restoreFs` in the isolate and the consumer's realm (ADR-0567) | ✅ | Paths, bytes, empty dirs, names up to 16 383 code units without NUL, `mtime`/`atime`/`ctime`/`birthtime` in the Date range, `readdir` order round-trip, both realms both ways; same tree → same bytes. `snapshot-acceptance.test.ts`, `snapshot-codec.test.ts` |
 | FS snapshot: restore that runs out of memory while writing | ⚠️ | `ERR_FS_SNAPSHOT_INCOMPLETE`: the FS is partial; the isolate refuses `run`/`snapshot`/`restore` with that code — dispose it (consumer realm: discard the target) |
-| FS snapshot: names over 16 383 code units or with NUL, times not finite or outside the Date range | ❌ | Refused at snapshot (`ERR_FS_SNAPSHOT_UNREPRESENTABLE`) and restore (`ERR_FS_SNAPSHOT_CORRUPT`); rifty's FS holds NUL names and NaN or out-of-range `utimes` values Node refuses or normalises until PR #419 (goal `isolate-host-live-sandbox`) lands — then an honest tree never hits this refusal. Names: V8 hashes longer strings by length alone. A sandbox run that creates such a state cannot save it. Node refuses names over NAME_MAX (`ENAMETOOLONG`); rifty's FS does not yet — `backlog/vfs/file-names-over-name-max-accepted` |
+| FS snapshot: names over 16 383 code units or with NUL, times not finite or outside the Date range | ❌ | Refused at snapshot (`ERR_FS_SNAPSHOT_UNREPRESENTABLE`) and restore (`ERR_FS_SNAPSHOT_CORRUPT`); rifty's FS holds neither NUL names nor non-finite or out-of-range `utimes` times (Node's `nullCheck` and utimes rules, PR #419), so an honest tree never hits this refusal. Names: V8 hashes longer strings by length alone. A sandbox run that creates such a state cannot save it. Node refuses names over NAME_MAX (`ENAMETOOLONG`); rifty's FS does not yet — `backlog/vfs/file-names-over-name-max-accepted` |
 | FS snapshot: `ino` | ⚠️ | Renewed by restore, as after a copy (Node over a persistent disk keeps it): rifty's inode counter is per realm. `backlog/distribution/isolate-host-fs-snapshot-keep-ino` |
-| FS snapshot: symlinks, hard links, modes, owners | ❌ | rifty's FS has none (ADR-0050): `fs.symlinkSync`/`linkSync`/`chmodSync` are absent functions there (`TypeError: … is not a function`), modes are fixed 0o100666/0o40777; nothing of them to keep |
+| FS snapshot: symlinks, hard links, modes, owners | ❌ | rifty's FS has none (ADR-0050): `fs.symlink*`/`link*` throw `NotImplementedError('fs.<name>')` (ADR-0443 correction 2026-11-22), `chmodSync` is an absent function (`TypeError: … is not a function`), modes are fixed 0o100666/0o40777; nothing of them to keep |
 | FS snapshot: restore of untrusted bytes (truncated, flipped byte, bad checksum, other version or template, bad path, duplicate, unknown kind, over `maxBytes`) | ✅ | Named `ERR_FS_SNAPSHOT_*` before anything is written; FS unchanged; no blob text in the error. `snapshot-codec.test.ts` |
 | FS snapshot taken after guest code ran | ⚠️ | Guest-authored bytes: the guest can make `snapshot` return anything (it shares the realm); bounded by `memoryLimit`, accepted only through `restoreFs` |
 | FS snapshot: restore after `run` was called | ❌ | `ERR_FS_SNAPSHOT_NOT_FRESH`: only a fresh isolate takes a snapshot |

@@ -6,9 +6,12 @@ None: the carrier and the codec landed on the goal branch (Final+GREEN PASS @ 6c
 
 ## Open questions
 
-- I1 «for any name rifty's FS holds»: until PR #419 lands, rifty's FS can hold names with NUL and times not finite or outside the Date range, which the codec refuses at snapshot (`ERR_FS_SNAPSHOT_UNREPRESENTABLE`) — owner: goal `isolate-host-live-sandbox` — closed by its PR #419 (`runtime-js/fs-path.ts` `nullCheck`, `builtins/fs-times.ts`: rifty stops holding both, I1 holds literally); manager, 2026-11-22.
 - Outcome says «never a partial tree»; a restore that runs out of memory while writing leaves a partial FS in an isolate that then refuses `run`/`snapshot`/`restore` (`ERR_FS_SNAPSHOT_INCOMPLETE`) — accept «all of the tree, or the isolate is thrown away»? — owner: user — asked by the manager 2026-11-22; evidence: acceptance `restore that runs out of memory while writing…`.
-- Does the packaged `isolate-host` need the codec at runtime (today `@riftydev/isolate-guest` is its devDependency, bundled into the child only)? — owner: agent — the sandbox goal decides; noted to the manager 2026-11-22.
+
+## Closed elsewhere
+
+- I1 «for any name rifty's FS holds» — closed 2026-11-23 by PR #419 (goal `isolate-host-live-sandbox`): rifty's FS no longer holds NUL names (`runtime-js/fs-path.ts`, Node's `nullCheck`) nor non-finite or out-of-Date times (`builtins/fs-times.ts`, utimes as Node 24.16.0).
+- The packaged `isolate-host` carries the codec at runtime: bundled into `dist/codec.js` (`src/codec.ts`, ADR-0568 §2), no `@riftydev/*` dependency — decided by the sandbox goal (PR #419).
 
 ## Out of scope
 

@@ -52,6 +52,7 @@
   },
   "devDependencies": {
     "@riftydev/isolate-guest": "workspace:*",
+    "@riftydev/vfs": "workspace:*",
     "esbuild": "0.28.0"
   },
   "engines": {

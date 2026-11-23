@@ -14,8 +14,11 @@ import {
   FrameReader,
   KIND,
   MAX_ERROR_TEXT,
+  REFUSED,
   type RunRequest,
   SHARD,
+  STUCK_GRACE_MS,
+  type SandboxRun,
   type WorkerRequest,
 } from './protocol.ts';
 
@@ -32,6 +35,9 @@ export interface Result {
   readonly exitCode: number | null;
   readonly termination?: Termination;
   readonly truncated?: true;
+  /** A sandbox run's end state (ADR-0568), validated by the sandbox before use. */
+  readonly state?: Uint8Array;
+  readonly stateRefused?: (typeof REFUSED)[number];
 }
 export interface CallSpec {
   readonly allowSharedArrayBuffer: boolean;
@@ -39,6 +45,12 @@ export interface CallSpec {
   readonly timeoutMs: number;
   readonly memoryLimitMb: number;
   readonly maxOutputBytes: number;
+  /**
+   * A sandbox run. `state()` encodes the state again for each attempt (the sandbox's
+   * files do not change while its run is in flight), so the call holds no copy of it
+   * between writes; on the wire its base64 is written in pieces.
+   */
+  readonly sandbox?: Omit<SandboxRun, 'state'> & { readonly state: () => Uint8Array };
 }
 
 /** Accepted output, copied into one growable buffer: never a view into a received chunk. */
@@ -67,6 +79,9 @@ class Call {
   /** What the consumer accepted in this attempt: the state each frame is judged against. */
   kept = 0;
   truncated = false;
+  /** A sandbox run's `state` frame, or its `refused` reason, of this attempt. */
+  state: Uint8Array | undefined;
+  refused: number | undefined;
   attempts = 0;
   settled = false;
   /** Settled here at the deadline; the worker still owes its terminal frame. */
@@ -75,6 +90,18 @@ class Call {
   lost: string | undefined;
   worker: Worker | undefined;
   readonly deadline: NodeJS.Timeout;
+  /**
+   * Resolves once the call has left for good: settled, and its isolate on no worker
+   * (the worker's `gone` frame, or its end). One event per call, from its creation:
+   * whoever holds it waits through every placement and rerun (ADR-0568 §5).
+   */
+  readonly left: Promise<void>;
+  #leave: () => void = () => {};
+  #hasLeft = false;
+  /** Someone awaits `left`: the process stays up until it resolves (workers are unref'd). */
+  held = false;
+  #hold: NodeJS.Timeout | undefined;
+  #stuck: NodeJS.Timeout | undefined;
   constructor(
     readonly id: number,
     readonly spec: CallSpec,
@@ -83,6 +110,28 @@ class Call {
     onDeadline: (call: Call) => void,
   ) {
     this.deadline = setTimeout(() => onDeadline(this), spec.timeoutMs);
+    this.left = new Promise((resolve) => {
+      this.#leave = resolve;
+    });
+  }
+  /**
+   * After the call settled or its worker let it go: has it left? A settled call whose
+   * isolate is still on a worker gets that worker's stuck-isolate grace (ADR-0563 §4):
+   * past it the worker is retired as if it had said so itself — no new call, ended once
+   * its calls are settled — so a worker that never sends `gone` cannot hold anyone forever.
+   */
+  checkLeft(): void {
+    if (this.#hasLeft || !this.settled) return;
+    const worker = this.worker;
+    if (worker !== undefined && !worker.dead && worker.running.has(this.id)) {
+      if (this.held) this.#hold ??= setInterval(() => {}, 2 ** 30);
+      this.#stuck ??= setTimeout(() => worker.retireStuck(), STUCK_GRACE_MS).unref();
+      return;
+    }
+    this.#hasLeft = true;
+    clearInterval(this.#hold);
+    clearTimeout(this.#stuck);
+    this.#leave();
   }
   /** A fresh attempt: nothing of the previous one reaches the result. */
   restart(): void {
@@ -90,15 +139,21 @@ class Call {
     this.err = new FdBytes();
     this.kept = 0;
     this.truncated = false;
+    this.state = undefined;
+    this.refused = undefined;
     this.attempts++;
   }
   result(exitCode: number | null, termination?: Termination): Result {
+    const refused = this.refused === undefined ? undefined : REFUSED[this.refused];
     return {
       stdout: this.out.text(),
       stderr: this.err.text(),
-      exitCode,
+      // A state the run could not restore: no guest code ran.
+      exitCode: this.refused === 0 ? null : exitCode,
       ...(termination === undefined ? {} : { termination }),
       ...(this.truncated ? { truncated: true as const } : {}),
+      ...(this.state === undefined ? {} : { state: this.state }),
+      ...(refused === undefined ? {} : { stateRefused: refused }),
     };
   }
   resolveWith(result: Result): void {
@@ -106,12 +161,14 @@ class Call {
     this.settled = true;
     clearTimeout(this.deadline);
     this.resolve(result);
+    this.checkLeft();
   }
   rejectWith(error: Error): void {
     if (this.settled) return;
     this.settled = true;
     clearTimeout(this.deadline);
     this.reject(error);
+    this.checkLeft();
   }
 }
 
@@ -123,6 +180,11 @@ function lostError(message: string): Error {
 class Worker {
   /** Calls placed here that have no terminal frame yet. */
   readonly calls = new Map<number, Call>();
+  /**
+   * Calls whose isolate has not stopped yet: placed, until the worker's `gone` frame
+   * (after the terminal frame) or its end. They hold a slot (ADR-0563 §7).
+   */
+  readonly running = new Map<number, Call>();
   retiring = false;
   dead = false;
   exited = false;
@@ -201,19 +263,38 @@ class Worker {
               ),
         );
       this.calls.clear();
+      this.#releaseAll();
     });
     // 'close', not 'exit': every frame the worker wrote is read before its loss is judged.
     child.on('close', (code, signal) => this.#exited(code, signal));
+  }
+
+  /** The worker ended: every isolate on it is gone with it. */
+  #releaseAll(): void {
+    const calls = [...this.running.values()];
+    this.running.clear();
+    for (const call of calls) call.checkLeft();
+  }
+
+  /** A settled call's isolate outlived the grace here: retire as the worker itself would. */
+  retireStuck(): void {
+    if (this.dead || this.ended !== undefined) return;
+    this.retiring = true;
+    this.pool.settleWorker(this);
   }
 
   send(request: WorkerRequest): void {
     this.child.stdin?.write(`${JSON.stringify(request)}\n`);
   }
 
+  /**
+   * Send `call` here. Everything that can throw — the request, a sandbox run's state —
+   * is built before the call is registered, so a throw leaves no phantom call (no slot,
+   * no waiter). A write that throws after registration (half a line on the wire) ends
+   * this worker as lost and rethrows: the caller rejects the call with that error.
+   */
   place(call: Call): void {
-    call.worker = this;
-    this.calls.set(call.id, call);
-    const { code, memoryLimitMb, maxOutputBytes } = call.spec;
+    const { code, memoryLimitMb, maxOutputBytes, sandbox } = call.spec;
     const request: RunRequest = {
       type: 'run',
       allowSharedArrayBuffer: call.spec.allowSharedArrayBuffer,
@@ -222,8 +303,52 @@ class Worker {
       memoryLimitMb,
       maxOutputBytes,
       ...(this.solo ? { solo: true as const } : {}),
+      // `state` last and empty: its base64 is streamed into the line below.
+      ...(sandbox
+        ? {
+            sandbox: {
+              path: sandbox.path,
+              args: sandbox.args,
+              maxFsBytes: sandbox.maxFsBytes,
+              state: '',
+            },
+          }
+        : {}),
     };
-    this.send(request);
+    const line = JSON.stringify(request);
+    const state = sandbox?.state();
+    call.worker = this;
+    this.calls.set(call.id, call);
+    this.running.set(call.id, call);
+    const stdin = this.child.stdin;
+    try {
+      if (state === undefined) {
+        stdin?.write(`${line}\n`);
+        return;
+      }
+      // The same JSON line, written in pieces: the state's base64 never becomes one string
+      // (the consumer's memory per run, ADR-0568 §6).
+      const at = line.lastIndexOf('""}}');
+      stdin?.write(line.slice(0, at + 1));
+      const step = 3 << 20; // a multiple of 3: the pieces join into one base64 text
+      for (let from = 0; from < state.byteLength; from += step)
+        stdin?.write(
+          Buffer.from(
+            state.buffer,
+            state.byteOffset + from,
+            Math.min(step, state.byteLength - from),
+          ).toString('base64'),
+        );
+      stdin?.write('"}}\n');
+    } catch (error) {
+      // Half a line on the wire: this worker can read no further request. It ends as lost
+      // (its other calls rerun); this call rejects with the error, no rerun (the caller's).
+      if (this.ended === undefined) {
+        this.ended = { lost: 'after a request it could not be sent whole' };
+        this.kill();
+      }
+      throw error;
+    }
   }
 
   kill(): void {
@@ -240,11 +365,23 @@ class Worker {
   /** Largest payload a frame may carry now, or the violation. */
   #maxPayload(kind: number, id: number): number | string {
     if (kind === KIND.retire) return id === 0 ? 0 : `retire for call ${id}`;
+    if (kind === KIND.gone)
+      return this.running.has(id) && !this.calls.has(id)
+        ? 0
+        : `gone for call ${id}, not ended on this worker`;
     const call = this.calls.get(id);
     if (call === undefined) return `frame for call ${id}, not in flight on this worker`;
     switch (kind) {
       case KIND.output:
         return 2 + (call.spec.maxOutputBytes - call.kept);
+      case KIND.state:
+      case KIND.refused: {
+        const sandbox = call.spec.sandbox;
+        if (sandbox === undefined) return `state frame for call ${id}, not a sandbox run`;
+        if (call.state !== undefined || call.refused !== undefined)
+          return `second state frame for call ${id}`;
+        return kind === KIND.state ? sandbox.maxFsBytes : 1;
+      }
       case KIND.exit:
         return 1;
       case KIND.memory:
@@ -263,6 +400,14 @@ class Worker {
       this.pool.settleWorker(this);
       return undefined;
     }
+    if (kind === KIND.gone) {
+      // The call's isolate has stopped: its slot is free, whoever waits for it may go on.
+      const call = this.running.get(id);
+      this.running.delete(id);
+      call?.checkLeft();
+      this.pool.settleWorker(this);
+      return undefined;
+    }
     const call = this.calls.get(id) as Call;
     if (kind === KIND.output) {
       const fd = p[0];
@@ -278,7 +423,25 @@ class Worker {
       if (!call.cancelled) (fd === 2 ? call.err : call.out).append(bytes);
       return undefined;
     }
+    if (kind === KIND.state) {
+      call.state = p;
+      return undefined;
+    }
+    if (kind === KIND.refused) {
+      if (p.byteLength !== 1 || (p[0] as number) >= REFUSED.length) return 'refused payload';
+      call.refused = p[0];
+      return undefined;
+    }
     if (kind === KIND.exit && p.byteLength !== 1) return 'exit payload';
+    // An honest worker ends a sandbox run it was not told to cancel with its state.
+    if (
+      kind === KIND.exit &&
+      call.spec.sandbox !== undefined &&
+      !call.cancelled &&
+      call.state === undefined &&
+      call.refused === undefined
+    )
+      return 'sandbox run ended without its state';
     this.calls.delete(id);
     if (kind === KIND.exit) call.resolveWith(call.result(p[0] as number));
     else if (kind === KIND.memory) call.resolveWith(call.result(null, 'memory'));
@@ -301,6 +464,7 @@ class Worker {
     if (this.dead) return;
     this.dead = true;
     this.pool.forget(this);
+    this.#releaseAll();
     const ended = this.ended;
     if (ended !== undefined && 'violation' in ended) return;
     // Everything still unsettled here was lost with this worker.
@@ -312,15 +476,46 @@ class Worker {
   }
 }
 
+/** A sandbox's hold on one of its calls (ADR-0568 §5). */
+export interface CallHandle {
+  abort(error: Error): void;
+  left(): Promise<void>;
+}
+
+let shared: Pool | undefined;
+/** One pool per consumer process, created by the first call (`runCode` and sandbox runs). */
+export function sharedPool(): Pool {
+  shared ??= new Pool();
+  return shared;
+}
+
 export class Pool {
   readonly #workers: Worker[] = [];
   #nextId = 1;
 
-  run(spec: CallSpec): Promise<Result> {
+  /**
+   * `handle.abort(error)` (a destroyed sandbox): reject with `error` now and
+   * dispose the isolate as at a deadline. `handle.left()`: the call's one
+   * "left for good" event (`Call.left`), valid from `onStart` on — its result out
+   * and its isolate gone, whichever comes last, through every rerun; awaiting it
+   * keeps the process up.
+   */
+  run(spec: CallSpec, onStart?: (handle: CallHandle) => void): Promise<Result> {
     return new Promise<Result>((resolve, reject) => {
       const id = this.#nextId;
       this.#nextId = id === MAX_CALL_ID ? 1 : id + 1;
       const call = new Call(id, spec, resolve, reject, (c) => this.#deadline(c));
+      onStart?.({
+        abort: (error) => {
+          call.rejectWith(error);
+          this.#cancel(call);
+        },
+        left: () => {
+          call.held = true;
+          call.checkLeft();
+          return call.left;
+        },
+      });
       call.restart();
       try {
         this.#placeFresh(call);
@@ -341,7 +536,7 @@ export class Pool {
           !w.exited &&
           !w.channelEnded &&
           w.ended === undefined &&
-          w.calls.size < SHARD,
+          w.running.size < SHARD,
       ) ?? this.#spawn(false);
     worker.place(call);
   }
@@ -366,9 +561,13 @@ export class Pool {
       }
       call.lost = reason;
       call.restart();
+      let solo: Worker | undefined;
       try {
-        this.#spawn(true).place(call);
+        solo = this.#spawn(true);
+        solo.place(call);
       } catch {
+        // A solo that got no call has nothing to do: it ends at once.
+        solo?.end();
         // spawn throws synchronously (ENOMEM, a bad path): this runs in a 'close'
         // handler, so a throw would take the consumer down. The call is lost.
         call.rejectWith(lostError(reason));
@@ -381,6 +580,11 @@ export class Pool {
     if (call.lost !== undefined)
       call.rejectWith(lostError(`${call.lost}; its rerun did not finish within timeoutMs`));
     else call.resolveWith(call.result(null, 'timeout'));
+    this.#cancel(call);
+  }
+
+  /** The call is settled here: its worker disposes its isolate. */
+  #cancel(call: Call): void {
     const worker = call.worker;
     if (worker === undefined || worker.dead || !worker.calls.has(call.id)) return;
     call.cancelled = true;
@@ -397,11 +601,11 @@ export class Pool {
       worker.end();
       return;
     }
-    if (worker.calls.size > 0) return;
+    if (worker.running.size > 0) return;
     // Keep one idle worker warm; a second idle one ends.
     const idle = this.#workers.filter(
       (w) =>
-        !w.solo && !w.retiring && !w.channelEnded && w.ended === undefined && w.calls.size === 0,
+        !w.solo && !w.retiring && !w.channelEnded && w.ended === undefined && w.running.size === 0,
     );
     if (idle.length > 1) worker.end();
   }

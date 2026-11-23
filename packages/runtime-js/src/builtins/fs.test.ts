@@ -59,6 +59,67 @@ function errorOf(fn: () => void): NodeJS.ErrnoException {
   throw new Error('expected throw');
 }
 
+describe('node:fs refuses a NUL in a path, as Node (isolate sandbox corpus, ADR-0568)', () => {
+  it('writeFileSync/readFileSync/mkdirSync: ERR_INVALID_ARG_VALUE with Node 24.16.0 text, nothing written', () => {
+    // Node 24.16.0: The argument 'path' must be a string, Uint8Array, or URL without null bytes. Received 'a\x00b'
+    for (const call of [
+      () => fs.writeFileSync('/workspace/a\0b', 'x'),
+      () => fs.readFileSync('/workspace/a\0b'),
+      () => fs.mkdirSync('/workspace/a\0b'),
+    ]) {
+      expect(call).toThrow(
+        expect.objectContaining({
+          code: 'ERR_INVALID_ARG_VALUE',
+          message:
+            "The argument 'path' must be a string, Uint8Array, or URL without null bytes. Received '/workspace/a\\x00b'",
+        }),
+      );
+    }
+    expect(fs.existsSync('/workspace/a')).toBe(false);
+    // Node: existsSync answers false for a path it would refuse.
+    expect(fs.existsSync('/workspace/a\0b')).toBe(false);
+  });
+});
+
+describe('node:fs.utimesSync times as Node 24.16.0 stores them (fs-times.ts)', () => {
+  it('an invalid Date keeps the time, a huge one saturates, a negative number is now; all finite', () => {
+    // Node 24.16.0 (darwin-arm64): new Date(NaN) leaves mtime as it was (libuv UTIME_OMIT);
+    // 1e306 s → 9223372036854.775 ms as on darwin (Node on Linux: EINVAL; rifty saturates); -1e306 → now;
+    // NaN/Infinity numbers → ERR_INVALID_ARG_TYPE.
+    fs.mkdirSync('/workspace', { recursive: true });
+    fs.writeFileSync('/workspace/t', 'x');
+    fs.utimesSync('/workspace/t', 1000, 2000);
+    fs.utimesSync('/workspace/t', new Date(Number.NaN), new Date(Number.NaN));
+    expect(fs.statSync('/workspace/t').mtimeMs).toBe(2_000_000);
+    fs.utimesSync('/workspace/t', 1e306, 1e306);
+    expect(fs.statSync('/workspace/t').mtimeMs).toBe(9223372036854.775);
+    // Signed as Node 24.16.0 on darwin (probed live): below -2^63 s libuv's borrow wraps to the top.
+    const MAX = 9223372036854.775;
+    for (const [v, ms] of [
+      ['-1e306', MAX],
+      ['-1e19', MAX],
+      ['-9223372036854777856', MAX],
+      ['-9223372036854775808', -MAX],
+      ['-9.2e18', -MAX],
+      ['-9.3e12', -MAX],
+      ['1e306', MAX],
+      ['9.3e18', MAX],
+      [new Date(-8.64e15), -MAX],
+    ] as const) {
+      // Node's TimeLike takes a numeric string; rifty's signature types only number | Date.
+      fs.utimesSync('/workspace/t', v as number | Date, v as number | Date);
+      expect([String(v), fs.statSync('/workspace/t').mtimeMs]).toEqual([String(v), ms]);
+    }
+    const before = Date.now();
+    fs.utimesSync('/workspace/t', -1e306, -1e306);
+    expect(fs.statSync('/workspace/t').mtimeMs).toBeGreaterThanOrEqual(before);
+    for (const v of [Number.NaN, Number.POSITIVE_INFINITY])
+      expect(() => fs.utimesSync('/workspace/t', v, v)).toThrow(
+        expect.objectContaining({ code: 'ERR_INVALID_ARG_TYPE' }),
+      );
+  });
+});
+
 describe('node:fs.cp dereference (loud gap under no-symlink, ADR-0050)', () => {
   it('cpSync({ dereference: true }) throws NotImplementedError (Node supports it)', () => {
     writeFileSync('/d_src.txt', 'x');
