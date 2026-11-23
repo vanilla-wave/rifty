@@ -15,6 +15,8 @@
    `runtime-js/reference/guest-builtin-names-baseline.md`):
    `runtime-js/guest-builtin-names`. Stream callbacks report
    `publishedConstructor.*`, a thrown `TextEncoder` prints `TextEncoder2 {}`.
+   Waits for pickup on the user's word (2026-11-23, user: «ок» to the
+   manager's recommendation to keep it in the map; order of work, not scope).
    → I2 I3
 ## Open questions
 
