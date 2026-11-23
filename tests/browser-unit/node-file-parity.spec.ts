@@ -11,7 +11,7 @@ import {
   runNodeFileOracle,
 } from './fixtures/node-file-programs.ts';
 
-// Goal node-file-entry-parity acceptance carrier, COI Workbench host (kernel
+// ADR-0571 acceptance carrier, COI Workbench host (kernel
 // child): each program in its own project dir `nf/<name>`. The shell has no
 // `2>`, so a rifty `node` runner spawns `node <argv>` there with piped stdio
 // (as the oracle) and prints both streams, status and its root as one JSON
@@ -64,16 +64,23 @@ test('node <file> matches Node (COI Workbench)', async ({ page }) => {
       for (const [path, content] of Object.entries(program.files)) {
         await writeOwnerFile(page, `${dir}/${path}`, content);
       }
-      const run = await execLine(page, `node nf/runner.cjs nf/${name} ${program.argv.join(' ')}`);
-      const json = /@@NF(.*)NF@@/su.exec(run.out)?.[1];
-      if (json === undefined)
-        throw new Error(`${program.name}: runner printed no result\n${run.out}`);
-      const observed = JSON.parse(json) as {
-        root: string;
-        stdout: string;
-        stderr: string;
-        exitCode: number;
-      };
+      let observed: { root: string; stdout: string; stderr: string; exitCode: number | null };
+      if (program.line !== undefined) {
+        // A spawned `node -e` loads `-e` as a module here (backlog
+        // runtime-js/coi-spawn-node-eval-flag): run the line in the shell. Without
+        // `2>` its output is one stream, so such a row writes nothing to stdout.
+        expect(oracle.stdout, `${program.name}: a shell row writes stderr only`).toBe('');
+        const root = `/home/project/nf/${name}`;
+        const run = await execLine(page, `cd ${root} && node ${program.line}`);
+        await execLine(page, 'cd /home/project');
+        observed = { root, stdout: '', stderr: run.out, exitCode: run.exit };
+      } else {
+        const run = await execLine(page, `node nf/runner.cjs nf/${name} ${program.argv.join(' ')}`);
+        const json = /@@NF(.*)NF@@/su.exec(run.out)?.[1];
+        if (json === undefined)
+          throw new Error(`${program.name}: runner printed no result\n${run.out}`);
+        observed = JSON.parse(json) as typeof observed;
+      }
       const expected = nodeFileExpected(oracle, riftyVersion);
       const actual = nodeFileNormalized(observed, observed.root);
       dump.push({ program, expected, actual });

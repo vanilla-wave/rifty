@@ -170,7 +170,7 @@ format, receiver `Error`), and freezes every `CallSite.prototype` method
   Function/eval whose sourceURL is a module's filename is projected there too.
   Still no stack-hook ownership. Cost: 3061-module CJS tree, CPU median +5%
   (one extra parse per module that had none). Critic 2026-11-22: direction
-  holds, no cheaper route (no eval offsets in V8). Goal `node-file-entry-parity`.
+  holds, no cheaper route (no eval offsets in V8). ADR-0571.
 - 2026-11-22 — correction to the line above: Function validated the wrapper
   with the body, so a stray `}` of the body closed it and the file ran its
   remaining lines silently (external review round 1, B2). Now the source

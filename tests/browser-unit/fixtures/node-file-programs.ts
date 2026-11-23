@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
-// Goal node-file-entry-parity: `node <file>` programs run verbatim in live Node
+// ADR-0571: `node <file>` programs run verbatim in live Node
 // (temp dir) and in rifty (`<root>` = the project root). Two surfaces: what the
 // entry and its dependencies see (entry semantics), and what a fatal error
 // writes to stderr with which status (fatal diagnostics).
@@ -15,6 +15,8 @@ export interface NodeFileProgram {
   readonly files: Readonly<Record<string, string>>;
   /** Argv after `node`; the rifty line is `node <argv joined by spaces>`. */
   readonly argv: readonly string[];
+  /** The rifty line after `node` when argv needs shell quoting (`-e "…"`). */
+  readonly line?: string;
 }
 
 const ENTRY_FACTS = `const dep = require('./lib/dep');
@@ -317,6 +319,174 @@ throw e;
   },
   { name: 'throw-null', files: { 'main.js': 'const a = 1;\nthrow null;\n' }, argv: ['main.js'] },
   {
+    // Each way rifty calls user code: the frames' names, lines and columns.
+    name: 'throw-from-interval',
+    files: {
+      'main.js':
+        "const h = setInterval(() => {\n  clearInterval(h);\n  throw new Error('interval');\n}, 0);\n",
+    },
+    argv: ['main.js'],
+  },
+  {
+    // Each way rifty calls user code: the frames' names, lines and columns.
+    name: 'throw-from-immediate',
+    files: { 'main.js': "setImmediate(() => {\n  throw new Error('immediate');\n});\n" },
+    argv: ['main.js'],
+  },
+  {
+    // Each way rifty calls user code: the frames' names, lines and columns.
+    name: 'throw-from-next-tick',
+    files: { 'main.js': "process.nextTick(() => {\n  throw new Error('tick');\n});\n" },
+    argv: ['main.js'],
+  },
+  {
+    // Each way rifty calls user code: the frames' names, lines and columns.
+    name: 'throw-from-queue-microtask',
+    files: { 'main.js': "queueMicrotask(() => {\n  throw new Error('microtask');\n});\n" },
+    argv: ['main.js'],
+  },
+  {
+    // Each way rifty calls user code: the frames' names, lines and columns.
+    name: 'throw-from-promise-reaction',
+    files: { 'main.js': "Promise.resolve().then(() => {\n  throw new Error('reaction');\n});\n" },
+    argv: ['main.js'],
+  },
+  {
+    // Each way rifty calls user code: the frames' names, lines and columns.
+    name: 'throw-in-emitter-listener',
+    files: {
+      'main.js':
+        "const EventEmitter = require('events');\nconst e = new EventEmitter();\ne.on('x', function onX() {\n  throw new Error('listener');\n});\ne.emit('x');\n",
+    },
+    argv: ['main.js'],
+  },
+  {
+    // Each way rifty calls user code: the frames' names, lines and columns.
+    name: 'throw-in-fs-callback',
+    files: {
+      'main.js': "require('fs').readFile(__filename, () => {\n  throw new Error('fs');\n});\n",
+    },
+    argv: ['main.js'],
+  },
+  {
+    // Each way rifty calls user code: the frames' names, lines and columns.
+    name: 'throw-in-new-function',
+    files: { 'main.js': 'new Function(\'throw new Error("fn")\')();\n' },
+    argv: ['main.js'],
+  },
+  {
+    // Each way rifty calls user code: the frames' names, lines and columns.
+    name: 'throw-in-indirect-eval',
+    files: { 'main.js': '(0, eval)(\'throw new Error("indirect")\');\n' },
+    argv: ['main.js'],
+  },
+  {
+    // The guest's Buffer names (isolate guest bundle; the browser carriers run the dev server).
+    name: 'throw-in-buffer-method',
+    files: {
+      'main.js':
+        "const b = Buffer.from('a');\nconsole.log(Buffer.name, b.constructor.name);\nBuffer.prototype.boom = function () {\n  throw new Error('buf');\n};\nb.boom();\n",
+    },
+    argv: ['main.js'],
+  },
+  {
+    // Node's listOnTimeout destroys a timer whose `_onTimeout` was nulled.
+    name: 'interval-nulled-on-timeout',
+    files: {
+      'main.js':
+        "let n = 0;\nconst f = function () {\n  if (++n === 3) {\n    clearInterval(h);\n    console.log('done', n);\n  }\n};\nconst h = setInterval(f, 1);\nh._onTimeout = null;\nsetTimeout(() => {\n  h._onTimeout = f;\n  console.log('back');\n}, 20);\n",
+    },
+    argv: ['main.js'],
+  },
+  {
+    // Node's clearTimeout: no `_onTimeout` → nothing; listOnTimeout destroys it.
+    name: 'interval-getter-null-on-timeout',
+    files: {
+      'main.js':
+        "const h = setInterval(() => {}, 1);\nObject.defineProperty(h, '_onTimeout', {\n  get() {\n    return null;\n  },\n});\n",
+    },
+    argv: ['main.js'],
+  },
+  {
+    // Node's clearTimeout writes `_onTimeout = null` through a guest setter that clears again.
+    name: 'interval-setter-clears-itself',
+    files: {
+      'main.js':
+        "let sets = 0;\nlet stored = () => {};\nconst h = setInterval(() => {}, 1);\nObject.defineProperty(h, '_onTimeout', {\n  get() {\n    return stored;\n  },\n  set(v) {\n    sets++;\n    stored = v;\n    clearInterval(h);\n  },\n});\nclearInterval(h);\nconsole.log('sets', sets, stored);\n",
+    },
+    argv: ['main.js'],
+  },
+  {
+    // Declared: a number reaches a timer only via its `Symbol.toPrimitive` id in Node.
+    name: 'timer-not-cleared-by-unrelated-number',
+    files: {
+      'main.js':
+        "const t = setTimeout(() => console.log('fired'), 5);\nfor (let i = 0; i < 200; i++) clearTimeout(i);\n",
+    },
+    argv: ['main.js'],
+  },
+  {
+    // Declared: Node drops a timer's numeric id after its callback, not before.
+    name: 'numeric-clear-inside-callback',
+    files: {
+      'main.js':
+        "const h = setTimeout(() => {\n  clearTimeout(+h);\n  console.log(h._onTimeout === null);\n  throw new Error('numeric-clear');\n}, 1);\n",
+    },
+    argv: ['main.js'],
+  },
+  {
+    // Node's clearTimeout of a nulled `_onTimeout` leaves the timer enrolled.
+    name: 'interval-cleared-after-null',
+    files: {
+      'main.js':
+        "let n = 0;\nconst f = () => {\n  if (++n === 3) {\n    clearInterval(h);\n    console.log('n', n);\n  }\n};\nconst h = setInterval(f, 1);\nh._onTimeout = null;\nclearInterval(h);\nh._onTimeout = f;\n",
+    },
+    argv: ['main.js'],
+  },
+  {
+    // `-e`: a `stack` getter throwing on its second read (browser hosts' report).
+    name: 'eval-stack-getter-second-read',
+    files: {
+      'main.js':
+        "const e = new Error('original');\nlet n = 0;\nObject.defineProperty(e, 'stack', {\n  get() {\n    if (n++) throw new Error('getter');\n    return 'Error: original\\n    at here';\n  },\n});\nthrow e;\n",
+    },
+    argv: ['-e', "require('./main.js')"],
+    line: `-e "require('./main.js')"`,
+  },
+  {
+    // Inside its own callback Node keeps `_onImmediate` until it returns.
+    name: 'clear-immediate-in-own-callback',
+    files: {
+      'main.js':
+        'const h = setImmediate(function () {\n  clearImmediate(h);\n  console.log(this._onImmediate === null);\n});\n',
+    },
+    argv: ['main.js'],
+  },
+  {
+    // `stack` read once before the report: a getter throwing on a later read.
+    name: 'throw-stack-getter-second-read',
+    files: {
+      'main.js':
+        "const e = new Error('original');\nlet n = 0;\nObject.defineProperty(e, 'stack', {\n  get() {\n    if (n++) throw new Error('getter');\n    return 'Error: original\\n    at here';\n  },\n});\nthrow e;\n",
+    },
+    argv: ['main.js'],
+  },
+  {
+    // The `Function` helper name must not be a binding the file declares (escaped).
+    name: 'function-helper-escaped-name',
+    files: {
+      'main.js':
+        "const \\u0024r000000 = 7;\nconsole.log(Function('return 5')(), \\u0024r000000);\n",
+    },
+    argv: ['main.js'],
+  },
+  {
+    // A shorthand `{ Function }` key is expanded by the rewrite (declared column).
+    name: 'throw-in-shorthand-function',
+    files: { 'main.js': 'const o = { Function }; new o.Function(\'throw new Error("x")\')();\n' },
+    argv: ['main.js'],
+  },
+  {
     name: 'throw-in-direct-eval',
     files: { 'main.js': 'eval(\'function f() {\\n  throw new Error("ev");\\n}\\nf();\');\n' },
     argv: ['main.js'],
@@ -516,7 +686,7 @@ export async function runNodeFileOracle(
 /**
  * The one normalization: the oracle temp dir and the rifty project root both
  * read `<root>`. Two declared projections of the ORACLE only (goal
- * node-file-entry-parity §Decisions): (1) Node's own `node:*` source has no
+ * ADR-0571 Decision 2): (1) Node's own `node:*` source has no
  * rifty counterpart — its frames are deleted, a report header naming it
  * (`node:…:N`, source, caret, blank) is deleted, the `... N lines matching
  * cause stack trace ...` line the frames feed is deleted, and an inspect props

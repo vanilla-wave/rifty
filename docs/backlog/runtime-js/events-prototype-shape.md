@@ -37,6 +37,17 @@ enumerable methods, `Symbol(kCapture)`. rifty's add `listenersMap`, `warned`
 clobber). `EventEmitter.length` 1 vs 0. The same `_listenersMap`/`_warned`
 names leak as `node:process` ESM names: `runtime-js/process-non-ipc-member-over-export`.
 
+Re-observed 2026-11-23 (PR #425, isolate guest vs Node v24.16.0):
+`console.log(new (require('events'))())` prints `EventEmitter { _listenersMap:
+Map(0) {  }, _warned: Set(0) {  } }`; Node prints `EventEmitter {` then
+`_events: [Object: null prototype] {}`, `_eventsCount: 0`, `_maxListeners:
+undefined`, `Symbol(shapeMode): false`, `Symbol(kCapture): false`, one per
+line. `constructor.name` is `EventEmitter` in both. `require('events').toString()`
+starts `function() {` (Node `function EventEmitter(opts) {`), `require('stream').toString()`
+`function() {` (Node `function Stream(opts) {`): the constructors are named by
+a property key since PR #425 (frames read Node's name; the source text has
+none).
+
 ## Next
 
 Owner runtime-js (`node:events` via `@riftydev/io`). Trigger: a claimed

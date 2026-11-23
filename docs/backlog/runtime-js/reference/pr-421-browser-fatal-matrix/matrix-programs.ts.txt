@@ -1,4 +1,4 @@
-// Fatal-path matrix (goal node-file-entry-parity round 5): kind × origin, as `node file` and `node -e`.
+// Fatal-path matrix (PR #421 round 5): kind × origin, as `node file` and `node -e`.
 const KINDS: Record<string, string> = {
   error: "new Error('e')",
   subclass: "new (class Bad extends Error {})('e')",

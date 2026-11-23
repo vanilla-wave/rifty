@@ -26,7 +26,9 @@ native: hand the guest a reference to the original reason (ReferenceHandle on
 patched native dependency (IRREVERSIBLE: ADR + guest-package adaptations
 inventory row). Rows `rejection-with-props-cause-subclass`,
 `rejection-fs-enoent` (`node-file-pins.json` isolate) move to `node` then.
-The `UNCOPYABLE_REJECTION` branch (`child/main.ts:149`, `entry.ts:296`) looks
+Owner: isolate-host (the isolated-vm boundary). Trigger: an agent report of
+a rejection report missing its props or `[cause]`, or the next isolated-vm
+upgrade or patch. The `UNCOPYABLE_REJECTION` branch (`child/main.ts:149`, `entry.ts:296`) looks
 unreachable (`CopyThrownValue` does not throw) — recheck with the fix.
 
 ## Challenge
