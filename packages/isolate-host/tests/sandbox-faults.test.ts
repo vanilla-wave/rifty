@@ -731,3 +731,69 @@ describe('host errors carry no consumer frames or paths (audit, manager 2026-11-
     },
   );
 });
+
+/**
+ * A worker that closes its result channel in the middle of a sandbox run (manager 2026-11-22,
+ * after #420): after the run's `state` frame and before its `exit`, or before any frame. The
+ * channel's end is a lost worker (ADR-0563 §6): the run reruns once alone, then rejects
+ * WORKER_LOST; the state changes only at a terminal exit, so it stays as before. The worker
+ * answers a `runCode` neighbour honestly (`n`, exit 0): the neighbour is rerun, exactly once.
+ */
+function closingChannelPackage(name: string, blob: string, afterState: boolean): string {
+  const dir = join(work, `pkg-close-${name}`);
+  cpSync(join(PACKAGE_DIR, 'dist'), join(dir, 'dist'), { recursive: true });
+  cpSync(join(PACKAGE_DIR, 'package.json'), join(dir, 'package.json'));
+  symlinkSync(join(PACKAGE_DIR, 'node_modules'), join(dir, 'node_modules'));
+  writeFileSync(
+    join(dir, 'dist', 'child.js'),
+    `import { closeSync, readFileSync, writeSync } from 'node:fs';
+     const f = (kind, call, b) => { const h = new Uint8Array(9); const v = new DataView(h.buffer);
+       v.setUint32(0, b.length); h[4] = kind; v.setUint32(5, call); writeSync(3, h); if (b.length) writeSync(3, b); };
+     let pending = '';
+     process.stdin.setEncoding('utf8').on('data', (d) => {
+       pending += d;
+       for (let nl; (nl = pending.indexOf('\\n')) >= 0; ) {
+         const req = JSON.parse(pending.slice(0, nl)); pending = pending.slice(nl + 1);
+         if (req.type !== 'run') continue;
+         if (!req.sandbox) { setTimeout(() => { f(1, req.call, Uint8Array.of(1, 0, 110, 10)); f(2, req.call, Uint8Array.of(0)); }, 300); continue; }
+         setTimeout(() => {
+           ${afterState ? `f(6, req.call, readFileSync(${JSON.stringify(blob)}));` : ''}
+           closeSync(3);
+         }, 50);
+       }
+     });
+     process.stdin.on('end', () => process.exit(0));
+     setInterval(() => {}, 1000);`,
+  );
+  return pathToFileURL(join(dir, 'dist', 'index.js')).href;
+}
+
+describe('a result channel closed in the middle of a sandbox run (Fault matrix)', () => {
+  for (const afterState of [true, false]) {
+    carrier(
+      `closed ${afterState ? 'after the state frame, before exit' : 'before any frame'}`,
+      async () => {
+        const blob = join(work, `close-${afterState}.snapshot`);
+        const { value } = await consumer(
+          `const other = await createSandbox();
+         await other.writeFile('extra', 'x');
+         (await import('node:fs')).writeFileSync(${JSON.stringify(blob)}, await other.snapshot());
+         const sb = await createSandbox();
+         await sb.writeFile('a', 'kept');
+         const neighbour = settle(runCode('1', { timeoutMs: 20000 }));
+         const exec = await settle(sb.exec('a', { timeoutMs: 20000 }));
+         out({ exec, neighbour: await neighbour, names: (await sb.list()).map((e) => e.name) });`,
+          { entry: closingChannelPackage(String(afterState), blob, afterState) },
+        );
+        expect(value).toEqual({
+          exec: {
+            rejected: expect.stringMatching(/exited unexpectedly .*closing its result channel/),
+            code: 'ERR_ISOLATE_HOST_WORKER_LOST',
+          },
+          neighbour: { stdout: 'n\n', stderr: '', exitCode: 0 },
+          names: ['a'],
+        });
+      },
+    );
+  }
+});
