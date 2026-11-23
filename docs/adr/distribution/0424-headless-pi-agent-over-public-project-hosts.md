@@ -79,4 +79,4 @@ not enforce its `replay` declaration.
 
 2026-09-27 — ADR-0473 admits native agent-level retries (§4) and bounded overflow continuation after failed-response removal and successful compaction (§2); transport retries and action replay remain forbidden.
 
-2026-11-23 — Pi core/ai pin 0.85.1 → 1.6.0 (DEC-2, PR pi-1x-upgrade). §6: Pi 1.6.0 records every call skipped by an abort as an "Operation aborted" error result (#9986; `ai-agent-pi-oracle.mjs` updated and rerun); rifty's synthetic completion is removed, receipts still map it to `cancelled/applied:no`. §5 re-proved: Chromium `tests/browser-unit/agent-core.spec.ts` on 1.6.0; guarded `require('node:fs')` byte-identical. Compaction utilities: ADR-0569.
+2026-11-23 — Pi core/ai pin 0.85.1 → 1.6.0 (DEC-2, PR #423). §6: Pi 1.6.0 records every call skipped by an abort as an "Operation aborted" error result (#9986; `ai-agent-pi-oracle.mjs` updated and rerun); rifty's synthetic completion is removed, receipts still map it to `cancelled/applied:no`. §5 re-proved: Chromium `tests/browser-unit/agent-core.spec.ts` on 1.6.0; guarded `require('node:fs')` byte-identical. Compaction utilities: ADR-0569.
