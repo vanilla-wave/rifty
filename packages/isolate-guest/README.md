@@ -17,7 +17,10 @@ It gives you:
 - `createHostBridge(hooks)`: the host functions the guest calls, with every
   argument validated;
 - `exitStatus(value)`, `IMPORT_GAP`, `UNCOPYABLE_REJECTION`, and the types
-  `GuestHost`, `GuestEntry`, `HostFunctions`, `HostHooks`, `HostBridge`.
+  `GuestHost`, `GuestEntry`, `HostFunctions`, `HostHooks`, `HostBridge`;
+- the FS snapshot (§Snapshot): `snapshotFs`, `restoreFs`, `FsSnapshotError`
+  and the types `SnapshotFs`, `SnapshotOptions`, `SnapshotStat`,
+  `SnapshotTemplate`, `FsSnapshotErrorCode`.
 
 ## Minimal embedder (isolated-vm 7.0.2)
 
@@ -174,7 +177,7 @@ timers. Bound your process from outside (measured: `docs/backlog/distribution/re
 
 ### Guest entry: `globalThis.__riftyGuest`
 
-The bundle defines this global. You take its three functions before you call
+The bundle defines this global. You take its functions before you call
 `run`, then delete the global.
 
 | function | called by | arguments, controlled by | what the embedder must check |
@@ -182,6 +185,8 @@ The bundle defines this global. You take its three functions before you call
 | `run(code)` | you, once | `code`: you | the promise's value is guest-controlled: pass it through `exitStatus(value)` (an integer 0..255, else 1). A rejection while the isolate is alive is exit 1 |
 | `fire(id)` | your `fire` hook | `id`: armed by the guest | none (`createHostBridge` fires only ids it armed) |
 | `rejection(reason)` | your unhandled-rejection hook | `reason`: guest | send a copy. If it cannot be copied (a function-bearing object, a symbol), send `UNCOPYABLE_REJECTION` |
+| `restore(bytes, options)` | you, before `run` | `bytes`: a snapshot, once written by a guest | copy exactly the bytes' range in (isolated-vm copies a view's whole backing store). Throws `ERR_FS_SNAPSHOT_*` (§Snapshot); `ERR_FS_SNAPSHOT_NOT_FRESH` once `run` was called |
+| `snapshot(options)` | you, whenever no guest code runs (after `run` settled included) | — | after `run` the result is guest-authored: bound it by `memoryLimit`, accept it only through `restoreFs` |
 
 ### Lifecycle of one call
 
@@ -206,6 +211,89 @@ The guest cannot see two events itself. Your embedder has to report them:
   Node's diagnostic and exit 1.
 - `importModuleDynamically` (isolated-vm option): end the run as in step 7.
   The guest may never see the rejection: it can swallow it, or exit first.
+
+## Snapshot
+
+The guest's whole in-memory FS as one opaque byte string, and back (ADR-0567).
+**After `ERR_FS_SNAPSHOT_INCOMPLETE` the target FS is partial: discard it.**
+In the isolate `run`, `snapshot` and `restore` then refuse with that code;
+in your realm nothing stops a later `snapshotFs` of that FS from returning a
+valid blob of the partial tree, so never snapshot it. The same module runs in
+the isolate (inside `guest.js`) and in your Node realm, over rifty's
+`MemoryFsSync` (or any `SnapshotFs`):
+
+```js
+const options = { template: { id: 'docs-libs', version: '2026.11.1' }, maxBytes: 256 << 20 };
+const bytes = await guest.snapshot.apply(undefined, [options], {
+  arguments: { copy: true },
+  result: { copy: true },
+});
+// … store bytes; next turn, a fresh isolate, before run:
+await guest.restore.apply(undefined, [new Uint8Array(bytes), options], { arguments: { copy: true } });
+```
+
+- **Kept:** every path from `/`, file bytes, empty directories, any name of
+  up to 16 383 code units without NUL (lone surrogates included), `mtime`,
+  `atime`, `ctime`, `birthtime` within the Date range. **Renewed:** `ino`, as after a copy. rifty's FS has no
+  symlinks, hard links, modes or owners, so there is nothing of them to keep.
+- **Format:** versioned and template-bound; a later rifty reads every
+  version released before it, an older one refuses a newer version
+  (`ERR_FS_SNAPSHOT_VERSION`). Restore requires the template it was made
+  with (`ERR_FS_SNAPSHOT_TEMPLATE`). The same tree gives the same bytes.
+- **Restore** checks every byte before it writes anything, then replaces the
+  whole FS. A refused blob (`ERR_FS_SNAPSHOT_CORRUPT` — truncated, a flipped
+  byte, a bad path, a duplicate…; `ERR_FS_SNAPSHOT_TOO_LARGE` before reading)
+  leaves the FS as it was. Error text carries no blob bytes. A restore that
+  fails *while writing* (memory) throws `ERR_FS_SNAPSHOT_INCOMPLETE`: the FS
+  is partial. Discard it — in the isolate `run`, `snapshot` and `restore`
+  then refuse with the same code; dispose the isolate.
+- **Snapshot** refuses a tree the format cannot carry
+  (`ERR_FS_SNAPSHOT_UNREPRESENTABLE`: a name over 16 383 code units or with
+  NUL, a time not finite or outside the Date range): it never writes what
+  restore would refuse. A sandbox run whose guest created such a state cannot
+  save it. V8 hashes strings over 16 383 units by length alone, so longer
+  names would make directory maps quadratic.
+- **After guest code** the realm is the guest's: `snapshot` may return
+  anything, hang, or throw an error whose text the guest chose. Give the call
+  a deadline, never show its error text as your own, and accept its bytes
+  only through `restoreFs`, which relies on nothing the writer promises.
+- **Budget:** `maxBytes` (required both ways) counts the blob's bytes + 384
+  per entry + 8 per code unit of each entry's path + 80 per level of its
+  depth, so a blob dense in entries, depth or long names is bounded like one
+  dense in bytes. The memory limit either direction needs (isolate
+  `memoryLimit`, or the heap limit in your realm) is ≈ 2 × bytes + ~680 B ×
+  entries + 15 MiB — under 2 × `maxBytes` + 16 MiB for any blob a budget
+  admits. Time: the densest blob a budget admits takes ~2 ms per MiB of
+  budget in either realm, flat, deep, long-named or mixed (table below). A snapshot right after a restore, with
+  no guest code between, can need ~3 × the bytes (the restored blob is not
+  yet collected: 231–322 MiB at template scale). An allocation the limit
+  refuses is `ERR_FS_SNAPSHOT_TOO_LARGE` (snapshot) or `_INCOMPLETE`
+  (restore); an isolate the limit kills outright is your memory termination.
+- **Crossing into the isolate:** isolated-vm copies the `bytes` argument
+  before `restore` runs; if that copy fails (the blob does not fit the
+  isolate), the error is isolated-vm's own, unnamed — `restore` never ran and
+  the FS is untouched.
+
+Cost (M3 Pro, Node 24.16.0, isolated-vm 7.0.2, median of 5,
+`node --no-node-snapshot scripts/measure-snapshot.mjs`; not measured on Linux):
+
+| tree | blob | Node snapshot / restore | isolate restore / snapshot | ivm copy in / out | smallest `memoryLimit`: restore → `run` → snapshot |
+|---|---|---|---|---|---|
+| 10 files, 958 kB | 962 kB | 0.8 / 0.8 ms | 2.3 / 1.2 ms | 0.1 / 0.2 ms | 19 MiB (empty guest 15) |
+| 23 654 files, 100.6 MB | 102.9 MB | 142 / 161 ms | 173 / 138 ms | 10 / 5.2 ms | 223 MiB |
+
+Densest blobs a 64 MiB budget admits (restore, Node / isolate; smallest
+isolate `memoryLimit`; measured at load 57–130 on 12 cores):
+
+| shape | entries | blob | restore | `memoryLimit` |
+|---|---|---|---|---|
+| flat empty directories | 122 665 | 5.7 MB | 120 / 116 ms | 95 MiB (+49 MiB retained heap in Node) |
+| deepest chain `/a/a/…` | 1 154 | 2.7 MB | 146 / 120 ms | 19 MiB |
+| 300-level chain + directories at its bottom | 2 346 | 2.7 MB | 136 / 130 ms | 19 MiB |
+| 16 383-unit names under a 16 383-unit directory | 205 | 13.3 MB | 87 / 79 ms | 31 MiB |
+
+The template scale above needs a budget of 142.2 MB (102.9 MB + 384 × 26 300
+entries + 8 × their path units + 80 × their depths).
 
 ## What you own
 

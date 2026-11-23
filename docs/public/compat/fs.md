@@ -16,6 +16,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat / exact-vers
 | `copyFileSync` / `renameSync` / `cpSync` | ✅ | `COPYFILE_EXCL`, recursive copy, mtime-preserving rename; `cp` `{ filter, force, errorOnExist, preserveTimestamps }`; `dereference` loud-throws (no-symlink, ADR-0050) |
 | `openAsBlob(path[, { type }])` | ✅ | Reads VFS bytes into a resolved Blob (default type `""`) |
 | `lutimesSync` / `futimesSync` / `futimes` | ✅ | lutimes ≡ utimes (no-symlink); futimes resolves fd→path, `EBADF` (syscall `futime`) on a bad fd |
+| `utimesSync` / `lutimesSync` / `futimesSync` sub-millisecond times | ⚠️ | Cut to whole milliseconds (Node keeps them: 100 ns measured on APFS) — `backlog/runtime-js/utimes-sub-millisecond-truncated` |
 | Encoding reads | ✅ | utf8, utf16le, latin1/ascii, hex parity cases |
 | Path resolution with `process.cwd()` | ✅ | Relative fs paths anchor at runtime cwd |
 | Callback `readFile` / `writeFile` | ✅ | Node-style error-first callbacks |

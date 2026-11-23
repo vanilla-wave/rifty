@@ -183,7 +183,16 @@ describe('the packed export (ADR-0558 §1)', () => {
         env,
       });
       expect(JSON.parse(out)).toEqual({
-        exports: ['IMPORT_GAP', 'UNCOPYABLE_REJECTION', 'createHostBridge', 'exitStatus'],
+        // ADR-0558 dated line 2026-11-22: the snapshot exports (ADR-0567).
+        exports: [
+          'FsSnapshotError',
+          'IMPORT_GAP',
+          'UNCOPYABLE_REJECTION',
+          'createHostBridge',
+          'exitStatus',
+          'restoreFs',
+          'snapshotFs',
+        ],
         bundle: true,
         native: [],
       });
