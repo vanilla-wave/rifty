@@ -1,9 +1,9 @@
 {
   "overall_verdict": "concern",
-  "merge_call": "Final+GREEN PASS re-bound at ebecf5eb7 (landing verdict); merge only on green PR CI at HEAD after CLOSE.",
+  "merge_call": "Final+GREEN PASS re-bound at 4c2878684 (landing verdict); merge only on green PR CI at HEAD after CLOSE.",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "ebecf5eb7c2f2c20def508293829ccefb627303e",
-  "unit_goal_source": "docs/backlog/distribution/isolate-host-sandbox-core.md (ready, re-cut 2026-11-22 ×4; Acceptance 1 = docs/backlog/distribution/isolate-host-sandbox-acceptance.md rows 1-14); Contract+RED PASS @ 16b7ab607; BASE 50c9d8bf1; verify passes c505b857f -> 30c8c1ff1 -> 525aaf075; r4 at c0ad781f2; r5 at d78411460; r6 at 7650df442; r7 at 214bbf1c4; this pass 214bbf1c4..ebecf5eb7 (r7 concerns + typescript-worker re-pin) (merges of main 11b9397ee: #418 codec, #416, #420); goal docs/backlog/epics/isolate-host-live-sandbox/goal.md",
+  "reviewed_sha": "4c2878684123c8c21c75f053223b8d625e13b131",
+  "unit_goal_source": "docs/backlog/distribution/isolate-host-sandbox-core.md (ready, re-cut 2026-11-22 ×4; Acceptance 1 = docs/backlog/distribution/isolate-host-sandbox-acceptance.md rows 1-14); Contract+RED PASS @ 16b7ab607; BASE 50c9d8bf1; verify passes c505b857f -> 30c8c1ff1 -> 525aaf075; r4 at c0ad781f2; r5 at d78411460; r6 at 7650df442; r7 at 214bbf1c4; r8 at ebecf5eb7; r9 at 4ea5736b5; this pass 4ea5736b5..4c2878684 (hostile gone carriers, tests + docs) (merges of main 11b9397ee: #418 codec, #416, #420); goal docs/backlog/epics/isolate-host-live-sandbox/goal.md",
   "unit_residuals": [],
   "goal_residuals": [
     {
@@ -522,6 +522,70 @@
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:605",
       "note": "own mutants killed: empty state on the second attempt (row 13 + lost twice); chunk step not a multiple of 3 (3 large-state rows)"
+    },
+    {
+      "row": "FM re-cut: destroy × every end of a run waits for the isolate (gone frame or worker end)",
+      "source": "fault-matrix",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:981",
+      "note": "own mutants killed: gone before unwind; no release on gone"
+    },
+    {
+      "row": "FM re-cut: a memory-reported call whose builtin still holds the isolate keeps its slot until gone",
+      "source": "fault-matrix",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:1035",
+      "note": "own mutant (placement by calls.size) killed"
+    },
+    {
+      "row": "FM re-cut: maxFsBytes below an empty sandbox cost -> ERR_OUT_OF_RANGE",
+      "source": "fault-matrix",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:1056",
+      "note": ""
+    },
+    {
+      "row": "FM re-cut: state fails to encode at placement -> call rejects, no phantom",
+      "source": "fault-matrix",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:1120",
+      "note": ""
+    },
+    {
+      "row": "FM re-cut: exec/createSandbox inputs fixed at the call",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:1074",
+      "note": ""
+    },
+    {
+      "row": "FM re-cut: destroy in flight leaves no hold on the run state",
+      "source": "fault-matrix",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:1102",
+      "note": ""
+    },
+    {
+      "row": "FM re-cut: destroy between result and continuation -> DESTROYED",
+      "source": "fault-matrix",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:1153",
+      "note": ""
+    },
+    {
+      "row": "ADR-0563 dated line 2026-11-23: a gone frame for an unknown id (or before its terminal frame) is a protocol violation",
+      "source": "fault-matrix",
+      "trace": "ADR-0563",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/protocol.test.ts:44",
+      "note": "three hostile cases (before terminal, unknown id, twice); own mutant Z4 (any gone accepted) killed by all three; protocol.test.ts 37/37"
     }
   ],
   "axes": [
@@ -579,6 +643,20 @@
       "findings": [
         {
           "severity": "concern",
+          "location": "packages/isolate-host/tests/sandbox-faults.test.ts:1102",
+          "evidence": "Z4 run 1: \"a destroy in flight leaves no hold on the run: its state is collectable\" failed; rerun of the same mutant 124/124",
+          "summary": "The --expose-gc collectability carrier failed once under an unrelated mutant: possibly GC-timing flaky; watch it on CI.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "packages/isolate-host/src/pool.ts:501",
+          "evidence": "",
+          "summary": "If the state encode throws at placement after #placeFresh spawned a new worker for it, that worker stays idle and unsettled until another settle; harmless (one warm worker) but not ended.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
           "location": "packages/isolate-host/src/child/main.ts:300",
           "evidence": "round 2 mutant V11",
           "summary": "Carried: clearing holdsState after restore is uncarried.",
@@ -590,13 +668,6 @@
           "evidence": "",
           "summary": "Carried: a run ended by the import() gap via vm loses its writes as CAPTURE.",
           "authority": ""
-        },
-        {
-          "severity": "nit",
-          "location": "packages/isolate-host/src/pool.ts:294",
-          "evidence": "",
-          "summary": "r7 concerns resolved: state encoded before the first byte of the request line; destroyed check restored after the pool result (sandbox.ts:371; the cancelled call is still awaited through abort -> left()); README names the consumer kept alive up to the grace after a timed-out run.",
-          "authority": ""
         }
       ]
     },
@@ -607,8 +678,8 @@
         {
           "severity": "nit",
           "location": "tools/checks/esbuild-legacy-retirement.mjs:105",
-          "evidence": "scratch at ebecf5eb7: workbench build + esbuild-legacy-retirement check pass with the re-pinned sha; sandbox-acceptance + sandbox-faults + protocol 109/109 pass",
-          "summary": "Re-pin is the built output (PR-4: criterion unchanged). Full package last run at 214bbf1c4 (699/699); this diff touches two lines of product code.",
+          "evidence": "scratch at 1ce7263df: isolate-host 711/711; at 4ea5736b5: workbench build + esbuild-legacy-retirement pass, runtime-js fs.test.ts 33/33",
+          "summary": "Re-pin is the built output; the fs.test.ts cast is type-only.",
           "authority": ""
         }
       ]
