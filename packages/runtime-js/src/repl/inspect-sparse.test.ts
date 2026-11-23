@@ -68,7 +68,7 @@ function* sparseArrays(count: number): Generator<unknown[]> {
       array[where] = next(100);
     }
     for (let k = next(3); k > 0; k -= 1) {
-      const key = next(8) === 7 ? symbol : (extras[next(extras.length)] as string);
+      const key = next(3) === 2 ? symbol : (extras[next(extras.length)] as string);
       (array as unknown as Record<string | symbol, unknown>)[key] = next(10);
     }
     yield array;
@@ -87,4 +87,11 @@ it("2000 generated sparse arrays print Node's single-line text", () => {
   }
   expect(wrong.slice(0, 5)).toEqual([]);
   expect(compared).toBeGreaterThan(1000);
+});
+
+it('a long dense array prints at once (no own-key walk past the shown items)', () => {
+  const array = new Array(5e6).fill(0);
+  const started = performance.now();
+  expect(inspect(array)).toMatch(/\.\.\. 4999970 more items \]$/u);
+  expect(performance.now() - started).toBeLessThan(50);
 });

@@ -306,6 +306,9 @@ function propValue(value: unknown, indent: number, state: InspectState, depth: n
 
 /** A dense array's elements when each is an own data primitive, else null. */
 function primitiveElements(array: readonly unknown[]): unknown[] | null {
+  // Non-index keys or symbols: inspect lists them after the elements.
+  if (objectKeys(array).length !== array.length || objectGetOwnPropertySymbols(array).length > 0)
+    return null;
   const out: unknown[] = [];
   for (let i = 0; i < array.length; i += 1) {
     const d = objectGetOwnPropertyDescriptor(array, i);

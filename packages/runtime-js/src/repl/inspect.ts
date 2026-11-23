@@ -266,8 +266,9 @@ function formatArray(
   const holes = (n: number) => `<${n} empty item${n > 1 ? 's' : ''}>`;
   // Own keys are enumerated only where Node's output needs them: a hole, or an
   // array short enough to list its non-index keys (a longer dense one hides them).
-  const keys = index < length || length <= DENSE_KEYS_LIMIT ? Object.keys(arr) : null;
-  if (keys !== null && index < length && items.length < MAX_ARRAY_ITEMS) {
+  const sparse = index < length && items.length < MAX_ARRAY_ITEMS;
+  const keys = sparse || length <= DENSE_KEYS_LIMIT ? Object.keys(arr) : null;
+  if (keys !== null && sparse) {
     // Node `formatSpecialArray`: walk the own index keys; a run of holes is one entry.
     for (let k = index; k < keys.length && items.length < MAX_ARRAY_ITEMS; k += 1) {
       const key = keys[k] as string;
@@ -292,7 +293,7 @@ function formatArray(
   }
   for (const symbol of Object.getOwnPropertySymbols(arr)) {
     if (getOwnPropertyDescriptorPrimordial(arr, symbol)?.enumerable)
-      items.push(`[${symbol.toString()}]: ${element(symbol)}`);
+      items.push(`${symbol.toString()}: ${element(symbol)}`);
   }
   context.ancestors.delete(arr);
   if (items.length === 0) return `${referencePrefix(arr, context)}[]`;

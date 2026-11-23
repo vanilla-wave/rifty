@@ -216,6 +216,10 @@ it.each([
     'nested getters, holes and a long list',
     "const e = new Error('x');\ne.detail = { get ran() { console.log('RAN'); return 1; }, a: { get bad() { throw new Error('g'); } } };\ne.holes = new Array(1e5);\nthrow e;\n",
   ],
+  [
+    'an array prop with extra keys',
+    "const e = new Error('x');\nconst a = [1, 2];\na['-1'] = 'neg';\na['1.5'] = 'frac';\na['a-b'] = 'dash';\na[Symbol('s')] = 'sym';\ne.a = a;\nthrow e;\n",
+  ],
   ['symbol-keyed props', "const e = new Error('x');\ne[Symbol('k')] = 1;\ne.a = 2;\nthrow e;\n"],
   [
     'an array element getter',
