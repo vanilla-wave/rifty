@@ -1,9 +1,9 @@
 ---
 area: playground
 status: draft
-title: Package authority `ensure` dispatch has only test callers
+title: Package authority `ensure` and `project-switch` dispatch routes have only test callers
 created: 2026-11-17
-why: Retiring the stamp-miss snapshot restore left an authority dispatch route that no production code sends
+why: Retiring the stamp-miss snapshot restore left two authority dispatch routes that no production code sends
 sources: [packages/workbench/CHANGELOG.md, docs/adr/playground/0135-sandbox-setup-kinds-instant-vs-from-scratch.md]
 code: [packages/workbench/src/workers/package-acquisition-types.ts, packages/workbench/src/workers/package-acquisition-authority.ts, packages/workbench/src/workers/owner-package-state.ts, packages/workbench/src/glue/project-deps.test-fixture.ts]
 ---
@@ -34,12 +34,16 @@ Observed 2026-11-17 after the stamp-miss restore removal (ADR-0135 correction
   `install` callback. About 30 `project-deps.test.ts` tests run the
   real authority, stamp and VFS through it, so they prove authority semantics,
   not the production adapter. Pickup must retire or retarget them.
-- `project-switch.resetPackages` was removed in PR #398 (its only sender was
-  the retired owner `transition`).
+- `dispatch({ type: 'project-switch' })` (`ProjectSwitchCommand`): no
+  production sender since its only one, the retired owner `transition`, was
+  removed (PR #398 also removed its `resetPackages` flag). The authority still
+  calls `adapter.switchProject` internally from `activate-and-ensure` and
+  `prepare-first-materialization`. Senders: `package-acquisition-authority.test.ts`
+  and `tests/integration/npm-shell-command.test.ts`.
 
-Probe: `git grep -n -E "type: 'ensure'" -- 'packages/**' ':!*.test.ts'
-':!*test-fixture*'` → only the type declaration and the authority's internal
-`#ensure` calls.
+Probe: `git grep -n -E "type: '(ensure|project-switch)'" -- packages apps tests
+tools ':!*.test.ts' ':!*test-fixture*'` → only the type declarations and the
+authority's internal `#ensure` / `adapter.switchProject` calls.
 
 No user-visible behavior; code shrinkage only (REV-7 capture). Owner: package
 acquisition authority. Trigger: next change to the authority's command
@@ -47,7 +51,7 @@ surface, or a review that cites these routes as dead.
 
 ## Question
 
-Delete the `ensure` dispatch route and retarget its tests to
-`activate-and-ensure` / `prepare-first-materialization` through the production
-adapter, or keep it as the authority's focused test entry? Which of its tests
-pin a property that live routes still need?
+Delete the `ensure` and `project-switch` dispatch routes and retarget their
+tests to `activate-and-ensure` / `prepare-first-materialization` through the
+production adapter, or keep them as the authority's focused test entries? Which
+of their tests pin a property that live routes still need?
