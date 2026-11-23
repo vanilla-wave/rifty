@@ -408,6 +408,25 @@ export function bundleViolations(file, source, loadSourceMap = () => null) {
     const line = sourceContentFor(sourceMap, origin.source)?.split('\n')[origin.line - 1];
     return calls.some((call) => line?.slice(origin.column).startsWith(call));
   }
+  function ownMethod(node, name) {
+    for (let current = parents.get(node); current; current = parents.get(current)) {
+      if (current.type === 'ArrowFunctionExpression') continue;
+      if (current.type !== 'FunctionExpression' && current.type !== 'FunctionDeclaration') continue;
+      const method = parents.get(current);
+      const body = method?.type === 'MethodDefinition' ? parents.get(method) : undefined;
+      return (
+        body?.type === 'ClassBody' &&
+        body.body.some(
+          (entry) =>
+            entry.type === 'MethodDefinition' &&
+            !entry.static &&
+            !entry.computed &&
+            (entry.key.name ?? entry.key.value) === name,
+        )
+      );
+    }
+    return false;
+  }
   function inspectMethod(member, call) {
     const method = propertyName(member);
     // Monaco's bracket query returns CallbackIterable, whose own findLast predates ES2023.
@@ -416,9 +435,10 @@ export function bundleViolations(file, source, loadSourceMap = () => null) {
       member.object?.type === 'CallExpression' &&
       member.object.callee.type === 'MemberExpression' &&
       propertyName(member.object.callee) === 'getBracketPairsInRange';
-    // pi-schema 1.6.0's schema compiler calls its own `union` method on `this`; a
-    // Set.prototype.union call needs a Set receiver, never a class's own `this`.
-    const ownUnion = method === 'union' && member.object?.type === 'ThisExpression';
+    // pi-schema 1.6.0's compiler calls its own `union` method on `this`: admitted only when
+    // the enclosing method's class itself defines `union` (a Set subclass does not).
+    const ownUnion =
+      method === 'union' && member.object?.type === 'ThisExpression' && ownMethod(member, 'union');
     if (METHODS.has(method) && !bracketIterable && !ownUnion) report(member, method);
     if (method !== 'with') return;
     if (

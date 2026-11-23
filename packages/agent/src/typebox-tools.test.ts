@@ -1,3 +1,4 @@
+import * as Format from 'typebox/format';
 import { expect, it } from 'vitest';
 import reference from '../../../docs/backlog/distribution/reference/pi-0.85.1-typebox-tool-probe.json' with {
   type: 'json',
@@ -60,31 +61,54 @@ it('Type.Object tool reaches the wire and validates as on pi 0.85.1', async () =
   }
 });
 
-// pi-ai 1.5.0 validates as JSON Schema only; TypeBox-only kinds would silently stop applying.
+// Differential probe (pi-typebox-validation-diff.json): only refinements and Format.Set
+// checks silently stop on pi 1.x; the guard refuses exactly those.
+const register = () => Format.Set('rifty-even', (value) => value.length % 2 === 0);
 it.each([
   ['Type.Refine', () => Type.Refine(Type.String(), (value) => value.startsWith('/'))],
+  ["Format.Set('rifty-even')", () => (register(), Type.String({ format: 'rifty-even' }))],
+])('a %s tool parameter fails loudly at session creation', (kind, schema) => {
+  expect(() => session(Type.Object({ path: schema() }))).toThrow(
+    `Not implemented: agent.tool-schema-typebox-only (Tool probe: ${kind}`,
+  );
+});
+
+it.each([
   [
     'Type.Codec',
     () =>
       Type.Codec(Type.String())
-        .Decode((value) => value)
-        .Encode((value) => value),
+        .Decode((v) => v)
+        .Encode((v) => v),
   ],
-  ['Type bigint', () => Type.BigInt()],
-])('a %s tool parameter fails loudly at session creation', (kind, schema) => {
-  expect(() =>
-    createAgentSession({
-      host: { root: '/', capabilities: () => ({}), async close() {} },
-      ...modelCatalog(),
-      tools: [
-        {
-          name: 'probe',
-          label: 'probe',
-          description: 'Probe tool',
-          parameters: Type.Object({ path: schema() }),
-          execute: async () => ({ content: [], details: undefined }),
-        },
-      ],
-    }),
-  ).toThrow(`Not implemented: agent.tool-schema-typebox-only (Tool probe: ${kind}`);
-});
+  ['Type.BigInt', () => Type.BigInt()],
+  ['Type.Void', () => Type.Void()],
+  ['Union with Undefined', () => Type.Union([Type.String(), Type.Undefined()])],
+  ['built-in email format', () => Type.String({ format: 'email' })],
+  [
+    'data in examples/default',
+    () => Type.String({ examples: [{ type: 'void' }], default: { type: 'bigint' } }),
+  ],
+  ['a property named ~refine', () => Type.Object({ '~refine': Type.String() })],
+])(
+  '%s keeps its 0.85.1 behavior or fails loudly on its own; the session is created',
+  (_kind, schema) => {
+    void session(Type.Object({ path: schema() })).dispose();
+  },
+);
+
+function session(parameters: ReturnType<typeof Type.Object>) {
+  return createAgentSession({
+    host: { root: '/', capabilities: () => ({}), async close() {} },
+    ...modelCatalog(),
+    tools: [
+      {
+        name: 'probe',
+        label: 'probe',
+        description: 'Probe tool',
+        parameters,
+        execute: async () => ({ content: [], details: undefined }),
+      },
+    ],
+  });
+}

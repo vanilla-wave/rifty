@@ -39,11 +39,11 @@ agent-bench core-v1 series shows no lost passes attributable to the upgrade.
 
 ## Acceptance
 
-1. Continuation, retry, overflow, recoverable length and threshold compaction equal the real CLI 1.6.0 `AgentSession` on 15 scripted scenarios (requests, retries, compaction numbers, transcript incl. system positions, file-operation lists). `tools/agent-bench/src/continuation-parity.test.ts` → ADR-0569
-2. A `Type.Object` consumer tool reaches the wire as on pi 0.85.1 (minus pi 1.x `strict: false`) and accepts/rejects/coerces 8 argument cases exactly as the captured 0.85.1 probe; `Refine`/`Codec`/`BigInt` parameters throw `NotImplementedError` at creation. `packages/agent/src/typebox-tools.test.ts` → ADR-0570
+1. Continuation, retry, overflow, recoverable length and threshold compaction equal the real CLI 1.6.0 `AgentSession` on 19 scripted scenarios (requests, retries, compaction numbers, transcript incl. system positions, file-operation lists). `tools/agent-bench/src/continuation-parity.test.ts` → ADR-0569
+2. A `Type.Object` consumer tool reaches the wire as on pi 0.85.1 (minus pi 1.x `strict: false`) and accepts/rejects/coerces 8 argument cases exactly as the captured 0.85.1 probe; `Refine` and `Format.Set` parameters (the probe's silent losses) throw `NotImplementedError` at creation. `packages/agent/src/typebox-tools.test.ts` → ADR-0570
 3. Stop mid-batch in Chromium: the skipped call gets an error result, no side effect, next run continues. `tests/browser-unit/agent-core.spec.ts` → ADR-0424
 4. The shared prompt recipe reaches the CLI 1.6.0 wire as the current system message; skills and `project_context` blocks are byte-identical to CLI 1.6.0. `prompt-recipe-parity.test.ts`, `project-resources.test.ts` → ADR-0440
-5. A changed prompt appends one `system` update before the next user message; the wire sends only the current prompt. `prompt-state.test.ts` → ADR-0569
+5. A changed prompt appends one `system` update before the next user message; the wire sends only the current prompt; restored foreign prompt sections are removed. `prompt-state.test.ts` → ADR-0569
 6. Histories with pi 1.x `system` messages (events, trace) restore through `initialMessages`, including a summary after prompt state. `history.test.ts`, `continuation.fault.test.ts`, browser `agent-core.spec.ts` → ADR-0466
 7. Packed consumer installs, typechecks and builds with pi 1.6.0 tarballs; client bundle budgets hold. `pnpm test:client-bundles` → ADR-0436
 8. core-v1 eval series on 1.6.0 vs a fresh 0.85.1 baseline on the same endpoint/limits; every FAIL classified per `tools/agent-bench/README.md`; a lost pass classed `rifty-runtime`/`rifty-tooling` and caused by the upgrade blocks landing. Summary in `tools/agent-bench/reports/summaries/` → ADR-0472
@@ -69,3 +69,4 @@ agent-bench core-v1 series shows no lost passes attributable to the upgrade.
 - 2026-11-23 — transcripts keep pi 1.x `system` messages (native history) instead of filtering them; restore admits them; the archive keeps conversation only (ADR-0482 correction).
 re-cut: 2026-11-23 — Acceptance 6 drops "archive" from restorable histories; fault-matrix archive row states system prompt state is not archived — trace: none
 re-cut: 2026-11-23 — Acceptance 1 grows to 15 scenarios; Acceptance 2 adds TypeBox-only loud throws; Acceptance 5 (prompt-state) and 8 (lost-pass rule) added after the Contract+RED review — trace: none
+re-cut: 2026-11-23 — review of PR #423: Acceptance 1 grows to 19 scenarios (recovery-omission pairs, re-send after failed recovery); Acceptance 2 guard narrowed to the probe's silent losses (Refine, Format.Set); Acceptance 5 adds foreign sections — trace: none

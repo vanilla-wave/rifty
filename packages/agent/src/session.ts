@@ -173,8 +173,13 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
     tools = refreshed.tools;
     agent.state.tools = tools;
     const prompt = refreshed.systemPrompt;
-    if (getCurrentSystemMessage(agent.state.messages)?.sections?.prompt === prompt) return;
-    return { role: 'system', content: '', sections: { prompt }, timestamp: Date.now() };
+    // Sections from restored foreign prompt state (e.g. a pi CLI history) are removed, as
+    // the CLI's section diff does; rifty owns the single `prompt` section.
+    const current = getCurrentSystemMessage(agent.state.messages)?.sections ?? {};
+    const stale = Object.keys(current).filter((name) => name !== 'prompt');
+    if (current.prompt === prompt && !stale.length) return;
+    const removed = Object.fromEntries(stale.map((name) => [name, null]));
+    return { role: 'system', content: '', sections: { ...removed, prompt }, timestamp: Date.now() };
   }
 
   /** CLI `_runAutoCompaction` + `appendCompaction`; true when a summary was installed. */

@@ -117,7 +117,10 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario, riftyPrompt = '
     if (!summary) conversationPrompt ??= system;
     requests.push({
       summary,
-      messages: structuredClone(context.messages.filter(({ role }) => role !== 'system')),
+      // Prompt bytes differ by design; system message positions in each request must match.
+      messages: structuredClone(context.messages).map((message) =>
+        message.role === 'system' ? ({ role: 'system' } as never) : message,
+      ),
       maxRetries: options?.maxRetries,
     });
     if (!summary) count++;
@@ -276,7 +279,7 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario, riftyPrompt = '
             scenario === 'resend-length'
           ? lowUsage(seed())
           : scenario === 'restored-length-tool'
-            ? [
+            ? ([
                 ...lowUsage(seed()),
                 { role: 'user', content: 'Run the effect', timestamp: 5 },
                 {
@@ -292,8 +295,8 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario, riftyPrompt = '
                   isError: false,
                   timestamp: 7,
                 },
-              ]
-          : [];
+              ] as Message[])
+            : [];
   const stopsOnRetry = scenario === 'abort-backoff' || scenario === 'length-tool-stop';
   // A second prompt after the first run settles (stopped or failed recovery).
   const prompts =

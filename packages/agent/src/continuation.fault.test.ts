@@ -273,6 +273,9 @@ describe('native continuation boundary', () => {
     try {
       await session.send('continue');
       expect(requests.map((r) => summaryRequest(r.context))).toEqual([true, false]);
+      // CLI 1.6.0 summary requests: no maxTokens (#9512), no cache write.
+      expect(requests[0]?.options).not.toHaveProperty('maxTokens');
+      expect(requests[0]?.options.cacheRetention).toBe('none');
       const trace = await session.exportTrace();
       expect(trace.transcript[0]).toMatchObject({
         role: 'compactionSummary',

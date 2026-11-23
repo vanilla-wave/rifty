@@ -142,6 +142,11 @@ describe('shipped ES2022 floor', () => {
     expect(violations('new Set([1]).union(other); left.union(right);').join('\n')).toContain(
       'union',
     );
+    expect(
+      violations('class Tags extends Set { merge(other) { return this.union(other); } }').join(
+        '\n',
+      ),
+    ).toContain('union');
   });
 
   it('accepts ES2022 syntax, library name tables and own with methods', () => {

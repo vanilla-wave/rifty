@@ -43,3 +43,29 @@ it('a capability change appends one prompt update before the next user message',
     await session.dispose();
   }
 });
+
+it('restored foreign prompt sections are removed from the wire prompt', async () => {
+  const provider = scriptedProvider(['Done.']);
+  const session = createAgentSession({
+    host: { root: '/', capabilities: () => ({}), async close() {} },
+    ...modelCatalog(undefined, provider.fetch),
+    initialMessages: [
+      {
+        role: 'system',
+        content: '',
+        sections: { preamble: 'OLD_CLI_PREAMBLE', cwd: '<cwd>\nOLD_CLI_CWD\n</cwd>' },
+        timestamp: 0,
+      },
+      { role: 'user', content: 'old', timestamp: 1 },
+    ],
+  });
+  try {
+    await session.send('new');
+    const wire = JSON.stringify(provider.requests[0]?.body.messages);
+    expect(wire).toContain('Rifty runs Node-compatible programs');
+    expect(wire).not.toContain('OLD_CLI_PREAMBLE');
+    expect(wire).not.toContain('OLD_CLI_CWD');
+  } finally {
+    await session.dispose();
+  }
+});
