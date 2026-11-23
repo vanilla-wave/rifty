@@ -72,6 +72,17 @@ retirement repair, Brotli quality 11, isolate host). Node v24.16.0, Chromium
   `apps/playground/tools/bake-dep-snapshots.ts` re-reads only its own committed
   replay JSON; no compact input reaches it.
 
+## After #398 merge (2026-11-23)
+
+Main `f5c232b3d` (#398: no stamp-miss auto-restore, one replay-cache
+verification per restore/apply). Conflicts resolved by combining
+`PreparedDepSnapshotRestore.lockfile` with the optional `applyCache`.
+`[fault: poisoned-cache]` COI first-materialization carriers for v5
+(`workbench-snapshot-initial-admission.contract.test.ts`): compact carrying
+replay bytes or an unsafe payload path is rejected before any cache, tree or
+claim write; dropping the compact empty-cache check goes RED. #398's replay
+tests unchanged; workbench glue+workers 112 files / 2005 tests PASS.
+
 ## Boundaries
 
 No saved-state migration, new install policy, registry fallback or offline
