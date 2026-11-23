@@ -66,4 +66,6 @@ agent-bench core-v1 series shows no lost passes attributable to the upgrade.
 ## Decisions
 
 - 2026-11-23 — manager default: port CLI compaction (ADR-0569) and keep `Type` via direct `typebox` (ADR-0570); user confirmation pending before merge.
-- 2026-11-23 — transcripts keep pi 1.x `system` messages (native history) instead of filtering them; restore admits them.
+- 2026-11-23 — transcripts keep pi 1.x `system` messages (native history) instead of filtering them; restore admits them; the archive keeps conversation only (ADR-0482 correction).
+re-cut: 2026-11-23 — Acceptance 6 drops "archive" from restorable histories; fault-matrix archive row states system prompt state is not archived — trace: none
+re-cut: 2026-11-23 — Acceptance 1 grows to 15 scenarios; Acceptance 2 adds TypeBox-only loud throws; Acceptance 5 (prompt-state) and 8 (lost-pass rule) added after the Contract+RED review — trace: none
