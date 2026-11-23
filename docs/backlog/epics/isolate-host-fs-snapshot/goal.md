@@ -16,7 +16,9 @@ the bare isolate and in the consumer's own Node realm. Restored, the files look
 to guest code exactly as before: same paths, bytes and `fs.stat` except `ino`. Bytes the
 consumer hands back — once written by an isolate that ran hostile code — are
 validated in one linear pass before anything is written; any defect is a named
-error, never a partial tree. The live sandbox (goal of the sibling thread)
+error, never a partial tree. A partial tree is never passed off as whole: a
+restore that fails while writing ends with a named error and the instance is
+thrown away. The live sandbox (goal of the sibling thread)
 builds its state on this seam: a run = fresh isolate → restore → `node <path>`
 → snapshot (manager, 2026-11-22). Format decision: ADR-0567.
 
@@ -100,6 +102,7 @@ final-check: 2026-11-22 — PASS (fresh read-only RDY-6 pass over goal, map, dra
 
 - amend: 2026-11-22 — user: «ок» (to the manager's: «Скрипт создаёт файл, у которого одно имя (не путь) длиннее 16 383 символов. Снимок такое дерево не примет, и запуск не сохранит своё состояние, с именованной ошибкой. Настоящий Node такой файл не создаст вовсе: ОС ограничивает имя 255 байтами. Задеты только программы, которые в Node и так падают. Цель обещала „любое имя“») — I1's «any name rifty's FS holds» covers names of at most 16 383 code units (the user's words say «символов»; the cap counts UTF-16 code units, so a name of 8 192–16 383 non-BMP characters is refused too — the manager's reading, not the user's words); a longer name is refused at snapshot by name (`ERR_FS_SNAPSHOT_UNREPRESENTABLE`, ADR-0567 §1), because longer names make decoding quadratic.
 - amend: 2026-11-22 — user: «давая в бэклог положим» (to the manager's: «Первый запуск читает `fs.statSync('a.txt').ino` и получает, скажем, 17. Во втором запуске у того же файла будет другое число; на настоящем диске оно сохранилось бы. Задеты программы, которые запоминают `ino` между запусками, чтобы узнавать файл, — например, свои кэши. Размер, времена и содержимое совпадают точно. Цель обещала „`stat` идентичен“») — I1's and scenario step 2's identical `fs.statSync` exclude `ino` here; keeping it is deferred to `backlog/distribution/isolate-host-fs-snapshot-keep-ino` (a per-realm inode counter makes a restored `ino` everyone's in the consumer realm).
+- amend: 2026-11-23 — user: «ок» (to the manager's recommendation: «Оставить как есть и принять формулировку „частичное дерево никогда не выдаётся за целое: после сбоя экземпляр выбрасывается“. Атомарность в кодеке записать в backlog с условием взятия: появился embedder, которому нужно восстановление поверх живой ФС»; asked after the user's «вот тут давай аккуратно разберемся. Во время реализации fs не очень приятно ходили по граблям пытаясь обеспечить точный статус файлов. Давай поймем что покупаем и какой ценой») — the Outcome's «never a partial tree» reads: a partial tree is never passed off as whole; a restore that fails while writing is `ERR_FS_SNAPSHOT_INCOMPLETE` and the instance is thrown away (ADR-0567 §6). Atomic restore deferred: `backlog/distribution/isolate-host-fs-snapshot-atomic-restore`.
 - tier: robust — the bytes are guest-authored and come back from storage: every reachable defect × {snapshot, restore} × {isolate, consumer realm} has a named outcome and a fault test; no crash-atomic storage promise (the consumer owns storage).
 - 2026-11-22 — manager: one goal = one PR; this goal lands first and standalone; embedding in the sandbox API, the rest-point rule and the sandbox-level e2e belong to the sandbox goal's PR.
 - 2026-11-22 — manager: the codec runs in two realms (isolate and the consumer's Node realm); the decoder trusts no property only an honest encoder guarantees.
