@@ -350,6 +350,23 @@ lead `distribution/isolate-host-sandbox-capture-at-process-terminal`); (3)
 `distribution/isolate-host-uncaught-throw-waits-for-microtask-checkpoint`. The question covered
 three members of a wider class (`docs/backlog/distribution/reference/isolate-host-sandbox-lifecycle-class.md`).
 
+The user, 2026-11-23, second answer — the external review of PR #424 showed the first «ок» covered
+three members of a class: a sandbox run inherits every lifecycle divergence `runCode` declares in
+compat. The question as the user saw it: that history; the three outcomes measured in
+`docs/backlog/distribution/reference/isolate-host-sandbox-lifecycle-class.md` (extra files kept;
+the whole run rolled back; another exit code — `process.exit(3)` + a microtask, `exit(3)` + an
+endless microtask, a reject in an `'exit'` handler: 0 against 1); «Самое весомое для агента —
+третий исход: в редких случаях программа читается как успешная (код 0), хотя в Node упала бы»;
+the choice «Принять: цель закрывается, случаи остаются объявленными ⚠️ в compat с записями в
+backlog.» / «Держать открытой: документ цели остаётся открытым до починки, #424 вливается как
+документы.» / «Рекомендую принять: это свойства рантайма в isolate, те же, что у `runCode`;
+чинятся в жизненном цикле `runtime-js`, а не в песочнице.» The user's answer, a comment on the
+last sentence: «ок, давай только доки оставим». The manager's reading, not the user's words: «ок»
+accepts the recommendation — the whole class, with its three outcomes for files and status — and
+«давай только доки оставим» keeps the cases declared in the docs (compat row "A run's lifecycle
+and exit status", backlog), not fixed in the sandbox now. A second reading the phrase allows,
+named by the manager: keep the goal open and merge only the docs.
+
 The user, 2026-11-17 (requirements, quoted in the goal's state-model line): «в пределах одного
 прогона агента один экземпляр живёт через write → exec → ошибка → fix → exec. Следующий прогон…
 новый экземпляр из шаблона + восстановленных файлов». The manager's reading, not the user's words
