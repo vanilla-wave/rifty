@@ -165,7 +165,9 @@ hypervisor and deploy stay outside rifty; the consumer supplies the outer bounda
   codec in the isolate and the consumer's realm; hostile bytes refused in one linear pass within a
   budget that bounds the trusted side's memory and time — ADR-0567 (PR #418, #422). Deferred as
   backlog: keeping `ino` (`distribution/isolate-host-fs-snapshot-keep-ino`), atomic restore over a
-  live FS (`distribution/isolate-host-fs-snapshot-atomic-restore`).
+  live FS (`distribution/isolate-host-fs-snapshot-atomic-restore`), the heavier snapshot straight
+  after a restore (`distribution/isolate-host-fs-snapshot-restore-then-snapshot-peak`); the
+  16 383-unit name cap stays until rifty refuses names over NAME_MAX (`vfs/file-names-over-name-max-accepted`).
 - B — delivered (PR #419); the goal `isolate-host-live-sandbox` stays open on one user question: live sandbox — `createSandbox()` with host binary file ops, `exec` = `node <path>
   [args]` with `runCode`'s limits, one sandbox through write → run → error → fix (every run end
   keeps the sandbox; killed runs roll back), `snapshot()` / create-from-snapshot, `destroy()`

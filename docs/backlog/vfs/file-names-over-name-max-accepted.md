@@ -37,7 +37,7 @@ platform, and so the unit (UTF-8 bytes, UTF-16 units or code points).
 Link: ADR-0567 caps snapshot names at 16 383 code units (V8 hashes longer
 strings by length alone); a guest run that creates a longer name cannot save
 its state. Once rifty refuses names over NAME_MAX, that cap is unreachable for
-an honest tree and the snapshot goal's I1 holds for every name again.
+an honest tree and I1 (ADR-0567 «Goal invariants») holds for every name again.
 
 Owner: vfs; trigger: a Node program that relies on `ENAMETOOLONG`, or the snapshot name cap biting a real guest.
 

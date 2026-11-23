@@ -3,7 +3,7 @@
 Status: Accepted
 Date: 2026-11
 
-> TL;DR: The guest's whole in-memory FS becomes one opaque byte string — rifty's own binary format v1 (records + CRC-32), template-bound, read forever by later rifty; a pure-JS codec reads and writes it in the isolate and in the consumer's realm; restore validates every byte, then replaces the FS of a fresh isolate before any guest code; a restore that fails while writing leaves an instance that is thrown away, never a partial tree passed off as whole.
+> TL;DR: The guest's whole in-memory FS becomes one opaque byte string — rifty's own binary format v1 (records + CRC-32), template-bound, read forever by later rifty; a pure-JS codec reads and writes it in the isolate and in the consumer's realm; restore validates every byte, then replaces the FS of a fresh isolate before any guest code; a restore that fails while writing names its failure and the instance is thrown away — the guest bundle refuses to run or snapshot it; in the consumer's realm discarding the target is the caller's.
 
 ## Context
 
@@ -112,11 +112,11 @@ Probes: `docs/backlog/distribution/reference/isolate-host-fs-snapshot-fit-probes
    chain took 2.6 s and 65 MB of 16 383-unit paths 2.8 s). An allocation the
    limit refuses at snapshot is `ERR_FS_SNAPSHOT_TOO_LARGE`, the FS untouched;
    an isolate the limit kills outright is the embedder's memory termination. A
-   snapshot right after a restore with no guest code between can need ~3 × the
-   bytes: the restored blob is not yet collected (231–322 MiB at 98 MiB). A
-   consumer sizes `memoryLimitMb` for 2 × `maxBytes` + 16 MiB — except for a
-   snapshot straight after a restore with no guest code between, which can
-   need ~3 × the bytes until the restored blob is collected.
+   consumer sizes `memoryLimitMb` for 2 × `maxBytes` + 16 MiB. One sequence can
+   need more under machine load: a snapshot straight after a restore with no
+   guest code between, while the restored blob is not yet collected (template
+   scale, 98 MiB: 225 MiB at rest, 232–277 MiB under 12 busy loops; restore →
+   run → snapshot 225 MiB either way — `distribution/isolate-host-fs-snapshot-restore-then-snapshot-peak`).
 8. **Where.** One pure-JS module in `@riftydev/isolate-guest` (root exports
    `snapshotFs(fs, options)`, `restoreFs(fs, bytes, options)`,
    `FsSnapshotError`; ADR-0558, unstable) over a structural FS interface that
@@ -168,8 +168,27 @@ Rejected (P1, template scale, S ≈ 95 MB):
   and out-of-range times are the manager's decision by delegation — guest
   `node:fs` and the sandbox's host ops no longer create either (PR #419); a
   consumer writing a `MemoryFsSync` directly still can, and snapshot refuses it
-  by name. The user's words (the name cap, `ino`, «a partial tree is never
-  passed off as whole»): `## Decisions` below.
+  by name. The user's words on the name cap and on `ino`, and his «ок» to the
+  manager's wording «a partial tree is never passed off as whole: after the
+  failure the instance is thrown away»: `## Decisions` below.
+- Manager's reading, 2026-11-23, not the user's words: the goal's I6 memory
+  budget holds on the scenario's sequence restore → run → snapshot (225 MiB
+  ≤ 2 × S + 64 = 260); the heavier snapshot straight after a restore is not a
+  user fork — CLOSE §1 «composed actions are proven on one representative real
+  program/state; no full cross-product», and RDY-6 «a difference is a user fork
+  only when it is reachable, materially affects the requested value and
+  nothing accepted settles it»: that snapshot returns the bytes just restored,
+  no requested action needs it, and a sandbox always runs guest code between.
+  Recorded: `distribution/isolate-host-fs-snapshot-restore-then-snapshot-peak`.
+
+## Goal invariants (exported from goal `isolate-host-fs-snapshot` at its close)
+
+- I1 — round trip: after restore guest code sees the same kind, bytes, `readdirSync` order and `fs.statSync` (`ino` aside) for every path, both realms, both directions; what is not kept is named in compat.
+- I2 — one blob with a format version and the template; other versions and templates refused by name; later rifty reads every earlier version.
+- I3 — hostile bytes refused by name, no blob text, target unchanged, linear in the blob, `maxBytes` before allocation, nothing outside the target touched.
+- I4 — limits: snapshot over `maxBytes` refused before allocating, restore before reading; restore only before guest code; snapshot after guest code is guest-authored, accepted only via restore.
+- I5 — the same tree gives the same bytes; snapshot changes nothing.
+- I6 — cost published for ~10 files / ~1 MB and 23 654 files / ~95 MB, both realms; at template scale each direction ≤ 2 s, memory ≤ 2 × S + 64 MiB (M3 Pro).
 
 ## Decisions
 

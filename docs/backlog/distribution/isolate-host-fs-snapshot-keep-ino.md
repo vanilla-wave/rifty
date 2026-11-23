@@ -20,7 +20,7 @@ Today (ADR-0567 §1): format v1 carries no
 inodes from one counter per realm (`packages/vfs/src/stat-metadata.ts`
 `nextInode`), shared by every `MemoryFs` there — a restored `ino` would move
 the counter of every other FS in the consumer's realm, and a hostile blob
-could push it past what restore accepts (FIT challenge, goal `## Challenge`).
+could push it past what restore accepts (the FIT premise critique of goal `isolate-host-fs-snapshot`, 2026-11-22; ADR-0567 «Rejected»).
 Constraint, not a design: a kept `ino` must not reach other FSs of the realm,
 and format v1 has no field for it (a reader change is a new format version,
 ADR-0567 §3).
@@ -30,7 +30,7 @@ Node over a disk that persists keeps it: the same file read from two separate
 times.
 
 Prior ruling it reopens: ADR-0567 «Rejected» (keeping `ino` in v1) and the
-closed goal `isolate-host-fs-snapshot`'s `rejected route: keeping ino — violates I3`; the user's deferral keeps
+closed goal `isolate-host-fs-snapshot`'s `rejected route: keeping ino — violates I3` (I3: ADR-0567 «Goal invariants»); the user's deferral keeps
 the question open. Dedup (`grep -rliw 'ino\|inode' docs/backlog`): this goal's
 own documents; `npm-client/reference/esbuild-upstream-twin-refine-evidence-2026-10-16.md`
 and `vfs/fs-sync-fd-api-and-fsync-durability.md` (fds, another concern) — no

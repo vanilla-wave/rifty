@@ -264,9 +264,12 @@ await guest.restore.apply(undefined, [new Uint8Array(bytes), options], { argumen
   `memoryLimit`, or the heap limit in your realm) is ≈ 2 × bytes + ~680 B ×
   entries + 15 MiB — under 2 × `maxBytes` + 16 MiB for any blob a budget
   admits. Time: the densest blob a budget admits takes ~2 ms per MiB of
-  budget in either realm, flat, deep, long-named or mixed (table below). A snapshot right after a restore, with
-  no guest code between, can need ~3 × the bytes (the restored blob is not
-  yet collected: 231–322 MiB at template scale). An allocation the limit
+  budget in either realm, flat, deep, long-named or mixed (table below). A
+  snapshot straight after a restore, with no guest code between, can need
+  more under machine load while the restored blob is not yet collected
+  (template scale: 225 MiB at rest, 232–277 MiB under 12 busy loops —
+  `docs/backlog/distribution/reference/isolate-host-fs-snapshot-probe/restore-then-snapshot.mjs`).
+  An allocation the limit
   refuses is `ERR_FS_SNAPSHOT_TOO_LARGE` (snapshot) or `_INCOMPLETE`
   (restore); an isolate the limit kills outright is your memory termination.
 - **Crossing into the isolate:** isolated-vm copies the `bytes` argument
