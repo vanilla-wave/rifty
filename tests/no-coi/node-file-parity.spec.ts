@@ -50,7 +50,8 @@ test('node <file> matches Node (no-COI SDK)', async ({ page }) => {
           if (version === '') {
             version = (await project.run('node -p process.version').completion).stdout.trim();
           }
-          const done = await project.run(`node ${program.argv.join(' ')}`).completion;
+          const done = await project.run(`node ${program.line ?? program.argv.join(' ')}`)
+            .completion;
           results.push({
             root: projectRoot,
             outcome: { stdout: done.stdout, stderr: done.stderr, exitCode: done.exitCode },

@@ -54,7 +54,7 @@ export function captureTimerBoundary(): number {
 export function clearTimersSince(boundary: number): void {
   for (const [id, handle] of handlesById) {
     handle.disposeScopesSince(boundary);
-    if (id >= boundary) handle.clear();
+    if (id >= boundary) handle.unenroll();
   }
 }
 
@@ -64,7 +64,7 @@ export function onTimerScopeDispose(handle: unknown, dispose: () => void): () =>
 }
 
 class Timeout {
-  /** The callback, as Node's `Timeout#_onTimeout`; null once cleared (Node's clearTimeout). */
+  /** The callback, as Node's `Timeout#_onTimeout`; clear* nulls it (`clearTimer`). */
   _onTimeout: ((...a: unknown[]) => void) | null = () => {};
   private active = true;
   private refed = true;
@@ -92,9 +92,8 @@ class Timeout {
     return this.active;
   }
 
-  clear(): void {
-    // Node's clearTimeout: a cleared handle's frame then reads `Timeout.<anonymous>`.
-    this._onTimeout = null;
+  /** Node's `unenroll`: the timer stops; `_onTimeout` is left as it is. */
+  unenroll(): void {
     if (this.active) {
       this.active = false;
       if (this.refed) keepaliveUnref();
@@ -159,7 +158,8 @@ export function setTimeout(
   const raw = hostSetTimeout(
     (...a: unknown[]) => {
       const handle = box.handle;
-      if (!handle?.fireTimeout() || handle._onTimeout === null) return;
+      // Node's listOnTimeout: no `_onTimeout` → the timer is destroyed unrun.
+      if (!handle?.fireTimeout() || !handle._onTimeout) return;
       reflectApply(handle._onTimeout, handle, a);
     },
     ms,
@@ -172,6 +172,29 @@ export function setTimeout(
   return handle;
 }
 
+/**
+ * Node v24.16.0 `lib/timers.js` clearTimeout (clearInterval calls it): a handle
+ * is unenrolled only `if (timer?._onTimeout)`, after `timer._onTimeout = null`
+ * (so a cleared callback's frame reads `Timeout.<anonymous>`); a numeric id's
+ * timer always. Anything else goes to the host clear.
+ */
+function clearTimer(handle: unknown, hostClear: (raw: never) => void): void {
+  if (handle instanceof Timeout) {
+    if (handle._onTimeout) {
+      handle._onTimeout = null;
+      handle.unenroll();
+    }
+    return;
+  }
+  const tracked = resolveHandle(handle);
+  if (tracked) {
+    tracked._onTimeout = null;
+    tracked.unenroll();
+    return;
+  }
+  hostClear(handle as never);
+}
+
 /** Resolve a clear* argument (handle object OR coerced numeric id) to its handle. */
 function resolveHandle(handle: unknown): Timeout | undefined {
   if (handle instanceof Timeout) return handle;
@@ -180,12 +203,7 @@ function resolveHandle(handle: unknown): Timeout | undefined {
 }
 
 export function clearTimeout(handle: unknown): void {
-  const tracked = resolveHandle(handle);
-  if (tracked) {
-    tracked.clear();
-    return;
-  }
-  hostClearTimeout(handle as HostTimeout);
+  clearTimer(handle, hostClearTimeout as (raw: never) => void);
 }
 
 export function setInterval(
@@ -198,8 +216,8 @@ export function setInterval(
     (...a: unknown[]) => {
       const handle = box.handle;
       if (!handle?.shouldRunInterval()) return;
-      // Node's listOnTimeout destroys a timer whose `_onTimeout` was nulled.
-      if (handle._onTimeout === null) return handle.clear();
+      // Node's listOnTimeout: no `_onTimeout` → the timer is destroyed unrun.
+      if (!handle._onTimeout) return handle.unenroll();
       reflectApply(handle._onTimeout, handle, a);
     },
     ms,
@@ -212,12 +230,7 @@ export function setInterval(
 }
 
 export function clearInterval(handle: unknown): void {
-  const tracked = resolveHandle(handle);
-  if (tracked) {
-    tracked.clear();
-    return;
-  }
-  hostClearInterval(handle as HostInterval);
+  clearTimer(handle, hostClearInterval as (raw: never) => void);
 }
 
 // ADR-0085: setImmediate queue rep + check-phase drain-order contract.

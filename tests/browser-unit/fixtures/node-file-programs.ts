@@ -15,6 +15,8 @@ export interface NodeFileProgram {
   readonly files: Readonly<Record<string, string>>;
   /** Argv after `node`; the rifty line is `node <argv joined by spaces>`. */
   readonly argv: readonly string[];
+  /** The rifty line after `node` when argv needs shell quoting (`-e "…"`). */
+  readonly line?: string;
 }
 
 const ENTRY_FACTS = `const dep = require('./lib/dep');
@@ -395,6 +397,43 @@ throw e;
         "let n = 0;\nconst f = function () {\n  if (++n === 3) {\n    clearInterval(h);\n    console.log('done', n);\n  }\n};\nconst h = setInterval(f, 1);\nh._onTimeout = null;\nsetTimeout(() => {\n  h._onTimeout = f;\n  console.log('back');\n}, 20);\n",
     },
     argv: ['main.js'],
+  },
+  {
+    // Node's clearTimeout: no `_onTimeout` → nothing; listOnTimeout destroys it.
+    name: 'interval-getter-null-on-timeout',
+    files: {
+      'main.js':
+        "const h = setInterval(() => {}, 1);\nObject.defineProperty(h, '_onTimeout', {\n  get() {\n    return null;\n  },\n});\n",
+    },
+    argv: ['main.js'],
+  },
+  {
+    // Node's clearTimeout writes `_onTimeout = null` through a guest setter.
+    name: 'interval-setter-clears-itself',
+    files: {
+      'main.js':
+        "let n = 0;\nlet stored = () => {\n  n++;\n};\nlet busy = false;\nconst h = setInterval(() => {}, 1);\nObject.defineProperty(h, '_onTimeout', {\n  get() {\n    return stored;\n  },\n  set(v) {\n    if (!busy) {\n      busy = true;\n      clearInterval(h);\n    }\n    stored = v;\n  },\n});\nclearInterval(h);\nsetTimeout(() => console.log(n, stored), 10);\n",
+    },
+    argv: ['main.js'],
+  },
+  {
+    // Node's clearTimeout of a nulled `_onTimeout` leaves the timer enrolled.
+    name: 'interval-cleared-after-null',
+    files: {
+      'main.js':
+        "let n = 0;\nconst f = () => {\n  if (++n === 3) {\n    clearInterval(h);\n    console.log('n', n);\n  }\n};\nconst h = setInterval(f, 1);\nh._onTimeout = null;\nclearInterval(h);\nh._onTimeout = f;\n",
+    },
+    argv: ['main.js'],
+  },
+  {
+    // `-e`: a `stack` getter throwing on its second read (browser hosts' report).
+    name: 'eval-stack-getter-second-read',
+    files: {
+      'main.js':
+        "const e = new Error('original');\nlet n = 0;\nObject.defineProperty(e, 'stack', {\n  get() {\n    if (n++) throw new Error('getter');\n    return 'Error: original\\n    at here';\n  },\n});\nthrow e;\n",
+    },
+    argv: ['-e', "require('./main.js')"],
+    line: `-e "require('./main.js')"`,
   },
   {
     // Inside its own callback Node keeps `_onImmediate` until it returns.

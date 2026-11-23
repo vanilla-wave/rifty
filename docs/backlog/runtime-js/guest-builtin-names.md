@@ -55,5 +55,9 @@ challenge: 2026-11-23 — inherits the goal premise check (`goal.md` §Challenge
   was withdrawn there: its check scanned these bundles only when built, and
   no CI lane builds them. A check that covers them proves a vendor name
   unreachable by the guest (prod build), never by a text window around it.
+  Owner: runtime-js with workbench (bundles). Trigger: a production-build
+  lane for the Workbench bundles, or a browser-host frame or
+  `constructor.name` reading a suffixed name. Compat process.md "Builtin names
+  in the browser hosts' production bundles".
 
 ## Decisions

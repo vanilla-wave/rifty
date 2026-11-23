@@ -23,8 +23,17 @@ such an error to the report (row equals Node in the isolate). Open: a
 non-string `stack` (`e.stack = 42`) on the `-e` path; the number of reads: an
 own `stack` getter runs 3 times in the isolate before the report prints, 4 in
 Node (PR #425 Final probe, a required file and a top-level `-e` throw).
+Browser hosts since PR #425 (the projection reads `stack` once and no longer
+throws a later read's error): an `-e` error whose getter throws on its second
+read prints `node: getter` (no-COI) / `Error: getter` with kernel frames (COI);
+main threw it inside the projection; Node `Error: original` + hint (row
+`eval-stack-getter-second-read`). Non-string `stack` in the isolate (2026-11-23,
+`e.stack = 42; throw e` in `-e` or a required file): `TypeError:
+(ownStack ?? error.nameerror.message).split is not a function`, Node `[Error:
+x\n    42]`.
 Owner: runtime-js (eval projection, fatal report). Trigger: a guest whose
-`stack` getter has effects, or the next change to the projection.
+`stack` getter has effects or is not a string, or the next change to the
+projection.
 
 ## Challenge
 

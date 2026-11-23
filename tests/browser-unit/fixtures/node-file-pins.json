@@ -160,6 +160,14 @@
       "exitCode": 1
     },
     "interval-nulled-on-timeout": "node",
+    "interval-getter-null-on-timeout": "node",
+    "interval-setter-clears-itself": "node",
+    "interval-cleared-after-null": "node",
+    "eval-stack-getter-second-read": {
+      "stdout": "",
+      "stderr": "node: getter\n",
+      "exitCode": 1
+    },
     "clear-immediate-in-own-callback": "node",
     "throw-stack-getter-second-read": {
       "stdout": "",
@@ -449,6 +457,14 @@
       "exitCode": 1
     },
     "interval-nulled-on-timeout": "node",
+    "interval-getter-null-on-timeout": "node",
+    "interval-setter-clears-itself": "node",
+    "interval-cleared-after-null": "node",
+    "eval-stack-getter-second-read": {
+      "stdout": "",
+      "stderr": "Error: getter\n    at Error.get (<root>/main.js:5:20)\n    at runEntryLifecycleInternal (<runtime>/packages/kernel/src/worker-entry.ts)\n    at async onMessage (<runtime>/packages/kernel/src/worker-entry.ts)\n",
+      "exitCode": 1
+    },
     "clear-immediate-in-own-callback": "node",
     "throw-stack-getter-second-read": {
       "stdout": "",
@@ -722,6 +738,9 @@
       "exitCode": 1
     },
     "interval-nulled-on-timeout": "node",
+    "interval-getter-null-on-timeout": "node",
+    "interval-setter-clears-itself": "node",
+    "interval-cleared-after-null": "node",
     "clear-immediate-in-own-callback": "node",
     "throw-stack-getter-second-read": "node",
     "function-helper-escaped-name": "node",
