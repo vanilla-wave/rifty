@@ -3,6 +3,7 @@
  * Shared by the bundle and the host side; no Node or embedder import here.
  * Unstable: any release may change it (README §Versions).
  */
+import type { SnapshotOptions } from './snapshot.ts';
 
 /** What the guest can call on the host. Every argument is guest-controlled. */
 export interface HostFunctions {
@@ -33,6 +34,14 @@ export interface GuestEntry {
   fire(id: number): void;
   /** An unhandled rejection the embedder saw: a copy of the reason, or `UNCOPYABLE_REJECTION`. */
   rejection(reason: unknown): void;
+  /** The realm's whole FS as a snapshot (ADR-0567); whenever no guest code runs, after `run` included. */
+  snapshot(options: SnapshotOptions): Uint8Array;
+  /**
+   * Replace the realm's FS with a snapshot; only before `run`, else `ERR_FS_SNAPSHOT_NOT_FRESH`.
+   * A failure while writing is `ERR_FS_SNAPSHOT_INCOMPLETE`: `run`, `snapshot` and `restore`
+   * then refuse with it — dispose the isolate.
+   */
+  restore(bytes: Uint8Array, options: SnapshotOptions): void;
 }
 
 /** Sent to `rejection` when the reason cannot be copied out of the isolate. */

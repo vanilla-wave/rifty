@@ -37,6 +37,11 @@ export const fsMatrix = {
       '✅',
       'lutimes ≡ utimes (no-symlink); futimes resolves fd→path, `EBADF` (syscall `futime`) on a bad fd',
     ],
+    [
+      '`utimesSync` / `lutimesSync` / `futimesSync` sub-millisecond times',
+      '⚠️',
+      'Cut to whole milliseconds (Node keeps them: 100 ns measured on APFS) — `backlog/runtime-js/utimes-sub-millisecond-truncated`',
+    ],
     ['Encoding reads', '✅', 'utf8, utf16le, latin1/ascii, hex parity cases'],
     ['Path resolution with `process.cwd()`', '✅', 'Relative fs paths anchor at runtime cwd'],
     ['Callback `readFile` / `writeFile`', '✅', 'Node-style error-first callbacks'],
