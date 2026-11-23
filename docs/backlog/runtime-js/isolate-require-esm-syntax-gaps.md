@@ -26,6 +26,14 @@ The reviewer's expectation (SyntaxError for every CJS file) holds only for
 `.cjs`; a typeless `.js` is Node's detect-module case. `node -e 'let require = 1'`
 runs as CJS in both (exit 0, `typeof module` `object`): not affected.
 
+Probe 2026-11-23 (PR #421 HEAD, isolate `runCode`, Node v24.16.0 oracle):
+`require('./m.mjs')` of `export const a = 1;`, of `export const a =
+import.meta.url;` and of `throw new Error('esm');` all fail `TypeError:
+URLConstructor is not a constructor` at the `require` call, exit 1 — the module
+body never runs; Node prints `{"a":1}` / its file URL. So every ES module
+reached by `require` in the isolate hits it, not only detected `.js` files
+(goal node-file-entry-parity map: deferred).
+
 Cause (read, not instrumented): `URLConstructor = globalThis.URL` is captured
 at runtime-js module load, where the isolate has no `URL` (ceiling global,
 installed after load, `web-shim.ts` `CEILING_GLOBALS`); the ESM path builds a
