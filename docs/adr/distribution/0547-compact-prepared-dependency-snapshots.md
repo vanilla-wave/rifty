@@ -53,8 +53,10 @@ unnecessary; existing tier projection and payload overlay already own applicatio
 Compact reduces the measured Vite pair, not every possible tree. Readers must
 upgrade before consuming compact; ordinary producers/readers remain compatible.
 Explicit install retains existing cache-miss and replay behavior. 2026-11-23 —
-concretely: shadow-substituted lock pins replay only from the shared cache, so
-after compact on a cold cache every install (adding a package included) fails
-`EBROKENLOCK … missing its pinned cache bytes` with zero network requests, even
-with a live registry; a replay snapshot or warm cache restores install
+concretely: shadow-substituted pins replayed from the lock read bytes only from
+the shared cache and are never fetched. After compact on a cold cache, install
+over the lock (zero requests) or adding an unrelated package fails `EBROKENLOCK
+… missing its pinned cache bytes`, even with a live registry; naming the
+substituted direct dependency re-resolves it through the registry (ADR-0361
+request admission). A replay snapshot or warm cache restores install
 (`no-coi-compact-install.contract.test.ts`).

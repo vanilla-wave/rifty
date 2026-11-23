@@ -200,11 +200,12 @@ The producer's `profile: 'compact'` omits replay archives while retaining prepar
 Vite/esbuild dependencies. Apply, saved open and explicit reapply use the same APIs;
 compact neither writes nor purges the shared replay cache. Update the Workbench
 producer/copied Worker before using v5. Explicit install keeps existing behavior:
-a lockfile with shadow-substituted pins (Vite's `esbuild-wasm`) replays those bytes
-only from the shared cache, so after compact on a cold cache every `npm install`,
-adding a package included, fails with `EBROKENLOCK` and never goes to the network,
-even with a registry connected. Apply a replay snapshot (or keep a warm cache) to
-install again; compact promises no reinstall.
+shadow-substituted pins replayed from the lockfile (Vite's `esbuild-wasm`) read their
+bytes only from the shared cache and are never fetched. After compact on a cold
+cache, `npm install` over the lock, or adding an unrelated package, fails with
+`EBROKENLOCK` even with a registry connected; naming a substituted direct dependency
+re-resolves it through the registry. Apply a replay snapshot (or keep a warm cache)
+to reinstall; compact promises no reinstall.
 
 No registry URL is needed. Every application validates the bounded input and
 identities, including same-ID/forced calls. Default conflicts reject before

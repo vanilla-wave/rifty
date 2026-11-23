@@ -3,8 +3,8 @@ area: npm-client
 status: draft
 title: What should install do when a lock's shadow-substituted pin has no replay bytes in a cold cache?
 created: 2026-11-23
-why: After a compact v5 snapshot (or any cold shared cache) every install over a lock with shadow-substituted pins fails `EBROKENLOCK … missing its pinned cache bytes` with zero network requests, even with a live registry — loud and accepted by ADR-0547, but the message names no remedy and the network question is undecided.
-user_story: As an editor developer using a compact prepared Vite snapshot, I want `npm install <pkg>` to either succeed or tell me what to do, but today it fails with EBROKENLOCK naming a shadow recipe.
+why: After a compact v5 snapshot (or any cold shared cache) an install over a lock with shadow-substituted pins, or adding an unrelated package, fails `EBROKENLOCK … missing its pinned cache bytes` even with a live registry; the lock-replayed pin is never fetched — loud and accepted by ADR-0547, but the message names no remedy and the network question is undecided.
+user_story: As an editor developer using a compact prepared Vite snapshot, I want `npm install` (or adding a package) to either succeed or tell me what to do, but today it fails with EBROKENLOCK naming a shadow recipe.
 sources: [PR-388, docs/adr/distribution/0547-compact-prepared-dependency-snapshots.md, docs/adr/playground/0346-baked-dependency-snapshots-carry-replay-tarball-cache.md, docs/adr/npm-client/0361-lock-replay-admits-the-attested-recipe-pin-request-admission-unchanged.md, docs/backlog/playground/snapshot-carries-substituted-bytes-twice.md]
 code:
   - packages/npm-client/src/installer-walk.ts
@@ -21,9 +21,16 @@ a lock pin whose acquisition is a shadow substitution
 `readRegistryShadowReplayCache`) reads its bytes only from the shared tarball
 cache (`internal/shadow/substitution.ts`, "is missing its pinned cache bytes").
 Replay snapshots carry exactly those bytes; compact v5 omits them by design.
-Real LightningCSS → `lightningcss-wasm@1.32.0` after compact: `EBROKENLOCK`,
-zero requests although the registry serves the tarball; replay → install
-succeeds from cache. Real Vite 7.3.6 has the same kind of pin (`esbuild-wasm`).
+Real LightningCSS → `lightningcss-wasm@1.32.0` after compact, registry live:
+plain install over the lock → `EBROKENLOCK`, zero requests; `npm install ms`
+→ fetches `ms`, then the same `EBROKENLOCK`; `npm install lightningcss` →
+the named root re-resolves through the registry (ADR-0361 request admission)
+and succeeds; replay → install succeeds from cache. So a registry route for
+the substituted source already exists for an explicit request; only the
+lock-replayed pin refuses network (zero-registry-read replay, originally
+ADR-0335, grafted into ADR-0361; ADR-0346). Real Vite 7.3.6 has the same kind
+of pin (`esbuild-wasm`, transitive); whether naming it re-resolves the same
+way is unverified.
 
 Accepted today (ADR-0547, goal compact-dependency-snapshots decision
 2026-10-23): no install ban, no network fallback, no reinstall promise. Docs
@@ -39,8 +46,9 @@ replay deduplication, not the cold-cache error.
    needs replay bytes absent from the cache — apply a replay snapshot or a warm
    cache") instead of the generic `EBROKENLOCK` recipe text? Agent-owned once
    the wording is the only change.
-2. **owner: user** — should shadow-substituted lock pins ever acquire their
-   source from a connected registry on a cold cache? This changes observable
+2. **owner: user** — should a lock-replayed shadow pin ever acquire its
+   source from a connected registry on a cold cache, as an explicit request
+   for the same root already does? This changes observable
    install scope and the replay-integrity authority (ADR-0346/0361); it is the
    user's call, not a direction this draft proposes.
 

@@ -88,7 +88,9 @@ tests unchanged; workbench glue+workers 112 files / 2005 tests PASS.
 - Install after compact (S1): `no-coi-compact-install.contract.test.ts` — real
   SDK apply + `installToolchainPackages` with a live registry: compact →
   `EBROKENLOCK: shadow recipe … is missing its pinned cache bytes`, zero
-  requests, tree/lock byte-exact; replay → install succeeds, no tarball fetch.
+  requests, tree/lock byte-exact; `npm install ms` → same EBROKENLOCK, the
+  replayed pin never fetched; `npm install lightningcss` re-resolves through the
+  registry and succeeds; replay → install succeeds, no tarball fetch.
   READMEs/ADR-0547 now state this. Stamp: the owner demotes before the
   installer and promotes only on success (`no-coi-toolchain-owner.ts`); not
   re-pinned here. Follow-up question: `npm-client/shadow-pin-replay-bytes-cold-cache`.
