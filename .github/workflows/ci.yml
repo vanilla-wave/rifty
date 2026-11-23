@@ -2,6 +2,8 @@ name: CI
 
 on:
   pull_request:
+    # ready_for_review: CI re-runs on the current merge candidate when a draft turns ready.
+    types: [opened, synchronize, reopened, ready_for_review]
   merge_group:
     types: [checks_requested]
   push:
@@ -39,7 +41,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # contract/goal gates need full baseline history
+          fetch-depth: 0 # full history
       - uses: pnpm/action-setup@v4 # version from package.json `packageManager`
       - uses: actions/setup-node@v4
         with:

@@ -65,7 +65,7 @@ Use `docs/process/rules/fault-classes.md`. Template: `TEMPLATE.md`.
 Recording a fact or question needs no premise critic. When refine recommends
 a new direction whose value or competing direct route could change what or
 whether the user chooses to build, check the premise before that choice is
-treated as settled. Otherwise check it at FIT before adopting the plan.
+treated as settled. Otherwise check it before adopting the plan.
 
 One fresh read-only critic receives the original user request/answers, proposed
 outcome, evidence, alternatives and unresolved forks, not just the polished

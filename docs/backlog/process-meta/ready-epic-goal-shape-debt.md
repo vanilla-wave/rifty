@@ -30,16 +30,12 @@ deferral, so the cost lands at hand-off time.
 
 The refit is not mechanical: `epics/TEMPLATE.md` says invariants come out of the user's decisions (refine
 interview) and are reported at FIT completion (README §Report); the run only
-proves them, and `process-meta/autonomous-epic-runs.md` adds a falsified-on-main proof
-per invariant. `tier` is a fidelity call. So a hand-off that reads "run this
+proves them, and FIT requires each to be false on current main. `tier` is a fidelity call. So a hand-off that reads "run this
 ready epic" silently means "interview me first" — the exact surprise this item
 records.
 
-Dedup (no match): `process-meta/draft-gate-enforcement` gates implementing FROM
-a draft and the `ready-verdict:` laundering channel — a different gate family;
-`process-meta/milestone-review-ritual` sweeps stale items at milestone close;
-`process-meta/autonomous-epic-runs` tracked the gate family retired by goal
-artifact v2. None covers epic goal-shape debt.
+Dedup (no match): `process-meta/milestone-review-ritual` sweeps stale items at
+milestone close. It does not cover epic goal-shape debt.
 
 ## Options or Next
 

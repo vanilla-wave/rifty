@@ -52,7 +52,7 @@ the write-up. Continue to the final check below.
 
 A factual capture needs no premise critic. A proposed direction follows
 `docs/backlog/README.md` §Challenge: early when it informs the user's choice,
-otherwise at FIT. Preserve any early record for reuse; formalizing the
+otherwise before adopting the plan. Preserve any early record for reuse; formalizing the
 same premise does not require another premise critique.
 
 Every completed write-up, including a factual/agent-only capture, gets the

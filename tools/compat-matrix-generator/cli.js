@@ -108,8 +108,8 @@ function buildSassMatrix(policyValue) {
     title: 'Compatibility matrix — sass-embedded',
     intro: `Exact install-only facade claim for \`sass-embedded@${version}\` over \`${sourcePackage}@${sourceVersion}\`; every supported row is an exact-version ceiling (⚠️): admission is exact-only. ${
       finalGreen
-        ? 'Final+GREEN is proven against real Node and Chromium.'
-        : 'Contract+RED is recorded; Final+GREEN is not.'
+        ? 'Proven against real Node and Chromium.'
+        : 'Proof against real Node and Chromium is pending.'
     }`,
     rows: [...surfaces, divergenceRow, ...unsupported],
     tests,

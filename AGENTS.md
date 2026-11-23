@@ -14,8 +14,8 @@ Never trade real behavior for speed of delivery; never propose a shortcut, mock,
 - **No mocking what we build.** Real Memory VFS, real Workers/SW, real npm tarballs, real parity vs Node. Mock only unavoidable external boundaries (network egress, clock, absent browser APIs); never the unit under test or a sibling rifty package. Hard to instantiate = API smell — fix it.
 - **Similar but different must work.** If "X works" needs exact `X@V`, rifty-patched bytes or a narrowed admission, X is a declared ceiling, not supported: compat ⚠️, inventory row with class/authority/kill condition (`docs/process/rules/fault-classes.md` §Guest-package adaptations). Never a silent fix, never a starter pin.
 - **Parity = gold standard.** Never assume Node/Anthropic/StackBlitz behavior — verify via parity-runner. Found gap/bug → failing parity (or regression) test first, then fix; no fix merges without it; never edit a test to make code pass.
-- **A throw is not a way to meet a goal.** A throw / compat ❌ for behavior that real Node and rifty already perform is a fake — never satisfy the letter of an invariant with it.
-- **Goal vs reality → the user decides.** `goal.md` (outcome, scenario, invariants, tier) is user-owned. It contradicts observed behavior, or can't be met as written → ask the user, probe/RED attached; continue whatever the question doesn't block; never narrow, drop or reinterpret it yourself.
+- **No throw for working behavior.** Replacing behavior that real Node performs and rifty already delivers with a throw / compat ❌, to satisfy the letter of an invariant, is a fake.
+- **Goal vs reality → the user decides.** `goal.md` (outcome, scenario, invariants, tier) is user-owned: never narrow, drop or reinterpret it yourself. Its premise proves false, or it can't be met without changing it → ask the user, probe/RED attached; continue whatever the question doesn't block.
 
 ## Architecture — hard rules
 - Import boundaries enforced by `pnpm check:arch` (rules `tools/checks/arch-rules.cjs`): layer top-down (vfs/io/net → kernel → runtime-* → shell/terminal/npm-client → playground), no reverse imports, no cycles, no foreign `src/internal/*`, solid-js only in playground (D-002).
@@ -29,14 +29,14 @@ Never trade real behavior for speed of delivery; never propose a shortcut, mock,
 - Comments/ADRs/docs: extremely concise, sacrifice grammar, cut anything restating code.
 
 ## Data sources
-- `docs/backlog/` — provisional contracts: items + user-value epics (`goal.md` = user-owned destination); delete on done; store shape + goal write-up (FIT): `docs/backlog/README.md`. User-brought idea/finding (in session) → `rifty-refine`; mid-task/agent discovery that must wait → `rifty-to-backlog`, never interview; epic missing tier/Invariants → fit it yourself (in the session that has the user) — a write-up is never a blocked ask. A `draft` goal carries an unanswered user question: ask, don't build.
+- `docs/backlog/` — provisional contracts: items + user-value epics (`goal.md` = user-owned destination); delete on done; store shape + goal write-up (FIT): `docs/backlog/README.md`. User-brought idea/finding (in session) → `rifty-refine`; mid-task/agent discovery that must wait → `rifty-to-backlog`, never interview; epic missing tier/Invariants → fit it yourself (in the session that has the user) — a write-up is never a blocked ask.
 - `docs/adr/` — decisions + strategic choices: write one for an important decision with non-obvious trade-offs (`pnpm adr:new <area> "Title"`); index + D→ADR map: `docs/adr/README.md`
 - `docs/process/traps.md` — hard-won gotchas (worktrees/git, CI, e2e, browser runtime, tooling); check before debugging a weird fail or re-proposing a rejected speedup
 - `docs/process/rules/fault-classes.md` — fault taxonomy; `docs/process/rules/testing.md` — test pyramid + why parity
 - `docs/public/` — compat matrix, publishing, hosting
 
 ## Confirm-first
-Only publish, spend, delete user data. Everything else: decide and continue; the one question is a goal conflict (§Fidelity).
+Only publish, spend, delete user data. Everything else: decide and continue.
 
 ## DoD (per PR)
 - [ ] implementation aligned with project goal
