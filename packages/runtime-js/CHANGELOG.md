@@ -1,5 +1,6 @@
 # Changelog
 
+- Where the Node fatal report is installed (isolate guest), an uncaught `MODULE_NOT_FOUND` from a `node <file>` entry is reported as the loader's error in Node's shape, its frame included; it printed a text stand-in built for `err.stack` hosts, doubled (`[Error: … { code … }] { code … }`).
 - `fs.utimes*` with a time past 2^63 ns stores Node 24.16.0's darwin value, sign included: a numeric string below −2^63 s wraps to the top as libuv does (`'-1e306'` stored −Infinity, then −2^63 ns); otherwise ±2^63 ns. Node on Linux refuses these with `EINVAL` — compat ⚠️; parity `fs/path-nul-and-utimes-edge-times` compares them exactly on darwin hosts.
 - `fs.utimes*` with a numeric string as Node: a negative one is that time (it was now), `''` is 0, `'Infinity'` is now (it threw `ERR_INVALID_ARG_TYPE`); parity `fs/path-nul-and-utimes-edge-times`.
 - `fs.utimes*`/`futimes*` store Node 24.16.0's times: an invalid `Date` keeps the time (it stored NaN), a negative number is now, a huge time saturates at 2^63 ns (it stored Infinity-scale values); parity `fs/path-nul-and-utimes-edge-times`.

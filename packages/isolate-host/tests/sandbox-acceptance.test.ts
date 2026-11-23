@@ -8,6 +8,7 @@
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { nodeFileExpected } from '../../../tests/browser-unit/fixtures/node-file-programs.ts';
 import * as pkg from '../src/index.ts';
 import {
   type FileTree,
@@ -73,21 +74,6 @@ async function tree(sb: Sandbox, dir = W): Promise<FileTree> {
   return out;
 }
 
-/**
- * The part of an uncaught-error report this goal owns: the error line and the
- * user files its frames name, in order. Positions, the `file:line` header and
- * the footer belong to the runtime-js diagnostics goal (pinned ⚠️ there).
- */
-function errorView(stderr: string): { error: string | undefined; files: string[] } {
-  const lines = stderr.split('\n');
-  const error = lines.find((l) => /^[A-Za-z]*Error\b/.test(l));
-  // `at f (/workspace/a.js:1:2)` or, for an anonymous frame, `at /workspace/a.js:1:2`.
-  const files = lines.flatMap(
-    (l) => /^\s+at (?:.*\()?(\/workspace\/[^:)]+):\d+:\d+\)?$/.exec(l)?.[1] ?? [],
-  );
-  return { error, files };
-}
-
 const BUGGY = `const fs = require('fs');
 const input = fs.readFileSync(__dirname + '/input.bin');
 const pdf = makePdf(input);
@@ -120,8 +106,8 @@ describe('write → run → error → fix → run (scenario 1–3)', () => {
       const failed = await sb.exec('main.js', { args: ['out/report.pdf'] });
       expect(failed.exitCode).toBe(1);
       expect(failed.stdout).toBe(oracle[0]?.stdout);
-      expect(errorView(failed.stderr)).toEqual(errorView(oracle[0]?.stderr ?? ''));
-      expect(errorView(failed.stderr).error).toBe('ReferenceError: makePdf is not defined');
+      expect(failed.stderr).toBe(nodeReport(oracle[0]?.stderr ?? ''));
+      expect(failed.stderr).toMatch(/^ReferenceError: makePdf is not defined\n/);
 
       await sb.writeFile('main.js', FIXED);
       await sb.writeFile('lib/pdf.js', PDF_LIB);
@@ -324,13 +310,39 @@ describe('ESM entries are a loud gap (I2)', () => {
   }
 });
 
+/**
+ * Node's report as rifty prints it (process.md "Fatal error stderr bytes"): without the
+ * `<file>:<line>` header (JS cannot read V8's message location), Node's own `node:*`
+ * frames and the trailer version projected as `node-file.test.ts` does. The oracle ran
+ * under a longer temp path: a string array util.inspect wrapped only for that length is
+ * joined again where `/workspace` fits it on one line (80 columns).
+ */
+function nodeReport(stderr: string): string {
+  const lines = stderr.split('\n');
+  if (/^\/workspace\/\S+:\d+$/u.test(lines[0] ?? '')) lines.splice(0, 4);
+  return nodeFileExpected(
+    { stdout: '', stderr: lines.join('\n'), exitCode: 1, root: '\0' },
+    'v24.0.0',
+  ).stderr.replace(
+    /^( *)(\w+: )\[\n((?: +'[^'\n]*',?\n)+) *\]/gmu,
+    (whole, indent: string, key: string, items: string) => {
+      const one = `${indent}${key}[ ${items.trim().split(/,\n +/u).join(', ')} ]`;
+      return one.length <= 80 ? one : whole;
+    },
+  );
+}
+
 /** Scenario 1–2 corpus: each row is a two-run sequence over the same files, compared with node's. */
 interface CorpusRow {
   readonly label: string;
   readonly files: Readonly<Record<string, string>>;
   readonly runs: readonly (readonly string[])[];
-  /** Only the diagnostic text differs from node's: the runtime-js diagnostics goal's (⚠️). */
-  readonly diagnosticText?: true;
+  /**
+   * ⚠️ The report of a failed run differs from Node's (beyond the header): rifty's exact
+   * stderr per run, and the backlog item that owns the difference. A change fails until
+   * the pin moves; a pin equal to Node fails too.
+   */
+  readonly pinned?: { readonly owner: string; readonly stderr: readonly string[] };
 }
 const CORPUS: readonly CorpusRow[] = [
   {
@@ -408,7 +420,13 @@ require('fs').writeFileSync('rel/out.txt', require('path').relative(__dirname, _
     label: 'syntax error in the entry, then in a dependency',
     files: { 'a.js': 'const a = ;\n', 'b.js': "require('./dep')\n", 'dep.js': 'let x = {\n' },
     runs: [['a.js'], ['b.js']],
-    diagnosticText: true,
+    pinned: {
+      owner: 'backlog/runtime-js/module-compile-error-node-syntax-error',
+      stderr: [
+        "ModuleLoadError: Failed to compile CJS module /workspace/a.js: Unexpected token ';' {\n  code: 'SYNTAX_ERROR',\n  specifier: '/workspace/a.js',\n  importer: '/workspace/a.js',\n  requireStack: undefined\n}\n\nNode.js v24.0.0\n",
+        "ModuleLoadError: Failed to compile CJS module /workspace/dep.js: Unexpected token ')'\n    at Object.<anonymous> (/workspace/b.js:1:1) {\n  code: 'SYNTAX_ERROR',\n  specifier: '/workspace/dep.js',\n  importer: '/workspace/dep.js',\n  requireStack: undefined\n}\n\nNode.js v24.0.0\n",
+      ],
+    },
   },
   {
     // Manager 2026-11-22: a regression on the diagnostics branch compiled this silently, exit 0.
@@ -418,7 +436,12 @@ require('fs').writeFileSync('rel/out.txt', require('path').relative(__dirname, _
         'function a() {\n  console.log("a");\n}}\nconsole.log("top");\nfunction b() {\n  return 1;\n}\n',
     },
     runs: [['brace.js']],
-    diagnosticText: true,
+    pinned: {
+      owner: 'backlog/runtime-js/module-compile-error-node-syntax-error',
+      stderr: [
+        "ModuleLoadError: Failed to compile CJS module /workspace/brace.js: Unexpected identifier 'console' {\n  code: 'SYNTAX_ERROR',\n  specifier: '/workspace/brace.js',\n  importer: '/workspace/brace.js',\n  requireStack: undefined\n}\n\nNode.js v24.0.0\n",
+      ],
+    },
   },
   {
     // Codec review (manager 2026-11-22): a guest-made NaN/Infinity time or NUL name must
@@ -464,7 +487,6 @@ process.on('exit', () => { queueMicrotask(() => { fs.writeFileSync('late', '1');
     label: 'missing module',
     files: { 'main.js': "require('./nope')\n" },
     runs: [['main.js'], ['missing.js']],
-    diagnosticText: true,
   },
 ];
 
@@ -483,11 +505,10 @@ describe('node <path> corpus in sequences (scenario 2, 5, I2)', () => {
           expect(r.stdout).toBe(o.stdout);
           expect(r.exitCode).toBe(o.exitCode);
           if (o.exitCode === 0) expect(r.stderr).toBe(o.stderr);
-          else if (row.diagnosticText) {
-            // The run fails as node's does and names the file; the text is the diagnostics goal's.
-            const named = /\/workspace\/[\w.]+/.exec(o.stderr)?.[0] ?? `${W}/${path}`;
-            expect(r.stderr).toContain(named);
-          } else expect(errorView(r.stderr)).toEqual(errorView(o.stderr));
+          else if (row.pinned !== undefined) {
+            expect(r.stderr, row.pinned.owner).toBe(row.pinned.stderr[i]);
+            expect(r.stderr, 'pinned row equals Node: unpin it').not.toBe(nodeReport(o.stderr));
+          } else expect(r.stderr).toBe(nodeReport(o.stderr));
           expect(await tree(sb)).toEqual(o.files);
         }
       } finally {

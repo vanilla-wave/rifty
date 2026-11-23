@@ -20,9 +20,11 @@ same Node executable over one fresh temporary directory, empty env, its real
 path read as `/workspace`. The API is typed in the test from the goal's
 contract until it exists. Committed RED: every case `it.fails`, failing at
 `createSandbox` (run 2026-11-22: 18 expected failures pass). Error reports are
-compared through `errorView` — the error line and the user files its frames
-name, in order; positions and Node's header/footer are the runtime-js
-diagnostics goal's.
+compared byte-for-byte with Node's projected as rifty prints it (no
+`<file>:<line>` header, Node's own frames and trailer version projected; re-cut
+2026-11-23 after #421 landed Node's fatal report in the isolate — it was
+`errorView`, the error line and the user files only); a compile error's report
+is pinned ⚠️ per row (`backlog/runtime-js/module-compile-error-node-syntax-error`).
 
 ## Challenge
 
@@ -59,10 +61,8 @@ challenge: 2026-11-22 — inherits the goal premise check (`goal.md` §Challenge
    `require`, JSON, `__filename`, `__dirname`, `argv` (a spaced arg, a flag),
    `require.main` / `module.id`, `path.relative`, a file the next run reads;
    `if (require.main === module) main()` by `cli.js` and `./cli.js`; an
-   uncaught throw in a dependency and an async-main rejection (`errorView`
-   equal); a syntax error in the entry and in a dependency, a missing module
-   and entry (exit and stdout equal, stderr names node's file — the text is
-   the diagnostics goal's ⚠️) → I2
+   uncaught throw in a dependency and an async-main rejection (Node's report); a syntax error in the entry and in a dependency (pinned ⚠️), a
+   missing module and entry (Node's report) → I2
 10. `maxFileBytes` 1024, `maxFsBytes` 64 KiB: a 1025-byte host write and a
     host read of a 2000-byte guest file reject `ERR_FS_FILE_TOO_LARGE`; a run
     writing 100 KiB resolves `exit 0`, its stdout, `stateRefused:

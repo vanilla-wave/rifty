@@ -309,7 +309,9 @@ export async function runNodeEntry(opts: RunNodeEntryOptions): Promise<void> {
     // on the child stderr instead of rifty's ModuleLoadError name + frames
     // (backlog/runtime-js/node-entry-miss-node-shape). All other throws are
     // re-raised unchanged.
-    const printed = asNodePrintedError(err);
+    // The fatal report prints the loader's error in Node's shape itself, frames
+    // included; the text-built stand-in is for hosts that print `err.stack`.
+    const printed = nodeFatalReportInstalled() ? err : asNodePrintedError(err);
     // ADR-0445: Node delivers an entry throw to `uncaughtException`; a handled
     // one leaves the loop running.
     const origin = preloading
