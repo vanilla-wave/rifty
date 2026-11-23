@@ -23,6 +23,17 @@
   после двух регрессов. Принять как есть и отложить в backlog — или отдельная
   цель — owner: user — evidence: map item 5d, compat process.md "Fatal error
   stderr bytes", `runtime-js/browser-host-realm-uncaught-fatal-report`.
+  Measured 2026-11-23 on the tree after the rollback, `console.log('before');
+  setTimeout(() => { throw new Error('x') }, 0)`: no-COI SDK
+  `project.run('node main.js')` → `status: 'failed'`, `exitCode: null`, stdout
+  `before\n`, stderr '', `error: { code: 'WORKER_CRASHED', message: 'Worker
+  crashed: Uncaught Error: x' }`, toolchain Worker `replaced`; the next `node -p
+  1+1` in the same sandbox → `exited`, 0, `2`. COI Workbench shell `node
+  zz/main.js` → exit 1, output `before\nUncaught Error: x
+  (/home/project/zz/main.js:2)` (one browser line, no frames); the next `node -p
+  1+1` → 0, `2`. Node: its report, exit 1. The user's first answer
+  («ок, не выглядит серьезным, если не так, поправь») was given before these
+  facts; asked again by the manager.
 
 - Settled (goal amend 2026-11-23, user: «давай положим в бэклог на всякий»):
   no Node-format header on any path and a syntax error as main's
