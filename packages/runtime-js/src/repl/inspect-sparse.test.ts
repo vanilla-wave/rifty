@@ -11,7 +11,7 @@ it.each([
     true,
     () => {
       const a: unknown[] = [1];
-    a[2] = 3;
+      a[2] = 3;
       a[10] = 4;
       return a;
     },
