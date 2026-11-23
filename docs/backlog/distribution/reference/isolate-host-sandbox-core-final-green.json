@@ -2,8 +2,8 @@
   "overall_verdict": "concern",
   "merge_call": "Final+GREEN PASS at 9d3d8ca84; merge only on green PR CI at HEAD after CLOSE.",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "9d3d8ca8448e0bfc324fd1435e27b987e09cee58",
-  "unit_goal_source": "docs/backlog/distribution/isolate-host-sandbox-core.md (ready, re-cut 2026-11-22 ×4; Acceptance 1 = docs/backlog/distribution/isolate-host-sandbox-acceptance.md rows 1-14); Contract+RED PASS @ 16b7ab607; BASE 50c9d8bf1; verify passes c505b857f -> 30c8c1ff1 -> 525aaf075; r4 at c0ad781f2; r5 at d78411460; r6 at 7650df442; r7 at 214bbf1c4; r8 at ebecf5eb7; r9 at 4ea5736b5; r10 at 4c2878684; r11 at a59996a0c; this pass 60b8ec137..9d3d8ca84 (external review round 3) (merges of main 11b9397ee: #418 codec, #416, #420); goal docs/backlog/epics/isolate-host-live-sandbox/goal.md",
+  "reviewed_sha": "4c7a263ac848ed8a5af030cbfa55c74f0937de4f",
+  "unit_goal_source": "docs/backlog/distribution/isolate-host-sandbox-core.md (ready, re-cut 2026-11-22 ×4; Acceptance 1 = docs/backlog/distribution/isolate-host-sandbox-acceptance.md rows 1-14); Contract+RED PASS @ 16b7ab607; BASE 50c9d8bf1; verify passes c505b857f -> 30c8c1ff1 -> 525aaf075; r4 at c0ad781f2; r5 at d78411460; r6 at 7650df442; r7 at 214bbf1c4; r8 at ebecf5eb7; r9 at 4ea5736b5; r10 at 4c2878684; r11 at a59996a0c; r12 at 9d3d8ca84; r13 at bc906f21e; this pass bc906f21e..4c7a263ac (comment-only) (merges of main 11b9397ee: #418 codec, #416, #420); goal docs/backlog/epics/isolate-host-live-sandbox/goal.md",
   "unit_residuals": [],
   "goal_residuals": [
     {
@@ -602,6 +602,14 @@
       "status": "weak",
       "citation": "packages/isolate-host/src/pool.ts:325",
       "note": "author T8 (write outside the try) survives: stdin.write of a string throws no injectable sync error; declared uncarried, not re-run by me"
+    },
+    {
+      "row": "FM re-cut: a refused host write leaves the state as it was, times of the target and every existing directory above it included",
+      "source": "fault-matrix",
+      "trace": "I3+I6",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:1175",
+      "note": "own mutant (times of the directories restored, the target excluded) KILLED; sandbox-faults + sandbox-acceptance 84/84 at bc906f21e"
     }
   ],
   "axes": [
