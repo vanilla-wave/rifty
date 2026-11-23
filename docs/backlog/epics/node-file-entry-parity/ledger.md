@@ -36,3 +36,4 @@
 - 2026-11-23 — internal verify PASS bound to c89c49aa9 (round-7 delta).
 - 2026-11-23 — Greptile threads from the first push (REV-12): six outdated answered + resolved with their closing commits; the live one (message lines read as frames) reproduced vs Node (node-vitest loader; in the isolate `-e` decoration the line is lost before the report, declared) → the report marks message lines before projecting frames (`protectMessage`), top-level, `cause` and nested; keys needing quotes print quoted (`'my key': 2`). RED both rows, mutant killed.
 - 2026-11-23 — internal verify @cbfa28db0: blocker the frame-line mark (one U+FFFF char) deleted the guest's own U+FFFF → a fresh unguessable per-report mark (`Math.random` primordial); row with U+FFFF in message and prop vs Node (RED before).
+- 2026-11-23 — internal verify PASS bound to ac0176e2c (Greptile delta).

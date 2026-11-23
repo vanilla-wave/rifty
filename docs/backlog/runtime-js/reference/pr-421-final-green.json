@@ -1,8 +1,8 @@
 {
   "overall_verdict": "pass",
-  "merge_call": "Merge on green PR CI at HEAD: the report no longer runs a guest accessor on a loader error's `code` (descriptor read; unit row + mutant killed), the `ERR_REQUIRE_*` head and the loader-error projection are unchanged, the remaining lifecycle read is declared with a draft; browser hosts unaffected. Goal not complete (5d user question, deferred header).",
+  "merge_call": "Merge on green PR CI at HEAD: the message-line mark is per report and removed exactly, so a guest's U+FFFF survives (probe and unit row vs live Node; mutant killed); every other probe byte-identical to the previous head; all lanes green. Goal not complete (5d user question, deferred header).",
   "checkpoint": "Final+GREEN",
-  "unit_goal_source": "docs/backlog/epics/node-file-entry-parity/goal.md (amend 2026-11-23) + map.md (5d STOP-1 owner: user) + ledger.md; manager round-5 criterion with its two named exceptions (ADR-0445 2026-11-23 lines: exception 1 rifty-internal frame line, exception 2 timer callback frame name / `this`); proof docs/backlog/runtime-js/reference/pr-421-browser-fatal-matrix.md (round-6 rerun vs main f5c232b3d); PR #421 @ c89c49aa9 (product a675fb292, re-pin c89c49aa9); BASE 50c9d8bf1; baseline = carrier RED rows on main 50c9d8bf1",
+  "unit_goal_source": "docs/backlog/epics/node-file-entry-parity/goal.md (amend 2026-11-23) + map.md (5d STOP-1 owner: user) + ledger.md; manager round-5 criterion with its two named exceptions (ADR-0445 2026-11-23 lines: exception 1 rifty-internal frame line, exception 2 timer callback frame name / `this`); proof docs/backlog/runtime-js/reference/pr-421-browser-fatal-matrix.md (round-6 rerun vs main f5c232b3d); PR #421 @ ac0176e2c (product 86e4744a5, re-pin ac0176e2c); BASE 50c9d8bf1; baseline = carrier RED rows on main 50c9d8bf1",
   "unit_residuals": [],
   "goal_residuals": [
     {
@@ -86,6 +86,14 @@
       "status": "pass",
       "citation": "tests/browser-unit/fixtures/node-file-programs.ts nodeFileExpected/nodeFileNormalized",
       "note": ""
+    },
+    {
+      "row": "Message lines that read like frames are never taken for frames; keys quoted as Node",
+      "source": "acceptance",
+      "trace": "I2+I3",
+      "status": "pass",
+      "citation": "packages/runtime-js/tests/fatal-report.test.ts \"message lines that read like frames, top-level and as a cause\", \"a key that needs quotes\" (mutant skipping the mark killed)",
+      "note": ""
     }
   ],
   "axes": [
@@ -136,16 +144,16 @@
       "findings": [
         {
           "severity": "concern",
-          "location": "packages/runtime-js/src/builtins/fatal-report.ts:355-357; docs/backlog/runtime-js/process-exit-signal-check-runs-guest-getter.md; docs/public/compat/process.md",
-          "evidence": "scratch /tmp/rev421 @ c89c49aa9: cp /tmp/nf-review/scripts/<zz-probe14|zz-probe15>.test.ts packages/isolate-host/tests/zz-probe.test.ts && pnpm exec vitest run --project isolate-host … (live node v24.16.0 -e vs isolate; raw /tmp/nf-review/probes-zz-probe1{4,5}-c89c49aa9.json). P_code_getter: rifty stdout \"RAN\\n\" (was \"RAN\\nRAN\\n\"; Node \"\"), report unchanged (\"code: [Getter]\"); every other zz-probe15 stderr byte-identical to 82f4d29f8; zz-probe14 (MODULE_NOT_FOUND, ERR_REQUIRE_ASYNC_MODULE sync/timer/file) byte-identical to round 6 incl. \"Error [ERR_REQUIRE_ASYNC_MODULE]: …\".",
-          "summary": "Previous blocker RESOLVED. The one remaining run is main's lifecycle exit-signal check (`isRiftyProcessExit` reading `code`), now declared in compat with a draft.",
+          "location": "packages/runtime-js/src/builtins/fatal-report.ts newMessageLine / unmark",
+          "evidence": "scratch /tmp/rev421 @ ac0176e2c: cp /tmp/nf-review/scripts/zz-probe16.test.ts packages/isolate-host/tests/zz-probe.test.ts && pnpm exec vitest run --project isolate-host … (live node v24.16.0; raw /tmp/nf-review/probes-zz-probe16-ac0176e2c.json, diff probes-diff-zz-probe16-ac0176e2c.txt). M4 `keep \\uffff char\\n    at here`: rifty now \"Error: keep \\uffff char\\n    at here\\n…\" = Node (header aside); the other 7 zz-probe16 rifty stderr byte-identical to cbfa28db0. Unit (scratch, removed): prop `note = 'x\\uffffy'` kept. Mutant (unmark also strips bare U+FFFF): new row \"a guest's own U+FFFF, in the message and a prop\" fails.",
+          "summary": "Previous blocker RESOLVED. The mark is built with the module-load `Math.random` but `Number.prototype.toString` / `String.prototype.slice` are read at report time — a guest that replaces them can make the mark predictable or throw (the report then falls back); that is the declared guest-replaced-intrinsics class.",
           "authority": ""
         },
         {
           "severity": "concern",
-          "location": "packages/runtime-js/src/repl/inspect.ts (errors nested in plain objects); docs/public/compat/modules.md",
-          "evidence": "scratch /tmp/rev421 @ c89c49aa9: cp /tmp/nf-review/scripts/<zz-probe14|zz-probe15>.test.ts packages/isolate-host/tests/zz-probe.test.ts && pnpm exec vitest run --project isolate-host … (live node v24.16.0 -e vs isolate; raw /tmp/nf-review/probes-zz-probe1{4,5}-c89c49aa9.json). P_nested_prop (no props for an error inside a plain object, declared nested layout); P_listener_sees (main's ModuleLoadError keys, declared).",
-          "summary": "Declared; noted.",
+          "location": "docs/backlog/runtime-js/fatal-report-reassigned-message.md",
+          "evidence": "scratch /tmp/rev421 @ ac0176e2c: cp /tmp/nf-review/scripts/zz-probe16.test.ts packages/isolate-host/tests/zz-probe.test.ts && pnpm exec vitest run --project isolate-host … (live node v24.16.0; raw /tmp/nf-review/probes-zz-probe16-ac0176e2c.json, diff probes-diff-zz-probe16-ac0176e2c.txt). M5 message reassigned after construction: rifty prints the stack's old message (Node the new).",
+          "summary": "Declared draft; unchanged.",
           "authority": ""
         }
       ]
@@ -157,7 +165,7 @@
         {
           "severity": "concern",
           "location": "packages/isolate-host/tests; tests/browser-unit/fixtures/node-file-pins.json",
-          "evidence": "cd /tmp/rev421 @ c89c49aa9: unit (fatal-report, module-loader, conformance modules) 259 tests exit 0; isolate-host 460 tests exit 0; no-COI node-file-parity + no-coi-fatal-stderr 8 passed; COI node-file-parity passed; pnpm build:libs + check:esbuild-legacy-retirement verified (re-pin c89c49aa9).",
+          "evidence": "cd /tmp/rev421 @ ac0176e2c: unit (fatal-report, module-loader, repl, conformance modules) 279 tests exit 0; isolate-host 460 tests exit 0; no-COI node-file-parity + no-coi-fatal-stderr passed; COI node-file-parity passed; pnpm build:libs + check:esbuild-legacy-retirement verified (re-pin ac0176e2c).",
           "summary": "All carriers green.",
           "authority": ""
         }
@@ -177,5 +185,5 @@
       ]
     }
   ],
-  "reviewed_sha": "c89c49aa9cc118046584eacddf16b24e374130fb"
+  "reviewed_sha": "ac0176e2c9329138f839934b361d6fd323809b11"
 }
