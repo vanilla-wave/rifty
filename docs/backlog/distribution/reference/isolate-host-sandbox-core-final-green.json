@@ -2,8 +2,8 @@
   "overall_verdict": "concern",
   "merge_call": "Final+GREEN PASS at 9d3d8ca84; merge only on green PR CI at HEAD after CLOSE.",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "4c7a263ac848ed8a5af030cbfa55c74f0937de4f",
-  "unit_goal_source": "docs/backlog/distribution/isolate-host-sandbox-core.md (ready, re-cut 2026-11-22 ×4; Acceptance 1 = docs/backlog/distribution/isolate-host-sandbox-acceptance.md rows 1-14); Contract+RED PASS @ 16b7ab607; BASE 50c9d8bf1; verify passes c505b857f -> 30c8c1ff1 -> 525aaf075; r4 at c0ad781f2; r5 at d78411460; r6 at 7650df442; r7 at 214bbf1c4; r8 at ebecf5eb7; r9 at 4ea5736b5; r10 at 4c2878684; r11 at a59996a0c; r12 at 9d3d8ca84; r13 at bc906f21e; this pass bc906f21e..4c7a263ac (comment-only) (merges of main 11b9397ee: #418 codec, #416, #420); goal docs/backlog/epics/isolate-host-live-sandbox/goal.md",
+  "reviewed_sha": "65c1462c12f56f02386f10bfa86b1984706dc67e",
+  "unit_goal_source": "docs/backlog/distribution/isolate-host-sandbox-core.md (ready, re-cut 2026-11-22 ×4; Acceptance 1 = docs/backlog/distribution/isolate-host-sandbox-acceptance.md rows 1-14); Contract+RED PASS @ 16b7ab607; BASE 50c9d8bf1; verify passes c505b857f -> 30c8c1ff1 -> 525aaf075; r4 at c0ad781f2; r5 at d78411460; r6 at 7650df442; r7 at 214bbf1c4; r8 at ebecf5eb7; r9 at 4ea5736b5; r10 at 4c2878684; r11 at a59996a0c; r12 at 9d3d8ca84; r13 at bc906f21e; r14 at 4c7a263ac; r15 at b876a81d1; this pass b876a81d1..65c1462c1 (one test timeout) (merges of main 11b9397ee: #418 codec, #416, #420); goal docs/backlog/epics/isolate-host-live-sandbox/goal.md",
   "unit_residuals": [],
   "goal_residuals": [
     {
@@ -25,7 +25,7 @@
       "trace": "I2+I3",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:110",
-      "note": ""
+      "note": "failed-run stderr now compared byte-for-byte with Node via nodeReport (header dropped, #421 projection); compile-error rows pinned exact with an unpin guard (owner backlog/runtime-js/module-compile-error-node-syntax-error)"
     },
     {
       "row": "Carrier row 2: timeout 1500 / heap growth / Array(2**28) at 64 MiB -> timeout/memory; partial write absent; next run reads earlier files",
@@ -89,7 +89,7 @@
       "trace": "I2",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:423",
-      "note": ""
+      "note": "failed-run stderr now compared byte-for-byte with Node via nodeReport (header dropped, #421 projection); compile-error rows pinned exact with an unpin guard (owner backlog/runtime-js/module-compile-error-node-syntax-error)"
     },
     {
       "row": "Carrier row 10: maxFileBytes/maxFsBytes: FILE_TOO_LARGE both ways, run over cap -> stateRefused TOO_LARGE, files as before, FULL before 64 host writes",
@@ -610,6 +610,14 @@
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:1175",
       "note": "own mutant (times of the directories restored, the target excluded) KILLED; sandbox-faults + sandbox-acceptance 84/84 at bc906f21e"
+    },
+    {
+      "row": "runtime-js node-entry: a MODULE_NOT_FOUND from a node <file> entry under the isolate fatal report prints Node's shape (err itself), the text stand-in only where the report is not installed",
+      "source": "fault-matrix",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:487",
+      "note": "\"missing module\" row compares the full report with Node; runtime-js unit 1027 pass (browser hosts: report not installed, stand-in path unchanged)"
     }
   ],
   "axes": [
@@ -700,10 +708,17 @@
       "verdict": "pass",
       "findings": [
         {
+          "severity": "concern",
+          "location": "packages/isolate-host/tests/sandbox-faults.test.ts:896",
+          "evidence": "scratch at b876a81d1, full isolate-host at load avg 74: 774/775, this case got held:false (the 300 MiB worker not found before the 1500 ms timeout); file rerun alone twice at load ~14-24: 52/52 both",
+          "summary": "Addressed (timeoutMs 1500 -> 3500). Residual: on hardware where the first 3e6 sort ends before 3.5 s the deadline lands between sorts, the isolate stops at once and the case no longer exercises a still-stopping isolate (passes without discriminating); the I5 table keeps the timeout x moment rows.",
+          "authority": ""
+        },
+        {
           "severity": "nit",
-          "location": "packages/isolate-host/tests/sandbox-destroy-table.test.ts:1",
-          "evidence": "scratch at 9d3d8ca84: isolate-host 24 files, 743/743 pass; mutants T1/T2/Ra as recorded in coverage; tree clean after",
-          "summary": "Full suite green; r9-r11 mutant claim for \"gone before unwind\" corrected (it failed for another reason then).",
+          "location": "packages/isolate-host/tests/sandbox-acceptance.test.ts:320",
+          "evidence": "runtime-js unit 112 files: 1027 pass, 4 skipped",
+          "summary": "nodeReport projects the oracle (drops the <file>:<line> header, re-joins an inspect wrap caused only by the longer temp path, <=80 cols); a hand projection of a live oracle, narrow and documented.",
           "authority": ""
         }
       ]
