@@ -360,6 +360,31 @@ function nodeInternalHead(stack: string, error: object): string {
   return stack.replace(/^((?:\[eval\]:\d+\n[^\n]*\n *\^\n\n)?)Error: /u, `$1Error [${code}]: `);
 }
 
+/** Marks a message line that reads like a frame; removed once frames are projected. */
+const MESSAGE_LINE = '\uFFFF';
+
+/**
+ * The stack starts with the error's name and its whole message; frames follow.
+ * A message line that reads like a frame (`    at config file`) is marked, so
+ * `guestStack` never takes it for one.
+ */
+function protectMessage(stack: string, error: object): string {
+  let message: unknown;
+  for (
+    let o: object | null = error;
+    o !== null && message === undefined;
+    o = objectGetPrototypeOf(o)
+  )
+    message = objectGetOwnPropertyDescriptor(o, 'message')?.value;
+  if (typeof message !== 'string' || !message.includes('\n')) return stack;
+  const at = stack.indexOf(message);
+  if (at === -1) return stack;
+  const end = at + message.length;
+  return `${stack.slice(0, at)}${message.replace(/\n(?=\s+at )/gu, `\n${MESSAGE_LINE}`)}${stack.slice(end)}`;
+}
+
+const unmark = (text: string) => text.replaceAll(MESSAGE_LINE, '');
+
 /** Node `improveStack`: `NotFound [Error]: …` when the class name hides the error's name. */
 function improveStack(stack: string, error: object): string {
   let errorName: unknown;
@@ -382,7 +407,10 @@ function improveStack(stack: string, error: object): string {
 
 /** Node `formatError` + `reduceToSingleString`; accessors read as `[Getter]`, never run. */
 function inspectError(error: object, indent: number, state: InspectState, depth: number): string {
-  const raw = stackOf(error) ?? (reflectApply(errorToString, error, []) as string);
+  const raw = protectMessage(
+    stackOf(error) ?? (reflectApply(errorToString, error, []) as string),
+    error,
+  );
   const shaped = nodeShapedLoaderError(error);
   state.ancestors.push(error);
   // Frames are projected once, over the whole report (`guestStack`).
@@ -402,7 +430,13 @@ function inspectError(error: object, indent: number, state: InspectState, depth:
     const own = keys[k] as string | symbol;
     if (own === 'stack') continue;
     if (shaped && typeof own === 'string' && LOADER_ONLY_KEYS.includes(own)) continue;
-    const key = typeof own === 'symbol' ? own.toString() : own;
+    // Node `formatProperty`: an identifier as is, any other string quoted.
+    const key =
+      typeof own === 'symbol'
+        ? own.toString()
+        : /^[a-zA-Z_][a-zA-Z_0-9]*$/u.test(own)
+          ? own
+          : inspect(own);
     const descriptor = objectGetOwnPropertyDescriptor(error, own);
     if (descriptor === undefined) continue;
     if (descriptor.get !== undefined || descriptor.set !== undefined) {
@@ -455,12 +489,14 @@ export function formatFatalReport(error: unknown): string {
   // Node: a `stack` that throws when read leaves the error's own text and the hint.
   if (readStack(error) === STACK_THREW)
     return `${reflectApply(errorToString, error, []) as string}\n${HINT}\n${FATAL_TRAILER}`;
-  return `${guestStack(inspectError(error, 0, { ancestors: [], circular: false }, 0)).text}\n${FATAL_TRAILER}`;
+  return `${unmark(guestStack(inspectError(error, 0, { ancestors: [], circular: false }, 0)).text)}\n${FATAL_TRAILER}`;
 }
 
 /** Node's fallback where inspecting the error fails (a throwing Proxy trap): its stack alone. */
 export function formatFatalStack(error: unknown): string | null {
   if (!isErrorLike(error)) return null;
   const stack = stackOf(error);
-  return stack === null ? null : `${guestStack(stack).text}\n${FATAL_TRAILER}`;
+  return stack === null
+    ? null
+    : `${unmark(guestStack(protectMessage(stack, error)).text)}\n${FATAL_TRAILER}`;
 }
