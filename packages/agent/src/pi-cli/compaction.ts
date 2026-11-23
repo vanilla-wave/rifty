@@ -63,7 +63,9 @@ export function entryToContextMessages(entry: Entry): AgentMessage[] {
       entry.tokensBefore,
       entry.timestamp,
     );
-    return entry.systemMessage ? [entry.systemMessage, summary] : [summary];
+    // Rifty keeps file details on the summary so JSON restore can resume them (ADR-0473 §3).
+    const message = entry.details === undefined ? summary : { ...summary, details: entry.details };
+    return entry.systemMessage ? [entry.systemMessage, message] : [message];
   }
   return [];
 }

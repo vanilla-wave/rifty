@@ -197,7 +197,6 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
     });
     const projected = buildProjection(journal).messages;
     const summary = projected.find((message) => message.role === 'compactionSummary');
-    if (summary) Object.assign(summary, { details: result.details });
     agent.state.messages = projected;
     emit({
       type: 'compaction',
@@ -218,22 +217,66 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
   }
 
   /** CLI `_checkCompaction`; returns whether to continue the interrupted turn. */
+  /** CLI `_findPersistedMessageEntryId`: agent state is the journal projection. */
+  function entryIdOf(message: AgentMessage): string | undefined {
+    const index = agent.state.messages.indexOf(message);
+    if (index < 0) return undefined;
+    let position = 0;
+    for (const entry of buildProjection(journal).entries)
+      for (const _ of entry.messages) if (position++ === index) return entry.sourceEntry.id;
+    return undefined;
+  }
+
+  /** CLI `_omitRecoveryAttempt`: the attempt and its paired results leave model context. */
+  function omitRecoveryAttempt(message: AssistantMessage) {
+    const calls = new Set(message.content.flatMap((b) => (b.type === 'toolCall' ? [b.id] : [])));
+    const messages = agent.state.messages;
+    const index = messages.indexOf(message);
+    const results: AgentMessage[] = [];
+    for (const next of index < 0 ? [] : messages.slice(index + 1)) {
+      if (next.role === 'assistant') break;
+      if (next.role === 'toolResult' && calls.has(next.toolCallId)) results.push(next);
+    }
+    const ids = [message, ...results].map(entryIdOf);
+    for (const id of ids) journalOmit(id);
+    agent.state.messages = buildProjection(journal).messages;
+  }
+
+  /** CLI `_checkCompaction`; returns whether to continue the interrupted turn. */
   async function checkCompaction(last: AssistantMessage): Promise<'continue' | 'done'> {
     const compaction = latestCompaction();
     if (compaction && last.timestamp <= new Date(compaction.timestamp).getTime()) return 'done';
     const sameModel = last.model === model.id && last.provider === model.provider;
+    const projection = buildProjection(journal);
+    const entryId = entryIdOf(last);
+    const assistantIsProjected =
+      entryId === undefined ||
+      projection.entries.some(
+        (entry) =>
+          entry.sourceEntry.id === entryId &&
+          entry.messages.some((message) => message.role === 'assistant'),
+      );
+    const position = entryId === undefined ? -1 : journal.findIndex(({ id }) => id === entryId);
+    const after = position >= 0 ? journal.slice(position + 1) : [];
+    const retainedForExplicitRecovery =
+      entryId === undefined ||
+      (!after.some(({ type }) => type === 'compaction') &&
+        !after.some((entry) => entry.type === 'context_edit' && entry.targetId === entryId));
+    const usageMatchesProjection =
+      assistantIsProjected && !after.some(({ type }) => type === 'context_edit');
     const contextOverflow =
       sameModel &&
-      ((last.stopReason === 'error' && isContextOverflow(last)) ||
-        isContextOverflow(last, model.contextWindow));
-    const recoverableLength = sameModel && isRecoverableLength(last, model.maxTokens);
+      ((last.stopReason === 'error' && isContextOverflow(last) && retainedForExplicitRecovery) ||
+        (usageMatchesProjection && isContextOverflow(last, model.contextWindow)));
+    const recoverableLength =
+      sameModel && assistantIsProjected && isRecoverableLength(last, model.maxTokens);
     if (contextOverflow || recoverableLength) {
       if (last.stopReason === 'stop') {
         await compactHistory('overflow');
         return 'done';
       }
       if (overflowRecoveryAttempted) {
-        const estimate = estimateProjectedContextTokens(buildProjection(journal), journal);
+        const estimate = estimateProjectedContextTokens(projection, journal);
         emit({
           type: 'compaction',
           phase: 'end',
@@ -249,12 +292,10 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
         return 'done';
       }
       overflowRecoveryAttempted = true;
-      journalOmit(lastAssistantEntry);
-      agent.state.messages = agent.state.messages.slice(0, -1);
+      omitRecoveryAttempt(last);
       return (await compactHistory('overflow')) ? 'continue' : 'done';
     }
     const path = journal;
-    const projection = buildProjection(path);
     const direct = calculateContextTokens(last.usage);
     let tokens: number;
     if (projection.entries.some((entry) => entry.sourceEntry.type === 'context_edit'))
@@ -400,6 +441,9 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
       event.message.stopReason !== 'length'
     )
       overflowRecoveryAttempted = false;
+    // CLI resets recovery when a user message starts, after the pre-prompt check.
+    if (event.type === 'message_start' && event.message.role === 'user')
+      overflowRecoveryAttempted = false;
     if (event.type === 'agent_start' && stopRequested) agent.abort();
     if (event.type === 'agent_end' && continuation.cancelledBackoff) {
       emit({ type: 'agent', event: { ...event, messages: event.messages.slice(0, -1) } });
@@ -533,7 +577,6 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
       stopRequested = false;
       budgetReason = undefined;
       toolCalls = 0;
-      overflowRecoveryAttempted = false;
       const copiedImages = images ? structuredClone(images) : undefined;
       active = Promise.resolve().then(() => run(prompt, copiedImages));
       setStatus('running');
