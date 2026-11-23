@@ -20,7 +20,11 @@ program's — `projectNodeEvalError` reads `stack` before the fatal formatter
 `error-throwing-stack-getter` on `node <file>`). Closed in PR #425: with the
 isolate's report installed the projection reads `stack` guarded and leaves
 such an error to the report (row equals Node in the isolate). Open: a
-non-string `stack` (`e.stack = 42`) on the `-e` path.
+non-string `stack` (`e.stack = 42`) on the `-e` path; the number of reads: an
+own `stack` getter runs 3 times in the isolate before the report prints, 4 in
+Node (PR #425 Final probe, a required file and a top-level `-e` throw).
+Owner: runtime-js (eval projection, fatal report). Trigger: a guest whose
+`stack` getter has effects, or the next change to the projection.
 
 ## Challenge
 
