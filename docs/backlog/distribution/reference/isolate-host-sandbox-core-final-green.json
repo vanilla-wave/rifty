@@ -1,0 +1,622 @@
+{
+ "overall_verdict": "concern",
+ "merge_call": "Final+GREEN PASS re-bound at ebecf5eb7 (landing verdict); merge only on green PR CI at HEAD after CLOSE.",
+ "checkpoint": "Final+GREEN",
+ "reviewed_sha": "ebecf5eb7c2f2c20def508293829ccefb627303e",
+ "unit_goal_source": "docs/backlog/distribution/isolate-host-sandbox-core.md (ready, re-cut 2026-11-22 ×4; Acceptance 1 = docs/backlog/distribution/isolate-host-sandbox-acceptance.md rows 1-14); Contract+RED PASS @ 16b7ab607; BASE 50c9d8bf1; verify passes c505b857f -> 30c8c1ff1 -> 525aaf075; r4 at c0ad781f2; r5 at d78411460; r6 at 7650df442; r7 at 214bbf1c4; this pass 214bbf1c4..ebecf5eb7 (r7 concerns + typescript-worker re-pin) (merges of main 11b9397ee: #418 codec, #416, #420); goal docs/backlog/epics/isolate-host-live-sandbox/goal.md",
+ "unit_residuals": [],
+ "goal_residuals": [
+  {
+   "clause": "Goal §Decisions state-model fork (manager delegation, user answer pending)",
+   "location": "docs/backlog/epics/isolate-host-live-sandbox/goal.md:155",
+   "summary": "Ready rests on the manager delegation; a user answer lands as amend: (I1 rollback clause, per-run cost)."
+  },
+  {
+   "clause": "Goal close (REV-9): RECHART after this slice; end-to-end acceptance at CLOSE",
+   "location": "docs/backlog/epics/isolate-host-live-sandbox/map.md:1",
+   "summary": "Goal not closed: CLOSE review with both residual sets empty still owed."
+  }
+ ],
+ "goal_complete": false,
+ "coverage": [
+  {
+   "row": "Carrier row 1: buggy main.js exit 1, stdout+errorView = node; fixed run = node result, tree and PDF bytes = node",
+   "source": "acceptance",
+   "trace": "I2+I3",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:110",
+   "note": ""
+  },
+  {
+   "row": "Carrier row 2: timeout 1500 / heap growth / Array(2**28) at 64 MiB -> timeout/memory; partial write absent; next run reads earlier files",
+   "source": "acceptance",
+   "trace": "I1",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:141",
+   "note": ""
+  },
+  {
+   "row": "Carrier row 3: two runs, only files carry over = node sequence",
+   "source": "acceptance",
+   "trace": "I2",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:175",
+   "note": ""
+  },
+  {
+   "row": "Carrier row 4: unawaited writeFile/exec/writeFile/exec/readFile in call order",
+   "source": "acceptance",
+   "trace": "I4",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:213",
+   "note": ""
+  },
+  {
+   "row": "Carrier row 5: destroy during busy run with queued write: both reject DESTROYED, later ops too",
+   "source": "acceptance",
+   "trace": "I5",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:233",
+   "note": ""
+  },
+  {
+   "row": "Carrier row 6: ENOENT with sandbox path, no host text; NUL -> ERR_INVALID_ARG_VALUE; B cannot see A canary",
+   "source": "acceptance",
+   "trace": "I7",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:250",
+   "note": ""
+  },
+  {
+   "row": "Carrier row 7: write, run, snapshot, destroy, createSandbox({snapshot}) same tree; run reads made.bin",
+   "source": "acceptance",
+   "trace": "I9",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:279",
+   "note": ""
+  },
+  {
+   "row": "Carrier row 8: ESM entry -> exit 1, Not implemented: isolate-host.esm; node runs it",
+   "source": "acceptance",
+   "trace": "I2",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:311",
+   "note": ""
+  },
+  {
+   "row": "Carrier row 9: node <path> corpus in sequences vs live node (require, JSON, __filename, argv, require.main, errors, syntax/missing module)",
+   "source": "acceptance",
+   "trace": "I2",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:423",
+   "note": ""
+  },
+  {
+   "row": "Carrier row 10: maxFileBytes/maxFsBytes: FILE_TOO_LARGE both ways, run over cap -> stateRefused TOO_LARGE, files as before, FULL before 64 host writes",
+   "source": "acceptance",
+   "trace": "I6+I1",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:595",
+   "note": "own mutants (never TOO_LARGE; capture budget back to maxFsBytes) killed"
+  },
+  {
+   "row": "Carrier row 11: special names round-trip, /tmp via ../../tmp, ../../../etc/passwd ENOENT, list sizes, remove tree/file, second remove ENOENT",
+   "source": "acceptance",
+   "trace": "I3+I7",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:550",
+   "note": ""
+  },
+  {
+   "row": "Carrier row 12: fs.symlinkSync in a run fails loudly; only files",
+   "source": "acceptance",
+   "trace": "I2+I7",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:587",
+   "note": ""
+  },
+  {
+   "row": "Carrier row 13: worker SIGKILLed after append -> resolves once on another worker, append landed once",
+   "source": "acceptance",
+   "trace": "I1",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:605",
+   "note": ""
+  },
+  {
+   "row": "Carrier row 14: exit endings corpus, no -e globals in a file, stdout.write without newline, empty dir kept, three ESM forms -> named gap",
+   "source": "acceptance",
+   "trace": "I1+I2",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:423",
+   "note": ""
+  },
+  {
+   "row": "Core Acceptance 2: root exports exactly createSandbox and runCode; every result plain data or Uint8Array",
+   "source": "acceptance",
+   "trace": "I8",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:31",
+   "note": ""
+  },
+  {
+   "row": "Core Acceptance 3: env/cwd/stdin NotImplementedError; bad path/args ERR_INVALID_ARG_TYPE; out of range ERR_OUT_OF_RANGE; template NotImplementedError; corrupt snapshot ERR_FS_SNAPSHOT_CORRUPT",
+   "source": "acceptance",
+   "trace": "I6+I8",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:35",
+   "note": ""
+  },
+  {
+   "row": "Core Acceptance 4: snapshot() behind a run holds that run end; exec behind snapshot() does not change it",
+   "source": "acceptance",
+   "trace": "I9+I4",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:66",
+   "note": "own mutant (queue bypassed) killed"
+  },
+  {
+   "row": "Core Acceptance 5: packed consumer runs the README sandbox snippet under plain node",
+   "source": "acceptance",
+   "trace": "I8",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/packed-consumer.test.ts:57",
+   "note": ""
+  },
+  {
+   "row": "FM: worker lost twice x run -> WORKER_LOST; state of before",
+   "source": "fault-matrix",
+   "trace": "I1",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:162",
+   "note": ""
+  },
+  {
+   "row": "FM: worker sends end state then dies before terminal frame -> lost, rerun, lost; state unchanged",
+   "source": "fault-matrix",
+   "trace": "I1",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:406",
+   "note": ""
+  },
+  {
+   "row": "FM: end state too large to capture in its isolate -> own stdout/exit + stateRefused CAPTURE; state of before",
+   "source": "fault-matrix",
+   "trace": "I1",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:92",
+   "note": ""
+  },
+  {
+   "row": "FM: state too large to restore -> {\"\",\"\"; null; RESTORE}; next run fine",
+   "source": "fault-matrix",
+   "trace": "I1",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:116",
+   "note": "own mutant (holdsState never cleared after guest start, child/main.ts:300) survives: a solo RSS crossing during the guest run would read RESTORE; advisory"
+  },
+  {
+   "row": "FM: deadline during restore of a large state -> timeout; state unchanged; next run fine",
+   "source": "fault-matrix",
+   "trace": "I1+I6",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:451",
+   "note": ""
+  },
+  {
+   "row": "FM: guest-authored capture over cap / not bytes / throw / hang next to a neighbour -> stateRefused/timeout or kept; never rejection; neighbour exact; worker kept",
+   "source": "fault-matrix",
+   "trace": "I1+I7",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:368",
+   "note": "own mutant (worker capture size check removed) killed; probe: real codec takes the refused/timeout branch for all four"
+  },
+  {
+   "row": "FM: guest replaces intrinsics its capture uses -> exec resolves, sandbox goes on",
+   "source": "fault-matrix",
+   "trace": "I1+I7",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:135",
+   "note": ""
+  },
+  {
+   "row": "FM: hostile worker state frame for runCode call / oversized / twice -> protocol violation; state unchanged",
+   "source": "fault-matrix",
+   "trace": "I7",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:228",
+   "note": "own mutant (second-frame check removed) killed"
+  },
+  {
+   "row": "FM: hostile worker corrupt state bytes under cap -> stateRefused ERR_FS_SNAPSHOT_CORRUPT",
+   "source": "fault-matrix",
+   "trace": "I7",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:252",
+   "note": ""
+  },
+  {
+   "row": "FM: createSandbox({snapshot}) corrupt / over maxFsBytes -> codec code",
+   "source": "fault-matrix",
+   "trace": "I9+I7",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:475",
+   "note": ""
+  },
+  {
+   "row": "FM: destroy during a run -> rejects DESTROYED; isolate disposed (memory given back)",
+   "source": "fault-matrix",
+   "trace": "I5",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:317",
+   "note": "plus light-run carrier (sandbox-faults.test.ts:870): own mutant (no release at the terminal frame) killed"
+  },
+  {
+   "row": "FM: run past timeoutMs -> timeout; isolate disposed",
+   "source": "fault-matrix",
+   "trace": "I6",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:328",
+   "note": ""
+  },
+  {
+   "row": "FM: queued run deadline counted from leaving the queue",
+   "source": "fault-matrix",
+   "trace": "I6",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:336",
+   "note": ""
+  },
+  {
+   "row": "FM: spinning run in sandbox A x run in B -> B first",
+   "source": "fault-matrix",
+   "trace": "ADR-0568",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:498",
+   "note": ""
+  },
+  {
+   "row": "FM: name over 16383 code units: host op ENAMETOOLONG; guest-made -> stateRefused CAPTURE (re-cut 2026-11-23), state of before",
+   "source": "fault-matrix",
+   "trace": "I6+I7",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:523",
+   "note": "row re-cut at core.md:74 matches the carrier"
+  },
+  {
+   "row": "FM: state bytes worker -> isolate as exact copy, never a view of a larger buffer",
+   "source": "fault-matrix",
+   "trace": "I7",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/protocol.test.ts:256",
+   "note": ""
+  },
+  {
+   "row": "Carrier FM: run killed (timeout, heap, catastrophic OOM) x state -> state of before",
+   "source": "fault-matrix",
+   "trace": "I1",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:141",
+   "note": "own mutant (stateWork never cleared after restore) killed"
+  },
+  {
+   "row": "Carrier FM: host op / run issued unawaited -> call order, one at a time",
+   "source": "fault-matrix",
+   "trace": "I4",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:213",
+   "note": ""
+  },
+  {
+   "row": "Carrier FM: model-chosen path (NUL, .., special, deep) x host op -> sandbox paths only",
+   "source": "fault-matrix",
+   "trace": "I3+I7",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:550",
+   "note": ""
+  },
+  {
+   "row": "Public API createSandbox(options) + Sandbox.writeFile/readFile/list/remove (bytes exact; README \"readFile ... (a copy)\")",
+   "source": "public-api",
+   "trace": "I3+ADR-0568",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:564",
+   "note": ""
+  },
+  {
+   "row": "Public API Sandbox.exec -> RunCodeResult + stateRefused",
+   "source": "public-api",
+   "trace": "I1+I2+ADR-0568",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:423",
+   "note": ""
+  },
+  {
+   "row": "Public API Sandbox.snapshot/destroy",
+   "source": "public-api",
+   "trace": "I5+I9",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:279",
+   "note": ""
+  },
+  {
+   "row": "Guest contract GuestEntry.runFile(path,args), GUEST_DIRS export",
+   "source": "public-api",
+   "trace": "ADR-0558+ADR-0568",
+   "status": "pass",
+   "citation": "packages/isolate-guest/tests/embedder.test.ts:186",
+   "note": ""
+  },
+  {
+   "row": "runtime-js fs.symlink/symlinkSync/link/linkSync + promises named loud",
+   "source": "public-api",
+   "trace": "ADR-0443",
+   "status": "pass",
+   "citation": "packages/runtime-js/src/builtins/loud-members.test.ts:48",
+   "note": ""
+  },
+  {
+   "row": "Frozen artifact: typescript-worker.js sha re-pin in esbuild-legacy-retirement inventory",
+   "source": "frozen-artifact",
+   "trace": "ADR-0391",
+   "status": "pass",
+   "citation": "tools/checks/esbuild-legacy-retirement.mjs:105",
+   "note": "reviewer rebuilt workbench at c505b857f in scratch: check passes with the new sha; criterion unchanged (PR-4)"
+  },
+  {
+   "row": "Re-cut row: an isolate too small for the runtime itself (limit 8) ends as memory, as runCode",
+   "source": "fault-matrix",
+   "trace": "I1+ADR-0557",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:549",
+   "note": "probe: 8 and 12 MiB -> memory for both runCode and exec"
+  },
+  {
+   "row": "Re-cut row: sandbox run ending without its state frame -> protocol violation; state unchanged",
+   "source": "fault-matrix",
+   "trace": "I7+ADR-0563",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:238",
+   "note": ""
+  },
+  {
+   "row": "Re-cut row: refused host write into new nested directories leaves none of them",
+   "source": "fault-matrix",
+   "trace": "I6+I3",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:537",
+   "note": ""
+  },
+  {
+   "row": "Corpus row: an extra closing brace is a SyntaxError: exit 1, stdout equal to node (no line runs), stderr names the file",
+   "source": "acceptance",
+   "trace": "I2",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:414",
+   "note": ""
+  },
+  {
+   "row": "FM re-cut: restore at the memory boundary -> all files or no guest code (RESTORE/memory); state intact",
+   "source": "fault-matrix",
+   "trace": "I1",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:583",
+   "note": ""
+  },
+  {
+   "row": "FM re-cut: guest NaN/Infinity times or NUL name -> throws as Node, nothing unrestorable written",
+   "source": "fault-matrix",
+   "trace": "I1+I2",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:426",
+   "note": "own mutant (NUL check removed in fs-path.ts) killed"
+  },
+  {
+   "row": "FM re-cut: snapshot bytes in/out never aliased",
+   "source": "fault-matrix",
+   "trace": "I3",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:619",
+   "note": "own mutant (copyOf identity) killed"
+  },
+  {
+   "row": "FM re-cut: guest error text from a broken capture never crosses",
+   "source": "fault-matrix",
+   "trace": "I7",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:369",
+   "note": ""
+  },
+  {
+   "row": "FM re-cut: worker ends a sandbox run itself (import() gap via vm, plain and in a timer) -> run result + CAPTURE, never a violation, neighbour exact",
+   "source": "fault-matrix",
+   "trace": "I1+I7",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:657",
+   "note": "own mutant (no state fate in the terminal) killed"
+  },
+  {
+   "row": "FM re-cut: pooled Buffer / offset view / readFile / snapshot() -> exact copies",
+   "source": "fault-matrix",
+   "trace": "I3",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:677",
+   "note": "own mutant (copyOf identity) killed"
+  },
+  {
+   "row": "FM re-cut: every host-op refusal: fields and stack name only sandbox paths",
+   "source": "fault-matrix",
+   "trace": "I7",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:706",
+   "note": "own mutant (bare() no-op) killed"
+  },
+  {
+   "row": "FM re-cut: result channel closes mid sandbox run -> lost worker, rerun once, then WORKER_LOST; state as before; neighbour exact once",
+   "source": "fault-matrix",
+   "trace": "I1+I7",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:773",
+   "note": "#420 placement rule kept for every worker (pool.ts:430); own mutant dropping it killed by protocol.test.ts"
+  },
+  {
+   "row": "FM re-cut: runCode hardening/options through exec, 1 MiB round trip, dropped sandbox",
+   "source": "fault-matrix",
+   "trace": "I3+I6",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:802",
+   "note": ""
+  },
+  {
+   "row": "FM re-cut: destroy of a light run on a shared worker resolves at the terminal frame; worker and neighbour stay",
+   "source": "fault-matrix",
+   "trace": "I5",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:870",
+   "note": "own mutant (no release at the terminal frame) killed"
+  },
+  {
+   "row": "FM re-cut: destroy after a timed-out run whose isolate is still stopping resolves once it left its worker",
+   "source": "fault-matrix",
+   "trace": "I5",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:896",
+   "note": "own mutant (destroy ignores #leaving) killed"
+  },
+  {
+   "row": "FM re-cut: the operation queue keeps no result",
+   "source": "fault-matrix",
+   "trace": "I6",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:911",
+   "note": ""
+  },
+  {
+   "row": "FM re-cut: a refused overwrite past the cap leaves the old bytes",
+   "source": "fault-matrix",
+   "trace": "I3+I6",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:923",
+   "note": ""
+  },
+  {
+   "row": "FM re-cut: input bytes are the bytes at the call",
+   "source": "fault-matrix",
+   "trace": "I3",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:936",
+   "note": "own mutant killed"
+  },
+  {
+   "row": "FM re-cut: unknown option names of createSandbox/exec -> ERR_INVALID_ARG_VALUE; no own enumerable state",
+   "source": "fault-matrix",
+   "trace": "I8",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:957",
+   "note": "probe: JSON.stringify(sb) === \"{}\", timeoutMS -> ERR_INVALID_ARG_VALUE"
+  },
+  {
+   "row": "Rerun of a lost sandbox call re-encodes the unchanged state per attempt; request line streamed in base64 pieces (ADR-0568 §6, ADR-0563 §6)",
+   "source": "fault-matrix",
+   "trace": "I1",
+   "status": "pass",
+   "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:605",
+   "note": "own mutants killed: empty state on the second attempt (row 13 + lost twice); chunk step not a multiple of 3 (3 large-state rows)"
+  }
+ ],
+ "axes": [
+  {
+   "axis": "Completeness",
+   "verdict": "pass",
+   "findings": []
+  },
+  {
+   "axis": "Mission and architecture",
+   "verdict": "pass",
+   "findings": []
+  },
+  {
+   "axis": "Goal drift",
+   "verdict": "pass",
+   "findings": [
+    {
+     "severity": "nit",
+     "location": "docs/backlog/epics/isolate-host-live-sandbox/goal.md:157",
+     "evidence": "",
+     "summary": "The ready goal.md must-not-change line was edited (runCode /tmp, export check) citing the manager «один set-up для обоих входов»; a decision line, no I#/scenario/user-traced row touched.",
+     "authority": ""
+    },
+    {
+     "severity": "nit",
+     "location": "docs/backlog/epics/isolate-host-live-sandbox/map.md:1",
+     "evidence": "",
+     "summary": "Map now records the manager rule: the two pinned ⚠️ rows (queued-at-exit, throw + endless microtasks) no longer gate draft; dropped from goal residuals on that record.",
+     "authority": ""
+    }
+   ]
+  },
+  {
+   "axis": "Approach cost",
+   "verdict": "pass",
+   "findings": []
+  },
+  {
+   "axis": "Scope",
+   "verdict": "pass",
+   "findings": [
+    {
+     "severity": "nit",
+     "location": "docs/backlog/runtime-js/fs-stats-atime-observability.md:28",
+     "evidence": "",
+     "summary": "RDY-6: captures match their probes; atime oracle caveat and process.title argv[0] wording corrected at df79f6995.",
+     "authority": ""
+    }
+   ]
+  },
+  {
+   "axis": "Bugs",
+   "verdict": "pass",
+   "findings": [
+    {
+     "severity": "concern",
+     "location": "packages/isolate-host/src/child/main.ts:300",
+     "evidence": "round 2 mutant V11",
+     "summary": "Carried: clearing holdsState after restore is uncarried.",
+     "authority": ""
+    },
+    {
+     "severity": "concern",
+     "location": "packages/isolate-host/README.md:173",
+     "evidence": "",
+     "summary": "Carried: a run ended by the import() gap via vm loses its writes as CAPTURE.",
+     "authority": ""
+    },
+    {
+     "severity": "nit",
+     "location": "packages/isolate-host/src/pool.ts:294",
+     "evidence": "",
+     "summary": "r7 concerns resolved: state encoded before the first byte of the request line; destroyed check restored after the pool result (sandbox.ts:371; the cancelled call is still awaited through abort -> left()); README names the consumer kept alive up to the grace after a timed-out run.",
+     "authority": ""
+    }
+   ]
+  },
+  {
+   "axis": "Regressions",
+   "verdict": "pass",
+   "findings": [
+    {
+     "severity": "nit",
+     "location": "tools/checks/esbuild-legacy-retirement.mjs:105",
+     "evidence": "scratch at ebecf5eb7: workbench build + esbuild-legacy-retirement check pass with the re-pinned sha; sandbox-acceptance + sandbox-faults + protocol 109/109 pass",
+     "summary": "Re-pin is the built output (PR-4: criterion unchanged). Full package last run at 214bbf1c4 (699/699); this diff touches two lines of product code.",
+     "authority": ""
+    }
+   ]
+  },
+  {
+   "axis": "Ecosystem UX",
+   "verdict": "pass",
+   "findings": []
+  }
+ ]
+}
