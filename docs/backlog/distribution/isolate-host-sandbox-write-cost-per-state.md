@@ -18,6 +18,8 @@ the op. An incremental budget (the codec's per-entry cost kept per sandbox and
 adjusted per write) would make it O(write); it needs the codec to expose its
 budget as a function, not only a refusal.
 
+Owner: distribution (isolate host). Trigger: the template goal putting a large layer in the state, or a consumer's host writes dominating a run.
+
 ## Challenge
 
 challenge: 2026-11-23 — none yet (factual capture at the live-sandbox goal's close, ADR-0568)

@@ -238,14 +238,16 @@ owner how to connect, the API, the limits and the gaps.
 - I5. Once `destroy()` resolves, no isolate of the sandbox runs and its state is
   unreachable; every operation not yet settled, queued or later rejects
   `ERR_ISOLATE_HOST_SANDBOX_DESTROYED` (§5).
-- I6. Bounded: `runCode`'s limits per run (`timeoutMs` from dequeue, covering
-  the consumer's encode, restore, run and capture); one state cap; a per-file
-  limit for host ops; the consumer survives every outcome; an idle sandbox
-  holds no process or isolate.
+- I6. Bounded: `runCode`'s limits and hardening per run (time, isolate memory,
+  output cap, no network; `timeoutMs` from dequeue, covering the consumer's
+  encode, restore, run and capture); one state cap; a per-file limit for host
+  ops; the consumer survives every outcome; an idle sandbox holds no process or
+  isolate, and one the consumer drops leaves nothing behind.
 - I7. Trust: model-chosen paths and bytes stay inside the sandbox; bytes a run
   hands back are validated before they become state; no sandbox reads
   another's files; host errors name only sandbox paths; the guest cannot make
-  its run read as an infrastructure failure.
+  its run read as an infrastructure failure; bytes cross the bridge as their
+  view's range only.
 - I8. Plain-data API, documented in the README; compat rows name every gap.
 - I9. `snapshot()` holds exactly the files; `createSandbox({ snapshot })` gives a
   sandbox whose ops and runs see them, in its turn, never a run's partial state.

@@ -19,6 +19,8 @@ code: [packages/isolate-host/src/pool.ts, packages/isolate-host/src/child/main.t
 - A worker spawned for a call whose state encode throws stays idle (warm, unref'd)
   until the pool's next settle: harmless, not ended at once.
 
+Owner: distribution (isolate host). Trigger: the next change to `Worker.place`, the RSS ceiling or `holdsState`, which must then bring a carrier.
+
 ## Challenge
 
 challenge: 2026-11-23 — none yet (factual capture at the live-sandbox goal's close, ADR-0568)

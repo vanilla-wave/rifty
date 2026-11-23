@@ -16,6 +16,8 @@ encoding per attempt, the consumer's peak per run is at most 5 × S + 16 MiB (S 
 frame would cut it to S and drop the encode/decode passes. Not built: it is a
 wire change no part of the sandbox contract needs.
 
+Owner: distribution (isolate host). Trigger: the next ADR-0563 wire change, or the consumer's per-run memory becoming the limit of a deployment.
+
 ## Challenge
 
 challenge: 2026-11-23 — none yet (factual capture)
