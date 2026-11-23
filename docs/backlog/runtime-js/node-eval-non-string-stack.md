@@ -10,15 +10,30 @@ code: [packages/runtime-js/src/module-loader/loader.ts]
 
 ## Context
 
-`projectNodeEvalError` reads `stack` as a string. Found by the PR #421 external review (round 1, Node v24.16.0), outside goal
-`node-file-entry-parity`; not reproduced by this capture beyond the reviewer's run.
+`projectNodeEvalError` reads `stack` as a string. Found by the PR #421 external review (round 1, Node v24.16.0), not in the corpus of
+ADR-0571; not reproduced by this capture beyond the reviewer's run.
 
 Same seam, internal review round 2 (PR #421, probe H4, isolate `-e` rows): an
 error whose `stack` getter throws reports the getter's own error instead of the
 program's — `projectNodeEvalError` reads `stack` before the fatal formatter
 (which prints Node's `name: message` + `--trace-uncaught` hint for it, row
-`error-throwing-stack-getter` on `node <file>`). Acceptance: the `-e` path
-reads `stack` once, guarded, like the formatter.
+`error-throwing-stack-getter` on `node <file>`). Closed in PR #425: with the
+isolate's report installed the projection reads `stack` guarded and leaves
+such an error to the report (row equals Node in the isolate). Open: a
+non-string `stack` (`e.stack = 42`) on the `-e` path; the number of reads: an
+own `stack` getter runs 3 times in the isolate before the report prints, 4 in
+Node (PR #425 Final probe, a required file and a top-level `-e` throw).
+Browser hosts since PR #425 (the projection reads `stack` once and no longer
+throws a later read's error): an `-e` error whose getter throws on its second
+read prints `node: getter` (no-COI) / `Error: getter` with kernel frames (COI);
+main threw it inside the projection; Node `Error: original` + hint (row
+`eval-stack-getter-second-read`). Non-string `stack` in the isolate (2026-11-23,
+`e.stack = 42; throw e` in `-e` or a required file): `TypeError:
+(ownStack ?? error.nameerror.message).split is not a function`, Node `[Error:
+x\n    42]`.
+Owner: runtime-js (eval projection, fatal report). Trigger: a guest whose
+`stack` getter has effects or is not a string, or the next change to the
+projection.
 
 ## Challenge
 

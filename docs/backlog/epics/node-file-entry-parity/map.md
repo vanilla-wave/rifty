@@ -3,39 +3,27 @@
 ## Items
 
 1. **acceptance carrier** — delivered: `tests/browser-unit/fixtures/node-file-programs.ts`
-   (9 entry + 43 fatal rows, live Node oracle, root length equal by
-   construction), `tests/no-coi/node-file-parity.spec.ts`,
+   (9 entry + 62 fatal rows, a fatal row for each listed way rifty calls user code,
+   live Node oracle, root length equal by construction),
+   `tests/no-coi/node-file-parity.spec.ts`,
    `tests/browser-unit/node-file-parity.spec.ts`,
-   `packages/isolate-host/tests/node-file.test.ts`: every row Node's bytes or
-   its pin in `node-file-pins.json` (a named compat row), no Node header on
-   any row. Removed at CLOSE. → I1–I4
-5d. **browser-host fatal path** — on the no-COI SDK and the COI Workbench
-   every fatal path prints as main (rolled back after review rounds 4 and 5;
-   Node's report only in the isolate guest): rows pinned with runtime
-   locations as `<runtime>/packages/<file>`, the no-COI timer rows `failed`
-   with `exitCode` null; proof `runtime-js/reference/pr-421-browser-fatal-matrix.md`.
-   Open: the user question below;
-   `runtime-js/browser-host-realm-uncaught-fatal-report`. → I2 I3 I4
+   `packages/isolate-host/tests/node-file.test.ts` (58 fatal rows and the entry
+   row `first-line-html-close`): every
+   row Node's bytes or its pin in `node-file-pins.json` (a named compat row),
+   no Node header on any row. Removed at CLOSE. → I1–I4
+2. **builtin names in the isolate report** — ready (observed defect, RED in
+   `runtime-js/reference/guest-builtin-names-baseline.md`):
+   `runtime-js/guest-builtin-names`. Stream callbacks report
+   `publishedConstructor.*`, a thrown `TextEncoder` prints `TextEncoder2 {}`.
+   Waits for pickup on the user's word (2026-11-23, user: «ок» to the
+   manager's recommendation to keep it in the map; order of work, not scope).
+   → I2 I3
 ## Open questions
 
-- В браузерных хостах (COI и no-COI) необработанная ошибка из таймера или
-  другого callback'а печатается как на main: текст браузера с кадрами и URL
-  runtime rifty, не отчёт Node. Цель обещала один отчёт на всех хостах;
-  изменение жизненного цикла браузерных процессов, которое это давало, откачено
-  после двух регрессов. Принять как есть и отложить в backlog — или отдельная
-  цель — owner: user — evidence: map item 5d, compat process.md "Fatal error
-  stderr bytes", `runtime-js/browser-host-realm-uncaught-fatal-report`.
-  Measured 2026-11-23 on the tree after the rollback, `console.log('before');
-  setTimeout(() => { throw new Error('x') }, 0)`: no-COI SDK
-  `project.run('node main.js')` → `status: 'failed'`, `exitCode: null`, stdout
-  `before\n`, stderr '', `error: { code: 'WORKER_CRASHED', message: 'Worker
-  crashed: Uncaught Error: x' }`, toolchain Worker `replaced`; the next `node -p
-  1+1` in the same sandbox → `exited`, 0, `2`. COI Workbench shell `node
-  zz/main.js` → exit 1, output `before\nUncaught Error: x
-  (/home/project/zz/main.js:2)` (one browser line, no frames); the next `node -p
-  1+1` → 0, `2`. Node: its report, exit 1. The user's first answer
-  («ок, не выглядит серьезным, если не так, поправь») was given before these
-  facts; asked again by the manager.
+- Settled (goal amend 2026-11-23, user: «ок, не выглядит серьезным, если не
+  так, поправь», then «оставить в backlog»; was item 5d): on the browser hosts
+  every fatal path prints as main — `runtime-js/browser-host-realm-uncaught-fatal-report`,
+  `distribution/no-coi-command-unhandled-rejection-exit`.
 
 - Settled (goal amend 2026-11-23, user: «давай положим в бэклог на всякий»):
   no Node-format header on any path and a syntax error as main's
@@ -69,6 +57,13 @@ COI timer fatal prints main's kernel report again (item 5d, rollback 2026-11-23)
   (`runtime-js/module-compile-error-node-syntax-error`); the rows stay named
   compat rows.
 
+- Outside the report's frame contract by the manager's reading (2026-11-23,
+  not the user's words; ADR-0571 §Not the user's words, accepted by the
+  independent CLOSE review of PR #425): the `[eval]` frame Node's
+  `stackTraceLimit` cuts (`runtime-js/fatal-report-eval-frame-beyond-node-limit`);
+  the `eval at …` origin of string-compiled code — direct and indirect `eval`
+  (`runtime-js/fatal-report-direct-eval-call-position`), `new Function`
+  (rifty's Function routing, `runtime-js/new-function-eval-origin`).
 - `process.version` identity (`runtime-js/process-versions-node-honesty`).
 - Node's `node:internal` frames, `--trace-uncaught`, `--enable-source-maps`.
 - Guest replacement of `Error.prepareStackTrace` / `Error.stackTraceLimit` /

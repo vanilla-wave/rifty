@@ -192,8 +192,7 @@ sample. Node v24.16.0 facts: evidence §O1–§O3.
   not the default Worker report; the COI kernel child and the no-COI child
   Worker run it at the entry catch, as the no-COI command does. The terminal
   prints Node's ReportFatalException shape (`builtins/fatal-report.ts`:
-  inspected error, user frames, trailer; header: see the corrections below). Goal
-  `node-file-entry-parity`; carriers `tests/{no-coi,browser-unit}/node-file-parity.spec.ts`.
+  inspected error, user frames, trailer; header: see the corrections below). ADR-0571; carriers `tests/{no-coi,browser-unit}/node-file-parity.spec.ts`.
 - 2026-11-22 — fatal report header, by construction (manager contract after
   external review round 1). Node's header is V8's message location. For an
   unhandled rejection it is `Exception::CreateMessage(error)`: the top frame

@@ -82,7 +82,7 @@ this item owns the name for every CJS source.
 
 ## Landed — 2026-11-22
 
-Goal `node-file-entry-parity` (ADR-0450 2026-11-22): every CJS source shares
+ADR-0571 (ADR-0450 2026-11-22): every CJS source shares
 line 1 with the wrapper prefix — native line numbers, top-level frame
 `Object.<anonymous>`; the fatal report projects line-1 columns and V8's
 `eval` name. Remaining here (compat modules.md "CJS stack positions"): in

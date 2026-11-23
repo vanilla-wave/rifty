@@ -20,7 +20,9 @@ export interface Stream extends EventEmitter {}
 // event-emitter.ts), so `Stream.call(this)` needs to do nothing — it exists
 // only so `util.inherits(X, require('stream'))` has a callable constructor.
 export const Stream = /* @__PURE__ */ (() => {
-  function Stream(this: object): void {}
+  // Named by its property key: a declaration named `Stream` shadows this
+  // export, so a bundler renames it (`Stream2`) and V8 prints that in frames.
+  const Stream = { Stream: function (this: object): void {} }.Stream;
 
   // Inherit EventEmitter on both the instance side (prototype chain) and the
   // static side (Stream.defaultMaxListeners, etc.) — mirrors Node's Stream.
