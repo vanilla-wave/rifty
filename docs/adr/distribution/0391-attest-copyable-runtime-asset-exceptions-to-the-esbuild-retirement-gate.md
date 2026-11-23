@@ -76,3 +76,4 @@ edits; that pin update stays explicit. No ADR is superseded.
 - 2026-11-23 — PR #421 round 7 (runtime-js isolate report projection): 10022716 bytes, SHA-256 `90c27d1b966e58455bcce5e6f99eb63ff663624e67c9d662749c903e4d124d59`. Exact pin only; ceilings and negative probes unchanged.
 - 2026-11-23 — PR #421 round 7 fix (runtime-js isolate report reads code by descriptor): 10022716 bytes, SHA-256 `5e8f997458900232b4733b0e4e3d11d2f4af082d08828aafddc2317217195f3b`. Exact pin only; ceilings and negative probes unchanged.
 - 2026-11-23 — PR #421 Greptile fixes (runtime-js fatal report message lines, quoted keys): 10022716 bytes, SHA-256 `98a03e00e35e109dc377657dd05771cae58f243c04adf9d3ce897ec7ea3996fe`. Exact pin only; ceilings and negative probes unchanged.
+- 2026-11-23 — PR #421 message-line mark fix (runtime-js fatal report): 10022716 bytes, SHA-256 `8103b039e289c6832ba66b962f5bee86709f2e2f8c49a445832cb024c5e033c9`. Exact pin only; ceilings and negative probes unchanged.
