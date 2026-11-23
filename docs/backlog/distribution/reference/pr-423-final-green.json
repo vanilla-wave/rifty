@@ -1,8 +1,8 @@
 {
   "overall_verdict": "concern",
-  "merge_call": "PASS at 43547cff7. Round-2 changes verified. The alias-proof TypeBox guard maps 21/21 Is* checkers to their registered kebab names (probe). Dropping assistantIsProjected/retainedForExplicitRecovery is sound under the state == projection invariant (REV-7 simplification). The kept usage gate is now discriminated: forcing it true fails usage-stop-resend. The CLI-style throw is in omitRecoveryAttempt. Local runs: vitest agent + bench + es-floor 510/510; parity 60/60, deterministic across 2 runs; typecheck and lint clean; browser-unit agent specs 38/38; chromium-heavy ai-mode 22/22. Before merge: commit this verdict as the landing record, green PR CI at HEAD, and user confirmation of ADR-0569/0570.",
+  "merge_call": "PASS, bound at ccd9ab30f. Since 43547cff7 there are only the verdict commit, the CLOSE deletion of the contract, the ADR-0569/0570 user confirmations, and a merge of origin/main. The merge's only manual resolution is the docs/adr/README.md index (0568 + 0569/0570 kept). The lockfile change is +3 lines (@riftydev/vfs link for main's package). git diff 43547cff7 ccd9ab30f over the agent, agent-bench, ai panel/spec, agent browser-unit, es-floor and playground vite configs is empty. Main does touch runtime-js builtins/module-loader, which the agent's tools run on. Local runs at ccd9ab30f: vitest agent + bench + es-floor 510/510, typecheck clean. Browser and e2e were not rerun after the merge. Merge on green PR CI at ccd9ab30f; it has not been pushed or reported yet.",
   "checkpoint": "Final+GREEN",
-  "unit_goal_source": "docs/backlog/distribution/pi-1x-upgrade.md (status ready) at 43547cff7; BASE 11b9397ee (origin/main merge-base); ADR-0569, ADR-0570, ADR-0482 + corrections in ADR-0424/0436/0440/0466/0472/0473/0474/0475; PR #423 body; prior PASS 2413ccd3f",
+  "unit_goal_source": "Unit contract pi-1x-upgrade (docs/backlog/distribution/, deleted at CLOSE 4c80e33db). Reviewed content is its last version, byte-identical at 43547cff7 and c80baa72a, with 13 traced rows. Code reviewed at 43547cff7. Bound at ccd9ab30f: 4c80e33db and 0b734bbe7 are docs-only, and the merge of origin/main 23ed6b445 leaves the unit's paths unchanged since 43547cff7. BASE 11b9397ee; ADR-0569, ADR-0570 (both user-confirmed 2026-11-23 per their Corrections), ADR-0482 + corrections in ADR-0424/0436/0440/0466/0472/0473/0474/0475; PR #423 body.",
   "unit_residuals": [],
   "goal_residuals": [],
   "goal_complete": false,
@@ -172,13 +172,13 @@
     },
     {
       "axis": "Goal drift",
-      "verdict": "concern",
+      "verdict": "pass",
       "findings": [
         {
-          "severity": "concern",
-          "location": "docs/backlog/distribution/pi-1x-upgrade.md:64",
+          "severity": "nit",
+          "location": "docs/adr/distribution/0569-port-pi-cli-1-6-0-compaction-into-the-agent.md:3",
           "evidence": "",
-          "summary": "The ADR-0569 (port, ADR-0473 §1 and ADR-0474 overturns) and ADR-0570 forks were taken on the manager's default. The contract Decisions line requires user confirmation before merge, and that confirmation is still open (STOP-1). The critic's HOLDS on the overturn is consistent with my reading: no browser-safe 1.6.0 export, and the CLI root imports node: builtins."
+          "summary": "User confirmation of ADR-0569/0570 is now recorded with the user's quoted words in both ADRs' Corrections. I can read only the record, not the user's channel, so this is accepted as attribution. The upstream issue draft stays unfiled, correctly, since no explicit go was given."
         }
       ]
     },
@@ -254,5 +254,5 @@
       ]
     }
   ],
-  "reviewed_sha": "43547cff791bd95f3ad4a152408feec840ee25e4"
+  "reviewed_sha": "ccd9ab30fe66fdad756085d8cefe57c0617b2e1d"
 }
