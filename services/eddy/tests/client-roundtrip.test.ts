@@ -1179,7 +1179,11 @@ describe('eddy client opt-in — fast path + auto-fallback', () => {
             code: (error as { code?: unknown } | undefined)?.code,
             reason: (error as { reason?: unknown } | undefined)?.reason,
           })
-          .toEqual({ code: 'EBROKENLOCK', reason: 'shadow-trace-drift' });
+          // A cold cache is not lock drift: its own reason (ADR-0547 2026-11-23).
+          .toEqual({
+            code: 'EBROKENLOCK',
+            reason: fault === 'missing' ? 'shadow-replay-cache-miss' : 'shadow-trace-drift',
+          });
         expect.soft(registry.packumentReads).toEqual([]);
         expect.soft(registry.tarballReads).toEqual([]);
         const sourceKey = `${SOURCE}\0${SOURCE_VERSION}\0${SOURCE_INTEGRITY}`;
