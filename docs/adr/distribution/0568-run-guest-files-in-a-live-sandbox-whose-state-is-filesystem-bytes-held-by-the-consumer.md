@@ -102,6 +102,10 @@ view's whole backing buffer; rifty's program entry has diagnostic gaps and no
    order with the intake of a run's state. `maxFsBytes` is in the codec's
    budget units (ADR-0567), and a run needs `memoryLimitMb` ≥ 2 × it + 16 MiB:
    the defaults 64 / 256 hold.
+   The capture is asked for up to the run's isolate memory so the trusted side
+   can measure an over-cap state: a refused capture may cost the worker up to
+   `memoryLimitMb` of copy (default 256 MiB, ~4 × the default cap), bounded and
+   inside the worker's RSS ceiling.
    The sandbox's state: one cap, the codec's `maxBytes` count (ADR-0567
    refuses before allocating): an end state over it, or one the isolate runs
    out of memory capturing, is the named capture result of §3; a host write
