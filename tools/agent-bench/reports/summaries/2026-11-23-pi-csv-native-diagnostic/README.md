@@ -20,3 +20,5 @@ so it was noise. Request diff (series native csv, every request):
 - `strict: false` no longer sent: codex-proxy drops tool `strict`.
 
 The model got the same input on both versions.
+
+Rifty lanes: [request comparison](rifty-requests.md) (no rerun needed).

@@ -2,7 +2,7 @@
 
 Question: in the [upgrade series](../2026-11-23-pi-1.6.0-upgrade/README.md), csv dropped
 on the rifty lanes (COI 3→1, no-COI 3→2) while the native lane turned out to be noise
-([native diagnostic](../2026-11-23-pi-csv-native-diagnostic/README.md)). Did the model
+([native diagnostic](README.md)). Did the model
 receive different input from `@riftydev/agent` on pi 1.6.0?
 
 Method: every provider request of the 12 rifty/rifty-no-coi csv trials in both series
