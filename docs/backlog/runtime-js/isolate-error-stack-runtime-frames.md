@@ -51,6 +51,12 @@ lying). Settles by Node's observable `stack` + a realm-wide hook's cost
    goal's `node:*` frame projection — user frame `at [eval]:1:15`, no
    `rifty-isolate-guest.js` frame. → scenario
 
+External review round 5 of PR #421 (2026-11-23, not reproduced here): in the
+isolate `console.log(err)` also loses the error's own props (`code: 'E1'`)
+next to the rifty frames — the most common way model-written code prints an
+error. Priority: high among the isolate drafts (the fatal report already shows
+both correctly; `console.log` does not reuse it).
+
 ## Challenge
 
 challenge: 2026-11-22 — finding capture; no premise critic (README §Challenge)

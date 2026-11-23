@@ -37,3 +37,7 @@ Parity-first, per-feature promotable. Per feature: failing parity test (real Nod
 ## Reversibility
 
 REVERSIBLE — recorded in this backlog item. Each landed method = additive public API on util default export.
+
+2026-11-23 — PR #421 external review round 5 (not reproduced here): an `Array`
+subclass prints without Node's `ClassName(n)` prefix, and a typed array prints
+as a plain object (Node: `Uint8Array(3) [ 1, 2, 3 ]`).
