@@ -10,6 +10,15 @@ code: [packages/runtime-js/src/internal/event-loop-keepalive.ts, packages/runtim
 
 ## Context
 
+Sandbox (ADR-0568): a member of the lifecycle class, compat ⚠️ (row "A run's lifecycle and exit status", measured in `reference/isolate-host-sandbox-lifecycle-class.md`). Owner: runtime-js. Trigger: primordials for the runtime's post-guest paths, or a guest found breaking its own status this way.
+
+Sandbox capture path (PR #424 cross-review round 2): the end state is captured in the guest's
+realm after the run's status is out, through the codec's `DataView` writes and the FS walk, so a
+guest that replaced those intrinsics runs its own code there and can leave any tree the codec
+accepts (`setUint16` turning `a` into `b`: `/workspbce`, exit 0, no `stateRefused`) or hang the
+run (`timeout`, rolled back); its output there is dropped. That path is the goal unit
+`distribution/isolate-host-sandbox-capture-outside-guest-realm`.
+
 Measured in the isolate host (ADR-0557) @ 2cbb37c50, each against `node -e`:
 `Map.prototype.get = () => { throw new Error('boom') }; console.log(1)` → the
 run never drains (`termination: 'timeout'`), Node exits 0;

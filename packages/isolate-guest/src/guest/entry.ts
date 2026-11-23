@@ -223,8 +223,15 @@ function writeDiagnostic(error: unknown): void {
   }
 }
 
-/** The drain settled with no terminal: the run ends as Node's natural exit. */
-let naturalExit = false;
+/**
+ * The run's phase, one state for every consumer: `natural` once the drain settled
+ * with no terminal (Node still runs what its 'exit' listeners queue: their output
+ * is kept, their throw reported); `ended` once the run's status is out without a
+ * natural exit. Past `running` the process is gone for Node: nothing the host still
+ * delivers (`deliveries`: a timer's expiry, an unhandled rejection) runs — `runCode` disposes the
+ * isolate at the result, a sandbox captures its state after it (ADR-0568 §3).
+ */
+let phase: 'running' | 'natural' | 'ended' = 'running';
 
 /** The runtime's own `process.exit`, captured before guest code can replace it. */
 let nativeExit: () => void = () => {
@@ -253,7 +260,10 @@ function runToExit(launch: () => Promise<void>): Promise<number> {
   // can poison (the thenable check runs only for objects). The child judges
   // the number in its own realm (ADR-0557 §6).
   return new Promise<number>((resolve) => {
-    const finish = (caught: unknown): void => resolve(settle(caught));
+    const finish = (caught: unknown): void => {
+      if (phase === 'running') phase = 'ended';
+      resolve(settle(caught));
+    };
     try {
       setUp();
       const entry = launch();
@@ -269,7 +279,7 @@ function runToExit(launch: () => Promise<void>): Promise<number> {
                 // The runtime's own exit: a guest-replaced `process.exit` must
                 // not change this run's status (Node's natural exit does not
                 // call it either).
-                naturalExit = true;
+                phase = 'natural';
                 nativeExit();
                 throw new Error('isolate-host guest: process.exit() returned');
               } catch (caught) {
@@ -353,7 +363,8 @@ function setUp(): void {
   // (backlog runtime-js/node-eval-work-queued-at-exit-runs), its output is dropped.
   // A natural exit is not one: Node still runs what its 'exit' listeners queue.
   setDefaultProcessOutputSink((fd, bytes) => {
-    if (naturalExit || readNodeProcessTerminal(riftyProcess) === null) bridge.write(fd, bytes);
+    if (phase === 'natural' || readNodeProcessTerminal(riftyProcess) === null)
+      bridge.write(fd, bytes);
   });
   // Node's global console is `require('console')`: util.format over process.stdout/stderr.
   (globalThis as { console?: unknown }).console = nodeConsole;
@@ -361,7 +372,7 @@ function setUp(): void {
     // Work a natural exit's 'exit' listeners queued: Node still reports its
     // throw (the run's status is already reported, backlog
     // distribution/isolate-host-natural-exit-listener-queued-work).
-    if (naturalExit) writeDiagnostic(error);
+    if (phase === 'natural') writeDiagnostic(error);
     else if (!handleRealmUncaughtError(error)) fatal(error);
   });
   for (const name of EGRESS_MODULES) {
@@ -383,7 +394,7 @@ function setUp(): void {
 }
 
 /** A rejection isolated-vm found unhandled after the microtask checkpoint (a copy of the reason). */
-function rejection(copied: unknown): void {
+function unhandledRejection(copied: unknown): void {
   // A reason isolated-vm could not copy out (function-bearing object, symbol): Node
   // still fails the run; the reason itself is lost (compat ⚠️).
   const reason =
@@ -394,6 +405,21 @@ function rejection(copied: unknown): void {
       : copied;
   if (!handleRealmUnhandledRejection(reason, undefined)) fatal(reason);
 }
+
+/**
+ * Every way the host calls into the guest: launch (`run`, `runFile`), state
+ * (`snapshot`, `restore`) and deliveries to a live process (`fire` a timer,
+ * `rejection`). A delivery goes through this one gate: once the run's status is
+ * out (`phase`) the process is gone for Node, so it runs nothing — `runCode`
+ * disposes the isolate there, a sandbox captures its state after it (ADR-0568 §3).
+ * One argument each: no spread through the guest's iterators.
+ */
+const delivered =
+  <T>(deliver: (value: T) => void) =>
+  (value: T): void => {
+    if (phase === 'running') deliver(value);
+  };
+const deliveries = { fire: delivered(fireTimer), rejection: delivered(unhandledRejection) };
 
 /** The realm's whole FS; whenever no guest code runs. After guest code ran, the result is guest-authored. */
 function snapshot(options: SnapshotOptions): Uint8Array {
@@ -418,6 +444,13 @@ function restore(bytes: Uint8Array, options: SnapshotOptions): void {
 }
 
 Object.defineProperty(globalThis, '__riftyGuest', {
-  value: Object.freeze({ run, runFile, fire: fireTimer, rejection, snapshot, restore }),
+  value: Object.freeze({
+    run,
+    runFile,
+    snapshot,
+    restore,
+    fire: deliveries.fire,
+    rejection: deliveries.rejection,
+  }),
   configurable: true,
 });

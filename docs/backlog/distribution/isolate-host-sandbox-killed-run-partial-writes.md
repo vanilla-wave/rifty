@@ -18,6 +18,8 @@ capture taken by the worker from outside the isolate. Both are a wire and trust
 change (the bytes stay guest-authored, ADR-0568 §7). A model that loops forever
 after writing its output loses that output today.
 
+Owner: distribution (isolate host). Trigger: a consumer needing a killed run's output (a model that loops after writing it), or a worker-side capture becoming available.
+
 ## Challenge
 
-challenge: 2026-11-23 — none yet (factual capture at the isolate-host-live-sandbox CLOSE)
+challenge: 2026-11-23 — none yet (factual capture, live-sandbox goal, ADR-0568)

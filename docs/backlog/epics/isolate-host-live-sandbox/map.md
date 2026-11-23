@@ -2,13 +2,15 @@
 
 ## Items
 
-None left to build: the acceptance carrier and `distribution/isolate-host-sandbox-core` landed
-(PR #419, external review rounds 1–4). CLOSE waits on the one `owner: user` question below; it
-runs as a small PR on the user's words.
+1. `distribution/isolate-host-sandbox-capture-outside-guest-realm` — draft (PICKUP compiles it,
+   `RDY-1`): a run's end state captured where the guest's code cannot reach, so a guest that broke
+   its own snapshot gets `stateRefused` and the state of before (I1). The closing review of PR #424
+   (2026-11-23) did not accept the reading «the files its own code left» as compatible with I1's
+   letter; the goal closes when this unit lands or the user narrows I1.
 
 ## Open questions
 
-- Три поведенческих расхождения с Node остаются в песочнице объявленными ⚠️: (1) работа, уже стоявшая в очереди на момент `process.exit()`, исполняется, и записанный ею файл остаётся в состоянии; (2) микрозадача из `'exit'`-listener'а после явного `exit()` исполняется и может записать файл; (3) uncaught throw с бесконечной цепочкой микрозадач заканчивается таймаутом с откатом записей, Node выходит с кодом 1 и записи сохраняет. Принять цель с ними и чинить по записям backlog — или держать цель открытой до починки — owner: user — asked by the manager 2026-11-23 (the goal's decision «the same holds for anything found in the class "a run silently does something else"» narrows I2 only in the user's words, `RDY-6`); evidence: `sandbox-acceptance` declared rows; backlog `runtime-js/node-eval-work-queued-at-exit-runs`, `distribution/isolate-host-natural-exit-listener-queued-work`, `distribution/isolate-host-uncaught-throw-waits-for-microtask-checkpoint`, lead `distribution/isolate-host-sandbox-capture-at-process-terminal`. Everything else of the goal is delivered and proven (CLOSE review 2026-11-23 @ 35fb53023: the only blocker is this gate).
+None: the `owner: user` question on behavior divergences was answered 2026-11-23 (goal.md `amend:` lines; the second covers the lifecycle class).
 
 ## Closes elsewhere
 

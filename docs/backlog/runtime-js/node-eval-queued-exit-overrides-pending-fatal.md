@@ -10,6 +10,8 @@ code: [packages/runtime-js/src/internal/event-loop-keepalive.ts]
 
 ## Context
 
+Sandbox (ADR-0568): a member of the lifecycle class, compat ⚠️ (row "A run's lifecycle and exit status", measured in `reference/isolate-host-sandbox-lifecycle-class.md`). Owner: runtime-js. Trigger: the next change to the fatal terminal in runtime-js, or a sandbox consumer finding a clean exit 0 after an uncaught throw.
+
 Isolate host (ADR-0557) @ 264e4b894 against `node -e` v24.16.0, each Node
 exit 1 with the `Error: x` report, host `{stdout: '', stderr: '', exitCode: 0}`:
 `setTimeout(() => { throw new Error('x') }); setTimeout(() => process.exit(0))`;

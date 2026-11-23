@@ -265,6 +265,9 @@ async function run(request: RunRequest): Promise<void> {
     const guestFire: { ref?: ivm.Reference<(id: number) => void> } = {};
     const bridge = createHostBridge({
       write: (fd, bytes) => {
+        // The run's output is fixed when its status is out: what the guest's realm prints
+        // while its state is captured (its own replaced intrinsics) is not the run's.
+        if (state.stateWork === 1) return;
         if (!output.write(fd, bytes) || flushScheduled) return;
         flushScheduled = true;
         // Batch: guest writes arrive as separate host tasks; one frame batch per 5 ms.
