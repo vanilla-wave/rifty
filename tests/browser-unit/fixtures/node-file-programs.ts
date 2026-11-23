@@ -408,11 +408,29 @@ throw e;
     argv: ['main.js'],
   },
   {
-    // Node's clearTimeout writes `_onTimeout = null` through a guest setter.
+    // Node's clearTimeout writes `_onTimeout = null` through a guest setter that clears again.
     name: 'interval-setter-clears-itself',
     files: {
       'main.js':
-        "let n = 0;\nlet stored = () => {\n  n++;\n};\nlet busy = false;\nconst h = setInterval(() => {}, 1);\nObject.defineProperty(h, '_onTimeout', {\n  get() {\n    return stored;\n  },\n  set(v) {\n    if (!busy) {\n      busy = true;\n      clearInterval(h);\n    }\n    stored = v;\n  },\n});\nclearInterval(h);\nsetTimeout(() => console.log(n, stored), 10);\n",
+        "let sets = 0;\nlet stored = () => {};\nconst h = setInterval(() => {}, 1);\nObject.defineProperty(h, '_onTimeout', {\n  get() {\n    return stored;\n  },\n  set(v) {\n    sets++;\n    stored = v;\n    clearInterval(h);\n  },\n});\nclearInterval(h);\nconsole.log('sets', sets, stored);\n",
+    },
+    argv: ['main.js'],
+  },
+  {
+    // Declared: a number reaches a timer only via its `Symbol.toPrimitive` id in Node.
+    name: 'timer-not-cleared-by-unrelated-number',
+    files: {
+      'main.js':
+        "const t = setTimeout(() => console.log('fired'), 5);\nfor (let i = 0; i < 200; i++) clearTimeout(i);\n",
+    },
+    argv: ['main.js'],
+  },
+  {
+    // Declared: Node drops a timer's numeric id after its callback, not before.
+    name: 'numeric-clear-inside-callback',
+    files: {
+      'main.js':
+        "const h = setTimeout(() => {\n  clearTimeout(+h);\n  console.log(h._onTimeout === null);\n  throw new Error('numeric-clear');\n}, 1);\n",
     },
     argv: ['main.js'],
   },

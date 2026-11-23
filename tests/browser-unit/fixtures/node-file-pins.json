@@ -162,6 +162,16 @@
     "interval-nulled-on-timeout": "node",
     "interval-getter-null-on-timeout": "node",
     "interval-setter-clears-itself": "node",
+    "timer-not-cleared-by-unrelated-number": {
+      "stdout": "",
+      "stderr": "",
+      "exitCode": 0
+    },
+    "numeric-clear-inside-callback": {
+      "stdout": "false\n",
+      "stderr": "",
+      "exitCode": null
+    },
     "interval-cleared-after-null": "node",
     "eval-stack-getter-second-read": {
       "stdout": "",
@@ -459,6 +469,16 @@
     "interval-nulled-on-timeout": "node",
     "interval-getter-null-on-timeout": "node",
     "interval-setter-clears-itself": "node",
+    "timer-not-cleared-by-unrelated-number": {
+      "stdout": "",
+      "stderr": "",
+      "exitCode": 0
+    },
+    "numeric-clear-inside-callback": {
+      "stdout": "false\n",
+      "stderr": "Uncaught Error: numeric-clear (<root>/main.js:4)\n",
+      "exitCode": 1
+    },
     "interval-cleared-after-null": "node",
     "eval-stack-getter-second-read": {
       "stdout": "",
@@ -740,6 +760,16 @@
     "interval-nulled-on-timeout": "node",
     "interval-getter-null-on-timeout": "node",
     "interval-setter-clears-itself": "node",
+    "timer-not-cleared-by-unrelated-number": {
+      "stdout": "",
+      "stderr": "",
+      "exitCode": 0
+    },
+    "numeric-clear-inside-callback": {
+      "stdout": "false\n",
+      "stderr": "Error: numeric-clear\n    at Timeout._onTimeout (<root>/main.js:4:9)\n\nNode.js v24.0.0\n",
+      "exitCode": 1
+    },
     "interval-cleared-after-null": "node",
     "clear-immediate-in-own-callback": "node",
     "throw-stack-getter-second-read": "node",

@@ -175,8 +175,9 @@ export function setTimeout(
 /**
  * Node v24.16.0 `lib/timers.js` clearTimeout (clearInterval calls it): a handle
  * is unenrolled only `if (timer?._onTimeout)`, after `timer._onTimeout = null`
- * (so a cleared callback's frame reads `Timeout.<anonymous>`); a numeric id's
- * timer always. Anything else goes to the host clear.
+ * (so a cleared callback's frame reads `Timeout.<anonymous>`). A number that is
+ * a live handle's id clears it (not Node's id lifecycle:
+ * `backlog/runtime-js/timeout-state-not-node`); anything else goes to the host clear.
  */
 function clearTimer(handle: unknown, hostClear: (raw: never) => void): void {
   if (handle instanceof Timeout) {
