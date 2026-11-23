@@ -114,7 +114,7 @@ async function literalV2Fixture() {
   return { ...fresh, lock, bundle: await eddyBundleFor(lock, fresh.entries) };
 }
 
-function replayFaultCache(fault: 'none' | 'missing' | 'corrupt') {
+function replayFaultCache(fault: 'none' | 'missing' | 'missing-once' | 'corrupt') {
   const entries = new Map<string, Uint8Array>();
   const gets: string[] = [];
   const puts: string[] = [];
@@ -132,6 +132,9 @@ function replayFaultCache(fault: 'none' | 'missing' | 'corrupt') {
           return bytes;
         }
         if (fault === 'missing') return null;
+        // A cache that loses the seeded source once (eviction between adoption and replay).
+        if (fault === 'missing-once')
+          return gets.filter((candidate) => candidate === readKey).length === 2 ? null : bytes;
         if (fault === 'corrupt' && bytes) bytes[0] = (bytes[0] ?? 0) ^ 0xff;
         return bytes;
       },
@@ -143,6 +146,12 @@ function replayFaultCache(fault: 'none' | 'missing' | 'corrupt') {
     },
   };
 }
+
+/** What the reader of an Eddy-staged cold-cache refusal gets (no package-lock.json on disk yet). */
+const eddyRefusal = [
+  `EBROKENLOCK: the lockfile Eddy resolved installs lightningcss@1.32.0 from its substitute ${SOURCE}@${SOURCE_VERSION} (shadow recipe rifty.shadow-substitution.lightningcss.v2), which the tarball cache dropped after Eddy seeded it.`,
+  'Lockfile replay takes substitutes only from that cache and never downloads them. No project file was written; run install again to seed the cache from Eddy again.',
+].join(' ');
 
 let eddy: EddyServer;
 let eddyUrl: string;
@@ -1184,6 +1193,8 @@ describe('eddy client opt-in — fast path + auto-fallback', () => {
             code: 'EBROKENLOCK',
             reason: fault === 'missing' ? 'shadow-replay-cache-miss' : 'shadow-trace-drift',
           });
+        if (fault === 'missing')
+          expect.soft((error as Error | undefined)?.message).toBe(eddyRefusal);
         expect.soft(registry.packumentReads).toEqual([]);
         expect.soft(registry.tarballReads).toEqual([]);
         const sourceKey = `${SOURCE}\0${SOURCE_VERSION}\0${SOURCE_INTEGRITY}`;
@@ -1198,6 +1209,30 @@ describe('eddy client opt-in — fast path + auto-fallback', () => {
       }
     },
   );
+
+  it('[fault: poisoned-cache] the Eddy refusal exit holds: running install again after a one-time cache loss installs from Eddy', async () => {
+    const literal = await literalV2Fixture();
+    const raw = await startRaw((_req, res) => {
+      res.writeHead(200, { 'content-type': 'application/x-tar' });
+      res.end(Buffer.from(literal.bundle));
+    });
+    try {
+      const vfs = new LedgerVfs();
+      await writeProject(vfs, literal.dependencies);
+      const registry = new LedgerRegistry(literal.entries);
+      const replayCache = replayFaultCache('missing-once');
+      const run = () =>
+        installFixture(vfs, registry, literal.dependencies, replayCache.cache, [], raw.url);
+      await expect(run()).rejects.toThrow(eddyRefusal);
+      await expect(vfs.exists('/project/package-lock.json')).resolves.toBe(false);
+      const retried = await run();
+      expect(retried.source).toBe('eddy');
+      expect(registry.packumentReads.length + registry.tarballReads.length).toBe(0);
+      await expect(vfs.exists('/project/package-lock.json')).resolves.toBe(true);
+    } finally {
+      await closeServer(raw.server);
+    }
+  });
 
   it('refuses a bundle whose manifest names DUPLICATE member files (two packages sharing one member)', async () => {
     // Regression (round 9): duplicate `file` values collapse in the client's

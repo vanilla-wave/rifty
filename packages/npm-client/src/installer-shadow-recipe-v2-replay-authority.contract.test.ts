@@ -1157,10 +1157,9 @@ describe('shadow recipe v2 replay authority', () => {
         const substitute = `${fixture.acquisition.name}@${fixture.acquisition.version}`;
         expect((error as Error).message).toBe(
           [
-            `EBROKENLOCK: package-lock.json installs lightningcss@1.32.0 from its substitute ${substitute} (shadow recipe ${LIGHTNING_RECIPE.id}), but the tarball cache holds no intact ${substitute}.`,
-            'Lockfile replay takes substitute bytes only from the tarball cache and never downloads them.',
-            'To reinstall this lockfile exactly, restore those bytes to the tarball cache;',
-            'or delete package-lock.json and run install again to re-resolve through the registry (installed versions may change).',
+            `EBROKENLOCK: package-lock.json installs lightningcss@1.32.0 from its substitute ${substitute} (shadow recipe ${LIGHTNING_RECIPE.id}), which is not in the tarball cache.`,
+            'Lockfile replay takes substitutes only from that cache and never downloads them, so this lockfile cannot be reinstalled exactly here.',
+            'To install anyway, delete package-lock.json and run install again: it re-resolves through the registry, and installed versions may change.',
           ].join(' '),
         );
       }

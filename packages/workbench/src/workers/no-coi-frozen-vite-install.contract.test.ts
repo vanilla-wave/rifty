@@ -92,8 +92,15 @@ async function registry() {
   return { requests, assets };
 }
 
-async function applied(profile: 'replay' | 'frozen') {
-  const network = await registry();
+type Network = Awaited<ReturnType<typeof registry>>;
+
+/** The committed Vite snapshot as replay (its replay cache) or frozen (same payload, none). */
+async function applySnapshot(
+  fs: MemoryFsSync,
+  network: Network,
+  profile: 'replay' | 'frozen',
+  force = false,
+) {
   const baked = JSON.parse(
     gunzipSync(
       await readFile(new URL('apps/playground/public/snapshots/vite-node-modules.json.gz', repo)),
@@ -109,25 +116,34 @@ async function applied(profile: 'replay' | 'frozen') {
           tarballCache: { version: 1, root: TARBALL_CACHE_ROOT, files: [] },
         };
   const bytes = new TextEncoder().encode(JSON.stringify(source));
-  network.assets.set(assetUrl, bytes);
-  const fs = new MemoryFsSync();
-  fs.mkdirSync('/project', { recursive: true });
-  fs.writeFileSync('/project/package.json', new TextEncoder().encode(baked.packageJsonText));
+  const url = `${assetUrl}?${profile}`;
+  network.assets.set(url, bytes);
+  if (!fs.existsSync('/project/package.json')) {
+    fs.mkdirSync('/project', { recursive: true });
+    fs.writeFileSync('/project/package.json', new TextEncoder().encode(baked.packageJsonText));
+  }
   await applyNoCoiSnapshot(
     {
       cwd: '/project',
       snapshot: {
-        assetUrl,
+        assetUrl: url,
         snapshotId: `sha256:${createHash('sha256').update(bytes).digest('hex')}`,
         templateId: 'vite',
       },
+      ...(force ? { force } : {}),
     },
     { fs, flush: async () => undefined },
   );
+}
+
+async function applied(profile: 'replay' | 'frozen') {
+  const network = await registry();
+  const fs = new MemoryFsSync();
+  await applySnapshot(fs, network, profile);
   const vfs = new SyncMirrorVfs();
   setSyncMirror(fs, { async: vfs });
   network.requests.length = 0;
-  return { fs, vfs, requests: network.requests };
+  return { fs, vfs, network, requests: network.requests };
 }
 
 function npm(...specs: string[]) {
@@ -141,26 +157,89 @@ function npm(...specs: string[]) {
   return { request: parsed.request, context };
 }
 
-/** Exact text a terminal/SDK reader gets; cause and both exits are carried below (ADR-0547). */
-const coldShadowPin = {
+/** Exact text a terminal reader gets; each named exit is executed below the way that reader would (ADR-0547). */
+const terminalRefusal = {
   code: 'EBROKENLOCK',
   reason: 'shadow-replay-cache-miss',
   message:
     'EBROKENLOCK: package-lock.json installs esbuild@0.28.0 from its substitute esbuild-wasm@0.28.0 ' +
-    '(shadow recipe rifty.shadow-substitution.esbuild.v2), but the tarball cache holds no intact esbuild-wasm@0.28.0. ' +
-    'Lockfile replay takes substitute bytes only from the tarball cache and never downloads them. ' +
-    'To reinstall this lockfile exactly, restore those bytes to the tarball cache; ' +
-    'or delete package-lock.json and run install again to re-resolve through the registry (installed versions may change).',
+    '(shadow recipe rifty.shadow-substitution.esbuild.v2), which is not in the tarball cache. ' +
+    'Lockfile replay takes substitutes only from that cache and never downloads them, so this lockfile cannot be reinstalled exactly here. ' +
+    'To install anyway, delete package-lock.json and run install again: it re-resolves through the registry, and installed versions may change.',
 };
+
+/** `toolchain.install` (host) reader: the same text plus the exit only the host has. */
+const hostRefusal = {
+  ...terminalRefusal,
+  message: `${terminalRefusal.message} Host exit: toolchain.applySnapshot with the replay-profile snapshot of these dependencies restores those bytes; toolchain.install then reinstalls this lockfile exactly.`,
+};
+
+/** The toolchain owner's terminal hook minus its stamp claim (no-coi-toolchain-owner.ts). */
+async function noCoiTerminal(fs: MemoryFsSync, vfs: SyncMirrorVfs, command: string) {
+  let stdout = '';
+  let stderr = '';
+  const result = await runNoCoiProjectCommand(
+    { project: { root: '/project' }, command, cwd: '/project', env: {} },
+    new AbortController().signal,
+    {
+      fs,
+      flush: async () => 'memory',
+      effects: () => 'unknown',
+      onOutput(chunk, stream) {
+        if (stream === 'stdout') stdout += chunk;
+        else stderr += chunk;
+      },
+      async install(args, context) {
+        const parsed = parseNpmInstallRequest(args);
+        if (parsed.status !== 'ready') throw new Error(parsed.message);
+        await installToolchainPackages({ cwd: context.cwd, registryUrl }, vfs, {
+          request: parsed.request,
+          context,
+        });
+        return 0;
+      },
+    },
+  );
+  return { status: result.status, exitCode: result.exitCode, stdout, stderr };
+}
+
+/** Package-authority terminal (`reportInstallError`) over the same installer. */
+async function authorityTerminal(vfs: SyncMirrorVfs, command: string) {
+  const deps = {
+    vfs,
+    registry: new RegistryClient({ baseUrl: registryUrl }),
+    runtimeTier: 'no-coi' as const,
+  };
+  const shell = new Shell({ cwd: '/project' });
+  shell.registerCommand(
+    'npm',
+    createNpmShellCommand({
+      ...deps,
+      packageAcquisitionAuthority: createTestNpmPackageAcquisitionAuthority(deps),
+    }),
+  );
+  let stderr = '';
+  const result = await shell.run(command, {
+    onChunk: (chunk, stream) => {
+      if (stream === 'stderr') stderr += chunk;
+    },
+  });
+  return { exitCode: result.exitCode, stderr };
+}
+
+const lockless = (requests: readonly string[]) => ({
+  packument: requests.includes(`${registryUrl}/esbuild-wasm`),
+  tarball: requests.some((url) => /\/esbuild-wasm-[^/]+\.tgz$/.test(url)),
+});
 
 describe('Vite 7.3.6 after a frozen snapshot on a cold cache: no npm reinstall route while the lock is kept (ADR-0547)', () => {
   it.each([
-    ['install over the lock', [] as string[], 11],
-    ['npm install esbuild (the transitive shadow pin)', ['esbuild'], 11],
-    ['npm install ms (an unrelated package)', ['ms@2.0.0'], 12],
+    ['toolchain.install over the lock', [] as string[], 11, hostRefusal],
+    ['npm install esbuild (the transitive shadow pin)', ['esbuild'], 11, terminalRefusal],
+    ['npm install ms (an unrelated package)', ['ms@2.0.0'], 12, terminalRefusal],
   ] as const)(
     '%s fails EBROKENLOCK on esbuild; ordinary tarballs reach the shared cache, project tree unchanged',
-    async (_label, specs, ordinary) => {
+    async (_label, specs, ordinary, refusal) => {
       const { fs, vfs, requests } = await applied('frozen');
       const before = digestTree(snapshotExactFsTree(fs), '/project/');
       await expect(
@@ -169,7 +248,7 @@ describe('Vite 7.3.6 after a frozen snapshot on a cold cache: no npm reinstall r
           vfs,
           ...(specs.length === 0 ? [] : [npm(...specs)]),
         ),
-      ).rejects.toMatchObject(coldShadowPin);
+      ).rejects.toMatchObject(refusal);
       const fetched = requests.filter((url) => url.endsWith('.tgz'));
       expect(fetched, 'ordinary lock/request tarballs fetched before the refusal').toHaveLength(
         ordinary,
@@ -188,78 +267,65 @@ describe('Vite 7.3.6 after a frozen snapshot on a cold cache: no npm reinstall r
     60_000,
   );
 
-  it('terminal `npm install` prints the same cause and exits, exit 1 (no-COI project command)', async () => {
+  it('no-COI terminal: `npm install` prints the terminal text; `rm package-lock.json && npm install` then re-resolves', async () => {
     const { fs, vfs, requests } = await applied('frozen');
-    let stdout = '';
-    let stderr = '';
-    const result = await runNoCoiProjectCommand(
-      { project: { root: '/project' }, command: 'npm install', cwd: '/project', env: {} },
-      new AbortController().signal,
-      {
-        fs,
-        flush: async () => 'memory',
-        effects: () => 'unknown',
-        onOutput(chunk, stream) {
-          if (stream === 'stdout') stdout += chunk;
-          else stderr += chunk;
-        },
-        // The toolchain owner's hook minus its stamp claim (no-coi-toolchain-owner.ts).
-        async install(args, context) {
-          const parsed = parseNpmInstallRequest(args);
-          if (parsed.status !== 'ready') throw new Error(parsed.message);
-          await installToolchainPackages({ cwd: context.cwd, registryUrl }, vfs, {
-            request: parsed.request,
-            context,
-          });
-          return 0;
-        },
-      },
-    );
-    expect({ status: result.status, exitCode: result.exitCode, stderr }).toEqual({
+    const refused = await noCoiTerminal(fs, vfs, 'npm install');
+    expect({ ...refused, stdout: undefined }).toEqual({
       status: 'exited',
       exitCode: 1,
-      stderr: `npm: ${coldShadowPin.message}\n`,
+      stdout: undefined,
+      stderr: `npm: ${terminalRefusal.message}\n`,
     });
     // Progress lines for the ordinary pins fetched first; no success summary.
-    expect(stdout).toMatch(/^npm: installing all from package\.json…\n(?:npm: \+ \S+\n)+$/u);
-    expect(requests.filter((url) => url.includes('esbuild'))).toEqual([]);
-  }, 60_000);
-
-  it('package-authority terminal maps the cold cache to the installer text, not "lockfile is broken"', async () => {
-    const { vfs, requests } = await applied('frozen');
-    const deps = {
-      vfs,
-      registry: new RegistryClient({ baseUrl: registryUrl }),
-      runtimeTier: 'no-coi' as const,
-    };
-    const shell = new Shell({ cwd: '/project' });
-    shell.registerCommand(
-      'npm',
-      createNpmShellCommand({
-        ...deps,
-        packageAcquisitionAuthority: createTestNpmPackageAcquisitionAuthority(deps),
-      }),
+    expect(refused.stdout).toMatch(
+      /^npm: installing all from package\.json…\n(?:npm: \+ \S+\n)+$/u,
     );
-    let stderr = '';
-    const result = await shell.run('npm install', {
-      onChunk: (chunk, stream) => {
-        if (stream === 'stderr') stderr += chunk;
-      },
-    });
-    expect({ exitCode: result.exitCode, stderr }).toEqual({
-      exitCode: 1,
-      stderr: `npm: ${coldShadowPin.message}\n`,
-    });
     expect(requests.filter((url) => url.includes('esbuild'))).toEqual([]);
+    const exit = await noCoiTerminal(fs, vfs, 'rm package-lock.json && npm install');
+    expect({ status: exit.status, exitCode: exit.exitCode, stderr: exit.stderr }).toEqual({
+      status: 'exited',
+      exitCode: 0,
+      stderr: '',
+    });
+    expect(lockless(requests)).toEqual({ packument: true, tarball: true });
+    expect(fs.existsSync('/project/node_modules/esbuild/package.json')).toBe(true);
   }, 60_000);
 
-  it('deleting package-lock.json re-resolves from the registry and installs (pins may move)', async () => {
+  it('package-authority terminal: same text (not "lockfile is broken"); the same lockfile exit works', async () => {
+    const { fs, vfs, requests } = await applied('frozen');
+    expect(await authorityTerminal(vfs, 'npm install')).toEqual({
+      exitCode: 1,
+      stderr: `npm: ${terminalRefusal.message}\n`,
+    });
+    expect(requests.filter((url) => url.includes('esbuild'))).toEqual([]);
+    expect(await authorityTerminal(vfs, 'rm package-lock.json && npm install')).toEqual({
+      exitCode: 0,
+      stderr: '',
+    });
+    expect(lockless(requests)).toEqual({ packument: true, tarball: true });
+    expect(fs.existsSync('/project/node_modules/esbuild/package.json')).toBe(true);
+  }, 60_000);
+
+  it('host lockfile exit: deleting package-lock.json then toolchain.install re-resolves (pins may move)', async () => {
     const { fs, vfs, requests } = await applied('frozen');
     fs.rmSync('/project/package-lock.json', { force: true });
     const result = await installToolchainPackages({ cwd: '/project', registryUrl }, vfs);
     expect(result.packages).toBeGreaterThan(0);
-    expect(requests).toContain(`${registryUrl}/esbuild-wasm`);
-    expect(requests.some((url) => /\/esbuild-wasm-[^/]+\.tgz$/.test(url))).toBe(true);
+    expect(lockless(requests)).toEqual({ packument: true, tarball: true });
+  }, 60_000);
+
+  it('host exact exit: after the refusal, applying the replay-profile snapshot lets toolchain.install reinstall the lock exactly', async () => {
+    const { fs, vfs, network, requests } = await applied('frozen');
+    await expect(
+      installToolchainPackages({ cwd: '/project', registryUrl }, vfs),
+    ).rejects.toMatchObject(hostRefusal);
+    const lock = fs.readFileBytesSync('/project/package-lock.json');
+    await applySnapshot(fs, network, 'replay');
+    requests.length = 0;
+    const result = await installToolchainPackages({ cwd: '/project', registryUrl }, vfs);
+    expect(result.packages).toBe(12);
+    expect(requests.filter((url) => url.includes('esbuild'))).toEqual([]);
+    expect(fs.readFileBytesSync('/project/package-lock.json')).toEqual(lock);
   }, 60_000);
 
   it('replay control: the same lock install succeeds from the restored shadow bytes', async () => {

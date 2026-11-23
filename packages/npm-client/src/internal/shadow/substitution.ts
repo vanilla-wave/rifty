@@ -229,27 +229,61 @@ function brokenShadowReplayCache(pin: ResolvedPin, detail: string): Error {
   );
 }
 
-/** Cold cache, not a broken lock: names the source, why it is not fetched, and both exits. */
+interface ShadowReplayCacheMiss {
+  readonly packageName: string;
+  readonly locked: string;
+  readonly substitute: string;
+  readonly recipeId: string;
+}
+
+/** Facts of errors minted here, so the installer can restate them for an Eddy-staged lock. */
+const shadowReplayCacheMisses = new WeakMap<Error, ShadowReplayCacheMiss>();
+
+function shadowReplayCacheMissError(miss: ShadowReplayCacheMiss, message: string): Error {
+  const error = Object.assign(new Error(message), {
+    code: 'EBROKENLOCK' as const,
+    packageName: miss.packageName,
+    reason: 'shadow-replay-cache-miss' as const,
+  });
+  shadowReplayCacheMisses.set(error, miss);
+  return error;
+}
+
+const REPLAY_TAKES_CACHE_ONLY =
+  'Lockfile replay takes substitutes only from that cache and never downloads them';
+
+/** Cold cache, not a broken lock: names the pin, why it is not fetched, and the reader's exit. */
 function missingShadowReplayBytes(
   pin: ResolvedPin,
   shadow: NonNullable<ResolvedPin['shadow']>,
   source: { readonly name: string; readonly version: string },
 ): Error {
-  const substitute = `${source.name}@${source.version}`;
-  return Object.assign(
-    new Error(
-      [
-        `EBROKENLOCK: package-lock.json installs ${shadow.trigger.name}@${shadow.trigger.version} from its substitute ${substitute} (shadow recipe ${shadow.recipe.id}), but the tarball cache holds no intact ${substitute}.`,
-        'Lockfile replay takes substitute bytes only from the tarball cache and never downloads them.',
-        'To reinstall this lockfile exactly, restore those bytes to the tarball cache;',
-        'or delete package-lock.json and run install again to re-resolve through the registry (installed versions may change).',
-      ].join(' '),
-    ),
-    {
-      code: 'EBROKENLOCK' as const,
-      packageName: pin.name,
-      reason: 'shadow-replay-cache-miss' as const,
-    },
+  const miss = {
+    packageName: pin.name,
+    locked: `${shadow.trigger.name}@${shadow.trigger.version}`,
+    substitute: `${source.name}@${source.version}`,
+    recipeId: shadow.recipe.id,
+  };
+  return shadowReplayCacheMissError(
+    miss,
+    [
+      `EBROKENLOCK: package-lock.json installs ${miss.locked} from its substitute ${miss.substitute} (shadow recipe ${miss.recipeId}), which is not in the tarball cache.`,
+      `${REPLAY_TAKES_CACHE_ONLY}, so this lockfile cannot be reinstalled exactly here.`,
+      'To install anyway, delete package-lock.json and run install again: it re-resolves through the registry, and installed versions may change.',
+    ].join(' '),
+  );
+}
+
+/** Eddy stages its lock in memory (ADR-0182): same cause, no file to delete; null for other errors. */
+export function eddyShadowReplayCacheMiss(error: unknown): Error | null {
+  const miss = error instanceof Error ? shadowReplayCacheMisses.get(error) : undefined;
+  if (miss === undefined) return null;
+  return shadowReplayCacheMissError(
+    miss,
+    [
+      `EBROKENLOCK: the lockfile Eddy resolved installs ${miss.locked} from its substitute ${miss.substitute} (shadow recipe ${miss.recipeId}), which the tarball cache dropped after Eddy seeded it.`,
+      `${REPLAY_TAKES_CACHE_ONLY}. No project file was written; run install again to seed the cache from Eddy again.`,
+    ].join(' '),
   );
 }
 

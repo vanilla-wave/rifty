@@ -29,14 +29,14 @@ Goal compact-dependency-snapshots I1–I3 preserves ordinary replay guarantees.
 
 ## Compatibility evidence
 
-BASE f37bfc517613d0e3618519ccbeeb3ed15fd5cc39: profile contract tests reject v5
-with `Unsupported dep snapshot version 5`; v3 with an unknown profile marker
+BASE f37bfc517613d0e3618519ccbeeb3ed15fd5cc39: compact contract tests reject v5
+with `Unsupported dep snapshot version 5`; v3 with an unknown compact marker
 is accepted for a real ms tree. Old tar decoder accepts only manifest v4.
 The packed same-input Vite 7.3.6 pair and no-COI journey carry I1–I2.
 Existing replay closure/SRI and malformed-container suites retain I3.
 2026-11-23 — I3 tar carriers: system-tar v5 without/unknown profile, v4 with a
-frozen marker and a v5 replay namespace reject before mutation
-(`dep-snapshot-frozen.contract.test.ts`). COI owner apply (permitted, not
+compact marker and a v5 replay namespace reject before mutation
+(`dep-snapshot-compact.contract.test.ts`). COI owner apply (permitted, not
 required by the goal) proves the same no replay-cache access
 (`workbench-snapshot-apply-validation.contract.test.ts`); COI first-materialization
 restore now also skips its cache-persistence flush (`PreparedDepSnapshotRestore.applyCache`
@@ -54,20 +54,19 @@ Frozen reduces the measured Vite pair, not every possible tree. Readers must
 upgrade before consuming frozen; ordinary producers/readers remain compatible.
 Explicit install retains existing cache-miss and replay behavior. 2026-11-23 —
 concretely: shadow-substituted pins replayed from the lock read bytes only from
-the shared cache and are never fetched. Real Vite 7.3.6 after frozen on a cold
-cache, live registry (`no-coi-frozen-vite-install.contract.test.ts`): install
-over the lock, `npm install esbuild` and adding `ms` each fail `EBROKENLOCK`
-naming `esbuild@0.28.0` and its substitute `esbuild-wasm@0.28.0`; the ordinary
-tarballs fetched first (11, or 12 with `ms`) stay in the shared cache; project
-files stay byte-exact (installer level; directories, `installManifest` and the
-stamp not observed). Mechanism (`no-coi-frozen-install.contract.test.ts`, one
-LightningCSS pin): naming in `npm install` a dependency of the root
-`package.json` whose lock pin is shadow-substituted re-resolves it through the
-registry (ADR-0361 request admission) — no route for Vite 7 while its lock is
-kept, since `esbuild` is transitive and stays lock-replayed. Deleting
-`package-lock.json` re-resolves from the registry (fetches `esbuild-wasm`; pins
-may move). A replay snapshot or warm cache restores the exact install. Vite 8 is
-not covered by these carriers.
+the shared cache and are never fetched. Real Vite 7.3.6 after compact on a cold
+cache, live registry (`no-coi-compact-vite-install.contract.test.ts`): install
+over the lock, `npm install esbuild` and adding `ms` each fail `EBROKENLOCK …
+esbuild.v2 is missing its pinned cache bytes`; the ordinary tarballs fetched
+first (11, or 12 with `ms`) stay in the shared cache; project files stay
+byte-exact (installer level; directories, `installManifest` and the stamp not
+observed). Mechanism (`no-coi-compact-install.contract.test.ts`, one LightningCSS
+pin): naming in `npm install` a dependency of the root `package.json` whose lock
+pin is shadow-substituted re-resolves it through the registry (ADR-0361 request
+admission) — no route for Vite 7 while its lock is kept, since `esbuild` is
+transitive and stays lock-replayed. Deleting `package-lock.json` re-resolves from
+the registry (fetches `esbuild-wasm`; pins may move). A replay snapshot or warm
+cache restores the exact install. Vite 8 is not covered by these carriers.
 
 ## Decisions
 
@@ -75,16 +74,27 @@ not covered by these carriers.
   переименовать на frozen» (the contract is "use as is, no reinstall", not size).
   `compact` was never published (`@riftydev/workbench`/`sdk`/`npm-client@0.11.0`
   carry no such profile): renamed in place, same v5, no alias; `'compact'` is
-  an unknown profile (producer, JSON and tar carriers). Goal id and the #388
-  verdict/ledger keep the old name as history.
-- 2026-11-23 — the cold-cache refusal names its cause and exits; user: «давай
-  тоже сделаем». npm-client: `EBROKENLOCK`, `reason: 'shadow-replay-cache-miss'`
-  (was `shadow-trace-drift`): `package-lock.json installs <pkg>@<v> from its
-  substitute <src>@<v> (shadow recipe <id>), but the tarball cache holds no
-  intact <src>@<v>`; replay takes substitute bytes only from that cache; exits:
-  restore those bytes (exact reinstall) or delete `package-lock.json` to
-  re-resolve (versions may change). Terminal prints it as `npm: <message>` on
-  both npm hosts; `toolchain.install` rejects with it (packed Chromium proof).
-  Invalid-integrity and corrupt-bytes texts unchanged: no carrier fixes their
-  exits. Lock-preserving network route stays `owner: user`
+  an unknown profile (producer, JSON and tar carriers). This file was
+  `0547-compact-prepared-dependency-snapshots.md` (cited by the PR #388 verdict).
+  Earlier dated lines keep pre-rename names; their carriers are now
+  `dep-snapshot-frozen.contract.test.ts`, `no-coi-frozen-install.contract.test.ts`,
+  `no-coi-frozen-vite-install.contract.test.ts`. Goal id, #388 verdict and
+  ledger keep `compact` as history.
+- 2026-11-23 — the cold-cache refusal names its cause and only exits its reader
+  can run; user: «давай тоже сделаем». `EBROKENLOCK`, `reason:
+  'shadow-replay-cache-miss'` (was `shadow-trace-drift`; kept by the manager:
+  the terminal branches on it). Disk lock, every terminal: `package-lock.json
+  installs <pkg>@<v> from its substitute <src>@<v> (shadow recipe <id>), which
+  is not in the tarball cache`; replay never downloads substitutes, so the lock
+  cannot be reinstalled exactly there; exit: delete `package-lock.json` and
+  install again (re-resolves, versions may change). `toolchain.install` adds the
+  host-only exit: apply the replay-profile snapshot of these dependencies, then
+  install reinstalls the lock exactly. Eddy-staged lock (no file on disk): the
+  cache dropped the seeded substitute; exit: run install again. Each exit is
+  executed by its carrier (Vite node carriers, `services/eddy` client test,
+  packed Chromium proof). The prod cache returns null for corrupt bytes
+  (`VfsTarballCache.get`), so on-disk corruption gets this text and reason; the
+  `has corrupt pinned cache bytes` and `has an invalid replay-cache integrity`
+  texts (non-verifying caches, malformed lock integrity) are unchanged. Lock-
+  preserving network route stays `owner: user`
   (`docs/backlog/npm-client/shadow-pin-replay-bytes-cold-cache.md`).

@@ -58,6 +58,7 @@ import {
 } from './internal/shadow/planner.ts';
 import {
   createSubstitutionReporter,
+  eddyShadowReplayCacheMiss,
   pinnedShadowSubstitutions,
 } from './internal/shadow/substitution.ts';
 import {
@@ -409,6 +410,7 @@ export async function install(
     );
   } catch (error) {
     throwIfAborted(opts.signal);
+    if (source === 'eddy') throw eddyShadowReplayCacheMiss(error) ?? error;
     if (eddyFallbackReason !== undefined) {
       const registryError = error instanceof Error ? error : new Error(String(error));
       throw new AggregateError(

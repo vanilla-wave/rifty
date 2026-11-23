@@ -145,9 +145,12 @@ function npmInstall(...specs: string[]) {
   return { request: parsed.request, context };
 }
 
-/** Same cold-cache text as the Vite carrier, for the LightningCSS pin. */
-const coldShadowPin =
-  /^EBROKENLOCK: package-lock\.json installs lightningcss@\S+ from its substitute (lightningcss-wasm@\S+) \(shadow recipe \S+\), but the tarball cache holds no intact \1\. Lockfile replay takes substitute bytes only from the tarball cache and never downloads them\. To reinstall this lockfile exactly, restore those bytes to the tarball cache; or delete package-lock\.json and run install again to re-resolve through the registry \(installed versions may change\)\.$/;
+/** Same cold-cache texts as the Vite carrier, for the LightningCSS pin: terminal, then host. */
+const terminalRefusal =
+  /^EBROKENLOCK: package-lock\.json installs lightningcss@\S+ from its substitute lightningcss-wasm@\S+ \(shadow recipe \S+\), which is not in the tarball cache\. Lockfile replay takes substitutes only from that cache and never downloads them, so this lockfile cannot be reinstalled exactly here\. To install anyway, delete package-lock\.json and run install again: it re-resolves through the registry, and installed versions may change\.$/;
+const hostRefusal = new RegExp(
+  `${terminalRefusal.source.slice(0, -1)} Host exit: toolchain\\.applySnapshot with the replay-profile snapshot of these dependencies restores those bytes; toolchain\\.install then reinstalls this lockfile exactly\\.$`,
+);
 
 describe('explicit install after a prepared snapshot (ADR-0547 install semantics)', () => {
   it('frozen on a cold shared cache: shadow-pinned install fails loudly, fetches no tarball, leaves the tree', async () => {
@@ -155,7 +158,7 @@ describe('explicit install after a prepared snapshot (ADR-0547 install semantics
     expect(fs.existsSync(TARBALL_CACHE_ROOT)).toBe(false);
     const before = digestTree(snapshotExactFsTree(fs));
     await expect(installToolchainPackages({ cwd: '/project', registryUrl }, vfs)).rejects.toThrow(
-      coldShadowPin,
+      hostRefusal,
     );
     expect(requests, 'no registry/network fallback although the registry is live').toEqual([]);
     expect(digestTree(snapshotExactFsTree(fs)), 'applied tree and lock unchanged').toEqual(before);
@@ -165,7 +168,7 @@ describe('explicit install after a prepared snapshot (ADR-0547 install semantics
     const { vfs, requests } = await applied('frozen');
     await expect(
       installToolchainPackages({ cwd: '/project', registryUrl }, vfs, npmInstall('ms@2.0.0')),
-    ).rejects.toThrow(coldShadowPin);
+    ).rejects.toThrow(terminalRefusal);
     expect(
       requests.filter((url) => url.includes('lightningcss')),
       'the replayed pin is never fetched',
