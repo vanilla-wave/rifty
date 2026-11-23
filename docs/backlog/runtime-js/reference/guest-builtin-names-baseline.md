@@ -1,9 +1,13 @@
 # Baseline — builtin names the isolate guest prints (PR #425, 2026-11-23)
 
 Observed at 61c69cab8 (isolate-host `runCode`, guest bundle built from that
-tree) against live Node v24.16.0. Reproduce: the CLOSE reviewer's probes
-(`/tmp/close425-probe/zz4.test.ts` shape: write `m.js`, `require('./m.js')`
-in `-e`, compare stderr) and the names sweep below.
+tree) against live Node v24.16.0. Reproduce: for each program, `runCode(code)`
+(`packages/isolate-host`) and `node -e code` in an empty temp dir with
+`code = "require('fs').writeFileSync('m.js', " + JSON.stringify(program) +
+"); require('./m.js');"`, compare stderr after the path normalization. The
+sweep: one `-e` program collecting `{ '<module>.<key>': fn.name }` over
+`require('module').builtinModules` (no `_`, no `internal`) and the listed
+globals, printed as JSON, compared key by key.
 
 ## Fatal report (RED for unit `runtime-js/guest-builtin-names`)
 

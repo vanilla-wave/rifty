@@ -93,10 +93,11 @@ Node's side only (`nodeFileExpected` in the carrier fixture):
    output pinned in `node-file-pins.json`, which must still differ from Node;
    every pinned row is a named compat row (process.md "Fatal error stderr
    bytes", modules.md, isolate-host.md). Every row asserts no Node-format
-   header (`NODE_HEADER`). The fatal corpus holds one row per way rifty calls
-   user code (timer, interval, immediate, `nextTick`, microtask, promise
-   reaction, emitter listener, fs callback, `new Function`, direct and
-   indirect `eval`): frame names, lines, columns. A builtin's name is the
+   header (`NODE_HEADER`). The fatal corpus holds a row for each of these ways
+   rifty calls user code (timer, interval, immediate, `nextTick`, microtask,
+   promise reaction, emitter listener, fs callback, `new Function`, direct and
+   indirect `eval`): frame names, lines, columns; stream callbacks are not in
+   it yet (`backlog/runtime-js/guest-builtin-names`). A builtin's name is the
    source name Node prints: `packages/isolate-host/tests/bundle-public-names.test.ts`
    fails on a `function`/`class` declaration named a Node builtin export plus
    a digit (`EventEmitter2`) in the guest bundle and the Workbench's (PR #425);
