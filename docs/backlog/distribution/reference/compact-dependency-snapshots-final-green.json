@@ -1,0 +1,205 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Merge on green PR CI at HEAD 25056d4fd; no blocker, no open concern on the product/test/docs delta. Lockless-route concern fixed: new case discriminates (lockless shadow pin forced to cache-only replay -> RED). Separate NOTE for the driver: the split draft playground/no-coi-failed-install-stamp-reopen is largely answered by ADR-0417 and should be narrowed or dropped (RDY-6, does not gate this PR).",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "25056d4fdfbf5c84d6dda9ef1235758b8e2a4601",
+  "unit_goal_source": "PR #388; goal compact-dependency-snapshots (closed in-branch, read at d693c59dd~1) I1-I3 + User scenario 4 + ADR-0547; BASE f5c232b3dee1a19c640cb0cdf176a58d103cadc0 (merge-base with origin/main); verify pass of 183cdb74d..25056d4fd (cross-review round 1 reception at 4e0df60c7, verify-5 reception at bb0713bbd, cross-review round 2 reception at 3ba735163: Vite goal-scenario install carrier, docs rewrite, cwd-independent fixture path; verify-7 reception at 25056d4fd: lockless route pinned, docs qualified by kept lock); last verified 11f893f17 (landing verdict compact-dependency-snapshots-final-green.json, now rebound by the driver)",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [
+    {
+      "row": "Mechanism (one direct LightningCSS shadow pin): lock-replayed shadow pin on a cold cache is never fetched; plain install (zero requests) and adding an unrelated package fail EBROKENLOCK with tree/lock unchanged; naming the substituted direct dependency re-resolves through the registry (ADR-0361 request admission); replay snapshot restores install from cache",
+      "source": "acceptance",
+      "trace": "scenario + ADR-0547",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/no-coi-compact-install.contract.test.ts:149; packages/workbench/src/workers/no-coi-compact-install.contract.test.ts:160; packages/workbench/src/workers/no-coi-compact-install.contract.test.ts:171; packages/workbench/src/workers/no-coi-compact-install.contract.test.ts:182 (real producer + applyNoCoiSnapshot + installToolchainPackages via parseNpmInstallRequest; only global fetch stubbed with real lightningcss-wasm and ms-2.0.0 fixture bytes. File unchanged in bb0713bbd..3ba735163; mutants at bb0713bbd: A lockfile shadow pin -> fetchAndUnpackToCache (installer-walk.ts:358) -> :149 and :160 RED \"promise resolved\"; B root updateNames ignored (installer-sources.ts:97) -> :171 RED EBROKENLOCK; B2 updateNames not passed (npm-shell-command.ts:716) -> :171 RED; 4e0df60c7 mutants compact-keeps-cache -> :149 RED, replay skips cache -> :182 RED; baseline 4/4 PASS)",
+      "note": ""
+    },
+    {
+      "row": "Goal scenario (real Vite 7.3.6, transitive esbuild shadow pin) after compact on a cold cache, live registry, lock kept: lock install, `npm install esbuild`, `npm install ms@2.0.0` each fail EBROKENLOCK on esbuild.v2; 11/11/12 ordinary tarballs fetched and cached, shadow bytes never fetched, project tree byte-exact. Lock deleted: plain install re-resolves through the registry (esbuild-wasm packument + tarball) and succeeds. Replay control installs 12 packages without an esbuild-wasm request",
+      "source": "acceptance",
+      "trace": "scenario + ADR-0547",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/no-coi-compact-vite-install.contract.test.ts:141; packages/workbench/src/workers/no-coi-compact-vite-install.contract.test.ts:177; packages/workbench/src/workers/no-coi-compact-vite-install.contract.test.ts:186 (baseline 5/5 PASS at 25056d4fd. Mutants: lockfile shadow pin -> fetchAndUnpackToCache (installer-walk.ts:358) -> 3/3 kept-lock cases RED (at 3ba735163); compact keeps its cache -> 3/3 RED (at 3ba735163); replay skips cache -> replay control RED (at 3ba735163); at 25056d4fd: registry-origin shadow pin routed to cache-only replay (installer-walk.ts:358 origin check dropped + substitution.ts:237 origin guard dropped) -> :177 RED \"EBROKENLOCK … esbuild.v2 is missing its pinned cache bytes\"; routing alone without the guard -> :177 RED TypeError)",
+      "note": ""
+    },
+    {
+      "row": "Replay leg of the packed browser proof keeps the BASE same-page dispose/reopen; compact leg keeps the closed-page reopen",
+      "source": "frozen-artifact",
+      "trace": "I2 + I3",
+      "status": "pass",
+      "citation": "tests/integration/no-coi-snapshot-browser-proof.mjs:78 (vs origin/main f5c232b3d the replay leg keeps the BASE same-page reopen; added checks only strengthen); packed run at 4e0df60c7: /tmp/compact-388-packed-3.log:203 (snapshot) + :204 (compact), EXIT 0 at :228; file unchanged in 4e0df60c7..bb0713bbd",
+      "note": ""
+    },
+    {
+      "row": "Same-input public compact v5 keeps the prepared payload (incl. esbuild-wasm), has no replay namespace and a smaller gzip than replay",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/integration/fixtures/workbench-vite-consumer/produce-vite-snapshot.mjs:87; /tmp/compact-388-packed-2.log:204; kept rifty-workbench-packed-consumer-2IiuPJ/consumer/dist: compact 6025348 B vs replay 9770971 B, manifest {version:5,profile:compact}, 0 rifty/replay-cache entries (carried from 11f893f17 verdict; REV-1, unchanged in 183cdb74d..4e0df60c7)",
+      "note": ""
+    },
+    {
+      "row": "Compact SDK journey: apply/read/edit/build, closed-page reopen/build, conflict/force reapply/build with zero registry/Eddy requests; shared cache tree unchanged",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "tests/integration/no-coi-snapshot-browser-proof.mjs:64; tests/integration/no-coi-snapshot-browser-proof.mjs:92; /tmp/compact-388-packed-2.log:204 (EXIT 0 on the merged tree); packages/workbench/src/glue/dep-snapshot-compact.contract.test.ts:117 (K4 apply cache-import on -> RED at 11f893f17) (carried from 11f893f17 verdict; REV-1, unchanged in 183cdb74d..4e0df60c7)",
+      "note": ""
+    },
+    {
+      "row": "COI first-materialization restore of compact v5 (merged #398 form: prepareDepSnapshotRestore(payload, {runtimeTier:'coi'})) neither reads/writes the shared cache nor runs the cache-persistence flush",
+      "source": "acceptance",
+      "trace": "ADR-0547 + I2",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/owner-package-state.ts:309; packages/workbench/src/workers/workbench-snapshot-apply-validation.contract.test.ts:525; packages/workbench/src/workers/workbench-snapshot-apply-validation.contract.test.ts:551 (mutant `else await options.flush()` after the applyCache branch in owner-package-state.ts -> RED with both the 183cdb74d and 4e0df60c7 assertion; narrowing did not weaken it; projectRoot now pinned)",
+      "note": ""
+    },
+    {
+      "row": "COI explicit apply of compact v5 skips cache import and persistence",
+      "source": "acceptance",
+      "trace": "ADR-0547",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-apply-validation.contract.test.ts:479; packages/workbench/src/workers/workbench-snapshot-apply-validation.contract.test.ts:511 (payloadRoot narrowed to live project node_modules/; mutant `if (!cache) { await options.flush(); return; }` in dep-snapshot-application.ts:84 -> RED at 4e0df60c7, PASSES against the 183cdb74d assertion = old check was vacuous, N1 confirmed fixed)",
+      "note": ""
+    },
+    {
+      "row": "Compact carrying planted replay bytes or an unsafe payload path rejects before any cache/tree/claim write on COI first materialization (poisoned-cache class, v5)",
+      "source": "fault-matrix",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-initial-admission.contract.test.ts:288; packages/workbench/src/glue/dep-snapshot.ts:334; packages/workbench/src/glue/dep-snapshot.ts:341 (K1 v5 empty-cache check off -> 2 RED; K6 v5 skips all cache checks -> 2 RED; K5 no verification in preflight -> 12 RED) (carried from 11f893f17 verdict; REV-1, unchanged in 183cdb74d..4e0df60c7)",
+      "note": ""
+    },
+    {
+      "row": "Corrupt/incompatible compact tar envelope (v4 + marker, v5 without/unknown profile, replay entries, directory-only replay namespace) rejects before mutation",
+      "source": "fault-matrix",
+      "trace": "I3 + ADR-0547",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/dep-snapshot-compact.contract.test.ts:150; packages/workbench/src/glue/dep-snapshot-tar.ts:248 (M1/M3/M6 RED at 00b1e62a3; the file is unchanged since). Linux/GNU tar pending PR CI (carried from 11f893f17 verdict; REV-1, unchanged in 183cdb74d..4e0df60c7)",
+      "note": ""
+    },
+    {
+      "row": "Ordinary replay restore/apply verifies the exact replay closure/SRI once before any write; #398 poisoned-cache and one-verification carriers unchanged",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/dep-snapshot.ts:249; packages/workbench/src/workers/workbench-first-materialization.contract.test.ts:1872; packages/workbench/src/workers/no-coi-snapshot-application.test.ts:37; packages/workbench/src/workers/no-coi-snapshot-application.test.ts:80; packages/workbench/src/workers/workbench-snapshot-initial-admission.contract.test.ts:190; packages/workbench/src/glue/dep-snapshot.test.ts:363; packages/workbench/src/glue/dep-snapshot.test.ts:470 (double-verify mutants in the restore and apply preparers -> the one-verification tests RED; K5 -> RED) (carried from 11f893f17 verdict; REV-1, unchanged in 183cdb74d..4e0df60c7)",
+      "note": ""
+    },
+    {
+      "row": "Unsupported readers reject compact before application",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "docs/adr/distribution/0547-compact-prepared-dependency-snapshots.md:31; tools/shadow-registry/src/snapshot-artifact-check.ts:72; #398 adds no snapshot reader (all prod callers of verifyDepSnapshotReplayCache/prepareDepSnapshotForRuntimeTier at 11f893f17: dep-snapshot.ts:211, dep-snapshot-application.ts:34, producer, bake and artifact-check tools) (carried from 11f893f17 verdict; REV-1, unchanged in 183cdb74d..4e0df60c7)",
+      "note": ""
+    },
+    {
+      "row": "Public optional replay|compact producer profile: defaults to replay, rejects unknown values before acquisition, composes with Brotli",
+      "source": "public-api",
+      "trace": "ADR-0547 + I1",
+      "status": "pass",
+      "citation": "packages/workbench/src/glue/dep-snapshot-producer.test.ts:121; packages/workbench/src/glue/dep-snapshot-producer.test.ts:134; packages/workbench/src/glue/dep-snapshot-producer.ts:138 (carried from 11f893f17 verdict; REV-1, unchanged in 183cdb74d..4e0df60c7)",
+      "note": ""
+    },
+    {
+      "row": "Evidence doc sizes and the post-#398 section (112 files / 2005 tests; carriers; mutant claim)",
+      "source": "frozen-artifact",
+      "trace": "I1 + I3",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/compact-dependency-snapshots-evidence.md:60; docs/backlog/distribution/reference/compact-dependency-snapshots-evidence.md:75; scratch glue+workers at 11f893f17: 112 files / 2005 tests PASS; packed-2 kept sizes equal the documented 9,770,971 / 6,025,348 (carried from 11f893f17 verdict; REV-1, unchanged in 183cdb74d..4e0df60c7)",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "docs/adr/distribution/0547-compact-prepared-dependency-snapshots.md:55",
+          "evidence": "",
+          "summary": "Dated ADR line is correct DEC-2 form; no goal/ledger edit in the delta; scenario 4 product behavior unchanged (docs+tests only).",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "docs/backlog/playground/no-coi-failed-install-stamp-reopen.md:13",
+          "evidence": "",
+          "summary": "Split draft is outside the unit result; its RDY-6 problems (ADR-0417 already answers most of it) are reported to the driver separately and do not gate the PR.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "packages/rifty/README.md:203",
+          "evidence": "carrier :141/:177/:186 + no-coi-compact-install :149/:160/:171; earlier probes of vite/--prefer-online/esbuild@0.28.0/vite@7.3.6/esbuild-wasm forms all EBROKENLOCK",
+          "summary": "Prior concern fixed: rifty README:202-208, workbench README:243-248, ADR-0547:64-67, evidence doc :102-105 qualify by the kept lockfile and name the lockless re-resolution (pins may move); every sentence maps to a carrier assertion.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "packages/workbench/src/workers/no-coi-compact-install.contract.test.ts:158",
+          "evidence": "",
+          "summary": "Prior C2 fixed: all four cases carry 30_000 timeouts.",
+          "authority": ""
+        },
+        {
+          "severity": "nit",
+          "location": "packages/workbench/src/glue/dep-snapshot-compact.contract.test.ts:107",
+          "evidence": "vitest from repo root 15/15 PASS; from packages/workbench 15/15 PASS",
+          "summary": "cwd-relative fixture path fixed via import.meta.url; no assertion changed (PR-4).",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "packages/workbench/src/glue/dep-snapshot-compact.contract.test.ts:57",
+          "evidence": "mutant: tree = extracted, no fresh copies -> 6 RED \"unsupported or duplicate PAX field \\\"LIBARCHIVE.creationtime\\\"\" on bsdtar 3.5.3 - libarchive 3.7.4 (macOS)",
+          "summary": "N4 comment is accurate.",
+          "authority": ""
+        }
+      ]
+    }
+  ]
+}

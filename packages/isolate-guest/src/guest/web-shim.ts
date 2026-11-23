@@ -211,8 +211,8 @@ define('queueMicrotask', function queueMicrotask(callback: unknown): void {
   );
 });
 
-/** A host-scheduled timer; expiry runs `_onTimeout`, as Node's `Timeout` does. */
-class Timeout {
+/** A host-scheduled timer; expiry runs `_onTimeout`. Not `Timeout`: that name is the runtime's guest-visible handle. */
+class HostTimer {
   constructor(
     readonly fn: (...args: unknown[]) => void,
     readonly args: readonly unknown[],
@@ -223,7 +223,7 @@ class Timeout {
     fn(...this.args);
   }
 }
-const timers = new Map<number, Timeout>();
+const timers = new Map<number, HostTimer>();
 let nextTimerId = 1;
 const MAX_TIMER_MS = 2 ** 31 - 1;
 function startTimer(repeat: boolean, fn: unknown, ms: unknown, args: unknown[]): number {
@@ -234,7 +234,7 @@ function startTimer(repeat: boolean, fn: unknown, ms: unknown, args: unknown[]):
   const id = nextTimerId++;
   reflectApplyPrimordial(mapSetPrimordial, timers, [
     id,
-    new Timeout(fn as Timeout['fn'], args, repeat),
+    new HostTimer(fn as HostTimer['fn'], args, repeat),
   ]);
   // Node's `Timeout`: a delay outside 1..2^31-1 (or NaN) runs after 1 ms. Its
   // `Timeout*Warning` is rifty's gap (`backlog/runtime-js/timeout-delay-warnings`).
@@ -256,11 +256,11 @@ define('clearInterval', clearTimer);
 
 /** Host timer expiry → the guest callback; a throw takes the uncaught path. */
 export function fireTimer(id: number): void {
-  const entry = reflectApplyPrimordial(mapGetPrimordial, timers, [id]) as Timeout | undefined;
+  const entry = reflectApplyPrimordial(mapGetPrimordial, timers, [id]) as HostTimer | undefined;
   if (entry === undefined) return;
   if (!entry.repeat) reflectApplyPrimordial(mapDeletePrimordial, timers, [id]);
   try {
-    // `Timeout` never reaches guest code (timers hand out ids), so its prototype is the host's.
+    // `HostTimer` never reaches guest code (timers hand out ids), so its prototype is the host's.
     entry._onTimeout();
   } catch (error) {
     uncaught(error);

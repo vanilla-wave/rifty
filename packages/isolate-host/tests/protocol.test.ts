@@ -13,7 +13,7 @@ import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
 import { CHANNEL_END_GRACE_MS } from '../src/pool.ts';
-import { FrameReader, HEADER, KIND, frame } from '../src/protocol.ts';
+import { FrameReader, HEADER, KIND, STUCK_GRACE_MS, decodeState, frame } from '../src/protocol.ts';
 import { consumer } from './support.ts';
 
 const PACKAGE_DIR = fileURLToPath(new URL('..', import.meta.url));
@@ -41,6 +41,9 @@ const HOSTILE: Readonly<Record<string, string>> = {
   'exit payload too long': 'f(2, [0, 0])',
   'memory payload not empty': 'f(3, [0])',
   'error text over 4 KiB': 'f(4, new Array(5000).fill(120))',
+  // `gone` frees a slot and lets destroy() go on: only after the call's terminal frame.
+  'gone before the terminal frame': 'f(8, [])',
+  'gone for a call not on this worker': 'C = [0, 0, 0x7f, 0x7f]; f(8, [])',
   // A header split across writes must not be mistaken for a short frame.
   'byte-by-byte garbage': 'for (const b of [0xff, 0xff, 0xff, 0xff, 1, ...C]) raw([b])',
 };
@@ -62,8 +65,9 @@ function hostilePackage(label: string, body: string): string {
      };
      process.stdin.on('end', () => process.exit(0));
      process.stdin.once('data', (d) => {
-       // The call id of the run request, big-endian: what every frame addresses.
-       const call = JSON.parse(String(d).split('\\n')[0]).call;
+       // The call id of the run request, big-endian: what every frame addresses (read from the
+       // line's head: a sandbox run's line may come in pieces).
+       const call = Number(/"call":(\\d+)/.exec(String(d))[1]);
        C = [call >>> 24, (call >>> 16) & 255, (call >>> 8) & 255, call & 255];
        ${body}; setInterval(() => {}, 1000);
      });`,
@@ -123,6 +127,36 @@ describe('consumer treats the child channel as hostile', () => {
       expect(report.ms).toBeLessThan(1000);
     });
   }
+
+  it('a second gone for one call ends the worker as hostile', async () => {
+    const entry = hostilePackage('gone twice', 'f(2, [0]); f(8, []); f(8, [])');
+    const { value } = await consumer(
+      `const r = await settle(runCode('1', { timeoutMs: 5000 }));
+       await sleep(300);
+       out({ exitCode: r.exitCode, workers: children().length });`,
+      { entry: pathToFileURL(entry).href },
+    );
+    expect(value).toEqual({ exitCode: 0, workers: 0 });
+  });
+
+  it('a terminal frame never followed by gone: the worker is retired after the stuck grace', async () => {
+    // A broken or hostile worker cannot hold destroy() or a slot forever (ADR-0563 §4 grace).
+    const entry = hostilePackage('terminal then silence', 'f(7, [1]); f(2, [0])');
+    const { value } = await consumer(
+      `const sb = await createSandbox();
+       await sb.writeFile('a.js', '1');
+       const t = now();
+       const r = await settle(sb.exec('a.js'));
+       await sb.destroy();
+       out({ stateRefused: r.stateRefused, ms: now() - t, workers: children().length });`,
+      { entry: pathToFileURL(entry).href },
+    );
+    const v = value as { stateRefused: string; ms: number; workers: number };
+    expect(v.stateRefused).toBe('ERR_ISOLATE_HOST_SANDBOX_CAPTURE');
+    expect(v.ms).toBeGreaterThanOrEqual(STUCK_GRACE_MS);
+    expect(v.ms).toBeLessThan(STUCK_GRACE_MS + 3000);
+    expect(v.workers).toBe(0);
+  });
 
   it('a legal header with a never-completed payload buffers at most one legal frame', () => {
     // Announces a 1026-byte output frame (cap 1024), sends 1000 bytes of it, then stalls.
@@ -508,5 +542,18 @@ describe('FrameReader framing is independent of how the bytes are chunked', () =
   it('refuses a frame for a call the judge does not know, before its payload arrives', () => {
     const hostile = frame(KIND.exit, 8, Uint8Array.of(0));
     expect(feed([hostile.slice(0, HEADER)])).toEqual({ frames: [], violations: ['call 8'] });
+  });
+});
+
+describe('a sandbox state crosses into the isolate as exactly its bytes (ADR-0568, I7)', () => {
+  it('decodeState returns a buffer of the state alone, never a view of a larger one', () => {
+    // A small Buffer.from() is a view into Node's shared 8 KiB pool: isolated-vm would copy the pool.
+    for (const size of [0, 1, 100, 5000, 70_000]) {
+      const bytes = Uint8Array.from({ length: size }, (_, i) => i % 251);
+      const out = decodeState(Buffer.from(bytes).toString('base64'));
+      expect(out).toEqual(bytes);
+      expect(out.byteOffset).toBe(0);
+      expect(out.buffer.byteLength).toBe(size);
+    }
   });
 });

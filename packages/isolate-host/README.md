@@ -91,12 +91,135 @@ one warm idle one holds a call. A call that timed out counts as in flight until
 its isolate stops (at most ~1 s more for a guest that ignores termination). Size the cgroup for your peak of concurrent
 calls times their workers' ceilings.
 
+## Sandbox: files and `node <path>` runs (ADR-0568)
+
+One sandbox for one agent run: the host writes the model's files, runs one as
+`node <path> [args]`, reads what it wrote (bytes, a PDF included), fixes and
+runs again.
+
+```js
+import { createSandbox } from '@riftydev/isolate-host';
+
+const sandbox = await createSandbox();
+await sandbox.writeFile('main.js', `
+  const fs = require('fs');
+  fs.mkdirSync('out', { recursive: true });
+  fs.writeFileSync(process.argv[2], Buffer.concat([Buffer.from('%PDF-1.4\\n'), Buffer.from([0, 255])]));
+  console.log('wrote', process.argv[2]);
+`);
+const result = await sandbox.exec('main.js', { args: ['out/report.pdf'] });
+// → { stdout: 'wrote out/report.pdf\n', stderr: '', exitCode: 0 }
+// exitCode 0 does not mean the files were kept: check stateRefused.
+if (result.stateRefused) throw new Error(`the run's files were not kept: ${result.stateRefused}`);
+const pdf = await sandbox.readFile('out/report.pdf'); // Uint8Array, straight from the sandbox
+await sandbox.destroy();
+```
+
+`createSandbox(options?) → Promise<Sandbox>`
+
+| option | default | meaning |
+|---|---|---|
+| `snapshot` | — | bytes of `sandbox.snapshot()`: the new sandbox starts with those files |
+| `maxFileBytes` | 32 MiB | largest file one `readFile`/`writeFile` moves (`ERR_FS_FILE_TOO_LARGE`) |
+| `maxFsBytes` | 64 MiB | largest state, in the snapshot codec's budget units (ADR-0567: blob bytes + 384 per entry + 8 per path code unit + 80 per depth level): a host write past it rejects `ERR_ISOLATE_HOST_SANDBOX_FULL` and leaves the files as they were, times included, a run whose end state is past it gets `stateRefused`. A run needs an isolate of at least 2 × `maxFsBytes` + 16 MiB (the default 256 holds the default 64 MiB); raise both together. Below the budget of an empty sandbox (its two directories) `createSandbox` rejects `ERR_OUT_OF_RANGE` |
+| `template` | — | not implemented: `NotImplementedError('isolate-host.sandbox-template')` |
+
+A fresh sandbox holds the empty directories `/workspace` (the cwd) and `/tmp`
+(rifty's `os.tmpdir()`). Paths: a relative path resolves against
+`/workspace`; `..` never leaves the sandbox's own `/`; a NUL is
+`ERR_INVALID_ARG_VALUE`. Errors have Node's shape (`code`, `syscall`, `path`,
+`ENOENT: no such file or directory, open '/workspace/x'`) and name only
+sandbox paths. rifty's FS has no links: every entry is a file or a directory.
+
+| method | does |
+|---|---|
+| `writeFile(path, data)` | `Uint8Array` or UTF-8 string; parents created |
+| `readFile(path)` | `Uint8Array`, a copy (and `writeFile` copies its input) |
+| `list(path = '/workspace')` | `{ name, type: 'file' \| 'directory', size }[]`, by name |
+| `remove(path)` | a file or a directory tree |
+| `exec(path, options?)` | `node <path> [args]` in `/workspace`: `runCode`'s options plus `args` (strings); `env`, `cwd`, `stdin` are `NotImplementedError('isolate-host.sandbox-exec-<option>')`. The path is one file, never a shell command |
+| `snapshot()` | the files as bytes (ADR-0567), taken between operations |
+| `destroy()` | every operation whose promise has not settled yet (a run, a host op) and everything after reject `ERR_ISOLATE_HOST_SANDBOX_DESTROYED`; the state is dropped; resolves once no isolate of the sandbox runs (whenever it is called, also in the microtasks around a run's result) |
+
+Operations on one sandbox take effect one at a time, in call order, also when
+you do not await them; sandboxes do not wait for each other. A run's
+`timeoutMs` counts from when it starts, after earlier operations, and covers
+encoding the state on your event loop (about one snapshot of the whole state:
+~40 ms at 56 MB, table below), the worker's restore, the run and the capture.
+Outside it, also on your event loop: decoding the run's state after it, about
+one restore of the whole state. The state
+travels to the worker as base64 inside the JSON-line request (the wire of
+ADR-0563 §3): a third more bytes and one more pass each way, kept because a
+binary request frame is a wire change no part of this contract needs.
+
+Every host op that writes measures the state cap by encoding the whole state
+once, so its cost follows the state's size, not the op's. Measured (M3 Pro,
+built package, machine load ~10 on 12 cores), one `writeFile` / one state
+intake after a run: 1 MB state 1 / 2 ms; 16 MB 19 / 19 ms; 56 MB near the cap
+69 / 67 ms; the densest state the default cap admits (119 472 empty
+directories) 114 / 139 ms; the deepest (a 1 153-level chain) 93 / 113 ms;
+100 one-byte writes near the cap ~6.6 s; 88 000 empty files: `createSandbox` from their snapshot 212 ms, one `writeFile` 137 ms, one `exec` 775 ms (load ~20). `list` and `remove` stay under 5 ms.
+The worst host op and the worst intake are of one order.
+
+Every error the sandbox API throws or rejects with names only sandbox paths, and its
+`stack` is its first line only (no frame or path of your process). `stateRefused` codes are
+chosen by the worker or your process from what they measured, never from the guest's text.
+
+`exec` returns `runCode`'s result, plus `stateRefused` when the run ended on
+its own but its files were not kept. What survives a run:
+
+| the run | the files after it |
+|---|---|
+| exits (any code, `process.exit`, an uncaught throw or rejection) | as the run left them |
+| `termination: 'timeout'` or `'memory'` | as before the run: a killed run's writes are rolled back (Node keeps them) |
+| its worker lost (rerun once, alone; then `ERR_ISOLATE_HOST_WORKER_LOST`) | as before the run; the rerun starts from the same files |
+| its state could not be sent whole (a throw while writing it to the worker, e.g. out of memory): `exec` rejects with that error, no rerun; that worker ends, its other calls rerun | as before the run |
+| `stateRefused` (`ERR_FS_SNAPSHOT_TOO_LARGE`: the run's files are over `maxFsBytes` (write fewer or smaller files, or raise `maxFsBytes` with `memoryLimitMb`); `ERR_ISOLATE_HOST_SANDBOX_CAPTURE`: the end state could not be captured — most often the files did not fit the run's isolate memory (same remedies), else the run hit the `import()` gap or broke its own capture (rewrite that code); another `ERR_FS_SNAPSHOT_*`: the consumer's codec refused the bytes; `ERR_ISOLATE_HOST_SANDBOX_RESTORE`: the files did not fit the run's isolate or its worker, no guest code ran, `exitCode: null`; an isolate too small for the runtime itself is `termination: 'memory'`, as for `runCode`) | as before the run |
+
+Each run is a fresh isolate, like a new `node` process: only files carry over.
+**`exitCode: 0` with `stateRefused` means the run's writes were lost.** Check
+`stateRefused` before you trust the files.
+
+An unknown option name of `createSandbox` or `exec` is refused
+(`ERR_INVALID_ARG_VALUE`), so a typo never leaves a limit unapplied. Every
+input — paths, `args`, options, bytes (`writeFile`, `createSandbox({ snapshot })`)
+— is read and copied at the call, even when the operation waits behind a run:
+a later change to your array or object does not reach it.
+
+Memory in your process. Between operations a sandbox holds no process and no
+isolate, only its files — rifty's in-memory FS: about their size, plus ~400
+bytes per entry (88 000 empty files, a 6.6 MiB snapshot, hold 37 MiB). During
+an `exec` your process holds, for that run, the encoded state, its base64 on the
+wire, the run's end state and the new FS beside the old one. Peak (heap +
+ArrayBuffers over the idle level) is at most 5 × S + 16 MiB per concurrent run
+for a state of S — an upper bound over every measurement so far (S = 56 MB: 212
+and 255 MiB for one run, 884–925 MiB for four at once; 16 MB: 88 / 276 MiB), not
+a mean. Size your service's cgroup for the idle sandboxes' files plus 5 × S + 16
+MiB per concurrent run, beside the workers' bound above. All of it is
+bounded by `maxFsBytes`. A run that timed out keeps your process alive until its isolate
+has stopped, so `destroy` can wait for it. That wait is bounded: an isolate still running
+1 s after its run's result (a builtin that ignores termination, or a broken worker that
+never reports it stopped) retires its worker, which ends once its other calls have
+settled (each within its own `timeoutMs` + 1 s). A sandbox you drop is ordinary garbage; the number of
+live sandboxes is yours to cap.
+
+Cost (M3 Pro, Node 24.16.0, medians, built package): `createSandbox` 0.01 ms; a warm
+`exec` 17 ms with one small file, 21 ms with 66 files (~180 KiB), 265 ms with a 20 MiB
+file (its state goes to the run and back as bytes); `writeFile` 10 KiB 0.14 ms on a small
+sandbox, 24 ms on a 20 MiB one (each host write checks the state cap by measuring a snapshot);
+an idle sandbox ~1.6 KiB plus its files.
+
+If your result type has `exitCode: number`, map a killed run yourself from
+`termination` (`exitCode: null` is never a guest's status).
+
 ## What the guest gets
 
 The guest gets rifty's Node environment, which is not real Node: `require`,
-`fs` over an empty in-memory filesystem (cwd `/workspace`), `Buffer`,
-`process`, timers, `console`, the builtin modules as globals (`path`, `fs`, …,
-as `node -e` provides), `TextEncoder`/`TextDecoder` (UTF-8),
+`fs` over an in-memory filesystem (`runCode`: the empty directories `/workspace`,
+the cwd, and `/tmp`, rifty's `os.tmpdir()`; a sandbox run: the sandbox's files),
+`Buffer`, `process`, timers, `console`, the builtin modules as globals for
+`runCode` only (`path`, `fs`, …, as `node -e` provides; a file run has none, as
+`node <file>`), `TextEncoder`/`TextDecoder` (UTF-8),
 `atob`/`btoa`, `crypto.getRandomValues`/`randomUUID` and `performance.now`.
 Parity with `node -e` on Node 24 is tested on a corpus of model-style
 snippets (`tests/parity.test.ts`).

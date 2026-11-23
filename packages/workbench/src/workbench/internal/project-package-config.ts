@@ -5,8 +5,6 @@ interface ProjectPackageConfigBase {
   readonly installDeps: Readonly<Record<string, string>>;
   readonly packageJson: string;
   readonly seedFiles: Readonly<Record<string, string>>;
-  readonly bakedNodeModulesUrl?: string;
-  readonly bakedNodeModulesTemplateId?: string;
 }
 
 export interface VitePackageConfig extends ProjectPackageConfigBase {

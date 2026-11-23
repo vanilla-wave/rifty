@@ -33,8 +33,9 @@ Where it shows:
   a natural exit still prints the microtask queued before it (corpus ceiling
   `exit-in-exit-listener-at-natural-exit-queued-microtask`).
 - Isolate host, the diagnostic of an uncaught throw from queued work: `queueMicrotask(() => { throw new Error('AFTER') });
-  process.exit(3)` → stderr `Error: AFTER`, exit 3 (Node: empty stderr); the guest's `writeDiagnostic` → `writeHost`
-  bypasses the output drop (same at `50c9d8bf1`).
+  process.exit(3)` → stderr `Error: AFTER`, exit 3 (Node: empty stderr) at `c2621b50c`: the guest's `writeDiagnostic` →
+  `writeHost` bypassed the output drop (same at `50c9d8bf1`). Fixed by PR #421: the realm-uncaught terminal finds the
+  exit's terminal and prints nothing (`guest-seam.test.ts`).
 - No-COI project command (status Node's, extra output pinned exactly in `declared:` rows of
   `tests/no-coi/no-coi-process-exit-status.spec.ts`): after an `exit()` from a microtask of `-e`, a 0 ms timer, a
   `setImmediate`, an fs callback, a timer and a microtask an `'exit'` listener queues; after a synchronous `exit()` or

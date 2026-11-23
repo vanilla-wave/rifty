@@ -96,3 +96,4 @@ Manager decision 2026-11-18: isolated-vm 6.2.0 stays a declared ceiling.
 
 - 2026-11-19 — §2: the pre-load GuestHost accepts allowSharedArrayBuffer (ADR-0566).
 - 2026-11-22 — §1, §2: `GuestEntry` gains `snapshot(options)` and `restore(bytes, options)` (before `run` only); root exports `snapshotFs`, `restoreFs`, `FsSnapshotError` and their types; the guest FS is installed at bundle load (ADR-0567).
+- 2026-11-22 — `GuestEntry.runFile(path, args)` beside `run(code)`: rifty's program entry over the realm's FS, cwd `/workspace`; ESM entries are the named gap `isolate-host.esm`; the `node -e` builtin-module globals are installed by `run` only (ADR-0568).

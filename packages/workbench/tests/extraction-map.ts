@@ -212,8 +212,6 @@ export const EXTRACTION_MAP = [
   ['workbench/workbench-owner-port.test.ts', 'workbench/workbench-owner-port.test.ts'],
   ['workbench/workbench-owner-port.ts', 'workbench/workbench-owner-port.ts'],
   ['workers/bundle-local-buffer.test.ts', 'workers/bundle-local-buffer.test.ts'],
-  ['workers/dev-boot-clean.test.ts', 'workers/dev-boot-clean.test.ts'],
-  ['workers/dev-boot-clean.ts', 'workers/dev-boot-clean.ts'],
   ['workers/dev-server-boot.test.ts', 'workers/dev-server-boot.test.ts'],
   ['workers/dev-server-boot.ts', 'workers/dev-server-boot.ts'],
   ['workers/dev-server-child-bootstrap.ts', 'workers/dev-server-child-bootstrap.ts'],

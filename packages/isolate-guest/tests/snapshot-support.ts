@@ -59,7 +59,7 @@ export const BUILD_TREE = `
 const fs = require('fs');
 fs.mkdirSync('/workspace/src/deep/er', { recursive: true });
 fs.mkdirSync('/workspace/empty');
-fs.mkdirSync('/tmp');
+fs.mkdirSync('/tmp', { recursive: true });
 fs.writeFileSync('/workspace/src/index.js', 'console.log(1)\\n');
 fs.writeFileSync('/workspace/bin.dat', Buffer.from(Array.from({ length: 256 }, (_, i) => i)));
 fs.writeFileSync('/workspace/empty.txt', '');

@@ -16,7 +16,8 @@ PR #416 verify review 2026-11-22, `node -e` v24.16.0, natural exit (no `exit()`)
   `await`s: Node `a b c d`, host `a b`.
 - `process.exitCode = 6`, `exit(5)` or a throw in a listener-queued microtask, the first hop included
   (`Promise.resolve().then(() => process.exit(4))`: Node 4, host 0): Node 6 / 5 / 1 with the `[eval]:1` diagnostic;
-  host 0, stderr empty (a throw via `queueMicrotask`: stderr `Error: L`). Same at `50c9d8bf1`.
+  host 0, stderr empty (a throw via `queueMicrotask`: stderr `Error: L`). Same at `50c9d8bf1`. Since PR #421 the
+  `queueMicrotask` throw prints the runtime's fatal report (`Error: L`, its `[eval]:1:55` frame, trailer; no header), status still 0 (`guest-seam.test.ts`).
 - An `exit()` or throw inside a listener at a natural exit: the microtask queued before it still prints — the runtime
   does not report that the exit happened during `emit('exit')`, so the guest's output drop (`entry.ts`) keeps the
   natural-exit allowance. Corpus ceiling `exit-in-exit-listener-at-natural-exit-queued-microtask`.

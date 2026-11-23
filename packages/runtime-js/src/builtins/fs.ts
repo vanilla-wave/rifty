@@ -22,7 +22,8 @@ import {
 import { Dirent, type StatOptions, Stats } from './fs-stats.ts';
 import { closeStdin, readStdin, readStdinSync, statStdin, writeStdio } from './fs-stdio.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
-import { statfsSync } from './loud-members.ts';
+import { setTimes, utimesArgs } from './fs-times.ts';
+import { link, linkSync, statfsSync, symlink, symlinkSync } from './loud-members.ts';
 import { runNodeCallback } from './process-lifecycle-events.ts';
 
 type Callback<T> = (err: NodeJS.ErrnoException | null, value?: T) => void;
@@ -672,7 +673,13 @@ export function statSync(
 }
 
 export function existsSync(p: string): boolean {
-  return syncMirror().existsSync(resolvePath(p));
+  let np: string;
+  try {
+    np = resolvePath(p);
+  } catch {
+    return false; // Node: an invalid path (a NUL, a non-path) does not exist
+  }
+  return syncMirror().existsSync(np);
 }
 
 // Remove-family kind gates (review 2026-07-05 handoff r3): the generic VFS
@@ -1035,27 +1042,9 @@ export function opendirSync(
   return new Dir(displayPath, entries.slice());
 }
 
-/**
- * `node:fs.utimesSync(path, atime, mtime)` — accepts numeric seconds (Node
- * semantics) or `Date`. The VFS sync surface stores ms, so we convert.
- * (ADR-0029)
- */
-function toMs(t: number | string | Date): number {
-  if (t instanceof Date) return t.getTime();
-  // Node's `toUnixTimestamp`: a numeric string coerces, a finite number is seconds
-  // since the epoch; anything else (NaN/Infinity/non-numeric string/null/…) is a loud
-  // ERR_INVALID_ARG_TYPE — never a silent NaN handed to the VFS.
-  const n = typeof t === 'string' ? Number(t) : t;
-  if (typeof n !== 'number' || !Number.isFinite(n)) {
-    const e = new TypeError('The "time" argument must be of type number, string, or Date.');
-    (e as { code?: string }).code = 'ERR_INVALID_ARG_TYPE';
-    throw e;
-  }
-  return Math.floor(n * 1000);
-}
-
 export function utimesSync(p: string, atime: number | Date, mtime: number | Date): void {
-  withSyscall('utime', p, () => syncMirror().utimes(resolvePath(p), toMs(atime), toMs(mtime)));
+  const times = utimesArgs(atime, mtime);
+  withSyscall('utime', p, () => setTimes(resolvePath(p), times));
 }
 
 // `fs.lutimesSync` — under the no-symlink VFS model (ADR-0050) a path is never a
@@ -1069,9 +1058,8 @@ export function lutimesSync(p: string, atime: number | Date, mtime: number | Dat
 // utimes. `EBADF` (syscall `futime`, matching Node) on an unknown fd.
 export function futimesSync(fd: number, atime: number | Date, mtime: number | Date): void {
   const record = getFd(fd, 'futime');
-  withSyscall('futime', record.path, () =>
-    syncMirror().utimes(record.path, toMs(atime), toMs(mtime)),
-  );
+  const times = utimesArgs(atime, mtime);
+  withSyscall('futime', record.path, () => setTimes(record.path, times));
 }
 
 export function futimes(
@@ -1153,6 +1141,12 @@ export const promises = {
   },
   async lstat(p: string, opts?: StatOptions): Promise<Stats> {
     return lstatImpl(p, opts, 'fs.promises.lstat.bigint');
+  },
+  async symlink(...args: unknown[]): Promise<never> {
+    return symlink(...args);
+  },
+  async link(...args: unknown[]): Promise<never> {
+    return link(...args);
   },
   async readlink(p: string): Promise<string> {
     return readlinkSync(p);
@@ -1552,6 +1546,8 @@ const fs = {
   lstat,
   realpath,
   readlink,
+  symlink,
+  link,
   access,
   copyFile,
   rename,
@@ -1588,6 +1584,8 @@ const fs = {
   openAsBlob,
   lstatSync,
   readlinkSync,
+  symlinkSync,
+  linkSync,
   realpathSync,
   constants,
   Stats,

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- `resolveBootstrapConfig` no longer emits `bakedNodeModulesUrl`/`bakedNodeModulesTemplateId`: no reader since the stamp-miss restore was retired (ADR-0135 correction 2026-11-17). The `ProjectSpec` fields still drive first materialization.
+
 - Plain-URL reopen of a project whose first dependency restore was cut short shows the SWITCHING pill until it publishes: `openActive` now runs inside the same project-open progress bracket as starter/project switches (was a silent workbench for the whole restore). Records the PR #167 loss of the «restoring project dependencies…» line (visibility kept, line not restored); `withSlowProgress` drops its unused `onSettledAfterSlow`/`now` options. e2e: `restore-progress-visibility.spec.ts` (also pins the deep-link indicator).
 
 - Baked Vite/TypeScript snapshots re-baked over their committed lockfile pins: installed Vite chunks are upstream bytes (ADR-0533).

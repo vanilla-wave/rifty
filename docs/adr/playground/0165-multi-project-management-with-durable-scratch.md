@@ -70,3 +70,4 @@ contract remain unchanged.
 ## Corrections (active)
 
 - 2026-09-08 — ADR-0394 supersedes decision 5's `replace:true` for explicit snapshot application; project-scoped claims and explicit whole-project Reset remain.
+- 2026-11-17 — Decision 5's dev-boot cleanup on root/template change (`shouldCleanForDevBoot`) is retired with the owner `transition` that called it; per-project roots and first materialization's `replaceTreeOnMiss` own foreign-tree clearing (ADR-0135 correction 2026-11-17).
