@@ -417,7 +417,7 @@ describe('a loader error prints the same wherever it is thrown (Node shape at th
   // left out (isolated-vm copies its reason, compat isolate-host.md).
   const view = (stderr: string, rejection: boolean) => {
     const body = stderr.replace(/^\[eval\]:\d+\n[^\n]*\n *\^\n\n/u, '');
-    const head = body.split('\n')[0];
+    const head = body.split('\n')[0] ?? '';
     const props = /\{\n([\s\S]*?)\n\}\n\nNode\.js/u.exec(body)?.[1] ?? '';
     return rejection ? head : `${head}\n${props}`;
   };
