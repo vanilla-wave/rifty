@@ -1,6 +1,8 @@
 export type * from './types.ts';
+export type { CompactionSummaryMessage } from './pi-cli/messages.ts';
 export type { AgentEvent, AgentMessage, AgentTool, StreamFn } from '@earendil-works/pi-agent-core';
-export { Type, createModels, createProvider } from '@earendil-works/pi-ai';
+export { Type } from 'typebox';
+export { createModels, createProvider } from '@earendil-works/pi-ai';
 export type {
   Api,
   Model,

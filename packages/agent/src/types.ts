@@ -1,9 +1,4 @@
-import type {
-  AgentEvent,
-  AgentMessage,
-  AgentTool,
-  CompactionSettings,
-} from '@earendil-works/pi-agent-core';
+import type { AgentEvent, AgentMessage, AgentTool } from '@earendil-works/pi-agent-core';
 import type {
   Api,
   AssistantMessage,
@@ -14,6 +9,7 @@ import type {
   SimpleStreamOptions,
   Usage,
 } from '@earendil-works/pi-ai';
+import type { CompactionSettings } from './pi-cli/compaction.ts';
 import type { SandboxProjectOptions, ToolchainSandbox } from '@riftydev/sdk';
 import type { ProjectSession, ProjectTerminal } from '@riftydev/workbench';
 import type { PlaygroundSessionTools } from '@riftydev/workbench/playground';

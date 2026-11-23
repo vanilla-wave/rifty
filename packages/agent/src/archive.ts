@@ -1,5 +1,5 @@
 import type { AgentMessage, AgentTool } from '@earendil-works/pi-agent-core';
-import { Type } from '@earendil-works/pi-ai';
+import { Type } from 'typebox';
 import { OpfsVfs } from '@riftydev/vfs';
 import type { AgentArchiveOptions, AgentSessionEvent } from './types.ts';
 
@@ -141,7 +141,7 @@ export function createArchive(
         data.messages.some(
           (message) =>
             !message ||
-            !['user', 'assistant', 'toolResult', 'compactionSummary'].includes(message.role) ||
+            !['system', 'user', 'assistant', 'toolResult', 'compactionSummary'].includes(message.role) ||
             !Number.isFinite(message.timestamp),
         )
       )

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Pi core/ai 0.85.1 → 1.6.0. Compaction, `convertToLlm` and the skills formatter are ported from pi CLI 1.6.0 (`src/pi-cli/`, MIT notice in `THIRD_PARTY_NOTICES.md`) and differential-tested against the real CLI (ADR-0569). Follows CLI 1.6.0: summary requests carry no `maxTokens`, new turn-prefix prompt, thinking left out of summaries, projected estimates count the system prompt, a length stop below the model limit gets one compact-and-continue, failed recovery emits the CLI's `compaction` end event. Abort-skipped tool calls get Pi's own "Operation aborted" result (receipt `cancelled/applied:no`); the synthetic completion is removed. Prompt changes enter history as `system` messages (`sections.prompt`); transcripts, archives and `initialMessages` admit them. `project_context` uses CLI 1.x bytes; prompt profile id `pi-1.6.0+rifty-adapter-v2`. `Type` stays public via a direct `typebox` 1.3.27 dependency (ADR-0570); tool `parameters` accept any JSON Schema, validation messages are pi-schema's. `CompactionSummaryMessage` type exported. Custom `streamFn`/providers receive pi 1.x `TranscriptContext` (prompt and tools as system messages).
+
 - The no-COI commands-mode host note no longer claims a fresh environment: fresh cwd/env in one shared JS realm, with the measured persisting state (compat process.md "Shared realm across no-COI `node` invocations").
 
 - Prompt host facts state the real shell subset (heredoc/compound/`$(…)`/process substitution/fd redirects fail loudly, other bash features may differ, no python or native binaries) instead of claiming every unsupported shell feature fails loudly; no-COI notes add that background `&` is rejected.

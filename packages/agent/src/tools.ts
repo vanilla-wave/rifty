@@ -1,5 +1,5 @@
 import type { AgentTool, AgentToolResult } from '@earendil-works/pi-agent-core';
-import { type Static, type TSchema, Type } from '@earendil-works/pi-ai';
+import { type Static, type TSchema, Type } from 'typebox';
 import { NotImplementedError } from '@riftydev/io';
 import { parseUnifiedPatch, planUnifiedPatch } from './apply-patch.ts';
 import { editMatchFailure } from './edit-hint.ts';
@@ -62,7 +62,8 @@ function tool<S extends TSchema>(
     label: name,
     description,
     parameters,
-    execute: (_id, args, signal) => execute(args, signal),
+    // pi-schema validates the TypeBox JSON Schema; its static type covers fewer kinds.
+    execute: (_id, args, signal) => execute(args as Static<S>, signal),
   };
   // Pi validates parameters before dispatch; registry erases each schema's generic.
   return value as unknown as Tool;

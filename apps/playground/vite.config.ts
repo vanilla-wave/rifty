@@ -177,6 +177,7 @@ export default defineConfig({
       '@riftydev/agent > @earendil-works/pi-agent-core',
       '@riftydev/agent > @earendil-works/pi-ai',
       '@riftydev/agent > @earendil-works/pi-ai/api/openai-completions',
+      '@riftydev/agent > typebox',
       '@riftydev/runtime-js > @jitl/quickjs-wasmfile-release-sync',
       '@riftydev/runtime-js > acorn',
       '@riftydev/runtime-js > cjs-module-lexer',

@@ -98,7 +98,7 @@ await agent.send('Continue from the saved work.');
 ```
 
 `initialMessages` works with every catalog provider; creation copies history, so later
-caller mutations cannot alter it. Supply native Pi 0.85.1 `user`, `assistant` and
+caller mutations cannot alter it. Supply native Pi 1.6.0 `system`, `user`, `assistant` and
 `toolResult` messages with numeric timestamps and native content. Calls must have
 matching id/name results in the immediately following tool-result group. Missing,
 orphan, duplicate or mismatched results throw `TypeError` naming `initialMessages`
@@ -225,7 +225,7 @@ Reset clears conversation only; reload preserves conversation.
 
 The host root is cwd. The first root file among `AGENTS.override.md`,
 `AGENTS.md`, `AGENTS.MD`, `CLAUDE.md`, `CLAUDE.MD` wins; no descendant context
-scan. Skills follow pi 0.85.1 `.pi/skills` and `.agents/skills` discovery,
+scan. Skills follow pi 1.6.0 `.pi/skills` and `.agents/skills` discovery,
 including ignore files, metadata diagnostics, collisions and hidden skills.
 Profile/date → consumer `instructions` → project context → skills → cwd.
 

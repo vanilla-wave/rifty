@@ -1,17 +1,4 @@
-import {
-  type AgentMessage,
-  BACKGROUND_CONTEXT,
-  DEFAULT_COMPACTION_SETTINGS,
-  type Entry,
-  type JsonValue,
-  type StreamFn,
-  compact,
-  createCompactionSummaryMessage,
-  estimateContextTokens,
-  estimateTokens,
-  prepareCompaction,
-  withAbortSignal,
-} from '@earendil-works/pi-agent-core';
+import type { StreamFn } from '@earendil-works/pi-agent-core';
 import {
   type AssistantMessage,
   type Models,
@@ -22,6 +9,15 @@ import {
   retryAssistantCall,
 } from '@earendil-works/pi-ai';
 import { builtInApiKeys } from './catalog.ts';
+import {
+  type CompactionResult,
+  DEFAULT_COMPACTION_SETTINGS,
+  type Entry,
+  buildProjection,
+  compact,
+  estimateProjectedContextTokens,
+  prepareCompaction,
+} from './pi-cli/compaction.ts';
 import type { AgentSessionEvent, AgentSessionOptions } from './types.ts';
 
 function continuationSettings(options: AgentSessionOptions) {
@@ -182,110 +178,22 @@ export function createContinuation(
     return output;
   };
 
-  async function compactMessages(
-    messages: AgentMessage[],
+  /** CLI `_runAutoCompaction` over rifty's journal; the caller installs the result. */
+  async function compactJournal(
+    path: Entry[],
     reason: 'threshold' | 'overflow',
     signal: AbortSignal,
-  ) {
+  ): Promise<CompactionResult | undefined> {
     if (!settings.compaction.enabled || signal.aborted) return undefined;
-    const entries: Entry[] = messages.map((message, index) => {
-      const base = {
-        id: String(index),
-        parentId: index ? String(index - 1) : null,
-        seq: index,
-        timestamp: message.timestamp,
-      };
-      if (message.role !== 'compactionSummary') return { ...base, type: 'message', message };
-      return {
-        ...base,
-        type: 'compaction',
-        summary: message.summary,
-        tokensBefore: message.tokensBefore,
-        retainedTail: [],
-        fromHook: false,
-        ...('details' in message ? { details: message.details as JsonValue } : {}),
-      };
-    });
-    const preparation = prepareCompaction(entries, settings.compaction);
-    if (!preparation.ok || !preparation.value) return undefined;
-    // The CLI declines an empty summary/cut; core preparation alone permits it.
-    if (
-      (!preparation.value.messagesToSummarize.length &&
-        !preparation.value.turnPrefixMessages.length) ||
-      !preparation.value.retainedTail.length
-    )
-      return undefined;
-    const source = estimateContextTokens(messages).lastUsageIndex === null ? 'estimate' : 'usage';
-    // Core context entries filter failures; the CLI estimates the persisted journal.
-    const before = estimateContextTokens(messages).tokens;
+    const preparation = prepareCompaction(path, settings.compaction);
+    if (!preparation) return undefined;
+    const before = preparation.tokensBefore;
+    const source =
+      estimateProjectedContextTokens(buildProjection(path), path).lastUsageIndex === null
+        ? 'estimate'
+        : 'usage';
     emit({ type: 'compaction', phase: 'start', reason, tokensBefore: before, source });
-    const scopedModels = new Proxy(options.models, {
-      get(target, property) {
-        if (property === 'completeSimple') {
-          const complete: Models['completeSimple'] = async (_model, context, base) => {
-            signal.throwIfAborted();
-            const model = selected();
-            const response = scrub(
-              await target.completeSimple(model, context, {
-                ...requestOptions(base),
-                signal,
-                maxTokens: Math.min(base?.maxTokens ?? model.maxTokens, model.maxTokens),
-              }),
-            );
-            account(response);
-            return response;
-          };
-          return complete;
-        }
-        const value: unknown = Reflect.get(target, property, target);
-        return typeof value === 'function' ? value.bind(target) : value;
-      },
-    });
-    try {
-      const result = await compact(
-        { ...preparation.value, tokensBefore: before },
-        scopedModels,
-        selected(),
-        undefined,
-        options.modelOptions?.[selected().id]?.reasoning ?? 'off',
-        settings.retry,
-        callbacks('summary'),
-        withAbortSignal(signal, BACKGROUND_CONTEXT),
-      );
-      if (!result.ok || signal.aborted) {
-        emit({
-          type: 'compaction',
-          phase: 'end',
-          reason,
-          source,
-          tokensBefore: before,
-          success: false,
-          aborted: signal.aborted,
-          errorMessage: result.ok ? 'Aborted' : scrubbed(result.error.message),
-        });
-        return undefined;
-      }
-      const value = result.value;
-      const summary = {
-        ...createCompactionSummaryMessage(value.summary, value.tokensBefore, Date.now()),
-        details: value.details,
-      };
-      const retained = [summary, ...value.retainedTail];
-      emit({
-        type: 'compaction',
-        phase: 'end',
-        reason,
-        source,
-        tokensBefore: before,
-        tokensAfter: retained.reduce((total, message) => total + estimateTokens(message), 0),
-        success: true,
-        summary,
-        retainedMessageCount: value.retainedTail.length,
-        aborted: false,
-        usage: value.usage,
-      });
-      return retained;
-    } catch (error) {
+    const fail = (error: unknown) => {
       emit({
         type: 'compaction',
         phase: 'end',
@@ -294,9 +202,35 @@ export function createContinuation(
         tokensBefore: before,
         success: false,
         aborted: signal.aborted,
-        errorMessage: scrubbed(error instanceof Error ? error.message : String(error)),
+        errorMessage: signal.aborted
+          ? 'Aborted'
+          : scrubbed(error instanceof Error ? error.message : String(error)),
       });
       return undefined;
+    };
+    try {
+      const model = selected();
+      const result = await compact(preparation, {
+        complete: async (context, base) => {
+          signal.throwIfAborted();
+          const response = scrub(
+            await options.models.completeSimple(selected(), context, {
+              ...requestOptions(base),
+              signal,
+            }),
+          );
+          account(response);
+          return response;
+        },
+        reasoning: model.reasoning,
+        thinkingLevel: options.modelOptions?.[model.id]?.reasoning ?? 'off',
+        signal,
+        retry: settings.retry,
+        callbacks: callbacks('summary'),
+      });
+      return signal.aborted ? fail(undefined) : result;
+    } catch (error) {
+      return fail(error);
     }
   }
   return {
@@ -305,7 +239,7 @@ export function createContinuation(
     get cancelledBackoff() {
       return cancelledBackoff;
     },
-    compactMessages,
+    compactJournal,
     usage,
     reset() {
       cancelledBackoff = false;

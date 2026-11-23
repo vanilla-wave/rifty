@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Dev Vite prebundles `typebox` for the lazy agent graph (pi 1.6.0 no longer re-exports it).
+
 - Plain-URL reopen of a project whose first dependency restore was cut short shows the SWITCHING pill until it publishes: `openActive` now runs inside the same project-open progress bracket as starter/project switches (was a silent workbench for the whole restore). Records the PR #167 loss of the «restoring project dependencies…» line (visibility kept, line not restored); `withSlowProgress` drops its unused `onSettledAfterSlow`/`now` options. e2e: `restore-progress-visibility.spec.ts` (also pins the deep-link indicator).
 
 - Baked Vite/TypeScript snapshots re-baked over their committed lockfile pins: installed Vite chunks are upstream bytes (ADR-0533).
