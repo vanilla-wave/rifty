@@ -39,7 +39,10 @@ type TarFault =
   | 'replay-entry';
 
 /** Re-pack a producer-valid compact tar with system tar after one control-data edit. */
-async function repackCompactTar(tar: Uint8Array, fault: TarFault): Promise<Uint8Array> {
+async function repackCompactTar(
+  tar: Uint8Array,
+  fault: TarFault,
+): Promise<Uint8Array<ArrayBuffer>> {
   const root = mkdtempSync(join(tmpdir(), 'rifty-compact-tar-'));
   roots.push(root);
   writeFileSync(join(root, 'in.tar'), tar);
