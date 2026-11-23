@@ -6,9 +6,11 @@ merge candidate). Branch artifacts rot; load-bearing numbers inlined here.
 Full raw/summary/host JSON + rendered app: `tools/perf/no-coi-resource-prototype/`
 on that branch. Re-verify against current main before building on it.
 
-Environment: Apple M3 Pro, 36 GiB; macOS arm64; Chromium 148.0.7778.96;
-Node 24.16.0; dev module host (unbundled), not the production bundle.
-Merge-base `c392669`.
+Environment: Apple M3 Pro (12 logical CPUs), 36 GiB; macOS arm64; Chromium
+148.0.7778.96 headless (Playwright `launchServer`); Node 24.16.0; dev module
+host `pnpm dev:no-coi` (unbundled), not the production bundle. Merge-base
+`c392669`. Command: `pnpm bench:no-coi-resources --runs 3`, then
+`summarize.mjs` over its `results.json`; install/network time excluded.
 
 ## Workload
 
@@ -59,7 +61,9 @@ structured clone of ~79 MB + host re-copy in `validateActivationState`);
 the wasm read is mechanism 1 alone. Vite's own phase unchanged → the ~1 s
 command gain is outside compilation, i.e. mechanism 2.
 
-Code-derived cost of mechanism 1 on main: 13,918,738 B / 256 KiB chunk =
+Code-derived cost of mechanism 1 on main (owner store non-forwarding →
+`readChunkReplyOf`, `runtime-js/src/ipc/sync-rpc-fs.ts`, full read per chunk):
+13,918,738 B / 256 KiB chunk =
 1 `readFileHead` + 53 `readChunk` = 54 sync XHR round trips (SW route,
 ADR-0539); each call reads the whole file and two wrapper layers each
 `.slice()` it → 108 × 13.27 MiB ≈ 1.4 GiB memcpy per read. `fs.readSync(fd, …)` in the child
