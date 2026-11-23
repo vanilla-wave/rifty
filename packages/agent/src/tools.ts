@@ -414,7 +414,29 @@ export function standardTools(
   return tools;
 }
 
+// Pi 1.x validates tool arguments as JSON Schema only (pi-ai 1.5.0): TypeBox-only
+// semantics would silently stop applying, so they fail loudly (ADR-0570).
+function typeboxOnly(schema: unknown, seen = new Set<object>()): string | undefined {
+  if (schema === null || typeof schema !== 'object' || seen.has(schema)) return undefined;
+  seen.add(schema);
+  if (Object.hasOwn(schema, '~refine')) return 'Type.Refine';
+  if (Object.hasOwn(schema, '~codec')) return 'Type.Codec';
+  const type = (schema as { type?: unknown }).type;
+  if (type === 'bigint' || type === 'undefined' || type === 'void') return `Type ${type}`;
+  for (const value of Object.values(schema)) {
+    const found = typeboxOnly(value, seen);
+    if (found) return found;
+  }
+  return undefined;
+}
+
 export function wrapTool(original: Tool, capFinal = true): Tool {
+  const unsupported = typeboxOnly(original.parameters);
+  if (unsupported)
+    throw new NotImplementedError(
+      'agent.tool-schema-typebox-only',
+      `Tool ${original.name}: ${unsupported} is not JSON Schema; pi 1.x does not apply it to tool arguments.`,
+    );
   return {
     ...original,
     async execute(id, args, signal, update) {

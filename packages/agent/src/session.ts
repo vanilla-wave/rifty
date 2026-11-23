@@ -203,10 +203,7 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
       type: 'compaction',
       phase: 'end',
       reason,
-      source:
-        estimateProjectedContextTokens(buildProjection(path), path).lastUsageIndex === null
-          ? 'estimate'
-          : 'usage',
+      source: result.source,
       tokensBefore: result.tokensBefore,
       tokensAfter: projected.reduce((total, message) => total + estimateTokens(message), 0),
       success: true,

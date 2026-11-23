@@ -183,7 +183,7 @@ export function createContinuation(
     path: Entry[],
     reason: 'threshold' | 'overflow',
     signal: AbortSignal,
-  ): Promise<CompactionResult | undefined> {
+  ): Promise<(CompactionResult & { source: 'usage' | 'estimate' }) | undefined> {
     if (!settings.compaction.enabled || signal.aborted) return undefined;
     const preparation = prepareCompaction(path, settings.compaction);
     if (!preparation) return undefined;
@@ -228,7 +228,7 @@ export function createContinuation(
         retry: settings.retry,
         callbacks: callbacks('summary'),
       });
-      return signal.aborted ? fail(undefined) : result;
+      return signal.aborted ? fail(undefined) : { ...result, source };
     } catch (error) {
       return fail(error);
     }

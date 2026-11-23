@@ -23,6 +23,15 @@ agent-core 1.5.0 types `AgentTool.parameters` as any JSON Schema validated by
    pi 1.x omitting `strict: false`, same accept/reject and coerced arguments for 8
    cases. Failure wording is pi-schema's ("missing", "expected >= 0").
 
+3. pi-ai 1.5.0 no longer runs TypeBox's validator: `Type.Refine`, `Type.Codec`,
+   `BigInt`/`Undefined`/`Void` would silently stop applying (review probe: a
+   `Refine` rejecting `relative` on 0.85.1 executes on 1.6.0). Such tool schemas
+   throw `NotImplementedError('agent.tool-schema-typebox-only')` at session
+   creation. Not detected, following pi: `Format.Set` custom formats are
+   annotations; property names are not regexps; `additionalProperties` converts only
+   undeclared properties. Restoring 0.85.1 TypeBox validation rifty-side is the
+   user's call (open in the PR).
+
 ## Alternatives
 
 - Remove `Type`: breaks 0.11.0 consumers (user's call).

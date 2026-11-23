@@ -33,18 +33,30 @@ challenge: 2026-11-23 — clear: the latest pin is the user's explicit request; 
 An embedder runs `createAgentSession` (Workbench COI, no-COI packed consumer,
 custom `streamFn`) on pi 1.6.0: tools, Stop, retry, overflow/threshold compaction,
 restore from `initialMessages` and archive behave as the real pi CLI 1.6.0 does for
-the same provider responses; `Type.Object` tools keep the 0.85.1 contract; the
+the same provider responses; JSON-Schema `Type.Object` tools keep the 0.85.1
+contract and TypeBox-only kinds fail loudly; the
 agent-bench core-v1 series shows no lost passes attributable to the upgrade.
 
 ## Acceptance
 
-1. Continuation, retry, overflow, recoverable length and threshold compaction equal the real CLI 1.6.0 `AgentSession` on 13 scripted scenarios (requests, retries, compaction numbers, transcript incl. system positions). `tools/agent-bench/src/continuation-parity.test.ts` → ADR-0569
-2. A `Type.Object` consumer tool reaches the wire as on pi 0.85.1 (minus pi 1.x `strict: false`) and accepts/rejects/coerces 8 argument cases exactly as the captured 0.85.1 probe. `packages/agent/src/typebox-tools.test.ts` → ADR-0570
+1. Continuation, retry, overflow, recoverable length and threshold compaction equal the real CLI 1.6.0 `AgentSession` on 14 scripted scenarios (requests, retries, compaction numbers, transcript incl. system positions, file-operation lists). `tools/agent-bench/src/continuation-parity.test.ts` → ADR-0569
+2. A `Type.Object` consumer tool reaches the wire as on pi 0.85.1 (minus pi 1.x `strict: false`) and accepts/rejects/coerces 8 argument cases exactly as the captured 0.85.1 probe; `Refine`/`Codec`/`BigInt` parameters throw `NotImplementedError` at creation. `packages/agent/src/typebox-tools.test.ts` → ADR-0570
 3. Stop mid-batch in Chromium: the skipped call gets an error result, no side effect, next run continues. `tests/browser-unit/agent-core.spec.ts` → ADR-0424
 4. The shared prompt recipe reaches the CLI 1.6.0 wire as the current system message; skills and `project_context` blocks are byte-identical to CLI 1.6.0. `prompt-recipe-parity.test.ts`, `project-resources.test.ts` → ADR-0440
-5. Histories with pi 1.x `system` messages (events, trace, archive) restore through `initialMessages`, including a summary after prompt state. `history.test.ts`, `continuation.fault.test.ts`, browser `agent-core.spec.ts` → ADR-0466
-6. Packed consumer installs, typechecks and builds with pi 1.6.0 tarballs; client bundle budgets hold. `pnpm test:client-bundles` → ADR-0436
-7. core-v1 eval series on 1.6.0 vs a fresh 0.85.1 baseline on the same endpoint/limits; every FAIL classified per `tools/agent-bench/README.md`. Summary in `tools/agent-bench/reports/summaries/` → ADR-0472
+5. A changed prompt appends one `system` update before the next user message; the wire sends only the current prompt. `prompt-state.test.ts` → ADR-0569
+6. Histories with pi 1.x `system` messages (events, trace, archive) restore through `initialMessages`, including a summary after prompt state. `history.test.ts`, `continuation.fault.test.ts`, browser `agent-core.spec.ts` → ADR-0466
+7. Packed consumer installs, typechecks and builds with pi 1.6.0 tarballs; client bundle budgets hold. `pnpm test:client-bundles` → ADR-0436
+8. core-v1 eval series on 1.6.0 vs a fresh 0.85.1 baseline on the same endpoint/limits; every FAIL classified per `tools/agent-bench/README.md`; a lost pass classed `rifty-runtime`/`rifty-tooling` and caused by the upgrade blocks landing. Summary in `tools/agent-bench/reports/summaries/` → ADR-0472
+
+## Fault matrix
+
+| axis × operation | honest outcome | artifact / fault target | trace |
+|---|---|---|---|
+| Stop × sequential batch mid-call | running call cancelled; skipped call gets Pi's "Operation aborted" error result, never executed; next run continues | browser `agent-core.spec.ts` stop; `ai-agent-pi-oracle.mjs` abort | → ADR-0424 |
+| Stop × retry backoff | synthetic aborted message dropped, attempt kept omitted | parity `abort-backoff` | → ADR-0473 |
+| provider 429/5xx × retries | attempts persisted then omitted; backoff schedule as CLI | parity `retry-two`, `retry-exhaust`, `partial` | → ADR-0473 |
+| overflow × twice in one episode | one compact-and-continue, then CLI recovery-failed event, `context-exceeded` | parity `overflow-episodes`, `retry-overflow-tail` | → ADR-0569 |
+| archive × history with `system` messages | written and re-read; restore admits them | `history.test.ts`, browser history spec | → ADR-0466 |
 
 ## Out of scope
 

@@ -59,3 +59,32 @@ it('Type.Object tool reaches the wire and validates as on pi 0.85.1', async () =
     await session.dispose();
   }
 });
+
+// pi-ai 1.5.0 validates as JSON Schema only; TypeBox-only kinds would silently stop applying.
+it.each([
+  ['Type.Refine', () => Type.Refine(Type.String(), (value) => value.startsWith('/'))],
+  [
+    'Type.Codec',
+    () =>
+      Type.Codec(Type.String())
+        .Decode((value) => value)
+        .Encode((value) => value),
+  ],
+  ['Type bigint', () => Type.BigInt()],
+])('a %s tool parameter fails loudly at session creation', (kind, schema) => {
+  expect(() =>
+    createAgentSession({
+      host: { root: '/', capabilities: () => ({}), async close() {} },
+      ...modelCatalog(),
+      tools: [
+        {
+          name: 'probe',
+          label: 'probe',
+          description: 'Probe tool',
+          parameters: Type.Object({ path: schema() }),
+          execute: async () => ({ content: [], details: undefined }),
+        },
+      ],
+    }),
+  ).toThrow(`Not implemented: agent.tool-schema-typebox-only (Tool probe: ${kind}`);
+});

@@ -80,7 +80,8 @@ type Scenario =
   | 'silent-overflow'
   | 'retry-overflow-tail'
   | 'abort-backoff'
-  | 'length-recovery';
+  | 'length-recovery'
+  | 'file-ops';
 async function run(kind: 'native' | 'rifty', scenario: Scenario, riftyPrompt = '') {
   const dir = await mkdtemp(join(tmpdir(), 'rifty-continuation-parity-'));
   let conversationPrompt: string | undefined;
@@ -211,18 +212,45 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario, riftyPrompt = '
       },
     },
   ];
+  const lowUsage = (list: Message[]) =>
+    list.map((message) =>
+      message.role === 'assistant' ? { ...message, usage: answer('low').usage } : message,
+    );
+  // CLI file-operation extraction keys on its own tool names (read/write/edit).
+  const fileOps = (): Message[] => [
+    { role: 'user', content: 'Inspect files', timestamp: 0 },
+    {
+      ...answer('', 10, 'toolUse'),
+      content: [
+        { type: 'toolCall', id: 'r1', name: 'read', arguments: { path: '/c.ts' } },
+        { type: 'toolCall', id: 'r2', name: 'read', arguments: { path: '/a.ts' } },
+        { type: 'toolCall', id: 'w1', name: 'write', arguments: { path: '/b.ts' } },
+        { type: 'toolCall', id: 'e1', name: 'edit', arguments: { path: '/a.ts' } },
+      ],
+      timestamp: 0,
+    },
+    ...['read', 'read', 'write', 'edit'].map((name, index) => ({
+      role: 'toolResult' as const,
+      toolCallId: ['r1', 'r2', 'w1', 'e1'][index]!,
+      toolName: name,
+      content: [{ type: 'text' as const, text: 'done' }],
+      isError: false,
+      timestamp: 0,
+    })),
+    ...seed(),
+  ];
   const initialMessages =
     scenario === 'threshold' || scenario === 'summary-failure'
       ? seed()
-      : scenario === 'stale-overflow' ||
-          scenario === 'overflow-episodes' ||
-          scenario === 'silent-overflow' ||
-          scenario === 'retry-overflow-tail' ||
-          scenario === 'length-recovery'
-        ? seed().map((message) =>
-            message.role === 'assistant' ? { ...message, usage: answer('low').usage } : message,
-          )
-        : [];
+      : scenario === 'file-ops'
+        ? fileOps()
+        : scenario === 'stale-overflow' ||
+            scenario === 'overflow-episodes' ||
+            scenario === 'silent-overflow' ||
+            scenario === 'retry-overflow-tail' ||
+            scenario === 'length-recovery'
+          ? lowUsage(seed())
+          : [];
   let messages: readonly AgentMessage[];
   try {
     if (kind === 'native') {
@@ -276,13 +304,7 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario, riftyPrompt = '
             customTools: tools,
           })
         ).session;
-      // A resumed CLI journal starts with the CLI's own system message, as rifty's history
-      // starts with rifty's; a foreign seed would make the CLI append a prompt update.
-      const fresh = await open(SessionManager.inMemory(dir));
-      const head = fresh.messages[0];
-      fresh.dispose();
       const sessionManager = SessionManager.inMemory(dir);
-      if (initialMessages.length && head?.role === 'system') sessionManager.appendMessage(head);
       for (const message of initialMessages) sessionManager.appendMessage(message);
       const session = await open(sessionManager);
       switchModel = () => session.setModel(modelRuntime.getModel('probe', 'large')!);
@@ -362,9 +384,9 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario, riftyPrompt = '
         ),
       );
     // Prompt bytes differ by design; system message positions must match.
-    const placed = (list: readonly AgentMessage[]) =>
-      list.map((message) => (message.role === 'system' ? { role: 'system' } : message));
-    messages = placed(messages);
+    const placed = messages.map((message) =>
+      message.role === 'system' ? { role: 'system' } : message,
+    );
     return {
       prompt: conversationPrompt,
       requests: requests.map((r) => ({ ...r, messages: normalized(r.messages) })),
@@ -374,7 +396,7 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario, riftyPrompt = '
       ...(scenario === 'retry-overflow-tail'
         ? { failure: (compactionEvents.at(-1) as { errorMessage?: string }).errorMessage }
         : {}),
-      messages: normalized(messages),
+      messages: normalized(placed),
       effects,
     };
   } finally {
@@ -396,6 +418,7 @@ it.each<Scenario>([
   'retry-overflow-tail',
   'abort-backoff',
   'length-recovery',
+  'file-ops',
 ])(
   'matches actual Pi CLI 1.6.0: %s',
   async (scenario) => {
@@ -411,6 +434,10 @@ it.each<Scenario>([
     if (scenario === 'after-tool' || scenario === 'overflow-episodes')
       expect(rifty.effects).toBe(1);
     if (scenario === 'partial') expect(rifty.effects).toBe(0);
+    if (scenario === 'file-ops')
+      expect(JSON.stringify(rifty.messages)).toContain(
+        '<read-files>\\n/c.ts\\n</read-files>\\n\\n<modified-files>\\n/a.ts\\n/b.ts\\n</modified-files>',
+      );
     if (scenario === 'length-recovery')
       expect(rifty.compactions).toEqual([
         expect.objectContaining({ reason: 'overflow', success: true }),

@@ -21,7 +21,12 @@ cannot hold with a browser agent on pi 1.x.
 
 ## Decision
 
-Overturns ADR-0473 §1 "No copied classifier/summary algorithm" for compaction only.
+Overturns ADR-0473 §1 "use native `prepareCompaction`, `compact`, `convertToLlm` and
+token estimators; no copied summary algorithm or second history ledger" for those
+utilities and the skills formatter (ADR-0440); and ADR-0474 "no persistent second
+message array": the CLI's compaction input needs entry ids (`firstKeptEntryId`,
+omission targets) that audit receipts do not carry, so the session keeps a CLI
+journal (`session.ts`) beside the receipts, cleared by reset.
 
 1. `packages/agent/src/pi-cli/` ports, from pi-coding-agent 1.6.0 source (MIT,
    notice in `packages/agent/THIRD_PARTY_NOTICES.md`): the journal projection
@@ -40,14 +45,19 @@ Overturns ADR-0473 §1 "No copied classifier/summary algorithm" for compaction o
 4. Classifier (`isContextOverflow`, `isRecoverableLength`), retry and the loop stay
    native pi-ai/agent-core; no copy.
 5. Oracle: `tools/agent-bench/src/continuation-parity.test.ts` runs the real CLI
-   1.6.0 `AgentSession` and rifty over the same provider (13 scenarios); token
+   1.6.0 `AgentSession` and rifty over the same provider (14 scenarios); token
    numbers equal with the system section sizes equalized; system message
-   positions compared. A copy tested only against itself does not count.
+   positions and CLI file-operation lists compared. A copy tested only against itself does not count.
 6. Kill condition: an upstream pi release exporting compaction/projection from a
    browser-safe entry → delete `pi-cli/` and import it (DEC-2 here). Every pi bump
    re-runs the parity suite; a diff is a sync, never a test edit.
 
 ## Alternatives
+
+Critic (DEC-5, 2026-11-23): overturn HOLDS — forcing facts (a) no browser-safe 1.6.0
+export, (b) CLI root fails browser bundling, (c) pi-durable differs, re-probed
+independently; fixes taken: journal overturn named, file-op parity scenario added.
+
 
 - Pin 0.99.2 (last harness release): keeps ADR-0473 but not latest; 1.x fixes lost.
 - `pi-durable`: new dependency, different algorithm — breaks CLI parity (ADR-0434).
@@ -56,7 +66,7 @@ Overturns ADR-0473 §1 "No copied classifier/summary algorithm" for compaction o
 
 ## Consequences
 
-- Rifty owns ~650 lines of upstream algorithm; drift is caught only by the parity suite.
+- Rifty owns ~840 lines of upstream algorithm (`pi-cli/`); drift is caught only by the parity suite.
 - Public: `CompactionSummaryMessage` type and its `CustomAgentMessages` augmentation
   ship from `@riftydev/agent`; transcripts carry `system` messages (pi 1.x history).
 - Upstream issue text for a browser-safe export is in the PR; filing waits for the user.

@@ -38,4 +38,4 @@ Scope: clarification of ADR-0473's ephemeral projection, not a second conversati
 
 ## Corrections
 
-2026-11-23 — Journal follows CLI 1.6.0: discarded attempts persist as messages plus null `context_edit` omissions, prompt-state system messages included (ADR-0569).
+2026-11-23 — Journal follows CLI 1.6.0: discarded attempts persist as messages plus null `context_edit` omissions, prompt-state system messages included; "no persistent second message array" overturned by ADR-0569 (the CLI input needs entry ids receipts do not carry).
