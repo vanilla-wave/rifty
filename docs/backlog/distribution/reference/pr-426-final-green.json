@@ -1,59 +1,67 @@
 {
   "overall_verdict": "pass",
-  "merge_call": "Merge after green PR CI at HEAD 58c9d1ba3 (packed-consumer lane light 1/8 and unit run still pending at review time) and after committing this landing verdict under docs/backlog/<area>/reference/ (REV-8); no blocker, concerns are NOTE.",
+  "merge_call": "Verify pass on 7ea60ff0b: all accepted FIX findings (S1, S1b, N1, N3, N5, N6, N7) hold on the tree; no blocker. Merge on green PR CI at HEAD after replacing the committed docs/backlog/distribution/reference/pr-426-final-green.json (bound to 58c9d1ba3) with this verdict re-bound to the HEAD sha (REV-8, PR-6).",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "58c9d1ba3668600bfd43030912f14a7a6d11e22b",
-  "unit_goal_source": "PR #426 standalone unit, no backlog contract. Authority: user decisions on ADR-0547 (landed PR #388) quoted in the hand-off and recorded as dated lines docs/adr/distribution/0547-frozen-prepared-dependency-snapshots.md:74-90 — (1) «отправь сессию переименовать на frozen»: profile compact -> frozen in place, no alias, no new format number, 'compact' rejects as an unknown profile; (2) «давай тоже сделаем»: npm-client cold-cache refusal names package, cause and the carried exits, EBROKENLOCK kept, no behavior change. Observed baseline: PR #388 behavior on main at BASE 23ed6b44556c (merge-base with origin/main). Diff 23ed6b44556c..58c9d1ba3.",
+  "reviewed_sha": "7ea60ff0b4b5375dd078b5b99e95aafcd04f62f5",
+  "unit_goal_source": "PR #426 standalone unit, no backlog contract; verify pass after reception (§Review run step 2). Authority: user decisions on ADR-0547 (PR #388) «отправь сессию переименовать на frozen» and «давай тоже сделаем», recorded at docs/adr/distribution/0547-frozen-prepared-dependency-snapshots.md:72-100; manager's amended error-text rule (each named exit runnable by the reader of that surface in its own terms, host-only exits labelled host-only; workbench may carry the replay-snapshot phrase; check:arch holds) and accepted FIX findings S1/S1b/N1/N3/N5/N6/N7; reason shadow-replay-cache-miss kept by manager. Baseline: PR #388 behavior at BASE 23ed6b44556c. Delta reviewed: 58c9d1ba3..7ea60ff0b (full unit 23ed6b44556c..7ea60ff0b).",
   "unit_residuals": [],
   "goal_residuals": [],
   "goal_complete": false,
   "coverage": [
     {
-      "row": "Producer accepts profile 'frozen' and emits tar manifest v5 with profile 'frozen', no replay namespace, same payload",
+      "row": "Producer accepts profile 'frozen', emits v5 manifest profile 'frozen', no replay namespace, same payload",
       "source": "public-api",
       "trace": "ADR-0547",
       "status": "pass",
-      "citation": "packages/workbench/src/glue/dep-snapshot-producer.test.ts:118; tests/integration/fixtures/workbench-vite-consumer/produce-vite-snapshot.mjs:87-125; /tmp/frozen-packed2.log:204",
+      "citation": "packages/workbench/src/glue/dep-snapshot-producer.test.ts:118; tests/integration/fixtures/workbench-vite-consumer/produce-vite-snapshot.mjs:87-125; /tmp/frozen-packed3.log:204",
       "note": ""
     },
     {
-      "row": "'compact' (never published: npm pack @riftydev/workbench|sdk|npm-client@0.11.0 = latest contain no 'compact'/'frozen' literal, reviewer re-ran) rejects as an unknown profile by the same path as any other: producer, JSON admission, system-tar admission",
+      "row": "'compact' (never published; reviewer npm-packed @riftydev/workbench|sdk|npm-client@0.11.0 = latest: no literal) rejects as an unknown profile: producer, JSON, system tar",
       "source": "acceptance",
       "trace": "ADR-0547",
       "status": "pass",
-      "citation": "packages/workbench/src/glue/dep-snapshot-producer.test.ts:134; packages/workbench/src/glue/dep-snapshot-frozen.contract.test.ts:69,153,188,199; prod checks dep-snapshot-producer.ts:141, dep-snapshot-tar.ts:228, dep-snapshot.ts:160",
+      "citation": "packages/workbench/src/glue/dep-snapshot-producer.test.ts:134; packages/workbench/src/glue/dep-snapshot-frozen.contract.test.ts:69,153,188,199",
       "note": ""
     },
     {
-      "row": "Cold-cache shadow pin refusal: EBROKENLOCK naming locked package@version, substitute@version, recipe, why replay never downloads it, exact-reinstall exit (restore bytes) and lockless exit with versions-may-change, exact text",
+      "row": "Disk-lock terminal text (both terminals): exact, EBROKENLOCK/shadow-replay-cache-miss, `npm: ` prefix, exit 1; no host-only exit named",
       "source": "acceptance",
       "trace": "ADR-0547",
       "status": "pass",
-      "citation": "packages/npm-client/src/installer-shadow-recipe-v2-replay-authority.contract.test.ts:1156-1166; packages/workbench/src/workers/no-coi-frozen-vite-install.contract.test.ts:145-154,172; packages/workbench/src/workers/no-coi-frozen-install.contract.test.ts:149-150",
+      "citation": "packages/workbench/src/workers/no-coi-frozen-vite-install.contract.test.ts:161-170,270-307; packages/npm-client/src/installer-shadow-recipe-v2-replay-authority.contract.test.ts:1157-1164; tests/integration/no-coi-snapshot-browser-proof.mjs:214-216; /tmp/frozen-packed3.log:205",
       "note": ""
     },
     {
-      "row": "Terminal surface: npm install prints `npm: <message>` exit 1 on both npm hosts (no-COI project command and package-authority reportInstallError, no longer 'lockfile is broken … delete package-lock.json and retry')",
+      "row": "Terminal exit executed as the terminal reader runs it: `rm package-lock.json && npm install` exits 0, re-resolves esbuild-wasm through the registry (both terminals; packed Chromium)",
       "source": "acceptance",
       "trace": "ADR-0547",
       "status": "pass",
-      "citation": "packages/workbench/src/workers/no-coi-frozen-vite-install.contract.test.ts:191-255; packages/workbench/src/glue/npm-shell-command.ts:979-983; tests/integration/no-coi-snapshot-browser-proof.mjs:203-205; /tmp/frozen-packed2.log:205",
+      "citation": "packages/workbench/src/workers/no-coi-frozen-vite-install.contract.test.ts:286-308; tests/integration/no-coi-snapshot-browser-proof.mjs:230-236",
       "note": ""
     },
     {
-      "row": "SDK surface: sandbox.toolchain.install rejects with the same message on the real packed Chromium path",
+      "row": "SDK toolchain.install text = terminal text + labelled host-only exit; host exits executed: replay-profile applySnapshot then toolchain.install reinstalls the lock byte-exact with no esbuild request; delete lock then toolchain.install re-resolves",
       "source": "acceptance",
       "trace": "ADR-0547",
       "status": "pass",
-      "citation": "tests/integration/no-coi-snapshot-browser-proof.mjs:206-207; tests/integration/fixtures/workbench-vite-consumer/src/no-coi-project-proof.ts:133-137; /tmp/frozen-packed2.log:206",
+      "citation": "packages/workbench/src/workers/no-coi-toolchain-install.ts:39-54,69-74; packages/workbench/src/workers/no-coi-frozen-vite-install.contract.test.ts:172-176,309-329; tests/integration/no-coi-snapshot-browser-proof.mjs:217-227; /tmp/frozen-packed3.log:206-207",
       "note": ""
     },
     {
-      "row": "Install behavior unchanged: no network fallback for the substitute, same failure point, tree/lock unchanged",
+      "row": "Eddy-staged lock (no package-lock.json on disk): true statement and exit; `run install again` executed and installs from Eddy with zero registry reads",
       "source": "acceptance",
       "trace": "ADR-0547",
       "status": "pass",
-      "citation": "packages/workbench/src/workers/no-coi-frozen-vite-install.contract.test.ts:172-186,226,252; packages/npm-client/src/installer-shadow-recipe-v2-replay-authority.contract.test.ts:677-688; tests/integration/no-coi-snapshot-browser-proof.mjs:208-212",
+      "citation": "packages/npm-client/src/internal/shadow/substitution.ts:277-288; packages/npm-client/src/installer.ts:413; services/eddy/tests/client-roundtrip.test.ts:151-154,1196-1197,1213-1236",
+      "note": ""
+    },
+    {
+      "row": "Install behavior unchanged: no network fallback for the substitute, same failure point, tree/lock unchanged; non-miss Eddy errors rethrown unchanged",
+      "source": "acceptance",
+      "trace": "ADR-0547",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/no-coi-frozen-vite-install.contract.test.ts:244-266; packages/npm-client/src/installer.ts:413 (`?? error`; eddyFallbackReason is undefined when source==='eddy', installer.ts:373-383); tests/integration/no-coi-snapshot-browser-proof.mjs:223",
       "note": ""
     }
   ],
@@ -61,15 +69,7 @@
     {
       "axis": "Completeness",
       "verdict": "pass",
-      "findings": [
-        {
-          "severity": "nit",
-          "location": "services/eddy/tests/client-roundtrip.test.ts:1182-1186",
-          "evidence": "",
-          "summary": "PR body §Carriers omits the eddy roundtrip test whose missing-cache reason expectation changed shadow-trace-drift -> shadow-replay-cache-miss (eb6d7ab1f); the change is deliberate and consistent, but PR-4 readers should see every changed assertion listed.",
-          "authority": ""
-        }
-      ]
+      "findings": []
     },
     {
       "axis": "Mission and architecture",
@@ -78,39 +78,46 @@
     },
     {
       "axis": "Goal drift",
-      "verdict": "concern",
-      "findings": [
-        {
-          "severity": "concern",
-          "location": "docs/adr/distribution/0547-frozen-prepared-dependency-snapshots.md:13-37; docs/adr/playground/0346-baked-dependency-snapshots-carry-replay-tarball-cache.md:68; docs/adr/distribution/0386-publish-deterministic-dependency-snapshot-archives.md:39; docs/adr/distribution/0420-apply-no-coi-snapshots-through-the-sdk.md:46; docs/adr/npm-client/0543-resolve-coi-esbuild-ranges-to-unmodified-upstream-node-twins.md:94",
-          "evidence": "",
-          "summary": "Besides the dated DEC-2 lines, the rename rewrites ADR-0547's Decision/Compatibility-evidence body (e.g. the BASE f37bfc5 evidence 'compact contract tests'/'unknown compact marker' -> 'profile …') and existing 2026-10-23 correction lines in four other ADRs; docs/adr/README.md:3 says active ADRs are immutable except dated lines. User-authorized in substance and recorded at 0547:74-79, so advisory; the f37bfc5 evidence sentence now paraphrases what was executed.",
-          "authority": ""
-        }
-      ]
+      "verdict": "pass",
+      "findings": []
     },
     {
       "axis": "Approach cost",
       "verdict": "pass",
-      "findings": []
-    },
-    {
-      "axis": "Scope",
-      "verdict": "concern",
       "findings": [
         {
-          "severity": "concern",
-          "location": "docs/backlog/distribution/reference/compact-dependency-snapshots-final-green.json:96,133",
-          "evidence": "git grep -n '0547-compact' -> only these two lines; file no longer exists at HEAD",
-          "summary": "The ADR file was renamed (0547-compact-… -> 0547-frozen-…), leaving the #388 landing verdict citing a dead path; refs:check does not scan JSON and docs/adr/README.md §Historical references has no redirect. Add a moved-path line there (or keep the old filename) so the history record resolves.",
+          "severity": "nit",
+          "location": "packages/npm-client/src/internal/shadow/substitution.ts:240",
+          "evidence": "",
+          "summary": "Module-level WeakMap side table to re-derive the Eddy text from a minted error; works (identity is preserved through the walk, eddy carrier proves it), but passing the source kind into fetchCtx would avoid a second state owner. Taste.",
           "authority": ""
         }
       ]
     },
     {
-      "axis": "Bugs",
+      "axis": "Scope",
       "verdict": "pass",
       "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/npm-client/src/internal/shadow/substitution.ts:256-276",
+          "evidence": "",
+          "summary": "N4 (NOTE): the walk stops at the first missing substitute, so with several cold shadow pins only the first is named; the exits stay true for all, but a reader restoring bytes would learn of the next pin only on retry.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "packages/npm-client/src/internal/shadow/substitution.ts:270",
+          "evidence": "",
+          "summary": "The disk text ('cannot be reinstalled exactly here') is also what a direct @riftydev/npm-client install() caller gets; such a host can seed its own tarball cache. Outside the manager's two named readers, so advisory.",
+          "authority": ""
+        }
+      ]
     },
     {
       "axis": "Regressions",
@@ -118,16 +125,23 @@
       "findings": [
         {
           "severity": "concern",
-          "location": "packages/npm-client/src/internal/shadow/substitution.ts:251",
-          "evidence": "git grep shadow-trace-drift: no prod consumer branches on the reason; warnOptional (installer-lockfile-replay.ts:273) and eddy-fast-path.ts:628 key on code/!== 'missing-entry', so control flow unchanged",
-          "summary": "The observable error.reason for a cold cache changes shadow-trace-drift -> shadow-replay-cache-miss (not just the text). Recorded in ADR-0547:81-82 and the npm-client CHANGELOG and needed for the terminal mapping; ADR-0361:63/134 still read 'drifted trace stays shadow-trace-drift', which remains true (a cold cache is not drift) — no cross-reference from 0361 to the new reason.",
+          "location": "packages/workbench/src/glue/npm-shell-command.ts:979-983; services/eddy/tests/client-roundtrip.test.ts:1213",
+          "evidence": "",
+          "summary": "The Eddy text is carried exactly at installer level only; the one surface that reaches Eddy (package-authority terminal with resolverUrl) has no carrier printing `npm: <eddy text>`. The mapping keys on reason and is carried for the disk text, so the gap is a composition, not an untested branch.",
           "authority": ""
         },
         {
           "severity": "concern",
-          "location": "packages/workbench/src/workers/no-coi-frozen-vite-install.contract.test.ts:207-216",
+          "location": "packages/workbench/src/workers/no-coi-frozen-vite-install.contract.test.ts:178-204",
           "evidence": "",
-          "summary": "The no-COI terminal unit carrier re-implements the toolchain owner's install hook in the test ('minus its stamp claim'); a divergence in the real owner hook would not be caught here. The real hook is covered by the packed Chromium proof (CI lane light 1/8), so advisory.",
+          "summary": "noCoiTerminal still re-implements the toolchain owner's install hook; the real owner hook is covered only by the packed Chromium proof (CI light 1/8).",
+          "authority": ""
+        },
+        {
+          "severity": "nit",
+          "location": "/tmp/frozen-packed3.log",
+          "evidence": "packed log mtime 16:25 precedes pr:check log 16:33; 7ea60ff0b is one commit holding product + evidence append, so the 'reception tree' sha is not in git",
+          "summary": "Packed-consumer evidence is not bound to a committed sha; its printed terminal/host texts equal HEAD's code byte-for-byte and CI re-runs the lane at HEAD, so no action beyond green CI.",
           "authority": ""
         }
       ]
@@ -135,15 +149,7 @@
     {
       "axis": "Ecosystem UX",
       "verdict": "pass",
-      "findings": [
-        {
-          "severity": "nit",
-          "location": "packages/npm-client/src/internal/shadow/substitution.ts:243-245",
-          "evidence": "",
-          "summary": "Exact-reinstall exit says 'restore those bytes to the tarball cache' without naming how a user does that; npm-client cannot name snapshot terms (layering) and READMEs (packages/rifty/README.md:204-207, packages/workbench/README.md:244-247) map it to replay snapshot / warm cache, so acceptable.",
-          "authority": ""
-        }
-      ]
+      "findings": []
     }
   ]
 }
