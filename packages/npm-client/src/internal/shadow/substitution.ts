@@ -239,12 +239,8 @@ interface ShadowReplayCacheMiss {
 /** Facts of errors minted here, so the installer can restate them for an Eddy-staged lock. */
 const shadowReplayCacheMisses = new WeakMap<Error, ShadowReplayCacheMiss>();
 
-function shadowReplayCacheMissError(
-  miss: ShadowReplayCacheMiss,
-  message: string,
-  cause?: Error,
-): Error {
-  const error = Object.assign(new Error(message, cause === undefined ? undefined : { cause }), {
+function shadowReplayCacheMissError(miss: ShadowReplayCacheMiss, message: string): Error {
+  const error = Object.assign(new Error(message), {
     code: 'EBROKENLOCK' as const,
     packageName: miss.packageName,
     reason: 'shadow-replay-cache-miss' as const,
@@ -289,7 +285,6 @@ export function eddyShadowReplayCacheMiss(error: unknown): Error | null {
       `EBROKENLOCK: the lockfile Eddy resolved installs ${miss.locked} from its substitute ${miss.substitute} (shadow recipe ${miss.recipeId}), but the tarball cache lost its intact copy after Eddy seeded it.`,
       `${REPLAY_TAKES_CACHE_ONLY}. No project file was written; run install again to seed the cache from Eddy again.`,
     ].join(' '),
-    error,
   );
 }
 

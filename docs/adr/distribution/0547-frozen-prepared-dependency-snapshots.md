@@ -67,13 +67,15 @@ admission) — no route for Vite 7 while its lock is kept, since `esbuild` is
 transitive and stays lock-replayed. Deleting `package-lock.json` re-resolves from
 the registry (fetches `esbuild-wasm`; pins may move). A replay snapshot or warm
 cache restores the exact install. Vite 8 is not covered by these carriers.
-2026-11-23 (PR #426) — exact-reinstall route for the host, with its
-condition: the replay-profile snapshot of the same dependencies applies without
-`force` only while `package.json` and `package-lock.json` are unchanged since
-the frozen snapshot; then `toolchain.install` reinstalls the lock byte-exact
-from its replay cache. A changed `package.json` (or lock) conflicts by default;
-`force` applies but reverts the project edit (`no-coi-frozen-vite-install.contract.test.ts`,
-packed Chromium proof). The refusal text names only the lockless exit.
+2026-11-23 (PR #426) — exact-reinstall route for the host: apply the
+replay-profile snapshot of the same dependencies, then `toolchain.install`.
+Whether it applies follows the `applySnapshot` conflict rule (ADR-0420
+§Decision: default conflict error, `force` overwrites), not a rule of this ADR.
+Carried: an untouched applied tree takes it without `force` and the install is
+byte-exact from the replay cache (`no-coi-frozen-vite-install.contract.test.ts`,
+packed Chromium proof); a `package.json` edit or a whitespace-only lock change
+conflicts, and `force` reverts the `package.json` edit (the same vitest file).
+The refusal text names only the lockless exit.
 
 ## Decisions
 
