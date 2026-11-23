@@ -10,7 +10,7 @@ each; the differences between runs are noted.
 Command (repo root, after `pnpm --filter @riftydev/isolate-host build`):
 `node docs/backlog/distribution/reference/isolate-host-sandbox-lifecycle-class-probe.mjs`
 
-## After PR #424 (the guest's run phase gates `fire`)
+## After PR #424 (one gate on the guest's run phase for every host delivery: `fire`, `rejection`)
 
 | case | sandbox: exit / end, files | `runCode`: exit / end | Node: exit, files | sandbox outcome |
 |---|---|---|---|---|
@@ -32,6 +32,10 @@ Command (repo root, after `pnpm --filter @riftydev/isolate-host build`):
 | an endless timer due beside a fatal thrown from a timer | timeout, — | timeout | 1, a | whole run rolled back |
 | an interval queued before an uncaught throw | 1, a | 1 | 1, a | as Node |
 | setImmediate queued before an uncaught throw | 1, a | 1 | 1, a | as Node |
+| exit(2) from a promise callback, a timer already due | 2, a,t | 2 | 2, a | extra files kept |
+| exit(2) from a promise callback, an endless timer already due | timeout, — | timeout | 2, a | whole run rolled back |
+| an unhandledRejection listener after an uncaught throw | 1, a | 1 | 1, a | as Node |
+| beforeExit listener | 0, a | 0 | 0, a,be | files Node writes missing (`'beforeExit'` never emitted, process.md) |
 | uncaught throw then an endless queued timer | 1, a | 1 | 1, a | as Node |
 | uncaught throw + endless microtask chain | memory, — | memory | 1, a | whole run rolled back |
 | exitCode in an exit listener after an uncaught throw | 1, a | 1 | 5, a | exit code not Node's |
@@ -44,7 +48,9 @@ row but one — a timer due beside a fatal thrown from another timer: `runCode` 
 
 ## Before PR #424 (main `f3861a3cd`)
 
-Two rows were the sandbox's own: a timer queued before an uncaught throw fired after the guest's
+Rows that were the sandbox's own (cross-review round 1 added the rejection one): an unhandled
+rejection reported after the run ran its `unhandledRejection` listener in the capture window (an
+endless listener: `timeout`, writes rolled back). A timer queued before an uncaught throw fired after the guest's
 run had ended (the host timer was in flight when the result was) — `runCode` disposed the isolate
 at the result, so nothing of it was seen, while a sandbox captured its state after the run and
 waited for the callback. A finite such timer left its file (`a,q` where Node has `a`), an endless

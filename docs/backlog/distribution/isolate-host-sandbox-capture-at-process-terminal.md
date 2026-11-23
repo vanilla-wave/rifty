@@ -14,7 +14,7 @@ Untried, narrowed 2026-11-23. Host-delivered callbacks (timers, `setImmediate`) 
 end no longer run (PR #424: the guest's run phase gates `fire`). Left: microtasks and callbacks
 the realm runs before the run's status is out — a microtask queued at `process.exit()`, a
 microtask an `'exit'` listener queues after `exit()`, a microtask or fs callback queued at an
-uncaught throw, a timer due in the same turn as an `exit()` or a fatal thrown from another timer —
+uncaught throw, a timer already due when `exit()` runs from a timer or a microtask, or when a fatal is thrown from another timer —
 still run and their files are kept (an endless such timer ends the run `timeout`). Taking the snapshot at the process terminal (after the `'exit'` listeners,
 before the queue drains) would leave those writes out, as in Node. Open questions: `finally`
 blocks run while the exit signal unwinds; the memory held meanwhile; an endless microtask chain

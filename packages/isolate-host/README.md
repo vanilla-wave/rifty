@@ -170,7 +170,7 @@ its own but its files were not kept. What survives a run:
 
 | the run | the files after it |
 |---|---|
-| exits (any code, `process.exit`, an uncaught throw or rejection) | as the run left them |
+| exits (any code, `process.exit`, an uncaught throw or rejection) | as the run left them — work the realm still runs before the run's status is out included (compat Sandbox row "A run's lifecycle and exit status") |
 | `termination: 'timeout'` or `'memory'` | as before the run: a killed run's writes are rolled back (Node keeps them) |
 | its worker lost (rerun once, alone; then `ERR_ISOLATE_HOST_WORKER_LOST`) | as before the run; the rerun starts from the same files |
 | its state could not be sent whole (a throw while writing it to the worker, e.g. out of memory): `exec` rejects with that error, no rerun; that worker ends, its other calls rerun | as before the run |

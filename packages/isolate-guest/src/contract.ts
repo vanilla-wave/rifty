@@ -37,7 +37,10 @@ export interface GuestEntry {
   runFile(path: string, args: readonly string[]): Promise<number>;
   /** Host timer `id` expired; once the run's status is out it runs nothing (the process is gone). */
   fire(id: number): void;
-  /** An unhandled rejection the embedder saw: a copy of the reason, or `UNCOPYABLE_REJECTION`. */
+  /**
+   * An unhandled rejection the embedder saw: a copy of the reason, or `UNCOPYABLE_REJECTION`;
+   * like `fire`, it runs nothing once the run's status is out.
+   */
   rejection(reason: unknown): void;
   /** The realm's whole FS as a snapshot (ADR-0567); whenever no guest code runs, after `run` included. */
   snapshot(options: SnapshotOptions): Uint8Array;

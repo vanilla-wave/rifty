@@ -84,6 +84,19 @@ const CASES = [
     `${W} w('a'); setImmediate(() => w('im')); throw new Error('x')`,
   ],
   [
+    'exit(2) from a promise callback, a timer already due',
+    `${W} w('a'); setTimeout(() => w('t'), 0); Promise.resolve().then(() => process.exit(2))`,
+  ],
+  [
+    'exit(2) from a promise callback, an endless timer already due',
+    `${W} w('a'); setTimeout(() => { for (;;) {} }, 0); Promise.resolve().then(() => process.exit(2))`,
+  ],
+  [
+    'an unhandledRejection listener after an uncaught throw',
+    `${W} w('a'); process.on('unhandledRejection', () => w('late')); globalThis.p = Promise.reject(new Error('r')); throw new Error('x')`,
+  ],
+  ['beforeExit listener', `${W} w('a'); process.on('beforeExit', () => w('be'))`],
+  [
     'uncaught throw then an endless queued timer',
     `${W} w('a'); setTimeout(() => { for (;;) {} }, 0); throw new Error('x')`,
   ],

@@ -666,7 +666,8 @@ describe('nothing of the guest runs after its run has ended (ADR-0568 §3)', () 
       exitCode: 1,
     },
     'a 0 ms timer beside process.exit(3): never runs': {
-      code: "require('fs').writeFileSync('w', '1'); setTimeout(() => require('fs').writeFileSync('late', '1'), 0); process.exit(3)",
+      // The timer is due before exit(3) (a 20 ms busy wait): its expiry is in flight at the end.
+      code: "require('fs').writeFileSync('w', '1'); setTimeout(() => require('fs').writeFileSync('late', '1'), 0); const e = Date.now() + 20; while (Date.now() < e); process.exit(3)",
       exitCode: 3,
     },
   };
@@ -689,6 +690,50 @@ describe('nothing of the guest runs after its run has ended (ADR-0568 §3)', () 
         } finally {
           await sb.destroy();
         }
+      }
+    });
+  }
+});
+
+describe('no host delivery reaches the guest after its run has ended (ADR-0568 §3)', () => {
+  // isolated-vm reports an unhandled rejection after the microtask checkpoint: the host
+  // delivers it while the sandbox captures the state (`runCode` has disposed the isolate).
+  const LISTENER =
+    "const fs = require('fs'); fs.writeFileSync('kept', '1'); process.on('unhandledRejection', () => { console.log('LATE'); fs.writeFileSync('late', '1') }); globalThis.p = Promise.reject(new Error('r'));";
+  const ROWS: Record<string, { code: string; report: boolean }> = {
+    'an unhandledRejection listener after an uncaught throw: not run': {
+      code: `${LISTENER} throw new Error('x')`,
+      report: true,
+    },
+    'an endless unhandledRejection listener after an uncaught throw: exit 1 at once, writes kept': {
+      code: "const fs = require('fs'); fs.writeFileSync('kept', '1'); process.on('unhandledRejection', () => { for (;;) {} }); globalThis.p = Promise.reject(new Error('r')); throw new Error('x')",
+      report: true,
+    },
+    'a rejected async call before an uncaught throw: only the throw is reported': {
+      code: "async function f() { throw new Error('p') } f(); throw new Error('x')",
+      report: true,
+    },
+    'an endless unhandledRejection listener beside process.exit(3): exit 3 at once': {
+      code: "const fs = require('fs'); fs.writeFileSync('kept', '1'); process.on('unhandledRejection', () => { for (;;) {} }); globalThis.p = Promise.reject(new Error('r')); process.exit(3)",
+      report: false,
+    },
+  };
+  for (const [label, { code, report }] of Object.entries(ROWS)) {
+    carrier(label, async () => {
+      const o = nodeSequence([{ files: { 'r.js': code }, run: ['r.js'] }])[0];
+      const sb = await createSandbox();
+      try {
+        await sb.writeFile('r.js', code);
+        const r = await sb.exec('r.js', { timeoutMs: 5000 });
+        expect({ exitCode: r.exitCode, termination: r.termination, stdout: r.stdout }).toEqual({
+          exitCode: o?.exitCode,
+          termination: undefined,
+          stdout: o?.stdout,
+        });
+        expect(r.stderr).toBe(report ? nodeReport(o?.stderr ?? '') : o?.stderr);
+        expect(await tree(sb)).toEqual(o?.files);
+      } finally {
+        await sb.destroy();
       }
     });
   }

@@ -228,7 +228,7 @@ function writeDiagnostic(error: unknown): void {
  * with no terminal (Node still runs what its 'exit' listeners queue: their output
  * is kept, their throw reported); `ended` once the run's status is out without a
  * natural exit. Past `running` the process is gone for Node: nothing the host still
- * delivers (a timer, `setImmediate`, through `fire`) runs — `runCode` disposes the
+ * delivers (`deliveries`: a timer's expiry, an unhandled rejection) runs — `runCode` disposes the
  * isolate at the result, a sandbox captures its state after it (ADR-0568 §3).
  */
 let phase: 'running' | 'natural' | 'ended' = 'running';
@@ -394,7 +394,7 @@ function setUp(): void {
 }
 
 /** A rejection isolated-vm found unhandled after the microtask checkpoint (a copy of the reason). */
-function rejection(copied: unknown): void {
+function unhandledRejection(copied: unknown): void {
   // A reason isolated-vm could not copy out (function-bearing object, symbol): Node
   // still fails the run; the reason itself is lost (compat ⚠️).
   const reason =
@@ -406,10 +406,20 @@ function rejection(copied: unknown): void {
   if (!handleRealmUnhandledRejection(reason, undefined)) fatal(reason);
 }
 
-/** A host timer's expiry; once the run is over it runs nothing (`phase`). */
-function fire(id: number): void {
-  if (phase === 'running') fireTimer(id);
-}
+/**
+ * Every way the host calls into the guest: launch (`run`, `runFile`), state
+ * (`snapshot`, `restore`) and deliveries to a live process (`fire` a timer,
+ * `rejection`). A delivery goes through this one gate: once the run's status is
+ * out (`phase`) the process is gone for Node, so it runs nothing — `runCode`
+ * disposes the isolate there, a sandbox captures its state after it (ADR-0568 §3).
+ * One argument each: no spread through the guest's iterators.
+ */
+const delivered =
+  <T>(deliver: (value: T) => void) =>
+  (value: T): void => {
+    if (phase === 'running') deliver(value);
+  };
+const deliveries = { fire: delivered(fireTimer), rejection: delivered(unhandledRejection) };
 
 /** The realm's whole FS; whenever no guest code runs. After guest code ran, the result is guest-authored. */
 function snapshot(options: SnapshotOptions): Uint8Array {
@@ -434,6 +444,13 @@ function restore(bytes: Uint8Array, options: SnapshotOptions): void {
 }
 
 Object.defineProperty(globalThis, '__riftyGuest', {
-  value: Object.freeze({ run, runFile, fire, rejection, snapshot, restore }),
+  value: Object.freeze({
+    run,
+    runFile,
+    snapshot,
+    restore,
+    fire: deliveries.fire,
+    rejection: deliveries.rejection,
+  }),
   configurable: true,
 });
