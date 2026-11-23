@@ -8,6 +8,8 @@
 import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
 
 type ImmediateHandle = { readonly id: number };
+const reflectApply = Reflect.apply;
+
 type HostTimeout = ReturnType<typeof globalThis.setTimeout>;
 type HostInterval = ReturnType<typeof globalThis.setInterval>;
 type HostTimer = HostTimeout | HostInterval;
@@ -31,7 +33,7 @@ let nextTimerId = 1;
 // branch and be forwarded to the host clear as an unrelated integer — a no-op
 // clear + a leaked keepalive ref (and a possible cross-clear of a host timer
 // whose id collides). One-shot timeouts deregister on fire; intervals on clear.
-const handlesById = new Map<number, KeepaliveTimerHandle>();
+const handlesById = new Map<number, Timeout>();
 
 /** Invocation boundary in the existing timer registry; capture before running guest code. */
 export function captureTimerBoundary(): number {
@@ -51,7 +53,9 @@ export function onTimerScopeDispose(handle: unknown, dispose: () => void): () =>
   return resolveHandle(handle)?.onScopeDispose(dispose) ?? (() => {});
 }
 
-class KeepaliveTimerHandle {
+class Timeout {
+  /** The callback, as Node's `Timeout#_onTimeout`. */
+  _onTimeout: (...a: unknown[]) => void = () => {};
   private active = true;
   private refed = true;
   private readonly primitiveId = nextTimerId++;
@@ -137,25 +141,28 @@ export function setTimeout(
   fn: (...a: unknown[]) => void,
   ms?: number,
   ...args: unknown[]
-): KeepaliveTimerHandle {
+): Timeout {
   // Use a box so the inner callback can reference the handle (self-ref timeout pattern).
-  const box: { handle: KeepaliveTimerHandle | null } = { handle: null };
+  const box: { handle: Timeout | null } = { handle: null };
   const raw = hostSetTimeout(
     (...a: unknown[]) => {
-      if (!box.handle?.fireTimeout()) return;
-      fn(...a);
+      const handle = box.handle;
+      if (!handle?.fireTimeout()) return;
+      reflectApply(handle._onTimeout, handle, a);
     },
     ms,
     ...args,
   );
-  const handle = new KeepaliveTimerHandle(raw, hostClearTimeout as HostTimerClear);
+  const handle = new Timeout(raw, hostClearTimeout as HostTimerClear);
+  // Node's Timeout runs `this._onTimeout` with `this` the handle (frame `Timeout._onTimeout`).
+  handle._onTimeout = fn;
   box.handle = handle;
   return handle;
 }
 
 /** Resolve a clear* argument (handle object OR coerced numeric id) to its handle. */
-function resolveHandle(handle: unknown): KeepaliveTimerHandle | undefined {
-  if (handle instanceof KeepaliveTimerHandle) return handle;
+function resolveHandle(handle: unknown): Timeout | undefined {
+  if (handle instanceof Timeout) return handle;
   if (typeof handle === 'number') return handlesById.get(handle);
   return undefined;
 }
@@ -173,17 +180,19 @@ export function setInterval(
   fn: (...a: unknown[]) => void,
   ms?: number,
   ...args: unknown[]
-): KeepaliveTimerHandle {
-  const box: { handle: KeepaliveTimerHandle | null } = { handle: null };
+): Timeout {
+  const box: { handle: Timeout | null } = { handle: null };
   const raw = hostSetInterval(
     (...a: unknown[]) => {
-      if (!box.handle?.shouldRunInterval()) return;
-      fn(...a);
+      const handle = box.handle;
+      if (!handle?.shouldRunInterval()) return;
+      reflectApply(handle._onTimeout, handle, a);
     },
     ms,
     ...args,
   );
-  const handle = new KeepaliveTimerHandle(raw, hostClearInterval as HostTimerClear);
+  const handle = new Timeout(raw, hostClearInterval as HostTimerClear);
+  handle._onTimeout = fn;
   box.handle = handle;
   return handle;
 }
