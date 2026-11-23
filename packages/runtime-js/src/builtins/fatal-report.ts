@@ -352,12 +352,12 @@ function constructorName(error: object): string | null {
  * them as `ModuleLoadError` named `Error` (`ERR_REQUIRE_*`).
  */
 function nodeInternalHead(stack: string, error: object): string {
-  if (!(error instanceof ModuleLoadError) || !error.code.startsWith('ERR_REQUIRE_')) return stack;
+  if (!(error instanceof ModuleLoadError)) return stack;
+  // Read as data: a guest accessor on `code` never runs.
+  const code = objectGetOwnPropertyDescriptor(error, 'code')?.value;
+  if (typeof code !== 'string' || !code.startsWith('ERR_REQUIRE_')) return stack;
   // After `-e`'s own `[eval]:N` decoration too.
-  return stack.replace(
-    /^((?:\[eval\]:\d+\n[^\n]*\n *\^\n\n)?)Error: /u,
-    `$1Error [${error.code}]: `,
-  );
+  return stack.replace(/^((?:\[eval\]:\d+\n[^\n]*\n *\^\n\n)?)Error: /u, `$1Error [${code}]: `);
 }
 
 /** Node `improveStack`: `NotFound [Error]: …` when the class name hides the error's name. */

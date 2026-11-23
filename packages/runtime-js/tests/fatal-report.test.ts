@@ -344,3 +344,23 @@ it('120 generated array-valued props: Node bytes but the header', async () => {
   // Not vacuous: the programs die of the generated error, extra keys included.
   expect(extraKeys).toBeGreaterThan(40);
 }, 300_000);
+
+it('a loader error with a guest accessor on `code` or `requireStack`: the report runs neither', async () => {
+  const { ModuleLoadError } = await import('../src/module-loader/errors.ts');
+  for (const code of ['MODULE_NOT_FOUND', 'ERR_REQUIRE_ASYNC_MODULE'] as const) {
+    const error = new ModuleLoadError(code, './x', 'm', '/p/main.js', ['/p/main.js']);
+    let reads = 0;
+    for (const key of ['code', 'requireStack'])
+      Object.defineProperty(error, key, {
+        enumerable: true,
+        get() {
+          reads += 1;
+          return 'X';
+        },
+      });
+    const report = formatFatalReport(error);
+    expect(reads).toBe(0);
+    expect(report).toContain('code: [Getter]');
+    expect(report).toContain('requireStack: [Getter]');
+  }
+});
