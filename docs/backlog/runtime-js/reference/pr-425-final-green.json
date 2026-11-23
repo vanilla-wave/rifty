@@ -1,9 +1,9 @@
 {
   "overall_verdict": "concern",
-  "merge_call": "Merge PR #425 as fixes + docs on green PR CI at HEAD a09e091b9 (commit this verdict as the landing record per REV-8 first). Fixes hold: mutants (a)-(f) each turn exactly their row red, three carriers + bundle check green at 61c69cab8, and the delta since then is docs + one test-comment change only. The CLOSE rollback is complete and honest: goal open, item 2 ready, no closure claimed, over-claims narrowed. goal_complete false (item 2 `runtime-js/guest-builtin-names`).",
+  "merge_call": "Merge PR #425 as fixes + docs on green PR CI at HEAD f20128624 (re-commit this verdict as the landing record, REV-8). Round-1 fixes F2/F3/F4/F5 hold vs live Node (own mutants: each reverted fix turns exactly its row red); F1/F7 withdrawal leaves no over-claim; all carriers green in scratch @ 5a3f932a6. goal_complete false (item 2 `runtime-js/guest-builtin-names`).",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "a09e091b992180b035d8564a15884d412a8ee7d8",
-  "unit_goal_source": "docs/backlog/epics/node-file-entry-parity/goal.md (restored, byte-identical to 89d48ac10) + map.md (item 2 ready) + ledger.md; PR #425 as fixes + docs @ a09e091b9 (merge of main f3861a3cd/#423, no file of this PR changed; product 3cabba225; docs 828122ce0, 61c69cab8, fecc03bfa, 357c71f75, 7205ad431); BASE origin/main f3861a3cd (was 23ed6b445); observed baseline = carrier rows + RED at e2ce4b722, re-run independently as mutants in scratch /tmp/close425 @ 61c69cab8",
+  "reviewed_sha": "f20128624aabc31d0b695e053dd5e506919c4bac",
+  "unit_goal_source": "docs/backlog/epics/node-file-entry-parity/goal.md + map.md (item 2 ready) + ledger.md @ f20128624; PR #425 as fixes + docs, delta reviewed 50205d5bf..5a3f932a6 (e5948ec06 cross-review round 1, 5a3f932a6 typescript-worker re-pin, f20128624 docs: stack-getter read count declared) over the prior verdict tree a09e091b9; BASE origin/main f3861a3cd; observed baseline = carrier rows + live Node v24.16.0; agent RED /tmp/nf-r4/red re-executed as own mutants",
   "unit_residuals": [],
   "goal_residuals": [
     {
@@ -19,7 +19,7 @@
       "source": "acceptance",
       "trace": "I1",
       "status": "pass",
-      "citation": "tests/no-coi/node-file-parity.spec.ts, tests/browser-unit/node-file-parity.spec.ts green in scratch @ 61c69cab8; no product/test-logic change after it (git diff 61c69cab8 357c71f75 -- packages tests: comments only)",
+      "citation": "no-COI node-file-parity + no-coi-fatal-stderr 8 passed, COI browser-unit 1 passed — scratch /tmp/close425c @ 5a3f932a6",
       "note": ""
     },
     {
@@ -27,15 +27,7 @@
       "source": "acceptance",
       "trace": "I2",
       "status": "pass",
-      "citation": "node-file-pins.json; dumps of all three hosts: every pin == actual; isolate node-file.test.ts 51 passed",
-      "note": ""
-    },
-    {
-      "row": "Changed pins vs e2ce4b722 move toward Node or have a cause in this PR",
-      "source": "frozen-artifact",
-      "trace": "I2",
-      "status": "pass",
-      "citation": "16 browser-host pins `main.js:1:N` → `1:N-7` (helper name 15 → 8 chars), toward Node's 1:1–1:16; isolate error-throwing-stack-getter = Node minus the deferred header",
+      "citation": "node-file-pins.json: git diff 50205d5bf 5a3f932a6 adds rows only, no existing pin moved; isolate node-file 56 + bundle-public-names + guest-seam = 168 passed @ 5a3f932a6",
       "note": ""
     },
     {
@@ -77,6 +69,30 @@
       "status": "pass",
       "citation": "tests/browser-unit/fixtures/node-file-programs.ts (rows added only)",
       "note": ""
+    },
+    {
+      "row": "Round-1 observed defects: nulled interval destroyed (Node listOnTimeout), clearImmediate in own callback keeps `_onImmediate`, `-e` projection reads `stack` once, helper names skip `\\u`-escaped user names",
+      "source": "baseline",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "rows interval-nulled-on-timeout, clear-immediate-in-own-callback, throw-stack-getter-second-read, function-helper-escaped-name equal Node in the isolate; own mutants (interval `return` without clear, null before pending check, second `error.stack` read, no escape decoding) → exactly these 4 rows red (4 failed | 52 passed); extra probes vs Node equal: nulled interval never restored (exit 0), nulled one-shot timeout, clearImmediate of another pending immediate, `\\u{24}r000000`, `$r00000\\u0030`",
+      "note": ""
+    },
+    {
+      "row": "Bundle check scans the isolate guest bundle, loud when unbuilt; no claim of Workbench coverage remains",
+      "source": "acceptance",
+      "trace": "ADR-0571",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/bundle-public-names.test.ts (existsSync assert, guest only); ADR-0571 Decision 2 names Workbench/`Server2` open; packages/net/src matches main 23ed6b445 (git diff --stat empty); net CHANGELOG line removed",
+      "note": ""
+    },
+    {
+      "row": "Changed pins vs e2ce4b722 move toward Node or have a cause in this PR",
+      "source": "frozen-artifact",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "16 browser-host pins `main.js:1:N` → `1:N-7` (helper name 15 → 8 chars), toward Node's 1:1–1:16; isolate error-throwing-stack-getter = Node minus the deferred header",
+      "note": ""
     }
   ],
   "axes": [
@@ -95,17 +111,10 @@
       "verdict": "pass",
       "findings": [
         {
-          "severity": "nit",
-          "location": "docs/adr/runtime-js/0571-prove-node-file-entry-and-fatal-report-parity-against-live-node-node-s-report-in-the-isolate-guest-only.md Decision 2",
-          "evidence": "«The fatal corpus holds one row per way rifty calls user code (timer, …, direct and indirect `eval`)»; stream listener and write/transform option callbacks are not in the corpus (they are item 2's Acceptance 1).",
-          "summary": "RESOLVED @ 7205ad431: Reads wider than the corpus; say «one row per listed way» or point at item 2.",
-          "authority": ""
-        },
-        {
-          "severity": "nit",
-          "location": "docs/backlog/runtime-js/reference/guest-builtin-names-baseline.md",
-          "evidence": "«Reproduce: the CLOSE reviewer's probes (`/tmp/close425-probe/zz4.test.ts` shape …)»",
-          "summary": "RESOLVED @ 7205ad431: The reproduce step names a /tmp file that will not exist; the table and sweep description are enough to re-run, but the RED is executed at pickup, not from that path.",
+          "severity": "concern",
+          "location": "docs/backlog/epics/node-file-entry-parity/goal.md (amend 2026-11-23, 5d)",
+          "evidence": "git diff 50205d5bf 5a3f932a6 -- goal.md: «— I3 and I4 hold for the isolate guest» → «— the manager's reading of those words, not the user's: I3 and I4 hold …»; obligations unchanged.",
+          "summary": "A ready goal.md edited at the manager's request, not the user's; it only labels the derived part of the amend (more honest), so no blocker — but it is a goal.md edit without user words.",
           "authority": ""
         }
       ]
@@ -113,15 +122,7 @@
     {
       "axis": "Approach cost",
       "verdict": "pass",
-      "findings": [
-        {
-          "severity": "concern",
-          "location": "packages/isolate-host/tests/bundle-public-names.test.ts:29",
-          "evidence": "`VENDOR` ±3000-char window; guest-builtin-names Acceptance 3 forbids a text-window exception",
-          "summary": "Left for item 2 by its acceptance; recorded.",
-          "authority": ""
-        }
-      ]
+      "findings": []
     },
     {
       "axis": "Scope",
@@ -131,7 +132,15 @@
     {
       "axis": "Bugs",
       "verdict": "pass",
-      "findings": []
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "packages/runtime-js/src/module-loader/loader.ts",
+          "evidence": "isolate vs node v24.16.0, a `stack` getter writing `R` to fd 2 (file required from `-e`, and a top-level `-e` throw): Node 4 reads, rifty 3; output otherwise as declared (`at here` dropped as an out-of-VFS frame).",
+          "summary": "RESOLVED @ f20128624 (compat process.md + runtime-js/node-eval-non-string-stack owner/trigger): Guest-visible `stack` getter call count differs from Node (3 vs 4); undeclared — one compat clause or a capture.",
+          "authority": ""
+        }
+      ]
     },
     {
       "axis": "Regressions",
