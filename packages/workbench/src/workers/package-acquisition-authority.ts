@@ -628,11 +628,6 @@ class FifoPackageAcquisitionAuthority implements PackageAcquisitionAuthority {
       case 'project-switch':
         if (command.from) this.#rememberProject(command.from);
         this.#rememberProject(command.to);
-        if (command.resetPackages) {
-          this.#invalidatePackageTrees(command.to.root);
-          await this.#applyMutationTransitions(this.#treeGuardsFor(command.to.root));
-          await this.#stamps.revoke({ root: command.to.root }, this.#stampTransition);
-        }
         await this.#adapter.switchProject(command);
         return;
       case 'activate-and-ensure': {

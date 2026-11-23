@@ -1,4 +1,3 @@
-import { NotImplementedError } from '@riftydev/io';
 import {
   planShadowSubstitutionsFromLockfile,
   shadowSubstitutionPlanForInstallResult,
@@ -8,7 +7,6 @@ import { normalizePath } from '@riftydev/vfs';
 import {
   type DepSnapshotV3,
   fetchVerifiedDepSnapshot,
-  prepareDepSnapshotForRuntimeTier,
   prepareDepSnapshotRestore,
 } from '../glue/dep-snapshot.ts';
 import {
@@ -32,7 +30,6 @@ import {
 } from '../glue/package-mutation-executor.ts';
 import {
   clearProjectTree,
-  ensureProjectDependencies,
   prepareProjectInstallTree,
   seedTemplateNodeModulesFiles,
   templateNodeModulesSeedMutationIntents,
@@ -42,7 +39,6 @@ import {
   type ProjectSnapshotAdmission,
   normalizeProjectSnapshotApplication,
 } from '../workbench/project-materialization.ts';
-import { shouldCleanForDevBootWithInstallState } from './dev-boot-clean.ts';
 import {
   planOwnerSnapshotApplication,
   snapshotManifestConfig,
@@ -134,7 +130,6 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
     config.templateNodeModulesFiles ?? config.cfg.seedFiles;
   let configured = options.initial;
   let activeProject = options.initial ? packageProject(options.initial) : null;
-  let activeTemplateId: string | null = null;
   const firstMaterializationPhases = new Map<string, 'preparing' | 'deferred' | 'consuming'>();
   if (options.initial) {
     configs.set(configKey(options.initial.cfg.root, options.initial.slug), options.initial);
@@ -297,13 +292,15 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
         const payload = snapshot.payload as DepSnapshotV3 | undefined;
         if (!payload) return { status: 'rejected', reason: 'snapshot-payload-missing' };
         try {
-          const selected = await prepareDepSnapshotForRuntimeTier(payload, 'coi');
-          const prepared = await prepareDepSnapshotRestore(options.fsSync, project.root, selected);
+          // One replay-cache verification of the source, then the COI projection.
+          const prepared = await prepareDepSnapshotRestore(options.fsSync, project.root, payload, {
+            runtimeTier: 'coi',
+          });
           const config = configFor(project);
           const lockfile =
-            selected.lockfile.length === 0
+            prepared.lockfile.length === 0
               ? { lockfileVersion: 3, packages: {} }
-              : (JSON.parse(selected.lockfile) as unknown);
+              : (JSON.parse(prepared.lockfile) as unknown);
           return {
             status: 'ready',
             packages: payload.packages,
@@ -475,18 +472,7 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
       },
       reset: async (command) => clearProjectTree(options.fsSync, command.target.root),
       switchProject: async (command) => {
-        if (command.resetPackages) {
-          if (command.packageJsonText === undefined) {
-            throw new NotImplementedError('package-acquisition.project-switch.package-json');
-          }
-          clearProjectTree(options.fsSync, command.to.root);
-          options.fsSync.writeFileSync(
-            normalizePath(`${command.to.root}/package.json`),
-            enc.encode(command.packageJsonText),
-          );
-        }
         activeProject = command.to;
-        activeTemplateId = configFor(command.to).templateId;
       },
     },
   });
@@ -546,7 +532,6 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
     const previous = configs.get(key);
     const priorConfigured = configured;
     const priorProject = activeProject;
-    const priorTemplate = activeTemplateId;
     if (snapshotAdmission) {
       configured = config;
       configs.set(key, config);
@@ -561,34 +546,10 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
               else configs.set(key, previous);
               configured = priorConfigured;
               activeProject = priorProject;
-              activeTemplateId = priorTemplate;
             },
           }
         : {}),
     };
-  };
-
-  const restore = async (config: OwnerPackageConfig): Promise<void> => {
-    if (!config.cfg.bakedNodeModulesUrl) return;
-    const result = await ensureProjectDependencies({
-      vfs: options.vfs,
-      fsSync: options.fsSync,
-      packageAcquisitionAuthority: packages,
-      root: config.cfg.root,
-      templateId: config.templateId,
-      snapshotTemplateId: config.cfg.bakedNodeModulesTemplateId,
-      slug: config.slug,
-      snapshotUrl: config.cfg.bakedNodeModulesUrl,
-      packageJsonText: config.cfg.packageJson,
-      replaceTreeOnMiss: true,
-      log: options.log,
-      flush: options.flush,
-    });
-    if (result.source === 'none') {
-      console.warn(
-        `[shell-owner/worker] instant snapshot unavailable/stale for ${config.templateId} — node_modules absent (re-run \`pnpm snapshots:bake\`)`,
-      );
-    }
   };
 
   function activateAndEnsure(
@@ -674,35 +635,6 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
     return prepared;
   }
 
-  const transition = async (config: OwnerPackageConfig): Promise<void> => {
-    configs.set(configKey(config.cfg.root, config.slug), config);
-    const checked = config.fromScratch
-      ? await stamps.check({
-          root: config.cfg.root,
-          slug: config.slug,
-          expectedPackageJsonText: config.cfg.packageJson,
-        })
-      : null;
-    const clean = shouldCleanForDevBootWithInstallState({
-      lastTemplateId: activeTemplateId,
-      lastRoot: activeProject?.root ?? null,
-      nextTemplateId: config.templateId,
-      nextRoot: config.cfg.root,
-      fromScratch: config.fromScratch,
-      installStampSatisfied:
-        checked?.status === 'trusted' &&
-        checked.stamp.installArtifactIdentity === installArtifactIdentity,
-    });
-    await packages.dispatch({
-      type: 'project-switch',
-      from: activeProject,
-      to: packageProject(config),
-      resetPackages: clean && !config.fromScratch,
-      ...(clean && !config.fromScratch ? { packageJsonText: config.cfg.packageJson } : {}),
-    });
-    if (!config.fromScratch) await restore(config);
-  };
-
   if (options.primeInitialPrefetch) {
     if (!options.initial) throw new Error('initial package config required to prime prefetch');
     primePrefetch(options.initial);
@@ -714,9 +646,6 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
     quiesce: () => packages.quiesce(),
     projectSave: (input, operation) => packages.projectSave(input, operation),
     reserveChildAdmission,
-    configure,
-    restore,
-    transition,
     reassertTemplateNodeModules,
     createNpmCommand: (runScript, commandOptions = {}) => {
       return async (args, context) => {

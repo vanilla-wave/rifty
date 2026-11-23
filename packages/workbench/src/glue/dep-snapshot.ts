@@ -1,9 +1,9 @@
 /**
  * Baked dependency snapshot (ADR-0135): a template's fully installed
  * node_modules tree + lockfile replay cache, serialized at bake time (`pnpm snapshots:bake`)
- * and shipped as a same-origin tar/gzip asset. The worker bootstrap
- * restores it on a stampless boot instead of running `install()`; runtime
- * assets follow the separate verified-store contract (ADR-0320).
+ * and shipped as a same-origin tar/gzip asset. Restored only by a project's
+ * first materialization or an explicit apply (ADR-0394); saved opens never read
+ * it (ADR-0415). Runtime assets follow the verified-store contract (ADR-0320).
  *
  * Snapshot v3 carries the exact package.json text, install-artifact identity,
  * and integrity-verified cache closure that produced the tree (ADR-0346).
@@ -48,6 +48,8 @@ export interface DepSnapshotV3 {
 }
 
 export interface PreparedDepSnapshotRestore {
+  /** Lockfile of the verified, tier-projected payload this plan writes. */
+  readonly lockfile: string;
   applyCache(): void;
   applyPayload(): void;
   apply(): void;
@@ -213,6 +215,7 @@ export async function prepareDepSnapshotRestore(
     if (lockfile) fs.writeFileSync(joinPath(root, 'package-lock.json'), lockfile);
   };
   return {
+    lockfile: snapshot.lockfile,
     applyCache: () => tarballCache.apply(),
     applyPayload,
     apply() {

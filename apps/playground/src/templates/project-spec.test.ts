@@ -196,7 +196,6 @@ describe('resolveBootstrapConfig', () => {
       '/snapshots/typescript-node-modules.json.gz',
     );
     expect(spec.bakedNodeModulesTemplateId).toBeUndefined();
-    expect(cfg.bakedNodeModulesTemplateId).toBeUndefined();
   });
 
   it('seeds the hidden empty first-run workspace without dependency restore', () => {
@@ -204,7 +203,6 @@ describe('resolveBootstrapConfig', () => {
 
     expect(cfg.entryPath).toBe('/scratch/src/main.js');
     expect(cfg.installDeps).toEqual({});
-    expect(cfg.bakedNodeModulesUrl).toBeUndefined();
     expect(cfg.seedFiles['/scratch/src/main.js']).toBe('');
     expect(cfg.seedFiles['/scratch/index.html']).toContain('src="src/main.js"');
   });

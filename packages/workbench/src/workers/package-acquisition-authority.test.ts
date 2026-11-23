@@ -14,9 +14,9 @@ import { createInstallStampAuthority } from '../glue/install-stamp-authority.ts'
 import { type NpmShellCommandDeps, createNpmShellCommand } from '../glue/npm-shell-command.ts';
 import {
   type EnsureProjectDepsOptions,
-  clearProjectTree,
   ensureProjectDependencies,
-} from '../glue/project-deps.ts';
+} from '../glue/project-deps.test-fixture.ts';
+import { clearProjectTree } from '../glue/project-deps.ts';
 import { createOwnerExecSyncRunner } from './owner-child-node-executor.ts';
 import { createOwnerVfsAuthorityComposition } from './owner-vfs-authority.ts';
 import {
