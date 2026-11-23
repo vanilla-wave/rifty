@@ -116,3 +116,32 @@ acceptance PASS. Compact+Brotli native decompression equals compact gzip's
 decoded v5 TAR and snapshot identity. Same gzip sizes above reproduced.
 The separate worker-retirement CI red was a Chromium nested-Worker notice
 drop, repaired on main by PR #392 (ADR-0548); no compact change.
+
+## 2026-11-23 — rename to `frozen`; cold-cache refusal text (PR #426)
+
+Names above are as executed under PR #388. Profile is now `frozen` (ADR-0547
+§Decisions); carriers renamed `dep-snapshot-frozen.contract.test.ts`,
+`no-coi-frozen-install.contract.test.ts`, `no-coi-frozen-vite-install.contract.test.ts`.
+`node tests/integration/workbench-packed-consumer.mjs` PASS @ eb6d7ab1f
+(Chromium 148.0.7778.96, 16 first-party + 180 external tarballs): replay and
+frozen journeys unchanged; frozen cold-cache install, `project.run('npm install')`
+stderr and `toolchain.install` rejection both read
+`EBROKENLOCK: package-lock.json installs esbuild@0.28.0 from its substitute esbuild-wasm@0.28.0 (shadow recipe rifty.shadow-substitution.esbuild.v2), but the tarball cache holds no intact esbuild-wasm@0.28.0. Lockfile replay takes substitute bytes only from the tarball cache and never downloads them. To reinstall this lockfile exactly, restore those bytes to the tarball cache; or delete package-lock.json and run install again to re-resolve through the registry (installed versions may change).`
+(terminal prefixed `npm: `); no `esbuild-wasm` request.
+
+2026-11-23, cross-review round 1 reception: exits restated per reader. Packed
+consumer PASS @ the reception commit (Chromium 148.0.7778.96): terminal stderr
+`npm: EBROKENLOCK: package-lock.json installs esbuild@0.28.0 from its substitute esbuild-wasm@0.28.0 (shadow recipe rifty.shadow-substitution.esbuild.v2), which is not in the tarball cache. Lockfile replay takes substitutes only from that cache and never downloads them, so this lockfile cannot be reinstalled exactly here. To install anyway, delete package-lock.json and run install again: it re-resolves through the registry, and installed versions may change.`;
+`toolchain.install` rejects with the same text plus `Host exit: toolchain.applySnapshot with the replay-profile snapshot of these dependencies restores those bytes; toolchain.install then reinstalls this lockfile exactly.`
+Executed exits: replay snapshot apply + `toolchain.install` → same lock bytes, no
+`esbuild-wasm` request; terminal `rm package-lock.json && npm install` → exit 0,
+substitute resolved from the registry.
+
+2026-11-23, cross-review round 2 reception: host-only exit removed from the
+text (it fails on a changed project); one text on every surface, terminals
+prefix `npm: `:
+`EBROKENLOCK: package-lock.json installs esbuild@0.28.0 from its substitute esbuild-wasm@0.28.0 (shadow recipe rifty.shadow-substitution.esbuild.v2), but the tarball cache holds no intact copy of it. Lockfile replay takes substitutes only from that cache and never downloads them, so this lockfile cannot be reinstalled exactly here. To install anyway, delete package-lock.json and run install again: it re-resolves through the registry, and installed versions may change.`
+Packed consumer PASS on the reception tree (Chromium 148.0.7778.96): SDK
+`fs.rm('/project/package-lock.json')` + `toolchain.install` and terminal
+`rm package-lock.json && npm install` both re-resolve; on an unchanged project
+the replay-profile snapshot + `toolchain.install` reinstall the same lock bytes.

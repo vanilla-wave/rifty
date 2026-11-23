@@ -196,13 +196,17 @@ await sandbox.toolchain.applySnapshot({
 });
 ```
 
-The producer's `profile: 'compact'` omits replay archives while retaining prepared
-Vite/esbuild dependencies. Apply, saved open and explicit reapply use the same APIs;
-compact neither writes nor purges the shared replay cache. Update the Workbench
-producer/copied Worker before using v5. Compact promises no reinstall: for Vite 7 with
-its substituted `esbuild`, on a cold shared cache and with the lockfile kept, `npm install`
-fails `EBROKENLOCK`; reinstall exactly from a replay snapshot or a warm cache. Outcomes:
-ADR-0547 §Consequences.
+The producer's `profile: 'frozen'` omits replay archives while retaining prepared
+Vite/esbuild dependencies: use the installed tree as is. Apply, saved open and explicit
+reapply use the same APIs; frozen neither writes nor purges the shared replay cache. Update
+the Workbench producer/copied Worker before using v5. Frozen promises no reinstall: on a
+cold shared cache with the lockfile kept, Vite 7.3.6's substituted `esbuild` makes
+`toolchain.install` reject with:
+
+> EBROKENLOCK: package-lock.json installs esbuild@0.28.0 from its substitute esbuild-wasm@0.28.0 (shadow recipe rifty.shadow-substitution.esbuild.v2), but the tarball cache holds no intact copy of it. Lockfile replay takes substitutes only from that cache and never downloads them, so this lockfile cannot be reinstalled exactly here. To install anyway, delete package-lock.json and run install again: it re-resolves through the registry, and installed versions may change.
+
+A project-command `npm install` prints the same text prefixed `npm: `. The exact-reinstall
+route: ADR-0547 §Consequences.
 
 No registry URL is needed. Every application validates the bounded input and
 identities, including same-ID/forced calls. Default conflicts reject before

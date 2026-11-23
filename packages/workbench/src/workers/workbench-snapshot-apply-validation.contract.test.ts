@@ -39,12 +39,12 @@ const decoder = new TextDecoder();
 type Fault = 'corrupt-replay-cache' | 'missing-replay-cache' | 'incompatible-install-artifact';
 let valid: SavedSnapshotFixture;
 let cacheApplication: SavedSnapshotFixture;
-let compactApplication: SavedSnapshotFixture;
+let frozenApplication: SavedSnapshotFixture;
 let invalid: Readonly<Record<Fault, SavedSnapshotFixture>>;
 
 async function produceLightningSnapshot(
   version = '1.0.0',
-  profile: 'replay' | 'compact' = 'replay',
+  profile: 'replay' | 'frozen' = 'replay',
 ): Promise<SavedSnapshotFixture> {
   const fixtureRoot = new URL('../../../../tools/shadow-registry/src/fixtures/', import.meta.url);
   const metadata = JSON.parse(
@@ -113,8 +113,8 @@ async function produceLightningSnapshot(
     templateId: payload.templateId,
     assetUrl: `https://host.test/lightning-${profile}-${version}.tar.gz`,
   };
-  if (profile === 'compact') {
-    expect(payload).toMatchObject({ version: 5, profile: 'compact', tarballCache: { files: [] } });
+  if (profile === 'frozen') {
+    expect(payload).toMatchObject({ version: 5, profile: 'frozen', tarballCache: { files: [] } });
     return { ...produced, payload, descriptor };
   }
   expect(payload.tarballCache.files).toHaveLength(1);
@@ -166,7 +166,7 @@ function invalidArtifact(fault: Fault): SavedSnapshotFixture {
 beforeAll(async () => {
   valid = await produceLightningSnapshot();
   cacheApplication = await produceLightningSnapshot('1.0.1');
-  compactApplication = await produceLightningSnapshot('1.0.1', 'compact');
+  frozenApplication = await produceLightningSnapshot('1.0.1', 'frozen');
   expect(cacheApplication.payload.lockfile).not.toBe(valid.payload.lockfile);
   invalid = {
     'corrupt-replay-cache': invalidArtifact('corrupt-replay-cache'),
@@ -476,9 +476,9 @@ describe('I8 explicit snapshot apply validates the artifact before effects over 
       await h.packages.quiesce();
     }
   }, 30_000);
-  it('COI owner applies compact v5 without touching the shared replay cache (ADR-0547)', async () => {
+  it('COI owner applies frozen v5 without touching the shared replay cache (ADR-0547)', async () => {
     const fs = new CacheAccessFs();
-    const h = await seedWarmOwner(compactApplication, fs);
+    const h = await seedWarmOwner(frozenApplication, fs);
     const cacheRoot = valid.payload.tarballCache.root;
     const cacheOnly = (tree: ExactFsTree): ExactFsTree => ({
       directories: tree.directories.filter(
@@ -495,8 +495,8 @@ describe('I8 explicit snapshot apply validates the artifact before effects over 
       fs.payloadRoot = `${h.root}/node_modules/`;
       fs.armed = true;
       opened = await h.owner.openProject(
-        savedSnapshotDefinition('scratch', compactApplication.descriptor, {
-          packageJsonText: compactApplication.payload.packageJsonText,
+        savedSnapshotDefinition('scratch', frozenApplication.descriptor, {
+          packageJsonText: frozenApplication.payload.packageJsonText,
           source,
           application: { mode: 'apply-snapshot', conflict: 'overwrite' },
         }),
@@ -505,15 +505,15 @@ describe('I8 explicit snapshot apply validates the artifact before effects over 
       fs.armed = false;
       expect(opened.acquisition).toMatchObject({
         kind: 'ready',
-        provenance: { outcome: 'snapshot', snapshotId: compactApplication.snapshotId },
+        provenance: { outcome: 'snapshot', snapshotId: frozenApplication.snapshotId },
       });
       expect(fs.accesses, 'no shared replay-cache read, write or removal').toEqual([]);
       expect(fs.flushes[0], 'no replay-cache persistence step before the payload').toBe(true);
       expect(h.network.requests, 'only the selected asset').toEqual([
-        compactApplication.descriptor.assetUrl,
+        frozenApplication.descriptor.assetUrl,
       ]);
       expect(decoder.decode(fs.readFileBytesSync(`${h.root}/package-lock.json`))).toBe(
-        compactApplication.payload.lockfile,
+        frozenApplication.payload.lockfile,
       );
       expectExactTree(cacheOnly(fs.durableSnapshot()), cacheBefore);
     } finally {
@@ -522,15 +522,15 @@ describe('I8 explicit snapshot apply validates the artifact before effects over 
       await h.packages.quiesce();
     }
   }, 30_000);
-  it('COI first materialization restores compact v5 without touching the shared replay cache (ADR-0547)', async () => {
+  it('COI first materialization restores frozen v5 without touching the shared replay cache (ADR-0547)', async () => {
     const fs = new CacheAccessFs();
     const cacheRoot = valid.payload.tarballCache.root;
     fs.mkdirSync(cacheRoot, { recursive: true });
     fs.writeFileSync(`${cacheRoot}/unrelated`, new TextEncoder().encode('warm'));
-    const network = installSnapshotNetwork(compactApplication);
+    const network = installSnapshotNetwork(frozenApplication);
     const h = await createOwner(fs, network);
-    const definition = savedSnapshotDefinition('scratch', compactApplication.descriptor, {
-      packageJsonText: compactApplication.payload.packageJsonText,
+    const definition = savedSnapshotDefinition('scratch', frozenApplication.descriptor, {
+      packageJsonText: frozenApplication.payload.packageJsonText,
       source,
     });
     let opened: OpenedPlaygroundProject | undefined;
@@ -545,15 +545,15 @@ describe('I8 explicit snapshot apply validates the artifact before effects over 
       fs.armed = false;
       expect(opened.acquisition).toMatchObject({
         kind: 'ready',
-        provenance: { outcome: 'snapshot', snapshotId: compactApplication.snapshotId },
+        provenance: { outcome: 'snapshot', snapshotId: frozenApplication.snapshotId },
       });
       expect(fs.accesses, 'no shared replay-cache read, write or removal').toEqual([]);
       expect(fs.flushes[0], 'no replay-cache persistence step before the payload').toBe(true);
       expect(network.requests, 'only the selected asset').toEqual([
-        compactApplication.descriptor.assetUrl,
+        frozenApplication.descriptor.assetUrl,
       ]);
       expect(decoder.decode(fs.readFileBytesSync(`${opened.projectRoot}/package-lock.json`))).toBe(
-        compactApplication.payload.lockfile,
+        frozenApplication.payload.lockfile,
       );
       expect(decoder.decode(fs.readFileBytesSync(`${cacheRoot}/unrelated`))).toBe('warm');
     } finally {
