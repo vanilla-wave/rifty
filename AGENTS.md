@@ -30,7 +30,7 @@ Never trade real behavior for speed of delivery; never propose a shortcut, mock,
 
 ## Data sources
 - `docs/backlog/` — provisional contracts: items + user-value epics (`goal.md` = user-owned destination); delete on done; store shape + goal write-up (FIT): `docs/backlog/README.md`. User-brought idea/finding (in session) → `rifty-refine`; mid-task/agent discovery that must wait → `rifty-to-backlog`, never interview; epic missing tier/Invariants → fit it yourself (in the session that has the user) — a write-up is never a blocked ask. A `draft` goal carries an unanswered user question: ask, don't build.
-- `docs/adr/` — decisions + strategic choices; index + D→ADR map: `docs/adr/README.md`
+- `docs/adr/` — decisions + strategic choices: write one for an important decision with non-obvious trade-offs (`pnpm adr:new <area> "Title"`); index + D→ADR map: `docs/adr/README.md`
 - `docs/process/traps.md` — hard-won gotchas (worktrees/git, CI, e2e, browser runtime, tooling); check before debugging a weird fail or re-proposing a rejected speedup
 - `docs/process/rules/fault-classes.md` — fault taxonomy; `docs/process/rules/testing.md` — test pyramid + why parity
 - `docs/public/` — compat matrix, publishing, hosting
