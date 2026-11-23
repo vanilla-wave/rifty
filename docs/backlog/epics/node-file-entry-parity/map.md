@@ -6,11 +6,6 @@
    corpus, `tests/no-coi/node-file-parity.spec.ts` (no-COI SDK) and
    `tests/browser-unit/node-file-parity.spec.ts` (COI Workbench); committed RED,
    open rows marked expected-failure. → I1–I4
-5. **header residue** — no header on any path (ADR-0445 2026-11-22 correction,
-   manager decision after external review round 2): every row whose Node
-   report has one is pinned without it; carriers assert none (`NODE_HEADER`).
-   Reopen only from an engine-level source:
-   `runtime-js/sync-uncaught-header-throw-site-source`. → I2
 5c. `distribution/isolate-host-rejection-reason-copy` — isolate rejection
    report built from isolated-vm's copy (props, `[cause]`, class lost); fix is
    a native patch (ADR). Rows `rejection-with-props-cause-subclass`,
@@ -23,22 +18,14 @@
    review round 4; the browser lifecycle is outside the goal): 24 COI rows
    pinned by first line, the no-COI timer rows silent with `exitCode` null
    (`distribution/no-coi-command-unhandled-rejection-exit`). → I2 I4
-6. `runtime-js/module-compile-error-node-syntax-error` — CJS and ESM compile
-   failure as V8's `SyntaxError` (CJS rolled back to main's `ModuleLoadError`
-   after review round 3; dead ends recorded there). → I2
 8. `runtime-js/esm-stack-positions` — **ESM entry frames** (existing draft;
    hypothesis). → I2 I3
 ## Open questions
 
-- No Node-format header (`<file>:<line>`, source line, caret) on any path — a
-  throw, an unhandled rejection, a compile error (JS cannot read V8's message
-  location; manager decision after external review round 2, ADR-0445
-  2026-11-22 correction); a compile error prints main's `ModuleLoadError:
-  Failed to compile CJS module <file>: <V8 message>` (file named, no line).
-  I2 admits it as a named compat row; whether the scenario accepts headerless
-  reports (the first frame names file:line; a compile error names the file) is the
-  user's — owner: user — evidence: `fatal-report.test.ts`, the `NODE_HEADER`
-  assertion on every carrier row, compat process.md.
+- Settled (goal amend 2026-11-23, user: «давай положим в бэклог на всякий»):
+  no Node-format header on any path and a syntax error as main's
+  `ModuleLoadError` — deferred to `runtime-js/sync-uncaught-header-throw-site-source`
+  and `runtime-js/module-compile-error-node-syntax-error`.
 
 - Isolate ESM entry `TypeError: URLConstructor is not a constructor`: runtime-js
   builds `import.meta.url` with the guest-visible `URL`, which the isolate
@@ -48,9 +35,15 @@
 
 Settled (ledger 2026-11-22): the frame budget (rifty frames count against
 `Error.stackTraceLimit`) and the header rules are declared compat rows; the
-COI timer fatal now prints the runtime report.
+COI timer fatal prints main's kernel report again (item 5d, rollback 2026-11-23).
 
 ## Out of scope
+
+- Deferred by the user (goal amend 2026-11-23): Node's `<file>:<line>` header
+  on every path (`runtime-js/sync-uncaught-header-throw-site-source`) and the
+  syntax-error report's class, message and place
+  (`runtime-js/module-compile-error-node-syntax-error`); the rows stay named
+  compat rows.
 
 - `process.version` identity (`runtime-js/process-versions-node-honesty`).
 - Node's `node:internal` frames, `--trace-uncaught`, `--enable-source-maps`.

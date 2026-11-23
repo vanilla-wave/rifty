@@ -4,11 +4,13 @@ status: draft
 title: "The fatal report carries Node's `<file>:<line>` header (throw, rejection, compile error)"
 created: 2026-11-22
 why: Node heads every fatal report with V8's message location; rifty prints none on any path (ADR-0445 2026-11-22, manager decision after PR #421 review round 2), so an agent reads file:line only from the first frame; a compile error names only its file (main's `ModuleLoadError`)
-sources: [docs/adr/runtime-js/0445-dispatch-node-process-lifecycle-events-before-terminal-handling.md, docs/public/compat/process.md]
+sources: [docs/adr/runtime-js/0445-dispatch-node-process-lifecycle-events-before-terminal-handling.md, docs/public/compat/process.md, docs/backlog/epics/node-file-entry-parity/goal.md]
 code: [packages/runtime-js/src/builtins/fatal-report.ts, packages/runtime-js/src/module-loader/cjs.ts]
 ---
 
 ## Context
+
+2026-11-23 — user (goal `node-file-entry-parity` amend, asked by the manager: «Отчёт об ошибке без заголовка Node; у синтаксической ошибки — только имя файла: „ок“ или отдельная задача»): «давай положим в бэклог на всякий». Deferred, not dropped: owner — runtime-js (fatal report / module loader); trigger — a user request, or a source that gives a place and message without inference (an engine-level message location, or for a syntax error rifty's own parser giving message and position together).
 
 V8's message location is not readable from JS. Each inference shipped in PR
 #421 printed false headers (ADR-0445 2026-11-22 lines):

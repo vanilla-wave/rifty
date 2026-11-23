@@ -3,8 +3,8 @@ kind: epic
 status: ready
 title: "`node <file>` behaves and reports errors like real Node"
 created: 2026-11-22
-value: A program run as `node <file>` sees Node's entry identity, and its fatal error reads as Node's — right file, right line, the source line — so an agent can fix it.
-user_story: As a service running model-written JS in rifty (browser or V8 isolate), I want `node <file>` to behave and fail like Node, but today `require.main === module` is false and a fatal error prints shifted lines, rifty frames and no source header.
+value: A program run as `node <file>` sees Node's entry identity, and its fatal error reads as Node's report (its place in the first frame; Node's source-line header deferred, amend 2026-11-23) — so an agent can fix it.
+user_story: As a service running model-written JS in rifty (browser or V8 isolate), I want `node <file>` to behave and fail like Node, but today `require.main === module` is false and a fatal error prints shifted lines and rifty frames.
 tier: works
 ---
 
@@ -13,7 +13,9 @@ tier: works
 A Node program started as `node <file>` in rifty observes what Node gives an
 entry and its dependencies, and dies with Node's stderr bytes and status. The
 user scenario: an agent writes JS, runs it, reads the error, fixes it — the
-diagnostic must name the right file, line and source line. One implementation
+diagnostic must name the right file and line (the first stack frame; a CJS
+syntax error names its file; Node's source-line header is deferred, amend
+2026-11-23). One implementation
 in `runtime-js` serves every host that runs a file: the no-COI SDK, the COI
 Workbench kernel child and the isolate guest bundle (ADR-0557). What cannot be
 made Node's is a named compat row with its cause, never a silent difference.
@@ -28,8 +30,9 @@ made Node's is a named compat row with its cause, never a silent difference.
 3. The program dies (throw in the entry or a dependency, from a timer or an
    async function, unhandled rejection, non-`Error` value, syntax error,
    missing module, error with `cause` or own props). The host reads stderr and
-   the exit status: Node's report — `<file>:<line>` header, source line, caret,
-   the inspected error with user frames at Node's positions, `Node.js` trailer.
+   the exit status: Node's report — the inspected error with user frames at
+   Node's positions, `Node.js` trailer; without Node's `<file>:<line>` header,
+   source line and caret (deferred, amend 2026-11-23).
 4. The agent fixes the named line and reruns.
 
 Oracle: live `node <file>` v24.16.0 over the same files in a temp dir; one path
@@ -107,3 +110,17 @@ the formatter per host (`sibling-drift`).
   — violates I4 (one implementation).
 - rejected route: forging Node's `node:internal` frames — violates Outcome
   (no fake implementation).
+- amend: 2026-11-23 — user: «давай положим в бэклог на всякий» (to the
+  manager's: «Отчёт об ошибке без заголовка Node; у синтаксической ошибки —
+  только имя файла: „ок“ или отдельная задача», after an example of Node's
+  three header lines beside rifty's report, whose file and line are only in the
+  first stack frame) — scenario step 3 and I2 no longer require Node's
+  `<file>:<line>` header, source line and caret: rifty prints the report
+  without it on every path (a throw's and a rejection's place is the first
+  stack frame), and a CJS syntax error prints main's `ModuleLoadError` naming
+  the file without a line (an ES module's, the loader parser's message and
+  position). Both are deferred to the backlog:
+  `runtime-js/sync-uncaught-header-throw-site-source` (the header) and
+  `runtime-js/module-compile-error-node-syntax-error` (the syntax-error
+  report's class, message and place); every row whose Node report has a header
+  stays a named compat row (process.md "Fatal error stderr bytes").
