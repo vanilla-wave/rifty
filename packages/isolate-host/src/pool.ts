@@ -290,8 +290,9 @@ class Worker {
     const line = JSON.stringify(request);
     const at = line.lastIndexOf('""}}');
     const stdin = this.child.stdin;
-    stdin?.write(line.slice(0, at + 1));
+    // Encoded before the first byte goes out: a throw here leaves no half line on the wire.
     const state = sandbox.state();
+    stdin?.write(line.slice(0, at + 1));
     const step = 3 << 20; // a multiple of 3: the pieces join into one base64 text
     for (let from = 0; from < state.byteLength; from += step)
       stdin?.write(

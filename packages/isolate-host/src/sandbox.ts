@@ -367,6 +367,8 @@ class LiveSandbox implements Sandbox {
         },
       );
       this.#run = undefined;
+      // destroy() between the result and this continuation: in flight, so it rejects.
+      if (this.#destroyed) throw destroyedError();
       // A timed-out isolate may still be stopping: destroy waits for it to leave its worker.
       if (handle !== undefined) {
         const gone = handle.left();

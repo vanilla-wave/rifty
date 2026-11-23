@@ -192,7 +192,9 @@ wire, the run's end state and the new FS beside the old one: measured peak
 a state of S (S = 56 MB: 212 MiB for one run, 925 MiB for four at once; 16 MB:
 88 / 276 MiB). Size your service's cgroup for the idle sandboxes' files plus
 4 × S + 8 MiB per concurrent run, beside the workers' bound above. All of it is
-bounded by `maxFsBytes`. A sandbox you drop is ordinary garbage; the number of
+bounded by `maxFsBytes`. A run that timed out keeps your process alive until its isolate
+has stopped (at most ~1 s more for a builtin that ignores termination), so `destroy` can wait
+for it. A sandbox you drop is ordinary garbage; the number of
 live sandboxes is yours to cap.
 
 Cost (M3 Pro, Node 24.16.0, medians, built package): `createSandbox` 0.01 ms; a warm

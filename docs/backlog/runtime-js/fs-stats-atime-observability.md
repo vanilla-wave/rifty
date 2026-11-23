@@ -24,4 +24,4 @@ Adding required public VFS fields needs refinement and an ADR before implementat
 
 ## Observed 2026-11-23
 
-In the isolate sandbox (PR #419 external review): reading a file does not advance its `atime`.
+In the isolate sandbox (PR #419 external review): reading a file does not advance its `atime`. Oracle caveat: Node v24.16.0 on darwin did not advance it on a read either (reviewer probe; relatime-like mount behaviour) — the oracle is platform- and mount-dependent.
