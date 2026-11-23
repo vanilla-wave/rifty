@@ -75,9 +75,11 @@ async function repackCompactTar(
     writeFileSync(join(tree, 'rifty/replay-cache/extra.tgz'), 'smuggled');
     entries.push('rifty/replay-cache/extra.tgz');
   }
+  // Top-level dirs are implicit; GNU tar would name their PAX headers `./PaxHeaders/…`.
+  const members = entries.filter((entry) => entry.replace(/\/$/, '').includes('/'));
   execFileSync(
     'tar',
-    ['--format=pax', '--no-recursion', '-cf', join(root, 'out.tar'), '-C', tree, ...entries],
+    ['--format=pax', '--no-recursion', '-cf', join(root, 'out.tar'), '-C', tree, ...members],
     { env: { ...process.env, COPYFILE_DISABLE: '1' } },
   );
   return new Uint8Array(readFileSync(join(root, 'out.tar')));
