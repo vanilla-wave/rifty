@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { type Page, expect, test } from '@playwright/test';
 import {
   type ProcessLifecycleCase,
   lifecycleRows,
@@ -85,6 +85,23 @@ const evalFatalMicrotask = {
   line: `node -e "Promise.resolve().then(()=>{process.exitCode=5});throw new Error('FATAL-MICRO')"`,
   fatal: 'FATAL-MICRO',
 };
+// An exit from a microtask the synchronous eval queued ends before any later
+// task: the 'exit' listener once, no code after exit(), a pending timer never runs.
+const microtaskExit = (delay: number) =>
+  `process.on('exit',(c)=>console.log('L|exit',c));setTimeout(()=>console.log('L|timer'),${delay});console.log('L|before');Promise.resolve().then(()=>{process.exit(3);console.log('L|after')})`;
+const evalCase = (name: string, source: string): ProcessLifecycleCase => ({
+  name,
+  files: {},
+  nodeArgv: ['-e', source],
+  line: `node -e "${source}"`,
+});
+const evalMicrotaskExit = evalCase('eval-microtask-exit', microtaskExit(50));
+// A file entry has no eval lifecycle: the same exits from its microtasks.
+const fileMicrotaskExit = program('file-microtask-exit', microtaskExit(50));
+const fileQueueMicrotaskExit = program(
+  'file-queue-microtask-exit',
+  "console.log('L|before');queueMicrotask(()=>process.exit(4))",
+);
 // Node reads the status after its report: a write the report's own `stack`
 // getter makes counts, on the entry terminal and the rejection trap alike.
 const GETTER = (marker: string) =>
@@ -133,6 +150,9 @@ const commandCases: readonly ProcessLifecycleCase[] = [
   fatalEntryTimer,
   exitEntryTimer,
   evalFatalMicrotask,
+  evalMicrotaskExit,
+  fileMicrotaskExit,
+  fileQueueMicrotaskExit,
   fatalStackGetter,
   rejectionStackGetter,
   fatalSilencedStderr,
@@ -190,47 +210,113 @@ async function expectNodeStatus(
   ).toEqual({ exit: oracle.code, rows: lifecycleRows(oracle.stdout), fatal: true });
 }
 
+/** One `sandbox.project().run(line)` in the no-COI toolchain realm. */
+async function runProjectCommand(page: Page, testCase: ProcessLifecycleCase): Promise<Observed> {
+  await page.goto('/no-coi-harness.html');
+  return page.evaluate(
+    async ({ root, files, line }) => {
+      const { createSandbox } = await import(`/@fs${root}/packages/rifty/src/index.ts`);
+      const sandbox = await createSandbox({
+        requireCrossOriginIsolation: false,
+        skipServiceWorker: true,
+        toolchain: {
+          workerUrl: `/@fs${root}/packages/workbench/src/workers/no-coi-toolchain-worker.ts`,
+        },
+      });
+      try {
+        await sandbox.fs.writeFile('/exit-status/.keep', '');
+        for (const [path, content] of Object.entries(files)) {
+          await sandbox.fs.writeFile(`/exit-status/${path}`, content);
+        }
+        const run = sandbox.project({ root: '/exit-status' }).run(line);
+        const timeout = new Promise<'timeout'>((resolve) =>
+          setTimeout(() => resolve('timeout'), 20_000),
+        );
+        const outcome = await Promise.race([run.completion, timeout]);
+        if (outcome === 'timeout') return { exit: 'timeout' as const, stdout: '', stderr: '' };
+        return {
+          exit: outcome.status === 'exited' ? outcome.exitCode : null,
+          stdout: outcome.stdout,
+          stderr: outcome.stderr,
+        };
+      } finally {
+        sandbox.dispose();
+      }
+    },
+    {
+      root,
+      files: testCase.files,
+      line: testCase.line ?? `node ${testCase.nodeArgv.join(' ')}`,
+    },
+  );
+}
+
 for (const testCase of commandCases) {
   test(`project command reports Node's status: ${testCase.name}`, async ({ page }) => {
     test.setTimeout(120_000);
-    await page.goto('/no-coi-harness.html');
-    const observed = await page.evaluate(
-      async ({ root, files, line }) => {
-        const { createSandbox } = await import(`/@fs${root}/packages/rifty/src/index.ts`);
-        const sandbox = await createSandbox({
-          requireCrossOriginIsolation: false,
-          skipServiceWorker: true,
-          toolchain: {
-            workerUrl: `/@fs${root}/packages/workbench/src/workers/no-coi-toolchain-worker.ts`,
-          },
-        });
-        try {
-          await sandbox.fs.writeFile('/exit-status/.keep', '');
-          for (const [path, content] of Object.entries(files)) {
-            await sandbox.fs.writeFile(`/exit-status/${path}`, content);
-          }
-          const run = sandbox.project({ root: '/exit-status' }).run(line);
-          const timeout = new Promise<'timeout'>((resolve) =>
-            setTimeout(() => resolve('timeout'), 20_000),
-          );
-          const outcome = await Promise.race([run.completion, timeout]);
-          if (outcome === 'timeout') return { exit: 'timeout' as const, stdout: '', stderr: '' };
-          return {
-            exit: outcome.status === 'exited' ? outcome.exitCode : null,
-            stdout: outcome.stdout,
-            stderr: outcome.stderr,
-          };
-        } finally {
-          sandbox.dispose();
-        }
-      },
-      {
-        root,
-        files: testCase.files,
-        line: testCase.line ?? `node ${testCase.nodeArgv.join(' ')}`,
-      },
-    );
-    await expectNodeStatus(testCase, observed, 'project command');
+    await expectNodeStatus(testCase, await runProjectCommand(page, testCase), 'project command');
+  });
+}
+
+// Declared gap (backlog runtime-js/node-eval-work-queued-at-exit-runs): work already
+// queued when exit() runs still runs and prints here; the status is Node's. Pinned
+// exactly, so a fix or another regression turns it red.
+const QUEUED_EXIT = 'Promise.resolve().then(()=>process.exit(3))';
+const queuedAtExit: readonly {
+  readonly testCase: ProcessLifecycleCase;
+  readonly extra: readonly string[];
+}[] = [
+  { testCase: evalCase('ripe-timer', microtaskExit(0)), extra: ['L|timer'] },
+  {
+    testCase: evalCase('immediate', `setImmediate(()=>console.log('L|immediate'));${QUEUED_EXIT}`),
+    extra: ['L|immediate'],
+  },
+  {
+    testCase: evalCase(
+      'fs-callback',
+      `require('fs').stat('.',()=>console.log('L|fs'));${QUEUED_EXIT}`,
+    ),
+    extra: ['L|fs'],
+  },
+  {
+    testCase: evalCase(
+      'exit-listener-timer',
+      `process.on('exit',()=>setTimeout(()=>console.log('L|exit-timer'),0));${QUEUED_EXIT}`,
+    ),
+    extra: ['L|exit-timer'],
+  },
+  {
+    testCase: evalCase(
+      'exit-listener-microtask',
+      `process.on('exit',()=>queueMicrotask(()=>console.log('L|exit-micro')));${QUEUED_EXIT}`,
+    ),
+    extra: ['L|exit-micro'],
+  },
+  {
+    testCase: evalCase(
+      'sync-exit-microtask',
+      "Promise.resolve().then(()=>console.log('L|micro'));process.exit(3)",
+    ),
+    extra: ['L|micro'],
+  },
+  {
+    testCase: evalCase(
+      'timer-exit-microtask',
+      "setTimeout(()=>{Promise.resolve().then(()=>console.log('L|micro'));process.exit(3)},1)",
+    ),
+    extra: ['L|micro'],
+  },
+];
+
+for (const { testCase, extra } of queuedAtExit) {
+  test(`declared: work queued at exit() still prints: ${testCase.name}`, async ({ page }) => {
+    test.setTimeout(120_000);
+    const oracle = await runLifecycleOracle(testCase);
+    const observed = await runProjectCommand(page, testCase);
+    expect({ exit: observed.exit, rows: lifecycleRows(observed.stdout) }).toEqual({
+      exit: oracle.code,
+      rows: [...lifecycleRows(oracle.stdout), ...extra],
+    });
   });
 }
 

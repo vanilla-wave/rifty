@@ -17,7 +17,9 @@ import { setKernelDrainHook } from '@riftydev/kernel';
 import {
   dispatchUncaughtException,
   dispatchUnhandledRejection,
+  isDrainOnlyNodeProcess,
   isRiftyProcessExit,
+  nodeFatalReportInstalled,
   readNodeProcessTerminal,
   takeUndispatchedRethrow,
   terminateFatal,
@@ -227,7 +229,9 @@ function completeNodeEvalTerminalWithoutDrain(
   record: NodeEvalLifecycleRecord,
   pending: NodeEvalPendingTerminal,
 ): void {
-  if (state.nodeEvalDirectTerminalPending) return;
+  // No control port (an in-process host) = no physical direct terminal: the
+  // claim stays pending, and the drain the host opens next settles with it.
+  if (state.nodeEvalDirectTerminalPending || isDrainOnlyNodeProcess()) return;
   state.nodeEvalDirectTerminalPending = true;
   const flush = flushNodeEvalDrainLifecycle(record);
   void reflectApplyPrimordial(promiseThenPrimordial, flush, [
@@ -406,7 +410,13 @@ export function awaitDrain(opts: DrainOptions = {}): Promise<void> {
                 outcome.origin === 'explicit-exit'
                   ? outcome.reason
                   : (lifecycle?.projectUnhandled(outcome.reason, outcome.origin) ?? outcome.reason);
-              reject(projected instanceof Error ? projected : new Error(String(projected)));
+              // The isolate's Node report prints a thrown non-Error as itself;
+              // main's text elsewhere.
+              reject(
+                nodeFatalReportInstalled() || projected instanceof Error
+                  ? projected
+                  : new Error(String(projected)),
+              );
             }
           } catch (error) {
             reject(error);
@@ -508,7 +518,11 @@ export function handleRealmUnhandledRejection(reason: unknown, promise: unknown)
   if (isRiftyProcessExit(reason) && readNodeProcessTerminal() !== reason) return true;
   const outcome = isRiftyProcessExit(reason) ? null : dispatchUnhandledRejection(reason, promise);
   if (outcome?.kind === 'handled' || outcome?.kind === 'exited') return true;
-  if (beginNodeEvalUnhandled(reason, 'rejection')) return true;
+  // Node's fatal reason: an `Error` as is, any other value wrapped as
+  // `UnhandledPromiseRejection` by the dispatch.
+  const fatalReason =
+    outcome?.kind === 'unhandled' && nodeFatalReportInstalled() ? outcome.error : reason;
+  if (beginNodeEvalUnhandled(fatalReason, 'rejection')) return true;
   const fatal = outcome?.kind === 'unhandled' ? terminateFatal(outcome.error) : null;
   recordRejection(fatal ?? reason);
   // A current exit signal still settles the drain, but is never a guest error.

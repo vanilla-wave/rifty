@@ -202,21 +202,13 @@ function snapshotPackageConfig(value: unknown): NodeServerPackageConfig {
       'packageJson',
       'seedFiles',
     ],
-    ['bakedNodeModulesUrl', 'bakedNodeModulesTemplateId'],
+    [],
     'dev-server bootstrap cfg',
   );
   if (cfg.runtime !== 'node-server') {
     throw new TypeError('dev-server bootstrap cfg.runtime must be node-server');
   }
   const root = projectRoot(cfg.root);
-  const bakedNodeModulesUrl = optionalString(
-    optionalOwnField(cfg, 'bakedNodeModulesUrl'),
-    'dev-server bootstrap cfg.bakedNodeModulesUrl',
-  );
-  const bakedNodeModulesTemplateId = optionalString(
-    optionalOwnField(cfg, 'bakedNodeModulesTemplateId'),
-    'dev-server bootstrap cfg.bakedNodeModulesTemplateId',
-  );
   return Object.freeze({
     runtime: 'node-server',
     root,
@@ -227,8 +219,6 @@ function snapshotPackageConfig(value: unknown): NodeServerPackageConfig {
     installDeps: stringMap(cfg.installDeps, 'dev-server bootstrap cfg.installDeps'),
     packageJson: packageJson(cfg.packageJson),
     seedFiles: seedFiles(cfg.seedFiles, root),
-    ...(bakedNodeModulesUrl === undefined ? {} : { bakedNodeModulesUrl }),
-    ...(bakedNodeModulesTemplateId === undefined ? {} : { bakedNodeModulesTemplateId }),
   });
 }
 

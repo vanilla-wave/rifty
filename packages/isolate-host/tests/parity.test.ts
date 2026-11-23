@@ -10,8 +10,11 @@ import { CORPUS, GC_CHURN, parityView } from './corpus.ts';
 import { nodeEval } from './support.ts';
 
 describe('package surface (ADR-0557 §1)', () => {
-  it("runCode is the package root's only runtime export", async () => {
-    expect(Object.keys(await import('../src/index.ts'))).toEqual(['runCode']);
+  it('the package root exports runCode and createSandbox only (ADR-0568)', async () => {
+    expect(Object.keys(await import('../src/index.ts')).sort()).toEqual([
+      'createSandbox',
+      'runCode',
+    ]);
   });
 });
 
@@ -51,16 +54,6 @@ describe('declared gaps and their workarounds (compat ⚠️)', () => {
     // The frames below are rifty's (`at eval ([eval]:1:22)`, guest-bundle frames), not Node's.
     expect(result.stderr.split('\n')[0]).toBe('Error: rej');
     expect(raw.stderr.split('\n')[0]).toBe('Error: rej');
-  });
-
-  it('process.exit() from a microtask of the synchronous run ends as timeout (Node exits with its code)', async () => {
-    // Nothing ends such a run: `timeout` in 160/160 runs, 16 concurrent under load.
-    const code = 'Promise.resolve().then(() => process.exit(3))';
-    expect(nodeEval(code).code).toBe(3);
-    const result = await runCode(code, { timeoutMs: 2000 });
-    expect(result.termination).toBe('timeout');
-    expect(result.exitCode).toBeNull();
-    expect(result.stderr).toContain('Error: process exit requires an active control port');
   });
 });
 

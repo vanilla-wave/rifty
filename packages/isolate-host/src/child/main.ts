@@ -27,6 +27,7 @@ import {
   type RunRequest,
   STUCK_GRACE_MS,
   type WorkerRequest,
+  decodeState,
   frame,
   rssCeilingBytes,
 } from '../protocol.ts';
@@ -60,7 +61,25 @@ interface Live {
   reported: boolean;
   cancelled: boolean;
   unwound: boolean;
+  /**
+   * A sandbox run's restore (0) or capture (1) is in the isolate: its end
+   * there is that refused state (`REFUSED`), not `memory`.
+   */
+  stateWork: 0 | 1 | undefined;
+  /**
+   * A sandbox run before its guest code: this worker holds its state (the
+   * request and its decoded bytes), so an exhaustion of the process is the
+   * state's — a refused restore. Its isolate's own heap limit in the bundle's
+   * boot stays `memory`, as for `runCode`.
+   */
+  holdsState: boolean;
   report(kind: number, payload: Uint8Array): void;
+  /** The run's exit status once it ended (a capture refused after it keeps it). */
+  status: number;
+  /** End a sandbox run whose state was not restored or captured. */
+  refuse(reason: number): void;
+  /** A sandbox run's state fate (a `state` or `refused` frame) went out. */
+  stateSent: boolean;
 }
 const live = new Map<number, Live>();
 /** Largest sum of live calls' `memoryLimitMb` since the worker was last idle. */
@@ -76,7 +95,8 @@ setInterval(() => {
   // Its own heap limit disposed this isolate: a certain culprit, even while a
   // builtin keeps its thread (step 0: the run may not settle for seconds).
   for (const call of live.values()) {
-    if (call.isolate.isDisposed && !call.disposedHere) call.report(KIND.memory, new Uint8Array(0));
+    if (call.isolate.isDisposed && !call.disposedHere && call.stateWork === undefined)
+      call.report(KIND.memory, new Uint8Array(0));
   }
   const rss = process.memoryUsage.rss();
   // Idle above the watermark: retire, never die under a call the consumer may be placing.
@@ -93,7 +113,12 @@ setInterval(() => {
   if (rss > rssCeilingBytes([busyAllowanceMb])) {
     // A solo worker's only call: the crossing is its own (ADR-0563 §6). Anywhere
     // else nobody is blamed: the consumer reruns each call alone.
-    for (const call of live.values()) if (call.solo) call.report(KIND.memory, new Uint8Array(0));
+    for (const call of live.values()) {
+      if (!call.solo) continue;
+      if (call.stateWork !== undefined) call.refuse(call.stateWork);
+      else if (call.holdsState) call.refuse(0);
+      else call.report(KIND.memory, new Uint8Array(0));
+    }
     dieAfterFlush();
   }
 }, 25);
@@ -130,7 +155,9 @@ async function run(request: RunRequest): Promise<void> {
     memoryLimit: request.memoryLimitMb,
     // V8 cannot recover this process: report the culprit, then the consumer reruns the rest.
     onCatastrophicError: () => {
-      state.report(KIND.memory, new Uint8Array(0));
+      // A sandbox run's restore or capture that kills V8 is its refused state (ADR-0568 §3).
+      if (state.stateWork === undefined) state.report(KIND.memory, new Uint8Array(0));
+      else state.refuse(state.stateWork);
       dieAfterFlush();
     },
     // `import()` is a gap this host cannot serve, and a rejection the guest may
@@ -154,8 +181,20 @@ async function run(request: RunRequest): Promise<void> {
     },
   });
   /** The isolate is gone for good: disposed and its run unwound. */
+  /**
+   * The one "left the worker" event, for every end (exit, timeout, memory, cancel,
+   * refused state): once the call has its terminal frame AND its isolate has
+   * stopped, a `gone` frame tells the consumer its slot is free (ADR-0563 §7, ADR-0568 §5).
+   */
+  let goneSent = false;
+  const gone = (): void => {
+    if (goneSent || !state.reported || !state.unwound) return;
+    goneSent = true;
+    send(KIND.gone, id, new Uint8Array(0));
+  };
   const forget = (): void => {
     state.unwound = true;
+    gone();
     if (!live.has(id)) return;
     if (state.reported) live.delete(id);
     if (live.size === 0 && process.memoryUsage.rss() > RECYCLE_RSS_BYTES) retire();
@@ -168,17 +207,41 @@ async function run(request: RunRequest): Promise<void> {
     reported: false,
     cancelled: false,
     unwound: false,
+    stateWork: undefined,
+    holdsState: request.sandbox !== undefined,
+    status: 1,
+    stateSent: false,
+    refuse(reason) {
+      if (state.reported) return;
+      flush();
+      if (!state.stateSent) send(KIND.refused, id, Uint8Array.of(reason));
+      state.stateSent = true;
+      state.report(KIND.exit, Uint8Array.of(state.status));
+    },
     /** The call's one terminal frame; the isolate ends with it. */
     report(kind, payload) {
       if (state.reported) return;
       flush();
+      // One rule for every way a sandbox run ends here (the import() gap, a broken guest
+      // tail, …): an `exit` carries its state's fate; without a capture, the state of before.
+      if (kind === KIND.exit && request.sandbox && !state.stateSent && !state.cancelled) {
+        send(KIND.refused, id, Uint8Array.of(1));
+        state.stateSent = true;
+      }
       state.reported = true;
       closeBridge();
       // Retire first (call 0, order-free): the consumer stops placing calls here
       // before this slot frees, however the bytes are split into chunks.
       const idle = [...live.values()].every((c) => c === state || c.reported);
       if (state.unwound && idle && process.memoryUsage.rss() > RECYCLE_RSS_BYTES) retire();
-      send(kind, id, payload);
+      if (state.unwound) {
+        // Already stopped: the terminal frame and `gone` in one write, so the consumer reads
+        // the slot free with the result (a separate `gone` chunk made it spawn a worker).
+        goneSent = true;
+        channel.write(
+          Buffer.concat([frame(kind, id, payload), frame(KIND.gone, id, new Uint8Array(0))]),
+        );
+      } else send(kind, id, payload);
       if (!isolate.isDisposed) {
         state.disposedHere = true;
         // Not inside an isolate callback (`importModuleDynamically` reports from one).
@@ -239,25 +302,79 @@ async function run(request: RunRequest): Promise<void> {
     const guest = await jail.get('__riftyGuest', { reference: true });
     guestFire.ref = await guest.get('fire', { reference: true });
     rejection = await guest.get('rejection', { reference: true });
-    const start = await guest.get('run', { reference: true });
+    const sandbox = request.sandbox;
+    const start = await guest.get(sandbox ? 'runFile' : 'run', { reference: true });
+    const snapshotOptions = { template: null, maxBytes: sandbox?.maxFsBytes ?? 0 };
+    const snapshot = sandbox ? await guest.get('snapshot', { reference: true }) : undefined;
+    if (sandbox) {
+      const restore = await guest.get('restore', { reference: true });
+      // Decoding and copying the state into the isolate is the restore.
+      state.stateWork = 0;
+      try {
+        const bytes = decodeState(sandbox.state);
+        await restore.apply(undefined, [bytes, snapshotOptions], { arguments: { copy: true } });
+      } catch {
+        // Before any guest code: the bundle's own refusal, or the isolate's memory.
+        if (state.cancelled) throw new Error('cancelled');
+        state.unwound = true;
+        state.refuse(0);
+        return;
+      }
+      state.stateWork = undefined;
+    }
     await jail.delete('__riftyGuest');
     // From here a failure is the guest's run, not this worker's wiring.
     started = true;
+    state.holdsState = false;
     // The status crosses as ONE PRIMITIVE and is judged HERE, in the worker's
     // realm (ADR-0557 §6): a number resolves a promise with no lookup in the
     // guest realm, so a poisoned prototype there cannot rewrite it.
-    const code: unknown = await start.apply(undefined, [request.code], {
-      arguments: { copy: true },
-      result: { promise: true, copy: true },
-    });
+    const code: unknown = await start.apply(
+      undefined,
+      sandbox ? [sandbox.path, [...sandbox.args]] : [request.code],
+      {
+        arguments: { copy: true },
+        result: { promise: true, copy: true },
+      },
+    );
+    state.status = exitStatus(code);
+    if (sandbox && snapshot && !state.reported) {
+      // The end state, taken in the guest's realm: its bytes and its errors are the
+      // guest's. The reason is what this worker measured, never the guest's text: bytes
+      // over the cap are TOO_LARGE, anything else (a throw, not bytes) is CAPTURE
+      // (ADR-0568 §3). The copy out is bounded by the isolate's memory, the frame by the cap.
+      state.stateWork = 1;
+      let bytes: unknown;
+      try {
+        // The guest's codec is asked for anything its isolate can hold: an end state over
+        // the cap then comes out as bytes the trusted side measures (this worker against
+        // `maxFsBytes`, the consumer's codec against the budget), not as a guest refusal.
+        const captureOptions = { template: null, maxBytes: request.memoryLimitMb * 2 ** 20 };
+        bytes = await snapshot.apply(undefined, [captureOptions], {
+          arguments: { copy: true },
+          result: { copy: true },
+        });
+      } catch {
+        bytes = undefined;
+      }
+      if (bytes instanceof Uint8Array && bytes.byteLength <= sandbox.maxFsBytes) {
+        if (!state.reported) {
+          flush();
+          send(KIND.state, id, bytes);
+          state.stateSent = true;
+        }
+      } else if (!state.cancelled) state.refuse(bytes instanceof Uint8Array ? 2 : 1);
+    }
     state.unwound = true;
-    state.report(KIND.exit, Uint8Array.of(exitStatus(code)));
+    state.report(KIND.exit, Uint8Array.of(state.status));
   } catch (error) {
     state.unwound = true;
     // Cancelled: the consumer already settled it; this terminal frame only ends its addressing.
     if (state.cancelled) state.report(KIND.exit, Uint8Array.of(1));
-    else if (isolate.isDisposed && !state.disposedHere)
-      state.report(KIND.memory, new Uint8Array(0));
+    else if (isolate.isDisposed && !state.disposedHere) {
+      if (state.stateWork === undefined) state.report(KIND.memory, new Uint8Array(0));
+      else state.refuse(state.stateWork);
+    }
     // The guest's own tail broke (its realm is the guest's to break): a failed run.
     else if (started) state.report(KIND.exit, Uint8Array.of(1));
     else {

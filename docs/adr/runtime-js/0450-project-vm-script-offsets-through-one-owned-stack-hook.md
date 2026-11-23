@@ -155,3 +155,49 @@ format, receiver `Error`), and freezes every `CallSite.prototype` method
   TypeScript 5.9.3 starts with a license comment, so ordinary require uses one
   Function; the TS language-service has its own single-Function compiler.
   No runtime change. Method/raw timings: `docs/backlog/runtime-js/cjs-wrapper-stack-positions.md`.
+- 2026-11-22 — every CJS source now shares line one with the anonymous
+  indirect-eval prefix (Function still validates the body first, so nothing
+  escapes the wrapper): all lines keep their native numbers, the factory is
+  named `Object.<anonymous>` (V8 renders Node's nameless wrapper so; a guest
+  reads that name through a sloppy `arguments.callee` or
+  `CallSite.getFunctionName()`, Node `''`/null). Line-1 columns stay right of
+  the source by the prefix in `err.stack` and CallSites — a one-line
+  (minified) bundle maps through its source map to a plausible wrong original
+  position (before: unmappable +2 lines). Only the fatal report projects
+  line-1 columns back, and drops V8's `eval` name where the source shows the
+  function anonymous, from a per-filename prefix length kept by the factory:
+  the one filename record, read by no stack formatter or hook; a guest
+  Function/eval whose sourceURL is a module's filename is projected there too.
+  Still no stack-hook ownership. Cost: 3061-module CJS tree, CPU median +5%
+  (one extra parse per module that had none). Critic 2026-11-22: direction
+  holds, no cheaper route (no eval offsets in V8). Goal `node-file-entry-parity`.
+- 2026-11-22 — correction to the line above: Function validated the wrapper
+  with the body, so a stray `}` of the body closed it and the file ran its
+  remaining lines silently (external review round 1, B2). Now the source
+  alone is validated as a function body (Node `compileFunction`); only then
+  can no `}` of it close the wrapper. Syntax errors are diagnosed without
+  evaluating any text. Carriers: `cjs-factory.test.ts` (no line of an
+  escaping source runs), `node-file-parity` rows `stray-*`, `wrapper-escape`.
+- 2026-11-22 — correction (external review round 2, N3): behind the shared-line
+  prefix a file's start is no longer the start of input, so a legal leading
+  `-->` comment (after whitespace or one-line block comments) became an
+  operator and the file was refused. Such a `-->` is rewritten to `//>` (the
+  same comment, same length) in the evaluated text only; validation still
+  sees the source as is. Class swept against Node: `-->` (bare, after spaces,
+  after a block comment, after a multi-line one), `<!--`, `#!`, ` #!`, BOM,
+  BOM + `#!` (the loader now keeps a CJS file's BOM as Node reads it, so this
+  fails as Node's does), the directive prologue: entry row
+  `first-line-html-close`, `cjs-factory.test.ts`. A guest reading the module
+  function's text (`arguments.callee.toString()`) sees `//>`.
+- 2026-11-22 — cost, recorded as measured (no cheaper route without evaluating
+  the source was found by the author or either reviewer): every module is now
+  compiled twice (Function over the source alone, then the wrapped eval);
+  main compiled once except a `"use strict"`-led file. CPU, Node 24.16.0,
+  macOS: (a) author, compile only, 3061 real npm CJS files from this repo's
+  `node_modules` (27.7 MB): 552 → 716 ms median of 10 (+30%; host load ~100);
+  (b) external reviewer Opus, compile on 3061 real modules: 403 → 869 ms;
+  (c) external reviewer Sol, synthetic 3061-module tree (`module.exports = n`):
+  load 94 → 125 ms (+33%), compile 24.7 → 47.2 ms; (d) author, same synthetic
+  tree, load 110–112 → 118–122 ms (+7–10%). The 2026-11-22 line's +5% and the
+  2026-10-20 line's "ordinary require uses one Function" are superseded.
+

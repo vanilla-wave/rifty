@@ -45,3 +45,5 @@ net effect using unchanged tasks/judges/config.
 ## Corrections (active)
 
 - 2026-09-28 — "Consumer plain text stays untouched" covers successful consumer text only; consumer tool errors and pi validation/unknown-tool errors carry the failed budget receipt. Repeat comparison's capped result excludes mutation host diagnostics (timing-dependent); diagnostics still reach the model. Other clauses stand.
+
+2026-11-23 — Pi 1.6.0 itself emits results for abort-skipped sequential calls; the synthetic-result decoration step is gone, receipts unchanged.

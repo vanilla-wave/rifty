@@ -3,7 +3,7 @@ import { planShadowSubstitutionsFromLockfile } from '@riftydev/npm-client/intern
 import type { ShadowRuntimeTier } from '@riftydev/shadow-registry/internal';
 import type { PersistFailureReport } from '@riftydev/vfs';
 import { assertPreparedDependencySnapshot } from './dep-snapshot-preparation.ts';
-import { type DepSnapshotV3, prepareDepSnapshotForRuntimeTier } from './dep-snapshot.ts';
+import { type DepSnapshot, prepareDepSnapshotForRuntimeTier } from './dep-snapshot.ts';
 import {
   type WorkspaceOverlayFs,
   prepareWorkspaceArchiveOverlay,
@@ -22,7 +22,7 @@ function encodedText(text: string): string {
 export async function prepareDepSnapshotApplication(
   fs: WorkspaceOverlayFs,
   root: string,
-  source: DepSnapshotV3,
+  source: DepSnapshot,
   options: {
     readonly conflict: 'error' | 'overwrite';
     readonly runtimeTier?: ShadowRuntimeTier;
@@ -63,10 +63,13 @@ export async function prepareDepSnapshotApplication(
     },
     options,
   );
-  const cache = prepareWorkspaceArchiveImport(fs, snapshot.tarballCache, {
-    root: TARBALL_CACHE_ROOT,
-    replace: false,
-  });
+  const cache =
+    snapshot.version === 5
+      ? undefined
+      : prepareWorkspaceArchiveImport(fs, snapshot.tarballCache, {
+          root: TARBALL_CACHE_ROOT,
+          replace: false,
+        });
   const shadowPlan = planShadowSubstitutionsFromLockfile(
     snapshot.lockfile.length === 0
       ? { lockfileVersion: 3, packages: {} }
@@ -78,6 +81,7 @@ export async function prepareDepSnapshotApplication(
     shadowPlan,
     intents: overlay.intents,
     async prepareCache() {
+      if (!cache) return;
       cache.apply();
       const report = await options.flush();
       if (report !== undefined && report.total > 0)

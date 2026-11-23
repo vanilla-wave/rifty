@@ -357,14 +357,15 @@ describe('post-guest paths: what the host owes whatever the guest replaced', () 
     }, 10_000);
   }
 
-  it("a non-Error throw prints the runtime's fatal text, never a line of the host's", async () => {
-    // rifty's `formatThrown`, as its fatal exit prints it; Node's `[eval]`
-    // header and inspect form are a declared gap
+  it("a non-Error throw prints the runtime's fatal report, never a line of the host's", async () => {
+    // Node's report without its `[eval]` header (no stack locates a non-Error
+    // throw) and with rifty's inspect form: declared gaps
     // (`backlog/runtime-js/node-eval-non-error-throw-rendering`).
+    const hint = '(Use `node --trace-uncaught ...` to show where the exception was thrown)\n';
     for (const [code, stderr] of [
-      ["throw 'oops'", 'oops\n'],
-      ['throw 5', '5\n'],
-      ['throw Object.create(null)', '[object Object]\n'],
+      ["throw 'oops'", `oops\n${hint}\nNode.js v24.0.0\n`],
+      ['throw 5', `5\n${hint}\nNode.js v24.0.0\n`],
+      ['throw Object.create(null)', '{}\n\nNode.js v24.0.0\n'],
     ] as const) {
       const result = await runCode(code);
       expect({ code, stderr: result.stderr, exitCode: result.exitCode }).toEqual({
@@ -375,6 +376,21 @@ describe('post-guest paths: what the host owes whatever the guest replaced', () 
     }
   });
 
+  it("a throw queued by a natural exit's 'exit' listener prints Node's report; an explicit exit drops it", async () => {
+    const natural = await runCode(
+      "process.on('exit', () => queueMicrotask(() => { throw new Error('L') }))",
+    );
+    // Node: the same report after its `[eval]:1` header, status 1 (status: declared ceiling).
+    expect(natural).toMatchObject({
+      stderr: 'Error: L\n    at [eval]:1:55\n\nNode.js v24.0.0\n',
+      exitCode: 0,
+    });
+    const explicit = await runCode(
+      "queueMicrotask(() => { throw new Error('AFTER') }); process.exit(3)",
+    );
+    expect(explicit).toMatchObject({ stderr: '', exitCode: 3 });
+  });
+
   it('the host helpers the hooks match are named so in the built bundle', () => {
     const bundle = readFileSync(new URL('../dist/guest.js', import.meta.url), 'utf8');
     for (const name of HOST_FRAMES)
@@ -383,4 +399,70 @@ describe('post-guest paths: what the host owes whatever the guest replaced', () 
         defined: true,
       });
   });
+});
+
+describe("a loader error prints Node's shape wherever it is thrown (one report point)", () => {
+  const origins: Record<string, (body: string) => string> = {
+    sync: (b) => `${b}`,
+    timer: (b) => `setTimeout(() => { ${b} }, 0);`,
+    microtask: (b) => `queueMicrotask(() => { ${b} });`,
+    tick: (b) => `process.nextTick(() => { ${b} });`,
+    rejection: (b) => `Promise.resolve().then(() => { ${b} });`,
+    exit: (b) => `process.on('exit', () => { ${b} });`,
+  };
+  const errors: Record<string, string> = {
+    'guest props': "try { require('./nope'); } catch (e) { e.extra = 1; e.hint = 'h'; throw e; }",
+    'a getter on code':
+      "try { require('./nope'); } catch (e) { Object.defineProperty(e, 'code', { enumerable: true, get() { globalThis.ran = 1; return 'X'; } }); throw e; }",
+    'a throwing getter on requireStack':
+      "try { require('./nope'); } catch (e) { Object.defineProperty(e, 'requireStack', { enumerable: true, get() { throw new Error('g'); } }); throw e; }",
+    'a loader error as cause':
+      "try { require('./nope'); } catch (c) { throw new Error('outer', { cause: c }); }",
+  };
+  // Head line and props, paths to `<root>`, whitespace collapsed: no frames, no
+  // `Require stack:` lines, no `[eval]:N` / Node header (declared, compat process.md).
+  const view = (stderr: string) => {
+    const body = stderr
+      .replace(/^\S+:\d+\n[^\n]*\n *\^+\n\n/u, '')
+      .replace(/'[^']*\/(\[eval\]|main\.js)'/gu, "'<root>/$1'")
+      // A file required from `-e`: rifty's `requireStack` lacks Node's `[eval]`
+      // parent (declared, compat isolate-host.md).
+      .replace(/'<root>\/main\.js',\s*'<root>\/\[eval\]'/gu, "'<root>/main.js'")
+      .split('\n')
+      .filter(
+        (line) => !/^\s+at |^\s+\.\.\. \d+ lines? matching|^\s*Require stack:$|^\s*- /u.test(line),
+      )
+      .join('\n');
+    // Line breaking follows the root's length (`/workspace` vs the oracle's dir).
+    return body
+      .replace(/\n\nNode\.js v[\d.]+\n$/u, '')
+      .replace(/\s+/gu, ' ')
+      .trim();
+  };
+  const forms = {
+    '-e': (code: string) => code,
+    'a required file': (code: string) =>
+      `require('fs').writeFileSync('main.js', ${JSON.stringify(code)}); require('./main.js');`,
+  };
+  for (const [form, wrap] of Object.entries(forms)) {
+    for (const [what, body] of Object.entries(errors)) {
+      it(`${what}, ${form}: Node's head and props from every origin`, async () => {
+        for (const [origin, make] of Object.entries(origins)) {
+          const code = wrap(make(body));
+          const [ours, node] = [await runCode(code), nodeEval(code)];
+          const label = `${origin}\n--- node\n${node.stderr}\n--- rifty\n${ours.stderr}`;
+          expect(ours.stdout, label).toBe(node.stdout);
+          if (origin === 'rejection') {
+            // isolated-vm copies the reason (compat isolate-host.md): its class
+            // family and message reach the report, nothing else.
+            expect(view(ours.stderr), label).toBe(
+              view(node.stderr).replace(/ (?:code|\[cause\]): .*$/u, ''),
+            );
+            continue;
+          }
+          expect(view(ours.stderr), label).toBe(view(node.stderr));
+        }
+      }, 120_000);
+    }
+  }
 });

@@ -47,3 +47,11 @@ read them (`node fail.mjs` → `at eval (<root>/fail.mjs:6:7)`, Node
 `tests/no-coi/no-coi-fatal-stderr.spec.ts`). That top-level `throw` is +5 lines
 with the column kept, against the Context's +7 / changed column: the offset
 depends on module shape.
+Probe 2026-11-23 (goal node-file-entry-parity carrier row `esm-throw`,
+`const a = 1;\nthrow new Error('esm');` as `main.mjs`, no-COI SDK and COI,
+Node v24.16.0): rifty `at eval (<root>/main.mjs:7:7)` (COI also `at
+Generator.next (<anonymous>)`), Node `at file://<root>/main.mjs:2:7` — line +5,
+the frame named `eval`, a path instead of a `file://` URL. Deferred from that
+goal (manager decision; compat modules.md "ESM stack positions", process.md
+"Fatal error stderr bytes").
+

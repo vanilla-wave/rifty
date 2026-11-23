@@ -1,16 +1,12 @@
-import {
-  Agent,
-  type AgentMessage,
-  type AgentToolResult,
-  convertToLlm,
-  estimateContextTokens,
-  shouldCompact,
-} from '@earendil-works/pi-agent-core';
+import { Agent, type AgentMessage, type AgentToolResult } from '@earendil-works/pi-agent-core';
 import {
   type AssistantMessage,
   type ImageContent,
-  type ToolResultMessage,
+  type Message,
+  type SystemMessage,
+  getCurrentSystemMessage,
   isContextOverflow,
+  isRecoverableLength,
 } from '@earendil-works/pi-ai';
 import { NotImplementedError } from '@riftydev/io';
 import { createArchive } from './archive.ts';
@@ -18,6 +14,16 @@ import { isOpenAIProvider, selectModel } from './catalog.ts';
 import { unsupportedChatCommand } from './chat-command.ts';
 import { createContinuation } from './continuation.ts';
 import { restoreMessages } from './history.ts';
+import {
+  type Entry,
+  buildProjection,
+  calculateContextTokens,
+  estimateContextTokens,
+  estimateProjectedContextTokens,
+  estimateTokens,
+  shouldCompact,
+} from './pi-cli/compaction.ts';
+import { convertToLlm } from './pi-cli/messages.ts';
 import { PROMPT_PROFILE_ID, systemPrompt } from './prompt.ts';
 import { loadResources } from './resources.ts';
 import { capToolText } from './text.ts';
@@ -67,7 +73,6 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
   let stopRequested = false;
   let budgetReason: string | undefined;
   let toolCalls = 0;
-  let runEventStart = 0;
   let deadline = 0;
   let ownedTools = new Set<string>();
   let currentArgs: unknown;
@@ -104,76 +109,221 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
   let overflowRecoveryAttempted = false;
   const continuation = createContinuation(options, () => model, emit);
 
-  // Reconstruct Pi's persisted compaction input from the existing audit receipts.
-  // Failed attempts remain here even when Agent drops them from request context.
-  function compactionHistory(): AgentMessage[] {
-    let messages = restoredMessageCount ? [...initialMessages] : [];
-    for (const { event } of events) {
-      if (event.type === 'agent' && event.event.type === 'message_end')
-        messages.push(event.event.message);
-      else if (
-        event.type === 'retry' &&
-        event.phase === 'start' &&
-        event.source === 'assistant' &&
-        event.message
-      )
-        messages.push(event.message);
-      else if (
-        event.type === 'compaction' &&
-        event.phase === 'end' &&
-        event.success &&
-        event.summary &&
-        event.retainedMessageCount !== undefined
-      ) {
-        messages = [
-          event.summary,
-          ...(event.retainedMessageCount ? messages.slice(-event.retainedMessageCount) : []),
-        ];
+  // CLI session journal for compaction (ADR-0474), projected from the audit receipts
+  // as they are emitted: discarded attempts stay as omitted entries.
+  const journal: Entry[] = [];
+  let lastAssistantEntry: string | undefined;
+  function journalAppend(
+    entry:
+      | { type: 'message'; message: AgentMessage }
+      | { type: 'context_edit'; targetId: string; replacement: null },
+  ): string {
+    const id = String(journal.length);
+    journal.push({ ...entry, id, timestamp: new Date().toISOString() } as Entry);
+    return id;
+  }
+  function journalMessage(message: AgentMessage) {
+    const id = journalAppend({ type: 'message', message: structuredClone(message) });
+    if (message.role === 'assistant') lastAssistantEntry = id;
+  }
+  function journalOmit(targetId: string | undefined) {
+    if (targetId !== undefined)
+      journalAppend({ type: 'context_edit', targetId, replacement: null });
+  }
+  function journalRestore(messages: readonly AgentMessage[]) {
+    journal.length = 0;
+    lastAssistantEntry = undefined;
+    // A restored summary is a CLI compaction entry; leading prompt state is its systemMessage.
+    const summaryIndex = messages.findIndex(({ role }) => role === 'compactionSummary');
+    const head = messages.slice(0, Math.max(0, summaryIndex)) as Message[];
+    for (const [index, message] of messages.entries()) {
+      if (index < summaryIndex) continue;
+      if (message.role !== 'compactionSummary') {
+        journalMessage(message);
+        continue;
       }
+      const id = String(journal.length);
+      const systemMessage = getCurrentSystemMessage(head);
+      journal.push({
+        type: 'compaction',
+        id,
+        timestamp: new Date(message.timestamp).toISOString(),
+        summary: message.summary,
+        firstKeptEntryId: id,
+        tokensBefore: message.tokensBefore,
+        ...('details' in message ? { details: message.details } : {}),
+        ...(systemMessage ? { systemMessage } : {}),
+      });
     }
-    return messages;
+  }
+  journalRestore(initialMessages);
+  function latestCompaction() {
+    for (let i = journal.length - 1; i >= 0; i--) {
+      const entry = journal[i];
+      if (entry?.type === 'compaction') return entry;
+    }
+    return undefined;
   }
 
-  async function compactHistory(
-    reason: 'threshold' | 'overflow',
-    staleGuard = false,
-    overflowResponse?: AssistantMessage,
-  ) {
-    const messages = agent.state.messages;
-    const estimate = estimateContextTokens(messages);
-    if (reason === 'threshold') {
-      const summary = messages[0];
-      const source =
-        estimate.lastUsageIndex === null ? undefined : messages[estimate.lastUsageIndex];
-      if (
-        staleGuard &&
-        summary?.role === 'compactionSummary' &&
-        source &&
-        source.timestamp <= summary.timestamp
-      )
-        return false;
-      if (!shouldCompact(estimate.tokens, model.contextWindow, continuation.compaction))
-        return false;
-    }
+  // CLI `_preparePromptAndToolLoadout`: a changed prompt enters history as a system
+  // update before the next request; Pi declares tool changes and collapses it on wire.
+  let tools: ReturnType<typeof refreshCapabilities>['tools'] = [];
+  function refresh(): SystemMessage | undefined {
+    const refreshed = refreshCapabilities();
+    tools = refreshed.tools;
+    agent.state.tools = tools;
+    const prompt = refreshed.systemPrompt;
+    // Sections from restored foreign prompt state (e.g. a pi CLI history) are removed, as
+    // the CLI's section diff does; rifty owns the single `prompt` section.
+    const current = getCurrentSystemMessage(agent.state.messages)?.sections ?? {};
+    const stale = Object.keys(current).filter((name) => name !== 'prompt');
+    if (current.prompt === prompt && !stale.length) return;
+    const removed = Object.fromEntries(stale.map((name) => [name, null]));
+    return { role: 'system', content: '', sections: { ...removed, prompt }, timestamp: Date.now() };
+  }
+
+  /** CLI `_runAutoCompaction` + `appendCompaction`; true when a summary was installed. */
+  async function compactHistory(reason: 'threshold' | 'overflow') {
     if (!runController) return false;
-    const retained = await continuation.compactMessages(
-      compactionHistory(),
+    const path = [...journal];
+    const result = await continuation.compactJournal(path, reason, runController.signal);
+    if (!result) return false;
+    const timestamp = Date.now();
+    const systemMessage = getCurrentSystemMessage(buildProjection(path).messages as Message[]);
+    journal.push({
+      type: 'compaction',
+      id: String(journal.length),
+      timestamp: new Date(timestamp).toISOString(),
+      summary: result.summary,
+      firstKeptEntryId: result.firstKeptEntryId,
+      tokensBefore: result.tokensBefore,
+      details: result.details,
+      ...(systemMessage ? { systemMessage: { ...systemMessage, timestamp } } : {}),
+    });
+    const projected = buildProjection(journal).messages;
+    const summary = projected.find((message) => message.role === 'compactionSummary');
+    agent.state.messages = projected;
+    emit({
+      type: 'compaction',
+      phase: 'end',
       reason,
-      runController.signal,
-    );
-    if (!retained) return false;
-    // Native CLI prepares from its persisted overflow entry, then removes it again before continue.
-    const last = retained.at(-1);
-    agent.state.messages =
-      overflowResponse &&
-      last?.role === 'assistant' &&
-      (last.stopReason === 'error' || last.stopReason === 'length')
-        ? retained.slice(0, -1)
-        : retained;
+      source: result.source,
+      tokensBefore: result.tokensBefore,
+      tokensAfter: projected.reduce((total, message) => total + estimateTokens(message), 0),
+      success: true,
+      ...(summary ? { summary: structuredClone(summary) } : {}),
+      retainedMessageCount: projected.filter(
+        (message) => message.role !== 'system' && message.role !== 'compactionSummary',
+      ).length,
+      aborted: false,
+      usage: result.usage,
+    });
     return true;
   }
 
+  /** CLI `_findPersistedMessageEntryId`: agent state is the journal projection. */
+  function entryIdOf(message: AgentMessage): string | undefined {
+    const index = agent.state.messages.indexOf(message);
+    if (index < 0) return undefined;
+    let position = 0;
+    for (const entry of buildProjection(journal).entries)
+      for (const _ of entry.messages) if (position++ === index) return entry.sourceEntry.id;
+    return undefined;
+  }
+
+  /** CLI `_omitRecoveryAttempt`: the attempt and its paired results leave model context. */
+  function omitRecoveryAttempt(message: AssistantMessage) {
+    const calls = new Set(message.content.flatMap((b) => (b.type === 'toolCall' ? [b.id] : [])));
+    const messages = agent.state.messages;
+    const index = messages.indexOf(message);
+    const results: AgentMessage[] = [];
+    for (const next of index < 0 ? [] : messages.slice(index + 1)) {
+      if (next.role === 'assistant') break;
+      if (next.role === 'toolResult' && calls.has(next.toolCallId)) results.push(next);
+    }
+    const targets = [message, ...results];
+    const ids = targets.map(entryIdOf);
+    if (ids.some((id, index) => id === undefined && agent.state.messages.includes(targets[index]!)))
+      throw new Error(
+        'Cannot persist recovery omission because a projected message has no source entry',
+      );
+    for (const id of ids) journalOmit(id);
+    agent.state.messages = buildProjection(journal).messages;
+  }
+
+  /** CLI `_checkCompaction`; returns whether to continue the interrupted turn. */
+  async function checkCompaction(last: AssistantMessage): Promise<'continue' | 'done'> {
+    const compaction = latestCompaction();
+    if (compaction && last.timestamp <= new Date(compaction.timestamp).getTime()) return 'done';
+    const sameModel = last.model === model.id && last.provider === model.provider;
+    const projection = buildProjection(journal);
+    // Agent state is the projection, so `last` is projected and never the target of an
+    // omission; a compaction after it was caught by the stale guard. Of the CLI's gating only
+    // the usage check remains reachable: a later omission makes `last`'s usage stale.
+    const entryId = entryIdOf(last);
+    const position = entryId === undefined ? -1 : journal.findIndex(({ id }) => id === entryId);
+    const usageMatchesProjection =
+      position < 0 || !journal.slice(position + 1).some(({ type }) => type === 'context_edit');
+    const contextOverflow =
+      sameModel &&
+      ((last.stopReason === 'error' && isContextOverflow(last)) ||
+        (usageMatchesProjection && isContextOverflow(last, model.contextWindow)));
+    const recoverableLength = sameModel && isRecoverableLength(last, model.maxTokens);
+    if (contextOverflow || recoverableLength) {
+      if (last.stopReason === 'stop') {
+        await compactHistory('overflow');
+        return 'done';
+      }
+      if (overflowRecoveryAttempted) {
+        const estimate = estimateProjectedContextTokens(projection, journal);
+        emit({
+          type: 'compaction',
+          phase: 'end',
+          reason: 'overflow',
+          source: estimate.lastUsageIndex === null ? 'estimate' : 'usage',
+          tokensBefore: estimate.tokens,
+          success: false,
+          aborted: false,
+          errorMessage: contextOverflow
+            ? 'Context overflow recovery failed after one compact-and-retry attempt. Try reducing context or switching to a larger-context model.'
+            : 'Truncated response recovery failed after one compact-and-retry attempt.',
+        });
+        return 'done';
+      }
+      overflowRecoveryAttempted = true;
+      omitRecoveryAttempt(last);
+      return (await compactHistory('overflow')) ? 'continue' : 'done';
+    }
+    const path = journal;
+    const direct = calculateContextTokens(last.usage);
+    let tokens: number;
+    if (projection.entries.some((entry) => entry.sourceEntry.type === 'context_edit'))
+      tokens = estimateProjectedContextTokens(projection, path).tokens;
+    else if (last.stopReason === 'error' || direct === 0) {
+      const messages = agent.state.messages;
+      const estimate = estimateContextTokens(messages);
+      const source =
+        estimate.lastUsageIndex === null ? undefined : messages[estimate.lastUsageIndex];
+      if (
+        compaction &&
+        source?.role === 'assistant' &&
+        source.timestamp <= new Date(compaction.timestamp).getTime()
+      )
+        return 'done';
+      tokens = estimate.tokens;
+    } else tokens = direct;
+    if (shouldCompact(tokens, model.contextWindow, continuation.compaction))
+      await compactHistory('threshold');
+    return 'done';
+  }
+
   function emit(event: AgentSessionEvent): void {
+    if (event.type === 'agent' && event.event.type === 'message_end')
+      journalMessage(event.event.message);
+    if (event.type === 'retry' && event.phase === 'start' && event.message) {
+      journalMessage(event.message);
+      journalOmit(lastAssistantEntry);
+    }
     archive?.observe(event);
     events.push({ at: Date.now(), event: structuredClone(event) });
     for (const listener of listeners) {
@@ -223,25 +373,33 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
     };
   }
 
+  refreshCapabilities();
   const agent: Agent = new Agent({
     initialState: {
       model,
       thinkingLevel: requestDefaults().reasoning ?? 'off',
-      ...refreshCapabilities(),
       messages: initialMessages,
     },
     toolExecution: 'sequential',
     convertToLlm,
     streamFn: continuation.stream,
     prepareNextTurnWithContext: async (context) => {
-      await compactHistory('threshold');
-      const refreshed = refreshCapabilities();
-      agent.state.systemPrompt = refreshed.systemPrompt;
-      agent.state.tools = refreshed.tools;
+      // CLI `_compactBeforeNextAssistantResponse`: projected threshold estimate.
+      const path = journal;
+      if (
+        shouldCompact(
+          estimateProjectedContextTokens(buildProjection(path), path).tokens,
+          model.contextWindow,
+          continuation.compaction,
+        )
+      )
+        await compactHistory('threshold');
+      const update = refresh();
       return {
         model,
         thinkingLevel: requestDefaults().reasoning ?? 'off',
-        context: { ...context.context, ...refreshed, messages: agent.state.messages.slice() },
+        context: { ...context.context, tools, messages: agent.state.messages.slice() },
+        ...(update ? { messages: [update] } : {}),
       };
     },
     beforeToolCall: async () => {
@@ -257,6 +415,8 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
       if (isToolFailure(context.result)) return { isError: true };
     },
   });
+  // Agent state is the journal projection (restored prompt state folds into the summary).
+  agent.state.messages = buildProjection(journal).messages;
   const detach = agent.subscribe(async (event) => {
     if (event.type === 'tool_execution_start') currentArgs = structuredClone(event.args);
     if (event.type === 'tool_execution_end')
@@ -282,100 +442,17 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
       event.message.stopReason !== 'length'
     )
       overflowRecoveryAttempted = false;
+    // CLI resets recovery when a user message starts, after the pre-prompt check.
+    if (event.type === 'message_start' && event.message.role === 'user')
+      overflowRecoveryAttempted = false;
     if (event.type === 'agent_start' && stopRequested) agent.abort();
-    if (event.type === 'agent_end') {
-      const added = completeSkippedCalls();
-      emit({
-        type: 'agent',
-        event: {
-          ...event,
-          messages: [
-            ...(continuation.cancelledBackoff ? event.messages.slice(0, -1) : event.messages),
-            ...added,
-          ],
-        },
-      });
+    if (event.type === 'agent_end' && continuation.cancelledBackoff) {
+      emit({ type: 'agent', event: { ...event, messages: event.messages.slice(0, -1) } });
       return;
     }
     emit({ type: 'agent', event });
     await archive?.flush();
   });
-
-  function completeSkippedCalls(): ToolResultMessage[] {
-    const added: ToolResultMessage[] = [];
-    const messages: AgentMessage[] = [];
-    const original = agent.state.messages;
-    for (let index = 0; index < original.length; index++) {
-      const message = original[index];
-      if (!message) continue;
-      messages.push(message);
-      // Interrupted proposals never entered tool dispatch. Pi omits them on wire;
-      // adding a result would create an orphaned tool response.
-      if (
-        message.role !== 'assistant' ||
-        message.stopReason === 'aborted' ||
-        message.stopReason === 'error'
-      )
-        continue;
-      const calls = message.content.filter((block) => block.type === 'toolCall');
-      if (!calls.length) continue;
-      const results: ToolResultMessage[] = [];
-      let next = index + 1;
-      while (original[next]?.role === 'toolResult') {
-        const result = original[next] as ToolResultMessage;
-        results.push(result);
-        messages.push(result);
-        next++;
-      }
-      for (const call of calls) {
-        if (results.some((result) => result.toolCallId === call.id)) continue;
-        const started = events
-          .slice(runEventStart)
-          .some(
-            ({ event }) =>
-              event.type === 'agent' &&
-              event.event.type === 'tool_execution_start' &&
-              event.event.toolCallId === call.id,
-          );
-        const result: ToolResultMessage = {
-          role: 'toolResult',
-          toolCallId: call.id,
-          toolName: call.name,
-          isError: true,
-          timestamp: Date.now(),
-          content: [
-            {
-              type: 'text',
-              text: started
-                ? 'Tool outcome unknown after interrupted settlement; inspect host state before another action.'
-                : 'Not executed: run ended before this tool call.',
-            },
-          ],
-          details: { status: 'cancelled', applied: started ? 'unknown' : 'no' },
-        };
-        const outcome = { content: result.content, details: result.details };
-        finalizeTool(call.name, outcome, true, call.arguments);
-        result.content = outcome.content;
-        result.details = outcome.details;
-        messages.push(result);
-        added.push(result);
-        emit({ type: 'agent', event: { type: 'message_end', message: result } });
-        emit({
-          type: 'agent',
-          event: {
-            type: 'tool_execution_end',
-            toolCallId: call.id,
-            toolName: call.name,
-            result: { content: result.content, details: result.details },
-            isError: true,
-          },
-        });
-      }
-      index = next - 1;
-    }
-    agent.state.messages = messages;
-    return added;
-  }
 
   function checkImages(images: unknown): asserts images is readonly ImageContent[] | undefined {
     if (images === undefined) return;
@@ -417,43 +494,38 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
             'agent.commandExpansion',
             `Unsupported chat command ${command}: pi skill and prompt-template expansion is not supported.`,
           );
-        const refreshed = refreshCapabilities();
-        agent.state.systemPrompt = refreshed.systemPrompt;
-        agent.state.tools = refreshed.tools;
         checkImages(images);
         await archive?.begin();
-        await compactHistory('threshold', true);
+        // CLI `_prepareRun`: check the last response, aborted included; never continue here.
+        const previous = [...agent.state.messages]
+          .reverse()
+          .find((message) => message.role === 'assistant');
+        if (previous && continuation.compaction.enabled) await checkCompaction(previous);
+        const update = refresh();
         if (!runController.signal.aborted)
-          await agent.prompt(prompt, images ? [...images] : undefined);
+          await agent.prompt([
+            ...(update ? [update] : []),
+            {
+              role: 'user',
+              content: [{ type: 'text', text: prompt }, ...(images ?? [])],
+              timestamp: Date.now(),
+            },
+          ]);
         while (!runController.signal.aborted) {
           const last = agent.state.messages.at(-1);
+          if (last?.role !== 'assistant' || last.stopReason === 'aborted') break;
           const overflow =
-            last?.role === 'assistant' && isContextOverflow(last, model.contextWindow);
-          if (!overflow || last.stopReason === 'stop') {
-            if (last?.role === 'assistant' && last.stopReason !== 'aborted')
-              await compactHistory(
-                overflow && last.model === model.id && last.provider === model.provider
-                  ? 'overflow'
-                  : 'threshold',
-                true,
-              );
-            break;
+            last.stopReason !== 'stop' && isContextOverflow(last, model.contextWindow);
+          const next = continuation.compaction.enabled ? await checkCompaction(last) : 'done';
+          if (next === 'continue' && !runController.signal.aborted) {
+            await agent.continue();
+            continue;
           }
-          contextExceeded = true;
-          outcomeDetail = last.errorMessage ?? 'Context exceeds the selected model window';
-          if (
-            last.model !== model.id ||
-            last.provider !== model.provider ||
-            overflowRecoveryAttempted ||
-            !continuation.compaction.enabled
-          )
-            break;
-          overflowRecoveryAttempted = true;
-          agent.state.messages = agent.state.messages.slice(0, -1);
-          if (!(await compactHistory('overflow', false, last)) || runController.signal.aborted)
-            break;
-          contextExceeded = false;
-          await agent.continue();
+          if (overflow) {
+            contextExceeded = true;
+            outcomeDetail = last.errorMessage ?? 'Context exceeds the selected model window';
+          }
+          break;
         }
       }
       if (budgetReason) {
@@ -506,8 +578,6 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
       stopRequested = false;
       budgetReason = undefined;
       toolCalls = 0;
-      overflowRecoveryAttempted = false;
-      runEventStart = events.length;
       const copiedImages = images ? structuredClone(images) : undefined;
       active = Promise.resolve().then(() => run(prompt, copiedImages));
       setStatus('running');
@@ -540,6 +610,9 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
       if (disposed) throw new Error('Agent session is disposed');
       archive?.reset();
       agent.reset();
+      // Pi keeps its seeded system message; a reset session starts with no prompt state.
+      agent.state.messages = [];
+      journalRestore([]);
       continuation.reset();
       previousCall = undefined;
       repeatedCalls = 0;

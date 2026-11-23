@@ -202,27 +202,27 @@ async function abortTool(effects, preserveErrorDetails) {
   await run;
   const afterAbort = agent.state.messages.map(compactMessage);
   assert(!secondExecuted, 'sequential pending tool executed after abort');
+  // Pi 1.6.0 (#9986): every call skipped by the abort gets an error result.
   assert(
-    afterAbort.filter((m) => m.role === 'toolResult').length === 1,
+    afterAbort.filter((m) => m.role === 'toolResult').length === 2,
     'unexpected tool result count',
   );
   assert(
     afterAbort.find((m) => m.toolCallId === 'call_active').isError,
     'cancelled tool not marked error',
   );
+  const skipped = afterAbort.find((m) => m.toolCallId === 'call_pending');
   assert(
-    !afterAbort.some((m) => m.toolCallId === 'call_pending'),
-    'expected Pi raw history to omit skipped call result',
+    skipped?.isError && skipped.content[0]?.text === 'Operation aborted',
+    'expected Pi to record the skipped call as Operation aborted',
   );
   const nextWire = await captureOpenAIWire([...agent.state.messages, user('Continue after Stop.')]);
   assert(
     nextWire.some(
       (m) =>
-        m.role === 'tool' &&
-        m.tool_call_id === 'call_pending' &&
-        m.content === 'No result provided',
+        m.role === 'tool' && m.tool_call_id === 'call_pending' && m.content === 'Operation aborted',
     ),
-    'OpenAI did not synthesize missing pending result',
+    'OpenAI wire lost the recorded skipped result',
   );
   await agent.prompt('Continue after Stop.');
   assert(requests.at(-1).signalAborted === false, 'next run reused aborted signal');

@@ -1,6 +1,7 @@
-import { type AgentTool, formatSkillsForSystemPrompt } from '@earendil-works/pi-agent-core';
+import type { AgentTool } from '@earendil-works/pi-agent-core';
+import { formatSkillsForPrompt } from './pi-cli/skills.ts';
 import { getAgentPromptProfile } from './prompt-profile.ts';
-import type { AgentCapabilities, AgentResourceReport, AgentSkill } from './types.ts';
+import type { AgentCapabilities, AgentResourceReport } from './types.ts';
 
 export const PROMPT_PROFILE_ID = getAgentPromptProfile().id;
 
@@ -39,17 +40,16 @@ export function systemPrompt(
   const append = instructions.join('\n\n');
   if (append) prompt += `\n\n${append}`;
   if (resources?.contextFiles.length) {
-    prompt += '\n\n<project_context>\n\nProject-specific instructions and guidelines:\n\n';
-    for (const { path, content } of resources.contextFiles)
-      prompt += `<project_instructions path="${path}">\n${content}\n</project_instructions>\n\n`;
-    prompt += '</project_context>\n';
+    // CLI 1.x `project_context` section bytes.
+    const files = resources.contextFiles.map(
+      ({ path, content }) =>
+        `<project_instructions path="${path}">\n${content}\n</project_instructions>`,
+    );
+    prompt += `\n\n<project_context>\n${['Project-specific instructions and guidelines:', ...files].join('\n\n')}\n</project_context>`;
   }
   if (capabilities.files && resources?.skills.length) {
-    // Pi's pinned formatter consumes metadata only; its Skill body is unused.
-    const format = formatSkillsForSystemPrompt as (skills: readonly AgentSkill[]) => string;
-    const block = format(resources.skills);
-    if (block)
-      prompt += `\n\n${block.replace('Read the full skill file when the task matches its description.', "Use the read_file tool to load a skill's file when the task matches its description.")}`;
+    const block = formatSkillsForPrompt(resources.skills);
+    if (block) prompt += block.replace('Use the read tool', 'Use the read_file tool');
   }
   return `${prompt}\nCurrent working directory: ${root.replace(/\\/g, '/')}\n`;
 }

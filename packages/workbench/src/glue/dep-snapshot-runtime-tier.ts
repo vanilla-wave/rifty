@@ -2,17 +2,17 @@ import { Buffer } from '@riftydev/io';
 import type { Lockfile } from '@riftydev/npm-client';
 import { reprojectShadowLockfile } from '@riftydev/npm-client/internal';
 import type { ShadowRuntimeTier } from '@riftydev/shadow-registry/internal';
-import type { DepSnapshotV3 } from './dep-snapshot.ts';
+import type { DepSnapshot } from './dep-snapshot.ts';
 import {
   installArtifactIdentity,
   installArtifactIdentityForTier,
 } from './install-artifact-identity.ts';
 
-/** Caller verifies replay-cache integrity first; only generated facade bytes may change. */
+/** Caller validates the profile/lock and any replay-cache integrity first; only generated facade bytes may change. */
 export function projectDependencySnapshotTier(
-  snapshot: DepSnapshotV3,
+  snapshot: DepSnapshot,
   runtimeTier?: ShadowRuntimeTier,
-): DepSnapshotV3 {
+): DepSnapshot {
   if (runtimeTier === undefined) return snapshot;
   if (
     snapshot.installArtifactIdentity !== installArtifactIdentity &&

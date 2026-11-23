@@ -266,6 +266,7 @@ function factoryArguments(
     fileURLFromResolvedPath(resolved.id).href,
     dirname(resolved.id),
     resolved.id,
+    deps.isNodeMain?.(resolved.id) === true,
     assetPath,
     metaResolve,
     routedConstructors.Function,

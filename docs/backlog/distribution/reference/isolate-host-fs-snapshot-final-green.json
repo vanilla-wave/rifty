@@ -1,0 +1,126 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Goal complete: I1-I6 and scenario proven end to end (carriers green @6c048372c, product unchanged since); verify @282fa3d69: invariants exported verbatim (diff vs f757909c4 goal.md empty), ADR-0568 correction, memory caveat true (reproduced 300/206 one file, 232/307 vs 225 template); commit this verdict, push, merge on green CI at HEAD (PR-6).",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "282fa3d699fd20ca39e0db9560b7aec16adfce9d",
+  "unit_goal_source": "PR #422 (docs-only CLOSE of goal isolate-host-fs-snapshot), diff b4a8dfde7..282fa3d69 (verify of 62b02763c..282fa3d69); goal text at git f757909c4 (goal/map/ledger, deleted by this PR): Outcome, scenario 1-4, I1-I6, three amend: lines; ADR-0567; delivered PR #418 (codec), PR #419 (NUL/time residual).",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [
+    {
+      "row": "Scenario 1-2: guest writes tree in one isolate, snapshot, restore in fresh isolate before guest code, identical listing (ino aside)",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/isolate-guest/tests/snapshot-acceptance.test.ts:29",
+      "note": ""
+    },
+    {
+      "row": "Scenario 3: consumer realm restores the bytes into MemoryFs; a realm-built tree restores in an isolate",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/isolate-guest/tests/snapshot-acceptance.test.ts:49",
+      "note": ""
+    },
+    {
+      "row": "Scenario 4: truncated/flipped/bad CRC/version/template/duplicate/non-canonical/under-file/unknown kind/over maxBytes refused by name, FS unchanged, both realms",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/isolate-guest/tests/snapshot-acceptance.test.ts:75",
+      "note": ""
+    },
+    {
+      "row": "I1 round trip: kind, bytes, readdirSync order, statSync (ino aside) for any name rifty's FS holds (<=16 383 units, amend 2026-11-22), both realms both directions; gaps named in compat",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/isolate-guest/tests/snapshot-acceptance.test.ts:29,49; packages/vfs/src/restore-stat.test.ts:13; tools parity fs/path-nul-and-utimes-edge-times",
+      "note": ""
+    },
+    {
+      "row": "I2 version + template in blob; other version/template refused by name; later rifty reads earlier versions",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "packages/isolate-guest/tests/snapshot-acceptance.test.ts:75; packages/isolate-guest/tests/snapshot-codec.test.ts:424",
+      "note": ""
+    },
+    {
+      "row": "I3 hostile bytes: named, no blob text, target unchanged, linear, maxBytes before allocation, nothing outside target",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/isolate-guest/tests/snapshot-codec.test.ts:509,751; packages/isolate-guest/tests/snapshot-acceptance.test.ts:75,166",
+      "note": ""
+    },
+    {
+      "row": "I4 limits: snapshot over maxBytes before allocation, restore over maxBytes before read, restore only before guest code, snapshot after guest code guest-authored",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "packages/isolate-guest/tests/snapshot-acceptance.test.ts:122,263,275",
+      "note": ""
+    },
+    {
+      "row": "I5 same tree same bytes; snapshot changes nothing",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "packages/isolate-guest/tests/snapshot-acceptance.test.ts:49",
+      "note": ""
+    },
+    {
+      "row": "I6 cost published for small and template scale, both realms; template scale each direction <= 2 s, peak isolate memory <= 2 x S + 64 MiB (M3 Pro)",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "packages/isolate-guest/scripts/measure-snapshot.mjs:229; packages/isolate-guest/README.md:286 (small tree), :287 (template scale)",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

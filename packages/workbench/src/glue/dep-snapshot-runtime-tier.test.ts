@@ -12,14 +12,14 @@ import { expect, it, vi } from 'vitest';
 import { finalizePackageInstallFiles } from '../workers/package-install-finalizer.ts';
 import { prepareDepSnapshotApplication } from './dep-snapshot-application.ts';
 import {
-  type DepSnapshotV3,
+  type DepSnapshot,
   buildDepSnapshot,
   parseDepSnapshot,
   prepareDepSnapshotRestore,
 } from './dep-snapshot.ts';
 import { createInstallStampAuthority } from './install-stamp-authority.ts';
 
-function legacySnapshot(): DepSnapshotV3 {
+function legacySnapshot(): DepSnapshot {
   return parseDepSnapshot(
     gunzipSync(
       readFileSync(
@@ -32,7 +32,7 @@ function legacySnapshot(): DepSnapshotV3 {
   );
 }
 
-async function apply(snapshot: DepSnapshotV3, runtimeTier: 'coi' | 'no-coi') {
+async function apply(snapshot: DepSnapshot, runtimeTier: 'coi' | 'no-coi') {
   const memory = createMemoryFs();
   memory.fsSync.mkdirSync('/target', { recursive: true });
   const options = { conflict: 'overwrite' as const, runtimeTier, flush: async () => undefined };

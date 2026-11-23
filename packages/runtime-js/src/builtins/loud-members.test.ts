@@ -45,6 +45,19 @@ describe('browser-unsuppliable Node members are named loud throws', () => {
     expectNamedThrow(() => statfsSync('/tmp'), 'fs.statfsSync');
   });
 
+  it('fs link members throw NotImplementedError: the VFS has no links (ADR-0050, ADR-0568)', async () => {
+    const fs = loadBuiltin('node:fs') as Record<string, unknown> & {
+      promises: Record<string, unknown>;
+    };
+    for (const name of ['symlinkSync', 'linkSync', 'symlink', 'link'])
+      expectNamedThrow(() => member(fs, name)('a', 'b'), `fs.${name}`);
+    for (const name of ['symlink', 'link'])
+      await expect(member(fs.promises, name)('a', 'b')).rejects.toMatchObject({
+        name: 'NotImplementedError',
+        feature: `fs.${name}`,
+      });
+  });
+
   it('child_process.spawnSync throws NotImplementedError("child_process.spawnSync")', () => {
     const spawnSync = member(loadBuiltin('node:child_process'), 'spawnSync');
     expectNamedThrow(() => spawnSync('git', ['diff', '--name-only']), 'child_process.spawnSync');

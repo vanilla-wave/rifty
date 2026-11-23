@@ -1,0 +1,60 @@
+import type { ParityCase } from '../../src/types.ts';
+
+/**
+ * A NUL in a path is Node's `nullCheck` (ERR_INVALID_ARG_VALUE, `existsSync`
+ * false), and `utimes` never stores a non-finite time: an invalid Date leaves
+ * the time as it was (libuv UTIME_OMIT), a negative number is now. A huge time
+ * is platform-specific in Node (darwin saturates at ±2^63 ns, Linux: EINVAL): compared
+ * exactly on a darwin host only (rifty keeps darwin's; the compat row names Linux). Found
+ * through the isolate sandbox (ADR-0568).
+ */
+/** Node on darwin stores a time past 2^63 ns; on Linux it is EINVAL. */
+const HOST_STORES_HUGE_TIMES = process.platform === 'darwin';
+
+const c: ParityCase = {
+  cwd: '/app',
+  setup: { files: { 'app/f': 'x' } },
+  code: `
+    const fs = require('node:fs');
+    for (const [label, fn] of [
+      ['write', () => fs.writeFileSync('a\\0b', 'x')],
+      ['read', () => fs.readFileSync('a\\0b')],
+      ['mkdir', () => fs.mkdirSync('d\\0')],
+    ]) {
+      try { fn(); console.log(label, 'ok'); } catch (e) { console.log(label, e.code, e.message); }
+    }
+    console.log('exists', fs.existsSync('a\\0b'), JSON.stringify(fs.readdirSync('.')));
+    fs.utimesSync('f', 1000, 2000);
+    fs.utimesSync('f', new Date(NaN), new Date(NaN));
+    console.log('invalid date keeps', fs.statSync('f').mtimeMs === 2000000);
+    const before = Date.now();
+    fs.utimesSync('f', -5, -5);
+    console.log('negative is now', fs.statSync('f').mtimeMs >= before);
+    for (const [label, v] of [['negative string', '-5'], ['empty string', ''], ['decimal string', '12.5']]) {
+      fs.utimesSync('f', v, v);
+      console.log(label, fs.statSync('f').mtimeMs);
+    }
+    const t0 = Date.now();
+    for (const v of ['Infinity', '-Infinity']) {
+      fs.utimesSync('f', v, v);
+      console.log(v, 'string is now', fs.statSync('f').mtimeMs >= t0);
+    }
+    try { fs.utimesSync('f', 'abc', 'abc'); } catch (e) { console.log('abc', e.code); }
+    // Past a 64-bit nanosecond clock Node's answer is the host's: darwin stores libuv's
+    // saturated (or wrapped) time, Linux refuses with EINVAL (compat ⚠️, rifty keeps darwin's).
+    // Compared exactly where Node stores one.
+    ${
+      HOST_STORES_HUGE_TIMES
+        ? `for (const v of ['-1e306', '-1e19', '-9223372036854775808', '-9.3e12', '1e306', new Date(-8.64e15)]) {
+      fs.utimesSync('f', v, v);
+      console.log(String(v).slice(0, 12), fs.statSync('f').mtimeMs);
+    }`
+        : ''
+    }
+    for (const v of [NaN, Infinity]) {
+      try { fs.utimesSync('f', v, v); } catch (e) { console.log('number', v, e.code); }
+    }
+  `,
+};
+
+export default c;

@@ -16,11 +16,19 @@ carrier("the host's guest bundle is the export's, byte for byte", () => {
   expect(readFileSync(hosted).equals(readFileSync(exported))).toBe(true);
 });
 
-it("runCode's guest clock is the export's: timeOrigin + now() is the wall clock", async () => {
-  // A fresh `node -e` reads ~0.5 ms here; a worker's process origin is its whole uptime off.
-  // 50 ms: the two clock reads are separate host calls, and a loaded machine can preempt between them.
+it("runCode's guest clock is the export's: timeOrigin + now() is the wall clock, from the call's start", async () => {
+  // A warm worker: its process origin is before the call, so an origin taken from
+  // the worker's start, not the call's, falls outside [t0, t1]. Each clock value is
+  // bracketed by reads taken before and after it, so preemption between reads only
+  // widens the bracket; 1 ms is Date.now()'s integer granularity.
+  await runCode('');
+  const t0 = Date.now();
   const result = await runCode(
-    'console.log(Math.abs(performance.timeOrigin + performance.now() - Date.now()) < 50, performance.now() < 1000)',
+    'const a = Date.now(); const p = performance.timeOrigin + performance.now(); const b = Date.now(); console.log(a - 1 <= p && p <= b + 1, performance.timeOrigin)',
   );
-  expect(result).toEqual({ stdout: 'true true\n', stderr: '', exitCode: 0 });
+  const t1 = Date.now();
+  const [wall, origin] = result.stdout.trim().split(' ');
+  expect({ ...result, stdout: wall }).toEqual({ stdout: 'true', stderr: '', exitCode: 0 });
+  expect(Number(origin)).toBeGreaterThanOrEqual(t0 - 1);
+  expect(Number(origin)).toBeLessThanOrEqual(t1 + 1);
 });

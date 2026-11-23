@@ -9,6 +9,7 @@
  * another bundle than the process: they reach its state through the
  * `Symbol.for` slot, never a module-local import.
  */
+import { FATAL_TRAILER, formatFatalReport, formatFatalStack } from './fatal-report.ts';
 import { readActiveNodeProcessBootstrap } from './process-bootstrap-identity.ts';
 
 const NODE_PROCESS_LIFECYCLE = Symbol.for('rifty.runtime-js.process-lifecycle.v1');
@@ -73,6 +74,8 @@ export interface NodeProcessExitHost {
   writeStderr(text: string): void;
   /** Request the kernel exit for `signal` (eval-owned or control port; the port sends once). */
   requestExit(signal: RiftyProcessExitSignal): void;
+  /** A control port can carry the exit; without one only the drain ends the process. */
+  hasExitControl(): boolean;
 }
 
 /** One process's exit state: Node's `_exiting`. */
@@ -96,6 +99,10 @@ export class NodeProcessExit {
   /** The first requested terminal; null while the process lives. */
   get terminal(): RiftyProcessExitSignal | null {
     return this.#terminal;
+  }
+
+  get hasExitControl(): boolean {
+    return this.#host.hasExitControl();
   }
 
   /** Node `per_thread.js` `exit()`: the status is read after the listeners. */
@@ -131,13 +138,13 @@ export class NodeProcessExit {
   fatal(error: unknown): never {
     if (this.#terminal !== null) throw this.#terminal;
     if (this.#fatalExitCode !== null) this.#host.writeExitCode(this.#fatalExitCode.value);
-    this.#host.writeStderr(`${formatThrown(error)}\n`);
+    this.#host.writeStderr(fatalReportText(error));
     return this.#terminate(toUint8ExitCode(this.#host.readExitCode() ?? 1), { cause: error });
   }
 
   /** A throwing `uncaughtException` listener: stderr, status 7, no `'exit'`. */
   listenerThrew(error: unknown): never {
-    this.#host.writeStderr(`${formatThrown(error)}\n`);
+    this.#host.writeStderr(fatalReportText(error));
     this.#exiting = true;
     return this.#terminate(7, { cause: error });
   }
@@ -167,7 +174,7 @@ export class NodeProcessExit {
 
 type NodeProcessExitLike = Pick<
   NodeProcessExit,
-  'exiting' | 'terminal' | 'beginFatal' | 'fatal' | 'listenerThrew' | 'reset'
+  'exiting' | 'terminal' | 'hasExitControl' | 'beginFatal' | 'fatal' | 'listenerThrew' | 'reset'
 >;
 
 export function attachNodeProcessExit(process: object, exit: NodeProcessExit): void {
@@ -198,6 +205,14 @@ export function isNodeProcessExiting(process: unknown): boolean {
  */
 export function readNodeProcessTerminal(target?: unknown): RiftyProcessExitSignal | null {
   return lifecycleTarget(target)?.exit.terminal ?? null;
+}
+
+/**
+ * The active runtime process has no control port (an in-process host: isolate
+ * guest, no-COI command): its terminal ends it only through its drain.
+ */
+export function isDrainOnlyNodeProcess(): boolean {
+  return lifecycleTarget(undefined)?.exit.hasExitControl === false;
 }
 
 /** Reset a reused in-process `NodeProcess` to an unset, not-exiting invocation. */
@@ -420,8 +435,42 @@ function noSideEffectsToString(value: unknown): string {
   return `[object ${typeof tag === 'string' ? tag : builtinTag(value)}]`;
 }
 
-/** The fatal report's text for a thrown value (also the isolate host's, ADR-0557 §6). */
-export function formatThrown(error: unknown): string {
+/** main's fatal text for a thrown value (every host but the isolate guest). */
+function formatThrown(error: unknown): string {
   if (error instanceof Error) return error.stack ?? `${error.name}: ${error.message}`;
   return noSideEffectsToString(error);
+}
+
+let nodeFatalReport = false;
+
+/**
+ * The isolate guest's one switch (ADR-0557, goal node-file-entry-parity): its
+ * fatal text is Node's report (`builtins/fatal-report.ts`). The browser hosts
+ * keep main's text (ADR-0445 2026-11-23 rollback).
+ */
+export function installNodeFatalReport(): void {
+  nodeFatalReport = true;
+}
+
+/** Whether the realm prints Node's fatal report (`installNodeFatalReport`). */
+export function nodeFatalReportInstalled(): boolean {
+  return nodeFatalReport;
+}
+
+/**
+ * The fatal text: main's `err.stack` line, or — in the isolate guest — Node's
+ * report; where inspecting a guest value throws, its stack alone (Node's
+ * fallback); without one, the value's side-effect-free text and the trailer.
+ */
+export function fatalReportText(error: unknown): string {
+  if (!nodeFatalReport) return `${formatThrown(error)}\n`;
+  try {
+    return formatFatalReport(error);
+  } catch {
+    try {
+      return formatFatalStack(error) ?? `${noSideEffectsToString(error)}\n${FATAL_TRAILER}`;
+    } catch {
+      return `Uncaught exception\n${FATAL_TRAILER}`;
+    }
+  }
 }

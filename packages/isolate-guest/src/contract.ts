@@ -3,6 +3,7 @@
  * Shared by the bundle and the host side; no Node or embedder import here.
  * Unstable: any release may change it (README §Versions).
  */
+import type { SnapshotOptions } from './snapshot.ts';
 
 /** What the guest can call on the host. Every argument is guest-controlled. */
 export interface HostFunctions {
@@ -29,14 +30,33 @@ export interface GuestHost extends HostFunctions {
 export interface GuestEntry {
   /** Run `code` like `node -e`, once. Resolves with the exit status (judge it with `exitStatus`). */
   run(code: string): Promise<number>;
+  /**
+   * `node <path> [args]` over this realm's FS, cwd `/workspace`, once, instead
+   * of `run` (ADR-0568). Resolves with the exit status (judge it with `exitStatus`).
+   */
+  runFile(path: string, args: readonly string[]): Promise<number>;
   /** Host timer `id` expired. */
   fire(id: number): void;
   /** An unhandled rejection the embedder saw: a copy of the reason, or `UNCOPYABLE_REJECTION`. */
   rejection(reason: unknown): void;
+  /** The realm's whole FS as a snapshot (ADR-0567); whenever no guest code runs, after `run` included. */
+  snapshot(options: SnapshotOptions): Uint8Array;
+  /**
+   * Replace the realm's FS with a snapshot; only before `run`, else `ERR_FS_SNAPSHOT_NOT_FRESH`.
+   * A failure while writing is `ERR_FS_SNAPSHOT_INCOMPLETE`: `run`, `snapshot` and `restore`
+   * then refuse with it — dispose the isolate.
+   */
+  restore(bytes: Uint8Array, options: SnapshotOptions): void;
 }
 
 /** Sent to `rejection` when the reason cannot be copied out of the isolate. */
 export const UNCOPYABLE_REJECTION = 'isolate-host:uncopyable-rejection-reason';
+
+/**
+ * The directories a fresh guest FS holds: the cwd and rifty's `os.tmpdir()`,
+ * both present for any `node` on a machine. A sandbox's first state too (ADR-0568).
+ */
+export const GUEST_DIRS: readonly string[] = ['/workspace', '/tmp'];
 
 /** The stderr line (prefixed `Error: `) a guest `import()` ends its run with. */
 export const IMPORT_GAP =

@@ -57,3 +57,5 @@ Independent DEC-2 decision reviewer: resource_decision; raw full CLI/core probe.
 ## Corrections
 
 2026-09-28 — ADR-0475 supersedes §4’s “Preserve profile id/paragraphs” clause: profile v2 adds one default workflow recipe; recipe:false omits only that paragraph. Profile/date → instructions → project context → skills → cwd ordering remains.
+
+2026-11-23 — Pi 1.x removed the agent-core skills formatter; rifty uses the ported CLI 1.6.0 `formatSkillsForPrompt` and CLI 1.x `project_context` bytes (ADR-0569); parity vs CLI 1.6.0 in `project-resources.test.ts`.

@@ -1,0 +1,33 @@
+// Fatal-path matrix (goal node-file-entry-parity round 5): kind × origin, as `node file` and `node -e`.
+const KINDS: Record<string, string> = {
+  error: "new Error('e')",
+  subclass: "new (class Bad extends Error {})('e')",
+  props: "Object.assign(new Error('e', { cause: new Error('c') }), { code: 'E1' })",
+  null: 'null',
+  number: '42',
+  string: "'str'",
+  object: '({ a: 1 })',
+  mnf: "(() => { require('./nope'); })()",
+  require_async: "(() => { require('./tla.mjs'); })()",
+};
+const ORIGINS: Record<string, (v: string) => string> = {
+  sync: (v) => `throw ${v};`,
+  timer: (v) => `setTimeout(() => { throw ${v}; }, 0);`,
+  microtask: (v) => `queueMicrotask(() => { throw ${v}; });`,
+  tick: (v) => `process.nextTick(() => { throw ${v}; });`,
+  rejection: (v) => `Promise.reject(${v});`,
+  exit: (v) => `process.on('exit', () => { throw ${v}; });`,
+};
+export interface MatrixProgram {
+  readonly name: string;
+  readonly mode: 'file' | 'eval';
+  readonly code: string;
+}
+export const matrixPrograms: MatrixProgram[] = [];
+for (const [kind, value] of Object.entries(KINDS))
+  for (const [origin, make] of Object.entries(ORIGINS))
+    for (const mode of ['file', 'eval'] as const)
+      matrixPrograms.push({ name: `${mode}:${origin}:${kind}`, mode, code: make(value) });
+for (const mode of ['file'] as const)
+  matrixPrograms.push({ name: `${mode}:sync:compile`, mode, code: 'const a = 1;\nlet x = ;\n' });
+export const MATRIX_TLA = 'await 1;\nexport const a = 1;\n';

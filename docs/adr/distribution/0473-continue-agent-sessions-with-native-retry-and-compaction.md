@@ -54,3 +54,5 @@ Corrects ADR-0466's admitted envelope list and restored-prefix interpretation.
 
 2026-09-27 — ADR-0474 projects persisted compaction input from existing audit
 receipts, including discarded assistant attempts. Agent remains the sole execution-context owner.
+
+2026-11-23 — §1 "no copied summary algorithm" overturned for compaction by ADR-0569 (pi 1.x has no browser-safe export); retry and classifier stay native. §3 maxTokens/summary prompts follow CLI 1.6.0; §4 adds recoverable-length compact-and-continue (CLI 1.6.0).

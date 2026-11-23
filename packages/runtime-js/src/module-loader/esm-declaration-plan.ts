@@ -24,6 +24,7 @@ export interface TransformHelperNames {
   readonly importMetaUrl: string;
   readonly metaDirname: string;
   readonly metaFilename: string;
+  readonly metaMain: string;
   readonly assetPath: string;
   readonly metaResolve: string;
   readonly runtimeObject: string;

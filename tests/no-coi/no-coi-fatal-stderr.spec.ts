@@ -102,7 +102,9 @@ const rows: readonly FatalRow[] = [
     name: 'cjs-entry-throw',
     files: { 'fail.cjs': "throw new Error('boom');\n" },
     nodeArgv: ['fail.cjs'],
-    residual: { ...UNPRINTED, userFrame: 'at Object.eval (<root>/fail.cjs:3:7)' },
+    // main's report; the module wrapper shares line 1 (ADR-0450 2026-11-22): native
+    // line, Node's name, line-1 column right of the source by the prefix.
+    residual: { ...UNPRINTED, userFrame: 'at Object.<anonymous> (<root>/fail.cjs:1:133)' },
   },
   {
     name: 'eval-throw',

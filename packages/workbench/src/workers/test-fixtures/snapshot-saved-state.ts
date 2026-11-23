@@ -8,7 +8,7 @@ import {
   produceDependencySnapshot,
 } from '../../glue/dep-snapshot-producer.ts';
 import { decodeDepSnapshotTar } from '../../glue/dep-snapshot-tar.ts';
-import { type DepSnapshotV3, parseDepSnapshot } from '../../glue/dep-snapshot.ts';
+import { type DepSnapshot, parseDepSnapshot } from '../../glue/dep-snapshot.ts';
 import { SyncMirrorVfs } from '../../glue/sync-mirror-vfs.ts';
 import { createPlaygroundProjectCatalog } from '../../workbench/internal/playground-project-catalog.ts';
 import { definePlaygroundProject } from '../../workbench/internal/playground-project-definition.ts';
@@ -36,7 +36,7 @@ export const unusedSnapshotAssetUrl = 'https://host.test/unavailable-new-snapsho
 
 export interface SavedSnapshotFixture extends ProducedDependencySnapshot {
   readonly descriptor: PlaygroundTrustedSnapshot;
-  readonly payload: DepSnapshotV3;
+  readonly payload: DepSnapshot;
 }
 
 export interface SnapshotDefinitionOptions {

@@ -57,8 +57,7 @@ No guest-realm or host-JS fix is causal: V8 creates the promises (async function
 the embedder's `PromiseRejectCallback` sees them, and isolated-vm owns it. The fix is that one line
 in isolated-vm, shipped to consumers. Every isolated-vm embedder of `@riftydev/isolate-guest` has it.
 
-Neighbours checked, different causes (their diagnostic is written, so no report is lost; the
-lifecycle after it misbehaves): `isolate-host-queuemicrotask-throw-times-out`,
+Neighbours checked, different causes (no report is lost to a GC; the lifecycle after it misbehaves):
 `isolate-host-uncaught-throw-waits-for-microtask-checkpoint`; `runtime-js/node-eval-unhandled-rejection-timing`
 and `late-unhandled-rejection-drain` are rifty lifecycle/browser paths.
 

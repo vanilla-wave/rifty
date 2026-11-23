@@ -22,6 +22,7 @@ import { requireTsconfigPaths } from './tsconfig-preload.ts';
 const safeReflectApply = Reflect.apply.bind(Reflect);
 const stringEndsWithPrimordial = String.prototype.endsWith;
 const utf8 = new TextDecoder('utf-8');
+const utf8KeepingBom = new TextDecoder('utf-8', { ignoreBOM: true });
 
 function safeEndsWith(value: string, suffix: string): boolean {
   return safeReflectApply(stringEndsWithPrimordial, value, [suffix]) as boolean;
@@ -880,9 +881,15 @@ function readResolved(
   filePath: string,
   _esm: boolean,
 ): ResolvedModule {
-  const raw = utf8.decode(vfs.readFileBytesSync(filePath));
-  const compiledSource =
-    raw.charCodeAt(0) === 0x23 && raw.charCodeAt(1) === 0x21 ? raw.replace(/^#![^\n]*/, '') : raw;
+  // Node's CJS loader reads the file as is: a BOM stays (whitespace to V8, so
+  // `\uFEFF#!` is a SyntaxError); JSON and the ESM loader strip it.
+  const kept = utf8KeepingBom.decode(vfs.readFileBytesSync(filePath));
+  const raw = kept.charCodeAt(0) === 0xfeff ? kept.slice(1) : kept;
+  const withoutShebang = (text: string) =>
+    text.charCodeAt(0) === 0x23 && text.charCodeAt(1) === 0x21
+      ? text.replace(/^#![^\n]*/, '')
+      : text;
+  const compiledSource = withoutShebang(raw);
   // One scope walk: feed its `type` into detectKind so the `.js`/`.ts`/`.tsx`
   // branch no longer re-walks/re-parses the same package.json (perf #4).
   const scope = findPackageScope(vfs, pkgCache, filePath);
@@ -894,7 +901,7 @@ function readResolved(
   // `new Function`/`new AsyncFunction` (which throw on `#!`). Drop only the
   // `#!` line's text, keep its newline so line numbers + source-map offsets
   // past line 1 are unchanged. json/text are not compiled — leave them verbatim.
-  const source = kind === 'cjs' || kind === 'esm' ? compiledSource : raw;
+  const source = kind === 'cjs' ? withoutShebang(kept) : kind === 'esm' ? compiledSource : raw;
   return {
     id: filePath,
     kind,

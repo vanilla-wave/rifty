@@ -154,12 +154,12 @@ describe('producer tar snapshot envelope', () => {
   it('writes deterministic standard tar entries ordinary tools extract', () => {
     const serialize = (
       codec as unknown as {
-        serializeDepSnapshotTar?: (snapshot: codec.DepSnapshotV3) => Uint8Array;
+        serializeDepSnapshotTar?: (snapshot: codec.DepSnapshot) => Uint8Array;
       }
     ).serializeDepSnapshotTar;
     expect(serialize, 'tar serializer is available').toBeTypeOf('function');
     if (!serialize) throw new Error('tar serializer missing');
-    const snapshot: codec.DepSnapshotV3 = {
+    const snapshot: codec.DepSnapshot = {
       ...manifest,
       version: 3,
       packageJsonText,

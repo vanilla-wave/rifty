@@ -1,6 +1,6 @@
 import type { AgentMessage, AgentTool } from '@earendil-works/pi-agent-core';
-import { Type } from '@earendil-works/pi-ai';
 import { OpfsVfs } from '@riftydev/vfs';
+import { Type } from 'typebox';
 import type { AgentArchiveOptions, AgentSessionEvent } from './types.ts';
 
 const encoder = new TextEncoder();
@@ -260,7 +260,8 @@ export function createArchive(
           : event.type === 'retry' && event.phase === 'start' && event.source === 'assistant'
             ? event.message
             : undefined;
-      if (started && message) {
+      // Prompt state (pi 1.x system messages) is re-derived each run, not conversation.
+      if (started && message && message.role !== 'system') {
         conversation.messages.push(structuredClone(message));
         void save();
       }

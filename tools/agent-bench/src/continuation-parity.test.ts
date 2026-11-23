@@ -7,10 +7,10 @@ import {
   type Message,
   type Model,
   type SimpleStreamOptions,
-  Type,
   createAssistantMessageEventStream,
   createModels,
   createProvider,
+  getCurrentSystemPrompt,
 } from '@earendil-works/pi-ai';
 import {
   DefaultResourceLoader,
@@ -19,7 +19,7 @@ import {
   SettingsManager,
   createAgentSession as createNativeSession,
 } from '@earendil-works/pi-coding-agent';
-import { type AgentMessage, createAgentSession } from '@riftydev/agent';
+import { type AgentMessage, Type, createAgentSession } from '@riftydev/agent';
 import { expect, it } from 'vitest';
 import { eventMetrics } from './metrics.ts';
 
@@ -79,10 +79,52 @@ type Scenario =
   | 'overflow-episodes'
   | 'silent-overflow'
   | 'retry-overflow-tail'
-  | 'abort-backoff';
-async function run(kind: 'native' | 'rifty', scenario: Scenario) {
+  | 'abort-backoff'
+  | 'length-recovery'
+  | 'file-ops'
+  | 'length-twice'
+  | 'length-tool-stop'
+  | 'restored-length-tool'
+  | 'resend'
+  | 'resend-length'
+  | 'usage-stop-resend'
+  | `rand:${number}`;
+// Seeded random traces (external review of PR #423): steps per conversation request.
+function rng(seed: number) {
+  let x = (seed * 2654435761) >>> 0 || 1;
+  return () => {
+    x ^= x << 13;
+    x >>>= 0;
+    x ^= x >>> 17;
+    x ^= x << 5;
+    x >>>= 0;
+    return x / 4294967296;
+  };
+}
+function plan(seed: number) {
+  const r = rng(seed);
+  const kinds = ['stop', 'tool', 'length', 'lengthtool', '429', 'overflow', 'silent'] as const;
+  const steps = Array.from({ length: 40 }, () => kinds[Math.floor(r() * kinds.length)]!);
+  const sumFail = Array.from({ length: 20 }, () => r() < 0.15);
+  return {
+    steps,
+    sumFail,
+    init: Math.floor(r() * 3),
+    prompts: 1 + Math.floor(r() * 3),
+    stop: r() < 0.4,
+    keep: [3, 30, 20000][Math.floor(r() * 3)]!,
+  };
+}
+async function run(kind: 'native' | 'rifty', scenario: Scenario, riftyPrompt = '') {
+  const P = scenario.startsWith('rand:') ? plan(Number(scenario.slice(5))) : undefined;
+  let summaries = 0;
   const dir = await mkdtemp(join(tmpdir(), 'rifty-continuation-parity-'));
-  const requests: { summary: boolean; messages: Context['messages']; maxRetries?: number }[] = [];
+  let conversationPrompt: string | undefined;
+  const requests: {
+    summary: boolean;
+    messages: Context['messages'];
+    maxRetries?: number;
+  }[] = [];
   const retries: { attempt: number; delayMs: number }[] = [];
   const compactionEvents: unknown[] = [];
   const compactions: {
@@ -99,14 +141,49 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario) {
     context: Context,
     options?: SimpleStreamOptions,
   ) => {
-    const summary = !!context.systemPrompt?.startsWith('You are a context summarization assistant');
+    // Pi 1.x carries the prompt as system messages; both sides send one current prompt.
+    const system = getCurrentSystemPrompt(context.messages);
+    const summary = system.startsWith('You are a context summarization assistant');
+    if (!summary) conversationPrompt ??= system;
     requests.push({
       summary,
-      messages: structuredClone(context.messages),
+      // Prompt bytes differ by design; system message positions in each request must match.
+      messages: structuredClone(context.messages).map((message) =>
+        message.role === 'system' ? ({ role: 'system' } as never) : message,
+      ),
       maxRetries: options?.maxRetries,
     });
     if (!summary) count++;
     const response = summary ? answer('Saved old context') : answer('Done');
+    if (P && summary && P.sumFail[summaries++ % 20])
+      Object.assign(response, answer('invalid credentials', 10, 'error'));
+    if (P && !summary) {
+      const step = P.steps[(count - 1) % 40];
+      if (step === 'tool')
+        Object.assign(response, {
+          ...answer('', 10, 'toolUse'),
+          // Distinct arguments: rifty's repeated-call notice (ADR-0475) is not a CLI behavior.
+          content: [{ type: 'toolCall', id: `c${count}`, name: 'effect', arguments: { n: count } }],
+        });
+      if (step === 'length') Object.assign(response, answer('Truncated', 10, 'length'));
+      if (step === 'lengthtool')
+        Object.assign(response, {
+          ...answer('', 10, 'length'),
+          content: [{ type: 'toolCall', id: `l${count}`, name: 'effect', arguments: { n: count } }],
+        });
+      if (step === '429') Object.assign(response, answer('429 rate limit', 7, 'error'));
+      if (step === 'overflow')
+        Object.assign(response, answer('maximum context length is 5000 tokens', 10, 'error'));
+      if (step === 'silent') Object.assign(response, answer('Done', 40000));
+    }
+    // Silent usage overflow, failing summaries, then a stopped 429 retry: the later omission
+    // makes the first answer's usage stale for the next pre-prompt check (CLI usage gating).
+    if (scenario === 'usage-stop-resend' && summary)
+      Object.assign(response, answer('invalid credentials', 10, 'error'));
+    if (scenario === 'usage-stop-resend' && !summary && count === 1)
+      Object.assign(response, answer('Done', 40000));
+    if (scenario === 'usage-stop-resend' && !summary && count === 2)
+      Object.assign(response, answer('429 rate limit', 7, 'error'));
     if (
       (scenario === 'retry-two' && count <= 2) ||
       scenario === 'abort-backoff' ||
@@ -147,6 +224,24 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario) {
         answer(count === 1 ? '429' : 'maximum context length is 5000 tokens', 10, 'error'),
       );
     if (scenario === 'silent-overflow' && !summary) Object.assign(response, answer('Done', 40000));
+    // Recovery-omission scenarios (review of PR #423): a recovered attempt leaves with its results.
+    if (scenario === 'length-tool-stop' && !summary && count === 1)
+      Object.assign(response, {
+        ...answer('', 10, 'length'),
+        content: [{ type: 'toolCall', id: 'cut', name: 'effect', arguments: {} }],
+      });
+    if (scenario === 'length-tool-stop' && !summary && count === 2)
+      Object.assign(response, answer('429 rate limit', 7, 'error'));
+    if (scenario === 'resend' && !summary && count <= 3)
+      Object.assign(response, answer('maximum context length is 5000 tokens', 10, 'error'));
+    if (scenario === 'resend-length' && !summary && count <= 3)
+      Object.assign(response, answer('Truncated', 10, 'length'));
+    // Pi 1.x: a length stop below the model's output limit gets one compact-and-continue.
+    if (
+      (scenario === 'length-recovery' && !summary && count === 1) ||
+      (scenario === 'length-twice' && !summary)
+    )
+      Object.assign(response, answer('Truncated', 10, 'length'));
     if (scenario === 'overflow-episodes' && !summary && (count === 1 || count === 3))
       Object.assign(response, answer('maximum context length is 5000 tokens', 10, 'error'));
     if (
@@ -175,7 +270,7 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario) {
       else
         events.push({
           type: 'done',
-          reason: response.stopReason as 'stop' | 'toolUse',
+          reason: response.stopReason as 'stop' | 'toolUse' | 'length',
           message: response,
         });
     });
@@ -199,33 +294,105 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario) {
       },
     },
   ];
+  const lowUsage = (list: Message[]) =>
+    list.map((message) =>
+      message.role === 'assistant' ? { ...message, usage: answer('low').usage } : message,
+    );
+  // CLI file-operation extraction keys on its own tool names (read/write/edit).
+  const fileOps = (): Message[] => [
+    { role: 'user', content: 'Inspect files', timestamp: 0 },
+    {
+      ...answer('', 10, 'toolUse'),
+      content: [
+        // Summaries omit thinking (CLI 1.6.0 serializeConversation).
+        { type: 'thinking', thinking: 'private reasoning' },
+        { type: 'toolCall', id: 'r1', name: 'read', arguments: { path: '/c.ts' } },
+        { type: 'toolCall', id: 'r2', name: 'read', arguments: { path: '/a.ts' } },
+        { type: 'toolCall', id: 'w1', name: 'write', arguments: { path: '/b.ts' } },
+        { type: 'toolCall', id: 'e1', name: 'edit', arguments: { path: '/a.ts' } },
+      ],
+      timestamp: 0,
+    },
+    ...['read', 'read', 'write', 'edit'].map((name, index) => ({
+      role: 'toolResult' as const,
+      toolCallId: ['r1', 'r2', 'w1', 'e1'][index]!,
+      toolName: name,
+      content: [{ type: 'text' as const, text: 'done' }],
+      isError: false,
+      timestamp: 0,
+    })),
+    ...seed(),
+  ];
   const initialMessages =
     scenario === 'threshold' || scenario === 'summary-failure'
       ? seed()
-      : scenario === 'stale-overflow' ||
-          scenario === 'overflow-episodes' ||
-          scenario === 'silent-overflow' ||
-          scenario === 'retry-overflow-tail'
-        ? seed().map((message) =>
-            message.role === 'assistant' ? { ...message, usage: answer('low').usage } : message,
-          )
-        : [];
+      : scenario === 'file-ops'
+        ? fileOps()
+        : scenario === 'stale-overflow' ||
+            scenario === 'overflow-episodes' ||
+            scenario === 'silent-overflow' ||
+            scenario === 'retry-overflow-tail' ||
+            scenario === 'length-recovery' ||
+            scenario === 'length-twice' ||
+            scenario === 'resend' ||
+            scenario === 'resend-length'
+          ? lowUsage(seed())
+          : scenario === 'restored-length-tool'
+            ? ([
+                ...lowUsage(seed()),
+                { role: 'user', content: 'Run the effect', timestamp: 5 },
+                {
+                  ...answer('', 10, 'length'),
+                  content: [{ type: 'toolCall', id: 'effect-one', name: 'effect', arguments: {} }],
+                  timestamp: 6,
+                },
+                {
+                  role: 'toolResult',
+                  toolCallId: 'effect-one',
+                  toolName: 'effect',
+                  content: [{ type: 'text', text: 'settled' }],
+                  isError: false,
+                  timestamp: 7,
+                },
+              ] as Message[])
+            : [];
+  if (P)
+    initialMessages.splice(0, Number.POSITIVE_INFINITY, ...[[], seed(), lowUsage(seed())][P.init]!);
+  if (scenario === 'usage-stop-resend')
+    initialMessages.splice(0, Number.POSITIVE_INFINITY, ...lowUsage(seed()));
+  const stopsOnRetry = P
+    ? P.stop
+    : scenario === 'abort-backoff' ||
+      scenario === 'length-tool-stop' ||
+      scenario === 'usage-stop-resend';
+  // A second prompt after the first run settles (stopped or failed recovery).
+  const prompts = P
+    ? ['continue', 'again', 'more'].slice(0, P.prompts)
+    : scenario === 'usage-stop-resend'
+      ? ['continue', 'again', 'more']
+      : scenario === 'length-tool-stop' || scenario === 'resend' || scenario === 'resend-length'
+        ? ['continue', 'again']
+        : ['continue'];
   let messages: readonly AgentMessage[];
-  let failure: string | undefined;
   try {
     if (kind === 'native') {
       const settingsManager = SettingsManager.inMemory({
         retry: {
           enabled: true,
           maxRetries: 3,
-          baseDelayMs: scenario === 'abort-backoff' ? 2000 : 1,
+          baseDelayMs: stopsOnRetry ? 2000 : 1,
           provider: { maxRetries: 0 },
         },
         compaction: {
           enabled: true,
           reserveTokens: 16384,
-          keepRecentTokens:
-            scenario === 'overflow-episodes' ? 3 : scenario === 'retry-overflow-tail' ? 30 : 20000,
+          keepRecentTokens: P
+            ? P.keep
+            : scenario === 'overflow-episodes'
+              ? 3
+              : scenario === 'retry-overflow-tail'
+                ? 30
+                : 20000,
         },
       });
       const resourceLoader = new DefaultResourceLoader({
@@ -237,6 +404,9 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario) {
         noPromptTemplates: true,
         noExtensions: true,
         noThemes: true,
+        // Estimates count the system message: the CLI's preamble + <cwd> sections get the
+        // same character count as rifty's prompt section (wire prompt bytes are not compared).
+        systemPrompt: riftyPrompt.slice(0, riftyPrompt.length - `<cwd>\n${dir}\n</cwd>`.length),
       });
       await resourceLoader.reload();
       const modelRuntime = await ModelRuntime.create({
@@ -247,19 +417,23 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario) {
         allowModelNetwork: false,
       });
       modelRuntime.registerNativeProvider(provider);
+      const open = async (sessionManager: SessionManager) =>
+        (
+          await createNativeSession({
+            cwd: dir,
+            agentDir: dir,
+            settingsManager,
+            resourceLoader,
+            modelRuntime,
+            sessionManager,
+            model: modelRuntime.getModel('probe', 'probe'),
+            tools: ['effect'],
+            customTools: tools,
+          })
+        ).session;
       const sessionManager = SessionManager.inMemory(dir);
       for (const message of initialMessages) sessionManager.appendMessage(message);
-      const { session } = await createNativeSession({
-        cwd: dir,
-        agentDir: dir,
-        settingsManager,
-        resourceLoader,
-        modelRuntime,
-        sessionManager,
-        model: modelRuntime.getModel('probe', 'probe'),
-        tools: ['effect'],
-        customTools: tools,
-      });
+      const session = await open(sessionManager);
       switchModel = () => session.setModel(modelRuntime.getModel('probe', 'large')!);
       session.subscribe((event) => {
         if (event.type === 'compaction_end') {
@@ -275,7 +449,7 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario) {
               : {}),
           });
         }
-        if (event.type === 'auto_retry_start' && scenario === 'abort-backoff')
+        if (event.type === 'auto_retry_start' && stopsOnRetry)
           setTimeout(() => {
             void session.abort();
           }, 0);
@@ -283,12 +457,7 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario) {
           retries.push({ attempt: event.attempt, delayMs: event.delayMs });
       });
       try {
-        try {
-          await session.prompt('continue');
-        } catch (error) {
-          if (scenario !== 'retry-overflow-tail') throw error;
-          failure = error instanceof Error ? error.message : String(error);
-        }
+        for (const prompt of prompts) await session.prompt(prompt);
         messages = structuredClone(session.messages);
       } finally {
         session.dispose();
@@ -302,10 +471,15 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario) {
         model: 'probe',
         initialMessages,
         tools,
-        retry: { baseDelayMs: scenario === 'abort-backoff' ? 2000 : 1 },
+        retry: { baseDelayMs: stopsOnRetry ? 2000 : 1 },
         compaction: {
-          keepRecentTokens:
-            scenario === 'overflow-episodes' ? 3 : scenario === 'retry-overflow-tail' ? 30 : 20000,
+          keepRecentTokens: P
+            ? P.keep
+            : scenario === 'overflow-episodes'
+              ? 3
+              : scenario === 'retry-overflow-tail'
+                ? 30
+                : 20000,
         },
       });
       switchModel = () => session.setModel('large');
@@ -320,7 +494,7 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario) {
               : {}),
           });
         }
-        if (event.type === 'retry' && event.phase === 'start' && scenario === 'abort-backoff')
+        if (event.type === 'retry' && event.phase === 'start' && stopsOnRetry)
           setTimeout(() => {
             void session.stop();
           }, 0);
@@ -328,9 +502,17 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario) {
           retries.push({ attempt: event.attempt, delayMs: event.delayMs! });
       });
       try {
-        await session.send('continue');
-        if (scenario === 'retry-overflow-tail') failure = session.detail();
+        for (const prompt of prompts) await session.send(prompt);
+        if (scenario === 'retry-overflow-tail') expect(session.status()).toBe('context-exceeded');
         messages = (await session.exportTrace()).transcript;
+        // The exported history stays restorable (paired calls and results).
+        await createAgentSession({
+          host: { root: dir, capabilities: () => ({}), async close() {} },
+          models,
+          model: 'probe',
+          tools,
+          initialMessages: messages,
+        }).dispose();
       } finally {
         await session.dispose();
       }
@@ -338,16 +520,37 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario) {
     const normalized = (value: unknown) =>
       JSON.parse(
         JSON.stringify(value, (key, value) =>
-          ['timestamp', 'details'].includes(key) ? undefined : value,
+          // Rand traces: rifty's receipts (below) also enter token estimates; fixed scenarios
+          // keep exact numbers.
+          [
+            'timestamp',
+            'details',
+            'durationMs',
+            ...(P ? ['tokensBefore', 'tokensAfter'] : []),
+          ].includes(key)
+            ? undefined
+            : // ADR-0475: rifty prefixes failed tool text with its budget receipt line.
+              key === 'text' && typeof value === 'string'
+              ? value.replace(/\{"status":"failed","callsLeft":\d+,"msLeft":\d+\}\n/g, '')
+              : value,
         ),
       );
+    // Prompt bytes differ by design; system message positions must match.
+    const placed = messages.map((message) =>
+      message.role === 'system' ? { role: 'system' } : message,
+    );
     return {
+      prompt: conversationPrompt,
       requests: requests.map((r) => ({ ...r, messages: normalized(r.messages) })),
       retries,
-      compactions,
+      compactions: P
+        ? compactions.map(({ reason, success }) => ({ reason, success }))
+        : compactions,
       reportedCompactions: eventMetrics(compactionEvents, model.contextWindow, 'done').compactions,
-      ...(scenario === 'retry-overflow-tail' ? { failure } : {}),
-      messages: normalized(messages),
+      ...(scenario === 'retry-overflow-tail' || scenario === 'length-twice'
+        ? { failure: (compactionEvents.at(-1) as { errorMessage?: string }).errorMessage }
+        : {}),
+      messages: normalized(placed),
       effects,
     };
   } finally {
@@ -368,21 +571,48 @@ it.each<Scenario>([
   'silent-overflow',
   'retry-overflow-tail',
   'abort-backoff',
+  'length-recovery',
+  'file-ops',
+  'length-twice',
+  'length-tool-stop',
+  'restored-length-tool',
+  'resend',
+  'resend-length',
+  'usage-stop-resend',
+  // Fixed seeds: deterministic random traces over stop/tool/length/429/overflow/silent steps,
+  // summary failures, restores, re-sends and stops during backoff.
+  ...Array.from({ length: 40 }, (_, index) => `rand:${index + 1}` as const),
 ])(
-  'matches actual Pi CLI 0.85.1: %s',
+  'matches actual Pi CLI 1.6.0: %s',
   async (scenario) => {
-    const native = await run('native', scenario);
     const rifty = await run('rifty', scenario);
+    const native = await run('native', scenario, rifty.prompt);
     expect(rifty.reportedCompactions).toBe(
       rifty.compactions.filter((event) => event.success).length,
     );
     expect(native.reportedCompactions).toBe(
       native.compactions.filter((event) => event.success).length,
     );
-    expect(rifty).toEqual(native);
+    expect({ ...rifty, prompt: undefined }).toEqual({ ...native, prompt: undefined });
     if (scenario === 'after-tool' || scenario === 'overflow-episodes')
       expect(rifty.effects).toBe(1);
     if (scenario === 'partial') expect(rifty.effects).toBe(0);
+    if (scenario === 'length-twice')
+      expect(rifty).toMatchObject({
+        failure: 'Truncated response recovery failed after one compact-and-retry attempt.',
+      });
+    if (scenario === 'file-ops') {
+      expect(JSON.stringify(rifty.requests)).not.toContain('private reasoning');
+      expect(JSON.stringify(native.requests)).not.toContain('private reasoning');
+    }
+    if (scenario === 'file-ops')
+      expect(JSON.stringify(rifty.messages)).toContain(
+        '<read-files>\\n/c.ts\\n</read-files>\\n\\n<modified-files>\\n/a.ts\\n/b.ts\\n</modified-files>',
+      );
+    if (scenario === 'length-recovery')
+      expect(rifty.compactions).toEqual([
+        expect.objectContaining({ reason: 'overflow', success: true }),
+      ]);
   },
   30000,
 );

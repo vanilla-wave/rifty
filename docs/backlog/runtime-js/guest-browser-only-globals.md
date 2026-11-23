@@ -34,7 +34,12 @@ rifty itself relies on several: a writable `self` for emnapi
 child sync calls (`ipc/no-coi-child-transport.ts`), so hiding them constrains
 rifty's own boot. ADR-0529 already names `indexedDB`/`caches`/`scheduler`
 "out of the Node surface" for keepalive accounting; no item decides whether
-guests should see them. Not checked: COI kernel Worker children (same Worker
+guests should see them. 2026-11-23: the Worker global's event surface
+(`addEventListener`, `removeEventListener`, `dispatchEvent`, `onerror`,
+`onunhandledrejection`; Node v24.16.0: `typeof` each `'undefined'`, `'onerror'
+in globalThis` false) lets a guest listen to `error`/`unhandledrejection` — its cancel
+(`runtime-js/guest-unhandledrejection-prevent-default`) and its persistence
+across no-COI commands (`distribution/no-coi-node-process-realm`). Not checked: COI kernel Worker children (same Worker
 global scope expected).
 
 ## Question

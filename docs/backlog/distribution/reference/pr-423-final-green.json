@@ -1,0 +1,258 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "PASS, bound at ccd9ab30f. Since 43547cff7 there are only the verdict commit, the CLOSE deletion of the contract, the ADR-0569/0570 user confirmations, and a merge of origin/main. The merge's only manual resolution is the docs/adr/README.md index (0568 + 0569/0570 kept). The lockfile change is +3 lines (@riftydev/vfs link for main's package). git diff 43547cff7 ccd9ab30f over the agent, agent-bench, ai panel/spec, agent browser-unit, es-floor and playground vite configs is empty. Main does touch runtime-js builtins/module-loader, which the agent's tools run on. Local runs at ccd9ab30f: vitest agent + bench + es-floor 510/510, typecheck clean. Browser and e2e were not rerun after the merge. Merge on green PR CI at ccd9ab30f; it has not been pushed or reported yet.",
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "Unit contract pi-1x-upgrade (docs/backlog/distribution/, deleted at CLOSE 4c80e33db). Reviewed content is its last version, byte-identical at 43547cff7 and c80baa72a, with 13 traced rows. Code reviewed at 43547cff7. Bound at ccd9ab30f: 4c80e33db and 0b734bbe7 are docs-only, and the merge of origin/main 23ed6b445 leaves the unit's paths unchanged since 43547cff7. BASE 11b9397ee; ADR-0569, ADR-0570 (both user-confirmed 2026-11-23 per their Corrections), ADR-0482 + corrections in ADR-0424/0436/0440/0466/0472/0473/0474/0475; PR #423 body.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: continuation/retry/overflow/length/threshold equal real CLI 1.6.0 AgentSession on 20 scripted scenarios + 40 seeded random traces (requests, retries, compaction numbers in scripted scenarios, transcript incl. system positions, file-op lists)",
+      "source": "acceptance",
+      "trace": "ADR-0569",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/continuation-parity.test.ts:584",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: Type.Object tool wire as 0.85.1 (minus strict:false), same accept/reject/coerce on 8 cases; Refine and Format.Set (incl. aliases of built-in checkers) throw NotImplementedError at creation",
+      "source": "acceptance",
+      "trace": "ADR-0570",
+      "status": "pass",
+      "citation": "packages/agent/src/typebox-tools.test.ts:9",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 3: Stop mid-batch in Chromium: skipped call gets an error result, no side effect, next run continues",
+      "source": "acceptance",
+      "trace": "ADR-0424",
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-core.spec.ts:86",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 4: shared recipe reaches CLI 1.6.0 wire as current system message; skills and project_context byte-identical to CLI 1.6.0",
+      "source": "acceptance",
+      "trace": "ADR-0440",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/project-resources.test.ts:554",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 5: changed prompt appends one system update before next user message; wire sends only the current prompt; restored foreign prompt sections removed",
+      "source": "acceptance",
+      "trace": "ADR-0569",
+      "status": "pass",
+      "citation": "packages/agent/src/prompt-state.test.ts:7",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 6: histories with pi 1.x system messages (events, trace) restore through initialMessages, incl. a summary after prompt state",
+      "source": "acceptance",
+      "trace": "ADR-0466",
+      "status": "pass",
+      "citation": "packages/agent/src/continuation.fault.test.ts:522",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 7: packed consumer installs/typechecks/builds with pi 1.6.0 tarballs; client bundle budgets hold",
+      "source": "acceptance",
+      "trace": "ADR-0436",
+      "status": "pass",
+      "citation": "tests/integration/workbench-packed-consumer.mjs",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 8: core-v1 eval series 1.6.0 vs fresh 0.85.1 baseline, FAILs classified, summary committed",
+      "source": "acceptance",
+      "trace": "ADR-0472",
+      "status": "pass",
+      "citation": "tools/agent-bench/reports/summaries/2026-11-23-pi-1.6.0-upgrade/README.md:1",
+      "note": ""
+    },
+    {
+      "row": "Fault: Stop x sequential batch mid-call -> running call cancelled, skipped call gets Pi 'Operation aborted' error result, never executed, next run continues",
+      "source": "fault-matrix",
+      "trace": "ADR-0424",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/ai-agent-pi-oracle.mjs:205",
+      "note": ""
+    },
+    {
+      "row": "Fault: Stop x retry backoff -> synthetic aborted message dropped, attempt kept omitted",
+      "source": "fault-matrix",
+      "trace": "ADR-0473",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/continuation-parity.test.ts:418",
+      "note": ""
+    },
+    {
+      "row": "Fault: provider 429/5xx x retries -> attempts persisted then omitted; backoff as CLI",
+      "source": "fault-matrix",
+      "trace": "ADR-0473",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/continuation-parity.test.ts:408",
+      "note": ""
+    },
+    {
+      "row": "Fault: overflow x twice in one episode -> one compact-and-continue, then CLI recovery-failed event, context-exceeded",
+      "source": "fault-matrix",
+      "trace": "ADR-0569",
+      "status": "pass",
+      "citation": "tools/agent-bench/src/continuation-parity.test.ts:416",
+      "note": ""
+    },
+    {
+      "row": "Fault: archive x run with a prompt update -> system prompt state not archived (conversation only); restore of trace/event histories admits it",
+      "source": "fault-matrix",
+      "trace": "ADR-0466",
+      "status": "pass",
+      "citation": "tests/browser-unit/agent-archive.spec.ts:39",
+      "note": ""
+    },
+    {
+      "row": "Public API: Type re-exported from direct typebox 1.3.27 dependency",
+      "source": "public-api",
+      "trace": "ADR-0570",
+      "status": "pass",
+      "citation": "packages/agent/src/index.ts:4",
+      "note": ""
+    },
+    {
+      "row": "Public API: CompactionSummaryMessage type + CustomAgentMessages augmentation exported; transcripts/streamFn carry pi 1.x system messages / TranscriptContext",
+      "source": "public-api",
+      "trace": "ADR-0569",
+      "status": "pass",
+      "citation": "packages/agent/src/index.ts:2",
+      "note": ""
+    },
+    {
+      "row": "Frozen artifact: pi-0.85.1-typebox-tool-probe.json captured on origin/main 11b9397ee",
+      "source": "frozen-artifact",
+      "trace": "ADR-0570",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/pi-0.85.1-typebox-tool-probe.json:1",
+      "note": ""
+    },
+    {
+      "row": "Frozen artifact: ai-agent-pi-oracle.mjs abort asserts updated to pi 1.6.0 'Operation aborted'",
+      "source": "frozen-artifact",
+      "trace": "ADR-0424",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/ai-agent-pi-oracle.mjs:205",
+      "note": ""
+    },
+    {
+      "row": "Frozen artifact: pi-typebox-validation-diff.json (0.85.1 vs 1.6.0 validateToolArguments, 20 kinds)",
+      "source": "frozen-artifact",
+      "trace": "ADR-0570",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/pi-typebox-validation-diff.json:1",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "packages/agent/CHANGELOG.md:5",
+          "evidence": "probe: typebox 1.3.7 (pi 0.85.1 validator) Compile(Type.Object({x: Type.String({format:'shout'})})) after Format.Set('shout', upper) -> Check({x:'abc'}) false; pi-ai 1.6.0 validateToolArguments same schema/args -> ACCEPT (unregistered formats accept on both; email rejects on both)",
+          "summary": "Custom Format.Set formats are no longer checked. This is now in the CHANGELOG (packages/agent/CHANGELOG.md:5) and ADR-0570 §3, and rests on a loud-throw-vs-annotation choice that is the user's call. Resolved as documented; kept as a note for the user question."
+        }
+      ]
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "docs/adr/distribution/0569-port-pi-cli-1-6-0-compaction-into-the-agent.md:3",
+          "evidence": "",
+          "summary": "User confirmation of ADR-0569/0570 is now recorded with the user's quoted words in both ADRs' Corrections. I can read only the record, not the user's channel, so this is accepted as attribution. The upstream issue draft stays unfiled, correctly, since no explicit go was given."
+        }
+      ]
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "packages/agent/src/session.ts:114",
+          "evidence": "",
+          "summary": "The journal is a second message owner beside agent.state.messages. Its forcing constraint (CLI entry ids for firstKeptEntryId and omission targets) is restated in ADR-0569, and the port stays scoped to the reachable entries (message/compaction/null context_edit). No machinery beyond the contract found."
+        }
+      ]
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/agent/src/session.ts:458",
+          "evidence": "mutant J (pre-prompt check skips aborted) at 43547cff7: parity 60/60 still pass, including the 40 seeded traces",
+          "summary": "ADR-0569 §2 says the pre-prompt _checkCompaction includes aborted messages, but no parity scenario catches a version that skips them."
+        },
+        {
+          "severity": "nit",
+          "location": "packages/agent/src/continuation.ts:205",
+          "evidence": "",
+          "summary": "Compaction failure errorMessage lacks the CLI prefixes (core_agent-session.ts:3387-3391). This was already so at BASE and parity does not compare it. Now recorded as backlog draft agent-compaction-failure-message-cli-prefix (pre-existing on main)."
+        },
+        {
+          "severity": "concern",
+          "location": "tools/checks/es-floor.mjs:411",
+          "evidence": "es-floor.test.ts adds a Set subclass case (still rejected); check:es-floor over 352 built bundles exit 0",
+          "summary": "The narrowed `this.union` allowance (enclosing class must define instance `union`) addresses my earlier concern. Residual: a class that defines `union` and also extends Set would still pass, which is acceptable."
+        },
+        {
+          "severity": "concern",
+          "location": "tools/agent-bench/src/continuation-parity.test.ts:529",
+          "evidence": "Mutant: usageMatchesProjection forced true -> usage-stop-resend fails (1/60).",
+          "summary": "Seeded traces compare compaction reason/success only. tokensBefore/After are stripped in rand mode because rifty's ADR-0475 failed-tool receipts enter estimates, and a divergence in estimates would only show if it flipped a decision. Scripted scenarios keep exact numbers. This PR-4 change is acceptable as added coverage, not a replacement."
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "tools/agent-bench/reports/summaries/2026-11-23-pi-1.6.0-upgrade/README.md:24",
+          "evidence": "",
+          "summary": "Two COI losses are classed ai-mode-ux: a pre-existing workspace-import toast timeout (draft backlog playground/workspace-import-success-observation-timeout, 2026-10-14). The csv-workflow-v5 drop across all Pi lanes, native included, is unisolated (n=3). Neither blocks by the Acceptance 8 clause; follow-up is optional."
+        }
+      ]
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "tools/agent-bench/src/config.ts:238",
+          "evidence": "",
+          "summary": "The redaction protocol tag vocabulary for `role` lacks 'system'. This is harmless unless a secret equals 'system', but it is now a common role value."
+        }
+      ]
+    }
+  ],
+  "reviewed_sha": "ccd9ab30fe66fdad756085d8cefe57c0617b2e1d"
+}

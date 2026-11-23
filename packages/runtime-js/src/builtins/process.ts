@@ -336,6 +336,7 @@ export class NodeProcess extends EventEmitter {
       });
       if (!evalLifecycleOwned && this.#ipcPort !== null) this.#requestSelfExit(signal.exitCode);
     },
+    hasExitControl: () => this.#ipcPort !== null,
   });
   #stdoutIsFile = false;
   stdout: NodeStdioWriter;

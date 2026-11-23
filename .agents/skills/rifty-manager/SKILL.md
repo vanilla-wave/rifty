@@ -22,6 +22,7 @@ You manage; threads do the work. Judge the product, not the records.
   user's ask and record it as yours, not as the user's words; the irreversible waits.
   Bring it as situation, question, options with pros and cons.
 - Speak to the user on a change of state: merged, failed, fork. What waits on them is one
-  list, rewritten whole. Settle a thread when its PR merges.
+  list, rewritten whole. Settle a thread when its PR merges; a thread with no PR (a review,
+  an audit, their delegates) as soon as you hold its report and no further round is due.
 
 Done when every PR is merged or waits on the user.

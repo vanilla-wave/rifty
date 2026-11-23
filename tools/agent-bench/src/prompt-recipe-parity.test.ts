@@ -7,6 +7,7 @@ import {
   type Model,
   createAssistantMessageEventStream,
   createProvider,
+  getCurrentSystemPrompt,
 } from '@earendil-works/pi-ai';
 import {
   DefaultResourceLoader,
@@ -120,7 +121,8 @@ it('actual native Pi benchmark extension sends the shared v2 recipe on model wir
     try {
       await session.prompt('Inspect the shared workflow.');
       expect(contexts).toHaveLength(1);
-      const actual = contexts[0]!.systemPrompt;
+      // Pi 1.x carries the forced prompt as the current system message.
+      const actual = getCurrentSystemPrompt(contexts[0]!.messages);
       expect(actual).toBe(await readFile(join(directory, 'system-prompt.txt'), 'utf8'));
       const profile = getAgentPromptProfile() as ReturnType<typeof getAgentPromptProfile> & {
         recipe?: string;

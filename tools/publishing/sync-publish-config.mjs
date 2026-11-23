@@ -43,6 +43,8 @@ const SPEC = {
   '@riftydev/agent': {
     dir: 'packages/agent',
     sideEffects: false,
+    // MIT notice for the ported pi CLI code (ADR-0569).
+    extraFiles: ['THIRD_PARTY_NOTICES.md'],
     keywords: ['ai', 'coding-agent', 'tools', 'sandbox'],
   },
   // Umbrella front door (EPIC B / ADR-0071). `@riftydev/sdk`: re-exports every

@@ -5,8 +5,8 @@ title: P6a child fs.* RPC chunk perf — O(N²) large-file reads + base64 write 
 created: 2026-06-16
 why: ADR-0150 v1 accepts these; large-file reads/writes over the per-chunk fs.* RPC are quadratic and writes carry base64 inflation; P6b's dev-server child amplifies them through large bundles, WASM, sourcemaps, and install writes
 user_story: As a dev running a CLI that reads or writes large files, I want fs.* RPC to stay linear without losing owner-as-SSoT coherence.
-sources: [ADR-0150, ADR-0084, ADR-0072]
-code: [packages/runtime-js/src/ipc/fs-handlers.ts, packages/runtime-js/src/ipc/sync-rpc-fs.ts, packages/runtime-js/src/ipc/fs-rpc-protocol.ts]
+sources: [ADR-0150, ADR-0084, ADR-0072, ADR-0365, ADR-0392, docs/backlog/distribution/reference/pr-384-no-coi-resource-prototype-evidence.md]
+code: [packages/runtime-js/src/ipc/fs-handlers.ts, packages/runtime-js/src/ipc/sync-rpc-fs.ts, packages/runtime-js/src/ipc/fs-rpc-protocol.ts, packages/vfs/src/fs-sync.ts, packages/workbench/src/workers/install-claim-fs.ts, packages/workbench/src/workers/no-coi-project-fs.ts]
 ---
 
 ## Context
@@ -22,7 +22,7 @@ forwarding (ADR-0365 correction). The owner-side whole-file re-read per chunk
 amplified through a relay: an append `writeChunk` re-reads the previous bytes
 and rewrites them upstream per chunk (unmeasured; no CI failure attributed).
 
-ADR-0150 Consequences flag these as accepted-for-v1; concrete record here. (1) `fs-handlers.readChunk` re-reads the WHOLE file per chunk (`readFileBytesSync(path)` then `subarray`) → O(N²) for a file read in K chunks. (2) `writeChunk` append reads prev+concat+writes per chunk → O(N²) multi-chunk writes; plus base64 ~33% inflation on every write request.
+ADR-0150 Consequences flag these as accepted-for-v1; concrete record here. (1) `fs.readChunk` on a non-forwarding store (`readChunkReplyOf`, sync-rpc-fs.ts, called from fs-handlers) re-reads the WHOLE file per chunk (`readFileBytesSync(path)` then `subarray`) → O(N²) for a file read in K chunks. (2) `writeChunk` append reads prev+concat+writes per chunk → O(N²) multi-chunk writes; plus base64 ~33% inflation on every write request.
 
 ## P6b amplification + feasibility (recorded 2026-06-17)
 
@@ -37,6 +37,36 @@ O(N²)→O(N) is real — the quadratic is handler naivety, not inherent to chun
 - **Binary write body on SyncRpc v5** — ADR-0366 supplied the envelope; add an
   exact write decoder while keeping the existing owner mutation authority.
 - **Spawn amortization** is `perf/kernel-worker-prewarm-pool` (warm child + caches) — not restated here.
+
+## PR 384 measurement (2026-10-22)
+
+`reference/pr-384-no-coi-resource-prototype-evidence.md` (distribution): one
+installed 13.27 MiB `esbuild.wasm` read in a no-COI native child 141.9 → 41.2 ms
+(3.44×) when the two owner wrappers return a detached range instead of each
+copying the whole file; the store still read the whole file per chunk, so a
+store-level range read was not measured. Child command with three reads
+1.83 → 0.59 s (shared with the recovery-image change). Code-derived on main: 54
+sync XHR round trips (head + 53 chunks of ≤256 KiB) and, on the no-COI owner,
+two wrapper layers (`InstallClaimFs`, `NoCoiProjectFs`) each `.slice()` the
+whole file per call → ≈1.4 GiB memcpy per read. The `.slice()` exists for alias
+protection (claims ADR-0392/0261, readonly policy); a detached
+`slice(off, off+len)` keeps it. Child `fs.readSync(fd, …)` (`builtins/fs.ts`)
+fetches the whole file per call — same fix applies; `readFileSync(fd)` loops
+`readSync` in 16 KiB steps → ~850 whole-file fetches for a 13 MiB file.
+Route 2's single-in-flight premise is an SAB-ring fact; on the no-COI SW route
+several children each issue sync XHR (inference from ADR-0539's design, not
+its text), so path+mtime buffers interleave and need concurrent eviction —
+weakens Route 2.
+
+Agent recommendation (2026-10-26, not user-decided; settled at pickup): Route 1
+read half first — a range read on `FsSync` (`readFileRangeSync(path, offset,
+length)` or Route 1's `readBytesAt`; vfs-core contract → ADR; ≈8 prod
+implementers, ~8 test fakes); wrappers return a detached range;
+`readFileHead`/`readChunk`, `SyncRpcFsSync` and child `fs.readSync(fd)` consume
+it; wire protocol unchanged. Required vs optional method (the prototype's
+optional wrapper method; `isChunkedReadSource` duck-type precedent) is the
+ADR's call. `writeChunk` O(N²) + base64 inflation stay in this item. Order:
+after `distribution/no-coi-command-snapshot-transfer`.
 
 ## Reversibility
 

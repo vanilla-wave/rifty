@@ -17,7 +17,7 @@ function usage(value: unknown): boolean {
   );
 }
 
-/** Validate required Pi 0.85.1 fields and pairing once, before any host work. */
+/** Validate required Pi 1.6.0 fields and pairing once, before any host work. */
 export function restoreMessages(input: readonly AgentMessage[] = []): AgentMessage[] {
   function fail(reason: string): never {
     throw new TypeError(`initialMessages: ${reason}`);
@@ -28,7 +28,7 @@ export function restoreMessages(input: readonly AgentMessage[] = []): AgentMessa
     if (message?.role === 'compactionSummary') {
       const details: unknown = 'details' in message ? message.details : undefined;
       if (
-        index !== 0 ||
+        input.slice(0, index).some((previous) => previous.role !== 'system') ||
         typeof message.summary !== 'string' ||
         !Number.isFinite(message.timestamp) ||
         !Number.isFinite(message.tokensBefore) ||
@@ -42,6 +42,22 @@ export function restoreMessages(input: readonly AgentMessage[] = []): AgentMessa
             )))
       )
         fail('expected one leading native compaction summary with file-operation details');
+      continue;
+    }
+    // Pi 1.x prompt state; the next run diffs it against the current prompt.
+    if (message?.role === 'system') {
+      if (
+        !Number.isFinite(message.timestamp) ||
+        !(typeof message.content === 'string' || Array.isArray(message.content)) ||
+        (message.sections !== undefined &&
+          (!record(message.sections) ||
+            Object.values(message.sections).some(
+              (value) => value !== null && typeof value !== 'string',
+            ))) ||
+        (message.toolsAdded !== undefined && !Array.isArray(message.toolsAdded)) ||
+        (message.toolsRemoved !== undefined && !Array.isArray(message.toolsRemoved))
+      )
+        fail('system message requires timestamp, native content and sections');
       continue;
     }
     if (

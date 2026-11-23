@@ -3,7 +3,7 @@
  * shared long-lived worker process of a lazy pool. The consumer process never
  * loads isolated-vm and needs no flag.
  */
-import { Pool } from './pool.ts';
+import { sharedPool } from './pool.ts';
 
 /** Options for one `runCode` call; omitted fields take the documented defaults. */
 export interface RunCodeOptions {
@@ -32,7 +32,7 @@ export interface RunCodeResult {
 
 const MAX_TIMER_MS = 2 ** 31 - 1;
 
-function limit(
+export function limit(
   name: string,
   value: number | undefined,
   fallback: number,
@@ -51,8 +51,26 @@ function limit(
   return value;
 }
 
-/** One pool per consumer process, created by the first call. */
-let pool: Pool | undefined;
+/** `runCode`'s options, validated, with their defaults (shared by sandbox runs). */
+export function runLimits(options: RunCodeOptions): {
+  allowSharedArrayBuffer: boolean;
+  timeoutMs: number;
+  memoryLimitMb: number;
+  maxOutputBytes: number;
+} {
+  const { allowSharedArrayBuffer = true } = options;
+  if (typeof allowSharedArrayBuffer !== 'boolean') {
+    throw Object.assign(new TypeError('options.allowSharedArrayBuffer must be a boolean'), {
+      code: 'ERR_INVALID_ARG_TYPE',
+    });
+  }
+  return {
+    allowSharedArrayBuffer,
+    timeoutMs: limit('timeoutMs', options.timeoutMs, 30_000, 1, MAX_TIMER_MS),
+    memoryLimitMb: limit('memoryLimitMb', options.memoryLimitMb, 256, 8),
+    maxOutputBytes: Math.floor(limit('maxOutputBytes', options.maxOutputBytes, 1 << 20, 0)),
+  };
+}
 
 export function runCode(code: string, options: RunCodeOptions = {}): Promise<RunCodeResult> {
   if (typeof code !== 'string') {
@@ -63,21 +81,7 @@ export function runCode(code: string, options: RunCodeOptions = {}): Promise<Run
     );
   }
   try {
-    const { allowSharedArrayBuffer = true } = options;
-    if (typeof allowSharedArrayBuffer !== 'boolean') {
-      throw Object.assign(new TypeError('options.allowSharedArrayBuffer must be a boolean'), {
-        code: 'ERR_INVALID_ARG_TYPE',
-      });
-    }
-    const spec = {
-      allowSharedArrayBuffer,
-      code,
-      timeoutMs: limit('timeoutMs', options.timeoutMs, 30_000, 1, MAX_TIMER_MS),
-      memoryLimitMb: limit('memoryLimitMb', options.memoryLimitMb, 256, 8),
-      maxOutputBytes: Math.floor(limit('maxOutputBytes', options.maxOutputBytes, 1 << 20, 0)),
-    };
-    pool ??= new Pool();
-    return pool.run(spec);
+    return sharedPool().run({ code, ...runLimits(options) });
   } catch (error) {
     return Promise.reject(error);
   }

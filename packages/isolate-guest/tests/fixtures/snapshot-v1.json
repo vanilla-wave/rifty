@@ -1,0 +1,123 @@
+[
+  {
+    "path": "/",
+    "kind": "dir",
+    "size": 0,
+    "nlink": 3,
+    "mtimeMs": 1700000000000.25,
+    "atimeMs": 1700000000001,
+    "ctimeMs": 1700000000002,
+    "birthtimeMs": 1699999999000,
+    "names": ["workspace"]
+  },
+  {
+    "path": "/workspace",
+    "kind": "dir",
+    "size": 0,
+    "nlink": 4,
+    "mtimeMs": 1700000010000.25,
+    "atimeMs": 1700000010001,
+    "ctimeMs": 1700000010002,
+    "birthtimeMs": 1700000009000,
+    "names": ["bin.dat", "empty", "empty.txt", "src"]
+  },
+  {
+    "path": "/workspace/bin.dat",
+    "kind": "file",
+    "size": 256,
+    "nlink": 1,
+    "mtimeMs": 1700000020000.25,
+    "atimeMs": 1700000020001,
+    "ctimeMs": 1700000020002,
+    "birthtimeMs": 1700000019000,
+    "bytes": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISIjJCUmJygpKissLS4vMDEyMzQ1Njc4OTo7PD0+P0BBQkNERUZHSElKS0xNTk9QUVJTVFVWV1hZWltcXV5fYGFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6e3x9fn+AgYKDhIWGh4iJiouMjY6PkJGSk5SVlpeYmZqbnJ2en6ChoqOkpaanqKmqq6ytrq+wsbKztLW2t7i5uru8vb6/wMHCw8TFxsfIycrLzM3Oz9DR0tPU1dbX2Nna29zd3t/g4eLj5OXm5+jp6uvs7e7v8PHy8/T19vf4+fr7/P3+/w=="
+  },
+  {
+    "path": "/workspace/empty",
+    "kind": "dir",
+    "size": 0,
+    "nlink": 2,
+    "mtimeMs": 1700000030000.25,
+    "atimeMs": 1700000030001,
+    "ctimeMs": 1700000030002,
+    "birthtimeMs": 1700000029000,
+    "names": []
+  },
+  {
+    "path": "/workspace/empty.txt",
+    "kind": "file",
+    "size": 0,
+    "nlink": 1,
+    "mtimeMs": 1700000040000.25,
+    "atimeMs": 1700000040001,
+    "ctimeMs": 1700000040002,
+    "birthtimeMs": 1700000039000,
+    "bytes": ""
+  },
+  {
+    "path": "/workspace/src",
+    "kind": "dir",
+    "size": 0,
+    "nlink": 2,
+    "mtimeMs": 1700000050000.25,
+    "atimeMs": 1700000050001,
+    "ctimeMs": 1700000050002,
+    "birthtimeMs": 1700000049000,
+    "names": ["a b", "lone\ud800", "new\nline", "é", "😀"]
+  },
+  {
+    "path": "/workspace/src/a b",
+    "kind": "file",
+    "size": 3,
+    "nlink": 1,
+    "mtimeMs": 1700000060000.25,
+    "atimeMs": 1700000060001,
+    "ctimeMs": 1700000060002,
+    "birthtimeMs": 1700000059000,
+    "bytes": "YSBi"
+  },
+  {
+    "path": "/workspace/src/lone\ud800",
+    "kind": "file",
+    "size": 7,
+    "nlink": 1,
+    "mtimeMs": 1700000070000.25,
+    "atimeMs": 1700000070001,
+    "ctimeMs": 1700000070002,
+    "birthtimeMs": 1700000069000,
+    "bytes": "bG9uZe+/vQ=="
+  },
+  {
+    "path": "/workspace/src/new\nline",
+    "kind": "file",
+    "size": 8,
+    "nlink": 1,
+    "mtimeMs": 1700000080000.25,
+    "atimeMs": 1700000080001,
+    "ctimeMs": 1700000080002,
+    "birthtimeMs": 1700000079000,
+    "bytes": "bmV3CmxpbmU="
+  },
+  {
+    "path": "/workspace/src/é",
+    "kind": "file",
+    "size": 2,
+    "nlink": 1,
+    "mtimeMs": 1700000090000.25,
+    "atimeMs": 1700000090001,
+    "ctimeMs": 1700000090002,
+    "birthtimeMs": 1700000089000,
+    "bytes": "w6k="
+  },
+  {
+    "path": "/workspace/src/😀",
+    "kind": "file",
+    "size": 4,
+    "nlink": 1,
+    "mtimeMs": 1700000100000.25,
+    "atimeMs": 1700000100001,
+    "ctimeMs": 1700000100002,
+    "birthtimeMs": 1700000099000,
+    "bytes": "8J+YgA=="
+  }
+]

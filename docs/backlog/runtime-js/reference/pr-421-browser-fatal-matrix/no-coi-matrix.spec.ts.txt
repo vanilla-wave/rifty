@@ -1,0 +1,24 @@
+import { writeFileSync } from 'node:fs';
+import { matrixPrograms, MATRIX_TLA } from '../browser-unit/fixtures/zz-matrix-programs.ts';
+import { test } from './fixtures/test.ts';
+test('fatal matrix no-COI', async ({ page }) => {
+  test.setTimeout(900_000);
+  await page.goto('/no-coi-harness.html');
+  const rows = await page.evaluate(async ({ root, programs, tla }) => {
+    const { createSandbox } = await import(`/@fs${root}/packages/rifty/src/index.ts`);
+    const sandbox = await createSandbox({ requireCrossOriginIsolation: false, skipServiceWorker: true, toolchain: { workerUrl: `/@fs${root}/packages/workbench/src/workers/no-coi-toolchain-worker.ts` } });
+    const out: unknown[] = [];
+    try {
+      for (const [i, p] of programs.entries()) {
+        const dir = `/m/r${i}`;
+        await sandbox.fs.writeFile(`${dir}/tla.mjs`, tla);
+        await sandbox.fs.writeFile(`${dir}/main.js`, p.code);
+        const line = p.mode === 'file' ? 'node main.js' : `node -e ${JSON.stringify(p.code)}`;
+        const done = await sandbox.project({ root: dir }).run(line).completion;
+        out.push({ name: p.name, dir, status: done.status, exitCode: done.exitCode, stdout: done.stdout, stderr: done.stderr, error: (done as { error?: { code?: string; message?: string } }).error?.message ?? null });
+      }
+    } finally { sandbox.dispose(); }
+    return out;
+  }, { root: process.cwd().replaceAll('\\', '/'), programs: matrixPrograms, tla: MATRIX_TLA });
+  writeFileSync(process.env.MATRIX_OUT as string, JSON.stringify(rows, null, 1));
+});

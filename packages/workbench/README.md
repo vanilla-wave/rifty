@@ -236,6 +236,19 @@ and `payload/node_modules/`. `rifty/manifest.json` and `rifty/replay-cache/` are
 control data, never project files. SnapshotId hashes decoded tar; gzip delivery
 with or without HTTP Content-Encoding works. Legacy v3 JSON/gzip remains readable.
 
+Set `profile: 'frozen'` for prepared environments that build installed dependencies
+as is, without reinstalling. Frozen v5 omits replay archives; the prepared payload stays
+intact. Default (or `profile: 'replay'`) retains v4 exact replay closure/SRI.
+Updated readers accept both; older readers reject frozen before application.
+Frozen adds no install ban, reinstall guarantee or registry fallback: on a cold shared
+cache with the lockfile kept, Vite 7.3.6's substituted `esbuild` makes terminal
+`npm install` print:
+
+> npm: EBROKENLOCK: package-lock.json installs esbuild@0.28.0 from its substitute esbuild-wasm@0.28.0 (shadow recipe rifty.shadow-substitution.esbuild.v2), but the tarball cache holds no intact copy of it. Lockfile replay takes substitutes only from that cache and never downloads them, so this lockfile cannot be reinstalled exactly here. To install anyway, delete package-lock.json and run install again: it re-resolves through the registry, and installed versions may change.
+
+`toolchain.install` rejects with the same text without `npm: `. The exact-reinstall route:
+ADR-0547 §Consequences.
+
 For Brotli, pass `encoding: 'br'` to the same call and save `archive` as
 `dependencies.tar.br`. `contentEncoding` is `'br'` or `'gzip'`; omitted
 `encoding` keeps gzip. Both representations decode to identical TAR and

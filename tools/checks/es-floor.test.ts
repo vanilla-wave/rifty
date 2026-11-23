@@ -138,6 +138,17 @@ describe('shipped ES2022 floor', () => {
     },
   );
 
+  it('still rejects Set union on a non-this receiver', () => {
+    expect(violations('new Set([1]).union(other); left.union(right);').join('\n')).toContain(
+      'union',
+    );
+    expect(
+      violations('class Tags extends Set { merge(other) { return this.union(other); } }').join(
+        '\n',
+      ),
+    ).toContain('union');
+  });
+
   it('accepts ES2022 syntax, library name tables and own with methods', () => {
     expect(
       violations(`
@@ -149,6 +160,7 @@ describe('shipped ES2022 floor', () => {
       textChanges.ChangeTracker.with({ host, formatContext, preferences }, callback);
       
       this.getBracketPairsInRange(range).findLast(predicate);
+      class Compiler { union(branches) { return branches; } emit(node) { return this.union(node.anyOf); } }
       const copy = [...items].sort(compare); copy.at(-1);
       request.with = importAttributes;
       typeof uri.with === 'function';

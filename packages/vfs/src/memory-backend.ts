@@ -277,6 +277,18 @@ export class MemoryBackend {
     node.metadata.ctime = Date.now();
   }
 
+  /** A snapshot restore (ADR-0567 §6): the four times verbatim; `ino` stays. */
+  restoreStat(
+    path: string,
+    stat: { mtimeMs: number; atimeMs: number; ctimeMs: number; birthtimeMs: number },
+  ): void {
+    const node = this.resolveStrict(path);
+    if (!node) throw new VfsError('ENOENT', path);
+    node.mtime = stat.mtimeMs;
+    node.atime = stat.atimeMs;
+    node.metadata = { ino: node.metadata.ino, birthtime: stat.birthtimeMs, ctime: stat.ctimeMs };
+  }
+
   copyFile(src: string, dst: string): void {
     const s = normalizeAbsolute(src);
     const d = normalizeAbsolute(dst);

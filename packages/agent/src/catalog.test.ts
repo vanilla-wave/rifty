@@ -122,7 +122,7 @@ describe('embedder model catalog', () => {
       { error: 'capacity exhausted' },
       'continued',
     ]);
-    const { Type } = await import('@earendil-works/pi-ai');
+    const { Type } = await import('typebox');
     const session = createAgentSession({
       retry: { enabled: false },
       host,

@@ -36,3 +36,7 @@ ADR-0434 still owns lanes/judges/privacy; ADR-0471 owns native model catalogs.
 loaded window 32768/output 4096, image input and compat from models.json;
 wire carried max_completion_tokens 4096, reasoning_effort medium,
 temperature 1 and top_p 0.95. Goal baseline records the real endpoint/run data.
+
+## Corrections
+
+2026-11-23 — Benchmark pi-ai pin 0.85.1 → 1.6.0; classifier reuse unchanged.

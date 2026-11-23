@@ -576,6 +576,7 @@ function createHelperNames(source: string): TransformHelperNames {
     importMetaUrl: uniqueHelperName(source, used, '__importMetaUrl'),
     metaDirname: uniqueHelperName(source, used, '__metaDirname'),
     metaFilename: uniqueHelperName(source, used, '__metaFilename'),
+    metaMain: uniqueHelperName(source, used, '__metaMain'),
     assetPath: uniqueHelperName(source, used, '__assetPath'),
     metaResolve: uniqueHelperName(source, used, '__metaResolve'),
     runtimeObject: uniqueHelperName(source, used, RUNTIME_OBJECT_BINDING),

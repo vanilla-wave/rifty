@@ -15,6 +15,8 @@ export type TransformSourceHook = (req: {
 }) => Promise<string>;
 
 export interface EsmLoaderDeps {
+  /** Node `import.meta.main`: whether `id` is the process's entry module. */
+  isNodeMain?(id: string): boolean;
   readonly registry: ModuleRegistry;
   readonly resolver: Resolver;
   loadAsync(id: string): Promise<Record<string, unknown>>;
@@ -42,6 +44,7 @@ export type EsmFactory = (
   importMetaUrl: string,
   metaDirname: string,
   metaFilename: string,
+  metaMain: boolean,
   assetPath: (s: string) => string,
   metaResolve: (s: string, ...parent: unknown[]) => string,
   Function: FunctionConstructor,

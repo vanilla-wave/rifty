@@ -40,7 +40,8 @@ browser runtime.
 
 ## Isolate host (Node, ADR-0557, ADR-0563)
 
-`@riftydev/isolate-host` is a server-side host: a Node service calls `runCode(code)`. Each call
+`@riftydev/isolate-host` is a server-side host: a Node service calls `runCode(code)` or runs files in a
+`createSandbox()` sandbox. Each call
 gets a fresh isolated-vm V8 isolate running the rifty runtime. Isolates live in long-lived worker
 processes with an empty environment, up to 4 concurrent calls per worker; guests of different
 calls share a worker process.
@@ -70,6 +71,17 @@ calls share a worker process.
   each retry reruns its worker's other calls: retry at most once, counted against that source's
   limit. Track Node point releases
   that patch V8. rifty does not orchestrate pods, hypervisors or deploys.
+- **Sandbox (`createSandbox`, ADR-0568).** Its files are rifty's in-memory FS: in the consumer's
+  memory between operations, restored into each run's fresh isolate, captured after it. The bytes
+  a run hands back were made in the guest's realm: the worker checks their type and size before
+  framing them, the consumer decodes them with the snapshot codec (ADR-0567) before they become
+  the sandbox's state, and any refusal is that run's own `stateRefused` — never a rejection that
+  reads as infrastructure. Host file ops resolve model-chosen paths inside the sandbox's own `/`
+  and name only sandbox paths in errors (fields and `stack`). Sandboxes share no FS: each run restores its own. `ino`
+  values come from the run's own fresh isolate (not kept by the snapshot), so they carry nothing
+  from other sandboxes. Not protected: the consumer's memory holds every live sandbox's files and, per
+  concurrent run, at most 5 × its state + 16 MiB, and decodes each run's state on its event loop —
+  cap the number of sandboxes, `maxFsBytes` and concurrent runs (README §Sandbox).
 - **Custom embedders (`@riftydev/isolate-guest`, ADR-0558).** The same guest in an isolate the
   consumer creates. Its `createHostBridge` validates every guest argument. The limits, the kill,
   the process boundary and the escape posture above are then the embedder's to provide, not rifty's.

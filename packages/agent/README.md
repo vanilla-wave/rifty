@@ -98,7 +98,7 @@ await agent.send('Continue from the saved work.');
 ```
 
 `initialMessages` works with every catalog provider; creation copies history, so later
-caller mutations cannot alter it. Supply native Pi 0.85.1 `user`, `assistant` and
+caller mutations cannot alter it. Supply native Pi 1.6.0 `system`, `user`, `assistant` and
 `toolResult` messages with numeric timestamps and native content. Calls must have
 matching id/name results in the immediately following tool-result group. Missing,
 orphan, duplicate or mismatched results throw `TypeError` naming `initialMessages`
@@ -111,9 +111,12 @@ Pi owns provider conversion. Storage, JSON decoding and migrations stay with the
 
 `reset()` clears restored and new messages. Also clear the host's stored history on
 conversation/project reset. `exportTrace().restoredMessageCount` counts originally admitted messages
-until reset, independent of compaction; events, timings, aggregate usage and per-run limits describe
+until reset, independent of compaction and of prompt-state folding (several restored `system`
+messages before a summary merge into one, as in the pi CLI), so it is not a transcript offset; events, timings, aggregate usage and per-run limits describe
 only new runs. Reset clears that count. Persist native messages rather than the diagnostic
-trace when exact history matters.
+trace when exact history matters. A pi CLI `session.messages` history restores too, but its
+summary carries no file-operation `details` (the CLI keeps them on the session entry), so the
+next compaction starts its file lists empty.
 
 The session owns its host handle. The Workbench adapter opens/closes one
 dedicated terminal unless the caller supplies a terminal (caller-owned).
@@ -225,7 +228,7 @@ Reset clears conversation only; reload preserves conversation.
 
 The host root is cwd. The first root file among `AGENTS.override.md`,
 `AGENTS.md`, `AGENTS.MD`, `CLAUDE.md`, `CLAUDE.MD` wins; no descendant context
-scan. Skills follow pi 0.85.1 `.pi/skills` and `.agents/skills` discovery,
+scan. Skills follow pi 1.6.0 `.pi/skills` and `.agents/skills` discovery,
 including ignore files, metadata diagnostics, collisions and hidden skills.
 Profile/date → consumer `instructions` → project context → skills → cwd.
 

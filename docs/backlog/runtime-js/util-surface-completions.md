@@ -26,7 +26,9 @@ All pure-JS, no platform dep. `process.stdout.isTTY=false` (process.ts:102) → 
 | toUSVString v11 | lone-surrogate→U+FFFD regex | low |
 | isArray/_extend v0.6 (deprecated) | Array.isArray / own-enum copy; warn via deprecate() (util.ts:184) | low |
 
-**Excluded** (the silent-divergence BUGS — inspect options-misread + single-quote, util.format %c — are already fixed; that item is closed). This item still owns the inspect option-fidelity SURFACE: Node-default depth (2), colors, showHidden (non-enumerable + symbol keys), getters, sorted, breakLength, numericSeparator, maxArrayLength, maxStringLength (rifty truncates in-structure strings at 120 + `…`; Node's default is 10000), inspect.custom, defaultOptions. `formatWithOptions` is shipped for the existing `inspect` contract, including `depth`; it inherits these tracked option gaps and is not a claim that they are complete.
+**Excluded** (the silent-divergence BUGS — inspect options-misread + single-quote, util.format %c — are already fixed; that item is closed). This item still owns the inspect option-fidelity SURFACE: Node-default depth (2), colors, showHidden (non-enumerable + symbol keys), the `getters: true` option (the default since 2026-11-22: an accessor reads `[Getter]`/`[Setter]`/`[Getter/Setter]`, never runs; a run of array holes reads `<N empty items>` — PR #421), sorted, breakLength, numericSeparator, maxArrayLength, maxStringLength (rifty truncates in-structure strings at 120 + `…`; Node's default is 10000), inspect.custom, defaultOptions. `formatWithOptions` is shipped for the existing `inspect` contract, including `depth`; it inherits these tracked option gaps and is not a claim that they are complete.
+
+`inspect.custom` finding, 2026-11-23 (PR #421 external review round 4, isolate host; observed by the review, not reproduced here): `util.inspect.custom === undefined`. Node v24.16.0: `node -e "const u = require('util'); class A { [u.inspect.custom]() { return 'CUSTOM' } } console.log(u.inspect.custom === Symbol.for('nodejs.util.inspect.custom'), new A())"` → `true CUSTOM`. Code reading: every host — `util.ts` sets no `inspect.custom` and `repl/inspect.ts` never reads the symbol (its `customInspect` gates Buffer only), so the class above gets a method named `"undefined"` and prints `A {}` (rifty's layout), silently. Fault class: missing surface without a loud throw (a placeholder `undefined`, AGENTS §Fidelity; no fault-classes.md axis applies). Shares the symbol with `Buffer#inspect` (`runtime-js/builtin-alias-members`). Acceptance target: parity case — `util.inspect.custom` is the registered symbol, an object's/class's `[custom](depth, options, inspect)` result is printed by `util.inspect`, `console.log` and `format('%o')`, on the isolate host (`packages/isolate-host/tests/parity.test.ts`) and in runtime-js conformance. Compat: no row names it (isolate-host.md "`console.log` / `util.inspect` layout" links this item without it) — add ❌ until shipped.
 
 ## Options or Next
 
@@ -35,3 +37,7 @@ Parity-first, per-feature promotable. Per feature: failing parity test (real Nod
 ## Reversibility
 
 REVERSIBLE — recorded in this backlog item. Each landed method = additive public API on util default export.
+
+2026-11-23 — PR #421 external review round 5 (not reproduced here): an `Array`
+subclass prints without Node's `ClassName(n)` prefix, and a typed array prints
+as a plain object (Node: `Uint8Array(3) [ 1, 2, 3 ]`).

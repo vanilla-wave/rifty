@@ -206,11 +206,10 @@ describe('dev-server entry bootstrap', () => {
 
   it('ignores inherited optional payload and package fields', () => {
     // Fault class: corrupt-input. Exact entry records snapshot own fields only;
-    // prototype data cannot acquire preview or baked-package authority.
+    // prototype data cannot acquire preview or package-config authority.
     const cfg = Object.assign(
       Object.create({
         bakedNodeModulesUrl: 'https://prototype.invalid/node_modules.tgz',
-        bakedNodeModulesTemplateId: 'prototype-template',
       }),
       CFG,
     );
@@ -232,9 +231,6 @@ describe('dev-server entry bootstrap', () => {
     });
     expect(Object.prototype.hasOwnProperty.call(resolved, 'previewScope')).toBe(false);
     expect(Object.prototype.hasOwnProperty.call(resolved.cfg, 'bakedNodeModulesUrl')).toBe(false);
-    expect(Object.prototype.hasOwnProperty.call(resolved.cfg, 'bakedNodeModulesTemplateId')).toBe(
-      false,
-    );
   });
 
   it('rejects the legacy template-id env binding instead of re-resolving app policy', () => {
@@ -287,6 +283,11 @@ describe('dev-server entry bootstrap', () => {
       'empty runtime URL',
       envelope({ nodeWorkerRuntime: { ...NODE_WORKER_RUNTIME, kernelWorkerUrl: '' } }),
       /non-empty/i,
+    ],
+    [
+      'retired baked snapshot cfg field',
+      envelope({ cfg: { ...CFG, bakedNodeModulesUrl: '/snapshots/app.json.gz' } }),
+      /missing or unexpected fields/i,
     ],
     [
       'extra terminal field',

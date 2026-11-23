@@ -25,3 +25,21 @@ export function memoryUsage(..._args: unknown[]): never {
 memoryUsage.rss = function rss(): never {
   throw new NotImplementedError('process.memoryUsage.rss');
 };
+
+/**
+ * Links (`fs.symlink*`, `fs.link*`): rifty's VFS has none (ADR-0050). Named-loud
+ * for model-written programs in the isolate sandbox (ADR-0568), so a call names
+ * the gap instead of `TypeError: … is not a function`.
+ */
+export function symlinkSync(..._args: unknown[]): never {
+  throw new NotImplementedError('fs.symlinkSync', 'the rifty VFS has no links, ADR-0050');
+}
+export function linkSync(..._args: unknown[]): never {
+  throw new NotImplementedError('fs.linkSync', 'the rifty VFS has no links, ADR-0050');
+}
+export function symlink(..._args: unknown[]): never {
+  throw new NotImplementedError('fs.symlink', 'the rifty VFS has no links, ADR-0050');
+}
+export function link(..._args: unknown[]): never {
+  throw new NotImplementedError('fs.link', 'the rifty VFS has no links, ADR-0050');
+}
