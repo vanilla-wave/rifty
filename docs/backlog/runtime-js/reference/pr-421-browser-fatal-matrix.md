@@ -76,3 +76,11 @@ round 6 counts 9 such cells with the no-COI SDK result's `error.stack`; and
 `throw this` in a timer callback throws the `Timeout` (Node prints the timer
 object, main `[object DedicatedWorkerGlobalScope]`, HEAD `Error: 1…` /
 `Uncaught 1`) — the same exception. Every other cell: equal main.
+
+## Rerun after review round 6 (S1 fix + main `f5c232b3d`, 2026-11-23)
+
+HEAD vs a fresh `f5c232b3d` build, narrowed normalization: no-COI 109 cells,
+102 equal, 7 rifty-internal frame line (exception 1); COI 109 cells, 99 equal,
+7 internal frame line, 3 `-e` timer frame name (exception 2). 218 cells,
+differences beyond the two exceptions: 0.
+
