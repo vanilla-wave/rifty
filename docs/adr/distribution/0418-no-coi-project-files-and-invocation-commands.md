@@ -76,3 +76,19 @@ Public types expand additively. Raw FS remains the trusted host control plane;
 project policy constrains ordinary operations, not malicious guest globals.
 Finite operations preserve filesystem effects; killed memory realms may lose
 unacknowledged effects. Errors and completion expose this uncertainty.
+
+## Corrections
+
+- 2026-11-18 — §5's no-fresh-realm line, made specific (PR #408): rifty's own
+  scaffolding under Node's `[eval]` names (`require`, `module`, `exports`,
+  `__filename`, `__dirname`; Node `runScriptInContext`) does not reach a later
+  guest process of a project command. `executeNode` opens
+  `captureNodeProcessGlobals` before guest code: the console `require` mirror is
+  hidden from every project-command `node`; an eval's bindings are snapshotted
+  and restored once the process ends, so a guest value under one survives; when
+  the realm cannot be returned (a non-configurable binding, a non-extensible
+  `globalThis` while the mirror is hidden) the command fails and the Worker is
+  replaced. `runBin` still exposes the console mirror. The rest of the realm
+  stays shared and is declared: compat process.md "Shared realm across no-COI
+  `node` invocations". A realm per invocation: draft
+  `backlog/distribution/no-coi-node-process-realm`.

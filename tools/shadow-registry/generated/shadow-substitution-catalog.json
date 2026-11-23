@@ -48,16 +48,16 @@
           },
           {
             "path": "package.json",
-            "content": "{\n  \"name\": \"esbuild\",\n  \"version\": \"0.28.0\",\n  \"main\": \"./lib/main.cjs\",\n  \"module\": \"./lib/main.cjs\",\n  \"type\": \"commonjs\",\n  \"bin\": {\n    \"esbuild\": \"./bin/esbuild\"\n  },\n  \"exports\": {\n    \".\": {\n      \"import\": \"./lib/main.cjs\",\n      \"require\": \"./lib/main.cjs\",\n      \"default\": \"./lib/main.cjs\"\n    }\n  }\n}",
-            "sha256": "6ea61c374d8c8681e86b0e950c4c87dea840996284709d35af7e799169e064ab",
-            "bytes": 313
+            "content": "{\n  \"name\": \"esbuild\",\n  \"version\": \"0.28.0\",\n  \"main\": \"./lib/main.cjs\",\n  \"types\": \"../esbuild-wasm/lib/main.d.ts\",\n  \"module\": \"./lib/main.cjs\",\n  \"type\": \"commonjs\",\n  \"bin\": {\n    \"esbuild\": \"./bin/esbuild\"\n  }\n}",
+            "sha256": "7e686c9edaff3817e7fae56dfab16f9615e9d1c5938b7e328a08c2e1a7acee1a",
+            "bytes": 217
           }
         ]
       },
       "binding": {
         "adapterId": "rifty.runtime-adapter.esbuild.v1"
       },
-      "digest": "9fd2a0aaf06f242c8d25e81852369ab069b07b596a770bf90f198547b8f52b2a"
+      "digest": "93fd259840a85a3747525264e5c34d0f834a874458b17bc9e6806da551967fdc"
     },
     {
       "schema": 2,
@@ -227,5 +227,5 @@
       "digest": "eb0ca99df87e4df12d1fc3ec5b7fe8eb563cf68fe9527d7997c7e650fca95712"
     }
   ],
-  "digest": "c8f992067758fe0a56f7da846fbcfec6022ecf3323ff53a34c127955d57cd3d1"
+  "digest": "3e068704b4d20ccee89d0471843ccb54e682687ee3b63a651e69beab6a43b7e8"
 }

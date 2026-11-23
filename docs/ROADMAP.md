@@ -146,3 +146,24 @@ project IS an agent stand).
 open:
 - `docs/backlog/epics/from-intent-to-running-project` — outcome-first launcher plus local/Git project ingress and an explicit install/run plan.
 - `docs/backlog/distribution/export-project-as-starter-m13` — project bundle → Starter / share-by-link; reuses the ADR-0165 baseline artifact. Links `create-rifty-template`.
+
+## M14 — Isolate host
+
+**PARTIAL.**
+A Node service runs a rifty guest in a V8 isolate (ADR-0557, ADR-0563): `@riftydev/isolate-host`,
+a fresh isolated-vm isolate per call inside a pool of long-lived clean-env worker processes. Orchestration, pods,
+hypervisor and deploy stay outside rifty; the consumer supplies the outer boundary
+(`docs/public/trust-model.md` §Isolate host).
+- A — done: `runCode(code)` → `{stdout, stderr, exitCode}` with `node -e` parity and limits —
+  `packages/isolate-host`, ADR-0557 (PR #405); gaps in `docs/public/compat/isolate-host.md`.
+- Guest export — done: `@riftydev/isolate-guest`, the guest bundle + bridge contract for custom
+  embedders, unstable; `runCode` runs on it — ADR-0558 (PR #411); isolated-vm 6.2.0 and other
+  embedders are declared ceilings in `docs/public/compat/isolate-host.md`.
+- Worker pool — done: up to 4 calls per long-lived worker, neighbour-safe limits, lost-worker
+  reruns; warm call 13 ms, 8 concurrent calls 414 MiB (was 137 ms, 1118 MiB) — ADR-0563 (PR #412).
+- Directions (not fitted): B — live sandbox: host binary file ops, `exec node <path>`; C — FS
+  snapshot export/import + library template; D — agent tool set over the host. Shim
+  completion (URL, structuredClone, web streams, AbortController, EventTarget — requirements'
+  shim list, ceilings in A) rides B. Also: an `AbortSignal` option, a concurrency limit
+  (semaphore) and per-tenant worker affinity in `runCode` — the consumer caps concurrency and
+  separates tenants by process itself today.

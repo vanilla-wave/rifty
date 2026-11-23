@@ -23,7 +23,8 @@
  * playground-testable-core); new evasion variants get added here when seen.
  *
  * Scope = the Playground + extracted Workbench test surfaces and the
- * `tests/browser-unit` lane (`*.spec.ts` — a grep there would bypass the gate).
+ * `tests/browser-unit` + `tests/e2e` lanes (`*.spec.ts` — a grep there would
+ * bypass the gate).
  * Other packages' pre-existing greps are inventoried but NOT yet ratcheted —
  * TODO(backlog: toolchain-build/source-grep-ratchet-repo-wide).
  */
@@ -90,7 +91,12 @@ export const ALLOWLIST = [
   },
 ];
 
-export const SCAN_ROOTS = ['apps/playground/src', 'packages/workbench/src', 'tests/browser-unit'];
+export const SCAN_ROOTS = [
+  'apps/playground/src',
+  'packages/workbench/src',
+  'tests/browser-unit',
+  'tests/e2e',
+];
 /** Window after a binding's `=` in which the readFileSync target path must
  *  appear — covers the multi-line `fileURLToPath(new URL('…', import.meta.url))`
  *  formatting without swallowing the whole file. */

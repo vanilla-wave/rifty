@@ -7,7 +7,9 @@
  * the RAW unrounded ratio, scaled by the calibrated per-op-flush inflation
  * bound and guarded by same-run empty-flush + single-pending write + mkdir
  * delta probes (three shapes sweep the faithful loop's flush population:
- * empty, pending-write, pending-mkdir; batched = the product's own) — with a
+ * empty, pending-write, pending-mkdir; batched = the product's own; the
+ * pending deltas are the MEDIAN over PENDING_PROBE_ROUNDS rounds so one
+ * runner stall in a ~0.6 s window is not projected ×26 811) — with a
  * clean flush ledger and a fresh-surface WHOLE-TREE durability proof (exact ENTRY
  * equality, files + dirs, with the manifest walk + BYTE-EXACT reads of ALL
  * files, per fault-classes.md exact-bytes) on both variants.
@@ -20,7 +22,7 @@
  */
 import { type Page, expect, test } from '@playwright/test';
 import { gotoHarness } from './fixtures.ts';
-import { pendingFlushOverheadMs } from './fixtures/opfs-drain-overhead.ts';
+import { type PendingProbeRound, pendingFlushOverheadMs } from './fixtures/opfs-drain-overhead.ts';
 
 const workspacePath = process.cwd().replaceAll('\\', '/');
 const workerModuleUrl = `/@fs${workspacePath}/tests/browser-unit/fixtures/opfs-parallel-drain-worker.ts?worker&url`;
@@ -53,25 +55,13 @@ interface AcceptanceResult {
   /** Same-run probe: mean ms of 2000 empty awaited flush() calls on the
    * drained faithful instance — the SHIPPED per-flush overhead. */
   readonly emptyFlushMeanMs: number;
-  /** Same-run probe (a): mean ms of 200 × { tiny fresh-path writeFileSync;
-   * await flush() } on the drained faithful instance — the faithful loop's
-   * exact per-op shape (ONE pending op per flush). RAW unrounded. */
-  readonly singlePendingFlushMeanMs: number;
-  /** Same-run probe (b): per-op mean ms of 200 tiny fresh-path writes drained
-   * by ONE awaited flush — raw per-op OPFS cost, flush machinery amortized
-   * (the product's own shape). RAW unrounded. */
-  readonly batchedPerOpMeanMs: number;
   /** Faithful mkdir-flush count (one mkdir flush per file ⇒ files) —
    * mkdir-probe-gate multiplier. */
   readonly faithfulMkdirCount: number;
-  /** Same-run probe (c): mean ms of 200 × { mkdirSync(fresh scratch dir);
-   * await flush() } on the drained faithful instance — the faithful loop's
-   * exact per-mkdir shape (ONE pending mkdir per flush). RAW unrounded. */
-  readonly singlePendingMkdirFlushMeanMs: number;
-  /** Same-run probe (d): per-op mean ms of 200 fresh-dir mkdirs drained by
-   * ONE awaited flush — raw per-op OPFS mkdir cost, flush machinery
-   * amortized (the product's own shape). RAW unrounded. */
-  readonly batchedMkdirPerOpMeanMs: number;
+  /** Same-run pending-shape probes on the drained faithful instance, 5 rounds
+   * × 4 windows of 200 ops (single-pending write / batched write / single-
+   * pending mkdir / batched mkdir), RAW unrounded means per round. */
+  readonly pendingProbeRounds: ReadonlyArray<PendingProbeRound>;
   /** RAW unrounded faithful/product ratio — the asserted I3 gate. */
   readonly speedupRaw: number;
   /** Log convenience only (2-decimal rounding) — never asserted. */
@@ -177,11 +167,15 @@ test('durability drain on a real 26k-file node_modules tree beats the same-run s
   // Each pending shape contributes only its actual population: files writes
   // and files mkdirs. Sum both costs under the SAME10% budget; do not charge
   // write-only overhead to mkdirs or let separate bounds hide their total.
-  expect(result.singlePendingFlushMeanMs).toBeGreaterThan(0);
-  expect(result.batchedPerOpMeanMs).toBeGreaterThan(0);
+  // Median over 5 real rounds: one stalled ~0.6 s window never decides.
   expect(result.faithfulMkdirCount).toBe(result.files);
-  expect(result.singlePendingMkdirFlushMeanMs).toBeGreaterThan(0);
-  expect(result.batchedMkdirPerOpMeanMs).toBeGreaterThan(0);
+  expect(result.pendingProbeRounds).toHaveLength(5);
+  for (const round of result.pendingProbeRounds) {
+    expect(round.singlePendingFlushMeanMs).toBeGreaterThan(0);
+    expect(round.batchedPerOpMeanMs).toBeGreaterThan(0);
+    expect(round.singlePendingMkdirFlushMeanMs).toBeGreaterThan(0);
+    expect(round.batchedMkdirPerOpMeanMs).toBeGreaterThan(0);
+  }
   expect(pendingFlushOverheadMs(result)).toBeLessThanOrEqual(0.1 * result.faithfulMs);
   // THE I3 gate — RED on main (serial drain ⇒ ~1.3x), GREEN post-ADR-0358.
   // RAW unrounded ratio (`speedup` is log-only rounding), scaled by the

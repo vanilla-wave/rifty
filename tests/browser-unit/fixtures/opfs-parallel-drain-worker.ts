@@ -15,6 +15,7 @@
  * and an EXACT-ENTRY dir-set match (stray empty dirs fail).
  */
 import { OpfsFsSync, OpfsVfs, type PersistFailureReport } from '@riftydev/vfs';
+import type { PendingProbeRound } from './opfs-drain-overhead.ts';
 
 const scope = globalThis as unknown as DedicatedWorkerGlobalScope;
 
@@ -53,25 +54,19 @@ interface AcceptanceResult {
   /** Same-run probe: mean ms of EMPTY_FLUSH_PROBE_N empty awaited flush()
    * calls on the drained faithful instance. RAW unrounded. */
   readonly emptyFlushMeanMs: number;
-  /** Same-run probe (a): mean ms of SINGLE_PENDING_PROBE_K iterations of
-   * { writeFileSync(tiny); await flush() } — the faithful loop's exact
-   * per-op shape, ONE pending op per flush. RAW unrounded. */
-  readonly singlePendingFlushMeanMs: number;
-  /** Same-run probe (b): per-op mean ms of SINGLE_PENDING_PROBE_K tiny
-   * fresh-path writes drained by ONE awaited flush — raw per-op OPFS cost,
-   * flush machinery amortized (the product's own shape). RAW unrounded. */
-  readonly batchedPerOpMeanMs: number;
   /** Faithful mkdir-flush count (one mkdir flush per file ⇒ files) —
    * mkdir-probe-gate multiplier. */
   readonly faithfulMkdirCount: number;
-  /** Same-run probe (c): mean ms of SINGLE_PENDING_PROBE_K iterations of
-   * { mkdirSync(fresh scratch dir); await flush() } — the faithful loop's
-   * exact per-mkdir shape, ONE pending mkdir per flush. RAW unrounded. */
-  readonly singlePendingMkdirFlushMeanMs: number;
-  /** Same-run probe (d): per-op mean ms of SINGLE_PENDING_PROBE_K fresh-path
-   * mkdirs drained by ONE awaited flush — raw per-op OPFS mkdir cost, flush
-   * machinery amortized (the product's own shape). RAW unrounded. */
-  readonly batchedMkdirPerOpMeanMs: number;
+  /** Same-run probes, PENDING_PROBE_ROUNDS rounds of four back-to-back
+   * SINGLE_PENDING_PROBE_K-iteration windows, RAW unrounded means:
+   * (a) { writeFileSync(tiny); await flush() } — the faithful loop's exact
+   *     per-op shape, ONE pending op per flush;
+   * (b) K tiny fresh-path writes drained by ONE awaited flush — raw per-op
+   *     OPFS cost, flush machinery amortized (the product's own shape);
+   * (c) { mkdirSync(fresh dir); await flush() } — exact per-mkdir shape;
+   * (d) K fresh-dir mkdirs drained by ONE awaited flush.
+   * The spec gates the MEDIAN over rounds (opfs-drain-overhead.ts). */
+  readonly pendingProbeRounds: ReadonlyArray<PendingProbeRound>;
   /** RAW unrounded faithful/product ratio — the asserted I3 gate. */
   readonly speedupRaw: number;
   /** Log convenience only (2-decimal rounding of speedupRaw) — never asserted. */
@@ -127,6 +122,14 @@ const EMPTY_FLUSH_PROBE_N = 2000;
  * deltas are weighted by their actual faithful-loop populations and SUMMED
  * under one10% bound; empty-flush overhead has its separate guard above. */
 const SINGLE_PENDING_PROBE_K = 200;
+
+/** Rounds of the four pending-shape windows. One window is ~0.6 s; a runner
+ * stall inside it shifts that round's mean by ~1 ms, which the ×26 811
+ * projection turns into ~27 s of phantom overhead (red main runs
+ * 39375394764, 39888233973 with vfs unchanged vs the neighbouring green run).
+ * The gate takes the median over rounds: up to two disturbed rounds are
+ * ignored, a cost present in every round is not. Odd, so no tie. */
+const PENDING_PROBE_ROUNDS = 5;
 
 /** Tiny payload for the single-pending probe — probe cost must be flush
  * machinery, not bytes. */
@@ -291,14 +294,9 @@ interface VariantOutcome {
   /** Faithful only (null on product): same-run empty-flush probe mean, see
    * EMPTY_FLUSH_PROBE_N. */
   readonly emptyFlushMeanMs: number | null;
-  /** Faithful only (null on product): single-pending delta probe means, see
-   * SINGLE_PENDING_PROBE_K. */
-  readonly singlePendingFlushMeanMs: number | null;
-  readonly batchedPerOpMeanMs: number | null;
-  /** Faithful only (null on product): mkdir-shape delta probe means, see
-   * SINGLE_PENDING_PROBE_K. */
-  readonly singlePendingMkdirFlushMeanMs: number | null;
-  readonly batchedMkdirPerOpMeanMs: number | null;
+  /** Faithful only (null on product): PENDING_PROBE_ROUNDS rounds of the
+   * four pending-shape windows, see SINGLE_PENDING_PROBE_K. */
+  readonly pendingProbeRounds: ReadonlyArray<PendingProbeRound> | null;
   readonly tree: TreeProof;
 }
 
@@ -320,10 +318,7 @@ async function runVariant(
   let ms: number;
   let report: PersistFailureReport;
   let emptyFlushMeanMs: number | null = null;
-  let singlePendingFlushMeanMs: number | null = null;
-  let batchedPerOpMeanMs: number | null = null;
-  let singlePendingMkdirFlushMeanMs: number | null = null;
-  let batchedMkdirPerOpMeanMs: number | null = null;
+  let pendingProbeRounds: PendingProbeRound[] | null = null;
   if (label === 'faithful') {
     // Faithful serial — the epic's baseline, the pre-dedup #256 regime
     // (mkdir before EVERY write, ~2 persist ops/file), serialized by the
@@ -356,50 +351,59 @@ async function runVariant(
     const probeNs = `/pd256-probe-${crypto.randomUUID()}`;
     fs.mkdirSync(probeNs, { recursive: true });
     await fs.flush();
-    // (a) single-pending shape — the faithful loop's exact per-op shape:
-    // ONE pending op per awaited flush, fresh path each iteration.
-    let lastProbe: PersistFailureReport | null = null;
-    const a0 = performance.now();
-    for (let i = 0; i < SINGLE_PENDING_PROBE_K; i++) {
-      fs.writeFileSync(`${probeNs}/sp-${i}`, PROBE_BYTES);
-      lastProbe = await fs.flush();
-    }
-    singlePendingFlushMeanMs = (performance.now() - a0) / SINGLE_PENDING_PROBE_K;
-    // (b) batched shape — K fresh-path writes, ONE awaited flush: raw per-op
-    // OPFS cost with flush machinery amortized to one call (the product's
-    // own shape).
-    const b0 = performance.now();
-    for (let i = 0; i < SINGLE_PENDING_PROBE_K; i++) {
-      fs.writeFileSync(`${probeNs}/bp-${i}`, PROBE_BYTES);
-    }
-    const batchedReport = await fs.flush();
-    batchedPerOpMeanMs = (performance.now() - b0) / SINGLE_PENDING_PROBE_K;
-    // Ledger `total` is the WHOLE cumulative unhealed set — dirty here means
-    // the probes timed error paths, not flush machinery: fail loudly.
-    if (lastProbe === null || lastProbe.total !== 0 || batchedReport.total !== 0) {
-      throw new Error('single-pending probe flush ledger dirty');
-    }
-    // (c) single-pending MKDIR shape — the faithful loop's exact per-mkdir
-    // shape: ONE pending mkdir per awaited flush, fresh scratch dir each
-    // iteration, same scratch namespace outside the verified tree.
-    let lastMkdirProbe: PersistFailureReport | null = null;
-    const c0 = performance.now();
-    for (let i = 0; i < SINGLE_PENDING_PROBE_K; i++) {
-      fs.mkdirSync(`${probeNs}/spm-${i}`, { recursive: true });
-      lastMkdirProbe = await fs.flush();
-    }
-    singlePendingMkdirFlushMeanMs = (performance.now() - c0) / SINGLE_PENDING_PROBE_K;
-    // (d) batched mkdir shape — K fresh-dir mkdirs, ONE awaited flush: raw
-    // per-op OPFS mkdir cost with flush machinery amortized to one call (the
-    // product's own shape).
-    const d0 = performance.now();
-    for (let i = 0; i < SINGLE_PENDING_PROBE_K; i++) {
-      fs.mkdirSync(`${probeNs}/bpm-${i}`, { recursive: true });
-    }
-    const batchedMkdirReport = await fs.flush();
-    batchedMkdirPerOpMeanMs = (performance.now() - d0) / SINGLE_PENDING_PROBE_K;
-    if (lastMkdirProbe === null || lastMkdirProbe.total !== 0 || batchedMkdirReport.total !== 0) {
-      throw new Error('single-pending mkdir probe flush ledger dirty');
+    pendingProbeRounds = [];
+    for (let r = 0; r < PENDING_PROBE_ROUNDS; r++) {
+      // (a) single-pending shape — the faithful loop's exact per-op shape:
+      // ONE pending op per awaited flush, fresh path each iteration.
+      let lastProbe: PersistFailureReport | null = null;
+      const a0 = performance.now();
+      for (let i = 0; i < SINGLE_PENDING_PROBE_K; i++) {
+        fs.writeFileSync(`${probeNs}/sp-${r}-${i}`, PROBE_BYTES);
+        lastProbe = await fs.flush();
+      }
+      const singlePendingFlushMeanMs = (performance.now() - a0) / SINGLE_PENDING_PROBE_K;
+      // (b) batched shape — K fresh-path writes, ONE awaited flush: raw per-op
+      // OPFS cost with flush machinery amortized to one call (the product's
+      // own shape).
+      const b0 = performance.now();
+      for (let i = 0; i < SINGLE_PENDING_PROBE_K; i++) {
+        fs.writeFileSync(`${probeNs}/bp-${r}-${i}`, PROBE_BYTES);
+      }
+      const batchedReport = await fs.flush();
+      const batchedPerOpMeanMs = (performance.now() - b0) / SINGLE_PENDING_PROBE_K;
+      // Ledger `total` is the WHOLE cumulative unhealed set — dirty here means
+      // the probes timed error paths, not flush machinery: fail loudly.
+      if (lastProbe === null || lastProbe.total !== 0 || batchedReport.total !== 0) {
+        throw new Error('single-pending probe flush ledger dirty');
+      }
+      // (c) single-pending MKDIR shape — the faithful loop's exact per-mkdir
+      // shape: ONE pending mkdir per awaited flush, fresh scratch dir each
+      // iteration, same scratch namespace outside the verified tree.
+      let lastMkdirProbe: PersistFailureReport | null = null;
+      const c0 = performance.now();
+      for (let i = 0; i < SINGLE_PENDING_PROBE_K; i++) {
+        fs.mkdirSync(`${probeNs}/spm-${r}-${i}`, { recursive: true });
+        lastMkdirProbe = await fs.flush();
+      }
+      const singlePendingMkdirFlushMeanMs = (performance.now() - c0) / SINGLE_PENDING_PROBE_K;
+      // (d) batched mkdir shape — K fresh-dir mkdirs, ONE awaited flush: raw
+      // per-op OPFS mkdir cost with flush machinery amortized to one call (the
+      // product's own shape).
+      const d0 = performance.now();
+      for (let i = 0; i < SINGLE_PENDING_PROBE_K; i++) {
+        fs.mkdirSync(`${probeNs}/bpm-${r}-${i}`, { recursive: true });
+      }
+      const batchedMkdirReport = await fs.flush();
+      const batchedMkdirPerOpMeanMs = (performance.now() - d0) / SINGLE_PENDING_PROBE_K;
+      if (lastMkdirProbe === null || lastMkdirProbe.total !== 0 || batchedMkdirReport.total !== 0) {
+        throw new Error('single-pending mkdir probe flush ledger dirty');
+      }
+      pendingProbeRounds.push({
+        singlePendingFlushMeanMs,
+        batchedPerOpMeanMs,
+        singlePendingMkdirFlushMeanMs,
+        batchedMkdirPerOpMeanMs,
+      });
     }
     await removeNamespace(probeNs);
   } else {
@@ -428,10 +432,7 @@ async function runVariant(
     ms,
     reportTotal: report.total,
     emptyFlushMeanMs,
-    singlePendingFlushMeanMs,
-    batchedPerOpMeanMs,
-    singlePendingMkdirFlushMeanMs,
-    batchedMkdirPerOpMeanMs,
+    pendingProbeRounds,
     tree,
   };
 }
@@ -447,14 +448,8 @@ async function runAcceptance(manifestUrl: string): Promise<AcceptanceResult> {
   if (faithful.emptyFlushMeanMs === null) {
     throw new Error('faithful variant returned no empty-flush probe');
   }
-  if (faithful.singlePendingFlushMeanMs === null || faithful.batchedPerOpMeanMs === null) {
-    throw new Error('faithful variant returned no single-pending delta probe');
-  }
-  if (
-    faithful.singlePendingMkdirFlushMeanMs === null ||
-    faithful.batchedMkdirPerOpMeanMs === null
-  ) {
-    throw new Error('faithful variant returned no single-pending mkdir delta probe');
+  if (faithful.pendingProbeRounds === null) {
+    throw new Error('faithful variant returned no pending-shape probe rounds');
   }
 
   return {
@@ -468,12 +463,9 @@ async function runAcceptance(manifestUrl: string): Promise<AcceptanceResult> {
     // Flushes actually awaited by the faithful loop: mkdir+write per file.
     faithfulOpCount: 2 * specs.length,
     emptyFlushMeanMs: faithful.emptyFlushMeanMs,
-    singlePendingFlushMeanMs: faithful.singlePendingFlushMeanMs,
-    batchedPerOpMeanMs: faithful.batchedPerOpMeanMs,
     // Mkdir flushes awaited by the faithful loop: one per file.
     faithfulMkdirCount: specs.length,
-    singlePendingMkdirFlushMeanMs: faithful.singlePendingMkdirFlushMeanMs,
-    batchedMkdirPerOpMeanMs: faithful.batchedMkdirPerOpMeanMs,
+    pendingProbeRounds: faithful.pendingProbeRounds,
     speedupRaw,
     speedup: Math.round(speedupRaw * 100) / 100,
     faithfulReportTotal: faithful.reportTotal,

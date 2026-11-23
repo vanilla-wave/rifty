@@ -110,6 +110,12 @@ physical termination proof is forbidden.
 > cleanup before surfacing listener/upstream failures; no route or output
 > ledger is duplicated.
 
+> **Correction (2026-10-25, ADR-0548):** `Worker.terminate()` returning never
+> proved thread release: Chromium drops a nested child's termination notice
+> queued when its realm starts shutdown. A realm an ancestor kill is ending
+> releases its nested Workers instead; that committed host termination is their
+> physical termination proof.
+
 Workbench binds private descendant events to its existing owner token, captured
 PTY admission, and `previewScope`. Kernel owns no preview route or port claim;
 the existing PreviewRegistry remains that authority. Old process/scope events

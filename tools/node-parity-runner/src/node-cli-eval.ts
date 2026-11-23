@@ -505,7 +505,10 @@ export function createNodeCliEvalCapture(): {
   push(stream: 'stdout' | 'stderr', chunk: unknown): void;
   finish(code: number | null, signal: string | null): NodeCliEvalRawOutcome;
 } {
-  const decoders = { stdout: new TextDecoder(), stderr: new TextDecoder() };
+  // Keep a leading BOM: native Node bytes are the oracle; a default decoder
+  // would strip it on both sides and hide an offset-0 drop.
+  const utf8 = () => new TextDecoder('utf-8', { ignoreBOM: true });
+  const decoders = { stdout: utf8(), stderr: utf8() };
   const pending = { stdout: '', stderr: '' };
   const pendingOrder: Record<'stdout' | 'stderr', number | undefined> = {
     stdout: undefined,

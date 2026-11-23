@@ -7,6 +7,11 @@ function buildEsbuildMatrix(verified) {
     intro: `COI installs unmodified upstream esbuild-wasm for the requested esbuild range (ADR-0543). Verified against stock esbuild-wasm on Node 24: ${verified.join(', ')}. Other admitted versions: ⚠️ not verified. No generated client or esbuild patches load in COI. No-COI uses the upstream 0.28.0 Node client through SW-backed children (ADR-0539); an active rifty SW is required. Exact admission remains a ceiling.`,
     rows: [
       [
+        'TypeScript declarations',
+        '✅',
+        'Both tiers resolve types to unchanged esbuild-wasm lib/main.d.ts; 0.28.0 bytes match native esbuild. Node10, Node16 and Bundler resolution plus the VFS language service are proven for no-COI 0.28.0 and the verified COI versions.',
+      ],
+      [
         'COI upstream source / range admission',
         '✅',
         'Complete upstream tarball bytes retained; one thin name/types/bin facade, selected version unchanged. Other resolved versions are admitted without a verified-version allowlist.',
@@ -33,6 +38,7 @@ function buildEsbuildMatrix(verified) {
       ],
     ],
     tests: [
+      '`tests/integration/esbuild-declarations.test.ts`',
       '`tests/browser-unit/esbuild-upstream-twin.spec.ts`',
       '`tests/browser-unit/esbuild-upstream-host.spec.ts`',
       '`tests/browser-unit/esbuild-vite-contract.spec.ts`',

@@ -8,6 +8,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat / exact-vers
 
 | Feature | Status | Notes |
 |---|---|---|
+| TypeScript declarations | ✅ | Both tiers resolve types to unchanged esbuild-wasm lib/main.d.ts; 0.28.0 bytes match native esbuild. Node10, Node16 and Bundler resolution plus the VFS language service are proven for no-COI 0.28.0 and the verified COI versions. |
 | COI upstream source / range admission | ✅ | Complete upstream tarball bytes retained; one thin name/types/bin facade, selected version unchanged. Other resolved versions are admitted without a verified-version allowlist. |
 | COI async API and lifecycle | ✅ | Live Node differential: transform/diagnostics, build/metadata, plugins, contexts/rebuild/cancel/watch/dispose, initialize/stop/restart; CLI pipe, TTY and file output. The file-output quirk follows stock Node, not native esbuild. |
 | COI context.serve | ⚠️ | Same upstream WebAssembly limitation/error as esbuild-wasm on Node; no independent native-esbuild serve claim. |
@@ -16,6 +17,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat / exact-vers
 
 ## Test Sources
 
+- `tests/integration/esbuild-declarations.test.ts`
 - `tests/browser-unit/esbuild-upstream-twin.spec.ts`
 - `tests/browser-unit/esbuild-upstream-host.spec.ts`
 - `tests/browser-unit/esbuild-vite-contract.spec.ts`

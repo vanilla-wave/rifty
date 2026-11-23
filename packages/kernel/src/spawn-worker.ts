@@ -134,6 +134,11 @@ export interface SpawnWorkerResult {
   onUncaughtError(cb: (message: string, outputSealedByChild: boolean) => void): () => void;
   /** Forcibly terminate the worker. Idempotent. */
   terminate(): void;
+  /**
+   * Retire every rifty channel but leave the thread to the ending creator
+   * realm's own termination (ADR-0548). Shares terminate()'s idempotence.
+   */
+  release(): void;
 }
 
 /**
@@ -187,11 +192,11 @@ export function spawnKernelWorker(
   };
 
   /**
-   * Detach the dispatcher, terminate the worker, and remove non-error
-   * listeners. Idempotent. Subscriber arrays are cleared by callers AFTER the
-   * final dispatch so waiters still receive their event.
+   * Detach the dispatcher, terminate the worker unless `release`, and remove
+   * non-error listeners. Idempotent. Subscriber arrays are cleared by callers
+   * AFTER the final dispatch so waiters still receive their event.
    */
-  function tearDownWorker(): void {
+  function tearDownWorker(release = false): void {
     if (terminated) return;
     terminated = true;
     try {
@@ -208,7 +213,7 @@ export function spawnKernelWorker(
     }
     if (worker !== null) {
       try {
-        worker.terminate();
+        if (!release) worker.terminate();
       } catch {
         /* the realm may already be gone */
       }
@@ -466,6 +471,10 @@ export function spawnKernelWorker(
     },
     terminate() {
       tearDownWorker();
+      clearSubscribers();
+    },
+    release() {
+      tearDownWorker(true);
       clearSubscribers();
     },
   };

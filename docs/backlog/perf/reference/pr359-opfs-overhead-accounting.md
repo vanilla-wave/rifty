@@ -31,8 +31,12 @@ Correction: positive write delta×(all−mkdir count) + positive mkdir delta×mk
 count ≤ existing10% serial duration. Faster shapes never credit another shape.
 This is a contract-stable count correction, not a new latency target or runtime
 mechanism. Independent PR-4 review must compare old/new criteria before landing.
-Existing `perf/opfs-parallel-drain-load-sensitive-threshold` still owns general
-sampling noise; this repair does not claim to eliminate all wall-clock variance.
+Sampling noise of the ~0.6 s probe windows was closed later (2026-10-25): the
+four windows run 5 rounds and the gate takes the median projection
+(`tests/browser-unit/fixtures/opfs-drain-overhead.ts`); red main runs
+39375394764 / 39888233973 (one stalled window each, vfs unchanged) are the
+recorded samples in `tools/checks/opfs-drain-overhead.test.ts`. The former
+draft `perf/opfs-parallel-drain-load-sensitive-threshold` is deleted.
 
 Rejected hypothesis: native I/O parallelism in this probe. Actual64-write
 Chromium148 experiment (real bytes, with/without10ms native createWritable delay)

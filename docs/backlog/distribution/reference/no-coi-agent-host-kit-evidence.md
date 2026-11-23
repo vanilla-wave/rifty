@@ -302,6 +302,14 @@ Class: ceiling | policy-default | invented-limit | silent-divergence | parity.
 | 22–25 | Stop semantics, `change`/`edit_file`, per-call cwd, exit codes 127/126/130 | — | same | parity | ADR-0418 D5, ADR-0426 D1 | pi-agent / agent-scenarios |
 | 26 | `workbench-host.ts:112-145` | no-COI lacks vs COI: TS diagnostics, SCM diff, CAS writes, persistent cwd/env, PTY, shell `npm install`, background jobs | — | gap list | ADR-0426 "absent stay absent" | asserted absent |
 
+Correction 2026-11-17 (row 14): a heredoc was not a loud 127. It lexed as two
+`<` redirects (a fabricated ENOENT, or a misattributed `shell.command-substitution`
+/ `shell.background` from its body), and newlines did not separate commands.
+`if`/`for` were 127 per segment while the other segments still ran. Now each
+throws `NotImplementedError` (`shell.heredoc`, `shell.here-string`,
+`shell.compound-command`) before anything runs; declared in
+`docs/public/compat/shell.md`, real heredoc in `backlog/shell/heredoc`.
+
 Top findings: (a) #1+#2+#21 — the agent has no way to add a dependency; not a
 ceiling (same Worker installs). (b) #3 — README's reference policy silently
 breaks every `npm run` script. (c) #4+#5 — empty env, no npm lifecycle vars.

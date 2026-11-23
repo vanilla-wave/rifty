@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Refused substitutions name the requested package/range, exact substituted version and admission rule; stable feature ids and admission unchanged.
+
 - Current-catalog tier changes replay the same verified registry source offline; one receipt writer also projects snapshot facades without changing acquisition pins (ADR-0543).
 
 - Explicit `runtimeTier: 'coi'` resolves esbuild ranges to unchanged upstream esbuild-wasm plus a versioned facade; offline trace replay validates specialization. Omitted/no-coi tier keeps 0.28.0 and names incompatible ranges/pins.

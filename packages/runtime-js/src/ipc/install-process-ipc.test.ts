@@ -171,6 +171,25 @@ describe('installNodeProcessShim fork-IPC (ADR-0045)', () => {
     await expect(response).resolves.toEqual({ kind: 'control:self-exit', code: 1 });
   });
 
+  it.each([
+    { kind: 'control:kill-tree', pid: 41, signal: 'SIGTERM' },
+    { kind: 'control:kill-tree', pid: 41, signal: 'SIGTERM', cascade: 'yes' },
+  ])('refuses a teardown kill without a boolean cascade bit', async (frame) => {
+    const ipc = new MessageChannel();
+    installNodeProcessShim({
+      ...spec(),
+      stdio: { ...spec().stdio, ipc: ipc.port1 },
+    });
+    const response = new Promise<unknown>((resolve) => {
+      ipc.port2.onmessage = (event) => resolve(event.data);
+      ipc.port2.start();
+    });
+
+    ipc.port2.postMessage(frame);
+
+    await expect(response).resolves.toEqual({ kind: 'control:self-exit', code: 1 });
+  });
+
   it('keeps unsupported process IPC arguments and channel controls loud by name', () => {
     const process = installNodeProcessShim(spec());
 
@@ -361,6 +380,7 @@ describe('installNodeProcessShim fork-IPC (ADR-0045)', () => {
       kind: 'control:kill-tree',
       pid: 987_654,
       signal: 'SIGTERM',
+      cascade: false,
     });
 
     await expect(tick()).resolves.toBeUndefined();
@@ -378,14 +398,14 @@ describe('installNodeProcessShim fork-IPC (ADR-0045)', () => {
     };
     bindNodeProcessDescendantAuthority(process, authority);
 
-    ipc.port2.postMessage({
-      kind: 'control:kill-tree',
-      pid: 41,
-      signal: 'SIGTERM',
-    });
+    ipc.port2.postMessage({ kind: 'control:kill-tree', pid: 41, signal: 'SIGTERM', cascade: true });
+    ipc.port2.postMessage({ kind: 'control:kill-tree', pid: 42, signal: 'SIGINT', cascade: false });
     await tick();
 
-    expect(authority.kill).toHaveBeenCalledWith(41, 'SIGTERM');
+    expect(authority.kill.mock.calls).toEqual([
+      [41, 'SIGTERM', true],
+      [42, 'SIGINT', false],
+    ]);
     expect(authority.snapshot).not.toHaveBeenCalled();
     expect(() => bindNodeProcessDescendantAuthority(process, authority)).toThrow(
       /descendant process authority is already bound/i,
@@ -409,7 +429,7 @@ describe('installNodeProcessShim fork-IPC (ADR-0045)', () => {
       receive.call(
         ipc.port1,
         new MessageEvent('message', {
-          data: { kind: 'control:kill-tree', pid: 41, signal: 'SIGTERM' },
+          data: { kind: 'control:kill-tree', pid: 41, signal: 'SIGTERM', cascade: false },
         }),
       ),
     ).toThrow('process control could not kill descendant PID 41');

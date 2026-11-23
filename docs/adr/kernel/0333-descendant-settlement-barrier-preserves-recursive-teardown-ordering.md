@@ -47,3 +47,9 @@ second barrier/route/output ledger, acknowledgement protocol, or timer ships.
 
 Specifies ADR-0326's ancestor/descendant terminal ordering. ADR-0332 otherwise
 stands.
+
+## Corrections
+
+- 2026-10-25 (ADR-0548): `control:kill-tree` carries `cascade`; a realm
+  ending with the kill settles its children unchanged but releases instead of
+  terminating them.

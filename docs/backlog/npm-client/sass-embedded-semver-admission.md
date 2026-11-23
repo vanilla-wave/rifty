@@ -45,8 +45,8 @@ clauses: the "literal 1.100.0" clause and the "version-exact facade" consequence
 the differential evidence for 1.100.0 itself is untouched); compat page row
 for the admitted request form (README §Shape: an admission surface names the
 organic request form it admits); the refusal message for out-of-range requests
-is the one `npm-client/shadow-admission-refusal-names-substituted-version`
-delivers. Twin bump to 1.105.0 is not this item.
+already names the requested package/range, substituted version and admission
+rule (`packages/npm-client/src/internal/shadow/admission.ts`, PR #383). Twin bump to 1.105.0 is not this item.
 
 Dedup: no title/`code:`/map match; `docs/adr/README.md` §Declined concepts has
 no admission row; closure fixture drift (unrelated to admission) is closed by the

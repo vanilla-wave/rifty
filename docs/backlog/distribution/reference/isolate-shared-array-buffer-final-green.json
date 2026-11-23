@@ -1,0 +1,166 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Goal closed. Merge after green HEAD CI and manager handoff.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "5723929bd4e4d6100bb45a92eb2e71fb9cd95f98",
+  "unit_goal_source": "PR #414, ADR-0566 and the closed goal contract at 284519fd7. External round two accepted 6e8d1f9f1. Manager authorized binding the two test additions after the merge of main at d6b811f8e.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [
+    {
+      "row": "The disabled V8 global is absent, fallback works, and direct fixed and growable construction produce ReferenceError.",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/shared-array-buffer.test.ts:28",
+      "note": ""
+    },
+    {
+      "row": "Shared wasm backing stores from JS memory and grown module-exported memory raise the named gap.",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/shared-array-buffer.test.ts:19",
+      "note": ""
+    },
+    {
+      "row": "Runtime views expose ordinary backing stores and ordinary ArrayBuffer prototype constructors.",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/shared-array-buffer.test.ts:57",
+      "note": ""
+    },
+    {
+      "row": "Ordinary wasm and the ordinary-view Atomics operations retain live Node semantics.",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/shared-array-buffer.test.ts:68",
+      "note": ""
+    },
+    {
+      "row": "Packaged README code selects restricted, omitted and explicit-allow guests in fresh contexts.",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/isolate-guest/tests/embedder.test.ts:353",
+      "note": ""
+    },
+    {
+      "row": "The complete corpus retains live Node behavior and declared ceilings with omitted and explicit true.",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/parity.test.ts:18",
+      "note": ""
+    },
+    {
+      "row": "Allow and default retain growable shared buffers, Atomics and shared wasm behavior.",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/shared-array-buffer.test.ts:43",
+      "note": ""
+    },
+    {
+      "row": "Opposite choices stay independent on sequential and overlapping calls to one warm worker.",
+      "source": "fault-matrix",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/shared-array-buffer.test.ts:78",
+      "note": ""
+    },
+    {
+      "row": "A restricted call keeps its policy after worker loss and a solo retry.",
+      "source": "fault-matrix",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/shared-array-buffer.test.ts:96",
+      "note": ""
+    },
+    {
+      "row": "runCode accepts the optional boolean and rejects invalid values.",
+      "source": "public-api",
+      "trace": "ADR-0566",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/shared-array-buffer.test.ts:107",
+      "note": ""
+    },
+    {
+      "row": "The pre-load GuestHost option selects policy and the packed embedder rejects invalid values.",
+      "source": "public-api",
+      "trace": "I3+ADR-0566",
+      "status": "pass",
+      "citation": "packages/isolate-guest/tests/embedder.test.ts:357",
+      "note": ""
+    },
+    {
+      "row": "The pinned wasm prototype surface includes the three covered producers. Ordinary conversions retain callable method identity by name and non-constructability.",
+      "source": "acceptance",
+      "trace": "ADR-0566",
+      "status": "pass",
+      "citation": "packages/isolate-guest/tests/embedder.test.ts:388",
+      "note": ""
+    },
+    {
+      "row": "All three wasm producers distinguish ordinary and shared backing stores under guest replacement of the selected intrinsics.",
+      "source": "acceptance",
+      "trace": "I1+ADR-0566",
+      "status": "pass",
+      "citation": "packages/isolate-guest/tests/embedder.test.ts:404",
+      "note": "ArrayBuffer[Symbol.hasInstance] records and throws on a late check. The instanceof mutant rejected ordinary memory on all three operations."
+    },
+    {
+      "row": "Restricted bootstrap removes the original global before runtime captures it and performs only its own early native wasm memory lookup.",
+      "source": "acceptance",
+      "trace": "ADR-0566",
+      "status": "pass",
+      "citation": "packages/isolate-guest/tests/embedder.test.ts:453",
+      "note": "The observer also requires zero Instance.exports reads before the buffer getter is guarded. An early lookup through an ordinary module-exported memory changed the count to one."
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

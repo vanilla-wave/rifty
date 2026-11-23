@@ -1,0 +1,103 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "PASS, no blockers: Acceptance 1-2 and both Fault-matrix rows green at HEAD (4/4 own run, repeat-each=2). RED@307a2c76a (product = BASE) turns GREEN through the one-line transition() reopen. PR-4: changed criteria equal or stronger (spec gained publishAt>=gz.end, ratchet now scans tests/e2e with a scope pin, the 7 deleted pty tests exercised only the deleted beforeRun gate, converted tests gained pending-asserts). Merge only after PR #301 CI is green at a42b4ec1f (pending at review) and this verdict is committed as docs/backlog/playground/reference/cold-restore-progress-visibility-final-green.json.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "a42b4ec1f20d45c3f2de3c467d68d09d16465d66",
+  "unit_goal_source": "docs/backlog/playground/cold-restore-progress-visibility.md @ a42b4ec1f20d45c3f2de3c467d68d09d16465d66 (ready-verdict: 2026-10-26 — Contract+RED @ 307a2c76a); PR #301 (branch t3code/restore-slow-terminal-progress-1); BASE 7c88bd336ed5386edfdf5dabe7d235fc1b7fc865 (origin/main, merged at 7e8027052); HEAD a42b4ec1f20d45c3f2de3c467d68d09d16465d66",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [
+    {
+      "row": "Acceptance 1: deep-link cold boot ?preset=vite8&autorun=1 under the 4s snapshot stall — every in-window sample shows a rendered launcher progress or switching pill (pin)",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/e2e/restore-progress-visibility.spec.ts:192",
+      "note": ""
+    },
+    {
+      "row": "Acceptance 2: plain-URL reopen after an interrupted first restore (replica active scratch/vite8, no claim) re-restores under the 4s stall with an indicator every in-window sample; replica ends same plan + install claim",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/e2e/restore-progress-visibility.spec.ts:210",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: Storage (replica) first materialization interrupted × plain-URL reopen (openActive) — restore re-runs on the persisted plan and completes with its claim; indicator every in-window sample",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/e2e/restore-progress-visibility.spec.ts:227",
+      "note": ""
+    },
+    {
+      "row": "Fault matrix: Network (snapshot asset) stall ≥2s × deep-link boot / plain-URL reopen — indicator every in-window sample until publication; stall proven by response duration",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/e2e/restore-progress-visibility.spec.ts:169",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "packages/workbench/src/workers/pty-server.ts:401",
+          "evidence": "scratch copy (git archive a42b4ec1f, /tmp/rpv-final/src) with the pre-exec `if (run.controller.signal.aborted) {code=130…} else` branch replaced by `if (false) {} else`: `npx vitest run packages/workbench/src/workers/pty-server.test.ts` → 42 passed (/tmp/rpv-final/mutant-preexec.log); scratch probe (exec 'mkdir -p /work && cd /work' + synchronous SIGINT, expect code 130 and cwd '/') passes on both mutant and original (/tmp/rpv-final/preexec-mutant.log, preexec-orig.log)",
+          "summary": "Without the beforeRun gate the pre-execution aborted branch does nothing observable (equivalent mutant), because Shell already honors a pre-aborted signal. It was the gate's companion check. It predates this unit and is not on the Acceptance 3 removal list, so it is not a REV-7 blocker; trimming it is optional.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "apps/playground/src/adapters/playground-app.tsx:748",
+          "evidence": "",
+          "summary": "Reopen failure now goes through transition(). When openActive rejects, runtime.current() is null (active is set only on success, playground-app-runtime.ts:123), so rebindAfterPlaygroundTransitionFailure (playground-app.tsx:645) rethrows and the initialize catch still runs flashError + openLauncher. projectBusy is cleared in finally, and disposeBound with nothing bound only calls bindSession(undefined). By reading this matches BASE, but no committed test drives a failing plain-URL reopen (the Decisions line 'indicator yields to the existing error surface' is untraced). Hardening option: a case where openActive rejects that asserts the error toast, the launcher, and that the pill does not stay in switching.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "adjudication": []
+}

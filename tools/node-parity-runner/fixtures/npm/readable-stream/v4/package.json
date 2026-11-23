@@ -1,0 +1,8 @@
+{
+  "name": "readable-stream-v4-tree",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "readable-stream": "4.7.0"
+  }
+}

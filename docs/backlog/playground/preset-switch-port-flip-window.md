@@ -20,3 +20,5 @@ Defer `setRealVitePort` to boot completion — `runViteCommand` already calls `m
 ## Reversibility
 
 REVERSIBLE (UI sequencing; recorded here + ADR-0130 follow-ups).
+
+2026-10-25 — retirement candidate (code reading, PR #158 salvage): a switch disposes the bound project (`playground-app.tsx:639` `disposeBound`) and closes the old session before opening the next (`playground-app-runtime.ts:173`/`:208` `closeActive` → `openDefinition`); preview URLs come from the session preview subscription (`playground-app.tsx:545`), and `useMode.realVitePort` (`useMode.ts:15`, `:27`) has no product reader. Not deleted here: ADR-0130/0165 cite this path, so deletion needs a `tools/refs/check.mjs` tombstone (non-docs change) — retire in the next code-touching PR.

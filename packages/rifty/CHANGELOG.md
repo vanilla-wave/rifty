@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 - Document compact prepared snapshots for no-COI apply/build/saved reopen/reapply; no install policy change (ADR-0547).
+- README and `SandboxCommandOptions.env` state that every no-COI `node` shares the toolchain Worker's JS realm: earlier commands' globals, builtin-module patches and state, intrinsics and `process` properties persist; rifty's `__rifty`/`__riftyImport` globals are visible (compat process.md).
 
 - No-COI child processes require a controlling rifty Service Worker; report missing transport explicitly while SW-free file/command APIs remain available. Toolchain protocol v7 requires matching Worker assets (ADR-0539).
 

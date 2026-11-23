@@ -48,19 +48,21 @@ import {
   setActiveNodeProcessBootstrap,
 } from './process-bootstrap-identity.ts';
 import { installLazyFileStdout } from './process-file-stdout.ts';
-import {
-  NODE_PROCESS_IDENTITY,
-  type NodeProcessRelease,
-  createNodeProcessRelease,
-} from './process-identity.ts';
+import { NODE_PROCESS_IDENTITY, type NodeProcessRelease } from './process-identity.ts';
 import {
   NodeProcessExit,
   attachNodeProcessExit,
   dispatchUncaughtException,
   rethrowUndispatched,
 } from './process-lifecycle-events.ts';
+import { defineNodeProcessBrand, defineNodeProcessRelease } from './process-own-identity.ts';
 import { type NodeStdin, makeStdinReader } from './process-stdin-reader.ts';
-import { type NodeStdioWriter, applyTtyShape, makeStdioWriter } from './process-stdio-writer.ts';
+import {
+  type NodeStdioWriter,
+  applyTtyShape,
+  makeDefaultStdioWriter,
+  makeStdioWriter,
+} from './process-stdio-writer.ts';
 import { type EmitWarning, installProcessWarnings } from './process-warnings.ts';
 import { captureProcessStdio } from './stdio-fd-source.ts';
 
@@ -93,7 +95,7 @@ let promisePatched = false;
 let currentCwd = '/workspace';
 
 export interface NodeProcessDescendantAuthority {
-  kill(pid: number, signal: string): boolean;
+  kill(pid: number, signal: string, realmEnding: boolean): boolean;
   snapshot(): readonly { readonly pid: number }[];
 }
 
@@ -233,7 +235,6 @@ export function patchPromiseForNextTick(): void {
   } as typeof Promise.prototype.then;
 }
 
-type StdinListener = (...args: unknown[]) => void;
 export type { NodeStdin } from './process-stdin-reader.ts';
 
 interface ProcessTerminalBootstrap {
@@ -335,6 +336,7 @@ export class NodeProcess extends EventEmitter {
       });
       if (!evalLifecycleOwned && this.#ipcPort !== null) this.#requestSelfExit(signal.exitCode);
     },
+    hasExitControl: () => this.#ipcPort !== null,
   });
   #stdoutIsFile = false;
   stdout: NodeStdioWriter;
@@ -363,6 +365,11 @@ export class NodeProcess extends EventEmitter {
   /** A fork program's `serialization`; `null` for a launch-less URL Worker's raw port. */
   #ipcSerialization: NodeIpcSerialization | null = null;
   #ipcKeepaliveHeld = false;
+  // Node's `control.refCounted()`: +1 per `'message'` newListener, -1 per removeListener.
+  #ipcMessageRefs = 0;
+  readonly #ipcReleaseHook = (event: unknown): void => {
+    if (event === 'message') this.#syncIpcKeepalive(this.#ipcMessageRefs - 1);
+  };
   readonly #workerMessageListeners = new Set<(message: unknown) => void>();
   readonly #workerIpcBacklog: unknown[] = [];
   #latestTtyControlSize: { readonly cols: number; readonly rows: number } | null = null;
@@ -382,12 +389,8 @@ export class NodeProcess extends EventEmitter {
       configurable: false,
     });
     attachNodeProcessExit(this, this.#exit);
-    Object.defineProperty(this, 'release', {
-      value: createNodeProcessRelease(),
-      writable: false,
-      enumerable: true,
-      configurable: true,
-    });
+    defineNodeProcessRelease(this);
+    defineNodeProcessBrand(this);
     Object.defineProperty(this, NODE_PROCESS_TERMINAL_BOOTSTRAP, {
       value: (terminal: unknown): void => this.#applyTerminalBootstrap(terminal),
       enumerable: false,
@@ -467,28 +470,19 @@ export class NodeProcess extends EventEmitter {
         this.connected = true;
         this.channel = nodeIpcChannel('process');
         this.#wireIpc(spec.stdio.ipc);
+        // Node's setupChannel: the hold follows meta-listeners, so every add path counts.
+        this.on('newListener', (event: unknown) => {
+          if (event === 'message') this.#syncIpcKeepalive(this.#ipcMessageRefs + 1);
+        });
+        this.on('removeListener', this.#ipcReleaseHook);
       }
     } else {
       this.pid = 1;
       this.ppid = 0;
       this.argv = ['rifty', 'repl'];
       this.env = Object.create(null);
-      const size = { cols: 80, rows: 24 };
-      const decoder = new TextDecoder();
-      this.stdout = makeStdioWriter(
-        { write: (bytes) => console.log(decoder.decode(bytes)) },
-        1,
-        false,
-        size,
-        nextTick,
-      );
-      this.stderr = makeStdioWriter(
-        { write: (bytes) => console.error(decoder.decode(bytes)) },
-        2,
-        false,
-        size,
-        nextTick,
-      );
+      this.stdout = makeDefaultStdioWriter(1, nextTick);
+      this.stderr = makeDefaultStdioWriter(2, nextTick);
       const reader = makeStdinReader();
       this.stdin = reader.stdin;
       this.#stdinPush = reader.push;
@@ -498,28 +492,17 @@ export class NodeProcess extends EventEmitter {
     installProcessWarnings(this);
   }
 
-  override addListener(event: string | symbol, listener: StdinListener): this {
-    const result = super.addListener(event, listener);
-    if (event === 'message') this.#syncIpcKeepalive();
-    return result;
-  }
-
-  override prependListener(event: string | symbol, listener: StdinListener): this {
-    const result = super.prependListener(event, listener);
-    if (event === 'message') this.#syncIpcKeepalive();
-    return result;
-  }
-
-  override removeListener(event: string | symbol, listener: StdinListener): this {
-    const result = super.removeListener(event, listener);
-    if (event === 'message') this.#syncIpcKeepalive();
-    return result;
-  }
-
+  // Silent in `@riftydev/io`; Node's emits `'removeListener'` per listener, so a still
+  // registered release hook drops one ref per removed `'message'` listener.
   override removeAllListeners(event?: string | symbol): this {
-    const result = super.removeAllListeners(event);
-    if (event === undefined || event === 'message') this.#syncIpcKeepalive();
-    return result;
+    const released =
+      (event === undefined || event === 'message') &&
+      this.listeners('removeListener').includes(this.#ipcReleaseHook)
+        ? this.listenerCount('message')
+        : 0;
+    super.removeAllListeners(event);
+    if (released > 0) this.#syncIpcKeepalive(this.#ipcMessageRefs - released);
+    return this;
   }
 
   // Own instance-bound fields, not prototype methods: Node's detached
@@ -570,7 +553,7 @@ export class NodeProcess extends EventEmitter {
       } else if (frame.kind === 'control:signal') {
         this.#receiveSignal(frame.signal);
       } else if (frame.kind === 'control:kill-tree') {
-        this.#killDescendant(frame.pid, frame.signal);
+        this.#killDescendant(frame.pid, frame.signal, frame.cascade);
       } else {
         this.#rejectControlFrame();
       }
@@ -633,7 +616,7 @@ export class NodeProcess extends EventEmitter {
       } else if (frame.kind === 'control:signal') {
         this.#receiveSignal(frame.signal);
       } else if (frame.kind === 'control:kill-tree') {
-        this.#killDescendant(frame.pid, frame.signal);
+        this.#killDescendant(frame.pid, frame.signal, frame.cascade);
       } else {
         this.#rejectControlFrame();
       }
@@ -657,7 +640,7 @@ export class NodeProcess extends EventEmitter {
       } else if (frame.kind === 'control:signal') {
         this.#receiveSignal(frame.signal);
       } else if (frame.kind === 'control:kill-tree') {
-        this.#killDescendant(frame.pid, frame.signal);
+        this.#killDescendant(frame.pid, frame.signal, frame.cascade);
       } else {
         this.#rejectControlFrame();
       }
@@ -726,10 +709,11 @@ export class NodeProcess extends EventEmitter {
     this.#requestSelfExit(1);
   }
 
-  #killDescendant(pid: number, signal: string): void {
+  #killDescendant(pid: number, signal: string, realmEnding: boolean): void {
     const authority = this.#descendantAuthority ?? globalProcessManager;
+    const killed = authority.kill(pid, signal, realmEnding);
     // Absence proves a federated descendant is already physically retired.
-    if (!authority.kill(pid, signal) && authority.snapshot().some((row) => row.pid === pid)) {
+    if (!killed && authority.snapshot().some((row) => row.pid === pid)) {
       throw new Error(`process control could not kill descendant PID ${pid}`);
     }
   }
@@ -747,8 +731,8 @@ export class NodeProcess extends EventEmitter {
       throw new TypeError('process descendant authority requires kill() and snapshot()');
     }
     this.#descendantAuthority = Object.freeze({
-      kill: (pid: number, signal: string): boolean =>
-        Reflect.apply(kill, authority, [pid, signal]) as boolean,
+      kill: (pid: number, signal: string, realmEnding: boolean): boolean =>
+        Reflect.apply(kill, authority, [pid, signal, realmEnding]) as boolean,
       snapshot: (): readonly { readonly pid: number }[] =>
         Reflect.apply(snapshot, authority, []) as readonly { readonly pid: number }[],
     });
@@ -823,11 +807,9 @@ export class NodeProcess extends EventEmitter {
     }
   }
 
-  #syncIpcKeepalive(): void {
-    const shouldHold =
-      this.#ipcSerialization !== null &&
-      !this.#ipcDisconnected &&
-      this.listenerCount('message') > 0;
+  #syncIpcKeepalive(refs = this.#ipcMessageRefs): void {
+    this.#ipcMessageRefs = refs;
+    const shouldHold = this.#ipcSerialization !== null && !this.#ipcDisconnected && refs > 0;
     if (shouldHold === this.#ipcKeepaliveHeld) return;
     this.#ipcKeepaliveHeld = shouldHold;
     if (shouldHold) refEventLoop();

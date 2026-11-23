@@ -2,6 +2,7 @@
  * `process.stdout`/`process.stderr` writers + TTY control shape for
  * `NodeProcess` (`process.ts`); split out of it by concern.
  */
+import { bytesToString } from '@riftydev/io';
 import type { KernelStdioOutputWriter } from '@riftydev/kernel';
 import { Buffer, type Encoding } from './buffer.ts';
 import { EventEmitter } from './events.ts';
@@ -144,4 +145,35 @@ export function makeStdioWriter(
   }) as NodeStdioWriter;
   Object.defineProperty(stream, OUTPUT_FD, { value: descriptor });
   return isTTY ? attachTtyControls(stream, size) : stream;
+}
+
+type DefaultOutputSink = (fd: 1 | 2, bytes: Uint8Array) => void;
+let defaultOutputSink: DefaultOutputSink | null = null;
+
+/**
+ * Byte sink for the no-spec process's fd 1/2. Unset: the REPL console fallback
+ * (one console line per write). An embedding host without a kernel spec (the
+ * isolate host, ADR-0557) routes the exact bytes instead.
+ */
+export function setDefaultProcessOutputSink(sink: DefaultOutputSink | null): void {
+  defaultOutputSink = sink;
+}
+
+/** The no-spec process's stdout/stderr writer, resolving its sink per write. */
+export function makeDefaultStdioWriter(
+  fd: 1 | 2,
+  defer: (callback: () => void) => void,
+): NodeStdioWriter {
+  const consoleWrite = (bytes: Uint8Array): void => {
+    const text = bytesToString(bytes, 'utf8');
+    if (fd === 1) console.log(text);
+    else console.error(text);
+  };
+  return makeStdioWriter(
+    { write: (bytes) => (defaultOutputSink ? defaultOutputSink(fd, bytes) : consoleWrite(bytes)) },
+    fd,
+    false,
+    { cols: 80, rows: 24 },
+    defer,
+  );
 }

@@ -1,0 +1,430 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "По обещанию PR #403 и перепиновке блокеров нет; pin concern resolved, PR-4 соблюдён. Merge после pnpm pr:check, привязки landing verdict и зелёного CI на актуальном HEAD; на момент проверки CI ещё выполняется. Сохранён прежний advisory о trailing bytes; весь wave-1 этим unit не закрыт.",
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "PR #403 https://github.com/vanilla-wave/rifty/pull/403; standalone observed-defect unit, no backlog contract. Authority: exact user request Wave-1 unit 5/7: every current node:zlib NotImplementedError export carries a reason naming its working async alternative or none; freeze every Sync/brotli/zstd/crc32/remaining stream class/create factory/unzip export in a completeness-checked test table; docs-only correct false no-honest-sync-path reason in ADR-0159, runtime-js zlib backlog and public compat, date the ADR correction and record pako / zlib-wasm options; no sync engine. Baseline: /Users/vanilla-wave/ai/euphotic/proofs/2026-11-12-no-coi-office-docs/agent/pdf/t1/trace.json and t3/trace.json contain node: Not implemented: zlib.inflateSync; contrast-native.json pdf-t1-inflate/pdf-t3-inflate exit 0. BASE a187ce3e055c57924b14a6394315673e33857a23; HEAD 3c7ca76c9b0c3fd0ed06654115fd9de202344dc3 (prior Final+GREEN e4fc7f8188f78946bcf88e14e3d03bba4d66bd3b retained below). RDY-8 proof independently executed in detached git-archive scratch: d6ec5431ca13a93e5b498bba2c0f330fc35ba2b6 RED 38 failed / 7 passed (/tmp/rifty-pr403-final/red.log), prior e4fc7f818 new + existing zlib suites 90/90 (/tmp/rifty-pr403-final/head.log), runtime-js tsc exit 0, compat generator exit 0 with zero matrix drift. Three scratch mutants killed: bare-reasons 38 failures, extra-ceiling completeness failure, wrong-alternative two failures. Original checkout kept read-only and clean. No whole-goal acceptance reviewed. Verify pass of the only intervening commit 3c7ca76c9: independent git-archive scratch /tmp/rifty-pr403-verify-v2/tree; pnpm build:libs HEAD = 10,022,686 bytes / d14abe45e285f126794a0dbcf61fda7c4cc1293e51e4c31eb30a9dac8192875f; replacing only zlib.ts with BASE and rebuilding gives 09240d003c45466130c6c86bd3c442a197c81a294ddfce6a15e150711683187e and the full old gate passes. Restored HEAD rebuild is byte-identical (comparison.json). Exactly 44 differing bytes in six import specifiers: five chunk-* plus dynamic module-loader-*; all other bytes identical. PR-4: whole gate file equals BASE after the exact SHA substitution (criteria-proof.log); ceilings, sizes, names and negative-payload criteria unchanged. Old/new criterion matrix and one-byte-drift mutant discriminate exact assets (gate-matrix.json). HEAD full retirement gate passes twice; 100/100 tests (90 zlib + 10 gate negative-payload tests; tests.log). ADR-0391 actual browser proof: pnpm test:client-bundles exit 0, 15 first-party + 75 external tarballs, strict TypeScript and generic SDK/Worker graphs, Chromium compiler loading/faults and packed toolchain browser acceptance (packed-browser.log). Full pnpm pr:check not run by this reviewer; driver owns it and landing binding. CI at this read: {\"Change scope\": \"SUCCESS\", \"Deploy playground\": \"SUCCESS\", \"lint-and-typecheck\": \"IN_PROGRESS\", \"Deploy landing\": \"SUCCESS\", \"unit-and-conformance (run)\": \"IN_PROGRESS\", \"unit-and-conformance (parity)\": \"IN_PROGRESS\", \"e2e-chromium (heavy, 1, 2)\": \"IN_PROGRESS\", \"e2e-chromium (heavy, 2, 2)\": \"IN_PROGRESS\", \"e2e-chromium (light, 1, 8)\": \"IN_PROGRESS\", \"e2e-chromium (light, 2, 8)\": \"SUCCESS\", \"e2e-chromium (light, 3, 8)\": \"SUCCESS\", \"e2e-chromium (light, 4, 8)\": \"SUCCESS\", \"e2e-chromium (light, 5, 8)\": \"IN_PROGRESS\", \"e2e-chromium (light, 6, 8)\": \"IN_PROGRESS\", \"e2e-chromium (light, 7, 8)\": \"SUCCESS\", \"e2e-chromium (light, 8, 8)\": \"IN_PROGRESS\", \"e2e-chromium (prod)\": \"IN_PROGRESS\", \"e2e-chromium (hosted)\": \"SUCCESS\", \"browser-unit-chromium\": \"IN_PROGRESS\", \"no-coi-chromium\": \"IN_PROGRESS\"}. All verify artifacts are under /tmp/rifty-pr403-verify-v2/. Original checkout unchanged and clean.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "zlib.gzipSync: NotImplementedError reason names working async zlib.gzip and util.promisify",
+      "source": "public-api",
+      "trace": "User PROMISE + AUTHORITY / CLOSED LIST (PR #403 standalone observed-defect unit)",
+      "status": "pass",
+      "citation": "tests/conformance/builtins/zlib-ceiling-reasons.test.ts:35; tests/conformance/builtins/zlib-ceiling-reasons.test.ts:139",
+      "note": ""
+    },
+    {
+      "row": "zlib.gunzipSync: NotImplementedError reason names working async zlib.gunzip and util.promisify",
+      "source": "public-api",
+      "trace": "User PROMISE + AUTHORITY / CLOSED LIST (PR #403 standalone observed-defect unit)",
+      "status": "pass",
+      "citation": "tests/conformance/builtins/zlib-ceiling-reasons.test.ts:36; tests/conformance/builtins/zlib-ceiling-reasons.test.ts:139",
+      "note": ""
+    },
+    {
+      "row": "zlib.deflateSync: NotImplementedError reason names working async zlib.deflate and util.promisify",
+      "source": "public-api",
+      "trace": "User PROMISE + AUTHORITY / CLOSED LIST (PR #403 standalone observed-defect unit)",
+      "status": "pass",
+      "citation": "tests/conformance/builtins/zlib-ceiling-reasons.test.ts:37; tests/conformance/builtins/zlib-ceiling-reasons.test.ts:139",
+      "note": ""
+    },
+    {
+      "row": "zlib.inflateSync: NotImplementedError reason names working async zlib.inflate and util.promisify",
+      "source": "public-api",
+      "trace": "User PROMISE + AUTHORITY / CLOSED LIST (PR #403 standalone observed-defect unit)",
+      "status": "pass",
+      "citation": "tests/conformance/builtins/zlib-ceiling-reasons.test.ts:38; tests/conformance/builtins/zlib-ceiling-reasons.test.ts:139",
+      "note": ""
+    },
+    {
+      "row": "zlib.deflateRawSync: NotImplementedError reason names working async zlib.deflateRaw and util.promisify",
+      "source": "public-api",
+      "trace": "User PROMISE + AUTHORITY / CLOSED LIST (PR #403 standalone observed-defect unit)",
+      "status": "pass",
+      "citation": "tests/conformance/builtins/zlib-ceiling-reasons.test.ts:39; tests/conformance/builtins/zlib-ceiling-reasons.test.ts:139",
+      "note": ""
+    },
+    {
+      "row": "zlib.inflateRawSync: NotImplementedError reason names working async zlib.inflateRaw and util.promisify",
+      "source": "public-api",
+      "trace": "User PROMISE + AUTHORITY / CLOSED LIST (PR #403 standalone observed-defect unit)",
+      "status": "pass",
+      "citation": "tests/conformance/builtins/zlib-ceiling-reasons.test.ts:40; tests/conformance/builtins/zlib-ceiling-reasons.test.ts:139",
+      "note": ""
+    },
+    {
+      "row": "zlib.unzip: NotImplementedError reason names gunzip / inflate selected by header",
+      "source": "public-api",
+      "trace": "User PROMISE + AUTHORITY / CLOSED LIST (PR #403 standalone observed-defect unit)",
+      "status": "pass",
+      "citation": "tests/conformance/builtins/zlib-ceiling-reasons.test.ts:42; tests/conformance/builtins/zlib-ceiling-reasons.test.ts:139",
+      "note": ""
+    },
+    {
+      "row": "zlib.unzipSync: NotImplementedError reason names gunzip / inflate selected by header",
+      "source": "public-api",
+      "trace": "User PROMISE + AUTHORITY / CLOSED LIST (PR #403 standalone observed-defect unit)",
+      "status": "pass",
+      "citation": "tests/conformance/builtins/zlib-ceiling-reasons.test.ts:43; tests/conformance/builtins/zlib-ceiling-reasons.test.ts:139",
+      "note": ""
+    },
+    {
+      "row": "zlib.brotliCompress: NotImplementedError reason names no working node:zlib alternative",
+      "source": "public-api",
+      "trace": "User PROMISE + AUTHORITY / CLOSED LIST (PR #403 standalone observed-defect unit)",
+      "status": "pass",
+      "citation": "tests/conformance/builtins/zlib-ceiling-reasons.test.ts:45; tests/conformance/builtins/zlib-ceiling-reasons.test.ts:139",
+      "note": ""
+    },
+    {
+      "row": "zlib.brotliCompressSync: NotImplementedError reason names no working node:zlib alternative",
+      "source": "public-api",
+      "trace": "User PROMISE + AUTHORITY / CLOSED LIST (PR #403 standalone observed-defect unit)",
+      "status": "pass",
+      "citation": "tests/conformance/builtins/zlib-ceiling-reasons.test.ts:46; tests/conformance/builtins/zlib-ceiling-reasons.test.ts:139",
+      "note": ""
+    },
+    {
+      "row": "zlib.brotliDecompress: NotImplementedError reason names no working node:zlib alternative",
+      "source": "public-api",
+      "trace": "User PROMISE + AUTHORITY / CLOSED LIST (PR #403 standalone observed-defect unit)",
+      "status": "pass",
+      "citation": "tests/conformance/builtins/zlib-ceiling-reasons.test.ts:47; tests/conformance/builtins/zlib-ceiling-reasons.test.ts:139",
+      "note": ""
+    },
+    {
+      "row": "zlib.brotliDecompressSync: NotImplementedError reason names no working node:zlib alternative",
+      "source": "public-api",
+      "trace": "User PROMISE + AUTHORITY / CLOSED LIST (PR #403 standalone observed-defect unit)",
+      "status": "pass",
+      "citation": "tests/conformance/builtins/zlib-ceiling-reasons.test.ts:48; tests/conformance/builtins/zlib-ceiling-reasons.test.ts:139",
+      "note": ""
+    },
+    {
+      "row": "zlib.zstdCompress: NotImplementedError reason names no working node:zlib alternative",
+      "source": "public-api",
+      "trace": "User PROMISE + AUTHORITY / CLOSED LIST (PR #403 standalone observed-defect unit)",
+      "status": "pass",
+      "citation": "tests/conformance/builtins/zlib-ceiling-reasons.test.ts:49; tests/conformance/builtins/zlib-ceiling-reasons.test.ts:139",
+      "note": ""
+    },
+    {
+      "row": "zlib.zstdCompressSync: NotImplementedError reason names no working node:zlib alternative",
+      "source": "public-api",
+      "trace": "User PROMISE + AUTHORITY / CLOSED LIST (PR #403 standalone observed-defect unit)",
+      "status": "pass",
+      "citation": "tests/conformance/builtins/zlib-ceiling-reasons.test.ts:50; tests/conformance/builtins/zlib-ceiling-reasons.test.ts:139",
+      "note": ""
+    },
+    {
+      "row": "zlib.zstdDecompress: NotImplementedError reason names no working node:zlib alternative",
+      "source": "public-api",
+      "trace": "User PROMISE + AUTHORITY / CLOSED LIST (PR #403 standalone observed-defect unit)",
+      "status": "pass",
+      "citation": "tests/conformance/builtins/zlib-ceiling-reasons.test.ts:51; tests/conformance/builtins/zlib-ceiling-reasons.test.ts:139",
+      "note": ""
+    },
+    {
+      "row": "zlib.zstdDecompressSync: NotImplementedError reason names no working node:zlib alternative",
+      "source": "public-api",
+      "trace": "User PROMISE + AUTHORITY / CLOSED LIST (PR #403 standalone observed-defect unit)",
+      "status": "pass",
+      "citation": "tests/conformance/builtins/zlib-ceiling-reasons.test.ts:52; tests/conformance/builtins/zlib-ceiling-reasons.test.ts:139",
+      "note": ""
+    },
+    {
+      "row": "zlib.crc32: NotImplementedError reason names no working node:zlib alternative",
+      "source": "public-api",
+      "trace": "User PROMISE + AUTHORITY / CLOSED LIST (PR #403 standalone observed-defect unit)",
+      "status": "pass",
+      "citation": "tests/conformance/builtins/zlib-ceiling-reasons.test.ts:53; tests/conformance/builtins/zlib-ceiling-reasons.test.ts:139",
+      "note": ""
+    },
+    {
+      "row": "zlib.createGunzip: NotImplementedError reason names working async zlib.gunzip and util.promisify",
+      "source": "public-api",
+      "trace": "User PROMISE + AUTHORITY / CLOSED LIST (PR #403 standalone observed-defect unit)",
+      "status": "pass",
+      "citation": "tests/conformance/builtins/zlib-ceiling-reasons.test.ts:55; tests/conformance/builtins/zlib-ceiling-reasons.test.ts:139",
+      "note": ""
+    },
+    {
+      "row": "zlib.createDeflate: NotImplementedError reason names working async zlib.deflate and util.promisify",
+      "source": "public-api",
+      "trace": "User PROMISE + AUTHORITY / CLOSED LIST (PR #403 standalone observed-defect unit)",
+      "status": "pass",
+      "citation": "tests/conformance/builtins/zlib-ceiling-reasons.test.ts:56; tests/conformance/builtins/zlib-ceiling-reasons.test.ts:139",
+      "note": ""
+    },
+    {
+      "row": "zlib.createInflate: NotImplementedError reason names working async zlib.inflate and util.promisify",
+      "source": "public-api",
+      "trace": "User PROMISE + AUTHORITY / CLOSED LIST (PR #403 standalone observed-defect unit)",
+      "status": "pass",
+      "citation": "tests/conformance/builtins/zlib-ceiling-reasons.test.ts:57; tests/conformance/builtins/zlib-ceiling-reasons.test.ts:139",
+      "note": ""
+    },
+    {
+      "row": "zlib.createDeflateRaw: NotImplementedError reason names working async zlib.deflateRaw and util.promisify",
+      "source": "public-api",
+      "trace": "User PROMISE + AUTHORITY / CLOSED LIST (PR #403 standalone observed-defect unit)",
+      "status": "pass",
+      "citation": "tests/conformance/builtins/zlib-ceiling-reasons.test.ts:58; tests/conformance/builtins/zlib-ceiling-reasons.test.ts:139",
+      "note": ""
+    },
+    {
+      "row": "zlib.createInflateRaw: NotImplementedError reason names working async zlib.inflateRaw and util.promisify",
+      "source": "public-api",
+      "trace": "User PROMISE + AUTHORITY / CLOSED LIST (PR #403 standalone observed-defect unit)",
+      "status": "pass",
+      "citation": "tests/conformance/builtins/zlib-ceiling-reasons.test.ts:59; tests/conformance/builtins/zlib-ceiling-reasons.test.ts:139",
+      "note": ""
+    },
+    {
+      "row": "zlib.createUnzip: NotImplementedError reason names gunzip / inflate selected by header",
+      "source": "public-api",
+      "trace": "User PROMISE + AUTHORITY / CLOSED LIST (PR #403 standalone observed-defect unit)",
+      "status": "pass",
+      "citation": "tests/conformance/builtins/zlib-ceiling-reasons.test.ts:60; tests/conformance/builtins/zlib-ceiling-reasons.test.ts:139",
+      "note": ""
+    },
+    {
+      "row": "zlib.createBrotliCompress: NotImplementedError reason names no working node:zlib alternative",
+      "source": "public-api",
+      "trace": "User PROMISE + AUTHORITY / CLOSED LIST (PR #403 standalone observed-defect unit)",
+      "status": "pass",
+      "citation": "tests/conformance/builtins/zlib-ceiling-reasons.test.ts:64; tests/conformance/builtins/zlib-ceiling-reasons.test.ts:139",
+      "note": ""
+    },
+    {
+      "row": "zlib.createBrotliDecompress: NotImplementedError reason names no working node:zlib alternative",
+      "source": "public-api",
+      "trace": "User PROMISE + AUTHORITY / CLOSED LIST (PR #403 standalone observed-defect unit)",
+      "status": "pass",
+      "citation": "tests/conformance/builtins/zlib-ceiling-reasons.test.ts:65; tests/conformance/builtins/zlib-ceiling-reasons.test.ts:139",
+      "note": ""
+    },
+    {
+      "row": "zlib.createZstdCompress: NotImplementedError reason names no working node:zlib alternative",
+      "source": "public-api",
+      "trace": "User PROMISE + AUTHORITY / CLOSED LIST (PR #403 standalone observed-defect unit)",
+      "status": "pass",
+      "citation": "tests/conformance/builtins/zlib-ceiling-reasons.test.ts:66; tests/conformance/builtins/zlib-ceiling-reasons.test.ts:139",
+      "note": ""
+    },
+    {
+      "row": "zlib.createZstdDecompress: NotImplementedError reason names no working node:zlib alternative",
+      "source": "public-api",
+      "trace": "User PROMISE + AUTHORITY / CLOSED LIST (PR #403 standalone observed-defect unit)",
+      "status": "pass",
+      "citation": "tests/conformance/builtins/zlib-ceiling-reasons.test.ts:67; tests/conformance/builtins/zlib-ceiling-reasons.test.ts:139",
+      "note": ""
+    },
+    {
+      "row": "zlib.Gunzip: NotImplementedError reason names working async zlib.gunzip and util.promisify",
+      "source": "public-api",
+      "trace": "User PROMISE + AUTHORITY / CLOSED LIST (PR #403 standalone observed-defect unit)",
+      "status": "pass",
+      "citation": "tests/conformance/builtins/zlib-ceiling-reasons.test.ts:69; tests/conformance/builtins/zlib-ceiling-reasons.test.ts:139",
+      "note": ""
+    },
+    {
+      "row": "zlib.Deflate: NotImplementedError reason names working async zlib.deflate and util.promisify",
+      "source": "public-api",
+      "trace": "User PROMISE + AUTHORITY / CLOSED LIST (PR #403 standalone observed-defect unit)",
+      "status": "pass",
+      "citation": "tests/conformance/builtins/zlib-ceiling-reasons.test.ts:70; tests/conformance/builtins/zlib-ceiling-reasons.test.ts:139",
+      "note": ""
+    },
+    {
+      "row": "zlib.Inflate: NotImplementedError reason names working async zlib.inflate and util.promisify",
+      "source": "public-api",
+      "trace": "User PROMISE + AUTHORITY / CLOSED LIST (PR #403 standalone observed-defect unit)",
+      "status": "pass",
+      "citation": "tests/conformance/builtins/zlib-ceiling-reasons.test.ts:71; tests/conformance/builtins/zlib-ceiling-reasons.test.ts:139",
+      "note": ""
+    },
+    {
+      "row": "zlib.DeflateRaw: NotImplementedError reason names working async zlib.deflateRaw and util.promisify",
+      "source": "public-api",
+      "trace": "User PROMISE + AUTHORITY / CLOSED LIST (PR #403 standalone observed-defect unit)",
+      "status": "pass",
+      "citation": "tests/conformance/builtins/zlib-ceiling-reasons.test.ts:72; tests/conformance/builtins/zlib-ceiling-reasons.test.ts:139",
+      "note": ""
+    },
+    {
+      "row": "zlib.InflateRaw: NotImplementedError reason names working async zlib.inflateRaw and util.promisify",
+      "source": "public-api",
+      "trace": "User PROMISE + AUTHORITY / CLOSED LIST (PR #403 standalone observed-defect unit)",
+      "status": "pass",
+      "citation": "tests/conformance/builtins/zlib-ceiling-reasons.test.ts:73; tests/conformance/builtins/zlib-ceiling-reasons.test.ts:139",
+      "note": ""
+    },
+    {
+      "row": "zlib.Unzip: NotImplementedError reason names gunzip / inflate selected by header",
+      "source": "public-api",
+      "trace": "User PROMISE + AUTHORITY / CLOSED LIST (PR #403 standalone observed-defect unit)",
+      "status": "pass",
+      "citation": "tests/conformance/builtins/zlib-ceiling-reasons.test.ts:74; tests/conformance/builtins/zlib-ceiling-reasons.test.ts:139",
+      "note": ""
+    },
+    {
+      "row": "zlib.BrotliCompress: NotImplementedError reason names no working node:zlib alternative",
+      "source": "public-api",
+      "trace": "User PROMISE + AUTHORITY / CLOSED LIST (PR #403 standalone observed-defect unit)",
+      "status": "pass",
+      "citation": "tests/conformance/builtins/zlib-ceiling-reasons.test.ts:75; tests/conformance/builtins/zlib-ceiling-reasons.test.ts:139",
+      "note": ""
+    },
+    {
+      "row": "zlib.BrotliDecompress: NotImplementedError reason names no working node:zlib alternative",
+      "source": "public-api",
+      "trace": "User PROMISE + AUTHORITY / CLOSED LIST (PR #403 standalone observed-defect unit)",
+      "status": "pass",
+      "citation": "tests/conformance/builtins/zlib-ceiling-reasons.test.ts:76; tests/conformance/builtins/zlib-ceiling-reasons.test.ts:139",
+      "note": ""
+    },
+    {
+      "row": "zlib.ZstdCompress: NotImplementedError reason names no working node:zlib alternative",
+      "source": "public-api",
+      "trace": "User PROMISE + AUTHORITY / CLOSED LIST (PR #403 standalone observed-defect unit)",
+      "status": "pass",
+      "citation": "tests/conformance/builtins/zlib-ceiling-reasons.test.ts:77; tests/conformance/builtins/zlib-ceiling-reasons.test.ts:139",
+      "note": ""
+    },
+    {
+      "row": "zlib.ZstdDecompress: NotImplementedError reason names no working node:zlib alternative",
+      "source": "public-api",
+      "trace": "User PROMISE + AUTHORITY / CLOSED LIST (PR #403 standalone observed-defect unit)",
+      "status": "pass",
+      "citation": "tests/conformance/builtins/zlib-ceiling-reasons.test.ts:78; tests/conformance/builtins/zlib-ceiling-reasons.test.ts:139",
+      "note": ""
+    },
+    {
+      "row": "Closed 37-export table equals the module actual throwing exports; the other eight function exports remain working",
+      "source": "frozen-artifact",
+      "trace": "User AUTHORITY / CLOSED LIST + RED completeness requirement",
+      "status": "pass",
+      "citation": "tests/conformance/builtins/zlib-ceiling-reasons.test.ts:104; tests/conformance/builtins/zlib-ceiling-reasons.test.ts:128",
+      "note": ""
+    },
+    {
+      "row": "All six named async alternatives run through guest util.promisify and interoperate with real Node zlib",
+      "source": "acceptance",
+      "trace": "User PROMISE: names its working async alternative",
+      "status": "pass",
+      "citation": "tests/conformance/builtins/zlib-ceiling-reasons.test.ts:95; tests/conformance/builtins/zlib-ceiling-reasons.test.ts:160",
+      "note": ""
+    },
+    {
+      "row": "Observed pdf t1 node -e inflateSync path now receives the reasoned ceiling",
+      "source": "acceptance",
+      "trace": "User observed baseline: pdf t1/t3 bare zlib.inflateSync diagnostic",
+      "status": "pass",
+      "citation": "tests/conformance/builtins/zlib-ceiling-reasons.test.ts:194",
+      "note": ""
+    },
+    {
+      "row": "ADR-0159 dated correction changes the false impossibility reason only; no sync engine is implemented",
+      "source": "acceptance",
+      "trace": "User ALSO docs only: dated ADR-0159 correction, ceiling unchanged",
+      "status": "pass",
+      "citation": "docs/adr/runtime-js/0159-node-zlib-web-compression-backed-async-subset.md:23; packages/runtime-js/src/builtins/zlib.ts:372",
+      "note": ""
+    },
+    {
+      "row": "Backlog records pako and zlib WASM options for wave-2 refine + ADR",
+      "source": "acceptance",
+      "trace": "User ALSO docs only: record engine option; do not implement a sync engine",
+      "status": "pass",
+      "citation": "docs/backlog/runtime-js/zlib-web-compression-subset.md:35",
+      "note": ""
+    },
+    {
+      "row": "Public compat reason is corrected and generated source reproduces the committed matrix",
+      "source": "acceptance",
+      "trace": "User ALSO docs only: correct docs/public/compat/zlib.md reason",
+      "status": "pass",
+      "citation": "docs/public/compat/zlib.md:20; tools/compat-matrix-generator/cli.js:392",
+      "note": ""
+    },
+    {
+      "row": "TypeScript worker compiler exception remains exact filename/size/SHA; other ceilings and payload detectors stay active",
+      "source": "frozen-artifact",
+      "trace": "ADR-0391 Decision: exempt only two exact compiler output fingerprints; all other content checks still run",
+      "status": "pass",
+      "citation": "tools/checks/esbuild-legacy-retirement.mjs:103; tools/checks/esbuild-legacy-retirement.test.ts:60",
+      "note": ""
+    },
+    {
+      "row": "Updated compiler output pin carries reviewed byte provenance and actual packed browser proof",
+      "source": "acceptance",
+      "trace": "ADR-0391: updating a compiler output requires a reviewed pin update and actual browser proof",
+      "status": "pass",
+      "citation": "docs/adr/distribution/0391-attest-copyable-runtime-asset-exceptions-to-the-esbuild-retirement-gate.md:26; tests/integration/workbench-packed-consumer.mjs:1191; tests/integration/client-bundle-browser-proof.mjs:103",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "docs/adr/distribution/0391-attest-copyable-runtime-asset-exceptions-to-the-esbuild-retirement-gate.md:62",
+          "summary": "Уточнить описание 44 изменённых байтов: кроме пяти chunk-* импортов переименован динамический module-loader-* импорт, итого шесть specifier. Остальные байты worker идентичны; точная SHA и перепиновка подтверждены.",
+          "authority": "",
+          "evidence": "Independent HEAD vs main-zlib builds: /tmp/rifty-pr403-verify-v2/comparison.json lists five chunk-* references at offsets 122/152/182/212/420 and module-loader-2KPFLOXE.js -> module-loader-GBG27CL5.js at offset 9946633; 44 differing bytes, same 10,022,686-byte length. Normalizing those six names gives identical remaining bytes. The former CI/pin concern is resolved by full gate passes (head-gate.log, head-2-gate.log) and old/new gate-matrix.json. Global CI/DoD remains the merge prerequisite, separately from the product verdict."
+        }
+      ]
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/src/builtins/zlib.ts:75",
+          "summary": "Подсказка на async inflate полезна, но для отмеченного в PR t3-ввода с trailing newline retry всё ещё завершится ошибкой: rifty inflate/inflateRaw отвергают байты после конца потока, Node их игнорирует. Это существующий иной fault class, уже записанный в PR body; обязательство unit — текст сообщений, а не новый engine. Сохранить наблюдение в одном разрешённом batched rifty-to-backlog после landing; не утверждать, что эта правка закрывает PDF scenario или весь wave-1.",
+          "authority": "User PROMISE (рабочая async альтернатива) + RULES FOR THIS UNIT (вне chokepoint — PR body, один batched backlog после landing); REV-1, REV-3, REV-12: advisory вне данной правки.",
+          "evidence": "node --import tsx review-probe.mts in /tmp/rifty-pr403-final/head, Node v24.16.0: deflateSync/deflateRawSync(hello) + newline -> native inflate/inflateRaw hello; rifty both TypeError [ERR_TRAILING_JUNK_AFTER_STREAM_END]: Trailing junk found after the end of the compressed stream. /tmp/rifty-pr403-final/trailing-probe.log. makeAsync/runStream are unchanged by git diff a187ce3e0..HEAD."
+        }
+      ]
+    }
+  ],
+  "reviewed_sha": "3c7ca76c9b0c3fd0ed06654115fd9de202344dc3"
+}

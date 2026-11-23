@@ -109,21 +109,15 @@ module.exports = esbuild;
   "name": "esbuild",
   "version": "0.28.0",
   "main": "./lib/main.cjs",
+  "types": "../esbuild-wasm/lib/main.d.ts",
   "module": "./lib/main.cjs",
   "type": "commonjs",
   "bin": {
     "esbuild": "./bin/esbuild"
-  },
-  "exports": {
-    ".": {
-      "import": "./lib/main.cjs",
-      "require": "./lib/main.cjs",
-      "default": "./lib/main.cjs"
-    }
   }
 }`,
-      sha256: '6ea61c374d8c8681e86b0e950c4c87dea840996284709d35af7e799169e064ab',
-      bytes: 313,
+      sha256: '7e686c9edaff3817e7fae56dfab16f9615e9d1c5938b7e328a08c2e1a7acee1a',
+      bytes: 217,
     },
   ],
 } as const;

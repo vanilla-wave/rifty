@@ -745,7 +745,7 @@ export function App(props: AppProps) {
       return;
     }
     try {
-      await bindProject(await runtime.openActive(plan));
+      await transition((app) => app.openActive(plan), presetForId(plan.starterId));
     } catch (error) {
       flashError(`Project reopen failed: ${errorMessage(error)}`);
       store.openLauncher();

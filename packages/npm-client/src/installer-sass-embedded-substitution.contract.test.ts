@@ -1226,7 +1226,7 @@ describe('sass-embedded required traversal, materialization, and replay', () => 
       expect(result.packages.map(({ name }) => name)).toEqual(['opt-host']);
       // The npm-visible skip observable, pinned verbatim including the reason.
       expect(warn.mock.calls.map(([message]) => String(message))).toContainEqual(
-        `optional dependency ${SASS_TRIGGER}@^1.70.0 of opt-host could not be installed: Not implemented: ${SASS_VERSION_FEATURE} (shadow recipe does not admit ^1.70.0)`,
+        `optional dependency ${SASS_TRIGGER}@^1.70.0 of opt-host could not be installed: Not implemented: ${SASS_VERSION_FEATURE} (sass-embedded@^1.70.0 refused: substitutes sass-embedded@1.100.0; admission rule exact-only)`,
       );
       // Writer records the declared edge; the never-pinned target has no entry.
       expect(result.lockfile.packages['node_modules/opt-host']?.optionalDependencies).toEqual({
@@ -1272,7 +1272,7 @@ describe('sass-embedded required traversal, materialization, and replay', () => 
       const replay = await installFixture(fixture, replayVfs, registry, replayCache, []);
       expect(replay.packages.map(({ name }) => name)).toEqual(['opt-host']);
       expect(warn.mock.calls.map(([message]) => String(message))).toContainEqual(
-        `optional dependency ${SASS_TRIGGER}@^1.70.0 of opt-host could not be installed: Not implemented: ${SASS_VERSION_FEATURE} (shadow recipe does not admit ^1.70.0)`,
+        `optional dependency ${SASS_TRIGGER}@^1.70.0 of opt-host could not be installed: Not implemented: ${SASS_VERSION_FEATURE} (sass-embedded@^1.70.0 refused: substitutes sass-embedded@1.100.0; admission rule exact-only)`,
       );
       expect(registry.reads).toEqual([]);
       expect(await replayVfs.exists(`${ROOT}/node_modules/${SASS_TRIGGER}`)).toBe(false);

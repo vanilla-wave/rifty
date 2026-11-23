@@ -76,6 +76,19 @@ export class MemoryFsSync implements FsSync {
     this.#backend.utimes(normalizeAbsolute(path), atimeMs, mtimeMs);
   }
 
+  /** Set all four times of an existing entry verbatim — a snapshot restore (ADR-0567 §6). */
+  restoreStatSync(
+    path: string,
+    stat: {
+      readonly mtimeMs: number;
+      readonly atimeMs: number;
+      readonly ctimeMs: number;
+      readonly birthtimeMs: number;
+    },
+  ): void {
+    this.#backend.restoreStat(normalizeAbsolute(path), stat);
+  }
+
   copyFileSync(src: string, dst: string): void {
     this.#backend.copyFile(normalizeAbsolute(src), normalizeAbsolute(dst));
   }

@@ -197,10 +197,10 @@ class ChunkDecoder {
   constructor(enc: string) {
     this.enc = enc;
     const low = enc.toLowerCase();
-    // Unknown encodings throw here (loud, synchronous — Node validates at
-    // createReadStream too): probe the codec with an empty buffer.
+    // Unknown encodings throw here (loud, sync, as Node's createReadStream).
     (Buffer.from(new Uint8Array()) as Uint8Array & { toString(e?: string): string }).toString(enc);
-    this.utf8 = low === 'utf8' || low === 'utf-8' ? new TextDecoder('utf-8') : null;
+    const utf8 = low === 'utf8' || low === 'utf-8';
+    this.utf8 = utf8 ? new TextDecoder('utf-8', { ignoreBOM: true }) : null; // Node keeps BOM
     this.unit =
       low === 'utf16le' || low === 'utf-16le' || low === 'ucs2' || low === 'ucs-2'
         ? 2

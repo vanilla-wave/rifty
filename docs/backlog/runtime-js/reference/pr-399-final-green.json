@@ -1,0 +1,134 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Merge после зелёного CI на 95ea085ce. Локально прошли brand parity 3/3, process/ 62/62, events/ 8/8, child_process/ 31/31, build:libs, esbuild-legacy-retirement и file-size. Playwright не запускался; no-coi-chromium pending. HEAD сохранён, дерево чистое.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "95ea085ce6495a1ace160ca3ce814113fb90368c",
+  "unit_goal_source": "PR #399, an observed-defect repair on the rifty-fix route. BASE 8d2efa6ad..HEAD 95ea085ce. Baseline: no-COI office-docs measurement process-tag (native [object process], sandbox [object Object]) and live Node 24.16.0. Authorities: that baseline, ADR-0345 §Corrections 2026-11-17, ADR-0157, ADR-0391 §Corrections.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Owner process, включая COI/no-COI: собственный Symbol.toStringTag и точный Node-дескриптор.",
+      "source": "acceptance",
+      "trace": "ADR-0345 + baseline",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/to-string-tag.case.ts:12; tools/node-parity-runner/cases/process/to-string-tag-same-realm.case.ts:25; packages/runtime-js/src/builtins/process.ts:387",
+      "note": ""
+    },
+    {
+      "row": "Kernel children: бренд и дескриптор доступны через global process и node:process в физических Workers.",
+      "source": "acceptance",
+      "trace": "ADR-0345 + baseline",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/to-string-tag-eval.case.ts:8",
+      "note": ""
+    },
+    {
+      "row": "No-COI children: тот же NodeProcess-конструктор задаёт бренд и дескриптор; реальный PDF-сценарий использует Node-ветку.",
+      "source": "acceptance",
+      "trace": "ADR-0345 + baseline",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/ipc/no-coi-child-worker.ts:87; packages/runtime-js/src/ipc/install-process.ts:76; packages/runtime-js/src/builtins/process-own-identity.ts:9; tests/no-coi/no-coi-pdf-text.spec.ts:90",
+      "note": ""
+    },
+    {
+      "row": "Отдельный same-realm process: собственный бренд и точный дескриптор через global, node:process и process.",
+      "source": "acceptance",
+      "trace": "ADR-0345 + baseline",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/to-string-tag-same-realm.case.ts:14; tools/node-parity-runner/cases/process/to-string-tag.case.ts:12",
+      "note": ""
+    },
+    {
+      "row": "RED через node:process предшествует исправлению наблюдаемого дефекта.",
+      "source": "frozen-artifact",
+      "trace": "baseline",
+      "status": "pass",
+      "citation": "38777693d:tools/node-parity-runner/cases/process/to-string-tag.case.ts:39; 2d5748ceb:packages/runtime-js/src/builtins/process.ts",
+      "note": ""
+    },
+    {
+      "row": "No-COI acceptance: pdfjs-dist legacy getDocument({data}).promise → getTextContent() и pdf-parse getText() извлекают текст реальных PDF как native Node.",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-pdf-text.spec.ts:32; tests/no-coi/no-coi-pdf-text.spec.ts:103; tests/no-coi/fixtures/pdf-text/pdfjs-text.mjs:7; tests/no-coi/fixtures/pdf-text/pdf-parse-text.cjs:9",
+      "note": ""
+    },
+    {
+      "row": "Same-realm process владеет свежей копией versions, которую читает брендовый Node-детектор.",
+      "source": "acceptance",
+      "trace": "ADR-0345",
+      "status": "weak",
+      "citation": "tools/node-parity-runner/cases/process/to-string-tag.case.ts:20; tools/node-parity-runner/cases/process/to-string-tag-same-realm.case.ts:14; packages/runtime-js/src/builtins/child_process-exec.ts:298",
+      "note": "Наличие versions и isNodeJS проверяются, независимость копии — нет. Общий объект versions с теми же значениями даёт идентичные наблюдения. Текущая реализация корректна: создаёт копию через spread; замечание advisory."
+    },
+    {
+      "row": "Дополнительный stderr объявлен точно; следующие блокеры связаны, compat ограничен доказанным {data} text extraction.",
+      "source": "acceptance",
+      "trace": "baseline",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-pdf-text.spec.ts:25; tests/no-coi/no-coi-pdf-text.spec.ts:108; docs/backlog/runtime-js/process-module-loader-surface.md:39; docs/public/compat/process.md:68",
+      "note": ""
+    },
+    {
+      "row": "typescript-worker сохраняет точный pin итоговой сборки без ослабления прежних критериев.",
+      "source": "frozen-artifact",
+      "trace": "ADR-0391",
+      "status": "pass",
+      "citation": "tools/checks/esbuild-legacy-retirement.mjs:103; docs/adr/distribution/0391-attest-copyable-runtime-asset-exceptions-to-the-esbuild-retirement-gate.md:61",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tools/node-parity-runner/cases/process/to-string-tag.case.ts:20",
+          "evidence": "Read-only probe импортировал BRAND_SOURCE и сравнил brand(make({...parentVersions})) с brand(make(parentVersions)) через assert.deepEqual: проверка прошла, вывод — 'BRAND_SOURCE: fresh and shared versions produce identical observations'.",
+          "summary": "ADR-0345 обещает свежую собственную versions, но carrier не проверяет изоляцию копии. Текущий spread в child_process-exec.ts:298 корректен; полезно закрепить отсутствие утечки мутации между родителем и ребёнком.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

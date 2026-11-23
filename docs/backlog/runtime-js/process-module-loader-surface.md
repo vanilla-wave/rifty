@@ -36,7 +36,39 @@ item owns warning delivery; no matching goal/trap/declined redirection item.
 Node 24.16.0 probe: `node --redirect-warnings=/tmp/rifty-fetch-warning-redirect-proof.log -e "process.emitWarning('redirect-proof', {code:'FETCH-REDIRECT'})"`
 exits 0; the file contains `[FETCH-REDIRECT] Warning: redirect-proof`.
 
+2026-11-17 — consumer evidence for `getBuiltinModule`: pdfjs-dist@6.5.438
+legacy and pdf-parse@2.4.5 (depends on `pdfjs-dist: 5.4.296`, `npm view
+pdf-parse@2.4.5 dependencies`) print on stderr
+``Warning: Cannot access the `require` function: "TypeError: process.getBuiltinModule is not a function".``
+in rifty's no-COI toolchain; native Node 24.16.0 (same probe, same PDFs) does
+not warn. Code reading of pdfjs-dist@6.5.438 `node_utils` (not observed by the
+spec): the warning means `createRequire` via `getBuiltinModule` failed, so
+`@napi-rs/canvas` is never loaded. The extracted text
+is byte-equal; rifty needs no polyfill only because the guest exposes the
+browser `DOMMatrix`/`Path2D` (`runtime-js/guest-browser-only-globals`). `tests/no-coi/no-coi-pdf-text.spec.ts`
+pins the line as a declared residual (`NO_GET_BUILTIN_MODULE`; green locally on
+Chromium against Node v24.16.0); kill: when `getBuiltinModule` lands, drop it
+from the expected stderr. Next blockers on the same Node path (scratch no-COI
+spec, pdfjs-dist@6.5.438 legacy, Node v24.16.0 vs rifty): `getDocument({ url:
+'invoice.pdf' })` Node text · rifty rejects `process.getBuiltinModule is not a
+function`; `{ data, standardFontDataUrl: 'node_modules/pdfjs-dist/standard_fonts/' }`
+text on both, but rifty warns `Unable to load font data at: …LiberationSans-Regular.ttf`
+(Node loads it silently). Code reading: `pdf.mjs` `getUrlProp` (`url`),
+`node_utils_fetchData` (`fs/promises`: cMap / standard-font / wasm data).
+
 REGRESSION TRAP — `getBuiltinModule`: `net/src/sqlite/engine.ts:48` + `engine-shimmed-process.test.ts` use its ABSENCE as the "not a real Node realm" signal; adding it breaks sqlite init. MUST refactor detection (e.g. `versions.rifty` marker) + update the pin FIRST, regression test first.
+
+2026-10-25 — salvaged from PR #158 (`plain-esm-inline-source-map-fidelity`,
+not kept as its own item): Node 24.16.0 applies inline maps only with
+`--enable-source-maps`/`setSourceMapsEnabled(true)` — a generated `.mjs`/`.cjs`
+frame becomes `(<dir>/orig/src.ts:10:5)`, `sourceRoot` honoured; flag off it
+stays the generated file, as rifty does. So the residual is enabled mode, owned
+here: when it lands, scan plain JS/CJS inline maps (today only
+`transformSource` output, `loader.ts:452-455`), keep `sources`/`sourceRoot`
+(dropped: `source-maps.ts:28-31`) and swap the frame id (kept:
+`source-maps.ts:249`). Today `--enable-source-maps` throws
+`NotImplementedError` (unknown-option path, `node-startup-options.ts:43-47`);
+`process.setSourceMapsEnabled` is absent (`TypeError` on call).
 
 EXCLUDE `import.meta.resolve` — owned by `runtime-js/import-meta-resolve-node-results` (Node's absent-file URL, non-`file:` parent errors) and ADR-0449 (parent argument). `file://` import is shipped and covered in `tests/conformance/modules/resolver.test.ts`.
 

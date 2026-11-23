@@ -186,6 +186,8 @@ test.describe('M0 — Foundation', () => {
   test('non-TypeScript starter does not report missing TypeScript in Problems', async ({
     page,
   }) => {
+    // Preserve the existing 90s startup assertion plus chooser/Problems work.
+    test.setTimeout(120_000);
     await page.goto('/');
     await pickStarter(page, 'project-files');
     await expectViteDevServerReady(page, 5174, 90_000);

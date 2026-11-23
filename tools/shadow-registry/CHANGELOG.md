@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+- No-COI esbuild declares the installed twin's unchanged TypeScript declarations; mirror upstream's no-exports resolution shape for Node10, Node16, Bundler and the VFS language service.
+
 - Load generated esbuild only on no-COI activation; reject legacy bindings in COI before import. COI Vite CLI has no version gate; stock Node differential and verified-version inventory own its claim.
 
 - Define same-source tier compatibility centrally; bin placement and acquisition/version stay identical. Generate both host policy identities without an eager runtime hash import (ADR-0543).
