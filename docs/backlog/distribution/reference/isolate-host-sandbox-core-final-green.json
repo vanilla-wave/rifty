@@ -1,9 +1,9 @@
 {
   "overall_verdict": "concern",
-  "merge_call": "Final+GREEN PASS re-bound at 4c2878684 (landing verdict); merge only on green PR CI at HEAD after CLOSE.",
+  "merge_call": "Final+GREEN PASS at 9d3d8ca84; merge only on green PR CI at HEAD after CLOSE.",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "a59996a0ce511330d6a56adfbac03f0642d53a88",
-  "unit_goal_source": "docs/backlog/distribution/isolate-host-sandbox-core.md (ready, re-cut 2026-11-22 ×4; Acceptance 1 = docs/backlog/distribution/isolate-host-sandbox-acceptance.md rows 1-14); Contract+RED PASS @ 16b7ab607; BASE 50c9d8bf1; verify passes c505b857f -> 30c8c1ff1 -> 525aaf075; r4 at c0ad781f2; r5 at d78411460; r6 at 7650df442; r7 at 214bbf1c4; r8 at ebecf5eb7; r9 at 4ea5736b5; r10 at 4c2878684; this pass 85be2cd39..a59996a0c (Linux CI test-only fix) (merges of main 11b9397ee: #418 codec, #416, #420); goal docs/backlog/epics/isolate-host-live-sandbox/goal.md",
+  "reviewed_sha": "9d3d8ca8448e0bfc324fd1435e27b987e09cee58",
+  "unit_goal_source": "docs/backlog/distribution/isolate-host-sandbox-core.md (ready, re-cut 2026-11-22 ×4; Acceptance 1 = docs/backlog/distribution/isolate-host-sandbox-acceptance.md rows 1-14); Contract+RED PASS @ 16b7ab607; BASE 50c9d8bf1; verify passes c505b857f -> 30c8c1ff1 -> 525aaf075; r4 at c0ad781f2; r5 at d78411460; r6 at 7650df442; r7 at 214bbf1c4; r8 at ebecf5eb7; r9 at 4ea5736b5; r10 at 4c2878684; r11 at a59996a0c; this pass 60b8ec137..9d3d8ca84 (external review round 3) (merges of main 11b9397ee: #418 codec, #416, #420); goal docs/backlog/epics/isolate-host-live-sandbox/goal.md",
   "unit_residuals": [],
   "goal_residuals": [
     {
@@ -528,8 +528,8 @@
       "source": "fault-matrix",
       "trace": "I5",
       "status": "pass",
-      "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:981",
-      "note": "own mutants killed: gone before unwind; no release on gone"
+      "citation": "packages/isolate-host/tests/sandbox-destroy-table.test.ts:150",
+      "note": "Correction of r9-r11: my Z3 (\"gone before unwind\") \"kill\" was the every-end refused-state row timing out (waitFor 20 s, the CI flake fixed in r11), not discrimination. Re-run at 9d3d8ca84 on the table: my T2 (terminal+gone in one write even when not unwound) KILLED 7 rows — memory x 0/2/3/after-await, catastrophic x 1/3, plus the slot test; memory x 1 and catastrophic x 0/2/after-await passed under it (timing-dependent per row). My T1 (left registered after the pool result, round-2 style) KILLED 7 rows (in flight, timeout x 0/2, memory x 0/2, catastrophic …). My Ra (worker end does not checkLeft) KILLED 16 rows (60 s hangs)."
     },
     {
       "row": "FM re-cut: a memory-reported call whose builtin still holds the isolate keeps its slot until gone",
@@ -586,6 +586,22 @@
       "status": "pass",
       "citation": "packages/isolate-host/tests/protocol.test.ts:44",
       "note": "three hostile cases (before terminal, unknown id, twice); own mutant Z4 (any gone accepted) killed by all three; protocol.test.ts 37/37"
+    },
+    {
+      "row": "FM re-cut: I5 table — every end (exit/timeout/memory/catastrophic/refused/lost) × destroy moment (0-3 microtasks after the result, after await, before start, in flight): no worker burns CPU after destroy returns",
+      "source": "fault-matrix",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-destroy-table.test.ts:150",
+      "note": "see the destroy × every end row for the mutant record"
+    },
+    {
+      "row": "ADR-0563 line (round 3): a runCode request line that throws half-written rejects the call, no rerun",
+      "source": "fault-matrix",
+      "trace": "ADR-0563",
+      "status": "weak",
+      "citation": "packages/isolate-host/src/pool.ts:325",
+      "note": "author T8 (write outside the try) survives: stdin.write of a string throws no injectable sync error; declared uncarried, not re-run by me"
     }
   ],
   "axes": [
@@ -661,6 +677,13 @@
           "evidence": "",
           "summary": "Carried: a run ended by the import() gap via vm loses its writes as CAPTURE.",
           "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "packages/isolate-host/tests/sandbox-destroy-table.test.ts:150",
+          "evidence": "T2 run: memory x 1 microtask and catastrophic x 0/2/after-await rows passed under the mutant",
+          "summary": "The table discriminates the memory path statistically, not per row: a single-row regression could slip if CI timing shifts; keep the whole table, not a subset, in the required lane.",
+          "authority": ""
         }
       ]
     },
@@ -670,16 +693,9 @@
       "findings": [
         {
           "severity": "nit",
-          "location": "tools/checks/esbuild-legacy-retirement.mjs:105",
-          "evidence": "scratch at 1ce7263df: isolate-host 711/711; at 4ea5736b5: workbench build + esbuild-legacy-retirement pass, runtime-js fs.test.ts 33/33",
-          "summary": "Re-pin is the built output; the fs.test.ts cast is type-only.",
-          "authority": ""
-        },
-        {
-          "severity": "nit",
-          "location": "packages/isolate-host/tests/sandbox-faults.test.ts:1120",
-          "evidence": "scratch at a59996a0c: -t \"every end of a run|no hold on the run\" 7/7 pass",
-          "summary": "PR-4: every-end exit/refused runs now live 1.5 s (same end kinds); the GC hold check polls gc()+100 ms up to 20x and takes the min against the unchanged 8 MiB bound — a real hold never drops, so it still discriminates. GC-flake concern closed.",
+          "location": "packages/isolate-host/tests/sandbox-destroy-table.test.ts:1",
+          "evidence": "scratch at 9d3d8ca84: isolate-host 24 files, 743/743 pass; mutants T1/T2/Ra as recorded in coverage; tree clean after",
+          "summary": "Full suite green; r9-r11 mutant claim for \"gone before unwind\" corrected (it failed for another reason then).",
           "authority": ""
         }
       ]
