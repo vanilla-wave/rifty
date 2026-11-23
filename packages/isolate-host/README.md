@@ -121,7 +121,7 @@ await sandbox.destroy();
 |---|---|---|
 | `snapshot` | — | bytes of `sandbox.snapshot()`: the new sandbox starts with those files |
 | `maxFileBytes` | 32 MiB | largest file one `readFile`/`writeFile` moves (`ERR_FS_FILE_TOO_LARGE`) |
-| `maxFsBytes` | 64 MiB | largest state, in the snapshot codec's budget units (ADR-0567: blob bytes + 384 per entry + 8 per path code unit + 80 per depth level): a host write past it rejects `ERR_ISOLATE_HOST_SANDBOX_FULL`, a run whose end state is past it gets `stateRefused`. A run needs an isolate of at least 2 × `maxFsBytes` + 16 MiB (the default 256 holds the default 64 MiB); raise both together |
+| `maxFsBytes` | 64 MiB | largest state, in the snapshot codec's budget units (ADR-0567: blob bytes + 384 per entry + 8 per path code unit + 80 per depth level): a host write past it rejects `ERR_ISOLATE_HOST_SANDBOX_FULL`, a run whose end state is past it gets `stateRefused`. A run needs an isolate of at least 2 × `maxFsBytes` + 16 MiB (the default 256 holds the default 64 MiB); raise both together. Below the budget of an empty sandbox (its two directories) `createSandbox` rejects `ERR_OUT_OF_RANGE` |
 | `template` | — | not implemented: `NotImplementedError('isolate-host.sandbox-template')` |
 
 A fresh sandbox holds the empty directories `/workspace` (the cwd) and `/tmp`
@@ -144,9 +144,10 @@ sandbox paths. rifty's FS has no links: every entry is a file or a directory.
 Operations on one sandbox take effect one at a time, in call order, also when
 you do not await them; sandboxes do not wait for each other. A run's
 `timeoutMs` counts from when it starts, after earlier operations, and covers
-the worker's restore, the run and the capture. Outside it, on your event loop:
-encoding the state before the run and decoding the run's state after it —
-each about one snapshot or restore of the whole state (table below). The state
+encoding the state on your event loop (about one snapshot of the whole state:
+~40 ms at 56 MB, table below), the worker's restore, the run and the capture.
+Outside it, also on your event loop: decoding the run's state after it, about
+one restore of the whole state. The state
 travels to the worker as base64 inside the JSON-line request (the wire of
 ADR-0563 §3): a third more bytes and one more pass each way, kept because a
 binary request frame is a wire change no part of this contract needs.
@@ -179,19 +180,21 @@ Each run is a fresh isolate, like a new `node` process: only files carry over.
 `stateRefused` before you trust the files.
 
 An unknown option name of `createSandbox` or `exec` is refused
-(`ERR_INVALID_ARG_VALUE`), so a typo never leaves a limit unapplied. Input bytes
-(`writeFile`, `createSandbox({ snapshot })`) are copied at the call, even when
-the operation waits behind a run.
+(`ERR_INVALID_ARG_VALUE`), so a typo never leaves a limit unapplied. Every
+input — paths, `args`, options, bytes (`writeFile`, `createSandbox({ snapshot })`)
+— is read and copied at the call, even when the operation waits behind a run:
+a later change to your array or object does not reach it.
 
 Memory in your process. Between operations a sandbox holds no process and no
 isolate, only its files — rifty's in-memory FS: about their size, plus ~400
 bytes per entry (88 000 empty files, a 6.6 MiB snapshot, hold 37 MiB). During
 an `exec` your process holds, for that run, the encoded state, its base64 on the
-wire, the run's end state and the new FS beside the old one: measured peak
-(heap + ArrayBuffers over the idle level) ≈ 4 × S + 8 MiB per concurrent run for
-a state of S (S = 56 MB: 212 MiB for one run, 925 MiB for four at once; 16 MB:
-88 / 276 MiB). Size your service's cgroup for the idle sandboxes' files plus
-4 × S + 8 MiB per concurrent run, beside the workers' bound above. All of it is
+wire, the run's end state and the new FS beside the old one. Peak (heap +
+ArrayBuffers over the idle level) is at most 5 × S + 16 MiB per concurrent run
+for a state of S — an upper bound over every measurement so far (S = 56 MB: 212
+and 255 MiB for one run, 884–925 MiB for four at once; 16 MB: 88 / 276 MiB), not
+a mean. Size your service's cgroup for the idle sandboxes' files plus 5 × S + 16
+MiB per concurrent run, beside the workers' bound above. All of it is
 bounded by `maxFsBytes`. A run that timed out keeps your process alive until its isolate
 has stopped (at most ~1 s more for a builtin that ignores termination), so `destroy` can wait
 for it. A sandbox you drop is ordinary garbage; the number of

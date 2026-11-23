@@ -10,7 +10,8 @@ import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
 import * as pkg from '../src/index.ts';
-import { consumer } from './support.ts';
+import { Pool, sharedPool } from '../src/pool.ts';
+import { childPids, consumer } from './support.ts';
 
 /** RED until the sandbox lands; flips to `it` with the implementation. */
 const carrier = it;
@@ -968,6 +969,207 @@ describe('external review round 1 (manager 2026-11-23)', () => {
       expect(Object.keys(sb)).toEqual([]);
     } finally {
       await sb.destroy();
+    }
+  });
+});
+
+/**
+ * External review round 2: "the run left its worker" is one event for every end. Each guest
+ * holds 300 MiB (its worker past 400 MiB RSS is the event that it runs); once `destroy()`
+ * resolves, that worker burns no more CPU or is gone — whatever the run's end.
+ */
+describe('destroy waits for the isolate on every end of a run (ADR-0568 §5, I5)', () => {
+  const HOLD = 'globalThis.hold = new Uint8Array(300 << 20).fill(1);';
+  const SORT = 'const a = Array.from({ length: 3e6 }, () => Math.random());';
+  const ENDS: Record<string, { code: string; options: string; awaitRun: boolean }> = {
+    exit: { code: `${HOLD} console.log(1)`, options: '{ memoryLimitMb: 512 }', awaitRun: true },
+    timeout: {
+      code: `${HOLD} ${SORT} for (;;) a.sort()`,
+      options: '{ memoryLimitMb: 512, timeoutMs: 1500 }',
+      awaitRun: true,
+    },
+    memory: {
+      code: `${HOLD} ${SORT} const keep = []; for (;;) { keep.push(new Array(2e6).fill(1.5)); a.sort() }`,
+      options: '{ memoryLimitMb: 512, timeoutMs: 60000 }',
+      awaitRun: true,
+    },
+    'refused state': {
+      code: `${HOLD} require('fs').writeFileSync('big', Buffer.alloc(200 << 10))`,
+      options: '{ memoryLimitMb: 512 }',
+      awaitRun: true,
+    },
+    'destroyed in flight': {
+      code: `${HOLD} ${SORT} for (;;) a.sort()`,
+      options: '{ memoryLimitMb: 512, timeoutMs: 60000 }',
+      awaitRun: false,
+    },
+    catastrophic: {
+      code: `${HOLD} new Array(2 ** 28).fill(0)`,
+      options: '{ memoryLimitMb: 512, timeoutMs: 60000 }',
+      awaitRun: true,
+    },
+  };
+  for (const [end, { code, options, awaitRun }] of Object.entries(ENDS)) {
+    carrier(end, async () => {
+      const { value } = await consumer(`
+        const sb = await createSandbox({ maxFsBytes: 128 << 10 });
+        await sb.writeFile('r.js', ${JSON.stringify(code)});
+        const rss = (pid) => Number(execFileSync('ps', ['-o', 'rss=', '-p', String(pid)], { encoding: 'utf8' }).trim() || 0);
+        const running = settle(sb.exec('r.js', ${options}));
+        const pid = await waitFor(() => children().find((p) => { try { return rss(p) > 400 * 1024 } catch { return false } }), 20000);
+        const result = ${awaitRun ? 'await running' : 'undefined'};
+        await sb.destroy();
+        // Stopped: the worker gone, or burning no CPU after destroy resolved (an isolate still
+        // sorting would add ~0.5 s over the window; freed heap pages may stay resident, so RSS
+        // alone cannot tell).
+        const cpu = (p) => { const t = execFileSync('ps', ['-o', 'time=', '-p', String(p)], { encoding: 'utf8' }).trim(); const [m, sec] = t.split(':'); return Number(m) * 60 + Number(sec); };
+        let before; try { before = cpu(pid) } catch { before = undefined }
+        await sleep(500);
+        let burned; try { burned = before === undefined ? 0 : cpu(pid) - before } catch { burned = 0 }
+        out({ stopped: burned < 0.15, burned, result });`);
+      expect((value as { stopped: boolean }).stopped, JSON.stringify(value)).toBe(true);
+    });
+  }
+});
+
+describe('a call whose isolate still runs keeps its slot on every end (ADR-0563 §7)', () => {
+  carrier(
+    'memory reported while a builtin still holds the isolate: the slot stays taken',
+    async () => {
+      const { value } = await consumer(`
+      const neighbours = [0, 1, 2].map(() => settle(runCode('setTimeout(() => {}, 20000)', { timeoutMs: 40000 })));
+      await sleep(200);
+      const culprit = await settle(runCode("const a = Array.from({ length: 3e6 }, () => Math.random()); const keep = []; for (;;) { keep.push(new Array(2e6).fill(1.5)); a.sort() }", { memoryLimitMb: 96, timeoutMs: 60000 }));
+      const before = children();
+      const probe = settle(runCode('1'));
+      await sleep(100);
+      const after = children();
+      await probe; await Promise.all(neighbours);
+      out({ culprit: culprit.termination, newWorker: after.some((p) => !before.includes(p)) });`);
+      expect(value).toEqual({ culprit: 'memory', newWorker: true });
+    },
+  );
+});
+
+describe('external review round 2 (manager 2026-11-23)', () => {
+  carrier(
+    'a cap below an empty sandbox is refused at creation; at the least it works',
+    async () => {
+      for (const maxFsBytes of [0, 1, 1024])
+        await expect(createSandbox({ maxFsBytes })).rejects.toMatchObject({
+          code: 'ERR_OUT_OF_RANGE',
+        });
+      const error = (await createSandbox({ maxFsBytes: 1 }).catch((e: unknown) => e)) as Error;
+      const least = Number(/at least (\d+)/.exec(error.message)?.[1]);
+      const sb = await createSandbox({ maxFsBytes: least });
+      await sb.exec('nope.js').catch(() => {});
+      await sb.destroy();
+      await expect(createSandbox({ maxFsBytes: least - 1 })).rejects.toMatchObject({
+        code: 'ERR_OUT_OF_RANGE',
+      });
+    },
+  );
+
+  carrier(
+    'everything an operation is given is fixed at the call: args, options, bytes',
+    async () => {
+      const sb = await createSandbox();
+      try {
+        await sb.writeFile('w.js', 'setTimeout(() => {}, 300)');
+        await sb.writeFile('a.js', 'console.log(process.argv.slice(2).join(","))');
+        const running = sb.exec('w.js');
+        const args = ['x', 'y'];
+        const options = { args, timeoutMs: 20_000 };
+        const queued = sb.exec('a.js', options);
+        args.push('z');
+        options.timeoutMs = 1;
+        await running;
+        expect(await queued).toEqual({ stdout: 'x,y\n', stderr: '', exitCode: 0 });
+      } finally {
+        await sb.destroy();
+      }
+      const opts = { maxFileBytes: 4 };
+      const creating = createSandbox(opts);
+      opts.maxFileBytes = 1 << 20;
+      const small = await creating;
+      await expect(small.writeFile('f', 'xxxxx')).rejects.toMatchObject({
+        code: 'ERR_FS_FILE_TOO_LARGE',
+      });
+      await small.destroy();
+    },
+  );
+
+  carrier('a destroy in flight leaves no hold on the run: its state is collectable', async () => {
+    const { value } = await consumer(
+      `const used = () => { globalThis.gc(); const m = process.memoryUsage(); return m.heapUsed + m.arrayBuffers; };
+       const base = used();
+       const sb = await createSandbox();
+       for (let i = 0; i < 2; i++) await sb.writeFile('big' + i, new Uint8Array(16 << 20).fill(1));
+       await sb.writeFile('spin.js', 'for (;;) {}');
+       const running = settle(sb.exec('spin.js', { timeoutMs: 60000 }));
+       await sleep(300);
+       await sb.destroy();
+       await running;
+       await sleep(50);
+       out({ held: (used() - base) / 2 ** 20, alive: typeof sb });`,
+      { flags: ['--expose-gc'] },
+    );
+    expect((value as { held: number }).held).toBeLessThan(8);
+  });
+
+  carrier('a state that fails to encode leaves no phantom call on its worker', async () => {
+    // A test limit: the floor keeps the real codec from throwing here, so the
+    // throw is injected at the pool seam (CallSpec.sandbox.state).
+    const pool = new Pool();
+    const spec = {
+      allowSharedArrayBuffer: false,
+      code: '1',
+      timeoutMs: 20_000,
+      memoryLimitMb: 64,
+      maxOutputBytes: 1 << 20,
+    };
+    const before = childPids();
+    for (let i = 0; i < 4; i++)
+      await expect(
+        pool.run({
+          ...spec,
+          sandbox: {
+            path: '/workspace/a.js',
+            args: [],
+            maxFsBytes: 1 << 20,
+            state: () => {
+              throw new RangeError('encode failed');
+            },
+          },
+        }),
+      ).rejects.toThrow('encode failed');
+    // Four phantoms would fill the worker's slots: this call would need a second worker.
+    await expect(pool.run({ ...spec, code: 'setTimeout(() => {}, 500)' })).resolves.toMatchObject({
+      exitCode: 0,
+    });
+    expect(childPids().filter((p) => !before.includes(p))).toHaveLength(1);
+  });
+
+  carrier('a destroy between the run result and its continuation rejects the exec', async () => {
+    // The window is microtasks wide (another settled call's reaction may destroy there):
+    // the real shared pool is wrapped so destroy lands exactly in it.
+    const pool = sharedPool();
+    const run = pool.run;
+    const sb = await createSandbox();
+    await sb.writeFile('t.js', 'require("fs").writeFileSync("after", "x")');
+    let destroying: Promise<void> | undefined;
+    pool.run = (spec, onStart) =>
+      run.call(pool, spec, onStart).then((result) => {
+        destroying = sb.destroy();
+        return result;
+      });
+    try {
+      await expect(sb.exec('t.js')).rejects.toMatchObject({
+        code: 'ERR_ISOLATE_HOST_SANDBOX_DESTROYED',
+      });
+      await destroying;
+    } finally {
+      pool.run = run;
     }
   });
 });

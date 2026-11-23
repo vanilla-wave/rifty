@@ -93,17 +93,25 @@ view's whole backing buffer; rifty's program entry has diagnostic gaps and no
 5. **destroy** rejects queued and later operations
    `ERR_ISOLATE_HOST_SANDBOX_DESTROYED`, cancels a run in flight (its
    isolate is disposed as at a deadline) and drops the state; it resolves once
-   that run has left its worker (its terminal frame, or the worker's end).
-6. **Limits.** Per run: `runCode`'s; `timeoutMs` covers restore, run and
-   capture in the worker, not the consumer's encode before and decode after
-   (each about one snapshot/restore of the state). Host file op:
+   every run of the sandbox has left its worker: the worker's `gone` frame
+   (sent once the run both reported and unwound, on every end — exit, timeout,
+   memory, refused state, cancel), or the worker's end. A worker's slot frees
+   on the same event (round 2, 2026-11-23: it freed at the result, so a
+   memory-killed run's isolate still held the worker while a new call landed).
+6. **Limits.** Per run: `runCode`'s; `timeoutMs` covers the consumer's encode
+   (done before the call registers, so a throw there settles the call and
+   leaves no phantom), the worker's restore, run and capture — not the
+   consumer's decode after (about one restore of the state). Host file op:
    `maxFileBytes` per call; every writing host op costs one encoding of the
    whole state (the cap check) — measured with the README's table, of one
    order with the intake of a run's state. `maxFsBytes` is in the codec's
    budget units (ADR-0567), and a run needs `memoryLimitMb` ≥ 2 × it + 16 MiB:
-   the defaults 64 / 256 hold.
-   The consumer's memory per concurrent run: ≈ 4 × S + 8 MiB (heap +
-   ArrayBuffers) for a state of S — the old FS, the encoded state (encoded again
+   the defaults 64 / 256 hold. `createSandbox` refuses `maxFsBytes` below the
+   codec's cost of an empty sandbox (`ERR_OUT_OF_RANGE`, the number computed
+   by the codec), so the empty state always encodes.
+   The consumer's memory per concurrent run: at most 5 × S + 16 MiB (heap +
+   ArrayBuffers; an upper bound over the measurements — 212 and 255 MiB at
+   56 MB, round 2 — not a mean) for a state of S — the old FS, the encoded state (encoded again
    for a rerun, never kept by the call), its base64 written in pieces, the end
    state and the new FS until the swap (measured 2026-11-23: 6.7 S before those
    cuts); between operations a sandbox holds its FS (~400 B per entry plus its

@@ -93,6 +93,10 @@ describe('node:fs.utimesSync times as Node 24.16.0 stores them (fs-times.ts)', (
     expect(fs.statSync('/workspace/t').mtimeMs).toBe(2_000_000);
     fs.utimesSync('/workspace/t', 1e306, 1e306);
     expect(fs.statSync('/workspace/t').mtimeMs).toBe(9223372036854.775);
+    for (const v of ['-1e306', '1e306', '-9.3e12', new Date(-8.64e15)]) {
+      fs.utimesSync('/workspace/t', v, v);
+      expect(Math.abs(fs.statSync('/workspace/t').mtimeMs)).toBe(9223372036854.775);
+    }
     const before = Date.now();
     fs.utimesSync('/workspace/t', -1e306, -1e306);
     expect(fs.statSync('/workspace/t').mtimeMs).toBeGreaterThanOrEqual(before);

@@ -143,7 +143,12 @@ function lostError(message: string): Error {
 class Worker {
   /** Calls placed here that have no terminal frame yet. */
   readonly calls = new Map<number, Call>();
-  /** Who waits for a call to leave this worker (its terminal frame, or the worker's end). */
+  /**
+   * Calls whose isolate has not stopped yet: placed, until the worker's `gone` frame
+   * (after the terminal frame) or its end. They hold a slot (ADR-0563 §7).
+   */
+  readonly running = new Set<number>();
+  /** Who waits for a call to leave this worker (its `gone` frame, or the worker's end). */
   readonly #released = new Map<number, (() => void)[]>();
   retiring = false;
   dead = false;
@@ -231,7 +236,7 @@ class Worker {
 
   /** Resolves once call `id` has left this worker: its isolate is gone with it. */
   released(id: number): Promise<void> {
-    if (!this.calls.has(id) || this.dead) return Promise.resolve();
+    if (!this.running.has(id) || this.dead) return Promise.resolve();
     return new Promise((resolve) => {
       // The worker is unref'd: someone awaiting this keeps the consumer alive until then.
       const hold = setInterval(() => {}, 2 ** 30);
@@ -250,6 +255,7 @@ class Worker {
   }
 
   #releaseAll(): void {
+    this.running.clear();
     for (const id of [...this.#released.keys()]) this.#release(id);
   }
 
@@ -257,9 +263,12 @@ class Worker {
     this.child.stdin?.write(`${JSON.stringify(request)}\n`);
   }
 
+  /**
+   * Send `call` here. Everything that can throw — the request, a sandbox run's state —
+   * is built before the call is registered, so a throw leaves no phantom call (no slot,
+   * no waiter); a failure while its line is half written ends this worker as lost.
+   */
   place(call: Call): void {
-    call.worker = this;
-    this.calls.set(call.id, call);
     const { code, memoryLimitMb, maxOutputBytes, sandbox } = call.spec;
     const request: RunRequest = {
       type: 'run',
@@ -281,28 +290,39 @@ class Worker {
           }
         : {}),
     };
-    if (sandbox === undefined) {
-      this.send(request);
+    const line = JSON.stringify(request);
+    const state = sandbox?.state();
+    call.worker = this;
+    this.calls.set(call.id, call);
+    this.running.add(call.id);
+    if (state === undefined) {
+      this.child.stdin?.write(`${line}\n`);
       return;
     }
     // The same JSON line, written in pieces: the state's base64 never becomes one string
     // (the consumer's memory per run, ADR-0568 §6).
-    const line = JSON.stringify(request);
     const at = line.lastIndexOf('""}}');
     const stdin = this.child.stdin;
-    // Encoded before the first byte goes out: a throw here leaves no half line on the wire.
-    const state = sandbox.state();
-    stdin?.write(line.slice(0, at + 1));
-    const step = 3 << 20; // a multiple of 3: the pieces join into one base64 text
-    for (let from = 0; from < state.byteLength; from += step)
-      stdin?.write(
-        Buffer.from(
-          state.buffer,
-          state.byteOffset + from,
-          Math.min(step, state.byteLength - from),
-        ).toString('base64'),
-      );
-    stdin?.write('"}}\n');
+    try {
+      stdin?.write(line.slice(0, at + 1));
+      const step = 3 << 20; // a multiple of 3: the pieces join into one base64 text
+      for (let from = 0; from < state.byteLength; from += step)
+        stdin?.write(
+          Buffer.from(
+            state.buffer,
+            state.byteOffset + from,
+            Math.min(step, state.byteLength - from),
+          ).toString('base64'),
+        );
+      stdin?.write('"}}\n');
+    } catch (error) {
+      // Half a line on the wire: this worker can read no further request.
+      if (this.ended === undefined) {
+        this.ended = { lost: 'after a request it could not be sent whole' };
+        this.kill();
+      }
+      throw error;
+    }
   }
 
   kill(): void {
@@ -319,6 +339,10 @@ class Worker {
   /** Largest payload a frame may carry now, or the violation. */
   #maxPayload(kind: number, id: number): number | string {
     if (kind === KIND.retire) return id === 0 ? 0 : `retire for call ${id}`;
+    if (kind === KIND.gone)
+      return this.running.has(id) && !this.calls.has(id)
+        ? 0
+        : `gone for call ${id}, not ended on this worker`;
     const call = this.calls.get(id);
     if (call === undefined) return `frame for call ${id}, not in flight on this worker`;
     switch (kind) {
@@ -347,6 +371,13 @@ class Worker {
   #onFrame(kind: number, id: number, p: Uint8Array): string | undefined {
     if (kind === KIND.retire) {
       this.retiring = true;
+      this.pool.settleWorker(this);
+      return undefined;
+    }
+    if (kind === KIND.gone) {
+      // The call's isolate has stopped: its slot is free, whoever waits for it may go on.
+      this.running.delete(id);
+      this.#release(id);
       this.pool.settleWorker(this);
       return undefined;
     }
@@ -385,7 +416,6 @@ class Worker {
     )
       return 'sandbox run ended without its state';
     this.calls.delete(id);
-    this.#release(id);
     if (kind === KIND.exit) call.resolveWith(call.result(p[0] as number));
     else if (kind === KIND.memory) call.resolveWith(call.result(null, 'memory'));
     else if (kind === KIND.error)
@@ -477,7 +507,7 @@ export class Pool {
           !w.exited &&
           !w.channelEnded &&
           w.ended === undefined &&
-          w.calls.size < SHARD,
+          w.running.size < SHARD,
       ) ?? this.#spawn(false);
     worker.place(call);
   }
@@ -502,9 +532,13 @@ export class Pool {
       }
       call.lost = reason;
       call.restart();
+      let solo: Worker | undefined;
       try {
-        this.#spawn(true).place(call);
+        solo = this.#spawn(true);
+        solo.place(call);
       } catch {
+        // A solo that got no call has nothing to do: it ends at once.
+        solo?.end();
         // spawn throws synchronously (ENOMEM, a bad path): this runs in a 'close'
         // handler, so a throw would take the consumer down. The call is lost.
         call.rejectWith(lostError(reason));
@@ -538,11 +572,11 @@ export class Pool {
       worker.end();
       return;
     }
-    if (worker.calls.size > 0) return;
+    if (worker.running.size > 0) return;
     // Keep one idle worker warm; a second idle one ends.
     const idle = this.#workers.filter(
       (w) =>
-        !w.solo && !w.retiring && !w.channelEnded && w.ended === undefined && w.calls.size === 0,
+        !w.solo && !w.retiring && !w.channelEnded && w.ended === undefined && w.running.size === 0,
     );
     if (idle.length > 1) worker.end();
   }

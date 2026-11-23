@@ -181,8 +181,20 @@ async function run(request: RunRequest): Promise<void> {
     },
   });
   /** The isolate is gone for good: disposed and its run unwound. */
+  /**
+   * The one "left the worker" event, for every end (exit, timeout, memory, cancel,
+   * refused state): once the call has its terminal frame AND its isolate has
+   * stopped, a `gone` frame tells the consumer its slot is free (ADR-0563 §7, ADR-0568 §5).
+   */
+  let goneSent = false;
+  const gone = (): void => {
+    if (goneSent || !state.reported || !state.unwound) return;
+    goneSent = true;
+    send(KIND.gone, id, new Uint8Array(0));
+  };
   const forget = (): void => {
     state.unwound = true;
+    gone();
     if (!live.has(id)) return;
     if (state.reported) live.delete(id);
     if (live.size === 0 && process.memoryUsage.rss() > RECYCLE_RSS_BYTES) retire();
@@ -228,8 +240,10 @@ async function run(request: RunRequest): Promise<void> {
         // Not inside an isolate callback (`importModuleDynamically` reports from one).
         setImmediate(() => isolate.isDisposed || isolate.dispose());
       }
-      if (state.unwound) live.delete(id);
-      else {
+      if (state.unwound) {
+        live.delete(id);
+        gone();
+      } else {
         // Still running after dispose (a builtin that ignores termination): this
         // worker takes no new call (I4).
         setTimeout(() => state.unwound || retire(), STUCK_GRACE_MS).unref();

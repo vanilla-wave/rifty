@@ -37,6 +37,14 @@ const c: ParityCase = {
       console.log(v, 'string is now', fs.statSync('f').mtimeMs >= t0);
     }
     try { fs.utimesSync('f', 'abc', 'abc'); } catch (e) { console.log('abc', e.code); }
+    // Past a 64-bit nanosecond clock: Node's value is the platform's (darwin saturates,
+    // Linux may refuse); only "finite and inside Date" is compared.
+    for (const v of ['-1e306', '1e306', '-9.3e12', new Date(-8.64e15)]) {
+      let finite;
+      try { fs.utimesSync('f', v, v); finite = Number.isFinite(fs.statSync('f').mtimeMs) && Math.abs(fs.statSync('f').mtimeMs) <= 8.64e15; }
+      catch { finite = true; }
+      console.log(String(v).slice(0, 8), 'finite', finite);
+    }
     for (const v of [NaN, Infinity]) {
       try { fs.utimesSync('f', v, v); } catch (e) { console.log('number', v, e.code); }
     }

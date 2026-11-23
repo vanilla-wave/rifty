@@ -334,7 +334,17 @@ class LiveSandbox implements Sandbox {
   }
 
   exec(path: string, options: ExecOptions = {}): Promise<ExecResult> {
+    // Everything the call passes is fixed at the call (ADR-0568 §1): the options and
+    // their `args` are copied now, read later.
+    const given: ExecOptions =
+      options !== null && typeof options === 'object'
+        ? {
+            ...options,
+            ...(Array.isArray(options.args) ? { args: [...options.args] } : {}),
+          }
+        : options;
     return this.#op(async (box) => {
+      const options = given;
       knownOptions(options, EXEC_OPTIONS, 'exec');
       for (const option of ['env', 'cwd', 'stdin'] as const) {
         if (option in options)
@@ -355,18 +365,22 @@ class LiveSandbox implements Sandbox {
       const fs = box.fs;
       const state = (): Uint8Array => this.#codec.snapshotFs(fs, this.#options);
       let handle: CallHandle | undefined;
-      const result = await sharedPool().run(
-        {
-          code: '',
-          ...limits,
-          sandbox: { path: entry, args: [...args], state, maxFsBytes: this.#options.maxBytes },
-        },
-        (h) => {
-          handle = h;
-          this.#run = h;
-        },
-      );
-      this.#run = undefined;
+      const result = await sharedPool()
+        .run(
+          {
+            code: '',
+            ...limits,
+            sandbox: { path: entry, args: [...args], state, maxFsBytes: this.#options.maxBytes },
+          },
+          (h) => {
+            handle = h;
+            this.#run = h;
+          },
+        )
+        .finally(() => {
+          // Whatever the end — a destroy in flight too: no stale hold on the call (and its state).
+          this.#run = undefined;
+        });
       // destroy() between the result and this continuation: in flight, so it rejects.
       if (this.#destroyed) throw destroyedError();
       // A timed-out isolate may still be stopping: destroy waits for it to leave its worker.
@@ -434,6 +448,7 @@ function firstMissingDir(fs: Fs, dir: string): string | undefined {
 
 export function createSandbox(options: SandboxOptions = {}): Promise<Sandbox> {
   let snapshot: Uint8Array | undefined;
+  let limits: { maxFsBytes: number; maxFileBytes: number };
   try {
     knownOptions(options, SANDBOX_OPTIONS, 'createSandbox');
     if ('template' in options)
@@ -442,6 +457,8 @@ export function createSandbox(options: SandboxOptions = {}): Promise<Sandbox> {
         'a sandbox starts empty or from its own snapshot, ADR-0568',
       );
     const maxFsBytes = Math.floor(limit('maxFsBytes', options.maxFsBytes, 64 << 20, 0));
+    const maxFileBytes = Math.floor(limit('maxFileBytes', options.maxFileBytes, 32 << 20, 0));
+    limits = { maxFsBytes, maxFileBytes };
     if (options.snapshot !== undefined) {
       if (!(options.snapshot instanceof Uint8Array))
         throw coded(
@@ -459,15 +476,49 @@ export function createSandbox(options: SandboxOptions = {}): Promise<Sandbox> {
   } catch (error) {
     return Promise.reject(bare(error));
   }
-  return open(options, snapshot).catch((error: unknown) => {
+  return open(limits, snapshot).catch((error: unknown) => {
     throw bare(error);
   });
 }
 
-async function open(options: SandboxOptions, snapshot: Uint8Array | undefined): Promise<Sandbox> {
-  const maxFileBytes = Math.floor(limit('maxFileBytes', options.maxFileBytes, 32 << 20, 0));
-  const maxFsBytes = Math.floor(limit('maxFsBytes', options.maxFsBytes, 64 << 20, 0));
+/** The codec's budget for an empty sandbox (`GUEST_DIRS`): no cap may be lower. */
+let emptyCost: number | undefined;
+function emptySandboxCost(c: Codec): number {
+  if (emptyCost !== undefined) return emptyCost;
+  const fs = new c.MemoryFsSync();
+  for (const dir of c.GUEST_DIRS) fs.mkdirSync(dir, { recursive: true });
+  const fits = (maxBytes: number): boolean => {
+    try {
+      c.snapshotFs(fs, { template: null, maxBytes });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  let lo = 0; // does not fit
+  let hi = 1 << 20; // fits
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (fits(mid)) hi = mid;
+    else lo = mid;
+  }
+  emptyCost = hi;
+  return hi;
+}
+
+async function open(
+  { maxFsBytes, maxFileBytes }: { maxFsBytes: number; maxFileBytes: number },
+  snapshot: Uint8Array | undefined,
+): Promise<Sandbox> {
   const c = await loadCodec();
+  const least = emptySandboxCost(c);
+  if (maxFsBytes < least)
+    throw coded(
+      new RangeError(
+        `The "options.maxFsBytes" must be at least ${least} (the budget of an empty sandbox). Received ${maxFsBytes}`,
+      ),
+      'ERR_OUT_OF_RANGE',
+    );
   const fs = new c.MemoryFsSync();
   if (snapshot !== undefined) c.restoreFs(fs, snapshot, { template: null, maxBytes: maxFsBytes });
   else for (const dir of c.GUEST_DIRS) fs.mkdirSync(dir, { recursive: true });

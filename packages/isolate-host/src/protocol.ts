@@ -10,9 +10,11 @@
  *   retire: (empty, call 0) — send this worker no new call
  *   state: snapshot bytes (≤ the call's maxFsBytes) — a sandbox run's end state (ADR-0568)
  *   refused: [reason] — a sandbox run's state was not restored or captured (REFUSED)
+ *   gone: (empty) — after its terminal frame, the call's isolate has stopped: its slot is free
  *
  * Per call: output frames, for a sandbox run at most one state or refused
- * frame, then exactly one terminal frame (exit, memory or error); for a call the consumer cancelled it only ends its addressing. Truncation rides output frames only
+ * frame, then exactly one terminal frame (exit, memory or error), then one gone
+ * frame once its isolate has stopped; for a call the consumer cancelled it only ends its addressing. Truncation rides output frames only
  * (a flip with no new bytes is its own frame): a terminal frame is always
  * preceded by the flush of what came before.
  */
@@ -56,6 +58,7 @@ export const KIND = {
   retire: 5,
   state: 6,
   refused: 7,
+  gone: 8,
 } as const;
 /** `refused` payload byte → the result's `stateRefused` code (ADR-0568 §3). */
 export const REFUSED = [

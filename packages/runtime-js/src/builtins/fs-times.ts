@@ -33,10 +33,14 @@ export function utimesArgs(atime: number | Date, mtime: number | Date): [number,
   return [toMs(atime), toMs(mtime)];
 }
 
-/** libuv: a NaN time leaves that time as it was (UTIME_OMIT); a huge one saturates. */
+/**
+ * libuv: a NaN time leaves that time as it was (UTIME_OMIT); a time past a 64-bit
+ * nanosecond clock saturates at ±2^63 ns (Node 24.16.0 on darwin; never a non-finite or
+ * out-of-Date time stored).
+ */
 export function setTimes(np: string, [atime, mtime]: [number, number]): void {
   const now = syncMirror().statSync(np);
   const stored = (ms: number, current: number | undefined): number =>
-    Number.isNaN(ms) ? (current ?? 0) : Math.min(ms, MAX_TIME_MS);
+    Number.isNaN(ms) ? (current ?? 0) : Math.max(-MAX_TIME_MS, Math.min(ms, MAX_TIME_MS));
   syncMirror().utimes(np, stored(atime, now.atime), stored(mtime, now.mtime));
 }
