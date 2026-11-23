@@ -866,3 +866,28 @@ describe("runCode's hardening and options through exec (FIT S6, S10)", () => {
     },
   );
 });
+
+describe('destroy of a light run on a shared worker (Final+GREEN r2 concern)', () => {
+  carrier(
+    'resolves once the cancelled run’s terminal frame arrives; the worker stays',
+    async () => {
+      const { value } = await consumer(`
+      const sb = await createSandbox();
+      await sb.writeFile('spin.js', 'for (;;) {}');
+      const neighbour = settle(runCode("setTimeout(() => console.log('n'), 1500)", { timeoutMs: 20000 }));
+      const running = settle(sb.exec('spin.js', { timeoutMs: 60000 }));
+      await sleep(300);
+      const before = children();
+      await sb.destroy();
+      out({ run: await running, neighbour: await neighbour, sameWorker: children().some((p) => before.includes(p)) });`);
+      expect(value).toEqual({
+        run: {
+          rejected: 'isolate-host sandbox: destroyed',
+          code: 'ERR_ISOLATE_HOST_SANDBOX_DESTROYED',
+        },
+        neighbour: { stdout: 'n\n', stderr: '', exitCode: 0 },
+        sameWorker: true,
+      });
+    },
+  );
+});

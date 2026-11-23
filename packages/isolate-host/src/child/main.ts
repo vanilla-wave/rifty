@@ -327,7 +327,11 @@ async function run(request: RunRequest): Promise<void> {
       state.stateWork = 1;
       let bytes: unknown;
       try {
-        bytes = await snapshot.apply(undefined, [snapshotOptions], {
+        // The guest's codec is asked for anything its isolate can hold: an end state over
+        // the cap then comes out as bytes the trusted side measures (this worker against
+        // `maxFsBytes`, the consumer's codec against the budget), not as a guest refusal.
+        const captureOptions = { template: null, maxBytes: request.memoryLimitMb * 2 ** 20 };
+        bytes = await snapshot.apply(undefined, [captureOptions], {
           arguments: { copy: true },
           result: { copy: true },
         });

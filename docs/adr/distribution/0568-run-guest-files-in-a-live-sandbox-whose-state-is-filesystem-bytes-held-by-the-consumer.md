@@ -65,9 +65,11 @@ view's whole backing buffer; rifty's program entry has diagnostic gaps and no
    ended on its own but whose end state is not kept — over the cap, out of
    isolate memory while capturing, a snapshot its own guest broke — resolves
    its own result plus `stateRefused: <code>`, state unchanged. The code is
-   what the trusted side measured: the worker names `CAPTURE` for a capture
-   that threw or returned no bytes (never reading the guest's text) and
-   `ERR_FS_SNAPSHOT_TOO_LARGE` for bytes over `maxFsBytes`; the consumer names
+   what the trusted side measured: the guest's codec is asked for anything
+   the isolate can hold, so an end state over the cap comes out as bytes —
+   the worker names `ERR_FS_SNAPSHOT_TOO_LARGE` for bytes over `maxFsBytes`,
+   the consumer's codec for a budget over it — and `CAPTURE` for a capture
+   that threw or returned no bytes (never reading the guest's text); the consumer names
    its codec's refusal of the bytes. Every way the worker ends a sandbox run
    itself (the `import()` gap, a broken guest tail) goes through one terminal
    that sends the state's fate first (refused `CAPTURE` when nothing was

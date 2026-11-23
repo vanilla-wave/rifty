@@ -592,7 +592,7 @@ describe('limits are loud (scenario 8, I6)', () => {
       expect(filled).toMatchObject({
         stdout: 'done\n',
         exitCode: 0,
-        stateRefused: 'ERR_ISOLATE_HOST_SANDBOX_CAPTURE',
+        stateRefused: 'ERR_FS_SNAPSHOT_TOO_LARGE',
       });
       expect((await sb.list()).map((e) => e.name)).toEqual([...before, 'fill.js'].sort());
       // Both views agree after the refusal: the next run does not see `huge` either.
