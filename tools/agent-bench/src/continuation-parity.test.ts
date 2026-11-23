@@ -82,7 +82,11 @@ type Scenario =
   | 'abort-backoff'
   | 'length-recovery'
   | 'file-ops'
-  | 'length-twice';
+  | 'length-twice'
+  | 'length-tool-stop'
+  | 'restored-length-tool'
+  | 'resend'
+  | 'resend-length';
 async function run(kind: 'native' | 'rifty', scenario: Scenario, riftyPrompt = '') {
   const dir = await mkdtemp(join(tmpdir(), 'rifty-continuation-parity-'));
   let conversationPrompt: string | undefined;
@@ -158,6 +162,18 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario, riftyPrompt = '
         answer(count === 1 ? '429' : 'maximum context length is 5000 tokens', 10, 'error'),
       );
     if (scenario === 'silent-overflow' && !summary) Object.assign(response, answer('Done', 40000));
+    // Recovery-omission scenarios (review of PR #423): a recovered attempt leaves with its results.
+    if (scenario === 'length-tool-stop' && !summary && count === 1)
+      Object.assign(response, {
+        ...answer('', 10, 'length'),
+        content: [{ type: 'toolCall', id: 'cut', name: 'effect', arguments: {} }],
+      });
+    if (scenario === 'length-tool-stop' && !summary && count === 2)
+      Object.assign(response, answer('429 rate limit', 7, 'error'));
+    if (scenario === 'resend' && !summary && count <= 3)
+      Object.assign(response, answer('maximum context length is 5000 tokens', 10, 'error'));
+    if (scenario === 'resend-length' && !summary && count <= 3)
+      Object.assign(response, answer('Truncated', 10, 'length'));
     // Pi 1.x: a length stop below the model's output limit gets one compact-and-continue.
     if (
       (scenario === 'length-recovery' && !summary && count === 1) ||
@@ -255,9 +271,35 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario, riftyPrompt = '
             scenario === 'silent-overflow' ||
             scenario === 'retry-overflow-tail' ||
             scenario === 'length-recovery' ||
-            scenario === 'length-twice'
+            scenario === 'length-twice' ||
+            scenario === 'resend' ||
+            scenario === 'resend-length'
           ? lowUsage(seed())
+          : scenario === 'restored-length-tool'
+            ? [
+                ...lowUsage(seed()),
+                { role: 'user', content: 'Run the effect', timestamp: 5 },
+                {
+                  ...answer('', 10, 'length'),
+                  content: [{ type: 'toolCall', id: 'effect-one', name: 'effect', arguments: {} }],
+                  timestamp: 6,
+                },
+                {
+                  role: 'toolResult',
+                  toolCallId: 'effect-one',
+                  toolName: 'effect',
+                  content: [{ type: 'text', text: 'settled' }],
+                  isError: false,
+                  timestamp: 7,
+                },
+              ]
           : [];
+  const stopsOnRetry = scenario === 'abort-backoff' || scenario === 'length-tool-stop';
+  // A second prompt after the first run settles (stopped or failed recovery).
+  const prompts =
+    scenario === 'length-tool-stop' || scenario === 'resend' || scenario === 'resend-length'
+      ? ['continue', 'again']
+      : ['continue'];
   let messages: readonly AgentMessage[];
   try {
     if (kind === 'native') {
@@ -265,7 +307,7 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario, riftyPrompt = '
         retry: {
           enabled: true,
           maxRetries: 3,
-          baseDelayMs: scenario === 'abort-backoff' ? 2000 : 1,
+          baseDelayMs: stopsOnRetry ? 2000 : 1,
           provider: { maxRetries: 0 },
         },
         compaction: {
@@ -329,7 +371,7 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario, riftyPrompt = '
               : {}),
           });
         }
-        if (event.type === 'auto_retry_start' && scenario === 'abort-backoff')
+        if (event.type === 'auto_retry_start' && stopsOnRetry)
           setTimeout(() => {
             void session.abort();
           }, 0);
@@ -337,7 +379,7 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario, riftyPrompt = '
           retries.push({ attempt: event.attempt, delayMs: event.delayMs });
       });
       try {
-        await session.prompt('continue');
+        for (const prompt of prompts) await session.prompt(prompt);
         messages = structuredClone(session.messages);
       } finally {
         session.dispose();
@@ -351,7 +393,7 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario, riftyPrompt = '
         model: 'probe',
         initialMessages,
         tools,
-        retry: { baseDelayMs: scenario === 'abort-backoff' ? 2000 : 1 },
+        retry: { baseDelayMs: stopsOnRetry ? 2000 : 1 },
         compaction: {
           keepRecentTokens:
             scenario === 'overflow-episodes' ? 3 : scenario === 'retry-overflow-tail' ? 30 : 20000,
@@ -369,7 +411,7 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario, riftyPrompt = '
               : {}),
           });
         }
-        if (event.type === 'retry' && event.phase === 'start' && scenario === 'abort-backoff')
+        if (event.type === 'retry' && event.phase === 'start' && stopsOnRetry)
           setTimeout(() => {
             void session.stop();
           }, 0);
@@ -377,9 +419,17 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario, riftyPrompt = '
           retries.push({ attempt: event.attempt, delayMs: event.delayMs! });
       });
       try {
-        await session.send('continue');
+        for (const prompt of prompts) await session.send(prompt);
         if (scenario === 'retry-overflow-tail') expect(session.status()).toBe('context-exceeded');
         messages = (await session.exportTrace()).transcript;
+        // The exported history stays restorable (paired calls and results).
+        await createAgentSession({
+          host: { root: dir, capabilities: () => ({}), async close() {} },
+          models,
+          model: 'probe',
+          tools,
+          initialMessages: messages,
+        }).dispose();
       } finally {
         await session.dispose();
       }
@@ -387,7 +437,12 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario, riftyPrompt = '
     const normalized = (value: unknown) =>
       JSON.parse(
         JSON.stringify(value, (key, value) =>
-          ['timestamp', 'details', 'durationMs'].includes(key) ? undefined : value,
+          ['timestamp', 'details', 'durationMs'].includes(key)
+            ? undefined
+            : // ADR-0475: rifty prefixes failed tool text with its budget receipt line.
+              key === 'text' && typeof value === 'string'
+              ? value.replace(/^\{"status":"failed","callsLeft":\d+,"msLeft":\d+\}\n/, '')
+              : value,
         ),
       );
     // Prompt bytes differ by design; system message positions must match.
@@ -427,6 +482,10 @@ it.each<Scenario>([
   'length-recovery',
   'file-ops',
   'length-twice',
+  'length-tool-stop',
+  'restored-length-tool',
+  'resend',
+  'resend-length',
 ])(
   'matches actual Pi CLI 1.6.0: %s',
   async (scenario) => {
