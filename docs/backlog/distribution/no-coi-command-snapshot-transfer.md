@@ -32,8 +32,9 @@ agent tool call on a 79 MB tree is user-visible.
 
 ## Options or Next
 
-- Take the file image only when `runtimeBackend === 'memory'`; OPFS sends
-  cwd/directories without bytes; host skips `applyRecoveryFsOperation` for an
+- Take the file image only when `runtimeBackend === 'memory'`; OPFS skips the
+  tree walk (no files, no directories — only the restore branch the decision
+  below turns into a loud failure reads them); host skips `applyRecoveryFsOperation` for an
   OPFS state; dispose releases `activation`/`residentRequest`. Smallest honest
   change; prototype shape in PR 384 (minus its Symbol switch and optional
   wrapper methods).
@@ -42,11 +43,13 @@ agent tool call on a 79 MB tree is user-visible.
 - Memory backend keeps today's per-command image and cost (no persistence to
   reopen; restart still needs the bytes): not better, not worse.
 - Pickup: ADR-0377 D2 clause "backend flip restores those files" is overturned
-  by the decision below → contradicts an active ADR (`DEC-1`(3)): critic +
-  superseding ADR naming the clause, 0377 stays with a dated §Corrections
-  pointer (`DEC-2`/`DEC-5`) in the implementing unit;
+  for the OPFS→memory direction only (memory→OPFS keeps the image and still
+  restores) → contradicts an active ADR (`DEC-1`(3)): critic + superseding ADR
+  naming that direction, 0377 stays with a dated §Corrections pointer
+  (`DEC-2`/`DEC-5`) in the implementing unit;
   `tests/no-coi/no-coi-dev-hmr.spec.ts` "successive OPFS-memory-OPFS restarts
-  restore the latest acknowledged bytes" re-targets to the loud failure.
+  restore the latest acknowledged bytes": its OPFS→memory leg re-targets to the
+  loud failure, its memory→OPFS leg keeps a restore test.
   Entry points reaching the failure (all via `replaceWorker` →
   `restoreToolchainState`): `restart()`, `stopResident()`, project command
   Stop/`requiresTermination` fallback (`sandbox-project.ts` → `replace`).

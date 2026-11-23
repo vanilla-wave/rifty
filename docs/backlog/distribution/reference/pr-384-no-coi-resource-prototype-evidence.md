@@ -1,10 +1,10 @@
 # PR 384 no-COI resource prototype — durable record (2026-10-26)
 
 Provenance: throwaway branch `prototype/no-coi-resource-economy`, commit
-`1f0cd3a0d`, PR https://github.com/vanilla-wave/rifty/pull/384 (open, never a
+`1f0cd3a0d`, PR https://github.com/vanilla-wave/rifty/pull/384 (throwaway, never a
 merge candidate). Branch artifacts rot; load-bearing numbers inlined here.
-Full raw/summary/host JSON + rendered app: `tools/perf/no-coi-resource-prototype/`
-on that branch. Re-verify against current main before building on it.
+Runner, full raw/summary/host JSON + rendered app:
+`tools/perf/no-coi-resource-prototype/` on that commit (also `refs/pull/384/head`). Re-verify against current main before building on it.
 
 Environment: Apple M3 Pro (12 logical CPUs), 36 GiB; macOS arm64; Chromium
 148.0.7778.96 headless (Playwright `launchServer`); Node 24.16.0; dev module
@@ -30,8 +30,8 @@ ran a command.
    (`InstallClaimFs`, `NoCoiProjectFs`) instead of `readFileBytesSync(path)`
    + full `.slice()` per layer per chunk. Wire protocol unchanged.
 2. **No page-side recovery image on OPFS**: Worker `snapshotFiles()` returns
-   no files when `runtimeBackend === 'opfs'`; host `applyRecoveryFsOperation`
-   skips OPFS; dispose drops `activation`/`residentRequest`. Memory backend
+   no files or directories (no tree walk) when `runtimeBackend === 'opfs'`;
+   host `applyRecoveryFsOperation` skips OPFS; dispose drops `activation`/`residentRequest`. Memory backend
    unchanged. OPFS→memory flip at restore throws explicitly.
 
 ## Medians (3 contexts)

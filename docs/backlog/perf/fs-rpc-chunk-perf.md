@@ -61,8 +61,9 @@ interleave and need concurrent eviction — weakens Route 2.
   contract → ADR at pickup); wrappers return a detached range; `readFileHead`/
   `readChunk` consume it; wire protocol and version unchanged. Not the
   prototype's optional duck-typed method on two wrappers: `SyncRpcFsSync` and
-  child `fs.readSync(fd)` need the same range read, and an optional
-  capability on `FsSync` is a silent fallback to the O(N²) path (§Fidelity). `writeChunk`
+  child `fs.readSync(fd)` need the same range read, and a required method makes
+  a missing implementer a type error, not an unnoticed O(N²) path (the
+  `isChunkedReadSource` duck-type precedent is the ADR's to weigh). `writeChunk`
   O(N²) + base64 inflation stay in this item, not in that first unit.
 - 2026-10-26 — order: after `distribution/no-coi-command-snapshot-transfer`.
 
