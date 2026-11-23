@@ -24,7 +24,7 @@ import {
 // `src/` in the workspace and `dist/` when packed are both one level under the package root.
 const WORKER_ENTRY = fileURLToPath(new URL('../dist/child.js', import.meta.url));
 /** How long a closed result channel waits for the worker's own exit to explain it. */
-const CHANNEL_END_GRACE_MS = 50;
+export const CHANNEL_END_GRACE_MS = 50;
 const MAX_CALL_ID = 2 ** 32 - 1;
 
 export type Termination = 'timeout' | 'memory';
@@ -143,6 +143,8 @@ class Worker {
   retiring = false;
   dead = false;
   exited = false;
+  /** Its result channel ended: it can answer nothing, so it takes no call and is never idle. */
+  channelEnded = false;
   /**
    * Why the consumer itself ended this worker; unset = an exit nobody asked for.
    * `done`: nothing left on it (idle, retired, solo finished).
@@ -181,12 +183,19 @@ class Worker {
       if (bad !== null) this.#violated(bad);
     });
     // A closed channel is a lost worker, unless its own exit explains it first.
+    // Judged after one poll past the grace: a loop turn runs due timers before I/O,
+    // so a preempted consumer finds the grace due and an exit that came in time still
+    // unread. (Not the deadline: reading late, it cannot tell a frame sent in time
+    // from one sent after — backlog distribution/isolate-host-starved-deadline-outcome.)
     frames?.on('end', () => {
+      this.channelEnded = true;
       setTimeout(() => {
-        if (!this.dead && this.ended === undefined) {
-          this.ended = { lost: 'after closing its result channel without a result' };
-          this.kill();
-        }
+        setImmediate(() => {
+          if (!this.dead && this.ended === undefined) {
+            this.ended = { lost: 'after closing its result channel without a result' };
+            this.kill();
+          }
+        });
       }, CHANNEL_END_GRACE_MS).unref();
     });
     // Exited, its stdio still draining: no new call goes here.
@@ -414,7 +423,13 @@ export class Pool {
   #placeFresh(call: Call): void {
     const worker =
       this.#workers.find(
-        (w) => !w.solo && !w.retiring && !w.exited && w.ended === undefined && w.calls.size < SHARD,
+        (w) =>
+          !w.solo &&
+          !w.retiring &&
+          !w.exited &&
+          !w.channelEnded &&
+          w.ended === undefined &&
+          w.calls.size < SHARD,
       ) ?? this.#spawn(false);
     worker.place(call);
   }
@@ -478,7 +493,8 @@ export class Pool {
     if (worker.calls.size > 0) return;
     // Keep one idle worker warm; a second idle one ends.
     const idle = this.#workers.filter(
-      (w) => !w.solo && !w.retiring && w.ended === undefined && w.calls.size === 0,
+      (w) =>
+        !w.solo && !w.retiring && !w.channelEnded && w.ended === undefined && w.calls.size === 0,
     );
     if (idle.length > 1) worker.end();
   }

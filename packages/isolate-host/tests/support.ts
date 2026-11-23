@@ -119,13 +119,19 @@ export async function consumer(
   child.stdout.setEncoding('utf8').on('data', (d: string) => {
     stdout += d;
   });
-  const killer = setTimeout(() => child.kill('SIGKILL'), timeoutMs);
+  let bounded = false;
+  const killer = setTimeout(() => {
+    bounded = true;
+    child.kill('SIGKILL');
+  }, timeoutMs);
   const [exitCode, signal] = (await once(child, 'exit')) as [number | null, string | null];
   clearTimeout(killer);
   const line = stdout.trim().split('\n').at(-1) ?? '';
-  let value: unknown = { unparsed: stdout };
+  let value: unknown = bounded
+    ? { harnessError: `consumer killed at its ${timeoutMs} ms harness bound`, stdout }
+    : { unparsed: stdout };
   try {
-    value = (JSON.parse(line) as { value: unknown }).value;
+    if (!bounded) value = (JSON.parse(line) as { value: unknown }).value;
   } catch {}
   return { value, exitCode, signal, ms: Date.now() - started };
 }
