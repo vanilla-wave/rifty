@@ -901,7 +901,9 @@ describe('external review round 1 (manager 2026-11-23)', () => {
       const sb = await createSandbox();
       await sb.writeFile('s.js', "globalThis.h = new Uint8Array(300 << 20).fill(1); const a = Array.from({ length: 3e6 }, () => Math.random()); for (;;) a.sort()");
       const rss = (pid) => Number(execFileSync('ps', ['-o', 'rss=', '-p', String(pid)], { encoding: 'utf8' }).trim() || 0);
-      const r = await sb.exec('s.js', { timeoutMs: 1500, memoryLimitMb: 512 });
+      // Deadline inside the first sort (~5 s on an M3): the 300 MiB is held by then even
+      // on a loaded host (at 1500 ms, load 74 had not filled it yet).
+      const r = await sb.exec('s.js', { timeoutMs: 3500, memoryLimitMb: 512 });
       const pid = children().find((p) => rss(p) > 400 * 1024);
       await sb.destroy();
       let atResolve; try { atResolve = pid === undefined || rss(pid) < 300 * 1024 } catch { atResolve = true }
