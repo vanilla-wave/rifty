@@ -1,6 +1,6 @@
 # ADR 0569: Port pi CLI 1.6.0 compaction into the agent
 
-Status: Accepted — agent decision on the manager's default; user confirmation pending
+Status: Accepted (user-confirmed 2026-11-23)
 Date: 2026-11-23
 
 > TL;DR: Pi 1.x has no browser-safe compaction export; `@riftydev/agent` carries a
@@ -76,3 +76,7 @@ independently; fixes taken: journal overturn named, file-op parity scenario adde
 - Public: `CompactionSummaryMessage` type and its `CustomAgentMessages` augmentation
   ship from `@riftydev/agent`; transcripts carry `system` messages (pi 1.x history).
 - Upstream issue text for a browser-safe export is in the PR; filing waits for the user.
+
+## Corrections
+
+2026-11-23 — user confirmation: «тут ок» (answer to «Компакция: подтвердить копию в rifty (ADR-0569) или остаться на 0.99.2…»). Manager's reading: this ADR is confirmed; the upstream issue draft is not filed (no explicit «подавай»).

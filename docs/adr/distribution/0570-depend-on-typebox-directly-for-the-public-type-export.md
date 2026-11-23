@@ -1,6 +1,6 @@
 # ADR 0570: Depend on typebox directly for the public Type export
 
-Status: Accepted — agent decision on the manager's default; user confirmation pending
+Status: Accepted (user-confirmed 2026-11-23)
 Date: 2026-11-23
 
 > TL;DR: Keep `Type` in `@riftydev/agent`'s public API by depending on `typebox`
@@ -44,3 +44,7 @@ agent-core 1.5.0 types `AgentTool.parameters` as any JSON Schema validated by
 
 - One more direct dependency (already in the lockfile via pi-coding-agent).
 - Consumers may also pass any JSON Schema object; documented in the package CHANGELOG.
+
+## Corrections
+
+2026-11-23 — user confirmation: «тут ок» (answer to «typebox прямой зависимостью (ADR-0570)…»), then «все ок. Мержи и закрывай все связанные t3 треды» (answer to «3. Схемы TypeBox: оставить отказ или вернуть валидацию…»). Manager's reading: this ADR is confirmed and the loud `NotImplementedError` for `Type.Refine`/custom formats stays.
