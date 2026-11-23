@@ -7,10 +7,10 @@ import {
   type Message,
   type Model,
   type SimpleStreamOptions,
-  Type,
   createAssistantMessageEventStream,
   createModels,
   createProvider,
+  getCurrentSystemPrompt,
 } from '@earendil-works/pi-ai';
 import {
   DefaultResourceLoader,
@@ -19,7 +19,7 @@ import {
   SettingsManager,
   createAgentSession as createNativeSession,
 } from '@earendil-works/pi-coding-agent';
-import { type AgentMessage, createAgentSession } from '@riftydev/agent';
+import { type AgentMessage, Type, createAgentSession } from '@riftydev/agent';
 import { expect, it } from 'vitest';
 import { eventMetrics } from './metrics.ts';
 
@@ -79,10 +79,16 @@ type Scenario =
   | 'overflow-episodes'
   | 'silent-overflow'
   | 'retry-overflow-tail'
-  | 'abort-backoff';
-async function run(kind: 'native' | 'rifty', scenario: Scenario) {
+  | 'abort-backoff'
+  | 'length-recovery';
+async function run(kind: 'native' | 'rifty', scenario: Scenario, riftyPrompt = '') {
   const dir = await mkdtemp(join(tmpdir(), 'rifty-continuation-parity-'));
-  const requests: { summary: boolean; messages: Context['messages']; maxRetries?: number }[] = [];
+  let conversationPrompt: string | undefined;
+  const requests: {
+    summary: boolean;
+    messages: Context['messages'];
+    maxRetries?: number;
+  }[] = [];
   const retries: { attempt: number; delayMs: number }[] = [];
   const compactionEvents: unknown[] = [];
   const compactions: {
@@ -99,10 +105,13 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario) {
     context: Context,
     options?: SimpleStreamOptions,
   ) => {
-    const summary = !!context.systemPrompt?.startsWith('You are a context summarization assistant');
+    // Pi 1.x carries the prompt as system messages; both sides send one current prompt.
+    const system = getCurrentSystemPrompt(context.messages);
+    const summary = system.startsWith('You are a context summarization assistant');
+    if (!summary) conversationPrompt ??= system;
     requests.push({
       summary,
-      messages: structuredClone(context.messages),
+      messages: structuredClone(context.messages.filter(({ role }) => role !== 'system')),
       maxRetries: options?.maxRetries,
     });
     if (!summary) count++;
@@ -147,6 +156,9 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario) {
         answer(count === 1 ? '429' : 'maximum context length is 5000 tokens', 10, 'error'),
       );
     if (scenario === 'silent-overflow' && !summary) Object.assign(response, answer('Done', 40000));
+    // Pi 1.x: a length stop below the model's output limit gets one compact-and-continue.
+    if (scenario === 'length-recovery' && !summary && count === 1)
+      Object.assign(response, answer('Truncated', 10, 'length'));
     if (scenario === 'overflow-episodes' && !summary && (count === 1 || count === 3))
       Object.assign(response, answer('maximum context length is 5000 tokens', 10, 'error'));
     if (
@@ -175,7 +187,7 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario) {
       else
         events.push({
           type: 'done',
-          reason: response.stopReason as 'stop' | 'toolUse',
+          reason: response.stopReason as 'stop' | 'toolUse' | 'length',
           message: response,
         });
     });
@@ -205,13 +217,14 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario) {
       : scenario === 'stale-overflow' ||
           scenario === 'overflow-episodes' ||
           scenario === 'silent-overflow' ||
-          scenario === 'retry-overflow-tail'
+          scenario === 'retry-overflow-tail' ||
+          scenario === 'length-recovery'
         ? seed().map((message) =>
             message.role === 'assistant' ? { ...message, usage: answer('low').usage } : message,
           )
         : [];
   let messages: readonly AgentMessage[];
-  let failure: string | undefined;
+  let debug: (() => unknown[]) | undefined;
   try {
     if (kind === 'native') {
       const settingsManager = SettingsManager.inMemory({
@@ -237,6 +250,9 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario) {
         noPromptTemplates: true,
         noExtensions: true,
         noThemes: true,
+        // Estimates count the system message: the CLI's preamble + <cwd> sections get the
+        // same character count as rifty's prompt section (wire prompt bytes are not compared).
+        systemPrompt: riftyPrompt.slice(0, riftyPrompt.length - `<cwd>\n${dir}\n</cwd>`.length),
       });
       await resourceLoader.reload();
       const modelRuntime = await ModelRuntime.create({
@@ -247,19 +263,30 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario) {
         allowModelNetwork: false,
       });
       modelRuntime.registerNativeProvider(provider);
+      const open = async (sessionManager: SessionManager) =>
+        (
+          await createNativeSession({
+            cwd: dir,
+            agentDir: dir,
+            settingsManager,
+            resourceLoader,
+            modelRuntime,
+            sessionManager,
+            model: modelRuntime.getModel('probe', 'probe'),
+            tools: ['effect'],
+            customTools: tools,
+          })
+        ).session;
+      // A resumed CLI journal starts with the CLI's own system message, as rifty's history
+      // starts with rifty's; a foreign seed would make the CLI append a prompt update.
+      const fresh = await open(SessionManager.inMemory(dir));
+      const head = fresh.messages[0];
+      fresh.dispose();
       const sessionManager = SessionManager.inMemory(dir);
+      if (initialMessages.length && head?.role === 'system') sessionManager.appendMessage(head);
       for (const message of initialMessages) sessionManager.appendMessage(message);
-      const { session } = await createNativeSession({
-        cwd: dir,
-        agentDir: dir,
-        settingsManager,
-        resourceLoader,
-        modelRuntime,
-        sessionManager,
-        model: modelRuntime.getModel('probe', 'probe'),
-        tools: ['effect'],
-        customTools: tools,
-      });
+      const session = await open(sessionManager);
+      if (process.env.DEBUG_PARITY === scenario) debug = () => sessionManager.getBranch();
       switchModel = () => session.setModel(modelRuntime.getModel('probe', 'large')!);
       session.subscribe((event) => {
         if (event.type === 'compaction_end') {
@@ -283,13 +310,10 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario) {
           retries.push({ attempt: event.attempt, delayMs: event.delayMs });
       });
       try {
-        try {
-          await session.prompt('continue');
-        } catch (error) {
-          if (scenario !== 'retry-overflow-tail') throw error;
-          failure = error instanceof Error ? error.message : String(error);
-        }
+        await session.prompt('continue');
         messages = structuredClone(session.messages);
+        if (debug)
+          console.log(JSON.stringify(debug().map((e: any) => ({ t: e.type, id: e.id.slice(0,6), role: e.message?.role, sr: e.message?.stopReason, target: e.targetId?.slice(0,6), first: e.firstKeptEntryId?.slice(0,6), sections: e.message?.sections ? Object.keys(e.message.sections) : undefined, len: JSON.stringify(e.message ?? e.summary ?? '').length }))));
       } finally {
         session.dispose();
       }
@@ -329,7 +353,7 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario) {
       });
       try {
         await session.send('continue');
-        if (scenario === 'retry-overflow-tail') failure = session.detail();
+        if (scenario === 'retry-overflow-tail') expect(session.status()).toBe('context-exceeded');
         messages = (await session.exportTrace()).transcript;
       } finally {
         await session.dispose();
@@ -338,15 +362,22 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario) {
     const normalized = (value: unknown) =>
       JSON.parse(
         JSON.stringify(value, (key, value) =>
-          ['timestamp', 'details'].includes(key) ? undefined : value,
+          ['timestamp', 'details', 'durationMs'].includes(key) ? undefined : value,
         ),
       );
+    // Prompt bytes differ by design; system message positions must match.
+    const placed = (list: readonly AgentMessage[]) =>
+      list.map((message) => (message.role === 'system' ? { role: 'system' } : message));
+    messages = placed(messages);
     return {
+      prompt: conversationPrompt,
       requests: requests.map((r) => ({ ...r, messages: normalized(r.messages) })),
       retries,
       compactions,
       reportedCompactions: eventMetrics(compactionEvents, model.contextWindow, 'done').compactions,
-      ...(scenario === 'retry-overflow-tail' ? { failure } : {}),
+      ...(scenario === 'retry-overflow-tail'
+        ? { failure: (compactionEvents.at(-1) as { errorMessage?: string }).errorMessage }
+        : {}),
       messages: normalized(messages),
       effects,
     };
@@ -368,21 +399,24 @@ it.each<Scenario>([
   'silent-overflow',
   'retry-overflow-tail',
   'abort-backoff',
+  'length-recovery',
 ])(
-  'matches actual Pi CLI 0.85.1: %s',
+  'matches actual Pi CLI 1.6.0: %s',
   async (scenario) => {
-    const native = await run('native', scenario);
     const rifty = await run('rifty', scenario);
+    const native = await run('native', scenario, rifty.prompt);
     expect(rifty.reportedCompactions).toBe(
       rifty.compactions.filter((event) => event.success).length,
     );
     expect(native.reportedCompactions).toBe(
       native.compactions.filter((event) => event.success).length,
     );
-    expect(rifty).toEqual(native);
+    expect({ ...rifty, prompt: undefined }).toEqual({ ...native, prompt: undefined });
     if (scenario === 'after-tool' || scenario === 'overflow-episodes')
       expect(rifty.effects).toBe(1);
     if (scenario === 'partial') expect(rifty.effects).toBe(0);
+    if (scenario === 'length-recovery')
+      expect(rifty.compactions).toEqual([expect.objectContaining({ reason: 'overflow', success: true })]);
   },
   30000,
 );

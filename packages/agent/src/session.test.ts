@@ -2,9 +2,10 @@ import type { StreamFn } from '@earendil-works/pi-agent-core';
 import {
   type AssistantMessage,
   type Context,
-  Type,
   createAssistantMessageEventStream,
 } from '@earendil-works/pi-ai';
+import { Type } from 'typebox';
+import { contextView } from './fixtures/context-view.ts';
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import { modelCatalog } from '../../../tests/integration/fixtures/workbench-vite-consumer/src/agent-catalog.ts';
 import { createAgentSession } from './session.ts';
@@ -85,7 +86,7 @@ describe('public agent transport contract', () => {
     const contexts: Context[] = [];
     const signals: (AbortSignal | undefined)[] = [];
     const streamFn: StreamFn = (_model, context, options) => {
-      contexts.push(context);
+      contexts.push(contextView(context));
       signals.push(options?.signal);
       return response(assistant([{ type: 'text', text: 'callback reply' }]));
     };

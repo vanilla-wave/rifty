@@ -22,7 +22,7 @@
   "exports": {
     ".": "./src/index.ts"
   },
-  "files": ["dist", "CHANGELOG.md"],
+  "files": ["dist", "CHANGELOG.md", "THIRD_PARTY_NOTICES.md"],
   "publishConfig": {
     "access": "public",
     "main": "./dist/index.js",
@@ -40,13 +40,14 @@
     "build": "tsup"
   },
   "dependencies": {
-    "@earendil-works/pi-agent-core": "0.85.1",
-    "@earendil-works/pi-ai": "0.85.1",
+    "@earendil-works/pi-agent-core": "1.6.0",
+    "@earendil-works/pi-ai": "1.6.0",
     "@riftydev/io": "workspace:*",
     "@riftydev/sdk": "workspace:*",
     "@riftydev/vfs": "workspace:*",
     "@riftydev/workbench": "workspace:*",
     "ignore": "7.0.5",
+    "typebox": "1.3.27",
     "yaml": "2.9.0"
   }
 }

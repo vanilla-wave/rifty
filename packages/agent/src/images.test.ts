@@ -1,5 +1,6 @@
 import { Agent } from '@earendil-works/pi-agent-core';
 import { expect, it } from 'vitest';
+import { conversation } from './fixtures/conversation.ts';
 import { scriptedProvider } from '../../../tests/integration/fixtures/workbench-vite-consumer/src/agent-scripted-provider.ts';
 import {
   type AgentSession,
@@ -61,7 +62,7 @@ it.each(['Inspect this image.', ''])('image prompt matches native pi: %j', async
       wire.requests[0]?.body.messages.find((message) => message.role === 'user');
     expect(user(actual.wire)).toEqual(user(reference.wire));
     expect(JSON.stringify(user(actual.wire))).toContain(`data:image/png;base64,${png.data}`);
-    expect((await session.exportTrace()).transcript[0]).toMatchObject({
+    expect(conversation((await session.exportTrace()).transcript)[0]).toMatchObject({
       role: 'user',
       content: expect.arrayContaining([png]),
     });

@@ -430,6 +430,8 @@ ADRs are immutable while active, except dated lines under `## Decisions` / `§Co
 | 0563 | Run runCode in a pool of long-lived worker processes, each hosting many isolates |
 | 0566 | Select guest SharedArrayBuffer access per isolate call |
 | 0567 | Snapshot the isolate guest filesystem as a versioned binary blob |
+| 0569 | Port pi CLI 1.6.0 compaction into the agent |
+| 0570 | Depend on typebox directly for the public Type export |
 
 ## Superseded (removed)
 

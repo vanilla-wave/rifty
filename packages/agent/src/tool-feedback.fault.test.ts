@@ -327,7 +327,7 @@ describe('honest tool feedback', () => {
       await on.session.send('work');
       await off.session.send('work');
       const profile = getAgentPromptProfile() as unknown as { id: string; recipe: string };
-      expect(profile.id).toBe('pi-0.85.1+rifty-adapter-v2');
+      expect(profile.id).toBe('pi-1.6.0+rifty-adapter-v2');
       expect(profile.recipe).toBeTruthy();
       for (const step of [/locat/i, /reproduc|inspect/i, /chang/i, /re.?run|verif/i, /edge/i])
         expect(profile.recipe).toMatch(step);

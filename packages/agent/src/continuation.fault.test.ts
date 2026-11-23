@@ -4,11 +4,14 @@ import {
   type Context,
   type Model,
   type SimpleStreamOptions,
-  Type,
   createAssistantMessageEventStream,
   createModels,
   createProvider,
+  getCurrentTools,
 } from '@earendil-works/pi-ai';
+import { Type } from 'typebox';
+import { contextView } from './fixtures/context-view.ts';
+import { conversation } from './fixtures/conversation.ts';
 import { describe, expect, it } from 'vitest';
 import { createAgentSession } from './session.ts';
 import type { AgentSessionOptions } from './types.ts';
@@ -86,9 +89,8 @@ function fixture(
         streamSimple: (selected, context, options) => {
           requests.push({
             context: {
-              ...context,
-              messages: structuredClone(context.messages),
-              tools: context.tools?.map(({ name, description, parameters }) => ({
+              ...contextView(context),
+              tools: getCurrentTools(context.messages).map(({ name, description, parameters }) => ({
                 name,
                 description,
                 parameters,
@@ -99,7 +101,7 @@ function fixture(
           });
           const stream = createAssistantMessageEventStream();
           void Promise.resolve().then(async () => {
-            const response = await reply(context, options ?? {}, requests.length);
+            const response = await reply(contextView(context), options ?? {}, requests.length);
             stream.push({ type: 'start', partial: response });
             stream.push(
               response.stopReason === 'error' || response.stopReason === 'aborted'
@@ -338,7 +340,7 @@ describe('native continuation boundary', () => {
     try {
       await session.send('continue');
       expect(requests).toHaveLength(1);
-      expect((await session.exportTrace()).transcript).toHaveLength(8);
+      expect(conversation((await session.exportTrace()).transcript)).toHaveLength(8);
     } finally {
       await session.dispose();
     }
@@ -377,7 +379,7 @@ describe('native continuation boundary', () => {
       await session.send('continue');
       expect(requests.map((r) => summaryRequest(r.context))).toEqual([false, true, false]);
       expect(session.status()).toBe('context-exceeded');
-      expect((await session.exportTrace()).transcript[0]?.role).toBe('compactionSummary');
+      expect(conversation((await session.exportTrace()).transcript)[0]?.role).toBe('compactionSummary');
     } finally {
       await session.dispose();
     }
@@ -459,7 +461,12 @@ describe('native continuation boundary', () => {
       const ended = trace.events.flatMap(({ event }) =>
         event.type === 'agent' && event.event.type === 'agent_end' ? event.event.messages : [],
       );
-      expect(ended.map((m) => m.role)).toEqual(['user', 'assistant', 'toolResult', 'assistant']);
+      expect(conversation(ended).map((m) => m.role)).toEqual([
+        'user',
+        'assistant',
+        'toolResult',
+        'assistant',
+      ]);
     } finally {
       await session.dispose();
     }
@@ -537,7 +544,7 @@ describe('native continuation boundary', () => {
       try {
         await session.send('continue');
         const trace = await session.exportTrace();
-        expect(trace.transcript[0]).toMatchObject({
+        expect(conversation(trace.transcript)[0]).toMatchObject({
           role: 'compactionSummary',
           details: { readFiles: ['/tracked.ts'], modifiedFiles: [] },
         });
