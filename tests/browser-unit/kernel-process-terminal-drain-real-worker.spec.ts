@@ -271,19 +271,11 @@ test('real Chromium global Worker error preserves output and settles failure onc
   expect(result.signalCode).toBeNull();
   expect(result.live).toBe(false);
   expect(result.terminateCalls).toBe(1);
-  // The child's own fatal terminal writes Node's report to its stderr
-  // (ADR-0445 2026-11-22), sequenced after its stdout.
   expect(result.controlFrames).toStrictEqual([
     {
       kind: 'control:stdio-order',
       stream: 'stdout',
       order: 0,
-      attestation: result.attestation,
-    },
-    {
-      kind: 'control:stdio-order',
-      stream: 'stderr',
-      order: 1,
       attestation: result.attestation,
     },
   ]);

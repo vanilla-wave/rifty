@@ -41,7 +41,6 @@ import {
   adoptNodeProcessBootstrap,
   postNodeProcessListeningControl,
 } from '@riftydev/runtime-js/builtins/process';
-import { isNodeProcessExiting, terminateFatal } from '@riftydev/runtime-js/internal';
 import { syncMirror } from '@riftydev/vfs';
 import { installOwnerSyncRuntimeHandlers } from '../glue/owner-sync-runtime-handlers.ts';
 import { installSqliteWasmSyncProvider } from '../glue/sqlite-wasm-provider.ts';
@@ -142,14 +141,7 @@ if (launch.kind === 'eval') {
   });
 }
 
-// ADR-0445: a dispatched no-listener entry throw ends in the process's fatal
-// terminal (Node's report on its stderr, one exit request), as on every host.
 const runEntry = (): Promise<void> =>
-  startEntry().catch((error: unknown) => {
-    throw (isNodeProcessExiting(proc) ? terminateFatal(error, proc) : null) ?? error;
-  });
-
-const startEntry = (): Promise<void> =>
   launch.kind === 'eval'
     ? runNodeEntry({
         kind: 'eval',

@@ -236,7 +236,8 @@ let nativeExit: () => void = () => {
  * text and lets the drain end the run.
  */
 function fatal(error: unknown): void {
-  writeDiagnostic(error);
+  // After an explicit exit() Node prints nothing more (its output drop, above).
+  if (readNodeProcessTerminal(riftyProcess) === null) writeDiagnostic(error);
   nativeExit();
 }
 

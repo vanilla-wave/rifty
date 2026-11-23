@@ -29,6 +29,32 @@ property`; the define-vs-assign difference itself is
 invocation scope does not retire the `diagnostics_channel` subscriber above
 (PR #408 outside finding 6).
 
+2026-11-23, PR #421 external review round 4 (observed by the review, not
+reproduced here): a guest listener on the Worker global
+(`globalThis.addEventListener('error', …)` in one `project.run` command)
+stays alive in later commands — their uncaught errors run it;
+`unhandledrejection` listeners the same way (code reading). Same residue class;
+the compat row's list does not name Worker-global listeners (this Context's
+"listeners are per invocation" means `process`/stdio ones). Code reading
+(ADR-0445 2026-11-23 rollback applied): a cancelling listener left by an earlier
+command suppresses the browser's Worker error report of a later file entry's
+uncaught throw, which then stays nonterminal (ADR-0340) — no report; `beginFatal`
+already set `exitCode = 1`, so the final status and whether later timers run
+are unprobed. Node v24.16.0 has no such listener at all:
+`node -e "globalThis.addEventListener('error', () => {})"` → `TypeError:
+globalThis.addEventListener is not a function`, exit 1 — command 1 itself has
+no Node counterpart, so if `runtime-js/guest-browser-only-globals` hides the
+API (its fork) this residue cannot arise. Open fork, owner: agent — scope
+Worker-global listeners per invocation (as `process` listeners already are)
+or leave them to this item's fresh-realm Question. Acceptance target: a
+`no-coi-shared-realm.spec.ts` row — command 1 adds a logging, cancelling
+`error` listener; command 2 `setTimeout(() => { throw new Error('x') })` as a
+file → the report and status 1 of command 2 run alone in Node, the listener
+never runs. Blocked by `distribution/no-coi-command-unhandled-rejection-exit`:
+command 2 alone crashes the toolchain Worker today (no report, no status).
+Cancel semantics inside one command:
+`runtime-js/guest-unhandledrejection-prevent-default`.
+
 `executeNode` (`no-coi-project-command.ts`) and `runInstalledBin`
 (`no-coi-toolchain-owner.ts`) run `runNodeEntry` in place. COI runs each `node`
 in its own kernel Worker (ADR-0011). ADR-0418 §5 states no fresh-realm promise;

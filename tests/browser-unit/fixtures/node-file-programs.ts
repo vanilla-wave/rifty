@@ -480,9 +480,10 @@ export async function runNodeFileOracle(
   const directory = await mkdtemp(join(tmpdir(), 'rifty-node-file-'));
   const temp = await realpath(directory);
   const width = ORACLE_ROOT_LENGTH - temp.length - 1;
-  if (width < 1) throw new Error(`temp dir ${temp} is longer than ${ORACLE_ROOT_LENGTH - 2}`);
-  const physical = `${temp}/${'r'.repeat(width)}`;
+  const physical = `${temp}/${'r'.repeat(Math.max(width, 1))}`;
   try {
+    // A longer TMPDIR cannot give every platform one root length: refused, cleaned up.
+    if (width < 1) throw new Error(`TMPDIR ${temp} is longer than ${ORACLE_ROOT_LENGTH - 2}`);
     await mkdir(physical);
     for (const [path, content] of Object.entries(program.files)) {
       await mkdir(dirname(join(physical, path)), { recursive: true });
@@ -575,7 +576,21 @@ export type NodeFileHost = 'no-COI' | 'COI' | 'isolate';
  */
 export const nodeFilePins = JSON.parse(
   readFileSync(new URL('./node-file-pins.json', import.meta.url), 'utf8'),
-) as Readonly<Record<NodeFileHost, Readonly<Record<string, NodeFileOutcome | 'node'>>>>;
+) as Readonly<Record<NodeFileHost, Readonly<Record<string, NodeFilePin>>>>;
+
+/**
+ * A row whose rifty stderr carries the host's served runtime URLs (the COI
+ * kernel's report of a synchronous or realm-uncaught throw prints the error's
+ * whole `stack`, main's behaviour, ADR-0445 2026-11-23 rollback): pinned by its
+ * first stderr line, stdout and status, never by machine-specific frames.
+ */
+interface NodeFileHeadPin {
+  readonly stdout: string;
+  readonly stderrHead: string;
+  readonly exitCode: number | null;
+}
+
+type NodeFilePin = NodeFileOutcome | NodeFileHeadPin | 'node';
 
 /**
  * Rows whose rifty outcome races (two timers due in one host turn): the pin
@@ -616,6 +631,18 @@ export function nodeFileVerdict(
   );
   if (pin === 'node') {
     assert(row.actual, `${label} vs Node`).toEqual(row.expected);
+    return;
+  }
+  if ('stderrHead' in pin) {
+    const head = (o: NodeFileOutcome) => ({
+      stdout: o.stdout,
+      stderrHead: o.stderr.split('\n')[0],
+      exitCode: o.exitCode,
+    });
+    assert(head(row.actual), `${label} vs its head pin`).toEqual(pin);
+    assert(row.actual, `${label}: pinned row equals Node — pin it "node"`).not.toEqual(
+      row.expected,
+    );
     return;
   }
   const racy = nodeFileRacy[row.program.name];

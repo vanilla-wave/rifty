@@ -35,8 +35,9 @@ Cause (read): `entry.ts` `esmGapOf` maps every SyntaxError whose message is in
 `ESM_SYNTAX` to the ESM gap. V8 gives the same message for top-level `await`
 (Node: re-runs as ESM — the declared gap, compat row "ESM syntax in `-e`") and
 for `await` in a non-async function (Node: SyntaxError, no ESM run). The message
-alone cannot tell them apart. A required file with the same body already gives
-Node's SyntaxError in the guest (no `esmGapOf` there).
+alone cannot tell them apart. A required file with the same body gives the same
+`NotImplementedError … use require()` (measured 2026-11-23, PR #421 HEAD; before the
+PR too): its compile error carries V8's message and reaches `esmGapOf` as well.
 
 Fault class: `provenance-lie` — the error claims a cause (unsupported ESM) the
 input does not have; the reader is sent to the wrong fix.

@@ -233,4 +233,13 @@ sample. Node v24.16.0 facts: evidence §O1–§O3.
   position: acorn's position and the wrapper-relative `new Function` message
   both mislead (`backlog/runtime-js/module-compile-error-node-syntax-error`,
   dead ends). The source is still validated alone (nothing runs, ADR-0450).
-
+- 2026-11-23 — rollback (manager decision after external review round 4; the
+  browser-process lifecycle is outside the goal, whose target is the isolate):
+  the 2026-11-22 rule-3 realm-uncaught terminal and its 2026-11-23 deferral are
+  withdrawn, and the COI kernel child / no-COI child Worker entry catch is
+  main's again — a global error canceled by any form (`onerror` returning
+  true, `Event.prototype.preventDefault.call`) is nonterminal as ADR-0340
+  says, by main's code. The runtime's report stays where it owns the fatal
+  path: the isolate guest, `NodeProcessExit.fatal` (rejections, the no-COI
+  project command's entry throw), the eval terminal. Realm-uncaught and COI
+  entry-throw rows are declared (compat process.md "Fatal error stderr bytes").

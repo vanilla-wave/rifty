@@ -389,9 +389,11 @@ function inspectError(error: object, indent: number, state: InspectState, depth:
   for (let k = 0; k < hidden.length; k += 1) {
     const key = hidden[k] as (typeof hidden)[number];
     const descriptor = objectGetOwnPropertyDescriptor(error, key);
-    if (descriptor?.enumerable === false && 'value' in descriptor) {
+    if (descriptor?.enumerable !== false) continue;
+    if ('value' in descriptor)
       entries.push(`[${key}]: ${propValue(descriptor.value, indent + 2, state, depth + 1)}`);
-    }
+    // Node prints a hidden accessor `[cause]: [Getter]` (and runs it once; rifty never does).
+    else if (descriptor.get !== undefined) entries.push(`[${key}]: [Getter]`);
   }
   state.ancestors.pop();
   if (indent === 0 && state.circular) base = `<ref *1> ${base}`;

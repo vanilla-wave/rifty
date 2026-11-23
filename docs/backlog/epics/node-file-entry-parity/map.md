@@ -18,6 +18,11 @@
 5b. **queued work at a fatal** — rows `fatal-with-queued-timer`,
    `rejection-with-queued-work`: due timers still run; owner: exit lifecycle
    (manager thread / PR #416 seam). → I2
+5d. **browser-host fatal path** — COI kernel child / no-COI child Worker entry
+   throw and realm-uncaught throws print main's report (rolled back after
+   review round 4; the browser lifecycle is outside the goal): 24 COI rows
+   pinned by first line, the no-COI timer rows silent with `exitCode` null
+   (`distribution/no-coi-command-unhandled-rejection-exit`). → I2 I4
 6. `runtime-js/module-compile-error-node-syntax-error` — CJS and ESM compile
    failure as V8's `SyntaxError` (CJS rolled back to main's `ModuleLoadError`
    after review round 3; dead ends recorded there). → I2

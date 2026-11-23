@@ -49,3 +49,42 @@ it("getters: true prints Node's `[Getter: <value>]`", () => {
   };
   expect(inspect(value, { getters: true })).toBe(nodeInspect(value, { getters: true }));
 });
+
+/** Deterministic generator: holes at the start, middle and end; index-like and other keys. */
+function* sparseArrays(count: number): Generator<unknown[]> {
+  let seed = 421;
+  const next = (n: number) => {
+    seed = (seed * 1103515245 + 12345) >>> 0;
+    return seed % n;
+  };
+  const lengths = [0, 1, 2, 3, 5, 6, 7, 12, 100, 2 ** 16, 2 ** 20, 2 ** 32 - 1];
+  const extras: (string | symbol)[] = ['-1', '1.5', 'x', 'a-b', '01', '4294967295', 'NaN'];
+  const symbol = Symbol('s');
+  for (let n = 0; n < count; n += 1) {
+    const length = lengths[next(lengths.length)] as number;
+    const array: unknown[] = new Array(length);
+    for (let k = next(4); k > 0 && length > 0; k -= 1) {
+      const where = [0, length - 1, Math.floor(length / 2), next(length)][next(4)] as number;
+      array[where] = next(100);
+    }
+    for (let k = next(3); k > 0; k -= 1) {
+      const key = next(8) === 7 ? symbol : (extras[next(extras.length)] as string);
+      (array as unknown as Record<string | symbol, unknown>)[key] = next(10);
+    }
+    yield array;
+  }
+}
+
+it("2000 generated sparse arrays print Node's single-line text", () => {
+  const wrong: string[] = [];
+  let compared = 0;
+  for (const array of sparseArrays(2000)) {
+    const node = nodeInspect(array);
+    if (node.includes('\n')) continue;
+    compared += 1;
+    const ours = inspect(array);
+    if (ours !== node) wrong.push(`node ${node}\nours ${ours}`);
+  }
+  expect(wrong.slice(0, 5)).toEqual([]);
+  expect(compared).toBeGreaterThan(1000);
+});

@@ -267,3 +267,27 @@ it.each([
   expect(report).not.toContain('x: 7');
   Reflect.deleteProperty(globalThis, '__riftyGetterRan');
 });
+
+it("require() of a top-level-await module reads Node's `Error [ERR_REQUIRE_ASYNC_MODULE]:` head", async () => {
+  const files = {
+    'main.js': "require('./tla.mjs');\n",
+    'tla.mjs': 'await 1;\nexport const a = 1;\n',
+  };
+  const oracle = await runNodeFileOracle({ name: 'unit', files, argv: ['main.js'] });
+  const head = (text: string) =>
+    text
+      .split('\n')
+      .find((line) => line.startsWith('Error'))
+      ?.split(':')[0];
+  const report = riftyFiles(files);
+  expect(head(report)).toBe('Error [ERR_REQUIRE_ASYNC_MODULE]');
+  expect(head(report)).toBe(head(nodeFileExpected(oracle, 'v24.0.0').stderr));
+});
+
+it('a non-enumerable `cause` accessor prints `[cause]: [Getter]` and never runs', () => {
+  const report = riftyReport(
+    "const e = new Error('x');\nObject.defineProperty(e, 'cause', { get() { globalThis.__riftyCauseRan = true; return 1; } });\nthrow e;\n",
+  );
+  expect(report).toMatch(/\{\n {2}\[cause\]: \[Getter\]\n\}/u);
+  expect(Reflect.get(globalThis, '__riftyCauseRan')).toBeUndefined();
+});

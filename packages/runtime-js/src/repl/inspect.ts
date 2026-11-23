@@ -12,6 +12,8 @@ import { Buffer, getInspectMaxBytes } from '@riftydev/io';
 // `options.depth` (the active divergence fixed here) and keeps the prior default.
 const DEFAULT_DEPTH = 3;
 const MAX_ARRAY_ITEMS = 30;
+/** Longest dense array whose own keys are enumerated for its non-index keys. */
+const DENSE_KEYS_LIMIT = 2 ** 16;
 const MAX_OBJECT_KEYS = 30;
 const MAX_STRING_LEN = 120;
 const PromiseConstructorPrimordial = Promise;
@@ -244,7 +246,7 @@ function formatArray(
   if (circular !== null) return circular;
   if (depth > maxDepth) return '[Array]';
   context.ancestors.add(arr);
-  const element = (key: number | string): string => {
+  const element = (key: number | string | symbol): string => {
     const d = getOwnPropertyDescriptorPrimordial(arr, key);
     if (d === undefined) return 'undefined';
     return (
@@ -262,13 +264,15 @@ function formatArray(
   }
   const more = (n: number) => `... ${n} more item${n > 1 ? 's' : ''}`;
   const holes = (n: number) => `<${n} empty item${n > 1 ? 's' : ''}>`;
-  if (index < length && items.length < MAX_ARRAY_ITEMS) {
+  // Own keys are enumerated only where Node's output needs them: a hole, or an
+  // array short enough to list its non-index keys (a longer dense one hides them).
+  const keys = index < length || length <= DENSE_KEYS_LIMIT ? Object.keys(arr) : null;
+  if (keys !== null && index < length && items.length < MAX_ARRAY_ITEMS) {
     // Node `formatSpecialArray`: walk the own index keys; a run of holes is one entry.
-    const keys = Object.keys(arr);
     for (let k = index; k < keys.length && items.length < MAX_ARRAY_ITEMS; k += 1) {
       const key = keys[k] as string;
+      if (!isArrayIndex(key)) break;
       const at = Number(key);
-      if (!(at <= 2 ** 32 - 2) || `${at}` !== key) break;
       if (at !== index) {
         items.push(holes(at - index));
         index = at;
@@ -282,8 +286,27 @@ function formatArray(
       if (remaining > 0) items.push(holes(remaining));
     } else if (remaining > 0) items.push(more(remaining));
   } else if (index < length) items.push(more(length - index));
+  // Node then lists the non-index own enumerable keys and symbols.
+  for (const key of keys ?? []) {
+    if (!isArrayIndex(key)) items.push(`${propertyKeyText(key)}: ${element(key)}`);
+  }
+  for (const symbol of Object.getOwnPropertySymbols(arr)) {
+    if (getOwnPropertyDescriptorPrimordial(arr, symbol)?.enumerable)
+      items.push(`[${symbol.toString()}]: ${element(symbol)}`);
+  }
   context.ancestors.delete(arr);
+  if (items.length === 0) return `${referencePrefix(arr, context)}[]`;
   return `${referencePrefix(arr, context)}[ ${items.join(', ')} ]`;
+}
+
+/** An array index key (`0` … `2**32 - 2`), as V8 orders it first in `Object.keys`. */
+function isArrayIndex(key: string): boolean {
+  return /^(?:0|[1-9]\d*)$/u.test(key) && Number(key) <= 2 ** 32 - 2;
+}
+
+/** Node `formatProperty` key text: an identifier as is, else quoted. */
+function propertyKeyText(key: string): string {
+  return /^[a-zA-Z_][a-zA-Z_0-9]*$/u.test(key) ? key : quoteString(key);
 }
 
 function formatObject(
