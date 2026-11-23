@@ -5,14 +5,16 @@ import { join } from 'node:path';
 /**
  * The sandbox's lifecycle class (ADR-0568, PR #424): each `runCode` lifecycle/status compat
  * row (docs/public/compat/isolate-host.md) as one `node p.js` program, run once in a sandbox
- * (`exec`) and once by live `node p.js` in a temp dir. Prints, per row: exit code (or the
- * termination) and the files left besides `p.js` (each program writes `a` first).
+ * (`exec`), once as `runCode(code)` (`node -e`, the row's own host: exit code or termination;
+ * its files are not observable) and once by live `node p.js` in a temp dir. Prints, per row:
+ * exit code (or the termination) and the files left besides `p.js` (each program writes `a`
+ * first).
  * Run from the repo root after `pnpm --filter @riftydev/isolate-host build`:
  *   node docs/backlog/distribution/reference/isolate-host-sandbox-lifecycle-class-probe.mjs
  */
 const dist =
   process.argv[2] ?? new URL('../../../../packages/isolate-host/dist', import.meta.url).pathname;
-const { createSandbox } = await import(`${dist}/index.js`);
+const { createSandbox, runCode } = await import(`${dist}/index.js`);
 const W = "const fs = require('fs'); const w = (n) => fs.writeFileSync(n, '1');";
 const CASES = [
   ['uncopyable rejection reason', `${W} w('a'); Promise.reject(Object.create(null))`],
@@ -117,6 +119,8 @@ for (const [label, code] of CASES) {
     stateRefused: r.stateRefused,
     files: list,
   };
-  console.log(JSON.stringify({ label, node, sandbox }));
+  const e = await runCode(code, { timeoutMs: 3000, memoryLimitMb: 128 });
+  const runcode = { exit: e.exitCode, termination: e.termination };
+  console.log(JSON.stringify({ label, node, sandbox, runcode }));
 }
 process.exit(0);
