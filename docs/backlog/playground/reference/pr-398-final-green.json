@@ -1,0 +1,126 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Mergeable: no blockers at HEAD 7cf74e9c9; the landing verdict is committed at docs/backlog/playground/reference/pr-398-final-green.json and bound by its reviewed_sha (REV-8); merge waits for green PR CI at HEAD (PR-6); remaining findings are advisory NOTEs.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "7cf74e9c94e42ec89d41631f8744e00a19017417",
+  "unit_goal_source": "PR #398 https://github.com/vanilla-wave/rifty/pull/398; observed baseline: OwnerPackageState.restore/transition (stamp-miss -> snapshot restore via ensureProjectDependencies, sole sender of project-switch.resetPackages) existed with no production caller, and first-materialization restore (owner-package-state.ts planSnapshotRestore) plus no-COI applyNoCoiSnapshot each verified the replay cache twice; BASE 11b9397eee2e8d820c7e2215d5c3e126eaed5348; HEAD 7cf74e9c94e42ec89d41631f8744e00a19017417. No ready contract document: direct user request, standalone unit.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Playground first materialization restores the baked snapshot verifying the replay cache once (was twice) and keeps its COI projection",
+      "source": "acceptance",
+      "trace": "scenario+ADR-0394",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-first-materialization.contract.test.ts:1872",
+      "note": ""
+    },
+    {
+      "row": "No-COI applySnapshot applies a real baked snapshot verifying the replay cache once (was twice, projected twice) and lands the no-COI projection",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/no-coi-snapshot-application.test.ts:37",
+      "note": ""
+    },
+    {
+      "row": "COI first materialization with a corrupt replay cache rejects before any shared-cache, tree or stamp/claim write; the receipt becomes a deferred install and the next open is saved without a fetch",
+      "source": "fault-matrix",
+      "trace": "scenario+ADR-0394",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-initial-admission.contract.test.ts:190",
+      "note": ""
+    },
+    {
+      "row": "No-COI applySnapshot with a corrupt replay cache rejects before any tarball-cache or project write and before flush",
+      "source": "fault-matrix",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/no-coi-snapshot-application.test.ts:80",
+      "note": ""
+    },
+    {
+      "row": "Ordinary saved open never fetches or restores the snapshot",
+      "source": "acceptance",
+      "trace": "scenario+ADR-0415",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-saved-state.contract.test.ts:126",
+      "note": ""
+    },
+    {
+      "row": "Interrupted first materialization (create, close, reload) still restores the snapshot automatically",
+      "source": "acceptance",
+      "trace": "scenario+ADR-0394",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/workbench-snapshot-initial-admission.contract.test.ts:74",
+      "note": ""
+    },
+    {
+      "row": "Dev-server child bootstrap cfg rejects the retired own bakedNodeModulesUrl field",
+      "source": "acceptance",
+      "trace": "ADR-0135",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/dev-server-child-config.test.ts:288",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/workbench/src/workers/package-acquisition-authority.ts:628",
+          "evidence": "git grep -n \"type: 'project-switch'\" 7cf74e9c9 -- packages apps tests tools -> senders only package-acquisition-authority.test.ts:1212,1763,2604 and tests/integration/npm-shell-command.test.ts:3043; the authority.ts:638,663 hits are internal adapter.switchProject calls, not dispatches. At BASE the only production dispatch was owner-package-state.ts:697 (transition).",
+          "summary": "Removing resetPackages leaves the whole public dispatch({type:'project-switch'}) case (and its overloads at authority.ts:360 / types.ts:381) with test-only senders, the same class as `ensure`. docs/backlog/playground/package-acquisition-test-only-dispatch-routes.md:4,40 (title, probe, Question) names only `ensure`, and :37 says resetPackages was removed without recording that the route itself is now dead. Widen the capture (REV-7 capture / REV-12 routing).",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "PR #398 body §Proof (/tmp/snapbench/pr-body-2.md)",
+          "evidence": "",
+          "summary": "The gate line still says 'pnpm pr:check 28/28 ... on eb80a875b (last product/test commit); the head commit after it adds only the landing verdict', but HEAD 7cf74e9c9 changes product and test paths; restate it against HEAD (driver-run 28/28 there). The landing-verdict sentence also sits inside the unrelated 'Cheaper snapshot decode' bullet of §Not in this PR.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}
