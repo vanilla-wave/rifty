@@ -180,11 +180,7 @@ afterEach(() => {
 });
 
 /** Real memory owner graph; persistence faults belong to the separate OPFS carrier. */
-async function seedWarmOwner(
-  artifact: SavedSnapshotFixture,
-  fs: MemoryFsSync = new MemoryFsSync(),
-) {
-  const network = installSnapshotNetwork(valid, artifact);
+async function createOwner(fs: MemoryFsSync, network: ReturnType<typeof installSnapshotNetwork>) {
   const composition = createOwnerVfsAuthorityComposition(fs, { initialRoots: ['/', '/.rifty'] });
   const vfs = new SyncMirrorVfs();
   setSyncMirror(composition.authority, { async: vfs });
@@ -192,7 +188,10 @@ async function seedWarmOwner(
     vfs,
     fsSync: composition.authority,
     installStampClaims: composition.installStampClaims,
-    flush: () => composition.authority.flush(),
+    flush: () => {
+      if (fs instanceof CacheAccessFs && fs.armed) fs.flushes.push(fs.payloadWritten);
+      return composition.authority.flush();
+    },
     nodeWorkerRuntimeEnv: {},
     log: () => {},
     registry: new RegistryClient({ baseUrl: registryUrl, maxRetries: 0, fetch: network.fetch }),
@@ -214,6 +213,15 @@ async function seedWarmOwner(
     },
     projectSave: packages,
   });
+  return { composition, packages, owner };
+}
+
+async function seedWarmOwner(
+  artifact: SavedSnapshotFixture,
+  fs: MemoryFsSync = new MemoryFsSync(),
+) {
+  const network = installSnapshotNetwork(valid, artifact);
+  const { composition, packages, owner } = await createOwner(fs, network);
   const definition = savedSnapshotDefinition('scratch', valid.descriptor, {
     packageJsonText: valid.payload.packageJsonText,
     source,
@@ -284,6 +292,9 @@ class ReplayCacheBoundaryFs extends DurableOwnerFs {
 class CacheAccessFs extends DurableOwnerFs {
   armed = false;
   readonly accesses: string[] = [];
+  /** Armed package-state flushes, each: was the payload already written? */
+  readonly flushes: boolean[] = [];
+  payloadWritten = false;
 
   #touch(operation: string, path: string): void {
     const root = valid.payload.tarballCache.root;
@@ -312,8 +323,10 @@ class CacheAccessFs extends DurableOwnerFs {
   }
   override writeFileSync(path: string, bytes: Uint8Array): void {
     this.#touch('write', path);
+    if (this.armed && path.includes('/node_modules/')) this.payloadWritten = true;
     super.writeFileSync(path, bytes);
   }
+
   override rmSync(path: string, options: { recursive?: boolean; force?: boolean }): void {
     this.#touch('rm', path);
     super.rmSync(path, options);
@@ -491,6 +504,7 @@ describe('I8 explicit snapshot apply validates the artifact before effects over 
         provenance: { outcome: 'snapshot', snapshotId: compactApplication.snapshotId },
       });
       expect(fs.accesses, 'no shared replay-cache read, write or removal').toEqual([]);
+      expect(fs.flushes[0], 'no replay-cache persistence step before the payload').toBe(true);
       expect(h.network.requests, 'only the selected asset').toEqual([
         compactApplication.descriptor.assetUrl,
       ]);
@@ -498,6 +512,43 @@ describe('I8 explicit snapshot apply validates the artifact before effects over 
         compactApplication.payload.lockfile,
       );
       expectExactTree(cacheOnly(fs.durableSnapshot()), cacheBefore);
+    } finally {
+      await opened?.close();
+      await h.owner.close();
+      await h.packages.quiesce();
+    }
+  }, 30_000);
+  it('COI first materialization restores compact v5 without touching the shared replay cache (ADR-0547)', async () => {
+    const fs = new CacheAccessFs();
+    const cacheRoot = valid.payload.tarballCache.root;
+    fs.mkdirSync(cacheRoot, { recursive: true });
+    fs.writeFileSync(`${cacheRoot}/unrelated`, new TextEncoder().encode('warm'));
+    const network = installSnapshotNetwork(compactApplication);
+    const h = await createOwner(fs, network);
+    const definition = savedSnapshotDefinition('scratch', compactApplication.descriptor, {
+      packageJsonText: compactApplication.payload.packageJsonText,
+      source,
+    });
+    let opened: OpenedPlaygroundProject | undefined;
+    try {
+      await h.owner.createScratch({ definition });
+      fs.armed = true;
+      opened = await h.owner.openProject(definition);
+      await h.composition.authority.flush();
+      fs.armed = false;
+      expect(opened.acquisition).toMatchObject({
+        kind: 'ready',
+        provenance: { outcome: 'snapshot', snapshotId: compactApplication.snapshotId },
+      });
+      expect(fs.accesses, 'no shared replay-cache read, write or removal').toEqual([]);
+      expect(fs.flushes[0], 'no replay-cache persistence step before the payload').toBe(true);
+      expect(network.requests, 'only the selected asset').toEqual([
+        compactApplication.descriptor.assetUrl,
+      ]);
+      expect(decoder.decode(fs.readFileBytesSync(`${opened.projectRoot}/package-lock.json`))).toBe(
+        compactApplication.payload.lockfile,
+      );
+      expect(decoder.decode(fs.readFileBytesSync(`${cacheRoot}/unrelated`))).toBe('warm');
     } finally {
       await opened?.close();
       await h.owner.close();

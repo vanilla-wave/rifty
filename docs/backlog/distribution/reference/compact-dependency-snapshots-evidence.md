@@ -61,8 +61,11 @@ retirement repair, Brotli quality 11, isolate host). Node v24.16.0, Chromium
   3,745,623 B (38.33%); extracted payloads equal (fixture assert).
 - Added I3 carriers: system-tar compact envelope (valid control applies; v4 +
   marker, v5 without/unknown profile, v5 replay namespace reject before FS or
-  flush) and COI owner compact apply with zero replay-cache access. Mutants
-  (decoder marker/namespace check off; COI cache-import skip off) go RED.
+  flush; includes a directory-only replay namespace) and COI owner compact
+  apply + first-materialization restore with zero replay-cache access and no
+  cache-persistence flush before the payload. Mutants (decoder marker /
+  namespace / exact-dir check off; apply or restore cache-import skip off;
+  restore cache flush kept) go RED.
 - Sweep: new snapshot readers on main since 8874e47d6 — none; existing readers
   are the codec (`dep-snapshot*.ts`, v5-aware) and
   `tools/shadow-registry/src/snapshot-artifact-check.ts` (rejects non-v3).

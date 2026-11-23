@@ -54,7 +54,8 @@ export type DepSnapshot = DepSnapshotPayload &
   );
 
 export interface PreparedDepSnapshotRestore {
-  applyCache(): void;
+  /** Absent for compact v5: no replay cache to stage or persist (ADR-0547). */
+  readonly applyCache?: () => void;
   applyPayload(): void;
   apply(): void;
 }
@@ -226,7 +227,7 @@ export async function prepareDepSnapshotRestore(
     if (lockfile) fs.writeFileSync(joinPath(root, 'package-lock.json'), lockfile);
   };
   return {
-    applyCache: () => tarballCache?.apply(),
+    ...(tarballCache === undefined ? {} : { applyCache: () => tarballCache.apply() }),
     applyPayload,
     apply() {
       // The global cache is shared across projects: merge this exact closure;

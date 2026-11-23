@@ -36,7 +36,8 @@ type TarFault =
   | 'v4-compact-marker'
   | 'v5-no-profile'
   | 'v5-unknown-profile'
-  | 'replay-entry';
+  | 'replay-entry'
+  | 'replay-dir';
 
 /** Re-pack a producer-valid compact tar with system tar after one control-data edit. */
 async function repackCompactTar(
@@ -66,10 +67,13 @@ async function repackCompactTar(
   if (fault === 'v5-no-profile') manifest.profile = undefined; // JSON.stringify drops the key
   if (fault === 'v5-unknown-profile') manifest.profile = 'mystery';
   writeFileSync(manifestPath, JSON.stringify(manifest));
-  if (fault === 'replay-entry') {
+  if (fault === 'replay-entry' || fault === 'replay-dir') {
     await mkdir(join(tree, 'rifty/replay-cache'));
+    entries.push('rifty/replay-cache');
+  }
+  if (fault === 'replay-entry') {
     writeFileSync(join(tree, 'rifty/replay-cache/extra.tgz'), 'smuggled');
-    entries.push('rifty/replay-cache', 'rifty/replay-cache/extra.tgz');
+    entries.push('rifty/replay-cache/extra.tgz');
   }
   execFileSync(
     'tar',
@@ -139,6 +143,7 @@ describe('compact snapshot admission (I1–I3)', () => {
     'v5-no-profile',
     'v5-unknown-profile',
     'replay-entry',
+    'replay-dir',
   ] as const) {
     it(`system-tar compact envelope ${fault === 'none' ? 'applies' : `rejects ${fault} before mutation`} (I3)`, async () => {
       const { payload, descriptor } = await bakeSavedSnapshotFixture();

@@ -309,10 +309,12 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
             packages: payload.packages,
             shadowPlan: planShadowSubstitutionsFromLockfile(lockfile),
             apply: async () => {
-              prepared.applyCache();
-              const report = await options.flush();
-              if (report !== undefined && report.total > 0)
-                throw new Error('Snapshot replay cache persistence failed');
+              if (prepared.applyCache) {
+                prepared.applyCache();
+                const report = await options.flush();
+                if (report !== undefined && report.total > 0)
+                  throw new Error('Snapshot replay cache persistence failed');
+              }
               prepared.applyPayload();
               seedTemplateNodeModulesFiles(
                 options.fsSync,

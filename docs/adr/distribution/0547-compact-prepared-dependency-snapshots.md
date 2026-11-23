@@ -38,7 +38,9 @@ Existing replay closure/SRI and malformed-container suites retain I3.
 compact marker and a v5 replay namespace reject before mutation
 (`dep-snapshot-compact.contract.test.ts`). COI owner apply (permitted, not
 required by the goal) proves the same no replay-cache access
-(`workbench-snapshot-apply-validation.contract.test.ts`).
+(`workbench-snapshot-apply-validation.contract.test.ts`); COI first-materialization
+restore now also skips its cache-persistence flush (`PreparedDepSnapshotRestore.applyCache`
+absent for v5). System-tar carriers include a directory-only replay namespace.
 
 ## Alternatives
 

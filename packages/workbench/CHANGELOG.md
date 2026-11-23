@@ -12,7 +12,7 @@
 
 ## [Unreleased]
 
-- Public compact v5 dependency snapshots omit replay archives, retain prepared payload and shared cache, and use existing validation/application; default replay unchanged (ADR-0547).
+- Public compact v5 dependency snapshots omit replay archives, retain prepared payload and shared cache, and use existing validation/application; default replay unchanged (ADR-0547). COI first-materialization restore of compact skips the replay-cache persistence step too.
 - Remove the PTY `beforeRun` dependency gate: no production caller since PR #167; tests hold runs with a registered Shell command instead.
 
 - Use Brotli quality 11 for smaller dependency snapshot downloads; document production CPU cost (ADR-0546).
