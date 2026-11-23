@@ -1,0 +1,155 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Merge PR #425 as fixes + docs on green PR CI at HEAD a09e091b9 (commit this verdict as the landing record per REV-8 first). Fixes hold: mutants (a)-(f) each turn exactly their row red, three carriers + bundle check green at 61c69cab8, and the delta since then is docs + one test-comment change only. The CLOSE rollback is complete and honest: goal open, item 2 ready, no closure claimed, over-claims narrowed. goal_complete false (item 2 `runtime-js/guest-builtin-names`).",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "a09e091b992180b035d8564a15884d412a8ee7d8",
+  "unit_goal_source": "docs/backlog/epics/node-file-entry-parity/goal.md (restored, byte-identical to 89d48ac10) + map.md (item 2 ready) + ledger.md; PR #425 as fixes + docs @ a09e091b9 (merge of main f3861a3cd/#423, no file of this PR changed; product 3cabba225; docs 828122ce0, 61c69cab8, fecc03bfa, 357c71f75, 7205ad431); BASE origin/main f3861a3cd (was 23ed6b445); observed baseline = carrier rows + RED at e2ce4b722, re-run independently as mutants in scratch /tmp/close425 @ 61c69cab8",
+  "unit_residuals": [],
+  "goal_residuals": [
+    {
+      "clause": "I2 I3 (isolate)",
+      "location": "docs/backlog/runtime-js/guest-builtin-names.md (map item 2, ready)",
+      "summary": "Stream callback frames `publishedConstructor.*`; `TextEncoder2`/`TextDecoder2`/`DOMException2` in the report; a bundle check that also sees bound class expressions and lowercase names. RED baseline: docs/backlog/runtime-js/reference/guest-builtin-names-baseline.md."
+    }
+  ],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "I1 entry semantics on the entry corpus (no-COI SDK, COI Workbench)",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "tests/no-coi/node-file-parity.spec.ts, tests/browser-unit/node-file-parity.spec.ts green in scratch @ 61c69cab8; no product/test-logic change after it (git diff 61c69cab8 357c71f75 -- packages tests: comments only)",
+      "note": ""
+    },
+    {
+      "row": "I2 every fatal row Node's bytes or an exact pin with a named compat row; no Node header",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "node-file-pins.json; dumps of all three hosts: every pin == actual; isolate node-file.test.ts 51 passed",
+      "note": ""
+    },
+    {
+      "row": "Changed pins vs e2ce4b722 move toward Node or have a cause in this PR",
+      "source": "frozen-artifact",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "16 browser-host pins `main.js:1:N` → `1:N-7` (helper name 15 → 8 chars), toward Node's 1:1–1:16; isolate error-throwing-stack-getter = Node minus the deferred header",
+      "note": ""
+    },
+    {
+      "row": "I3 isolate: the listed ways rifty calls user code at Node's frame name/line/column",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "rows throw-from-{timer,interval,immediate,next-tick,queue-microtask,promise-reaction}, throw-in-{emitter-listener,fs-callback,new-function,direct-eval,indirect-eval,buffer-method}",
+      "note": ""
+    },
+    {
+      "row": "Observed defects fixed (Immediate `this`/name, plain nextTick, cleared interval, `new Function` caller column, throwing `stack` getter on `-e`, EventEmitter2/Stream2/Server2)",
+      "source": "baseline",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "own mutants (a) `_onTimeout` kept on clear, (b) Immediate receiver undefined, (c) `item.fn(...)`, (d) loader guard off, (e) `uniqueHelperName('__riftyFunction')` → exactly their 5 rows red (5 failed | 46 passed); (f) event-emitter.ts @ e2ce4b722 → bundle check + throw-in-emitter-listener red",
+      "note": ""
+    },
+    {
+      "row": "ADR-0571 Decision 2 states what the bundle check catches and names the open part",
+      "source": "acceptance",
+      "trace": "ADR-0571",
+      "status": "pass",
+      "citation": "docs/adr/runtime-js/0571-prove-node-file-entry-and-fatal-report-parity-against-live-node-node-s-report-in-the-isolate-guest-only.md Decision 2; packages/isolate-host/tests/bundle-public-names.test.ts header; packages/io/CHANGELOG.md line 5 (all narrowed in fecc03bfa)",
+      "note": ""
+    },
+    {
+      "row": "I4 one switch: Node's report only in the isolate guest; browser hosts print main's text (amend 2026-11-23)",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "process-lifecycle-events.ts installNodeFatalReport; browser pins `<runtime>/packages/…`",
+      "note": ""
+    },
+    {
+      "row": "Oracle: live node v24.16.0, one normalization, P1/P2 on Node's side",
+      "source": "frozen-artifact",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/node-file-programs.ts (rows added only)",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "docs/adr/runtime-js/0571-prove-node-file-entry-and-fatal-report-parity-against-live-node-node-s-report-in-the-isolate-guest-only.md Decision 2",
+          "evidence": "«The fatal corpus holds one row per way rifty calls user code (timer, …, direct and indirect `eval`)»; stream listener and write/transform option callbacks are not in the corpus (they are item 2's Acceptance 1).",
+          "summary": "RESOLVED @ 7205ad431: Reads wider than the corpus; say «one row per listed way» or point at item 2.",
+          "authority": ""
+        },
+        {
+          "severity": "nit",
+          "location": "docs/backlog/runtime-js/reference/guest-builtin-names-baseline.md",
+          "evidence": "«Reproduce: the CLOSE reviewer's probes (`/tmp/close425-probe/zz4.test.ts` shape …)»",
+          "summary": "RESOLVED @ 7205ad431: The reproduce step names a /tmp file that will not exist; the table and sweep description are enough to re-run, but the RED is executed at pickup, not from that path.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/isolate-host/tests/bundle-public-names.test.ts:29",
+          "evidence": "`VENDOR` ±3000-char window; guest-builtin-names Acceptance 3 forbids a text-window exception",
+          "summary": "Left for item 2 by its acceptance; recorded.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tools/node-parity-runner/cases/worker_threads/exec-argv-startup.case.ts",
+          "evidence": "pr:check on a09e091b9 (driver): drain cap 10000ms exceeded at load avg 38/12 cpus, green 3/3 alone. Ledger 2026-11-22 (89d48ac10) records the same case failing the same way under load before this PR's timers change (3cabba225, 2026-11-23). git diff e2ce4b722 7205ad431 -- timers.ts: no keepalive/refImmediateHost/unrefImmediateHost/channel line changed; ref/unref per immediate unchanged. Not rerun by this reviewer.",
+          "summary": "Load flake older than this PR, not a regression of the Immediate change; CI at HEAD decides.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}
