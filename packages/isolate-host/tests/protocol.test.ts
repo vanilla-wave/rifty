@@ -41,6 +41,9 @@ const HOSTILE: Readonly<Record<string, string>> = {
   'exit payload too long': 'f(2, [0, 0])',
   'memory payload not empty': 'f(3, [0])',
   'error text over 4 KiB': 'f(4, new Array(5000).fill(120))',
+  // `gone` frees a slot and lets destroy() go on: only after the call's terminal frame.
+  'gone before the terminal frame': 'f(8, [])',
+  'gone for a call not on this worker': 'C = [0, 0, 0x7f, 0x7f]; f(8, [])',
   // A header split across writes must not be mistaken for a short frame.
   'byte-by-byte garbage': 'for (const b of [0xff, 0xff, 0xff, 0xff, 1, ...C]) raw([b])',
 };
@@ -123,6 +126,17 @@ describe('consumer treats the child channel as hostile', () => {
       expect(report.ms).toBeLessThan(1000);
     });
   }
+
+  it('a second gone for one call ends the worker as hostile', async () => {
+    const entry = hostilePackage('gone twice', 'f(2, [0]); f(8, []); f(8, [])');
+    const { value } = await consumer(
+      `const r = await settle(runCode('1', { timeoutMs: 5000 }));
+       await sleep(300);
+       out({ exitCode: r.exitCode, workers: children().length });`,
+      { entry: pathToFileURL(entry).href },
+    );
+    expect(value).toEqual({ exitCode: 0, workers: 0 });
+  });
 
   it('a legal header with a never-completed payload buffers at most one legal frame', () => {
     // Announces a 1026-byte output frame (cap 1024), sends 1000 bytes of it, then stalls.
