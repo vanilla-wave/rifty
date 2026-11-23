@@ -84,7 +84,8 @@ describe('node:fs refuses a NUL in a path, as Node (isolate sandbox corpus, ADR-
 describe('node:fs.utimesSync times as Node 24.16.0 stores them (fs-times.ts)', () => {
   it('an invalid Date keeps the time, a huge one saturates, a negative number is now; all finite', () => {
     // Node 24.16.0 (darwin-arm64): new Date(NaN) leaves mtime as it was (libuv UTIME_OMIT);
-    // 1e306 s → 9223372036854.775 ms; -1e306 → now; NaN/Infinity numbers → ERR_INVALID_ARG_TYPE.
+    // 1e306 s → 9223372036854.775 ms as on darwin (Node on Linux: EINVAL; rifty saturates); -1e306 → now;
+    // NaN/Infinity numbers → ERR_INVALID_ARG_TYPE.
     fs.mkdirSync('/workspace', { recursive: true });
     fs.writeFileSync('/workspace/t', 'x');
     fs.utimesSync('/workspace/t', 1000, 2000);

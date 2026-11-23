@@ -3,9 +3,10 @@ import type { ParityCase } from '../../src/types.ts';
 /**
  * A NUL in a path is Node's `nullCheck` (ERR_INVALID_ARG_VALUE, `existsSync`
  * false), and `utimes` never stores a non-finite time: an invalid Date leaves
- * the time as it was (libuv UTIME_OMIT), a negative number is now, a huge one
- * saturates (its exact value is the platform's, so only finiteness is
- * compared). Found through the isolate sandbox (ADR-0568).
+ * the time as it was (libuv UTIME_OMIT), a negative number is now. A huge time
+ * is platform-specific in Node (darwin saturates at 2^63 ns, Linux: EINVAL), so
+ * it is not compared here (rifty saturates; compat ⚠️). Found through the
+ * isolate sandbox (ADR-0568).
  */
 const c: ParityCase = {
   cwd: '/app',
@@ -23,8 +24,6 @@ const c: ParityCase = {
     fs.utimesSync('f', 1000, 2000);
     fs.utimesSync('f', new Date(NaN), new Date(NaN));
     console.log('invalid date keeps', fs.statSync('f').mtimeMs === 2000000);
-    fs.utimesSync('f', 1e306, 1e306);
-    console.log('huge finite', Number.isFinite(fs.statSync('f').mtimeMs));
     const before = Date.now();
     fs.utimesSync('f', -5, -5);
     console.log('negative is now', fs.statSync('f').mtimeMs >= before);

@@ -110,7 +110,7 @@ export const fsMatrix = {
     [
       'A NUL in a path; `utimes` edge times',
       '✅',
-      "A NUL throws Node's `ERR_INVALID_ARG_VALUE` (`existsSync` answers `false`); `utimes` as Node 24.16.0: an invalid `Date` keeps the time, a negative number is now, a huge time saturates at 2^63 ns, a NaN/Infinity number is `ERR_INVALID_ARG_TYPE` — no non-finite time is stored. Parity: `fs/path-nul-and-utimes-edge-times`",
+      "A NUL throws Node's `ERR_INVALID_ARG_VALUE` (`existsSync` answers `false`); `utimes` as Node 24.16.0: an invalid `Date` keeps the time, a negative number is now, a NaN/Infinity number is `ERR_INVALID_ARG_TYPE` — no non-finite time is stored. A huge finite time saturates at 2^63 ns as Node on darwin (Node on Linux: `EINVAL`). Parity: `fs/path-nul-and-utimes-edge-times`",
     ],
     [
       '`symlink`/`symlinkSync`/`link`/`linkSync`, `promises.symlink`/`link`',

@@ -431,7 +431,7 @@ for (const v of [NaN, Infinity]) { try { fs.utimesSync('f', v, v); console.log('
 fs.utimesSync('f', 1000, 2000);
 fs.utimesSync('f', new Date(NaN), new Date(NaN));
 console.log('date-nan keeps', fs.statSync('f').mtimeMs === 2000000);
-for (const v of [1e306, -1e306]) { fs.utimesSync('f', v, v); console.log(v, 'finite', Number.isFinite(fs.statSync('f').mtimeMs)); }
+fs.utimesSync('f', -1e306, -1e306); console.log('negative finite', Number.isFinite(fs.statSync('f').mtimeMs));
 try { fs.writeFileSync('a\\0b', 'x'); console.log('nul ok'); } catch (e) { console.log('nul err', e.code); }`,
       'next.js': "console.log(require('fs').readdirSync('.').sort().join(','))",
     },
