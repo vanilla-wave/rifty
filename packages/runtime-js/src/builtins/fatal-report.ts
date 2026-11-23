@@ -322,7 +322,22 @@ function primitiveElements(array: readonly unknown[]): unknown[] | null {
 }
 
 /** Node `getConstructorName` without running guest getters: the first own data `constructor`. */
+/**
+ * A CJS-loader `MODULE_NOT_FOUND` (it carries `requireStack`) printed in Node's
+ * shape wherever it is thrown or nested: the same object, read as `Error` with
+ * its loader-only `specifier`/`importer` hidden; descriptors only, no getter runs.
+ */
+function nodeShapedLoaderError(error: object): boolean {
+  if (!(error instanceof ModuleLoadError)) return false;
+  const requireStack = objectGetOwnPropertyDescriptor(error, 'requireStack');
+  return (
+    requireStack !== undefined && !('value' in requireStack && requireStack.value === undefined)
+  );
+}
+const LOADER_ONLY_KEYS = ['specifier', 'importer'];
+
 function constructorName(error: object): string | null {
+  if (nodeShapedLoaderError(error)) return 'Error';
   for (let o: object | null = error; o !== null; o = objectGetPrototypeOf(o)) {
     const ctor = objectGetOwnPropertyDescriptor(o, 'constructor')?.value;
     if (typeof ctor !== 'function') continue;
@@ -368,6 +383,7 @@ function improveStack(stack: string, error: object): string {
 /** Node `formatError` + `reduceToSingleString`; accessors read as `[Getter]`, never run. */
 function inspectError(error: object, indent: number, state: InspectState, depth: number): string {
   const raw = stackOf(error) ?? (reflectApply(errorToString, error, []) as string);
+  const shaped = nodeShapedLoaderError(error);
   state.ancestors.push(error);
   // Frames are projected once, over the whole report (`guestStack`).
   let base = improveStack(nodeInternalHead(raw, error), error);
@@ -385,6 +401,7 @@ function inspectError(error: object, indent: number, state: InspectState, depth:
   for (let k = 0; k < keys.length; k += 1) {
     const own = keys[k] as string | symbol;
     if (own === 'stack') continue;
+    if (shaped && typeof own === 'string' && LOADER_ONLY_KEYS.includes(own)) continue;
     const key = typeof own === 'symbol' ? own.toString() : own;
     const descriptor = objectGetOwnPropertyDescriptor(error, own);
     if (descriptor === undefined) continue;
@@ -426,25 +443,8 @@ function primitiveText(value: unknown): string {
   return typeof value === 'symbol' ? value.toString() : String(value);
 }
 
-/**
- * The one point a rifty loader error takes Node's shape, wherever it was
- * thrown: a CJS-loader `MODULE_NOT_FOUND` (it carries `requireStack`) is Node's
- * plain `Error` with `code` and `requireStack`, its frames kept.
- */
-function asNodeError(error: unknown): unknown {
-  if (!(error instanceof ModuleLoadError)) return error;
-  if (error.code !== 'MODULE_NOT_FOUND' || error.requireStack === undefined) return error;
-  const out = new Error(error.message) as Error & { code?: string; requireStack?: unknown };
-  // V8 wrote `Error:` there: ModuleLoadError names itself after capture.
-  out.stack = stackOf(error) ?? `Error: ${error.message}`;
-  out.code = error.code;
-  out.requireStack = error.requireStack;
-  return out;
-}
-
 /** The whole fatal report for `error`, ending in the trailer's newline. */
-export function formatFatalReport(thrown: unknown): string {
-  const error = asNodeError(thrown);
+export function formatFatalReport(error: unknown): string {
   if (!isErrorLike(error)) {
     const body =
       (typeof error === 'object' && error !== null) || typeof error === 'function'

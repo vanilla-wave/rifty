@@ -401,48 +401,68 @@ describe('post-guest paths: what the host owes whatever the guest replaced', () 
   });
 });
 
-describe('a loader error prints the same wherever it is thrown (Node shape at the one report point)', () => {
-  const origins: Record<string, (expr: string) => string> = {
-    sync: (e) => `${e};`,
-    timer: (e) => `setTimeout(() => { ${e}; }, 0);`,
-    microtask: (e) => `queueMicrotask(() => { ${e}; });`,
-    tick: (e) => `process.nextTick(() => { ${e}; });`,
-    rejection: (e) => `Promise.resolve().then(() => { ${e}; });`,
-    exit: (e) => `process.on('exit', () => { ${e}; });`,
+describe("a loader error prints Node's shape wherever it is thrown (one report point)", () => {
+  const origins: Record<string, (body: string) => string> = {
+    sync: (b) => `${b}`,
+    timer: (b) => `setTimeout(() => { ${b} }, 0);`,
+    microtask: (b) => `queueMicrotask(() => { ${b} });`,
+    tick: (b) => `process.nextTick(() => { ${b} });`,
+    rejection: (b) => `Promise.resolve().then(() => { ${b} });`,
+    exit: (b) => `process.on('exit', () => { ${b} });`,
   };
-  const setup =
-    "const fs = require('fs'); fs.writeFileSync('bad.js', 'let x = ;\\n'); fs.writeFileSync('tla.mjs', 'await 1;\\nexport const a = 1;\\n'); ";
-  // The error's head line and props: no frames (their call sites differ), no
-  // `-e` `[eval]:N` decoration (declared, compat process.md); a rejection is
-  // left out (isolated-vm copies its reason, compat isolate-host.md).
-  const view = (stderr: string, rejection: boolean) => {
-    const body = stderr.replace(/^\[eval\]:\d+\n[^\n]*\n *\^\n\n/u, '');
-    const head = body.split('\n')[0] ?? '';
-    const props = /\{\n([\s\S]*?)\n\}\n\nNode\.js/u.exec(body)?.[1] ?? '';
-    return rejection ? head : `${head}\n${props}`;
+  const errors: Record<string, string> = {
+    'guest props': "try { require('./nope'); } catch (e) { e.extra = 1; e.hint = 'h'; throw e; }",
+    'a getter on code':
+      "try { require('./nope'); } catch (e) { Object.defineProperty(e, 'code', { enumerable: true, get() { globalThis.ran = 1; return 'X'; } }); throw e; }",
+    'a throwing getter on requireStack':
+      "try { require('./nope'); } catch (e) { Object.defineProperty(e, 'requireStack', { enumerable: true, get() { throw new Error('g'); } }); throw e; }",
+    'a loader error as cause':
+      "try { require('./nope'); } catch (c) { throw new Error('outer', { cause: c }); }",
   };
-  for (const [kind, expr] of Object.entries({
-    MODULE_NOT_FOUND: "require('./nope')",
-    'compile error': "require('./bad.js')",
-    ERR_REQUIRE_ASYNC_MODULE: "require('./tla.mjs')",
-  })) {
-    it(kind, async () => {
-      const heads = new Set<string>();
-      const full = new Set<string>();
-      for (const [origin, make] of Object.entries(origins)) {
-        const result = await runCode(`${setup}${make(expr)}`);
-        expect(result.exitCode).not.toBe(0);
-        // A rejection's reason is isolated-vm's copy (no props, no class).
-        if (origin === 'rejection') continue;
-        heads.add(view(result.stderr, true));
-        full.add(view(result.stderr, false));
-      }
-      expect([...heads]).toHaveLength(1);
-      expect([...full]).toHaveLength(1);
-      if (kind === 'MODULE_NOT_FOUND')
-        expect([...full][0]).toMatch(
-          /^Error: Cannot find module '\.\/nope'\n {2}code: 'MODULE_NOT_FOUND',/u,
-        );
-    }, 60_000);
+  // Head line and props, paths to `<root>`, whitespace collapsed: no frames, no
+  // `Require stack:` lines, no `[eval]:N` / Node header (declared, compat process.md).
+  const view = (stderr: string) => {
+    const body = stderr
+      .replace(/^\S+:\d+\n[^\n]*\n *\^+\n\n/u, '')
+      .replace(/'[^']*\/(\[eval\]|main\.js)'/gu, "'<root>/$1'")
+      // A file required from `-e`: rifty's `requireStack` lacks Node's `[eval]`
+      // parent (declared, compat isolate-host.md).
+      .replace(/'<root>\/main\.js',\s*'<root>\/\[eval\]'/gu, "'<root>/main.js'")
+      .split('\n')
+      .filter(
+        (line) => !/^\s+at |^\s+\.\.\. \d+ lines? matching|^\s*Require stack:$|^\s*- /u.test(line),
+      )
+      .join('\n');
+    // Line breaking follows the root's length (`/workspace` vs the oracle's dir).
+    return body
+      .replace(/\n\nNode\.js v[\d.]+\n$/u, '')
+      .replace(/\s+/gu, ' ')
+      .trim();
+  };
+  const forms = {
+    '-e': (code: string) => code,
+    'a required file': (code: string) =>
+      `require('fs').writeFileSync('main.js', ${JSON.stringify(code)}); require('./main.js');`,
+  };
+  for (const [form, wrap] of Object.entries(forms)) {
+    for (const [what, body] of Object.entries(errors)) {
+      it(`${what}, ${form}: Node's head and props from every origin`, async () => {
+        for (const [origin, make] of Object.entries(origins)) {
+          const code = wrap(make(body));
+          const [ours, node] = [await runCode(code), nodeEval(code)];
+          const label = `${origin}\n--- node\n${node.stderr}\n--- rifty\n${ours.stderr}`;
+          expect(ours.stdout, label).toBe(node.stdout);
+          if (origin === 'rejection') {
+            // isolated-vm copies the reason (compat isolate-host.md): its class
+            // family and message reach the report, nothing else.
+            expect(view(ours.stderr), label).toBe(
+              view(node.stderr).replace(/ (?:code|\[cause\]): .*$/u, ''),
+            );
+            continue;
+          }
+          expect(view(ours.stderr), label).toBe(view(node.stderr));
+        }
+      }, 120_000);
+    }
   }
 });
