@@ -1,8 +1,11 @@
 import { NotImplementedError } from '@riftydev/io';
 import { type FsSync, joinPath } from '@riftydev/vfs';
 import { type Node as AcornNode, parse as acornParse } from 'acorn';
+import { firstGuestFrame, markFatalDecorated } from '../builtins/fatal-report.ts';
 import { loadBuiltin } from '../builtins/index.ts';
 import { __setCreateRequireImpl } from '../builtins/module.ts';
+import { nodeMainImports } from '../builtins/node-entry-main.ts';
+import { nodeFatalReportInstalled } from '../builtins/process-lifecycle-events.ts';
 import { setSameRealmWorkerModuleImporter } from '../builtins/worker_threads.ts';
 import { createRequirePath } from '../internal/create-require-path.ts';
 import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
@@ -12,6 +15,7 @@ import {
   type CjsExtensionHook,
   type CjsExtensions,
   type CjsRequire,
+  createRequireParent,
   executeCjs,
   initialiseDetachedCjsRecord,
 } from './cjs.ts';
@@ -97,29 +101,6 @@ function stringEndsWith(value: string, suffix: string): boolean {
 export interface NodeEvalScriptRunner {
   readonly registry: ModuleRegistry;
   run(source: string): unknown;
-}
-
-type NodeMainImport = (
-  specifier: string,
-  from: string,
-  onMain: (module: CjsModule) => void,
-) => Promise<Record<string, unknown>>;
-const nodeMainImports = new WeakMap<ModuleLoader, NodeMainImport>();
-
-/**
- * Node `executeUserEntryPoint`: import `specifier` as the process's main. A
- * CommonJS entry becomes Node's main module (`require.main`, `id` '.', parent
- * null; `onMain` publishes `process.mainModule` before it runs).
- */
-export function importNodeMain(
-  loader: ModuleLoader,
-  specifier: string,
-  from: string,
-  onMain: (module: CjsModule) => void,
-): Promise<Record<string, unknown>> {
-  const run = nodeMainImports.get(loader);
-  if (run === undefined) throw new TypeError('importNodeMain needs a createModuleLoader loader');
-  return run(specifier, from, onMain);
 }
 
 interface ModuleLoaderCore {
@@ -345,7 +326,7 @@ function nodeEvalHasTimerWrapperFrame(stack: string): boolean {
     .split('\n')
     .some(
       (line) =>
-        /^\s+at Timeout\._onTimeout \(/u.test(line) ||
+        /^\s+at Timeout\.(?:_onTimeout|eval \[as _onTimeout\]) \(/u.test(line) ||
         /\/builtins\/timers\.[cm]?[jt]s:\d+:\d+\)?$/u.test(line),
     );
 }
@@ -364,10 +345,14 @@ export function projectNodeEvalError(
     const prelude = nodeEvalSyntaxPrelude(source, error, compiler);
     if (prelude !== null) {
       error.stack = `${prelude}${firstLine}`;
+      markFatalDecorated(error);
       return error;
     }
   }
   const stack = error.stack ?? firstLine;
+  // A file's frame leads (a required module threw): the isolate's report heads it.
+  if (nodeFatalReportInstalled() && !(firstGuestFrame(stack)?.includes('[eval]') ?? true))
+    return error;
   const frame = /(?:eval \()?\[eval\]:(\d+):(\d+)\)?/u.exec(stack);
   if (frame === null) return error;
   const frameLine = Number(frame[1]);
@@ -377,6 +362,7 @@ export function projectNodeEvalError(
     error.stack = nodeEvalStackThroughUserFrame(stack) ?? stack;
     return error;
   }
+  markFatalDecorated(error);
   const useThrowLocation =
     thrown !== null &&
     (origin === 'sync' || (origin === 'uncaught' && nodeEvalHasTimerWrapperFrame(stack)));
@@ -461,7 +447,10 @@ function createModuleLoaderCore(
   builtinOverrides?: ReadonlyMap<string, Record<string, unknown>>,
 ): ModuleLoaderCore {
   const registry = new ModuleRegistry();
+  // Node `Module._cache`, the object every `require.cache` is (null prototype).
+  const cjsCache = Object.create(null) as Record<string, CjsModule>;
   let mainModule: CjsModule | undefined;
+  let mainEsm: string | undefined;
   let pendingMain: { readonly id: string; onMain(module: CjsModule): void } | undefined;
   // Node's replaceable `.js` translator publishes a CJS `require.cache`
   // projection even when the same file already has an independent ESM job.
@@ -473,7 +462,7 @@ function createModuleLoaderCore(
   let loaderModuleBuiltin: Record<string, unknown> | null = null;
   const loadBuiltinForLoader = (id: string): Record<string, unknown> => {
     if (builtinOverrides !== undefined && id === 'node:module') {
-      loaderModuleBuiltin ??= createLoaderModuleBuiltin(loadBuiltinOrThrow(id), makeRequire);
+      loaderModuleBuiltin ??= createLoaderModuleBuiltin(loadBuiltinOrThrow(id), detachedRequire);
       return loaderModuleBuiltin;
     }
     return loadBuiltinOrThrow(id, builtinOverrides);
@@ -552,6 +541,7 @@ function createModuleLoaderCore(
     extensions: cjsExtensions,
     defaultJsExtension,
     makeRequire,
+    cjsCache,
     workspace,
     sourceMaps,
     transformSource: cachedTransform,
@@ -560,6 +550,7 @@ function createModuleLoaderCore(
     resolve(specifier: string, fromFile: string, esm: boolean): ResolvedModule {
       return resolver.resolve(specifier, { fromFile, esm });
     },
+    isNodeMain: (id: string): boolean => id === mainEsm,
     claimMain(id: string): ((module: CjsModule) => void) | undefined {
       const claim = pendingMain;
       if (claim?.id !== id) return undefined;
@@ -650,16 +641,15 @@ function createModuleLoaderCore(
     }) as CjsRequire;
     req.resolve = (specifier: string): string =>
       resolver.resolve(specifier, { fromFile: from, esm: false }).id;
-    // TODO(backlog: runtime-js/require-cache-module-record-surface): this is
-    // intentionally not claimed as Node-compatible until backed by registry.
-    req.cache = Object.create(null) as Record<string, unknown>;
+    req.cache = cjsCache;
     req.extensions = cjsExtensions;
     // Node makeRequireFunction: `require.main` is process.mainModule at creation.
     req.main = mainModule;
     return req;
   }
 
-  if (builtinOverrides === undefined) __setCreateRequireImpl(makeRequire);
+  const detachedRequire = (from: string) => makeRequire(from, createRequireParent(from, deps));
+  if (builtinOverrides === undefined) __setCreateRequireImpl(detachedRequire);
 
   const loader: ModuleLoader = {
     require(specifier, from = cwd) {
@@ -688,11 +678,13 @@ function createModuleLoaderCore(
       // Keep derived caches + future import-job lookup coherent with records.
       // Already-returned job promises retain their captured generation.
       if (id === undefined) {
+        for (const key of Object.keys(cjsCache)) delete cjsCache[key];
         transformCache.clear();
         esmAstCache.clear();
         sourceMaps.clear();
         defaultRequiredEsm.clear();
       } else {
+        delete cjsCache[id];
         transformCache.delete(id);
         esmAstCache.delete(id);
         sourceMaps.delete(id);
@@ -716,6 +708,7 @@ function createModuleLoaderCore(
       const resolved = resolver.resolve(specifier, { fromFile: from, esm: true });
       // Claimed synchronously by the CJS execution; an ES module entry never is.
       pendingMain = { id: resolved.id, onMain };
+      if (resolved.kind === 'esm') mainEsm = resolved.id;
       const loaded = deps.loadAsyncResolved(resolved);
       pendingMain = undefined;
       return loaded.finally(keepaliveUnref);

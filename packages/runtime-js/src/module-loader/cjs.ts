@@ -17,7 +17,12 @@ import {
   staticPropertyName,
   unwrapChain,
 } from './global-write-key.ts';
-import type { CjsModule, ModuleRecord, ModuleRegistry } from './registry.ts';
+import {
+  type CjsModule,
+  type ModuleRecord,
+  type ModuleRegistry,
+  createModuleRecord,
+} from './registry.ts';
 import type { ResolvedModule } from './resolver.ts';
 import type { Resolver } from './resolver.ts';
 
@@ -82,6 +87,8 @@ export interface CjsLoaderDeps {
   loadSync(resolved: ResolvedModule, parent?: CjsModule): unknown;
   loadAsync(id: string): Promise<Record<string, unknown>>;
   resolve(specifier: string, fromFile: string, esm: boolean): ResolvedModule;
+  /** Node's `Module._cache`: the one `require.cache` object, keyed by filename. */
+  readonly cjsCache?: Record<string, CjsModule>;
   /** The entry `id` runs as Node's main module: returns its installer once. */
   claimMain?(id: string): ((module: CjsModule) => void) | undefined;
 }
@@ -91,18 +98,11 @@ export type CjsExtensions = Record<string, CjsExtensionHook>;
 
 export type CjsRequire = ((specifier: string) => unknown) & {
   resolve(specifier: string): string;
-  cache: Record<string, unknown>;
+  cache: Record<string, CjsModule>;
   extensions: CjsExtensions;
   main: CjsModule | undefined;
 };
 
-/**
- * Best-effort source snippet for a `new Function` compile failure. A bare
- * SyntaxError often carries no `<anonymous>:line:col`; then returns '' (the
- * caller's directed error still names the module). When V8 gives an offset,
- * subtract the 2-line synthetic `function anonymous(...) {` header to map back
- * onto the source.
- */
 function snippetForSource(source: string, stack: string): string {
   const m = /<anonymous>:(\d+):(\d+)/.exec(stack);
   if (!m) return '';
@@ -1738,14 +1738,11 @@ function compileCjsSource(
   };
 
   type CjsFactory = (
-    module: CjsModule,
     exports: Record<string, unknown>,
     require: CjsRequire,
+    module: CjsModule,
     __filename: string,
     __dirname: string,
-    __riftyDynamicImport: (specifier: unknown) => Promise<Record<string, unknown>>,
-    __riftyFunction: FunctionConstructor,
-    __riftyGlobalKey: (key: unknown) => unknown,
   ) => void;
 
   const routedConstructors = createFunctionImportRouting(dynamicImport, filename);
@@ -1770,18 +1767,16 @@ function compileCjsSource(
   let fn: CjsFactory;
   try {
     fn = compileCjsFactory(
-      [
-        'module',
-        'exports',
-        'require',
-        '__filename',
-        '__dirname',
-        dynamicImportHelperName,
-        functionHelperName,
-        globalKeyHelperName,
-      ],
+      [dynamicImportHelperName, functionHelperName, globalKeyHelperName],
       source,
       filename,
+    )(
+      dynamicImport,
+      routedConstructors.Function,
+      createGlobalWriteKeyCheck(
+        'module-loader.cjs-global-function-assignment',
+        `CJS module ${filename} writes the global Function property through a runtime key; rifty cannot emulate that without mutating the host constructor`,
+      ),
     ) as CjsFactory;
   } catch (error) {
     // `new Function` SyntaxError has no file context — surface a directed
@@ -1795,19 +1790,14 @@ function compileCjsSource(
     );
   }
 
+  // Node `Module.prototype._compile`: (exports, require, module, __filename, __dirname).
   fn.call(
     moduleObject.exports,
-    moduleObject,
     moduleObject.exports,
     require,
+    moduleObject,
     filename,
     dirname(filename),
-    dynamicImport,
-    routedConstructors.Function,
-    createGlobalWriteKeyCheck(
-      'module-loader.cjs-global-function-assignment',
-      `CJS module ${filename} writes the global Function property through a runtime key; rifty cannot emulate that without mutating the host constructor`,
-    ),
   );
 }
 
@@ -1858,6 +1848,11 @@ function initialiseCjsRecord(
     },
   });
   return record as CjsModule;
+}
+
+/** Node `createRequire(filename)`: a detached `new Module(filename)` its require hangs from. */
+export function createRequireParent(filename: string, deps: CjsLoaderDeps): CjsModule {
+  return initialiseCjsRecord(createModuleRecord(filename, 'cjs'), deps, undefined);
 }
 
 /** Initialise Node's synthetic eval module without inserting it into `require.cache`. */
@@ -1923,8 +1918,18 @@ export function executeCjs(
   deps: CjsLoaderDeps,
   parent?: CjsModule,
 ): Record<string, unknown> {
-  const { registry } = deps;
+  const { registry, cjsCache: cache } = deps;
   let existing = registry.get(resolved.id);
+  // Node Module._load reads `require.cache` first: a guest's entry wins, a deleted one reloads.
+  const visible = cache?.[resolved.id];
+  if (visible !== undefined && visible !== existing) {
+    attachCjsChild(parent, visible);
+    return visible.exports;
+  }
+  if (cache !== undefined && visible === undefined && existing?.state === 'loaded') {
+    registry.invalidate(resolved.id);
+    existing = undefined;
+  }
   if (existing && (existing.state === 'loaded' || existing.state === 'loading')) {
     const cached = existing as CjsModule;
     // Cached loads and cycles link each requesting parent once without
@@ -1943,6 +1948,7 @@ export function executeCjs(
   const record = existing ?? registry.getOrCreate(resolved.id, resolved.kind);
   const asMain = deps.claimMain?.(resolved.id);
   const moduleObject = initialiseCjsRecord(record, deps, asMain === undefined ? parent : null);
+  if (cache !== undefined) cache[resolved.id] = moduleObject;
   asMain?.(moduleObject);
   record.state = 'loading';
   if (asMain === undefined) attachCjsChild(parent, moduleObject);
@@ -1965,6 +1971,7 @@ export function executeCjs(
     assertCjsExtensionHook(selection.hook, selection.key);
     reflectApplyPrimordial(selection.hook, deps.extensions, [moduleObject, resolved.id]);
   } catch (error) {
+    if (cache?.[resolved.id] === record) delete cache[resolved.id];
     failCjsRecord(registry, record, error, resolved.id);
   }
 

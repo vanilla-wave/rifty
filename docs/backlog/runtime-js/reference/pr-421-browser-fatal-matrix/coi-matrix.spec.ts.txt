@@ -1,0 +1,25 @@
+import { writeFileSync } from 'node:fs';
+import { test } from '@playwright/test';
+import { bootOwner, closeOwner, execLine, gotoHarness, writeOwnerFile } from './fixtures.ts';
+import { matrixPrograms, MATRIX_TLA } from './fixtures/zz-matrix-programs.ts';
+test('fatal matrix COI', async ({ page }) => {
+  test.setTimeout(1_800_000);
+  await gotoHarness(page);
+  await bootOwner(page, { workspaceId: 'bu-zz-matrix', template: 'hidden-empty', persistence: 'ephemeral' });
+  const rows: unknown[] = [];
+  try {
+    await execLine(page, 'npm install');
+    await writeOwnerFile(page, '/scratch/m/package.json', '{}\n');
+    for (const [i, p] of matrixPrograms.entries()) {
+      await writeOwnerFile(page, `/scratch/m/r${i}/tla.mjs`, MATRIX_TLA);
+      await writeOwnerFile(page, `/scratch/m/r${i}/main.js`, p.code);
+      const line = p.mode === 'file' ? `cd m/r${i} && node main.js` : `cd m/r${i} && node -e ${JSON.stringify(p.code)}`;
+      const r = await execLine(page, line);
+      await execLine(page, 'cd /home/project');
+      rows.push({ name: p.name, exit: r.exit, out: r.out });
+    }
+  } finally {
+    writeFileSync(process.env.MATRIX_OUT as string, JSON.stringify(rows, null, 1));
+    await closeOwner(page);
+  }
+});

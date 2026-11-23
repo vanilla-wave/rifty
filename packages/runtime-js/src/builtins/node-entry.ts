@@ -26,13 +26,19 @@ import {
   type ModuleLoader,
   createModuleLoader,
   createNodeEvalScriptRunner,
-  importNodeMain,
   prepareNodeEvalCompiler,
   projectNodeEvalError,
 } from '../module-loader/loader.ts';
 import { formatNodeEvalPrintValue } from '../repl/inspect.ts';
+import { setFatalEvalSource } from './fatal-report.ts';
 import { refreshRuntimeJsProcessBuiltin } from './index.ts';
-import { type UncaughtOrigin, dispatchUncaughtException } from './process-lifecycle-events.ts';
+import { importNodeMain } from './node-entry-main.ts';
+import {
+  type UncaughtOrigin,
+  dispatchUncaughtException,
+  fatalReportText,
+  nodeFatalReportInstalled,
+} from './process-lifecycle-events.ts';
 
 const utf8 = new TextDecoder();
 const reflectApplyPrimordial = Reflect.apply;
@@ -214,11 +220,13 @@ export async function runNodeEntry(opts: RunNodeEntryOptions): Promise<void> {
   // A reused in-process process (no-COI) starts without a previous run's main.
   const process = (globalThis as { process?: object }).process;
   if (process !== undefined) reflectDeletePropertyPrimordial(process, 'mainModule');
+  setFatalEvalSource(null);
   if (opts.kind === 'eval') {
     // Capture the installed process capabilities before guest code can replace
     // `process`, its streams, or their methods. Late eval terminals are runtime
     // work and must not trust guest-mutated globals.
     const terminalProcess = captureNodeEvalTerminalProcess();
+    setFatalEvalSource(opts.source);
     const preparation = prepareNodeEvalCompiler(opts.source);
     const compiler = preparation === undefined ? undefined : await preparation;
     let completion: unknown;
@@ -252,11 +260,11 @@ export async function runNodeEntry(opts: RunNodeEntryOptions): Promise<void> {
           compiler,
         ),
       terminateUnhandled: (reason) => {
-        const message =
-          reason instanceof Error
-            ? (reason.stack ?? `${reason.name}: ${reason.message}`)
-            : String(reason);
-        terminalProcess.writeStderr(`${message}\n`);
+        terminalProcess.writeStderr(
+          nodeFatalReportInstalled()
+            ? fatalReportText(reason)
+            : `${reason instanceof Error ? (reason.stack ?? `${reason.name}: ${reason.message}`) : String(reason)}\n`,
+        );
         try {
           const returned = terminalProcess.exit(1);
           throw new Error(`node eval process.exit(1) returned ${String(returned)}`);

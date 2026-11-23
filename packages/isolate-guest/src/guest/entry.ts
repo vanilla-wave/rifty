@@ -16,9 +16,10 @@ import {
 } from '@riftydev/runtime-js/builtins/process';
 import { installTimerGlobals } from '@riftydev/runtime-js/builtins/timers';
 import {
-  formatThrown,
+  fatalReportText,
   handleRealmUncaughtError,
   handleRealmUnhandledRejection,
+  installNodeFatalReport,
   readNodeProcessTerminal,
   setDefaultProcessOutputSink,
 } from '@riftydev/runtime-js/internal';
@@ -213,10 +214,10 @@ function esmGapOf(caught: unknown): Error | null {
   }
 }
 
-/** Write the guest's error with the runtime's own fatal text (`formatThrown`); never throws. */
+/** Write the guest's error as the runtime's fatal report (`fatalReportText`); never throws. */
 function writeDiagnostic(error: unknown): void {
   try {
-    writeHost(2, `${formatThrown(error)}\n`);
+    writeHost(2, fatalReportText(error));
   } catch {
     // The guest broke its own diagnostic: nothing is written, the status still crosses.
   }
@@ -236,7 +237,8 @@ let nativeExit: () => void = () => {
  * text and lets the drain end the run.
  */
 function fatal(error: unknown): void {
-  writeDiagnostic(error);
+  // After an explicit exit() Node prints nothing more (its output drop, above).
+  if (readNodeProcessTerminal(riftyProcess) === null) writeDiagnostic(error);
   nativeExit();
 }
 
@@ -342,6 +344,8 @@ function resolvePosix(base: string, p: string): string {
 
 /** Installs the runtime for one run; before any guest code. */
 function setUp(): void {
+  // The isolate host prints Node's fatal report (goal node-file-entry-parity).
+  installNodeFatalReport();
   installProcessGlobals();
   installTimerGlobals();
   (globalThis as { Buffer?: unknown }).Buffer = Buffer;
@@ -354,7 +358,11 @@ function setUp(): void {
   // Node's global console is `require('console')`: util.format over process.stdout/stderr.
   (globalThis as { console?: unknown }).console = nodeConsole;
   setUncaughtHandler((error) => {
-    if (!handleRealmUncaughtError(error)) fatal(error);
+    // Work a natural exit's 'exit' listeners queued: Node still reports its
+    // throw (the run's status is already reported, backlog
+    // distribution/isolate-host-natural-exit-listener-queued-work).
+    if (naturalExit) writeDiagnostic(error);
+    else if (!handleRealmUncaughtError(error)) fatal(error);
   });
   for (const name of EGRESS_MODULES) {
     registerBuiltin(name, () => {

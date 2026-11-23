@@ -1,0 +1,375 @@
+/**
+ * The fatal report against live Node (goal node-file-entry-parity I2): Node's
+ * report without its header (V8's message location is not readable from JS,
+ * ADR-0445 2026-11-22, compat process.md), frames and props as Node's.
+ */
+import { MemoryFsSync, resetSyncMirror, setSyncMirror } from '@riftydev/vfs/internal';
+import { afterEach, expect, it } from 'vitest';
+import {
+  nodeFileExpected,
+  nodeFileNormalized,
+  runNodeFileOracle,
+} from '../../../tests/browser-unit/fixtures/node-file-programs.ts';
+import { formatFatalReport } from '../src/builtins/fatal-report.ts';
+import {
+  fatalReportText,
+  installNodeFatalReport,
+} from '../src/builtins/process-lifecycle-events.ts';
+
+// The isolate guest's realm (its entry installs Node's report).
+installNodeFatalReport();
+import { createModuleLoader } from '../src/module-loader/loader.ts';
+
+afterEach(() => resetSyncMirror());
+
+function riftyReport(source: string): string {
+  const vfs = new MemoryFsSync();
+  vfs.loadFixture({ '/p/main.js': source });
+  setSyncMirror(vfs);
+  try {
+    createModuleLoader(vfs, { cwd: '/p' }).require('./main.js', '/p/x.js');
+  } catch (error) {
+    // What every host prints: the report, or its fallback.
+    return fatalReportText(error);
+  }
+  throw new Error('program did not throw');
+}
+
+async function againstNode(source: string): Promise<{ node: string; rifty: string }> {
+  const oracle = await runNodeFileOracle({
+    name: 'unit',
+    files: { 'main.js': source },
+    argv: ['main.js'],
+  });
+  return {
+    node: nodeFileExpected(oracle, 'v24.0.0').stderr,
+    rifty: nodeFileNormalized({ stdout: '', stderr: riftyReport(source), exitCode: 1 }, '/p')
+      .stderr,
+  };
+}
+
+const headerOf = (report: string) => report.split('\n\n')[0];
+
+it.each([
+  [
+    'a catch that rethrows its parameter',
+    "try {\n  JSON.parse('{');\n} catch (err) {\n  err.seen = 1;\n  throw err;\n}\n",
+  ],
+  [
+    'an error built, decorated, then thrown',
+    "const e = new TypeError('x');\ne.code = 'E';\nthrow e;\n",
+  ],
+  [
+    'a method named eval keeps its name',
+    "class Calc { eval() { throw new Error('m'); } }\nnew Calc().eval();\n",
+  ],
+  ['a V8 throw inside a callback', '[1].forEach(() => {\n  null.x;\n});\n'],
+])('%s: Node bytes but the header', async (_, source) => {
+  const { node, rifty } = await againstNode(source);
+  expect(headerOf(node)).toMatch(/^<root>\/main\.js:\d+\n/u);
+  expect(rifty).toBe(node.slice(node.indexOf('\n\n') + 2));
+});
+
+it.each([
+  [
+    'the catch hands the error on',
+    "function again(e) { throw e; }\ntry {\n  JSON.parse('{');\n} catch (err) {\n  again(err);\n}\n",
+  ],
+  [
+    'the catch may swallow and something else rethrows',
+    "let saved;\ntry {\n  JSON.parse('{');\n} catch (err) {\n  saved = err;\n}\nthrow saved;\n",
+  ],
+  [
+    'the built error leaves through an argument',
+    "function fail(e) { throw e; }\nconst e = new Error('x');\nfail(e);\n",
+  ],
+  [
+    'the built error leaves through an alias past an unrun throw',
+    "const e = new Error('x');\nconst box = [e];\nif (box.length === 0) throw e;\nthrow box[0];\n",
+  ],
+  [
+    'a finally swallowed the first throw',
+    "let saved;\nfunction f() {\n  try {\n    throw (saved = new Error('x'));\n  } finally {\n    return;\n  }\n}\nf();\nthrow saved;\n",
+  ],
+  [
+    'a runtime function caught the first throw',
+    "const assert = require('node:assert');\nlet saved;\nassert.throws(() => {\n  throw (saved = new Error('x'));\n});\nthrow saved;\n",
+  ],
+  [
+    'a closure may throw the built error later',
+    "const e = new Error('x');\nconst later = () => { throw e; };\nlater();\n",
+  ],
+])('%s: Node bytes but the header', async (_, source) => {
+  const { node, rifty } = await againstNode(source);
+  expect(headerOf(node)).toMatch(/^<root>\/main\.js:\d+\n/u);
+  expect(rifty).toBe(node.slice(node.indexOf('\n\n') + 2));
+});
+
+it("a CJS top-level frame reads Node's name in the guest's own err.stack", async () => {
+  const source = "const n = 1;\nconsole.log(new Error('s').stack.split('\\n')[1]);\n";
+  const oracle = await runNodeFileOracle({
+    name: 'unit',
+    files: { 'main.js': source },
+    argv: ['main.js'],
+  });
+  const vfs = new MemoryFsSync();
+  vfs.loadFixture({ '/p/main.js': source });
+  setSyncMirror(vfs);
+  const lines: string[] = [];
+  const log = console.log;
+  console.log = (line: string) => lines.push(line);
+  try {
+    createModuleLoader(vfs, { cwd: '/p' }).require('./main.js', '/p/x.js');
+  } finally {
+    console.log = log;
+  }
+  expect(`${lines.join('\n').replaceAll('/p', '<root>')}\n`).toBe(
+    nodeFileNormalized(oracle, oracle.root).stdout,
+  );
+});
+
+function riftyFiles(files: Record<string, string>): string {
+  const vfs = new MemoryFsSync();
+  vfs.loadFixture(Object.fromEntries(Object.entries(files).map(([k, v]) => [`/p/${k}`, v])));
+  setSyncMirror(vfs);
+  try {
+    createModuleLoader(vfs, { cwd: '/p' }).require('./main.js', '/p/x.js');
+  } catch (error) {
+    return formatFatalReport(error);
+  }
+  throw new Error('program did not throw');
+}
+
+it.each([
+  [
+    'an async function held the error before the rethrow',
+    "let saved;\n(async () => {\n  throw (saved = new Error('x'));\n})().catch(() => {});\nthrow saved;\n",
+  ],
+  [
+    'a promise executor held the error before the rethrow',
+    "let saved;\nnew Promise(() => {\n  throw (saved = new Error('x'));\n}).catch(() => {});\nthrow saved;\n",
+  ],
+])('%s: Node bytes but the header', async (_, source) => {
+  const { node, rifty } = await againstNode(source);
+  expect(headerOf(node)).toMatch(/^<root>\/main\.js:5\n/u);
+  expect(rifty).toBe(node.slice(node.indexOf('\n\n') + 2));
+});
+
+it('an object with a captured stack is inspected, not reported as an Error', async () => {
+  const source =
+    "class AppError {\n  constructor(m) {\n    this.message = m;\n    Error.captureStackTrace(this);\n  }\n}\nthrow new AppError('x');\n";
+  const { node, rifty } = await againstNode(source);
+  // Node's non-Error header (blank, `<file>:<line>`, source, caret) is not provable.
+  expect(node.split('\n').slice(0, 2)).toEqual(['', '<root>/main.js:7']);
+  expect(rifty).toBe(node.split('\n').slice(4).join('\n'));
+});
+
+it("a nested error's frames are projected like the report's own, its props and braces kept", () => {
+  const report = riftyFiles({ 'main.js': "throw { inner: new Error('x'), code: 7 };\n" });
+  expect(report).not.toMatch(/\/src\/|compileCjsSource|loader\.ts/u);
+  expect(report).toContain('at Object.<anonymous> (/p/main.js:1:16)');
+  expect(report).toMatch(/code: 7 \}\n\nNode\.js/u);
+  const limited = riftyFiles({
+    'main.js': "Error.stackTraceLimit = 1;\nthrow { inner: new Error('x'), code: 7 };\n",
+  });
+  Error.stackTraceLimit = 10;
+  expect(limited).toMatch(/code: 7 \}\n\nNode\.js/u);
+});
+
+it('a rejection held by a promise reaction: Node bytes but the header', async () => {
+  const head = "const p = Promise.resolve().then(() => {\n  throw new Error('x');\n});\n";
+  const oracle = await runNodeFileOracle({
+    name: 'unit',
+    files: { 'main.js': `${head}p.catch((err) => setTimeout(() => { throw err; }));\n` },
+    argv: ['main.js'],
+  });
+  const node = nodeFileExpected(oracle, 'v24.0.0').stderr;
+  const vfs = new MemoryFsSync();
+  vfs.loadFixture({ '/p/main.js': `${head}p.catch(() => {});\nmodule.exports = p;\n` });
+  setSyncMirror(vfs);
+  const held = createModuleLoader(vfs, { cwd: '/p' }).require(
+    './main.js',
+    '/p/x.js',
+  ) as Promise<void>;
+  const error = await held.then(
+    () => null,
+    (reason: unknown) => reason,
+  );
+  const rifty = nodeFileNormalized(
+    { stdout: '', stderr: formatFatalReport(error), exitCode: 1 },
+    '/p',
+  ).stderr;
+  expect(headerOf(node)).toMatch(/^<root>\/main\.js:4\n/u);
+  expect(rifty).toBe(node.slice(node.indexOf('\n\n') + 2));
+});
+
+it.each([
+  ['an error that is its own cause', "const e = new Error('x');\ne.cause = e;\nthrow e;\n"],
+  [
+    'an enumerable getter that throws',
+    "const e = new Error('x');\nObject.defineProperty(e, 'bad', { enumerable: true, get() { throw new Error('g'); } });\nthrow e;\n",
+  ],
+  [
+    'an enumerable getter that never returns',
+    "const e = new Error('x');\nObject.defineProperty(e, 'spin', { enumerable: true, get() { for (;;) {} } });\nthrow e;\n",
+  ],
+  [
+    'a subclass hiding the name',
+    "class NotFound extends Error {}\nthrow new NotFound('missing');\n",
+  ],
+  ['a subclass carrying the name', "class MyError extends Error {}\nthrow new MyError('m');\n"],
+  [
+    'nested getters, holes and a long list',
+    "const e = new Error('x');\ne.detail = { get ran() { console.log('RAN'); return 1; }, a: { get bad() { throw new Error('g'); } } };\ne.holes = new Array(1e5);\nthrow e;\n",
+  ],
+  [
+    'an array prop with extra keys',
+    "const e = new Error('x');\nconst a = [1, 2];\na['-1'] = 'neg';\na['1.5'] = 'frac';\na['a-b'] = 'dash';\na[Symbol('s')] = 'sym';\ne.a = a;\nthrow e;\n",
+  ],
+  [
+    'message lines that read like frames, top-level and as a cause',
+    "const e = new Error('first\\n    at config file');\ne.cause = new Error('c\\n    at x (y.js:1:1)', { cause: new Error('d\\n  at z') });\nthrow e;\n",
+  ],
+  [
+    "a guest's own U+FFFF, in the message and a prop",
+    "const e = new Error('keep \\uFFFF char\\n    at here');\ne.note = 'x\\uFFFFy';\nthrow e;\n",
+  ],
+  ['a key that needs quotes', "const e = new Error('x');\ne['my key'] = 2;\ne.ok = 1;\nthrow e;\n"],
+  ['symbol-keyed props', "const e = new Error('x');\ne[Symbol('k')] = 1;\ne.a = 2;\nthrow e;\n"],
+  [
+    'an array element getter',
+    "const e = new Error('x');\ne.list = [1, 2];\nObject.defineProperty(e.list, 0, { get() { console.log('RAN'); throw new Error('g'); } });\nthrow e;\n",
+  ],
+  [
+    'a cause chain deeper than the report inspects',
+    "let e = new Error('leaf');\nfor (let i = 0; i < 5000; i++) e = new Error('e' + i, { cause: e });\nthrow e;\n",
+  ],
+  [
+    'a cause whose Proxy traps throw',
+    "const trap = () => {\n  throw new Error('trap');\n};\nthrow new Error('x', { cause: new Proxy({}, { get: trap, ownKeys: trap, getPrototypeOf: trap }) });\n",
+  ],
+  [
+    'a stack getter that throws',
+    "const e = new Error('x');\nObject.defineProperty(e, 'stack', { get() { throw new Error('boom'); } });\nthrow e;\n",
+  ],
+  [
+    'a hand-written stack',
+    "const e = new Error('x');\ne.stack = 'Error: x\\n    at fake (z.js:1:1)';\nthrow e;\n",
+  ],
+])('%s: Node bytes but the header', async (_, source) => {
+  const { node, rifty } = await againstNode(source);
+  expect(rifty).toBe(node.slice(node.indexOf('\n\n') + 2));
+});
+
+it('code compiled from a string keeps its frame, never a rifty path', () => {
+  const report = riftyReport(
+    "const n = 1;\nconst f = new Function('a', 'const b = 1;\\nthrow new Error(a);');\nf('x');\n",
+  );
+  expect(report).toContain('    at eval (eval at <anonymous>, <anonymous>:4:7)\n');
+  expect(report).not.toMatch(/function-import-routing|\/src\//u);
+});
+
+it("a direct eval frame names its module as origin, without Node's position", () => {
+  const report = riftyReport('eval(\'function f() {\\n  throw new Error("ev");\\n}\\nf();\');\n');
+  expect(report).toContain('    at f (eval at <anonymous> (/p/main.js), <anonymous>:2:9)\n');
+});
+
+it.each([
+  ['Buffer', "require('buffer').Buffer.from([1])"],
+  ['Date', 'new Date(0)'],
+  ['RegExp', '/r/'],
+])('a %s prop: its own getter never runs', (_, make) => {
+  const report = riftyReport(
+    `const v = ${make};\nObject.defineProperty(v, 'x', { enumerable: true, get() { globalThis.__riftyGetterRan = true; return 7; } });\nObject.defineProperty(v, 'toISOString', { get() { globalThis.__riftyGetterRan = true; return () => ''; } });\nconst e = new Error('x');\ne.v = v;\nthrow e;\n`,
+  );
+  expect(Reflect.get(globalThis, '__riftyGetterRan')).toBeUndefined();
+  expect(report).not.toContain('x: 7');
+  Reflect.deleteProperty(globalThis, '__riftyGetterRan');
+});
+
+it("require() of a top-level-await module reads Node's `Error [ERR_REQUIRE_ASYNC_MODULE]:` head", async () => {
+  const files = {
+    'main.js': "require('./tla.mjs');\n",
+    'tla.mjs': 'await 1;\nexport const a = 1;\n',
+  };
+  const oracle = await runNodeFileOracle({ name: 'unit', files, argv: ['main.js'] });
+  const head = (text: string) =>
+    text
+      .split('\n')
+      .find((line) => line.startsWith('Error'))
+      ?.split(':')[0];
+  const report = riftyFiles(files);
+  expect(head(report)).toBe('Error [ERR_REQUIRE_ASYNC_MODULE]');
+  expect(head(report)).toBe(head(nodeFileExpected(oracle, 'v24.0.0').stderr));
+});
+
+it('a non-enumerable `cause` accessor prints `[cause]: [Getter]` and never runs', () => {
+  const report = riftyReport(
+    "const e = new Error('x');\nObject.defineProperty(e, 'cause', { get() { globalThis.__riftyCauseRan = true; return 1; } });\nthrow e;\n",
+  );
+  expect(report).toMatch(/\{\n {2}\[cause\]: \[Getter\]\n\}/u);
+  expect(Reflect.get(globalThis, '__riftyCauseRan')).toBeUndefined();
+});
+
+/** Arrays with holes and extra keys as prop values, at any depth (generator vs live Node). */
+function arrayValueSource(seed: number): string {
+  let s = seed;
+  const next = (n: number) => {
+    s = (s * 1103515245 + 12345) >>> 0;
+    return s % n;
+  };
+  const array = (): string => {
+    const length = [0, 1, 2, 3, 5][next(5)] as number;
+    const parts = [`const a = new Array(${length});`];
+    for (let i = 0; i < length; i += 1) if (next(3) > 0) parts.push(`a[${i}] = ${next(10)};`);
+    const keys = ["'-1'", "'1.5'", "'x'", "'a-b'", "Symbol('s')"];
+    for (let k = next(3); k > 0; k -= 1) parts.push(`a[${keys[next(keys.length)]}] = ${next(10)};`);
+    return `(() => { ${parts.join(' ')} return a; })()`;
+  };
+  const value = (depth: number): string => {
+    const pick = depth === 0 ? 0 : next(3);
+    if (pick === 0) return array();
+    if (pick === 1) return `{ k: ${value(depth - 1)} }`;
+    return `[${value(depth - 1)}]`;
+  };
+  return `const e = new Error('x');\ne.p = ${value(next(4))};\nthrow e;\n`;
+}
+
+it('120 generated array-valued props: Node bytes but the header', async () => {
+  const wrong: string[] = [];
+  let extraKeys = 0;
+  for (let seed = 1; seed <= 120; seed += 1) {
+    const source = arrayValueSource(seed);
+    const { node, rifty } = await againstNode(source);
+    expect(node).toMatch(/^Error: x\n/mu);
+    if (/'-1'|'1\.5'|x: |'a-b'|Symbol\(s\)/u.test(node)) extraKeys += 1;
+    // Line breaking of nested values is rifty's declared layout: compare the content.
+    const flat = (text: string) => text.replace(/\s*\n\s+(?!at )/gu, ' ');
+    const expected = node.slice(node.indexOf('\n\n') + 2);
+    if (flat(rifty) !== flat(expected))
+      wrong.push(`${source}\n--- node\n${node}\n--- rifty\n${rifty}`);
+  }
+  expect(wrong.slice(0, 3)).toEqual([]);
+  // Not vacuous: the programs die of the generated error, extra keys included.
+  expect(extraKeys).toBeGreaterThan(40);
+}, 300_000);
+
+it('a loader error with a guest accessor on `code` or `requireStack`: the report runs neither', async () => {
+  const { ModuleLoadError } = await import('../src/module-loader/errors.ts');
+  for (const code of ['MODULE_NOT_FOUND', 'ERR_REQUIRE_ASYNC_MODULE'] as const) {
+    const error = new ModuleLoadError(code, './x', 'm', '/p/main.js', ['/p/main.js']);
+    let reads = 0;
+    for (const key of ['code', 'requireStack'])
+      Object.defineProperty(error, key, {
+        enumerable: true,
+        get() {
+          reads += 1;
+          return 'X';
+        },
+      });
+    const report = formatFatalReport(error);
+    expect(reads).toBe(0);
+    expect(report).toContain('code: [Getter]');
+    expect(report).toContain('requireStack: [Getter]');
+  }
+});

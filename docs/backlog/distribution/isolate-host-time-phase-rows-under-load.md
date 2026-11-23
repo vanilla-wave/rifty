@@ -41,6 +41,18 @@ Each row needs boot plus setup to finish within its `timeoutMs`. An output frame
 
 Owner: next isolate-host test-hygiene pickup; trigger: any of them red in CI. Rule: `docs/process/traps.md` wall-clock-assertion-under-load (no bigger bound; an event, or a stall at the judged point).
 
+2026-11-23 — PR #421 author run (macOS arm64, Node v24.16.0): five `pool-faults.test.ts`
+rows failed — the four ADR-0563 §6 "worker lost with no culprit" rows and "a cancelled
+call still running keeps its slot". Symptom: the test's `waitFor(() => children()…, 5000)`
+(the child worker process appearing) timed out at 5000 ms, not the 60 s test timeout.
+Conditions: load average ~65 from other sessions' work; reproduced 2/2 in the PR
+worktree right after a `pnpm build:libs` + isolate-host rebuild and once in a fresh
+`11b9397ee` worktree (the only vitest in it, others running elsewhere on the machine).
+Not reproduced by the manager on a clean `11b9397ee` copy: 30/30 five runs, load 6–15
+and 45–88 under 24 `yes` processes; main CI green. Cause unknown (memory or
+process-creation pressure, not CPU load alone).
+
 ## Challenge
 
 challenge: 2026-11-22 — finding capture; no premise critic (README §Challenge)
+

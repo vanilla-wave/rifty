@@ -42,7 +42,7 @@ restore, build using installed esbuild, reopen saved files, reset from the same
 snapshot. It proposes an explicit profile without replay acquisitions, retaining
 ordinary snapshot integrity and replay. This changes the offered capability;
 it is not an answer to this draft's replay-preserving question. Selected
-no-replay work lives in `epics/compact-dependency-snapshots/goal.md`.
+no-replay work is delivered by ADR-0547 (proof: `distribution/reference/compact-dependency-snapshots-evidence.md`).
 
 Current tar encoder over committed trees: removing cache entries saves
 3,745,601 B (Vite), 3,813,015 B (Vite 8), 3,746,182 B (TypeScript) after gzip.
@@ -131,7 +131,7 @@ independently; no public API and no ADR is contradicted by asking.
 
 ## Decisions
 
-- 2026-10-23 — re-cut: selected no-replay scope goes to `epics/compact-dependency-snapshots/goal.md`; this draft retains replay-preserving deduplication — trace: none.
+- 2026-10-23 — re-cut: selected no-replay scope is delivered by ADR-0547 (proof: `distribution/reference/compact-dependency-snapshots-evidence.md`); this draft retains replay-preserving deduplication — trace: none.
 - 2026-10-23 — user: «1, но если убирается и в других местах - ок»; «Редактор не вызывает установку; отдельный запрет не нужен (рекомендую)» — no-COI SDK, no new install ban; evidence: `playground/reference/replay-cache-profile-refine-2026-10-23.md`.
 
 - 2026-09-07 — challenge response: removed assigned encoding savings from why/user_story; independent tar.gz dedup value awaits measurement after producer delivery, so this draft remains unscheduled.

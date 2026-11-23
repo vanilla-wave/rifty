@@ -26,7 +26,17 @@ all loud:
 - No-listener uncaught throw (`setTimeout(() => { throw … })`): ADR-0445 rule
   3 keeps the realm's default report, so the toolchain Worker crashes —
   command `failed`, `Worker crashed: Uncaught Error: …`, replaced; runBin
-  rejects. Node: stderr + 1.
+  rejects. Node: stderr + 1. Measured 2026-11-23 on PR #421's tree (same as
+  main): `setTimeout(() => { throw new Error('x') }, 0)` → `status: 'failed'`,
+  `exitCode: null`, stdout kept, stderr '', `error: { code: 'WORKER_CRASHED',
+  message: 'Worker crashed: Uncaught Error: x' }`, toolchain Worker `replaced`,
+  the sandbox's next command fine. PR #421 had closed it for the project
+  command with a realm-trap fatal terminal; that change was rolled back with
+  the browser-process lifecycle after it broke ADR-0340 twice (a canceled global
+  error became terminal — review rounds 3 and 4; ADR-0445 2026-11-23 rollback
+  line; `runtime-js/browser-host-realm-uncaught-fatal-report`). Carrier rows
+  `throw-from-timer`, `fatal-with-queued-*`, `rethrow-after-import`,
+  `listener-rethrows-from-later-timer` pin the SDK's stderr '' and `exitCode` null.
 - `node -e` fatal rejection or throw: the eval lifecycle rejects the drain
   with its projected error (not an exit signal) → `failed`, empty stderr,
   replaced. Node: stderr + 1.

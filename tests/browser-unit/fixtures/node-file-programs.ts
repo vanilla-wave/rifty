@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -55,6 +55,36 @@ const DEP_FACTS = `module.exports = {
 `;
 
 const LEAF = 'exports.where = [__filename.slice(__dirname.length), require.main === module];\n';
+
+/** Sources whose meaning depends on the start of the file; `forms.js` requires each. */
+const FIRST_LINE_FORMS: Readonly<Record<string, string>> = {
+  'forms.js': `const out = {};
+for (const name of ['ws', 'cmt', 'mlcmt', 'line2', 'open', 'bang', 'bom', 'strict', 'strict-cmt', 'late', 'bang-ws', 'bom-bang', 'midline']) {
+  globalThis.ran = false;
+  try {
+    out[name] = require('./first/' + name).v;
+  } catch (e) {
+    out[name] = 'refused' + (globalThis.ran ? ' (ran)' : '');
+  }
+}
+module.exports = JSON.stringify(out);
+`,
+  'first/ws.js': '   --> legacy\nexports.v = "ws";\n',
+  'first/cmt.js': '/* a */ --> legacy\nexports.v = "cmt";\n',
+  'first/mlcmt.js': '/* a\n */ --> legacy\nexports.v = "mlcmt";\n',
+  'first/line2.js': 'exports.v = "line2";\n--> legacy\n',
+  'first/open.js': '<!-- legacy\nexports.v = "open" <!-- trailing\n;\n',
+  'first/bang.js': '#!/usr/bin/env node\nexports.v = "bang";\n',
+  'first/bom.js': '\uFEFFexports.v = "bom";\n',
+  'first/strict.js': '"use strict";\nexports.v = (function () { return this; })() === undefined;\n',
+  'first/strict-cmt.js':
+    '/* c */ "use strict";\nexports.v = (function () { return this; })() === undefined;\n',
+  'first/late.js':
+    'var a;\n"use strict";\nexports.v = (function () { return this; })() === undefined;\n',
+  'first/bang-ws.js': ' #!/usr/bin/env node\nglobalThis.ran = true;\n',
+  'first/bom-bang.js': '\uFEFF#!/usr/bin/env node\nglobalThis.ran = true;\n',
+  'first/midline.js': 'globalThis.ran = true;\nx = 1 --> 0;\n',
+};
 
 const entryFiles = {
   'lib/dep.js': DEP_FACTS,
@@ -121,6 +151,15 @@ console.log(first.n, second.n, first === second, require.cache[key].exports === 
 `,
       'counter.js':
         'globalThis.loads = (globalThis.loads || 0) + 1;\nexports.n = globalThis.loads;\n',
+    },
+    argv: ['main.js'],
+  },
+  {
+    // The wrapper must not change what a file's start means (N3 class).
+    name: 'first-line-html-close',
+    files: {
+      'main.js': '--> legacy comment\nconsole.log("ok", require("./forms"));\n',
+      ...FIRST_LINE_FORMS,
     },
     argv: ['main.js'],
   },
@@ -220,6 +259,69 @@ export const fatalPrograms: readonly NodeFileProgram[] = [
     argv: ['main.js'],
   },
   {
+    name: 'rejection-with-props-cause-subclass',
+    files: {
+      'main.js':
+        "class Bad extends Error {}\nconst e = new Bad('r', { cause: new Error('c') });\ne.code = 'E_X';\nPromise.reject(e);\n",
+    },
+    argv: ['main.js'],
+  },
+  {
+    name: 'rejection-fs-enoent',
+    files: { 'main.js': "require('fs').promises.readFile('missing.txt');\n" },
+    argv: ['main.js'],
+  },
+  {
+    name: 'rejection-after-stack-read',
+    files: {
+      'main.js':
+        "(async () => {\n  try {\n    throw new Error('x');\n  } catch (e) {\n    console.log('failed:', String(e.stack).split('\\n')[0]);\n    throw e;\n  }\n})();\n",
+    },
+    argv: ['main.js'],
+  },
+  {
+    name: 'error-hostile-props',
+    files: {
+      'main.js': `const e = new Error('x');
+e.detail = { get ran() { console.log('GETTER RAN'); return 1; }, a: { get bad() { throw new Error('g'); } } };
+e.holes = new Array(1e5);
+e.list = Array.from({ length: 150 }, (_, i) => i);
+throw e;
+`,
+    },
+    argv: ['main.js'],
+  },
+  {
+    name: 'error-deep-cause',
+    files: {
+      'main.js':
+        "let e = new Error('leaf');\nfor (let i = 0; i < 5000; i++) e = new Error('e' + i, { cause: e });\nthrow e;\n",
+    },
+    argv: ['main.js'],
+  },
+  {
+    name: 'error-throwing-proxy-cause',
+    files: {
+      'main.js':
+        "const trap = () => {\n  throw new Error('trap');\n};\nthrow new Error('x', { cause: new Proxy({}, { get: trap, ownKeys: trap, getPrototypeOf: trap }) });\n",
+    },
+    argv: ['main.js'],
+  },
+  {
+    name: 'error-throwing-stack-getter',
+    files: {
+      'main.js':
+        "const e = new Error('x');\nObject.defineProperty(e, 'stack', { get() { throw new Error('boom'); } });\nthrow e;\n",
+    },
+    argv: ['main.js'],
+  },
+  { name: 'throw-null', files: { 'main.js': 'const a = 1;\nthrow null;\n' }, argv: ['main.js'] },
+  {
+    name: 'throw-in-direct-eval',
+    files: { 'main.js': 'eval(\'function f() {\\n  throw new Error("ev");\\n}\\nf();\');\n' },
+    argv: ['main.js'],
+  },
+  {
     name: 'error-with-props',
     files: { 'main.js': "const err = new TypeError('x');\nerr.code = 'E_X';\nthrow err;\n" },
     argv: ['main.js'],
@@ -240,13 +342,99 @@ export const fatalPrograms: readonly NodeFileProgram[] = [
     argv: ['main.js'],
   },
   {
+    name: 'throw-from-named-timer',
+    files: {
+      'main.js': "function tick() {\n  throw new Error('tick');\n}\nsetTimeout(tick, 1);\n",
+    },
+    argv: ['main.js'],
+  },
+  {
+    name: 'rethrow-after-import',
+    files: {
+      'main.js': "import('./dep.js').catch((err) => setTimeout(() => {\n  throw err;\n}, 1));\n",
+      'dep.js': "const a = 1;\nthrow new Error('dep');\n",
+    },
+    argv: ['main.js'],
+  },
+  {
+    name: 'listener-logs-and-rethrows',
+    files: {
+      'main.js':
+        "process.on('uncaughtException', (err) => {\n  console.log('log');\n  throw err;\n});\nsetTimeout(() => {\n  throw new Error('a');\n}, 1);\n",
+    },
+    argv: ['main.js'],
+  },
+  {
+    name: 'listener-rethrows-from-later-timer',
+    files: {
+      'main.js':
+        "process.once('uncaughtException', (e) => {\n  setTimeout(() => {\n    throw e;\n  }, 5);\n});\nsetTimeout(() => {\n  throw new Error('first');\n}, 1);\n",
+    },
+    argv: ['main.js'],
+  },
+  {
+    name: 'fatal-with-queued-timer',
+    files: {
+      'main.js':
+        "setTimeout(() => {\n  throw new Error('a');\n}, 1);\nsetTimeout(() => console.log('queued'), 1);\n",
+    },
+    argv: ['main.js'],
+  },
+  {
+    name: 'fatal-with-queued-in-callback',
+    files: {
+      'main.js':
+        "setTimeout(() => {\n  setTimeout(() => console.log('queued'), 0);\n  setImmediate(() => console.log('immediate'));\n  throw new Error('a');\n}, 1);\n",
+    },
+    argv: ['main.js'],
+  },
+  {
+    name: 'fatal-with-queued-exit-zero',
+    files: {
+      'main.js':
+        "setTimeout(() => {\n  throw new Error('a');\n}, 1);\nsetTimeout(() => process.exit(0), 1);\n",
+    },
+    argv: ['main.js'],
+  },
+  {
+    name: 'rejection-with-queued-work',
+    files: {
+      'main.js':
+        "Promise.reject(new Error('r'));\nsetTimeout(() => console.log('queued'), 0);\nprocess.nextTick(() => console.log('tick'));\n",
+    },
+    argv: ['main.js'],
+  },
+  {
     name: 'syntax-error-entry',
     files: { 'main.js': 'const a = 1;\nlet x = ;\n' },
     argv: ['main.js'],
   },
   {
+    name: 'stray-closing-brace',
+    files: {
+      'main.js':
+        'function a() {\n  console.log("a");\n}}\nconsole.log("top");\nfunction b() {\n  console.log("b");\n}\n',
+    },
+    argv: ['main.js'],
+  },
+  {
+    name: 'stray-brace-closed-later',
+    files: { 'main.js': 'console.log("start");\n}\nconsole.log("after");\n{\n' },
+    argv: ['main.js'],
+  },
+  {
+    name: 'wrapper-escape',
+    files: { 'main.js': 'console.log("inside");\n}); console.log("escaped"); (function () {\n' },
+    argv: ['main.js'],
+  },
+  {
     name: 'syntax-error-dependency',
     files: { 'main.js': "require('./lib/broken');\n", 'lib/broken.js': 'function (\n' },
+    argv: ['main.js'],
+  },
+  {
+    name: 'syntax-error-missing-paren',
+    files: { 'main.js': 'const a = 1;\nfoo((a) });\n' },
     argv: ['main.js'],
   },
   { name: 'module-not-found-entry', files: {}, argv: ['missing.js'] },
@@ -278,13 +466,25 @@ export interface NodeFileOutcome {
   readonly exitCode: number | null;
 }
 
-/** Live `node <argv>` in a fresh temp dir; `root` is its realpath (macOS `/private/var/…`). */
+/**
+ * Every oracle root's length, on every platform: the rifty root matches it
+ * (`nodeFileRoot`), so inspect breaks printed paths alike and the pins hold on
+ * Linux (`/tmp/…`) and macOS (`/private/var/folders/…`).
+ */
+const ORACLE_ROOT_LENGTH = 96;
+
+/** Live `node <argv>` in a fresh temp dir; `root` is a realpath dir of `ORACLE_ROOT_LENGTH`. */
 export async function runNodeFileOracle(
   program: NodeFileProgram,
 ): Promise<NodeFileOutcome & { readonly root: string; readonly version: string }> {
   const directory = await mkdtemp(join(tmpdir(), 'rifty-node-file-'));
-  const physical = await realpath(directory);
+  const temp = await realpath(directory);
+  const width = ORACLE_ROOT_LENGTH - temp.length - 1;
+  const physical = `${temp}/${'r'.repeat(Math.max(width, 1))}`;
   try {
+    // A longer TMPDIR cannot give every platform one root length: refused, cleaned up.
+    if (width < 1) throw new Error(`TMPDIR ${temp} is longer than ${ORACLE_ROOT_LENGTH - 2}`);
+    await mkdir(physical);
     for (const [path, content] of Object.entries(program.files)) {
       await mkdir(dirname(join(physical, path)), { recursive: true });
       await writeFile(join(physical, path), content);
@@ -334,17 +534,39 @@ export function nodeFileExpected(
   if (/^node:\S+:\d+$/u.test(lines[0] ?? '')) lines.splice(0, 4);
   for (const line of lines) {
     if (/^\s+\.\.\. \d+ lines? matching cause stack trace \.\.\.$/u.test(line)) continue;
-    const internal = /^\s+at (?:async )?(?:.* \()?node:[^)\s]*\)?( \{)?$/u.exec(line);
+    const internal = /^\s+at (?:async )?(?:.* \()?node:[^)\s]*\)?( \{|,)?$/u.exec(line);
     if (internal === null) kept.push(line);
-    // inspect opens the props block on the last frame line: it moves up a line.
-    else if (internal[1] !== undefined) kept.push(`${kept.pop() ?? ''} {`);
+    // inspect's props opener or list comma on the last frame line moves up a line.
+    else if (internal[1] !== undefined) kept.push(`${kept.pop() ?? ''}${internal[1]}`);
   }
   const stderr = kept.join('\n').replace(/^Node\.js v\d+\.\d+\.\d+$/mu, `Node.js ${riftyVersion}`);
   return nodeFileNormalized({ ...oracle, stderr }, oracle.root);
 }
 
+/**
+ * A rifty project root under `parent` as long as the oracle's temp dir, so
+ * util.inspect's 80-column line breaking over printed paths decides alike on
+ * both sides of the one `<root>` rewrite.
+ */
+export function nodeFileRoot(parent: string, name: string, oracleRoot: string): string {
+  const width = oracleRoot.length - parent.length;
+  if (width < name.length)
+    throw new Error(`oracle root ${oracleRoot} is shorter than ${parent}${name}`);
+  return `${parent}${name.padEnd(width, '_')}`;
+}
+
+/**
+ * The browser hosts print main's fatal text, which carries rifty's runtime
+ * frames at the dev server's URLs (ADR-0445 2026-11-23 rollback): a served
+ * runtime location reads `<runtime>/packages/<file>` (port, checkout path and
+ * line:column dropped), so a pin holds on every machine.
+ */
+const RUNTIME_LOCATION =
+  /https?:\/\/[^\s()]*?\/packages\/([^\s():?]+)(?:\?[^\s():]*)?(?::\d+){0,2}/gu;
+
 export function nodeFileNormalized(outcome: NodeFileOutcome, root: string): NodeFileOutcome {
-  const paths = (text: string) => text.split(root).join('<root>');
+  const paths = (text: string) =>
+    text.split(root).join('<root>').replace(RUNTIME_LOCATION, '<runtime>/packages/$1');
   return {
     stdout: paths(outcome.stdout),
     stderr: paths(outcome.stderr),
@@ -352,34 +574,46 @@ export function nodeFileNormalized(outcome: NodeFileOutcome, root: string): Node
   };
 }
 
-export type NodeFileHost = 'no-COI' | 'COI';
+export type NodeFileHost = 'no-COI' | 'COI' | 'isolate';
 
 /**
- * Expected-failure rows: a row listed for a host is not at Node parity yet and
- * must still differ (a fix that lands makes it fail until removed here); every
- * other row must equal Node. Shrinks to empty as the goal's map lands.
+ * Each row's verdict per host (`node-file-pins.json`): `"node"` — equal to
+ * Node; otherwise rifty's exact normalized outcome, which must also still
+ * differ from Node, so any change (a fix or a new defect) fails until the pin
+ * moves. Every pinned row is a named compat row (process.md "Fatal error
+ * stderr bytes", modules.md, isolate-host.md). Regenerate from
+ * `NODE_FILE_DUMP` output only after reading the diff.
  */
-const LANDED = new Set(['entry-main-guard', 'entry-cjs-extension', 'entry-directory']);
-const OPEN = [...entryPrograms, ...fatalPrograms]
-  .map((program) => program.name)
-  .filter((name) => !LANDED.has(name));
-export const nodeFileOpenRows: Readonly<Record<NodeFileHost, ReadonlySet<string>>> = {
-  'no-COI': new Set(OPEN),
-  COI: new Set(OPEN),
+export const nodeFilePins = JSON.parse(
+  readFileSync(new URL('./node-file-pins.json', import.meta.url), 'utf8'),
+) as Readonly<Record<NodeFileHost, Readonly<Record<string, NodeFilePin>>>>;
+
+type NodeFilePin = NodeFileOutcome | 'node';
+
+/**
+ * Rows whose rifty outcome races (two timers due in one host turn): the pin
+ * holds without stdout, which is the pin's or the declared residual.
+ */
+export const nodeFileRacy: Readonly<Record<string, string>> = {
+  'fatal-with-queued-timer': 'queued\n',
 };
 
-interface SoftExpect {
-  soft(
-    actual: unknown,
-    message?: string,
-  ): {
-    toEqual(expected: unknown): void;
-    not: { toEqual(expected: unknown): void };
-  };
+interface Expectation {
+  toEqual(expected: unknown): void;
+  toContain(item: unknown): void;
+  not: { toEqual(expected: unknown): void };
 }
 
+/**
+ * A Node-format report header's first line (`<file>:<line>` alone, unindented). rifty
+ * prints none on any host (ADR-0445 2026-11-22): JS cannot read V8's message
+ * location, so a printed one could only be inferred.
+ */
+export const NODE_HEADER = /^\S+:\d+$/mu;
+
+/** One row's assertion against its pin; `assert` is vitest's or playwright's (soft) expect. */
 export function nodeFileVerdict(
-  expect: SoftExpect,
+  assert: (actual: unknown, message?: string) => Expectation,
   host: NodeFileHost,
   row: {
     readonly program: NodeFileProgram;
@@ -388,13 +622,25 @@ export function nodeFileVerdict(
   },
 ): void {
   const label = `${host} ${row.program.name}`;
-  if (nodeFileOpenRows[host].has(row.program.name)) {
-    expect
-      .soft(row.actual, `${label}: open row now equals Node — remove it from nodeFileOpenRows`)
-      .not.toEqual(row.expected);
-  } else {
-    expect.soft(row.actual, `${label} vs Node`).toEqual(row.expected);
+  const pin = nodeFilePins[host][row.program.name];
+  if (pin === undefined) throw new Error(`${label}: no pin in node-file-pins.json`);
+  assert(NODE_HEADER.exec(row.actual.stderr)?.[0] ?? null, `${label}: no Node header`).toEqual(
+    null,
+  );
+  if (pin === 'node') {
+    assert(row.actual, `${label} vs Node`).toEqual(row.expected);
+    return;
   }
+  const racy = nodeFileRacy[row.program.name];
+  if (racy !== undefined) {
+    assert({ ...row.actual, stdout: '' }, `${label} vs its pin`).toEqual({ ...pin, stdout: '' });
+    assert([pin.stdout, `${pin.stdout}${racy}`], label).toContain(row.actual.stdout);
+    return;
+  }
+  assert(row.actual, `${label} vs its pin (a change: read the diff, then move the pin)`).toEqual(
+    pin,
+  );
+  assert(row.actual, `${label}: pinned row equals Node — pin it "node"`).not.toEqual(row.expected);
 }
 
 /** Dev aid: `NODE_FILE_DUMP=<dir>` writes each host's rows for diffing. */

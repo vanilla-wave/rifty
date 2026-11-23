@@ -27,6 +27,9 @@ failed `require()` has scheduled a self-import. Rifty's directed
 `NotImplementedError('module-loader.cjs-import-job-failed-require')` remains a
 separate loader ceiling; this cache facade cannot relabel or silently bypass it.
 
-## Observed 2026-11-23
+## Landed — 2026-11-22
 
-In a `node <file>` run of the isolate sandbox (PR #419 external review): `typeof require.cache[__filename]` is `'undefined'` (Node v24.16.0: `'object'`).
+Goal `node-file-entry-parity`: `require.cache` is the loader's CJS record
+object (delete reloads, an assigned entry is returned). Remaining: ES modules
+loaded by `require(esm)` are absent from it, and the failed-require
+self-import ceiling above.

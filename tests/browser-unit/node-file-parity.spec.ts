@@ -6,6 +6,7 @@ import {
   nodeFileDump,
   nodeFileExpected,
   nodeFileNormalized,
+  nodeFileRoot,
   nodeFileVerdict,
   runNodeFileOracle,
 } from './fixtures/node-file-programs.ts';
@@ -53,15 +54,17 @@ test('node <file> matches Node (COI Workbench)', async ({ page }) => {
     await writeOwnerFile(page, '/scratch/nf/package.json', '{}\n');
     await writeOwnerFile(page, '/scratch/nf/runner.cjs', RUNNER);
     for (const program of programs) {
-      const dir = `/scratch/nf/${program.name}`;
+      const oracle = oracles.get(program.name);
+      if (oracle === undefined) throw new Error(`missing oracle for ${program.name}`);
+      const name = nodeFileRoot('/home/project/nf/', program.name, oracle.root).slice(
+        '/home/project/nf/'.length,
+      );
+      const dir = `/scratch/nf/${name}`;
       await writeOwnerFile(page, `${dir}/.keep`, '');
       for (const [path, content] of Object.entries(program.files)) {
         await writeOwnerFile(page, `${dir}/${path}`, content);
       }
-      const run = await execLine(
-        page,
-        `node nf/runner.cjs nf/${program.name} ${program.argv.join(' ')}`,
-      );
+      const run = await execLine(page, `node nf/runner.cjs nf/${name} ${program.argv.join(' ')}`);
       const json = /@@NF(.*)NF@@/su.exec(run.out)?.[1];
       if (json === undefined)
         throw new Error(`${program.name}: runner printed no result\n${run.out}`);
@@ -71,12 +74,10 @@ test('node <file> matches Node (COI Workbench)', async ({ page }) => {
         stderr: string;
         exitCode: number;
       };
-      const oracle = oracles.get(program.name);
-      if (oracle === undefined) throw new Error(`missing oracle for ${program.name}`);
       const expected = nodeFileExpected(oracle, riftyVersion);
       const actual = nodeFileNormalized(observed, observed.root);
       dump.push({ program, expected, actual });
-      nodeFileVerdict(expect, 'COI', { program, expected, actual });
+      nodeFileVerdict(expect.soft, 'COI', { program, expected, actual });
     }
   } finally {
     nodeFileDump('COI', dump);

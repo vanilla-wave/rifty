@@ -43,3 +43,4 @@ SDK/copied Worker Vite build/edit/reopen/update/interruption/quota journey.
   esbuild executes its upstream Node entry through SW children, without
   lock-derived adapter activation. Invalid locks remain untouched; installed
   builds still run, as Node. Snapshot/replay validation remains mandatory.
+- 2026-10-23 — ADR-0547 admits explicit compact v5 through shared preflight; no cache writes/flush, unchanged payload validation, overlay and saved access.

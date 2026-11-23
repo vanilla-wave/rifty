@@ -1,20 +1,77 @@
 import { NotImplementedError } from '@riftydev/io';
+import type { InstallResult } from '@riftydev/npm-client';
 import { planShadowSubstitutionsFromLockfile } from '@riftydev/npm-client/internal';
+import type { PersistFailureReport, Vfs } from '@riftydev/vfs';
 import {
   type PackageAcquisitionAuthority,
+  PackageAcquisitionError,
   createPackageAcquisitionAuthority,
 } from '../workers/package-acquisition-authority.ts';
-import { type DepSnapshotV3, prepareDepSnapshotRestore } from './dep-snapshot.ts';
+import {
+  type DepSnapshot,
+  prepareDepSnapshotRestore,
+  fetchDepSnapshot as realFetchDepSnapshot,
+} from './dep-snapshot.ts';
+import { installArtifactIdentity } from './install-artifact-identity.ts';
 import {
   type InstallStampAuthority,
   createInstallStampAuthority,
 } from './install-stamp-authority.ts';
 import { readPackageJsonText } from './install-stamp.ts';
-import {
-  type EnsureProjectDepsOptions,
-  clearProjectTree,
-  prepareProjectInstallTree,
-} from './project-deps.ts';
+import { clearProjectTree, prepareProjectInstallTree } from './project-deps.ts';
+import type { WorkspaceArchiveFs } from './workspace-archive.ts';
+
+/**
+ * Test harness for the package authority's `ensure` command: stamp → snapshot →
+ * install over one FIFO; `log` receives raw authority reason codes. Production retired this stamp-miss restore; instant
+ * dependencies arrive only by first materialization or explicit apply
+ * (ADR-0135 correction 2026-11-17, ADR-0394, ADR-0415).
+ */
+export type ProjectDepsSource = 'stamp' | 'snapshot' | 'install' | 'none';
+
+export interface EnsureProjectDepsResult {
+  readonly source: ProjectDepsSource;
+  readonly packages: number;
+}
+
+export interface EnsureProjectDepsOptions {
+  /** Async surface of the realm's VFS (stamp + package.json reads). */
+  readonly vfs: Vfs;
+  /** Sync surface of the SAME store (archive restore writes). */
+  readonly fsSync: WorkspaceArchiveFs;
+  readonly root: string;
+  readonly templateId: string;
+  /** Expected `templateId` inside the baked snapshot. Defaults to `templateId`. */
+  readonly snapshotTemplateId?: string;
+  /** Project identity (preset slug) — the install-stamp reuse key. A stamp from
+   *  a different slug never suppresses this project's install. */
+  readonly slug: string;
+  /** Baked snapshot URL; absent → no snapshot restore. */
+  readonly snapshotUrl?: string;
+  /** Exact manifest this acquisition owns; defaults to the current file. */
+  readonly packageJsonText?: string;
+  /**
+   * Runs the real installer; returns the installed package count. OPTIONAL:
+   * omit for a restore-only (`snapshot-only`) dispatch — then a stampless,
+   * snapshotless tree resolves to `'none'` (deps left absent) instead of an
+   * install.
+   */
+  readonly install?: () => Promise<InstallResult>;
+  readonly log: (line: string) => void;
+  /** Test seam; defaults to fetch + gunzip + parse. */
+  readonly fetchSnapshot?: (url: string) => Promise<DepSnapshot | null>;
+  /**
+   * Drains the realm's OPFS write-through and reports persist failures
+   * (ADR-0187 Corrected). NEVER awaited on the boot critical path — it promotes
+   * a PENDING stamp after a clean drain or leaves it untrusted after tree damage.
+   * Optional: absent on the memory backend and in restore-only harnesses.
+   */
+  readonly flush?: () => Promise<PersistFailureReport | undefined>;
+  /** One owner-realm FIFO shared with terminal npm. */
+  readonly packageAcquisitionAuthority: PackageAcquisitionAuthority;
+  /** Clear foreign dependency-owned files after durable demotion. */
+  readonly replaceTreeOnMiss?: boolean;
+}
 
 export type TestEnsureProjectDepsOptions = Omit<
   EnsureProjectDepsOptions,
@@ -34,24 +91,10 @@ export function createTestProjectPackageAcquisitionAuthority(
   return createPackageAcquisitionAuthority({
     stamps,
     ...(opts.flush ? { stampTransition: { flush: opts.flush } } : {}),
+    // Raw authority reason codes: assertions pin product data, not harness prose.
     observe: (event) => {
-      if (event.type !== 'snapshot-rejected') return;
-      const outcome = opts.install
-        ? ' — falling back to install\n'
-        : ' — dependencies remain absent (restore-only mode)\n';
-      if (event.reason === 'snapshot-unavailable') {
-        opts.log(`[workbench/worker] baked snapshot unavailable (${event.snapshotId})${outcome}`);
-      } else if (event.reason.startsWith('snapshot-fetch-failed:')) {
-        opts.log(
-          `[workbench/worker] baked snapshot unavailable (${event.snapshotId}): ${event.reason
-            .slice('snapshot-fetch-failed:'.length)
-            .trim()}${outcome}`,
-        );
-      } else {
-        opts.log(
-          `[workbench/worker] baked snapshot is stale (package.json or install artifacts drifted; re-run \`pnpm snapshots:bake\`)${outcome}`,
-        );
-      }
+      if (event.type === 'snapshot-rejected')
+        opts.log(`snapshot-rejected ${event.snapshotId} ${event.reason}\n`);
     },
     adapter: {
       readPackageLock: async (project) => {
@@ -78,7 +121,7 @@ export function createTestProjectPackageAcquisitionAuthority(
       },
       planSnapshotRestore: async ({ project, snapshot }) => {
         try {
-          const payload = snapshot.payload as DepSnapshotV3;
+          const payload = snapshot.payload as DepSnapshot;
           const prepared = await prepareDepSnapshotRestore(opts.fsSync, project.root, payload);
           const lockfile =
             payload.lockfile.length === 0
@@ -118,4 +161,79 @@ export function createTestProjectPackageAcquisitionAuthority(
       },
     },
   });
+}
+
+export async function ensureProjectDependencies(
+  opts: EnsureProjectDepsOptions,
+): Promise<EnsureProjectDepsResult> {
+  const packageJsonText =
+    opts.packageJsonText ?? (await readPackageJsonText(opts.vfs, opts.root)) ?? '';
+  const authority = opts.packageAcquisitionAuthority;
+  try {
+    const provenance = await authority.dispatch({
+      type: 'ensure',
+      project: {
+        projectId: opts.slug,
+        root: opts.root,
+        slug: opts.slug,
+        identity: installArtifactIdentity,
+      },
+      packageJsonText,
+      ...(opts.snapshotUrl
+        ? {
+            snapshotSource: {
+              snapshotId: opts.snapshotUrl,
+              resolve: () => resolveProjectSnapshot(opts),
+            },
+          }
+        : {}),
+      fallback: opts.install ? 'install' : 'snapshot-only',
+      replaceTreeOnMiss: opts.replaceTreeOnMiss ?? opts.install !== undefined,
+      onPromotion: (result) => {
+        if (result.status === 'refused') opts.log(`promotion refused ${result.reason}\n`);
+      },
+    });
+
+    switch (provenance.outcome) {
+      case 'existing':
+        return { source: 'stamp', packages: provenance.packages };
+      case 'snapshot':
+        return { source: 'snapshot', packages: provenance.packages };
+      case 'installed':
+        return { source: 'install', packages: provenance.packages.length };
+    }
+  } catch (error) {
+    if (
+      error instanceof PackageAcquisitionError &&
+      error.failure === 'snapshot-unavailable' &&
+      !opts.install
+    ) {
+      return { source: 'none', packages: 0 };
+    }
+    throw error;
+  }
+}
+
+async function resolveProjectSnapshot(opts: EnsureProjectDepsOptions) {
+  if (!opts.snapshotUrl) {
+    return { status: 'rejected' as const, reason: 'snapshot-not-configured' };
+  }
+  const fetchSnapshot = opts.fetchSnapshot ?? realFetchDepSnapshot;
+  const snapshot = await fetchSnapshot(opts.snapshotUrl);
+  if (!snapshot) {
+    return { status: 'rejected' as const, reason: 'snapshot-unavailable' };
+  }
+  const expectedSnapshotTemplateId = opts.snapshotTemplateId ?? opts.templateId;
+  if (snapshot.templateId !== expectedSnapshotTemplateId) {
+    return { status: 'rejected' as const, reason: 'snapshot-template-mismatch' };
+  }
+  return {
+    status: 'candidate' as const,
+    snapshot: {
+      snapshotId: opts.snapshotUrl,
+      identity: snapshot.installArtifactIdentity,
+      packageJsonText: snapshot.packageJsonText,
+      payload: snapshot,
+    },
+  };
 }
