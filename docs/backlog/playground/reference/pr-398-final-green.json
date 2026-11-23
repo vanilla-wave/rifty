@@ -1,6 +1,6 @@
 {
   "overall_verdict": "concern",
-  "merge_call": "Mergeable: no blockers at HEAD 7cf74e9c9; the landing verdict is committed at docs/backlog/playground/reference/pr-398-final-green.json and bound by its reviewed_sha (the copy at HEAD is still bound to eb80a87, so it must be replaced with this verdict plus reviewed_sha 7cf74e9c94e42ec89d41631f8744e00a19017417 for check:pass-binding, REV-8); merge waits for green PR CI at HEAD (PR-6); remaining findings are advisory NOTEs.",
+  "merge_call": "Mergeable: no blockers at HEAD 7cf74e9c9; the landing verdict is committed at docs/backlog/playground/reference/pr-398-final-green.json and bound by its reviewed_sha (REV-8); merge waits for green PR CI at HEAD (PR-6); remaining findings are advisory NOTEs.",
   "checkpoint": "Final+GREEN",
   "reviewed_sha": "7cf74e9c94e42ec89d41631f8744e00a19017417",
   "unit_goal_source": "PR #398 https://github.com/vanilla-wave/rifty/pull/398; observed baseline: OwnerPackageState.restore/transition (stamp-miss -> snapshot restore via ensureProjectDependencies, sole sender of project-switch.resetPackages) existed with no production caller, and first-materialization restore (owner-package-state.ts planSnapshotRestore) plus no-COI applyNoCoiSnapshot each verified the replay cache twice; BASE 11b9397eee2e8d820c7e2215d5c3e126eaed5348; HEAD 7cf74e9c94e42ec89d41631f8744e00a19017417. No ready contract document: direct user request, standalone unit.",
