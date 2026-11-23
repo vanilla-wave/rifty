@@ -136,3 +136,12 @@ consumer PASS @ the reception commit (Chromium 148.0.7778.96): terminal stderr
 Executed exits: replay snapshot apply + `toolchain.install` → same lock bytes, no
 `esbuild-wasm` request; terminal `rm package-lock.json && npm install` → exit 0,
 substitute resolved from the registry.
+
+2026-11-23, cross-review round 2 reception: host-only exit removed from the
+text (it fails on a changed project); one text on every surface, terminals
+prefix `npm: `:
+`EBROKENLOCK: package-lock.json installs esbuild@0.28.0 from its substitute esbuild-wasm@0.28.0 (shadow recipe rifty.shadow-substitution.esbuild.v2), but the tarball cache holds no intact copy of it. Lockfile replay takes substitutes only from that cache and never downloads them, so this lockfile cannot be reinstalled exactly here. To install anyway, delete package-lock.json and run install again: it re-resolves through the registry, and installed versions may change.`
+Packed consumer PASS on the reception tree (Chromium 148.0.7778.96): SDK
+`fs.rm('/project/package-lock.json')` + `toolchain.install` and terminal
+`rm package-lock.json && npm install` both re-resolve; on an unchanged project
+the replay-profile snapshot + `toolchain.install` reinstall the same lock bytes.

@@ -149,7 +149,7 @@ function replayFaultCache(fault: 'none' | 'missing' | 'missing-once' | 'corrupt'
 
 /** What the reader of an Eddy-staged cold-cache refusal gets (no package-lock.json on disk yet). */
 const eddyRefusal = [
-  `EBROKENLOCK: the lockfile Eddy resolved installs lightningcss@1.32.0 from its substitute ${SOURCE}@${SOURCE_VERSION} (shadow recipe rifty.shadow-substitution.lightningcss.v2), which the tarball cache dropped after Eddy seeded it.`,
+  `EBROKENLOCK: the lockfile Eddy resolved installs lightningcss@1.32.0 from its substitute ${SOURCE}@${SOURCE_VERSION} (shadow recipe rifty.shadow-substitution.lightningcss.v2), but the tarball cache lost its intact copy after Eddy seeded it.`,
   'Lockfile replay takes substitutes only from that cache and never downloads them. No project file was written; run install again to seed the cache from Eddy again.',
 ].join(' ');
 

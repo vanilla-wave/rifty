@@ -36,23 +36,6 @@ export async function prepareSavedToolchain(cwd: string) {
   return bindings;
 }
 
-/** `toolchain.install` reader is the host: name the exact-reinstall exit only it has (ADR-0547). */
-function hostShadowReplayCacheMiss(error: unknown): unknown {
-  const miss = error as { code?: unknown; reason?: unknown; message?: unknown } | null;
-  if (miss?.reason !== 'shadow-replay-cache-miss' || typeof miss.message !== 'string') return error;
-  return Object.assign(
-    new Error(
-      `${miss.message} Host exit: toolchain.applySnapshot with the replay-profile snapshot of these dependencies restores those bytes; toolchain.install then reinstalls this lockfile exactly.`,
-      { cause: error },
-    ),
-    {
-      code: miss.code,
-      packageName: (error as { packageName?: unknown }).packageName,
-      reason: miss.reason,
-    },
-  );
-}
-
 /** First-use package acquisition and activation; worker owns admission and snapshots. */
 export async function installToolchainPackages(
   input: ToolchainInstallRequest,
@@ -67,11 +50,7 @@ export async function installToolchainPackages(
   let result: InstallResult;
   let packageJsonText: string | undefined;
   if (npm === undefined)
-    result = await install({ vfs, cwd: input.cwd, registry, runtimeTier: 'no-coi' }).catch(
-      (error: unknown) => {
-        throw hostShadowReplayCacheMiss(error);
-      },
-    );
+    result = await install({ vfs, cwd: input.cwd, registry, runtimeTier: 'no-coi' });
   else {
     const installed = await executeNpmInstallOperation(npm.request, npm.context, {
       vfs,

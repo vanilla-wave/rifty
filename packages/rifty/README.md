@@ -203,10 +203,10 @@ the Workbench producer/copied Worker before using v5. Frozen promises no reinsta
 cold shared cache with the lockfile kept, Vite 7.3.6's substituted `esbuild` makes
 `toolchain.install` reject with:
 
-> EBROKENLOCK: package-lock.json installs esbuild@0.28.0 from its substitute esbuild-wasm@0.28.0 (shadow recipe rifty.shadow-substitution.esbuild.v2), which is not in the tarball cache. Lockfile replay takes substitutes only from that cache and never downloads them, so this lockfile cannot be reinstalled exactly here. To install anyway, delete package-lock.json and run install again: it re-resolves through the registry, and installed versions may change. Host exit: toolchain.applySnapshot with the replay-profile snapshot of these dependencies restores those bytes; toolchain.install then reinstalls this lockfile exactly.
+> EBROKENLOCK: package-lock.json installs esbuild@0.28.0 from its substitute esbuild-wasm@0.28.0 (shadow recipe rifty.shadow-substitution.esbuild.v2), but the tarball cache holds no intact copy of it. Lockfile replay takes substitutes only from that cache and never downloads them, so this lockfile cannot be reinstalled exactly here. To install anyway, delete package-lock.json and run install again: it re-resolves through the registry, and installed versions may change.
 
-A project-command `npm install` prints the same text without the `Host exit:` sentence,
-prefixed `npm: `. Outcomes: ADR-0547 §Consequences.
+A project-command `npm install` prints the same text prefixed `npm: `. The exact-reinstall
+route and its condition: ADR-0547 §Consequences.
 
 No registry URL is needed. Every application validates the bounded input and
 identities, including same-ID/forced calls. Default conflicts reject before

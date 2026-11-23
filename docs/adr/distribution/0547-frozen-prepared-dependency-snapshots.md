@@ -67,6 +67,13 @@ admission) — no route for Vite 7 while its lock is kept, since `esbuild` is
 transitive and stays lock-replayed. Deleting `package-lock.json` re-resolves from
 the registry (fetches `esbuild-wasm`; pins may move). A replay snapshot or warm
 cache restores the exact install. Vite 8 is not covered by these carriers.
+2026-11-23 (PR #426) — exact-reinstall route for the host, with its
+condition: the replay-profile snapshot of the same dependencies applies without
+`force` only while `package.json` and `package-lock.json` are unchanged since
+the frozen snapshot; then `toolchain.install` reinstalls the lock byte-exact
+from its replay cache. A changed `package.json` (or lock) conflicts by default;
+`force` applies but reverts the project edit (`no-coi-frozen-vite-install.contract.test.ts`,
+packed Chromium proof). The refusal text names only the lockless exit.
 
 ## Decisions
 
@@ -80,21 +87,22 @@ cache restores the exact install. Vite 8 is not covered by these carriers.
   `dep-snapshot-frozen.contract.test.ts`, `no-coi-frozen-install.contract.test.ts`,
   `no-coi-frozen-vite-install.contract.test.ts`. Goal id, #388 verdict and
   ledger keep `compact` as history.
-- 2026-11-23 — the cold-cache refusal names its cause and only exits its reader
-  can run; user: «давай тоже сделаем». `EBROKENLOCK`, `reason:
+- 2026-11-23 — the cold-cache refusal names its cause and only the exit every
+  reader can run; user: «давай тоже сделаем». `EBROKENLOCK`, `reason:
   'shadow-replay-cache-miss'` (was `shadow-trace-drift`; kept by the manager:
-  the terminal branches on it). Disk lock, every terminal: `package-lock.json
-  installs <pkg>@<v> from its substitute <src>@<v> (shadow recipe <id>), which
-  is not in the tarball cache`; replay never downloads substitutes, so the lock
-  cannot be reinstalled exactly there; exit: delete `package-lock.json` and
-  install again (re-resolves, versions may change). `toolchain.install` adds the
-  host-only exit: apply the replay-profile snapshot of these dependencies, then
-  install reinstalls the lock exactly. Eddy-staged lock (no file on disk): the
-  cache dropped the seeded substitute; exit: run install again. Each exit is
-  executed by its carrier (Vite node carriers, `services/eddy` client test,
-  packed Chromium proof). The prod cache returns null for corrupt bytes
-  (`VfsTarballCache.get`), so on-disk corruption gets this text and reason; the
-  `has corrupt pinned cache bytes` and `has an invalid replay-cache integrity`
-  texts (non-verifying caches, malformed lock integrity) are unchanged. Lock-
-  preserving network route stays `owner: user`
+  the terminal branches on it). Disk lock, both terminals and `toolchain.install`
+  (terminals prefix `npm: `): `package-lock.json installs <pkg>@<v> from its
+  substitute <src>@<v> (shadow recipe <id>), but the tarball cache holds no
+  intact copy of it`; replay never downloads substitutes, so the lock cannot be
+  reinstalled exactly there; exit: delete `package-lock.json` and install again
+  (re-resolves, versions may change). A host-only replay-snapshot exit was
+  dropped from the text (it fails on a changed project, §Consequences
+  2026-11-23 PR #426): its route lives in §Consequences. Eddy-staged lock (no
+  file on disk): the cache lost its intact copy after Eddy seeded it; exit: run
+  install again. Each exit is executed by its carrier (Vite node carriers,
+  `services/eddy` client test, packed Chromium proof). The prod cache returns
+  null for corrupt bytes (`VfsTarballCache.get`), so on-disk corruption gets
+  this text and reason; the `has corrupt pinned cache bytes` and `has an
+  invalid replay-cache integrity` texts (non-verifying caches, malformed lock
+  integrity) are unchanged. Lock-preserving network route stays `owner: user`
   (`docs/backlog/npm-client/shadow-pin-replay-bytes-cold-cache.md`).

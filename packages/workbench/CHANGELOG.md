@@ -13,7 +13,7 @@
 ## [Unreleased]
 
 - Public frozen v5 dependency snapshots (`profile: 'frozen'`) omit replay archives, retain prepared payload and shared cache, and use existing validation/application; default replay unchanged (ADR-0547). COI first-materialization restore of frozen skips the replay-cache persistence step too. Named `compact` before release (never published); `'compact'` is an unknown profile.
-- Terminal `npm install` prints a cold-cache substituted-pin refusal as the installer's own cause/exit text (`npm: EBROKENLOCK: …`), not `lockfile is broken (…); delete package-lock.json and retry`. No-COI `toolchain.install` appends the host-only exit: apply the replay-profile snapshot, then install reinstalls the lock exactly.
+- Terminal `npm install` prints a cold-cache substituted-pin refusal as the installer's own cause/exit text (`npm: EBROKENLOCK: …`), not `lockfile is broken (…); delete package-lock.json and retry`.
 - Remove the stamp-miss dependency restore (`restore`/`transition`, `ensureProjectDependencies`, dev-boot clean predicate) and the dev-server child cfg `bakedNodeModulesUrl`/`bakedNodeModulesTemplateId` fields only it read: no production caller; the authority's `project-switch.resetPackages` route goes too (only `transition` sent it). Snapshot restore runs only as first materialization or explicit apply (ADR-0135 correction 2026-11-17).
 
 - Verify a dependency snapshot's replay cache once per first-materialization restore and per no-COI `applySnapshot` (was twice; the no-COI path also projected twice). The removed pass is one base64 decode + SHA-512 of the 3.8 MB replay tarball: ~6.5 ms warm, 11–47 ms as a single cold call (Node 24.16, baked vite/vite8/typescript). Poisoned-cache fault tests now cover both paths.

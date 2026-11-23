@@ -186,7 +186,7 @@ export async function provePackedNoCoiSnapshots(
   });
 }
 
-/** Cold cache after frozen apply: what each reader gets, and each named exit run their way (ADR-0547). */
+/** Cold cache after frozen apply: the text each reader gets, and its exit run their way (ADR-0547). */
 async function proveColdFrozenInstall(context, boot, invoke, descriptor, registryOrigin, replay) {
   assert(registryOrigin, 'frozen cold-install proof needs the packed registry');
   const registryRequests = [];
@@ -205,27 +205,28 @@ async function proveColdFrozenInstall(context, boot, invoke, descriptor, registr
   const lock = JSON.parse(await invoke(page, 'read', '/package-lock.json')).packages;
   const trigger = lock['node_modules/esbuild'];
   const substitute = `esbuild-wasm@${lock['node_modules/esbuild-wasm'].version}`;
-  const terminalText = [
-    `EBROKENLOCK: package-lock.json installs esbuild@${trigger.version} from its substitute ${substitute} (shadow recipe ${trigger.riftyShadowRecipe}), which is not in the tarball cache.`,
+  const text = [
+    `EBROKENLOCK: package-lock.json installs esbuild@${trigger.version} from its substitute ${substitute} (shadow recipe ${trigger.riftyShadowRecipe}), but the tarball cache holds no intact copy of it.`,
     'Lockfile replay takes substitutes only from that cache and never downloads them, so this lockfile cannot be reinstalled exactly here.',
     'To install anyway, delete package-lock.json and run install again: it re-resolves through the registry, and installed versions may change.',
   ].join(' ');
-  const hostText = `${terminalText} Host exit: toolchain.applySnapshot with the replay-profile snapshot of these dependencies restores those bytes; toolchain.install then reinstalls this lockfile exactly.`;
   const terminal = await invoke(page, 'terminal', 'npm install');
   assert.equal(terminal.exitCode, 1, terminal.stderr);
-  assert.equal(terminal.stderr, `npm: ${terminalText}\n`);
+  assert.equal(terminal.stderr, `npm: ${text}\n`);
   const sdk = await invoke(page, 'install', registryOrigin);
-  assert.deepEqual(sdk, { ok: false, message: hostText });
+  assert.deepEqual(sdk, { ok: false, message: text });
   assert.deepEqual(substituteRequests(), [], 'substitute bytes are never downloaded');
-  // Host exact exit, as the host runs it.
-  const lockText = await invoke(page, 'read', '/package-lock.json');
-  await invoke(page, 'apply', replay);
+  // SDK exit, as the host runs it.
+  await invoke(page, 'remove', '/package-lock.json');
   assert.deepEqual(await invoke(page, 'install', registryOrigin), { ok: true });
-  assert.equal(await invoke(page, 'read', '/package-lock.json'), lockText, 'exact reinstall');
-  assert.deepEqual(substituteRequests(), [], 'exact reinstall reads the replay cache');
+  assert(
+    substituteRequests().length > 0,
+    'lockless install resolves the substitute from the registry',
+  );
   await invoke(page, 'dispose');
   await page.close();
-  // Terminal exit, as the terminal user runs it: re-resolves through the registry.
+  // Terminal exit, as the terminal user runs it.
+  registryRequests.length = 0;
   page = await fresh('packed-sdk-cold-install-lockless-frozen');
   const lockless = await invoke(page, 'terminal', 'rm package-lock.json && npm install');
   assert.equal(lockless.exitCode, 0, lockless.stderr);
@@ -235,9 +236,19 @@ async function proveColdFrozenInstall(context, boot, invoke, descriptor, registr
   );
   await invoke(page, 'dispose');
   await page.close();
+  // ADR-0547 §Consequences: on an unchanged project the replay-profile snapshot restores the exact install.
+  registryRequests.length = 0;
+  page = await fresh('packed-sdk-cold-install-replay-frozen');
+  const lockText = await invoke(page, 'read', '/package-lock.json');
+  await invoke(page, 'apply', replay);
+  assert.deepEqual(await invoke(page, 'install', registryOrigin), { ok: true });
+  assert.equal(await invoke(page, 'read', '/package-lock.json'), lockText, 'exact reinstall');
+  assert.deepEqual(substituteRequests(), [], 'exact reinstall reads the replay cache');
+  await invoke(page, 'dispose');
+  await page.close();
   console.log(`Frozen cold-cache install, terminal stderr: ${terminal.stderr.trimEnd()}`);
   console.log(`Frozen cold-cache install, toolchain.install rejection: ${sdk.message}`);
   console.log(
-    'Frozen cold-cache exits: replay snapshot + toolchain.install exact; terminal rm lock + npm install re-resolved',
+    'Frozen cold-cache exits: SDK rm lock + toolchain.install and terminal rm lock + npm install re-resolved; unchanged project + replay snapshot exact',
   );
 }

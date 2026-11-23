@@ -137,6 +137,7 @@ const api = {
     ),
   write: (path: string, content: string) => sandbox.fs.writeFile(`/project${path}`, content),
   read: (path: string) => sandbox.fs.readFile(`/project${path}`, 'utf8'),
+  remove: (path: string) => sandbox.fs.rm(`/project${path}`),
   async evaluate(source: string) {
     output = '';
     const result = await sandbox.runtime.eval(source);

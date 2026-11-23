@@ -244,10 +244,10 @@ Frozen adds no install ban, reinstall guarantee or registry fallback: on a cold 
 cache with the lockfile kept, Vite 7.3.6's substituted `esbuild` makes terminal
 `npm install` print:
 
-> npm: EBROKENLOCK: package-lock.json installs esbuild@0.28.0 from its substitute esbuild-wasm@0.28.0 (shadow recipe rifty.shadow-substitution.esbuild.v2), which is not in the tarball cache. Lockfile replay takes substitutes only from that cache and never downloads them, so this lockfile cannot be reinstalled exactly here. To install anyway, delete package-lock.json and run install again: it re-resolves through the registry, and installed versions may change.
+> npm: EBROKENLOCK: package-lock.json installs esbuild@0.28.0 from its substitute esbuild-wasm@0.28.0 (shadow recipe rifty.shadow-substitution.esbuild.v2), but the tarball cache holds no intact copy of it. Lockfile replay takes substitutes only from that cache and never downloads them, so this lockfile cannot be reinstalled exactly here. To install anyway, delete package-lock.json and run install again: it re-resolves through the registry, and installed versions may change.
 
-`toolchain.install` rejects with the same text plus a `Host exit:` sentence naming the
-replay-profile snapshot. Outcomes: ADR-0547 §Consequences.
+`toolchain.install` rejects with the same text without `npm: `. The exact-reinstall route
+and its condition: ADR-0547 §Consequences.
 
 For Brotli, pass `encoding: 'br'` to the same call and save `archive` as
 `dependencies.tar.br`. `contentEncoding` is `'br'` or `'gzip'`; omitted

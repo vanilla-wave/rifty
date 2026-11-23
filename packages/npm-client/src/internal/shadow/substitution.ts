@@ -239,8 +239,12 @@ interface ShadowReplayCacheMiss {
 /** Facts of errors minted here, so the installer can restate them for an Eddy-staged lock. */
 const shadowReplayCacheMisses = new WeakMap<Error, ShadowReplayCacheMiss>();
 
-function shadowReplayCacheMissError(miss: ShadowReplayCacheMiss, message: string): Error {
-  const error = Object.assign(new Error(message), {
+function shadowReplayCacheMissError(
+  miss: ShadowReplayCacheMiss,
+  message: string,
+  cause?: Error,
+): Error {
+  const error = Object.assign(new Error(message, cause === undefined ? undefined : { cause }), {
     code: 'EBROKENLOCK' as const,
     packageName: miss.packageName,
     reason: 'shadow-replay-cache-miss' as const,
@@ -267,7 +271,7 @@ function missingShadowReplayBytes(
   return shadowReplayCacheMissError(
     miss,
     [
-      `EBROKENLOCK: package-lock.json installs ${miss.locked} from its substitute ${miss.substitute} (shadow recipe ${miss.recipeId}), which is not in the tarball cache.`,
+      `EBROKENLOCK: package-lock.json installs ${miss.locked} from its substitute ${miss.substitute} (shadow recipe ${miss.recipeId}), but the tarball cache holds no intact copy of it.`,
       `${REPLAY_TAKES_CACHE_ONLY}, so this lockfile cannot be reinstalled exactly here.`,
       'To install anyway, delete package-lock.json and run install again: it re-resolves through the registry, and installed versions may change.',
     ].join(' '),
@@ -276,14 +280,16 @@ function missingShadowReplayBytes(
 
 /** Eddy stages its lock in memory (ADR-0182): same cause, no file to delete; null for other errors. */
 export function eddyShadowReplayCacheMiss(error: unknown): Error | null {
-  const miss = error instanceof Error ? shadowReplayCacheMisses.get(error) : undefined;
+  if (!(error instanceof Error)) return null;
+  const miss = shadowReplayCacheMisses.get(error);
   if (miss === undefined) return null;
   return shadowReplayCacheMissError(
     miss,
     [
-      `EBROKENLOCK: the lockfile Eddy resolved installs ${miss.locked} from its substitute ${miss.substitute} (shadow recipe ${miss.recipeId}), which the tarball cache dropped after Eddy seeded it.`,
+      `EBROKENLOCK: the lockfile Eddy resolved installs ${miss.locked} from its substitute ${miss.substitute} (shadow recipe ${miss.recipeId}), but the tarball cache lost its intact copy after Eddy seeded it.`,
       `${REPLAY_TAKES_CACHE_ONLY}. No project file was written; run install again to seed the cache from Eddy again.`,
     ].join(' '),
+    error,
   );
 }
 
