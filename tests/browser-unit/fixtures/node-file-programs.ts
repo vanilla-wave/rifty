@@ -319,7 +319,10 @@ throw e;
   {
     // Each way rifty calls user code: the frames' names, lines and columns.
     name: 'throw-from-interval',
-    files: { 'main.js': "const h = setInterval(() => {\n  clearInterval(h);\n  throw new Error('interval');\n}, 0);\n" },
+    files: {
+      'main.js':
+        "const h = setInterval(() => {\n  clearInterval(h);\n  throw new Error('interval');\n}, 0);\n",
+    },
     argv: ['main.js'],
   },
   {
@@ -349,25 +352,30 @@ throw e;
   {
     // Each way rifty calls user code: the frames' names, lines and columns.
     name: 'throw-in-emitter-listener',
-    files: { 'main.js': "const EventEmitter = require('events');\nconst e = new EventEmitter();\ne.on('x', function onX() {\n  throw new Error('listener');\n});\ne.emit('x');\n" },
+    files: {
+      'main.js':
+        "const EventEmitter = require('events');\nconst e = new EventEmitter();\ne.on('x', function onX() {\n  throw new Error('listener');\n});\ne.emit('x');\n",
+    },
     argv: ['main.js'],
   },
   {
     // Each way rifty calls user code: the frames' names, lines and columns.
     name: 'throw-in-fs-callback',
-    files: { 'main.js': "require('fs').readFile(__filename, () => {\n  throw new Error('fs');\n});\n" },
+    files: {
+      'main.js': "require('fs').readFile(__filename, () => {\n  throw new Error('fs');\n});\n",
+    },
     argv: ['main.js'],
   },
   {
     // Each way rifty calls user code: the frames' names, lines and columns.
     name: 'throw-in-new-function',
-    files: { 'main.js': "new Function('throw new Error(\"fn\")')();\n" },
+    files: { 'main.js': 'new Function(\'throw new Error("fn")\')();\n' },
     argv: ['main.js'],
   },
   {
     // Each way rifty calls user code: the frames' names, lines and columns.
     name: 'throw-in-indirect-eval',
-    files: { 'main.js': "(0, eval)('throw new Error(\"indirect\")');\n" },
+    files: { 'main.js': '(0, eval)(\'throw new Error("indirect")\');\n' },
     argv: ['main.js'],
   },
   {
