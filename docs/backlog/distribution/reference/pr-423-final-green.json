@@ -1,22 +1,22 @@
 {
   "overall_verdict": "concern",
-  "merge_call": "PASS at e3027ed02. The last blocker is closed: ADR-0482 now has a dated §Corrections line saying pi 1.x system prompt-state messages are not archived, and the contract has a Decisions line plus two re-cut lines. The merge of origin/main is clean; the only combined diff is an apps/playground/CHANGELOG.md union, and main's 38 files are workbench/bootstrap, none on unit paths. Unit product/test paths are unchanged since 72d722248, where the evidence was run. Merge only after CI is green at e3027ed02 (still running) and the user confirms ADR-0569/0570, per the contract Decisions line.",
+  "merge_call": "PASS at 637e9122e. The 8988843ec blocker is fixed: agent state is now set to the journal projection at construction (session.ts:424). The new fault test fails at 8988843ec ('Cannot continue from message role: assistant') and passes at HEAD. Local runs: vitest agent + agent-bench 361/361, es-floor 102/102, typecheck + lint clean, browser-unit agent-archive/core/snapshot/ui-terminal 38/38, chromium-heavy ai-mode 22/22. Before merge: commit the re-bound landing verdict, because CI at 8988843ec failed check:pass-binding on the stale pr-423-final-green.json (REV-8); wait for green PR CI at HEAD; and get the user's confirmation of ADR-0569/0570.",
   "checkpoint": "Final+GREEN",
-  "unit_goal_source": "docs/backlog/distribution/pi-1x-upgrade.md (status ready) at e3027ed02 (unit product/test evidence run at 72d722248; 8fd90f5c7 docs-only; e3027ed02 clean merge of origin/main); BASE 11b9397ee (origin/main merge-base); ADR-0569, ADR-0570, ADR-0482 + corrections in ADR-0424/0436/0440/0466/0472/0473/0474/0475; PR #423 body",
+  "unit_goal_source": "docs/backlog/distribution/pi-1x-upgrade.md (status ready) at 637e9122e; BASE 11b9397ee (origin/main merge-base); ADR-0569, ADR-0570, ADR-0482 + corrections in ADR-0424/0436/0440/0466/0472/0473/0474/0475; PR #423 body; prior PASS e3027ed02, BLOCK 8988843ec",
   "unit_residuals": [],
   "goal_residuals": [],
   "goal_complete": false,
   "coverage": [
     {
-      "row": "Acceptance 1: continuation/retry/overflow/length/threshold equal real CLI 1.6.0 AgentSession on 15 scenarios (requests, retries, compaction numbers, transcript incl. system positions, file-op lists)",
+      "row": "Acceptance 1: continuation/retry/overflow/length/threshold equal real CLI 1.6.0 AgentSession on 19 scenarios (requests, retries, compaction numbers, transcript incl. system positions, file-op lists)",
       "source": "acceptance",
       "trace": "ADR-0569",
       "status": "pass",
-      "citation": "tools/agent-bench/src/continuation-parity.test.ts:414",
+      "citation": "tools/agent-bench/src/continuation-parity.test.ts:470",
       "note": ""
     },
     {
-      "row": "Acceptance 2: Type.Object tool wire as 0.85.1 (minus strict:false) and same accept/reject/coerce on 8 cases; Refine/Codec/BigInt throw NotImplementedError at creation",
+      "row": "Acceptance 2: Type.Object tool wire as 0.85.1 (minus strict:false), same accept/reject/coerce on 8 cases; Refine and Format.Set parameters (probe silent losses) throw NotImplementedError at creation",
       "source": "acceptance",
       "trace": "ADR-0570",
       "status": "pass",
@@ -40,7 +40,7 @@
       "note": ""
     },
     {
-      "row": "Acceptance 5: changed prompt appends one system update before next user message; wire sends only the current prompt",
+      "row": "Acceptance 5: changed prompt appends one system update before next user message; wire sends only the current prompt; restored foreign prompt sections removed",
       "source": "acceptance",
       "trace": "ADR-0569",
       "status": "pass",
@@ -142,6 +142,14 @@
       "status": "pass",
       "citation": "docs/backlog/distribution/reference/ai-agent-pi-oracle.mjs:205",
       "note": ""
+    },
+    {
+      "row": "Frozen artifact: pi-typebox-validation-diff.json (0.85.1 vs 1.6.0 validateToolArguments, 20 kinds)",
+      "source": "frozen-artifact",
+      "trace": "ADR-0570",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/reference/pi-typebox-validation-diff.json:1",
+      "note": ""
     }
   ],
   "axes": [
@@ -197,27 +205,33 @@
       "findings": [
         {
           "severity": "concern",
-          "location": "packages/agent/src/session.ts:458",
-          "evidence": "mutant J (pre-prompt check skips aborted previous) at 72d722248: continuation-parity 15/15 pass. D (thinking in summary) and E (length recovery-failed text) are now killed, 1 parity red each.",
-          "summary": "ADR-0569 §2 says the pre-prompt _checkCompaction includes aborted messages, but no scenario discriminates this. Suggest an abort-then-send continuation-parity scenario."
+          "location": "packages/agent/src/session.ts:269",
+          "evidence": "Mutants at 8988843ec: M (drop retainedForExplicitRecovery), N (drop usageMatchesProjection), O (drop assistantIsProjected on the length check) -> parity 19/19 + agent 146/146 all pass. K (omit only the attempt, not its paired results) and L (no reset on user message_start) -> 2 parity failures each; P (no foreign-section null) -> 1 agent failure.",
+          "summary": "The ported CLI gating (assistantIsProjected / retainedForExplicitRecovery / usageMatchesProjection) has no discriminating scenario, so the port is checked only by reading against core_agent-session.ts:3150-3180. Suggest: re-send after a failed recovery of an explicit overflow (retained edit), and Stop during backoff after a usage-overflowing assistant. Since state == projection is now set at construction, the reachable inputs are narrow (Stop during backoff); concern accepted as recorded."
         },
         {
           "severity": "concern",
-          "location": "packages/agent/src/session.ts:224",
-          "evidence": "",
-          "summary": "checkCompaction drops the CLI gating (assistantIsProjected, assistantRetainedForExplicitRecovery, hasPostAssistantContextEdit; /tmp/piup/src/core_agent-session.ts:3150-3180). This is equivalent today because rifty's agent state never holds an omitted assistant. The one exception is a usage-based overflow check on an assistant followed by an omitted retry attempt (Stop during backoff), where the CLI skips the usage test. Port the gating or comment why it is unreachable."
+          "location": "packages/agent/src/session.ts:458",
+          "evidence": "mutant J (pre-prompt check skips aborted) survived at 72d722248; no new scenario targets it",
+          "summary": "ADR-0569 §2 says the pre-prompt _checkCompaction includes aborted messages, but no parity scenario catches a version that skips them."
         },
         {
           "severity": "concern",
           "location": "packages/agent/src/continuation.ts:205",
           "evidence": "",
-          "summary": "The compaction failure errorMessage lacks the CLI prefixes 'Auto-compaction failed: ' / 'Context overflow recovery failed: ' (core_agent-session.ts:3387-3391). Parity does not compare it, and this was pre-existing at BASE."
+          "summary": "Compaction failure errorMessage lacks the CLI prefixes (core_agent-session.ts:3387-3391). This was already so at BASE and parity does not compare it."
         },
         {
           "severity": "concern",
-          "location": "tools/checks/es-floor.mjs:421",
-          "evidence": "es-floor.test.ts: own this.union admitted; new Set().union and left.union rejected (vitest 102/102). Local check:es-floor exit 0 after build:libs + build:playground.",
-          "summary": "PR-4 gate change: any `this.union(...)` is admitted, including inside a Set subclass method. That is a narrow false negative. A receiver-class check, or a source-map/file-scoped allowance like MONACO_WITH_CALLS, would be tighter."
+          "location": "tools/checks/es-floor.mjs:411",
+          "evidence": "es-floor.test.ts adds a Set subclass case (still rejected); check:es-floor over 352 built bundles exit 0",
+          "summary": "The narrowed `this.union` allowance (enclosing class must define instance `union`) addresses my earlier concern. Residual: a class that defines `union` and also extends Set would still pass, which is acceptable."
+        },
+        {
+          "severity": "nit",
+          "location": "packages/agent/src/session.ts:424",
+          "evidence": "probe: initialMessages [system, system, compactionSummary, user, assistant] -> exportTrace before send: 4 messages (system,compactionSummary,user,assistant), restoredMessageCount 5",
+          "summary": "For a restored history with 2 or more system messages before a summary, the trace collapses them as the CLI does, so transcript length is below restoredMessageCount. This is consistent with the ADR-0466 2026-09-27 correction (the count is of admitted messages, not a retained prefix), but `transcript.slice(restoredMessageCount)` skips one new message for that shape. Consider a README note."
         }
       ]
     },
@@ -246,5 +260,5 @@
       ]
     }
   ],
-  "reviewed_sha": "e3027ed02e6c5ae1e3e55e57db8d0b0c43bc0577"
+  "reviewed_sha": "637e9122e7966e2175edbd4ecca3b58f55b9d146"
 }

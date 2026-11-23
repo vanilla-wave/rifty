@@ -111,7 +111,8 @@ Pi owns provider conversion. Storage, JSON decoding and migrations stay with the
 
 `reset()` clears restored and new messages. Also clear the host's stored history on
 conversation/project reset. `exportTrace().restoredMessageCount` counts originally admitted messages
-until reset, independent of compaction; events, timings, aggregate usage and per-run limits describe
+until reset, independent of compaction and of prompt-state folding (several restored `system`
+messages before a summary merge into one, as in the pi CLI), so it is not a transcript offset; events, timings, aggregate usage and per-run limits describe
 only new runs. Reset clears that count. Persist native messages rather than the diagnostic
 trace when exact history matters.
 
