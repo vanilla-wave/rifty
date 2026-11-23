@@ -4,10 +4,13 @@ import type { ParityCase } from '../../src/types.ts';
  * A NUL in a path is Node's `nullCheck` (ERR_INVALID_ARG_VALUE, `existsSync`
  * false), and `utimes` never stores a non-finite time: an invalid Date leaves
  * the time as it was (libuv UTIME_OMIT), a negative number is now. A huge time
- * is platform-specific in Node (darwin saturates at 2^63 ns, Linux: EINVAL), so
- * it is not compared here (rifty saturates; the compat row names it). Found through the
- * isolate sandbox (ADR-0568).
+ * is platform-specific in Node (darwin saturates at ±2^63 ns, Linux: EINVAL): compared
+ * exactly on a darwin host only (rifty keeps darwin's; the compat row names Linux). Found
+ * through the isolate sandbox (ADR-0568).
  */
+/** Node on darwin stores a time past 2^63 ns; on Linux it is EINVAL. */
+const HOST_STORES_HUGE_TIMES = process.platform === 'darwin';
+
 const c: ParityCase = {
   cwd: '/app',
   setup: { files: { 'app/f': 'x' } },
@@ -37,13 +40,16 @@ const c: ParityCase = {
       console.log(v, 'string is now', fs.statSync('f').mtimeMs >= t0);
     }
     try { fs.utimesSync('f', 'abc', 'abc'); } catch (e) { console.log('abc', e.code); }
-    // Past a 64-bit nanosecond clock: Node's value is the platform's (darwin saturates,
-    // Linux may refuse); only "finite and inside Date" is compared.
-    for (const v of ['-1e306', '1e306', '-9.3e12', new Date(-8.64e15)]) {
-      let finite;
-      try { fs.utimesSync('f', v, v); finite = Number.isFinite(fs.statSync('f').mtimeMs) && Math.abs(fs.statSync('f').mtimeMs) <= 8.64e15; }
-      catch { finite = true; }
-      console.log(String(v).slice(0, 8), 'finite', finite);
+    // Past a 64-bit nanosecond clock Node's answer is the host's: darwin stores libuv's
+    // saturated (or wrapped) time, Linux refuses with EINVAL (compat ⚠️, rifty keeps darwin's).
+    // Compared exactly where Node stores one.
+    ${
+      HOST_STORES_HUGE_TIMES
+        ? `for (const v of ['-1e306', '-1e19', '-9223372036854775808', '-9.3e12', '1e306', new Date(-8.64e15)]) {
+      fs.utimesSync('f', v, v);
+      console.log(String(v).slice(0, 12), fs.statSync('f').mtimeMs);
+    }`
+        : ''
     }
     for (const v of [NaN, Infinity]) {
       try { fs.utimesSync('f', v, v); } catch (e) { console.log('number', v, e.code); }

@@ -1,6 +1,6 @@
 # Changelog
 
-- `fs.utimes*` with a time past Date's range in either direction (`'-1e306'`, `'1e306'`) saturates at ±2^63 ns as Node (a large negative one stored −Infinity); parity `fs/path-nul-and-utimes-edge-times`.
+- `fs.utimes*` with a time past 2^63 ns stores Node 24.16.0's darwin value, sign included: a numeric string below −2^63 s wraps to the top as libuv does (`'-1e306'` stored −Infinity, then −2^63 ns); otherwise ±2^63 ns. Node on Linux refuses these with `EINVAL` — compat ⚠️; parity `fs/path-nul-and-utimes-edge-times` compares them exactly on darwin hosts.
 - `fs.utimes*` with a numeric string as Node: a negative one is that time (it was now), `''` is 0, `'Infinity'` is now (it threw `ERR_INVALID_ARG_TYPE`); parity `fs/path-nul-and-utimes-edge-times`.
 - `fs.utimes*`/`futimes*` store Node 24.16.0's times: an invalid `Date` keeps the time (it stored NaN), a negative number is now, a huge time saturates at 2^63 ns (it stored Infinity-scale values); parity `fs/path-nul-and-utimes-edge-times`.
 - A NUL in an fs path throws Node's `ERR_INVALID_ARG_VALUE` (`The argument 'path' must be a string, Uint8Array, or URL without null bytes. Received '…'`) instead of creating the name; `existsSync` answers `false` for such a path, as Node.

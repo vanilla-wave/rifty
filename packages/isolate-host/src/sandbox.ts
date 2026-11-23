@@ -228,9 +228,8 @@ class LiveSandbox implements Sandbox {
   #box: { fs: Fs } | undefined;
   #tail: Promise<unknown> = Promise.resolve();
   #run: CallHandle | undefined;
-  /** Calls whose isolate may still be on its worker (a timed-out one keeps running a while). */
+  /** Every call this sandbox placed, from its start until it has left (result out, isolate gone). */
   readonly #leaving = new Set<Promise<void>>();
-  #ended: Promise<void> = Promise.resolve();
   #destroyed = false;
   readonly #codec: Codec;
   readonly #maxFileBytes: number;
@@ -364,7 +363,6 @@ class LiveSandbox implements Sandbox {
       // Encoded per attempt (a rerun encodes the same files again): the call keeps no copy.
       const fs = box.fs;
       const state = (): Uint8Array => this.#codec.snapshotFs(fs, this.#options);
-      let handle: CallHandle | undefined;
       const result = await sharedPool()
         .run(
           {
@@ -373,8 +371,12 @@ class LiveSandbox implements Sandbox {
             sandbox: { path: entry, args: [...args], state, maxFsBytes: this.#options.maxBytes },
           },
           (h) => {
-            handle = h;
             this.#run = h;
+            // Registered with the call itself and removed only by its own "left" event:
+            // destroy() waits for it in every phase of this exec (ADR-0568 §5).
+            const gone = h.left();
+            this.#leaving.add(gone);
+            void gone.then(() => this.#leaving.delete(gone));
           },
         )
         .finally(() => {
@@ -383,12 +385,6 @@ class LiveSandbox implements Sandbox {
         });
       // destroy() between the result and this continuation: in flight, so it rejects.
       if (this.#destroyed) throw destroyedError();
-      // A timed-out isolate may still be stopping: destroy waits for it to leave its worker.
-      if (handle !== undefined) {
-        const gone = handle.left();
-        this.#leaving.add(gone);
-        void gone.then(() => this.#leaving.delete(gone));
-      }
       const { state: end, stateRefused, ...run } = result;
       if (stateRefused !== undefined) return { ...run, stateRefused };
       // Killed (timeout, memory): the state of before the run (ADR-0568 §3).
@@ -412,12 +408,12 @@ class LiveSandbox implements Sandbox {
   destroy(): Promise<void> {
     if (!this.#destroyed) {
       this.#destroyed = true;
-      // The run in flight is cancelled; resolves once it has left its worker.
-      this.#ended = this.#run?.abort(destroyedError()) ?? Promise.resolve();
+      // The run in flight is cancelled.
+      this.#run?.abort(destroyedError());
       this.#box = undefined;
     }
-    // Every isolate of this sandbox gone, the cancelled one and any still stopping.
-    return this.#tail.then(() => Promise.all([this.#ended, ...this.#leaving])).then(settle);
+    // Every call this sandbox placed has left: the cancelled one and any still stopping.
+    return this.#tail.then(() => Promise.all(this.#leaving)).then(settle);
   }
 }
 

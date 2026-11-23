@@ -20,7 +20,10 @@ function toMs(t: number | string | Date): number {
   // biome-ignore lint/suspicious/noDoubleEquals: Node's own test, `+time == time`.
   if (typeof t === 'string' && +t == (t as unknown as number)) {
     const n = +t;
-    return Number.isFinite(n) ? Math.floor(n * 1000) : Date.now();
+    if (!Number.isFinite(n)) return Date.now();
+    // Below -2^63 s libuv's tv_sec saturates at INT64_MIN and the negative nanosecond
+    // remainder borrows one more second: it wraps to INT64_MAX (darwin stores the top).
+    return n < -(2 ** 63) ? MAX_TIME_MS : Math.floor(n * 1000);
   }
   if (typeof t === 'number' && Number.isFinite(t)) return t < 0 ? Date.now() : Math.floor(t * 1000);
   const e = new TypeError('The "time" argument must be of type number, string, or Date.');
@@ -35,8 +38,8 @@ export function utimesArgs(atime: number | Date, mtime: number | Date): [number,
 
 /**
  * libuv: a NaN time leaves that time as it was (UTIME_OMIT); a time past a 64-bit
- * nanosecond clock saturates at ±2^63 ns (Node 24.16.0 on darwin; never a non-finite or
- * out-of-Date time stored).
+ * nanosecond clock saturates at ±2^63 ns, its sign as Node 24.16.0 on darwin (Linux:
+ * EINVAL, compat ⚠️); never a non-finite time stored.
  */
 export function setTimes(np: string, [atime, mtime]: [number, number]): void {
   const now = syncMirror().statSync(np);

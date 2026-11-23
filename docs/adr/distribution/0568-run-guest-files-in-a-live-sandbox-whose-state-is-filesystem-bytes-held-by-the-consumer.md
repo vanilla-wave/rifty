@@ -93,11 +93,24 @@ view's whole backing buffer; rifty's program entry has diagnostic gaps and no
 5. **destroy** rejects queued and later operations
    `ERR_ISOLATE_HOST_SANDBOX_DESTROYED`, cancels a run in flight (its
    isolate is disposed as at a deadline) and drops the state; it resolves once
-   every run of the sandbox has left its worker: the worker's `gone` frame
-   (sent once the run both reported and unwound, on every end — exit, timeout,
-   memory, refused state, cancel), or the worker's end. A worker's slot frees
-   on the same event (round 2, 2026-11-23: it freed at the result, so a
-   memory-killed run's isolate still held the worker while a new call landed).
+   every call the sandbox placed has left: settled, and its isolate gone — the
+   worker's `gone` frame (sent once the run both reported and unwound, on every
+   end — exit, timeout, memory, refused state, cancel, a lost worker), or the
+   worker's end. One event per call, registered with the sandbox when the call
+   is created (the pool's `onStart`) and removed only by that event, so no
+   phase of `exec` hands it from field to field (round 3: it was registered
+   after the result, and a destroy in between returned with the isolate still
+   running). A worker's slot frees on the same event (round 2: it freed at the
+   result). Bounded: an isolate still on its worker 1 s after the result
+   (ADR-0563 §4's stuck grace) retires that worker, which ends once its calls
+   are settled. Carried as a table: every end × every destroy moment (before
+   start, in flight, 0–3 microtasks after the result, after `await`), observed
+   on the workers' CPU (`tests/sandbox-destroy-table.test.ts`). Decided
+   rollback (manager 2026-11-23): one more hole in this invariant (round 4)
+   and it is rewritten weaker — after `destroy()` the state is unreachable and
+   no new run starts; the last run's isolate may still stop for up to N ms —
+   with the number, a compat row and a question to the user (it narrows «после
+   destroy от песочницы ничего не остаётся»).
 6. **Limits.** Per run: `runCode`'s; `timeoutMs` covers the consumer's encode
    (done before the call registers, so a throw there settles the call and
    leaves no phantom), the worker's restore, run and capture — not the

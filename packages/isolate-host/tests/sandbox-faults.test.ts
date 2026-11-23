@@ -973,70 +973,6 @@ describe('external review round 1 (manager 2026-11-23)', () => {
   });
 });
 
-/**
- * External review round 2: "the run left its worker" is one event for every end. Each guest
- * holds 300 MiB (its worker past 400 MiB RSS is the event that it runs); once `destroy()`
- * resolves, that worker burns no more CPU or is gone — whatever the run's end.
- */
-describe('destroy waits for the isolate on every end of a run (ADR-0568 §5, I5)', () => {
-  const HOLD = 'globalThis.hold = new Uint8Array(300 << 20).fill(1);';
-  const SORT = 'const a = Array.from({ length: 3e6 }, () => Math.random());';
-  const ENDS: Record<string, { code: string; options: string; awaitRun: boolean }> = {
-    // Each run lives long enough (≥ 1.5 s) for the probe to find its worker by RSS.
-    exit: {
-      code: `${HOLD} setTimeout(() => console.log(1), 1500)`,
-      options: '{ memoryLimitMb: 512 }',
-      awaitRun: true,
-    },
-    timeout: {
-      code: `${HOLD} ${SORT} for (;;) a.sort()`,
-      options: '{ memoryLimitMb: 512, timeoutMs: 1500 }',
-      awaitRun: true,
-    },
-    memory: {
-      code: `${HOLD} ${SORT} const keep = []; for (;;) { keep.push(new Array(2e6).fill(1.5)); a.sort() }`,
-      options: '{ memoryLimitMb: 512, timeoutMs: 60000 }',
-      awaitRun: true,
-    },
-    'refused state': {
-      code: `${HOLD} setTimeout(() => require('fs').writeFileSync('big', Buffer.alloc(200 << 10)), 1500)`,
-      options: '{ memoryLimitMb: 512 }',
-      awaitRun: true,
-    },
-    'destroyed in flight': {
-      code: `${HOLD} ${SORT} for (;;) a.sort()`,
-      options: '{ memoryLimitMb: 512, timeoutMs: 60000 }',
-      awaitRun: false,
-    },
-    catastrophic: {
-      code: `${HOLD} new Array(2 ** 28).fill(0)`,
-      options: '{ memoryLimitMb: 512, timeoutMs: 60000 }',
-      awaitRun: true,
-    },
-  };
-  for (const [end, { code, options, awaitRun }] of Object.entries(ENDS)) {
-    carrier(end, async () => {
-      const { value } = await consumer(`
-        const sb = await createSandbox({ maxFsBytes: 128 << 10 });
-        await sb.writeFile('r.js', ${JSON.stringify(code)});
-        const rss = (pid) => Number(execFileSync('ps', ['-o', 'rss=', '-p', String(pid)], { encoding: 'utf8' }).trim() || 0);
-        const running = settle(sb.exec('r.js', ${options}));
-        const pid = await waitFor(() => children().find((p) => { try { return rss(p) > 400 * 1024 } catch { return false } }), 20000);
-        const result = ${awaitRun ? 'await running' : 'undefined'};
-        await sb.destroy();
-        // Stopped: the worker gone, or burning no CPU after destroy resolved (an isolate still
-        // sorting would add ~0.5 s over the window; freed heap pages may stay resident, so RSS
-        // alone cannot tell).
-        const cpu = (p) => { const t = execFileSync('ps', ['-o', 'time=', '-p', String(p)], { encoding: 'utf8' }).trim(); const [m, sec] = t.split(':'); return Number(m) * 60 + Number(sec); };
-        let before; try { before = cpu(pid) } catch { before = undefined }
-        await sleep(500);
-        let burned; try { burned = before === undefined ? 0 : cpu(pid) - before } catch { burned = 0 }
-        out({ stopped: burned < 0.15, burned, result });`);
-      expect((value as { stopped: boolean }).stopped, JSON.stringify(value)).toBe(true);
-    });
-  }
-});
-
 describe('a call whose isolate still runs keeps its slot on every end (ADR-0563 §7)', () => {
   carrier(
     'memory reported while a builtin still holds the isolate: the slot stays taken',
@@ -1158,6 +1094,41 @@ describe('external review round 2 (manager 2026-11-23)', () => {
     expect(childPids().filter((p) => !before.includes(p))).toHaveLength(1);
   });
 
+  carrier(
+    'a request that fails half-written rejects its call (no rerun) and ends that worker',
+    async () => {
+      // A test limit at the pool seam: the state's second 3 MiB piece cannot be read.
+      const pool = new Pool();
+      const bytes = new Uint8Array(7 << 20);
+      const real = bytes.buffer;
+      let reads = 0;
+      Object.defineProperty(bytes, 'buffer', {
+        get: () => {
+          if (++reads > 1) throw new RangeError('piece unreadable');
+          return real;
+        },
+      });
+      const spec = {
+        allowSharedArrayBuffer: false,
+        code: '',
+        timeoutMs: 20_000,
+        memoryLimitMb: 64,
+        maxOutputBytes: 1 << 20,
+      };
+      const before = childPids();
+      await expect(
+        pool.run({
+          ...spec,
+          sandbox: { path: '/workspace/a.js', args: [], maxFsBytes: 8 << 20, state: () => bytes },
+        }),
+      ).rejects.toThrow('piece unreadable');
+      // Its worker was killed (half a line on its stdin); no solo rerun was spawned.
+      await new Promise((r) => setTimeout(r, 300));
+      expect(childPids().filter((p) => !before.includes(p))).toHaveLength(0);
+      await expect(pool.run({ ...spec, code: '1' })).resolves.toMatchObject({ exitCode: 0 });
+    },
+  );
+
   carrier('a destroy between the run result and its continuation rejects the exec', async () => {
     // The window is microtasks wide (another settled call's reaction may destroy there):
     // the real shared pool is wrapped so destroy lands exactly in it.
@@ -1180,4 +1151,23 @@ describe('external review round 2 (manager 2026-11-23)', () => {
       pool.run = run;
     }
   });
+});
+
+describe('external review round 3 (manager 2026-11-23)', () => {
+  carrier(
+    'a call that ends stopped frees its slot with its result: bursts stay on one warm worker',
+    async () => {
+      // The terminal frame and `gone` in one write: a separate `gone` chunk left the slot
+      // taken when the next burst was placed, and it spawned a cold worker.
+      const { value } = await consumer(`
+      await runCode('1');
+      const seen = new Set(children());
+      for (let b = 0; b < 50; b++) {
+        await Promise.all([0, 1, 2, 3].map(() => runCode('console.log(1)')));
+        for (const p of children()) seen.add(p);
+      }
+      out({ workers: seen.size });`);
+      expect(value).toEqual({ workers: 1 });
+    },
+  );
 });

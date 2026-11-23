@@ -93,10 +93,22 @@ describe('node:fs.utimesSync times as Node 24.16.0 stores them (fs-times.ts)', (
     expect(fs.statSync('/workspace/t').mtimeMs).toBe(2_000_000);
     fs.utimesSync('/workspace/t', 1e306, 1e306);
     expect(fs.statSync('/workspace/t').mtimeMs).toBe(9223372036854.775);
-    for (const v of ['-1e306', '1e306', '-9.3e12', new Date(-8.64e15)]) {
+    // Signed as Node 24.16.0 on darwin (probed live): below -2^63 s libuv's borrow wraps to the top.
+    const MAX = 9223372036854.775;
+    for (const [v, ms] of [
+      ['-1e306', MAX],
+      ['-1e19', MAX],
+      ['-9223372036854777856', MAX],
+      ['-9223372036854775808', -MAX],
+      ['-9.2e18', -MAX],
+      ['-9.3e12', -MAX],
+      ['1e306', MAX],
+      ['9.3e18', MAX],
+      [new Date(-8.64e15), -MAX],
+    ] as const) {
       // Node's TimeLike takes a numeric string; rifty's signature types only number | Date.
       fs.utimesSync('/workspace/t', v as number | Date, v as number | Date);
-      expect(Math.abs(fs.statSync('/workspace/t').mtimeMs)).toBe(9223372036854.775);
+      expect([String(v), fs.statSync('/workspace/t').mtimeMs]).toEqual([String(v), ms]);
     }
     const before = Date.now();
     fs.utimesSync('/workspace/t', -1e306, -1e306);

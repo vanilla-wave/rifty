@@ -13,7 +13,7 @@ import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
 import { CHANNEL_END_GRACE_MS } from '../src/pool.ts';
-import { FrameReader, HEADER, KIND, decodeState, frame } from '../src/protocol.ts';
+import { FrameReader, HEADER, KIND, STUCK_GRACE_MS, decodeState, frame } from '../src/protocol.ts';
 import { consumer } from './support.ts';
 
 const PACKAGE_DIR = fileURLToPath(new URL('..', import.meta.url));
@@ -65,8 +65,9 @@ function hostilePackage(label: string, body: string): string {
      };
      process.stdin.on('end', () => process.exit(0));
      process.stdin.once('data', (d) => {
-       // The call id of the run request, big-endian: what every frame addresses.
-       const call = JSON.parse(String(d).split('\\n')[0]).call;
+       // The call id of the run request, big-endian: what every frame addresses (read from the
+       // line's head: a sandbox run's line may come in pieces).
+       const call = Number(/"call":(\\d+)/.exec(String(d))[1]);
        C = [call >>> 24, (call >>> 16) & 255, (call >>> 8) & 255, call & 255];
        ${body}; setInterval(() => {}, 1000);
      });`,
@@ -136,6 +137,25 @@ describe('consumer treats the child channel as hostile', () => {
       { entry: pathToFileURL(entry).href },
     );
     expect(value).toEqual({ exitCode: 0, workers: 0 });
+  });
+
+  it('a terminal frame never followed by gone: the worker is retired after the stuck grace', async () => {
+    // A broken or hostile worker cannot hold destroy() or a slot forever (ADR-0563 §4 grace).
+    const entry = hostilePackage('terminal then silence', 'f(7, [1]); f(2, [0])');
+    const { value } = await consumer(
+      `const sb = await createSandbox();
+       await sb.writeFile('a.js', '1');
+       const t = now();
+       const r = await settle(sb.exec('a.js'));
+       await sb.destroy();
+       out({ stateRefused: r.stateRefused, ms: now() - t, workers: children().length });`,
+      { entry: pathToFileURL(entry).href },
+    );
+    const v = value as { stateRefused: string; ms: number; workers: number };
+    expect(v.stateRefused).toBe('ERR_ISOLATE_HOST_SANDBOX_CAPTURE');
+    expect(v.ms).toBeGreaterThanOrEqual(STUCK_GRACE_MS);
+    expect(v.ms).toBeLessThan(STUCK_GRACE_MS + 3000);
+    expect(v.workers).toBe(0);
   });
 
   it('a legal header with a never-completed payload buffers at most one legal frame', () => {

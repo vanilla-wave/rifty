@@ -139,7 +139,7 @@ sandbox paths. rifty's FS has no links: every entry is a file or a directory.
 | `remove(path)` | a file or a directory tree |
 | `exec(path, options?)` | `node <path> [args]` in `/workspace`: `runCode`'s options plus `args` (strings); `env`, `cwd`, `stdin` are `NotImplementedError('isolate-host.sandbox-exec-<option>')`. The path is one file, never a shell command |
 | `snapshot()` | the files as bytes (ADR-0567), taken between operations |
-| `destroy()` | the run in flight and everything after reject `ERR_ISOLATE_HOST_SANDBOX_DESTROYED`; the state is dropped |
+| `destroy()` | the run in flight and everything after reject `ERR_ISOLATE_HOST_SANDBOX_DESTROYED`; the state is dropped; resolves once no isolate of the sandbox runs (whenever it is called, also in the microtasks around a run's result) |
 
 Operations on one sandbox take effect one at a time, in call order, also when
 you do not await them; sandboxes do not wait for each other. A run's
@@ -173,6 +173,7 @@ its own but its files were not kept. What survives a run:
 | exits (any code, `process.exit`, an uncaught throw or rejection) | as the run left them |
 | `termination: 'timeout'` or `'memory'` | as before the run: a killed run's writes are rolled back (Node keeps them) |
 | its worker lost (rerun once, alone; then `ERR_ISOLATE_HOST_WORKER_LOST`) | as before the run; the rerun starts from the same files |
+| its state could not be sent whole (a throw while writing it to the worker, e.g. out of memory): `exec` rejects with that error, no rerun; that worker ends, its other calls rerun | as before the run |
 | `stateRefused` (`ERR_FS_SNAPSHOT_TOO_LARGE`: the run's files are over `maxFsBytes` (write fewer or smaller files, or raise `maxFsBytes` with `memoryLimitMb`); `ERR_ISOLATE_HOST_SANDBOX_CAPTURE`: the end state could not be captured — most often the files did not fit the run's isolate memory (same remedies), else the run hit the `import()` gap or broke its own capture (rewrite that code); another `ERR_FS_SNAPSHOT_*`: the consumer's codec refused the bytes; `ERR_ISOLATE_HOST_SANDBOX_RESTORE`: the files did not fit the run's isolate or its worker, no guest code ran, `exitCode: null`; an isolate too small for the runtime itself is `termination: 'memory'`, as for `runCode`) | as before the run |
 
 Each run is a fresh isolate, like a new `node` process: only files carry over.
@@ -196,8 +197,10 @@ and 255 MiB for one run, 884–925 MiB for four at once; 16 MB: 88 / 276 MiB), n
 a mean. Size your service's cgroup for the idle sandboxes' files plus 5 × S + 16
 MiB per concurrent run, beside the workers' bound above. All of it is
 bounded by `maxFsBytes`. A run that timed out keeps your process alive until its isolate
-has stopped (at most ~1 s more for a builtin that ignores termination), so `destroy` can wait
-for it. A sandbox you drop is ordinary garbage; the number of
+has stopped, so `destroy` can wait for it. That wait is bounded: an isolate still running
+1 s after its run's result (a builtin that ignores termination, or a broken worker that
+never reports it stopped) retires its worker, which ends once its other calls have
+settled (each within its own `timeoutMs` + 1 s). A sandbox you drop is ordinary garbage; the number of
 live sandboxes is yours to cap.
 
 Cost (M3 Pro, Node 24.16.0, medians, built package): `createSandbox` 0.01 ms; a warm

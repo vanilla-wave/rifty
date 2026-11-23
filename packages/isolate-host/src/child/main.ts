@@ -234,16 +234,21 @@ async function run(request: RunRequest): Promise<void> {
       // before this slot frees, however the bytes are split into chunks.
       const idle = [...live.values()].every((c) => c === state || c.reported);
       if (state.unwound && idle && process.memoryUsage.rss() > RECYCLE_RSS_BYTES) retire();
-      send(kind, id, payload);
+      if (state.unwound) {
+        // Already stopped: the terminal frame and `gone` in one write, so the consumer reads
+        // the slot free with the result (a separate `gone` chunk made it spawn a worker).
+        goneSent = true;
+        channel.write(
+          Buffer.concat([frame(kind, id, payload), frame(KIND.gone, id, new Uint8Array(0))]),
+        );
+      } else send(kind, id, payload);
       if (!isolate.isDisposed) {
         state.disposedHere = true;
         // Not inside an isolate callback (`importModuleDynamically` reports from one).
         setImmediate(() => isolate.isDisposed || isolate.dispose());
       }
-      if (state.unwound) {
-        live.delete(id);
-        gone();
-      } else {
+      if (state.unwound) live.delete(id);
+      else {
         // Still running after dispose (a builtin that ignores termination): this
         // worker takes no new call (I4).
         setTimeout(() => state.unwound || retire(), STUCK_GRACE_MS).unref();

@@ -17,6 +17,7 @@ import {
   REFUSED,
   type RunRequest,
   SHARD,
+  STUCK_GRACE_MS,
   type SandboxRun,
   type WorkerRequest,
 } from './protocol.ts';
@@ -89,6 +90,18 @@ class Call {
   lost: string | undefined;
   worker: Worker | undefined;
   readonly deadline: NodeJS.Timeout;
+  /**
+   * Resolves once the call has left for good: settled, and its isolate on no worker
+   * (the worker's `gone` frame, or its end). One event per call, from its creation:
+   * whoever holds it waits through every placement and rerun (ADR-0568 §5).
+   */
+  readonly left: Promise<void>;
+  #leave: () => void = () => {};
+  #hasLeft = false;
+  /** Someone awaits `left`: the process stays up until it resolves (workers are unref'd). */
+  held = false;
+  #hold: NodeJS.Timeout | undefined;
+  #stuck: NodeJS.Timeout | undefined;
   constructor(
     readonly id: number,
     readonly spec: CallSpec,
@@ -97,6 +110,28 @@ class Call {
     onDeadline: (call: Call) => void,
   ) {
     this.deadline = setTimeout(() => onDeadline(this), spec.timeoutMs);
+    this.left = new Promise((resolve) => {
+      this.#leave = resolve;
+    });
+  }
+  /**
+   * After the call settled or its worker let it go: has it left? A settled call whose
+   * isolate is still on a worker gets that worker's stuck-isolate grace (ADR-0563 §4):
+   * past it the worker is retired as if it had said so itself — no new call, ended once
+   * its calls are settled — so a worker that never sends `gone` cannot hold anyone forever.
+   */
+  checkLeft(): void {
+    if (this.#hasLeft || !this.settled) return;
+    const worker = this.worker;
+    if (worker !== undefined && !worker.dead && worker.running.has(this.id)) {
+      if (this.held) this.#hold ??= setInterval(() => {}, 2 ** 30);
+      this.#stuck ??= setTimeout(() => worker.retireStuck(), STUCK_GRACE_MS).unref();
+      return;
+    }
+    this.#hasLeft = true;
+    clearInterval(this.#hold);
+    clearTimeout(this.#stuck);
+    this.#leave();
   }
   /** A fresh attempt: nothing of the previous one reaches the result. */
   restart(): void {
@@ -126,12 +161,14 @@ class Call {
     this.settled = true;
     clearTimeout(this.deadline);
     this.resolve(result);
+    this.checkLeft();
   }
   rejectWith(error: Error): void {
     if (this.settled) return;
     this.settled = true;
     clearTimeout(this.deadline);
     this.reject(error);
+    this.checkLeft();
   }
 }
 
@@ -147,9 +184,7 @@ class Worker {
    * Calls whose isolate has not stopped yet: placed, until the worker's `gone` frame
    * (after the terminal frame) or its end. They hold a slot (ADR-0563 §7).
    */
-  readonly running = new Set<number>();
-  /** Who waits for a call to leave this worker (its `gone` frame, or the worker's end). */
-  readonly #released = new Map<number, (() => void)[]>();
+  readonly running = new Map<number, Call>();
   retiring = false;
   dead = false;
   exited = false;
@@ -234,29 +269,18 @@ class Worker {
     child.on('close', (code, signal) => this.#exited(code, signal));
   }
 
-  /** Resolves once call `id` has left this worker: its isolate is gone with it. */
-  released(id: number): Promise<void> {
-    if (!this.running.has(id) || this.dead) return Promise.resolve();
-    return new Promise((resolve) => {
-      // The worker is unref'd: someone awaiting this keeps the consumer alive until then.
-      const hold = setInterval(() => {}, 2 ** 30);
-      const list = this.#released.get(id) ?? [];
-      list.push(() => {
-        clearInterval(hold);
-        resolve();
-      });
-      this.#released.set(id, list);
-    });
-  }
-
-  #release(id: number): void {
-    for (const resolve of this.#released.get(id) ?? []) resolve();
-    this.#released.delete(id);
-  }
-
+  /** The worker ended: every isolate on it is gone with it. */
   #releaseAll(): void {
+    const calls = [...this.running.values()];
     this.running.clear();
-    for (const id of [...this.#released.keys()]) this.#release(id);
+    for (const call of calls) call.checkLeft();
+  }
+
+  /** A settled call's isolate outlived the grace here: retire as the worker itself would. */
+  retireStuck(): void {
+    if (this.dead || this.ended !== undefined) return;
+    this.retiring = true;
+    this.pool.settleWorker(this);
   }
 
   send(request: WorkerRequest): void {
@@ -266,7 +290,8 @@ class Worker {
   /**
    * Send `call` here. Everything that can throw — the request, a sandbox run's state —
    * is built before the call is registered, so a throw leaves no phantom call (no slot,
-   * no waiter); a failure while its line is half written ends this worker as lost.
+   * no waiter). A write that throws after registration (half a line on the wire) ends
+   * this worker as lost and rethrows: the caller rejects the call with that error.
    */
   place(call: Call): void {
     const { code, memoryLimitMb, maxOutputBytes, sandbox } = call.spec;
@@ -294,16 +319,16 @@ class Worker {
     const state = sandbox?.state();
     call.worker = this;
     this.calls.set(call.id, call);
-    this.running.add(call.id);
-    if (state === undefined) {
-      this.child.stdin?.write(`${line}\n`);
-      return;
-    }
-    // The same JSON line, written in pieces: the state's base64 never becomes one string
-    // (the consumer's memory per run, ADR-0568 §6).
-    const at = line.lastIndexOf('""}}');
+    this.running.set(call.id, call);
     const stdin = this.child.stdin;
     try {
+      if (state === undefined) {
+        stdin?.write(`${line}\n`);
+        return;
+      }
+      // The same JSON line, written in pieces: the state's base64 never becomes one string
+      // (the consumer's memory per run, ADR-0568 §6).
+      const at = line.lastIndexOf('""}}');
       stdin?.write(line.slice(0, at + 1));
       const step = 3 << 20; // a multiple of 3: the pieces join into one base64 text
       for (let from = 0; from < state.byteLength; from += step)
@@ -316,7 +341,8 @@ class Worker {
         );
       stdin?.write('"}}\n');
     } catch (error) {
-      // Half a line on the wire: this worker can read no further request.
+      // Half a line on the wire: this worker can read no further request. It ends as lost
+      // (its other calls rerun); this call rejects with the error, no rerun (the caller's).
       if (this.ended === undefined) {
         this.ended = { lost: 'after a request it could not be sent whole' };
         this.kill();
@@ -376,8 +402,9 @@ class Worker {
     }
     if (kind === KIND.gone) {
       // The call's isolate has stopped: its slot is free, whoever waits for it may go on.
+      const call = this.running.get(id);
       this.running.delete(id);
-      this.#release(id);
+      call?.checkLeft();
       this.pool.settleWorker(this);
       return undefined;
     }
@@ -451,7 +478,7 @@ class Worker {
 
 /** A sandbox's hold on one of its calls (ADR-0568 §5). */
 export interface CallHandle {
-  abort(error: Error): Promise<void>;
+  abort(error: Error): void;
   left(): Promise<void>;
 }
 
@@ -468,24 +495,26 @@ export class Pool {
 
   /**
    * `handle.abort(error)` (a destroyed sandbox): reject with `error` now and
-   * dispose the isolate as at a deadline. `handle.left()`: resolves once the
-   * call has left its worker — its isolate is gone — whether or not its result
-   * is already out (a timed-out isolate may still be stopping).
+   * dispose the isolate as at a deadline. `handle.left()`: the call's one
+   * "left for good" event (`Call.left`), valid from `onStart` on — its result out
+   * and its isolate gone, whichever comes last, through every rerun; awaiting it
+   * keeps the process up.
    */
   run(spec: CallSpec, onStart?: (handle: CallHandle) => void): Promise<Result> {
     return new Promise<Result>((resolve, reject) => {
       const id = this.#nextId;
       this.#nextId = id === MAX_CALL_ID ? 1 : id + 1;
       const call = new Call(id, spec, resolve, reject, (c) => this.#deadline(c));
-      const left = (): Promise<void> => call.worker?.released(call.id) ?? Promise.resolve();
       onStart?.({
         abort: (error) => {
           call.rejectWith(error);
-          const gone = left();
           this.#cancel(call);
-          return gone;
         },
-        left,
+        left: () => {
+          call.held = true;
+          call.checkLeft();
+          return call.left;
+        },
       });
       call.restart();
       try {
