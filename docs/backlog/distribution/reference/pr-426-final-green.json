@@ -1,9 +1,9 @@
 {
   "overall_verdict": "pass",
-  "merge_call": "Verify pass on 7ea60ff0b: all accepted FIX findings (S1, S1b, N1, N3, N5, N6, N7) hold on the tree; no blocker. Merge on green PR CI at HEAD after replacing the committed docs/backlog/distribution/reference/pr-426-final-green.json (bound to 58c9d1ba3) with this verdict re-bound to the HEAD sha (REV-8, PR-6).",
+  "merge_call": "Verify pass #2 on ef6051a0f: S2 and the 'no intact' precision fix hold; Eddy error keeps the original as cause; new backlog draft passes the RDY-6 check with two minor edits advised. No blocker. Merge on green PR CI at HEAD after re-binding the committed pr-426-final-green.json to this verdict at the HEAD sha (REV-8, PR-6).",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "7ea60ff0b4b5375dd078b5b99e95aafcd04f62f5",
-  "unit_goal_source": "PR #426 standalone unit, no backlog contract; verify pass after reception (§Review run step 2). Authority: user decisions on ADR-0547 (PR #388) «отправь сессию переименовать на frozen» and «давай тоже сделаем», recorded at docs/adr/distribution/0547-frozen-prepared-dependency-snapshots.md:72-100; manager's amended error-text rule (each named exit runnable by the reader of that surface in its own terms, host-only exits labelled host-only; workbench may carry the replay-snapshot phrase; check:arch holds) and accepted FIX findings S1/S1b/N1/N3/N5/N6/N7; reason shadow-replay-cache-miss kept by manager. Baseline: PR #388 behavior at BASE 23ed6b44556c. Delta reviewed: 58c9d1ba3..7ea60ff0b (full unit 23ed6b44556c..7ea60ff0b).",
+  "reviewed_sha": "ef6051a0fd3427da93150769f060b19434ba4ba3",
+  "unit_goal_source": "PR #426 standalone unit, no backlog contract; verify pass #2 after cross-review round 2 reception (§Review run step 2). Authority: user decisions on ADR-0547 (PR #388) «отправь сессию переименовать на frozen» and «давай тоже сделаем» (docs/adr/distribution/0547-frozen-prepared-dependency-snapshots.md:79-108); manager error-text rule (each named exit runnable by its reader; host-only exits labelled) and manager decision S2 (REV-7: drop the Host exit sentence and hostShadowReplayCacheMiss; SDK reads the terminal text without `npm: `; exact-reinstall route with its condition in ADR-0547 §Consequences; READMEs quote verbatim; SDK exit proven in packed Chromium via SDK fs delete + toolchain.install); reason shadow-replay-cache-miss kept by manager. Baseline: PR #388 behavior at BASE 23ed6b44556c. Delta reviewed: 7ea60ff0b..ef6051a0f (full unit 23ed6b44556c..ef6051a0f).",
   "unit_residuals": [],
   "goal_residuals": [],
   "goal_complete": false,
@@ -13,11 +13,11 @@
       "source": "public-api",
       "trace": "ADR-0547",
       "status": "pass",
-      "citation": "packages/workbench/src/glue/dep-snapshot-producer.test.ts:118; tests/integration/fixtures/workbench-vite-consumer/produce-vite-snapshot.mjs:87-125; /tmp/frozen-packed3.log:204",
+      "citation": "packages/workbench/src/glue/dep-snapshot-producer.test.ts:118; tests/integration/fixtures/workbench-vite-consumer/produce-vite-snapshot.mjs:87-125; /tmp/frozen-packed4.log:204",
       "note": ""
     },
     {
-      "row": "'compact' (never published; reviewer npm-packed @riftydev/workbench|sdk|npm-client@0.11.0 = latest: no literal) rejects as an unknown profile: producer, JSON, system tar",
+      "row": "'compact' (never published; npm-packed @riftydev/workbench|sdk|npm-client@0.11.0 = latest carry no literal) rejects as an unknown profile: producer, JSON, system tar",
       "source": "acceptance",
       "trace": "ADR-0547",
       "status": "pass",
@@ -25,51 +25,59 @@
       "note": ""
     },
     {
-      "row": "Disk-lock terminal text (both terminals): exact, EBROKENLOCK/shadow-replay-cache-miss, `npm: ` prefix, exit 1; no host-only exit named",
+      "row": "One disk-lock refusal text on every surface ('holds no intact copy of it'; terminals prefix `npm: `, SDK without), EBROKENLOCK/shadow-replay-cache-miss, no Host exit sentence",
       "source": "acceptance",
       "trace": "ADR-0547",
       "status": "pass",
-      "citation": "packages/workbench/src/workers/no-coi-frozen-vite-install.contract.test.ts:161-170,270-307; packages/npm-client/src/installer-shadow-recipe-v2-replay-authority.contract.test.ts:1157-1164; tests/integration/no-coi-snapshot-browser-proof.mjs:214-216; /tmp/frozen-packed3.log:205",
+      "citation": "packages/npm-client/src/internal/shadow/substitution.ts:274; packages/workbench/src/workers/no-coi-frozen-vite-install.contract.test.ts:161-169,230-260; packages/workbench/src/workers/no-coi-frozen-install.contract.test.ts:149-150; tests/integration/no-coi-snapshot-browser-proof.mjs:213-218; /tmp/frozen-packed4.log:205-206",
       "note": ""
     },
     {
-      "row": "Terminal exit executed as the terminal reader runs it: `rm package-lock.json && npm install` exits 0, re-resolves esbuild-wasm through the registry (both terminals; packed Chromium)",
+      "row": "The named exit executed the way each reader runs it: terminal `rm package-lock.json && npm install` (both terminals; packed Chromium) and SDK fs.rm('/project/package-lock.json') + toolchain.install (packed Chromium) re-resolve through the registry",
       "source": "acceptance",
       "trace": "ADR-0547",
       "status": "pass",
-      "citation": "packages/workbench/src/workers/no-coi-frozen-vite-install.contract.test.ts:286-308; tests/integration/no-coi-snapshot-browser-proof.mjs:230-236",
+      "citation": "packages/workbench/src/workers/no-coi-frozen-vite-install.contract.test.ts:278,295,303-309; tests/integration/no-coi-snapshot-browser-proof.mjs:220-236; tests/integration/fixtures/workbench-vite-consumer/src/no-coi-project-proof.ts:140",
       "note": ""
     },
     {
-      "row": "SDK toolchain.install text = terminal text + labelled host-only exit; host exits executed: replay-profile applySnapshot then toolchain.install reinstalls the lock byte-exact with no esbuild request; delete lock then toolchain.install re-resolves",
+      "row": "ADR-0547 §Consequences (PR #426) condition: replay-profile snapshot applies without force only on an unchanged project and then toolchain.install is byte-exact; package.json edit or whitespace-only lock change conflicts; force reverts the edit",
       "source": "acceptance",
       "trace": "ADR-0547",
       "status": "pass",
-      "citation": "packages/workbench/src/workers/no-coi-toolchain-install.ts:39-54,69-74; packages/workbench/src/workers/no-coi-frozen-vite-install.contract.test.ts:172-176,309-329; tests/integration/no-coi-snapshot-browser-proof.mjs:217-227; /tmp/frozen-packed3.log:206-207",
+      "citation": "docs/adr/distribution/0547-frozen-prepared-dependency-snapshots.md:70-76; packages/workbench/src/workers/no-coi-frozen-vite-install.contract.test.ts:311-347; tests/integration/no-coi-snapshot-browser-proof.mjs:239-249",
       "note": ""
     },
     {
-      "row": "Eddy-staged lock (no package-lock.json on disk): true statement and exit; `run install again` executed and installs from Eddy with zero registry reads",
+      "row": "Eddy-staged lock: true statement ('lost its intact copy after Eddy seeded it'), exit 'run install again' executed (installs from Eddy, zero registry reads); original error kept as cause",
       "source": "acceptance",
       "trace": "ADR-0547",
       "status": "pass",
-      "citation": "packages/npm-client/src/internal/shadow/substitution.ts:277-288; packages/npm-client/src/installer.ts:413; services/eddy/tests/client-roundtrip.test.ts:151-154,1196-1197,1213-1236",
+      "citation": "packages/npm-client/src/internal/shadow/substitution.ts:282-294; packages/npm-client/src/installer.ts:413; services/eddy/tests/client-roundtrip.test.ts:151-154,1196-1197,1213-1236",
       "note": ""
     },
     {
-      "row": "Install behavior unchanged: no network fallback for the substitute, same failure point, tree/lock unchanged; non-miss Eddy errors rethrown unchanged",
+      "row": "Install behavior unchanged: no network fallback for the substitute, same failure point, tree/lock unchanged; SDK install path byte-identical to BASE",
       "source": "acceptance",
       "trace": "ADR-0547",
       "status": "pass",
-      "citation": "packages/workbench/src/workers/no-coi-frozen-vite-install.contract.test.ts:244-266; packages/npm-client/src/installer.ts:413 (`?? error`; eddyFallbackReason is undefined when source==='eddy', installer.ts:373-383); tests/integration/no-coi-snapshot-browser-proof.mjs:223",
+      "citation": "packages/workbench/src/workers/no-coi-toolchain-install.ts (git diff 23ed6b44556c HEAD empty); packages/workbench/src/workers/no-coi-frozen-vite-install.contract.test.ts:230-260; tests/integration/no-coi-snapshot-browser-proof.mjs:218",
       "note": ""
     }
   ],
   "axes": [
     {
       "axis": "Completeness",
-      "verdict": "pass",
-      "findings": []
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/backlog/distribution/sdk-install-error-structured-reason.md:15-25",
+          "evidence": "packages/runtime-js/src/protocol.ts:67-76 defines SerializedRuntimeError (host-fs.ts:8 only imports it); toolchain owner posts serializeRuntimeError (packages/runtime-js/src/worker-fs-rpc.ts:209-232, no-coi-toolchain-owner.ts:437); git ls-files docs/backlog (non-reference) -> playground/structured-execution-diagnostics.md is the only neighbour",
+          "summary": "RDY-6 written-result check of the new draft: facts hold (fields name/message/stack/code/path/feature/cause/effects; reason/packageName dropped; unchanged since BASE), dedupe holds. Two edits advised: cite protocol.ts:67 as the type's home instead of host-fs.ts, and name the neighbouring playground/structured-execution-diagnostics (different surface: page PTY diagnostics) in the dedupe line. Owner/trigger present; question correctly agent-owned with ADR on public fields (DEC-1).",
+          "authority": ""
+        }
+      ]
     },
     {
       "axis": "Mission and architecture",
@@ -89,7 +97,7 @@
           "severity": "nit",
           "location": "packages/npm-client/src/internal/shadow/substitution.ts:240",
           "evidence": "",
-          "summary": "Module-level WeakMap side table to re-derive the Eddy text from a minted error; works (identity is preserved through the walk, eddy carrier proves it), but passing the source kind into fetchCtx would avoid a second state owner. Taste.",
+          "summary": "WeakMap side table for the Eddy restatement remains (carried nit); works and is carried.",
           "authority": ""
         }
       ]
@@ -105,16 +113,16 @@
       "findings": [
         {
           "severity": "concern",
-          "location": "packages/npm-client/src/internal/shadow/substitution.ts:256-276",
+          "location": "packages/npm-client/src/internal/shadow/substitution.ts:275",
           "evidence": "",
-          "summary": "N4 (NOTE): the walk stops at the first missing substitute, so with several cold shadow pins only the first is named; the exits stay true for all, but a reader restoring bytes would learn of the next pin only on retry.",
+          "summary": "'so this lockfile cannot be reinstalled exactly here' is read by the SDK host too, who does have an exact route (ADR-0547:70-76, unchanged project + replay snapshot). True of the current cache state, and the README points to the route, so advisory; 'with this cache' would be more precise.",
           "authority": ""
         },
         {
           "severity": "concern",
-          "location": "packages/npm-client/src/internal/shadow/substitution.ts:270",
+          "location": "packages/npm-client/src/internal/shadow/substitution.ts:256-280",
           "evidence": "",
-          "summary": "The disk text ('cannot be reinstalled exactly here') is also what a direct @riftydev/npm-client install() caller gets; such a host can seed its own tarball cache. Outside the manager's two named readers, so advisory.",
+          "summary": "N4 carried: with several cold shadow pins only the first is named.",
           "authority": ""
         }
       ]
@@ -125,23 +133,16 @@
       "findings": [
         {
           "severity": "concern",
-          "location": "packages/workbench/src/glue/npm-shell-command.ts:979-983; services/eddy/tests/client-roundtrip.test.ts:1213",
+          "location": "packages/workbench/src/glue/npm-shell-command.ts:979-983",
           "evidence": "",
-          "summary": "The Eddy text is carried exactly at installer level only; the one surface that reaches Eddy (package-authority terminal with resolverUrl) has no carrier printing `npm: <eddy text>`. The mapping keys on reason and is carried for the disk text, so the gap is a composition, not an untested branch.",
-          "authority": ""
-        },
-        {
-          "severity": "concern",
-          "location": "packages/workbench/src/workers/no-coi-frozen-vite-install.contract.test.ts:178-204",
-          "evidence": "",
-          "summary": "noCoiTerminal still re-implements the toolchain owner's install hook; the real owner hook is covered only by the packed Chromium proof (CI light 1/8).",
+          "summary": "Carried: the Eddy text is carried exactly at installer level; the package-authority terminal with resolverUrl (only surface reaching Eddy) has no carrier printing `npm: <eddy text>`; the mapping keys on reason and is carried with the disk text.",
           "authority": ""
         },
         {
           "severity": "nit",
-          "location": "/tmp/frozen-packed3.log",
-          "evidence": "packed log mtime 16:25 precedes pr:check log 16:33; 7ea60ff0b is one commit holding product + evidence append, so the 'reception tree' sha is not in git",
-          "summary": "Packed-consumer evidence is not bound to a committed sha; its printed terminal/host texts equal HEAD's code byte-for-byte and CI re-runs the lane at HEAD, so no action beyond green CI.",
+          "location": "packages/workbench/src/workers/no-coi-frozen-vite-install.contract.test.ts:346",
+          "evidence": "",
+          "summary": "Final `requests` assertion reads the first fixture's request log after the work moved to `fresh`; vacuous (its fresh.requests twin above carries the claim).",
           "authority": ""
         }
       ]
