@@ -104,7 +104,12 @@ describe('compact snapshot admission (I1–I3)', () => {
   it('admits a compact shadow tree without its ordinary exact replay closure', async () => {
     const legacy = JSON.parse(
       gunzipSync(
-        await readFile('apps/playground/public/snapshots/vite-node-modules.json.gz'),
+        await readFile(
+          new URL(
+            '../../../../apps/playground/public/snapshots/vite-node-modules.json.gz',
+            import.meta.url,
+          ),
+        ),
       ).toString(),
     );
     expect(legacy.tarballCache.files.length).toBeGreaterThan(0);

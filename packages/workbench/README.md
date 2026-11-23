@@ -240,11 +240,11 @@ Set `profile: 'compact'` for prepared environments that build installed dependen
 without reinstalling. Compact v5 omits replay archives; the prepared payload stays
 intact. Default (or `profile: 'replay'`) retains v4 exact replay closure/SRI.
 Updated readers accept both; older readers reject compact before application.
-Compact adds no install ban, reinstall guarantee or registry fallback: shadow-substituted
-lock pins replay only from the shared cache and are never fetched, so after compact on
-a cold cache `npm install` over the lock, or adding an unrelated package, fails with
-`EBROKENLOCK` even with a registry; naming a substituted direct dependency re-resolves
-it through the registry. A replay snapshot or a warm cache restores install.
+Compact adds no install ban, reinstall guarantee or registry fallback. For a Vite
+project after compact on a cold shared cache no `npm install` form succeeds (over the
+lock, `npm install esbuild`, adding a package): each fails `EBROKENLOCK` because the
+substituted `esbuild` replays only from the cache, even with a registry. A replay
+snapshot or a warm cache restores install.
 
 For Brotli, pass `encoding: 'br'` to the same call and save `archive` as
 `dependencies.tar.br`. `contentEncoding` is `'br'` or `'gzip'`; omitted

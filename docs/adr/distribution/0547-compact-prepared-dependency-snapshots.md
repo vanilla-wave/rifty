@@ -54,9 +54,12 @@ Compact reduces the measured Vite pair, not every possible tree. Readers must
 upgrade before consuming compact; ordinary producers/readers remain compatible.
 Explicit install retains existing cache-miss and replay behavior. 2026-11-23 —
 concretely: shadow-substituted pins replayed from the lock read bytes only from
-the shared cache and are never fetched. After compact on a cold cache, install
-over the lock (zero requests) or adding an unrelated package fails `EBROKENLOCK
-… missing its pinned cache bytes`, even with a live registry; naming the
-substituted direct dependency re-resolves it through the registry (ADR-0361
-request admission). A replay snapshot or warm cache restores install
-(`no-coi-compact-install.contract.test.ts`).
+the shared cache and are never fetched. Real Vite 7.3.6 after compact on a cold
+cache, live registry (`no-coi-compact-vite-install.contract.test.ts`): install
+over the lock, `npm install esbuild` and adding `ms` each fail `EBROKENLOCK …
+esbuild.v2 is missing its pinned cache bytes`; the ordinary tarballs fetched
+first (11, or 12 with `ms`) stay in the shared cache; the project tree is
+unchanged. Mechanism (`no-coi-compact-install.contract.test.ts`, one direct
+LightningCSS pin): naming a substituted *direct* dependency re-resolves it
+through the registry (ADR-0361 request admission) — no route for Vite, whose
+`esbuild` stays lock-replayed. A replay snapshot or warm cache restores install.
