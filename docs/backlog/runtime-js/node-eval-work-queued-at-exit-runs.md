@@ -10,7 +10,7 @@ code: [packages/runtime-js/src/internal/event-loop-keepalive.ts, packages/runtim
 
 ## Context
 
-Sandbox (ADR-0568): a member of the lifecycle class, compat ⚠️ (row "A run's lifecycle and exit status", measured in `reference/isolate-host-sandbox-lifecycle-class.md`). Owner: runtime-js. Trigger: the next process-exit change in runtime-js, or a sandbox consumer finding a file written after `process.exit()`. Lead with the same mechanism: `runtime-js/host-deliveries-stop-at-process-terminal` (stop host deliveries at the terminal).
+Sandbox (ADR-0568): a member of the lifecycle class, compat ⚠️ (row "A run's lifecycle and exit status", measured in `reference/isolate-host-sandbox-lifecycle-class.md`). Owner: runtime-js. Trigger: the next process-exit change in runtime-js, or a sandbox consumer finding a file written after `process.exit()`.
 
 Measured 2026-11-22 (PR #416), `node -e` v24.16.0 runs none of it. Who dispatches what still runs after `exit()`:
 
@@ -44,6 +44,17 @@ Where it shows:
   one in a timer, a microtask queued before it.
 - Kernel children (COI): a microtask queued before a synchronous `exit()` or one in a timer prints (external review
   probe, PR #416; not re-measured here).
+
+Lead, untried (PR #424 cross-review): in the isolate guest every host delivery (a timer's expiry,
+an unhandled rejection) already passes one gate on the run phase and runs nothing once the run's
+status is out; the runtime's terminal comes earlier — at `exit()` or a fatal thrown in a callback — and
+between the two a timer already due still runs (`setTimeout(() => fs.writeFileSync('t', '1'), 0);
+Promise.resolve().then(() => process.exit(2))` keeps `t` in a sandbox, Node exit 2 without it; an
+endless such timer ends the run `timeout` in both hosts). Closing that gate at the terminal would match
+Node on both isolate hosts for host-delivered work, and move `runCode` corpus pins of today's
+divergence (they pin rifty's outcome, not Node's: a timer's `exit(0)` overriding a pending fatal,
+`node-eval-queued-exit-overrides-pending-fatal`; output of callbacks due beside `exit()`), so it needs
+its own contract against live Node; V8 microtasks stay out of its reach.
 
 Twin of `node-eval-queued-exit-overrides-pending-fatal` (the fatal terminal, same deferral). Not a timing
 tolerance: a fix ends the realm at the terminal (the isolate host's child sees no request then — ADR-0557 §6

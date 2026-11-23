@@ -713,6 +713,7 @@ describe('no host delivery reaches the guest after its run has ended (ADR-0568 Â
       code: "const fs = require('fs'); fs.writeFileSync('kept', '1'); process.on('unhandledRejection', () => { for (;;) {} }); globalThis.p = Promise.reject(new Error('r')); throw new Error('x')",
       report: true,
     },
+    // A guard row, not a RED one: green with the base entry.ts too.
     'a rejected async call before an uncaught throw: only the throw is reported': {
       code: "async function f() { throw new Error('p') } f(); throw new Error('x')",
       report: true,

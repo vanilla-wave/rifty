@@ -50,7 +50,7 @@ Command (repo root, after `pnpm --filter @riftydev/isolate-host build`):
 Files Node writes are missing in two rows (`'beforeExit'` is never emitted, process.md ❌; an
 `unhandledRejection` listener never runs for a rejection made inside an `'exit'` listener), in both
 hosts. Work already due when `exit()` is called from any callback still runs in both hosts — the untried
-lead `runtime-js/host-deliveries-stop-at-process-terminal`. Every divergence is at a place `runCode` diverges too; the sandbox's status is `runCode`'s on every
+lead in `runtime-js/node-eval-work-queued-at-exit-runs`. Every divergence is at a place `runCode` diverges too; the sandbox's status is `runCode`'s on every
 row but one — a timer due beside a fatal thrown from another timer: `runCode` takes its `exit(0)`
 (0), the sandbox keeps the fatal's 1 (Node's; the terminal is already recorded) and its file.
 
