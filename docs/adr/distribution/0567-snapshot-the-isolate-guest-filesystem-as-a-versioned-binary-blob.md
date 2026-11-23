@@ -114,7 +114,7 @@ Probes: `docs/backlog/distribution/reference/isolate-host-fs-snapshot-fit-probes
    an isolate the limit kills outright is the embedder's memory termination. A
    snapshot right after a restore with no guest code between can need ~3 × the
    bytes: the restored blob is not yet collected (231–322 MiB at 98 MiB). A
-   consumer sizes `memoryLimitMb` for 2 × `maxBytes`.
+   consumer sizes `memoryLimitMb` for 2 × `maxBytes` + 16 MiB.
 8. **Where.** One pure-JS module in `@riftydev/isolate-guest` (root exports
    `snapshotFs(fs, options)`, `restoreFs(fs, bytes, options)`,
    `FsSnapshotError`; ADR-0558, unstable) over a structural FS interface that

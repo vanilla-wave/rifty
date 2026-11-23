@@ -225,7 +225,7 @@ export function snapshotFs(fs: SnapshotFs, options: SnapshotOptions): Uint8Array
     if (error instanceof RangeError)
       throw new FsSnapshotError(
         'ERR_FS_SNAPSHOT_TOO_LARGE',
-        'out of memory building the snapshot (size the memory limit for about 2 × maxBytes)',
+        'out of memory building the snapshot (size the memory limit for 2 × maxBytes + 16 MiB)',
       );
     throw error;
   }
@@ -430,7 +430,9 @@ function decode(bytes: Uint8Array, expected: SnapshotTemplate | null, maxBytes: 
     if (kind === FILE) {
       need(8);
       const size = view.getFloat64(o, true);
-      if (!Number.isSafeInteger(size) || size < 0) throw corrupt('bad file size', o);
+      // −0 would restore as +0: a blob the writer never makes, refused for byte-exact determinism.
+      if (!Number.isSafeInteger(size) || size < 0 || Object.is(size, -0))
+        throw corrupt('bad file size', o);
       o += 8;
       // A size past the end leaves `o` past it: the next read or the end check refuses.
       start = o;
