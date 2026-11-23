@@ -124,3 +124,22 @@ the formatter per host (`sibling-drift`).
   `runtime-js/module-compile-error-node-syntax-error` (the syntax-error
   report's class, message and place); every row whose Node report has a header
   stays a named compat row (process.md "Fatal error stderr bytes").
+- amend: 2026-11-23 — user: «ок, не выглядит серьезным, если не так, поправь»
+  (to the manager's: «Цель обещала один отчёт об ошибке на всех хостах:
+  isolate, no-COI и браузерный COI. Изменение жизненного цикла браузерных
+  процессов, которое это давало, откачено после двух регрессов подряд. В итоге:
+  в isolate отчёт новый: без кадров rifty, с верными номерами строк; в
+  браузерных хостах необработанная ошибка из таймера или другого callback'а
+  печатается как на main — текстом браузера, с кадрами и URL runtime rifty»,
+  options «Принять как есть, отложить в backlog (рекомендую)» / «Отдельная
+  цель после этапа»), then, after the manager's correction that on no-COI the
+  command loses its exit code and stderr, user: «оставить в backlog» (to the
+  manager's: «no-COI: команда с uncaught-ошибкой из колбэка теряет код выхода
+  и stderr. Оставить в backlog или отдельная починка после этапа?», with
+  `exitCode: null`, `WORKER_CRASHED`, the same on main, the PR #421 fix rolled
+  back) — I3 and I4 hold for the isolate guest: on the no-COI SDK and the COI
+  Workbench every fatal path prints as main (rifty frames and served runtime
+  URLs; a no-COI command whose callback throws ends `failed`, `exitCode` null,
+  stderr empty), named compat rows; deferred to
+  `runtime-js/browser-host-realm-uncaught-fatal-report` and
+  `distribution/no-coi-command-unhandled-rejection-exit`.

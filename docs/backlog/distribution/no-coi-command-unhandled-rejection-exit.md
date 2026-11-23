@@ -5,11 +5,17 @@ title: Settle the remaining no-COI in-process terminals as Node exits, not realm
 created: 2026-09-11
 why: A no-COI command or runBin whose guest ends by a no-listener throw, an eval fatal, or an exit while a non-timer handle is live reports failed/crash with the realm replaced, where real Node prints and exits with a status
 user_story: As an embedder running agent commands, I want `node -e "Promise.reject(…)"`, a no-listener timer throw, or `process.exit(n)` beside a listening server to report Node's status with known effects, but today the realm is replaced (or the toolchain Worker crashes) and the status is lost.
-sources: [docs/adr/distribution/0418-no-coi-project-files-and-invocation-commands.md, docs/adr/distribution/0423-keep-no-coi-invocation-settlement-generic.md, docs/adr/runtime-js/0445-dispatch-node-process-lifecycle-events-before-terminal-handling.md]
+sources: [docs/adr/runtime-js/0445-dispatch-node-process-lifecycle-events-before-terminal-handling.md, docs/adr/distribution/0418-no-coi-project-files-and-invocation-commands.md, docs/adr/distribution/0423-keep-no-coi-invocation-settlement-generic.md, docs/adr/runtime-js/0445-dispatch-node-process-lifecycle-events-before-terminal-handling.md]
 code: [packages/workbench/src/workers/no-coi-project-command.ts, packages/workbench/src/workers/no-coi-toolchain-worker.ts, packages/runtime-js/src/internal/event-loop-keepalive.ts]
 ---
 
 ## Context
+
+2026-11-23 — user, asked by the manager «no-COI: команда с uncaught-ошибкой из
+колбэка теряет код выхода и stderr. Оставить в backlog или отдельная починка
+после этапа?»: «оставить в backlog». Owner: runtime-js with workbench (no-COI
+invocation settlement); trigger: an embedder or agent report of a lost status,
+or the next change to the no-COI realm trap.
 
 Since ADR-0445's 2026-09-25 note the drain settles with the process's first
 terminal. A no-COI project command maps it to Node's status, clears the
@@ -70,10 +76,13 @@ so an `'exit'` listener's `exitCode`/`exit(n)` is ignored there.
 
 ## Options or Next
 
-- Throw: in the toolchain realm, run the fatal terminal at the trap (stderr +
-  exit 1) instead of the default report, as a rejection does; COI keeps its
-  kernel report unless the same move is decided for both (compat row "Fatal
-  throw with an `'exit'` listener").
+- Throw: in the toolchain realm, run the fatal terminal for a no-listener
+  throw (stderr + exit 1) instead of the default report, as a rejection does.
+  Tried in PR #421 at the realm trap and rolled back: run in the trap or after
+  it, it made a global error another listener cancels terminal (ADR-0340;
+  `runtime-js/browser-host-realm-uncaught-fatal-report` records why each
+  interception failed). A fix decides from the event's own cancel flag after
+  the dispatch.
 - Eval: map the eval lifecycle's projected fatal to stderr + exit 1 through
   its existing `terminateUnhandled`.
 - Live handles: a host-owned retirement of ports/imports/fetches, or a
