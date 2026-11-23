@@ -1,0 +1,221 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Mergeable once PR CI is green at HEAD a876a6b09 and the landing verdict is committed (REV-8). No blockers. Before landing, add the NOTE concerns (fatal stack-getter, non-writable stderr realm poisoning, stack positions) to the PR body as findings 10-12 for the batched post-landing rifty-to-backlog: they are not there yet, and the Decisions line is still stale.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "a876a6b090a3a388a00350e4d8e50615a8ab915b",
+  "unit_goal_source": "PR #406 + observed baseline (/Users/vanilla-wave/ai/euphotic/proofs/2026-11-12-no-coi-office-docs/sandbox-out/heredoc.json sync-throw -> 'node: boom-sync'; brief /Users/vanilla-wave/ai/euphotic/proofs/2026-11-12-no-coi-office-docs/wave1/6-no-coi-fatal-stderr.md) + Node v24.16.0, BASE 35f54d9e4, HEAD a876a6b090a3a388a00350e4d8e50615a8ab915b (4ce4a10ee + docs-only reception fix); observed-defect unit (rifty-fix, RDY-8), no contract doc",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Closed RED 1: `node fail.cjs` (CJS throw new Error('boom')): Node status and normalized fatal shape, or a declared residual",
+      "source": "acceptance",
+      "trace": "scenario (user closed RED list #1) + Node v24.16.0",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-fatal-stderr.spec.ts:102",
+      "note": ""
+    },
+    {
+      "row": "Closed RED 2: `node -e \"throw new Error('boom')\"`: [eval]:1 header, caret, Error: boom, at [eval]:1:7, status 1",
+      "source": "acceptance",
+      "trace": "scenario (user closed RED list #2) + Node v24.16.0",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-fatal-stderr.spec.ts:108",
+      "note": ""
+    },
+    {
+      "row": "Closed RED 3: `node fail.mjs` (ESM sync throw)",
+      "source": "acceptance",
+      "trace": "scenario (user closed RED list #3) + Node v24.16.0",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-fatal-stderr.spec.ts:115",
+      "note": ""
+    },
+    {
+      "row": "Closed RED 4: SyntaxError in a CJS entry",
+      "source": "acceptance",
+      "trace": "scenario (user closed RED list #4) + Node v24.16.0",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-fatal-stderr.spec.ts:121",
+      "note": ""
+    },
+    {
+      "row": "Closed RED 5: SyntaxError in an ESM entry",
+      "source": "acceptance",
+      "trace": "scenario (user closed RED list #5) + Node v24.16.0",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-fatal-stderr.spec.ts:131",
+      "note": ""
+    },
+    {
+      "row": "Closed RED 6: `node -e \"require('missing-pkg')\"` (MODULE_NOT_FOUND with Require stack)",
+      "source": "acceptance",
+      "trace": "scenario (user closed RED list #6) + Node v24.16.0",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-fatal-stderr.spec.ts:141",
+      "note": ""
+    },
+    {
+      "row": "Closed RED 7: non-Error throw (`throw 42`)",
+      "source": "acceptance",
+      "trace": "scenario (user closed RED list #7) + Node v24.16.0",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-fatal-stderr.spec.ts:148",
+      "note": ""
+    },
+    {
+      "row": "Every row is Node-shaped or a declared residual: rifty prints exactly the declared value and Node does not",
+      "source": "acceptance",
+      "trace": "scenario (user: no silent partial) + Node v24.16.0",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-fatal-stderr.spec.ts:203",
+      "note": ""
+    },
+    {
+      "row": "Status branch: an 'exit' listener's exitCode sets the sync fatal status (5)",
+      "source": "acceptance",
+      "trace": "scenario (exit with Node's status) + ADR-0445",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-process-exit-status.spec.ts:62",
+      "note": ""
+    },
+    {
+      "row": "Status branch: no timer of the process runs after the sync fatal or entry exit() terminal (0 ms timer)",
+      "source": "acceptance",
+      "trace": "scenario (exit with Node's status) + ADR-0445",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-process-exit-status.spec.ts:67",
+      "note": ""
+    },
+    {
+      "row": "Status branch: status read after the report. A microtask's exitCode before the host catch does not count (eval -> 1); a stack getter's write during the report counts (5), on the entry terminal and the rejection trap",
+      "source": "acceptance",
+      "trace": "scenario (exit with Node's status) + ADR-0445",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-process-exit-status.spec.ts:78",
+      "note": ""
+    },
+    {
+      "row": "Report reaches the command stderr past a silenced/throwing guest process.stderr.write (Node writes fd 2)",
+      "source": "acceptance",
+      "trace": "scenario (prints stderr in Node 24's shape) + Node v24.16.0",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-process-exit-status.spec.ts:102",
+      "note": ""
+    },
+    {
+      "row": "Declared gap behind a sync throw stays named (failed, NotImplementedError feature) with the report on stderr",
+      "source": "acceptance",
+      "trace": "baseline ('node: Not implemented: zlib.inflateRawSync') + ADR-0445",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-agent-sdk.spec.ts:156",
+      "note": ""
+    },
+    {
+      "row": "Compat row 'Fatal error stderr bytes' carries a host scope: bytes claimed only for the tested no-COI command; the kernel child is stated as uncompared; every no-COI residual is named",
+      "source": "acceptance",
+      "trace": "scenario (user RULES: compat row with host scope) + baseline process.md 'The error and status match'",
+      "status": "pass",
+      "citation": "docs/public/compat/process.md:65",
+      "note": ""
+    },
+    {
+      "row": "runtime-js ./internal adds terminateFatal, isNodeProcessExiting (repo-internal subpath)",
+      "source": "public-api",
+      "trace": "ADR-0445",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/no-coi-project-command-exit.test.ts:97",
+      "note": ""
+    },
+    {
+      "row": "typescript-worker exact SHA pin re-pinned (294718dc...)",
+      "source": "frozen-artifact",
+      "trace": "ADR-0391",
+      "status": "pass",
+      "citation": "tools/checks/esbuild-legacy-retirement.mjs:107",
+      "note": ""
+    },
+    {
+      "row": "Shared lifecycle oracle runLifecycleOracle also returns root (realpath cwd)",
+      "source": "frozen-artifact",
+      "trace": "ADR-0445",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/process-lifecycle-cases.ts:385",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "PR #406 body §Decisions + §Findings",
+          "evidence": "`gh pr view 406` (updatedAt 2026-11-18T04:11:34Z, before a876a6b09): Decisions still reads 'fatal status read at `beginFatal`'; the findings list ends at 9, with no 10-12.",
+          "summary": "Reception said the PR body was corrected, but it is unchanged. The Decisions line still describes the r1 design (the landed one restores exitCode in fatal() and reads it after the report; the ADR text is correct), and the NOTE concerns are not yet listed as findings 10-12 for the post-landing batch.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/runtime-js/src/builtins/process-lifecycle-events.ts:134",
+          "evidence": "Scratch HEAD copy, vitest via runNoCoiProjectCommand: a.cjs `const e = new Error('x'); Object.defineProperty(e, 'stack', { get() { throw new Error('getter'); } }); throw e;` -> {status:'exited', exitCode:1, stderr:'node: getter\\n'}. BASE product -> 'node: x\\n'. node v24.16.0 -> '<file>:3\\nthrow e;\\n^\\n\\nError: x\\n(Use `node --trace-uncaught ...` to show where the exception was thrown)\\n\\nNode.js v24.16.0', status 1.",
+          "summary": "Fault class: an unguarded guest accessor runs inside the fatal terminal. formatThrown's `error.stack` read in fatal() can throw, and that error escapes terminateFatal (no-coi-project-command.ts:145) back to the Shell catch, so the old `node: <message>` shape returns, now with the getter's message. The status still matches. This is outside the closed list and not in the compat row. The trap path shares it. Route to the batched backlog, or guard the read the way Node's report falls back.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "packages/workbench/src/workers/no-coi-project-command.ts:144",
+          "evidence": "Probe: a.cjs `Object.defineProperty(process.stderr, 'write', { value: () => true, writable: false, configurable: true }); throw new Error('boom-nw');` -> stderr \"node: Cannot assign to read only property 'write' of object '#<EventEmitter2>'\", exited 1. Every later command in the same realm (9 probes) prints the same. HEAD and BASE are identical. node v24.16.0 prints the report, status 1.",
+          "summary": "A non-writable guest `write` silently defeats the stderr re-install (Reflect.set returns false), and the finally restore at :188 then throws in strict mode. The report is lost and the reused realm is poisoned for later commands. This predates the PR (BASE identical). PR body finding 7 lists the bypass but not the realm poisoning. Add it to the post-landing batch.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "tests/no-coi/no-coi-fatal-stderr.spec.ts:105",
+          "evidence": "HEAD e2e attachment: CJS 'at Object.eval (/fatal-stderr/fail.cjs:3:7)' vs node v24.16.0 'at Object.<anonymous> (<root>/fail.cjs:1:7)'; ESM 'at eval (/fatal-stderr/fail.mjs:6:7)' vs 'file://<root>/fail.mjs:1:7'.",
+          "summary": "Agents now get a line:col, which was the baseline complaint, but it is +2 lines for CJS and +5 for ESM. That is a declared residual tracked by cjs-wrapper-stack-positions / esm-stack-positions. The user-visible value of this fix depends on those items, so consider raising their priority in the post-landing batch.",
+          "authority": ""
+        }
+      ]
+    }
+  ]
+}

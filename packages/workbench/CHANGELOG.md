@@ -1,5 +1,11 @@
 # Changelog
 
+- No-COI project commands: a `node -e`/`-p` invocation's `[eval]` globals (`require`, `module`, `exports`, `__filename`, `__dirname`) end with it — restored once the process ends (normal exit, throw, `exit()`, a settled Stop) — so a later `node` no longer sees them and a guest value under one survives unchanged; no project-command `node` sees the console `require` mirror (ES modules read `typeof require` `'undefined'`, as Node). When the realm cannot be returned (an `-e`/`-p` binding made non-configurable, a `node` that makes `globalThis` non-extensible while the mirror is hidden) the command fails naming the binding and the Worker is replaced. ADR-0418 correction 2026-11-18. Was: the bindings stayed on `globalThis` for every later command. `tests/no-coi/no-coi-shared-realm.spec.ts` vs live Node.
+
+- No-COI project commands end a `node` killed by a synchronous no-listener throw (entry, `-e`) as Node does (ADR-0445 correction 2026-11-18): the runtime fatal terminal a fatal rejection takes prints the error's name, message and stack with its user frame — an eval's `[eval]:N` source line and caret too — to the command's stderr even past a guest-patched `process.stderr.write` (was `node: <message>`); the status is the `'exit'` listeners' `exitCode ?? 1`, read before any later task (was 1); no timer of the process runs afterwards (was: they ran). An entry `exit()` also kills a 0 ms timer queued ahead of it (was: it ran). A declared gap behind such a throw is reported by name (`failed`, realm replaced) as behind a fatal rejection (was `exited` 1). What it does not reproduce: compat process.md "Fatal error stderr bytes".
+
+- The rooted guest view (`ProjectTerminalFsSync`) forwards ADR-0365 head/chunk reads through its usual guest resolution, so dev-server-child relays stay linear for nested Workers (esbuild-wasm service).
+
 - Supply owner-stable Stats metadata for virtual namespace directories, retaining guest-only error paths.
 
 - No-COI install/open/snapshot no longer activate the generated esbuild client; builds use SW children.

@@ -73,6 +73,8 @@ export interface NodeProcessExitHost {
   writeStderr(text: string): void;
   /** Request the kernel exit for `signal` (eval-owned or control port; the port sends once). */
   requestExit(signal: RiftyProcessExitSignal): void;
+  /** A control port can carry the exit; without one only the drain ends the process. */
+  hasExitControl(): boolean;
 }
 
 /** One process's exit state: Node's `_exiting`. */
@@ -81,6 +83,8 @@ export class NodeProcessExit {
   #exiting = false;
   /** The first requested terminal: after it the process is gone for Node. */
   #terminal: RiftyProcessExitSignal | null = null;
+  /** `exitCode` as the fatal `'exit'` listeners left it; null before `beginFatal`. */
+  #fatalExitCode: { readonly value: number | undefined } | null = null;
 
   constructor(host: NodeProcessExitHost) {
     this.#host = host;
@@ -94,6 +98,10 @@ export class NodeProcessExit {
   /** The first requested terminal; null while the process lives. */
   get terminal(): RiftyProcessExitSignal | null {
     return this.#terminal;
+  }
+
+  get hasExitControl(): boolean {
+    return this.#host.hasExitControl();
   }
 
   /** Node `per_thread.js` `exit()`: the status is read after the listeners. */
@@ -116,14 +124,19 @@ export class NodeProcessExit {
     } catch {
       // Node: "Nothing to be done about it at this point."
     }
+    this.#fatalExitCode = { value: this.#host.readExitCode() };
   }
 
   /**
-   * After `beginFatal`, Node prints and exits with `exitCode ?? 1` inside its
-   * handler — unless an `exit()` already ended it (e.g. in the fatal `'exit'`).
+   * After `beginFatal`, Node prints and exits with `exitCode ?? 1` read after its
+   * report, inside its handler (TriggerUncaughtException): no task runs between
+   * the `'exit'` listeners and the report, so a later one's `exitCode` (an
+   * in-process host's catch runs after microtasks) is undone first. An `exit()`
+   * that already ended the process (e.g. in the fatal `'exit'`) keeps its status.
    */
   fatal(error: unknown): never {
     if (this.#terminal !== null) throw this.#terminal;
+    if (this.#fatalExitCode !== null) this.#host.writeExitCode(this.#fatalExitCode.value);
     this.#host.writeStderr(`${formatThrown(error)}\n`);
     return this.#terminate(toUint8ExitCode(this.#host.readExitCode() ?? 1), { cause: error });
   }
@@ -140,6 +153,7 @@ export class NodeProcessExit {
     this.#host.writeExitCode(undefined);
     this.#exiting = false;
     this.#terminal = null;
+    this.#fatalExitCode = null;
   }
 
   /**
@@ -159,7 +173,7 @@ export class NodeProcessExit {
 
 type NodeProcessExitLike = Pick<
   NodeProcessExit,
-  'exiting' | 'terminal' | 'beginFatal' | 'fatal' | 'listenerThrew' | 'reset'
+  'exiting' | 'terminal' | 'hasExitControl' | 'beginFatal' | 'fatal' | 'listenerThrew' | 'reset'
 >;
 
 export function attachNodeProcessExit(process: object, exit: NodeProcessExit): void {
@@ -190,6 +204,14 @@ export function isNodeProcessExiting(process: unknown): boolean {
  */
 export function readNodeProcessTerminal(target?: unknown): RiftyProcessExitSignal | null {
   return lifecycleTarget(target)?.exit.terminal ?? null;
+}
+
+/**
+ * The active runtime process has no control port (an in-process host: isolate
+ * guest, no-COI command): its terminal ends it only through its drain.
+ */
+export function isDrainOnlyNodeProcess(): boolean {
+  return lifecycleTarget(undefined)?.exit.hasExitControl === false;
 }
 
 /** Reset a reused in-process `NodeProcess` to an unset, not-exiting invocation. */
@@ -412,7 +434,8 @@ function noSideEffectsToString(value: unknown): string {
   return `[object ${typeof tag === 'string' ? tag : builtinTag(value)}]`;
 }
 
-function formatThrown(error: unknown): string {
+/** The fatal report's text for a thrown value (also the isolate host's, ADR-0557 §6). */
+export function formatThrown(error: unknown): string {
   if (error instanceof Error) return error.stack ?? `${error.name}: ${error.message}`;
   return noSideEffectsToString(error);
 }

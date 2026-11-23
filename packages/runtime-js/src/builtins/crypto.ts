@@ -1,4 +1,4 @@
-import { NotImplementedError } from '@riftydev/io';
+import { NotImplementedError, bytesToString } from '@riftydev/io';
 /** Synchronous Node hashes use JS cores; random sources use captured Web Crypto. */
 import { Buffer } from './buffer.ts';
 
@@ -575,9 +575,7 @@ function encodeBytes(bytes: Uint8Array, encoding: Encoding): string {
       ? b64.replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '')
       : b64;
   }
-  if (encoding === 'utf8') {
-    return new TextDecoder().decode(bytes);
-  }
+  if (encoding === 'utf8') return bytesToString(bytes, 'utf8'); // Node's codec: keeps a BOM
   if (encoding === 'binary' || encoding === 'latin1') {
     let s = '';
     for (const b of bytes) s += String.fromCharCode(b);

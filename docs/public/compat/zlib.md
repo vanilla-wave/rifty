@@ -8,16 +8,16 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat / exact-vers
 
 | Feature | Status | Notes |
 |---|---|---|
-| `gzip` / `gunzip` (async) | ✅ | `CompressionStream('gzip')` — RFC-1952; rifty output reads in Node and vice versa |
-| `deflate` / `inflate` (async) | ✅ | `'deflate'` — RFC-1950 zlib-wrapped; both-direction wire-compat |
-| `deflateRaw` / `inflateRaw` (async) | ✅ | `'deflate-raw'` — RFC-1951 raw; both-direction wire-compat |
+| `gzip` / `gunzip` (async) | ⚠️ | `CompressionStream('gzip')` — RFC-1952; rifty output reads in Node and vice versa. `gunzip` rejects zero padding (every host) and, in Chromium, a 2nd member; Node accepts both — `backlog/runtime-js/zlib-trailing-bytes-after-stream-end` |
+| `deflate` / `inflate` (async) | ⚠️ | `'deflate'` — RFC-1950 zlib-wrapped; both-direction wire-compat. `inflate` rejects bytes after the stream end, Node ignores them — `backlog/runtime-js/zlib-trailing-bytes-after-stream-end` |
+| `deflateRaw` / `inflateRaw` (async) | ⚠️ | `'deflate-raw'` — RFC-1951 raw; both-direction wire-compat. `inflateRaw` rejects bytes after the stream end, Node ignores them — `backlog/runtime-js/zlib-trailing-bytes-after-stream-end` |
 | `util.promisify(zlib.gzip)` | ✅ | Standard `(err, Buffer)` callback convention |
 | String / Buffer / TypedArray / ArrayBuffer input | ✅ | Normalised to bytes, utf-8 for strings |
 | `constants` / `codes` | ✅ | Full real Node table; legacy top-level aliases are non-enumerable; `codes` frozen (Node shape) |
 | `maxOutputLength` option | ✅ | Honored — output reader aborts early and throws `RangeError [ERR_BUFFER_TOO_LARGE]` (decompression-bomb guard, matches Node) |
 | Compression `level` / `strategy` options | ⚠️ | Accepted but not applied (Web API has no level control); output stays valid and round-trips, bytes differ from Node |
 | Decompression error `code` / `errno` | ⚠️ | Corrupt input rejects with an `Error` (error-first holds), but codes are the browser stream's, not Node's `Z_DATA_ERROR` |
-| `gzipSync` / `gunzipSync` / `*Sync` | ❌ | Web compression is async-only; no honest sync path |
+| `gzipSync` / `gunzipSync` / `*Sync` | ❌ | Not implemented yet (engine choice tracked in backlog); the error names the working async variant, e.g. `zlib.inflate` / `util.promisify(zlib.inflate)` |
 | Brotli (`brotliCompress` / …) | ❌ | No Web API for brotli in the realm |
 | Zstd (`zstdCompress` / …) | ❌ | No Web API for zstd in the realm |
 | `crc32` | ❌ | Deferred — not part of the compression subset |
@@ -29,10 +29,11 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat / exact-vers
 ## Test Sources
 
 - `tests/conformance/builtins/zlib.test.ts`
+- `tests/conformance/builtins/zlib-ceiling-reasons.test.ts`
 - `tools/node-parity-runner/cases/zlib/*.case.ts`
 
 ## Known Limitations
 
-- Web compression is async-only and exposes no level/window/dictionary/flush control: sync variants throw, size-only knobs (`level`/`strategy`/…) are inert no-ops, `flush`/`finishFlush`/`windowBits`/`dictionary`/truthy-`info` throw rather than silently lie (ADR-0159 correction 2026-06-29 / ADR-0178).
+- Web compression is async-only and exposes no level/window/dictionary/flush control: sync variants throw (no sync engine yet), size-only knobs (`level`/`strategy`/…) are inert no-ops, `flush`/`finishFlush`/`windowBits`/`dictionary`/truthy-`info` throw rather than silently lie (ADR-0159 correction 2026-06-29 / ADR-0178).
 - Brotli and zstd have no browser primitive — loud `NotImplementedError`.
-- Only the gzip Transform subset is implemented (`createGzip` / `Gzip`); flush-opcode options, unsupported instance APIs such as `bytesWritten`, and the rest of the Transform-stream surface are still loud ceilings.
+- Only the gzip Transform subset is implemented (`createGzip` / `Gzip`); flush-opcode options, unsupported instance APIs such as `bytesWritten`, and the rest of the Transform-stream surface are still loud ceilings. Every throwing `node:zlib` export names its working async alternative in the `NotImplementedError` message (sync and stream forms → the one-shot async call; `unzip` → `gunzip`/`inflate` by header), or states there is none (brotli, zstd, `crc32`).

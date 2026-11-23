@@ -28,3 +28,5 @@ Owner runtime-js; trigger: a claimed program piping an fs ReadStream into
 process stdio or with `{end: false}`. Parity first: `fs.createReadStream(f)`
 piped to `process.stdout`, to a Writable with `{end: false}`, and listener
 deltas after end, vs the `stream/pipe-*` cases.
+
+2026-11-17: same root also leaves `setEncoding` absent — `runtime-js/fs-readstream-set-encoding`.

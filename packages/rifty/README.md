@@ -296,7 +296,11 @@ await project.fs.rm('src/message.txt');
 ```
 
 `project` is immutable configuration. Each run gets fresh Shell cwd/env; cd
-changes subsequent segments of that call. Files persist. Relative file paths,
+changes subsequent segments of that call. Files persist. Every `node` shares the
+Worker's one JS realm: globals, builtin-module patches and state, intrinsics and
+`process` properties an earlier run left persist, and rifty's `__rifty` /
+`__riftyImport` globals are visible (compat process.md, "Shared realm across
+no-COI `node` invocations"). Relative file paths,
 cwd and readonly paths resolve from root; absolute paths retain their VFS
 meaning. Root is a path origin, not a filesystem jail. Optional allowedCommands
 permits only exact names at Shell dispatch, including nested npm scripts.

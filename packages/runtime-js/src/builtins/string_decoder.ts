@@ -28,7 +28,7 @@ export function StringDecoder(this: DecoderThis, encoding = 'utf8'): void {
     throw new NotImplementedError(`string_decoder encoding '${encoding}'`);
   }
   this.encoding = 'utf8';
-  this._decoder = new TextDecoder('utf-8');
+  this._decoder = new TextDecoder('utf-8', { ignoreBOM: true }); // Node keeps a leading BOM
 }
 
 StringDecoder.prototype.write = function write(this: DecoderThis, buf: Uint8Array): string {

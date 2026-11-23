@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- The no-COI commands-mode host note no longer claims a fresh environment: fresh cwd/env in one shared JS realm, with the measured persisting state (compat process.md "Shared realm across no-COI `node` invocations").
+
+- Prompt host facts state the real shell subset (heredoc/compound/`$(…)`/process substitution/fd redirects fail loudly, other bash features may differ, no python or native binaries) instead of claiming every unsupported shell feature fails loudly; no-COI notes add that background `&` is rejected.
+
 - Keep transcript notice types aligned with emitted notice events when archive receipts are enabled.
 
 - Describe connected/unconnected SDK registry accurately in prompt notes; remove the host-only dependency instruction. Ordinary shell npm install uses SDK admission and policy (ADR-0487).

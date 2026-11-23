@@ -1,0 +1,305 @@
+{
+  "reference": "Closed operator and reserved-word table of @riftydev/shell, frozen (ADR-0093 tier). packages/shell/src/tokenize.ts OPERATORS / RESERVED_WORDS equal it (tests/grammar-table.test.ts); each entry lexes as its token or throws its NotImplementedError before any neighbour-token check. `fixture` names the command-lists-bash-3.2.57.json row that pins the entry.",
+  "sources": {
+    "posix": "The Open Group Base Specifications Issue 7, 2018 edition (IEEE Std 1003.1-2017), XCU §2.3 Token Recognition, §2.4 Reserved Words, §2.10.1 (IO_NUMBER), §2.10.2 %token. Not Issue 8, which adds `;&` (GNU bash 3.2.57 rejects it).",
+    "bash": "GNU bash 3.2.57(1)-release (arm64-apple-darwin25, macOS /bin/bash): `compgen -k` (21 words); bash(1) GNU Bash-3.2 REDIRECTION and Process Substitution operator spellings. Facts only; no bash source or manual text copied."
+  },
+  "excluded": [
+    {
+      "text": "&>>",
+      "why": "bash 4.0; bash 3.2.57 `echo a &>> f`: syntax error near unexpected token `>'"
+    },
+    {
+      "text": "|&",
+      "why": "bash 4.0; bash 3.2.57 `echo a |& cat`: syntax error near unexpected token `&'"
+    },
+    {
+      "text": ";&",
+      "why": "POSIX Issue 8 / bash 4.0; bash 3.2.57: syntax error near unexpected token `&'"
+    },
+    {
+      "text": ";;&",
+      "why": "bash 4.0; bash 3.2.57: syntax error near unexpected token `&'"
+    }
+  ],
+  "operators": [
+    {
+      "text": "\n",
+      "name": "NEWLINE",
+      "source": "posix",
+      "rifty": ";",
+      "fixture": "newline-separates"
+    },
+    {
+      "text": "&&",
+      "name": "AND_IF",
+      "source": "posix",
+      "rifty": "&&",
+      "fixture": "assign-and-expand"
+    },
+    {
+      "text": "||",
+      "name": "OR_IF",
+      "source": "posix",
+      "rifty": "||",
+      "fixture": "newline-after-or"
+    },
+    {
+      "text": ";;",
+      "name": "DSEMI",
+      "source": "posix",
+      "rifty": "shell.compound-command",
+      "fixture": "compound-dsemi"
+    },
+    {
+      "text": "<<",
+      "name": "DLESS",
+      "source": "posix",
+      "rifty": "shell.heredoc",
+      "fixture": "heredoc-unquoted"
+    },
+    {
+      "text": ">>",
+      "name": "DGREAT",
+      "source": "posix",
+      "rifty": ">>",
+      "fixture": "op-append"
+    },
+    {
+      "text": "<&",
+      "name": "LESSAND",
+      "source": "posix",
+      "rifty": "shell.fd-redirect",
+      "fixture": "fd-dup-input"
+    },
+    {
+      "text": ">&",
+      "name": "GREATAND",
+      "source": "posix",
+      "rifty": "shell.fd-redirect",
+      "fixture": "fd-dup-stderr"
+    },
+    {
+      "text": "<>",
+      "name": "LESSGREAT",
+      "source": "posix",
+      "rifty": "shell.fd-redirect",
+      "fixture": "fd-read-write"
+    },
+    {
+      "text": "<<-",
+      "name": "DLESSDASH",
+      "source": "posix",
+      "rifty": "shell.heredoc",
+      "fixture": "heredoc-strip-tabs"
+    },
+    {
+      "text": ">|",
+      "name": "CLOBBER",
+      "source": "posix",
+      "rifty": "shell.fd-redirect",
+      "fixture": "fd-clobber"
+    },
+    {
+      "text": "<",
+      "name": "<",
+      "source": "posix",
+      "rifty": "<",
+      "fixture": "op-input"
+    },
+    {
+      "text": ">",
+      "name": ">",
+      "source": "posix",
+      "rifty": ">",
+      "fixture": "newline-redirects"
+    },
+    {
+      "text": "|",
+      "name": "|",
+      "source": "posix",
+      "rifty": "|",
+      "fixture": "op-pipe"
+    },
+    {
+      "text": ";",
+      "name": ";",
+      "source": "posix",
+      "rifty": ";",
+      "fixture": "assign-semicolon-expand"
+    },
+    {
+      "text": "&",
+      "name": "&",
+      "source": "posix",
+      "rifty": "&",
+      "fixture": "background-prohibited"
+    },
+    {
+      "text": "(",
+      "name": "(",
+      "source": "posix",
+      "rifty": "shell.compound-command",
+      "fixture": "compound-subshell"
+    },
+    {
+      "text": ")",
+      "name": ")",
+      "source": "posix",
+      "rifty": "shell.compound-command",
+      "fixture": "compound-close-paren"
+    },
+    {
+      "text": "&>",
+      "name": "&>word",
+      "source": "bash",
+      "rifty": "shell.fd-redirect",
+      "fixture": "fd-both"
+    },
+    {
+      "text": "<<<",
+      "name": "<<<word",
+      "source": "bash",
+      "rifty": "shell.here-string",
+      "fixture": "here-string"
+    },
+    {
+      "text": "<(",
+      "name": "<(list)",
+      "source": "bash",
+      "rifty": "shell.process-substitution",
+      "fixture": "process-substitution-input"
+    },
+    {
+      "text": ">(",
+      "name": ">(list)",
+      "source": "bash",
+      "rifty": "shell.process-substitution",
+      "fixture": "process-substitution-output"
+    }
+  ],
+  "ioNumber": {
+    "name": "IO_NUMBER",
+    "source": "posix §2.10.1: a word of digits only whose delimiter is `<` or `>`",
+    "rifty": "fd 0 with `<` and fd 1 with `>` / `>>` lex as that plain redirect; any other fd, or fd 0/1 with another redirect, throws shell.fd-redirect; with a gap operator (`2>&1`, `0<<`) the operator's gap is thrown",
+    "fixtures": [
+      "io-number-stdout",
+      "io-number-append",
+      "io-number-stdin",
+      "fd-io-number-stderr",
+      "fd-io-number-devnull",
+      "fd-io-number-high",
+      "fd-io-number-input",
+      "process-substitution-io-number",
+      "io-number-quoted-is-argument"
+    ]
+  },
+  "reservedWords": [
+    {
+      "word": "!",
+      "source": "posix",
+      "fixture": "compound-bang"
+    },
+    {
+      "word": "{",
+      "source": "posix",
+      "fixture": "compound-group"
+    },
+    {
+      "word": "}",
+      "source": "posix",
+      "fixture": "reserved-close-brace"
+    },
+    {
+      "word": "case",
+      "source": "posix",
+      "fixture": "compound-case"
+    },
+    {
+      "word": "do",
+      "source": "posix",
+      "fixture": "reserved-do"
+    },
+    {
+      "word": "done",
+      "source": "posix",
+      "fixture": "reserved-done"
+    },
+    {
+      "word": "elif",
+      "source": "posix",
+      "fixture": "reserved-elif"
+    },
+    {
+      "word": "else",
+      "source": "posix",
+      "fixture": "reserved-else"
+    },
+    {
+      "word": "esac",
+      "source": "posix",
+      "fixture": "reserved-esac"
+    },
+    {
+      "word": "fi",
+      "source": "posix",
+      "fixture": "reserved-fi"
+    },
+    {
+      "word": "for",
+      "source": "posix",
+      "fixture": "compound-for"
+    },
+    {
+      "word": "if",
+      "source": "posix",
+      "fixture": "compound-if-multiline"
+    },
+    {
+      "word": "in",
+      "source": "posix",
+      "fixture": "reserved-in"
+    },
+    {
+      "word": "then",
+      "source": "posix",
+      "fixture": "reserved-then"
+    },
+    {
+      "word": "until",
+      "source": "posix",
+      "fixture": "compound-until"
+    },
+    {
+      "word": "while",
+      "source": "posix",
+      "fixture": "compound-while"
+    },
+    {
+      "word": "[[",
+      "source": "posix-optional, bash compgen -k",
+      "fixture": "compound-double-bracket"
+    },
+    {
+      "word": "]]",
+      "source": "posix-optional, bash compgen -k",
+      "fixture": "reserved-close-bracket"
+    },
+    {
+      "word": "function",
+      "source": "posix-optional, bash compgen -k",
+      "fixture": "compound-function-keyword"
+    },
+    {
+      "word": "select",
+      "source": "posix-optional, bash compgen -k",
+      "fixture": "compound-select"
+    },
+    {
+      "word": "time",
+      "source": "bash compgen -k",
+      "fixture": "compound-time"
+    }
+  ],
+  "reservedWordGap": "shell.compound-command"
+}

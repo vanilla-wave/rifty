@@ -425,6 +425,11 @@ ADRs are immutable while active, except dated lines under `## Decisions` / `§Co
 | 0532 | Commit evaluation summaries as text core only |
 | 0535 | Judge app tasks against a prompt-stated contract |
 | 0546 | Produce browser-compatible Brotli dependency snapshots |
+| 0557 | Run guest code in a disposable child process holding a rifty V8 isolate (isolated-vm) |
+| 0558 | Export the isolate guest bundle and bridge contract as an unstable package |
+| 0563 | Run runCode in a pool of long-lived worker processes, each hosting many isolates |
+| 0566 | Select guest SharedArrayBuffer access per isolate call |
+| 0567 | Snapshot the isolate guest filesystem as a versioned binary blob |
 
 ## Superseded (removed)
 
@@ -488,6 +493,7 @@ superseded.
 
 | ADR | corrected by | note |
 |---|---|---|
+| 0069 D3 TextDecoder set and "matches `StringDecoder`" clause | note 2026-11-17 | utf8/utf16le decoder keeps a leading BOM (`ignoreBOM: true`); `latin1`/`binary` decode via Buffer, not windows-1252 TextDecoder |
 | 0226 / 0384 / 0417 no-COI generated-client activation | 0539 / note 2026-10-20 | upstream Node client through SW children; shared COI client retained |
 | 0163 decision 1 production base, decision 4 Netlify-not-owning `/npm-registry` + smoke target, TL;DR "Netlify static only" | 0528 / note 2026-10-14 | Yandex VMs unreachable; production registry route is a same-origin Netlify proxy rewrite to `registry.npmjs.org`, eddy OFF in the production build; decisions 2, 3, 5 + Yandex config stand as runbook |
 | 0445 rule 5 control-port-only exit request; Consequences "no-COI command keeps its own settlement" | note 2026-09-25 | the drain settles with the active process's first terminal (every kernel child unchanged); no-COI command and runBin report that status, the command replaces its realm only when a live non-timer handle outlives it |

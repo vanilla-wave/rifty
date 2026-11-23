@@ -7,7 +7,7 @@
  * over the page fetch; TLS server/socket surface still throws — ADR-0010);
  * `node:zlib` is a real web-compression-backed subset in `./zlib.ts` (ADR-0159).
  */
-import { NotImplementedError } from '@riftydev/io';
+import { NotImplementedError, bytesToString } from '@riftydev/io';
 import { EventEmitter } from './events.ts';
 import { HTTP2_CONSTANTS } from './http2-constants.ts';
 
@@ -88,16 +88,13 @@ function resolveReadlineOptions(
   return { input: inputOrOptions, output };
 }
 
-const READLINE_DECODER = new TextDecoder();
-
+// Buffer's codec: keeps a leading BOM like Node's readline StringDecoder.
 function decodeReadlineChunk(chunk: unknown): string {
   if (typeof chunk === 'string') return chunk;
-  if (chunk instanceof Uint8Array) return READLINE_DECODER.decode(chunk);
-  if (chunk instanceof ArrayBuffer) return READLINE_DECODER.decode(new Uint8Array(chunk));
+  if (chunk instanceof Uint8Array) return bytesToString(chunk, 'utf8');
+  if (chunk instanceof ArrayBuffer) return bytesToString(new Uint8Array(chunk), 'utf8');
   if (ArrayBuffer.isView(chunk)) {
-    return READLINE_DECODER.decode(
-      new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength),
-    );
+    return bytesToString(new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength), 'utf8');
   }
   return String(chunk);
 }
@@ -141,9 +138,9 @@ export class Interface extends EventEmitter {
   close(): void {
     if (this.#closed) return;
     this.#closed = true;
-    this.input.off('data', this.#onData);
-    this.input.off('end', this.#onEnd);
-    this.input.off('close', this.#onEnd);
+    this.input.removeListener('data', this.#onData);
+    this.input.removeListener('end', this.#onEnd);
+    this.input.removeListener('close', this.#onEnd);
     this.input.pause?.();
     this.emit('close');
   }

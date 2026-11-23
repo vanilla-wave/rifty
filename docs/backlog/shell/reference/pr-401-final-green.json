@@ -1,0 +1,214 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Блокеров нет; после привязки verdict и зелёного CI на HEAD можно продолжать merge. Весь wave-1 goal этим ревью не закрывается.",
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "PR #401 https://github.com/vanilla-wave/rifty/pull/401; observed baseline: unquoted newlines were word characters, << became two < operators, quoted heredoc bodies produced fabricated file/substitution/background errors; user instruction in this review: newline/continuation/comment semantics, loud atomic heredoc/compound guards, truthful host facts, per-segment expansion, closed POSIX XCU Issue 7 (2018) + bash 3.2.57 table, IO_NUMBER and process-substitution class-kill. BASE f55691f39dda7c1b49d85eb65c8828e2b180e599; HEAD 57afdfbc7c5bc1566b43ea67740f934096a1ff25; focus 7f6de75ba..57afdfbc7. No ready contract document: observed-defect rifty-fix route.",
+  "coverage": [
+    {
+      "row": "Unquoted newline terminates a command; blank/joined newlines are dropped; quoted newlines remain literal",
+      "source": "acceptance",
+      "trace": "User item Step 1 newline semantics + ADR-0091",
+      "status": "pass",
+      "citation": "packages/shell/tests/tokenize-newline.test.ts:24; packages/shell/tests/command-lists.test.ts:56",
+      "note": ""
+    },
+    {
+      "row": "Unquoted/double-quoted backslash-newline is removed before lexing, including joined operators and variable names",
+      "source": "acceptance",
+      "trace": "User item Step 1 continuation semantics + ADR-0091",
+      "status": "pass",
+      "citation": "packages/shell/tests/tokenize-newline.test.ts:49",
+      "note": ""
+    },
+    {
+      "row": "Word-initial unquoted # comments to newline; quoted/escaped/mid-word # remains literal",
+      "source": "acceptance",
+      "trace": "User item Step 1 comments + ADR-0091",
+      "status": "pass",
+      "citation": "packages/shell/tests/tokenize-newline.test.ts:80",
+      "note": ""
+    },
+    {
+      "row": "Heredoc << / <<- throws shell.heredoc before body parsing or any output/mutation",
+      "source": "acceptance",
+      "trace": "Observed quoted-heredoc baseline + user item atomic heredoc rejection",
+      "status": "pass",
+      "citation": "packages/shell/tests/tokenize-newline.test.ts:112; packages/shell/tests/command-lists.test.ts:78",
+      "note": ""
+    },
+    {
+      "row": "Here-string <<< throws shell.here-string atomically",
+      "source": "acceptance",
+      "trace": "User item Step 1 here-string rejection",
+      "status": "pass",
+      "citation": "packages/shell/tests/tokenize-newline.test.ts:108; packages/shell/tests/command-lists.test.ts:78",
+      "note": ""
+    },
+    {
+      "row": "Literal reserved words at command position, unquoted parentheses and ;; fail atomically; quoted/escaped/expanded words and redirect targets remain ordinary",
+      "source": "acceptance",
+      "trace": "User item compound-command guard + latest instruction closed reserved-word/operator entries",
+      "status": "pass",
+      "citation": "packages/shell/tests/command-lists.test.ts:56; packages/shell/tests/tokenize-newline.test.ts:132; packages/shell/tests/grammar-table.test.ts:41",
+      "note": ""
+    },
+    {
+      "row": "Each later segment expands with the environment left by its predecessors, including DIR=dist followed by rm -rf $DIR/*",
+      "source": "acceptance",
+      "trace": "Driver-added per-segment expansion scenario + ADR-0091",
+      "status": "pass",
+      "citation": "packages/shell/tests/tokenize-newline.test.ts:149; packages/shell/tests/command-lists.test.ts:56",
+      "note": ""
+    },
+    {
+      "row": "tokenize retains the existing exported WordToken / OpToken union; newline and default-fd redirects lower to existing operators",
+      "source": "public-api",
+      "trace": "User item unchanged Token shape + ADR-0091",
+      "status": "pass",
+      "citation": "packages/shell/tests/tokenize-newline.test.ts:24; packages/shell/src/tokenize.ts:48",
+      "note": ""
+    },
+    {
+      "row": "Committed closed grammar artifact pins POSIX Issue 7 (2018), IO_NUMBER and bash 3.2.57 extensions/21 reserved words, with a fixture row for every entry",
+      "source": "frozen-artifact",
+      "trace": "Latest user instruction 1 and 5 + ADR-0093",
+      "status": "pass",
+      "citation": "packages/shell/fixtures/bash/grammar-table.json:1; packages/shell/tests/grammar-table.test.ts:45",
+      "note": ""
+    },
+    {
+      "row": "Runtime operator and reserved-word tables equal the committed closed artifact",
+      "source": "acceptance",
+      "trace": "Latest user instruction 2",
+      "status": "pass",
+      "citation": "packages/shell/tests/grammar-table.test.ts:35",
+      "note": ""
+    },
+    {
+      "row": "All fd gap operators and unsupported IO_NUMBER redirects throw shell.fd-redirect before neighbour-token checks or execution; 2>err.txt and 2>/dev/null are explicit gaps",
+      "source": "acceptance",
+      "trace": "Latest user instruction 3 and 4",
+      "status": "pass",
+      "citation": "packages/shell/tests/command-lists.test.ts:56; packages/shell/fixtures/bash/grammar-table.json:183",
+      "note": ""
+    },
+    {
+      "row": "IO_NUMBER 1>, 1>> and 0< use existing stdout/stdin behavior; quoted/escaped digits remain arguments",
+      "source": "acceptance",
+      "trace": "Latest user instruction 4 + ADR-0091",
+      "status": "pass",
+      "citation": "packages/shell/tests/command-lists.test.ts:56; packages/shell/fixtures/bash/grammar-table.json:188",
+      "note": ""
+    },
+    {
+      "row": "<( / >( throw shell.process-substitution, including after <, >, >> and 0<, before neighbour-token validation",
+      "source": "acceptance",
+      "trace": "Latest user instruction 3 and its four named process-substitution scenarios",
+      "status": "pass",
+      "citation": "packages/shell/tests/command-lists.test.ts:56; packages/shell/fixtures/bash/command-lists-bash-3.2.57.json:1365",
+      "note": ""
+    },
+    {
+      "row": "Frozen bash reference remains a captured, pinned oracle with discriminating REDs, rather than implementation-derived expected output",
+      "source": "frozen-artifact",
+      "trace": "User item bash 3.2.57 oracle + latest instruction 5 + ADR-0093",
+      "status": "pass",
+      "citation": "packages/shell/fixtures/bash/command-lists-bash-3.2.57.json:1; packages/shell/fixtures/bash/capture-command-lists.mjs:171; packages/shell/tests/command-lists.test.ts:66",
+      "note": ""
+    },
+    {
+      "row": "validateShellInput ignores comment contents and submits unsupported heredocs for a loud shell rejection",
+      "source": "public-api",
+      "trace": "User item loud heredoc boundary + ADR-0096 dated decision",
+      "status": "pass",
+      "citation": "packages/shell/tests/language-service.test.ts:195",
+      "note": ""
+    },
+    {
+      "row": "Completion handles unsupported tokenizer syntax without throwing into the terminal host",
+      "source": "public-api",
+      "trace": "Existing terminal completion baseline after tokenizer behavior change + ADR-0096",
+      "status": "pass",
+      "citation": "packages/shell/tests/language-service.test.ts:73",
+      "note": ""
+    },
+    {
+      "row": "Agent prompt/host fact and public compatibility records state actual named gaps, native-binary limits and the no-COI background prohibition; sandbox-host.ts:112 remains untouched",
+      "source": "acceptance",
+      "trace": "User item truthful prompt/host fact/public compat surface + latest instruction 3",
+      "status": "pass",
+      "citation": "packages/agent/src/prompt.test.ts:6; tests/no-coi/agent-capability-policy.spec.ts:65; docs/public/compat/shell.md:26; docs/backlog/shell/fd-redirects.md:14",
+      "note": ""
+    },
+    {
+      "row": "Real no-COI project-command acceptance carrier covers newline/env/comment behavior and atomic heredoc/here-string/compound rejection",
+      "source": "acceptance",
+      "trace": "User item no-COI agent command scenario",
+      "status": "pass",
+      "citation": "tests/no-coi/no-coi-shell-command-lists.spec.ts:27",
+      "note": ""
+    },
+    {
+      "row": "Pre-existing trailing && / || / | divergence stays out of this fix and is recorded as backlog plus compat warning",
+      "source": "acceptance",
+      "trace": "Latest user instruction 6",
+      "status": "pass",
+      "citation": "docs/backlog/shell/trailing-list-operator-eof.md:1; docs/public/compat/shell.md:33",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/shell/src/tokenize.ts:382",
+          "evidence": "Executed: node --import /Users/vanilla-wave/.t3/worktrees/rifty/t3-w1-shell-newline-her-c726d7692d81d57c/node_modules/tsx/dist/loader.mjs /tmp/rifty-pr401-final-review/probe.mts. Input echo hi > 1>f: Shell.run throws shell: syntax error near unexpected token `>`; /bin/bash --noprofile --norc -c reports syntax error near unexpected token `1', exit 2. Input echo hi > 0<f similarly reports `<` instead of bash's `0`. Both leave files untouched.",
+          "summary": "При lowering IO_NUMBER теряется его исходный текст, поэтому диагностика соседнего незавершённого redirect называет >/< вместо 1/0. Это advisory к точности текста, заявленной docs/public/compat/shell.md:32: некорректный ввод уже отклонён атомарно; названные пользователем валидные bash-сценарии проходят требуемую классификацию. Сохранить исходное обозначение можно в lexer-internal provenance без изменения Token.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "reviewed_sha": "57afdfbc7c5bc1566b43ea67740f934096a1ff25"
+}

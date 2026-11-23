@@ -54,3 +54,7 @@ Also ratified:
 - [ ] Every unimplemented flag throws `NotImplementedError('shell.<cmd>.<flag>')` and is registered `❌` in the compat matrix; a test asserts the throw.
 - [ ] Known GNU-divergences (locale sort order, `wc -c` vs `-m`, `-A` vs `-a`, `LS_COLORS`, ASCII-only column width) are captured as notes in the compat matrix.
 - [ ] For the future WASI/uutils path (ADR-0088 Option B), `ls`/`find`/etc. pass against this chosen oracle before rifty routes to the WASM applet.
+
+## Decisions
+
+- 2026-11-17 — shell grammar (newline lists, continuation, comments, heredoc/compound gaps) uses the frozen tier against GNU bash 3.2.57: `packages/shell/fixtures/bash/command-lists-bash-3.2.57.json`, captured by the adjacent script, which refuses any other bash version.

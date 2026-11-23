@@ -1,0 +1,183 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "Final+GREEN: PASS, 0 блокеров, 15/15 coverage rows pass; merge только после green CI на HEAD 5a31d0909475052c87cf92ff022dc05a5c243bec. Verify pass REV-8 / Review run step 2: git diff c8c684c62..5a31d0909 содержит единственное изменение вне docs — выбор port pair перенесён перед createHostFixture(); отказ выбора больше не создаёт временный каталог, assertions и oracle semantics сохранены (PR-4). Независимый разрешённый e2e на проверенном через lsof порту 15273: 1 passed (12.3s), exit 0, /tmp/pr397-verify-cli.log; авторский /tmp/cli-final.log также 1 passed (12.5s). Docs corrections проверены: ceil(13978850/262144)=54, 54×54=2916; подробное описание retirement pin в PR учитывает перенос SyncRpcFsSync в shared chunk import и сохранённое compiler body. Оба замечания к формулировкам сняты. Прежний Final+GREEN и его coverage сохранены; полные suites и pr:check в этом verify pass не запускались. Однократный успешный gh pr checks 397: run 44057645537 и deployment run 44057645478 ещё pending; повторного опроса не было. Checkout чист, tracked files не изменены.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "5a31d0909475052c87cf92ff022dc05a5c243bec",
+  "unit_goal_source": "PR #397 vanilla-wave/rifty, observed-defect repairs on rifty-fix route плюс CI image change. BASE origin/main 8a4a612ed11d5704b65d2a907c85bfa11784d170; HEAD 5a31d0909475052c87cf92ff022dc05a5c243bec. Baselines: CI 43974699316 ubuntu26.04/Playwright refusal; pin 518647719 ранее независимо проверен на #396. Grandchild read baseline: CI 43989500517, сырой job 133726159832, /tmp/diag-local.log и /tmp/diag-fixed.log. OPFS: main 40251341113 и /tmp/osr-*.log. Targeted reads: CI jobs 118434607690/121273822277 и /tmp/tpr-*.log. M0: три обрыва по 30 s в /tmp/ciflake/pin-l3.log. CLI: EADDRINUSE в job 133731913223, /tmp/cli-red.log и /tmp/cli-green.log. Compiler baseline: /tmp/tsw-base.js с прежним pinned SHA. У run 43992561128 все jobs success на 8fd528df8; browser log 133737482676 скачан независимо: 389 passed, 1 skipped. Сырые cached logs sampling run 43991199155 прочитаны. Authorities: эти baselines, ADR-0365, ADR-0391, прежние критерии из git и AGENTS.md Fidelity. Verify pass: ранее принятый Final+GREEN на c8c684c62831140e9dffd07277e0ee9e63c7c471 переиспользован по REV-1; проверена вся дельта через docs-only 58bef12e3 и test-only 5a31d0909, включая cleanup при отказе port pick и неизменность PR-4 criteria; текущий headRefOid подтверждён через gh pr view 397.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Nested raw relay: один upstream-запрос того же метода на каждый head/chunk, байты файла сохранены.",
+      "source": "acceptance",
+      "trace": "baseline: grandchild readFileSync 31–35 s vs child 0.65 s, CI 43989500517 + ADR-0365",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/ipc/sync-rpc-fs-relay.test.ts:74; /tmp/rev397-review-red-unit.log:5 (BASE 36 vs 6); /tmp/rev397-review-green-unit.log:1; /tmp/rev397-diag-depth.log:370",
+      "note": ""
+    },
+    {
+      "row": "ChunkedReadSource.readFileHeadReply / SyncRpcFsSync.readFileHeadReply возвращает исходный head одним binary upstream-вызовом.",
+      "source": "public-api",
+      "trace": "ADR-0365:76",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/ipc/sync-rpc-fs.ts:148; packages/runtime-js/src/ipc/sync-rpc-fs-relay.test.ts:84; packages/runtime-js/src/ipc/sync-rpc-fs-binary-request.test.ts:116",
+      "note": ""
+    },
+    {
+      "row": "ChunkedReadSource.readChunkReply / SyncRpcFsSync.readChunkReply передаёт path, offset, length и возвращает один диапазон.",
+      "source": "public-api",
+      "trace": "ADR-0365:76",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/ipc/sync-rpc-fs.ts:152; packages/runtime-js/src/ipc/sync-rpc-fs-relay.test.ts:86; packages/workbench/src/workers/project-terminal-relay-reads.test.ts:68",
+      "note": ""
+    },
+    {
+      "row": "readFileHeadReplyOf пересылает capability; обычный owner сохраняет один текущий full read и прежний head.",
+      "source": "public-api",
+      "trace": "ADR-0365:35 + ADR-0365:76",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/ipc/sync-rpc-fs.ts:79; packages/runtime-js/src/ipc/sync-rpc-fs-single-hop.test.ts:80; packages/runtime-js/src/ipc/sync-rpc-fs-relay.test.ts:90",
+      "note": ""
+    },
+    {
+      "row": "readChunkReplyOf пересылает capability; обычный owner сохраняет current-file slice без нового кеша.",
+      "source": "public-api",
+      "trace": "ADR-0365:51 + ADR-0365:76",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/ipc/sync-rpc-fs.ts:85; packages/runtime-js/src/ipc/sync-rpc-fs.test.ts:86; packages/runtime-js/src/ipc/sync-rpc-fs-relay.test.ts:86",
+      "note": ""
+    },
+    {
+      "row": "Rooted relay преобразует guest path один раз, передаёт один owner head/chunk на запрос и сохраняет guest error paths.",
+      "source": "acceptance",
+      "trace": "baseline: rooted relay 16 owner requests for 4 requests + ADR-0365:77",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/project-terminal-relay-reads.test.ts:58; packages/workbench/src/workers/project-terminal-relay-reads.test.ts:81; /tmp/rev397-review-red-unit.log:8; /tmp/rev397-review-green-unit.log:1",
+      "note": ""
+    },
+    {
+      "row": "Сжатие owner-файла между head и continuation остаётся loud short read.",
+      "source": "fault-matrix",
+      "trace": "ADR-0365:51 + baseline: loud continuation semantics",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/ipc/sync-rpc-fs-relay.test.ts:101; packages/runtime-js/src/ipc/sync-rpc-fs-single-hop.fault.test.ts:79; /tmp/rev397-review-green-unit.log:1",
+      "note": ""
+    },
+    {
+      "row": "Head validation, oversized continuation, binary range validation и VfsError identity сохраняются.",
+      "source": "fault-matrix",
+      "trace": "ADR-0365:44 + baseline: ADR-0366 binary request validation",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/ipc/sync-rpc-fs-single-hop.fault.test.ts:37; packages/runtime-js/src/ipc/sync-rpc-fs-single-hop.fault.test.ts:107; packages/runtime-js/src/ipc/sync-rpc-fs-binary-request.test.ts:194; packages/runtime-js/src/ipc/sync-rpc-fs-relay.test.ts:114",
+      "note": ""
+    },
+    {
+      "row": "Каждое чтение обращается к текущему owner; overwrite виден без child cache.",
+      "source": "acceptance",
+      "trace": "ADR-0365:64 + ADR-0365:84",
+      "status": "pass",
+      "citation": "packages/runtime-js/src/ipc/sync-rpc-fs-single-hop.test.ts:121; packages/runtime-js/src/ipc/sync-rpc-fs-relay.test.ts:105; /tmp/rev397-review-green-unit.log:1 (46 committed tests плюс scratch overwrite/growth/shrink/delete probe)",
+      "note": ""
+    },
+    {
+      "row": "CI image pin сохраняет lanes, команды, retries и deadlines; browser cache разделён по ImageOS.",
+      "source": "frozen-artifact",
+      "trace": "baseline: Playwright 1.60.0 refuses ubuntu26.04, CI 43974699316; accepted Final+GREEN 518647719 on PR #396",
+      "status": "pass",
+      "citation": ".github/workflows/ci.yml:20; .github/workflows/ci.yml:175; .github/workflows/ci-cross-browser.yml:12; /tmp/rev397-pr396-comments.log:17; git diff 518647719 c8c684c62 -- .github/workflows (empty)",
+      "note": ""
+    },
+    {
+      "row": "OPFS seed/repair оцениваются после native settlement; held-phase bound 50 ms и failure/live/native/reopen assertions сохранены.",
+      "source": "acceptance",
+      "trace": "baseline: opfs-structural-repair seed failed, main CI 40251341113; baseline: 80 ms native-close probe",
+      "status": "pass",
+      "citation": "tests/browser-unit/fixtures/opfs-structural-repair-worker.ts:24; tests/browser-unit/fixtures/opfs-structural-repair-worker.ts:85; tests/browser-unit/opfs-structural-repair.spec.ts:40; /tmp/rev397-review-osr-base.log:1 (seed failed); /tmp/rev397-review-osr-head.log:1 (1 passed); /tmp/osr-nofence-allprobe.log:1; /tmp/osr-reverse-hardfail.log:1",
+      "note": ""
+    },
+    {
+      "row": "Targeted reads сохраняют content-read isolation, defensive bytes, fresh version, пределы 1 ms и scale ratio 2; paired judge различает metadata O(n).",
+      "source": "acceptance",
+      "trace": "baseline: targeted-page-reads.spec.ts:73, I4 carrier; CI jobs 118434607690 and 121273822277",
+      "status": "pass",
+      "citation": "tests/browser-unit/targeted-page-reads.spec.ts:60; tests/browser-unit/targeted-page-reads.spec.ts:73; tests/browser-unit/targeted-page-reads.spec.ts:75; /tmp/rev397-review-tpr-head.log:1 (1 passed); /tmp/rev397-review-tpr-mutant.log:1 (ratio 14.875555 > 2, file 0.052133 ms)",
+      "note": ""
+    },
+    {
+      "row": "M0 non-TypeScript Problems сохраняет 90 s readiness wait и Problems assertions при достаточном outer budget.",
+      "source": "acceptance",
+      "trace": "baseline: m0-boot.spec.ts:186, 3/3 CI attempts cut by implicit 30 s; /tmp/ciflake/pin-l3.log:535",
+      "status": "pass",
+      "citation": "tests/e2e/m0-boot.spec.ts:189; tests/e2e/m0-boot.spec.ts:193; /tmp/ciflake/fix/133737482964.log:378 (21 passed); /tmp/ciflake/pin-l3.log:547",
+      "note": ""
+    },
+    {
+      "row": "CLI oracle использует свободную consecutive IPv6 port pair для настоящих Node children; isolation/parity assertions сохранены.",
+      "source": "acceptance",
+      "trace": "baseline: cli-report EADDRINUSE :::40576, sampling job 133731913223; blocked-port RED /tmp/cli-red.log",
+      "status": "pass",
+      "citation": "tests/e2e/cli-report.spec.ts:490; tests/e2e/cli-report.spec.ts:829; tests/e2e/cli-report.spec.ts:889; /tmp/rev397-review-cli-ports.log:1 (BASE EADDRINUSE, HEAD both native IPv6 listeners bound); /tmp/cli-green.log:1",
+      "note": ""
+    },
+    {
+      "row": "Retirement pin принимает точный новый compiler asset; compiler body и negative payload criteria сохранены.",
+      "source": "frozen-artifact",
+      "trace": "ADR-0391 + baseline: typescript-worker.js 10022694 bytes, SHA256 b27005eb694cc1e87eb8e18b2e79cf46d4588b25d6fa318a414c56a75b9e6326",
+      "status": "pass",
+      "citation": "tools/checks/esbuild-legacy-retirement.mjs:104; tools/checks/esbuild-legacy-retirement.mjs:253; /tmp/rev397-review-retirement-base.log:1 (old gate rejects HEAD asset); /tmp/rev397-review-retirement-head.log:1 (exact inventory verified); /tmp/tsw-base.js",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": ".github/workflows/ci.yml:337",
+          "evidence": "Однократный успешный gh pr checks 397: exit 8; Change scope и lint-and-typecheck pending в run 44057645537; Deploy landing и Deploy playground pending в run 44057645478. gh pr view 397 --json body,headRefOid,url подтвердил HEAD 5a31d0909475052c87cf92ff022dc05a5c243bec. Первый запрос из песочницы не достиг api.github.com; успешный снимок получен вне песочницы, без polling.",
+          "summary": "CI текущего HEAD ещё не green; сливать только после green CI на 5a31d0909475052c87cf92ff022dc05a5c243bec (PR-6).",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "adjudication": []
+}

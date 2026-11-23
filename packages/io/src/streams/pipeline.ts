@@ -67,7 +67,7 @@ export function pipeline(...streams: unknown[]): Promise<void> {
      */
     const absorbers: Array<{ stage: PipelineStage; handler: (err: unknown) => void }> = [];
     const detachAbsorbers = (): void => {
-      for (const { stage, handler } of absorbers) stage.off('error', handler);
+      for (const { stage, handler } of absorbers) stage.removeListener('error', handler);
       absorbers.length = 0;
     };
     const destroyAll = (err: Error, except?: PipelineStage): void => {

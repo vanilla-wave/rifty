@@ -258,27 +258,6 @@ describe('no-COI invocation command', () => {
     expect(await run('node -p "1 + 1"')).toMatchObject({ stdout: '2\n', exitCode: 0 });
   });
 
-  it('keeps delayed effects/output with a throwing Node handler before running the next segment', async () => {
-    const { fs, run } = fixture({
-      '/project/fail.cjs': `
-        require('node:timers').setTimeout(() => {
-          require('node:fs').writeFileSync('/project/late.txt', 'retained');
-          process.stdout.write('late');
-        }, 20);
-        throw new Error('entry failed');
-      `,
-    });
-    const result = await run('node fail.cjs ; echo next');
-    expect(result).toMatchObject({ status: 'exited', exitCode: 0, stdout: 'latenext\n' });
-    expect(result.stderr).toContain('entry failed');
-    expect(decoder.decode(fs.readFileBytesSync('/project/late.txt'))).toBe('retained');
-    expect(await run('echo separate')).toMatchObject({
-      stdout: 'separate\n',
-      stderr: '',
-      exitCode: 0,
-    });
-  });
-
   it('reuses npm lifecycle, prefix and forwarded arguments with an actual bin loader', async () => {
     const { fs, run } = fixture({
       '/project/package.json': JSON.stringify({

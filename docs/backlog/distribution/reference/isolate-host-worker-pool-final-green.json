@@ -1,0 +1,172 @@
+{
+  "overall_verdict": "concern",
+  "merge_call": "PASS, goal complete. Round 4 (docs + comment-only test edits) matches the code for the busy-period RSS ceiling and F1 in the solo. Two advisory items: the retire-before-terminal order has no discriminating carrier (weak row, backlog item owns it), and the calls-in-flight + 1 worker bound ignores cancelled isolates still running in their 1 s grace. Rebind the landing JSON to df0bf20f7; merge only on a green PR CI at HEAD.",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "df0bf20f7c96086a0c4f798573cd8f9a0a60428e",
+  "unit_goal_source": "CLOSE of goal isolate-host-worker-pool, PR #412 @ df0bf20f7c96086a0c4f798573cd8f9a0a60428e (= last product/test commit); BASE origin/main merge-base 6d764035315524cc242d88673d44f4b9041b1ae8. Authorities removed by CLOSE (99ee27913), read via git show b6d8a8625 under docs/backlog: epics/isolate-host-worker-pool/goal.md (I1-I10 + §Decisions amend 2026-11-19 solo reruns), distribution/isolate-host-pool-acceptance.md (carrier rows 1-11, fault matrix), epics/isolate-host-worker-pool/map.md (Linux-retention question). Verify passes over 99ee27913..7c53ded38 (CLOSE findings), 7c53ded38..6367dde13 (test timing, PR-4) and 9a8a67596..df0bf20f7 (round-4 docs; test diff comment-only).",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": true,
+  "coverage": [
+    {
+      "row": "I1: sequential calls reuse one worker; N concurrent calls in ceil(N/4) workers; API/result shape unchanged",
+      "source": "acceptance",
+      "trace": "I1",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/pool.test.ts:15 (same pid over 6 calls), pool.test.ts:~30 (4->1, 5->2, 8->2, exact results); mutant SHARD=1 killed",
+      "note": ""
+    },
+    {
+      "row": "I2: calls on one worker see none of each other's files/globals/timers/promises; output only to own result; floods/spin/Atomics.wait/heap-to-limit leave neighbours at solo result",
+      "source": "acceptance",
+      "trace": "I2",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/pool.test.ts:49,79 (freshness, pending timer/promise); pool-faults.test.ts:156-180 (output and interval floods), :109-154 (busy loop, Atomics.wait), :65-107 (heap), :385-401 (262 000 intervals at 64 MiB, timeoutMs 60000: still asserts culprit memory exactly and neighbours exact; budget only, no assertion loosened)",
+      "note": ""
+    },
+    {
+      "row": "I3: own-isolate memory signal -> {exitCode:null, termination:'memory'}, never rerun; neighbours exact once; lost-worker neighbours rerun by I5",
+      "source": "acceptance",
+      "trace": "I3",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/pool-faults.test.ts:66 (Array(2**28)), :87 (heap growth), slots-and-ceilings 'memory retained from finished calls never lands on the last call left'",
+      "note": ""
+    },
+    {
+      "row": "I4: timeout within timeoutMs+1000 incl. Atomics.wait and termination-ignoring builtin; stuck >1000 ms retires worker, neighbours finish there, then killed",
+      "source": "acceptance",
+      "trace": "I4",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/pool-faults.test.ts:110-153 (probe on new worker, retired), slots 'a cancelled call still running keeps its slot'; mutant no-stuck-retire killed; packages/isolate-host/tests/limits.test.ts:46,63 deadline floor timeoutMs - 5 (libuv cached loop time; pool-faults.test.ts:135 uses the same): mutant deadline = timeoutMs - 20 killed (1485 < 1495, 983 < 995)",
+      "note": ""
+    },
+    {
+      "row": "I5 (amended 2026-11-19): each lost call reruns once alone on a solo worker; exhaustion there is its own memory; unknown solo loss or rerun past deadline rejects ERR_ISOLATE_HOST_WORKER_LOST naming code/signal, no guest/worker bytes; <=2 runs; mass loss <= one process per call",
+      "source": "acceptance",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/pool-faults.test.ts:183,203,223,246,268,311 (kill once/twice, budget, fresh not placed with reruns, 4 solos, 2 rerun workers); :354-383 + 'attribution of a worker's RSS' describe (solo memory: wasm, resizable/growable buffers, Intl, call-alone-on-shared, allowance reset); mass loss <=8; sync/async spawn failure -> LOST; pool-protocol.test.ts:128 (no worker text); mutants rerun-on-shared, solo-not-blamed (6 carriers), blame-last-on-shared, async-spawn-raw killed",
+      "note": ""
+    },
+    {
+      "row": "I6: idle worker does not keep consumer alive; never outlives it (consumer SIGKILL -> worker gone)",
+      "source": "acceptance",
+      "trace": "I6",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/pool.test.ts:104,116,127; mutant no-unref killed",
+      "note": ""
+    },
+    {
+      "row": "I7: hostile worker frames for unknown/other-worker/settled calls kill it and reject its in-flight calls with protocol violation; other calls unchanged",
+      "source": "acceptance",
+      "trace": "I7",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/pool-protocol.test.ts:71,98,109,143",
+      "note": ""
+    },
+    {
+      "row": "I8: trust-model, README, ADR state escape reach (now and later), open side-channel class (SAB/Atomics, measured performance.now), shared resources each with its guard, unbounded repeat -> consumer rate limiting",
+      "source": "acceptance",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "docs/public/trust-model.md:41-71; packages/isolate-host/README.md:137-198; docs/adr/distribution/0563-run-runcode-in-a-pool-of-long-lived-worker-processes-each-hosting-many-isolates.md:52-71",
+      "note": ""
+    },
+    {
+      "row": "I9: README §Cost records measure.mjs next to A; warm p50 and 8-concurrent peak RSS each <= 1/2 of A (137 ms, 1118 MiB)",
+      "source": "acceptance",
+      "trace": "I9",
+      "status": "pass",
+      "citation": "packages/isolate-host/README.md:200-221 (13.1 ms, 414 MiB vs 137 ms, 1118 MiB); reviewer run @ 99ee27913 (pool src unchanged since) under the 10x load: p50 27.3 ms (<= 68.5), 8 concurrent 415 MiB (<= 559)",
+      "note": ""
+    },
+    {
+      "row": "I10: idle worker never warm above recycle watermark (ADR: 256 MiB, <= 512); past it takes no new call, killed once idle",
+      "source": "acceptance",
+      "trace": "I10",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/pool-faults.test.ts:330-349; mutant no-idle-retire killed (macOS); Linux retention: docs/backlog/distribution/reference/isolate-host-pool-step0.md:154-164, reviewer re-run in node:24.16.0-bookworm linux/arm64: 8e6 objects 712 MiB, 585 MiB 1 s after dispose (> 512), so the carrier discriminates on Linux",
+      "note": ""
+    },
+    {
+      "row": "I10: a worker past its watermark takes no new call — the worker sends retire before the last terminal frame, so the consumer stops placing calls before the slot frees",
+      "source": "acceptance",
+      "trace": "I10",
+      "status": "weak",
+      "citation": "packages/isolate-host/src/child/main.ts:177-181 (report: retire before send); carrier pool-faults.test.ts:330-349",
+      "note": "A mutant sending retire after the terminal frame passes every test: the consumer usually reads both frames in one chunk, the 25 ms idle poll retires shortly after, and the carrier places its next call 1 s later. On a split read one call could land on a worker above its watermark; it still gets a correct result and the worker retires after it, so the main I10 clause (no idle worker kept warm above it) holds. Advisory (REV-4 weak). Owner: docs/backlog/distribution/isolate-host-retire-before-terminal-uncarried.md; ADR-0563 §Corrections residual line (2026-11-19, residual at landing)."
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "packages/isolate-host/tests/pool-faults.test.ts:385-401",
+          "evidence": "",
+          "summary": "The 262 000-interval carrier (own heap limit, as its comment says) sits under the describe titled 'a solo rerun names the culprit'; the title overstates it for this one case.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "packages/isolate-host/src/child/main.ts:177-181; docs/backlog/distribution/isolate-host-retire-before-terminal-uncarried.md; docs/adr/distribution/0563-run-runcode-in-a-pool-of-long-lived-worker-processes-each-hosting-many-isolates.md:116",
+          "evidence": "The driver reports the mutant (retire sent after the terminal frame) passes the full isolate-host suite; I did not rerun it in this pass (the round-4 test diff is comment-only, and the order code is unchanged).",
+          "summary": "The retire-before-terminal order has no discriminating carrier (the I10 sub-clause \"takes no new call\"). Advisory, not a residual: if it broke, one call placed in a split-read window would run on a worker above its watermark with a correct result, and the worker would retire after it. Owned by the backlog item and the ADR-0563 §Corrections residual line.",
+          "authority": ""
+        },
+        {
+          "severity": "nit",
+          "location": "docs/adr/distribution/0563-run-runcode-in-a-pool-of-long-lived-worker-processes-each-hosting-many-isolates.md:48-49",
+          "evidence": "",
+          "summary": "§6 says F1 twice: the new sentence in the first bullet, then \"The rerun keeps the original deadline (F1)\" opening the next.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "docs/adr/distribution/0563-run-runcode-in-a-pool-of-long-lived-worker-processes-each-hosting-many-isolates.md:65; packages/isolate-host/README.md:88-90; docs/public/trust-model.md:65-67",
+          "evidence": "Code read @ df0bf20f7: pool.ts:362-371 (#deadline settles the call, then marks it cancelled while it stays in worker.calls), pool.ts:375-383 (settleWorker returns while calls.size > 0 and none is unsettled, unless the worker is retiring or solo), main.ts:191,281 (retire only after STUCK_GRACE_MS = 1000).",
+          "summary": "\"every worker but one warm idle one holds at least one unsettled call\" is false for up to ~1 s after deadlines. A worker whose calls all timed out and keep running is held by settled (cancelled) calls until their terminal frame, or until retire after the 1 s grace. Example: 8 stuck calls on 2 workers time out together, so 0 calls are in flight but 2 workers stay up for about 1 s, against a stated bound of 1. For RSS sizing, count cancelled isolates still running as in flight, or add \"+ workers in their 1 s stuck grace\".",
+          "authority": ""
+        }
+      ]
+    }
+  ]
+}
