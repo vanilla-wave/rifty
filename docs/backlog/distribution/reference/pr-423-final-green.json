@@ -1,22 +1,22 @@
 {
   "overall_verdict": "concern",
-  "merge_call": "PASS at 2413ccd3f (product/test/gate code as reviewed at 637e9122e; 637e9122e..2413ccd3f adds only the csv rifty-lane request diagnostic record, a README line on restoredMessageCount (resolves the nit) and the committed verdict JSON). The 8988843ec blocker is fixed: agent state is now set to the journal projection at construction (session.ts:424). The new fault test fails at 8988843ec ('Cannot continue from message role: assistant') and passes at HEAD. Local runs: vitest agent + agent-bench 361/361, es-floor 102/102, typecheck + lint clean, browser-unit agent-archive/core/snapshot/ui-terminal 38/38, chromium-heavy ai-mode 22/22. Before merge: commit the re-bound landing verdict, because CI at 8988843ec failed check:pass-binding on the stale pr-423-final-green.json (REV-8); wait for green PR CI at HEAD; and get the user's confirmation of ADR-0569/0570.",
+  "merge_call": "PASS at 43547cff7. Round-2 changes verified. The alias-proof TypeBox guard maps 21/21 Is* checkers to their registered kebab names (probe). Dropping assistantIsProjected/retainedForExplicitRecovery is sound under the state == projection invariant (REV-7 simplification). The kept usage gate is now discriminated: forcing it true fails usage-stop-resend. The CLI-style throw is in omitRecoveryAttempt. Local runs: vitest agent + bench + es-floor 510/510; parity 60/60, deterministic across 2 runs; typecheck and lint clean; browser-unit agent specs 38/38; chromium-heavy ai-mode 22/22. Before merge: commit this verdict as the landing record, green PR CI at HEAD, and user confirmation of ADR-0569/0570.",
   "checkpoint": "Final+GREEN",
-  "unit_goal_source": "docs/backlog/distribution/pi-1x-upgrade.md (status ready) at 2413ccd3f (code reviewed at 637e9122e; later commits records/docs only); BASE 11b9397ee (origin/main merge-base); ADR-0569, ADR-0570, ADR-0482 + corrections in ADR-0424/0436/0440/0466/0472/0473/0474/0475; PR #423 body; prior PASS e3027ed02, BLOCK 8988843ec",
+  "unit_goal_source": "docs/backlog/distribution/pi-1x-upgrade.md (status ready) at 43547cff7; BASE 11b9397ee (origin/main merge-base); ADR-0569, ADR-0570, ADR-0482 + corrections in ADR-0424/0436/0440/0466/0472/0473/0474/0475; PR #423 body; prior PASS 2413ccd3f",
   "unit_residuals": [],
   "goal_residuals": [],
   "goal_complete": false,
   "coverage": [
     {
-      "row": "Acceptance 1: continuation/retry/overflow/length/threshold equal real CLI 1.6.0 AgentSession on 19 scenarios (requests, retries, compaction numbers, transcript incl. system positions, file-op lists)",
+      "row": "Acceptance 1: continuation/retry/overflow/length/threshold equal real CLI 1.6.0 AgentSession on 20 scripted scenarios + 40 seeded random traces (requests, retries, compaction numbers in scripted scenarios, transcript incl. system positions, file-op lists)",
       "source": "acceptance",
       "trace": "ADR-0569",
       "status": "pass",
-      "citation": "tools/agent-bench/src/continuation-parity.test.ts:470",
+      "citation": "tools/agent-bench/src/continuation-parity.test.ts:584",
       "note": ""
     },
     {
-      "row": "Acceptance 2: Type.Object tool wire as 0.85.1 (minus strict:false), same accept/reject/coerce on 8 cases; Refine and Format.Set parameters (probe silent losses) throw NotImplementedError at creation",
+      "row": "Acceptance 2: Type.Object tool wire as 0.85.1 (minus strict:false), same accept/reject/coerce on 8 cases; Refine and Format.Set (incl. aliases of built-in checkers) throw NotImplementedError at creation",
       "source": "acceptance",
       "trace": "ADR-0570",
       "status": "pass",
@@ -205,27 +205,27 @@
       "findings": [
         {
           "severity": "concern",
-          "location": "packages/agent/src/session.ts:269",
-          "evidence": "Mutants at 8988843ec: M (drop retainedForExplicitRecovery), N (drop usageMatchesProjection), O (drop assistantIsProjected on the length check) -> parity 19/19 + agent 146/146 all pass. K (omit only the attempt, not its paired results) and L (no reset on user message_start) -> 2 parity failures each; P (no foreign-section null) -> 1 agent failure.",
-          "summary": "The ported CLI gating (assistantIsProjected / retainedForExplicitRecovery / usageMatchesProjection) has no discriminating scenario, so the port is checked only by reading against core_agent-session.ts:3150-3180. Suggest: re-send after a failed recovery of an explicit overflow (retained edit), and Stop during backoff after a usage-overflowing assistant. Since state == projection is now set at construction, the reachable inputs are narrow (Stop during backoff); concern accepted as recorded."
-        },
-        {
-          "severity": "concern",
           "location": "packages/agent/src/session.ts:458",
-          "evidence": "mutant J (pre-prompt check skips aborted) survived at 72d722248; no new scenario targets it",
+          "evidence": "mutant J (pre-prompt check skips aborted) at 43547cff7: parity 60/60 still pass, including the 40 seeded traces",
           "summary": "ADR-0569 §2 says the pre-prompt _checkCompaction includes aborted messages, but no parity scenario catches a version that skips them."
         },
         {
-          "severity": "concern",
+          "severity": "nit",
           "location": "packages/agent/src/continuation.ts:205",
           "evidence": "",
-          "summary": "Compaction failure errorMessage lacks the CLI prefixes (core_agent-session.ts:3387-3391). This was already so at BASE and parity does not compare it."
+          "summary": "Compaction failure errorMessage lacks the CLI prefixes (core_agent-session.ts:3387-3391). This was already so at BASE and parity does not compare it. Now recorded as backlog draft agent-compaction-failure-message-cli-prefix (pre-existing on main)."
         },
         {
           "severity": "concern",
           "location": "tools/checks/es-floor.mjs:411",
           "evidence": "es-floor.test.ts adds a Set subclass case (still rejected); check:es-floor over 352 built bundles exit 0",
           "summary": "The narrowed `this.union` allowance (enclosing class must define instance `union`) addresses my earlier concern. Residual: a class that defines `union` and also extends Set would still pass, which is acceptable."
+        },
+        {
+          "severity": "concern",
+          "location": "tools/agent-bench/src/continuation-parity.test.ts:529",
+          "evidence": "Mutant: usageMatchesProjection forced true -> usage-stop-resend fails (1/60).",
+          "summary": "Seeded traces compare compaction reason/success only. tokensBefore/After are stripped in rand mode because rifty's ADR-0475 failed-tool receipts enter estimates, and a divergence in estimates would only show if it flipped a decision. Scripted scenarios keep exact numbers. This PR-4 change is acceptable as added coverage, not a replacement."
         }
       ]
     },
@@ -254,5 +254,5 @@
       ]
     }
   ],
-  "reviewed_sha": "2413ccd3f643c30a6eac2331988e721e9c2806c0"
+  "reviewed_sha": "43547cff791bd95f3ad4a152408feec840ee25e4"
 }
