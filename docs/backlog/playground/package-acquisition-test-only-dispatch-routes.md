@@ -1,9 +1,9 @@
 ---
 area: playground
 status: draft
-title: Package authority `ensure` dispatch and `project-switch.resetPackages` have only test callers
+title: Package authority `ensure` dispatch has only test callers
 created: 2026-11-17
-why: Retiring the stamp-miss snapshot restore left two authority dispatch routes that no production code sends
+why: Retiring the stamp-miss snapshot restore left an authority dispatch route that no production code sends
 sources: [packages/workbench/CHANGELOG.md, docs/adr/playground/0135-sandbox-setup-kinds-instant-vs-from-scratch.md]
 code: [packages/workbench/src/workers/package-acquisition-types.ts, packages/workbench/src/workers/package-acquisition-authority.ts, packages/workbench/src/workers/owner-package-state.ts, packages/workbench/src/glue/project-deps.test-fixture.ts]
 ---
@@ -25,20 +25,21 @@ Observed 2026-11-17 after the stamp-miss restore removal (ADR-0135 correction
   tests drive `snapshotSource` with `fallback: 'install'`, a combination
   production no longer sends (first materialization is `snapshot-only`; `activate-and-ensure`
   has no `snapshotSource`).
-- `project-switch` command with `resetPackages`: no production sender; the
-  authority calls `adapter.switchProject` internally without it. Senders are
-  only `package-acquisition-authority.fault.test.ts` ("does not mutate a clean
-  project switch when durable destination revocation fails") and
-  `tests/integration/npm-shell-command.test.ts`, both with their own adapters.
-  The owner adapter's clear+reseed branch had no runner left, so it now throws
-  `NotImplementedError('package-acquisition.owner.project-switch.reset-packages')`
-  — after the authority's durable revoke (`package-acquisition-authority.ts`
-  `project-switch` case), not before effects.
+- The harness adapter (`createTestProjectPackageAcquisitionAuthority`) is not the
+  production owner adapter (`owner-package-state.ts`). Its `planSnapshotRestore`
+  restores the untiered payload (no `runtimeTier: 'coi'` projection), applies
+  cache and payload together with no persisted-cache flush gate between them,
+  and runs neither template `node_modules` seeding nor
+  `finalizePackageInstallFiles`; its `install` adapter is the test's own
+  `install` callback. About 30 `project-deps.test.ts` tests run the
+  real authority, stamp and VFS through it, so they prove authority semantics,
+  not the production adapter. Pickup must retire or retarget them.
+- `project-switch.resetPackages` was removed in PR #398 (its only sender was
+  the retired owner `transition`).
 
-Probe: `git grep -n -E "type: 'ensure'|type: 'project-switch'|resetPackages"
--- 'packages/**' ':!*.test.ts' ':!*test-fixture*'` → only the type
-declarations, the two `resetPackages` handler branches and the authority's
-internal `#ensure`/`switchProject` calls.
+Probe: `git grep -n -E "type: 'ensure'" -- 'packages/**' ':!*.test.ts'
+':!*test-fixture*'` → only the type declaration and the authority's internal
+`#ensure` calls.
 
 No user-visible behavior; code shrinkage only (REV-7 capture). Owner: package
 acquisition authority. Trigger: next change to the authority's command
@@ -46,7 +47,7 @@ surface, or a review that cites these routes as dead.
 
 ## Question
 
-Delete both routes and retarget their tests to `activate-and-ensure` /
-`prepare-first-materialization`, or keep `ensure` dispatch as the authority's
-focused test entry? Which of their tests pin a property that live routes still
-need?
+Delete the `ensure` dispatch route and retarget its tests to
+`activate-and-ensure` / `prepare-first-materialization` through the production
+adapter, or keep it as the authority's focused test entry? Which of its tests
+pin a property that live routes still need?

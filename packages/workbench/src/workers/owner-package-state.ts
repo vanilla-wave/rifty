@@ -1,4 +1,3 @@
-import { NotImplementedError } from '@riftydev/io';
 import {
   planShadowSubstitutionsFromLockfile,
   shadowSubstitutionPlanForInstallResult,
@@ -473,11 +472,6 @@ export function createOwnerPackageState(options: OwnerPackageStateOptions): Owne
       },
       reset: async (command) => clearProjectTree(options.fsSync, command.target.root),
       switchProject: async (command) => {
-        // Only the retired owner `transition` sent reset switches.
-        // TODO(backlog: playground/package-acquisition-test-only-dispatch-routes)
-        if (command.resetPackages) {
-          throw new NotImplementedError('package-acquisition.owner.project-switch.reset-packages');
-        }
         activeProject = command.to;
       },
     },

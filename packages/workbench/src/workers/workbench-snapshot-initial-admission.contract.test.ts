@@ -1,5 +1,10 @@
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { gunzipSync } from 'node:zlib';
+import { TARBALL_CACHE_ROOT } from '@riftydev/npm-client';
 import { resetSyncMirror } from '@riftydev/vfs/internal';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { parseDepSnapshot, serializeDepSnapshot } from '../glue/dep-snapshot.ts';
 import { isInstallStampPath } from '../glue/install-stamp.ts';
 import type { OpenedPlaygroundProject } from './playground-project-authority.ts';
 import type { ExactFsTree } from './test-fixtures/durable-owner-fs.ts';
@@ -181,6 +186,97 @@ describe('snapshot first acquisition admission survives the catalog lifetime', (
       await reopened.close();
     }
   });
+
+  it('[fault: poisoned-cache] rejects a corrupt replay cache before any cache, tree or claim write', async () => {
+    // Real replay-capable baked asset (the ms fixture has no replay closure).
+    const baked = parseDepSnapshot(
+      gunzipSync(
+        readFileSync(
+          new URL(
+            '../../../../apps/playground/public/snapshots/vite-node-modules.json.gz',
+            import.meta.url,
+          ),
+        ),
+      ).toString('utf8'),
+    );
+    expect(baked.tarballCache.files.length).toBeGreaterThan(0);
+    const corrupt = {
+      ...baked,
+      tarballCache: {
+        ...baked.tarballCache,
+        files: baked.tarballCache.files.map((file) => ({
+          ...file,
+          content: Buffer.from('corrupt replay bytes').toString('base64'),
+        })),
+      },
+    };
+    const bytes = new TextEncoder().encode(serializeDepSnapshot(corrupt));
+    const descriptor = {
+      snapshotId: `sha256:${createHash('sha256').update(bytes).digest('hex')}`,
+      templateId: baked.templateId,
+      assetUrl: 'https://host.test/corrupt-replay.json',
+    };
+    const requests: string[] = [];
+    const fetch = async (input: string | URL | Request): Promise<Response> => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      requests.push(url);
+      if (url === descriptor.assetUrl) return new Response(bytes.slice());
+      throw new Error(`Network unavailable: ${url}`);
+    };
+    vi.stubGlobal('fetch', fetch);
+    const network = { requests, fetch };
+    const definition = savedSnapshotDefinition('scratch', descriptor, {
+      packageJsonText: baked.packageJsonText,
+    });
+    const first = await openSavedSnapshotOwner(network);
+    await first.catalog.createScratch({ definition });
+    await first.close();
+    const root = '/.rifty/workbench/v2/projects/scratch/tree';
+    const dependencyState = (tree: ExactFsTree) =>
+      Object.keys(tree.files).filter(
+        (path) =>
+          path.startsWith(`${TARBALL_CACHE_ROOT}/`) ||
+          path.startsWith(`${root}/node_modules/`) ||
+          path === `${root}/package-lock.json` ||
+          isInstallStampPath(path),
+      );
+    const reopened = await openSavedSnapshotOwner(network, first.fs.restartFromDurableState());
+    let opened: OpenedPlaygroundProject | undefined;
+    try {
+      opened = await reopened.owner.openProject(definition);
+      expect(opened.acquisition).toEqual({
+        kind: 'install',
+        snapshotFailures: [
+          {
+            snapshotId: descriptor.snapshotId,
+            reason: expect.stringMatching(
+              /^snapshot-restore-plan-failed: Dep snapshot replay cache integrity mismatch for /,
+            ),
+          },
+        ],
+      });
+      expect(requests).toEqual([descriptor.assetUrl]);
+      await opened.close();
+      opened = undefined;
+      await reopened.authority.flush();
+      expect(dependencyState(reopened.fs.liveSnapshot()), 'no cache/tree/claim write').toEqual([]);
+      expect(dependencyState(reopened.fs.durableSnapshot())).toEqual([]);
+    } finally {
+      await opened?.close();
+      await reopened.close();
+    }
+    // The deferred install consumed the receipt: the next open is saved, with no fetch.
+    requests.length = 0;
+    const again = await openSavedSnapshotOwner(network, reopened.fs.restartFromDurableState());
+    try {
+      const saved = await again.owner.openProject(definition);
+      expect(saved.acquisition).toEqual({ kind: 'saved' });
+      expect(requests).toEqual([]);
+      await saved.close();
+    } finally {
+      await again.close();
+    }
+  }, 60_000);
 
   it('reopens the old four-field catalog shape without rewriting it', async () => {
     const network = installSnapshotNetwork(fixture);

@@ -52,10 +52,9 @@ export interface EnsureProjectDepsOptions {
   readonly packageJsonText?: string;
   /**
    * Runs the real installer; returns the installed package count. OPTIONAL:
-   * omit for a RESTORE-ONLY call (instant preset at owner-seed) — then a stampless,
-   * snapshotless tree resolves to `'none'` (deps left absent) instead of a
-   * network install. The faithful from-scratch install is the explicit `npm install`
-   * command, never a dev-line side effect.
+   * omit for a restore-only (`snapshot-only`) dispatch — then a stampless,
+   * snapshotless tree resolves to `'none'` (deps left absent) instead of an
+   * install.
    */
   readonly install?: () => Promise<InstallResult>;
   readonly log: (line: string) => void;
