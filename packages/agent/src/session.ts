@@ -221,7 +221,6 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
     return true;
   }
 
-  /** CLI `_checkCompaction`; returns whether to continue the interrupted turn. */
   /** CLI `_findPersistedMessageEntryId`: agent state is the journal projection. */
   function entryIdOf(message: AgentMessage): string | undefined {
     const index = agent.state.messages.indexOf(message);
@@ -421,6 +420,8 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
       if (isToolFailure(context.result)) return { isError: true };
     },
   });
+  // Agent state is the journal projection (restored prompt state folds into the summary).
+  agent.state.messages = buildProjection(journal).messages;
   const detach = agent.subscribe(async (event) => {
     if (event.type === 'tool_execution_start') currentArgs = structuredClone(event.args);
     if (event.type === 'tool_execution_end')

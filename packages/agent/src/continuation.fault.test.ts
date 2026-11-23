@@ -389,6 +389,46 @@ describe('native continuation boundary', () => {
       await session.dispose();
     }
   });
+  it('[fault: torn-state] restored prompt state before a summary still lets overflow recovery omit the attempt', async () => {
+    // Review of PR #423: two restored system messages before the summary used to
+    // misalign agent state and journal projection, leaving the attempt in context.
+    let overflowed = false;
+    const { session, requests } = fixture(
+      (c) => {
+        if (summaryRequest(c)) return answer('Recovered summary');
+        if (overflowed) return answer('Done');
+        overflowed = true;
+        return answer('maximum context length is 5000 tokens', 10, 'error');
+      },
+      {
+        initialMessages: [
+          { role: 'system', content: '', sections: { prompt: 'Old prompt.' }, timestamp: 0 },
+          { role: 'system', content: '', sections: { prompt: 'Newer prompt.' }, timestamp: 1 },
+          {
+            role: 'compactionSummary',
+            summary: 'Earlier work',
+            tokensBefore: 40000,
+            timestamp: 2,
+          } as AgentMessage,
+          ...history().map((m) =>
+            m.role === 'assistant'
+              ? { ...m, usage: answer().usage, timestamp: 3 }
+              : { ...m, timestamp: 3 },
+          ),
+        ],
+      },
+    );
+    try {
+      await session.send('continue');
+      expect(session.status(), session.detail()).toBe('done');
+      expect(requests.map((r) => summaryRequest(r.context))).toEqual([false, true, false]);
+      expect(JSON.stringify(requests.at(-1)?.context.messages)).not.toContain(
+        'maximum context length is 5000 tokens',
+      );
+    } finally {
+      await session.dispose();
+    }
+  });
   it('[fault: torn-state] stop during summary installs no partial summary or later request', async () => {
     let entered!: () => void;
     const started = new Promise<void>((r) => {
