@@ -122,7 +122,7 @@ it.each(['AGENTS.override.md', 'AGENTS.md', 'AGENTS.MD', 'CLAUDE.md', 'CLAUDE.MD
     });
     const block = reference.slice(
       reference.indexOf('<project_context>'),
-      reference.lastIndexOf('\nCurrent working directory:'),
+      reference.indexOf('</project_context>') + '</project_context>'.length,
     );
     expect(f.prompt()).toContain(block);
     expect(f.prompt()).not.toContain('Descendant must not load.');

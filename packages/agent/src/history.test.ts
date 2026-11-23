@@ -5,6 +5,7 @@ import {
 } from '@earendil-works/pi-ai';
 import { describe, expect, it } from 'vitest';
 import { modelCatalog } from '../../../tests/integration/fixtures/workbench-vite-consumer/src/agent-catalog.ts';
+import { contextView } from './fixtures/context-view.ts';
 import { type AgentMessage, type AgentSessionOptions, Type, createAgentSession } from './index.ts';
 
 function assistant(
@@ -72,7 +73,7 @@ function setup(initialMessages: readonly AgentMessage[] = [], replies = [assista
       },
     ],
     ...modelCatalog(undefined, undefined, (_model: unknown, context: Context) => {
-      contexts.push({ ...context, messages: structuredClone(context.messages) });
+      contexts.push(contextView(context));
       const message = replies.shift() ?? assistant();
       const stream = createAssistantMessageEventStream();
       stream.push({ type: 'done', reason: message.stopReason as 'stop' | 'toolUse', message });
@@ -165,7 +166,8 @@ describe('restored native agent history', () => {
       [result()],
       [call(), result(), result()],
       [call(), { ...result(), toolName: 'other' }],
-      [{ role: 'system', content: 'invalid role', timestamp: 1 }],
+      [{ role: 'system', content: 'missing timestamp' }],
+      [{ role: 'system', content: '', sections: { prompt: 1 }, timestamp: 1 }],
       [{ role: 'user', content: 'missing timestamp' }],
       [
         { ...call(), stopReason: 'aborted' },

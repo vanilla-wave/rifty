@@ -67,3 +67,5 @@ Publishing the package and its Pi types is irreversible. Reference evidence:
 
 - 2026-09-27: ADR-0471 supersedes decisions 2–3 with native pi Models catalog
   selection and declared model metadata. Decisions 1 and 4–6 remain.
+
+2026-11-23 — Exact public pins move to pi core/ai 1.6.0 plus `typebox` 1.3.27 (ADR-0570); public types now include pi 1.x `TranscriptContext`, `system` messages and `CompactionSummaryMessage` (ADR-0569).
