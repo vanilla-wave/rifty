@@ -1,10 +1,12 @@
 /**
  * A bundler renames a function or class whose name shadows another binding
  * (`EventEmitter2`, `Stream2`, `Server2`), and V8 prints that name in frames
- * and `constructor` lookups the guest sees. Any declaration in the guest
- * bundle (and the Workbench's browser bundles, when built) named after a Node
- * builtin export plus a numeric suffix fails here — by construction, not by a
- * list of found cases. Fix: name the function by a property key (ADR-0571).
+ * and `constructor` lookups the guest sees. A `function`/`class` declaration
+ * in the guest bundle (and the Workbench's browser bundles, when built) named
+ * after a Node builtin export plus a numeric suffix fails here. Bound class
+ * expressions (`TextEncoder2 = class`) and lowercase names are not seen yet
+ * (`backlog/runtime-js/guest-builtin-names`). Fix: name the function by a
+ * property key (ADR-0571).
  */
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { builtinModules, createRequire } from 'node:module';

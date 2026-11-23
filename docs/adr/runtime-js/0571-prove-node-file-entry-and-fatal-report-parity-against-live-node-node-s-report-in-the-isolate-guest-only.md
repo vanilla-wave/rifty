@@ -7,7 +7,7 @@ Date: 2026-11
 
 ## Context
 
-User scenario (goal `node-file-entry-parity`, closed 2026-11-23, PR #421): an
+User scenario (goal `node-file-entry-parity`, PR #421, PR #425): an
 agent writes JS, runs `node <file>`, reads the error, fixes it. On main
 `50c9d8bf1` `require.main === module` was false and a fatal error printed
 shifted lines, rifty frames and no Node shape. Hosts: the no-COI SDK, the COI
@@ -45,8 +45,10 @@ and the browser lifecycle each failed review more than once and were narrowed
    reaction, emitter listener, fs callback, `new Function`, direct and
    indirect `eval`): frame names, lines, columns. A builtin's name is the
    source name Node prints: `packages/isolate-host/tests/bundle-public-names.test.ts`
-   fails on a bundler-renamed Node builtin name (`EventEmitter2`) in the guest
-   bundle and the Workbench's (PR #425).
+   fails on a `function`/`class` declaration named a Node builtin export plus
+   a digit (`EventEmitter2`) in the guest bundle and the Workbench's (PR #425);
+   bound class expressions (`TextEncoder2 = class`), lowercase exports and the
+   generic stream constructor are open (`backlog/runtime-js/guest-builtin-names`).
 3. **Node's fatal report in the isolate guest only** (ADR-0445 2026-11-23
    lines): `builtins/fatal-report.ts` behind one switch the guest entry calls
    (`installNodeFatalReport()`); the no-COI SDK and the COI Workbench print
