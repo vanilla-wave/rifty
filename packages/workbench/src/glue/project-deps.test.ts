@@ -7,12 +7,12 @@ import { type DepSnapshot, buildDepSnapshot } from './dep-snapshot.ts';
 import { createInstallStampAuthority } from './install-stamp-authority.ts';
 import { installStampSatisfied, readInstallStamp } from './install-stamp.ts';
 import {
+  type EnsureProjectDepsOptions,
   type TestEnsureProjectDepsOptions,
   createTestProjectPackageAcquisitionAuthority,
+  ensureProjectDependencies as ensureProjectDependenciesWithAuthority,
 } from './project-deps.test-fixture.ts';
 import {
-  type EnsureProjectDepsOptions,
-  ensureProjectDependencies as ensureProjectDependenciesWithAuthority,
   prepareProjectInstallTree,
   seedTemplateNodeModulesFiles,
   templateNodeModulesSeedMutationIntents,
@@ -111,7 +111,7 @@ async function expectPending(promise: Promise<unknown>): Promise<void> {
   expect(settled).toBe(false);
 }
 
-describe('ensureProjectDependencies (ADR-0135)', () => {
+describe('project-deps helpers and the authority ensure harness (ADR-0135)', () => {
   it('preserves a same-project covering lock while clearing a cold stale tree', () => {
     const fs = new MemoryFsSync();
     fs.mkdirSync(`${ROOT}/node_modules/pkg`, { recursive: true });
@@ -231,7 +231,7 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
   });
 
   it('reuses a stamp written under the SAME slug without fetching or installing', async () => {
-    const { vfs, fsSync, log, logFn } = project();
+    const { vfs, fsSync, logFn } = project();
     fsSync.mkdirSync(`${ROOT}/node_modules`, { recursive: true });
     await seedTrustedStamp({ vfs, fsSync }, 'project-files', 8);
 
@@ -252,13 +252,12 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
     });
 
     expect(result).toEqual({ source: 'stamp', packages: 8 });
-    expect(log.join('')).toContain('install skipped');
   });
 
   it('ignores a stamp written under a DIFFERENT slug — the from-scratch install still runs', async () => {
     // project-files (instant) stamped OPFS for the shared vite deps; selecting
     // real-vite (from-scratch, no snapshot) must still install, not reuse.
-    const { vfs, fsSync, log, logFn } = project();
+    const { vfs, fsSync, logFn } = project();
     fsSync.mkdirSync(`${ROOT}/node_modules`, { recursive: true });
     await seedTrustedStamp({ vfs, fsSync }, 'project-files', 8);
     let installed = false;
@@ -282,7 +281,6 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
 
     expect(result).toEqual({ source: 'install', packages: 8 });
     expect(installed).toBe(true);
-    expect(log.join('')).not.toContain('install skipped');
     // re-selecting the SAME slug now reuses the tree it just stamped.
     expect((await installStampSatisfied(vfs, ROOT, 'real-vite'))?.packages).toBe(8);
   });
@@ -326,7 +324,7 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
   });
 
   it('restores the baked snapshot on a stampless boot and stamps the tree', async () => {
-    const { vfs, fsSync, log, logFn } = project();
+    const { vfs, fsSync, logFn } = project();
     let installed = false;
 
     const result = await ensureProjectDependencies({
@@ -349,7 +347,6 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
     expect(fsSync.existsSync(`${ROOT}/node_modules/vite/package.json`)).toBe(true);
     expect(fsSync.existsSync(`${ROOT}/package-lock.json`)).toBe(true);
     expect((await installStampSatisfied(vfs, ROOT, 'project-files'))?.packages).toBe(8);
-    expect(log.join('')).toContain('baked node_modules restored');
   });
 
   it.each([
@@ -428,7 +425,9 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
     });
 
     expect(result).toEqual({ source: 'install', packages: 9 });
-    expect(log.join('')).toContain('stale');
+    expect(log.join('')).toContain(
+      'snapshot-rejected /snapshots/vite.json.gz package-json-mismatch',
+    );
     expect((await installStampSatisfied(vfs, ROOT, 'project-files'))?.packages).toBe(9);
   });
 
@@ -448,7 +447,9 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
     });
 
     expect(result).toEqual({ source: 'install', packages: 9 });
-    expect(log.join('')).toContain('unavailable');
+    expect(log.join('')).toContain(
+      'snapshot-rejected /snapshots/vite.json.gz snapshot-unavailable',
+    );
   });
 
   it('reports the exact snapshot fetch failure before a successful install fallback', async () => {
@@ -470,7 +471,7 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
 
     expect(result).toEqual({ source: 'install', packages: 9 });
     expect(log.join('')).toContain(
-      'baked snapshot unavailable (/snapshots/vite.json.gz): HTTP 404 Not Found — falling back to install',
+      'snapshot-rejected /snapshots/vite.json.gz snapshot-fetch-failed: HTTP 404 Not Found',
     );
   });
 
@@ -560,8 +561,8 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
     await expect(running).resolves.toMatchObject({ source: 'snapshot' });
     expect(await installStampSatisfied(vfs, ROOT, 'project-files')).toBeNull();
     expect((await readInstallStamp(vfs, ROOT))?.durability).toBe('pending');
-    expect(log.join('')).toContain('pending claim remains untrusted');
-    expect(log.join('')).not.toContain('CRITICAL');
+    expect(log.join('')).toContain('promotion refused guarded-scope-not-durable');
+    expect(log.join('')).not.toContain('revocation-not-durable');
     expect(flushCalls).toBe(1);
   });
 
@@ -608,7 +609,7 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
     await new Promise((r) => setTimeout(r, 0));
     expect(await installStampSatisfied(vfs, ROOT, 'project-files')).toBeNull();
     expect((await readInstallStamp(vfs, ROOT))?.durability).toBe('pending');
-    expect(log.join('')).toContain('pending claim remains untrusted');
+    expect(log.join('')).toContain('promotion refused guarded-scope-not-durable');
     expect(flushCalls).toBe(1);
   });
 
@@ -642,8 +643,7 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
     expect(result.source).toBe('snapshot');
     await new Promise((r) => setTimeout(r, 0));
     expect(await installStampSatisfied(vfs, ROOT, 'project-files')).not.toBeNull(); // kept
-    expect(log.join('')).not.toContain('discarded');
-    expect(log.join('')).not.toContain('revoked');
+    expect(log.join('')).not.toContain('promotion refused');
     expect(flushCalls).toBe(1);
   });
 
@@ -675,7 +675,7 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
     await new Promise((r) => setTimeout(r, 0));
     expect(await installStampSatisfied(vfs, ROOT, 'project-files')).toBeNull();
     expect((await readInstallStamp(vfs, ROOT))?.durability).toBe('pending');
-    expect(log.join('')).toContain('pending claim remains untrusted');
+    expect(log.join('')).toContain('promotion refused guarded-scope-not-durable');
   });
 
   it('does not delete or re-drain a pending claim after a dirty proof', async () => {
@@ -708,9 +708,8 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
     await new Promise((r) => setTimeout(r, 0));
     expect(await installStampSatisfied(vfs, ROOT, 'project-files')).toBeNull();
     expect((await readInstallStamp(vfs, ROOT))?.durability).toBe('pending');
-    expect(log.join('')).toContain('pending claim remains untrusted');
-    expect(log.join('')).not.toContain('delete');
-    expect(log.join('')).not.toContain('CRITICAL');
+    expect(log.join('')).toContain('promotion refused guarded-scope-not-durable');
+    expect(log.join('')).not.toContain('revocation-not-durable');
     expect(flushCalls).toBe(1);
   });
 
@@ -740,8 +739,8 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
     await new Promise((r) => setTimeout(r, 0));
     expect(await installStampSatisfied(vfs, ROOT, 'project-files')).toBeNull();
     expect((await readInstallStamp(vfs, ROOT))?.durability).toBe('pending');
-    expect(log.join('')).toContain('promotion skipped');
-    expect(log.join('')).not.toContain('revoked');
+    expect(log.join('')).toContain('promotion refused claim-not-durable');
+    expect(log.join('')).not.toContain('revocation-not-durable');
   });
 
   it('a CLEAN deferred drain keeps the stamp', async () => {
@@ -894,8 +893,7 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
 
     expect((await readInstallStamp(vfs, ROOT))?.durability).toBe('pending');
     expect(await installStampSatisfied(vfs, ROOT, 'project-files')).toBeNull();
-    expect(log.join('')).toContain('package.json deps changed before install stamp promotion');
-    expect(log.join('')).toContain('pending claim remains untrusted');
+    expect(log.join('')).toContain('promotion refused identity-drift');
     expect(flushCalls).toBe(1);
   });
 
@@ -915,8 +913,7 @@ describe('ensureProjectDependencies (ADR-0135)', () => {
       log: logFn,
     });
     expect(result).toEqual({ source: 'none', packages: 0 });
-    expect(log.join('')).toContain('dependencies remain absent (restore-only mode)');
-    expect(log.join('')).not.toContain('falling back to install');
+    expect(log.join('')).toContain('snapshot-rejected <none> snapshot-not-configured');
   });
 
   it('restore-only with no snapshot returns none before any demote', async () => {

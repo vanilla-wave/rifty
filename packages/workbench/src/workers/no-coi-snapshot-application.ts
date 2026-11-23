@@ -5,10 +5,7 @@ import {
 } from '@riftydev/runtime-js/internal';
 import type { FsSync, PersistFailureReport } from '@riftydev/vfs';
 import { prepareDepSnapshotApplication } from '../glue/dep-snapshot-application.ts';
-import {
-  fetchVerifiedDepSnapshot,
-  prepareDepSnapshotForRuntimeTier,
-} from '../glue/dep-snapshot.ts';
+import { fetchVerifiedDepSnapshot } from '../glue/dep-snapshot.ts';
 import {
   installArtifactIdentity,
   installArtifactIdentityForTier,
@@ -39,8 +36,8 @@ export async function applyNoCoiSnapshot(
     source.installArtifactIdentity !== installArtifactIdentityForTier('coi')
   )
     throw mismatch('runtime compatibility');
-  const snapshot = await prepareDepSnapshotForRuntimeTier(source, 'no-coi');
-  const plan = await prepareDepSnapshotApplication(options.fs, input.cwd, snapshot, {
+  // Application verifies the source replay cache once, then projects to no-COI.
+  const plan = await prepareDepSnapshotApplication(options.fs, input.cwd, source, {
     runtimeTier: 'no-coi',
     conflict: input.force === true ? 'overwrite' : 'error',
     onProgress: (written, total) => options.onProgress?.({ phase: 'entries', written, total }),

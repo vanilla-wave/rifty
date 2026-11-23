@@ -14,8 +14,8 @@ import {
 import {
   type TestEnsureProjectDepsOptions,
   createTestProjectPackageAcquisitionAuthority,
+  ensureProjectDependencies as ensureProjectDependenciesWithAuthority,
 } from './project-deps.test-fixture.ts';
-import { ensureProjectDependencies as ensureProjectDependenciesWithAuthority } from './project-deps.ts';
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();

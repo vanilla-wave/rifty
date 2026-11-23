@@ -13,6 +13,10 @@
 ## [Unreleased]
 
 - Public compact v5 dependency snapshots omit replay archives, retain prepared payload and shared cache, and use existing validation/application; default replay unchanged (ADR-0547). COI first-materialization restore of compact skips the replay-cache persistence step too.
+- Remove the stamp-miss dependency restore (`restore`/`transition`, `ensureProjectDependencies`, dev-boot clean predicate) and the dev-server child cfg `bakedNodeModulesUrl`/`bakedNodeModulesTemplateId` fields only it read: no production caller; the authority's `project-switch.resetPackages` route goes too (only `transition` sent it). Snapshot restore runs only as first materialization or explicit apply (ADR-0135 correction 2026-11-17).
+
+- Verify a dependency snapshot's replay cache once per first-materialization restore and per no-COI `applySnapshot` (was twice; the no-COI path also projected twice). The removed pass is one base64 decode + SHA-512 of the 3.8 MB replay tarball: ~6.5 ms warm, 11–47 ms as a single cold call (Node 24.16, baked vite/vite8/typescript). Poisoned-cache fault tests now cover both paths.
+
 - Remove the PTY `beforeRun` dependency gate: no production caller since PR #167; tests hold runs with a registered Shell command instead.
 
 - Use Brotli quality 11 for smaller dependency snapshot downloads; document production CPU cost (ADR-0546).

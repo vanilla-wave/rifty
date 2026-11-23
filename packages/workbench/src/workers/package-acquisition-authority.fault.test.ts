@@ -617,41 +617,6 @@ describe('package-acquisition authority faults', () => {
     },
   );
 
-  it('does not mutate a clean project switch when durable destination revocation fails', async () => {
-    const vfs = await vfsHarness();
-    const stamps = createInstallStampAuthority({ vfs });
-    await trustTree(vfs, stamps);
-    const durabilityFailure = new Error('OPFS revoke failed');
-    let switchCalls = 0;
-    const authority = createPackageAcquisitionAuthority({
-      stamps,
-      stampTransition: {
-        flush: async () => {
-          throw durabilityFailure;
-        },
-      },
-      adapter: adapterWith({
-        switchProject: async () => {
-          switchCalls += 1;
-        },
-      }),
-    });
-
-    await expect(
-      authority.dispatch({
-        type: 'project-switch',
-        from: PROJECT,
-        to: { ...PROJECT, projectId: 'next', slug: 'next' },
-        resetPackages: true,
-        packageJsonText: PACKAGE_JSON,
-      }),
-    ).rejects.toMatchObject({
-      code: 'INSTALL_STAMP_REVOKE_UNPROVEN',
-      cause: durabilityFailure,
-    });
-    expect(switchCalls).toBe(0);
-  });
-
   it.each([
     [
       'package-json',
