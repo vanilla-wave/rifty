@@ -1,19 +1,27 @@
 {
   "overall_verdict": "pass",
-  "merge_call": "Merge on green PR CI at HEAD bb0713bbd; no blocker, no open concern. Prior C1 (docs overclaim) and C2 (carrier timeout) fixed and verified by mutants; packed consumer on 4e0df60c7 PASS (/tmp/compact-388-packed-3.log:203-204, EXIT 0; bb0713bbd changes only docs + this unit carrier). Local pr:check verdict is the driver's.",
+  "merge_call": "Merge on green PR CI at HEAD 25056d4fd; no blocker, no open concern on the product/test/docs delta. Lockless-route concern fixed: new case discriminates (lockless shadow pin forced to cache-only replay -> RED). Separate NOTE for the driver: the split draft playground/no-coi-failed-install-stamp-reopen is largely answered by ADR-0417 and should be narrowed or dropped (RDY-6, does not gate this PR).",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "bb0713bbd9b9c995db7498349230ff77760b8411",
-  "unit_goal_source": "PR #388; goal compact-dependency-snapshots (closed in-branch, read at d693c59dd~1) I1-I3 + User scenario 4 + ADR-0547; BASE f5c232b3dee1a19c640cb0cdf176a58d103cadc0 (merge-base with origin/main); verify pass of 183cdb74d..bb0713bbd (cross-review round 1 reception S1/N1/N3/N4 at 4e0df60c7 + verify-5 reception C1/C2 at bb0713bbd); last verified 11f893f17 (landing verdict compact-dependency-snapshots-final-green.json)",
+  "reviewed_sha": "25056d4fdfbf5c84d6dda9ef1235758b8e2a4601",
+  "unit_goal_source": "PR #388; goal compact-dependency-snapshots (closed in-branch, read at d693c59dd~1) I1-I3 + User scenario 4 + ADR-0547; BASE f5c232b3dee1a19c640cb0cdf176a58d103cadc0 (merge-base with origin/main); verify pass of 183cdb74d..25056d4fd (cross-review round 1 reception at 4e0df60c7, verify-5 reception at bb0713bbd, cross-review round 2 reception at 3ba735163: Vite goal-scenario install carrier, docs rewrite, cwd-independent fixture path; verify-7 reception at 25056d4fd: lockless route pinned, docs qualified by kept lock); last verified 11f893f17 (landing verdict compact-dependency-snapshots-final-green.json, now rebound by the driver)",
   "unit_residuals": [],
   "goal_residuals": [],
   "goal_complete": true,
   "coverage": [
     {
-      "row": "Explicit install after compact keeps existing semantics: lock-replayed shadow pin on a cold cache is never fetched; plain install (zero requests) and adding an unrelated package fail EBROKENLOCK with tree/lock unchanged; naming the substituted direct dependency re-resolves through the registry (ADR-0361 request admission); replay snapshot restores install from cache",
+      "row": "Mechanism (one direct LightningCSS shadow pin): lock-replayed shadow pin on a cold cache is never fetched; plain install (zero requests) and adding an unrelated package fail EBROKENLOCK with tree/lock unchanged; naming the substituted direct dependency re-resolves through the registry (ADR-0361 request admission); replay snapshot restores install from cache",
       "source": "acceptance",
       "trace": "scenario + ADR-0547",
       "status": "pass",
-      "citation": "packages/workbench/src/workers/no-coi-compact-install.contract.test.ts:149; packages/workbench/src/workers/no-coi-compact-install.contract.test.ts:160; packages/workbench/src/workers/no-coi-compact-install.contract.test.ts:171; packages/workbench/src/workers/no-coi-compact-install.contract.test.ts:182 (real producer + applyNoCoiSnapshot + installToolchainPackages via parseNpmInstallRequest; only global fetch stubbed with real lightningcss-wasm and ms-2.0.0 fixture bytes. Mutants at bb0713bbd: A lockfile shadow pin -> fetchAndUnpackToCache (installer-walk.ts:358) -> :149 and :160 RED \"promise resolved\"; B root updateNames ignored (installer-sources.ts:97) -> :171 RED EBROKENLOCK; B2 updateNames not passed (npm-shell-command.ts:716) -> :171 RED; 4e0df60c7 mutants compact-keeps-cache -> :149 RED, replay skips cache -> :182 RED; baseline 4/4 PASS)",
+      "citation": "packages/workbench/src/workers/no-coi-compact-install.contract.test.ts:149; packages/workbench/src/workers/no-coi-compact-install.contract.test.ts:160; packages/workbench/src/workers/no-coi-compact-install.contract.test.ts:171; packages/workbench/src/workers/no-coi-compact-install.contract.test.ts:182 (real producer + applyNoCoiSnapshot + installToolchainPackages via parseNpmInstallRequest; only global fetch stubbed with real lightningcss-wasm and ms-2.0.0 fixture bytes. File unchanged in bb0713bbd..3ba735163; mutants at bb0713bbd: A lockfile shadow pin -> fetchAndUnpackToCache (installer-walk.ts:358) -> :149 and :160 RED \"promise resolved\"; B root updateNames ignored (installer-sources.ts:97) -> :171 RED EBROKENLOCK; B2 updateNames not passed (npm-shell-command.ts:716) -> :171 RED; 4e0df60c7 mutants compact-keeps-cache -> :149 RED, replay skips cache -> :182 RED; baseline 4/4 PASS)",
+      "note": ""
+    },
+    {
+      "row": "Goal scenario (real Vite 7.3.6, transitive esbuild shadow pin) after compact on a cold cache, live registry, lock kept: lock install, `npm install esbuild`, `npm install ms@2.0.0` each fail EBROKENLOCK on esbuild.v2; 11/11/12 ordinary tarballs fetched and cached, shadow bytes never fetched, project tree byte-exact. Lock deleted: plain install re-resolves through the registry (esbuild-wasm packument + tarball) and succeeds. Replay control installs 12 packages without an esbuild-wasm request",
+      "source": "acceptance",
+      "trace": "scenario + ADR-0547",
+      "status": "pass",
+      "citation": "packages/workbench/src/workers/no-coi-compact-vite-install.contract.test.ts:141; packages/workbench/src/workers/no-coi-compact-vite-install.contract.test.ts:177; packages/workbench/src/workers/no-coi-compact-vite-install.contract.test.ts:186 (baseline 5/5 PASS at 25056d4fd. Mutants: lockfile shadow pin -> fetchAndUnpackToCache (installer-walk.ts:358) -> 3/3 kept-lock cases RED (at 3ba735163); compact keeps its cache -> 3/3 RED (at 3ba735163); replay skips cache -> replay control RED (at 3ba735163); at 25056d4fd: registry-origin shadow pin routed to cache-only replay (installer-walk.ts:358 origin check dropped + substitution.ts:237 origin guard dropped) -> :177 RED \"EBROKENLOCK … esbuild.v2 is missing its pinned cache bytes\"; routing alone without the guard -> :177 RED TypeError)",
       "note": ""
     },
     {
@@ -137,7 +145,15 @@
     {
       "axis": "Scope",
       "verdict": "pass",
-      "findings": []
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "docs/backlog/playground/no-coi-failed-install-stamp-reopen.md:13",
+          "evidence": "",
+          "summary": "Split draft is outside the unit result; its RDY-6 problems (ADR-0417 already answers most of it) are reported to the driver separately and do not gate the PR.",
+          "authority": ""
+        }
+      ]
     },
     {
       "axis": "Bugs",
@@ -146,8 +162,8 @@
         {
           "severity": "nit",
           "location": "packages/rifty/README.md:203",
-          "evidence": "mutants A/B/B2 above; carrier :149/:160/:171",
-          "summary": "Prior C1 fixed: rifty README:203-208, workbench README:243-247, ADR-0547:56-61 and evidence doc now state exactly the behaviour the four carrier cases pin (never-fetched lock-replayed pin; plain/unrelated-add EBROKENLOCK; named direct dependency re-resolves); transitive Vite esbuild not claimed.",
+          "evidence": "carrier :141/:177/:186 + no-coi-compact-install :149/:160/:171; earlier probes of vite/--prefer-online/esbuild@0.28.0/vite@7.3.6/esbuild-wasm forms all EBROKENLOCK",
+          "summary": "Prior concern fixed: rifty README:202-208, workbench README:243-248, ADR-0547:64-67, evidence doc :102-105 qualify by the kept lockfile and name the lockless re-resolution (pins may move); every sentence maps to a carrier assertion.",
           "authority": ""
         }
       ]
@@ -161,6 +177,13 @@
           "location": "packages/workbench/src/workers/no-coi-compact-install.contract.test.ts:158",
           "evidence": "",
           "summary": "Prior C2 fixed: all four cases carry 30_000 timeouts.",
+          "authority": ""
+        },
+        {
+          "severity": "nit",
+          "location": "packages/workbench/src/glue/dep-snapshot-compact.contract.test.ts:107",
+          "evidence": "vitest from repo root 15/15 PASS; from packages/workbench 15/15 PASS",
+          "summary": "cwd-relative fixture path fixed via import.meta.url; no assertion changed (PR-4).",
           "authority": ""
         }
       ]
