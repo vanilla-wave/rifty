@@ -116,3 +116,15 @@ acceptance PASS. Compact+Brotli native decompression equals compact gzip's
 decoded v5 TAR and snapshot identity. Same gzip sizes above reproduced.
 The separate worker-retirement CI red was a Chromium nested-Worker notice
 drop, repaired on main by PR #392 (ADR-0548); no compact change.
+
+## 2026-11-23 — rename to `frozen`; cold-cache refusal text (PR #426)
+
+Names above are as executed under PR #388. Profile is now `frozen` (ADR-0547
+§Decisions); carriers renamed `dep-snapshot-frozen.contract.test.ts`,
+`no-coi-frozen-install.contract.test.ts`, `no-coi-frozen-vite-install.contract.test.ts`.
+`node tests/integration/workbench-packed-consumer.mjs` PASS @ eb6d7ab1f
+(Chromium 148.0.7778.96, 16 first-party + 180 external tarballs): replay and
+frozen journeys unchanged; frozen cold-cache install, `project.run('npm install')`
+stderr and `toolchain.install` rejection both read
+`EBROKENLOCK: package-lock.json installs esbuild@0.28.0 from its substitute esbuild-wasm@0.28.0 (shadow recipe rifty.shadow-substitution.esbuild.v2), but the tarball cache holds no intact esbuild-wasm@0.28.0. Lockfile replay takes substitute bytes only from the tarball cache and never downloads them. To reinstall this lockfile exactly, restore those bytes to the tarball cache; or delete package-lock.json and run install again to re-resolve through the registry (installed versions may change).`
+(terminal prefixed `npm: `); no `esbuild-wasm` request.
