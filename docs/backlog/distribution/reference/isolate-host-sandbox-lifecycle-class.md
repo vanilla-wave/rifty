@@ -32,8 +32,9 @@ Command (repo root, after `pnpm --filter @riftydev/isolate-host build`):
 | throw in an exit listener | 1, a | 1 | 3, a | exit code not Node's |
 | rejection in an exit listener | 0, a | 0 | 1, a | exit code not Node's |
 
-**Sandbox only** (not inherited from `runCode`): a timer queued before an uncaught throw runs in
-`node <path>` and not in `node -e` — `setTimeout(() => console.log('ran'), 0); throw new Error('x')`:
+**Sandbox only** (not inherited from `runCode`): a timer queued before an uncaught throw fires after
+the guest's run has ended, in both hosts (worker trace); `runCode` disposes the isolate at the result,
+so nothing of it is seen, while a sandbox captures its state after the run and waits for the callback — `setTimeout(() => console.log('ran'), 0); throw new Error('x')`:
 `runCode` exit 1, stdout empty (as Node); the sandbox exit 1, stdout `ran`. A finite such timer
 leaves its files, an endless one ends the run `timeout` (writes rolled back) where `runCode` and
 Node exit 1. Every other row: the sandbox's status is `runCode`'s.
