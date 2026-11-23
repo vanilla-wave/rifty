@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+- `MemoryFsSync.restoreStatSync(path, {mtimeMs, atimeMs, ctimeMs, birthtimeMs})`: set an entry's four times verbatim — a snapshot restore (ADR-0567); `ino` stays.
+
 - Entry-owned session inode and creation/change clocks in FsStat; Memory/OPFS sync preserve identity on overwrite/rename and expose link count/atime (ADR-0540).
 
 - `VfsErrorCode` gains `EXDEV` (rename across mounts, ADR-0531).

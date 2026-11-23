@@ -3,7 +3,7 @@ area: runtime-js
 status: draft
 title: "An `'exit'` listener's throw reaches `'uncaughtException'`, and its `exitCode` sets a fatal throw's status, as in Node"
 created: 2026-09-24
-why: rifty treats a throw inside an `'exit'` listener as a new fatal error (stderr, status 1) where Node routes it to `'uncaughtException'` and keeps the status; after a no-listener throw rifty exits 1 even when an `'exit'` listener set `exitCode` (Node: that code)
+why: rifty treats a throw inside an `'exit'` listener as a new fatal error (stderr, status 1) where Node routes it to `'uncaughtException'` and keeps the status; after a no-listener throw rifty exits 1 even when an `'exit'` listener set `exitCode` (Node: that code) — kernel children and no-COI asynchronous throws; a no-COI project command's synchronous entry/eval throw honours it since 2026-11-18
 sources: [docs/backlog/runtime-js/reference/process-lifecycle-events-exit-code-evidence.md, docs/adr/runtime-js/0445-dispatch-node-process-lifecycle-events-before-terminal-handling.md, docs/public/compat/process.md]
 code: [packages/runtime-js/src/builtins/process-lifecycle-events.ts, packages/runtime-js/src/builtins/process.ts]
 ---
@@ -24,6 +24,11 @@ child                                              node v24.16.0                
 'exit' listener throws + 'uncaughtException' one   ["exit 0","caught inexit"] code 0      ["exit 0"] code 1, stderr names inexit
 'exit' sets exitCode = 5; setTimeout throw (none)  ["exit 1"] code 5, stderr               ["exit 1"] code 1, stderr
 ```
+
+Isolate host (ADR-0557) @ 1d3fc3c43, `node -e` v24.16.0:
+`process.on('exit', () => { process.exitCode = 0 }); throw new Error('x')` →
+host exit 1, Node 0 (both print the error). Compat ⚠️
+`docs/public/compat/isolate-host.md`.
 
 Compat ⚠️ `docs/public/compat/process.md` "Throw from an `'exit'` listener"
 and "Fatal throw with an `'exit'` listener that sets `exitCode`" (a

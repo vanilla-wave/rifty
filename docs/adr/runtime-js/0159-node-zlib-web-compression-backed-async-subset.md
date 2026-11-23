@@ -20,6 +20,13 @@ outcomes (for example `gunzip(truncated, { finishFlush: Z_SYNC_FLUSH })`), so
 silently ignoring it would be a behavior lie. They now throw
 `NotImplementedError('zlib.<fn> option: flush|finishFlush')`.
 
+Correction 2026-11-18: reason only, ceilings unchanged. "No honest sync path
+exists in-browser" was false: a sync JS/WASM DEFLATE engine computes the result
+(sync engines already ship: sql.js ADR-0065, QuickJS WASM ADR-0142; `pako` is in
+the lockfile via isomorphic-git). Same premise behind "error codes out of parity
+reach". Reason now: not implemented yet; engine choice tracked in
+`docs/backlog/runtime-js/zlib-web-compression-subset.md`.
+
 ## Context
 
 `node:zlib` was a loud stub — every member threw `NotImplementedError` (`null-net-stubs.ts`). Ordinary
@@ -62,7 +69,7 @@ The web API is async-only and exposes no compression-level / dictionary / window
 
 **Loud ceilings** (`NotImplementedError`, compat ❌ — Fidelity, refines ADR-0010/0153):
 - `*Sync` (`gzipSync`/`gunzipSync`/…) — `CompressionStream` is async-only; a synchronous facade over it
-  would pretend async is sync. No honest sync path exists in-browser.
+  would pretend async is sync. Not implemented yet; a sync engine is an open choice (correction 2026-11-18).
 - Brotli (`brotliCompress`/`brotliDecompress`/`brotliCompressSync`/… + `createBrotli*` + `BrotliCompress`/
   `BrotliDecompress`) — no Web API for brotli in the realm.
 - Zstd (`zstdCompress`/`zstdDecompress`/`zstdCompressSync`/`zstdDecompressSync` + `createZstdCompress`/
@@ -78,7 +85,7 @@ The web API is async-only and exposes no compression-level / dictionary / window
 
 **Error divergence (honest, documented ⚠️):** decompressing corrupt input rejects the callback with an
 `Error` (error-first handling works), but its `code`/`errno` are the browser stream's, not Node's
-`Z_DATA_ERROR`/`errno`. Exact zlib error codes are out of parity reach (no zlib engine in-realm).
+`Z_DATA_ERROR`/`errno`. Exact zlib error codes are not reached yet (no zlib engine in-realm; correction 2026-11-18).
 
 ## Design notes — options policy (empirical, Node 24)
 
@@ -107,6 +114,9 @@ Why the option handling is exactly this, verified against Node 24 — so a later
    the npm-install e2e (`npm-client/unpacker.ts` already uses `DecompressionStream('gzip')`). A
    dedicated in-runtime e2e for the compress + deflate/raw directions is a low-risk residual gap —
    tracked in `docs/backlog/runtime-js/zlib-web-compression-subset.md`.
+   Correction 2026-11-18: same primitive, not same behaviour — Node's `DecompressionStream`
+   concatenates gzip members, Chromium 148 throws; the harness cannot pin that, and inflate/inflateRaw
+   tails and gunzip zero padding diverge from Node on both hosts (`docs/backlog/runtime-js/zlib-trailing-bytes-after-stream-end.md`).
 
 ## Consequences
 

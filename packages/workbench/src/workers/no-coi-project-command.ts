@@ -11,8 +11,11 @@ import {
   type ToolchainCommandInput,
   type ToolchainCommandResult,
   activeRefs,
+  captureNodeProcessGlobals,
   installConsole,
+  isNodeProcessExiting,
   takeUnhandledRejection,
+  terminateFatal,
 } from '@riftydev/runtime-js/internal';
 import { type CommandContext, Shell, ShellCommandLifecycleError } from '@riftydev/shell';
 import type { FsSync } from '@riftydev/vfs';
@@ -83,7 +86,7 @@ export async function runNoCoiProjectCommand(
       ? undefined
       : new Set(input.project.allowedCommands);
 
-  const executeNode = async (
+  const runInPlace = async (
     entry: RunNodeEntryOptions,
     argv: readonly string[],
     execArgv: readonly string[],
@@ -107,10 +110,11 @@ export async function runNoCoiProjectCommand(
       ctx.stdout.write(chunk);
       return true;
     };
-    riftyProcess.stderr.write = (chunk) => {
+    const writeStderr = (chunk: string | Uint8Array): boolean => {
       ctx.stderr.write(chunk);
       return true;
     };
+    riftyProcess.stderr.write = writeStderr;
     riftyProcess.env = { ...ctx.env };
     riftyProcess.argv = [...argv];
     riftyProcess.execArgv = [...execArgv];
@@ -133,9 +137,16 @@ export async function runNoCoiProjectCommand(
         await runNodeEntry(entry);
       } catch (error) {
         executionFailed = true;
-        executionError = error;
+        // ADR-0445 (2026-11-18): Node prints a no-listener entry/eval throw and
+        // exits inside TriggerUncaughtException. The runtime fatal terminal
+        // prints it now, to the invocation's stderr as Node writes fd 2 (not a
+        // guest-patched `process.stderr.write`); none of its timers runs after.
+        const fatal = processExitCode(error) === null && isNodeProcessExiting(riftyProcess);
+        if (fatal) Reflect.set(riftyProcess.stderr, 'write', writeStderr);
+        executionError = fatal ? (terminateFatal(error) ?? error) : error;
+        if (processExitCode(executionError) !== null) invocation.clearTimers();
       }
-      // A throwing entry may already have scheduled real work. Never skip its drain.
+      // The drain settles with the terminal, else runs the entry's scheduled work.
       let terminal: number | null = null;
       try {
         await awaitDrain({ capMs: 600_000, hasRef: () => listPorts().length > 0 });
@@ -184,6 +195,33 @@ export async function runNoCoiProjectCommand(
         setProcessCwd(previous.cwd);
       }
     }
+  };
+
+  // Node: a process sees no global `require`, and its `-e`/`-p` bindings die
+  // with it; a guest value under one survives (ADR-0418 correction 2026-11-18).
+  const executeNode = async (
+    entry: RunNodeEntryOptions,
+    argv: readonly string[],
+    execArgv: readonly string[],
+    ctx: CommandContext,
+  ): Promise<number> => {
+    const restoreGlobals = captureNodeProcessGlobals(entry.kind === 'eval');
+    const settled = await runInPlace(entry, argv, execArgv, ctx).then(
+      (exitCode) => ({ ok: true as const, exitCode }),
+      (error: unknown) => ({ ok: false as const, error }),
+    );
+    const unrestored = requiresTermination ? null : restoreGlobals();
+    if (unrestored !== null) {
+      // A non-configurable binding or non-extensible globalThis: only a new realm returns it.
+      requiresTermination = true;
+      failure = new Error(
+        `cannot restore globalThis.${unrestored} after this node process; the Worker is replaced`,
+        settled.ok ? undefined : { cause: settled.error },
+      );
+      throw new ShellCommandLifecycleError('Node process globals not restored', { cause: failure });
+    }
+    if (!settled.ok) throw settled.error;
+    return settled.exitCode;
   };
 
   const makeShell = (cwd: string, env: Record<string, string>): Shell => {

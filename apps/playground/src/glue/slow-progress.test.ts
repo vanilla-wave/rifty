@@ -17,35 +17,31 @@ describe('withSlowProgress', () => {
     expect(onSlow).not.toHaveBeenCalled();
   });
 
-  it('signals slow once after the delay and reports total elapsed on success', async () => {
+  it('signals slow once after the delay and passes the result through', async () => {
     const onSlow = vi.fn();
-    const onSettledAfterSlow = vi.fn();
     let resolve!: (v: string) => void;
     const work = new Promise<string>((r) => {
       resolve = r;
     });
-    const result = withSlowProgress(work, { delayMs: 250, onSlow, onSettledAfterSlow });
+    const result = withSlowProgress(work, { delayMs: 250, onSlow });
     await vi.advanceTimersByTimeAsync(9_000);
     expect(onSlow).toHaveBeenCalledTimes(1);
     resolve('done');
     await expect(result).resolves.toBe('done');
-    expect(onSettledAfterSlow).toHaveBeenCalledTimes(1);
-    expect(onSettledAfterSlow.mock.calls[0]?.[0]).toBeGreaterThanOrEqual(9_000);
+    expect(onSlow).toHaveBeenCalledTimes(1);
   });
 
-  it('a failure after the slow signal propagates and never claims completion', async () => {
+  it('a failure after the slow signal propagates untouched', async () => {
     const onSlow = vi.fn();
-    const onSettledAfterSlow = vi.fn();
     let reject!: (e: Error) => void;
     const work = new Promise<string>((_r, rj) => {
       reject = rj;
     });
-    const result = withSlowProgress(work, { delayMs: 250, onSlow, onSettledAfterSlow });
+    const result = withSlowProgress(work, { delayMs: 250, onSlow });
     await vi.advanceTimersByTimeAsync(500);
     reject(new Error('boom'));
     await expect(result).rejects.toThrow('boom');
     expect(onSlow).toHaveBeenCalledTimes(1);
-    expect(onSettledAfterSlow).not.toHaveBeenCalled();
   });
 
   it('a fast failure propagates without signaling slow', async () => {

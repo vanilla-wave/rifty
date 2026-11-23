@@ -1,0 +1,198 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "PASS, no blockers; 2 concerns + 2 nits are NOTE. Delta verified: releasedAll (8be02e1a8) kills the predecessor's M3 (`event === undefined ||` dropped -> [\"releasedAll\",[\"armed\",\"hung\"],0]); d262c6c48 (concurrent children, 2000 ms unref guards) keeps every mutant killed (M1 released/releasedAll hung, M2 and c1f343583 noReleaseHook [\"armed\"], c1f343583 replaceAll/clearAll [\"armed\"], d597ec176^ replace [\"armed\"], no-hold mutant baseOn..once [\"armed\"]), 4/4 parallel runs stable; merge c5c34b104 keeps the PR's code hunks byte-identical vs BASE a639e0810 and composes with #402 (stdin `on` alias required by process/stdin-set-encoding-bom, readline removeListener detach and BOM decode each discriminate independently); typescript-worker pin = combined build (10,022,686 B, sha256 b05c95ee..., distinct from both parents). Parity vs Node v24.16.0 at d262c6c48: events/ 8, child_process/ 31, process/ 59, readline/ 2, readable-stream-v 3, bom 16, latin1, string_decoder/, readable-set-encoding 3, stream/pipe 9 - all match. Merge only on green PR CI at HEAD d262c6c48 (PR-6): unit-and-conformance (run) is RED (unhandled EPIPE in packages/shell/tests/git-portable-network.integration.test.ts, outside the diff, passes 3/3 locally) and browser-unit-chromium pending at review time; driver adds reviewed_sha and commits the landing verdict (REV-8) before ready/merge.",
+  "checkpoint": "Final+GREEN",
+  "unit_goal_source": "PR #400, observed-defect repair (rifty-fix, no contract doc), VERIFY PASS of HEAD d262c6c4894b522ac0aca508f62fb666f3f51c47 over the delta from the bound PASS at 9ecc33394afabb581d36f29d9865bd92c806540b: 8be02e1a8 (parity path releasedAll + backlog context line), a75578101 (verdict JSON), c5c34b104 (merge of origin/main a639e0810: #397 CI runner pin, #402 UTF-8 BOM; typescript-worker pin re-derived + ADR-0391 dated line), d262c6c48 (IPC listener-path children concurrent, release-guard unref timers 500 -> 2000 ms). Authority: real-Node baseline Node v24.16.0 (EventEmitter.prototype.on === addListener, off === removeListener; readable-stream 2/3/4 `addListener = on` override flows in Node, RangeError in rifty at the original BASE; once/prependOnceListener return `this`; process.on === EventEmitter.prototype.on; the fork child's IPC hold = _forkChild 'newListener'/'removeListener' meta-listeners with control.refCounted()/unrefCounted(), removeAllListeners emitting 'removeListener' per listener while any 'removeListener' listener exists) and the user hand-off quoted in the PR body (identity, override sweep keeping process/stdin Node-faithful, RED first, real readable-stream v3+v4 data flow, mechanism sweep, acceptance on a real readable-stream package, exceljs ceiling out of scope, discoveries to backlog). BASE a639e0810ae85206ee6bb6c09a969fa8d5b61dc3 (merge-base with main; original BASE 8a4a612ed11d5704b65d2a907c85bfa11784d170).",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "EventEmitter.prototype.on === addListener and off === removeListener (one function object per pair, name addListener/removeListener) on the prototype, every stream class and instances",
+      "source": "acceptance",
+      "trace": "baseline: Node v24.16.0 events.js identity (user hand-off)",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/events/listener-alias-identity.case.ts:17",
+      "note": ""
+    },
+    {
+      "row": "readable-stream override pattern (`on` calls Stream.prototype.on.call, `addListener = on`) and its mirror (`addListener` override, `on = addListener`) run without recursion, as Node",
+      "source": "acceptance",
+      "trace": "baseline: Node v24.16.0 + scenario (user hand-off RED: identity + override pattern)",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/events/listener-alias-identity.case.ts:41",
+      "note": ""
+    },
+    {
+      "row": "`once`/`prependOnceListener` register through `this.on`/`this.prependListener` and return the emitter itself even when the `on`/`prependListener` override returns something else",
+      "source": "acceptance",
+      "trace": "baseline: Node v24.16.0 events.js once/prependOnceListener (`this.on(...)`/`this.prependListener(...)`; `return this`)",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/events/listener-alias-identity.case.ts:95",
+      "note": ""
+    },
+    {
+      "row": "Real readable-stream v3 and v4 'data' flowing inside rifty (plus v2), pipe and pipeline, original registry tarballs",
+      "source": "acceptance",
+      "trace": "scenario (user hand-off: real readable-stream v3 and v4 data flowing; parity runner carrier)",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/stream/readable-stream-v4-real.case.ts:7",
+      "note": ""
+    },
+    {
+      "row": "Acceptance: a real readable-stream-based package works in the runtime (through2 2.0.5 / 4.0.2 transform in a pipe)",
+      "source": "acceptance",
+      "trace": "scenario (user hand-off acceptance: observable proof, parity/e2e)",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/stream/readable-stream-v3-real.case.ts:7",
+      "note": ""
+    },
+    {
+      "row": "process keeps the inherited listener methods (process.on/off === EventEmitter.prototype.on/off, on===addListener, off===removeListener) and process.stdin's flow override is reachable through both names (stdin addListener('data') flows)",
+      "source": "acceptance",
+      "trace": "scenario (user hand-off: override of one name must not silently miss calls through the other) + baseline Node v24.16.0",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/process/listener-aliases.case.ts:20",
+      "note": ""
+    },
+    {
+      "row": "A fork child's IPC 'message' hold is taken through every add path: EventEmitter.prototype.on.call / addListener.call, process.addListener, prependListener, once (Node keys it to 'newListener')",
+      "source": "acceptance",
+      "trace": "baseline: Node v24.16.0 _forkChild meta-listeners + scenario (user hand-off: keep process Node-faithful under the aliasing) + ADR-0448",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/ipc-message-listener-paths.case.ts:19",
+      "note": ""
+    },
+    {
+      "row": "The fork child's IPC hold is Node's ref count (+1 per 'message' newListener, -1 per removeListener): a guest 'newListener' hook removing the previous 'message' listener mid-add keeps the hold",
+      "source": "acceptance",
+      "trace": "baseline: Node v24.16.0 _forkChild control.refCounted()/unrefCounted() + ADR-0448 (2026-11-17 correction)",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/ipc-message-listener-paths.case.ts:25",
+      "note": ""
+    },
+    {
+      "row": "removeAllListeners('message') / removeAllListeners() releases one ref per removed 'message' listener while Node's release hook is registered (a guest 'newListener' hook clearing listeners mid-add keeps the hold; removeAllListeners('message') with no other listener releases the child), and releases nothing once the 'removeListener' hook is gone",
+      "source": "acceptance",
+      "trace": "baseline: Node v24.16.0 events.js removeAllListeners (per-listener removeListener -> _forkChild onRemoveListener -> control.unrefCounted()) + ADR-0448 (2026-11-17 correction)",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/ipc-message-listener-paths.case.ts:32",
+      "note": ""
+    },
+    {
+      "row": "ADR-0448 D5: a fork child's IPC lane holds the realm while it has a 'message' listener (both serializations): released when the last listener leaves and on disconnect; a launch-less URL Worker's raw port is never held",
+      "source": "acceptance",
+      "trace": "ADR-0448",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/child_process/ipc-message-listener-paths.case.ts:48",
+      "note": ""
+    },
+    {
+      "row": "Builtin internals detach through Node's name removeListener (events.once, pipe/unpipe, readline close, pipeline, Readable.toWeb, Writable.toWeb, async iterator): a removeListener override sees them, an off override none",
+      "source": "acceptance",
+      "trace": "baseline: Node v24.16.0 (user hand-off: keep overrides Node-faithful under aliasing)",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/cases/events/internal-removal-name.case.ts:69",
+      "note": ""
+    },
+    {
+      "row": "@riftydev/io `EventEmitter` type keeps `on`/`off` as methods: a TS subclass can `override on()/off()` and reach the base through `super` (BASE's public type allowed it; published d.ts included)",
+      "source": "public-api",
+      "trace": "baseline: BASE public type of `@riftydev/io` EventEmitter (src/index.ts export)",
+      "status": "pass",
+      "citation": "packages/io/src/event-emitter-aliases.test.ts:12",
+      "note": ""
+    },
+    {
+      "row": "Original npm fixture bytes: lock resolved/integrity match provenance, SHA512 SRI + size verified before system tar extraction, same bytes in both runtimes",
+      "source": "frozen-artifact",
+      "trace": "baseline: npm registry tarballs (README provenance, Node v24.16.0 / npm 11.17.0)",
+      "status": "pass",
+      "citation": "tools/node-parity-runner/src/npm-tree-files.ts:66",
+      "note": ""
+    },
+    {
+      "row": "ADR-0391 exact compiler-asset exception: the typescript-worker.js pin equals the bytes/SHA-256 the merged tree's `pnpm build:libs` emits",
+      "source": "frozen-artifact",
+      "trace": "ADR-0391",
+      "status": "pass",
+      "citation": "tools/checks/esbuild-legacy-retirement.mjs:103",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "PR #400 body (## Blocked, Resume, ## Residuals first bullet)",
+          "evidence": "`gh pr view 400 --json headRefOid,body` at headRefOid d262c6c48: Blocked still says \"#397 (pins ubuntu-24.04) is unmerged\" and Resume step 1 \"After #397 lands: merge origin/main ... refresh the typescript-worker.js SHA pin\" (done in c5c34b104); Residuals bullet 1 still lists `listenerCount(name, fn)` under events-prototype-shape, which c5c34b104 moved to its own compat row (docs/public/compat/process.md:116). The bound verdict's round-3 nit is fixed (RED table row r3 present).",
+          "summary": "PR body (the re-entry record) is stale after the merge: Blocked/Resume describe the pre-merge state and the events-prototype-shape bullet still names listenerCount.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "docs/public/compat/process.md:115",
+          "evidence": "`git diff a75578101 c5c34b104 -- docs/public/compat/process.md`: the merge splits the PR's own-property-shape row and adds row 116 (`emitter.listenerCount(name, listener)` -> backlog/runtime-js/events-listener-count-listener-arg); neither parent has row 116 (`git show --cc c5c34b104` marks it `++`). Content is accurate (draft exists, events-prototype-shape.md does not mention listenerCount). Code hunks unchanged: `diff <(git diff -U0 8a4a612ed a75578101 -- packages tools tests ...) <(git diff -U0 a639e0810 c5c34b104 -- ...)` -> identical.",
+          "summary": "Merge commit c5c34b104 carries a non-merge docs edit (compat row split) its message does not name; correct, but a reader of the merge cannot see it was intentional.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/io/src/event-emitter.ts:101",
+          "evidence": "Carried from the bound verdict (scratch probe at 9ecc33394: plain emitter `e.on('a', f); e.removeAllListeners(undefined)` -> Node v24.16.0 [1,1,1], rifty [0,0,0]; fork child `p.on('message', handler); p.removeAllListeners(undefined)` -> Node [\"armed\",\"pong\"], rifty [\"armed\"]); body unchanged at d262c6c48. Routed by 8be02e1a8 as a context line on the existing draft (docs/backlog/runtime-js/events-remove-all-listeners-remove-listener-event.md:40).",
+          "summary": "Pre-existing: Node's removeAllListeners clears all only for arguments.length === 0, an explicit `undefined` removes nothing; @riftydev/io (and NodeProcess's override) treat it as 'all'. Routed (REV-12) to the existing removeAllListeners backlog item; not a regression.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/shell/tests/git-portable-network.integration.test.ts:77",
+          "evidence": "`gh pr checks 400` at d262c6c48: unit-and-conformance (run) fail (job 134296061111): `Test Files 845 passed | 8 skipped`, `Errors 1 error`: Uncaught `Error: write EPIPE` at Socket.end node:net <- IncomingMessage.<anonymous> git-portable-network.integration.test.ts:77:17 (`cgi.stdin.end(body)`, no 'error' sink on cgi.stdin); the file itself passed (206 ms). Not in the PR diff (`git diff a639e0810 HEAD --stat -- packages/shell packages/net packages/git` empty; main delta adds no listener overrides). Local isolation at d262c6c48: `npx vitest run packages/shell/tests/git-portable-network.integration.test.ts` x3 -> 1 passed each. Targeted unit set (io, process, null-net, ipc, stream, events) 52 files / 867 tests pass.",
+          "summary": "PR CI red at HEAD on an unhandled host EPIPE when git http-backend closes stdin early (test harness lacks a cgi.stdin 'error' sink); not attributable to this diff, does not reproduce locally. Merge blocks on PR-6 green CI: rerun the lane; a reproduction routes to rifty-fix, otherwise capture the missing error sink.",
+          "authority": ""
+        }
+      ]
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ],
+  "reviewed_sha": "d262c6c4894b522ac0aca508f62fb666f3f51c47"
+}

@@ -69,6 +69,12 @@ class NodeStdinEmitter extends EventEmitter implements NodeStdin {
     return throwStdinGap('process.stdin[Symbol.asyncIterator]');
   }
 }
+// Node's stdin is a Readable: `on === addListener`, one override for both names.
+Object.defineProperty(NodeStdinEmitter.prototype, 'on', {
+  configurable: true,
+  writable: true,
+  value: NodeStdinEmitter.prototype.addListener,
+});
 
 /**
  * Build a `process.stdin` Readable-ish EventEmitter fed by either a kernel
@@ -86,7 +92,8 @@ export function makeStdinReader(
 } {
   let encoding: string | null = null;
   const pending: Array<string | Uint8Array> = [];
-  let decoder = new TextDecoder();
+  const utf8Decoder = () => new TextDecoder('utf-8', { ignoreBOM: true }); // Node keeps BOM
+  let decoder = utf8Decoder();
   let flowing = false;
   let explicitlyPaused = false;
   let eofReceived = false;
@@ -194,7 +201,7 @@ export function makeStdinReader(
       }
       if (encoding === 'utf8') return stdin;
       encoding = 'utf8';
-      decoder = new TextDecoder();
+      decoder = utf8Decoder();
       return stdin;
     },
     resume() {

@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { stripVTControlCharacters } from 'node:util';
@@ -366,11 +366,14 @@ export function lifecycleRows(output: string): string[] {
 
 export async function runLifecycleOracle(testCase: ProcessLifecycleCase): Promise<{
   readonly version: string;
+  /** The oracle's cwd as Node prints it (realpath: macOS tmpdir is `/private/var/…`). */
+  readonly root: string;
   readonly code: number | null;
   readonly stdout: string;
   readonly stderr: string;
 }> {
   const directory = await mkdtemp(join(tmpdir(), 'rifty-process-lifecycle-'));
+  const root = await realpath(directory);
   try {
     for (const [path, content] of Object.entries(testCase.files)) {
       await mkdir(dirname(join(directory, path)), { recursive: true });
@@ -399,7 +402,7 @@ export async function runLifecycleOracle(testCase: ProcessLifecycleCase): Promis
       });
       child.once('close', (code) => {
         clearTimeout(deadline);
-        resolve({ version: process.version, code, stdout, stderr });
+        resolve({ version: process.version, root, code, stdout, stderr });
       });
     });
   } finally {

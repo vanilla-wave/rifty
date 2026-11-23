@@ -16,6 +16,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat / exact-vers
 | `copyFileSync` / `renameSync` / `cpSync` | ✅ | `COPYFILE_EXCL`, recursive copy, mtime-preserving rename; `cp` `{ filter, force, errorOnExist, preserveTimestamps }`; `dereference` loud-throws (no-symlink, ADR-0050) |
 | `openAsBlob(path[, { type }])` | ✅ | Reads VFS bytes into a resolved Blob (default type `""`) |
 | `lutimesSync` / `futimesSync` / `futimes` | ✅ | lutimes ≡ utimes (no-symlink); futimes resolves fd→path, `EBADF` (syscall `futime`) on a bad fd |
+| `utimesSync` / `lutimesSync` / `futimesSync` sub-millisecond times | ⚠️ | Cut to whole milliseconds (Node keeps them: 100 ns measured on APFS) — `backlog/runtime-js/utimes-sub-millisecond-truncated` |
 | Encoding reads | ✅ | utf8, utf16le, latin1/ascii, hex parity cases |
 | Path resolution with `process.cwd()` | ✅ | Relative fs paths anchor at runtime cwd |
 | Callback `readFile` / `writeFile` | ✅ | Node-style error-first callbacks |
@@ -25,6 +26,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat / exact-vers
 | No-COI synchronous stdin | ❌ | `readSync`/`readFileSync(0)` throw `NotImplementedError('fs.readSync.stdin')`: no-COI children receive push-MessagePort stdin, without a pull pipe. Async `fs.read(0)` and `process.stdin` work. |
 | `truncate` / zero fill | ✅ | Sync and promises paths |
 | `mkdtemp` / `opendir` | ✅ | Sync and promises; async directory iteration |
+| `Dir#entries()` | ❌ | Node's alias of `dir[Symbol.asyncIterator]` reads `undefined`; `for await (const e of dir)` works — backlog `runtime-js/builtin-alias-members` |
 | `createReadStream` / `createWriteStream` | ⚠️ | Async `Vfs.openReadable` first, cwd-resolved paths, chunked reads, write flags (`w`/`a`/`x`/`r+` subset), read-stream abort `signal` (Node event order incl. pre-abort), TypedArray/DataView chunks, string-options overload (`createReadStream(p, 'utf8')` emits strings; `createWriteStream(p, 'base64')` decodes string writes, per-write encoding overrides), destroy() on Node's write-dispatch boundary (in-flight bytes land + 'error'; pre-dispatch discards silently), pipe and `end` parity tests. Gap: `ReadStream.pipe` ignores options and always calls `dest.end()` (`{ end: false }` still ends; `pipe(process.stdout)` throws `dest.end is not a function`) — backlog `runtime-js/fs-readstream-pipe-node-options` |
 | Stream unsupported options | ❌ | `fd`, custom `fs`, write-stream `start`, write-stream `signal`, `autoClose:false`, and non-`r` read-stream flags throw `NotImplementedError` — no silent accept-and-ignore; invalid options/encoding args are Node-shaped `ERR_INVALID_ARG_TYPE`/`ERR_INVALID_ARG_VALUE` |
 | `fs.watch` | ⚠️ | Conformance covered as cooperative VFS watch subset, not OS-native watcher semantics; `null` options accepted, invalid encoding value rejected before target existence (Node order) |

@@ -607,7 +607,8 @@ function installSeededProcessMode(
       await Promise.all([stdoutCapture.drain(), stderrCapture.drain()]);
     },
     stdoutText(): string {
-      return new TextDecoder().decode(stdoutCapture.bytes());
+      // Keep a leading BOM like the Node side's Buffer#toString capture.
+      return new TextDecoder('utf-8', { ignoreBOM: true }).decode(stdoutCapture.bytes());
     },
     teardown(): void {
       if (tornDown) return;
@@ -665,7 +666,8 @@ async function installHttpMode(): Promise<() => void> {
         status: resp.status,
         statusText: resp.statusText,
         contentType: resp.headers.get('content-type'),
-        body: await resp.text(),
+        // Bytes, BOM kept: the Node side decodes with Buffer#toString.
+        body: new TextDecoder('utf-8', { ignoreBOM: true }).decode(await resp.arrayBuffer()),
       };
     };
   } catch (error) {

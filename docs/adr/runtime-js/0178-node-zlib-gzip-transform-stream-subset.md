@@ -16,8 +16,9 @@ built static assets through Vite/sirv's compression path, which expects
 `zlib.createGzip()` to return a Node-shaped `Transform`.
 
 The browser still has no native zlib engine and no sync compression primitive.
-The only honest implementation path is the WHATWG `CompressionStream` already
-used for ADR-0159. That primitive is async and streaming, and can faithfully
+The implementation path already in use is the WHATWG `CompressionStream` from
+ADR-0159 (correction 2026-11-18: not the only honest path — a JS/WASM engine is
+one too; engine choice tracked in `docs/backlog/runtime-js/zlib-web-compression-subset.md`). That primitive is async and streaming, and can faithfully
 emit gzip wire bytes, but it does not expose Node's flush opcodes, zlib params,
 `bytesWritten` timing, or the rest of the zlib stream family.
 

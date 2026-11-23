@@ -1,0 +1,224 @@
+#!/usr/bin/env node
+/**
+ * Captures `command-lists-bash-3.2.57.json`: the frozen bash reference for
+ * newline lists, line continuation, `#` comments, heredoc/here-string and
+ * compound-command syntax (ADR-0093 frozen tier — never a CI oracle).
+ *
+ * Re-capture is a reviewed act: `node packages/shell/fixtures/bash/capture-command-lists.mjs`
+ * on a host whose `/bin/bash` is GNU bash 3.2.57; refuses any other version.
+ */
+import { spawnSync } from 'node:child_process';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const BASH = '/bin/bash';
+const ENV = { PATH: '/usr/bin:/bin', LC_ALL: 'C', LANG: 'C' };
+
+/** [id, command, setup files] — setup paths are relative to the case cwd. */
+const CASES = [
+  ['newline-separates', 'echo a\necho b'],
+  ['newline-redirects', 'echo hi > a.txt\necho bye > b.txt'],
+  ['newline-after-and', 'true &&\necho b'],
+  ['newline-after-or', 'false ||\necho b'],
+  ['newline-after-pipe', 'echo a |\ncat'],
+  ['newline-after-semicolon', 'echo a;\necho b'],
+  ['newline-blank-lines', '\n\necho a\n\n'],
+  ['newline-blank-after-and', 'true &&\n\necho b'],
+  ['newline-keeps-exit', 'false\n'],
+  ['newline-no-short-circuit', 'false\necho ran'],
+  ['newline-and-chain', 'false &&\necho skipped\necho next'],
+  ['newline-crlf', 'echo a\r\necho b'],
+  ['assign-newline-expand', 'X=1\necho $X'],
+  ['assign-semicolon-expand', 'X=1; echo $X'],
+  ['assign-and-expand', 'X=1 && echo $X'],
+  ['assign-prefix-not-expanded', 'X=outer; X=inner echo $X'],
+  ['assign-pipeline-subshell', 'X=1 | cat\necho [$X]'],
+  ['assign-path-later-line', 'D=out\nmkdir $D\necho hi > $D/f.txt'],
+  ['continuation-between-words', 'echo a \\\necho b'],
+  ['continuation-in-word', 'ec\\\nho a'],
+  ['continuation-before-space', 'echo a\\\n b'],
+  ['continuation-at-start', '\\\necho a'],
+  ['continuation-then-space', '\\\n echo a'],
+  ['continuation-joins-operators', 'echo a >\\\n> f.txt\ntrue &\\\n& echo b'],
+  ['continuation-joins-expansion', 'X=v; echo $\\\nX'],
+  ['continuation-escaped-backslash', 'echo a\\\\\necho b'],
+  ['continuation-after-mid-word-hash', 'echo a#b \\\nc'],
+  ['literal-escaped-parens', 'echo \\( a \\)'],
+  ['double-quoted-newline', 'echo "a\nb"'],
+  ['single-quoted-newline', "echo 'a\nb'"],
+  ['double-quoted-continuation', 'echo "a\\\nb"'],
+  ['single-quoted-continuation', "echo 'a\\\nb'"],
+  ['comment-trailing', 'echo a # c'],
+  ['comment-only', '# only'],
+  ['comment-lines', '# c1\necho a # c2\necho b'],
+  ['comment-mid-word', 'echo a#b'],
+  ['comment-quoted-escaped', 'echo \'#x\' "#y" \\#z'],
+  ['comment-after-semicolon', 'echo a;#c'],
+  ['comment-after-and', 'echo a && # c\necho b'],
+  ['comment-hides-syntax', "echo a # it's $(x) <<EOF & if `"],
+  ['comment-backslash-not-continuation', 'echo a #c \\\necho b'],
+  ['comment-after-escaped-space', 'echo a\\ #b'],
+  ['comment-keeps-exit', 'false # c'],
+  ['comment-after-continuation', "echo \\\n# it's a comment"],
+  ['reserved-words-as-arguments', 'echo if then fi do done { } ! [[ ]] in'],
+  ['reserved-word-quoted', "'if' true"],
+  ['reserved-word-redirect-target', 'echo hi > done; cat < done'],
+  ['reserved-word-escaped', '\\if'],
+  ['reserved-word-empty-quotes', "i''f"],
+  ['reserved-word-expanded', 'CMD=if; $CMD'],
+  ['reserved-word-after-expansion', '${X}if'],
+  ['heredoc-quoted', "cat <<'EOF'\ntouch heredoc-body-ran\nEOF"],
+  ['heredoc-unquoted', 'X=v; cat <<EOF\nhello $X\nEOF'],
+  ['heredoc-strip-tabs', 'cat <<-EOF\n\thello\n\tEOF'],
+  ['heredoc-no-space', 'cat<<EOF\nx\nEOF'],
+  ['heredoc-literal-body', "cat > f.js <<'JS'\nconst s = `t` & 1;\nJS"],
+  ['heredoc-after-side-effect', 'echo pre > pre.txt; cat <<EOF\nx\nEOF'],
+  ['heredoc-continued-operator', 'echo pre > pre.txt; cat <\\\n<EOF\ntouch body-ran\nEOF'],
+  ['here-string', 'cat <<< hi'],
+  ['here-string-after-side-effect', 'touch t; cat <<< hi'],
+  ['here-string-continued-operator', 'echo pre > pre.txt; cat <\\\n<\\\n< hi'],
+  ['heredoc-operator-quoted', 'echo \'<<\' "<<<" a\\<\\<b'],
+  ['compound-if-multiline', 'if [ -f nope ]\nthen\nrm -rf dist\nfi', { 'dist/keep.txt': 'k\n' }],
+  ['compound-if-one-line', 'echo a; if true; then echo b; fi'],
+  ['compound-for', 'for f in a b\ndo\necho $f\ndone'],
+  ['compound-while', 'while false\ndo\necho x\ndone'],
+  ['compound-until', 'until true\ndo\necho x\ndone'],
+  ['compound-case', 'case a in\na) echo A;;\nesac'],
+  ['compound-group', '{ echo a\necho b\n}'],
+  ['compound-group-close-later', 'echo a\n}'],
+  ['compound-subshell', '( echo a )'],
+  ['compound-subshell-word', '(cd . && echo a)'],
+  ['compound-arithmetic', '(( 1 ))'],
+  ['compound-function-keyword', 'function f {\necho a\n}\nf'],
+  ['compound-function-definition', 'f() { echo in; }; f'],
+  ['compound-function-subshell-body', 'f() ( echo in ); f'],
+  [
+    'compound-function-spaced-subshell',
+    'echo pre > pre.txt; f () (echo body\ntouch body-ran\ntrue)',
+  ],
+  ['compound-after-and', 'true && ! false'],
+  ['compound-after-or', 'false || ! false'],
+  ['compound-after-pipe', 'echo x | ! cat'],
+  ['compound-paren-argument', 'echo (a)'],
+  ['compound-bang', '! false && echo neg'],
+  ['compound-double-bracket', '[[ -d . ]] && echo d'],
+  ['reserved-then', 'echo a; then'],
+  ['reserved-elif', 'echo a; elif'],
+  ['reserved-else', 'echo a; else'],
+  ['reserved-fi', 'echo a; fi'],
+  ['reserved-do', 'echo a; do'],
+  ['reserved-done', 'echo a; done'],
+  ['reserved-esac', 'echo a; esac'],
+  ['reserved-in', 'echo a; in'],
+  ['reserved-close-brace', 'echo a; }'],
+  ['reserved-close-bracket', 'echo a\n]]'],
+  ['syntax-leading-and', 'echo a\n&& echo b'],
+  ['syntax-leading-pipe', 'echo a\n| cat'],
+  ['syntax-dangling-redirect-newline', 'echo hi >\ntouch x'],
+  ['syntax-spaced-heredoc', 'cat < <EOF\ntouch x\nEOF'],
+  ['syntax-redirect-before-comment', 'echo a >#b'],
+  ['syntax-trailing-redirect', 'echo a >'],
+  ['syntax-dropped-newline-semicolon', 'echo a;\n;'],
+  ['fd-dup-stderr', 'echo x 2>&1'],
+  ['fd-dup-to-stderr', 'echo x >&2'],
+  ['fd-dup-input', 'cat <&0'],
+  ['fd-read-write', 'echo x <>f'],
+  ['fd-clobber', 'echo a >| b'],
+  ['fd-both', 'echo x &>f'],
+  ['fd-io-number-stderr', 'echo x 2>err.txt'],
+  ['fd-io-number-devnull', 'echo x 2>/dev/null'],
+  ['fd-io-number-high', 'echo x 10>f'],
+  ['fd-io-number-input', 'echo IN > in.txt; cat 3<in.txt'],
+  ['io-number-stdout', 'echo x 1>out.txt'],
+  ['io-number-append', 'echo a 1>o.txt; echo b 1>>o.txt'],
+  ['io-number-stdin', 'echo IN > in.txt; cat 0<in.txt'],
+  ['io-number-quoted-is-argument', "echo '2'>f; echo \\3>g"],
+  ['op-append', 'echo a > f; echo b >> f'],
+  ['op-input', 'echo IN > in.txt; cat < in.txt'],
+  ['op-pipe', 'echo a | cat'],
+  ['background-prohibited', 'true &'],
+  ['process-substitution-input', 'cat < <(echo hi)'],
+  ['process-substitution-output', 'echo a > >(cat)'],
+  ['process-substitution-append', 'echo a >> >(cat)'],
+  ['process-substitution-io-number', 'cat 0< <(echo hi)'],
+  ['process-substitution-argument', 'cat <(echo x)'],
+  ['compound-dsemi', 'echo a;; echo b'],
+  ['compound-close-paren', 'echo a\n)'],
+  ['compound-select', 'select x in a; do echo $x; done'],
+  ['compound-time', 'time true'],
+];
+
+function snapshot(root, rel = '') {
+  const out = {};
+  for (const name of readdirSync(join(root, rel)).sort()) {
+    const path = rel ? `${rel}/${name}` : name;
+    if (statSync(join(root, path)).isDirectory()) {
+      out[`${path}/`] = '';
+      Object.assign(out, snapshot(root, path));
+    } else out[path] = readFileSync(join(root, path), 'utf8');
+  }
+  return out;
+}
+
+const version = spawnSync(BASH, ['--version'], { encoding: 'utf8' }).stdout.split('\n')[0];
+if (!version.startsWith('GNU bash, version 3.2.57(')) {
+  throw new Error(`refusing to capture: ${BASH} is ${version}`);
+}
+
+const cases = CASES.map(([id, command, setup = {}]) => {
+  const cwd = mkdtempSync(join(tmpdir(), 'rifty-bash-lists-'));
+  try {
+    for (const [path, body] of Object.entries(setup)) {
+      mkdirSync(dirname(join(cwd, path)), { recursive: true });
+      writeFileSync(join(cwd, path), body);
+    }
+    const run = spawnSync(BASH, ['--noprofile', '--norc', '-c', command], {
+      cwd,
+      env: ENV,
+      encoding: 'utf8',
+    });
+    return {
+      id,
+      command,
+      setup,
+      bash: {
+        stdout: run.stdout,
+        // Normalized: the interpreter path that prefixes diagnostics and `time` durations.
+        stderr: run.stderr
+          .replaceAll(`${BASH}: `, 'bash: ')
+          .replace(/\d+m\d+\.\d+s/g, '<duration>'),
+        exit: run.status,
+        files: snapshot(cwd),
+      },
+    };
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+const sw = spawnSync('sw_vers', [], { encoding: 'utf8' }).stdout.trim().replace(/\s+/g, ' ');
+const fixture = {
+  reference: 'frozen shell-conformance capture (ADR-0093), not a live oracle',
+  capture: {
+    shell: version,
+    invocation: `${BASH} --noprofile --norc -c <command>`,
+    env: ENV,
+    host: sw,
+    node: process.version,
+    script: 'packages/shell/fixtures/bash/capture-command-lists.mjs',
+  },
+  cases,
+};
+const out = fileURLToPath(new URL('./command-lists-bash-3.2.57.json', import.meta.url));
+writeFileSync(out, `${JSON.stringify(fixture, null, 2)}\n`);
+console.log(`${cases.length} cases → ${out}`);

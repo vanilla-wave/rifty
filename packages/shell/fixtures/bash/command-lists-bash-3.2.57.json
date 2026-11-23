@@ -1,0 +1,1466 @@
+{
+  "reference": "frozen shell-conformance capture (ADR-0093), not a live oracle",
+  "capture": {
+    "shell": "GNU bash, version 3.2.57(1)-release (arm64-apple-darwin25)",
+    "invocation": "/bin/bash --noprofile --norc -c <command>",
+    "env": {
+      "PATH": "/usr/bin:/bin",
+      "LC_ALL": "C",
+      "LANG": "C"
+    },
+    "host": "ProductName: macOS ProductVersion: 26.6.2 BuildVersion: 25G83",
+    "node": "v24.16.0",
+    "script": "packages/shell/fixtures/bash/capture-command-lists.mjs"
+  },
+  "cases": [
+    {
+      "id": "newline-separates",
+      "command": "echo a\necho b",
+      "setup": {},
+      "bash": {
+        "stdout": "a\nb\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "newline-redirects",
+      "command": "echo hi > a.txt\necho bye > b.txt",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "",
+        "exit": 0,
+        "files": {
+          "a.txt": "hi\n",
+          "b.txt": "bye\n"
+        }
+      }
+    },
+    {
+      "id": "newline-after-and",
+      "command": "true &&\necho b",
+      "setup": {},
+      "bash": {
+        "stdout": "b\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "newline-after-or",
+      "command": "false ||\necho b",
+      "setup": {},
+      "bash": {
+        "stdout": "b\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "newline-after-pipe",
+      "command": "echo a |\ncat",
+      "setup": {},
+      "bash": {
+        "stdout": "a\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "newline-after-semicolon",
+      "command": "echo a;\necho b",
+      "setup": {},
+      "bash": {
+        "stdout": "a\nb\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "newline-blank-lines",
+      "command": "\n\necho a\n\n",
+      "setup": {},
+      "bash": {
+        "stdout": "a\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "newline-blank-after-and",
+      "command": "true &&\n\necho b",
+      "setup": {},
+      "bash": {
+        "stdout": "b\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "newline-keeps-exit",
+      "command": "false\n",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "",
+        "exit": 1,
+        "files": {}
+      }
+    },
+    {
+      "id": "newline-no-short-circuit",
+      "command": "false\necho ran",
+      "setup": {},
+      "bash": {
+        "stdout": "ran\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "newline-and-chain",
+      "command": "false &&\necho skipped\necho next",
+      "setup": {},
+      "bash": {
+        "stdout": "next\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "newline-crlf",
+      "command": "echo a\r\necho b",
+      "setup": {},
+      "bash": {
+        "stdout": "a\r\nb\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "assign-newline-expand",
+      "command": "X=1\necho $X",
+      "setup": {},
+      "bash": {
+        "stdout": "1\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "assign-semicolon-expand",
+      "command": "X=1; echo $X",
+      "setup": {},
+      "bash": {
+        "stdout": "1\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "assign-and-expand",
+      "command": "X=1 && echo $X",
+      "setup": {},
+      "bash": {
+        "stdout": "1\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "assign-prefix-not-expanded",
+      "command": "X=outer; X=inner echo $X",
+      "setup": {},
+      "bash": {
+        "stdout": "outer\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "assign-pipeline-subshell",
+      "command": "X=1 | cat\necho [$X]",
+      "setup": {},
+      "bash": {
+        "stdout": "[]\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "assign-path-later-line",
+      "command": "D=out\nmkdir $D\necho hi > $D/f.txt",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "",
+        "exit": 0,
+        "files": {
+          "out/": "",
+          "out/f.txt": "hi\n"
+        }
+      }
+    },
+    {
+      "id": "continuation-between-words",
+      "command": "echo a \\\necho b",
+      "setup": {},
+      "bash": {
+        "stdout": "a echo b\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "continuation-in-word",
+      "command": "ec\\\nho a",
+      "setup": {},
+      "bash": {
+        "stdout": "a\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "continuation-before-space",
+      "command": "echo a\\\n b",
+      "setup": {},
+      "bash": {
+        "stdout": "a b\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "continuation-at-start",
+      "command": "\\\necho a",
+      "setup": {},
+      "bash": {
+        "stdout": "a\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "continuation-then-space",
+      "command": "\\\n echo a",
+      "setup": {},
+      "bash": {
+        "stdout": "a\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "continuation-joins-operators",
+      "command": "echo a >\\\n> f.txt\ntrue &\\\n& echo b",
+      "setup": {},
+      "bash": {
+        "stdout": "b\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {
+          "f.txt": "a\n"
+        }
+      }
+    },
+    {
+      "id": "continuation-joins-expansion",
+      "command": "X=v; echo $\\\nX",
+      "setup": {},
+      "bash": {
+        "stdout": "v\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "continuation-escaped-backslash",
+      "command": "echo a\\\\\necho b",
+      "setup": {},
+      "bash": {
+        "stdout": "a\\\nb\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "continuation-after-mid-word-hash",
+      "command": "echo a#b \\\nc",
+      "setup": {},
+      "bash": {
+        "stdout": "a#b c\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "literal-escaped-parens",
+      "command": "echo \\( a \\)",
+      "setup": {},
+      "bash": {
+        "stdout": "( a )\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "double-quoted-newline",
+      "command": "echo \"a\nb\"",
+      "setup": {},
+      "bash": {
+        "stdout": "a\nb\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "single-quoted-newline",
+      "command": "echo 'a\nb'",
+      "setup": {},
+      "bash": {
+        "stdout": "a\nb\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "double-quoted-continuation",
+      "command": "echo \"a\\\nb\"",
+      "setup": {},
+      "bash": {
+        "stdout": "ab\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "single-quoted-continuation",
+      "command": "echo 'a\\\nb'",
+      "setup": {},
+      "bash": {
+        "stdout": "a\\\nb\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "comment-trailing",
+      "command": "echo a # c",
+      "setup": {},
+      "bash": {
+        "stdout": "a\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "comment-only",
+      "command": "# only",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "comment-lines",
+      "command": "# c1\necho a # c2\necho b",
+      "setup": {},
+      "bash": {
+        "stdout": "a\nb\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "comment-mid-word",
+      "command": "echo a#b",
+      "setup": {},
+      "bash": {
+        "stdout": "a#b\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "comment-quoted-escaped",
+      "command": "echo '#x' \"#y\" \\#z",
+      "setup": {},
+      "bash": {
+        "stdout": "#x #y #z\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "comment-after-semicolon",
+      "command": "echo a;#c",
+      "setup": {},
+      "bash": {
+        "stdout": "a\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "comment-after-and",
+      "command": "echo a && # c\necho b",
+      "setup": {},
+      "bash": {
+        "stdout": "a\nb\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "comment-hides-syntax",
+      "command": "echo a # it's $(x) <<EOF & if `",
+      "setup": {},
+      "bash": {
+        "stdout": "a\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "comment-backslash-not-continuation",
+      "command": "echo a #c \\\necho b",
+      "setup": {},
+      "bash": {
+        "stdout": "a\nb\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "comment-after-escaped-space",
+      "command": "echo a\\ #b",
+      "setup": {},
+      "bash": {
+        "stdout": "a #b\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "comment-keeps-exit",
+      "command": "false # c",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "",
+        "exit": 1,
+        "files": {}
+      }
+    },
+    {
+      "id": "comment-after-continuation",
+      "command": "echo \\\n# it's a comment",
+      "setup": {},
+      "bash": {
+        "stdout": "\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "reserved-words-as-arguments",
+      "command": "echo if then fi do done { } ! [[ ]] in",
+      "setup": {},
+      "bash": {
+        "stdout": "if then fi do done { } ! [[ ]] in\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "reserved-word-quoted",
+      "command": "'if' true",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "bash: if: command not found\n",
+        "exit": 127,
+        "files": {}
+      }
+    },
+    {
+      "id": "reserved-word-redirect-target",
+      "command": "echo hi > done; cat < done",
+      "setup": {},
+      "bash": {
+        "stdout": "hi\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {
+          "done": "hi\n"
+        }
+      }
+    },
+    {
+      "id": "reserved-word-escaped",
+      "command": "\\if",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "bash: if: command not found\n",
+        "exit": 127,
+        "files": {}
+      }
+    },
+    {
+      "id": "reserved-word-empty-quotes",
+      "command": "i''f",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "bash: if: command not found\n",
+        "exit": 127,
+        "files": {}
+      }
+    },
+    {
+      "id": "reserved-word-expanded",
+      "command": "CMD=if; $CMD",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "bash: if: command not found\n",
+        "exit": 127,
+        "files": {}
+      }
+    },
+    {
+      "id": "reserved-word-after-expansion",
+      "command": "${X}if",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "bash: if: command not found\n",
+        "exit": 127,
+        "files": {}
+      }
+    },
+    {
+      "id": "heredoc-quoted",
+      "command": "cat <<'EOF'\ntouch heredoc-body-ran\nEOF",
+      "setup": {},
+      "bash": {
+        "stdout": "touch heredoc-body-ran\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "heredoc-unquoted",
+      "command": "X=v; cat <<EOF\nhello $X\nEOF",
+      "setup": {},
+      "bash": {
+        "stdout": "hello v\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "heredoc-strip-tabs",
+      "command": "cat <<-EOF\n\thello\n\tEOF",
+      "setup": {},
+      "bash": {
+        "stdout": "hello\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "heredoc-no-space",
+      "command": "cat<<EOF\nx\nEOF",
+      "setup": {},
+      "bash": {
+        "stdout": "x\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "heredoc-literal-body",
+      "command": "cat > f.js <<'JS'\nconst s = `t` & 1;\nJS",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "",
+        "exit": 0,
+        "files": {
+          "f.js": "const s = `t` & 1;\n"
+        }
+      }
+    },
+    {
+      "id": "heredoc-after-side-effect",
+      "command": "echo pre > pre.txt; cat <<EOF\nx\nEOF",
+      "setup": {},
+      "bash": {
+        "stdout": "x\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {
+          "pre.txt": "pre\n"
+        }
+      }
+    },
+    {
+      "id": "heredoc-continued-operator",
+      "command": "echo pre > pre.txt; cat <\\\n<EOF\ntouch body-ran\nEOF",
+      "setup": {},
+      "bash": {
+        "stdout": "touch body-ran\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {
+          "pre.txt": "pre\n"
+        }
+      }
+    },
+    {
+      "id": "here-string",
+      "command": "cat <<< hi",
+      "setup": {},
+      "bash": {
+        "stdout": "hi\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "here-string-after-side-effect",
+      "command": "touch t; cat <<< hi",
+      "setup": {},
+      "bash": {
+        "stdout": "hi\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {
+          "t": ""
+        }
+      }
+    },
+    {
+      "id": "here-string-continued-operator",
+      "command": "echo pre > pre.txt; cat <\\\n<\\\n< hi",
+      "setup": {},
+      "bash": {
+        "stdout": "hi\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {
+          "pre.txt": "pre\n"
+        }
+      }
+    },
+    {
+      "id": "heredoc-operator-quoted",
+      "command": "echo '<<' \"<<<\" a\\<\\<b",
+      "setup": {},
+      "bash": {
+        "stdout": "<< <<< a<<b\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "compound-if-multiline",
+      "command": "if [ -f nope ]\nthen\nrm -rf dist\nfi",
+      "setup": {
+        "dist/keep.txt": "k\n"
+      },
+      "bash": {
+        "stdout": "",
+        "stderr": "",
+        "exit": 0,
+        "files": {
+          "dist/": "",
+          "dist/keep.txt": "k\n"
+        }
+      }
+    },
+    {
+      "id": "compound-if-one-line",
+      "command": "echo a; if true; then echo b; fi",
+      "setup": {},
+      "bash": {
+        "stdout": "a\nb\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "compound-for",
+      "command": "for f in a b\ndo\necho $f\ndone",
+      "setup": {},
+      "bash": {
+        "stdout": "a\nb\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "compound-while",
+      "command": "while false\ndo\necho x\ndone",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "compound-until",
+      "command": "until true\ndo\necho x\ndone",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "compound-case",
+      "command": "case a in\na) echo A;;\nesac",
+      "setup": {},
+      "bash": {
+        "stdout": "A\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "compound-group",
+      "command": "{ echo a\necho b\n}",
+      "setup": {},
+      "bash": {
+        "stdout": "a\nb\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "compound-group-close-later",
+      "command": "echo a\n}",
+      "setup": {},
+      "bash": {
+        "stdout": "a\n",
+        "stderr": "bash: -c: line 1: syntax error near unexpected token `}'\nbash: -c: line 1: `}'\n",
+        "exit": 2,
+        "files": {}
+      }
+    },
+    {
+      "id": "compound-subshell",
+      "command": "( echo a )",
+      "setup": {},
+      "bash": {
+        "stdout": "a\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "compound-subshell-word",
+      "command": "(cd . && echo a)",
+      "setup": {},
+      "bash": {
+        "stdout": "a\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "compound-arithmetic",
+      "command": "(( 1 ))",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "compound-function-keyword",
+      "command": "function f {\necho a\n}\nf",
+      "setup": {},
+      "bash": {
+        "stdout": "a\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "compound-function-definition",
+      "command": "f() { echo in; }; f",
+      "setup": {},
+      "bash": {
+        "stdout": "in\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "compound-function-subshell-body",
+      "command": "f() ( echo in ); f",
+      "setup": {},
+      "bash": {
+        "stdout": "in\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "compound-function-spaced-subshell",
+      "command": "echo pre > pre.txt; f () (echo body\ntouch body-ran\ntrue)",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "",
+        "exit": 0,
+        "files": {
+          "pre.txt": "pre\n"
+        }
+      }
+    },
+    {
+      "id": "compound-after-and",
+      "command": "true && ! false",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "compound-after-or",
+      "command": "false || ! false",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "compound-after-pipe",
+      "command": "echo x | ! cat",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "bash: -c: line 0: syntax error near unexpected token `!'\nbash: -c: line 0: `echo x | ! cat'\n",
+        "exit": 2,
+        "files": {}
+      }
+    },
+    {
+      "id": "compound-paren-argument",
+      "command": "echo (a)",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "bash: -c: line 0: syntax error near unexpected token `a'\nbash: -c: line 0: `echo (a)'\n",
+        "exit": 2,
+        "files": {}
+      }
+    },
+    {
+      "id": "compound-bang",
+      "command": "! false && echo neg",
+      "setup": {},
+      "bash": {
+        "stdout": "neg\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "compound-double-bracket",
+      "command": "[[ -d . ]] && echo d",
+      "setup": {},
+      "bash": {
+        "stdout": "d\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "reserved-then",
+      "command": "echo a; then",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "bash: -c: line 0: syntax error near unexpected token `then'\nbash: -c: line 0: `echo a; then'\n",
+        "exit": 2,
+        "files": {}
+      }
+    },
+    {
+      "id": "reserved-elif",
+      "command": "echo a; elif",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "bash: -c: line 0: syntax error near unexpected token `elif'\nbash: -c: line 0: `echo a; elif'\n",
+        "exit": 2,
+        "files": {}
+      }
+    },
+    {
+      "id": "reserved-else",
+      "command": "echo a; else",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "bash: -c: line 0: syntax error near unexpected token `else'\nbash: -c: line 0: `echo a; else'\n",
+        "exit": 2,
+        "files": {}
+      }
+    },
+    {
+      "id": "reserved-fi",
+      "command": "echo a; fi",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "bash: -c: line 0: syntax error near unexpected token `fi'\nbash: -c: line 0: `echo a; fi'\n",
+        "exit": 2,
+        "files": {}
+      }
+    },
+    {
+      "id": "reserved-do",
+      "command": "echo a; do",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "bash: -c: line 0: syntax error near unexpected token `do'\nbash: -c: line 0: `echo a; do'\n",
+        "exit": 2,
+        "files": {}
+      }
+    },
+    {
+      "id": "reserved-done",
+      "command": "echo a; done",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "bash: -c: line 0: syntax error near unexpected token `done'\nbash: -c: line 0: `echo a; done'\n",
+        "exit": 2,
+        "files": {}
+      }
+    },
+    {
+      "id": "reserved-esac",
+      "command": "echo a; esac",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "bash: -c: line 0: syntax error near unexpected token `esac'\nbash: -c: line 0: `echo a; esac'\n",
+        "exit": 2,
+        "files": {}
+      }
+    },
+    {
+      "id": "reserved-in",
+      "command": "echo a; in",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "bash: -c: line 0: syntax error near unexpected token `in'\nbash: -c: line 0: `echo a; in'\n",
+        "exit": 2,
+        "files": {}
+      }
+    },
+    {
+      "id": "reserved-close-brace",
+      "command": "echo a; }",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "bash: -c: line 0: syntax error near unexpected token `}'\nbash: -c: line 0: `echo a; }'\n",
+        "exit": 2,
+        "files": {}
+      }
+    },
+    {
+      "id": "reserved-close-bracket",
+      "command": "echo a\n]]",
+      "setup": {},
+      "bash": {
+        "stdout": "a\n",
+        "stderr": "bash: -c: line 1: syntax error near unexpected token `]]'\nbash: -c: line 1: `]]'\n",
+        "exit": 2,
+        "files": {}
+      }
+    },
+    {
+      "id": "syntax-leading-and",
+      "command": "echo a\n&& echo b",
+      "setup": {},
+      "bash": {
+        "stdout": "a\n",
+        "stderr": "bash: -c: line 1: syntax error near unexpected token `&&'\nbash: -c: line 1: `&& echo b'\n",
+        "exit": 2,
+        "files": {}
+      }
+    },
+    {
+      "id": "syntax-leading-pipe",
+      "command": "echo a\n| cat",
+      "setup": {},
+      "bash": {
+        "stdout": "a\n",
+        "stderr": "bash: -c: line 1: syntax error near unexpected token `|'\nbash: -c: line 1: `| cat'\n",
+        "exit": 2,
+        "files": {}
+      }
+    },
+    {
+      "id": "syntax-dangling-redirect-newline",
+      "command": "echo hi >\ntouch x",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "bash: -c: line 0: syntax error near unexpected token `newline'\nbash: -c: line 0: `echo hi >'\n",
+        "exit": 2,
+        "files": {}
+      }
+    },
+    {
+      "id": "syntax-spaced-heredoc",
+      "command": "cat < <EOF\ntouch x\nEOF",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "bash: -c: line 0: syntax error near unexpected token `<'\nbash: -c: line 0: `cat < <EOF'\n",
+        "exit": 2,
+        "files": {}
+      }
+    },
+    {
+      "id": "syntax-redirect-before-comment",
+      "command": "echo a >#b",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "bash: -c: line 0: syntax error near unexpected token `newline'\nbash: -c: line 0: `echo a >#b'\n",
+        "exit": 2,
+        "files": {}
+      }
+    },
+    {
+      "id": "syntax-trailing-redirect",
+      "command": "echo a >",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "bash: -c: line 0: syntax error near unexpected token `newline'\nbash: -c: line 0: `echo a >'\n",
+        "exit": 2,
+        "files": {}
+      }
+    },
+    {
+      "id": "syntax-dropped-newline-semicolon",
+      "command": "echo a;\n;",
+      "setup": {},
+      "bash": {
+        "stdout": "a\n",
+        "stderr": "bash: -c: line 1: syntax error near unexpected token `;'\nbash: -c: line 1: `;'\n",
+        "exit": 2,
+        "files": {}
+      }
+    },
+    {
+      "id": "fd-dup-stderr",
+      "command": "echo x 2>&1",
+      "setup": {},
+      "bash": {
+        "stdout": "x\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "fd-dup-to-stderr",
+      "command": "echo x >&2",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "x\n",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "fd-dup-input",
+      "command": "cat <&0",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "fd-read-write",
+      "command": "echo x <>f",
+      "setup": {},
+      "bash": {
+        "stdout": "x\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {
+          "f": ""
+        }
+      }
+    },
+    {
+      "id": "fd-clobber",
+      "command": "echo a >| b",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "",
+        "exit": 0,
+        "files": {
+          "b": "a\n"
+        }
+      }
+    },
+    {
+      "id": "fd-both",
+      "command": "echo x &>f",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "",
+        "exit": 0,
+        "files": {
+          "f": "x\n"
+        }
+      }
+    },
+    {
+      "id": "fd-io-number-stderr",
+      "command": "echo x 2>err.txt",
+      "setup": {},
+      "bash": {
+        "stdout": "x\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {
+          "err.txt": ""
+        }
+      }
+    },
+    {
+      "id": "fd-io-number-devnull",
+      "command": "echo x 2>/dev/null",
+      "setup": {},
+      "bash": {
+        "stdout": "x\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "fd-io-number-high",
+      "command": "echo x 10>f",
+      "setup": {},
+      "bash": {
+        "stdout": "x\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {
+          "f": ""
+        }
+      }
+    },
+    {
+      "id": "fd-io-number-input",
+      "command": "echo IN > in.txt; cat 3<in.txt",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "",
+        "exit": 0,
+        "files": {
+          "in.txt": "IN\n"
+        }
+      }
+    },
+    {
+      "id": "io-number-stdout",
+      "command": "echo x 1>out.txt",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "",
+        "exit": 0,
+        "files": {
+          "out.txt": "x\n"
+        }
+      }
+    },
+    {
+      "id": "io-number-append",
+      "command": "echo a 1>o.txt; echo b 1>>o.txt",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "",
+        "exit": 0,
+        "files": {
+          "o.txt": "a\nb\n"
+        }
+      }
+    },
+    {
+      "id": "io-number-stdin",
+      "command": "echo IN > in.txt; cat 0<in.txt",
+      "setup": {},
+      "bash": {
+        "stdout": "IN\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {
+          "in.txt": "IN\n"
+        }
+      }
+    },
+    {
+      "id": "io-number-quoted-is-argument",
+      "command": "echo '2'>f; echo \\3>g",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "",
+        "exit": 0,
+        "files": {
+          "f": "2\n",
+          "g": "3\n"
+        }
+      }
+    },
+    {
+      "id": "op-append",
+      "command": "echo a > f; echo b >> f",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "",
+        "exit": 0,
+        "files": {
+          "f": "a\nb\n"
+        }
+      }
+    },
+    {
+      "id": "op-input",
+      "command": "echo IN > in.txt; cat < in.txt",
+      "setup": {},
+      "bash": {
+        "stdout": "IN\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {
+          "in.txt": "IN\n"
+        }
+      }
+    },
+    {
+      "id": "op-pipe",
+      "command": "echo a | cat",
+      "setup": {},
+      "bash": {
+        "stdout": "a\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "background-prohibited",
+      "command": "true &",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "process-substitution-input",
+      "command": "cat < <(echo hi)",
+      "setup": {},
+      "bash": {
+        "stdout": "hi\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "process-substitution-output",
+      "command": "echo a > >(cat)",
+      "setup": {},
+      "bash": {
+        "stdout": "a\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "process-substitution-append",
+      "command": "echo a >> >(cat)",
+      "setup": {},
+      "bash": {
+        "stdout": "a\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "process-substitution-io-number",
+      "command": "cat 0< <(echo hi)",
+      "setup": {},
+      "bash": {
+        "stdout": "hi\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "process-substitution-argument",
+      "command": "cat <(echo x)",
+      "setup": {},
+      "bash": {
+        "stdout": "x\n",
+        "stderr": "",
+        "exit": 0,
+        "files": {}
+      }
+    },
+    {
+      "id": "compound-dsemi",
+      "command": "echo a;; echo b",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "bash: -c: line 0: syntax error near unexpected token `;;'\nbash: -c: line 0: `echo a;; echo b'\n",
+        "exit": 2,
+        "files": {}
+      }
+    },
+    {
+      "id": "compound-close-paren",
+      "command": "echo a\n)",
+      "setup": {},
+      "bash": {
+        "stdout": "a\n",
+        "stderr": "bash: -c: line 1: syntax error near unexpected token `)'\nbash: -c: line 1: `)'\n",
+        "exit": 2,
+        "files": {}
+      }
+    },
+    {
+      "id": "compound-select",
+      "command": "select x in a; do echo $x; done",
+      "setup": {},
+      "bash": {
+        "stdout": "\n",
+        "stderr": "1) a\n#? ",
+        "exit": 1,
+        "files": {}
+      }
+    },
+    {
+      "id": "compound-time",
+      "command": "time true",
+      "setup": {},
+      "bash": {
+        "stdout": "",
+        "stderr": "\nreal\t<duration>\nuser\t<duration>\nsys\t<duration>\n",
+        "exit": 0,
+        "files": {}
+      }
+    }
+  ]
+}

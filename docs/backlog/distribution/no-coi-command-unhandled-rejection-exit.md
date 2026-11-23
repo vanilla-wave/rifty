@@ -34,6 +34,23 @@ all loud:
   import/fetch, tracked CLI promise): the command replaces the realm →
   `failed`, error `process.exit(n)`. Node: status n.
 
+Re-observed 2026-11-12 (proof @ 8a4a612ed in
+`/Users/vanilla-wave/ai/euphotic/proofs/2026-11-12-no-coi-office-docs`, file
+`sandbox-out/runtime-observed.json`):
+`node probe-words.cjs` with word-extractor@1.0.4 `.docx` (the `.doc` command
+fails the same way) → yauzl callback → `zlib.createInflateRaw` ceiling
+→ `failed`, exitCode null, stderr `''`, replaced, error `{name: 'Error', code:
+'WORKER_CRASHED', message: 'Worker crashed: Uncaught NotImplementedError: …'}`;
+Node: exit 1 + stack. The throw path drops the declared gap (no
+`NotImplementedError` name/`feature`); the rejection path keeps it
+(`tests/no-coi/no-coi-agent-sdk.spec.ts:155`). Open fork for a declared-gap
+throw: the SDK contract `failed` + structured gap (that spec;
+`no-coi-project-command.ts:49` `terminalExitCode` null for a `declaredGapCause`)
+or Node's status 1? Carrier: a synthetic no-listener
+callback throw (setImmediate / fs cb / stream `'data'`) in
+`no-coi-process-exit-status.spec.ts` commandCases — not word-extractor, whose
+ceiling may lift.
+
 Not loud: runBin keeps such a handle (ADR-0423 retains live refcounts), so its
 callbacks run after runBin returned, in the reused realm; Node's process is
 gone. Sibling in-process owners without a natural `exit()`: the Node-hosted

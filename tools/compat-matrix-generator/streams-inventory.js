@@ -32,6 +32,16 @@ export const streamsMatrix = {
       "Routing, unpipe and Node's end rule are parity-tested: only a literal `{ end: false }` or the realm's own `process.stdout`/`process.stderr` skips `dest.end()`, and such a pipe unpipes at source end (vitest's pool-child stdio shape). No `'pipe'`/`'unpipe'` events on the destination; an already-ended source never ends/unpipes; `pipeline(src, process.stdout)` throws `TypeError` — process streams lack `end()`",
     ],
     [
+      'Listener aliases / real readable-stream',
+      '⚠️',
+      "`on === addListener` and `off === removeListener` on every stream class (Node's shared function objects); internals detach through `removeListener`. Original readable-stream 2.3.8 / 3.6.2 / 4.7.0 (+ through2 2.0.5 / 4.0.2) flow, pipe and pipeline as Node — parity `stream/readable-stream-v{2,3,4}-real`, `events/internal-removal-name`. Caveat: `Readable.prototype.on` is EventEmitter's (Node overrides it; flow row below); internals attach with `on` where Node uses `once`/`prependListener` — backlog `runtime-js/stream-internal-listener-registration`",
+    ],
+    [
+      '`Readable` flow after `removeAllListeners()`',
+      '❌',
+      "Flow starts from an ordinary `'newListener'` listener (Node: the `on` override), so `removeAllListeners()` then `on('data')` never flows; `readableFlowing` is not exposed — backlog `runtime-js/readable-flow-new-listener-hook`",
+    ],
+    [
       '`Writable` write/end/finish',
       '⚠️',
       'decodeStrings, covered byte admission, and scalar/batch completion order, HWM returns, drain, errors, and finish are parity-tested; other chunk kinds and `writableNeedDrain` remain — backlogs `runtime-js/stream-byte-chunk-kinds`, `runtime-js/writable-sync-dispatch-state`',

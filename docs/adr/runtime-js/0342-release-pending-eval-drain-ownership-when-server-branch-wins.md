@@ -57,3 +57,7 @@ drain cancellation, `AbortSignal`, or a second process lifecycle.
 ## Corrections (2026-09-08)
 
 ADR-0385 supersedes the Workbench release-on-port handoff. Its single drain stays active; runtime lease validation and terminal precedence remain.
+
+## Corrections (2026-11-22)
+
+A process with no control port (in-process hosts: isolate guest, no-COI command) has no physical direct terminal: a terminal claimed before its drain stays pending, and the drain the host opens next settles with it (`isDrainOnlyNodeProcess`). Before, the claim parked that drain forever (`timeout`/hang) and the exit control failed into the guest's stderr.

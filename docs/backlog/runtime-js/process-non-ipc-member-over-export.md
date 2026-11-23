@@ -23,6 +23,15 @@ listener or warning is recorded). Probe (temporary esm case):
 of a forked child. Compat ⚠️ `docs/public/compat/process.md` named-imports
 row ("Known over-export").
 
+2026-11-17 — related own-shape difference, not an ESM name (symbols are not
+`Object.keys`): `Object.getOwnPropertySymbols(require('node:process'))`, scratch
+parity case, Node v24.16.0 `[shapeMode, kCapture, Symbol.toStringTag]` vs rifty
+seven `Symbol(rifty.runtime-js.process-*.v1)` keys plus `Symbol.toStringTag`
+(second). Pre-existing; the brand fix only added the tag (ADR-0345).
+Similarly `versions` is a writable data property on `NodeProcess` and the
+same-realm child; Node's is `{ writable: false, enumerable: true, configurable:
+true }` (`node -e`, v24.16.0). Advisory: no known consumer.
+
 ## Next
 
 Owner runtime-js; trigger: a consumer that feature-detects IPC by a

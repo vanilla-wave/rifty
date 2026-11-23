@@ -48,11 +48,22 @@ function deferred<T>(): Deferred<T> {
 
 function actorHarness() {
   const gates = [deferred<void>(), deferred<void>()];
-  let gateIndex = 0;
   const server = createPtyServer({
     send: () => {},
-    makeShell: () => new Shell({ cwd: '/', env: {} }),
-    beforeRun: () => gates[gateIndex++]!.promise,
+    makeShell: () => {
+      const shell = new Shell({ cwd: '/', env: {} });
+      // Holds the run until its gate releases (or the run aborts).
+      shell.registerCommand('actor-held-command', async ([index], ctx) => {
+        await Promise.race([
+          gates[Number(index)]!.promise,
+          new Promise<void>((resolve) =>
+            ctx.signal?.addEventListener('abort', () => resolve(), { once: true }),
+          ),
+        ]);
+        return ctx.signal?.aborted ? 130 : 0;
+      });
+      return shell;
+    },
   });
   server.handleFrame({ type: 'pty:open', sid: 'terminal-shared' });
 
@@ -62,7 +73,7 @@ function actorHarness() {
         type: 'pty:exec',
         sid: 'terminal-shared',
         rid: ptyRid,
-        line: 'actor-held-command',
+        line: `actor-held-command ${index}`,
         cols: 80,
         rows: 24,
         isTTY: true,

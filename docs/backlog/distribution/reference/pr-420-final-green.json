@@ -1,0 +1,134 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Mergeable once PR CI at HEAD is green; verdict re-bound to 0804a773f after the verify pass over cross-review round 4 and the merge of main c2621b50c (PR #416).",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "0804a773fc1c3e66502606f9510d5b122d833f06",
+  "unit_goal_source": "PR #420 (branch t3/isolate-host-suite-flake), standalone rifty-fix unit. Observed baseline: the finding backlog distribution/isolate-host-tests-flake-under-extreme-load (deleted by this PR; read at BASE 50c9d8bf1) — guest-export clock tolerance, pool-faults interval churn, protocol closed-then-exit red under load. BASE 50c9d8bf1, HEAD 0804a773fc1c3e66502606f9510d5b122d833f06. Passes: b1ca3e5f0 (2 blockers: removed period parity row, compat line 9 — fixed), d98cd3fa8 PASS, external cross-review round 1 at bb022938b (B1: deadline after one poll admitted late results — reverted), 375d1bd21 PASS, dd429db50 PASS, external cross-review round 2 at 325f22022 (no blocker; F1 carrier budget-dependent, placement window during the grace decision — both fixed), b959f129e PASS, external cross-review round 3 at 12151aea5 (no blocker; window from channel end reached placement and idle accounting — closed by one mark on 'end'; F1 bound spun), ba2d16844 PASS, 3e5403f6e PASS, external cross-review round 4 at d057830c9 (no blocker; placement carrier's own EOF-vs-exit race removed, residual record completed), merge of main c2621b50c, 0804a773f PASS.",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Baseline: the guest clock is the wall clock and starts at the call's start (green under load)",
+      "source": "acceptance",
+      "trace": "ADR-0558 (Decisions 2026-11-18)",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/guest-export.test.ts:19-33",
+      "note": ""
+    },
+    {
+      "row": "Baseline: a child that closes the channel then exits is reported by its own exit code, also when the consumer reads the exit only after the grace is due",
+      "source": "acceptance",
+      "trace": "ADR-0563 §6 + Corrections 2026-11-22",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/protocol.test.ts:185-204; packages/isolate-host/src/pool.ts:173-183",
+      "note": ""
+    },
+    {
+      "row": "A worker whose result channel ended takes no new call: the call gets a fresh worker, not a spent rerun",
+      "source": "acceptance",
+      "trace": "ADR-0563 §6 + Corrections 2026-11-22",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/protocol.test.ts:309-328; packages/isolate-host/src/pool.ts:130,174,342",
+      "note": ""
+    },
+    {
+      "row": "A worker whose result channel ended is not idle: a healthy warm worker survives it",
+      "source": "acceptance",
+      "trace": "ADR-0563 §2 + §6 + Corrections 2026-11-22",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/protocol.test.ts:330-368; packages/isolate-host/src/pool.ts:404",
+      "note": ""
+    },
+    {
+      "row": "The consumer owns the deadline: at timeoutMs it resolves timeout; a result sent after the deadline does not win (starved consumer)",
+      "source": "acceptance",
+      "trace": "ADR-0563 §4",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/protocol.test.ts:206-229; packages/isolate-host/src/pool.ts:85",
+      "note": ""
+    },
+    {
+      "row": "F1: a rerun keeps the original deadline; out of budget it is a lost call, not a result (starved consumer, order imposed by events)",
+      "source": "acceptance",
+      "trace": "ADR-0563 §6 (F1)",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/protocol.test.ts:231-290",
+      "note": ""
+    },
+    {
+      "row": "Declared gap: with a starved consumer, a result sent before the deadline but read after it is timeout",
+      "source": "acceptance",
+      "trace": "ADR-0563 Corrections 2026-11-22 (compat ⚠️ row)",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/protocol.test.ts:370-397; docs/public/compat/isolate-host.md (starved-consumer ⚠️ row)",
+      "note": ""
+    },
+    {
+      "row": "Declared gap: with a starved consumer, a worker lost before the deadline but read after it is timeout, no rerun",
+      "source": "acceptance",
+      "trace": "ADR-0563 Corrections 2026-11-22 (compat ⚠️ row)",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/protocol.test.ts:399-428; docs/public/compat/isolate-host.md (starved-consumer ⚠️ row)",
+      "note": ""
+    },
+    {
+      "row": "Interval create/clear loop next to three neighbours: culprit memory, neighbours exact once",
+      "source": "acceptance",
+      "trace": "ADR-0563 Corrections 2026-11-19 (round 2 carriers)",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/pool-faults.test.ts:471-504",
+      "note": ""
+    },
+    {
+      "row": "A repeating timer keeps Node's period from the tick's start",
+      "source": "acceptance",
+      "trace": "ADR-0558 (Decisions 2026-11-19 §3, 2026-11-22)",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/corpus.ts:155 (row interval-keeps-its-period); packages/isolate-guest/tests/host-bridge.test.ts:425",
+      "note": ""
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}
