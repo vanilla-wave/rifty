@@ -30,8 +30,6 @@ interface BootstrapConfigBase {
   readonly installDeps: Readonly<Record<string, string>>;
   readonly packageJson: string;
   readonly seedFiles: Readonly<Record<string, string>>;
-  readonly bakedNodeModulesUrl?: string;
-  readonly bakedNodeModulesTemplateId?: string;
 }
 
 export interface ViteBootstrapConfig extends BootstrapConfigBase {
@@ -299,10 +297,6 @@ export function resolveBootstrapConfig(
     packageVersion: pkg.version,
     installDeps: spec.install,
     packageJson: pkg.json,
-    ...(spec.bakedNodeModulesUrl ? { bakedNodeModulesUrl: spec.bakedNodeModulesUrl } : {}),
-    ...(spec.bakedNodeModulesTemplateId
-      ? { bakedNodeModulesTemplateId: spec.bakedNodeModulesTemplateId }
-      : {}),
   };
   if (
     spec.runtime === 'node-server' ||

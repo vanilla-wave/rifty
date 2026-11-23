@@ -85,4 +85,6 @@ per-file surveillance remain.
 the ADR-0165 §5 dev-boot clean predicate it used. The stamp → snapshot order
 remains inside first materialization (pending catalog receipt, ADR-0394);
 otherwise a snapshot restores only by explicit apply/Reset, and a stamp miss
-on open never restores (ADR-0415).
+on open never restores (ADR-0415). Consequences' "a same-template instant
+switch re-restores it" now holds only via a new scratch/Reset (first
+materialization), never on reopen.

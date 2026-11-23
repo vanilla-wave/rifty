@@ -18,7 +18,8 @@ import {
 } from '@riftydev/vfs/internal';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_ASSET_MAX_BYTES, DEFAULT_ASSET_STALL_MS } from '../glue/bounded-asset-fetch.ts';
-import { buildDepSnapshot, serializeDepSnapshot } from '../glue/dep-snapshot.ts';
+import { projectDependencySnapshotTier } from '../glue/dep-snapshot-runtime-tier.ts';
+import { buildDepSnapshot, parseDepSnapshot, serializeDepSnapshot } from '../glue/dep-snapshot.ts';
 import type { InstallFn } from '../glue/npm-shell-command.ts';
 import { createPtyClient } from '../glue/pty-client.ts';
 import type { OwnerToPageFrame } from '../glue/pty-protocol.ts';
@@ -1868,26 +1869,25 @@ describe('Workbench companion first materialization Contract+RED', () => {
     ).toBe(true);
   });
 
-  it('restores a real baked snapshot with one replay-cache verification', async () => {
+  it('restores a real baked snapshot with one replay-cache verification and its COI projection', async () => {
+    // The `vite` starter's COI projection rewrites its lock and esbuild facade.
     const gzipped = readFileSync(
       new URL(
-        '../../../../apps/playground/public/snapshots/vite8-node-modules.json.gz',
+        '../../../../apps/playground/public/snapshots/vite-node-modules.json.gz',
         import.meta.url,
       ),
     );
     const bytes = gunzipSync(gzipped);
-    const baked = JSON.parse(bytes.toString('utf8')) as {
-      readonly templateId: string;
-      readonly packageJsonText: string;
-      readonly tarballCache: { readonly files: readonly { readonly content: string }[] };
-    };
+    const baked = parseDepSnapshot(bytes.toString('utf8'));
+    const coiLockfile = projectDependencySnapshotTier(baked, 'coi').lockfile;
+    expect(coiLockfile).not.toBe(baked.lockfile);
     const replayLengths = new Set(
       baked.tarballCache.files.map((file) => Buffer.from(file.content, 'base64').byteLength),
     );
     expect(baked.tarballCache.files.length).toBeGreaterThan(0);
     const descriptor = {
       snapshotId: `sha256:${createHash('sha256').update(bytes).digest('hex')}`,
-      assetUrl: 'https://playground.test/snapshots/vite8.json.gz',
+      assetUrl: 'https://playground.test/snapshots/vite.json.gz',
       templateId: baked.templateId,
     } as const;
     vi.stubGlobal(
@@ -1916,12 +1916,16 @@ describe('Workbench companion first materialization Contract+RED', () => {
     );
     const opened = await h.open(definition);
     await h.packageState.quiesce();
+    const restoredLockfile = decoder.decode(
+      h.authority.readFileBytesSync(`${opened.projectRoot}/package-lock.json`),
+    );
     await h.close();
 
     expect(opened.acquisition).toMatchObject({
       kind: 'ready',
       provenance: { outcome: 'snapshot', snapshotId: descriptor.snapshotId },
     });
+    expect(restoredLockfile).toBe(coiLockfile);
     const replayVerifications = digest.mock.calls.filter(
       ([algorithm, data]) =>
         algorithm === 'SHA-512' && replayLengths.has((data as ArrayBufferView).byteLength),
