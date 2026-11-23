@@ -99,8 +99,10 @@ tests unchanged; workbench glue+workers 112 files / 2005 tests PASS.
   11 / 11 / 12 ordinary tarballs fetched first and left in the shared cache
   (`npm install esbuild` also reads the `esbuild-wasm` packument, never its
   tarball); project tree byte-exact. Replay control: lock install succeeds,
-  12 packages, no `esbuild-wasm` request. So no npm route reinstalls Vite after
-  compact on a cold cache. READMEs/ADR-0547 state exactly this. Stamp: the owner demotes before the
+  12 packages, no `esbuild-wasm` request. Lockless: deleting `package-lock.json`
+  → plain install re-resolves, fetches the `esbuild-wasm` packument + tarball and
+  succeeds. So while the lock is kept no npm route reinstalls Vite after compact
+  on a cold cache. READMEs/ADR-0547 state exactly this. Stamp: the owner demotes before the
   installer and promotes only on success (`no-coi-toolchain-owner.ts`); not
   re-pinned here. Follow-up question: `npm-client/shadow-pin-replay-bytes-cold-cache`.
 - COI apply flush assertion narrowed to the live project `node_modules/`;

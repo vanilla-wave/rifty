@@ -61,5 +61,7 @@ esbuild.v2 is missing its pinned cache bytes`; the ordinary tarballs fetched
 first (11, or 12 with `ms`) stay in the shared cache; the project tree is
 unchanged. Mechanism (`no-coi-compact-install.contract.test.ts`, one direct
 LightningCSS pin): naming a substituted *direct* dependency re-resolves it
-through the registry (ADR-0361 request admission) — no route for Vite, whose
-`esbuild` stays lock-replayed. A replay snapshot or warm cache restores install.
+through the registry (ADR-0361 request admission) — no route for Vite while its
+lock is kept, since `esbuild` stays lock-replayed. Deleting `package-lock.json`
+re-resolves from the registry (fetches `esbuild-wasm`; pins may move). A replay
+snapshot or warm cache restores the exact install.

@@ -137,7 +137,7 @@ function npm(...specs: string[]) {
   return { request: parsed.request, context };
 }
 
-describe('Vite 7.3.6 after compact on a cold cache: no npm reinstall route (ADR-0547)', () => {
+describe('Vite 7.3.6 after compact on a cold cache: no npm reinstall route while the lock is kept (ADR-0547)', () => {
   it.each([
     ['install over the lock', [] as string[], 11],
     ['npm install esbuild (the transitive shadow pin)', ['esbuild'], 11],
@@ -173,6 +173,15 @@ describe('Vite 7.3.6 after compact on a cold cache: no npm reinstall route (ADR-
     },
     60_000,
   );
+
+  it('deleting package-lock.json re-resolves from the registry and installs (pins may move)', async () => {
+    const { fs, vfs, requests } = await applied('compact');
+    fs.rmSync('/project/package-lock.json', { force: true });
+    const result = await installToolchainPackages({ cwd: '/project', registryUrl }, vfs);
+    expect(result.packages).toBeGreaterThan(0);
+    expect(requests).toContain(`${registryUrl}/esbuild-wasm`);
+    expect(requests.some((url) => /\/esbuild-wasm-[^/]+\.tgz$/.test(url))).toBe(true);
+  }, 60_000);
 
   it('replay control: the same lock install succeeds from the restored shadow bytes', async () => {
     const { vfs, requests } = await applied('replay');
