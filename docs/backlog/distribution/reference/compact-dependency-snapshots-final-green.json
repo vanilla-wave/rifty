@@ -1,9 +1,9 @@
 {
   "overall_verdict": "pass",
-  "merge_call": "Final+GREEN verify-pass PASS at d0ac622f6: both FIX findings are repaired and the new tests discriminate; no blockers. Merge only after this verdict is committed as the landing artifact (reviewed_sha d0ac622f6; later commits docs-only), HEAD is pushed (the PR head is a8992c078) and PR CI at that HEAD is green.",
+  "merge_call": "Final+GREEN verify-pass PASS at 00b1e62a3: the GNU-tar portability repack keeps every system-tar case discriminating; no blockers. Verified on macOS (bsdtar 3.5.3) only; Linux/GNU tar execution is pending PR CI at this HEAD. Merge only after re-binding the landing artifact to 00b1e62a3 (96db53f20 binds d0ac622f6, and 00b1e62a3 changes a test path), pushing, and green PR CI at that HEAD.",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "d0ac622f6d83b58a3921c0064cda5c4557dda8b9",
-  "unit_goal_source": "PR #388; goal compact-dependency-snapshots (closed in-branch, read at d693c59dd~1) I1-I3 + ADR-0547; BASE 11b9397eee2e8d820c7e2215d5c3e126eaed5348 (merge-base with origin/main); verify pass of 8a993dd5108a73cf72d5e910d6bd9aea6083db24..d0ac622f6d83b58a3921c0064cda5c4557dda8b9 (merge 4211272ed, test commits 1faf9739d/6bec4e1cf, docs a2a7d982a/a8992c078, reception fix d0ac622f6 for review findings at 6bec4e1cf)",
+  "reviewed_sha": "00b1e62a361385c230c8249a7d9b73b339237c40",
+  "unit_goal_source": "PR #388; goal compact-dependency-snapshots (closed in-branch, read at d693c59dd~1) I1-I3 + ADR-0547; BASE 11b9397eee2e8d820c7e2215d5c3e126eaed5348 (merge-base with origin/main); verify pass of 8a993dd5108a73cf72d5e910d6bd9aea6083db24..00b1e62a361385c230c8249a7d9b73b339237c40 (merge 4211272ed, tests 1faf9739d/6bec4e1cf, docs a2a7d982a/a8992c078, reception fix d0ac622f6, binding 96db53f20, CI-red test fix 00b1e62a3 for run 45105481072)",
   "unit_residuals": [],
   "goal_residuals": [],
   "goal_complete": true,
@@ -21,7 +21,7 @@
       "source": "acceptance",
       "trace": "I2",
       "status": "pass",
-      "citation": "tests/integration/no-coi-snapshot-browser-proof.mjs:64; tests/integration/no-coi-snapshot-browser-proof.mjs:76; tests/integration/no-coi-snapshot-browser-proof.mjs:92; /tmp/compact-388-packed.log:204; packages/workbench/src/glue/dep-snapshot-compact.contract.test.ts:111 (at d0ac622f6: M4 apply cache-import on -> 3 RED; M9 apply-path cache flush kept -> RED)",
+      "citation": "tests/integration/no-coi-snapshot-browser-proof.mjs:64; tests/integration/no-coi-snapshot-browser-proof.mjs:76; tests/integration/no-coi-snapshot-browser-proof.mjs:92; /tmp/compact-388-packed.log:204; packages/workbench/src/glue/dep-snapshot-compact.contract.test.ts:117 (at d0ac622f6: M4 apply cache-import on -> 3 RED; M9 apply-path cache flush kept -> RED)",
       "note": ""
     },
     {
@@ -29,7 +29,7 @@
       "source": "fault-matrix",
       "trace": "I3",
       "status": "pass",
-      "citation": "packages/workbench/src/glue/dep-snapshot-compact.contract.test.ts:147; packages/workbench/src/glue/dep-snapshot-compact.contract.test.ts:184; packages/workbench/src/glue/dep-snapshot-tar.ts:227; packages/workbench/src/glue/dep-snapshot-tar.ts:248 (mutants M1/M2/M3 RED at 6bec4e1cf; the test loop is unchanged except for the added fault)",
+      "citation": "packages/workbench/src/glue/dep-snapshot-compact.contract.test.ts:150; packages/workbench/src/glue/dep-snapshot-compact.contract.test.ts:187; packages/workbench/src/glue/dep-snapshot-tar.ts:227; packages/workbench/src/glue/dep-snapshot-tar.ts:248 (at 00b1e62a3 on macOS: M1 decoder profile check off -> 3 RED; M2 +validate off -> 5 RED; M3 namespace check off -> replay-entry + replay-dir RED). Linux/GNU tar pending CI",
       "note": ""
     },
     {
@@ -37,7 +37,7 @@
       "source": "acceptance",
       "trace": "I3 + ADR-0547",
       "status": "pass",
-      "citation": "packages/workbench/src/glue/dep-snapshot-compact.contract.test.ts:70; packages/workbench/src/glue/dep-snapshot-compact.contract.test.ts:146; packages/workbench/src/glue/dep-snapshot-tar.ts:248 (M6 exact-dir check off -> 'rejects replay-dir before mutation' RED, 1 failed / 14 passed)",
+      "citation": "packages/workbench/src/glue/dep-snapshot-compact.contract.test.ts:70; packages/workbench/src/glue/dep-snapshot-compact.contract.test.ts:148; packages/workbench/src/glue/dep-snapshot-tar.ts:248 (at 00b1e62a3: the repacked replay-dir tar lists rifty/replay-cache/ as its only replay member, tar -tvf; M6 exact-dir check off -> replay-dir RED, 1 failed / 14 passed). Linux/GNU tar pending CI",
       "note": ""
     },
     {
@@ -97,8 +97,8 @@
         {
           "severity": "concern",
           "location": "docs/backlog/distribution/reference/compact-dependency-snapshots-final-green.json:5",
-          "evidence": "Committed landing verdict reviewed_sha=8a993dd51; product/test paths changed afterwards (4211272ed, 1faf9739d, 6bec4e1cf, d0ac622f6); tools/checks/pass-binding.mjs:1-9 requires every change after reviewed_sha to be docs. gh pr view 388 headRefOid=a8992c078, local HEAD d0ac622f6.",
-          "summary": "Merge mechanics (driver-owned): commit this verdict bound to d0ac622f6 as the landing artifact, push, and merge on green PR CI at that HEAD.",
+          "evidence": "The committed artifact (96db53f20) has reviewed_sha d0ac622f6; 00b1e62a3 then changes packages/workbench/src/glue/dep-snapshot-compact.contract.test.ts; tools/checks/pass-binding.mjs:1-9 requires every later change to be docs. CI run 45105481072 at 96db53f20 was red (6 system-tar cases); the fix has no CI run yet.",
+          "summary": "Merge mechanics (driver-owned): re-bind the landing artifact to 00b1e62a3, push, merge only on green PR CI at that HEAD. That CI run is also the outstanding Linux/GNU tar proof.",
           "authority": ""
         },
         {
@@ -153,18 +153,32 @@
           "evidence": "git show d0ac622f6: seedWarmOwner split into createOwner + seedWarmOwner with identical composition; the flush wrapper only records when fs is an armed CacheAccessFs. The replay-entry fault still adds dir + file. No assertion is removed or loosened; the COI apply test gains a flush-order assertion. Baseline glue+workers 2006/2006 PASS.",
           "summary": "PR-4: no weakened assertion in the reception fix.",
           "authority": ""
+        },
+        {
+          "severity": "nit",
+          "location": "packages/workbench/src/glue/dep-snapshot-compact.contract.test.ts:79",
+          "evidence": "git show 00b1e62a3: only the tar member list changes (top-level payload/ and rifty/ are dropped); no expect() changes. dep-snapshot-tar.ts:96-124 validateEntries requires only payload/package.json, payload/package-lock.json and rifty/manifest.json; top-level directory members are optional. dep-snapshot-tar.test.ts:45-55 standardTar already omits them and is green on CI. The failing CI log shows the reject cases went red on the unsafe-path message (they did not pass falsely), so the message regex keeps wrong-reason rejection loud on Linux; the none control proves the repack decodes.",
+          "summary": "PR-4: the CI-red test fix weakens nothing; dropping implicit top-level directory members is legitimate and matches the existing system-tar helper.",
+          "authority": ""
         }
       ]
     },
     {
       "axis": "Ecosystem UX",
-      "verdict": "pass",
+      "verdict": "concern",
       "findings": [
         {
           "severity": "nit",
           "location": "docs/backlog/distribution/reference/compact-dependency-snapshots-evidence.md:60",
           "evidence": "The packed log (03:38) predates d0ac622f6. The fix touches only the COI ensure-restore (owner-package-state.ts, PreparedDepSnapshotRestore). The no-COI SDK path uses prepareDepSnapshotApplication (no-coi-snapshot-application.ts:43), so the I1/I2 packed evidence is unaffected. 'Compact Vite pair' sizes are not in the raw log; reproduced by stat on the kept artifacts.",
           "summary": "Packed acceptance remains valid for the changed tree; PR CI at HEAD gives the full gate.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "packages/workbench/src/glue/dep-snapshot-tar.ts:162",
+          "evidence": "CI run 45105481072 (GNU tar, Linux): `tar --format=pax` of a top-level member names its PAX header ./PaxHeaders/payload, and readEntries runs safePath on the x-header name -> Malformed dependency snapshot tar: unsafe path. The code predates this unit (git diff 11b9397ee..00b1e62a3 leaves readEntries/safePath unchanged).",
+          "summary": "Pre-existing, outside REV-1 (loud, not silent): an archive repacked with GNU tar including top-level dirs is rejected. ADR-0386 promises ordinary-tool inspection, not admission of tool-authored archives, so this is advisory. Route by REV-12 to backlog only if third-party repacking becomes a scenario.",
           "authority": ""
         }
       ]
