@@ -400,3 +400,49 @@ describe('post-guest paths: what the host owes whatever the guest replaced', () 
       });
   });
 });
+
+describe('a loader error prints the same wherever it is thrown (Node shape at the one report point)', () => {
+  const origins: Record<string, (expr: string) => string> = {
+    sync: (e) => `${e};`,
+    timer: (e) => `setTimeout(() => { ${e}; }, 0);`,
+    microtask: (e) => `queueMicrotask(() => { ${e}; });`,
+    tick: (e) => `process.nextTick(() => { ${e}; });`,
+    rejection: (e) => `Promise.resolve().then(() => { ${e}; });`,
+    exit: (e) => `process.on('exit', () => { ${e}; });`,
+  };
+  const setup =
+    "const fs = require('fs'); fs.writeFileSync('bad.js', 'let x = ;\\n'); fs.writeFileSync('tla.mjs', 'await 1;\\nexport const a = 1;\\n'); ";
+  // The error's head line and props: no frames (their call sites differ), no
+  // `-e` `[eval]:N` decoration (declared, compat process.md); a rejection is
+  // left out (isolated-vm copies its reason, compat isolate-host.md).
+  const view = (stderr: string, rejection: boolean) => {
+    const body = stderr.replace(/^\[eval\]:\d+\n[^\n]*\n *\^\n\n/u, '');
+    const head = body.split('\n')[0];
+    const props = /\{\n([\s\S]*?)\n\}\n\nNode\.js/u.exec(body)?.[1] ?? '';
+    return rejection ? head : `${head}\n${props}`;
+  };
+  for (const [kind, expr] of Object.entries({
+    MODULE_NOT_FOUND: "require('./nope')",
+    'compile error': "require('./bad.js')",
+    ERR_REQUIRE_ASYNC_MODULE: "require('./tla.mjs')",
+  })) {
+    it(kind, async () => {
+      const heads = new Set<string>();
+      const full = new Set<string>();
+      for (const [origin, make] of Object.entries(origins)) {
+        const result = await runCode(`${setup}${make(expr)}`);
+        expect(result.exitCode).not.toBe(0);
+        // A rejection's reason is isolated-vm's copy (no props, no class).
+        if (origin === 'rejection') continue;
+        heads.add(view(result.stderr, true));
+        full.add(view(result.stderr, false));
+      }
+      expect([...heads]).toHaveLength(1);
+      expect([...full]).toHaveLength(1);
+      if (kind === 'MODULE_NOT_FOUND')
+        expect([...full][0]).toMatch(
+          /^Error: Cannot find module '\.\/nope'\n {2}code: 'MODULE_NOT_FOUND',/u,
+        );
+    }, 60_000);
+  }
+});

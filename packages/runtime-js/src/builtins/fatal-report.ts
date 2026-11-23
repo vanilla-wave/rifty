@@ -337,9 +337,11 @@ function constructorName(error: object): string | null {
  */
 function nodeInternalHead(stack: string, error: object): string {
   if (!(error instanceof ModuleLoadError) || !error.code.startsWith('ERR_REQUIRE_')) return stack;
-  return stack.startsWith('Error: ')
-    ? `Error [${error.code}]: ${stack.slice('Error: '.length)}`
-    : stack;
+  // After `-e`'s own `[eval]:N` decoration too.
+  return stack.replace(
+    /^((?:\[eval\]:\d+\n[^\n]*\n *\^\n\n)?)Error: /u,
+    `$1Error [${error.code}]: `,
+  );
 }
 
 /** Node `improveStack`: `NotFound [Error]: …` when the class name hides the error's name. */
@@ -423,8 +425,25 @@ function primitiveText(value: unknown): string {
   return typeof value === 'symbol' ? value.toString() : String(value);
 }
 
+/**
+ * The one point a rifty loader error takes Node's shape, wherever it was
+ * thrown: a CJS-loader `MODULE_NOT_FOUND` (it carries `requireStack`) is Node's
+ * plain `Error` with `code` and `requireStack`, its frames kept.
+ */
+function asNodeError(error: unknown): unknown {
+  if (!(error instanceof ModuleLoadError)) return error;
+  if (error.code !== 'MODULE_NOT_FOUND' || error.requireStack === undefined) return error;
+  const out = new Error(error.message) as Error & { code?: string; requireStack?: unknown };
+  // V8 wrote `Error:` there: ModuleLoadError names itself after capture.
+  out.stack = stackOf(error) ?? `Error: ${error.message}`;
+  out.code = error.code;
+  out.requireStack = error.requireStack;
+  return out;
+}
+
 /** The whole fatal report for `error`, ending in the trailer's newline. */
-export function formatFatalReport(error: unknown): string {
+export function formatFatalReport(thrown: unknown): string {
+  const error = asNodeError(thrown);
   if (!isErrorLike(error)) {
     const body =
       (typeof error === 'object' && error !== null) || typeof error === 'function'

@@ -136,16 +136,19 @@ function formatNodeModuleNotFound(err: ModuleLoadError): string {
 }
 
 /**
- * Surface an uncaught `MODULE_NOT_FOUND` as Node's CJS-loader Error: plain
- * `Error` name, `code` and `requireStack`, the loader error's frames (the fatal
- * report keeps the user's `require` call site and drops rifty's own).
+ * Surface an uncaught `MODULE_NOT_FOUND` as Node's CJS-loader Error. The kernel
+ * worker-entry writes `err.stack` to the child stderr, so set it to the printed
+ * form above (plain `Error` name, no rifty `ModuleLoadError` name / frames).
+ * `code`/`requireStack` ride along for error-matching tooling.
  *
  * Gated on `requireStack` being present: the resolver sets it ONLY on the
  * CJS-loader-shaped misses (a missing entry — incl. `.mjs`, which Node runs
- * through the CJS loader — and a nested `require()`). A nested ESM `import()`
- * miss (Node's `ERR_MODULE_NOT_FOUND`, a shape rifty does not emit yet)
- * carries NO `requireStack`, so it is left as the honest rifty
- * `ModuleLoadError`. TODO(backlog: runtime-js/esm-import-miss-err-module-not-found)
+ * through the CJS loader — and a nested `require()`), where this CJS printed
+ * form is faithful. A nested ESM `import()` miss (Node's `ERR_MODULE_NOT_FOUND`,
+ * a shape rifty does not emit yet) carries NO `requireStack`, so it is left as
+ * the honest rifty `ModuleLoadError` rather than masquerade as the CJS form.
+ * Every other error propagates unchanged (the generic-throw path stays
+ * `err.stack`). TODO(backlog: runtime-js/esm-import-miss-err-module-not-found)
  */
 function asNodePrintedError(err: unknown): unknown {
   if (
@@ -157,11 +160,7 @@ function asNodePrintedError(err: unknown): unknown {
       code?: string;
       requireStack?: readonly string[];
     };
-    // The isolate's Node report prints the frames and props itself (V8 wrote
-    // `Error:` there); main's printed form elsewhere.
-    out.stack = nodeFatalReportInstalled()
-      ? (err.stack ?? `Error: ${err.message}`)
-      : formatNodeModuleNotFound(err);
+    out.stack = formatNodeModuleNotFound(err);
     out.code = err.code;
     out.requireStack = err.requireStack;
     return out;
@@ -239,8 +238,7 @@ export async function runNodeEntry(opts: RunNodeEntryOptions): Promise<void> {
         explicitCommonJs: opts.explicitCommonJs,
         compiler,
       }).run(opts.source);
-    } catch (thrown) {
-      const error = nodeFatalReportInstalled() ? asNodePrintedError(thrown) : thrown;
+    } catch (error) {
       // ADR-0445: a listener-handled eval throw continues with no `-p` result.
       const outcome = dispatchUncaughtException(error, 'uncaughtException');
       if (outcome.kind === 'exited') throw outcome.signal;
