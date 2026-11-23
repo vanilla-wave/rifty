@@ -5,7 +5,7 @@ title: rifty's FS accepts file names Node refuses with ENAMETOOLONG
 created: 2026-11-22
 why: a Node program that hits NAME_MAX gets ENAMETOOLONG; in rifty the same call succeeds, and a name over 16 383 code units also cannot be snapshotted (ADR-0567)
 user_story: As a developer running Node code in rifty, I want a too-long file name to fail with ENAMETOOLONG as in Node, but today rifty creates it
-sources: [ADR-0567, docs/backlog/epics/isolate-host-fs-snapshot/goal.md, docs/public/compat/isolate-host.md]
+sources: [ADR-0567, docs/public/compat/isolate-host.md]
 code: [packages/vfs/src/memory-backend.ts, packages/runtime-js/src/builtins/fs.ts]
 ---
 
@@ -38,6 +38,8 @@ Link: ADR-0567 caps snapshot names at 16 383 code units (V8 hashes longer
 strings by length alone); a guest run that creates a longer name cannot save
 its state. Once rifty refuses names over NAME_MAX, that cap is unreachable for
 an honest tree and the snapshot goal's I1 holds for every name again.
+
+Owner: vfs; trigger: a Node program that relies on `ENAMETOOLONG`, or the snapshot name cap biting a real guest.
 
 ## Challenge
 

@@ -3,7 +3,7 @@
 Status: Accepted
 Date: 2026-11
 
-> TL;DR: The guest's whole in-memory FS becomes one opaque byte string — rifty's own binary format v1 (records + CRC-32), template-bound, read forever by later rifty; a pure-JS codec reads and writes it in the isolate and in the consumer's realm; restore replaces the FS of a fresh isolate before any guest code, all or nothing.
+> TL;DR: The guest's whole in-memory FS becomes one opaque byte string — rifty's own binary format v1 (records + CRC-32), template-bound, read forever by later rifty; a pure-JS codec reads and writes it in the isolate and in the consumer's realm; restore validates every byte, then replaces the FS of a fresh isolate before any guest code; a restore that fails while writing leaves an instance that is thrown away, never a partial tree passed off as whole.
 
 ## Context
 
@@ -114,7 +114,9 @@ Probes: `docs/backlog/distribution/reference/isolate-host-fs-snapshot-fit-probes
    an isolate the limit kills outright is the embedder's memory termination. A
    snapshot right after a restore with no guest code between can need ~3 × the
    bytes: the restored blob is not yet collected (231–322 MiB at 98 MiB). A
-   consumer sizes `memoryLimitMb` for 2 × `maxBytes` + 16 MiB.
+   consumer sizes `memoryLimitMb` for 2 × `maxBytes` + 16 MiB — except for a
+   snapshot straight after a restore with no guest code between, which can
+   need ~3 × the bytes until the restored blob is collected.
 8. **Where.** One pure-JS module in `@riftydev/isolate-guest` (root exports
    `snapshotFs(fs, options)`, `restoreFs(fs, bytes, options)`,
    `FsSnapshotError`; ADR-0558, unstable) over a structural FS interface that
@@ -163,7 +165,16 @@ Rejected (P1, template scale, S ≈ 95 MB):
   structure checks keep it consistent, not truthful.
 - Not the user's words: format, CRC-32, replace-on-fresh-only and exact
   template match are agent decisions; the `_UNREPRESENTABLE` refusals of NUL
-  and out-of-range times and «all of the tree or the isolate is thrown away»
-  are the manager's decisions by delegation, open for the user (goal map).
-  The user's words (2026-11-22, goal `amend:` lines): the 16 383-unit name
-  cap («ок»), `ino` renewed for now («давая в бэклог положим») (goal `isolate-host-fs-snapshot` Decisions).
+  and out-of-range times are the manager's decision by delegation — guest
+  `node:fs` and the sandbox's host ops no longer create either (PR #419); a
+  consumer writing a `MemoryFsSync` directly still can, and snapshot refuses it
+  by name. The user's words (the name cap, `ino`, «a partial tree is never
+  passed off as whole»): `## Decisions` below.
+
+## Decisions
+
+The user's words on the goal's narrowings, relayed by the manager (exported from goal `isolate-host-fs-snapshot` at its close):
+
+- 2026-11-22 — user: «ок» (to the manager's: «Скрипт создаёт файл, у которого одно имя (не путь) длиннее 16 383 символов. Снимок такое дерево не примет, и запуск не сохранит своё состояние, с именованной ошибкой. Настоящий Node такой файл не создаст вовсе: ОС ограничивает имя 255 байтами. Задеты только программы, которые в Node и так падают. Цель обещала „любое имя“») — I1's «any name rifty's FS holds» covers names of at most 16 383 code units (the user's words say «символов»; the cap counts UTF-16 code units, so a name of 8 192–16 383 non-BMP characters is refused too — the manager's reading, not the user's words); a longer name is refused at snapshot by name (`ERR_FS_SNAPSHOT_UNREPRESENTABLE`, ADR-0567 §1), because longer names make decoding quadratic.
+- 2026-11-22 — user: «давая в бэклог положим» (to the manager's: «Первый запуск читает `fs.statSync('a.txt').ino` и получает, скажем, 17. Во втором запуске у того же файла будет другое число; на настоящем диске оно сохранилось бы. Задеты программы, которые запоминают `ino` между запусками, чтобы узнавать файл, — например, свои кэши. Размер, времена и содержимое совпадают точно. Цель обещала „`stat` идентичен“») — I1's and scenario step 2's identical `fs.statSync` exclude `ino` here; keeping it is deferred to `backlog/distribution/isolate-host-fs-snapshot-keep-ino` (a per-realm inode counter makes a restored `ino` everyone's in the consumer realm).
+- 2026-11-23 — user: «ок» (to the manager's recommendation: «Оставить как есть и принять формулировку „частичное дерево никогда не выдаётся за целое: после сбоя экземпляр выбрасывается“. Атомарность в кодеке записать в backlog с условием взятия: появился embedder, которому нужно восстановление поверх живой ФС»; asked after the user's «вот тут давай аккуратно разберемся. Во время реализации fs не очень приятно ходили по граблям пытаясь обеспечить точный статус файлов. Давай поймем что покупаем и какой ценой») — the Outcome's «never a partial tree» reads: a partial tree is never passed off as whole; a restore that fails while writing is `ERR_FS_SNAPSHOT_INCOMPLETE` and the instance is thrown away (ADR-0567 §6). Atomic restore deferred: `backlog/distribution/isolate-host-fs-snapshot-atomic-restore`.

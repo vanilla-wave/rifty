@@ -161,6 +161,11 @@ hypervisor and deploy stay outside rifty; the consumer supplies the outer bounda
   embedders are declared ceilings in `docs/public/compat/isolate-host.md`.
 - Worker pool — done: up to 4 calls per long-lived worker, neighbour-safe limits, lost-worker
   reruns; warm call 13 ms, 8 concurrent calls 414 MiB (was 137 ms, 1118 MiB) — ADR-0563 (PR #412).
+- FS snapshot — done: the guest's whole FS as one versioned, template-bound blob; one pure-JS
+  codec in the isolate and the consumer's realm; hostile bytes refused in one linear pass within a
+  budget that bounds the trusted side's memory and time — ADR-0567 (PR #418, #422). Deferred as
+  backlog: keeping `ino` (`distribution/isolate-host-fs-snapshot-keep-ino`), atomic restore over a
+  live FS (`distribution/isolate-host-fs-snapshot-atomic-restore`).
 - B — delivered (PR #419); the goal `isolate-host-live-sandbox` stays open on one user question: live sandbox — `createSandbox()` with host binary file ops, `exec` = `node <path>
   [args]` with `runCode`'s limits, one sandbox through write → run → error → fix (every run end
   keeps the sandbox; killed runs roll back), `snapshot()` / create-from-snapshot, `destroy()`
