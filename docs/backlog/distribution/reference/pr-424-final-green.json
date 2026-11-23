@@ -1,9 +1,9 @@
 {
   "overall_verdict": "concern",
-  "merge_call": "Final+GREEN PASS at 8d00404c1 for the observed-defect fixes (host deliveries gated on the run phase; output fixed at the status): B2(1) row RED->GREEN, mutants M1 (drop check) and M2 (fd 1 only) killed; sandbox-acceptance 48/48, isolate-host 844/844 at 82d39db66 (delta since: docs + one test line); doc gates OK. CLOSE rolled back: goal isolate-host-live-sandbox stays open on draft unit distribution/isolate-host-sandbox-capture-outside-guest-realm; goal_complete false. Merge only on green PR CI at the pushed head.",
+  "merge_call": "Final+GREEN PASS at 0ce236c53 for the observed-defect fixes (host deliveries gated on the run phase; output fixed at the status): B2(1) row RED->GREEN, mutants M1 (drop check) and M2 (fd 1 only) killed at 8d00404c1; sandbox-acceptance 48/48 at 0ce236c53; isolate-host 844/844 at 82d39db66 (82d39db66..0ce236c53: docs + test text only, no product code); backlog/docs/compat-drift/contract-drift OK. Goal isolate-host-live-sandbox stays open on draft unit distribution/isolate-host-sandbox-capture-outside-guest-realm; goal_complete false. Merge only on green PR CI at the pushed head.",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "8d00404c1c601ff448ff0b744f546911bb060e2d",
-  "unit_goal_source": "PR #424 observed-defect fixes (rifty-fix, RDY-8): cross-review round 1 @ d3171889e (deliveries gate) and round 2 @ d2fc38351 B2 (output during the state capture), S-A, S-B, nits; changed tree d2fc38351..8d00404c1 (3b9321daa, merge of origin/main 4bb219d25 #425, CLOSE rollback 8d00404c1); baseline = live node + packages/isolate-host/src/child/main.ts of d2fc38351 in a scratch worktree. Goal isolate-host-live-sandbox (not closed): goal.md at HEAD identical to 2bff8d26c; map ## Items = one draft unit; ADR-0568 §Invariants and scenario, §Not the user's words, §Corrections 2026-11-23.",
+  "reviewed_sha": "0ce236c539a1aba22a2511d8daab08430643754d",
+  "unit_goal_source": "PR #424 observed-defect fixes (rifty-fix, RDY-8): cross-review round 1 @ d3171889e (deliveries gate) and round 2 @ d2fc38351 B2 (output during the state capture), S-A, S-B, nits; changed tree d2fc38351..0ce236c53 (3b9321daa, merge of origin/main 4bb219d25 #425, CLOSE rollback 8d00404c1, cross-review round 3 fixes 0ce236c53; #419 landing verdict restored byte-for-byte from origin/main); baseline = live node + packages/isolate-host/src/child/main.ts of d2fc38351 in a scratch worktree. Goal isolate-host-live-sandbox (not closed): goal.md at HEAD identical to 2bff8d26c; map ## Items = one draft unit; ADR-0568 §Invariants and scenario, §Not the user's words, §Corrections 2026-11-23.",
   "unit_residuals": [],
   "goal_residuals": [
     {
@@ -186,7 +186,7 @@
       "source": "acceptance",
       "trace": "ADR-0557+ADR-0563",
       "status": "pass",
-      "citation": "isolate-host vitest project: 25 files, 844/844 passed at 82d39db66 (reviewer run, scratch worktree); 82d39db66..8d00404c1 touches no product code; sandbox-acceptance 48/48 at 8d00404c1"
+      "citation": "isolate-host vitest project: 25 files, 844/844 passed at 82d39db66 (reviewer run, scratch worktree); 82d39db66..0ce236c53 touches no product code; sandbox-acceptance 48/48 at 0ce236c53"
     },
     {
       "row": "ADR-0568 §Invariants and scenario verbatim vs goal.md @ 2bff8d26c",
@@ -275,7 +275,7 @@
         {
           "severity": "concern",
           "location": "packages/isolate-host/src/child/main.ts:270",
-          "evidence": "HEAD 8d00404c1 not pushed at review.",
+          "evidence": "HEAD 0ce236c53 not pushed at review.",
           "summary": "PR CI has not run at HEAD; merge only on green `gh pr checks` at the pushed head (DoD).",
           "authority": ""
         }
