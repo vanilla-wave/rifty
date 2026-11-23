@@ -1,6 +1,6 @@
 import type { AgentTool, AgentToolResult } from '@earendil-works/pi-agent-core';
-import { type Static, type TSchema, Type } from 'typebox';
 import { NotImplementedError } from '@riftydev/io';
+import { type Static, type TSchema, Type } from 'typebox';
 import { parseUnifiedPatch, planUnifiedPatch } from './apply-patch.ts';
 import { editMatchFailure } from './edit-hint.ts';
 import { mutationDiagnostics } from './mutation-diagnostics.ts';

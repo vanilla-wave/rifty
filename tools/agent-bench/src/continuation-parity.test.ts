@@ -224,7 +224,6 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario, riftyPrompt = '
           )
         : [];
   let messages: readonly AgentMessage[];
-  let debug: (() => unknown[]) | undefined;
   try {
     if (kind === 'native') {
       const settingsManager = SettingsManager.inMemory({
@@ -286,7 +285,6 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario, riftyPrompt = '
       if (initialMessages.length && head?.role === 'system') sessionManager.appendMessage(head);
       for (const message of initialMessages) sessionManager.appendMessage(message);
       const session = await open(sessionManager);
-      if (process.env.DEBUG_PARITY === scenario) debug = () => sessionManager.getBranch();
       switchModel = () => session.setModel(modelRuntime.getModel('probe', 'large')!);
       session.subscribe((event) => {
         if (event.type === 'compaction_end') {
@@ -312,8 +310,6 @@ async function run(kind: 'native' | 'rifty', scenario: Scenario, riftyPrompt = '
       try {
         await session.prompt('continue');
         messages = structuredClone(session.messages);
-        if (debug)
-          console.log(JSON.stringify(debug().map((e: any) => ({ t: e.type, id: e.id.slice(0,6), role: e.message?.role, sr: e.message?.stopReason, target: e.targetId?.slice(0,6), first: e.firstKeptEntryId?.slice(0,6), sections: e.message?.sections ? Object.keys(e.message.sections) : undefined, len: JSON.stringify(e.message ?? e.summary ?? '').length }))));
       } finally {
         session.dispose();
       }
@@ -416,7 +412,9 @@ it.each<Scenario>([
       expect(rifty.effects).toBe(1);
     if (scenario === 'partial') expect(rifty.effects).toBe(0);
     if (scenario === 'length-recovery')
-      expect(rifty.compactions).toEqual([expect.objectContaining({ reason: 'overflow', success: true })]);
+      expect(rifty.compactions).toEqual([
+        expect.objectContaining({ reason: 'overflow', success: true }),
+      ]);
   },
   30000,
 );

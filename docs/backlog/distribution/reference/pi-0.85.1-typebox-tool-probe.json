@@ -12,9 +12,7 @@
         "description": "Probe tool",
         "parameters": {
           "type": "object",
-          "required": [
-            "path"
-          ],
+          "required": ["path"],
           "properties": {
             "path": {
               "type": "string"

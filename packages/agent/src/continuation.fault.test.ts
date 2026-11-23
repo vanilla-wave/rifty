@@ -10,9 +10,9 @@ import {
   getCurrentTools,
 } from '@earendil-works/pi-ai';
 import { Type } from 'typebox';
+import { describe, expect, it } from 'vitest';
 import { contextView } from './fixtures/context-view.ts';
 import { conversation } from './fixtures/conversation.ts';
-import { describe, expect, it } from 'vitest';
 import { createAgentSession } from './session.ts';
 import type { AgentSessionOptions } from './types.ts';
 
@@ -379,7 +379,9 @@ describe('native continuation boundary', () => {
       await session.send('continue');
       expect(requests.map((r) => summaryRequest(r.context))).toEqual([false, true, false]);
       expect(session.status()).toBe('context-exceeded');
-      expect(conversation((await session.exportTrace()).transcript)[0]?.role).toBe('compactionSummary');
+      expect(conversation((await session.exportTrace()).transcript)[0]?.role).toBe(
+        'compactionSummary',
+      );
     } finally {
       await session.dispose();
     }

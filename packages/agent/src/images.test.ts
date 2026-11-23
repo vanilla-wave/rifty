@@ -1,7 +1,7 @@
 import { Agent } from '@earendil-works/pi-agent-core';
 import { expect, it } from 'vitest';
-import { conversation } from './fixtures/conversation.ts';
 import { scriptedProvider } from '../../../tests/integration/fixtures/workbench-vite-consumer/src/agent-scripted-provider.ts';
+import { conversation } from './fixtures/conversation.ts';
 import {
   type AgentSession,
   type ImageContent,

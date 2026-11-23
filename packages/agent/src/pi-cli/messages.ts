@@ -53,7 +53,12 @@ export function convertToLlm(messages: AgentMessage[]): Message[] {
           timestamp: m.timestamp,
         },
       ];
-    if (m.role === 'system' || m.role === 'user' || m.role === 'assistant' || m.role === 'toolResult')
+    if (
+      m.role === 'system' ||
+      m.role === 'user' ||
+      m.role === 'assistant' ||
+      m.role === 'toolResult'
+    )
       return [m];
     return [];
   });

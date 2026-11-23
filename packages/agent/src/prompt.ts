@@ -1,7 +1,7 @@
 import type { AgentTool } from '@earendil-works/pi-agent-core';
 import { formatSkillsForPrompt } from './pi-cli/skills.ts';
 import { getAgentPromptProfile } from './prompt-profile.ts';
-import type { AgentCapabilities, AgentResourceReport, AgentSkill } from './types.ts';
+import type { AgentCapabilities, AgentResourceReport } from './types.ts';
 
 export const PROMPT_PROFILE_ID = getAgentPromptProfile().id;
 

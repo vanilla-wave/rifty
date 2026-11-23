@@ -9,10 +9,10 @@ import type {
   SimpleStreamOptions,
   Usage,
 } from '@earendil-works/pi-ai';
-import type { CompactionSettings } from './pi-cli/compaction.ts';
 import type { SandboxProjectOptions, ToolchainSandbox } from '@riftydev/sdk';
 import type { ProjectSession, ProjectTerminal } from '@riftydev/workbench';
 import type { PlaygroundSessionTools } from '@riftydev/workbench/playground';
+import type { CompactionSettings } from './pi-cli/compaction.ts';
 
 export interface AgentFiles {
   read(path: string): Promise<string>;

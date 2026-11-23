@@ -89,7 +89,8 @@ function buildContextEntries(path: Entry[]): Entry[] {
 export function buildProjection(path: Entry[]): Projection {
   const contextEntries = buildContextEntries(path);
   const omitted = new Set<string>();
-  for (const entry of contextEntries) if (entry.type === 'context_edit') omitted.add(entry.targetId);
+  for (const entry of contextEntries)
+    if (entry.type === 'context_edit') omitted.add(entry.targetId);
   const entries = contextEntries.map(
     (sourceEntry, index): ProjectedEntry => ({
       sourceEntry,
@@ -250,7 +251,9 @@ export function estimateTokens(message: AgentMessage): number {
 // ---- Cut point detection ----
 
 function isCutPointMessage(message: AgentMessage): boolean {
-  return message.role === 'user' || message.role === 'assistant' || message.role === 'compactionSummary';
+  return (
+    message.role === 'user' || message.role === 'assistant' || message.role === 'compactionSummary'
+  );
 }
 
 function isTurnStartMessage(message: AgentMessage): boolean {
@@ -315,8 +318,7 @@ function findProjectedCutPoint(
         isOmitted(entry),
     ) &&
     suffix.every(
-      (entry) =>
-        entry.sourceEntry.type !== 'compaction' && (!isVisible(entry) || isOmitted(entry)),
+      (entry) => entry.sourceEntry.type !== 'compaction' && (!isVisible(entry) || isOmitted(entry)),
     )
   )
     cutIndex++;
@@ -427,7 +429,9 @@ export function prepareCompaction(
   const firstKeptEntry = projected[cutPoint.firstKeptEntryIndex]?.sourceEntry;
   if (!firstKeptEntry?.id) return undefined;
   const historyEnd = cutPoint.isSplitTurn ? cutPoint.turnStartIndex : cutPoint.firstKeptEntryIndex;
-  const messagesToSummarize = projected.slice(boundaryStart, historyEnd).flatMap(compactionMessages);
+  const messagesToSummarize = projected
+    .slice(boundaryStart, historyEnd)
+    .flatMap(compactionMessages);
   const turnPrefixMessages = cutPoint.isSplitTurn
     ? projected
         .slice(cutPoint.turnStartIndex, cutPoint.firstKeptEntryIndex)
@@ -635,7 +639,9 @@ async function summarize(
     options.reasoning = request.thinkingLevel as SimpleStreamOptions['reasoning'];
   const context = normalizeContext({
     systemPrompt: SUMMARIZATION_SYSTEM_PROMPT,
-    messages: [{ role: 'user', content: [{ type: 'text', text: promptText }], timestamp: Date.now() }],
+    messages: [
+      { role: 'user', content: [{ type: 'text', text: promptText }], timestamp: Date.now() },
+    ],
   });
   const response = await retryAssistantCall(
     () => request.complete(context, options),
@@ -657,7 +663,8 @@ function generateSummary(
 ) {
   const conversationText = serializeConversation(convertToLlm(messages));
   let promptText = `<conversation>\n${conversationText}\n</conversation>\n\n`;
-  if (previousSummary) promptText += `<previous-summary>\n${previousSummary}\n</previous-summary>\n\n`;
+  if (previousSummary)
+    promptText += `<previous-summary>\n${previousSummary}\n</previous-summary>\n\n`;
   promptText += previousSummary ? UPDATE_SUMMARIZATION_PROMPT : SUMMARIZATION_PROMPT;
   return summarize(promptText, 'Summarization', request);
 }

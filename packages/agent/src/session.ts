@@ -2,8 +2,8 @@ import { Agent, type AgentMessage, type AgentToolResult } from '@earendil-works/
 import {
   type AssistantMessage,
   type ImageContent,
-  type SystemMessage,
   type Message,
+  type SystemMessage,
   getCurrentSystemMessage,
   isContextOverflow,
   isRecoverableLength,
@@ -13,6 +13,7 @@ import { createArchive } from './archive.ts';
 import { isOpenAIProvider, selectModel } from './catalog.ts';
 import { unsupportedChatCommand } from './chat-command.ts';
 import { createContinuation } from './continuation.ts';
+import { restoreMessages } from './history.ts';
 import {
   type Entry,
   buildProjection,
@@ -23,7 +24,6 @@ import {
   shouldCompact,
 } from './pi-cli/compaction.ts';
 import { convertToLlm } from './pi-cli/messages.ts';
-import { restoreMessages } from './history.ts';
 import { PROMPT_PROFILE_ID, systemPrompt } from './prompt.ts';
 import { loadResources } from './resources.ts';
 import { capToolText } from './text.ts';
@@ -127,7 +127,8 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
     if (message.role === 'assistant') lastAssistantEntry = id;
   }
   function journalOmit(targetId: string | undefined) {
-    if (targetId !== undefined) journalAppend({ type: 'context_edit', targetId, replacement: null });
+    if (targetId !== undefined)
+      journalAppend({ type: 'context_edit', targetId, replacement: null });
   }
   function journalRestore(messages: readonly AgentMessage[]) {
     journal.length = 0;
@@ -264,7 +265,8 @@ export function createAgentSession(options: AgentSessionOptions): AgentSession {
     else if (last.stopReason === 'error' || direct === 0) {
       const messages = agent.state.messages;
       const estimate = estimateContextTokens(messages);
-      const source = estimate.lastUsageIndex === null ? undefined : messages[estimate.lastUsageIndex];
+      const source =
+        estimate.lastUsageIndex === null ? undefined : messages[estimate.lastUsageIndex];
       if (
         compaction &&
         source?.role === 'assistant' &&

@@ -5,9 +5,9 @@ import {
   createAssistantMessageEventStream,
 } from '@earendil-works/pi-ai';
 import { Type } from 'typebox';
-import { contextView } from './fixtures/context-view.ts';
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import { modelCatalog } from '../../../tests/integration/fixtures/workbench-vite-consumer/src/agent-catalog.ts';
+import { contextView } from './fixtures/context-view.ts';
 import { createAgentSession } from './session.ts';
 import { standardTools, wrapTool } from './tools.ts';
 import type {
