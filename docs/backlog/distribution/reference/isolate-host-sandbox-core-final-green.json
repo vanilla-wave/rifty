@@ -1,20 +1,15 @@
 {
   "overall_verdict": "concern",
-  "merge_call": "Final+GREEN PASS at 9d3d8ca84; merge only on green PR CI at HEAD after CLOSE.",
+  "merge_call": "Final+GREEN PASS at 13ea6ee8f (unit holds; 35fb53023..13ea6ee8f docs only); merge on green PR CI at HEAD with the goal open on one owner: user question; CLOSE later as a small PR on the user's words.",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "65c1462c12f56f02386f10bfa86b1984706dc67e",
-  "unit_goal_source": "docs/backlog/distribution/isolate-host-sandbox-core.md (ready, re-cut 2026-11-22 ×4; Acceptance 1 = docs/backlog/distribution/isolate-host-sandbox-acceptance.md rows 1-14); Contract+RED PASS @ 16b7ab607; BASE 50c9d8bf1; verify passes c505b857f -> 30c8c1ff1 -> 525aaf075; r4 at c0ad781f2; r5 at d78411460; r6 at 7650df442; r7 at 214bbf1c4; r8 at ebecf5eb7; r9 at 4ea5736b5; r10 at 4c2878684; r11 at a59996a0c; r12 at 9d3d8ca84; r13 at bc906f21e; r14 at 4c7a263ac; r15 at b876a81d1; this pass b876a81d1..65c1462c1 (one test timeout) (merges of main 11b9397ee: #418 codec, #416, #420); goal docs/backlog/epics/isolate-host-live-sandbox/goal.md",
+  "reviewed_sha": "13ea6ee8f0bcab01169aaa133b6ed0450f1758a0",
+  "unit_goal_source": "docs/backlog/distribution/isolate-host-sandbox-core.md (ready, re-cut 2026-11-22 ×4; Acceptance 1 = docs/backlog/distribution/isolate-host-sandbox-acceptance.md rows 1-14); Contract+RED PASS @ 16b7ab607; BASE 50c9d8bf1; verify passes c505b857f -> 30c8c1ff1 -> 525aaf075; r4 at c0ad781f2; r5 at d78411460; r6 at 7650df442; r7 at 214bbf1c4; r8 at ebecf5eb7; r9 at 4ea5736b5; r10 at 4c2878684; r11 at a59996a0c; r12 at 9d3d8ca84; r13 at bc906f21e; r14 at 4c7a263ac; r15 at b876a81d1; this pass b876a81d1..65c1462c1 (one test timeout) (merges of main 11b9397ee: #418 codec, #416, #420); goal docs/backlog/epics/isolate-host-live-sandbox/goal.md; r16 CLOSE pass (goal end-to-end, docs/process/README.md §CLOSE) on 65c1462c1..35fb53023 (round 4: 902b0ed12, CLOSE prep 35fb53023), base merge-base 28d86acc4; r17 landing pass 35fb53023..13ea6ee8f (docs only: map, ledger, ROADMAP, ADR-0568 Accepted, compat, new lead backlog item)",
   "unit_residuals": [],
   "goal_residuals": [
     {
-      "clause": "Goal §Decisions state-model fork (manager delegation, user answer pending)",
-      "location": "docs/backlog/epics/isolate-host-live-sandbox/goal.md:155",
-      "summary": "Ready rests on the manager delegation; a user answer lands as amend: (I1 rollback clause, per-run cost)."
-    },
-    {
-      "clause": "Goal close (REV-9): RECHART after this slice; end-to-end acceptance at CLOSE",
-      "location": "docs/backlog/epics/isolate-host-live-sandbox/map.md:1",
-      "summary": "Goal not closed: CLOSE review with both residual sets empty still owed."
+      "clause": "I2 + goal.md §Decisions 2026-11-22 (line 154): the class \"a run silently does something else\" gates goal close until green against Node; narrowing it needs the user's words (RDY-6)",
+      "location": "docs/backlog/epics/isolate-host-live-sandbox/map.md:11",
+      "summary": "owner: user — asked by the manager 2026-11-23: accept the goal with three declared behavior ⚠️ (work queued at exit() runs + file kept; exit-listener microtask after exit() writes; throw + endless microtask chain → timeout, writes rolled back) and fix via backlog, or keep the goal open until fixed. Carriers sandbox-acceptance.test.ts:521,549,571; owners backlog runtime-js/node-eval-work-queued-at-exit-runs, distribution/isolate-host-natural-exit-listener-queued-work, distribution/isolate-host-uncaught-throw-waits-for-microtask-checkpoint; lead distribution/isolate-host-sandbox-capture-at-process-terminal."
     }
   ],
   "goal_complete": false,
@@ -528,7 +523,7 @@
       "source": "fault-matrix",
       "trace": "I5",
       "status": "pass",
-      "citation": "packages/isolate-host/tests/sandbox-destroy-table.test.ts:150",
+      "citation": "packages/isolate-host/tests/sandbox-destroy-table.test.ts:190",
       "note": "Correction of r9-r11: my Z3 (\"gone before unwind\") \"kill\" was the every-end refused-state row timing out (waitFor 20 s, the CI flake fixed in r11), not discrimination. Re-run at 9d3d8ca84 on the table: my T2 (terminal+gone in one write even when not unwound) KILLED 7 rows — memory x 0/2/3/after-await, catastrophic x 1/3, plus the slot test; memory x 1 and catastrophic x 0/2/after-await passed under it (timing-dependent per row). My T1 (left registered after the pool result, round-2 style) KILLED 7 rows (in flight, timeout x 0/2, memory x 0/2, catastrophic …). My Ra (worker end does not checkLeft) KILLED 16 rows (60 s hangs)."
     },
     {
@@ -592,7 +587,7 @@
       "source": "fault-matrix",
       "trace": "I5",
       "status": "pass",
-      "citation": "packages/isolate-host/tests/sandbox-destroy-table.test.ts:150",
+      "citation": "packages/isolate-host/tests/sandbox-destroy-table.test.ts:190",
       "note": "see the destroy × every end row for the mutant record"
     },
     {
@@ -618,18 +613,58 @@
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:487",
       "note": "\"missing module\" row compares the full report with Node; runtime-js unit 1027 pass (browser hosts: report not installed, stand-in path unchanged)"
+    },
+    {
+      "row": "Round 4: every operation whose promise has not settled when destroy() is called rejects DESTROYED (exec: every end × 0–3 microtasks after the pool result, after await) — outcome column decided by a microtask queued at the destroy call",
+      "source": "fault-matrix",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-destroy-table.test.ts:183",
+      "note": ""
+    },
+    {
+      "row": "Round 4: writeFile/readFile/list/remove/snapshot × destroy 0–5 microtasks after the call → DESTROYED unless settled first",
+      "source": "fault-matrix",
+      "trace": "I5",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-destroy-table.test.ts:217",
+      "note": ""
+    },
+    {
+      "row": "Scenario 10 / I8: README documents connection, API, limits (maxFileBytes, maxFsBytes vs memoryLimitMb), costs, consumer memory, gaps; packed consumer runs its sandbox snippet",
+      "source": "acceptance",
+      "trace": "I8",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/packed-consumer.test.ts:57",
+      "note": ""
     }
   ],
   "axes": [
     {
       "axis": "Completeness",
       "verdict": "pass",
-      "findings": []
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "docs/backlog/epics/isolate-host-live-sandbox/map.md:11",
+          "evidence": "",
+          "summary": "Unit holds (no unit blocker at r16 CLOSE run). The I2 gate is a goal residual owned by the user on the map, not a unit defect: the unit's declared rows assert the divergence against the live Node oracle and compat names each with an owner.",
+          "authority": ""
+        }
+      ]
     },
     {
       "axis": "Mission and architecture",
       "verdict": "pass",
-      "findings": []
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "docs/adr/distribution/0568-run-guest-files-in-a-live-sandbox-whose-state-is-filesystem-bytes-held-by-the-consumer.md:3",
+          "evidence": "",
+          "summary": "ADR-0568 Accepted at 636cc2d1b (r16 concern fixed).",
+          "authority": ""
+        }
+      ]
     },
     {
       "axis": "Goal drift",
@@ -647,6 +682,20 @@
           "location": "docs/backlog/epics/isolate-host-live-sandbox/map.md:1",
           "evidence": "",
           "summary": "Map now records the manager rule: the two pinned ⚠️ rows (queued-at-exit, throw + endless microtasks) no longer gate draft; dropped from goal residuals on that record.",
+          "authority": ""
+        },
+        {
+          "severity": "nit",
+          "location": "docs/backlog/epics/isolate-host-live-sandbox/map.md:9",
+          "evidence": "",
+          "summary": "State-model fork: closed in the user's words (goal.md amend: «все правильно, не нужно давать настоящую fs»; ADR-0568 §Not the user's words); rollback and per-run cost stay manager-by-delegation, as recorded. The prior landing residual goal.md:155 is dropped on that record.",
+          "authority": ""
+        },
+        {
+          "severity": "nit",
+          "location": "docs/adr/distribution/0568-run-guest-files-in-a-live-sandbox-whose-state-is-filesystem-bytes-held-by-the-consumer.md:113",
+          "evidence": "",
+          "summary": "Rollback note now states fact: round 4 hole repaired, rollback not taken (r16 concern fixed).",
           "authority": ""
         }
       ]
@@ -666,12 +715,26 @@
           "evidence": "",
           "summary": "RDY-6: captures match their probes; atime oracle caveat and process.title argv[0] wording corrected at df79f6995.",
           "authority": ""
+        },
+        {
+          "severity": "nit",
+          "location": "docs/backlog/distribution/isolate-host-sandbox-uncarried-mechanisms.md:1",
+          "evidence": "",
+          "summary": "New captures (write-cost-per-state, killed-run-partial-writes, uncarried-mechanisms, binary-request-frame) are drafts with area owner, sources and measurements; backlog:check OK, refs:check OK at 35fb53023. None is a required repair moved to backlog: I1 declares the rollback, I6 bounds host-write cost to one order of intake.",
+          "authority": ""
+        },
+        {
+          "severity": "nit",
+          "location": "docs/backlog/epics/isolate-host-live-sandbox/map.md:9",
+          "evidence": "",
+          "summary": "Map open questions reduced to the one owner: user line; compat :68 link and :94 text fixed at 636cc2d1b (r16 concerns fixed).",
+          "authority": ""
         }
       ]
     },
     {
       "axis": "Bugs",
-      "verdict": "pass",
+      "verdict": "concern",
       "findings": [
         {
           "severity": "concern",
@@ -700,12 +763,19 @@
           "evidence": "T2 run: memory x 1 microtask and catastrophic x 0/2/after-await rows passed under the mutant",
           "summary": "The table discriminates the memory path statistically, not per row: a single-row regression could slip if CI timing shifts; keep the whole table, not a subset, in the required lane.",
           "authority": ""
+        },
+        {
+          "severity": "nit",
+          "location": "packages/isolate-host/src/sandbox.ts:266",
+          "evidence": "scratch @35fb53023: U1 (last link back to plain .catch) → sandbox-destroy-table 29 failed/62 (24 exec end×0-3 rows + 5 host ops ×1 microtask); U2 (re-check on values only) → 4 failed (worker lost ×0-3); unmutated isolate-host 805/805 (24 files, 129 s)",
+          "summary": "Round 4 verified: the last #op link re-checks #destroyed in the job that settles the caller's promise (values non-thenable, so no adoption tick); the removed exec-internal check is subsumed; writing box.fs of a dropped box is unreachable state.",
+          "authority": ""
         }
       ]
     },
     {
       "axis": "Regressions",
-      "verdict": "pass",
+      "verdict": "concern",
       "findings": [
         {
           "severity": "concern",
@@ -719,6 +789,13 @@
           "location": "packages/isolate-host/tests/sandbox-acceptance.test.ts:320",
           "evidence": "runtime-js unit 112 files: 1027 pass, 4 skipped",
           "summary": "nodeReport projects the oracle (drops the <file>:<line> header, re-joins an inspect wrap caused only by the longer temp path, <=80 cols); a hand projection of a live oracle, narrow and documented.",
+          "authority": ""
+        },
+        {
+          "severity": "concern",
+          "location": "packages/isolate-host/src/sandbox.ts:266",
+          "evidence": "",
+          "summary": "PR CI at HEAD 13ea6ee8f must be green before merge (PR-6); last checked remote head was 3e606c9d7.",
           "authority": ""
         }
       ]
