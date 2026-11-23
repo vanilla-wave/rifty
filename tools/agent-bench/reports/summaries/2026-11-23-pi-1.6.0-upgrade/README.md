@@ -28,8 +28,10 @@ lost passes; it did not refuse the changed lockfile).
   app defects (judge probes) plus one native provider failure (proxy streams without
   `finish_reason` ×4).
 - csv-workflow-v5 dropped in all three Pi lanes (9/9 → 5/9; native CLI too), which points
-  away from a rifty-runtime cause. Observed pi 1.6.0 wire change on both rifty and native:
-  the prompt role went from `developer` to `system`, because pi now uses `developer` only on
-  api.openai.com. Not isolated; no causal claim with n=3.
+  away from a rifty-runtime cause. Wire diff on the native lane: identical parameters,
+  prompt, tool descriptions/schemas and tool-result formats; only the prompt role
+  (`developer` → `system`) and `strict: false` differ, and codex-proxy folds both roles
+  into one and drops `strict` (`toModelMessages`, `createToolSet`). The model saw the same
+  input. Diagnostic re-run: [`../2026-11-23-pi-csv-native-diagnostic`](../2026-11-23-pi-csv-native-diagnostic/README.md).
 - queue-clear stays 0/6 in rifty (AsyncLocalStorage across `await`, rifty-runtime,
   pre-existing).

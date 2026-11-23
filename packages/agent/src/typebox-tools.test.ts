@@ -63,10 +63,13 @@ it('Type.Object tool reaches the wire and validates as on pi 0.85.1', async () =
 
 // Differential probe (pi-typebox-validation-diff.json): only refinements and Format.Set
 // checks silently stop on pi 1.x; the guard refuses exactly those.
-const register = () => Format.Set('rifty-even', (value) => value.length % 2 === 0);
+const customFormat = () => {
+  Format.Set('rifty-even', (value) => value.length % 2 === 0);
+  return Type.String({ format: 'rifty-even' });
+};
 it.each([
   ['Type.Refine', () => Type.Refine(Type.String(), (value) => value.startsWith('/'))],
-  ["Format.Set('rifty-even')", () => (register(), Type.String({ format: 'rifty-even' }))],
+  ["Format.Set('rifty-even')", customFormat],
 ])('a %s tool parameter fails loudly at session creation', (kind, schema) => {
   expect(() => session(Type.Object({ path: schema() }))).toThrow(
     `Not implemented: agent.tool-schema-typebox-only (Tool probe: ${kind}`,
