@@ -435,12 +435,35 @@ function noSideEffectsToString(value: unknown): string {
   return `[object ${typeof tag === 'string' ? tag : builtinTag(value)}]`;
 }
 
+/** main's fatal text for a thrown value (every host but the isolate guest). */
+function formatThrown(error: unknown): string {
+  if (error instanceof Error) return error.stack ?? `${error.name}: ${error.message}`;
+  return noSideEffectsToString(error);
+}
+
+let nodeFatalReport = false;
+
 /**
- * Node's fatal report; where inspecting a guest value throws, its stack alone
- * (Node's fallback); without one, the value's side-effect-free text and the
- * trailer — no rifty frame or host path reaches the output, a failure is never silent.
+ * The isolate guest's one switch (ADR-0557, goal node-file-entry-parity): its
+ * fatal text is Node's report (`builtins/fatal-report.ts`). The browser hosts
+ * keep main's text (ADR-0445 2026-11-23 rollback).
+ */
+export function installNodeFatalReport(): void {
+  nodeFatalReport = true;
+}
+
+/** Whether the realm prints Node's fatal report (`installNodeFatalReport`). */
+export function nodeFatalReportInstalled(): boolean {
+  return nodeFatalReport;
+}
+
+/**
+ * The fatal text: main's `err.stack` line, or — in the isolate guest — Node's
+ * report; where inspecting a guest value throws, its stack alone (Node's
+ * fallback); without one, the value's side-effect-free text and the trailer.
  */
 export function fatalReportText(error: unknown): string {
+  if (!nodeFatalReport) return `${formatThrown(error)}\n`;
   try {
     return formatFatalReport(error);
   } catch {

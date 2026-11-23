@@ -19,6 +19,7 @@ import {
   fatalReportText,
   handleRealmUncaughtError,
   handleRealmUnhandledRejection,
+  installNodeFatalReport,
   readNodeProcessTerminal,
   setDefaultProcessOutputSink,
 } from '@riftydev/runtime-js/internal';
@@ -290,6 +291,8 @@ function run(source: string): Promise<number> {
 
 /** Installs the runtime for one run; before any guest code. */
 function setUp(): void {
+  // The isolate host prints Node's fatal report (goal node-file-entry-parity).
+  installNodeFatalReport();
   installProcessGlobals();
   installTimerGlobals();
   (globalThis as { Buffer?: unknown }).Buffer = Buffer;

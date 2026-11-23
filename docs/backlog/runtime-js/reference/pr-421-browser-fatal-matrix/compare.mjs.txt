@@ -1,0 +1,22 @@
+import { readFileSync } from 'node:fs';
+const [,, host] = process.argv;
+const load = (t) => JSON.parse(readFileSync(`/tmp/nf-r3/matrix/${t}-${host}.json`, 'utf8'));
+const head = load('head'), main = load('main');
+const norm = (s) => String(s ?? '')
+  .replace(/https?:\/\/(localhost|127\.0\.0\.1):\d+\/@fs\/[^\s)]*?\/packages\//g, '<runtime>/packages/')
+  .replace(/(<runtime>\/[^\s)]*?):\d+(?::\d+)?/g, "$1:L:C")
+  .replace(/(<runtime>\/[^\s)?]*)\?[^\s):]*/g, '$1')
+  // user frames: line/col and names change with the module wrapper
+  .replace(/((?:\/home\/project)?\/m\/r\d+\/[\w.]+):\d+(?::\d+)?/g, '$1:L')
+  .replace(/at (?:[\w.<>$\[\] ]+? )?\(((?:\/home\/project)?\/m\/r\d+\/)/g, 'at <fn> ($1')
+  .replace(/\[eval\]:\d+(?::\d+)?/g, '[eval]:L')
+  .replace(/at (?:[\w.<>$\[\] ]+? )\(\[eval\]/g, 'at <fn> ([eval]');
+let same = 0; const diff = [];
+for (let i = 0; i < head.length; i++) {
+  const h = head[i], m = main[i];
+  const a = JSON.stringify({ ...h, stderr: norm(h.stderr), out: norm(h.out), error: norm(h.error), stdout: norm(h.stdout) });
+  const b = JSON.stringify({ ...m, stderr: norm(m.stderr), out: norm(m.out), error: norm(m.error), stdout: norm(m.stdout) });
+  if (a === b) same++; else diff.push([h.name, a, b]);
+}
+console.log(host, 'cells', head.length, 'equal main', same, 'differ', diff.length);
+for (const [n, a, b] of diff.slice(0, Number(process.argv[3] ?? 6))) console.log(`## ${n}\nHEAD ${a.slice(0, 700)}\nMAIN ${b.slice(0, 700)}`);

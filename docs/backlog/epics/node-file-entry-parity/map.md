@@ -9,10 +9,12 @@
    `packages/isolate-host/tests/node-file.test.ts`: every row Node's bytes or
    its pin in `node-file-pins.json` (a named compat row), no Node header on
    any row. Removed at CLOSE. → I1–I4
-5d. **browser-host fatal path** — COI kernel child / no-COI child Worker entry
-   throw and realm-uncaught throws print main's report (rolled back after
-   review round 4): 24 COI rows pinned by first line, the no-COI timer rows
-   silent with `exitCode` null. Open: the user question below;
+5d. **browser-host fatal path** — on the no-COI SDK and the COI Workbench
+   every fatal path prints as main (rolled back after review rounds 4 and 5;
+   Node's report only in the isolate guest): rows pinned with runtime
+   locations as `<runtime>/packages/<file>`, the no-COI timer rows `failed`
+   with `exitCode` null; proof `runtime-js/reference/pr-421-browser-fatal-matrix.md`.
+   Open: the user question below;
    `runtime-js/browser-host-realm-uncaught-fatal-report`. → I2 I3 I4
 ## Open questions
 

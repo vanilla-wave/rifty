@@ -5,6 +5,7 @@ import { firstGuestFrame, markFatalDecorated } from '../builtins/fatal-report.ts
 import { loadBuiltin } from '../builtins/index.ts';
 import { __setCreateRequireImpl } from '../builtins/module.ts';
 import { nodeMainImports } from '../builtins/node-entry-main.ts';
+import { nodeFatalReportInstalled } from '../builtins/process-lifecycle-events.ts';
 import { setSameRealmWorkerModuleImporter } from '../builtins/worker_threads.ts';
 import { createRequirePath } from '../internal/create-require-path.ts';
 import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
@@ -349,8 +350,9 @@ export function projectNodeEvalError(
     }
   }
   const stack = error.stack ?? firstLine;
-  // A file's frame leads (a required module threw): the fatal report heads it.
-  if (!(firstGuestFrame(stack)?.includes('[eval]') ?? true)) return error;
+  // A file's frame leads (a required module threw): the isolate's report heads it.
+  if (nodeFatalReportInstalled() && !(firstGuestFrame(stack)?.includes('[eval]') ?? true))
+    return error;
   const frame = /(?:eval \()?\[eval\]:(\d+):(\d+)\)?/u.exec(stack);
   if (frame === null) return error;
   const frameLine = Number(frame[1]);

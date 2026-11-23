@@ -342,9 +342,9 @@ describe('runNodeEntry', () => {
 
   it('reshapes a missing ENTRY into a Node-faithful MODULE_NOT_FOUND (requireStack [], printed form)', async () => {
     // backlog/runtime-js/node-entry-miss-node-shape: `node ./nope.js` must emit
-    // real Node's `Error: Cannot find module '<abs>'` with `{ code,
-    // requireStack: [] }` (the fatal report prints the props), NOT rifty's
-    // `ModuleLoadError` name. The
+    // real Node's multi-line `Error: Cannot find module '<abs>'` + `{ code,
+    // requireStack: [] }` on the child stderr (the kernel worker-entry writes
+    // `err.stack`), NOT rifty's `ModuleLoadError` name + internal frames. The
     // entry has no requirer, so requireStack is empty (no `Require stack:` block).
     const vfs = new MemoryFsSync();
     vfs.mkdirSync('/w', { recursive: true });
@@ -360,8 +360,9 @@ describe('runNodeEntry', () => {
     const err = thrown as Error & { code?: string; requireStack?: readonly string[] };
     expect(err.code).toBe('MODULE_NOT_FOUND');
     expect(err.requireStack).toEqual([]);
-    // Node's `stack` is the message and its frames; the props print from the error.
-    expect(err.stack).toMatch(/^Error: Cannot find module '\/w\/nope\.js'\n {4}at /u);
+    expect(err.stack).toBe(
+      "Error: Cannot find module '/w/nope.js'\n{\n  code: 'MODULE_NOT_FOUND',\n  requireStack: []\n}",
+    );
   });
 
   it('does NOT fake-shape an ESM import() miss into the CJS form (Node uses ERR_MODULE_NOT_FOUND)', async () => {
@@ -404,8 +405,14 @@ describe('runNodeEntry', () => {
     const err = thrown as Error & { code?: string; requireStack?: readonly string[] };
     expect(err.code).toBe('MODULE_NOT_FOUND');
     expect(err.requireStack).toEqual(['/w/app.js']);
-    expect(err.stack).toMatch(
-      /^Error: Cannot find module '\.\/gone\.js'\nRequire stack:\n- \/w\/app\.js\n {4}at /u,
+    expect(err.stack).toBe(
+      "Error: Cannot find module './gone.js'\n" +
+        'Require stack:\n' +
+        '- /w/app.js\n' +
+        '{\n' +
+        "  code: 'MODULE_NOT_FOUND',\n" +
+        "  requireStack: [ '/w/app.js' ]\n" +
+        '}',
     );
   });
 

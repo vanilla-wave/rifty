@@ -107,10 +107,7 @@ throw new Error('entry');`,
     const result = await run('node fatal.cjs ; echo next');
     expect(result).toMatchObject({ status: 'exited', exitCode: 0, stdout: 'next\n' });
     expect(result.requiresTermination).toBeUndefined();
-    // Node's report without its header (compat process.md): the user frame, the trailer.
-    expect(result.stderr).toBe(
-      'Error: entry\n    at Object.<anonymous> (/project/fatal.cjs:2:7)\n\nNode.js v24.0.0\n',
-    );
+    expect(result.stderr).toMatch(/^Error: entry\n {4}at \S+ \(\/project\/fatal\.cjs:\d+:7\)\n/u);
     await run('sleep 0.05');
     expect(fs.existsSync('/project/late.txt')).toBe(false);
     expect(await run('node ok.cjs')).toMatchObject({ exitCode: 0, stdout: 'next\n' });
@@ -187,6 +184,6 @@ throw e;`,
       error: { name: 'NotImplementedError', feature: 'zlib.inflateRawSync' },
     });
     expect(result.stderr).toMatch(/^NotImplementedError: Not implemented: zlib\.inflateRawSync /u);
-    expect(result.stderr).toMatch(/\n {4}at \S+ \(\/project\/gap\.cjs:\d+:\d+\)(?: \{)?\n/u);
+    expect(result.stderr).toMatch(/\n {4}at \S+ \(\/project\/gap\.cjs:\d+:\d+\)\n/u);
   });
 });

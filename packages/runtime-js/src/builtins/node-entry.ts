@@ -37,6 +37,7 @@ import {
   type UncaughtOrigin,
   dispatchUncaughtException,
   fatalReportText,
+  nodeFatalReportInstalled,
 } from './process-lifecycle-events.ts';
 
 const utf8 = new TextDecoder();
@@ -115,6 +116,26 @@ function captureNodeEvalTerminalProcess(): NodeEvalTerminalProcess {
 }
 
 /**
+ * Real-Node printed form of an uncaught CJS-loader `MODULE_NOT_FOUND`: the
+ * `Error: <message>` line — the message already carries Node's `Require stack:`
+ * block when the require-stack is non-empty — followed by the inspected tail of
+ * the error's own props, `{ code, requireStack }`. ALL stack frames are dropped:
+ * the `node:internal/…` loader frames have no in-browser equivalent (and are
+ * version-specific noise tooling does not match on), and rifty does not
+ * synthesize the Node-style user call-site frame either — so a nested miss omits
+ * the `at <file>` line Node would interleave (an entry miss has no user frame
+ * anyway). The `Node.js vX` trailer is likewise omitted. `requireStack` uses
+ * Node's INLINE array form (`[]` / `[ 'a', 'b' ]`) — faithful for the common
+ * short-path case; util.inspect's multi-line wrap for long paths + single-quote
+ * escaping are not reproduced. See docs/public/compat/process.md.
+ */
+function formatNodeModuleNotFound(err: ModuleLoadError): string {
+  const stack = err.requireStack ?? [];
+  const inspected = stack.length === 0 ? '[]' : `[ ${stack.map((p) => `'${p}'`).join(', ')} ]`;
+  return `Error: ${err.message}\n{\n  code: '${err.code}',\n  requireStack: ${inspected}\n}`;
+}
+
+/**
  * Surface an uncaught `MODULE_NOT_FOUND` as Node's CJS-loader Error: plain
  * `Error` name, `code` and `requireStack`, the loader error's frames (the fatal
  * report keeps the user's `require` call site and drops rifty's own).
@@ -136,8 +157,11 @@ function asNodePrintedError(err: unknown): unknown {
       code?: string;
       requireStack?: readonly string[];
     };
-    // V8 wrote `Error:` there: ModuleLoadError names itself after capture.
-    out.stack = err.stack ?? `Error: ${err.message}`;
+    // The isolate's Node report prints the frames and props itself (V8 wrote
+    // `Error:` there); main's printed form elsewhere.
+    out.stack = nodeFatalReportInstalled()
+      ? (err.stack ?? `Error: ${err.message}`)
+      : formatNodeModuleNotFound(err);
     out.code = err.code;
     out.requireStack = err.requireStack;
     return out;
@@ -216,7 +240,7 @@ export async function runNodeEntry(opts: RunNodeEntryOptions): Promise<void> {
         compiler,
       }).run(opts.source);
     } catch (thrown) {
-      const error = asNodePrintedError(thrown);
+      const error = nodeFatalReportInstalled() ? asNodePrintedError(thrown) : thrown;
       // ADR-0445: a listener-handled eval throw continues with no `-p` result.
       const outcome = dispatchUncaughtException(error, 'uncaughtException');
       if (outcome.kind === 'exited') throw outcome.signal;
@@ -238,7 +262,11 @@ export async function runNodeEntry(opts: RunNodeEntryOptions): Promise<void> {
           compiler,
         ),
       terminateUnhandled: (reason) => {
-        terminalProcess.writeStderr(fatalReportText(reason));
+        terminalProcess.writeStderr(
+          nodeFatalReportInstalled()
+            ? fatalReportText(reason)
+            : `${reason instanceof Error ? (reason.stack ?? `${reason.name}: ${reason.message}`) : String(reason)}\n`,
+        );
         try {
           const returned = terminalProcess.exit(1);
           throw new Error(`node eval process.exit(1) returned ${String(returned)}`);

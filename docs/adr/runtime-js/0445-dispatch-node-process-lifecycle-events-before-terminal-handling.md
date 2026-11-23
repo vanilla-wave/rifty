@@ -243,3 +243,10 @@ sample. Node v24.16.0 facts: evidence §O1–§O3.
   path: the isolate guest, `NodeProcessExit.fatal` (rejections, the no-COI
   project command's entry throw), the eval terminal. Realm-uncaught and COI
   entry-throw rows are declared (compat process.md "Fatal error stderr bytes").
+- 2026-11-23 — round 5 (manager decision, pre-decided rollback): Node's report
+  stays in the isolate guest only, behind one switch its entry calls
+  (`installNodeFatalReport()`); without it every fatal text on the no-COI SDK
+  and the COI Workbench is main's — `NodeProcessExit.fatal`/`listenerThrew`
+  (`err.stack`), the eval terminal, the drain's non-Error rejection
+  (`new Error(String(x))`), `MODULE_NOT_FOUND`'s printed form, the eval
+  projection. Proof: `docs/backlog/runtime-js/reference/pr-421-browser-fatal-matrix.md`.

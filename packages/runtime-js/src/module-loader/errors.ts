@@ -39,9 +39,6 @@ export class ModuleLoadError extends Error {
         ? 'Error'
         : 'ModuleLoadError';
     this.code = code;
-    // Node's internal errors read `Error [CODE]: message` in their stack.
-    if (code.startsWith('ERR_REQUIRE_') && typeof this.stack === 'string')
-      this.stack = `Error [${code}]: ${message}${this.stack.slice(`Error: ${message}`.length)}`;
     this.specifier = specifier;
     if (importer !== undefined) this.importer = importer;
     if (requireStack !== undefined) this.requireStack = requireStack;

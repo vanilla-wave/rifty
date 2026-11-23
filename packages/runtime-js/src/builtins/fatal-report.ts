@@ -14,6 +14,7 @@
 import { syncMirror } from '@riftydev/vfs';
 import type { Node as AcornNode } from 'acorn';
 import { cjsLineOnePrefix } from '../module-loader/cjs-factory.ts';
+import { ModuleLoadError } from '../module-loader/errors.ts';
 import { inspect } from '../repl/inspect.ts';
 import { enclosing, offsetOf, parseProgram } from './fatal-source.ts';
 import { NODE_PROCESS_IDENTITY } from './process-identity.ts';
@@ -330,6 +331,17 @@ function constructorName(error: object): string | null {
   return null;
 }
 
+/**
+ * Node's internal errors read `Error [CODE]: message`; rifty's loader raises
+ * them as `ModuleLoadError` named `Error` (`ERR_REQUIRE_*`).
+ */
+function nodeInternalHead(stack: string, error: object): string {
+  if (!(error instanceof ModuleLoadError) || !error.code.startsWith('ERR_REQUIRE_')) return stack;
+  return stack.startsWith('Error: ')
+    ? `Error [${error.code}]: ${stack.slice('Error: '.length)}`
+    : stack;
+}
+
 /** Node `improveStack`: `NotFound [Error]: …` when the class name hides the error's name. */
 function improveStack(stack: string, error: object): string {
   let errorName: unknown;
@@ -355,7 +367,7 @@ function inspectError(error: object, indent: number, state: InspectState, depth:
   const raw = stackOf(error) ?? (reflectApply(errorToString, error, []) as string);
   state.ancestors.push(error);
   // Frames are projected once, over the whole report (`guestStack`).
-  let base = improveStack(raw, error);
+  let base = improveStack(nodeInternalHead(raw, error), error);
   // Node brackets a stackless error; a runtime-decorated stack is not one.
   if (!/\n\s+at /u.test(raw) && !decorated.has(error)) base = `[${base}]`;
   if (indent > 0) base = base.replaceAll('\n', `\n${' '.repeat(indent)}`);

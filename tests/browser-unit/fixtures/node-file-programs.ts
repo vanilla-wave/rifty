@@ -555,8 +555,18 @@ export function nodeFileRoot(parent: string, name: string, oracleRoot: string): 
   return `${parent}${name.padEnd(width, '_')}`;
 }
 
+/**
+ * The browser hosts print main's fatal text, which carries rifty's runtime
+ * frames at the dev server's URLs (ADR-0445 2026-11-23 rollback): a served
+ * runtime location reads `<runtime>/packages/<file>` (port, checkout path and
+ * line:column dropped), so a pin holds on every machine.
+ */
+const RUNTIME_LOCATION =
+  /https?:\/\/[^\s()]*?\/packages\/([^\s():?]+)(?:\?[^\s():]*)?(?::\d+){0,2}/gu;
+
 export function nodeFileNormalized(outcome: NodeFileOutcome, root: string): NodeFileOutcome {
-  const paths = (text: string) => text.split(root).join('<root>');
+  const paths = (text: string) =>
+    text.split(root).join('<root>').replace(RUNTIME_LOCATION, '<runtime>/packages/$1');
   return {
     stdout: paths(outcome.stdout),
     stderr: paths(outcome.stderr),
@@ -578,19 +588,7 @@ export const nodeFilePins = JSON.parse(
   readFileSync(new URL('./node-file-pins.json', import.meta.url), 'utf8'),
 ) as Readonly<Record<NodeFileHost, Readonly<Record<string, NodeFilePin>>>>;
 
-/**
- * A row whose rifty stderr carries the host's served runtime URLs (the COI
- * kernel's report of a synchronous or realm-uncaught throw prints the error's
- * whole `stack`, main's behaviour, ADR-0445 2026-11-23 rollback): pinned by its
- * first stderr line, stdout and status, never by machine-specific frames.
- */
-interface NodeFileHeadPin {
-  readonly stdout: string;
-  readonly stderrHead: string;
-  readonly exitCode: number | null;
-}
-
-type NodeFilePin = NodeFileOutcome | NodeFileHeadPin | 'node';
+type NodeFilePin = NodeFileOutcome | 'node';
 
 /**
  * Rows whose rifty outcome races (two timers due in one host turn): the pin
@@ -631,18 +629,6 @@ export function nodeFileVerdict(
   );
   if (pin === 'node') {
     assert(row.actual, `${label} vs Node`).toEqual(row.expected);
-    return;
-  }
-  if ('stderrHead' in pin) {
-    const head = (o: NodeFileOutcome) => ({
-      stdout: o.stdout,
-      stderrHead: o.stderr.split('\n')[0],
-      exitCode: o.exitCode,
-    });
-    assert(head(row.actual), `${label} vs its head pin`).toEqual(pin);
-    assert(row.actual, `${label}: pinned row equals Node — pin it "node"`).not.toEqual(
-      row.expected,
-    );
     return;
   }
   const racy = nodeFileRacy[row.program.name];

@@ -1,6 +1,5 @@
 import { stripVTControlCharacters } from 'node:util';
 import { expect, test } from '@playwright/test';
-import { nodeFileRoot } from '../browser-unit/fixtures/node-file-programs.ts';
 import {
   type ProcessLifecycleCase,
   runLifecycleOracle,
@@ -92,45 +91,42 @@ function fatalShape(stderr: string, root: string): FatalShape {
   };
 }
 
-// Residuals (byte parity for file entries: node-file-parity.spec.ts): a
-// synchronous file-entry throw prints no header; an ES module entry no header and its shifted frame (compat modules.md "ESM
-// stack positions"), its compile error the loader's ModuleLoadError; a
-// non-Error throw has no header; Node's eval `require()` miss header names its
-// own loader source.
+// Residuals: `header`/`trailer`/`hint` are not printed outside `node -e`;
+// `userFrame` positions/names per compat modules.md "CJS/ESM stack positions"
+// (backlog runtime-js/cjs-wrapper-stack-positions, esm-stack-positions); a
+// compile error prints the loader's ModuleLoadError; an eval `require()` miss
+// lacks the inspected props.
+const UNPRINTED = { header: null, trailer: null } as const;
 const rows: readonly FatalRow[] = [
   {
     name: 'cjs-entry-throw',
     files: { 'fail.cjs': "throw new Error('boom');\n" },
     nodeArgv: ['fail.cjs'],
-    // A synchronous throw has no header: V8's throw site is not readable from JS.
-    residual: { header: null },
+    // main's report; the module wrapper shares line 1 (ADR-0450 2026-11-22): native
+    // line, Node's name, line-1 column right of the source by the prefix.
+    residual: { ...UNPRINTED, userFrame: 'at Object.<anonymous> (<root>/fail.cjs:1:133)' },
   },
   {
     name: 'eval-throw',
     files: {},
     nodeArgv: ['-e', "throw new Error('boom')"],
     line: `node -e "throw new Error('boom')"`,
-    residual: {},
+    residual: { trailer: null },
   },
   {
     name: 'esm-entry-throw',
     files: { 'fail.mjs': "throw new Error('boom');\n" },
     nodeArgv: ['fail.mjs'],
-    residual: { header: null, userFrame: 'at eval (<root>/fail.mjs:6:7)' },
+    residual: { ...UNPRINTED, userFrame: 'at eval (<root>/fail.mjs:6:7)' },
   },
   {
     name: 'cjs-syntax-error',
     files: { 'syntax.cjs': 'const a = 1;\nlet x = ;\n' },
     nodeArgv: ['syntax.cjs'],
-    // main's compile error, unchanged (manager decision after review round 3):
-    // the loader's ModuleLoadError naming the file; no header.
     residual: {
-      header: null,
+      ...UNPRINTED,
       error:
         "ModuleLoadError: Failed to compile CJS module <root>/syntax.cjs: Unexpected token ';'",
-      stack: false,
-      props:
-        "code: 'SYNTAX_ERROR',\nspecifier: '<root>/syntax.cjs',\nimporter: '<root>/syntax.cjs',\nrequireStack: undefined",
     },
   },
   {
@@ -138,12 +134,9 @@ const rows: readonly FatalRow[] = [
     files: { 'syntax.mjs': 'const a = 1;\nlet x = ;\n' },
     nodeArgv: ['syntax.mjs'],
     residual: {
-      header: null,
+      ...UNPRINTED,
       error:
         'ModuleLoadError: Failed to parse ESM source for <root>/syntax.mjs: Unexpected token (2:8)',
-      stack: false,
-      props:
-        "code: 'SYNTAX_ERROR',\nspecifier: '<root>/syntax.mjs',\nimporter: '<root>/syntax.mjs',\nrequireStack: undefined",
     },
   },
   {
@@ -151,15 +144,13 @@ const rows: readonly FatalRow[] = [
     files: {},
     nodeArgv: ['-e', "require('missing-pkg')"],
     line: `node -e "require('missing-pkg')"`,
-    // Node's header names its own loader source (`node:internal/…`).
-    residual: { header: null },
+    residual: { ...UNPRINTED, props: null },
   },
   {
     name: 'non-error-throw',
     files: { 'throw-number.cjs': 'throw 42;\n' },
     nodeArgv: ['throw-number.cjs'],
-    // No stack locates a non-Error throw.
-    residual: { header: null },
+    residual: { ...UNPRINTED, hint: false },
   },
 ];
 
@@ -167,8 +158,6 @@ for (const row of rows) {
   test(`project command prints Node's sync fatal report: ${row.name}`, async ({ page }) => {
     test.setTimeout(120_000);
     const oracle = await runLifecycleOracle(row);
-    // As long as the oracle's dir, so inspect breaks printed paths alike.
-    const projectRoot = nodeFileRoot('/', ROOT.slice(1), oracle.root);
     await page.goto('/no-coi-harness.html');
     const observed = await page.evaluate(
       async ({ root, projectRoot, files, line }) => {
@@ -198,7 +187,7 @@ for (const row of rows) {
       },
       {
         root: process.cwd().replaceAll('\\', '/'),
-        projectRoot,
+        projectRoot: ROOT,
         files: row.files,
         line: row.line ?? `node ${row.nodeArgv.join(' ')}`,
       },
@@ -208,7 +197,7 @@ for (const row of rows) {
       contentType: 'application/json',
     });
     const node = fatalShape(oracle.stderr, oracle.root);
-    const rifty = fatalShape(observed.stderr, projectRoot);
+    const rifty = fatalShape(observed.stderr, ROOT);
     const label = `${row.name} vs Node ${oracle.version}\n--- node\n${oracle.stderr}\n--- rifty\n${observed.stderr}`;
     const declared = row.residual as Readonly<Record<string, unknown>>;
     const compared = (shape: FatalShape) =>

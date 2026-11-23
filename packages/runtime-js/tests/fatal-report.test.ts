@@ -11,7 +11,13 @@ import {
   runNodeFileOracle,
 } from '../../../tests/browser-unit/fixtures/node-file-programs.ts';
 import { formatFatalReport } from '../src/builtins/fatal-report.ts';
-import { fatalReportText } from '../src/builtins/process-lifecycle-events.ts';
+import {
+  fatalReportText,
+  installNodeFatalReport,
+} from '../src/builtins/process-lifecycle-events.ts';
+
+// The isolate guest's realm (its entry installs Node's report).
+installNodeFatalReport();
 import { createModuleLoader } from '../src/module-loader/loader.ts';
 
 afterEach(() => resetSyncMirror());
