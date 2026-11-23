@@ -797,3 +797,72 @@ describe('a result channel closed in the middle of a sandbox run (Fault matrix)'
     );
   }
 });
+
+describe("runCode's hardening and options through exec (FIT S6, S10)", () => {
+  carrier(
+    'no network or child processes; output cap, shared buffers and limits as runCode',
+    async () => {
+      const sb = await createSandbox();
+      try {
+        await sb.writeFile(
+          'h.js',
+          `(async () => {
+  for (const f of [() => fetch('http://x'), () => require('http'), () => require('child_process')]) {
+    try { await f(); console.log('ran') } catch (e) { console.log(e.name, String(e.message).split(' (')[0]) }
+  }
+  console.log(typeof SharedArrayBuffer, typeof globalThis.ivm, typeof process.binding);
+})();`,
+        );
+        const r = await sb.exec('h.js', { allowSharedArrayBuffer: false });
+        expect(r.exitCode).toBe(0);
+        expect(r.stdout).toBe(
+          [
+            'NotImplementedError Not implemented: isolate-host.fetch',
+            'NotImplementedError Not implemented: isolate-host.http',
+            'NotImplementedError Not implemented: isolate-host.child_process',
+            'undefined undefined undefined',
+            '',
+          ].join('\n'),
+        );
+        await sb.writeFile(
+          'flood.js',
+          "for (let i = 0; i < 1000; i++) console.log('x'.repeat(99))",
+        );
+        const flood = await sb.exec('flood.js', { maxOutputBytes: 1000 });
+        expect(flood).toMatchObject({ exitCode: 0, truncated: true });
+        expect(flood.stdout).toHaveLength(1000);
+      } finally {
+        await sb.destroy();
+      }
+    },
+  );
+
+  carrier('a 1 MiB random file round-trips host → run → host byte for byte', async () => {
+    const sb = await createSandbox();
+    try {
+      const bytes = new Uint8Array(1 << 20);
+      for (let i = 0; i < bytes.length; i++) bytes[i] = (i * 2654435761) >>> 24;
+      await sb.writeFile('in.bin', bytes);
+      await sb.writeFile('cp.js', "require('fs').copyFileSync('in.bin', 'out.bin')");
+      expect((await sb.exec('cp.js')).exitCode).toBe(0);
+      expect(Buffer.compare(Buffer.from(await sb.readFile('out.bin')), Buffer.from(bytes))).toBe(0);
+    } finally {
+      await sb.destroy();
+    }
+  });
+
+  carrier(
+    'a sandbox the consumer drops keeps nothing alive: the consumer exits on its own',
+    async () => {
+      const r = await consumer(
+        `const sb = await createSandbox();
+       await sb.writeFile('a.js', 'console.log(1)');
+       out(await sb.exec('a.js'));`,
+        { naturalExit: true },
+      );
+      expect(r.value).toEqual({ stdout: '1\n', stderr: '', exitCode: 0 });
+      expect(r.exitCode).toBe(0);
+      expect(r.signal).toBeNull();
+    },
+  );
+});

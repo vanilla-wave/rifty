@@ -80,6 +80,7 @@ path is only for frames an honest worker never sends.
 | host bytes in/out × a pooled `Buffer`, a view with an offset, `readFile`/`snapshot()` results | exact copies, no shared memory | `sandbox-faults` "Buffer inputs" | → I3 |
 | every host-op refusal × its error object | fields and `stack` name only sandbox paths; `stack` is the first line | `sandbox-faults` "no consumer frames" | → I7 |
 | the worker's result channel closes mid sandbox run (after `state`, before `exit`; before any frame), a `runCode` neighbour on it | lost worker (ADR-0563 §6): rerun once alone, then `WORKER_LOST`; state as before (adopted only at a terminal `exit`); the neighbour rerun, its result exact once | `sandbox-faults` "result channel closed" ×2 | → I1, I7 |
+| runCode's hardening through `exec` (no `fetch`/`http`/`child_process`, `allowSharedArrayBuffer: false`, `maxOutputBytes`), a 1 MiB round trip, a dropped sandbox | as `runCode`; bytes exact; the consumer exits on its own | `sandbox-faults` "hardening and options" ×3 | → I3, I6 |
 | state bytes worker → isolate × view of a larger buffer | an exact copy crosses | `protocol.test.ts` "decodeState" | → I7 |
 
 ## Out of scope
