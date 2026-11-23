@@ -16,6 +16,59 @@ went through seven external review rounds; the header, the syntax-error report
 and the browser lifecycle each failed review more than once and were narrowed
 (below).
 
+## The goal, verbatim
+
+User scenario and invariants exactly as in `goal.md` (`docs/backlog/epics/node-file-entry-parity/goal.md` @ 89d48ac10, its amends in
+its Decisions; narrowings by the user's words and the manager's reading below,
+not in this text).
+
+### User scenario
+
+1. The host writes project files and runs `node <file> [args]`.
+2. The program runs as Node's main module: `if (require.main === module)
+   main()` runs `main`; `module`, `__filename`, `__dirname`, `process.argv`,
+   `require.cache`, relative `require`, `import.meta` for an ES module entry
+   read as in Node.
+3. The program dies (throw in the entry or a dependency, from a timer or an
+   async function, unhandled rejection, non-`Error` value, syntax error,
+   missing module, error with `cause` or own props). The host reads stderr and
+   the exit status: Node's report — the inspected error with user frames at
+   Node's positions, `Node.js` trailer; without Node's `<file>:<line>` header,
+   source line and caret (deferred, amend 2026-11-23).
+4. The agent fixes the named line and reruns.
+
+Oracle: live `node <file>` v24.16.0 over the same files in a temp dir; one path
+normalization (temp dir ↔ project root). Two declared projections, applied to
+Node's side only (`nodeFileExpected` in the carrier fixture):
+
+- P1 — Node's own source (`node:*`, `[eval]-wrapper`) has no rifty
+  counterpart: its frames are deleted; a report header naming it (`node:…:N`,
+  source line, caret, blank) is deleted; the `... N lines matching cause stack
+  trace ...` line those frames feed is deleted; an inspect props opener ` {`
+  on a deleted frame moves to the previous kept line. Nothing else is
+  rewritten — a report left without frames keeps its unbracketed first line.
+- P2 — the trailer names the runtime's own `process.version` (rifty v24.0.0,
+  `runtime-js/process-versions-node-honesty`).
+
+### Invariants
+
+1. I1. Entry semantics: on the carrier's entry corpus the program's stdout and
+   status equal Node's — `require.main`/`process.mainModule` is the entry
+   module (`id` `.`, `parent` null), dependencies see the same `require.main`
+   and their own `parent`/`children`/`loaded`, `require.cache` holds the live
+   records, `__filename`/`__dirname`/`process.argv`, and an ES module entry's
+   `import.meta` and `require.main` (undefined); directory, `.cjs` and
+   extensionless entries; a typeless `.js` with ESM syntax (detection).
+2. I2. Fatal diagnostics: on the carrier's fatal corpus stderr bytes and status
+   equal Node's under the one normalization and the two declared projections.
+   A row that cannot reach Node's bytes is a named compat row with its cause.
+3. I3. A fatal report prints no rifty-runtime frame or path; the frames it
+   prints are the ones Node prints for user code (and V8 builtins), at Node's
+   line, column and name.
+4. I4. One implementation: I1–I3 hold on the no-COI SDK and the COI Workbench
+   (carrier lanes) and the isolate guest bundle prints the same report through
+   the same runtime code (isolate rows: a file `require`d from `node -e`).
+
 ## Decision
 
 1. **Entry identity** (proven on the no-COI SDK and the COI Workbench; the
