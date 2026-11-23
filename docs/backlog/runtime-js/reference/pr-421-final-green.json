@@ -1,8 +1,8 @@
 {
   "overall_verdict": "pass",
-  "merge_call": "Merge on green PR CI at HEAD: the isolate loader-error shape (asNodeError at the one report point) holds and does not leak — the browser hosts still print main's fatal text (143 cells × 2 hosts vs main f5c232b3d, every difference inside the two named exceptions); main merge clean; all lanes green. Goal not complete (5d user question, deferred header).",
+  "merge_call": "Merge on green PR CI at HEAD: the report no longer runs a guest accessor on a loader error's `code` (descriptor read; unit row + mutant killed), the `ERR_REQUIRE_*` head and the loader-error projection are unchanged, the remaining lifecycle read is declared with a draft; browser hosts unaffected. Goal not complete (5d user question, deferred header).",
   "checkpoint": "Final+GREEN",
-  "unit_goal_source": "docs/backlog/epics/node-file-entry-parity/goal.md (amend 2026-11-23) + map.md (5d STOP-1 owner: user) + ledger.md; manager round-5 criterion with its two named exceptions (ADR-0445 2026-11-23 lines: exception 1 rifty-internal frame line, exception 2 timer callback frame name / `this`); proof docs/backlog/runtime-js/reference/pr-421-browser-fatal-matrix.md (round-6 rerun vs main f5c232b3d); PR #421 @ 6dc8096be (product 2ecff113e, merge 916cc215b of main f5c232b3d = #398, re-pin 0afc1d2a6); BASE 50c9d8bf1; baseline = carrier RED rows on main 50c9d8bf1",
+  "unit_goal_source": "docs/backlog/epics/node-file-entry-parity/goal.md (amend 2026-11-23) + map.md (5d STOP-1 owner: user) + ledger.md; manager round-5 criterion with its two named exceptions (ADR-0445 2026-11-23 lines: exception 1 rifty-internal frame line, exception 2 timer callback frame name / `this`); proof docs/backlog/runtime-js/reference/pr-421-browser-fatal-matrix.md (round-6 rerun vs main f5c232b3d); PR #421 @ c89c49aa9 (product a675fb292, re-pin c89c49aa9); BASE 50c9d8bf1; baseline = carrier RED rows on main 50c9d8bf1",
   "unit_residuals": [],
   "goal_residuals": [
     {
@@ -56,6 +56,14 @@
       "note": ""
     },
     {
+      "row": "Isolate: a loader error's report is the same object projected (guest props kept, no getter runs) at any depth",
+      "source": "acceptance",
+      "trace": "I2+I4",
+      "status": "pass",
+      "citation": "packages/runtime-js/tests/fatal-report.test.ts \"a loader error with a guest accessor on `code` or `requireStack`: the report runs neither\" (mutant: [[Get]] read of `code` → 1 failed | 38 passed); packages/isolate-host/tests/guest-seam.test.ts six-origin rows",
+      "note": ""
+    },
+    {
       "row": "Isolate guest: Node's report (props, cause, frames, trailer, no header)",
       "source": "acceptance",
       "trace": "I2+I3+I4",
@@ -89,15 +97,7 @@
     {
       "axis": "Mission and architecture",
       "verdict": "pass",
-      "findings": [
-        {
-          "severity": "concern",
-          "location": "packages/runtime-js/src/builtins/fatal-report.ts asNodeError (inside formatFatalReport); packages/runtime-js/src/builtins/process-lifecycle-events.ts fatalReportText",
-          "evidence": "Reviewer matrix (PR tools + 17 reviewer kinds × file/-e incl. `throw this`, MNF via listener/timer, compile error from a timer = 143 cells per host) in /tmp/rev421 @ 6dc8096be and a fresh worktree of main f5c232b3d; outputs /tmp/nf-review/matrix/{head,main}-{nocoi,coi}.json; tightened round-6 normalization (node /tmp/nf-review/scripts/compare-r6.mjs nocoi|coi → no-COI 132 equal / 11 differ, COI 126 equal / 17 differ); node /tmp/nf-review/scripts/linediff.mjs: every difference is exception 1 (rifty-internal \"at Object.import (loader.ts)\" / \"at importNodeMain\") or exception 2 (\"at Timeout.eval [as _onTimeout] (…)\" where main prints \"at eval (…)\"); none beyond the two named exceptions.",
-          "summary": "S1 does not leak: asNodeError runs only inside formatFatalReport, which only the installed (isolate) path reaches; node-entry.ts asNodePrintedError / eval catch are main's again. Previous concerns RESOLVED: the criterion now names exception 1 (internal frame line) and exception 2 (timer frame name, `this`) in ADR-0445, and the matrix normalization is limited to the wrapper (`Object.eval`→`Object.<anonymous>`, lines).",
-          "authority": ""
-        }
-      ]
+      "findings": []
     },
     {
       "axis": "Goal drift",
@@ -136,16 +136,16 @@
       "findings": [
         {
           "severity": "concern",
-          "location": "packages/runtime-js/src/module-loader/loader.ts projectNodeEvalError (`error.stack = prelude + firstLine`); packages/isolate-host/tests/guest-seam.test.ts (view: head line + props)",
-          "evidence": "scratch /tmp/rev421: cp /tmp/nf-review/scripts/zz-probe14.test.ts packages/isolate-host/tests/zz-probe.test.ts && pnpm exec vitest run --project isolate-host … (raw /tmp/nf-review/probes-zz-probe14-6dc8096be.json, live node v24.16.0 -e). E_mnf_sync: rifty \"Error: Cannot find module './nope'\\nRequire stack:\\n- <root>/[eval]\\n    at [eval]:1:141 { code, requireStack }\" (Node: same lines + node:internal frames). E_mnf_timer: rifty \"[eval]:1 … ^\\n\\nError: Cannot find module './nope'\\n    at Timeout._onTimeout ([eval]:1:160) {\" — the message's \"Require stack:\" lines are gone (Node keeps them). E_tla_*: rifty message/props are rifty's loader text (Node: long ERR_REQUIRE_ASYNC_MODULE message with From/Requiring, only `code`).",
-          "summary": "Isolate shape now Node-like at the head and props. Remaining, pre-existing (`-e` projection keeps only the first message line when it decorates): a multi-line loader message loses its `Require stack:` block from a timer — the new row compares only the head line, so it passes; ERR_REQUIRE_ASYNC_MODULE text and extra props differ from Node (rifty loader). Declare or extend the draft.",
+          "location": "packages/runtime-js/src/builtins/fatal-report.ts:355-357; docs/backlog/runtime-js/process-exit-signal-check-runs-guest-getter.md; docs/public/compat/process.md",
+          "evidence": "scratch /tmp/rev421 @ c89c49aa9: cp /tmp/nf-review/scripts/<zz-probe14|zz-probe15>.test.ts packages/isolate-host/tests/zz-probe.test.ts && pnpm exec vitest run --project isolate-host … (live node v24.16.0 -e vs isolate; raw /tmp/nf-review/probes-zz-probe1{4,5}-c89c49aa9.json). P_code_getter: rifty stdout \"RAN\\n\" (was \"RAN\\nRAN\\n\"; Node \"\"), report unchanged (\"code: [Getter]\"); every other zz-probe15 stderr byte-identical to 82f4d29f8; zz-probe14 (MODULE_NOT_FOUND, ERR_REQUIRE_ASYNC_MODULE sync/timer/file) byte-identical to round 6 incl. \"Error [ERR_REQUIRE_ASYNC_MODULE]: …\".",
+          "summary": "Previous blocker RESOLVED. The one remaining run is main's lifecycle exit-signal check (`isRiftyProcessExit` reading `code`), now declared in compat with a draft.",
           "authority": ""
         },
         {
           "severity": "concern",
-          "location": "tests/browser-unit/fixtures/node-file-programs.ts RUNTIME_LOCATION",
-          "evidence": "unchanged",
-          "summary": "Carrier rifty-side runtime-URL normalization (pins only) — name it.",
+          "location": "packages/runtime-js/src/repl/inspect.ts (errors nested in plain objects); docs/public/compat/modules.md",
+          "evidence": "scratch /tmp/rev421 @ c89c49aa9: cp /tmp/nf-review/scripts/<zz-probe14|zz-probe15>.test.ts packages/isolate-host/tests/zz-probe.test.ts && pnpm exec vitest run --project isolate-host … (live node v24.16.0 -e vs isolate; raw /tmp/nf-review/probes-zz-probe1{4,5}-c89c49aa9.json). P_nested_prop (no props for an error inside a plain object, declared nested layout); P_listener_sees (main's ModuleLoadError keys, declared).",
+          "summary": "Declared; noted.",
           "authority": ""
         }
       ]
@@ -156,9 +156,9 @@
       "findings": [
         {
           "severity": "concern",
-          "location": "merge 916cc215b (main f5c232b3d #398: workbench snapshot/package-state)",
-          "evidence": "git show --cc 916cc215b → no conflicted file. cd /tmp/rev421 @ 6dc8096be (pnpm install --offline): unit (fatal-report, node-entry.test, module-loader, internal, repl, process-lifecycle, workbench no-coi-project-command-exit, conformance modules) 41 files / 378 tests exit 0; isolate-host 455 and isolate-guest 190 tests exit 0; no-COI node-file-parity + no-coi-fatal-stderr + no-coi-process-exit-status 46 passed; COI node-file-parity + kernel drain specs 10 passed; pnpm build:libs + check:esbuild-legacy-retirement verified (re-pin 0afc1d2a6).",
-          "summary": "Main merge clean; all PR carriers and suites green.",
+          "location": "packages/isolate-host/tests; tests/browser-unit/fixtures/node-file-pins.json",
+          "evidence": "cd /tmp/rev421 @ c89c49aa9: unit (fatal-report, module-loader, conformance modules) 259 tests exit 0; isolate-host 460 tests exit 0; no-COI node-file-parity + no-coi-fatal-stderr 8 passed; COI node-file-parity passed; pnpm build:libs + check:esbuild-legacy-retirement verified (re-pin c89c49aa9).",
+          "summary": "All carriers green.",
           "authority": ""
         }
       ]
@@ -177,5 +177,5 @@
       ]
     }
   ],
-  "reviewed_sha": "6dc8096bef96de700e2d95210406b462f360d199"
+  "reviewed_sha": "c89c49aa9cc118046584eacddf16b24e374130fb"
 }
