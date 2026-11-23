@@ -5,7 +5,7 @@ import type { ParityCase } from '../../src/types.ts';
  * false), and `utimes` never stores a non-finite time: an invalid Date leaves
  * the time as it was (libuv UTIME_OMIT), a negative number is now. A huge time
  * is platform-specific in Node (darwin saturates at 2^63 ns, Linux: EINVAL), so
- * it is not compared here (rifty saturates; compat ⚠️). Found through the
+ * it is not compared here (rifty saturates; the compat row names it). Found through the
  * isolate sandbox (ADR-0568).
  */
 const c: ParityCase = {
