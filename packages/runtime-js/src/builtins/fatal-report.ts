@@ -2,8 +2,9 @@
  * Node v24's fatal report (`src/node_errors.cc` ReportFatalException) without
  * its `<file>:<line>` header: the error as `inspect(error, { customInspect:
  * false })` prints it, the `--trace-uncaught` hint for a primitive, and the
- * `Node.js <version>` trailer. The one text every host prints for a fatal
- * error (goal node-file-entry-parity I2–I4). The header is V8's message
+ * `Node.js <version>` trailer. The isolate guest's fatal text, behind its one
+ * switch (`installNodeFatalReport()`); the browser hosts print main's
+ * (ADR-0445 2026-11-23). The header is V8's message
  * location, which JS cannot read: never printed (compat process.md "Fatal
  * error stderr bytes"; only `-e`'s own `[eval]` decoration carries one).
  *

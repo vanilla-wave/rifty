@@ -71,5 +71,8 @@ a `-e` timer callback prints `at Timeout.eval [as _onTimeout] ([eval]:…)` wher
 main printed `at eval ([eval]:…)` (Node `at Timeout._onTimeout ([eval]:…)`):
 the timer callback now runs as `Timeout#_onTimeout` with `this` the handle
 (Node's semantics, every host), and V8 names an anonymous function of the
-eval-compiled `-e` code `eval` — declared, compat process.md. Every other cell:
-equal main.
+eval-compiled `-e` code `eval` — declared, compat process.md. External review
+round 6 counts 9 such cells with the no-COI SDK result's `error.stack`; and
+`throw this` in a timer callback throws the `Timeout` (Node prints the timer
+object, main `[object DedicatedWorkerGlobalScope]`, HEAD `Error: 1…` /
+`Uncaught 1`) — the same exception. Every other cell: equal main.

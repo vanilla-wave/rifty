@@ -254,6 +254,9 @@ sample. Node v24.16.0 facts: evidence §O1–§O3.
   follows the runtime's call path — the main-module claim enters the loader
   below `loader.import`; main prints them only as a leak), and a timer
   callback's frame name (`Timeout.eval [as _onTimeout]` in `-e` code, main
-  `eval`, Node `Timeout._onTimeout`) from `Timeout#_onTimeout`, Node's `this`.
+  `eval`, Node `Timeout._onTimeout`) from `Timeout#_onTimeout`, Node's `this`
+  — printed in COI `-e` reports and in the no-COI SDK result's `error.stack`
+  (9 cells, external review round 6); `throw this` in a timer callback throws
+  the `Timeout` (Node's object; main the Worker global).
   Carrier pins read a served runtime location as `<runtime>/packages/<file>`,
   a rifty-side normalization next to the one path normalization.
