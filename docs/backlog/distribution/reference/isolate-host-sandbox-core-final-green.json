@@ -1,9 +1,9 @@
 {
   "overall_verdict": "pass",
-  "merge_call": "Final+GREEN PASS (CLOSE) at 97d293020 (merge of main 23ed6b445, #422, into 941277c25): goal end-to-end holds, user amend verbatim, every residual owned with trigger; merge on green PR CI at HEAD (PR-6). No product change.",
+  "merge_call": "Final+GREEN PASS (fix + CLOSE) at ccff9c18b: observed-defect fix proven (RED on base, F1/F2 killed, carriers for timer/interval/setImmediate), class table re-measured, compat rows to fact, user answers verbatim, residuals owned; goal complete; merge on green PR CI at HEAD (PR-6). No product change needed.",
   "checkpoint": "Final+GREEN",
-  "reviewed_sha": "97d293020ba69b58fc9fa1c1e94f86e5a68913b6",
-  "unit_goal_source": "unit distribution/isolate-host-sandbox-core (contract deleted at b62da7f90; read at 3eb6b744a as (docs)/backlog/distribution/isolate-host-sandbox-core.md, 45 traced rows, coverage 82 rows, Acceptance 1 = 3eb6b744a:…/isolate-host-sandbox-acceptance.md rows 1-14); goal epics/isolate-host-live-sandbox/{goal,map,ledger}.md @ 3eb6b744a (amend goal.md:157); history: distribution/isolate-host-sandbox-core.md (ready, re-cut 2026-11-22 ×4; Acceptance 1 = distribution/isolate-host-sandbox-acceptance.md rows 1-14); Contract+RED PASS @ 16b7ab607; BASE 50c9d8bf1; verify passes c505b857f -> 30c8c1ff1 -> 525aaf075; r4 at c0ad781f2; r5 at d78411460; r6 at 7650df442; r7 at 214bbf1c4; r8 at ebecf5eb7; r9 at 4ea5736b5; r10 at 4c2878684; r11 at a59996a0c; r12 at 9d3d8ca84; r13 at bc906f21e; r14 at 4c7a263ac; r15 at b876a81d1; this pass b876a81d1..65c1462c1 (one test timeout) (merges of main 11b9397ee: #418 codec, #416, #420); goal epics/isolate-host-live-sandbox/goal.md; r16 CLOSE pass (goal end-to-end, docs/process/README.md §CLOSE) on 65c1462c1..35fb53023 (round 4: 902b0ed12, CLOSE prep 35fb53023), base merge-base 28d86acc4; r17 landing pass 35fb53023..13ea6ee8f (docs only: map, ledger, ROADMAP, ADR-0568 Accepted, compat, new lead backlog item); r18 CLOSE pass on b4a8dfde7..b62da7f90 (3eb6b744a amend+exports, b62da7f90 removal; 3 concerns); r19 re-bind on b62da7f90..882621128 (concern fixes: ADR-0568 I6/I7, owner+trigger lines, steadied carrier + backlog record); r20 re-bind on the merge 97d293020 (parents 941277c25, 23ed6b445): non-doc delta from 882621128 = packages/isolate-guest/README.md only; fs-snapshot goal dir removed by main, ADR-0568 §Corrections (main) beside §Invariants (ours)",
+  "reviewed_sha": "ccff9c18b8725637c608fb1e2823c4490e8f8924",
+  "unit_goal_source": "unit distribution/isolate-host-sandbox-core (contract deleted at b62da7f90; read at 3eb6b744a as (docs)/backlog/distribution/isolate-host-sandbox-core.md, 45 traced rows, coverage 82 rows, Acceptance 1 = 3eb6b744a:…/isolate-host-sandbox-acceptance.md rows 1-14); goal epics/isolate-host-live-sandbox/{goal,map,ledger}.md @ 3eb6b744a (amend goal.md:157); history: distribution/isolate-host-sandbox-core.md (ready, re-cut 2026-11-22 ×4; Acceptance 1 = distribution/isolate-host-sandbox-acceptance.md rows 1-14); Contract+RED PASS @ 16b7ab607; BASE 50c9d8bf1; verify passes c505b857f -> 30c8c1ff1 -> 525aaf075; r4 at c0ad781f2; r5 at d78411460; r6 at 7650df442; r7 at 214bbf1c4; r8 at ebecf5eb7; r9 at 4ea5736b5; r10 at 4c2878684; r11 at a59996a0c; r12 at 9d3d8ca84; r13 at bc906f21e; r14 at 4c7a263ac; r15 at b876a81d1; this pass b876a81d1..65c1462c1 (one test timeout) (merges of main 11b9397ee: #418 codec, #416, #420); goal epics/isolate-host-live-sandbox/goal.md; r16 CLOSE pass (goal end-to-end, docs/process/README.md §CLOSE) on 65c1462c1..35fb53023 (round 4: 902b0ed12, CLOSE prep 35fb53023), base merge-base 28d86acc4; r17 landing pass 35fb53023..13ea6ee8f (docs only: map, ledger, ROADMAP, ADR-0568 Accepted, compat, new lead backlog item); r18 CLOSE pass on b4a8dfde7..b62da7f90 (3eb6b744a amend+exports, b62da7f90 removal; 3 concerns); r19 re-bind on b62da7f90..882621128 (concern fixes: ADR-0568 I6/I7, owner+trigger lines, steadied carrier + backlog record); r20 re-bind on the merge 97d293020 (parents 941277c25, 23ed6b445): non-doc delta from 882621128 = packages/isolate-guest/README.md only; fs-snapshot goal dir removed by main, ADR-0568 §Corrections (main) beside §Invariants (ours); r21: observed-defect fix (rifty-fix, RDY-8) found by the r20 CLOSE review @ 0d795a442 — a timer queued before an uncaught throw / beside process.exit fired after the run ended; BASE 0d795a442 (origin/main f3861a3cd merged at 231b2cd29), fix b0c638d47, RED by reverting entry.ts to 0d795a442 in scratch; r22 (this pass) verify on b0c638d47..2e042c83d (docs + 2 carrier rows, entry.ts identical) with CLOSE §1–4 re-check of goal epics/isolate-host-live-sandbox (read at 2bff8d26c), units at 3eb6b744a; r23 re-bind on 2e042c83d..ccff9c18b (one phrase of compat row 41: same-turn timer exit(0) reads as a clean {exitCode: 0, stderr: ''}, output printed — matches runCode probe {stdout:'',stderr:'',exitCode:0}); compat-drift, backlog, refs OK",
   "unit_residuals": [],
   "goal_residuals": [],
   "goal_complete": true,
@@ -14,7 +14,7 @@
       "trace": "I2+I3",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:109",
-      "note": "failed-run stderr now compared byte-for-byte with Node via nodeReport (header dropped, #421 projection); compile-error rows pinned exact with an unpin guard (owner backlog/runtime-js/module-compile-error-node-syntax-error) | CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": "failed-run stderr now compared byte-for-byte with Node via nodeReport (header dropped, #421 projection); compile-error rows pinned exact with an unpin guard (owner backlog/runtime-js/module-compile-error-node-syntax-error)"
     },
     {
       "row": "Carrier row 2: timeout 1500 / heap growth / Array(2**28) at 64 MiB -> timeout/memory; partial write absent; next run reads earlier files",
@@ -22,7 +22,7 @@
       "trace": "I1",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:140",
-      "note": "CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": ""
     },
     {
       "row": "Carrier row 3: two runs, only files carry over = node sequence",
@@ -30,7 +30,7 @@
       "trace": "I2",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:174",
-      "note": "CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": ""
     },
     {
       "row": "Carrier row 4: unawaited writeFile/exec/writeFile/exec/readFile in call order",
@@ -38,7 +38,7 @@
       "trace": "I4",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:212",
-      "note": "CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": ""
     },
     {
       "row": "Carrier row 5: destroy during busy run with queued write: both reject DESTROYED, later ops too",
@@ -46,7 +46,7 @@
       "trace": "I5",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:232",
-      "note": "CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": ""
     },
     {
       "row": "Carrier row 6: ENOENT with sandbox path, no host text; NUL -> ERR_INVALID_ARG_VALUE; B cannot see A canary",
@@ -54,7 +54,7 @@
       "trace": "I7",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:249",
-      "note": "CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": ""
     },
     {
       "row": "Carrier row 7: write, run, snapshot, destroy, createSandbox({snapshot}) same tree; run reads made.bin",
@@ -62,7 +62,7 @@
       "trace": "I9",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:278",
-      "note": "CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": ""
     },
     {
       "row": "Carrier row 8: ESM entry -> exit 1, Not implemented: isolate-host.esm; node runs it",
@@ -70,7 +70,7 @@
       "trace": "I2",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:310",
-      "note": "CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": ""
     },
     {
       "row": "Carrier row 9: node <path> corpus in sequences vs live node (require, JSON, __filename, argv, require.main, errors, syntax/missing module)",
@@ -78,7 +78,7 @@
       "trace": "I2",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:422",
-      "note": "failed-run stderr now compared byte-for-byte with Node via nodeReport (header dropped, #421 projection); compile-error rows pinned exact with an unpin guard (owner backlog/runtime-js/module-compile-error-node-syntax-error) | CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": "failed-run stderr now compared byte-for-byte with Node via nodeReport (header dropped, #421 projection); compile-error rows pinned exact with an unpin guard (owner backlog/runtime-js/module-compile-error-node-syntax-error)"
     },
     {
       "row": "Carrier row 10: maxFileBytes/maxFsBytes: FILE_TOO_LARGE both ways, run over cap -> stateRefused TOO_LARGE, files as before, FULL before 64 host writes",
@@ -86,7 +86,7 @@
       "trace": "I6+I1",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:594",
-      "note": "own mutants (never TOO_LARGE; capture budget back to maxFsBytes) killed | CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": "own mutants (never TOO_LARGE; capture budget back to maxFsBytes) killed"
     },
     {
       "row": "Carrier row 11: special names round-trip, /tmp via ../../tmp, ../../../etc/passwd ENOENT, list sizes, remove tree/file, second remove ENOENT",
@@ -94,7 +94,7 @@
       "trace": "I3+I7",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:549",
-      "note": "CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": ""
     },
     {
       "row": "Carrier row 12: fs.symlinkSync in a run fails loudly; only files",
@@ -102,15 +102,15 @@
       "trace": "I2+I7",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:586",
-      "note": "CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": ""
     },
     {
       "row": "Carrier row 13: worker SIGKILLed after append -> resolves once on another worker, append landed once",
       "source": "acceptance",
       "trace": "I1",
       "status": "pass",
-      "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:604",
-      "note": "CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:706",
+      "note": "CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header). | r21: citation rebuilt from HEAD b0c638d47 (was sandbox-acceptance.test.ts:604)."
     },
     {
       "row": "Carrier row 14: exit endings corpus, no -e globals in a file, stdout.write without newline, empty dir kept, three ESM forms -> named gap",
@@ -118,7 +118,7 @@
       "trace": "I1+I2",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:422",
-      "note": "CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": ""
     },
     {
       "row": "Core Acceptance 2: root exports exactly createSandbox and runCode; every result plain data or Uint8Array",
@@ -126,7 +126,7 @@
       "trace": "I8",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:30",
-      "note": "CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": ""
     },
     {
       "row": "Core Acceptance 3: env/cwd/stdin NotImplementedError; bad path/args ERR_INVALID_ARG_TYPE; out of range ERR_OUT_OF_RANGE; template NotImplementedError; corrupt snapshot ERR_FS_SNAPSHOT_CORRUPT",
@@ -134,7 +134,7 @@
       "trace": "I6+I8",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:34",
-      "note": "CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": ""
     },
     {
       "row": "Core Acceptance 4: snapshot() behind a run holds that run end; exec behind snapshot() does not change it",
@@ -142,7 +142,7 @@
       "trace": "I9+I4",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:65",
-      "note": "own mutant (queue bypassed) killed | CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": "own mutant (queue bypassed) killed"
     },
     {
       "row": "Core Acceptance 5: packed consumer runs the README sandbox snippet under plain node",
@@ -150,7 +150,7 @@
       "trace": "I8",
       "status": "pass",
       "citation": "packages/isolate-host/tests/packed-consumer.test.ts:57",
-      "note": "CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": ""
     },
     {
       "row": "FM: worker lost twice x run -> WORKER_LOST; state of before",
@@ -158,7 +158,7 @@
       "trace": "I1",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:161",
-      "note": "CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": ""
     },
     {
       "row": "FM: worker sends end state then dies before terminal frame -> lost, rerun, lost; state unchanged",
@@ -166,7 +166,7 @@
       "trace": "I1",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:405",
-      "note": "CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": ""
     },
     {
       "row": "FM: end state too large to capture in its isolate -> own stdout/exit + stateRefused CAPTURE; state of before",
@@ -174,7 +174,7 @@
       "trace": "I1",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:91",
-      "note": "CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": ""
     },
     {
       "row": "FM: state too large to restore -> {\"\",\"\"; null; RESTORE}; next run fine",
@@ -182,7 +182,7 @@
       "trace": "I1",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:115",
-      "note": "own mutant (holdsState never cleared after guest start, child/main.ts:300) survives: a solo RSS crossing during the guest run would read RESTORE; advisory | CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": "own mutant (holdsState never cleared after guest start, child/main.ts:300) survives: a solo RSS crossing during the guest run would read RESTORE; advisory"
     },
     {
       "row": "FM: deadline during restore of a large state -> timeout; state unchanged; next run fine",
@@ -190,7 +190,7 @@
       "trace": "I1+I6",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:450",
-      "note": "CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": ""
     },
     {
       "row": "FM: guest-authored capture over cap / not bytes / throw / hang next to a neighbour -> stateRefused/timeout or kept; never rejection; neighbour exact; worker kept",
@@ -198,7 +198,7 @@
       "trace": "I1+I7",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:367",
-      "note": "own mutant (worker capture size check removed) killed; probe: real codec takes the refused/timeout branch for all four | CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": "own mutant (worker capture size check removed) killed; probe: real codec takes the refused/timeout branch for all four"
     },
     {
       "row": "FM: guest replaces intrinsics its capture uses -> exec resolves, sandbox goes on",
@@ -206,7 +206,7 @@
       "trace": "I1+I7",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:134",
-      "note": "CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": ""
     },
     {
       "row": "FM: hostile worker state frame for runCode call / oversized / twice -> protocol violation; state unchanged",
@@ -214,7 +214,7 @@
       "trace": "I7",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:227",
-      "note": "own mutant (second-frame check removed) killed | CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": "own mutant (second-frame check removed) killed"
     },
     {
       "row": "FM: hostile worker corrupt state bytes under cap -> stateRefused ERR_FS_SNAPSHOT_CORRUPT",
@@ -222,7 +222,7 @@
       "trace": "I7",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:251",
-      "note": "CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": ""
     },
     {
       "row": "FM: createSandbox({snapshot}) corrupt / over maxFsBytes -> codec code",
@@ -230,7 +230,7 @@
       "trace": "I9+I7",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:474",
-      "note": "CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": ""
     },
     {
       "row": "FM: destroy during a run -> rejects DESTROYED; isolate disposed (memory given back)",
@@ -238,7 +238,7 @@
       "trace": "I5",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:316",
-      "note": "plus light-run carrier (sandbox-faults.test.ts:870): own mutant (no release at the terminal frame) killed | CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": "plus light-run carrier (sandbox-faults.test.ts:870): own mutant (no release at the terminal frame) killed"
     },
     {
       "row": "FM: run past timeoutMs -> timeout; isolate disposed",
@@ -246,7 +246,7 @@
       "trace": "I6",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:327",
-      "note": "CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": ""
     },
     {
       "row": "FM: queued run deadline counted from leaving the queue",
@@ -254,7 +254,7 @@
       "trace": "I6",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:335",
-      "note": "CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": ""
     },
     {
       "row": "FM: spinning run in sandbox A x run in B -> B first",
@@ -262,7 +262,7 @@
       "trace": "ADR-0568",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:497",
-      "note": "CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": ""
     },
     {
       "row": "FM: name over 16383 code units: host op ENAMETOOLONG; guest-made -> stateRefused CAPTURE (re-cut 2026-11-23), state of before",
@@ -270,7 +270,7 @@
       "trace": "I6+I7",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:522",
-      "note": "row re-cut at core.md:74 matches the carrier | CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": "row re-cut at core.md:74 matches the carrier"
     },
     {
       "row": "FM: state bytes worker -> isolate as exact copy, never a view of a larger buffer",
@@ -278,7 +278,7 @@
       "trace": "I7",
       "status": "pass",
       "citation": "packages/isolate-host/tests/protocol.test.ts:256",
-      "note": "CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": ""
     },
     {
       "row": "Carrier FM: run killed (timeout, heap, catastrophic OOM) x state -> state of before",
@@ -286,7 +286,7 @@
       "trace": "I1",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:140",
-      "note": "own mutant (stateWork never cleared after restore) killed | CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": "own mutant (stateWork never cleared after restore) killed"
     },
     {
       "row": "Carrier FM: host op / run issued unawaited -> call order, one at a time",
@@ -294,7 +294,7 @@
       "trace": "I4",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:212",
-      "note": "CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": ""
     },
     {
       "row": "Carrier FM: model-chosen path (NUL, .., special, deep) x host op -> sandbox paths only",
@@ -302,7 +302,7 @@
       "trace": "I3+I7",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:549",
-      "note": "CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": ""
     },
     {
       "row": "Public API createSandbox(options) + Sandbox.writeFile/readFile/list/remove (bytes exact; README \"readFile ... (a copy)\")",
@@ -310,7 +310,7 @@
       "trace": "I3+ADR-0568",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:563",
-      "note": "CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": ""
     },
     {
       "row": "Public API Sandbox.exec -> RunCodeResult + stateRefused",
@@ -318,7 +318,7 @@
       "trace": "I1+I2+ADR-0568",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:422",
-      "note": "CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": ""
     },
     {
       "row": "Public API Sandbox.snapshot/destroy",
@@ -326,7 +326,7 @@
       "trace": "I5+I9",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:278",
-      "note": "CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": ""
     },
     {
       "row": "Guest contract GuestEntry.runFile(path,args), GUEST_DIRS export",
@@ -334,7 +334,7 @@
       "trace": "ADR-0558+ADR-0568",
       "status": "pass",
       "citation": "packages/isolate-guest/tests/embedder.test.ts:186",
-      "note": "CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": ""
     },
     {
       "row": "runtime-js fs.symlink/symlinkSync/link/linkSync + promises named loud",
@@ -342,7 +342,7 @@
       "trace": "ADR-0443",
       "status": "pass",
       "citation": "packages/runtime-js/src/builtins/loud-members.test.ts:48",
-      "note": "CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": ""
     },
     {
       "row": "Frozen artifact: typescript-worker.js sha re-pin in esbuild-legacy-retirement inventory",
@@ -350,7 +350,7 @@
       "trace": "ADR-0391",
       "status": "pass",
       "citation": "tools/checks/esbuild-legacy-retirement.mjs:105",
-      "note": "reviewer rebuilt workbench at c505b857f in scratch: check passes with the new sha; criterion unchanged (PR-4) | CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": "reviewer rebuilt workbench at c505b857f in scratch: check passes with the new sha; criterion unchanged (PR-4)"
     },
     {
       "row": "Re-cut row: an isolate too small for the runtime itself (limit 8) ends as memory, as runCode",
@@ -358,7 +358,7 @@
       "trace": "I1+ADR-0557",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:548",
-      "note": "probe: 8 and 12 MiB -> memory for both runCode and exec | CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": "probe: 8 and 12 MiB -> memory for both runCode and exec"
     },
     {
       "row": "Re-cut row: sandbox run ending without its state frame -> protocol violation; state unchanged",
@@ -366,7 +366,7 @@
       "trace": "I7+ADR-0563",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:237",
-      "note": "CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": ""
     },
     {
       "row": "Re-cut row: refused host write into new nested directories leaves none of them",
@@ -374,7 +374,7 @@
       "trace": "I6+I3",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:536",
-      "note": "CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": ""
     },
     {
       "row": "Corpus row: an extra closing brace is a SyntaxError: exit 1, stdout equal to node (no line runs), stderr names the file",
@@ -382,7 +382,7 @@
       "trace": "I2",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:413",
-      "note": "CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": ""
     },
     {
       "row": "FM re-cut: restore at the memory boundary -> all files or no guest code (RESTORE/memory); state intact",
@@ -390,7 +390,7 @@
       "trace": "I1",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:582",
-      "note": "CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": ""
     },
     {
       "row": "FM re-cut: guest NaN/Infinity times or NUL name -> throws as Node, nothing unrestorable written",
@@ -398,7 +398,7 @@
       "trace": "I1+I2",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:425",
-      "note": "own mutant (NUL check removed in fs-path.ts) killed | CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": "own mutant (NUL check removed in fs-path.ts) killed"
     },
     {
       "row": "FM re-cut: snapshot bytes in/out never aliased",
@@ -406,7 +406,7 @@
       "trace": "I3",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:618",
-      "note": "own mutant (copyOf identity) killed | CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": "own mutant (copyOf identity) killed"
     },
     {
       "row": "FM re-cut: guest error text from a broken capture never crosses",
@@ -414,7 +414,7 @@
       "trace": "I7",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:368",
-      "note": "CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": ""
     },
     {
       "row": "FM re-cut: worker ends a sandbox run itself (import() gap via vm, plain and in a timer) -> run result + CAPTURE, never a violation, neighbour exact",
@@ -422,7 +422,7 @@
       "trace": "I1+I7",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:656",
-      "note": "own mutant (no state fate in the terminal) killed | CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": "own mutant (no state fate in the terminal) killed"
     },
     {
       "row": "FM re-cut: pooled Buffer / offset view / readFile / snapshot() -> exact copies",
@@ -430,7 +430,7 @@
       "trace": "I3",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:676",
-      "note": "own mutant (copyOf identity) killed | CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": "own mutant (copyOf identity) killed"
     },
     {
       "row": "FM re-cut: every host-op refusal: fields and stack name only sandbox paths",
@@ -438,7 +438,7 @@
       "trace": "I7",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:705",
-      "note": "own mutant (bare() no-op) killed | CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": "own mutant (bare() no-op) killed"
     },
     {
       "row": "FM re-cut: result channel closes mid sandbox run -> lost worker, rerun once, then WORKER_LOST; state as before; neighbour exact once",
@@ -446,7 +446,7 @@
       "trace": "I1+I7",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:772",
-      "note": "#420 placement rule kept for every worker (pool.ts:430); own mutant dropping it killed by protocol.test.ts | CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": "#420 placement rule kept for every worker (pool.ts:430); own mutant dropping it killed by protocol.test.ts"
     },
     {
       "row": "FM re-cut: runCode hardening/options through exec, 1 MiB round trip, dropped sandbox",
@@ -454,7 +454,7 @@
       "trace": "I3+I6",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:801",
-      "note": "CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": ""
     },
     {
       "row": "FM re-cut: destroy of a light run on a shared worker resolves at the terminal frame; worker and neighbour stay",
@@ -462,7 +462,7 @@
       "trace": "I5",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:869",
-      "note": "own mutant (no release at the terminal frame) killed | CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": "own mutant (no release at the terminal frame) killed"
     },
     {
       "row": "FM re-cut: destroy after a timed-out run whose isolate is still stopping resolves once it left its worker",
@@ -470,7 +470,7 @@
       "trace": "I5",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:895",
-      "note": "own mutant (destroy ignores #leaving) killed | CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": "own mutant (destroy ignores #leaving) killed"
     },
     {
       "row": "FM re-cut: the operation queue keeps no result",
@@ -478,7 +478,7 @@
       "trace": "I6",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:910",
-      "note": "CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": ""
     },
     {
       "row": "FM re-cut: a refused overwrite past the cap leaves the old bytes",
@@ -486,7 +486,7 @@
       "trace": "I3+I6",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:922",
-      "note": "CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": ""
     },
     {
       "row": "FM re-cut: input bytes are the bytes at the call",
@@ -494,7 +494,7 @@
       "trace": "I3",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:935",
-      "note": "own mutant killed | CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": "own mutant killed"
     },
     {
       "row": "FM re-cut: unknown option names of createSandbox/exec -> ERR_INVALID_ARG_VALUE; no own enumerable state",
@@ -502,15 +502,15 @@
       "trace": "I8",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:956",
-      "note": "probe: JSON.stringify(sb) === \"{}\", timeoutMS -> ERR_INVALID_ARG_VALUE | CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": "probe: JSON.stringify(sb) === \"{}\", timeoutMS -> ERR_INVALID_ARG_VALUE"
     },
     {
       "row": "Rerun of a lost sandbox call re-encodes the unchanged state per attempt; request line streamed in base64 pieces (ADR-0568 §6, ADR-0563 §6)",
       "source": "fault-matrix",
       "trace": "I1",
       "status": "pass",
-      "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:604",
-      "note": "own mutants killed: empty state on the second attempt (row 13 + lost twice); chunk step not a multiple of 3 (3 large-state rows) | CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:706",
+      "note": "own mutants killed: empty state on the second attempt (row 13 + lost twice); chunk step not a multiple of 3 (3 large-state rows) | r21: citation rebuilt from HEAD b0c638d47 (was sandbox-acceptance.test.ts:604)."
     },
     {
       "row": "FM re-cut: destroy × every end of a run waits for the isolate (gone frame or worker end)",
@@ -518,7 +518,7 @@
       "trace": "I5",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-destroy-table.test.ts:190",
-      "note": "Correction of r9-r11: my Z3 (\"gone before unwind\") \"kill\" was the every-end refused-state row timing out (waitFor 20 s, the CI flake fixed in r11), not discrimination. Re-run at 9d3d8ca84 on the table: my T2 (terminal+gone in one write even when not unwound) KILLED 7 rows — memory x 0/2/3/after-await, catastrophic x 1/3, plus the slot test; memory x 1 and catastrophic x 0/2/after-await passed under it (timing-dependent per row). My T1 (left registered after the pool result, round-2 style) KILLED 7 rows (in flight, timeout x 0/2, memory x 0/2, catastrophic …). My Ra (worker end does not checkLeft) KILLED 16 rows (60 s hangs). | CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": "Correction of r9-r11: my Z3 (\"gone before unwind\") \"kill\" was the every-end refused-state row timing out (waitFor 20 s, the CI flake fixed in r11), not discrimination. Re-run at 9d3d8ca84 on the table: my T2 (terminal+gone in one write even when not unwound) KILLED 7 rows — memory x 0/2/3/after-await, catastrophic x 1/3, plus the slot test; memory x 1 and catastrophic x 0/2/after-await passed under it (timing-dependent per row). My T1 (left registered after the pool result, round-2 style) KILLED 7 rows (in flight, timeout x 0/2, memory x 0/2, catastrophic …). My Ra (worker end does not checkLeft) KILLED 16 rows (60 s hangs)."
     },
     {
       "row": "FM re-cut: a memory-reported call whose builtin still holds the isolate keeps its slot until gone",
@@ -526,7 +526,7 @@
       "trace": "I5",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:1034",
-      "note": "own mutant (placement by calls.size) killed | CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": "own mutant (placement by calls.size) killed"
     },
     {
       "row": "FM re-cut: maxFsBytes below an empty sandbox cost -> ERR_OUT_OF_RANGE",
@@ -534,7 +534,7 @@
       "trace": "I6",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:1055",
-      "note": "CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": ""
     },
     {
       "row": "FM re-cut: state fails to encode at placement -> call rejects, no phantom",
@@ -542,7 +542,7 @@
       "trace": "I5",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:1119",
-      "note": "CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": ""
     },
     {
       "row": "FM re-cut: exec/createSandbox inputs fixed at the call",
@@ -550,7 +550,7 @@
       "trace": "I3",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:1073",
-      "note": "CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": ""
     },
     {
       "row": "FM re-cut: destroy in flight leaves no hold on the run state",
@@ -558,7 +558,7 @@
       "trace": "I6",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:1101",
-      "note": "CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": ""
     },
     {
       "row": "FM re-cut: destroy between result and continuation -> DESTROYED",
@@ -566,7 +566,7 @@
       "trace": "I5",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:1152",
-      "note": "CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": ""
     },
     {
       "row": "ADR-0563 dated line 2026-11-23: a gone frame for an unknown id (or before its terminal frame) is a protocol violation",
@@ -574,7 +574,7 @@
       "trace": "ADR-0563",
       "status": "pass",
       "citation": "packages/isolate-host/tests/protocol.test.ts:44",
-      "note": "three hostile cases (before terminal, unknown id, twice); own mutant Z4 (any gone accepted) killed by all three; protocol.test.ts 37/37 | CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": "three hostile cases (before terminal, unknown id, twice); own mutant Z4 (any gone accepted) killed by all three; protocol.test.ts 37/37"
     },
     {
       "row": "FM re-cut: I5 table — every end (exit/timeout/memory/catastrophic/refused/lost) × destroy moment (0-3 microtasks after the result, after await, before start, in flight): no worker burns CPU after destroy returns",
@@ -582,7 +582,7 @@
       "trace": "I5",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-destroy-table.test.ts:190",
-      "note": "see the destroy × every end row for the mutant record | CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": "see the destroy × every end row for the mutant record"
     },
     {
       "row": "ADR-0563 line (round 3): a runCode request line that throws half-written rejects the call, no rerun",
@@ -590,7 +590,7 @@
       "trace": "ADR-0563",
       "status": "weak",
       "citation": "packages/isolate-host/src/pool.ts:325",
-      "note": "author T8 (write outside the try) survives: stdin.write of a string throws no injectable sync error; declared uncarried, not re-run by me | CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": "author T8 (write outside the try) survives: stdin.write of a string throws no injectable sync error; declared uncarried, not re-run by me"
     },
     {
       "row": "FM re-cut: a refused host write leaves the state as it was, times of the target and every existing directory above it included",
@@ -598,7 +598,7 @@
       "trace": "I3+I6",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:1174",
-      "note": "own mutant (times of the directories restored, the target excluded) KILLED; sandbox-faults + sandbox-acceptance 84/84 at bc906f21e | CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": "own mutant (times of the directories restored, the target excluded) KILLED; sandbox-faults + sandbox-acceptance 84/84 at bc906f21e"
     },
     {
       "row": "runtime-js node-entry: a MODULE_NOT_FOUND from a node <file> entry under the isolate fatal report prints Node's shape (err itself), the text stand-in only where the report is not installed",
@@ -606,7 +606,7 @@
       "trace": "I2",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:486",
-      "note": "\"missing module\" row compares the full report with Node; runtime-js unit 1027 pass (browser hosts: report not installed, stand-in path unchanged) | CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": "\"missing module\" row compares the full report with Node; runtime-js unit 1027 pass (browser hosts: report not installed, stand-in path unchanged)"
     },
     {
       "row": "Round 4: every operation whose promise has not settled when destroy() is called rejects DESTROYED (exec: every end × 0–3 microtasks after the pool result, after await) — outcome column decided by a microtask queued at the destroy call",
@@ -614,7 +614,7 @@
       "trace": "I5",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-destroy-table.test.ts:183",
-      "note": "CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": ""
     },
     {
       "row": "Round 4: writeFile/readFile/list/remove/snapshot × destroy 0–5 microtasks after the call → DESTROYED unless settled first",
@@ -622,7 +622,7 @@
       "trace": "I5",
       "status": "pass",
       "citation": "packages/isolate-host/tests/sandbox-destroy-table.test.ts:217",
-      "note": "CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": ""
     },
     {
       "row": "Scenario 10 / I8: README documents connection, API, limits (maxFileBytes, maxFsBytes vs memoryLimitMb), costs, consumer memory, gaps; packed consumer runs its sandbox snippet",
@@ -630,7 +630,7 @@
       "trace": "I8",
       "status": "pass",
       "citation": "packages/isolate-host/tests/packed-consumer.test.ts:57",
-      "note": "CLOSE @ b62da7f90: product/test code unchanged since 35fb53023 (packages diff = test header comments/describe titles only); citation line re-based (−1 after the header)."
+      "note": ""
     },
     {
       "row": "CLOSE 1: scenario 1–10 + I1–I9 executed end to end on the real scenario at the final tree",
@@ -645,16 +645,16 @@
       "source": "goal",
       "trace": "I2",
       "status": "pass",
-      "citation": "docs/adr/distribution/0568-run-guest-files-in-a-live-sandbox-whose-state-is-filesystem-bytes-held-by-the-consumer.md:279",
-      "note": "goal.md:157 @ 3eb6b744a (amend line) exported verbatim to ADR-0568 §Not the user's words; three ⚠️ rows docs/public/compat/isolate-host.md:67-69 with backlog owner+trigger"
+      "citation": "docs/adr/distribution/0568-run-guest-files-in-a-live-sandbox-whose-state-is-filesystem-bytes-held-by-the-consumer.md:345",
+      "note": "goal.md:157 @ 3eb6b744a (amend line) exported verbatim to ADR-0568 §Not the user's words; three ⚠️ rows docs/public/compat/isolate-host.md:67-69 with backlog owner+trigger | r21: citation rebuilt from HEAD b0c638d47 (was 0568-run-guest-files-in-a-live-sandbox-whose-state-is-filesystem-bytes-held-by-the-consumer.md:279)."
     },
     {
       "row": "CLOSE 3: invariants and scenario exported to ADR-0568 §Invariants and scenario; tests cite I#/scenario N there",
       "source": "goal",
       "trace": "ADR-0568",
       "status": "pass",
-      "citation": "docs/adr/distribution/0568-run-guest-files-in-a-live-sandbox-whose-state-is-filesystem-bytes-held-by-the-consumer.md:203",
-      "note": "I6 restores hardening (time, memory, output cap, no network) + dropped sandbox leaves nothing; I7 restores view-range clause (ADR-0568:241-250 @ 882621128); I2 feature list in compat:63"
+      "citation": "docs/adr/distribution/0568-run-guest-files-in-a-live-sandbox-whose-state-is-filesystem-bytes-held-by-the-consumer.md:208",
+      "note": "I6 restores hardening (time, memory, output cap, no network) + dropped sandbox leaves nothing; I7 restores view-range clause (ADR-0568:241-250 @ 882621128); I2 feature list in compat:63 | r21: citation rebuilt from HEAD b0c638d47 (was 0568-run-guest-files-in-a-live-sandbox-whose-state-is-filesystem-bytes-held-by-the-consumer.md:203)."
     },
     {
       "row": "CLOSE 4: goal dir + unit docs removed; no unresolved cite of the removed goal; backlog:check, refs:check, check:compat-drift",
@@ -663,6 +663,62 @@
       "status": "pass",
       "citation": "docs/adr/distribution/0567-snapshot-the-isolate-guest-filesystem-as-a-versioned-binary-blob.md:186",
       "note": "r20 @ 97d293020: git grep finds no cite of either removed goal (live-sandbox, fs-snapshot) that resolves nowhere; fs-snapshot goal/I# cites resolve to ADR-0567 §Goal invariants; backlog/refs/compat-drift exit 0 in scratch"
+    },
+    {
+      "row": "Observed defect (r20 CLOSE finding): a finite timer queued before an uncaught throw does not run after the run ended — exit 1, no output, no extra file, = live node <path>, 3 iterations",
+      "source": "acceptance",
+      "trace": "I2+ADR-0568",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:652",
+      "note": "RED on base (entry.ts @ 0d795a442): stdout \"ran\\n\"; GREEN at HEAD; F1 (fire ungated) and F2 (finish not recording the end) both killed."
+    },
+    {
+      "row": "Observed defect: an endless timer queued before an uncaught throw — exit 1 at once with the writes kept (was timeout + whole-run rollback)",
+      "source": "acceptance",
+      "trace": "I1+I2+ADR-0568",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:656",
+      "note": "RED on base: exitCode null, termination timeout; F1, F2 killed."
+    },
+    {
+      "row": "Observed defect: a 0 ms timer beside process.exit(3) never runs (file absent), 3 iterations",
+      "source": "acceptance",
+      "trace": "I2+ADR-0568",
+      "status": "weak",
+      "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:668",
+      "note": "Intermittent discriminator: passed on base in r21 and under F2, failed under F1 (red on base in the implementer's r22 run). Rows 1–4 carry the fix."
+    },
+    {
+      "row": "An interval queued before an uncaught throw never ticks (= live node, 3 iterations)",
+      "source": "acceptance",
+      "trace": "I2+ADR-0568",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:660",
+      "note": "Added at 2e042c83d; RED on base entry.ts (r22), GREEN at HEAD."
+    },
+    {
+      "row": "setImmediate queued before an uncaught throw never runs (= live node, 3 iterations)",
+      "source": "acceptance",
+      "trace": "I2+ADR-0568",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-acceptance.test.ts:664",
+      "note": "Added at 2e042c83d; RED on base entry.ts (r22), GREEN at HEAD."
+    },
+    {
+      "row": "Fault row: after an endless timer queued before a throw the same worker serves the next runCode exactly (no stuck isolate)",
+      "source": "fault-matrix",
+      "trace": "ADR-0568+ADR-0563",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-faults.test.ts:1217",
+      "note": "RED on base: exitCode null/timeout; F1, F2 killed."
+    },
+    {
+      "row": "Regression guard (goal decision 'must not change'): runCode API, results, corpus parity vs live node -e, pool behaviour unchanged by the run phase gate",
+      "source": "acceptance",
+      "trace": "ADR-0557+ADR-0563",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/parity.test.ts:1",
+      "note": "isolate-host project 24 files / 813 tests green at b0c638d47 in r21; delta to 2e042c83d is docs + 2 test rows, product code identical; sandbox-acceptance+faults 94/94 at 2e042c83d (parity, guest-seam, pool, isolate-guest embedder included)."
     }
   ],
   "axes": [
@@ -672,9 +728,16 @@
       "findings": [
         {
           "severity": "nit",
-          "location": "docs/adr/distribution/0568-run-guest-files-in-a-live-sandbox-whose-state-is-filesystem-bytes-held-by-the-consumer.md:279",
-          "evidence": "git show 3eb6b744a:docs/backlog/epics/isolate-host-live-sandbox/goal.md:157",
-          "summary": "The only prior CLOSE blocker (I2 gate) is resolved by the user's recorded amend (RDY-6): question quoted, «ок» verbatim, reading labeled the manager's; compat :67-69 keep the three ⚠️.",
+          "location": "docs/adr/distribution/0568-run-guest-files-in-a-live-sandbox-whose-state-is-filesystem-bytes-held-by-the-consumer.md:345",
+          "evidence": "git show 2bff8d26c:docs/backlog/epics/isolate-host-live-sandbox/goal.md (amend lines)",
+          "summary": "Both user answers verbatim in goal amend and ADR §Not the user's words, readings labelled the manager's; §User scenario/§Invariants identical to goal.md @ 2bff8d26c.",
+          "authority": ""
+        },
+        {
+          "severity": "nit",
+          "location": "docs/backlog/distribution/reference/isolate-host-sandbox-lifecycle-class.md:15",
+          "evidence": "probe @ 2e042c83d (Node v24.16.0): 23 rows; new 4 rows = table (1, a,q / runCode 0; timeout both; interval, setImmediate as Node)",
+          "summary": "Table re-measured; the one status difference (sandbox 1 = Node, runCode 0) is stated; premise «те же, что у runCode» holds (sandbox never worse than runCode).",
           "authority": ""
         }
       ]
@@ -685,16 +748,16 @@
       "findings": [
         {
           "severity": "nit",
-          "location": "docs/adr/distribution/0568-run-guest-files-in-a-live-sandbox-whose-state-is-filesystem-bytes-held-by-the-consumer.md:241",
-          "evidence": "",
-          "summary": "r18 concern fixed: exported I6/I7 hold the goal clauses the carriers cite (hardening, dropped sandbox, bridge view range).",
+          "location": "docs/public/compat/isolate-host.md:41",
+          "evidence": "runCode(\"setTimeout(() => { throw new Error('x') }, 0); setTimeout(() => process.exit(0), 0)\") @ 2e042c83d dist → {stdout:'',stderr:'',exitCode:0}; with console.log('second') in the 2nd timer → stdout 'second\\n', stderr ''. Node -e and node p.js: 1 with the report. Backlog runtime-js/node-eval-queued-exit-overrides-pending-fatal.md:16-17 records the same {stderr:''}.",
+          "summary": "r21/r22 blocker fixed at ccff9c18b: row 41 now says the same-turn timer's exit(0) reads as a clean {exitCode: 0, stderr: ''} with its output printed (Node 1 with the report), sandbox 1 with writes kept, endless → timeout; only still-pending timers 'do not run'.",
           "authority": ""
         },
         {
           "severity": "nit",
-          "location": "docs/adr/distribution/0568-run-guest-files-in-a-live-sandbox-whose-state-is-filesystem-bytes-held-by-the-consumer.md:302",
+          "location": "docs/adr/distribution/0568-run-guest-files-in-a-live-sandbox-whose-state-is-filesystem-bytes-held-by-the-consumer.md:387",
           "evidence": "",
-          "summary": "Merge coherent: main's §Corrections (231 MiB at :261 superseded by ADR-0567 §7) sits after our §Invariants export; one Corrections section.",
+          "summary": "r21 concern fixed: §Corrections now states the terminal moment (exit() / fatal in a callback, same-turn callbacks still run, output dropped; entry sync fatal records none) apart from the fire gate (status out).",
           "authority": ""
         }
       ]
@@ -705,9 +768,9 @@
       "findings": [
         {
           "severity": "nit",
-          "location": "docs/ROADMAP.md:168",
+          "location": "docs/adr/distribution/0568-run-guest-files-in-a-live-sandbox-whose-state-is-filesystem-bytes-held-by-the-consumer.md:364",
           "evidence": "",
-          "summary": "\"accepted by the user\" rests on «ок» plus the manager's reading; the ADR labels it so, ROADMAP is shorthand. Destroy wording matches README:142 and ADR-0568 §5.",
+          "summary": "The fix removes sandbox-own outcomes only; the accepted class «где runCode» is not widened; the one status difference favours the sandbox (Node's 1).",
           "authority": ""
         }
       ]
@@ -715,27 +778,20 @@
     {
       "axis": "Approach cost",
       "verdict": "pass",
-      "findings": []
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "packages/isolate-guest/src/guest/entry.ts:234",
+          "evidence": "",
+          "summary": "REV-7 holds: one phase 'running'|'natural'|'ended', three readers (sink, uncaught handler, fire), no second flag; entry.ts identical b0c638d47..2e042c83d.",
+          "authority": ""
+        }
+      ]
     },
     {
       "axis": "Scope",
       "verdict": "pass",
-      "findings": [
-        {
-          "severity": "nit",
-          "location": "docs/backlog/distribution/isolate-host-sandbox-killed-run-partial-writes.md:21",
-          "evidence": "",
-          "summary": "r18 concern fixed: owner + trigger on killed-run-partial-writes, write-cost-per-state, binary-request-frame, uncarried-mechanisms; flaky precondition recorded as distribution/isolate-host-timed-out-destroy-test-precondition (owner + trigger).",
-          "authority": ""
-        },
-        {
-          "severity": "nit",
-          "location": "packages/isolate-host/tests/lifecycle.test.ts:2",
-          "evidence": "",
-          "summary": "Pre-existing cites of other closed goals (lifecycle.test.ts:2 \"Fault matrix rows of distribution/isolate-host-acceptance\", guest-seam.test.ts:4 \"Acceptance 16\") resolve nowhere; not this goal's, outside this PR.",
-          "authority": ""
-        }
-      ]
+      "findings": []
     },
     {
       "axis": "Bugs",
@@ -743,9 +799,9 @@
       "findings": [
         {
           "severity": "nit",
-          "location": "packages/isolate-host/src/sandbox.ts:266",
-          "evidence": "",
-          "summary": "No product change since 35fb53023 (git diff 35fb53023..b62da7f90 -- packages/: test comments/titles only); prior executed evidence stands.",
+          "location": "packages/isolate-host/tests/sandbox-acceptance.test.ts:660",
+          "evidence": "RED @ 2e042c83d with entry.ts of 0d795a442: rows 652/656/660/664 red, 668 green (intermittent); GREEN 94/94",
+          "summary": "r21 carrier concern fixed: setInterval and setImmediate rows discriminate.",
           "authority": ""
         }
       ]
@@ -755,10 +811,10 @@
       "verdict": "pass",
       "findings": [
         {
-          "severity": "nit",
-          "location": "packages/isolate-host/tests/sandbox-faults.test.ts:901",
-          "evidence": "scratch @ 882621128: 1/1 x2, 146/146",
-          "summary": "r18 concern addressed: 5e6 doubles, timeoutMs 4000, memoryLimitMb 768; passed 2/2 alone and in the 3-file run at load ~13; residual timing dependence owned by the new backlog record.",
+          "severity": "concern",
+          "location": "tools/node-parity-runner/src/cli.ts:87",
+          "evidence": "pnpm test:parity worker_threads/exec-argv-startup alone: ✓; runner has no isolate-guest import",
+          "summary": "Implementer's single test:parity red is unrelated; CI full gate at HEAD decides (PR-6).",
           "authority": ""
         }
       ]
@@ -766,7 +822,15 @@
     {
       "axis": "Ecosystem UX",
       "verdict": "pass",
-      "findings": []
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "packages/isolate-guest/README.md:159",
+          "evidence": "",
+          "summary": "r21 concern fixed: README and both CHANGELOGs limited to work still pending when the status is out.",
+          "authority": ""
+        }
+      ]
     }
   ]
 }
