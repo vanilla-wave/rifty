@@ -89,7 +89,12 @@ const DIST_INDEX = new URL('../dist/index.js', import.meta.url).href;
  */
 export async function consumer(
   body: string,
-  { entry = DIST_INDEX, naturalExit = false, timeoutMs = 60_000 } = {},
+  {
+    entry = DIST_INDEX,
+    naturalExit = false,
+    timeoutMs = 60_000,
+    flags = [] as readonly string[],
+  } = {},
 ): Promise<{ value: unknown; exitCode: number | null; signal: string | null; ms: number }> {
   const script = `import { execFileSync } from 'node:child_process';
     import { readFileSync } from 'node:fs';
@@ -112,7 +117,7 @@ export async function consumer(
     catch (e) { out({ harnessError: String(e && e.stack || e) }); }
     ${naturalExit ? '' : 'process.exit(0);'}`;
   const started = Date.now();
-  const child = spawn(process.execPath, ['--input-type=module', '-e', script], {
+  const child = spawn(process.execPath, [...flags, '--input-type=module', '-e', script], {
     stdio: ['ignore', 'pipe', 'inherit'],
   });
   let stdout = '';

@@ -26,3 +26,7 @@ Node v24.16.0's file translator itself raises `ERR_INTERNAL_ASSERTION` when a
 failed `require()` has scheduled a self-import. Rifty's directed
 `NotImplementedError('module-loader.cjs-import-job-failed-require')` remains a
 separate loader ceiling; this cache facade cannot relabel or silently bypass it.
+
+## Observed 2026-11-23
+
+In a `node <file>` run of the isolate sandbox (PR #419 external review): `typeof require.cache[__filename]` is `'undefined'` (Node v24.16.0: `'object'`).

@@ -102,6 +102,12 @@ view's whole backing buffer; rifty's program entry has diagnostic gaps and no
    order with the intake of a run's state. `maxFsBytes` is in the codec's
    budget units (ADR-0567), and a run needs `memoryLimitMb` ≥ 2 × it + 16 MiB:
    the defaults 64 / 256 hold.
+   The consumer's memory per concurrent run: ≈ 4 × S + 8 MiB (heap +
+   ArrayBuffers) for a state of S — the old FS, the encoded state (encoded again
+   for a rerun, never kept by the call), its base64 written in pieces, the end
+   state and the new FS until the swap (measured 2026-11-23: 6.7 S before those
+   cuts); between operations a sandbox holds its FS (~400 B per entry plus its
+   bytes). The README turns this into the service's cgroup rule.
    The capture is asked for up to the run's isolate memory so the trusted side
    can measure an over-cap state: a refused capture may cost the worker up to
    `memoryLimitMb` of copy (default 256 MiB, ~4 × the default cap), bounded and

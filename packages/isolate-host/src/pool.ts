@@ -44,7 +44,12 @@ export interface CallSpec {
   readonly timeoutMs: number;
   readonly memoryLimitMb: number;
   readonly maxOutputBytes: number;
-  readonly sandbox?: SandboxRun;
+  /**
+   * A sandbox run. `state()` encodes the state again for each attempt (the sandbox's
+   * files do not change while its run is in flight), so the call holds no copy of it
+   * between writes; on the wire its base64 is written in pieces.
+   */
+  readonly sandbox?: Omit<SandboxRun, 'state'> & { readonly state: () => Uint8Array };
 }
 
 /** Accepted output, copied into one growable buffer: never a view into a received chunk. */
@@ -255,7 +260,7 @@ class Worker {
   place(call: Call): void {
     call.worker = this;
     this.calls.set(call.id, call);
-    const { code, memoryLimitMb, maxOutputBytes } = call.spec;
+    const { code, memoryLimitMb, maxOutputBytes, sandbox } = call.spec;
     const request: RunRequest = {
       type: 'run',
       allowSharedArrayBuffer: call.spec.allowSharedArrayBuffer,
@@ -264,9 +269,39 @@ class Worker {
       memoryLimitMb,
       maxOutputBytes,
       ...(this.solo ? { solo: true as const } : {}),
-      ...(call.spec.sandbox ? { sandbox: call.spec.sandbox } : {}),
+      // `state` last and empty: its base64 is streamed into the line below.
+      ...(sandbox
+        ? {
+            sandbox: {
+              path: sandbox.path,
+              args: sandbox.args,
+              maxFsBytes: sandbox.maxFsBytes,
+              state: '',
+            },
+          }
+        : {}),
     };
-    this.send(request);
+    if (sandbox === undefined) {
+      this.send(request);
+      return;
+    }
+    // The same JSON line, written in pieces: the state's base64 never becomes one string
+    // (the consumer's memory per run, ADR-0568 §6).
+    const line = JSON.stringify(request);
+    const at = line.lastIndexOf('""}}');
+    const stdin = this.child.stdin;
+    stdin?.write(line.slice(0, at + 1));
+    const state = sandbox.state();
+    const step = 3 << 20; // a multiple of 3: the pieces join into one base64 text
+    for (let from = 0; from < state.byteLength; from += step)
+      stdin?.write(
+        Buffer.from(
+          state.buffer,
+          state.byteOffset + from,
+          Math.min(step, state.byteLength - from),
+        ).toString('base64'),
+      );
+    stdin?.write('"}}\n');
   }
 
   kill(): void {
@@ -383,6 +418,12 @@ class Worker {
   }
 }
 
+/** A sandbox's hold on one of its calls (ADR-0568 §5). */
+export interface CallHandle {
+  abort(error: Error): Promise<void>;
+  left(): Promise<void>;
+}
+
 let shared: Pool | undefined;
 /** One pool per consumer process, created by the first call (`runCode` and sandbox runs). */
 export function sharedPool(): Pool {
@@ -395,19 +436,25 @@ export class Pool {
   #nextId = 1;
 
   /**
-   * `abort(error)` (a destroyed sandbox): reject with `error` now and dispose
-   * the isolate as at a deadline; resolves once the call has left its worker.
+   * `handle.abort(error)` (a destroyed sandbox): reject with `error` now and
+   * dispose the isolate as at a deadline. `handle.left()`: resolves once the
+   * call has left its worker — its isolate is gone — whether or not its result
+   * is already out (a timed-out isolate may still be stopping).
    */
-  run(spec: CallSpec, onAbort?: (abort: (error: Error) => Promise<void>) => void): Promise<Result> {
+  run(spec: CallSpec, onStart?: (handle: CallHandle) => void): Promise<Result> {
     return new Promise<Result>((resolve, reject) => {
       const id = this.#nextId;
       this.#nextId = id === MAX_CALL_ID ? 1 : id + 1;
       const call = new Call(id, spec, resolve, reject, (c) => this.#deadline(c));
-      onAbort?.((error) => {
-        call.rejectWith(error);
-        const worker = call.worker;
-        this.#cancel(call);
-        return worker === undefined ? Promise.resolve() : worker.released(call.id);
+      const left = (): Promise<void> => call.worker?.released(call.id) ?? Promise.resolve();
+      onStart?.({
+        abort: (error) => {
+          call.rejectWith(error);
+          const gone = left();
+          this.#cancel(call);
+          return gone;
+        },
+        left,
       });
       call.restart();
       try {

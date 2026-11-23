@@ -1,4 +1,4 @@
-import { sharedPool } from './pool.ts';
+import { type CallHandle, sharedPool } from './pool.ts';
 /**
  * A live sandbox (ADR-0568): between operations its files are rifty's
  * in-memory FS in this realm, decoded from snapshot bytes (ADR-0567); a run is
@@ -179,51 +179,101 @@ const isCodec = (error: unknown): error is { code: string } =>
   typeof (error as { code?: unknown })?.code === 'string' &&
   (error as { code: string }).code.startsWith('ERR_FS_SNAPSHOT_');
 
+/** The options each entry point knows; any other name is a loud refusal (ADR-0568 §1). */
+const SANDBOX_OPTIONS = new Set(['snapshot', 'maxFileBytes', 'maxFsBytes', 'template']);
+const EXEC_OPTIONS = new Set([
+  'args',
+  'timeoutMs',
+  'memoryLimitMb',
+  'maxOutputBytes',
+  'allowSharedArrayBuffer',
+  'env',
+  'cwd',
+  'stdin',
+]);
+
+function knownOptions(options: object, known: Set<string>, where: string): void {
+  for (const name of Object.keys(options)) {
+    if (!known.has(name))
+      throw coded(
+        new TypeError(`The option '${name}' is not an option of ${where}`),
+        'ERR_INVALID_ARG_VALUE',
+      );
+  }
+}
+
+/**
+ * The bytes of a host write as they are at the call: an exact copy (a `Buffer`
+ * slice would share memory), its size checked first so a refused input costs
+ * no copy.
+ */
+function inputBytes(data: unknown, maxFileBytes: number): Uint8Array {
+  if (typeof data !== 'string' && !(data instanceof Uint8Array))
+    throw coded(
+      new TypeError('The "data" argument must be a string or a Uint8Array'),
+      'ERR_INVALID_ARG_TYPE',
+    );
+  const size = typeof data === 'string' ? Buffer.byteLength(data) : data.byteLength;
+  if (size > maxFileBytes) throw tooLarge(size, maxFileBytes);
+  return typeof data === 'string' ? new TextEncoder().encode(data) : copyOf(data);
+}
+
+const settle = (): void => {};
+
 class LiveSandbox implements Sandbox {
-  #fs: Fs | undefined;
+  /**
+   * The state, boxed: `destroy` drops the box, so a run that finishes after it
+   * writes into a box nothing references any more — no state comes back.
+   */
+  #box: { fs: Fs } | undefined;
   #tail: Promise<unknown> = Promise.resolve();
-  #abort: ((error: Error) => Promise<void>) | undefined;
+  #run: CallHandle | undefined;
+  /** Calls whose isolate may still be on its worker (a timed-out one keeps running a while). */
+  readonly #leaving = new Set<Promise<void>>();
   #ended: Promise<void> = Promise.resolve();
   #destroyed = false;
+  readonly #codec: Codec;
+  readonly #maxFileBytes: number;
   readonly #options: SnapshotOptions;
 
-  constructor(
-    private readonly codec: Codec,
-    fs: Fs,
-    readonly maxFileBytes: number,
-    maxFsBytes: number,
-  ) {
-    this.#fs = fs;
+  constructor(codec: Codec, fs: Fs, maxFileBytes: number, maxFsBytes: number) {
+    this.#codec = codec;
+    this.#box = { fs };
+    this.#maxFileBytes = maxFileBytes;
     this.#options = { template: null, maxBytes: maxFsBytes };
   }
 
-  /** One operation, after every earlier one (ADR-0568 §4). */
-  #op<T>(fn: (fs: Fs) => T | Promise<T>): Promise<T> {
+  /** One operation, after every earlier one (ADR-0568 §4). The queue keeps no result. */
+  #op<T>(fn: (box: { fs: Fs }) => T | Promise<T>): Promise<T> {
     const next = this.#tail
       .then(() => {
-        if (this.#fs === undefined || this.#destroyed) throw destroyedError();
-        return fn(this.#fs);
+        if (this.#box === undefined || this.#destroyed) throw destroyedError();
+        return fn(this.#box);
       })
       .catch((error: unknown) => {
         throw bare(error);
       });
-    this.#tail = next.catch(() => {});
+    this.#tail = next.then(settle, settle);
     return next;
   }
 
+  /** An op whose input failed validation at the call: it rejects in its turn. */
+  #refused(error: unknown): Promise<never> {
+    return this.#op(() => {
+      throw error;
+    });
+  }
+
   writeFile(path: string, data: Uint8Array | string): Promise<void> {
-    return this.#op((fs) => {
+    let bytes: Uint8Array;
+    try {
+      // The bytes at the call, not when the op reaches its turn.
+      bytes = inputBytes(data, this.#maxFileBytes);
+    } catch (error) {
+      return this.#refused(error);
+    }
+    return this.#op(({ fs }) => {
       const target = opPath(path, 'open');
-      if (typeof data !== 'string' && !(data instanceof Uint8Array))
-        throw coded(
-          new TypeError('The "data" argument must be a string or a Uint8Array'),
-          'ERR_INVALID_ARG_TYPE',
-        );
-      // The size first (a refused input costs no copy), then an exact copy: the caller's
-      // buffer may change after the call.
-      const size = typeof data === 'string' ? Buffer.byteLength(data) : data.byteLength;
-      if (size > this.maxFileBytes) throw tooLarge(size, this.maxFileBytes);
-      const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : copyOf(data);
       const parent = target.slice(0, target.lastIndexOf('/')) || '/';
       const previous =
         fs.existsSync(target) && fs.statSync(target).isFile
@@ -233,7 +283,7 @@ class LiveSandbox implements Sandbox {
       vfs('mkdir', parent, () => fs.mkdirSync(parent, { recursive: true }));
       vfs('open', target, () => fs.writeFileSync(target, bytes));
       try {
-        this.codec.snapshotFs(fs, this.#options);
+        this.#codec.snapshotFs(fs, this.#options);
       } catch (error) {
         // Over the state cap: undo, then refuse.
         if (previous === undefined) fs.rmSync(target, { force: true });
@@ -252,17 +302,17 @@ class LiveSandbox implements Sandbox {
   }
 
   readFile(path: string): Promise<Uint8Array> {
-    return this.#op((fs) => {
+    return this.#op(({ fs }) => {
       const target = opPath(path, 'open');
       const stat = vfs('open', target, () => fs.statSync(target));
       if (stat.isDirectory) throw fsError('EISDIR', 'read', target);
-      if ((stat.size ?? 0) > this.maxFileBytes) throw tooLarge(stat.size ?? 0, this.maxFileBytes);
+      if ((stat.size ?? 0) > this.#maxFileBytes) throw tooLarge(stat.size ?? 0, this.#maxFileBytes);
       return copyOf(vfs('open', target, () => fs.readFileBytesSync(target)));
     });
   }
 
   list(path: string = WORKSPACE): Promise<SandboxEntry[]> {
-    return this.#op((fs) => {
+    return this.#op(({ fs }) => {
       const dir = opPath(path, 'scandir');
       const entries = vfs('scandir', dir, () => fs.readdirSync(dir));
       return entries
@@ -276,7 +326,7 @@ class LiveSandbox implements Sandbox {
   }
 
   remove(path: string): Promise<void> {
-    return this.#op((fs) => {
+    return this.#op(({ fs }) => {
       const target = opPath(path, 'rm');
       if (!fs.existsSync(target)) throw fsError('ENOENT', 'rm', target);
       vfs('rm', target, () => fs.rmSync(target, { recursive: true }));
@@ -284,7 +334,8 @@ class LiveSandbox implements Sandbox {
   }
 
   exec(path: string, options: ExecOptions = {}): Promise<ExecResult> {
-    return this.#op(async (fs) => {
+    return this.#op(async (box) => {
+      knownOptions(options, EXEC_OPTIONS, 'exec');
       for (const option of ['env', 'cwd', 'stdin'] as const) {
         if (option in options)
           throw notImplemented(
@@ -300,52 +351,57 @@ class LiveSandbox implements Sandbox {
           'ERR_INVALID_ARG_TYPE',
         );
       const limits = runLimits(options);
-      const state = this.codec.snapshotFs(fs, this.#options);
+      // Encoded per attempt (a rerun encodes the same files again): the call keeps no copy.
+      const fs = box.fs;
+      const state = (): Uint8Array => this.#codec.snapshotFs(fs, this.#options);
+      let handle: CallHandle | undefined;
       const result = await sharedPool().run(
         {
           code: '',
           ...limits,
-          sandbox: {
-            path: entry,
-            args: [...args],
-            state: Buffer.from(state.buffer, state.byteOffset, state.byteLength).toString('base64'),
-            maxFsBytes: this.#options.maxBytes,
-          },
+          sandbox: { path: entry, args: [...args], state, maxFsBytes: this.#options.maxBytes },
         },
-        (abort) => {
-          this.#abort = abort;
+        (h) => {
+          handle = h;
+          this.#run = h;
         },
       );
-      this.#abort = undefined;
-      if (this.#destroyed) throw destroyedError();
+      this.#run = undefined;
+      // A timed-out isolate may still be stopping: destroy waits for it to leave its worker.
+      if (handle !== undefined) {
+        const gone = handle.left();
+        this.#leaving.add(gone);
+        void gone.then(() => this.#leaving.delete(gone));
+      }
       const { state: end, stateRefused, ...run } = result;
       if (stateRefused !== undefined) return { ...run, stateRefused };
       // Killed (timeout, memory): the state of before the run (ADR-0568 §3).
       if (end === undefined || run.termination !== undefined) return run;
-      const next = new this.codec.MemoryFsSync();
+      const next = new this.#codec.MemoryFsSync();
       try {
         // The run's bytes are the guest's: they become state only through the codec's checks.
-        this.codec.restoreFs(next, end, this.#options);
+        this.#codec.restoreFs(next, end, this.#options);
       } catch (error) {
         return { ...run, stateRefused: isCodec(error) ? error.code : REFUSED[1] };
       }
-      this.#fs = next;
+      box.fs = next;
       return run;
     });
   }
 
   snapshot(): Promise<Uint8Array> {
-    return this.#op((fs) => copyOf(this.codec.snapshotFs(fs, this.#options)));
+    return this.#op(({ fs }) => copyOf(this.#codec.snapshotFs(fs, this.#options)));
   }
 
   destroy(): Promise<void> {
     if (!this.#destroyed) {
       this.#destroyed = true;
-      // Resolves once the run in flight has left its worker: its isolate is gone.
-      this.#ended = this.#abort?.(destroyedError()) ?? Promise.resolve();
-      this.#fs = undefined;
+      // The run in flight is cancelled; resolves once it has left its worker.
+      this.#ended = this.#run?.abort(destroyedError()) ?? Promise.resolve();
+      this.#box = undefined;
     }
-    return this.#tail.then(() => this.#ended);
+    // Every isolate of this sandbox gone, the cancelled one and any still stopping.
+    return this.#tail.then(() => Promise.all([this.#ended, ...this.#leaving])).then(settle);
   }
 }
 
@@ -375,33 +431,43 @@ function firstMissingDir(fs: Fs, dir: string): string | undefined {
 }
 
 export function createSandbox(options: SandboxOptions = {}): Promise<Sandbox> {
-  return open(options).catch((error: unknown) => {
+  let snapshot: Uint8Array | undefined;
+  try {
+    knownOptions(options, SANDBOX_OPTIONS, 'createSandbox');
+    if ('template' in options)
+      throw notImplemented(
+        'isolate-host.sandbox-template',
+        'a sandbox starts empty or from its own snapshot, ADR-0568',
+      );
+    const maxFsBytes = Math.floor(limit('maxFsBytes', options.maxFsBytes, 64 << 20, 0));
+    if (options.snapshot !== undefined) {
+      if (!(options.snapshot instanceof Uint8Array))
+        throw coded(
+          new TypeError('The "options.snapshot" property must be a Uint8Array'),
+          'ERR_INVALID_ARG_TYPE',
+        );
+      if (options.snapshot.byteLength > maxFsBytes)
+        throw coded(
+          new RangeError(`isolate-host sandbox: the snapshot is over maxFsBytes (${maxFsBytes})`),
+          'ERR_FS_SNAPSHOT_TOO_LARGE',
+        );
+      // The bytes at the call: the caller may change its buffer while the codec loads.
+      snapshot = copyOf(options.snapshot);
+    }
+  } catch (error) {
+    return Promise.reject(bare(error));
+  }
+  return open(options, snapshot).catch((error: unknown) => {
     throw bare(error);
   });
 }
 
-async function open(options: SandboxOptions): Promise<Sandbox> {
-  if ('template' in options)
-    throw notImplemented(
-      'isolate-host.sandbox-template',
-      'a sandbox starts empty or from its own snapshot, ADR-0568',
-    );
+async function open(options: SandboxOptions, snapshot: Uint8Array | undefined): Promise<Sandbox> {
   const maxFileBytes = Math.floor(limit('maxFileBytes', options.maxFileBytes, 32 << 20, 0));
   const maxFsBytes = Math.floor(limit('maxFsBytes', options.maxFsBytes, 64 << 20, 0));
   const c = await loadCodec();
   const fs = new c.MemoryFsSync();
-  if (options.snapshot !== undefined) {
-    if (!(options.snapshot instanceof Uint8Array))
-      throw coded(
-        new TypeError('The "options.snapshot" property must be a Uint8Array'),
-        'ERR_INVALID_ARG_TYPE',
-      );
-    if (options.snapshot.byteLength > maxFsBytes)
-      throw coded(
-        new RangeError(`isolate-host sandbox: the snapshot is over maxFsBytes (${maxFsBytes})`),
-        'ERR_FS_SNAPSHOT_TOO_LARGE',
-      );
-    c.restoreFs(fs, copyOf(options.snapshot), { template: null, maxBytes: maxFsBytes });
-  } else for (const dir of c.GUEST_DIRS) fs.mkdirSync(dir, { recursive: true });
+  if (snapshot !== undefined) c.restoreFs(fs, snapshot, { template: null, maxBytes: maxFsBytes });
+  else for (const dir of c.GUEST_DIRS) fs.mkdirSync(dir, { recursive: true });
   return new LiveSandbox(c, fs, maxFileBytes, maxFsBytes);
 }

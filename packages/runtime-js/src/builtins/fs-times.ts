@@ -9,19 +9,23 @@ import { syncMirror } from '@riftydev/vfs';
 const MAX_TIME_MS = 9223372036854.775;
 
 /**
- * Node's `toUnixTimestamp`: a Date is its time (NaN for an invalid one); a
- * numeric string coerces; a negative number is now; anything else
- * (NaN/Infinity/non-numeric string/null/…) is a loud ERR_INVALID_ARG_TYPE.
+ * Node's `toUnixTimestamp`, then libuv: a numeric string is its number as is
+ * (a negative one too; `''` is 0; an infinite one is now, libuv UTIME_NOW); a
+ * finite number is seconds, a negative one now; a Date is its time (NaN for an
+ * invalid one); anything else (NaN/Infinity numbers, other strings, null, …)
+ * is a loud ERR_INVALID_ARG_TYPE.
  */
 function toMs(t: number | string | Date): number {
   if (t instanceof Date) return t.getTime();
-  const n = typeof t === 'string' ? Number(t) : t;
-  if (typeof n !== 'number' || !Number.isFinite(n)) {
-    const e = new TypeError('The "time" argument must be of type number, string, or Date.');
-    (e as { code?: string }).code = 'ERR_INVALID_ARG_TYPE';
-    throw e;
+  // biome-ignore lint/suspicious/noDoubleEquals: Node's own test, `+time == time`.
+  if (typeof t === 'string' && +t == (t as unknown as number)) {
+    const n = +t;
+    return Number.isFinite(n) ? Math.floor(n * 1000) : Date.now();
   }
-  return n < 0 ? Date.now() : Math.floor(n * 1000);
+  if (typeof t === 'number' && Number.isFinite(t)) return t < 0 ? Date.now() : Math.floor(t * 1000);
+  const e = new TypeError('The "time" argument must be of type number, string, or Date.');
+  (e as { code?: string }).code = 'ERR_INVALID_ARG_TYPE';
+  throw e;
 }
 
 /** Validated before the path is touched, as Node validates arguments first. */

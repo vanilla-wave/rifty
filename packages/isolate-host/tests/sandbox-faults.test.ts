@@ -891,3 +891,83 @@ describe('destroy of a light run on a shared worker (Final+GREEN r2 concern)', (
     },
   );
 });
+
+describe('external review round 1 (manager 2026-11-23)', () => {
+  carrier('destroy after a timed-out run waits until that isolate has stopped', async () => {
+    // A builtin ignoring termination (ADR-0563 §4) keeps the isolate past its deadline; it
+    // holds 300 MiB, so its worker's RSS tells whether it is still there.
+    const { value } = await consumer(`
+      const sb = await createSandbox();
+      await sb.writeFile('s.js', "globalThis.h = new Uint8Array(300 << 20).fill(1); const a = Array.from({ length: 3e6 }, () => Math.random()); for (;;) a.sort()");
+      const rss = (pid) => Number(execFileSync('ps', ['-o', 'rss=', '-p', String(pid)], { encoding: 'utf8' }).trim() || 0);
+      const r = await sb.exec('s.js', { timeoutMs: 1500, memoryLimitMb: 512 });
+      const pid = children().find((p) => rss(p) > 400 * 1024);
+      await sb.destroy();
+      let atResolve; try { atResolve = pid === undefined || rss(pid) < 300 * 1024 } catch { atResolve = true }
+      out({ termination: r.termination, held: pid !== undefined, atResolve });`);
+    expect(value).toEqual({ termination: 'timeout', held: true, atResolve: true });
+  });
+
+  carrier('the queue keeps no result: a dropped snapshot is collectable', async () => {
+    const { value } = await consumer(
+      `const sb = await createSandbox();
+       await sb.writeFile('big', new Uint8Array(8 << 20).fill(1));
+       let ref = new WeakRef(await sb.snapshot());
+       for (let i = 0; i < 5 && ref.deref() !== undefined; i++) { await sleep(10); globalThis.gc(); }
+       out({ collected: ref.deref() === undefined });`,
+      { flags: ['--expose-gc'] },
+    );
+    expect(value).toEqual({ collected: true });
+  });
+
+  carrier('a refused overwrite past the cap leaves the old bytes', async () => {
+    const sb = await createSandbox({ maxFsBytes: 64 * 1024 });
+    try {
+      await sb.writeFile('f', 'old');
+      await expect(sb.writeFile('f', new Uint8Array(100 * 1024))).rejects.toMatchObject({
+        code: 'ERR_ISOLATE_HOST_SANDBOX_FULL',
+      });
+      expect(await text(sb, 'f')).toBe('old');
+    } finally {
+      await sb.destroy();
+    }
+  });
+
+  carrier('input bytes are the bytes at the call, even behind a long run', async () => {
+    const sb = await createSandbox();
+    try {
+      await sb.writeFile('w.js', 'setTimeout(() => {}, 300)');
+      const running = sb.exec('w.js');
+      const mine = new Uint8Array([1, 2, 3]);
+      const writing = sb.writeFile('f', mine);
+      mine.fill(9);
+      await Promise.all([running, writing]);
+      expect([...(await sb.readFile('f'))]).toEqual([1, 2, 3]);
+      const snap = await sb.snapshot();
+      const created = createSandbox({ snapshot: snap });
+      snap.fill(0);
+      const again = await created;
+      expect([...(await again.readFile('f'))]).toEqual([1, 2, 3]);
+      await again.destroy();
+    } finally {
+      await sb.destroy();
+    }
+  });
+
+  carrier('unknown option names are refused; the sandbox shows no internals', async () => {
+    await expect(createSandbox({ maxFsByte: 1 } as Record<string, unknown>)).rejects.toMatchObject({
+      code: 'ERR_INVALID_ARG_VALUE',
+    });
+    const sb = await createSandbox();
+    try {
+      await sb.writeFile('a.js', '1');
+      await expect(sb.exec('a.js', { timeoutMS: 5 })).rejects.toMatchObject({
+        code: 'ERR_INVALID_ARG_VALUE',
+      });
+      expect(JSON.stringify(sb)).toBe('{}');
+      expect(Object.keys(sb)).toEqual([]);
+    } finally {
+      await sb.destroy();
+    }
+  });
+});

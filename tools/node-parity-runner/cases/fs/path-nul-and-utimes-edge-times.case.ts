@@ -27,6 +27,16 @@ const c: ParityCase = {
     const before = Date.now();
     fs.utimesSync('f', -5, -5);
     console.log('negative is now', fs.statSync('f').mtimeMs >= before);
+    for (const [label, v] of [['negative string', '-5'], ['empty string', ''], ['decimal string', '12.5']]) {
+      fs.utimesSync('f', v, v);
+      console.log(label, fs.statSync('f').mtimeMs);
+    }
+    const t0 = Date.now();
+    for (const v of ['Infinity', '-Infinity']) {
+      fs.utimesSync('f', v, v);
+      console.log(v, 'string is now', fs.statSync('f').mtimeMs >= t0);
+    }
+    try { fs.utimesSync('f', 'abc', 'abc'); } catch (e) { console.log('abc', e.code); }
     for (const v of [NaN, Infinity]) {
       try { fs.utimesSync('f', v, v); } catch (e) { console.log('number', v, e.code); }
     }

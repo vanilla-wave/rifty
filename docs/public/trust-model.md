@@ -79,8 +79,9 @@ calls share a worker process.
   reads as infrastructure. Host file ops resolve model-chosen paths inside the sandbox's own `/`
   and name only sandbox paths in errors (fields and `stack`). Sandboxes share no FS: each run restores its own. `ino`
   values come from the run's own fresh isolate (not kept by the snapshot), so they carry nothing
-  from other sandboxes. Not protected: the consumer's memory holds every live sandbox's files and
-  decodes each run's state on its event loop — cap the number of sandboxes and `maxFsBytes`.
+  from other sandboxes. Not protected: the consumer's memory holds every live sandbox's files and, per
+  concurrent run, about 4 × its state + 8 MiB, and decodes each run's state on its event loop —
+  cap the number of sandboxes, `maxFsBytes` and concurrent runs (README §Sandbox).
 - **Custom embedders (`@riftydev/isolate-guest`, ADR-0558).** The same guest in an isolate the
   consumer creates. Its `createHostBridge` validates every guest argument. The limits, the kill,
   the process boundary and the escape posture above are then the embedder's to provide, not rifty's.

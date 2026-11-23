@@ -109,6 +109,8 @@ await sandbox.writeFile('main.js', `
 `);
 const result = await sandbox.exec('main.js', { args: ['out/report.pdf'] });
 // → { stdout: 'wrote out/report.pdf\n', stderr: '', exitCode: 0 }
+// exitCode 0 does not mean the files were kept: check stateRefused.
+if (result.stateRefused) throw new Error(`the run's files were not kept: ${result.stateRefused}`);
 const pdf = await sandbox.readFile('out/report.pdf'); // Uint8Array, straight from the sandbox
 await sandbox.destroy();
 ```
@@ -155,7 +157,7 @@ built package, machine load ~10 on 12 cores), one `writeFile` / one state
 intake after a run: 1 MB state 1 / 2 ms; 16 MB 19 / 19 ms; 56 MB near the cap
 69 / 67 ms; the densest state the default cap admits (119 472 empty
 directories) 114 / 139 ms; the deepest (a 1 153-level chain) 93 / 113 ms;
-100 one-byte writes near the cap ~6.6 s. `list` and `remove` stay under 5 ms.
+100 one-byte writes near the cap ~6.6 s; 88 000 empty files: `createSandbox` from their snapshot 212 ms, one `writeFile` 137 ms, one `exec` 775 ms (load ~20). `list` and `remove` stay under 5 ms.
 The worst host op and the worst intake are of one order.
 
 Every error the sandbox API throws or rejects with names only sandbox paths, and its
@@ -173,9 +175,25 @@ its own but its files were not kept. What survives a run:
 | `stateRefused` (`ERR_FS_SNAPSHOT_TOO_LARGE`: the run's files are over `maxFsBytes` (write fewer or smaller files, or raise `maxFsBytes` with `memoryLimitMb`); `ERR_ISOLATE_HOST_SANDBOX_CAPTURE`: the end state could not be captured — most often the files did not fit the run's isolate memory (same remedies), else the run hit the `import()` gap or broke its own capture (rewrite that code); another `ERR_FS_SNAPSHOT_*`: the consumer's codec refused the bytes; `ERR_ISOLATE_HOST_SANDBOX_RESTORE`: the files did not fit the run's isolate or its worker, no guest code ran, `exitCode: null`; an isolate too small for the runtime itself is `termination: 'memory'`, as for `runCode`) | as before the run |
 
 Each run is a fresh isolate, like a new `node` process: only files carry over.
-Between operations a sandbox holds no process and no isolate, only its files
-in your process's memory (about their size); a sandbox you drop is ordinary
-garbage. The number of live sandboxes is yours to cap.
+**`exitCode: 0` with `stateRefused` means the run's writes were lost.** Check
+`stateRefused` before you trust the files.
+
+An unknown option name of `createSandbox` or `exec` is refused
+(`ERR_INVALID_ARG_VALUE`), so a typo never leaves a limit unapplied. Input bytes
+(`writeFile`, `createSandbox({ snapshot })`) are copied at the call, even when
+the operation waits behind a run.
+
+Memory in your process. Between operations a sandbox holds no process and no
+isolate, only its files — rifty's in-memory FS: about their size, plus ~400
+bytes per entry (88 000 empty files, a 6.6 MiB snapshot, hold 37 MiB). During
+an `exec` your process holds, for that run, the encoded state, its base64 on the
+wire, the run's end state and the new FS beside the old one: measured peak
+(heap + ArrayBuffers over the idle level) ≈ 4 × S + 8 MiB per concurrent run for
+a state of S (S = 56 MB: 212 MiB for one run, 925 MiB for four at once; 16 MB:
+88 / 276 MiB). Size your service's cgroup for the idle sandboxes' files plus
+4 × S + 8 MiB per concurrent run, beside the workers' bound above. All of it is
+bounded by `maxFsBytes`. A sandbox you drop is ordinary garbage; the number of
+live sandboxes is yours to cap.
 
 Cost (M3 Pro, Node 24.16.0, medians, built package): `createSandbox` 0.01 ms; a warm
 `exec` 17 ms with one small file, 21 ms with 66 files (~180 KiB), 265 ms with a 20 MiB
