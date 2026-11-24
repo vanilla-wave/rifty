@@ -41,7 +41,7 @@ Only publish, spend, delete user data. Everything else: decide and continue.
 ## DoD (per PR)
 - [ ] implementation aligned with project goal
 - [ ] no machinery the contract is deliverable without (§Simplicity)
-- [ ] `pnpm pr:check` pass — lanes follow the diff since the origin/main merge-base: a docs-only tree runs the doc gates; otherwise `test:run` covers the tests related to the changed files and `test:parity` runs only when its inputs changed (`--all` forces the full gate, which CI runs on every non-docs PR push); a `test:run` red reruns its failed files once in isolation and says so (time-outs counted; a failure that reproduces stays red)
+- [ ] `pnpm pr:check` pass — lanes follow the diff since the origin/main merge-base: a docs-only tree runs the doc gates; otherwise `test:run` covers the tests related to the changed files and `test:parity` runs only when its inputs changed (`--all` forces the full gate, which CI runs on every non-docs ready-PR push; a draft skips the heavy lanes); a `test:run` red reruns its failed files once in isolation and says so (time-outs counted; a failure that reproduces stays red)
 - [ ] merged only on a green PR CI at HEAD (`gh pr checks`, not a local gate; cancelled ≠ green — read states/`--json bucket`, never the exit code)
 - [ ] touches cache/persistence/network/concurrency → covered by fault tests (`docs/process/rules/fault-classes.md`)
 - [ ] shipped capability carries observable acceptance proof (e2e/parity) in the same PR — source greps, fakes, and opt-in lanes do not close acceptance

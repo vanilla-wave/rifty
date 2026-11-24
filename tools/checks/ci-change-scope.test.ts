@@ -141,14 +141,22 @@ describe('CI change scope', () => {
       expect(packageJson.scripts['test:docs-contract'], contract).toContain(contract);
     }
 
-    for (const job of ['unit-and-conformance', 'e2e-chromium', 'browser-unit-chromium']) {
+    expect(workflow).toContain('types: [opened, synchronize, reopened, ready_for_review]');
+    for (const job of [
+      'unit-and-conformance',
+      'e2e-chromium',
+      'browser-unit-chromium',
+      'no-coi-chromium',
+    ]) {
       const block = jobBlock(workflow, job);
       expect(block, job).toContain('needs: change-scope');
       // A bare `needs.*` condition implies success() and silently skips the
       // heavy suite when change-scope dies; !cancelled() + != 'false' fails
       // open to the full gate (ADR-0323 §2, fault class false-fallback).
+      // Draft PRs withhold heavy lanes; push/merge_group carry no PR payload,
+      // so `!...draft` is true there (ADR-0323 correction 2026-11-24).
       expect(block, job).toContain(
-        "if: ${{ !cancelled() && needs.change-scope.outputs.code != 'false' }}",
+        "if: ${{ !cancelled() && needs.change-scope.outputs.code != 'false' && !github.event.pull_request.draft }}",
       );
     }
 
@@ -160,6 +168,10 @@ describe('CI change scope', () => {
       "group: ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}\n  cancel-in-progress: true",
     );
     expect(gate).toContain('node tools/checks/ci-gate.mjs');
+    expect(gate).toContain('DRAFT: ${{ github.event.pull_request.draft }}');
+    for (const light of ['change-scope', 'lint-and-typecheck']) {
+      expect(jobBlock(workflow, light), light).not.toMatch(/^ {4}if:/mu);
+    }
     for (const dependency of [
       'change-scope',
       'lint-and-typecheck',
