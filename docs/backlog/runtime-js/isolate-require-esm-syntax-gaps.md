@@ -68,14 +68,12 @@ Review round 1 (2026-11-24, reproduced, `sandbox.exec`): `import()` from a Commo
 typeless ESM-syntax `.js` loaded it as CommonJS (`ModuleLoadError SYNTAX_ERROR Failed to compile
 CJS module …`; Node: the namespace) — `loadAsync` re-resolved the id with `esm: false`; of an
 `.mjs` or `"type": "module"` `.js` it threw `TypeError: URLConstructor is not a constructor`.
-Review round 2 (2026-11-24, reproduced): a third path, the root of the class —
-`URLConstructor = globalThis.URL` is `undefined` in the guest at runtime-js load; `import('file:…')`
-(ESM or CJS) → `ModuleLoadError [UNSUPPORTED_PROTOCOL] Invalid file URL …: URLConstructor is not a
-constructor`, `url.pathToFileURL`/`fileURLToPath` → `TypeError URLConstructor is not a constructor`,
-`new url.URL` → `url.URL is not a constructor`, `createRequire('file:…')` → `ERR_INVALID_ARG_VALUE`,
-`readFileSync({})` → `Right-hand side of 'instanceof' is not an object`. Manager decision (round 2):
-one seam at the root — a late-`URL` forwarder reaching the host's `URL` at use time (the ceiling's
-named gap in the guest), the load-time capture unchanged where `URL` exists at load.
+Review rounds 2–3 (2026-11-24): `import()` by `file:` URL and other internal uses of web globals
+absent when runtime-js loads (`URL`, `URLSearchParams`, `Blob`, `File`, `crypto.subtle`) leak
+internal names or return wrong values (`url.parse`/`url.resolve`). A late-global forwarder seam was
+tried (round 2) and taken out (round 3: it broke with a real `URL` installed later and covered
+only part of the class). Manager decision (round 3): the class is outside this unit, returned to
+the user — `runtime-js/isolate-web-globals-captured-at-load`.
 Manager decision (round 1): one host fact, "no ES module loader", carrying the host's gap;
 `require` without `require(esm)` follows from it; every ES module load throws the gap
 (`import()` from a file rejects with `isolate-host.esm`, as the file entry).
@@ -114,11 +112,6 @@ prints its verdict on a generator, an async, a plain and an arrow function. Toda
 7. compat isolate-host.md rows say "as Node launched with `--no-require-module`" → ADR-0557
 8. The runtime's default: `import()` from a CommonJS file still detects ESM syntax in a typeless
    `.js` (`require-module-switch.test.ts`) → ADR-0557
-9. Every internal `URL` use the guest reaches (`URLConstructor`, `posix-file-url.ts`) gives the
-   URL ceiling's `NotImplementedError('isolate-host.URL')` where Node works — `import()` by `file:`
-   URL of an ES module and of a CommonJS file, `url.pathToFileURL`, `url.fileURLToPath`,
-   `new url.URL`, `createRequire(file URL)` — never `URLConstructor`; with `URL` present at load
-   the runtime keeps its loaded `URL` (`internal/posix-file-url.test.ts`) → ADR-0557
 
 ## Reference contract
 
@@ -163,7 +156,7 @@ prints its verdict on a generator, an async, a plain and an arrow function. Toda
   as Node, but rifty's text and `ModuleLoadError` — `runtime-js/exports-no-main-message`.
 - `fs` path type errors: `readFileSync({})` → rifty's code-less `TypeError: fs path must be string,
   Buffer, or URL` on every host (Node `ERR_INVALID_ARG_TYPE`): `runtime-js/fs-path-invalid-arg-type`.
-- `require('url').URLSearchParams` `undefined` in the guest (a sibling load-time capture): `runtime-js/isolate-url-searchparams-export`.
+- Web globals absent when runtime-js loads in the guest (`import()` by `file:` URL, `url` helpers, `buffer.Blob`/`File`, `crypto.subtle`, `url.parse`/`resolve` wrong values): `runtime-js/isolate-web-globals-captured-at-load`, compat ❌.
 - `process.getBuiltinModule` absent (`runtime-js/process-get-builtin-module`); `import()` of JSON
   without an attribute loads (`runtime-js/import-attributes`); `module.require`/`Module._load`
   (`runtime-js/require-resolve-paths-module-require`, `runtime-js/node-module-builtin-module-class`).
@@ -173,7 +166,6 @@ prints its verdict on a generator, an async, a plain and an arrow function. Toda
 - One host fact in runtime-js, "no ES module loader" with the host's gap (`declareNoEsmLoader`, `internal/esm-loader.ts`), declared by the guest before guest code; `require` without `require(esm)` derives from it (manager, round 1: no separate knob, no case needs `require(esm)` off with a loader); not a startup-options token (fork/Worker would start accepting it — a browser change).
 - The guest's own ESM-entry check is gone: `executeEsm` throws the declared gap for the entry too (same stderr, tests unchanged).
 - `loadAsync` (`import()` from CommonJS by id) resolves as `import` (`esm: true`): browser-neutral, detection is on there either way.
-- `URLConstructor` with no `URL` at load is a forwarder (name `URL`, `Symbol.hasInstance` against the current global) to the global at use time; the two catches that reinterpret a `URL` failure as bad input (`resolver.ts` `fileUrlToVfsPath`, `create-require-path.ts`) rethrow a `NotImplementedError` (a host's gap). `readFileSync({})` then gives rifty's every-host fs path `TypeError`, not Node's `ERR_INVALID_ARG_TYPE` — fs argument names vary per call, outside this seam (`runtime-js/fs-path-invalid-arg-type`).
 - Typeless `.js`: `require` skips syntax detection when the mode is off (Node compiles it as CJS); `import`/entry resolution (`esm: true`) still detects.
 - `module-sync` is dropped from both condition sets when off, as Node's `initializeDefaultConditions`.
 - `ERR_REQUIRE_ESM` has Node's `NodeError` shape (prototype with `constructor` Error and the coded `toString`, then `Error.prototype`; own `stack`, `code`, `message`; coded `stack` head), not `ModuleLoadError` (constructor would differ).
