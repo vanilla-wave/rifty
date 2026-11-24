@@ -28,6 +28,13 @@ Node inspects it whole and `internal/errors` cuts at 128 + `...` (message 214 ch
 inspector cuts the string itself (`…'`, 206 chars). `Object.create(null)`
 (`describeReceived`, ERR_INVALID_ARG_TYPE): Node `[Object: null prototype] {}`, rifty `[Object]`.
 
+2026-11-24 (probe of unit `runtime-js/util-format-percent-s`, `util.format('%s', v)` = inspect at
+depth 0, parity-runner and isolate `runCode` vs `node -e` v24.16.0): `class T { get
+[Symbol.toStringTag]() { return 'Tag' } }` → Node `T [Tag] {}`, rifty `T {}`;
+`Promise.resolve(1)` → Node `Promise { 1 }`, rifty `Promise { <pending> }` (a pure-JS realm
+cannot read a promise's state synchronously); `new WeakMap()` → Node
+`WeakMap { <items unknown> }`, rifty `WeakMap {}`.
+
 ## Challenge
 
 challenge: 2026-11-18 — finding capture; no premise critic (README §Challenge)
