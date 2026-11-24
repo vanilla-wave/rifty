@@ -3,18 +3,10 @@
   "node": "v24.16.0",
   "isolatedVm": "7.0.2",
   "esbuild": "0.28.0",
-  "loadavg": [
-    "2.2",
-    "3.7",
-    "3.4"
-  ],
+  "loadavg": ["2.2", "3.7", "3.4"],
   "preludeBytes": 7305,
   "timing": {
-    "loadavg": [
-      "2.2",
-      "3.7",
-      "3.4"
-    ],
+    "loadavg": ["2.2", "3.7", "3.4"],
     "samples": 40,
     "baselineEmptyScriptMs": 0.0235,
     "variants": {

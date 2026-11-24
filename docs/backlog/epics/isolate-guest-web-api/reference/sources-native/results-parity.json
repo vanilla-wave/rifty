@@ -3,11 +3,7 @@
   "node": "v24.16.0",
   "isolatedVm": "7.0.2",
   "esbuild": "0.28.0",
-  "loadavg": [
-    "2.2",
-    "3.7",
-    "3.4"
-  ],
+  "loadavg": ["2.2", "3.7", "3.4"],
   "preludeBytes": 7305,
   "parity": {
     "url:whatwg-url": {
@@ -410,9 +406,7 @@
                 "ok": []
               },
               "guest": {
-                "ok": [
-                  "Symbol(impl)"
-                ]
+                "ok": ["Symbol(impl)"]
               }
             },
             {
@@ -462,16 +456,10 @@
             {
               "case": "length",
               "node": {
-                "ok": [
-                  1,
-                  "URL"
-                ]
+                "ok": [1, "URL"]
               },
               "guest": {
-                "ok": [
-                  1,
-                  "URL2"
-                ]
+                "ok": [1, "URL2"]
               }
             }
           ],
@@ -644,13 +632,7 @@
               }
             }
           ],
-          "allDiffs": [
-            "bad pair",
-            "null",
-            "call no new",
-            "no args append",
-            "proto keys"
-          ]
+          "allDiffs": ["bad pair", "null", "call no new", "no args append", "proto keys"]
         }
       }
     },
@@ -1031,9 +1013,7 @@
                 "ok": []
               },
               "guest": {
-                "ok": [
-                  "Symbol(impl)"
-                ]
+                "ok": ["Symbol(impl)"]
               }
             },
             {
@@ -1234,12 +1214,7 @@
               }
             }
           ],
-          "allDiffs": [
-            "bad pair",
-            "null",
-            "no args append",
-            "proto keys"
-          ]
+          "allDiffs": ["bad pair", "null", "no args append", "proto keys"]
         }
       }
     },
@@ -1707,13 +1682,7 @@
               }
             }
           ],
-          "allDiffs": [
-            "bad pair",
-            "null",
-            "call no new",
-            "no args append",
-            "proto keys"
-          ]
+          "allDiffs": ["bad pair", "null", "call no new", "no args append", "proto keys"]
         }
       }
     },
@@ -2588,14 +2557,7 @@
               }
             }
           ],
-          "allDiffs": [
-            "statics",
-            "invalid",
-            "no-arg",
-            "call",
-            "proto keys",
-            "href setter invalid"
-          ]
+          "allDiffs": ["statics", "invalid", "no-arg", "call", "proto keys", "href setter invalid"]
         },
         "usp": {
           "cases": 30,
@@ -2706,13 +2668,7 @@
               }
             }
           ],
-          "allDiffs": [
-            "bad pair",
-            "null",
-            "call no new",
-            "no args append",
-            "proto keys"
-          ]
+          "allDiffs": ["bad pair", "null", "call no new", "no args append", "proto keys"]
         }
       }
     },
@@ -2822,11 +2778,7 @@
             {
               "case": "searchParams link",
               "node": {
-                "ok": [
-                  "https://a/?x=1&y=2+3",
-                  "9",
-                  true
-                ]
+                "ok": ["https://a/?x=1&y=2+3", "9", true]
               },
               "guest": {
                 "threw": "Error",
@@ -2838,16 +2790,10 @@
             {
               "case": "length",
               "node": {
-                "ok": [
-                  1,
-                  "URL"
-                ]
+                "ok": [1, "URL"]
               },
               "guest": {
-                "ok": [
-                  2,
-                  "_URL"
-                ]
+                "ok": [2, "_URL"]
               }
             }
           ],
@@ -2868,14 +2814,7 @@
               }
             }
           ],
-          "allDiffs": [
-            "statics",
-            "call",
-            "tag",
-            "proto keys",
-            "searchParams link",
-            "length"
-          ]
+          "allDiffs": ["statics", "call", "tag", "proto keys", "searchParams link", "length"]
         }
       }
     },
@@ -2903,10 +2842,7 @@
                   "byteOffset": 1,
                   "byteLength": 2,
                   "bufferLength": 4,
-                  "bytes": [
-                    2,
-                    3
-                  ],
+                  "bytes": [2, 3],
                   "own": []
                 }
               },
@@ -2917,10 +2853,7 @@
                   "byteOffset": 0,
                   "byteLength": 2,
                   "bufferLength": 2,
-                  "bytes": [
-                    2,
-                    3
-                  ],
+                  "bytes": [2, 3],
                   "own": []
                 }
               }
@@ -2934,10 +2867,7 @@
                   "byteOffset": 1,
                   "byteLength": 2,
                   "bufferLength": 4,
-                  "bytes": [
-                    0,
-                    0
-                  ],
+                  "bytes": [0, 0],
                   "own": []
                 }
               },
@@ -2948,12 +2878,7 @@
                   "byteOffset": 0,
                   "byteLength": 4,
                   "bufferLength": 4,
-                  "bytes": [
-                    0,
-                    0,
-                    0,
-                    0
-                  ],
+                  "bytes": [0, 0, 0, 0],
                   "own": []
                 }
               }
@@ -2967,16 +2892,7 @@
                   "byteLength": 8,
                   "resizable": true,
                   "maxByteLength": 16,
-                  "bytes": [
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0
-                  ],
+                  "bytes": [0, 0, 0, 0, 0, 0, 0, 0],
                   "own": []
                 }
               },
@@ -2987,16 +2903,7 @@
                   "byteLength": 8,
                   "resizable": false,
                   "maxByteLength": 8,
-                  "bytes": [
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0
-                  ],
+                  "bytes": [0, 0, 0, 0, 0, 0, 0, 0],
                   "own": []
                 }
               }
@@ -3013,9 +2920,7 @@
                   "cause": {
                     "tag": "[object Object]",
                     "proto": "Object",
-                    "own": [
-                      "c=num:1"
-                    ]
+                    "own": ["c=num:1"]
                   },
                   "stackType": "string",
                   "own": []
@@ -3054,9 +2959,7 @@
                   "message": "",
                   "hasCause": false,
                   "stackType": "string",
-                  "own": [
-                    "errors(ne)=[object Object]"
-                  ]
+                  "own": ["errors(ne)=[object Object]"]
                 }
               }
             },
@@ -3066,12 +2969,7 @@
                 "ok": {
                   "tag": "[object Array]",
                   "proto": "Array",
-                  "own": [
-                    "0=num:1",
-                    "2=num:3",
-                    "length(ne)=num:3",
-                    "x=num:1"
-                  ],
+                  "own": ["0=num:1", "2=num:3", "length(ne)=num:3", "x=num:1"],
                   "length": 3
                 }
               },
@@ -3079,12 +2977,7 @@
                 "ok": {
                   "tag": "[object Array]",
                   "proto": "Array",
-                  "own": [
-                    "0=num:1",
-                    "1=undefined:undefined",
-                    "2=num:3",
-                    "length(ne)=num:3"
-                  ],
+                  "own": ["0=num:1", "1=undefined:undefined", "2=num:3", "length(ne)=num:3"],
                   "length": 3
                 }
               }
@@ -3180,25 +3073,17 @@
                   "message": "agg",
                   "hasCause": false,
                   "stackType": "string",
-                  "own": [
-                    "errors(ne)=[object Object]"
-                  ]
+                  "own": ["errors(ne)=[object Object]"]
                 }
               }
             },
             {
               "case": "length/name",
               "node": {
-                "ok": [
-                  2,
-                  "structuredClone"
-                ]
+                "ok": [2, "structuredClone"]
               },
               "guest": {
-                "ok": [
-                  1,
-                  "structuredClone"
-                ]
+                "ok": [1, "structuredClone"]
               }
             }
           ],
@@ -3292,16 +3177,7 @@
                   "byteLength": 8,
                   "resizable": true,
                   "maxByteLength": 16,
-                  "bytes": [
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0
-                  ],
+                  "bytes": [0, 0, 0, 0, 0, 0, 0, 0],
                   "own": []
                 }
               },
@@ -3312,16 +3188,7 @@
                   "byteLength": 8,
                   "resizable": false,
                   "maxByteLength": 8,
-                  "bytes": [
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0
-                  ],
+                  "bytes": [0, 0, 0, 0, 0, 0, 0, 0],
                   "own": []
                 }
               }
@@ -3332,11 +3199,7 @@
                 "ok": {
                   "tag": "[object Array]",
                   "proto": "Array",
-                  "own": [
-                    "0=num:0",
-                    "1=num:4",
-                    "length(ne)=num:2"
-                  ],
+                  "own": ["0=num:0", "1=num:4", "length(ne)=num:2"],
                   "length": 2
                 }
               },
@@ -3344,11 +3207,7 @@
                 "ok": {
                   "tag": "[object Array]",
                   "proto": "Array",
-                  "own": [
-                    "0=num:4",
-                    "1=num:4",
-                    "length(ne)=num:2"
-                  ],
+                  "own": ["0=num:4", "1=num:4", "length(ne)=num:2"],
                   "length": 2
                 }
               }
@@ -3462,45 +3321,25 @@
             {
               "case": "type lower",
               "node": {
-                "ok": [
-                  "text/plain",
-                  "",
-                  ""
-                ]
+                "ok": ["text/plain", "", ""]
               },
               "guest": {
-                "ok": [
-                  "Text/Plain",
-                  "",
-                  ""
-                ]
+                "ok": ["Text/Plain", "", ""]
               }
             },
             {
               "case": "slice",
               "node": {
-                "ok": [
-                  "bc",
-                  "ef",
-                  "x/y",
-                  0
-                ]
+                "ok": ["bc", "ef", "x/y", 0]
               },
               "guest": {
-                "ok": [
-                  "bc",
-                  "ef",
-                  "X/Y",
-                  0
-                ]
+                "ok": ["bc", "ef", "X/Y", 0]
               }
             },
             {
               "case": "bytes",
               "node": {
-                "ok": [
-                  97
-                ]
+                "ok": [97]
               },
               "guest": {
                 "ok": "no bytes()"
@@ -3509,16 +3348,10 @@
             {
               "case": "endings",
               "node": {
-                "ok": [
-                  "a\nb\rc\n",
-                  "a\r\nb"
-                ]
+                "ok": ["a\nb\rc\n", "a\r\nb"]
               },
               "guest": {
-                "ok": [
-                  "a\r\nb\rc\n",
-                  "a\r\nb"
-                ]
+                "ok": ["a\r\nb\rc\n", "a\r\nb"]
               }
             },
             {
@@ -3643,12 +3476,7 @@
             {
               "case": "slice",
               "node": {
-                "ok": [
-                  "bc",
-                  "ef",
-                  "x/y",
-                  0
-                ]
+                "ok": ["bc", "ef", "x/y", 0]
               },
               "guest": {
                 "threw": "TypeError",
@@ -3661,23 +3489,16 @@
             {
               "case": "arrayBuffer",
               "node": {
-                "ok": [
-                  195,
-                  169
-                ]
+                "ok": [195, 169]
               },
               "guest": {
-                "ok": [
-                  0
-                ]
+                "ok": [0]
               }
             },
             {
               "case": "bytes",
               "node": {
-                "ok": [
-                  97
-                ]
+                "ok": [97]
               },
               "guest": {
                 "ok": "no bytes()"
@@ -3686,10 +3507,7 @@
             {
               "case": "endings",
               "node": {
-                "ok": [
-                  "a\nb\rc\n",
-                  "a\r\nb"
-                ]
+                "ok": ["a\nb\rc\n", "a\r\nb"]
               },
               "guest": {
                 "threw": "TypeError",

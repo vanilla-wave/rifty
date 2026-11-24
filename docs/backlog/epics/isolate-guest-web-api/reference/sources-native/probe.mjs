@@ -27,14 +27,23 @@ const timing = argv.includes('--timing');
 const jsonOut = argv.includes('--json') ? argv[argv.indexOf('--json') + 1] : undefined;
 const NODE_TAG = 'v24.16.0';
 const FIXTURES = {
-  urltestdata: ['urltestdata.json', 'cdccbdd24648f8b6935f2271f4f5ea285bf036ad1a8a7727e77a76d0287aa019'],
-  setters: ['setters_tests.json', '3eb50af867645b1c1fc9818d82a53ac40ca8d448d0625f08b8f68c3b8b729c21'],
+  urltestdata: [
+    'urltestdata.json',
+    'cdccbdd24648f8b6935f2271f4f5ea285bf036ad1a8a7727e77a76d0287aa019',
+  ],
+  setters: [
+    'setters_tests.json',
+    '3eb50af867645b1c1fc9818d82a53ac40ca8d448d0625f08b8f68c3b8b729c21',
+  ],
 };
 
 // 1. Candidates into a temp dir; WPT fixtures of the oracle's Node tag.
 const work = mkdtempSync(join(tmpdir(), 'isolate-web-api-native-'));
 cpSync(join(here, 'deps'), join(work, 'deps'), { recursive: true });
-execFileSync('npm', ['ci', '--no-audit', '--no-fund', '--registry=https://registry.npmjs.org/'], { cwd: join(work, 'deps'), stdio: 'ignore' });
+execFileSync('npm', ['ci', '--no-audit', '--no-fund', '--registry=https://registry.npmjs.org/'], {
+  cwd: join(work, 'deps'),
+  stdio: 'ignore',
+});
 const nm = join(work, 'deps/node_modules');
 const DATA = {};
 for (const [key, [file, sha]] of Object.entries(FIXTURES)) {
@@ -49,40 +58,91 @@ for (const [key, [file, sha]] of Object.entries(FIXTURES)) {
 const src = (f) => JSON.stringify(join(here, 'src', f));
 const pkg = (p) => JSON.stringify(join(nm, p));
 const VARIANTS = {
-  'url:whatwg-url': { suites: ['url', 'urlSetters', 'urlShape', 'usp'], entry: `import { URL, URLSearchParams } from ${pkg('whatwg-url/index.js')}; Object.assign(globalThis, { URL, URLSearchParams });` },
-  'url:whatwg-url@15': { suites: ['url', 'urlSetters', 'urlShape', 'usp'], entry: `import { URL, URLSearchParams } from ${pkg('whatwg-url-15/index.js')}; Object.assign(globalThis, { URL, URLSearchParams });` },
+  'url:whatwg-url': {
+    suites: ['url', 'urlSetters', 'urlShape', 'usp'],
+    entry: `import { URL, URLSearchParams } from ${pkg('whatwg-url/index.js')}; Object.assign(globalThis, { URL, URLSearchParams });`,
+  },
+  'url:whatwg-url@15': {
+    suites: ['url', 'urlSetters', 'urlShape', 'usp'],
+    entry: `import { URL, URLSearchParams } from ${pkg('whatwg-url-15/index.js')}; Object.assign(globalThis, { URL, URLSearchParams });`,
+  },
   // Same package, evaluated on first read of the global (a self-replacing accessor, as Node's lazy globals).
-  'url:whatwg-url@15 lazy': { suites: ['url', 'urlShape', 'usp'], entry: `let m; const load = () => (m ??= require(${pkg('whatwg-url-15/index.js')}));
-    for (const k of ['URL', 'URLSearchParams']) Object.defineProperty(globalThis, k, { configurable: true, enumerable: false, get() { const v = load()[k]; Object.defineProperty(globalThis, k, { value: v, writable: true, configurable: true, enumerable: false }); return v; } });` },
+  'url:whatwg-url@15 lazy': {
+    suites: ['url', 'urlShape', 'usp'],
+    entry: `let m; const load = () => (m ??= require(${pkg('whatwg-url-15/index.js')}));
+    for (const k of ['URL', 'URLSearchParams']) Object.defineProperty(globalThis, k, { configurable: true, enumerable: false, get() { const v = load()[k]; Object.defineProperty(globalThis, k, { value: v, writable: true, configurable: true, enumerable: false }); return v; } });`,
+  },
   // Same package, its UTS #46 table (tr46) loaded on the first host that needs domain-to-ASCII.
-  'url:whatwg-url@15 lazy-tr46': { suites: ['url', 'urlSetters', 'usp'], plugins: 'lazyTr46', entry: `import { URL, URLSearchParams } from ${pkg('whatwg-url-15/index.js')}; Object.assign(globalThis, { URL, URLSearchParams });` },
-  'url:core-js': { suites: ['url', 'urlSetters', 'urlShape', 'usp'], entry: `import ${pkg('core-js/actual/url/index.js')}; import ${pkg('core-js/actual/url-search-params/index.js')};` },
-  'url:bridge': { suites: ['url', 'urlSetters', 'urlShape'], entry: `import ${src('url-bridge.js')};`, bridge: true },
-  'clone:@ungap': { suites: ['clone'], entry: `import sc from ${pkg('@ungap/structured-clone/esm/index.js')}; globalThis.structuredClone = sc;` },
-  'clone:core-js': { suites: ['clone'], entry: `import ${pkg('core-js/actual/structured-clone.js')};` },
+  'url:whatwg-url@15 lazy-tr46': {
+    suites: ['url', 'urlSetters', 'usp'],
+    plugins: 'lazyTr46',
+    entry: `import { URL, URLSearchParams } from ${pkg('whatwg-url-15/index.js')}; Object.assign(globalThis, { URL, URLSearchParams });`,
+  },
+  'url:core-js': {
+    suites: ['url', 'urlSetters', 'urlShape', 'usp'],
+    entry: `import ${pkg('core-js/actual/url/index.js')}; import ${pkg('core-js/actual/url-search-params/index.js')};`,
+  },
+  'url:bridge': {
+    suites: ['url', 'urlSetters', 'urlShape'],
+    entry: `import ${src('url-bridge.js')};`,
+    bridge: true,
+  },
+  'clone:@ungap': {
+    suites: ['clone'],
+    entry: `import sc from ${pkg('@ungap/structured-clone/esm/index.js')}; globalThis.structuredClone = sc;`,
+  },
+  'clone:core-js': {
+    suites: ['clone'],
+    entry: `import ${pkg('core-js/actual/structured-clone.js')};`,
+  },
   'clone:bridge': { suites: ['clone'], entry: `import ${src('clone-bridge.js')};`, bridge: true },
-  'blob:formdata-node': { suites: ['blob'], entry: `import { Blob, File } from ${pkg('formdata-node/lib/form-data.js')}; Object.assign(globalThis, { Blob, File });` },
-  'blob:blob-polyfill': { suites: ['blob'], entry: `import m from ${pkg('blob-polyfill/Blob.js')}; Object.assign(globalThis, { Blob: m.Blob, File: m.File });` },
-  'blob:fetch-blob': { suites: ['blob'], entry: `import Blob from ${pkg('fetch-blob/index.js')}; import File from ${pkg('fetch-blob/file.js')}; Object.assign(globalThis, { Blob, File });` },
+  'blob:formdata-node': {
+    suites: ['blob'],
+    entry: `import { Blob, File } from ${pkg('formdata-node/lib/form-data.js')}; Object.assign(globalThis, { Blob, File });`,
+  },
+  'blob:blob-polyfill': {
+    suites: ['blob'],
+    entry: `import m from ${pkg('blob-polyfill/Blob.js')}; Object.assign(globalThis, { Blob: m.Blob, File: m.File });`,
+  },
+  'blob:fetch-blob': {
+    suites: ['blob'],
+    entry: `import Blob from ${pkg('fetch-blob/index.js')}; import File from ${pkg('fetch-blob/file.js')}; Object.assign(globalThis, { Blob, File });`,
+  },
 };
 const PLUGINS = {
-  lazyTr46: [{
-    name: 'lazy-tr46',
-    setup(b) {
-      b.onLoad({ filter: /whatwg-url-15\/lib\/url-state-machine\.js$/ }, async (a) => {
-        const text = readFileSync(a.path, 'utf8');
-        const eager = 'const tr46 = require("tr46");';
-        if (!text.includes(eager)) throw new Error('lazy-tr46: anchor missing');
-        return { contents: text.replace(eager, 'let tr46_; const tr46 = { toASCII: (...a) => (tr46_ ??= require("tr46")).toASCII(...a) };'), loader: 'js' };
-      });
+  lazyTr46: [
+    {
+      name: 'lazy-tr46',
+      setup(b) {
+        b.onLoad({ filter: /whatwg-url-15\/lib\/url-state-machine\.js$/ }, async (a) => {
+          const text = readFileSync(a.path, 'utf8');
+          const eager = 'const tr46 = require("tr46");';
+          if (!text.includes(eager)) throw new Error('lazy-tr46: anchor missing');
+          return {
+            contents: text.replace(
+              eager,
+              'let tr46_; const tr46 = { toASCII: (...a) => (tr46_ ??= require("tr46")).toASCII(...a) };',
+            ),
+            loader: 'js',
+          };
+        });
+      },
     },
-  }],
+  ],
 };
 const bundle = async (contents, minify, sizes, plugins) => {
   const r = await build({
     plugins: plugins ? PLUGINS[plugins] : [],
     stdin: { contents, resolveDir: here, loader: 'js' },
-    bundle: true, write: false, format: 'iife', platform: 'browser', target: 'es2022', minify, legalComments: 'none', logLevel: 'silent', metafile: true,
+    bundle: true,
+    write: false,
+    format: 'iife',
+    platform: 'browser',
+    target: 'es2022',
+    minify,
+    legalComments: 'none',
+    logLevel: 'silent',
+    metafile: true,
   });
   if (sizes) {
     // Unminified output bytes per package (the biggest shares of a variant).
@@ -95,6 +155,7 @@ const bundle = async (contents, minify, sizes, plugins) => {
 };
 const prelude = await bundle(`import ${src('prelude.js')};`, false);
 const cases = readFileSync(join(here, 'cases.js'), 'utf8');
+// biome-ignore lint/correctness/noUnusedVariables: probe input, deliberate
 for (const [name, v] of Object.entries(VARIANTS)) {
   try {
     // Unminified, as the guest bundle is built (scripts/build-guest.mjs); minified size for reference.
@@ -109,7 +170,19 @@ for (const [name, v] of Object.entries(VARIANTS)) {
 }
 
 // Host side of the bridges: ada through Node's URL; ExternalCopy copies for structuredClone.
-const F = ['href', 'origin', 'protocol', 'username', 'password', 'host', 'hostname', 'port', 'pathname', 'search', 'hash'];
+const F = [
+  'href',
+  'origin',
+  'protocol',
+  'username',
+  'password',
+  'host',
+  'hostname',
+  'port',
+  'pathname',
+  'search',
+  'hash',
+];
 const fields = (u) => F.map((f) => u[f]);
 function hostUrl(op, a, b, c) {
   if (op === 'parse') {
@@ -153,14 +226,31 @@ async function parity() {
     try {
       ({ isolate, context } = await isolateWith(v));
     } catch (e) {
-      report[name] = { bytes: v.bytes, gzip: v.gzip, minBytes: v.minBytes, byPackage: v.byPackage, installError: String(e.message) };
+      report[name] = {
+        bytes: v.bytes,
+        gzip: v.gzip,
+        minBytes: v.minBytes,
+        byPackage: v.byPackage,
+        installError: String(e.message),
+      };
       continue;
     }
     await context.global.set('__DATA', new ivm.ExternalCopy(DATA).copyInto());
     await (await isolate.compileScript(cases)).run(context);
-    const guest = JSON.parse(await context.eval(`__runCases(${JSON.stringify(v.suites)})`, { promise: true, timeout: 60_000 }));
+    const guest = JSON.parse(
+      await context.eval(`__runCases(${JSON.stringify(v.suites)})`, {
+        promise: true,
+        timeout: 60_000,
+      }),
+    );
     isolate.dispose();
-    report[name] = { bytes: v.bytes, gzip: v.gzip, minBytes: v.minBytes, byPackage: v.byPackage, suites: {} };
+    report[name] = {
+      bytes: v.bytes,
+      gzip: v.gzip,
+      minBytes: v.minBytes,
+      byPackage: v.byPackage,
+      suites: {},
+    };
     for (const suite of v.suites) {
       const n = node[suite];
       const g = guest[suite];
@@ -197,6 +287,7 @@ const ms = (t) => Number(t) / 1e6;
 const FIRST_USE = {
   url: `new URL('https://user:pw@example.com:8080/a/../b?c=d#e', undefined).href`,
   urlFile: `new URL('./m.mjs', 'file:///workspace/main.mjs').href`,
+  // biome-ignore lint/style/noUnusedTemplateLiteral: probe input, deliberate
   clone: `structuredClone({ a: [1, new Date(0), new Map([[1, 2]])] }).a.length`,
   blob: `new Blob(['ab', new Uint8Array([1])]).size`,
 };
@@ -213,7 +304,10 @@ async function timingRun() {
     await context.global.set('__hostClone', new ivm.Callback((x) => x));
     if (withPrelude) await (await isolate.compileScript(prelude)).run(context);
     const t0 = process.hrtime.bigint();
-    const script = await isolate.compileScript(code, cache ? { cachedData: cache } : { produceCachedData: true });
+    const script = await isolate.compileScript(
+      code,
+      cache ? { cachedData: cache } : { produceCachedData: true },
+    );
     await script.run(context);
     const t1 = process.hrtime.bigint();
     isolate.dispose();
@@ -240,7 +334,12 @@ async function timingRun() {
     }
     const firstUseMs = (await measure(`${v.code};${FIRST_USE[kind]}`)) - base - installMs;
     const r = { installMs: +installMs.toFixed(2), firstUseMs: +firstUseMs.toFixed(2) };
-    if (kind === 'url') r.firstUseFileUrlMs = +((await measure(`${v.code};${FIRST_USE.urlFile}`)) - base - installMs).toFixed(2);
+    if (kind === 'url')
+      r.firstUseFileUrlMs = +(
+        (await measure(`${v.code};${FIRST_USE.urlFile}`)) -
+        base -
+        installMs
+      ).toFixed(2);
     if (LOOP[kind]) {
       const isolate = new ivm.Isolate({ memoryLimit: 256 });
       const context = await isolate.createContext();
@@ -277,7 +376,8 @@ const result = {
   date: new Date().toISOString(),
   node: process.version,
   isolatedVm: require('isolated-vm/package.json').version,
-  esbuild: createRequire(join(root, 'packages/isolate-guest/package.json'))('esbuild/package.json').version,
+  esbuild: createRequire(join(root, 'packages/isolate-guest/package.json'))('esbuild/package.json')
+    .version,
   loadavg: loadavg().map((x) => x.toFixed(1)),
   preludeBytes: Buffer.byteLength(prelude),
   ...(timing ? { timing: await timingRun() } : { parity: await parity() }),
