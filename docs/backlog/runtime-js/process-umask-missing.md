@@ -14,7 +14,7 @@ Probe 2026-11-24 (`isolate-library-probe/gen/diag.cjs`, isolate-host sandbox vs 
 `require('fstream')` → Node ok, rifty `TypeError: process.umask is not a function` at
 `fstream/lib/writer.js:8` (`process.platform === 'win32' ? 0 : process.umask()`, module top level).
 fstream comes from unzipper, which exceljs 4.4.0's main entry loads
-(`lib/exceljs.nodejs.js:7` → `stream/xlsx/workbook-reader.js:5`) — today behind the declared
+(`lib/exceljs.nodejs.js:7` → `stream/xlsx/workbook-reader.js:5`, read from source at the lock version) — today behind the declared
 `node:zlib` ❌ on the same chain, so it is the next stop once zlib exists. compat process.md names
 `umask` as an ESM link-time miss (row "`node:process` named imports") and a ❌ row for the call.
 

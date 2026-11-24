@@ -8,7 +8,7 @@
 // From the repo root, after `pnpm install && pnpm --filter @riftydev/isolate-host build`:
 //   node docs/backlog/distribution/reference/isolate-library-probe/probe.mjs [--json out.json] [--min-memory] [--keep] [--deps-artifact a.tar.gz] [name…]
 // Installs deps/ and verify/ with `npm ci` into a temp dir (network: the npm registry only).
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import {
   cpSync,
   lstatSync,
@@ -184,6 +184,16 @@ for (const lib of libs) {
     nodeRun = { exitCode: e.status, stdout: e.stdout, stderr: e.stderr };
   }
   nodeRun.ms = Math.round(performance.now() - tn); // process start included
+  // The same run under trace.cjs: builtins loaded (with their require chains) and web globals read.
+  const traced = spawnSync(
+    'node',
+    ['-r', join(here, 'trace.cjs'), `gen/${lib}.cjs`, `out/trace-${lib}.${kindOf(lib)}`],
+    { cwd: oracle, encoding: 'utf8' },
+  );
+  const traceLine = traced.stderr.split('\n').find((l) => l.startsWith('TRACE '));
+  nodeRun.trace = traceLine
+    ? JSON.parse(traceLine.slice(6))
+    : { error: traced.stderr.slice(0, 2000) };
   // Sandbox.
   await sandbox.writeFile(`gen/${lib}.cjs`, gen);
   await sandbox.writeFile('out/.keep', '');
@@ -205,6 +215,7 @@ for (const lib of libs) {
       differs: guestLines.filter((l) => !nodeLines.includes(l)),
       nodeOnly: nodeLines.filter((l) => !guestLines.includes(l)),
       stderr: run.stderr,
+      trace: nodeRun.trace,
     };
     results.push(r);
     console.log(JSON.stringify(r, null, 1));
@@ -230,7 +241,12 @@ for (const lib of libs) {
     lib,
     pkg: LIBS[kindOf(lib)],
     version: versions[LIBS[kindOf(lib)]],
-    node: { exitCode: nodeRun.exitCode, ms: nodeRun.ms, verdict: nodeVerdict },
+    node: {
+      exitCode: nodeRun.exitCode,
+      ms: nodeRun.ms,
+      verdict: nodeVerdict,
+      trace: nodeRun.trace,
+    },
     guest: { ...run, execMs, outBytes, verdict: guestVerdict },
   };
   results.push(r);

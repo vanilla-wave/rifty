@@ -1,7 +1,7 @@
 // node diag-outputs.cjs: the other output paths an agent may pick, one line each (`ok <bytes>` or
 // the error), past the canonical generators' first stops: pptxgenjs outputTypes (with
 // pptx-handled.cjs's rejection filter), docx Packer methods, exceljs over lib/doc/workbook
-// (writeFile, CSV, read back). The probe diffs the lines against real node.
+// (writeFile, CSV write/read, read back, sheet protection). The probe diffs the lines against real node.
 const fs = require('node:fs');
 process.on('unhandledRejection', (e) => {
   if (/isolate-host\.https/.test(e?.message)) return;
@@ -12,7 +12,8 @@ const PNG =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==';
 fs.writeFileSync('dot.png', Buffer.from(PNG, 'base64'));
 const size = (v) => {
-  if (typeof v === 'string') return `string ${v.length}`;
+  if (typeof v === 'string')
+    return v.length <= 40 ? `string ${JSON.stringify(v)}` : `string ${v.length}`;
   if (v && typeof v.byteLength === 'number')
     return `${Object.prototype.toString.call(v).slice(8, -1)} ${v.byteLength}`;
   if (v && typeof v.size === 'number')
@@ -76,6 +77,27 @@ const deck = () => {
     const w = new Workbook();
     await w.xlsx.readFile('w.xlsx');
     return String(w.getWorksheet('S').getCell('A1').value);
+  });
+  await line('exceljs xlsx.load(fs.readFileSync) of a writeFile output', async () => {
+    const w = new Workbook();
+    await w.xlsx.load(fs.readFileSync('w.xlsx'));
+    return String(w.getWorksheet('S').getCell('A1').value);
+  });
+  await line('exceljs xlsx.read(fs.createReadStream)', async () => {
+    const w = new Workbook();
+    await w.xlsx.read(fs.createReadStream('w.xlsx'));
+    return String(w.getWorksheet('S').getCell('A1').value);
+  });
+  await line('exceljs csv.read(fs.createReadStream)', async () => {
+    fs.writeFileSync('r.csv', 'a,1\nb,2\n');
+    const w = new Workbook();
+    const ws = await w.csv.read(fs.createReadStream('r.csv'));
+    return `${ws.getCell('A2').value} ${ws.rowCount} rows`;
+  });
+  await line('exceljs worksheet.protect + writeBuffer', async () => {
+    const w = wb();
+    await w.getWorksheet('S').protect('pw', {});
+    return w.xlsx.writeBuffer();
   });
   const { PDFDocument } = require('pdf-lib');
   await line('pdf-lib load + modify + save', async () => {
