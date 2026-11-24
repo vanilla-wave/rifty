@@ -30,9 +30,9 @@ Real path: exceljs 4.4.0 `wb.csv.writeBuffer()` → `@fast-csv/format` `CsvForma
 (`exceljs/lib/utils/stream-buf.js:239`). A subclass whose output a sink accepts would write wrong
 bytes with exit 0.
 
-Owner: runtime-js (`@riftydev/io` streams). Trigger: the library-compat work (ROADMAP M14 E,
-requirements §6, exceljs CSV), or any package subclassing `stream.Transform`/`Duplex` — the
-compat row was ✅ and is ⚠️ until fixed.
+Owner: runtime-js (`@riftydev/io` streams). Trigger: a guest package subclassing
+`stream.Transform`/`Duplex` with its own hooks (any host); first measured consumer: exceljs CSV
+write (isolate library probe). The compat rows read ⚠️ until fixed.
 
 ## Challenge
 

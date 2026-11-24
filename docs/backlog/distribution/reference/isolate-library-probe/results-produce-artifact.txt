@@ -1,6 +1,6 @@
-# 2026-11-24, Node v24.16.0, produce-artifact.mjs https://registry.npmjs.org/ <out> twice
-{"ms":14083,"bytes":19904823,"contentEncoding":"gzip","snapshotId":"sha256:533a3f518e715e166d4fda058e8c391dae627bebd0a810759fe49816d6be0067","installArtifactIdentity":"sha256:e982ad3d58158957346920b10b98939d56005b767a3cbeeed11589ee1509bffc"}
-{"ms":16365,"bytes":19904823,"contentEncoding":"gzip","snapshotId":"sha256:533a3f518e715e166d4fda058e8c391dae627bebd0a810759fe49816d6be0067","installArtifactIdentity":"sha256:e982ad3d58158957346920b10b98939d56005b767a3cbeeed11589ee1509bffc"}
+# 2026-11-24, Node v24.16.0, produce-artifact.mjs https://registry.npmjs.org/ <out> twice (published @riftydev/workbench@0.11.0)
+{"ms":10377,"bytes":19904808,"contentEncoding":"gzip","snapshotId":"sha256:4a9fa09737ededa3cd49afe6b01e91b3cb9a577d0d49ebd00926ddf86fd67e2c","installArtifactIdentity":"sha256:e982ad3d58158957346920b10b98939d56005b767a3cbeeed11589ee1509bffc"}
+{"ms":11812,"bytes":19904808,"contentEncoding":"gzip","snapshotId":"sha256:4a9fa09737ededa3cd49afe6b01e91b3cb9a577d0d49ebd00926ddf86fd67e2c","installArtifactIdentity":"sha256:e982ad3d58158957346920b10b98939d56005b767a3cbeeed11589ee1509bffc"}
 # cmp p1 p2: identical
 # tar -tzf p1 outside payload/node_modules:
 payload/
@@ -18,3 +18,5 @@ Files npm-ci/node_modules/.bin/rimraf and artifact/payload/node_modules/.bin/rim
 Files npm-ci/node_modules/.bin/uuid and artifact/payload/node_modules/.bin/uuid differ
 Only in npm-ci/node_modules: .package-lock.json
 # .bin in npm ci: 6 links; in artifact: 6 files
+# repo workbench dist (packages/workbench built at b3731e9c0+): produce-artifact.mjs https://registry.npmjs.org/ <out> packages/workbench/dist/index.js
+SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript parameter property is not supported in strip-only mode

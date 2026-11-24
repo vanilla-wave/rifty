@@ -1,5 +1,6 @@
-// node verify.cjs <pptx|pdf|docx|xlsx> <file> → JSON verdict on stdout. Real Node, readers that are
-// not the generating library (pdf-lib for pdf, as the requirement names it).
+// node verify.cjs <pptx|pdf|docx|xlsx> <file> → JSON verdict on stdout, in real Node. OOXML readers
+// are not the generating library; a PDF is checked by pdf-lib itself (as the requirement names it),
+// so a valid PDF means pdf-lib parses it.
 // OOXML: a ZIP, the expected parts present, every XML part well-formed, then a reader:
 // xlsx SheetJS, docx mammoth, pptx the slide list + slide text (no maintained Node pptx reader;
 // verify.py cross-checks with python-pptx / python-docx / openpyxl).
