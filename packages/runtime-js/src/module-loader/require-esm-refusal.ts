@@ -1,5 +1,5 @@
 import { basename, joinPath } from '@riftydev/vfs';
-import { requireModuleEnabled } from '../internal/require-module.ts';
+import { requireModuleEnabled } from '../internal/esm-loader.ts';
 import { hasModuleSyntax } from './resolver-profile.ts';
 import type { ResolvedModule } from './resolver.ts';
 

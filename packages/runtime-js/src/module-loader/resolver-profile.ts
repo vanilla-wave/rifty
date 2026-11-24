@@ -1,6 +1,6 @@
 import { parse as acornParse } from 'acorn';
+import { requireModuleEnabled } from '../internal/esm-loader.ts';
 import { nodeStartupOptions } from '../internal/node-startup-options.ts';
-import { requireModuleEnabled } from '../internal/require-module.ts';
 
 export interface FileDirResolutionOrder {
   readonly extensions: readonly string[];

@@ -6,7 +6,7 @@ created: 2026-11-22
 why: The guest claims `require(esm)` (`process.features.require_module === true`, the `module-sync` condition) without an ESM loader, so `require` of a dual package's ESM entry or of an ES module throws `TypeError: URLConstructor is not a constructor` — a leaked internal name, neither Node's behaviour nor a named gap
 user_story: As an agent backend running ordinary npm libraries in an isolate sandbox, I want `require('is-generator-function')` (exceljs 4.4.0's main entry, through es-abstract) to load as in Node, but today its `require('generator-function')` takes the `module-sync` ESM entry and throws `TypeError: URLConstructor is not a constructor`
 sources: [PR-421-external-review-round-1, docs/backlog/distribution/reference/isolate-library-probe/README.md, docs/adr/runtime-js/0571-prove-node-file-entry-and-fatal-report-parity-against-live-node-node-s-report-in-the-isolate-guest-only.md, ADR-0557]
-code: [packages/runtime-js/src/internal/require-module.ts (new), packages/runtime-js/src/module-loader/resolver.ts, packages/runtime-js/src/module-loader/resolver-profile.ts, packages/runtime-js/src/module-loader/loader.ts, packages/runtime-js/src/builtins/process.ts, packages/isolate-guest/src/guest/entry.ts]
+code: [packages/runtime-js/src/internal/esm-loader.ts (new), packages/runtime-js/src/module-loader/resolver.ts, packages/runtime-js/src/module-loader/resolver-profile.ts, packages/runtime-js/src/module-loader/loader.ts, packages/runtime-js/src/builtins/process.ts, packages/isolate-guest/src/guest/entry.ts]
 ---
 
 ## Context
@@ -64,6 +64,14 @@ In this mode `import()` still loads ES modules and a file entry is still detecte
 (`--experimental-detect-module` is separate); in the guest both stay named gaps
 (`isolate-host.dynamic-import`, `isolate-host.esm`), measured without `URLConstructor`.
 
+Review round 1 (2026-11-24, reproduced, `sandbox.exec`): `import()` from a CommonJS file of a
+typeless ESM-syntax `.js` loaded it as CommonJS (`ModuleLoadError SYNTAX_ERROR Failed to compile
+CJS module …`; Node: the namespace) — `loadAsync` re-resolved the id with `esm: false`; of an
+`.mjs` or `"type": "module"` `.js` it threw `TypeError: URLConstructor is not a constructor`.
+Manager decision (round 1): one host fact, "no ES module loader", carrying the host's gap;
+`require` without `require(esm)` follows from it; every ES module load throws the gap
+(`import()` from a file rejects with `isolate-host.esm`, as the file entry).
+
 ## User scenario
 
 The installed closures of `is-generator-function@1.1.2` and `is-async-function@2.1.1` in the
@@ -76,7 +84,8 @@ prints its verdict on a generator, an async, a plain and an arrow function. Toda
 1. Isolate parity against live `node --no-require-module -e` over the same files
    (`packages/isolate-host/tests/require-esm.test.ts`): `process.features.require_module`;
    every `ERR_REQUIRE_ESM` row's constructor, `name`, `code`, message, `stack` head and own keys
-   (from `-e`, from a file, and through `require.extensions['.js']` with and without a parent);
+   (from `-e`, from a file, and through `require.extensions['.js']` with no parent and on a real
+   module that has one);
    the `module-sync` package's `require` and `require.resolve`. Never `URLConstructor` → scenario
 2. The typeless-`.js` and `.cjs` SyntaxError rows: the guest's existing `ModuleLoadError`
    `SYNTAX_ERROR` carrying V8's exact message, pinned as `runtime-js/module-compile-error-node-syntax-error`;
@@ -90,22 +99,28 @@ prints its verdict on a generator, an async, a plain and an arrow function. Toda
    `import`, a typeless ESM-syntax `.js` loaded by `require` as ESM, `require` of `.mjs`
    returning its namespace (`packages/runtime-js/src/module-loader/require-module-switch.test.ts`) → ADR-0557
 6. ESM entry (`node m.mjs`, `node tm/x.js`, `node b.js`) and `import()` in the guest: their
-   named gaps, no `URLConstructor` (same isolate test file) → ADR-0557
+   named gaps, no `URLConstructor` (same isolate test file); `import()` from a file of a typeless
+   ESM-syntax `.js`, an `.mjs` or a `"type": "module"` `.js` rejects with `isolate-host.esm`, a
+   later `require` of it gives Node's row; `import()` of a CommonJS file and of `node:path` loads
+   as in Node → ADR-0557
+8. The runtime's default: `import()` from a CommonJS file still detects ESM syntax in a typeless
+   `.js` (`require-module-switch.test.ts`) → ADR-0557
 7. compat isolate-host.md rows say "as Node launched with `--no-require-module`" → ADR-0557
 
 ## Reference contract
 
 - Oracle: Node v24.16.0 (`process.execPath` of the test run) with `--no-require-module`.
 - Messages: Node's `ERR_REQUIRE_ESM` (A)/(B)/(C) above, text as probed; "has ESM syntax" read
-  as the loader's detection (`!parsesAsCommonJs && parsesAsEsm`, `resolver-profile.ts`).
-- Mechanism: one boolean `requireModule` (Node's flag name), default `true`, set by the host
-  before guest code; four readers: the `module-sync` condition, `require`'s typeless-`.js`
-  syntax detection, `ERR_REQUIRE_ESM` at `require` of an ES module, `process.features.require_module`.
+  as the loader's detection (`!parsesAsCommonJs && parsesAsEsm`, `resolver-profile.ts`; Node
+  classifies V8's CJS compile error instead — Out of scope).
+- Mechanism: one host fact, `declareNoEsmLoader(gap)` (`internal/esm-loader.ts`), undeclared by
+  default; readers: every ES module load (`executeEsm`, the gap), the `module-sync` condition,
+  `require`'s typeless-`.js` syntax detection, `ERR_REQUIRE_ESM`, `process.features.require_module`.
 
 ## Parity cases
 
 1. `process.features.require_module` → `false` → scenario
-2. (A)/(B)/(C) from `-e`, from a file, and via `require.extensions['.js']` with and without a parent: constructor, `name`, `code`, message, `stack` head, own keys; the SyntaxError rows: V8's message inside the pinned wrapper → scenario
+2. (A)/(B)/(C) from `-e`, from a file, and via `require.extensions['.js']` with no parent and on a module with one: constructor, `name`, `code`, message, `stack` head, own keys; the SyntaxError rows: V8's message inside the pinned wrapper → scenario
 3. Dual package: `require('dual')` → CJS entry, `require.resolve('dual')` → `i.js` → scenario
 4. Real `is-generator-function` / `is-async-function` verdicts (`node <gen>`) → scenario
 5. RED targets: 1–4 fail today with `URLConstructor` / `true` / `r.mjs` → scenario
@@ -116,20 +131,31 @@ prints its verdict on a generator, an async, a plain and an arrow function. Toda
   `.cjs` in its default mode too; rifty's browser hosts do not); the guest's stderr is empty there, pinned — finding
   `runtime-js/cjs-esm-syntax-load-warning`, compat ⚠️.
 - The CJS compile error's `ModuleLoadError` wrapper (constructor, `code` `SYNTAX_ERROR`, message
-  prefix): `runtime-js/module-compile-error-node-syntax-error` (user-deferred), compat ⚠️.
+  prefix): `runtime-js/module-compile-error-node-syntax-error` (user-deferred), compat ⚠️. A
+  static `import` or `import.meta` is refused by rifty's own CJS parse first: `Failed to parse CJS
+  source for <file>: <acorn message> (l:c)` (Node `Cannot use import statement outside a module`).
+- Which `ERR_REQUIRE_ESM` text a `"type": "module"` `.js` that fails to parse gets (`export const = ;`:
+  Node (B), rifty (C)), and detect-module of such a typeless file on every host: Node classifies
+  V8's CJS compile error, rifty parses whole — `runtime-js/esm-syntax-detection-v8-error-classification`, compat ⚠️.
+- `import()` from `-e` ends the run (`isolate-host.dynamic-import`, the isolate's own hook); from a
+  file it rejects with `isolate-host.esm` (rifty's loader): two named forms, compat.
 - `require.extensions['.js'](obj, file)` on a plain object with an own `parent`: rifty names that
   parent (it reads `module.parent`), Node none (its internal slot); `new Module(id, parent)` is
   `runtime-js/node-module-builtin-module-class`, compat ⚠️.
 - ES modules in the guest (`import()`, ESM entry): `isolate-host.dynamic-import`, `isolate-host.esm`, compat ❌.
 - `process.execArgv` stays `[]` (Node `['--no-require-module', …]`): the mode is the host's, not a
-  launch token; `--no-require-module` in a `fork`/`Worker` `execArgv` stays
+  launch token (compat row); `--no-require-module` in a `fork`/`Worker` `execArgv` stays
   `NotImplementedError('child_process.fork.execArgv')` on browser hosts.
+- A package whose `exports` has only `module-sync`/`import` entries: `ERR_PACKAGE_PATH_NOT_EXPORTED`
+  as Node, but rifty's text and `ModuleLoadError` — `runtime-js/exports-no-main-message`.
 - `fs` path type errors (`readFileSync({})` → `Right-hand side of 'instanceof' is not an object`,
   `fs-path.ts` `URLConstructor`): `runtime-js/isolate-fs-path-url-instanceof`.
 
 ## Decisions
 
-- The mode is a realm-level boolean in runtime-js (`internal/require-module.ts`), set by the guest before any guest code; not a startup-options token (fork/Worker would start accepting it — a browser change).
+- One host fact in runtime-js, "no ES module loader" with the host's gap (`declareNoEsmLoader`, `internal/esm-loader.ts`), declared by the guest before guest code; `require` without `require(esm)` derives from it (manager, round 1: no separate knob, no case needs `require(esm)` off with a loader); not a startup-options token (fork/Worker would start accepting it — a browser change).
+- The guest's own ESM-entry check is gone: `executeEsm` throws the declared gap for the entry too (same stderr, tests unchanged).
+- `loadAsync` (`import()` from CommonJS by id) resolves as `import` (`esm: true`): browser-neutral, detection is on there either way.
 - Typeless `.js`: `require` skips syntax detection when the mode is off (Node compiles it as CJS); `import`/entry resolution (`esm: true`) still detects.
 - `module-sync` is dropped from both condition sets when off, as Node's `initializeDefaultConditions`.
 - `ERR_REQUIRE_ESM` has Node's `NodeError` shape (prototype with `constructor` Error and the coded `toString`, then `Error.prototype`; own `stack`, `code`, `message`; coded `stack` head), not `ModuleLoadError` (constructor would differ).

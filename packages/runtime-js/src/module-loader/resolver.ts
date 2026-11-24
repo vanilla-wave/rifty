@@ -1,12 +1,12 @@
 import type { FsSync } from '@riftydev/vfs';
 import { basename, dirname, isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
 import { ensureRuntimeJsBuiltinsRegistered, isBuiltinSpecifier } from '../builtins/index.ts';
+import { requireModuleEnabled } from '../internal/esm-loader.ts';
 import {
   URLConstructor,
   fileURLToPathPosix,
   hasEncodedPathSeparator,
 } from '../internal/posix-file-url.ts';
-import { requireModuleEnabled } from '../internal/require-module.ts';
 import { hasURLScheme } from '../internal/url-scheme.ts';
 import { ModuleLoadError } from './errors.ts';
 import {

@@ -618,7 +618,8 @@ function createModuleLoaderCore(
       // Drop the SECOND resolve+read+scope-walk: carry the already-resolved
       // module (perf #14). The id-only path stays for direct id callers
       // (cjs/interop), which never hold a ResolvedModule.
-      return deps.loadAsyncResolved(readResolvedById(id));
+      // As `import` resolves: ESM syntax detection on with or without `require(esm)`.
+      return deps.loadAsyncResolved(readResolvedById(id, true));
     },
     // Async load of an ALREADY-RESOLVED module — skips re-resolving (perf #14).
     // ESM job ownership below supplies deduplication and cycle handling.
@@ -636,13 +637,13 @@ function createModuleLoaderCore(
     },
   };
 
-  function readResolvedById(id: string): ResolvedModule {
+  function readResolvedById(id: string, esm = false): ResolvedModule {
     if (id.startsWith('node:')) {
       return { id, kind: 'builtin', source: '', packageRoot: null };
     }
     // Re-resolve via the id itself as both specifier and fromFile so the
     // absolute path matches.
-    return resolver.resolve(id, { fromFile: id, esm: false });
+    return resolver.resolve(id, { fromFile: id, esm });
   }
 
   function makeRequire(from: string, parent?: CjsModule): CjsRequire {

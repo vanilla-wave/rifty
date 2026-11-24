@@ -20,6 +20,7 @@ import {
   globalProcessManager,
 } from '@riftydev/kernel';
 import { NotImplementedError, isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
+import { requireModuleEnabled } from '../internal/esm-loader.ts';
 import {
   beginNodeEvalExplicitExit,
   ref as refEventLoop,
@@ -31,7 +32,6 @@ import {
   decodeNodeIpcMessage,
   encodeNodeIpcMessage,
 } from '../internal/node-ipc-serialization.ts';
-import { requireModuleEnabled } from '../internal/require-module.ts';
 import { installGlobalAlias } from '../ipc/worker-realm-compat.ts';
 import { EventEmitter } from './events.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
