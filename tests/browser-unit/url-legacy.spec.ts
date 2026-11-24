@@ -35,11 +35,16 @@ const requireFixture = createRequire(join(FIXTURES, 'codec.cjs'));
 const DEP_ROWS = requireFixture('./dep0169-rows.cjs') as Record<string, Record<string, string>>;
 const ERROR_ROWS = requireFixture('./error-state-rows.cjs') as Record<
   string,
-  { declared: boolean; files: Record<string, string> }
+  { files: Record<string, string> }
 >;
-/** A declared row: the walk is impossible, DEP0169 not emitted — Node's stdout without its warning. */
-const expectedFor = (row: { declared: boolean }, node: string): string =>
-  row.declared ? node.replace(/^warning DEP0169\n/m, '') : node;
+/**
+ * Declared (ADR-0574, the user's choice 2026-11-24): rifty never emits DEP0169 (no caller
+ * detection). Node's output with its DEP0169 removed: the listener's `warning DEP0169` line, and
+ * on stderr the warning and the hint that follows it.
+ */
+const withoutDep0169 = (stdout: string): string => stdout.replace(/^warning DEP0169\n/gm, '');
+const stderrWithoutDep0169 = (stderr: string): string =>
+  stderr.replace(/^\(node:<pid>\) \[DEP0169\][^\n]*\n(?:\(Use `<argv0> --trace[^\n]*\n)?/m, '');
 const GUEST_ROWS = requireFixture('./guest-rows.cjs') as Record<
   string,
   { hosts: string[]; files: Record<string, string> }
@@ -187,7 +192,7 @@ test('legacy node:url / querystring equal Node (COI Workbench)', async ({ page, 
         .toEqual([]);
     }
 
-    // Acceptance 1: the user scenario, all five lines and DEP0169 as Node.
+    // Acceptance 1: the user scenario, all five lines as Node; DEP0169 declared (not emitted).
     {
       const files = {
         ...packageFiles(PARSEURL, 'node_modules/parseurl'),
@@ -198,41 +203,41 @@ test('legacy node:url / querystring equal Node (COI Workbench)', async ({ page, 
       const rifty = await inRifty(files, ['main.js']);
       expect.soft({ ...rifty, stderr: mask(rifty.stderr) }, 'scenario').toEqual({
         stdout: node.stdout,
-        stderr: mask(node.stderr),
+        stderr: stderrWithoutDep0169(mask(node.stderr)),
         exitCode: node.exitCode,
       });
     }
 
-    // ADR-0574 §2: a guest's patched intrinsics do not reach the port where Node's do not.
+    // Guest programs around url (guest-rows.cjs).
     for (const [name, row] of Object.entries(GUEST_ROWS)) {
       if (!row.hosts.includes('browser')) continue;
       const node = inNode(row.files, ['main.js']);
       rmSync(node.dir, { recursive: true, force: true });
       const rifty = await inRifty(row.files, ['main.js']);
       expect.soft({ stdout: rifty.stdout, exitCode: rifty.exitCode }, name).toEqual({
-        stdout: node.stdout,
+        stdout: withoutDep0169(node.stdout),
         exitCode: node.exitCode,
       });
     }
 
-    // ADR-0574 §4: DEP0169/DEP0170 window rows.
+    // DEP0169 (declared, never emitted) and DEP0170 rows.
     for (const [name, files] of Object.entries(DEP_ROWS)) {
       const node = inNode(files, ['main.js']);
       rmSync(node.dir, { recursive: true, force: true });
       const rifty = await inRifty(files, ['main.js']);
       expect.soft({ stdout: rifty.stdout, exitCode: rifty.exitCode }, name).toEqual({
-        stdout: node.stdout,
+        stdout: withoutDep0169(node.stdout),
         exitCode: node.exitCode,
       });
     }
 
-    // A guest's Error state never breaks url.parse; an impossible walk is "unknown", no DEP0169.
+    // A guest's Error state never breaks url.parse.
     for (const [name, row] of Object.entries(ERROR_ROWS)) {
       const node = inNode(row.files, ['main.js']);
       rmSync(node.dir, { recursive: true, force: true });
       const rifty = await inRifty(row.files, ['main.js']);
       expect.soft({ stdout: rifty.stdout, exitCode: rifty.exitCode }, name).toEqual({
-        stdout: expectedFor(row, node.stdout),
+        stdout: withoutDep0169(node.stdout),
         exitCode: node.exitCode,
       });
     }

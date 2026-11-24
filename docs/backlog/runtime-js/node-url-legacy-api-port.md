@@ -64,7 +64,8 @@ warning on stderr. Target: the same file gives Node's output in a browser-host `
 ## Acceptance
 
 1. The scenario file: in an isolate-host sandbox and in a browser-host `node main.js` (Chromium
-   lane), stdout, stderr and exit code equal `node main.js` over the same files; masked only: the
+   lane), stdout, stderr and exit code equal `node main.js` over the same files, but for Node's
+   DEP0169 warning and its hint (rifty emits no DEP0169, the user's choice 2026-11-24); masked only: the
    pid in `(node:<pid>)` and the program name in the `(Use \`node --trace-deprecation …\`` hint
    (rifty's `argv0` `'rifty'`, `builtins/process-identity.ts:22`; declared by Acceptance 7). Under
    Acceptance 4 (the user's choice 2026-11-24) the isolate run stops at the `ñ.com` line with
@@ -145,7 +146,8 @@ sandbox lane; each case is RED on main:
 - `url.resolveObject(url.parse(base), rel)` record, and `url.resolveObject('', 'foo')` → `'foo'` → scenario
 - `new url.Url()`: its keys, `Url.prototype.parse`/`format`/`resolve`/`resolveObject` → scenario
 - Errors: `url.parse(null)`, `url.format(1)` → `ERR_INVALID_ARG_TYPE` with Node's message → scenario
-- DEP0169 by Node's 4-frame window (Reference contract): once per process for a call from user
+- Declared ceiling (the user's choice 2026-11-24, ADR-0574 §Corrections): rifty emits no DEP0169;
+  each row below gives Node's output without it (DEP0170 as Node). DEP0169 by Node's 4-frame window: once per process for a call from user
   code; none from a caller in `node_modules` (parseurl); `url.resolve` from `node_modules`
   (`urlResolve` takes a window slot); a `node_modules` caller behind three `EventEmitter.emit`
   frames (window used up by builtin frames → warns; behind two → silent); a user frame first
@@ -169,21 +171,9 @@ binds `primordials`, `ERR_*`, validators, `urlFormat`'s `instanceof URL` (the ru
 an `xn--` label is returned as is, ada's ASCII path; otherwise the `URL` captured at load parses
 `http://<hostname>.x/` (a neutral last label: no IPv4 rule; `.x` cut), each `xn--` label of its hostname is decoded by ada's `punycode_to_utf32`
 (an all-ASCII or out-of-range decoding is an error, as ada) and the decoded name must parse back to
-the same hostname; a failure is ada's `''`; no `URL` at load → `NotImplementedError('url.toASCII')`) and `isInsideNodeModules(4)`: a V8
-stack walk through rifty's one `Error.prepareStackTrace` owner
-(`builtins/vm/script-offsets.ts`) that ignores the guest's `stackTraceLimit`/`prepareStackTrace`
-(a guest frame is one rifty's loader compiled from guest source, V8 `CallSite.isEval()`; every
-other frame is the runtime's and counts as Node's `node:` frame),
-a lookup that never throws nor changes `Error` (an impossible walk → "unknown", no DEP0169; manager's
-rule, review round 2),
-and reproduces Node's window (`node_util.cc` `IsInsideNodeModules`: `CurrentStackTrace(isolate,
-4)` — 4 frames in total, builtin ones included; frames with an empty or `node:` script name are
-skipped; the first remaining frame decides; all 4 skipped → not inside, the warning fires). The
-window counts rifty's builtin-module frames (recognised per host by the runtime's own script
-names) one for one as Node's `node:` frames: the ported `node:url` functions have Node's frames by
-construction; elsewhere (an `EventEmitter.emit` chain) rifty's builtin call depth decides, and a
-case where it differs from Node's is a failing parity case or, if the depth cannot match, a
-declared compat ⚠️ row naming it. Oracle: live Node v24.16.0 over
+the same hostname; a failure is ada's `''`; no `URL` at load → `NotImplementedError('url.toASCII')`) and `isInsideNodeModules(4)`: a constant `true` — no caller detection, so no DEP0169 (the user's
+choice 2026-11-24 after three review rounds broke a V8 stack walk through the guest's `Error` state;
+ADR-0574 §Corrections, compat modules.md). Oracle: Oracle: live Node v24.16.0 over
 the recorded corpus. A Node re-pin regenerates and reruns the suite.
 
 ## Out of scope
@@ -231,6 +221,10 @@ the recorded corpus. A Node re-pin regenerates and reruns the suite.
   license notice (`generated/node.LICENSE` is not in `dist`; undici's too, ADR-0541): no package
   with this code is published before the unit that ships license notices of generated sources
   (manager's, all generated sources at once).
+- 2026-11-24 — the user's choice («ок» to the manager): DEP0169 caller detection removed, DEP0169
+  never emitted (declared); supersedes the next line and the round-2 lookup rule. Three review rounds
+  each broke the walk through the guest's `Error` state (`url.parse` threw, the guest's hook stayed
+  replaced); DEP0170 stays.
 - 2026-11-24 — DEP0169 window: a guest frame is code rifty's loader compiled from guest source
   (V8 `CallSite.isEval()`: CJS, ESM and `-e` bodies are `Function`/indirect-eval code), not a
   per-host list of runtime script names — the runtime's bundles and chunks need no registry, and a

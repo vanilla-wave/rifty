@@ -86,11 +86,6 @@ export function writePrepareStackTrace(value: unknown): void {
   else errorCtor.prepareStackTrace = value;
 }
 
-/** The slot is this module's owner accessor (its reads and writes run no guest code). */
-export function ownsPrepareStackTrace(): boolean {
-  return isOwnerInstalled();
-}
-
 // Node 24's default `Error.prepareStackTrace` (`ErrorPrepareStackTrace` →
 // `defaultPrepareStackTrace`), fed projected CallSites.
 const defaultPrepareStackTrace = {

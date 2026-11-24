@@ -41,15 +41,7 @@ points, 1 mapped `%`, 4 Unicode labels whose ASCII part starts with `xn--`), Chr
    all-ASCII or > U+10FFFF → error, as ada) and the decoded name must parse back to the same
    host. Failure → `''` (ada's error; url.js throws `ERR_INVALID_URL`). No `URL` at load →
    `NotImplementedError('url.toASCII')`. A guest's later `globalThis.URL` is never read.
-4. `isInsideNodeModules(4)`: `Error.captureStackTrace` under rifty's one `prepareStackTrace` owner
-   with the guest's hook and `stackTraceLimit` set aside through their data slots and restored
-   exactly (hook first). A lookup, never a side effect (review round 2): no guest code runs
-   (an accessor slot is not called), nothing throws; where the walk is impossible (slot unsettable,
-   sealed limit below 4, capture throws) the answer is "unknown" → treated as inside
-   `node_modules`, no DEP0169 (declared); window = 4 frames from `urlParse`, as
-   Node's `CurrentStackTrace(4)`. A frame is the guest's iff V8 `isEval()` (rifty compiles guest
-   CJS/ESM/`-e` with `Function`/indirect eval); others count as Node's `node:` frames. First guest
-   frame with a non-empty name decides (`/node_modules/`).
+4. `isInsideNodeModules(4)`: superseded 2026-11-24 (§Corrections) — a constant `true`; no DEP0169.
 5. `instanceof URL` → the load-time `URL`, else a class no value is an instance of.
    `bindingUrl.format(href, fragment, unicode, search, auth)` → `href` where no option changes it,
    else `NotImplementedError('url.format.options')`. `domainToASCII`, `domainToUnicode`,
@@ -61,7 +53,7 @@ points, 1 mapped `%`, 4 Unicode labels whose ASCII part starts with `xn--`), Chr
 | Binding | Class / authority | Drift guard | Kill condition |
 |---|---|---|---|
 | `toASCII` via host `URL` | platform-gap; the user's choice 2026-11-24 | IdnaTestV2 rows pinned per host (browser-unit), ASCII rows exact in the isolate | the isolate Web API goal delivers a `URL` (its candidate: the generated `ada::idna` port) |
-| `isInsideNodeModules` | platform-gap; this ADR | DEP0169 window parity rows | none (native in Node) |
+| `isInsideNodeModules` (constant `true`, no DEP0169) | platform-gap; the user's choice 2026-11-24 | declared DEP0169 rows (Node's output without it) | a caller test that cannot break under any guest `Error` state |
 | errors, validators, intrinsics | substitution-environment | generator anchors + differential corpus | none |
 
 ## Alternatives rejected
@@ -73,7 +65,7 @@ points, 1 mapped `%`, 4 Unicode labels whose ASCII part starts with `xn--`), Chr
 
 ## Consequences
 
-- One `node:url` behaviour on every host for ASCII hosts; `Url` shape, errors, DEP0169/DEP0170.
+- One `node:url` behaviour on every host for ASCII hosts; `Url` shape, errors, DEP0170 (DEP0169 not emitted, §Corrections).
 - Browser hosts: `toASCII` residual declared (compat ⚠️); isolate: non-ASCII hosts loud (❌).
 - Cost, 2026-11-24 at `313d64326` (Node v24.16.0, esbuild 0.28.0, Chromium 148; review round 1 adds a few hundred bytes, not remeasured): generated `legacy.js` 19 139 B;
   isolate `guest.js` 7 123 270 → 7 170 362 B (+47 092; gzip +10 855); `client-bundle-budget`
@@ -84,3 +76,15 @@ points, 1 mapped `%`, 4 Unicode labels whose ASCII part starts with `xn--`), Chr
 - Publishing gate: no package with this code is published before the generated-sources license
   unit (the Node notice is not in `dist`; review round 1).
 - Re-pin of Node: rerun the generator, the corpus and IdnaTestV2 suites.
+
+## Corrections
+
+- 2026-11-24 — §4 overturned, the user's choice («ок» to the manager on removing caller detection):
+  rifty has no `isInsideNodeModules` walk; the binding is `true` for every caller, so `url.parse`
+  never emits DEP0169 (Node: for a caller outside `node_modules`); DEP0170 stays. Why: three review
+  rounds in a row broke the walk through the guest's `Error` state — a non-writable
+  `stackTraceLimit`, a frozen `Error` / unsettable `prepareStackTrace`, then a guest
+  `Object.getOwnPropertyDescriptor` read by rifty's stack-hook owner — each time `url.parse` threw
+  or the guest's hook stayed replaced (`.stack` of later errors an array). Declared: compat
+  modules.md `node:url`; rows `dep0169-rows.cjs`, `error-state-rows.cjs`, `guest-rows.cjs`
+  (Node's output without its DEP0169).

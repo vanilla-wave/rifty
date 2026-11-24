@@ -172,27 +172,27 @@ const GUEST_ROWS = requireFixture('./guest-rows.cjs') as Record<
   { hosts: string[]; files: Record<string, string> }
 >;
 
-describe('isolate guest: patched intrinsics do not reach the port where Node does not use them', () => {
+describe('isolate guest: guest programs around url (guest-rows)', () => {
   for (const [name, row] of Object.entries(GUEST_ROWS)) {
     if (!row.hosts.includes('isolate')) continue;
     it(name, async () => {
       const node = inNode(row.files, ['main.js']);
       const rifty = await inSandbox(row.files, ['main.js']);
       expect({ stdout: rifty.stdout, exitCode: rifty.exitCode }).toEqual({
-        stdout: node.stdout,
+        stdout: withoutDep0169(node.stdout),
         exitCode: node.exitCode,
       });
     }, 60_000);
   }
 });
 
-describe('isolate guest: DEP0169/DEP0170 by Node v24.16.0s 4-frame window', () => {
+describe('isolate guest: DEP0169 (declared, never emitted) and DEP0170 rows', () => {
   for (const [name, files] of Object.entries(DEP_ROWS)) {
     it(name, async () => {
       const node = inNode(files, ['main.js']);
       const rifty = await inSandbox(files, ['main.js']);
       expect({ stdout: rifty.stdout, exitCode: rifty.exitCode }).toEqual({
-        stdout: node.stdout,
+        stdout: withoutDep0169(node.stdout),
         exitCode: node.exitCode,
       });
     }, 60_000);
@@ -201,23 +201,29 @@ describe('isolate guest: DEP0169/DEP0170 by Node v24.16.0s 4-frame window', () =
 
 const ERROR_ROWS = requireFixture('./error-state-rows.cjs') as Record<
   string,
-  { declared: boolean; files: Record<string, string> }
+  { files: Record<string, string> }
 >;
-/** A declared row: the walk is impossible, DEP0169 not emitted — Node's stdout without its warning. */
-const expectedFor = (row: { declared: boolean }, node: string): string =>
-  row.declared ? node.replace(/^warning DEP0169\n/m, '') : node;
-describe("isolate guest: a guest's Error state never breaks url.parse (ADR-0574 §4)", () => {
+describe("isolate guest: a guest's Error state never breaks url.parse", () => {
   for (const [name, row] of Object.entries(ERROR_ROWS)) {
     it(name, async () => {
       const node = inNode(row.files, ['main.js']);
       const rifty = await inSandbox(row.files, ['main.js']);
       expect({ stdout: rifty.stdout, exitCode: rifty.exitCode }).toEqual({
-        stdout: expectedFor(row, node.stdout),
+        stdout: withoutDep0169(node.stdout),
         exitCode: node.exitCode,
       });
     }, 60_000);
   }
 });
+
+/**
+ * Declared (ADR-0574, the user's choice 2026-11-24): rifty never emits DEP0169 (no caller
+ * detection). Node's output with its DEP0169 removed: the listener's `warning DEP0169` line, and
+ * on stderr the warning and the hint that follows it.
+ */
+const withoutDep0169 = (stdout: string): string => stdout.replace(/^warning DEP0169\n/gm, '');
+const stderrWithoutDep0169 = (stderr: string): string =>
+  stderr.replace(/^\(node:<pid>\) \[DEP0169\][^\n]*\n(?:\(Use `<argv0> --trace[^\n]*\n)?/m, '');
 
 /** The pid in `(node:<pid>)` and the program name in Node's `--trace-*` hint. */
 const mask = (stderr: string): string =>
@@ -228,7 +234,7 @@ const mask = (stderr: string): string =>
 describe('user scenario: parseurl 1.3.3 + legacy url in a sandbox (Acceptance 1)', () => {
   const closure = closureFiles('parseurl', realpathSync(join(here, '../node_modules/parseurl')));
   const files = new Map(closure).set('main.js', readFileSync(join(FIXTURES, 'scenario-main.js')));
-  it('Node prints five lines and DEP0169; the isolate stops at the non-ASCII host (declared, Acceptance 4)', async () => {
+  it('Node prints five lines and DEP0169; the isolate stops at the non-ASCII host (declared, Acceptance 4), no DEP0169 (declared)', async () => {
     const node = closureInNode(files, 'main.js', 'unused');
     const rifty = await closureInSandbox(files, 'main.js', 'unused');
     expect(node.exitCode, node.stderr).toBe(0);
@@ -238,10 +244,8 @@ describe('user scenario: parseurl 1.3.3 + legacy url in a sandbox (Acceptance 1)
     // to Node's full output once the isolate translates hostnames (option (d) or a guest URL).
     expect(rifty.stdout).toBe(`${lines.slice(0, 3).join('\n')}\n`);
     expect(rifty.exitCode).toBe(1);
-    const warning = mask(node.stderr);
-    expect(mask(rifty.stderr).startsWith(warning), rifty.stderr).toBe(true);
-    expect(mask(rifty.stderr).slice(warning.length)).toContain(
-      'NotImplementedError: Not implemented: url.toASCII',
-    );
+    expect(stderrWithoutDep0169(mask(node.stderr))).toBe('');
+    expect(mask(rifty.stderr)).not.toContain('DEP0169');
+    expect(rifty.stderr).toContain('NotImplementedError: Not implemented: url.toASCII');
   }, 120_000);
 });

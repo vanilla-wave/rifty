@@ -1,7 +1,7 @@
 /**
  * Inputs of Node v24.16.0's generated legacy `url`/`querystring` (ADR-0574 §2–§5): `primordials`
  * (captured at load), Node's error classes and validators, the active process, `toASCII`,
- * `isInsideNodeModules`, `bindingUrl.format`. Everything else is upstream's text. Error message
+ * `isInsideNodeModules` (constant, below), `bindingUrl.format`. Everything else is upstream's text. Error message
  * building and `bindingUrl.format` still call live intrinsics
  * (`backlog/runtime-js/post-guest-paths-use-replaceable-intrinsics`).
  */
@@ -11,7 +11,6 @@ import { URLConstructor } from '../../internal/posix-file-url.ts';
 import bufferModule from '../buffer.ts';
 import { publicNodeProcess } from '../process-public.ts';
 import createUrlLegacy from './generated/legacy.js';
-import { isInsideNodeModules } from './inside-node-modules.ts';
 import { createToASCII, nativeHostOf } from './to-ascii.ts';
 
 type Fn = (...args: never[]) => unknown;
@@ -217,7 +216,10 @@ const BINDINGS: Readonly<Record<string, unknown>> = {
   encoding_binding: { toASCII: createToASCII(hostOf) },
   url: { format: formatURL },
   url_pattern: {},
-  util: { isInsideNodeModules },
+  // Node walks the caller's stack to emit DEP0169 for code outside `node_modules`. rifty has no
+  // such walk (removed, the user's choice 2026-11-24, ADR-0574): every caller counts as inside,
+  // so `url.parse` never emits DEP0169 (declared, compat modules.md `node:url`).
+  util: { isInsideNodeModules: () => true },
 };
 const MODULES: Readonly<Record<string, unknown>> = {
   buffer: bufferModule,
