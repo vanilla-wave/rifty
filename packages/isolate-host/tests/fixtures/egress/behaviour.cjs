@@ -80,6 +80,31 @@ for (const n of [
 ])
   run(`validateHeaderName ${JSON.stringify(n)}`, () => http.validateHeaderName(n));
 run('validateHeaderName label', () => http.validateHeaderName('a b', 'Label'));
+// Node formats these messages with util.format's %s (ERR_INVALID_CHAR: a template literal).
+for (const [label, name] of [
+  ['{}', {}],
+  ['null-proto', Object.create(null)],
+  ['[]', []],
+  ['[1,2]', [1, 2]],
+  ['nested', { a: { b: { c: 1 } }, d: [1, [2]] }],
+  ['1n', 1n],
+  ['-0', -0],
+  ['1.5', 1.5],
+  ['symbol', Symbol('s')],
+  ['function', function f() {}],
+  ['own toString', { toString: () => 'custom' }],
+  ['Date', new Date(0)],
+  ['Error', new Error('boom')],
+  ['Map', new Map([[1, 2]])],
+  ['class instance', new (class Foo {})()],
+]) {
+  run(`validateHeaderName name ${label}`, () => http.validateHeaderName(name));
+  run(`validateHeaderName label ${label}`, () => http.validateHeaderName('bad name', name));
+  run(`validateHeaderValue name ${label} undefined`, () =>
+    http.validateHeaderValue(name, undefined),
+  );
+  run(`validateHeaderValue name ${label} bad char`, () => http.validateHeaderValue(name, '\n'));
+}
 run('validateHeaderName.withoutStackTrace', () => http.validateHeaderName.withoutStackTrace('a b'));
 for (const v of [undefined, null, 5, 'a\nb', 'ok', ['a', 'b'], 'é'])
   run(`validateHeaderValue ${JSON.stringify(v)}`, () => http.validateHeaderValue('h', v));
@@ -180,6 +205,8 @@ for (const o of [
   {},
   { host: 'h', port: 1, localAddress: 'l', family: 4, socketPath: '/s' },
   { family: 5 },
+  { family: 6 },
+  { host: 'h', port: 2, family: 6 },
 ])
   run(`http getName ${JSON.stringify(o)}`, () => g.getName(o));
 const gs = new https.Agent();
@@ -244,6 +271,27 @@ for (const [label, make] of [
       .map((s) => String(a[s]))
       .join();
   });
+run('proxyEnv non-string proxy', () => new http.Agent({ proxyEnv: { HTTP_PROXY: 5 } }));
+for (const [label, env] of [
+  ['empty', {}],
+  ['other variables', { PATH: '/bin', no_proxy: 'x' }],
+  ['empty strings', { http_proxy: '', HTTPS_PROXY: '' }],
+  ['number', 5],
+  ['null', null],
+  ['array', []],
+  ['crlf', { http_proxy: 'http://p\r' }],
+  ['https crlf', { HTTPS_PROXY: 'http://p\n' }],
+])
+  run(`setGlobalProxyFromEnv ${label}`, () => {
+    const before = [http.globalAgent, https.globalAgent];
+    const restore = http.setGlobalProxyFromEnv(env);
+    const kept = http.globalAgent === before[0] && https.globalAgent === before[1];
+    const r = restore();
+    return `${typeof restore} name=${JSON.stringify(restore.name)} length=${restore.length} prototype=${'prototype' in restore} kept=${kept} restore=${r}`;
+  });
+run('setGlobalProxyFromEnv default env', () => typeof http.setGlobalProxyFromEnv());
+run('net.BlockList() without new', () => net.BlockList());
+run('net.SocketAddress() without new', () => net.SocketAddress());
 run('keylog hook', () => {
   const a = new http.Agent();
   const before = a.listenerCount('newListener');

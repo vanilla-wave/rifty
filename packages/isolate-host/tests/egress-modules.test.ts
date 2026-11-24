@@ -47,13 +47,44 @@ describe('real members equal live node -e (Acceptance 2, parity cases 2–6)', (
   });
 });
 
+const NO_NETWORK = 'no network in the rifty isolate host, ADR-0557';
+/** Loud although Node's constructor opens nothing (unit Decisions, manager-confirmed): its own reason. */
+const NOT_IN_GUEST: Readonly<Record<string, string>> = Object.fromEntries([
+  ...[
+    'http.IncomingMessage',
+    'http.OutgoingMessage',
+    'http.Server',
+    'http.ServerResponse',
+    'https.Server',
+    'net.Server',
+    'net.Socket',
+  ].map((f) => [
+    f,
+    "Node's HTTP message, server and socket objects are not in the rifty isolate host, ADR-0557",
+  ]),
+  ...[
+    'net.BlockList',
+    'net.BlockList.isBlockList',
+    'net.SocketAddress',
+    'net.SocketAddress.isSocketAddress',
+    'net.SocketAddress.parse',
+  ].map((f) => [f, 'not implemented in the rifty isolate host (Node backs it natively), ADR-0557']),
+]);
+
 /** [what the guest does, the feature its gap names]. */
 const LOUD: readonly (readonly [string, string])[] = [
   ['http._connectionListener({})', 'http._connectionListener'],
   ["http.request('http://example.com/')", 'http.request'],
   ["http.get('http://example.com/')", 'http.get'],
   ['http.createServer()', 'http.createServer'],
-  ['http.setGlobalProxyFromEnv({})', 'http.setGlobalProxyFromEnv'],
+  [
+    "http.setGlobalProxyFromEnv({ HTTP_PROXY: 'http://proxy.invalid:1' })",
+    'http.setGlobalProxyFromEnv',
+  ],
+  [
+    "http.setGlobalProxyFromEnv({ https_proxy: 'https://proxy.invalid' })",
+    'http.setGlobalProxyFromEnv',
+  ],
   ["new http.ClientRequest('http://example.com/')", 'http.ClientRequest'],
   ['new http.IncomingMessage()', 'http.IncomingMessage'],
   ['new http.OutgoingMessage()', 'http.OutgoingMessage'],
@@ -143,11 +174,11 @@ describe('network use is a named gap; load, reads and subclassing are not (Accep
     const result = await runCode(`
       const http = require('http'), https = require('https'), net = require('net'), util = require('util');
       const out = [];
-      for (const [expr, feature] of ${JSON.stringify(LOUD)}) {
+      for (const [expr, feature, hint] of ${JSON.stringify(LOUD.map(([expr, feature]) => [expr, feature, NOT_IN_GUEST[feature] ?? NO_NETWORK]))}) {
         try { new Function('http', 'https', 'net', 'util', expr)(http, https, net, util); out.push(expr + ' REACHED'); }
         catch (e) {
           const ok = e instanceof Error && e.name === 'NotImplementedError' &&
-            e.message.startsWith('Not implemented: isolate-host.' + feature + ' (');
+            e.message === 'Not implemented: isolate-host.' + feature + ' (' + hint + ')';
           out.push(expr + ' ' + (ok ? 'loud' : 'WRONG ' + e.name + ': ' + e.message));
         }
       }

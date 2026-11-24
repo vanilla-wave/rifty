@@ -41,6 +41,12 @@ const fn = (f) =>
       ? ` proto->${label(Object.getPrototypeOf(f.prototype))} ctor->${label(Object.getPrototypeOf(f))}` +
         ` statics=${Object.getOwnPropertyNames(f)
           .filter((s) => !['length', 'name', 'prototype', 'arguments', 'caller'].includes(s))
+          .map((s) => {
+            const v = f[s];
+            return typeof v === 'function'
+              ? `${s}(fn ${v.name}/${v.length} prototype=${'prototype' in v})`
+              : s;
+          })
           .join('|')}`
       : ''
   }`;
