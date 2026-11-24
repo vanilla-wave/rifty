@@ -21,8 +21,6 @@
 
 ## Open questions
 
-- Tier: `works` is the manager's provisional default (2026-11-24) — owner: user — the manager carries
-  the question and brings the answer; the goal stays `draft` until it lands.
 - Which existing harness carries scenario 1–7 in Chromium on both browser hosts (Workbench and SDK) —
   owner: agent — settled by unit 1 against the e2e harnesses.
 - Whether Node's own `test/parallel/test-zlib*.js` (the 47 deflate-family files pass on the engine in
