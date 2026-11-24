@@ -146,6 +146,28 @@ describe('esbuild carrier retirement', () => {
     }
   });
 
+  it('bounds the unpinned worker header at 2048 bytes, whatever esbuild-form lines it holds', () => {
+    const CEILING = 2_048;
+    const line = (name: string) => `import {\n  ${name}\n} from "./chunk-ABCDEFGH.js";\n`;
+    const base = WORKER_HEADER.join('').length + line('').length;
+    const filled = (bytes: number) => [...WORKER_HEADER, line('a'.repeat(bytes - base))];
+    expect.soft(workerViolations(workerBytes(filled(CEILING)))).toEqual([]);
+    expect
+      .soft(workerViolations(workerBytes(filled(CEILING + 1))))
+      .toContainEqual(
+        expect.stringContaining(
+          `leading sibling imports are ${CEILING + 1} bytes, over the 2048-byte`,
+        ),
+      );
+    const repeated = `import {\n${'  ts,\n'.repeat(100_000)}  ts\n} from "./chunk-ABCDEFGH.js";\n`;
+    expect
+      .soft(workerViolations(workerBytes([...WORKER_HEADER, repeated])))
+      .toContainEqual(expect.stringContaining('over the 2048-byte'));
+    // esbuild's alias form (node-worker.js: `init_src as init_src2,`) is a header line.
+    const alias = 'import {\n  init_src as init_src2,\n  __toESM\n} from "./chunk-ABCDEFGH.js";\n';
+    expect.soft(workerViolations(workerBytes([...WORKER_HEADER, alias]))).toEqual([]);
+  });
+
   it('pins the other compiler output whole: a leading sibling import is red', () => {
     const compiler = Buffer.from(WORKER_BODY, 'latin1');
     expect(workerViolations(compiler, 'chunk-EMDIREKY.js')).toEqual([]);
