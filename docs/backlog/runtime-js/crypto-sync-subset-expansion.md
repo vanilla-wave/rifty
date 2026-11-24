@@ -21,6 +21,11 @@ real code calls can't be backed by async SubtleCrypto on the calling worker, so 
 needs pure-JS implementations (as already done for the hashes), with correctness/timing risk.
 Parked: record the deferral + its gate; don't build speculatively.
 
+Consumer observed 2026-11-24 (isolate-host sandbox, `docs/backlog/distribution/reference/isolate-library-probe/gen/diag-outputs.cjs`):
+exceljs 4.4.0 `worksheet.protect(password)` → `Error: Hash algorithm 'sha512' not supported!`
+(`crypto.getHashes()` lacks it; `crypto.createHash('sha512')` → `NotImplementedError`) — a sheet
+password is a plausible agent request for xlsx output.
+
 ## Options or Next
 
 - Gate: a verified consumer needing sync ciphers/KDF/sign (a JWT/auth library in a target project).

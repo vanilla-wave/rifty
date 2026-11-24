@@ -49,7 +49,12 @@ export const streamsMatrix = {
     [
       '`Transform`',
       '⚠️',
-      "The `transform`/`flush` constructor options work; a subclass's own `_transform`/`_flush` never run — its chunks pass through unchanged — and a `Duplex` subclass's own `_write` never runs, its data dropped (measured 2026-11-24: fast-csv's `CsvFormatterStream`, so exceljs `csv.writeBuffer` throws) — backlog `runtime-js/stream-subclass-hooks-ignored`",
+      "The `transform`/`flush` constructor options work; a subclass's own `_transform`/`_flush` never run — its chunks pass through unchanged (measured 2026-11-24: fast-csv's `CsvFormatterStream`, so exceljs `csv.writeBuffer` throws) — backlog `runtime-js/stream-subclass-hooks-ignored`",
+    ],
+    [
+      '`Duplex` subclass',
+      '⚠️',
+      "A subclass's own `_write` never runs — its writes complete and the data is dropped (measured 2026-11-24, isolate guest) — backlog `runtime-js/stream-subclass-hooks-ignored`",
     ],
     ['`PassThrough`', '✅', 'Forwards chunks unchanged'],
     [
