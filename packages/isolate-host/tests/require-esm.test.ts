@@ -52,8 +52,6 @@ const SYNTAX_ROWS = ['./s.js', './b.js', './d.js', './a.cjs', './e.cjs'];
 /** Run by `require` from `-e` and from `probe.js`: one JSON row per case. */
 const PROBE = `
 const path = require('path');
-// require('module') is not Node's class here (backlog/runtime-js/node-module-builtin-module-class).
-const Module = module.constructor;
 const show = (e) => e === null || typeof e !== 'object' ? ['thrown', String(e)] : [
   e.constructor === Error ? 'Error' : e.constructor.name, e.name, e.code ?? null, e.message,
   String(e.stack).split('\\n')[0], Object.getOwnPropertyNames(e), String(e).split('\\n')[0],
@@ -63,12 +61,12 @@ for (const f of ${JSON.stringify([...ESM_ROWS, ...SYNTAX_ROWS, 'dual'])}) {
   try { rows.push([f, 'value', JSON.stringify(require(f))]); } catch (e) { rows.push([f, show(e)]); }
 }
 rows.push(['resolve', require.resolve('dual')]);
+// The default .js hook called directly with no parent module (rifty cannot build a Module
+// with one: backlog/runtime-js/node-module-builtin-module-class).
 for (const f of ['./tm/v.js', './tm/x.js', './m.mjs']) {
-  for (const parent of [null, module]) {
-    const abs = path.resolve(f);
-    try { require.extensions['.js'](new Module(abs, parent), abs); rows.push(['hook', f, !!parent, 'loaded']); }
-    catch (e) { rows.push(['hook', f, !!parent, show(e)]); }
-  }
+  const abs = path.resolve(f);
+  try { require.extensions['.js']({}, abs); rows.push(['hook', f, 'loaded']); }
+  catch (e) { rows.push(['hook', f, show(e)]); }
 }
 console.log(JSON.stringify(rows).split(process.cwd()).join('<root>'));
 `;
@@ -133,7 +131,7 @@ function expectNodeWarnings(stderr: string): void {
 }
 
 describe('isolate require as Node --no-require-module', () => {
-  it('from -e: features, ERR_REQUIRE_ESM rows, SyntaxError rows, module-sync, the .js hook', async () => {
+  it('from -e: features, ERR_REQUIRE_ESM rows, SyntaxError rows, module-sync, the .js hook without a parent', async () => {
     const code = `${writeFiles}\n${PROBE}`;
     const node = nodeEvalIn(code);
     expect(node.exitCode, node.stderr).toBe(0);
