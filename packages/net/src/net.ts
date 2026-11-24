@@ -16,6 +16,7 @@
 
 import { EventEmitter, NotImplementedError } from '@riftydev/io';
 import { claimPort, releasePort } from './cross-realm/port-claim.ts';
+import { isIP, isIPv4, isIPv6 } from './ip-address.ts';
 import {
   addrInUseError,
   allocateEphemeralPort,
@@ -24,7 +25,6 @@ import {
   registerPort,
   unregisterPort,
 } from './registry.ts';
-import { isIP, isIPv4, isIPv6 } from './ip-address.ts';
 import { type AddressInfo, createVirtualAddressInfo } from './server-address.ts';
 
 // Shared one-shot codecs (default config, non-fatal). One-shot utf8
