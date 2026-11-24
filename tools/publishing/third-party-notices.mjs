@@ -147,13 +147,23 @@ export function collect(
       const dir = sourceDir(input);
       if (!dir || firstParty.has(input)) continue;
       const record = manifest.generated[dir];
-      if (!record) {
+      if (!record?.files.includes(basename(input))) {
         violations.push(
           `${input}: in ${dir} without a third-party-manifest record (${pkgDir} ${packed})`,
         );
         continue;
       }
       counted.add(packed);
+      const how = `generated into ${dir}${record.changes ? ` (changed: ${record.changes})` : ''}`;
+      if (!record.package) {
+        // Upstream that is no npm package (e.g. Node's own lib/): texts from the record.
+        const texts = record.licenseFiles.map((f) => ({
+          name: basename(f),
+          text: readText(root, f),
+        }));
+        add(`${record.name}@${record.version}`, record.license, how, texts);
+        continue;
+      }
       const owner = createRequire(join(root, record.resolveFrom ?? '', 'package.json'));
       const pkgDirOf = dirname(owner.resolve(`${record.package}/package.json`));
       const { version } = JSON.parse(readFileSync(join(pkgDirOf, 'package.json'), 'utf8'));
@@ -161,16 +171,13 @@ export function collect(
         violations.push(
           `${dir}: manifest pins ${record.package}@${record.version}, installed ${version}`,
         );
-      npm(
-        pkgDirOf,
-        `generated into ${dir}${record.changes ? ` (changed: ${record.changes})` : ''}`,
-      );
+      npm(pkgDirOf, how);
     }
   }
   return {
     entries: [...entries.values()].sort((a, b) => a.id.localeCompare(b.id)),
     counted,
-    violations,
+    violations: [...new Set(violations)],
   };
 }
 

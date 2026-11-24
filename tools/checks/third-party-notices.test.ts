@@ -16,7 +16,14 @@ const npmPkg = (name: string, version: string, license?: string) => {
   if (license) put(`node_modules/${name}/LICENSE`, license);
 };
 const manifest = {
-  generated: { 'pkg/src/generated': { package: 'upstream', version: '1.0.0', resolveFrom: '.' } },
+  generated: {
+    'pkg/src/generated': {
+      files: ['up.js'],
+      package: 'upstream',
+      version: '1.0.0',
+      resolveFrom: '.',
+    },
+  },
   firstParty: ['pkg/src/own/generated/ids.json'],
   npm: { 'bare@2.0.0': { licenseFiles: ['licenses/bare.LICENSE'] } },
 };
@@ -108,6 +115,14 @@ describe('check:third-party-notices', () => {
     );
   });
 
+  it('mutant: a new file in a recorded generated/ dir is not covered by the dir record → red', () => {
+    put('pkg/src/generated/other.js', 'export default 2;');
+    const more = { ...inputs, 'dist/a.js': [...inputs['dist/a.js'], 'pkg/src/generated/other.js'] };
+    expect(built(more, files())().violations).toContain(
+      '@riftydev/pkg pkg/src/generated/other.js: in pkg/src/generated without a third-party-manifest record (pkg dist/a.js)',
+    );
+  });
+
   it('a record covers exactly its own package: a manual record supplies only bare@2.0.0', () => {
     const more = { ...inputs, 'dist/b.js': [...inputs['dist/b.js'], 'node_modules/bare/index.js'] };
     const f = {
@@ -133,6 +148,30 @@ describe('check:third-party-notices', () => {
     expect(built(ownOnly, { 'dist/b.js': 'x', [NOTICES]: 'old' })().violations).toEqual([
       '@riftydev/pkg dist/THIRD_PARTY_NOTICES.md packed but nothing third-party is bundled',
     ]);
+  });
+
+  it('a generated dir from a non-npm upstream takes name, version and texts from its record', () => {
+    put('pkg/src/node/generated/legacy.js', 'export default 3;');
+    put('licenses/node.LICENSE', 'Copyright Node.js contributors. MIT');
+    const m = {
+      ...manifest,
+      generated: {
+        ...manifest.generated,
+        'pkg/src/node/generated': {
+          files: ['legacy.js'],
+          name: 'node',
+          version: 'v24.16.0',
+          license: 'MIT',
+          licenseFiles: ['licenses/node.LICENSE'],
+        },
+      },
+    };
+    const { entries, violations } = collect(root, 'pkg', m, {
+      'dist/a.js': ['pkg/src/node/generated/legacy.js'],
+    });
+    expect(violations).toEqual([]);
+    expect(render('@riftydev/pkg', entries)).toContain('## node@v24.16.0');
+    expect(render('@riftydev/pkg', entries)).toContain('Copyright Node.js contributors. MIT');
   });
 
   it('a generated dir pinned to another installed version → red', () => {

@@ -1,24 +1,28 @@
 {
   "generated": {
     "packages/runtime-js/src/builtins/fetch/generated": {
+      "files": ["classes.js"],
       "package": "undici",
       "version": "7.25.0",
       "resolveFrom": ".",
       "changes": "Request/Response/Headers/FormData graph patched at exact anchors and minified by esbuild, tools/publishing/generate-fetch-classes.mjs"
     },
     "packages/runtime-js/src/module-loader/generated": {
+      "files": ["typescript-browser.js"],
       "package": "typescript",
       "version": "5.9.3",
       "resolveFrom": ".",
       "changes": "lib/typescript.js wrapped in a browser-scoped module (process, require undefined) and minified by esbuild, tools/publishing/generate-eval-compiler.mjs"
     },
     "packages/ts-language-service/vendor": {
+      "files": ["lib-bundle.json"],
       "package": "typescript",
       "version": "5.9.3",
       "resolveFrom": "packages/ts-language-service",
       "changes": "lib*.d.ts files collected unchanged into one JSON map, packages/ts-language-service/scripts/vendor-ts-lib.mjs"
     },
     "tools/shadow-registry/src/runtime/generated": {
+      "files": ["esbuild-runtime.js"],
       "package": "esbuild-wasm",
       "version": "0.28.0",
       "resolveFrom": "tools/shadow-registry",
