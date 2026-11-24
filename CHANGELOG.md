@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-- `check:esbuild-legacy-retirement`: the TypeScript worker pin covers the worker minus its leading `./chunk-HASH.js` imports, sibling hashes zeroed (ADR-0391 correction, user «ок»). A runtime edit no longer re-pins it; compiler version, injected code or a changed body size still red (unit + real-build mutants). A red worker prints the new pin. Since 2026-11-21 the old exact pin cost 48 re-pin commits on 26 PRs and 11 merge conflicts.
+- `check:esbuild-legacy-retirement`: the TypeScript worker pin covers the worker minus its leading `./chunk-HASH.js` imports, built sibling hashes zeroed (ADR-0391 correction, user «ок»); `chunk-EMDIREKY.js` stays whole-file. A runtime edit no longer re-pins it; compiler version, injected code, body size, free whitespace or an unbuilt sibling stay red (unit mutants; real-build mutants in PR #447). Price: the pin no longer fixes which built sibling chunks the worker links (the old pin did, transitively via chunk hashes) — those meet only their own checks; bindings are bounded to tokens of the pinned body, not checked as linkage. A red worker prints the new pin. Since 2026-11-21 the old exact pin cost 48 re-pin commits on 26 PRs and 11 merge conflicts.
 
 - CI: a new push to a PR cancels that PR's unfinished `CI` run (`concurrency` per PR, `cancel-in-progress`); push/merge_group runs never cancel. `CI gate` runs on `!cancelled()` instead of `always()`, so in a cancelled run it never starts and takes no runner (conclusion `cancelled`, not `skipped`); a failed or timed-out job still reds it (ADR-0323 correction). Superseded PR runs were 58% of PR runner time (2026-11-16…24).
 

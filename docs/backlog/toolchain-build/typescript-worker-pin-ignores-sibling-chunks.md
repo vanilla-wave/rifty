@@ -32,7 +32,7 @@ passes with no pin or ADR edit.
 ## Acceptance
 
 1. Unit: a pinned worker whose leading sibling imports are renamed, added or removed and whose `import("./x-HASH.js")` hash changes stays admitted (RED on main) → scenario
-2. Mutants stay red: compiler body byte changed, code injected in body or between leading imports, body grown/shrunk, leading import with a non-chunk specifier, duplicate, or a binding absent from the body → ADR-0391
+2. Mutants stay red: compiler body byte changed, code injected in body or between leading imports, body grown/shrunk, free whitespace in `{…}`, unbuilt or non-`chunk-XXXXXXXX` sibling, duplicate, a binding absent from the body; `chunk-EMDIREKY.js` with a leading import → ADR-0391
 3. Two local branches with runtime edits + their merge: gate green on each build, no pin/ADR diff → scenario
 4. Real build mutants (compiler version string, appended code, injected header line) red on the real worker → ADR-0391
 
@@ -43,5 +43,6 @@ Other exempt pins (`chunk-EMDIREKY.js`, QuickJS/sql-wasm, lexer literal, generat
 ## Decisions
 
 - Carrier: pin the worker minus its leading sibling-chunk imports, hashed sibling names normalized; no metafile/source-map analysis (ADR-0391 rejected it).
-- Leading import admitted only as `import {ids} from "./chunk-HASH.js";` / `import "./chunk-HASH.js";`, unique, each id used in the pinned rest — no free bytes outside the pin.
+- Leading import skipped only in esbuild's exact form, for a built sibling, once, each binding once and a token of the pinned rest — bounds the header, not a linkage check; opt-in per pin (`siblingImports`).
+- Price named in ADR-0391: linkage (which built siblings, which bindings) no longer pinned.
 - ADR-0391 dated correction; no per-re-pin ADR line.
