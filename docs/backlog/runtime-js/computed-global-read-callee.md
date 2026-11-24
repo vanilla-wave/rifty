@@ -60,11 +60,12 @@ passes es-abstract/typed-array-* (Node prints `loaded`); rifty today stops at
    on the shared loader (same files, Node vs `createModuleLoader`,
    `library-exceljs.test.ts`); the sandbox reaches them only past its
    `require(esm)` gap (row 3) → scenario
-3. Isolate `library-exceljs.test.ts`: `require('exceljs')` no longer stops at
-   `module-loader.cjs-global-function-assignment`; the new stop is pinned:
+3. `library-exceljs.test.ts`: `require('exceljs')` loads on the shared loader
+   as in Node (prints `loaded`); in the sandbox it no longer stops at
+   `module-loader.cjs-global-function-assignment` (measured next stop
    `TypeError: URLConstructor is not a constructor` at
-   `is-generator-function/index.js:12` (`require` of generator-function's
-   `module-sync` ES module; owner `runtime-js/isolate-require-esm-syntax-gaps`) → scenario
+   `is-generator-function/index.js:12`, owner `runtime-js/isolate-require-esm-syntax-gaps`;
+   not pinned — PR #440 moves it, review 1 S2) → scenario
 4. Declared ceiling: such a read whose key is `'Function'` at runtime (string
    or object key) throws `NotImplementedError('module-loader.{cjs,esm}-global-function-assignment')`
    at that read, after earlier statements ran; the module never gets the host
@@ -111,6 +112,8 @@ unit and ADR-0171's claim.)
   `global['Fun' + 'ction']`); `Reflect.get(G, k)` called; an alias of the read
   called (`const C = G[k]; new C()`, `{ [k]: C } = G`); optional member
   `G?.[k](…)`.
+- A module with such a read and `with` or a direct `eval`:
+  `module-loader.{cjs,esm}-dynamic-function-scope` at load (compat modules.md).
 - Key `'Function'` at runtime: ❌ `module-loader.{cjs,esm}-global-function-assignment`
   at the read (Node constructs; routing it is deferred, §Decisions).
 - Reads not called/constructed (`typeof G[k]`, `x = G[k]` compared):
@@ -126,6 +129,7 @@ unit and ADR-0171's claim.)
 - Deferred: a runtime `'Function'` key yielding the routed `Function` (ADR-0171) — trigger: a real package constructing `Function` through a computed global key.
 - Feature id: the format's existing `module-loader.{cjs,esm}-global-function-assignment` (same ceiling, moved to the read); message names write or call/construct.
 - Contract change (manager): `global-computed-key-guard.test.ts` drops ESM `new globalThis[key](…)` from its kept load-time ceilings; `Reflect.get` stays.
+- Helper shadowing (review 1 S1, manager: variant b): a called computed read plus `with` or a direct `eval` → `module-loader.{cjs,esm}-dynamic-function-scope` at load. Any direct `eval`, not only a non-literal one (my call, stricter): a folded text and a plain literal nesting one both shadow (probe, conformance rows). Write side: finding in `function-constructor-exhaustive-metaprogramming-ceiling`.
 - Not widened (manager): an alias of the read or a destructured read called stays a load-time ceiling even though this carrier could check it; candidate filed as a finding.
 
 - Applies to tracked global objects only (`globalThis`, `global`, tracked aliases), as every other guard site.

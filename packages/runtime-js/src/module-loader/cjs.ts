@@ -17,6 +17,7 @@ import {
   createGlobalWriteKeyCheck,
   globalWriteKeyMayBeFunction,
   isComputedMember,
+  isDirectEval,
   literalString,
   staticPropertyKeyName,
   staticPropertyName,
@@ -154,6 +155,8 @@ interface FunctionRewriteCtx {
   hasDerivedHostFunctionConstructor: boolean;
   hasRoutedFunctionReference: boolean;
   hasFunctionEvalText: boolean;
+  hasCalledGlobalRead: boolean;
+  hasDirectEval: boolean;
 }
 
 // TODO(backlog: runtime-js/function-constructor-exhaustive-metaprogramming-ceiling):
@@ -261,6 +264,8 @@ function rewriteCjsFunctionConstructorReferences(
     hasDerivedHostFunctionConstructor: false,
     hasRoutedFunctionReference: false,
     hasFunctionEvalText: false,
+    hasCalledGlobalRead: false,
+    hasDirectEval: false,
   };
   walkFunctionReferences(program as unknown as AnyNodeShape, ctx);
   if (ctx.hasDerivedHostFunctionConstructor) {
@@ -271,11 +276,12 @@ function rewriteCjsFunctionConstructorReferences(
   }
   if (
     ctx.hasFunctionEvalText ||
-    (ctx.hasWithDynamicFunctionScope && ctx.hasRoutedFunctionReference)
+    (ctx.hasWithDynamicFunctionScope && ctx.hasRoutedFunctionReference) ||
+    (ctx.hasCalledGlobalRead && (ctx.hasWithDynamicFunctionScope || ctx.hasDirectEval))
   ) {
     throw new NotImplementedError(
       'module-loader.cjs-dynamic-function-scope',
-      `CJS module ${id} contains literal eval Function/import text or combines routed Function with with dynamic scope; rifty cannot statically preserve Node's dynamic binding semantics, so this module is an explicit ceiling`,
+      `CJS module ${id} contains literal eval Function/import text or combines routed Function or a called computed global read with with/eval dynamic scope; rifty cannot statically preserve Node's dynamic binding semantics, so this module is an explicit ceiling`,
     );
   }
   if (ctx.hasGlobalFunctionWrite) {
@@ -713,6 +719,7 @@ function walkFunctionReferences(node: unknown, ctx: FunctionRewriteCtx): void {
         isShadowed(ctx, 'eval'),
       );
       if (directEvalImportEdit !== null) ctx.edits.push(directEvalImportEdit);
+      if (isDirectEval(n, isShadowed(ctx, 'eval'))) ctx.hasDirectEval = true;
       if (expressionMayBeGlobalEval(callee, ctx)) {
         ctx.hasDynamicFunctionScope = true;
         ctx.hasFunctionEvalText =
@@ -1593,6 +1600,7 @@ function isCalledGlobalRead(node: AnyNodeShape, ctx: FunctionRewriteCtx): boolea
 }
 
 function calledGlobalReadKeyCheck(node: AnyNodeShape, ctx: FunctionRewriteCtx): boolean {
+  ctx.hasCalledGlobalRead = true;
   return globalWriteKeyMayBeFunction(node.property, ctx.globalKeyHelperName, ctx.edits);
 }
 

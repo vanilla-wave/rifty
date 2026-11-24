@@ -53,6 +53,34 @@ does not touch): a CJS module `exports.f = (k) => <form>` loaded with
   host, not the loader (lexical `Function` routes it).
 A later `import()` through the first three is inferred from the host value, not run.
 
+Review 1 of PR #439 (2026-11-24), same probe; each loads at `c2be2193a` (before
+that unit) and after it — `f(…)` hands out or calls the host `Function`:
+`(0, G[k])(s)`, `(c ? G[k] : 0)(s)`, `G[k][j](G, 'Function')` (`k = 'Reflect'`,
+`j = 'get'`: returns host `Function`), `[G[k]][0](s)`, `G[k]` passed as an
+argument and called, `G[k].Function(s)` (`k = 'globalThis'`),
+`G[k].get(G, 'Function')(s)` (`k = 'Reflect'`), `G[k].constructor(s)` (`k = 'Object'`).
+
+Key-check helper shadowed (ADR-0444 write side, since that ADR): the per-module
+helper is a lexical name, so `with` or a sloppy direct `eval` declaring it
+disables the check. Probe at `6a3bbf410`, CJS, `f('Function')`, then
+`globalThis.Function === Function`:
+
+```
+withWrite  exports.f=function(k){ with(new Proxy({},{has:(t,p)=>typeof p==='string'&&p.startsWith('__rifty'),get:(t,p)=>p===Symbol.unscopables?undefined:x=>x})){ global[k] = function W(){}; } }
+           loads; hostIntact false
+evalWrite  exports.f=function(k){ eval('var __rifty'+'GlobalKey=x=>x'); global[k] = function W(){}; }
+           loads; hostIntact false
+```
+
+The read side (`new G[k](…)`) keeps a load-time ceiling for a module with
+`with` or a direct `eval` (unit `runtime-js/computed-global-read-callee`); the
+write side does not. Owner runtime-js (module-loader); trigger: next guard unit.
+
+Key `'eval'`: `G[k](s)` with `k === 'eval'` is an indirect eval in Node and rifty
+(`var x = 'module-local'; global[k]('typeof x')` → `'undefined'`), as
+`global.eval(s)` and `(0, eval)(s)` before that unit: its runtime text,
+`import()` included, runs through the host, not the loader.
+
 ## Known false positives
 
 - Non-literal `Object.assign(globalThis, src)` in a dead branch rejects

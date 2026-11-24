@@ -90,10 +90,13 @@ fold, used as a callee or constructor (also `?.()`, the object of
 `.call|apply|bind`), gets the same key check at the read; a runtime `'Function'`
 key throws the format's ceiling there (Node constructs). Consumer: es-abstract
 `IsDetachedBuffer`, typed-array-* (exceljs). Kept at load: `Reflect.get(G, k)`
-called, a called alias/destructured binding of the read, `G?.[k](…)`.
-Rejected: handing the routed `Function` (ADR-0171) for that key — a
-value-substituting helper with stashed state, no consumer; trigger to revisit:
-a package constructing `Function` through a computed global key. Unit
+called, a called alias/destructured binding of the read, `G?.[k](…)`, and
+(`*-dynamic-function-scope`) a module holding such a read with `with` or a
+direct `eval`, which can shadow the per-module helper (PR #439 review 1).
+Rejected, manager decision (not the user's words, reversible): handing the
+routed `Function` (ADR-0171) for that key — a value-substituting helper with
+stashed state, no consumer; trigger to revisit: a package constructing
+`Function` through a computed global key. Unit
 `runtime-js/computed-global-read-callee`; guard: parity
 `modules/global-computed-read-callee-{cjs,esm}`, conformance
 `tests/conformance/modules/global-computed-read-callee.test.ts`.

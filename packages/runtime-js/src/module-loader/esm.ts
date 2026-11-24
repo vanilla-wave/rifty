@@ -6,6 +6,7 @@ import { rewriteDirectEvalImportCallArgument } from './direct-eval-import.ts';
 import {
   globalWriteKeyMayBeFunction,
   isComputedMember,
+  isDirectEval,
   literalString,
   staticPropertyKeyName,
   staticPropertyName,
@@ -37,6 +38,8 @@ interface EsmFunctionGuardCtx {
   hasDerivedHostFunctionConstructor: boolean;
   hasRoutedFunctionReference: boolean;
   hasFunctionEvalText: boolean;
+  hasCalledGlobalRead: boolean;
+  hasDirectEval: boolean;
 }
 
 // TODO(backlog: runtime-js/function-constructor-exhaustive-metaprogramming-ceiling):
@@ -78,6 +81,8 @@ export function assertNoEsmFunctionRoutingCeiling(
     hasDerivedHostFunctionConstructor: false,
     hasRoutedFunctionReference: false,
     hasFunctionEvalText: false,
+    hasCalledGlobalRead: false,
+    hasDirectEval: false,
   };
   walkEsmFunctionGuard(program as unknown as GuardNodeShape, ctx);
 
@@ -89,11 +94,12 @@ export function assertNoEsmFunctionRoutingCeiling(
   }
   if (
     ctx.hasFunctionEvalText ||
-    (ctx.hasWithDynamicFunctionScope && ctx.hasRoutedFunctionReference)
+    (ctx.hasWithDynamicFunctionScope && ctx.hasRoutedFunctionReference) ||
+    (ctx.hasCalledGlobalRead && (ctx.hasWithDynamicFunctionScope || ctx.hasDirectEval))
   ) {
     throw new NotImplementedError(
       'module-loader.esm-dynamic-function-scope',
-      `ESM module ${id} contains literal eval Function/import text or combines routed Function with with dynamic scope; rifty cannot statically preserve Node's dynamic binding semantics, so this module is an explicit ceiling`,
+      `ESM module ${id} contains literal eval Function/import text or combines routed Function or a called computed global read with with/eval dynamic scope; rifty cannot statically preserve Node's dynamic binding semantics, so this module is an explicit ceiling`,
     );
   }
   if (ctx.hasGlobalFunctionWrite) {
@@ -482,6 +488,7 @@ function walkEsmFunctionGuard(node: unknown, ctx: EsmFunctionGuardCtx): void {
           directEvalImportProbeHelper,
           isGuardShadowed(ctx, 'eval'),
         ) !== null;
+      if (isDirectEval(n, isGuardShadowed(ctx, 'eval'))) ctx.hasDirectEval = true;
       if (guardExpressionMayBeGlobalEval(callee, ctx)) {
         ctx.hasDynamicFunctionScope = true;
         ctx.hasFunctionEvalText =
@@ -1419,6 +1426,7 @@ function isCalledGlobalRead(node: GuardNodeShape, ctx: EsmFunctionGuardCtx): boo
 }
 
 function calledGlobalReadKeyCheck(node: GuardNodeShape, ctx: EsmFunctionGuardCtx): boolean {
+  ctx.hasCalledGlobalRead = true;
   return globalWriteKeyMayBeFunction(node.property, ctx.keyHelperName, ctx.keyEdits);
 }
 

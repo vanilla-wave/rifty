@@ -117,9 +117,12 @@ Hand-maintained (the `pnpm compat:generate` data-driven sink isn't wired yet —
   loads and runs as in Node; a key that is `'Function'` at runtime throws the
   same ceiling at that read (Node constructs). Still rejected at load: a called
   alias or destructured binding of such a read (`const C = global[k]; new C()`),
-  `Reflect.get(globalThis, k)` called, `global?.[k](…)`. V8 messages, stack
+  `Reflect.get(globalThis, k)` called, `global?.[k](…)`; a module holding such a
+  read and `with` or a direct `eval` (either can shadow the key check) throws
+  `module-loader.{cjs,esm}-dynamic-function-scope`. V8 messages, stack
   columns and `fn.toString()` of that line show the helper
-  (`global[$k(...)] is not a constructor`; `backlog/runtime-js/function-rewrite-visible`).
+  (`global[__riftyGlobalKey(...)] is not a constructor`, Node `global[k] is not a constructor`;
+  `backlog/runtime-js/function-rewrite-visible`).
   Tracked in `docs/backlog/runtime-js/cjs-global-function-assignment.md`.
   ❌ False positive: a non-literal `Object.assign(globalThis, src)` rejects the
   module at load even in a branch that never runs — `fetch-blob@3.2.0`
