@@ -152,15 +152,28 @@ describe('computed global read used as a callee/constructor (unit computed-globa
   // read keeps a load-time ceiling (dynamic scope).
   const FOLDED = "eval('var __rifty' + 'GlobalKey = (x) => x');";
   const NESTED = `eval("eval('var __rif' + 'tyGlobalKey = (x) => x')");`;
+  // Review 2: a local binding named `eval` holding the real eval still makes `eval(…)` direct,
+  // so the rule is any call whose callee is the identifier `eval`, no exceptions.
+  const SHADOW = "'var __rifty' + 'GlobalKey = (x) => x'";
+  const READ = 'return new global[key]("return 1");';
+  const ESM_READ = 'return new globalThis[key]("return 1");';
   const dynamicScope = {
     cjs: {
-      with: 'with ({}) { return new global[key]("return 1"); }',
-      'a folded direct eval': `${FOLDED} return new global[key]("return 1");`,
-      'a literal direct eval': `${NESTED} return new global[key]("return 1");`,
+      with: `with ({}) { ${READ} }`,
+      'a folded direct eval': `${FOLDED} ${READ}`,
+      'a literal direct eval': `${NESTED} ${READ}`,
+      'eval as a parameter': `return ((eval) => { eval(${SHADOW}); ${READ} })(globalThis.eval);`,
+      'eval as a var': `{ var eval = globalThis.eval; } eval(${SHADOW}); ${READ}`,
+      'eval as a let': `let eval = globalThis.eval; eval(${SHADOW}); ${READ}`,
+      'eval as a catch binding': `try { throw globalThis.eval; } catch (eval) { eval(${SHADOW}); } ${READ}`,
+      'eval?.()': `eval?.(${SHADOW}); ${READ}`,
+      'eval(...args)': `eval(...[${SHADOW}]); ${READ}`,
     },
     esm: {
-      'a folded direct eval': `${FOLDED} return new globalThis[key]("return 1");`,
-      'a literal direct eval': `${NESTED} return new globalThis[key]("return 1");`,
+      'a folded direct eval': `${FOLDED} ${ESM_READ}`,
+      'a literal direct eval': `${NESTED} ${ESM_READ}`,
+      'eval?.()': `eval?.(${SHADOW}); ${ESM_READ}`,
+      'eval(...args)': `eval(...[${SHADOW}]); ${ESM_READ}`,
     },
   };
 
