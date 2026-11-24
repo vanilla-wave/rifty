@@ -66,10 +66,10 @@ function formatWithInspectOptions(
     switch (spec) {
       case 's':
         // Node's `formatWithOptionsInternal` `%s`.
-        if (typeof arg === 'number') result += Object.is(arg, -0) ? '-0' : `${arg}`;
+        if (typeof arg === 'number') result += objectIsPrimordial(arg, -0) ? '-0' : `${arg}`;
         else if (typeof arg === 'bigint') result += `${arg}n`;
         else if (typeof arg !== 'object' || arg === null || !hasBuiltInToString(arg))
-          result += String(arg);
+          result += StringPrimordial(arg);
         else result += inspectImpl(arg, { ...inspectOptions, depth: 0 });
         break;
       case 'd':
@@ -113,8 +113,8 @@ function formatWithInspectOptions(
 
 /**
  * Node v24.16.0 `builtInObjects`: the `globalThis` names matching `/^[A-Z][a-zA-Z0-9]+$/`
- * when `lib/internal/util/inspect.js` loads — V8's own globals, before Node adds
- * `Buffer`, `URL`, … (live-Node list, parity `util/format-percent-s`).
+ * when `lib/internal/util/inspect.js` loads — not `Buffer`, `URL`, `Float16Array`,
+ * `SharedArrayBuffer`, … (live-Node list, parity `util/format-percent-s`).
  */
 const NODE_BUILTIN_OBJECTS: ReadonlySet<string> = new Set(
   (
@@ -125,6 +125,9 @@ const NODE_BUILTIN_OBJECTS: ReadonlySet<string> = new Set(
     'Set Iterator WeakMap WeakSet Proxy Reflect FinalizationRegistry WeakRef'
   ).split(' '),
 );
+const setHasPrimordial = Set.prototype.has;
+const objectIsPrimordial = Object.is;
+const StringPrimordial = String;
 const hasOwnPropertyPrimordial = Object.prototype.hasOwnProperty;
 const getPrototypeOfPrimordial = Object.getPrototypeOf;
 const getOwnPropertyDescriptorPrimordial = Object.getOwnPropertyDescriptor;
@@ -162,7 +165,9 @@ function hasBuiltInToString(value: object): boolean {
   return (
     descriptor !== undefined &&
     typeof descriptor.value === 'function' &&
-    NODE_BUILTIN_OBJECTS.has((descriptor.value as { name: string }).name)
+    reflectApplyPrimordial(setHasPrimordial, NODE_BUILTIN_OBJECTS, [
+      (descriptor.value as { name: unknown }).name,
+    ]) === true
   );
 }
 
