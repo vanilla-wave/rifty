@@ -34,9 +34,19 @@ tar -tzf /tmp/rifty/rifty-vfs-0.1.0.tgz           # dist/ + package.json + READM
 
 CI's `lint-and-typecheck` job runs `pnpm build:libs` on every PR, so the publish build can't silently rot.
 
+## Third-party notices
+
+Upstream code copied into a package (generated or vendored) ships with its license in the published file itself:
+
+- Convention: the artifact lives in a `generated/` or `vendor/` dir that also holds `<origin>.LICENSE` (verbatim upstream text), one origin per dir. Rifty's own generated files are listed in `FIRST_PARTY` of `tools/checks/third-party-notices.mjs`; any other file there without a license is red.
+- Delivery: the generator writes the license as a `/*! … */` comment into the artifact (`tools/publishing/legal-comment.mjs`); tsup/esbuild keep it at the end of every chunk holding the code (`legalComments: 'eof'`, default for bundles — never `'none'`), and so do consumer bundlers by default. A JSON artifact (`ts-language-service/vendor/lib-bundle.json`) ships its `.LICENSE` files next to it in `vendor/`.
+- Today: undici (MIT), TypeScript 5.9.3 compiler and lib files (Apache-2.0 `LICENSE.txt` + `ThirdPartyNoticeText.txt`; the compiler also a change line, §4(b)), esbuild-wasm runtime (MIT) + Go `wasm_exec.js` (BSD-3-Clause, `tools/shadow-registry/go1.26.1.LICENSE`).
+- Gate: `pnpm check:third-party-notices` after `build:libs` (in `pr:check`, CI and `release.yml` before publish) reads every publishable package's `npm pack --dry-run` files, finds each artifact by content fingerprint and requires its licenses in that file or in a LICENSE/NOTICE file of the same tarball.
+- Not covered: npm dependencies inlined into bundles and copied `.wasm` (`docs/backlog/toolchain-build/bundled-npm-dependency-notices.md`).
+
 ## Releasing (automated, on a tag) — tokenless OIDC
 
-`.github/workflows/release.yml` triggers on a `v*` tag, rejects anything except stable SemVer `vX.Y.Z`, then: installs → sets every package version to the tag → `pnpm build:libs` → copies `LICENSE` into each package → `pnpm publish` filtered to **`./packages/*` + `@riftydev/shadow-registry` + `@riftydev/eddy` only** with `--access public --no-git-checks --provenance`. pnpm rewrites `workspace:*` to the tag version (at pack time, *before* the auth handshake) and applies each `publishConfig`.
+`.github/workflows/release.yml` triggers on a `v*` tag, rejects anything except stable SemVer `vX.Y.Z`, then: installs → sets every package version to the tag → `pnpm build:libs` → `pnpm check:third-party-notices` → copies `LICENSE` into each package → `pnpm publish` filtered to **`./packages/*` + `@riftydev/shadow-registry` + `@riftydev/eddy` only** with `--access public --no-git-checks --provenance`. pnpm rewrites `workspace:*` to the tag version (at pack time, *before* the auth handshake) and applies each `publishConfig`.
 
 **No NPM_TOKEN.** Auth is **npm OIDC trusted publishing**: with `id-token: write`, pnpm mints a short-lived token from GitHub's OIDC and publishes with build provenance — no long-lived secret in the repo. The bootstrap below makes that work.
 

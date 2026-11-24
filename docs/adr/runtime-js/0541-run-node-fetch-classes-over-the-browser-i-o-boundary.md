@@ -191,6 +191,13 @@ no new limit. Node sends explicit Cookie; Chromium cannot.
   package/network support. Source upgrades require fresh differential proof.
 - Browser-only network restrictions remain explicit; no server deployment.
 
+## Notices (2026-11-24)
+
+The generated classes ship undici's MIT text as a `/*! … */` comment written by
+the generator; tsup/esbuild keep it in each chunk. `undici.LICENSE` stays the
+source of truth; `check:third-party-notices` reads packed files (publishing.md
+§Third-party notices). Versions 0.11.0 of runtime-js/workbench shipped without it.
+
 ## Bundle measurement (2026-10-20)
 
 Production `pnpm build:playground`, baseline main 7f8d0e8d7 in an isolated
