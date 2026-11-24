@@ -236,46 +236,32 @@ function outputFiles(root) {
 
 // ADR-0391 §Corrections 2026-11-24: runtime edits rename, add or drop the worker's
 // leading sibling-chunk imports and rename hashed sibling specifiers; nothing else.
-// esbuild's emitted forms only (dist/assets, main 841fa5300); an alias import
-// (`a as b`, other chunks only) stays pinned.
-const IDENTIFIER = '[A-Za-z_$][\\w$]*';
+// esbuild's emitted import forms (dist/assets, main 841fa5300), alias included.
+const BINDING = '[A-Za-z_$][\\w$]*(?: as [A-Za-z_$][\\w$]*)?';
 const SIBLING_CHUNK_IMPORT = new RegExp(
-  `import (?:\\{\\n((?:  ${IDENTIFIER},\\n)*  ${IDENTIFIER})\\n\\} from )?"\\./(chunk-[A-Z0-9]{8}\\.js)";\\n`,
+  `import (?:\\{\\n(?:  ${BINDING},\\n)*  ${BINDING}\\n\\} from )?"\\./(chunk-[A-Z0-9]{8}\\.js)";\\n`,
   'y',
 );
 const HASHED_SIBLING = /"\.\/([a-z][a-z-]*-)([A-Z0-9]{8})\.js"/gu;
+// 3× the largest header of 249 built workers and 15 main builds (630–682 bytes).
+const HEADER_MAX_BYTES = 2_048;
 
 /**
  * Pin of an exempt compiler output (ADR-0391): whole bytes, or — given the built
- * sibling names — the output without its leading sibling-chunk imports, built
- * sibling hashes zeroed. A leading import is dropped only for a built sibling,
- * once, each binding once and used in the pinned rest: bounds what the unpinned
- * header can carry to tokens of the pinned body, not a check of linkage.
+ * sibling names — the output without its leading esbuild-form imports of built
+ * sibling chunks, built sibling hashes zeroed (length kept). The caller bounds
+ * the unpinned header: raw size − pinned size ≤ HEADER_MAX_BYTES.
  */
 export function compilerOutputPin(bytes, siblings = null) {
   let pinned = bytes;
   if (siblings !== null) {
     const text = bytes.toString('latin1');
-    const imports = [];
-    const seen = new Set();
+    let start = 0;
     SIBLING_CHUNK_IMPORT.lastIndex = 0;
-    let match = SIBLING_CHUNK_IMPORT.exec(text);
-    while (match !== null) {
-      const names = match[1]?.split(',\n').map((name) => name.slice(2)) ?? [];
-      const keys = [match[2], ...names];
-      if (!siblings.has(match[2]) || keys.some((key) => seen.has(key))) break;
-      for (const key of keys) seen.add(key);
-      imports.push({ start: match.index, end: SIBLING_CHUNK_IMPORT.lastIndex, names });
+    for (let match = SIBLING_CHUNK_IMPORT.exec(text); match !== null && siblings.has(match[1]); ) {
+      start = SIBLING_CHUNK_IMPORT.lastIndex;
       match = SIBLING_CHUNK_IMPORT.exec(text);
     }
-    const headerEnd = imports.at(-1)?.end ?? 0;
-    const rest = text.slice(headerEnd);
-    const unused = imports.findIndex(({ names }) =>
-      names.some(
-        (name) => !new RegExp(`(?<![\\w$])${name.replaceAll('$', '\\$')}(?![\\w$])`).test(rest),
-      ),
-    );
-    const start = unused === -1 ? headerEnd : imports[unused].start;
     const body = text
       .slice(start)
       .replace(HASHED_SIBLING, (literal, name, hash) =>
@@ -309,7 +295,7 @@ export function evaluateEsbuildBundleInventory(
     const wasm = assetName === null ? undefined : WORKBENCH_WASM_OUTPUTS[assetName];
     if (wasm?.bytes === bytes.byteLength && wasm.sha256 === digest) continue;
     if (path.endsWith('.wasm')) violations.push(`${path}: runtime wasm shipped in package output`);
-    // Only the two exact compiler artifacts bypass the original carrier ceiling.
+    // Only the pinned compiler outputs bypass the 2 MB carrier ceiling.
     const compiler = assetName === null ? undefined : compilerOutputs[assetName];
     const pin =
       compiler === undefined
@@ -321,6 +307,12 @@ export function evaluateEsbuildBundleInventory(
     ) {
       const actual = pin === undefined ? '' : ` (compiler pin now ${JSON.stringify(pin)})`;
       violations.push(`${path}: published output exceeds the exact 2 MB carrier ceiling${actual}`);
+    }
+    const header = pin === undefined ? 0 : bytes.byteLength - pin.bytes;
+    if (header > HEADER_MAX_BYTES) {
+      violations.push(
+        `${path}: leading sibling imports are ${header} bytes, over the ${HEADER_MAX_BYTES}-byte header ceiling (ADR-0391)`,
+      );
     }
     const rawText = bytes.toString('utf8');
     const text =

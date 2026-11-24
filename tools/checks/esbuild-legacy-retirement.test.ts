@@ -125,17 +125,13 @@ describe('esbuild carrier retirement', () => {
       [[spaced('\u00a0'), ...WORKER_HEADER.slice(1)], WORKER_BODY],
       [[WORKER_HEADER[0], 'import  "./chunk-HXPMOJXM.js";\n', WORKER_HEADER[2]], WORKER_BODY],
       [[...WORKER_HEADER, 'import { __toESM } from "./chunk-ABCDEFGH.js";\n'], WORKER_BODY],
-      // Specifier: an existing `chunk-` sibling with an esbuild hash, once.
+      // Specifier: a built `chunk-` sibling with an esbuild hash.
       [[...WORKER_HEADER, 'import "./chunk-NOPENOPE.js";\n'], WORKER_BODY],
       [[...WORKER_HEADER, 'import "./chunk-ABC.js";\n'], WORKER_BODY],
       [[...WORKER_HEADER, 'import "./module-loader-SE2E5KRJ.js";\n'], WORKER_BODY],
       [[...WORKER_HEADER, 'import "https://example.test/chunk-ABCDEFGH.js";\n'], WORKER_BODY],
-      [[...WORKER_HEADER, WORKER_HEADER[1]], WORKER_BODY],
-      // Bindings: identifiers used in the pinned body, each once.
-      [[...WORKER_HEADER, 'import {\n  payloadAAAA\n} from "./chunk-ABCDEFGH.js";\n'], WORKER_BODY],
-      [[...WORKER_HEADER, 'import {\n  __toESM\n} from "./chunk-ABCDEFGH.js";\n'], WORKER_BODY],
+      // Bindings: identifiers, optionally `a as b`.
       [[...WORKER_HEADER, 'import {\n  ts.k\n} from "./chunk-ABCDEFGH.js";\n'], WORKER_BODY],
-      [[...WORKER_HEADER, 'import {\n  a as ts\n} from "./chunk-ABCDEFGH.js";\n'], WORKER_BODY],
     ] as const;
     const admitted = mutants.flatMap(([header, body], index) =>
       workerViolations(workerBytes(header, body)).length === 0 ? [index] : [],
@@ -151,7 +147,7 @@ describe('esbuild carrier retirement', () => {
     const line = (name: string) => `import {\n  ${name}\n} from "./chunk-ABCDEFGH.js";\n`;
     const base = WORKER_HEADER.join('').length + line('').length;
     const filled = (bytes: number) => [...WORKER_HEADER, line('a'.repeat(bytes - base))];
-    expect.soft(workerViolations(workerBytes(filled(CEILING)))).toEqual([]);
+    expect(workerViolations(workerBytes(filled(CEILING)))).toEqual([]);
     expect
       .soft(workerViolations(workerBytes(filled(CEILING + 1))))
       .toContainEqual(
@@ -163,9 +159,16 @@ describe('esbuild carrier retirement', () => {
     expect
       .soft(workerViolations(workerBytes([...WORKER_HEADER, repeated])))
       .toContainEqual(expect.stringContaining('over the 2048-byte'));
-    // esbuild's alias form (node-worker.js: `init_src as init_src2,`) is a header line.
+    // Within the ceiling any esbuild-form line of a built chunk is header: repeats,
+    // bindings the body never uses, esbuild's alias form (node-worker.js `init_src as init_src2,`).
+    for (const extra of [
+      WORKER_HEADER[1],
+      'import {\n  payloadAAAA,\n  payloadAAAA\n} from "./chunk-ABCDEFGH.js";\n',
+    ]) {
+      expect(workerViolations(workerBytes([...WORKER_HEADER, extra]))).toEqual([]);
+    }
     const alias = 'import {\n  init_src as init_src2,\n  __toESM\n} from "./chunk-ABCDEFGH.js";\n';
-    expect.soft(workerViolations(workerBytes([...WORKER_HEADER, alias]))).toEqual([]);
+    expect(workerViolations(workerBytes([...WORKER_HEADER, alias]))).toEqual([]);
   });
 
   it('pins the other compiler output whole: a leading sibling import is red', () => {
