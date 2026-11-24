@@ -7,6 +7,7 @@ import {
   ALLOWED_SHADOW_PRODUCTION_SOURCES,
   RETIRED_ESBUILD_PATHS,
   RETIRED_ESBUILD_REFERENCES,
+  compilerOutputPin,
   evaluateEsbuildBundleInventory,
   evaluateEsbuildLegacyRetirement,
   evaluateEsbuildPackagePacklists,
@@ -26,7 +27,67 @@ function assetViolations(name: string, bytes: Buffer): string[] {
   ).filter((violation: string) => !violation.startsWith('emitted generated esbuild client count'));
 }
 
+// Shape of the built worker (main 841fa5300): leading sibling-chunk imports, an own body
+// above 2 MB, one hashed dynamic import. Runtime edits change only the sibling chunks.
+const WORKER_HEADER = [
+  'import {\n  installBundleLocalBuffer,\n  readKernelSyncApi\n} from "./chunk-S2ASLTLJ.js";\n',
+  'import "./chunk-HXPMOJXM.js";\n',
+  'import {\n  __commonJS,\n  __toESM\n} from "./chunk-2ESYSVXG.js";\n',
+];
+const WORKER_BODY = [
+  '\n// node_modules/.pnpm/typescript@5.9.3/node_modules/typescript/lib/typescript.js\n',
+  'var require_typescript = __commonJS({ "typescript.js"(exports, module) {\n',
+  '  var ts = {}; ts.version = "5.9.3";\n',
+  '  ts.k = 0;\n'.repeat(200_000),
+  '} });\nvar import_typescript = __toESM(require_typescript());\n',
+  'installBundleLocalBuffer(); readKernelSyncApi();\n',
+  'const { createModuleLoader } = await import("./module-loader-SE2E5KRJ.js");\n',
+].join('');
+const workerBytes = (header: readonly string[], body = WORKER_BODY) =>
+  Buffer.from(header.join('') + body, 'latin1');
+const WORKER_PINS = { 'typescript-worker.js': compilerOutputPin(workerBytes(WORKER_HEADER)) };
+
+function workerViolations(bytes: Buffer): string[] {
+  return evaluateEsbuildBundleInventory(
+    ROOT,
+    ['packages/workbench/dist/assets/typescript-worker.js'],
+    () => bytes,
+    WORKER_PINS,
+  ).filter((violation: string) => !violation.startsWith('emitted generated esbuild client count'));
+}
+
 describe('esbuild carrier retirement', () => {
+  it('keeps the TypeScript worker pin across runtime edits that only change sibling chunks', () => {
+    expect(workerViolations(workerBytes(WORKER_HEADER))).toEqual([]);
+    const renamed = [
+      'import {\n  installBundleLocalBuffer,\n  readKernelSyncApi\n} from "./chunk-KTR54RDO.js";\n',
+      'import "./chunk-33QWLS3Y.js";\n',
+      'import "./chunk-ONZOAA7V.js";\n',
+      'import {\n  __commonJS,\n  __toESM\n} from "./chunk-2ESYSVXG.js";\n',
+    ];
+    const reloaded = WORKER_BODY.replace('module-loader-SE2E5KRJ', 'module-loader-A575V22B');
+    expect(workerViolations(workerBytes(renamed, reloaded))).toEqual([]);
+    expect(workerViolations(workerBytes([WORKER_HEADER[0], WORKER_HEADER[2]]))).toEqual([]);
+  });
+
+  it('rejects any change to the TypeScript worker outside its sibling-chunk names', () => {
+    const ceiling = [expect.stringContaining('2 MB carrier ceiling')];
+    for (const [header, body] of [
+      [WORKER_HEADER, WORKER_BODY.replace('"5.9.3"', '"5.9.4"')],
+      [WORKER_HEADER, `${WORKER_BODY}globalThis.extra = 1;\n`],
+      [WORKER_HEADER, WORKER_BODY.replace('  ts.k = 0;\n', '')],
+      [WORKER_HEADER, WORKER_BODY.replace('module-loader-SE2E5KRJ', 'esbuild-wasm-SE2E5KRJ')],
+      [[WORKER_HEADER[0], 'globalThis.extra = 1;\n', ...WORKER_HEADER.slice(1)], WORKER_BODY],
+      [[...WORKER_HEADER, 'import "./esbuild-runtime-ABCDEFGH.js";\n'], WORKER_BODY],
+      [[...WORKER_HEADER, 'import "https://example.test/chunk-ABCDEFGH.js";\n'], WORKER_BODY],
+      [[...WORKER_HEADER, WORKER_HEADER[1]], WORKER_BODY],
+      [[...WORKER_HEADER, 'import {\n  payloadAAAA\n} from "./chunk-ABCDEFGH.js";\n'], WORKER_BODY],
+      [[...WORKER_HEADER, 'import { a as b } from "./chunk-ABCDEFGH.js";\n'], WORKER_BODY],
+    ] as const) {
+      expect(workerViolations(workerBytes(header, body))).toEqual(ceiling);
+    }
+  });
+
   it('admits only exact copied QuickJS and SQLite binaries', () => {
     for (const [name, source] of [
       [

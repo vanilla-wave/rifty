@@ -232,10 +232,16 @@ function outputFiles(root) {
   return files;
 }
 
+/** Pin of an exempt compiler output (ADR-0391). */
+export function compilerOutputPin(bytes) {
+  return { bytes: bytes.byteLength, sha256: createHash('sha256').update(bytes).digest('hex') };
+}
+
 export function evaluateEsbuildBundleInventory(
   root,
   files = outputFiles(root),
   readOutput = (path) => readFileSync(`${root}/${path}`),
+  compilerOutputs = WORKBENCH_COMPILER_OUTPUTS,
 ) {
   if (files === null) return ['build outputs missing; run pnpm build:libs'];
   const violations = [];
@@ -250,10 +256,11 @@ export function evaluateEsbuildBundleInventory(
     if (wasm?.bytes === bytes.byteLength && wasm.sha256 === digest) continue;
     if (path.endsWith('.wasm')) violations.push(`${path}: runtime wasm shipped in package output`);
     // Only the two exact compiler artifacts bypass the original carrier ceiling.
-    const compiler = assetName === null ? undefined : WORKBENCH_COMPILER_OUTPUTS[assetName];
+    const compiler = assetName === null ? undefined : compilerOutputs[assetName];
+    const pin = compiler === undefined ? undefined : compilerOutputPin(bytes);
     if (
       bytes.byteLength > MAX_PUBLISHED_OUTPUT_BYTES &&
-      (compiler?.bytes !== bytes.byteLength || compiler.sha256 !== digest)
+      (pin === undefined || compiler.bytes !== pin.bytes || compiler.sha256 !== pin.sha256)
     ) {
       violations.push(`${path}: published output exceeds the exact 2 MB carrier ceiling`);
     }
