@@ -1,7 +1,7 @@
 /**
- * The runtime's default `requireModule` (unit `runtime-js/isolate-require-esm-syntax-gaps`,
- * Acceptance 5): the four behaviours the isolate guest switches off stay Node 24's on every
- * other host. The switched-off side is proven in the isolate against live Node
+ * The runtime's default, no host-declared ESM loader gap (unit
+ * `runtime-js/isolate-require-esm-syntax-gaps`, Acceptance 5): what the isolate guest turns
+ * off stays Node 24's on every other host. The switched-off side is proven in the isolate against live Node
  * (`packages/isolate-host/tests/require-esm.test.ts`).
  */
 import { riftyProcess } from '@riftydev/runtime-js/builtins/process';
@@ -46,6 +46,14 @@ describe('require(esm) by default, as Node 24', () => {
     expect(l.require('./s.js', '/work/entry.cjs')).toMatchObject({ a: 1 });
     const ns = l.require('./b.js', '/work/entry.cjs') as object;
     expect([Object.prototype.toString.call(ns), Object.keys(ns)]).toEqual(['[object Module]', []]);
+  });
+
+  it('import() from a CommonJS file detects ESM syntax in a typeless .js', async () => {
+    const vfs = new MemoryFsSync();
+    vfs.loadFixture({ ...FILES, '/work/imp.cjs': "module.exports = import('./s.js');" });
+    const l = createModuleLoader(vfs, { cwd: '/work' });
+    const ns = (await l.require('./imp.cjs', '/work/entry.cjs')) as { a: number };
+    expect(ns.a).toBe(1);
   });
 
   it('require of an .mjs returns its namespace', () => {

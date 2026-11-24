@@ -24,6 +24,7 @@ const FILES: Readonly<Record<string, string>> = {
   'tm/v.js': 'var x = 1;',
   'tm/r.js': 'let require = 1;',
   'tm/m.mjs': 'export const a = 1;',
+  'tm/bad.js': 'export const = ;',
   'node_modules/esmpkg/package.json': '{"type":"module","main":"i.js"}',
   'node_modules/esmpkg/i.js': 'export default 1;',
   's.js': 'export const a = 1;',
@@ -31,6 +32,10 @@ const FILES: Readonly<Record<string, string>> = {
   'd.js': 'const exports = 1;',
   'a.cjs': 'let require = 1;',
   'e.cjs': 'export const a = 1;',
+  'i.js': 'import x from "fs";',
+  'im.js': 'console.log(import.meta.url);',
+  'c.cjs': 'module.exports = { a: 2 };',
+  'kid.js': 'module.exports = module;',
   'node_modules/dual/package.json':
     '{"name":"dual","exports":{".":{"module-sync":"./r.mjs","default":"./i.js"}}}',
   'node_modules/dual/r.mjs': 'export default "esm";',
@@ -45,9 +50,15 @@ const ESM_ROWS = [
   './tm/v.js',
   './tm/r.js',
   './tm/m.mjs',
+  './tm/bad.js',
   'esmpkg',
 ];
 const SYNTAX_ROWS = ['./s.js', './b.js', './d.js', './a.cjs', './e.cjs'];
+/** Rejected by rifty's own CJS parse first (acorn's message): row → acorn's text. */
+const PARSE_ROWS: Readonly<Record<string, string>> = {
+  './i.js': "'import' and 'export' may appear only with 'sourceType: module' (1:0)",
+  './im.js': "Cannot use 'import.meta' outside a module (1:12)",
+};
 
 /** Run by `require` from `-e` and from `probe.js`: one JSON row per case. */
 const PROBE = `
@@ -57,7 +68,7 @@ const show = (e) => e === null || typeof e !== 'object' ? ['thrown', String(e)] 
   String(e.stack).split('\\n')[0], Object.getOwnPropertyNames(e), String(e).split('\\n')[0],
 ];
 const rows = [['features', process.features.require_module]];
-for (const f of ${JSON.stringify([...ESM_ROWS, ...SYNTAX_ROWS, 'dual'])}) {
+for (const f of ${JSON.stringify([...ESM_ROWS, ...SYNTAX_ROWS, ...Object.keys(PARSE_ROWS), 'dual'])}) {
   try { rows.push([f, 'value', JSON.stringify(require(f))]); } catch (e) { rows.push([f, show(e)]); }
 }
 rows.push(['resolve', require.resolve('dual')]);
@@ -67,6 +78,13 @@ for (const f of ['./tm/v.js', './tm/x.js', './m.mjs']) {
   const abs = path.resolve(f);
   try { require.extensions['.js']({}, abs); rows.push(['hook', f, 'loaded']); }
   catch (e) { rows.push(['hook', f, show(e)]); }
+}
+// The same hook on a real module that has a parent (this one).
+const kid = require('./kid.js');
+for (const f of ['./tm/v.js', './tm/x.js', './m.mjs']) {
+  const abs = path.resolve(f);
+  try { require.extensions['.js'](kid, abs); rows.push(['hook-parent', f, 'loaded']); }
+  catch (e) { rows.push(['hook-parent', f, show(e)]); }
 }
 console.log(JSON.stringify(rows).split(process.cwd()).join('<root>'));
 `;
@@ -112,12 +130,56 @@ function pinSyntaxRow(row: Row): Row {
   ];
 }
 
+/** Rifty's CJS parse rejects these before V8 does: the acorn message, pinned likewise. */
+function pinParseRow(row: Row): Row {
+  const [f, e] = row as [string, unknown[]];
+  expect(e.slice(0, 3)).toEqual(['SyntaxError', 'SyntaxError', null]);
+  expect(e[3]).toMatch(/^Cannot use (?:import statement|'import\.meta') outside a module$/);
+  return [
+    f,
+    [
+      'ModuleLoadError',
+      'ModuleLoadError',
+      'SYNTAX_ERROR',
+      `Failed to parse CJS source for <root>/${f.slice(2)}: ${PARSE_ROWS[f] as string}`,
+    ],
+  ];
+}
+
+/**
+ * A `"type": "module"` `.js` that fails to parse: Node reads "has ESM syntax" off V8's CJS
+ * compile error (`Unexpected token 'export'`) and gives the in-parent variant; rifty needs
+ * the whole file to parse as a module and gives the treated-as variant (pinned,
+ * `backlog/runtime-js/esm-syntax-detection-v8-error-classification`).
+ */
+function pinUnparsableVariant(row: Row): Row {
+  const [f, e] = row as [string, unknown[]];
+  const message = e[3] as string;
+  const head = message.slice(0, message.indexOf('\n'));
+  expect(message).toBe(
+    `${head}\nInstead change the require of bad.js in <root>/[eval] to a dynamic import() which is available in all CommonJS modules.`.replace(
+      '<root>/[eval]',
+      /from (\S+) not supported/.exec(head)?.[1] ?? '',
+    ),
+  );
+  const treated = `${head}\nbad.js is treated as an ES module file as it is a .js file whose nearest parent package.json contains "type": "module" which declares all .js files in that package scope as ES modules.\nInstead either rename bad.js to end in .cjs, change the requiring code to use dynamic import() which is available in all CommonJS modules, or change "type": "module" to "type": "commonjs" in <root>/tm/package.json to treat all .js files as CommonJS (using .mjs for all ES modules instead).\n`;
+  return [f, [...e.slice(0, 3), treated, ...e.slice(4)]];
+}
+
 function compare(node: Row[], guest: Row[]): void {
   const syntax = new Set(SYNTAX_ROWS);
   const project = (row: Row): Row =>
-    syntax.has(row[0] as string) ? [row[0], (row[1] as unknown[]).slice(0, 4)] : row;
+    syntax.has(row[0] as string) || PARSE_ROWS[row[0] as string] !== undefined
+      ? [row[0], (row[1] as unknown[]).slice(0, 4)]
+      : row;
   expect(guest.map(project)).toEqual(
-    node.map((row) => (syntax.has(row[0] as string) ? pinSyntaxRow(row) : row)),
+    node.map((row) => {
+      const f = row[0] as string;
+      if (syntax.has(f)) return pinSyntaxRow(row);
+      if (PARSE_ROWS[f] !== undefined) return pinParseRow(row);
+      if (f === './tm/bad.js') return pinUnparsableVariant(row);
+      return row;
+    }),
   );
 }
 
@@ -180,7 +242,59 @@ describe('isolate ES modules stay named gaps, no URLConstructor', () => {
     });
   }
 
-  it('import()', async () => {
+  it(
+    'import() from a file: an ES module rejects with the gap, CommonJS and builtins load',
+    { timeout: 60_000 },
+    async () => {
+      const files = fileMap({
+        'imp.js': `const rows = [];
+(async () => {
+  for (const f of ['./s.js', './b.js', './m.mjs', './tm/x.js', './c.cjs', 'node:path']) {
+    try { const m = await import(f); rows.push([f, 'ok', typeof m.default]); }
+    catch (e) { rows.push([f, e.name, e.message.split(' (')[0]]); }
+    try { require(f); rows.push([f, 'req ok']); } catch (e) { rows.push([f, 'req', e.code ?? null]); }
+  }
+  console.log(JSON.stringify(rows));
+})();`,
+      });
+      const node = inNode(files, 'imp.js', 'out/none', [FLAG]);
+      expect(JSON.parse(node.stdout)).toEqual([
+        ['./s.js', 'ok', 'undefined'],
+        ['./s.js', 'req', null],
+        ['./b.js', 'ok', 'undefined'],
+        ['./b.js', 'req', null],
+        ['./m.mjs', 'ok', 'undefined'],
+        ['./m.mjs', 'req', 'ERR_REQUIRE_ESM'],
+        ['./tm/x.js', 'ok', 'undefined'],
+        ['./tm/x.js', 'req', 'ERR_REQUIRE_ESM'],
+        ['./c.cjs', 'ok', 'object'],
+        ['./c.cjs', 'req ok'],
+        ['node:path', 'ok', 'object'],
+        ['node:path', 'req ok'],
+      ]);
+      const guest = await inSandbox(files, 'imp.js', 'out/none');
+      expect(guest.stderr).toBe('');
+      const gap = ['NotImplementedError', 'Not implemented: isolate-host.esm'];
+      // require after the rejected import: Node's rows (a typeless file's compile error is the
+      // pinned `ModuleLoadError` SYNTAX_ERROR).
+      expect(JSON.parse(guest.stdout)).toEqual([
+        ['./s.js', ...gap],
+        ['./s.js', 'req', 'SYNTAX_ERROR'],
+        ['./b.js', ...gap],
+        ['./b.js', 'req', 'SYNTAX_ERROR'],
+        ['./m.mjs', ...gap],
+        ['./m.mjs', 'req', 'ERR_REQUIRE_ESM'],
+        ['./tm/x.js', ...gap],
+        ['./tm/x.js', 'req', 'ERR_REQUIRE_ESM'],
+        ['./c.cjs', 'ok', 'object'],
+        ['./c.cjs', 'req ok'],
+        ['node:path', 'ok', 'object'],
+        ['node:path', 'req ok'],
+      ]);
+    },
+  );
+
+  it('import() from -e', async () => {
     const guest = await runCode(`${writeFiles}\nimport('./m.mjs').then((m) => console.log(m.a));`);
     expect(guest.exitCode).toBe(1);
     expect(guest.stderr).toMatch(/Not implemented: isolate-host\.dynamic-import /);
