@@ -1,3 +1,5 @@
+import readStreamClose from '../../../tools/node-parity-runner/cases/fs/read-stream-close.case.ts';
+import writeStreamClose from '../../../tools/node-parity-runner/cases/fs/write-stream-close.case.ts';
 /**
  * The model-style `node -e` corpus (ADR-0557 §1), shared by
  * `runCode` parity and the custom-embedder parity of `@riftydev/isolate-guest`
@@ -6,8 +8,6 @@
  * diagnostic projection.
  */
 import { canonicalNodeCliEvalOutcome } from '../../../tools/node-parity-runner/src/node-cli-eval.ts';
-import readStreamClose from '../../../tools/node-parity-runner/cases/fs/read-stream-close.case.ts';
-import writeStreamClose from '../../../tools/node-parity-runner/cases/fs/write-stream-close.case.ts';
 
 export interface Row {
   readonly label: string;
@@ -82,7 +82,12 @@ export const CORPUS: readonly Row[] = [
     code: "const fsp = require('fs/promises'); (async () => { await fsp.writeFile('p.json', JSON.stringify({ k: [1, 2] })); const j = JSON.parse(await fsp.readFile('p.json', 'utf8')); console.log(j.k.length) })()",
   },
   // The parity cases' code on the async `openReadable` path (`installMemoryFs`, as the browser hosts).
-  { label: 'fs-read-stream-close', code: readStreamClose.code },
+  {
+    label: 'fs-read-stream-close',
+    code: readStreamClose.code,
+    ceiling:
+      "fs.createReadStream of an existing file errors NotImplementedError('isolate-host.ReadableStream') (distribution/isolate-guest-fs-createreadstream-readablestream)",
+  },
   { label: 'fs-write-stream-close', code: writeStreamClose.code },
   {
     label: 'fs-enoent',

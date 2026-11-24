@@ -25,13 +25,21 @@ node:    data abc / end
 The guest entry runs `installMemoryFs()` (`entry.ts:46`), so `asyncVfs()` is set and
 `FileReadStream` takes `Vfs.openReadable` (`memory.ts:74` `new ReadableStream`); the guest's
 `CEILING_GLOBALS` (`web-shim.ts`) make that global a loud throw. A missing file still gives
-`ENOENT` (stat first). The isolate-host compat row "`{stdout, stderr, exitCode}` …" claims ✅
-"fs on the in-memory VFS"; nothing declares fs read streams — undeclared.
+`ENOENT` (stat first). Was undeclared (the isolate-host compat ✅ row claimed "fs on the in-memory VFS"); declared
+by `runtime-js/fs-stream-close-method-missing`: compat isolate-host.md row ❌.
 
 Library effect: probe `isolate-library-probe` `diag-outputs` after the close() fix —
 `exceljs xlsx.readFile (read back): NotImplementedError: … isolate-host.ReadableStream`
 (node: `ok string 1`); before it, exceljs's `stream.close()` in its catch threw the
-`TypeError` that hid this error. The isolate corpus row `fs-read-stream-close` fails on it.
+`TypeError` that hid this error. The isolate corpus row `fs-read-stream-close` fails on it (`ceiling:`, expected failure).
+
+Spike 2026-11-24 (not committed, on this unit's branch): `entry.ts` `installMemoryFs()` →
+`setSyncMirror(new MemoryFsSync())` (no paired async VFS; fs-streams takes its sync-mirror
+fallback, parity-proven vs Node; in the guest bundle only `fs-streams.ts` reads `asyncVfs()`).
+Result: `packages/isolate-host` `tests/parity.test.ts` 176/176 incl. `fs-read-stream-close`;
+probe `diag-outputs` `exceljs xlsx.readFile (read back)` equals node. Not run: the guest's
+snapshot/restore tests, the rest of the isolate-host and isolate-guest suites. Cost: no true
+streaming in the guest (whole-file `readFileBytesSync`, sliced per `highWaterMark`).
 
 Open: the carrier (guest without a paired async VFS → the sync-mirror fallback; a
 rifty-internal web-streams implementation the guest ceiling does not cover; MemoryVfs

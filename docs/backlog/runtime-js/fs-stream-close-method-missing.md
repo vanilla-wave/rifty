@@ -41,10 +41,12 @@ resolves, `getWorksheet('S').getCell('A1').value === 'a'`.
 ## Acceptance
 
 1. Parity `fs/read-stream-close` and `fs/write-stream-close` (sync-mirror path) green vs live
-   Node; the same code as isolate-host corpus rows (`installMemoryFs`, async `openReadable`
-   path, the browser hosts' and isolate guest's) green vs `node -e` → scenario
-2. `probe.mjs diag-outputs diag-repro` in the isolate sandbox: the `exceljs xlsx.readFile (read
-   back)` and both `typeof … .close` lines equal real node's → scenario
+   Node; the same code on the async `openReadable` path (`installMemoryFs`, the browser
+   hosts' workers: `tests/conformance/builtins/fs-stream-close-async-vfs.test.ts`) green vs
+   `node -e`; isolate-host corpus row `fs-write-stream-close` green, `fs-read-stream-close` a
+   declared ceiling (Decisions) → scenario
+2. `probe.mjs diag-repro` in the isolate sandbox: both `typeof … .close` lines equal real
+   node's → scenario
 3. compat fs.md `createReadStream` / `createWriteStream` row states `close`/`destroySoon`/
    `closed`/`destroyed` support and names the remaining Readable/Writable gap with its backlog
    item; no "no close()" text → scenario
@@ -121,6 +123,11 @@ zero, `this` the stream via `on('close')`, not the stream when already closed (n
   `runtime-js/fs-readstream-preaborted-signal-sync-destroy`.
 
 ## Decisions
+
+- Manager 2026-11-24: exceljs `xlsx.readFile` in the isolate moves to the next unit
+  (`distribution/isolate-guest-fs-createreadstream-readablestream`: after `close()`, the read
+  stream itself errors `NotImplementedError('isolate-host.ReadableStream')`). Here the gap is
+  declared (corpus row `ceiling:`, compat isolate-host.md row ❌), not fixed.
 
 - ReadStream callback = Node's end-of-stream rules for a readable that will emit `'close'`
   (or not, `emitClose:false`), reimplemented in `fs-streams.ts`; rifty `stream.finished` is
