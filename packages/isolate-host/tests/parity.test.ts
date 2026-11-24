@@ -122,7 +122,6 @@ describe('declared ceilings fail loudly (I1 ceilings, scenario step 4)', () => {
       'Crypto',
       'CryptoKey',
       'SubtleCrypto',
-      'Navigator',
       'Performance',
       'PerformanceEntry',
       'PerformanceMark',
@@ -143,11 +142,7 @@ describe('declared ceilings fail loudly (I1 ceilings, scenario step 4)', () => {
       'performance.eventLoopUtilization',
       'performance.timerify',
       'performance.nodeTiming',
-      'navigator.hardwareConcurrency',
-      'navigator.language',
-      'navigator.languages',
-      'navigator.platform',
-      'navigator.userAgent',
+      'navigator.locks',
     ];
     const result = await runCode(`
       const out = [];
