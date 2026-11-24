@@ -18,6 +18,8 @@ allowBuilds:
   '@biomejs/biome': true
   # Pi's unused provider dependencies; the OpenAI transport needs no install hook.
   '@google/genai': false
+  # Test-only (isolate-host navigator acceptance); its postinstall only prints a banner.
+  core-js: false
   esbuild: true
   # @riftydev/isolate-host child process (ADR-0557); install picks a shipped prebuild.
   isolated-vm: true

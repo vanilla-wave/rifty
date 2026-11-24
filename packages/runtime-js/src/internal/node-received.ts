@@ -34,3 +34,28 @@ export function invalidArgType(what: string, expected: string, value: unknown): 
     { code: 'ERR_INVALID_ARG_TYPE' },
   );
 }
+
+/** `RangeError` with Node's `ERR_OUT_OF_RANGE` code and message for a number. */
+export function outOfRange(name: string, range: string, value: number): RangeError {
+  const received =
+    Number.isInteger(value) && Math.abs(value) > 2 ** 32
+      ? addNumericalSeparator(String(value))
+      : Object.is(value, -0)
+        ? '-0'
+        : String(value);
+  return Object.assign(
+    new RangeError(
+      `The value of "${name}" is out of range. It must be ${range}. Received ${received}`,
+    ),
+    { code: 'ERR_OUT_OF_RANGE' },
+  );
+}
+
+/** Node's `addNumericalSeparator` (`8_589_934_592`). */
+function addNumericalSeparator(value: string): string {
+  let result = '';
+  let index = value.length;
+  const start = value[0] === '-' ? 1 : 0;
+  for (; index >= start + 4; index -= 3) result = `_${value.slice(index - 3, index)}${result}`;
+  return `${value.slice(0, index)}${result}`;
+}

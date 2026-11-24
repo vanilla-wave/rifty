@@ -4,7 +4,7 @@ status: draft
 title: "In the isolate guest a required typeless `.js` that Node loads as an ES module loads as in Node"
 created: 2026-11-22
 why: Node 24 detects ESM syntax or a redeclared CJS binding (`let require = 1`) in a typeless `.js` and loads it as ESM; the isolate guest throws `TypeError: URLConstructor is not a constructor`
-sources: [PR-421-external-review-round-1, docs/adr/runtime-js/0571-prove-node-file-entry-and-fatal-report-parity-against-live-node-node-s-report-in-the-isolate-guest-only.md]
+sources: [PR-421-external-review-round-1, docs/backlog/distribution/reference/isolate-library-probe/README.md, docs/adr/runtime-js/0571-prove-node-file-entry-and-fatal-report-parity-against-live-node-node-s-report-in-the-isolate-guest-only.md]
 code: [packages/runtime-js/src/internal/posix-file-url.ts, packages/runtime-js/src/module-loader/resolver.ts, packages/isolate-guest/src/guest/web-shim.ts]
 ---
 
@@ -34,6 +34,12 @@ body never runs; Node prints `{"a":1}` / its file URL. So every ES module
 reached by `require` in the isolate hits it, not only detected `.js` files
 (deferred, ADR-0571).
 
+Probe 2026-11-24 (isolate-host sandbox, `docs/backlog/distribution/reference/isolate-library-probe/gen/diag.cjs`):
+`require('nanoid')` of nanoid 6.0.2 (`"type": "module"`, a transitive dependency of docx 9.15.3,
+which bundles its own copy) fails the same `TypeError: URLConstructor is not a constructor`
+(Node: loads), while compat isolate-host.md's Sandbox row "ES modules" names
+`NotImplementedError('isolate-host.esm')` for `"type": "module"`.
+
 Cause (read, not instrumented): `URLConstructor = globalThis.URL` is captured
 at runtime-js module load, where the isolate has no `URL` (ceiling global,
 installed after load, `web-shim.ts` `CEILING_GLOBALS`); the ESM path builds a
@@ -41,6 +47,13 @@ file URL with it. Same mechanism as the isolate ESM entry's ❌ (compat
 isolate-host.md "ES modules"). Fault class: `sibling-drift` — one
 runtime path behaves per host on a host-provided global; the leaked internal
 name is not a named gap.
+
+Same capture, other symptom (2026-11-24, `runCode`, Node v24.16.0): an
+fs path that is neither a string nor bytes — `require('fs').readFileSync({})` —
+throws `TypeError: Right-hand side of 'instanceof' is not an object` at
+`fs-path.ts` `pathText` (`p instanceof URLConstructor`); Node: `TypeError
+[ERR_INVALID_ARG_TYPE]: The "path" argument must be of type string or an
+instance of Buffer or URL. Received an instance of Object`.
 
 Owner: runtime-js with isolate-guest (the ceiling `URL`). Trigger: the
 isolate ESM ❌ lifting, or an agent run that hits `URLConstructor`.
