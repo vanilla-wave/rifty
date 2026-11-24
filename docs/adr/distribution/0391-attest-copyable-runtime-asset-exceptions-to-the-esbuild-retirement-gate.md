@@ -53,27 +53,30 @@ longer re-pin. No ADR is superseded.
   added) and the `import("./module-loader-HASH.js")` hash; 15 main builds
   10-20…11-24 (15 raw pins, 3 sizes) give one pin.
   Rule (`compilerOutputPin`, opt-in per pin via `siblingImports`; the
-  `chunk-EMDIREKY.js` pin stays whole-file): pin = size + SHA-256 of the worker
-  minus its leading imports, built sibling hashes zeroed. A leading import is
-  skipped only in esbuild's exact emitted form (no other whitespace, no alias),
-  for a built `chunk-XXXXXXXX.js` in `dist/assets`, once, each binding once and
-  present as a token in the pinned rest; a body hash is zeroed only for a built
-  sibling. Compiler version, injected code, body size, free whitespace, unbuilt
-  siblings stay red (unit mutants; real-build mutants in PR #447).
-  No longer seen (the price): (1) linkage — which built sibling chunks the
-  worker imports and which bindings it takes. An esbuild chunk hash covers the
+  `chunk-EMDIREKY.js` pin stays whole-file). Pinned: the worker body — all
+  after its leading imports — with hashes zeroed only for built siblings.
+  Header: only esbuild-form lines (`import "./chunk-XXXXXXXX.js";`,
+  `import {\n  a,\n  b as c\n} from "./chunk-XXXXXXXX.js";`) of chunks built in
+  `dist/assets`, at most 2048 bytes (3× the largest of 249 built workers and
+  15 main builds, 630–682 bytes); over → violation naming both sizes. Each
+  check has a file it alone rejects: form — code or a tab inside `{…}`;
+  built sibling — `import "./chunk-NOPENOPE.js"`, body
+  `module-loader-NOPENOPE`; ceiling — 100 000 repeated bindings. Token-in-body
+  and no-repeat checks removed: under the ceiling they only narrowed an
+  already bounded channel. Compiler version, injected code, body size stay red
+  (unit mutants; real-build mutants in PR #447).
+  No longer seen (the price): the worker's linkage — which built siblings it
+  imports, in what order, which bindings. An esbuild chunk hash covers the
   hashes it imports, so the old exact pin indirectly fixed the content of the
   worker's whole transitive chunk graph, `module-loader` included; now those
   siblings meet only their own checks (2 MB ceiling, WASM/base64/gzip, map
-  tokens), like any other entry's chunks. Red before, green now: the worker
-  statically imports a new built sibling ≤2 MB with foreign runtime and no
-  signature; a swapped sibling exporting `__commonJS`/`__toESM`; the
-  `module-loader` hash pointing at another built one. (2) "Present as a token"
-  searches the 10 MB pinned text (strings, comments, property names count):
-  `Object` (shadows the global for the whole compiler) or `default`/`if`/
-  `return` (invalid JS) pass. It is not a linkage check; it bounds the unpinned
-  header to tokens of the pinned body — without it `import {\n  <any
-  identifiers>\n} from "./chunk-<built>.js"` carries unbounded free bytes.
+  tokens), like any other entry's chunks. Red before, green now: a static
+  import of a new built sibling ≤2 MB with foreign runtime and no signature;
+  of the exempt 4.9 MB `chunk-EMDIREKY.js`; a swapped sibling exporting
+  `__commonJS`/`__toESM`; reordered imports (side-effect order); bindings that
+  repeat, go unused, shadow a global (`Object`) or are keywords (invalid JS);
+  the `module-loader` hash pointing at another built one — all within 2048
+  header bytes.
   Rejected: hash placeholder only (an added chunk line still re-pins); unsplit
   worker build (copies runtime into the pinned body); source-map provenance
   (rejected above). Re-pin only on the worker's own content (TypeScript,
