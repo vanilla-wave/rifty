@@ -1,7 +1,7 @@
 /**
  * `process.umask()` is the mask new files/dirs are created under — Node's
  * invariant under any umask; the oracle's number depends on its environment,
- * so only the invariant is printed (backlog runtime-js/process-umask-missing).
+ * so only the invariant is printed.
  */
 import type { ParityCase } from '../../src/types.ts';
 
