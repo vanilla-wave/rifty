@@ -22,6 +22,12 @@ typed-array / grouping layout gaps; these three are default-format defects.
 2026-11-22 — getters (`[Getter]`, never run) and holes (`<N empty items>`)
 fixed in PR #421 (`repl/inspect.ts`); the class form remains.
 
+2026-11-24 (PR #432 review, isolate `runCode` vs `node -e`, v24.16.0): two more in Node's error
+`Received …` text. A 200-char string (`process.umask('a'.repeat(200))`, ERR_INVALID_ARG_VALUE):
+Node inspects it whole and `internal/errors` cuts at 128 + `...` (message 214 chars), rifty's
+inspector cuts the string itself (`…'`, 206 chars). `Object.create(null)`
+(`describeReceived`, ERR_INVALID_ARG_TYPE): Node `[Object: null prototype] {}`, rifty `[Object]`.
+
 ## Challenge
 
 challenge: 2026-11-18 — finding capture; no premise critic (README §Challenge)

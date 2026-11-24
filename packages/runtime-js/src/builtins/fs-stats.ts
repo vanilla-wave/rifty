@@ -8,6 +8,13 @@
  */
 import { type FsStat, NotImplementedError } from '@riftydev/vfs';
 
+/**
+ * The mask new files/dirs get: the VFS stores no modes, so every file reports
+ * `0o666 & ~VFS_UMASK`, every dir `0o777 & ~VFS_UMASK`; `process.umask()` reports
+ * it (backlog runtime-js/fs-default-file-modes).
+ */
+export const VFS_UMASK = 0;
+
 export class Stats {
   dev = 1;
   ino: number;
@@ -36,7 +43,13 @@ export class Stats {
     this.ctimeMs = vs.metadata?.ctime ?? 0;
     this.birthtimeMs = vs.metadata?.birthtime ?? 0;
     this.ino = vs.metadata?.ino ?? 0;
-    this.mode = vs.mode ?? (vs.isFile ? 0o100666 : vs.isDirectory ? 0o40777 : 0);
+    this.mode =
+      vs.mode ??
+      (vs.isFile
+        ? 0o100000 | (0o666 & ~VFS_UMASK)
+        : vs.isDirectory
+          ? 0o40000 | (0o777 & ~VFS_UMASK)
+          : 0);
     this.nlink = vs.nlink ?? 0;
     this.blocks = Math.ceil(this.size / 512);
     this._isFile = vs.isFile;

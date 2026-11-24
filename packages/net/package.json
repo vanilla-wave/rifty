@@ -26,7 +26,8 @@
     "./https": "./src/https.ts",
     "./sqlite/engine": "./src/sqlite/engine.ts",
     "./sqlite/database-sync": "./src/sqlite/database-sync.ts",
-    "./sqlite/register-builtins": "./src/sqlite/register-builtins.ts"
+    "./sqlite/register-builtins": "./src/sqlite/register-builtins.ts",
+    "./node-data": "./src/node-data.ts"
   },
   "files": ["dist", "CHANGELOG.md"],
   "publishConfig": {
@@ -62,6 +63,10 @@
       "./sqlite/register-builtins": {
         "types": "./dist/sqlite/register-builtins.d.ts",
         "import": "./dist/sqlite/register-builtins.js"
+      },
+      "./node-data": {
+        "types": "./dist/node-data.d.ts",
+        "import": "./dist/node-data.js"
       }
     }
   },

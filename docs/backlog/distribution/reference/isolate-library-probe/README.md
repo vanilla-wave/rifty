@@ -77,7 +77,7 @@ from the package source at the lock version, not traced.
 | 5 | `stream.Transform` subclass `_transform`/`_flush`, `Duplex` subclass `_write` | **undeclared** when measured (streams.md `Transform` was ✅); fixed by PR #433, 2026-11-24 — the probe's subclass and `csv.writeBuffer` lines equal Node's (the latter prints type and length only; `distribution/isolate-exceljs-csv-write-acceptance-row`) | source: `@fast-csv/format/build/src/CsvFormatterStream.js:6-55` → `exceljs/lib/utils/stream-buf.js:239` | exceljs CSV write (chunks passed through unchanged; silent where a sink accepts them) — fixed, PR #433 |
 | 6 | web `ReadableStream`, under rifty's own `fs.createReadStream` | **undeclared** (isolate-host.md row "`fs.createReadStream` reads" added) | guest stack: `new ReadableStream < MemoryVfs.openReadable < FileReadStream.start` (`diag-fsread`); source: exceljs `xlsx.js:244-253` (`read`), `csv/csv.js:32-43` | every fs read stream in the guest: exceljs `xlsx.read(stream)`, `readFile`, `csv.read` — `distribution/isolate-host-fs-read-stream-needs-web-readablestream` |
 | 7 | `fs.ReadStream#close`/`WriteStream#close`, `ReadStream[Symbol.asyncIterator]` | **undeclared** (fs.md row now names them) | source: `exceljs/lib/xlsx/xlsx.js:56`, `:59` (its catch's `close()` masks #6), `:247` | `xlsx.readFile` — `runtime-js/fs-stream-close-method-missing` |
-| 8 | `process.umask` | **undeclared** (process.md row added) | source: `fstream/lib/writer.js:8` at load (unzipper → exceljs main) | exceljs main after #1 (`diag`: `require('fstream')`) — `runtime-js/process-umask-missing` |
+| 8 | `process.umask` | fixed (PR #432: reads 0, another mask loud) | source: `fstream/lib/writer.js:8` at load (unzipper → exceljs main) | was exceljs main's stop after #1; fstream's next stop is graceful-fs `fs$WriteStream.apply` — `runtime-js/fs-stream-class-call-shape` |
 | 9 | `crypto.createHash('sha512')` / `getHashes()` | declared (`runtime-js/crypto-sync-subset-expansion`; consumer added there) | traced load: `exceljs/lib/utils/encryptor.js:3`; source: `:27-30` checks `getHashes()` | `worksheet.protect(password)` |
 | 10 | `require()` of a `"type": "module"` package | declared ❌ (`isolate-host.md` Sandbox row "ES modules" names `NotImplementedError('isolate-host.esm')`; the measured refusal is `TypeError: URLConstructor is not a constructor`, now noted there) | `nanoid` 6.0.2 (`diag`) | nothing measured: docx bundles its own copy — `runtime-js/isolate-require-esm-syntax-gaps` |
 
@@ -92,6 +92,19 @@ path, not a library call); #1 needs `CompressionStream` or a zlib not built on i
 (`runtime-js/isolate-require-esm-syntax-gaps`, `docs/ROADMAP.md` M14 E). The paths behind the
 first stops (exceljs's main entry past #1, its streaming writer/reader) are not measured. #5 is
 the one silent wrong behavior.
+
+### After `isolate-host-egress-modules-load` (2026-11-24)
+
+Same probe, this branch (guest `http`/`https`/`net` load with Node's shape; network use a named
+gap): `results-after-egress-modules.json`. pptxgenjs canonical `gen/pptx.cjs` and `pptx-write` ✅ exit 0, valid,
+= node's (masked); rerun over this probe at `main` a994a6cf9 merged; the diag lines for `require('http')`, `require('https')`, `import('node:https')`
+and "pptx image by path + writeFile" now equal node's. Row 2 above is closed; every other row is
+unchanged. pptxgenjs's next stops (ad-hoc diag, same closure, vs node): `write()` with no
+`outputType` → Blob (row 3: `blob is not supported by this platform`; node returns a `Blob`);
+an image `path` starting `http` → `NotImplementedError('isolate-host.https.get')`, a rejection
+`write()` hands back (node fetches it). `write` as base64/binarystring/uint8array/arraybuffer/
+nodebuffer/STREAM, `stream()`, `writeFile({compression})`, SVG image and video by `path`, a
+master + notes + hyperlink: equal to node.
 
 ## Measures (requirement 3 baseline)
 

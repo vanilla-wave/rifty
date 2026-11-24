@@ -47,8 +47,9 @@ processes with an empty environment, up to 4 concurrent calls per worker; guests
 calls share a worker process.
 
 - **Tested seam properties.** The guest sees no host global, host env, Node primitive or
-  isolated-vm handle. It gets no network: `fetch`, `node:http`/`https`/`net` and `WebSocket`
-  throw `NotImplementedError`. The time limit, the isolate heap limit, V8 fatal OOM and the
+  isolated-vm handle. It gets no network: `fetch`, `WebSocket` and every network member of
+  `node:http`/`https`/`net` (requests, servers, sockets; the modules themselves load) throw
+  `NotImplementedError`. The time limit, the isolate heap limit, V8 fatal OOM and the
   worker RSS ceiling end the guilty call or its worker, never the consumer process. A guest that
   does not escape changes a neighbour's result only by delay (memory, hangs, floods tested next
   to neighbours); a lost worker's calls rerun once, each alone, where any exhaustion of the
