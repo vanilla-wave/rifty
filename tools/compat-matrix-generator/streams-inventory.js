@@ -54,7 +54,7 @@ export const streamsMatrix = {
     [
       '`Transform` / `PassThrough` backpressure',
       '⚠️',
-      "The `_transform` callback is released at once, so `write()` keeps returning `true` while the readable buffer is full — backlog `runtime-js/transform-readable-backpressure`",
+      'The `_transform` callback is released at once, so `write()` keeps returning `true` while the readable buffer is full — backlog `runtime-js/transform-readable-backpressure`',
     ],
     ['`PassThrough`', '✅', 'Forwards chunks unchanged'],
     [
@@ -80,7 +80,7 @@ export const streamsMatrix = {
     [
       '`destroy` / cleanup',
       '⚠️',
-      "Writable destroy and async-iterator cleanup parity; no `_destroy` hook runs (row below) and `errored` is not exposed — backlog `runtime-js/stream-destroy-construct-hooks`",
+      'Writable destroy and async-iterator cleanup parity; no `_destroy` hook runs (row below) and `errored` is not exposed — backlog `runtime-js/stream-destroy-construct-hooks`',
     ],
     [
       '`_destroy` / `_construct` hooks',
@@ -90,7 +90,7 @@ export const streamsMatrix = {
     [
       '`Duplex` Writable surface',
       '⚠️',
-      "No `cork`/`uncork`/`setDefaultEncoding`/`writableCorked` on Duplex/Transform (`TypeError`); `readableObjectMode`/`writableObjectMode` options ignored — backlog `runtime-js/duplex-writable-surface-gaps`",
+      'No `cork`/`uncork`/`setDefaultEncoding`/`writableCorked` on Duplex/Transform (`TypeError`); `readableObjectMode`/`writableObjectMode` options ignored — backlog `runtime-js/duplex-writable-surface-gaps`',
     ],
     [
       '`Duplex` / `Transform` event order',
