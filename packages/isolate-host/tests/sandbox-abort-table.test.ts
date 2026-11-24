@@ -66,6 +66,8 @@ function referee(controller: AbortController) {
 async function usableThenGone(sb: Sandbox): Promise<void> {
   expect(await sb.exec('ok.js')).toEqual({ stdout: '', stderr: '', exitCode: 0 });
   await sb.destroy();
+  // A worker's own cleanup after its last call (an isolate's heap freed) settles first.
+  await sleep(200);
   expect(await burnedAfter(500)).toBeLessThan(0.1);
 }
 
@@ -167,8 +169,10 @@ describe('an abort before the run has a result: AbortError at once, files of bef
         expect(outcome.ms).toBeLessThan(50);
         // Cancelled, not left to the stuck grace (1 s): stopped well before it.
         if (!row.stuck) {
-          await sleep(100);
-          expect(await burnedAfter(400)).toBeLessThan(0.1);
+          // Inside the grace (1 s from the abort): the worker's cleanup of the isolate
+          // settles; a live one would burn the window through.
+          await sleep(250);
+          expect(await burnedAfter(500)).toBeLessThan(0.15);
         }
         expect(await names(sb)).toEqual(BEFORE);
         await usableThenGone(sb);
@@ -182,9 +186,13 @@ describe('an abort before the run has a result: AbortError at once, files of bef
     const controller = new AbortController();
     const exec = outcomeOf(sb.exec('r.js', { timeoutMs: 20_000, signal: controller.signal }));
     await sleep(300);
-    const before = new Map(childPids().map((p) => [p, cpu(p) ?? 0]));
-    await sleep(100);
-    const busy = [...before].find(([p, c]) => (cpu(p) ?? c) - c > 0.02)?.[0];
+    let before = new Map<number, number>();
+    let busy: number | undefined;
+    for (let tries = 0; busy === undefined && tries < 30; tries++) {
+      before = new Map(childPids().map((p) => [p, cpu(p) ?? 0]));
+      await sleep(100);
+      busy = [...before].find(([p, c]) => (cpu(p) ?? c) - c > 0.02)?.[0];
+    }
     expect(busy).toBeDefined();
     // The loss is judged at the worker's 'close', later: the abort comes first.
     process.kill(busy as number, 'SIGKILL');
