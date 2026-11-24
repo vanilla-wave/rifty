@@ -4,9 +4,11 @@ import { realpathSync } from 'node:fs';
 // Heavy jobs carry `!cancelled() && code != 'false'` conditions, so when
 // change-scope dies they fail open and run; the gate still names the dead
 // dependency instead of miscalling its empty output an invalid classification.
+// Draft PRs withhold the heavy lanes: the gate then fails, never reads as a
+// merge verdict (ADR-0323 correction 2026-11-24).
 import { fileURLToPath } from 'node:url';
 
-export function evaluateGate({ code, changeScope, lint, unit, e2e, browserUnit, noCoi }) {
+export function evaluateGate({ code, changeScope, lint, unit, e2e, browserUnit, noCoi, draft }) {
   const errors = [];
   const require = (name, actual, expected) => {
     if (actual !== expected) errors.push(`${name} concluded '${actual}'; expected '${expected}'`);
@@ -22,9 +24,16 @@ export function evaluateGate({ code, changeScope, lint, unit, e2e, browserUnit, 
   } else if (changeScope === 'success') {
     errors.push(`change-scope emitted invalid code='${code}'`);
   } else {
-    errors.push(
-      `change-scope concluded '${changeScope}' before classifying; heavy suite fails open — rerun it for a green gate`,
-    );
+    const next =
+      draft === 'true'
+        ? 'heavy lanes withheld on draft — mark the PR ready for review (fresh run)'
+        : 'heavy suite fails open — rerun it for a green gate';
+    errors.push(`change-scope concluded '${changeScope}' before classifying; ${next}`);
+  }
+
+  if (draft === 'true' && code !== 'false') {
+    heavyExpected = 'skipped';
+    errors.push('draft PR: heavy lanes withheld — mark the PR ready for review for the full gate');
   }
 
   require('unit-and-conformance', unit, heavyExpected);
@@ -43,6 +52,7 @@ function main() {
     e2e: process.env.E2E_RESULT ?? '',
     browserUnit: process.env.BROWSER_UNIT_RESULT ?? '',
     noCoi: process.env.NO_COI_RESULT ?? '',
+    draft: process.env.DRAFT ?? '',
   });
   for (const error of errors) process.stdout.write(`::error::${error}\n`);
   if (errors.length > 0) process.exit(1);

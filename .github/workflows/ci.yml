@@ -2,7 +2,8 @@ name: CI
 
 on:
   pull_request:
-    # ready_for_review: CI re-runs on the current merge candidate when a draft turns ready.
+    # ready_for_review: a draft runs only the light jobs; turning ready re-runs
+    # the full gate on the current merge candidate.
     types: [opened, synchronize, reopened, ready_for_review]
   merge_group:
     types: [checks_requested]
@@ -91,7 +92,8 @@ jobs:
     needs: change-scope
     # bare needs.* implies success() and would skip the heavy suite when
     # change-scope dies; fail open to the full gate instead (ADR-0323 §2).
-    if: ${{ !cancelled() && needs.change-scope.outputs.code != 'false' }}
+    # Draft PR: withheld until ready_for_review (no PR payload on push/merge_group).
+    if: ${{ !cancelled() && needs.change-scope.outputs.code != 'false' && !github.event.pull_request.draft }}
     runs-on: ubuntu-24.04
     # run + parity as parallel matrix jobs: wall-clock = max(suite), not sum
     # (test:run ~3m dominates; parity ~1m rides a second runner).
@@ -121,7 +123,8 @@ jobs:
     needs: change-scope
     # bare needs.* implies success() and would skip the heavy suite when
     # change-scope dies; fail open to the full gate instead (ADR-0323 §2).
-    if: ${{ !cancelled() && needs.change-scope.outputs.code != 'false' }}
+    # Draft PR: withheld until ready_for_review (no PR payload on push/merge_group).
+    if: ${{ !cancelled() && needs.change-scope.outputs.code != 'false' && !github.event.pull_request.draft }}
     runs-on: ubuntu-24.04
     # Run the four lanes as PARALLEL matrix jobs (separate runners), not
     # sequential steps in one job: e2e wall-clock becomes max(lane) instead of
@@ -258,7 +261,8 @@ jobs:
     needs: change-scope
     # bare needs.* implies success() and would skip the heavy suite when
     # change-scope dies; fail open to the full gate instead (ADR-0323 §2).
-    if: ${{ !cancelled() && needs.change-scope.outputs.code != 'false' }}
+    # Draft PR: withheld until ready_for_review (no PR payload on push/merge_group).
+    if: ${{ !cancelled() && needs.change-scope.outputs.code != 'false' && !github.event.pull_request.draft }}
     # Browser-unit lane (ADR-0196): worker-side playground modules behaviorally
     # tested against the REAL owner worker under COI — thin harness page, no App
     # boot. Own job (not an e2e matrix lane): different tier, different config.
@@ -296,7 +300,7 @@ jobs:
 
   no-coi-chromium:
     needs: change-scope
-    if: ${{ !cancelled() && needs.change-scope.outputs.code != 'false' }}
+    if: ${{ !cancelled() && needs.change-scope.outputs.code != 'false' && !github.event.pull_request.draft }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -334,7 +338,8 @@ jobs:
     # then never starts, no runner (conclusion `cancelled`, not `skipped` —
     # a skipped required check would count as passed). A failed or individually
     # cancelled (timed-out) dependency in a live run still reaches the reducer
-    # and turns it red (ADR-0323 §4).
+    # and turns it red (ADR-0323 §4). A code-affecting draft reds it too:
+    # withheld heavy lanes are not a merge verdict.
     if: ${{ !cancelled() }}
     needs:
       - change-scope
@@ -355,4 +360,5 @@ jobs:
           E2E_RESULT: ${{ needs.e2e-chromium.result }}
           BROWSER_UNIT_RESULT: ${{ needs.browser-unit-chromium.result }}
           NO_COI_RESULT: ${{ needs.no-coi-chromium.result }}
+          DRAFT: ${{ github.event.pull_request.draft }}
         run: node tools/checks/ci-gate.mjs
