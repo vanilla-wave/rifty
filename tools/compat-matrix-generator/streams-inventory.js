@@ -48,8 +48,13 @@ export const streamsMatrix = {
     ],
     [
       '`Transform`',
+      '✅',
+      'Transform `_transform`/`_flush`/`_final` and Duplex `_read`/`_write`/`_writev`/`_final` run as in Node however defined (option, own property, ES class, ES5 `util.inherits`, subclass chain, late prototype), `this` = the stream; a missing `_transform`/`_write` throws `ERR_METHOD_NOT_IMPLEMENTED` — parity `stream/stream-hook-*`',
+    ],
+    [
+      '`Transform` / `PassThrough` backpressure',
       '⚠️',
-      "The `transform`/`flush` constructor options work; a subclass's own `_transform`/`_flush` never run — its chunks pass through unchanged — and a `Duplex` subclass's own `_write` never runs, its data dropped (measured 2026-11-24: fast-csv's `CsvFormatterStream`, so exceljs `csv.writeBuffer` throws) — backlog `runtime-js/stream-subclass-hooks-ignored`",
+      "The `_transform` callback is released at once, so `write()` keeps returning `true` while the readable buffer is full — backlog `runtime-js/transform-readable-backpressure`",
     ],
     ['`PassThrough`', '✅', 'Forwards chunks unchanged'],
     [

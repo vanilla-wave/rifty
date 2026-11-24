@@ -1,128 +1,83 @@
 /**
  * Node-compatible `node:stream.Transform` — owned by `@riftydev/io` per ADR-0012.
  *
- * Per ADR-0034, `write`/`end` live on the prototype — no per-instance rebinding.
- * If no `transform` option is given, chunks pass through unchanged.
- *
- * Writable-side impls are wired via the Symbol-keyed
- * {@link INTERNAL_WRITABLE_SIDE} hook on `Duplex`, avoiding instance-method
- * rebinding. The Symbol is intentionally not exported from `src/index.ts` —
- * subclasses outside `@riftydev/io` cannot reach it.
+ * Node's model: `transform`/`flush` options become own `_transform`/`_flush`;
+ * `Transform.prototype._write` runs `this._transform` and `_final` runs
+ * `this._flush`, each looked up at call time, so subclass prototypes work.
  */
 
 import {
   type CallableStreamConstructor,
   makeCallableStreamConstructor,
 } from './callable-constructor.ts';
-import {
-  Duplex,
-  type DuplexInternalOptions,
-  INTERNAL_WRITABLE_SIDE,
-  ownFinalOverride,
-  ownWriteOverride,
-} from './duplex.ts';
-import type { ReadableOptions } from './readable.ts';
-import { Writable, type WritableOptions } from './writable.ts';
+import { Duplex, type DuplexOptions } from './duplex.ts';
+import { methodNotImplementedError } from './method-not-implemented.ts';
 
-export interface TransformOptions extends ReadableOptions, WritableOptions {
-  transform?(
-    this: Transform,
-    chunk: unknown,
-    encoding: string,
-    cb: (err?: Error | null, value?: unknown) => void,
-  ): void;
-  flush?(this: Transform, cb: (err?: Error | null) => void): void;
+type TransformCallback = (err?: Error | null, value?: unknown) => void;
+
+export interface TransformOptions extends DuplexOptions {
+  transform?(this: Transform, chunk: unknown, encoding: string, cb: TransformCallback): void;
+  flush?(this: Transform, cb: TransformCallback): void;
 }
 
-const TRANSFORM_HOOK = Symbol('rifty/io:transform-hook');
-const FLUSH_HOOK = Symbol('rifty/io:transform-flush-hook');
-
-interface TransformHookTarget {
-  [TRANSFORM_HOOK]?: NonNullable<TransformOptions['transform']>;
-  [FLUSH_HOOK]?: NonNullable<TransformOptions['flush']>;
+/** Node's `final`: flush, push EOF. Identity matters — see {@link prefinish}. */
+function transformFinal(this: Transform, cb?: (err?: Error | null) => void): void {
+  if (typeof this._flush !== 'function' || this.destroyed) {
+    this.push(null);
+    cb?.();
+    return;
+  }
+  this._flush((err, value) => {
+    if (err) {
+      if (cb) cb(err);
+      else this.destroy(err);
+      return;
+    }
+    if (value != null) this.push(value);
+    this.push(null);
+    cb?.();
+  });
 }
 
-interface TransformConstruction {
-  readonly options: ReadableOptions & WritableOptions & DuplexInternalOptions;
-  bind(instance: Transform): void;
+/** A replaced `_final` still flushes once the writable side prefinishes (Node). */
+function prefinish(this: Transform): void {
+  if (this._final !== transformFinal) transformFinal.call(this);
 }
 
-function prepareTransform(
-  opts: TransformOptions = {},
-  receiver?: Transform,
-): TransformConstruction {
-  const target = receiver as (Transform & TransformHookTarget) | undefined;
-  const configuredTransform = opts.transform;
-  const configuredFlush = opts.flush;
-  const transformImpl =
-    typeof configuredTransform === 'function' ? configuredTransform : target?.[TRANSFORM_HOOK];
-  const flushImpl = typeof configuredFlush === 'function' ? configuredFlush : target?.[FLUSH_HOOK];
-  const transformRef: { instance: Transform | null } = { instance: null };
-  return {
-    options: {
-      ...opts,
-      [INTERNAL_WRITABLE_SIDE]: (innerOpts, owner) =>
-        new Writable({
-          ...innerOpts,
-          write(chunk, encoding, cb): void {
-            const target = transformRef.instance ?? (owner as Transform);
-            const override = ownWriteOverride(target);
-            if (override) {
-              override.call(target, chunk, encoding, cb);
-              return;
-            }
-            if (transformImpl) {
-              transformImpl.call(target, chunk, encoding, (err, value) => {
-                if (err) cb(err);
-                else {
-                  if (value !== undefined && value !== null) target.push(value);
-                  cb();
-                }
-              });
-              return;
-            }
-            target.push(chunk);
-            cb();
-          },
-          final(cb): void {
-            const target = transformRef.instance ?? (owner as Transform);
-            const override = ownFinalOverride(target);
-            if (override) {
-              override.call(target, cb);
-              return;
-            }
-            const finalize = (): void => {
-              target.push(null);
-              cb();
-            };
-            if (flushImpl) {
-              flushImpl.call(target, (err) => {
-                if (err) cb(err);
-                else finalize();
-              });
-            } else finalize();
-          },
-        }),
-    },
-    bind(instance): void {
-      transformRef.instance = instance;
-      const bound = instance as Transform & TransformHookTarget;
-      if (typeof configuredTransform === 'function') bound[TRANSFORM_HOOK] = configuredTransform;
-      if (typeof configuredFlush === 'function') bound[FLUSH_HOOK] = configuredFlush;
-    },
-  };
+function initializeTransform(receiver: Transform, opts: TransformOptions = {}): void {
+  if (typeof opts.transform === 'function') receiver._transform = opts.transform;
+  if (typeof opts.flush === 'function') receiver._flush = opts.flush;
+  receiver.on('prefinish', prefinish);
 }
 
 class TransformImplementation extends Duplex {
   constructor(opts: TransformOptions = {}) {
-    const construction = prepareTransform(opts);
-    super(construction.options);
-    construction.bind(this as unknown as Transform);
+    super(opts);
+    initializeTransform(this as unknown as Transform, opts);
   }
+
+  _transform(_chunk: unknown, _encoding: string, _cb: TransformCallback): void {
+    throw methodNotImplementedError('_transform()');
+  }
+
+  override _write(chunk: unknown, encoding: string, cb: (err?: Error | null) => void): void {
+    this._transform(chunk, encoding, (err, value) => {
+      if (err) {
+        cb(err);
+        return;
+      }
+      if (value != null) this.push(value);
+      cb();
+    });
+  }
+
+  _flush?(cb: TransformCallback): void;
 
   /** Transform callbacks push the readable side; Node owns the same no-op hook. */
   override _read(): void {}
 }
+
+TransformImplementation.prototype._final = transformFinal;
 
 export interface Transform extends TransformImplementation {}
 
@@ -136,8 +91,7 @@ export const Transform: TransformConstructor = /* @__PURE__ */ makeCallableStrea
   'Transform',
   TransformImplementation,
   (receiver, options) => {
-    const construction = prepareTransform(options, receiver);
-    Duplex.call(receiver, construction.options);
-    construction.bind(receiver);
+    Duplex.call(receiver, options);
+    initializeTransform(receiver, options);
   },
 );

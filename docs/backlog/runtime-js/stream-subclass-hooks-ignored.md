@@ -98,7 +98,7 @@ never runs).
   errors, never `'finish'`/`'end'`/`'close'` relative order on a Duplex.
 - `readableObjectMode`/`writableObjectMode` options (ignored) — `runtime-js/duplex-writable-surface-gaps`.
 - Transform callback backpressure (Node holds the `_transform` callback while the readable buffer is
-  full): unchanged here.
+  full) — backlog `runtime-js/transform-readable-backpressure`; compat ⚠️ row.
 - Pending-write callback errors after `destroy()` (message/code) — unchanged here.
 
 ## Decisions
