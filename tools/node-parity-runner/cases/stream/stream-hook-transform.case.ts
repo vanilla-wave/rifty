@@ -66,6 +66,8 @@ scenario('Transform prototype method replaced after construction', (l) => {
   return () => 'data=' + data.join('');
 });
 scenario('Transform subclass with _transform and a public transform() method (fast-csv shape)', (l) => {
+  // The runner's rifty realm keeps the host's global Buffer; node:buffer is the guest's.
+  const { Buffer } = require('node:buffer');
   class F extends Transform {
     constructor() { super({ writableObjectMode: true }); }
     transform() { return this; }
