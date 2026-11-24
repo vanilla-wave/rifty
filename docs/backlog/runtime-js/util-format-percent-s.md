@@ -29,14 +29,21 @@ Node's `%s` (`formatWithOptionsInternal`, Reference contract): a number via `for
 bigint `<n>n`, a non-object or an object without a built-in `toString` (`hasBuiltInToString`)
 via `String()`, otherwise `inspect(v, { depth: 0, colors: false, compact: 3 })`. Built-in =
 the constructor of the prototype owning the `toString`/`Symbol.toPrimitive` is named in
-Node's `builtInObjects`, the `globalThis` names when `inspect.js` loads: V8's 47 globals,
-before Node adds `Buffer`, `URL`, `TextEncoder`, … (live probe: a user class named
-`SharedArrayBuffer` or `Buffer` with its own `toString` is `String()`ed). Reached by the
+Node's `builtInObjects`, the 47 `globalThis` names when `inspect.js` loads — not `Buffer`,
+`URL`, `TextEncoder`, nor V8's later `Float16Array`, `SharedArrayBuffer`, `WebAssembly`,
+`DisposableStack`, … (live probe: a user class so named with its own `toString` is
+`String()`ed; `%s` of `new Float16Array([1])` is `1`). Reached by the
 isolate guest's `http.validateHeaderName`/`validateHeaderValue` messages.
 
 ## Challenge
 
-challenge: 2026-11-24 — existing-baseline repair; final check of the written result: see Decisions
+challenge: 2026-11-24 — 6 problems (fresh critic, final check of the written result; each verified by probe, resolved)
+- primordials: `Set.prototype.has`, `Object.is`, `String` were read live (guest patch → `A {}`, `0`) — captured; parity row
+- Parity case 4 called `Date`/`RegExp` `String()`; Node inspects them (built-in) — text fixed
+- this record lacked a verdict — added
+- inspect gaps reachable through `%s`'s inspect branch, unowned — recorded in `runtime-js/inspect-default-format-gaps`
+- "V8's 47 globals" was wrong (V8 has more); numericSeparator also bigints — text fixed
+- Parity case 2 promised Proxy of both shapes, test had one — rows added
 
 ## User scenario
 
@@ -76,29 +83,34 @@ buffer's text, as in Node.
 1. Own, class, subclass, inherited user `toString` → its result; own and class
    `Symbol.toPrimitive` → its result; a throwing one of either → that error → scenario
 2. `toString: 1` (not a function) → inspected; a null-prototype object with own
-   `toString` → its result; a transparent Proxy (`{}` handler) of either shape → as its
-   target → scenario
+   `toString` → its result; a transparent Proxy (`{}` handler) of either shape, of an object
+   with own `toString` and of a plain object → as its target → scenario
 3. Numbers `-0`, `0`, `1.5`, `NaN`, `-Infinity`, `1e21`; bigints `10n`, `-10n`; string,
    symbol, `null`, `undefined`, `true`, function, class → Node's text → scenario
-4. Depth-0 inspect for a plain object, nested array, class without `toString`, `Map`,
-   `Set`, `Error` (fixed stack); `String()` for `Date`, `RegExp`, `Uint8Array`, `Buffer`
-   → scenario
+4. Depth-0 inspect for a plain object, nested array, class without `toString`, `Date`,
+   `RegExp`, `Map`, `Set`, `Error` (fixed stack); `String()` for `Uint8Array`, `Buffer`
+   (their `toString` is not a built-in's) → scenario
+6. A guest that replaced `Set.prototype.has` and `Object.is` gets Node's text (Node's
+   primordials) → scenario
 5. `%s` without an argument stays literal (`'x %s y'`, `'%s:%s'` with one);
    `formatWithOptions({ depth: 5 }, '%s', …)` still depth 0 → scenario
 
 ## Out of scope
 
-- The inspect text of what `%s` inspects: null-prototype objects (top level and nested),
+- The inspect text of what `%s` inspects (none a regression: main inspected every object): null-prototype objects (top level and nested),
   boxed primitives, an `Error`'s own props and `cause`, a long string —
   `runtime-js/inspect-null-prototype-prefix` (rows stay in `DECLARED_FORMAT_ROWS`);
-  `Symbol.toStringTag`, a settled `Promise`'s state, `WeakMap`/`WeakSet` `<items unknown>`
-  — `runtime-js/inspect-default-format-gaps`.
+  `Symbol.toStringTag` (user and built-in), a settled `Promise`'s state, `WeakMap`/`WeakSet`
+  `<items unknown>`, symbol keys, `[Arguments]`, subclass prefixes, `ArrayBuffer`/`DataView`
+  contents, `Object.create(Date.prototype)` (rifty throws) — `runtime-js/inspect-default-format-gaps`.
 - A Proxy with traps: Node reads its target without running a trap, rifty runs
   `get`/`getOwnPropertyDescriptor`/`getPrototypeOf`; a revoked Proxy throws `TypeError`
   (Node `<Revoked Proxy>`) — `runtime-js/format-inspect-proxy-traps`, compat
   isolate-host.md "`util.format` / `util.inspect` of a Proxy" ⚠️.
-- `formatWithOptions({ numericSeparator: true }, '%s', 1234567)` (Node `1_234_567`):
-  inspect option `numericSeparator`, `runtime-js/util-surface-completions`.
+- `formatWithOptions({ numericSeparator: true }, '%s', 1234567)` / `1234567n` (Node
+  `1_234_567` / `1_234_567n`): inspect option `numericSeparator`,
+  `runtime-js/util-surface-completions` (which also owns `%s` forcing `colors: false`,
+  `compact: 3` once inspect has them).
 - `%d %i %f %j %o %O` and a lone `'%%'`: `runtime-js/util-format-other-directives`.
 
 ## Decisions

@@ -33,7 +33,15 @@ depth 0, parity-runner and isolate `runCode` vs `node -e` v24.16.0): `class T { 
 [Symbol.toStringTag]() { return 'Tag' } }` → Node `T [Tag] {}`, rifty `T {}`;
 `Promise.resolve(1)` → Node `Promise { 1 }`, rifty `Promise { <pending> }` (a pure-JS realm
 cannot read a promise's state synchronously); `new WeakMap()` → Node
-`WeakMap { <items unknown> }`, rifty `WeakMap {}`.
+`WeakMap { <items unknown> }`, rifty `WeakMap {}`. Same probe (critic, verified):
+`Object.create(Date.prototype)` → Node `Date {}`, rifty throws `TypeError: Method
+Date.prototype.toISOString called on incompatible receiver`; `{ a: 1, [Symbol('k')]: 2 }` →
+Node `{ a: 1, Symbol(k): 2 }`, rifty `{ a: 1 }`; `arguments` → Node `[Arguments] { '0': 1 }`,
+rifty `{ 0: 1 }`; `class D extends Date`, `class M extends Map` → Node `D 1970-…`,
+`M(1) [Map] { 1 => 2 }`, rifty no prefix; `new ArrayBuffer(2)` → Node
+`ArrayBuffer { [Uint8Contents]: <00 00>, [byteLength]: 2 }`, rifty `ArrayBuffer {}` (also
+`DataView`); `Math`, an array iterator → Node `Object [Math] {}`, `Object [Array Iterator] {}`,
+rifty `{}`.
 
 ## Challenge
 
