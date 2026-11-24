@@ -214,6 +214,9 @@ importers:
       '@riftydev/io':
         specifier: workspace:*
         version: link:../io
+      '@riftydev/net':
+        specifier: workspace:*
+        version: link:../net
       '@riftydev/runtime-js':
         specifier: workspace:*
         version: link:../runtime-js

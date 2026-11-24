@@ -75,6 +75,19 @@ streams, …) blocks these libraries' Node paths; the blockers are Node modules 
 #5–#7), and #5 is the one silent wrong behavior. Web APIs appear only on routes Node does not
 need (#3 Blob outputs, #4 browser bundles).
 
+### After `isolate-host-egress-modules-load` (2026-11-24)
+
+Same probe, this branch (guest `http`/`https`/`net` load with Node's shape; network use a named
+gap): `results-after-egress-modules.json`. pptxgenjs canonical `gen/pptx.cjs` ✅ exit 0, valid,
+= node's (masked); the diag lines for `require('http')`, `require('https')`, `import('node:https')`
+and "pptx image by path + writeFile" now equal node's. Row 2 above is closed; every other row is
+unchanged. pptxgenjs's next stops (ad-hoc diag, same closure, vs node): `write()` with no
+`outputType` → Blob (row 3: `blob is not supported by this platform`; node returns a `Blob`);
+an image `path` starting `http` → `NotImplementedError('isolate-host.https.get')`, a rejection
+`write()` hands back (node fetches it). `write` as base64/binarystring/uint8array/arraybuffer/
+nodebuffer/STREAM, `stream()`, `writeFile({compression})`, SVG image and video by `path`, a
+master + notes + hyperlink: equal to node.
+
 ## Measures (requirement 3 baseline)
 
 | | value |
