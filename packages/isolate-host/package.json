@@ -53,7 +53,8 @@
   "devDependencies": {
     "@riftydev/isolate-guest": "workspace:*",
     "@riftydev/vfs": "workspace:*",
-    "esbuild": "0.28.0"
+    "esbuild": "0.28.0",
+    "pptxgenjs": "4.0.1"
   },
   "engines": {
     "node": ">=24"
