@@ -20,6 +20,7 @@ import {
   globalProcessManager,
 } from '@riftydev/kernel';
 import { NotImplementedError, isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
+import { requireModuleEnabled } from '../internal/esm-loader.ts';
 import {
   beginNodeEvalExplicitExit,
   ref as refEventLoop,
@@ -314,7 +315,12 @@ export class NodeProcess extends EventEmitter {
   readonly version = NODE_PROCESS_IDENTITY.version;
   // Each process owns mutable version fields (ADR-0150).
   readonly versions: Record<string, string> = { ...NODE_PROCESS_IDENTITY.versions };
-  readonly features = { require_module: true } as const;
+  // Node's accessor: the realm's `--[no-]require-module`.
+  readonly features = {
+    get require_module(): boolean {
+      return requireModuleEnabled();
+    },
+  };
   declare readonly release: NodeProcessRelease;
   readonly title = NODE_PROCESS_IDENTITY.title;
   env: Record<string, string | undefined>;

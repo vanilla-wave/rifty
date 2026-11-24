@@ -32,8 +32,8 @@
 
 - Settled (probe 2026-11-23): in the isolate every `require()` of an ES module
   fails `TypeError: URLConstructor is not a constructor` before the module runs
-  — compat isolate-host.md ❌, `runtime-js/isolate-require-esm-syntax-gaps`;
-  deferred (below).
+  — compat isolate-host.md ❌; since PR #440 Node's `--no-require-module` `ERR_REQUIRE_ESM`
+  (compat isolate-host.md "`require()` of an ES module"); deferred (below).
 
 Settled (ledger 2026-11-22): the frame budget (rifty frames count against
 `Error.stackTraceLimit`) and the header rules are declared compat rows; the
@@ -49,7 +49,7 @@ COI timer fatal prints main's kernel report again (item 5d, rollback 2026-11-23)
   (probe 2026-11-23: `esm-throw` prints `at eval (<root>/main.mjs:7:7)`, Node
   `at file://<root>/main.mjs:2:7` — the loader rewrite, `runtime-js/esm-stack-positions`,
   compat modules.md "ESM stack positions"); the isolate `require(esm)`
-  `URLConstructor` failure (`runtime-js/isolate-require-esm-syntax-gaps`).
+  `URLConstructor` failure (since PR #440 `ERR_REQUIRE_ESM`, compat isolate-host.md).
 
 - Deferred by the user (goal amend 2026-11-23): Node's `<file>:<line>` header
   on every path (`runtime-js/sync-uncaught-header-throw-site-source`) and the

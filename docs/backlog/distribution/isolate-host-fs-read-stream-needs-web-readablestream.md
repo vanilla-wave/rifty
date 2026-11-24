@@ -18,7 +18,7 @@ the run ends exit 1. Code: `FileReadStream` reads via `Vfs.openReadable`
 (`packages/runtime-js/src/builtins/fs-streams.ts:445`), `MemoryVfs.openReadable`
 (`packages/vfs/src/memory.ts:64`) returns a web stream; `ReadableStream` is in the guest's
 `CEILING_GLOBALS` (`packages/isolate-guest/src/guest/web-shim.ts:343`). Same mechanism class as
-`runtime-js/isolate-require-esm-syntax-gaps` (a runtime path depending on a host global the
+`runtime-js/isolate-web-globals-captured-at-load` (a runtime path depending on a host global the
 isolate withholds). Browser hosts have the global; not run there.
 
 Real path: exceljs 4.4.0 `wb.xlsx.read(fs.createReadStream(f))`, `wb.csv.read(fs.createReadStream(f))`

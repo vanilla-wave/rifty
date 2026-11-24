@@ -16,6 +16,7 @@ import {
 } from '@riftydev/runtime-js/builtins/process';
 import { installTimerGlobals } from '@riftydev/runtime-js/builtins/timers';
 import {
+  declareNoEsmLoader,
   fatalReportText,
   handleRealmUncaughtError,
   handleRealmUnhandledRejection,
@@ -45,6 +46,14 @@ import {
 } from './web-shim.ts';
 
 bindNotImplemented(NotImplementedError);
+// No ES module loader here (it needs `URL`, a ceiling): every ES module load throws this
+// gap, and `require` is Node's with `--no-require-module` until one exists.
+const esmGap = (): NotImplementedError =>
+  new NotImplementedError(
+    'isolate-host.esm',
+    'ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568',
+  );
+declareNoEsmLoader(esmGap);
 
 const CWD = '/workspace';
 // The realm's FS exists from load, so a restore before `run` is the tree `run` sees (ADR-0567 §6).
@@ -337,32 +346,14 @@ function run(source: string): Promise<number> {
 
 /**
  * `node <path> [args]` (ADR-0568): rifty's program entry over this realm's
- * FS. An ES module entry is a declared gap: rifty's ESM loader needs `URL`,
- * a ceiling global here.
+ * FS. An ES module entry throws the declared gap (`declareNoEsmLoader`).
  */
 function runFile(path: string, args: readonly string[]): Promise<number> {
   return runToExit(() => {
     const entryPath = resolvePosix(CWD, path);
     riftyProcess.argv = [riftyProcess.execPath, entryPath, ...args];
-    if (isEsmEntry(entryPath)) throw esmGap();
     return runNodeEntry({ vfs: syncMirror(), entryPath, cwd: CWD });
   });
-}
-
-const esmGap = (): NotImplementedError =>
-  new NotImplementedError(
-    'isolate-host.esm',
-    'ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568',
-  );
-
-/** The entry resolves as an ES module (`.mjs`, `"type": "module"`). A miss is the loader's own error. */
-function isEsmEntry(entryPath: string): boolean {
-  try {
-    const loader = createModuleLoader(syncMirror(), { cwd: CWD });
-    return loader.resolver.resolve(entryPath, { fromFile: entryPath, esm: true }).kind === 'esm';
-  } catch {
-    return false;
-  }
 }
 
 /** POSIX `path.resolve(base, p)` for an absolute `base`. */

@@ -3,9 +3,11 @@
  * Acceptance 4): its installed closure laid out as `/workspace/node_modules` in the state
  * and in the oracle's temp dir — the same files — each fixture run as `node <file> <out>`
  * on both sides. The modules that load `node:zlib` load as in Node; the streaming writer,
- * which deflates, stops at the named gap; the CSV writer gives Node's bytes.
+ * which deflates, stops at the named gap; the CSV writer gives Node's bytes; the main entry
+ * writes Node's xlsx (PR #440).
  */
 import { readFileSync, realpathSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createModuleLoader } from '@riftydev/runtime-js/loader';
@@ -23,6 +25,31 @@ function sharedLoader(files: Map<string, Uint8Array>): ReturnType<typeof createM
     vfs.writeFileSync(`/w/${rel}`, data);
   }
   return createModuleLoader(vfs);
+}
+interface ZipEntry {
+  readonly dir: boolean;
+  async(type: 'nodebuffer'): Promise<Buffer>;
+}
+// exceljs's own JSZip: the reader the library writes with, in real Node.
+const JSZip = createRequire(join(here, '../node_modules/exceljs/package.json'))('jszip') as {
+  loadAsync(data: Uint8Array): Promise<{ readonly files: Readonly<Record<string, ZipEntry>> }>;
+};
+/** Part name → text (XML, `docProps/core.xml` timestamps masked) or base64 (binary). */
+async function xlsxParts(bytes: Uint8Array): Promise<Record<string, string>> {
+  const zip = await JSZip.loadAsync(bytes);
+  const out: Record<string, string> = {};
+  for (const [name, entry] of Object.entries(zip.files)) {
+    if (entry.dir) continue;
+    const data = await entry.async('nodebuffer');
+    out[name] = /\.(xml|rels|vml)$/.test(name)
+      ? data
+          .toString('utf8')
+          .replace(/\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?Z/g, (t) =>
+            name === 'docProps/core.xml' ? '<time>' : t,
+          )
+      : data.toString('base64');
+  }
+  return out;
 }
 const withFixture = (gen: string): Map<string, Uint8Array> =>
   new Map(closure)
@@ -77,18 +104,31 @@ describe('exceljs 4.4.0 loads node:zlib as in Node (Acceptance 4)', () => {
     }
   });
 
-  // Past `node:zlib` the main entry stops at other units' gaps (PR #438 body), not all of them
-  // named gaps: zlib's absence, and since PR #439 no loader ceiling (es-abstract `new global[k](…)`).
+  // The canonical generator (isolate-library-probe `gen/xlsx.cjs`): `require('exceljs')` by its
+  // main entry and `workbook.xlsx.writeFile` — the sandbox writes Node's file, part by part, the
+  // ISO timestamps of `docProps/core.xml` masked (PR #440).
   it(
-    'require(exceljs) loads with no isolate-host.zlib named gap',
+    'require(exceljs) and writeFile: the sandbox writes the xlsx Node writes',
     { timeout: 180_000 },
     async () => {
-      const files = withFixture('main-load.cjs');
-      const oracle = inNode(files, 'main-load.cjs', 'out/none');
-      expect(oracle).toMatchObject({ exitCode: 0, stdout: 'loaded\n', stderr: '' });
-      const guest = await inSandbox(files, 'main-load.cjs', 'out/none');
-      expect(guest.exitCode).not.toBeNull(); // the run ended with a status, not a kill
-      expect(guest.stderr).not.toMatch(/module-loader\.\w+|isolate-host\.zlib/);
+      const files = withFixture('xlsx-write.cjs');
+      const out = 'out/revenue.xlsx';
+      const oracle = inNode(files, 'xlsx-write.cjs', out);
+      expect(oracle, oracle.stderr).toMatchObject({
+        exitCode: 0,
+        stdout: `wrote ${out}\n`,
+        stderr: '',
+      });
+      const guest = await inSandbox(files, 'xlsx-write.cjs', out);
+      expect({ stdout: guest.stdout, stderr: guest.stderr, exitCode: guest.exitCode }).toEqual({
+        stdout: oracle.stdout,
+        stderr: '',
+        exitCode: 0,
+      });
+      const nodeParts = await xlsxParts(oracle.file ?? new Uint8Array());
+      expect(Object.keys(nodeParts)).toContain('xl/worksheets/sheet1.xml');
+      expect(Object.keys(nodeParts).some((name) => name.startsWith('xl/media/'))).toBe(true);
+      expect(await xlsxParts(guest.file ?? new Uint8Array())).toEqual(nodeParts);
     },
   );
 
