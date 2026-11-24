@@ -47,7 +47,8 @@ at `fstream/lib/writer.js:8`.
 3. Invalid arguments throw Node's error class, code and message → scenario
 4. `import { umask } from 'node:process'` links and works unbound; member descriptor as Node →
    scenario
-5. The same member in the isolate guest: isolate corpus rows (live `node -e` oracle) for 1, 3, 4;
+5. The same member in the isolate guest: isolate corpus rows (live `node -e` oracle) for 1–3 (no ESM in the guest, compat
+   isolate-host.md "ES modules");
    `require('fstream')` in an isolate-host sandbox loads (probe `diag.cjs` line
    `require('fstream'): ok`) → scenario
 
@@ -68,8 +69,8 @@ at `fstream/lib/writer.js:8`.
 4. `process/umask-esm-named`: `import { umask } from 'node:process'` links; `umask === process.umask`,
    unbound call equals `process.umask()`; descriptor `[writable, enumerable, configurable]` =
    `[true, true, true]`, `length` 1 → scenario
-5. isolate corpus rows `process-umask-invariant`, `process-umask-invalid-args`,
-   `process-umask-esm-named`: the same probes through `runCode` vs `node -e` → scenario
+5. isolate corpus rows `process-umask-invariant` (1 + 2), `process-umask-invalid-args` (3): the
+   same probes through `runCode` vs `node -e` → scenario
 
 ## Out of scope
 
