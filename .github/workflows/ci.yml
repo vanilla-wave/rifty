@@ -12,6 +12,12 @@ on:
 permissions:
   contents: read
 
+# A new push to a PR cancels that PR's unfinished run. push/merge_group get a
+# per-run group: never cancelled, never queued behind another run.
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}
+  cancel-in-progress: true
+
 jobs:
   # Every job pins ubuntu-24.04: locked Playwright 1.60 has no ubuntu26.04
   # browser build (ubuntu-latest moved there), and unit-and-conformance also
@@ -324,7 +330,11 @@ jobs:
 
   ci-gate:
     name: CI gate
-    if: always()
+    # !cancelled() is false only for a cancelled run (superseded push): the gate
+    # then skips instead of waiting for a runner. A failed or individually
+    # cancelled (timed-out) dependency in a live run still reaches the reducer
+    # and turns it red (ADR-0323 §4).
+    if: ${{ !cancelled() }}
     needs:
       - change-scope
       - lint-and-typecheck
