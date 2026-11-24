@@ -1,9 +1,9 @@
 ---
 area: runtime-js
 status: draft
-title: "`url.format(string)`, `url.domainToASCII`, `url.domainToUnicode` and `url.urlToHttpOptions` behave as in Node"
+title: "`url.domainToASCII`, `url.domainToUnicode`, `url.urlToHttpOptions` and `url.format(URL, options)` behave as in Node"
 created: 2026-11-24
-why: rifty's `node:url` throws `o.search.startsWith is not a function` for `url.format('http://a.com/b?c=d')` and has no `domainToASCII`/`domainToUnicode`/`urlToHttpOptions`, on every host
+why: rifty's `node:url` has no `domainToASCII`/`domainToUnicode`/`urlToHttpOptions` and its `format(URL, options)` ignores the options, on every host
 sources: [PR-440, PR-440-review-round-3]
 code: [packages/runtime-js/src/builtins/url.ts]
 ---
@@ -16,3 +16,12 @@ the string); `typeof url.domainToASCII`, `domainToUnicode`, `urlToHttpOptions` â
 rifty (`builtins/url.ts` imported in a node-env vitest run, the code every host ships; the isolate
 guest the same in `sandbox.exec`): `TypeError: o.search.startsWith is not a function`; the three
 are `undefined`. Owner: runtime-js `node:url`. Trigger: a package calling one. No compat row yet.
+
+2026-11-24 â€” `url.format(string)` (and the rest of the legacy parser) moved to
+`runtime-js/node-url-legacy-api-port`. Left here: the WHATWG-side members (Node: ada's host
+parser, `bindingUrl.format`): `domainToASCII`, `domainToUnicode`, `urlToHttpOptions`, and
+`format(URL, { fragment, unicode, search, auth })`, which rifty answers with `href` and ignores
+the options.
+Until this item lands, `runtime-js/node-url-legacy-api-port` (Acceptance 9) makes each of them a
+`NotImplementedError('url.<member>')`; `format(URL, options)` only where an option changes Node's
+output (its Acceptance 9).

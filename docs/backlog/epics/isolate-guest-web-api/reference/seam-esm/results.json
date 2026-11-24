@@ -1,0 +1,1254 @@
+{
+  "date": "2026-11-24T13:55:37.434Z",
+  "node": "v24.16.0",
+  "results": [
+    {
+      "name": "url-globals",
+      "group": "seam",
+      "node": {
+        "stdout": "typeof URL: function\nURL.canParse: function\nnew URL: http://u:p@a.com:8/b?c=1#d\nUSP: [\"1\",\"3\"]",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "base": {
+        "stdout": "typeof URL: function\nURL.canParse: undefined\nnew URL: ERR NotImplementedError undefined Not implemented: isolate-host.URL (not available in the rifty isolate host, ADR-0557)\nUSP: ERR NotImplementedError undefined Not implemented: isolate-host.URLSearchParams (not available in the rifty isolate host, ADR-0557)",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "url-first": {
+        "stdout": "typeof URL: function\nURL.canParse: function\nnew URL: http://u:p@a.com:8/b?c=1#d\nUSP: [\"1\",\"3\"]",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "url-esm": {
+        "stdout": "typeof URL: function\nURL.canParse: function\nnew URL: http://u:p@a.com:8/b?c=1#d\nUSP: [\"1\",\"3\"]",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "ceilings-first": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.MessageChannel before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-late": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.crypto.subtle before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-subtle-late": {
+        "stdout": "typeof URL: function\nURL.canParse: undefined\nnew URL: ERR NotImplementedError undefined Not implemented: isolate-host.URL (not available in the rifty isolate host, ADR-0557)\nUSP: ERR NotImplementedError undefined Not implemented: isolate-host.URLSearchParams (not available in the rifty isolate host, ADR-0557)",
+        "stderr": "",
+        "exitCode": 0
+      }
+    },
+    {
+      "name": "import-file-url-mjs",
+      "group": "seam",
+      "node": {
+        "stdout": "import(file:m.mjs): [\"default\",\"x\"]",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "base": {
+        "stdout": "import(file:m.mjs): ERR ModuleLoadError UNSUPPORTED_PROTOCOL Invalid file URL 'file:///workspace/m.mjs': URLConstructor is not a constructor",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "url-first": {
+        "stdout": "import(file:m.mjs): ERR NotImplementedError undefined Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568)",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "url-esm": {
+        "stdout": "import(file:m.mjs): [\"default\",\"x\"]",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "ceilings-first": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.MessageChannel before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-late": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.crypto.subtle before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-subtle-late": {
+        "stdout": "import(file:m.mjs): ERR ModuleLoadError UNSUPPORTED_PROTOCOL Invalid file URL 'file:///workspace/m.mjs': Not implemented: isolate-host.URL (not available in the rifty isolate host, ADR-0557)",
+        "stderr": "",
+        "exitCode": 0
+      }
+    },
+    {
+      "name": "import-file-url-cjs",
+      "group": "seam",
+      "node": {
+        "stdout": "import(file:c.cjs): {\"a\":1,\"b\":2}",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "base": {
+        "stdout": "import(file:c.cjs): ERR ModuleLoadError UNSUPPORTED_PROTOCOL Invalid file URL 'file:///workspace/c.cjs': URLConstructor is not a constructor",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "url-first": {
+        "stdout": "import(file:c.cjs): {\"a\":1,\"b\":2}",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "url-esm": {
+        "stdout": "import(file:c.cjs): {\"a\":1,\"b\":2}",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "ceilings-first": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.MessageChannel before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-late": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.crypto.subtle before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-subtle-late": {
+        "stdout": "import(file:c.cjs): ERR ModuleLoadError UNSUPPORTED_PROTOCOL Invalid file URL 'file:///workspace/c.cjs': Not implemented: isolate-host.URL (not available in the rifty isolate host, ADR-0557)",
+        "stderr": "",
+        "exitCode": 0
+      }
+    },
+    {
+      "name": "create-require-file-url",
+      "group": "seam",
+      "node": {
+        "stdout": "createRequire(file:): {\"a\":1,\"b\":2}",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "base": {
+        "stdout": "createRequire(file:): ERR TypeError ERR_INVALID_ARG_VALUE The argument filename must be a file URL object, file URL string, or absolute path string",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "url-first": {
+        "stdout": "createRequire(file:): {\"a\":1,\"b\":2}",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "url-esm": {
+        "stdout": "createRequire(file:): {\"a\":1,\"b\":2}",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "ceilings-first": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.MessageChannel before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-late": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.crypto.subtle before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-subtle-late": {
+        "stdout": "createRequire(file:): ERR TypeError ERR_INVALID_ARG_VALUE The argument filename must be a file URL object, file URL string, or absolute path string",
+        "stderr": "",
+        "exitCode": 0
+      }
+    },
+    {
+      "name": "path-file-url",
+      "group": "seam",
+      "node": {
+        "stdout": "pathToFileURL: file:///x%20y\nfileURLToPath: /x y\nfileURLToPath(URL): /a/b",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "base": {
+        "stdout": "pathToFileURL: ERR TypeError undefined URLConstructor is not a constructor\nfileURLToPath: ERR TypeError undefined URLConstructor is not a constructor\nfileURLToPath(URL): ERR NotImplementedError undefined Not implemented: isolate-host.URL (not available in the rifty isolate host, ADR-0557)",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "url-first": {
+        "stdout": "pathToFileURL: file:///x%20y\nfileURLToPath: /x y\nfileURLToPath(URL): /a/b",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "url-esm": {
+        "stdout": "pathToFileURL: file:///x%20y\nfileURLToPath: /x y\nfileURLToPath(URL): /a/b",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "ceilings-first": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.MessageChannel before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-late": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.crypto.subtle before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-subtle-late": {
+        "stdout": "pathToFileURL: ERR NotImplementedError undefined Not implemented: isolate-host.URL (not available in the rifty isolate host, ADR-0557)\nfileURLToPath: ERR NotImplementedError undefined Not implemented: isolate-host.URL (not available in the rifty isolate host, ADR-0557)\nfileURLToPath(URL): ERR NotImplementedError undefined Not implemented: isolate-host.URL (not available in the rifty isolate host, ADR-0557)",
+        "stderr": "",
+        "exitCode": 0
+      }
+    },
+    {
+      "name": "url-module-URL",
+      "group": "seam",
+      "node": {
+        "stdout": "new url.URL: file:///x\nurl.URL === URL: true\nnew url.USP: 1\nurl.USP === USP: true",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "base": {
+        "stdout": "new url.URL: ERR TypeError undefined url.URL is not a constructor\nurl.URL === URL: false\nnew url.USP: ERR TypeError undefined url.URLSearchParams is not a constructor\nurl.USP === USP: false",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "url-first": {
+        "stdout": "new url.URL: file:///x\nurl.URL === URL: true\nnew url.USP: 1\nurl.USP === USP: true",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "url-esm": {
+        "stdout": "new url.URL: file:///x\nurl.URL === URL: true\nnew url.USP: 1\nurl.USP === USP: true",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "ceilings-first": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.MessageChannel before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-late": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.crypto.subtle before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-subtle-late": {
+        "stdout": "new url.URL: ERR NotImplementedError undefined Not implemented: isolate-host.URL (not available in the rifty isolate host, ADR-0557)\nurl.URL === URL: false\nnew url.USP: ERR NotImplementedError undefined Not implemented: isolate-host.URLSearchParams (not available in the rifty isolate host, ADR-0557)\nurl.USP === USP: false",
+        "stderr": "",
+        "exitCode": 0
+      }
+    },
+    {
+      "name": "fs-path-arg",
+      "group": "seam",
+      "node": {
+        "stdout": "readFileSync({}): ERR TypeError ERR_INVALID_ARG_TYPE The \"path\" argument must be of type string or an instance of Buffer or URL. Received an instance of Object\nreadFileSync(URL): xtext",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "base": {
+        "stdout": "readFileSync({}): ERR TypeError undefined Right-hand side of 'instanceof' is not an object\nreadFileSync(URL): ERR NotImplementedError undefined Not implemented: isolate-host.URL (not available in the rifty isolate host, ADR-0557)",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "url-first": {
+        "stdout": "readFileSync({}): ERR TypeError undefined fs path must be string, Buffer, or URL\nreadFileSync(URL): xtext",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "url-esm": {
+        "stdout": "readFileSync({}): ERR TypeError undefined fs path must be string, Buffer, or URL\nreadFileSync(URL): xtext",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "ceilings-first": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.MessageChannel before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-late": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.crypto.subtle before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-subtle-late": {
+        "stdout": "readFileSync({}): ERR TypeError undefined fs path must be string, Buffer, or URL\nreadFileSync(URL): ERR NotImplementedError undefined Not implemented: isolate-host.URL (not available in the rifty isolate host, ADR-0557)",
+        "stderr": "",
+        "exitCode": 0
+      }
+    },
+    {
+      "name": "url-legacy",
+      "group": "seam",
+      "node": {
+        "stdout": "resolve 1: https://example.com/b\nresolve 2: http://a.com/d\nparse: [\"u:p\",\"a.com:8\",\"a.com\",\"8\",\"/b?c=d\",\"http://u:p@a.com:8/b?c=d#e\"]",
+        "stderr": "(node:PID) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.\n(Use `node --trace-deprecation ...` to show where the warning was created)",
+        "exitCode": 0
+      },
+      "base": {
+        "stdout": "resolve 1: b\nresolve 2: ../d\nparse: [null,\"u:p@a.com:8\",null,null,null,\"http://u:p@a.com:8/b?c=d#e\"]",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "url-first": {
+        "stdout": "resolve 1: https://example.com/b\nresolve 2: http://a.com/d\nparse: [\"u:p\",\"a.com:8\",\"a.com\",\"8\",null,\"http://u:p@a.com:8/b?c=d#e\"]",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "url-esm": {
+        "stdout": "resolve 1: https://example.com/b\nresolve 2: http://a.com/d\nparse: [\"u:p\",\"a.com:8\",\"a.com\",\"8\",null,\"http://u:p@a.com:8/b?c=d#e\"]",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "ceilings-first": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.MessageChannel before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-late": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.crypto.subtle before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-subtle-late": {
+        "stdout": "resolve 1: b\nresolve 2: ../d\nparse: [null,\"u:p@a.com:8\",null,null,null,\"http://u:p@a.com:8/b?c=d#e\"]",
+        "stderr": "",
+        "exitCode": 0
+      }
+    },
+    {
+      "name": "blob-file",
+      "group": "ceiling",
+      "node": {
+        "stdout": "typeof Blob: function\nnew buffer.Blob: 1\ninstanceof buffer.File: false\nbuffer.Blob === Blob: true",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "base": {
+        "stdout": "typeof Blob: function\nnew buffer.Blob: ERR TypeError undefined b.Blob is not a constructor\ninstanceof buffer.File: ERR TypeError undefined Right-hand side of 'instanceof' is not an object\nbuffer.Blob === Blob: false",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "url-first": {
+        "stdout": "typeof Blob: function\nnew buffer.Blob: ERR TypeError undefined b.Blob is not a constructor\ninstanceof buffer.File: ERR TypeError undefined Right-hand side of 'instanceof' is not an object\nbuffer.Blob === Blob: false",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "url-esm": {
+        "stdout": "typeof Blob: function\nnew buffer.Blob: ERR TypeError undefined b.Blob is not a constructor\ninstanceof buffer.File: ERR TypeError undefined Right-hand side of 'instanceof' is not an object\nbuffer.Blob === Blob: false",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "ceilings-first": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.MessageChannel before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-late": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.crypto.subtle before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-subtle-late": {
+        "stdout": "typeof Blob: function\nnew buffer.Blob: ERR NotImplementedError undefined Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\ninstanceof buffer.File: false\nbuffer.Blob === Blob: false",
+        "stderr": "",
+        "exitCode": 0
+      }
+    },
+    {
+      "name": "crypto-subtle",
+      "group": "ceiling",
+      "node": {
+        "stdout": "typeof crypto.subtle.digest: function\nwebcrypto.subtle: object\nglobalThis.crypto.subtle: object",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "base": {
+        "stdout": "typeof crypto.subtle.digest: ERR TypeError undefined Cannot read properties of undefined (reading 'digest')\nwebcrypto.subtle: ERR NotImplementedError undefined Not implemented: isolate-host.crypto.subtle (not available in the rifty isolate host, ADR-0557)\nglobalThis.crypto.subtle: ERR NotImplementedError undefined Not implemented: isolate-host.crypto.subtle (not available in the rifty isolate host, ADR-0557)",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "url-first": {
+        "stdout": "typeof crypto.subtle.digest: ERR TypeError undefined Cannot read properties of undefined (reading 'digest')\nwebcrypto.subtle: ERR NotImplementedError undefined Not implemented: isolate-host.crypto.subtle (not available in the rifty isolate host, ADR-0557)\nglobalThis.crypto.subtle: ERR NotImplementedError undefined Not implemented: isolate-host.crypto.subtle (not available in the rifty isolate host, ADR-0557)",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "url-esm": {
+        "stdout": "typeof crypto.subtle.digest: ERR TypeError undefined Cannot read properties of undefined (reading 'digest')\nwebcrypto.subtle: ERR NotImplementedError undefined Not implemented: isolate-host.crypto.subtle (not available in the rifty isolate host, ADR-0557)\nglobalThis.crypto.subtle: ERR NotImplementedError undefined Not implemented: isolate-host.crypto.subtle (not available in the rifty isolate host, ADR-0557)",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "ceilings-first": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.MessageChannel before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-late": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.crypto.subtle before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-subtle-late": {
+        "stdout": "typeof crypto.subtle.digest: ERR TypeError undefined Cannot read properties of undefined (reading 'digest')\nwebcrypto.subtle: ERR NotImplementedError undefined Not implemented: isolate-host.crypto.subtle (not available in the rifty isolate host, ADR-0557)\nglobalThis.crypto.subtle: ERR NotImplementedError undefined Not implemented: isolate-host.crypto.subtle (not available in the rifty isolate host, ADR-0557)",
+        "stderr": "",
+        "exitCode": 0
+      }
+    },
+    {
+      "name": "stream-web",
+      "group": "ceiling",
+      "node": {
+        "stdout": "stream/web.ReadableStream: function\n=== global: true\nnew sw.ReadableStream: function",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "base": {
+        "stdout": "stream/web.ReadableStream: ERR NotImplementedError undefined Not implemented: stream/web.ReadableStream\n=== global: ERR NotImplementedError undefined Not implemented: stream/web.ReadableStream\nnew sw.ReadableStream: ERR NotImplementedError undefined Not implemented: stream/web.ReadableStream",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "url-first": {
+        "stdout": "stream/web.ReadableStream: ERR NotImplementedError undefined Not implemented: stream/web.ReadableStream\n=== global: ERR NotImplementedError undefined Not implemented: stream/web.ReadableStream\nnew sw.ReadableStream: ERR NotImplementedError undefined Not implemented: stream/web.ReadableStream",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "url-esm": {
+        "stdout": "stream/web.ReadableStream: ERR NotImplementedError undefined Not implemented: stream/web.ReadableStream\n=== global: ERR NotImplementedError undefined Not implemented: stream/web.ReadableStream\nnew sw.ReadableStream: ERR NotImplementedError undefined Not implemented: stream/web.ReadableStream",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "ceilings-first": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.MessageChannel before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-late": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.crypto.subtle before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-subtle-late": {
+        "stdout": "stream/web.ReadableStream: function\n=== global: false\nnew sw.ReadableStream: ERR NotImplementedError undefined Not implemented: isolate-host.ReadableStream (not available in the rifty isolate host, ADR-0557)",
+        "stderr": "",
+        "exitCode": 0
+      }
+    },
+    {
+      "name": "abort-event",
+      "group": "ceiling",
+      "node": {
+        "stdout": "new AbortController: object\nevents.once: function\nnew EventEmitter: function\nutil.types: true",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "base": {
+        "stdout": "new AbortController: ERR NotImplementedError undefined Not implemented: isolate-host.AbortController (not available in the rifty isolate host, ADR-0557)\nevents.once: function\nnew EventEmitter: function\nutil.types: true",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "url-first": {
+        "stdout": "new AbortController: ERR NotImplementedError undefined Not implemented: isolate-host.AbortController (not available in the rifty isolate host, ADR-0557)\nevents.once: function\nnew EventEmitter: function\nutil.types: true",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "url-esm": {
+        "stdout": "new AbortController: ERR NotImplementedError undefined Not implemented: isolate-host.AbortController (not available in the rifty isolate host, ADR-0557)\nevents.once: function\nnew EventEmitter: function\nutil.types: true",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "ceilings-first": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.MessageChannel before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-late": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.crypto.subtle before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-subtle-late": {
+        "stdout": "new AbortController: ERR NotImplementedError undefined Not implemented: isolate-host.AbortController (not available in the rifty isolate host, ADR-0557)\nevents.once: function\nnew EventEmitter: function\nutil.types: true",
+        "stderr": "",
+        "exitCode": 0
+      }
+    },
+    {
+      "name": "smoke",
+      "group": "smoke",
+      "node": {
+        "stdout": "hello\nrequire json: {\"k\":\"v\"}\nfs write/read: written\nTextDecoder: hi\nBuffer: aGk=\nutil.inspect: { a: [ 1, { b: 2 } ] }\nmicro\nimmediate\nstream xtext\npromises xtext\ntimer",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "base": {
+        "stdout": "hello\nrequire json: {\"k\":\"v\"}\nfs write/read: written\nTextDecoder: hi\nBuffer: aGk=\nutil.inspect: { a: [ 1, { b: 2 } ] }\nmicro\npromises xtext\nstream ERR Not implemented: isolate-host.ReadableStream (not available in the rifty isolate host, ADR-0557)\nimmediate\ntimer",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "url-first": {
+        "stdout": "hello\nrequire json: {\"k\":\"v\"}\nfs write/read: written\nTextDecoder: hi\nBuffer: aGk=\nutil.inspect: { a: [ 1, { b: 2 } ] }\nmicro\npromises xtext\nstream ERR Not implemented: isolate-host.ReadableStream (not available in the rifty isolate host, ADR-0557)\nimmediate\ntimer",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "url-esm": {
+        "stdout": "hello\nrequire json: {\"k\":\"v\"}\nfs write/read: written\nTextDecoder: hi\nBuffer: aGk=\nutil.inspect: { a: [ 1, { b: 2 } ] }\nmicro\npromises xtext\nstream ERR Not implemented: isolate-host.ReadableStream (not available in the rifty isolate host, ADR-0557)\nimmediate\ntimer",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "ceilings-first": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.MessageChannel before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-late": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.crypto.subtle before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-subtle-late": {
+        "stdout": "hello\nrequire json: {\"k\":\"v\"}\nfs write/read: written\nTextDecoder: hi\nBuffer: aGk=\nutil.inspect: { a: [ 1, { b: 2 } ] }\nmicro\npromises xtext\nstream ERR Not implemented: isolate-host.ReadableStream (not available in the rifty isolate host, ADR-0557)\nimmediate\ntimer",
+        "stderr": "",
+        "exitCode": 0
+      }
+    },
+    {
+      "name": "esm-entry-mjs",
+      "group": "esm",
+      "node": {
+        "stdout": "mjs-x mjs-default function true\nfile:///workspace/main.mjs /workspace /workspace/main.mjs\nfunction file:///workspace/m.mjs",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "base": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {\n  feature: 'isolate-host.esm'\n}\n\nNode.js v24.0.0",
+        "exitCode": 1
+      },
+      "url-first": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {\n  feature: 'isolate-host.esm'\n}\n\nNode.js v24.0.0",
+        "exitCode": 1
+      },
+      "url-esm": {
+        "stdout": "mjs-x mjs-default function true\nfile:///workspace/main.mjs /workspace /workspace/main.mjs\nfunction file:///workspace/m.mjs",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "ceilings-first": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.MessageChannel before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-late": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.crypto.subtle before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-subtle-late": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {\n  feature: 'isolate-host.esm'\n}\n\nNode.js v24.0.0",
+        "exitCode": 1
+      }
+    },
+    {
+      "name": "esm-type-module",
+      "group": "esm",
+      "node": {
+        "stdout": "type-module mjs-x undefined",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "base": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {\n  feature: 'isolate-host.esm'\n}\n\nNode.js v24.0.0",
+        "exitCode": 1
+      },
+      "url-first": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {\n  feature: 'isolate-host.esm'\n}\n\nNode.js v24.0.0",
+        "exitCode": 1
+      },
+      "url-esm": {
+        "stdout": "type-module mjs-x undefined",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "ceilings-first": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.MessageChannel before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-late": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.crypto.subtle before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-subtle-late": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {\n  feature: 'isolate-host.esm'\n}\n\nNode.js v24.0.0",
+        "exitCode": 1
+      }
+    },
+    {
+      "name": "esm-typeless-js",
+      "group": "esm",
+      "node": {
+        "stdout": "typeless function",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "base": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {\n  feature: 'isolate-host.esm'\n}\n\nNode.js v24.0.0",
+        "exitCode": 1
+      },
+      "url-first": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {\n  feature: 'isolate-host.esm'\n}\n\nNode.js v24.0.0",
+        "exitCode": 1
+      },
+      "url-esm": {
+        "stdout": "typeless function",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "ceilings-first": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.MessageChannel before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-late": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.crypto.subtle before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-subtle-late": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {\n  feature: 'isolate-host.esm'\n}\n\nNode.js v24.0.0",
+        "exitCode": 1
+      }
+    },
+    {
+      "name": "esm-import-cjs",
+      "group": "esm",
+      "node": {
+        "stdout": "{\"a\":1,\"b\":2} 1 2 a,b,default,module.exports",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "base": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {\n  feature: 'isolate-host.esm'\n}\n\nNode.js v24.0.0",
+        "exitCode": 1
+      },
+      "url-first": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {\n  feature: 'isolate-host.esm'\n}\n\nNode.js v24.0.0",
+        "exitCode": 1
+      },
+      "url-esm": {
+        "stdout": "{\"a\":1,\"b\":2} 1 2 a,b,default,module.exports",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "ceilings-first": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.MessageChannel before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-late": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.crypto.subtle before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-subtle-late": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {\n  feature: 'isolate-host.esm'\n}\n\nNode.js v24.0.0",
+        "exitCode": 1
+      }
+    },
+    {
+      "name": "esm-dynamic-import",
+      "group": "esm",
+      "node": {
+        "stdout": "1 mjs-x function",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "base": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {\n  feature: 'isolate-host.esm'\n}\n\nNode.js v24.0.0",
+        "exitCode": 1
+      },
+      "url-first": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {\n  feature: 'isolate-host.esm'\n}\n\nNode.js v24.0.0",
+        "exitCode": 1
+      },
+      "url-esm": {
+        "stdout": "1 mjs-x function",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "ceilings-first": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.MessageChannel before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-late": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.crypto.subtle before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-subtle-late": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {\n  feature: 'isolate-host.esm'\n}\n\nNode.js v24.0.0",
+        "exitCode": 1
+      }
+    },
+    {
+      "name": "cjs-dynamic-import",
+      "group": "esm",
+      "node": {
+        "stdout": "import(./m.mjs): mjs-x\nimport(./c.cjs): 1",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "base": {
+        "stdout": "import(./m.mjs): ERR NotImplementedError undefined Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568)\nimport(./c.cjs): 1",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "url-first": {
+        "stdout": "import(./m.mjs): ERR NotImplementedError undefined Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568)\nimport(./c.cjs): 1",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "url-esm": {
+        "stdout": "import(./m.mjs): mjs-x\nimport(./c.cjs): 1",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "ceilings-first": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.MessageChannel before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-late": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.crypto.subtle before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-subtle-late": {
+        "stdout": "import(./m.mjs): ERR NotImplementedError undefined Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568)\nimport(./c.cjs): 1",
+        "stderr": "",
+        "exitCode": 0
+      }
+    },
+    {
+      "name": "esm-tla",
+      "group": "esm",
+      "node": {
+        "stdout": "tla done",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "base": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {\n  feature: 'isolate-host.esm'\n}\n\nNode.js v24.0.0",
+        "exitCode": 1
+      },
+      "url-first": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {\n  feature: 'isolate-host.esm'\n}\n\nNode.js v24.0.0",
+        "exitCode": 1
+      },
+      "url-esm": {
+        "stdout": "tla done",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "ceilings-first": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.MessageChannel before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-late": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.crypto.subtle before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-subtle-late": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {\n  feature: 'isolate-host.esm'\n}\n\nNode.js v24.0.0",
+        "exitCode": 1
+      }
+    },
+    {
+      "name": "require-esm",
+      "group": "esm",
+      "node": {
+        "stdout": "require_module: true\nrequire(m.mjs): mjs-x",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "base": {
+        "stdout": "require_module: false\nrequire(m.mjs): ERR Error ERR_REQUIRE_ESM require() of ES Module /workspace/m.mjs from /workspace/main.cjs not supported.",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "url-first": {
+        "stdout": "require_module: false\nrequire(m.mjs): ERR Error ERR_REQUIRE_ESM require() of ES Module /workspace/m.mjs from /workspace/main.cjs not supported.",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "url-esm": {
+        "stdout": "require_module: true\nrequire(m.mjs): mjs-x",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "ceilings-first": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.MessageChannel before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-late": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.crypto.subtle before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-subtle-late": {
+        "stdout": "require_module: false\nrequire(m.mjs): ERR Error ERR_REQUIRE_ESM require() of ES Module /workspace/m.mjs from /workspace/main.cjs not supported.",
+        "stderr": "",
+        "exitCode": 0
+      }
+    },
+    {
+      "name": "esm-create-require",
+      "group": "esm",
+      "node": {
+        "stdout": "1 v",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "base": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {\n  feature: 'isolate-host.esm'\n}\n\nNode.js v24.0.0",
+        "exitCode": 1
+      },
+      "url-first": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {\n  feature: 'isolate-host.esm'\n}\n\nNode.js v24.0.0",
+        "exitCode": 1
+      },
+      "url-esm": {
+        "stdout": "1 v",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "ceilings-first": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.MessageChannel before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-late": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.crypto.subtle before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-subtle-late": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {\n  feature: 'isolate-host.esm'\n}\n\nNode.js v24.0.0",
+        "exitCode": 1
+      }
+    },
+    {
+      "name": "esm-json-import",
+      "group": "esm",
+      "node": {
+        "stdout": "v",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "base": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {\n  feature: 'isolate-host.esm'\n}\n\nNode.js v24.0.0",
+        "exitCode": 1
+      },
+      "url-first": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {\n  feature: 'isolate-host.esm'\n}\n\nNode.js v24.0.0",
+        "exitCode": 1
+      },
+      "url-esm": {
+        "stdout": "v",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "ceilings-first": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.MessageChannel before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-late": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.crypto.subtle before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-subtle-late": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {\n  feature: 'isolate-host.esm'\n}\n\nNode.js v24.0.0",
+        "exitCode": 1
+      }
+    },
+    {
+      "name": "esm-nanoid",
+      "group": "esm",
+      "node": {
+        "stdout": "21 5",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "base": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {\n  feature: 'isolate-host.esm'\n}\n\nNode.js v24.0.0",
+        "exitCode": 1
+      },
+      "url-first": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {\n  feature: 'isolate-host.esm'\n}\n\nNode.js v24.0.0",
+        "exitCode": 1
+      },
+      "url-esm": {
+        "stdout": "",
+        "stderr": "TypeError: Buffer.allocUnsafe(...) is not a function\n    at fillPool (/workspace/node_modules/nanoid/index.js:22:7)\n    at Module.nanoid (/workspace/node_modules/nanoid/index.js:89:3)\n    at eval (/workspace/main.mjs:7:28)\n\nNode.js v24.0.0",
+        "exitCode": 1
+      },
+      "ceilings-first": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.MessageChannel before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-late": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.crypto.subtle before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-subtle-late": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {\n  feature: 'isolate-host.esm'\n}\n\nNode.js v24.0.0",
+        "exitCode": 1
+      }
+    },
+    {
+      "name": "cjs-import-nanoid",
+      "group": "esm",
+      "node": {
+        "stdout": "import(nanoid): 21\nrequire(nanoid): 21",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "base": {
+        "stdout": "import(nanoid): ERR NotImplementedError undefined Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568)\nrequire(nanoid): ERR Error ERR_REQUIRE_ESM require() of ES Module /workspace/node_modules/nanoid/index.js from /workspace/main.cjs not supported.",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "url-first": {
+        "stdout": "import(nanoid): ERR NotImplementedError undefined Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568)\nrequire(nanoid): ERR Error ERR_REQUIRE_ESM require() of ES Module /workspace/node_modules/nanoid/index.js from /workspace/main.cjs not supported.",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "url-esm": {
+        "stdout": "import(nanoid): ERR TypeError undefined Buffer.allocUnsafe(...) is not a function\nrequire(nanoid): ERR TypeError undefined Buffer.allocUnsafe(...) is not a function",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "ceilings-first": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.MessageChannel before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-late": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.crypto.subtle before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-subtle-late": {
+        "stdout": "import(nanoid): ERR NotImplementedError undefined Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568)\nrequire(nanoid): ERR Error ERR_REQUIRE_ESM require() of ES Module /workspace/node_modules/nanoid/index.js from /workspace/main.cjs not supported.",
+        "stderr": "",
+        "exitCode": 0
+      }
+    },
+    {
+      "name": "esm-asi-imported-binding",
+      "group": "esm",
+      "node": {
+        "stdout": "asi ok 1 2",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "base": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {\n  feature: 'isolate-host.esm'\n}\n\nNode.js v24.0.0",
+        "exitCode": 1
+      },
+      "url-first": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {\n  feature: 'isolate-host.esm'\n}\n\nNode.js v24.0.0",
+        "exitCode": 1
+      },
+      "url-esm": {
+        "stdout": "",
+        "stderr": "TypeError: String(...) is not a function\n    at eval (/workspace/main.mjs:10:1)\n\nNode.js v24.0.0",
+        "exitCode": 1
+      },
+      "ceilings-first": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.MessageChannel before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-late": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.crypto.subtle before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-subtle-late": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {\n  feature: 'isolate-host.esm'\n}\n\nNode.js v24.0.0",
+        "exitCode": 1
+      }
+    },
+    {
+      "name": "esm-throw",
+      "group": "esm",
+      "node": {
+        "stdout": "mjs-x",
+        "stderr": "file:///workspace/main.mjs:3\nthrow new Error('boom');\n      ^\n\nError: boom\n    at file:///workspace/main.mjs:3:7\n    at ModuleJob.run (node:internal/modules/esm/module_job:439:25)\n    at async node:internal/modules/esm/loader:633:26\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)\n\nNode.js v24.16.0",
+        "exitCode": 1
+      },
+      "base": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {\n  feature: 'isolate-host.esm'\n}\n\nNode.js v24.0.0",
+        "exitCode": 1
+      },
+      "url-first": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {\n  feature: 'isolate-host.esm'\n}\n\nNode.js v24.0.0",
+        "exitCode": 1
+      },
+      "url-esm": {
+        "stdout": "mjs-x",
+        "stderr": "Error: boom\n    at eval (/workspace/main.mjs:8:7)\n\nNode.js v24.0.0",
+        "exitCode": 1
+      },
+      "ceilings-first": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.MessageChannel before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-late": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.crypto.subtle before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-subtle-late": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {\n  feature: 'isolate-host.esm'\n}\n\nNode.js v24.0.0",
+        "exitCode": 1
+      }
+    },
+    {
+      "name": "esm-syntax-error",
+      "group": "esm",
+      "node": {
+        "stdout": "",
+        "stderr": "file:///workspace/main.mjs:2\nconst = 1;\n      ^\n\nSyntaxError: Unexpected token '='\n    at compileSourceTextModule (node:internal/modules/esm/utils:318:16)\n    at ModuleLoader.moduleStrategy (node:internal/modules/esm/translators:90:18)\n    at #translate (node:internal/modules/esm/loader:435:20)\n    at afterLoad (node:internal/modules/esm/loader:491:29)\n    at ModuleLoader.loadAndTranslate (node:internal/modules/esm/loader:496:12)\n    at #getOrCreateModuleJobAfterResolve (node:internal/modules/esm/loader:549:36)\n    at afterResolve (node:internal/modules/esm/loader:597:52)\n    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:603:12)\n    at node:internal/modules/esm/loader:622:32\n    at TracingChannel.tracePromise (node:diagnostics_channel:362:14)\n\nNode.js v24.16.0",
+        "exitCode": 1
+      },
+      "base": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {\n  feature: 'isolate-host.esm'\n}\n\nNode.js v24.0.0",
+        "exitCode": 1
+      },
+      "url-first": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {\n  feature: 'isolate-host.esm'\n}\n\nNode.js v24.0.0",
+        "exitCode": 1
+      },
+      "url-esm": {
+        "stdout": "",
+        "stderr": "ModuleLoadError: Failed to parse ESM source for /workspace/main.mjs: Unexpected token (2:6) {\n  code: 'SYNTAX_ERROR',\n  specifier: '/workspace/main.mjs',\n  importer: '/workspace/main.mjs',\n  requireStack: undefined\n}\n\nNode.js v24.0.0",
+        "exitCode": 1
+      },
+      "ceilings-first": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.MessageChannel before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-late": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.crypto.subtle before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-subtle-late": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {\n  feature: 'isolate-host.esm'\n}\n\nNode.js v24.0.0",
+        "exitCode": 1
+      }
+    },
+    {
+      "name": "esm-missing-export",
+      "group": "esm",
+      "node": {
+        "stdout": "",
+        "stderr": "file:///workspace/main.mjs:1\nimport { nope } from './m.mjs';\n         ^^^^\nSyntaxError: The requested module './m.mjs' does not provide an export named 'nope'\n    at #asyncInstantiate (node:internal/modules/esm/module_job:327:21)\n    at async ModuleJob.run (node:internal/modules/esm/module_job:431:5)\n    at async node:internal/modules/esm/loader:633:26\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)\n\nNode.js v24.16.0",
+        "exitCode": 1
+      },
+      "base": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {\n  feature: 'isolate-host.esm'\n}\n\nNode.js v24.0.0",
+        "exitCode": 1
+      },
+      "url-first": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {\n  feature: 'isolate-host.esm'\n}\n\nNode.js v24.0.0",
+        "exitCode": 1
+      },
+      "url-esm": {
+        "stdout": "",
+        "stderr": "SyntaxError: The requested module '/workspace/m.mjs' does not provide an export named 'nope' (imported by /workspace/main.mjs)\n\nNode.js v24.0.0",
+        "exitCode": 1
+      },
+      "ceilings-first": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.MessageChannel before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-late": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.crypto.subtle before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-subtle-late": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {\n  feature: 'isolate-host.esm'\n}\n\nNode.js v24.0.0",
+        "exitCode": 1
+      }
+    },
+    {
+      "name": "esm-data-url",
+      "group": "esm",
+      "node": {
+        "stdout": "42",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "base": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {\n  feature: 'isolate-host.esm'\n}\n\nNode.js v24.0.0",
+        "exitCode": 1
+      },
+      "url-first": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {\n  feature: 'isolate-host.esm'\n}\n\nNode.js v24.0.0",
+        "exitCode": 1
+      },
+      "url-esm": {
+        "stdout": "",
+        "stderr": "ModuleLoadError: Protocol in 'data:text/javascript,export default 42' is not supported in M2.\n    at eval (/workspace/main.mjs:6:17)\n    at eval (/workspace/main.mjs:9:3) {\n  code: 'UNSUPPORTED_PROTOCOL',\n  specifier: 'data:text/javascript,export default 42',\n  importer: '/workspace/main.mjs',\n  requireStack: undefined\n}\n\nNode.js v24.0.0",
+        "exitCode": 1
+      },
+      "ceilings-first": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.MessageChannel before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-late": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.crypto.subtle before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-subtle-late": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {\n  feature: 'isolate-host.esm'\n}\n\nNode.js v24.0.0",
+        "exitCode": 1
+      }
+    },
+    {
+      "name": "eval-dynamic-import",
+      "group": "esm",
+      "node": {
+        "stdout": "function",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "base": {
+        "stdout": "",
+        "stderr": "Error: Not implemented: isolate-host.dynamic-import (import() is not available in the rifty isolate host; use require(), ADR-0557)",
+        "exitCode": 1
+      },
+      "url-first": {
+        "stdout": "",
+        "stderr": "Error: Not implemented: isolate-host.dynamic-import (import() is not available in the rifty isolate host; use require(), ADR-0557)",
+        "exitCode": 1
+      },
+      "url-esm": {
+        "stdout": "",
+        "stderr": "Error: Not implemented: isolate-host.dynamic-import (import() is not available in the rifty isolate host; use require(), ADR-0557)",
+        "exitCode": 1
+      },
+      "ceilings-first": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.MessageChannel before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-late": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.crypto.subtle before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-subtle-late": {
+        "stdout": "",
+        "stderr": "Error: Not implemented: isolate-host.dynamic-import (import() is not available in the rifty isolate host; use require(), ADR-0557)",
+        "exitCode": 1
+      }
+    },
+    {
+      "name": "eval-esm-syntax",
+      "group": "esm",
+      "node": {
+        "stdout": "function",
+        "stderr": "",
+        "exitCode": 0
+      },
+      "base": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.node-eval-esm (Node runs -e input with ESM syntax as a module; this host evaluates CommonJS only — use require()) {\n  feature: 'isolate-host.node-eval-esm'\n}\n\nNode.js v24.0.0",
+        "exitCode": 1
+      },
+      "url-first": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.node-eval-esm (Node runs -e input with ESM syntax as a module; this host evaluates CommonJS only — use require()) {\n  feature: 'isolate-host.node-eval-esm'\n}\n\nNode.js v24.0.0",
+        "exitCode": 1
+      },
+      "url-esm": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.node-eval-esm (Node runs -e input with ESM syntax as a module; this host evaluates CommonJS only — use require()) {\n  feature: 'isolate-host.node-eval-esm'\n}\n\nNode.js v24.0.0",
+        "exitCode": 1
+      },
+      "ceilings-first": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.MessageChannel before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-late": {
+        "stdout": "",
+        "stderr": "HOST REJECT: isolate-host child failed: isolate-host guest: isolate-host.crypto.subtle before runtime load",
+        "exitCode": "reject"
+      },
+      "ceilings-first-ports-subtle-late": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.node-eval-esm (Node runs -e input with ESM syntax as a module; this host evaluates CommonJS only — use require()) {\n  feature: 'isolate-host.node-eval-esm'\n}\n\nNode.js v24.0.0",
+        "exitCode": 1
+      }
+    }
+  ]
+}

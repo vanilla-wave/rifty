@@ -1,0 +1,83 @@
+{
+  "date": "2026-11-24T13:56:01.109Z",
+  "node": "v24.16.0",
+  "isolatedVm": "7.0.2",
+  "esbuild": "0.28.0",
+  "loadavg": [
+    "2.2",
+    "3.7",
+    "3.4"
+  ],
+  "preludeBytes": 7305,
+  "timing": {
+    "loadavg": [
+      "2.2",
+      "3.7",
+      "3.4"
+    ],
+    "samples": 40,
+    "baselineEmptyScriptMs": 0.0235,
+    "variants": {
+      "url:whatwg-url": {
+        "installError": "isolate-host guest: isolate-host.TextDecoder(latin1) before runtime load"
+      },
+      "url:whatwg-url@15": {
+        "installMs": 3.79,
+        "firstUseMs": 1.06,
+        "firstUseFileUrlMs": 0.51,
+        "loop10kMs": 98.5
+      },
+      "url:whatwg-url@15 lazy": {
+        "installMs": 0.05,
+        "firstUseMs": 5.22,
+        "firstUseFileUrlMs": 4.71,
+        "loop10kMs": 98.7
+      },
+      "url:whatwg-url@15 lazy-tr46": {
+        "installMs": 0.82,
+        "firstUseMs": 4.19,
+        "firstUseFileUrlMs": 0.6,
+        "loop10kMs": 97.5
+      },
+      "url:core-js": {
+        "installMs": 2.3,
+        "firstUseMs": 0.47,
+        "firstUseFileUrlMs": 0.31,
+        "loop10kMs": 122.4
+      },
+      "url:bridge": {
+        "installMs": 0.04,
+        "firstUseMs": 0.03,
+        "firstUseFileUrlMs": 0.03,
+        "loop10kMs": 106.9
+      },
+      "clone:@ungap": {
+        "installMs": 0.02,
+        "firstUseMs": 0.18,
+        "loop10kMs": 13.3
+      },
+      "clone:core-js": {
+        "installMs": 3.37,
+        "firstUseMs": 0.13,
+        "loop10kMs": 9.7
+      },
+      "clone:bridge": {
+        "installMs": 0,
+        "firstUseMs": 0.03,
+        "loop10kMs": 102.2
+      },
+      "blob:formdata-node": {
+        "installMs": 0.05,
+        "firstUseMs": 0.1
+      },
+      "blob:blob-polyfill": {
+        "installMs": 0.16,
+        "firstUseMs": 0.09
+      }
+    },
+    "nodeNativeLoop10kMs": {
+      "url": 4.1,
+      "clone": 8.2
+    }
+  }
+}
