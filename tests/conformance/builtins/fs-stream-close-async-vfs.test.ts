@@ -32,7 +32,9 @@ function nodeStdout(code: string): string {
 async function riftyStdout(code: string, lastLinePrefix: string): Promise<string> {
   let out = '';
   let done!: () => void;
-  const finished = new Promise<void>((resolve) => (done = resolve));
+  const finished = new Promise<void>((resolve) => {
+    done = resolve;
+  });
   const log = (line: string): void => {
     out += `${line}\n`;
     if (line.startsWith(lastLinePrefix)) done();
