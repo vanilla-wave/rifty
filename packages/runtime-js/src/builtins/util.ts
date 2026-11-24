@@ -65,14 +65,12 @@ function formatWithInspectOptions(
     const arg = args[i++];
     switch (spec) {
       case 's':
-        // Node's `%s`: strings pass through, bigints get the `n` suffix,
-        // non-null objects (incl. arrays) use Node's fixed depth 0; everything
-        // else is `String()`.
-        if (typeof arg === 'string') result += arg;
+        // Node's `formatWithOptionsInternal` `%s`.
+        if (typeof arg === 'number') result += Object.is(arg, -0) ? '-0' : `${arg}`;
         else if (typeof arg === 'bigint') result += `${arg}n`;
-        else if (arg !== null && typeof arg === 'object')
-          result += inspectImpl(arg, { ...inspectOptions, depth: 0 });
-        else result += String(arg);
+        else if (typeof arg !== 'object' || arg === null || !hasBuiltInToString(arg))
+          result += String(arg);
+        else result += inspectImpl(arg, { ...inspectOptions, depth: 0 });
         break;
       case 'd':
       case 'i':
@@ -111,6 +109,61 @@ function formatWithInspectOptions(
     result += ` ${typeof a === 'string' ? a : inspectImpl(a, inspectOptions)}`;
   }
   return result;
+}
+
+/**
+ * Node v24.16.0 `builtInObjects`: the `globalThis` names matching `/^[A-Z][a-zA-Z0-9]+$/`
+ * when `lib/internal/util/inspect.js` loads — V8's own globals, before Node adds
+ * `Buffer`, `URL`, … (live-Node list, parity `util/format-percent-s`).
+ */
+const NODE_BUILTIN_OBJECTS: ReadonlySet<string> = new Set(
+  (
+    'Object Function Array Number Infinity NaN Boolean String Symbol Date Promise RegExp Error ' +
+    'AggregateError EvalError RangeError ReferenceError SyntaxError TypeError URIError JSON Math ' +
+    'Intl ArrayBuffer Atomics Uint8Array Int8Array Uint16Array Int16Array Uint32Array Int32Array ' +
+    'BigUint64Array BigInt64Array Uint8ClampedArray Float32Array Float64Array DataView Map BigInt ' +
+    'Set Iterator WeakMap WeakSet Proxy Reflect FinalizationRegistry WeakRef'
+  ).split(' '),
+);
+const hasOwnPropertyPrimordial = Object.prototype.hasOwnProperty;
+const getPrototypeOfPrimordial = Object.getPrototypeOf;
+const getOwnPropertyDescriptorPrimordial = Object.getOwnPropertyDescriptor;
+type HasOwn = (o: unknown, key: PropertyKey) => boolean;
+const reflectApplyPrimordial = Reflect.apply;
+const hasOwn: HasOwn = (o, key) => reflectApplyPrimordial(hasOwnPropertyPrimordial, o, [key]);
+const returnFalse: HasOwn = () => false;
+
+/**
+ * Node's `hasBuiltInToString`: does the `toString`/`Symbol.toPrimitive` `%s` would call come
+ * from a built-in prototype? Node first unwraps a Proxy without running its traps; a pure-JS
+ * realm cannot see a Proxy (`util.types.isProxy`), so here its traps run.
+ */
+function hasBuiltInToString(value: object): boolean {
+  const v = value as { toString?: unknown; [Symbol.toPrimitive]?: unknown };
+  let hasOwnToString = hasOwn;
+  let hasOwnToPrimitive = hasOwn;
+  if (typeof v.toString !== 'function') {
+    if (typeof v[Symbol.toPrimitive] !== 'function') return true;
+    if (hasOwn(value, Symbol.toPrimitive)) return false;
+    hasOwnToString = returnFalse;
+  } else if (hasOwn(value, 'toString')) {
+    return false;
+  } else if (typeof v[Symbol.toPrimitive] !== 'function') {
+    hasOwnToPrimitive = returnFalse;
+  } else if (hasOwn(value, Symbol.toPrimitive)) {
+    return false;
+  }
+  // The prototype owning that `toString`/`Symbol.toPrimitive` (as Node: a null end throws).
+  let pointer: object | null = value;
+  do {
+    pointer = getPrototypeOfPrimordial(pointer) as object | null;
+  } while (!hasOwnToString(pointer, 'toString') && !hasOwnToPrimitive(pointer, Symbol.toPrimitive));
+  const descriptor = getOwnPropertyDescriptorPrimordial(pointer as object, 'constructor');
+  return (
+    descriptor !== undefined &&
+    typeof descriptor.value === 'function' &&
+    NODE_BUILTIN_OBJECTS.has((descriptor.value as { name: string }).name)
+  );
 }
 
 const STYLE_CODES = {
