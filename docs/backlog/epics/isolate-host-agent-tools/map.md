@@ -10,8 +10,8 @@ killed-run decision.
 ## Open questions
 
 - Blocked on `epics/isolate-host-sandbox-template` (template package list, its mount for
-  `list_files`, the changed-paths field) and `distribution/isolate-host-sandbox-exec-abort-signal`
-  (`execute(args, signal)`) — owner: agent — settled when those land.
+  `list_files`, the changed-paths field) and `distribution/isolate-host-sandbox-exec-abort-signal` (in progress, branch
+  `t3/isolate-host-exec-abort-signal`; `execute(args, signal)`) — owner: agent — settled when those land.
 - The killed-run text: «the writes of this run were rolled back» or «kept» — owner: user — asked in
   the template goal (one answer for both).
 - «Ложный успех по коду выхода» (exit 0 where Node exits 1: GC-collected rejection, a rejection in an

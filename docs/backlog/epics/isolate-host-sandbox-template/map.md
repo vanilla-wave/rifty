@@ -51,6 +51,6 @@ hypothesis until the carrier hits it:
 - Building the artifact inside the guest (`npm` in the isolate); a template made by anything but
   `produceDependencySnapshot`.
 - The agent tool set over the sandbox: `epics/isolate-host-agent-tools`.
-- `exec`'s `signal`: `distribution/isolate-host-sandbox-exec-abort-signal`.
+- `exec`'s `signal`: `distribution/isolate-host-sandbox-exec-abort-signal` — in progress, branch `t3/isolate-host-exec-abort-signal`.
 - npm publication: `epics/isolate-host-npm-delivery`.
 - Templates shared across consumer processes or machines (one copy per process, one per worker).
