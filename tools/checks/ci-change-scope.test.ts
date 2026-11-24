@@ -154,7 +154,11 @@ describe('CI change scope', () => {
 
     const gate = jobBlock(workflow, 'ci-gate');
     expect(gate).toContain('name: CI gate');
-    expect(gate).toContain('if: always()');
+    expect(gate).toContain('if: ${{ !cancelled() }}');
+    // Cancel group only for PRs; push/merge_group runs get their own group.
+    expect(workflow).toContain(
+      "group: ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}\n  cancel-in-progress: true",
+    );
     expect(gate).toContain('node tools/checks/ci-gate.mjs');
     for (const dependency of [
       'change-scope',
@@ -162,6 +166,7 @@ describe('CI change scope', () => {
       'unit-and-conformance',
       'e2e-chromium',
       'browser-unit-chromium',
+      'no-coi-chromium',
     ]) {
       expect(gate, dependency).toContain(`- ${dependency}`);
     }
