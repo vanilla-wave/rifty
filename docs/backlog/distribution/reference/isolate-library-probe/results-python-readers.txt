@@ -1,13 +1,16 @@
-# 2026-11-24, python -I verify/verify.py over a --keep run of probe.mjs (python-pptx 1.0.2, python-docx 1.1.2, openpyxl 3.1.5, Python 3.9.6)
+# 2026-11-24, python -I verify/verify.py over a full --keep run of probe.mjs (python-pptx 1.0.2, python-docx 1.1.2, openpyxl 3.1.5, Python 3.9.6)
 ok guest-docx.docx: paragraphs ['Quarterly report', 'Revenue grew 12%'], table rows 2
 ok guest-pptx-handled.pptx: 3 slides, slide 1 ['Quarterly report', '']
 ok guest-pptx-notnode.pptx: 3 slides, slide 1 ['Quarterly report', '']
+ok guest-xlsx-workbook-file.xlsx: A1 Region, B4 =SUM(B2:B3), images 1
 ok guest-xlsx-workbook.xlsx: A1 Region, B4 =SUM(B2:B3), images 1
 ok oracle/out/probe-docx.docx: paragraphs ['Quarterly report', 'Revenue grew 12%'], table rows 2
 ok oracle/out/probe-pptx-bundle.pptx: 3 slides, slide 1 ['Quarterly report', '']
 ok oracle/out/probe-pptx-handled.pptx: 3 slides, slide 1 ['Quarterly report', '']
 ok oracle/out/probe-pptx-notnode.pptx: 3 slides, slide 1 ['Quarterly report', '']
+ok oracle/out/probe-pptx-write.pptx: 3 slides, slide 1 ['Quarterly report', '']
 ok oracle/out/probe-pptx.pptx: 3 slides, slide 1 ['Quarterly report', '']
 ok oracle/out/probe-xlsx-browser.xlsx: A1 Region, B4 =SUM(B2:B3), images 1
+ok oracle/out/probe-xlsx-workbook-file.xlsx: A1 Region, B4 =SUM(B2:B3), images 1
 ok oracle/out/probe-xlsx-workbook.xlsx: A1 Region, B4 =SUM(B2:B3), images 1
 ok oracle/out/probe-xlsx.xlsx: A1 Region, B4 =SUM(B2:B3), images 1

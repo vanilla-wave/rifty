@@ -1,5 +1,6 @@
-// node verify.cjs <pptx|pdf|docx|xlsx> <file> → JSON verdict on stdout. Real Node, readers that are
-// not the generating library (pdf-lib for pdf, as the requirement names it).
+// node verify.cjs <pptx|pdf|docx|xlsx> <file> → JSON verdict on stdout, in real Node. OOXML readers
+// are not the generating library; a PDF is checked by pdf-lib itself (as the requirement names it),
+// so a valid PDF means pdf-lib parses it.
 // OOXML: a ZIP, the expected parts present, every XML part well-formed, then a reader:
 // xlsx SheetJS, docx mammoth, pptx the slide list + slide text (no maintained Node pptx reader;
 // verify.py cross-checks with python-pptx / python-docx / openpyxl).
@@ -82,6 +83,12 @@ const diffBytes = async (x, y) => {
         // A nested package (pptx chart data): diffed as its own entries.
         const inner = await diffBytes(await px.async('nodebuffer'), await py.async('nodebuffer'));
         if (!inner.equal) parts.push({ part: n, inner: inner.parts });
+        continue;
+      }
+      if (!/\.(xml|rels|vml)$/.test(n)) {
+        // Binary parts (media): bytes, unmasked.
+        const [bx, by] = await Promise.all([px.async('nodebuffer'), py.async('nodebuffer')]);
+        if (!bx.equals(by)) parts.push({ part: n, bytes: [bx.length, by.length] });
         continue;
       }
       const [tx, ty] = (await Promise.all([px.async('string'), py.async('string')])).map(mask);

@@ -1,20 +1,19 @@
 // Oracle-side trace, real Node only: `node -r ./trace.cjs gen/<lib>.cjs <out>`. At exit prints one
 // `TRACE {…}` line on stderr: every builtin module the run loads (require or import(), with the
-// first node_modules call site) and every web global it reads (a `typeof X` check included), with
+// node_modules frames of its first load) and every web global it reads (a `typeof X` check included), with
 // TextDecoder labels. The isolate guest's gaps are the intersection with the compat ❌ rows; the
 // sandbox runs confirm which of them a run actually needs.
 const Module = require('node:module');
 const { builtinModules } = Module;
 
+// The node_modules frames of the first load, innermost first (the require chain for a builtin).
 const site = () => {
-  const lines = new Error().stack.split('\n').slice(2);
-  const hit = lines.find((l) => l.includes('node_modules'));
-  return hit
-    ? hit
-        .trim()
-        .replace(/^at /, '')
-        .replace(/.*node_modules\//, '')
-    : '(generator)';
+  const hits = new Error().stack
+    .split('\n')
+    .slice(2)
+    .filter((l) => l.includes('node_modules'))
+    .map((l) => l.replace(/.*node_modules\//, '').replace(/\)$/, ''));
+  return hits.length ? hits.slice(0, 20) : ['(generator)'];
 };
 const modules = {};
 const note = (map, key) => {

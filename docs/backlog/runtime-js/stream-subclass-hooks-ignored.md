@@ -42,6 +42,10 @@ prototype method assigned after construction. Code read confirms each cause:
 The same `@riftydev/io` streams back `node:stream` on every host (`runtime-js/src/builtins/stream.ts`):
 browser hosts and the isolate guest.
 
+Owner: runtime-js (`@riftydev/io` streams). Trigger: a guest package subclassing
+`stream.Transform`/`Duplex` with its own hooks (any host); first measured consumer: exceljs CSV
+write (isolate library probe).
+
 ## Challenge
 
 challenge: 2026-11-24 — none (existing-baseline repair: compat promised ✅, Node behavior measured)

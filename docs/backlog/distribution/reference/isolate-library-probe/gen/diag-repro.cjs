@@ -1,5 +1,5 @@
-// node diag-repro.cjs: minimal repros of the undeclared stops in diag-outputs.cjs (exceljs CSV
-// write, exceljs readFile) plus sibling stream hooks and controls, one line each; the probe diffs
+// node diag-repro.cjs: minimal repros of the stops in diag-outputs.cjs (exceljs CSV write/read,
+// readFile, sheet protection; reading an fs stream: diag-fsread.cjs) plus sibling stream hooks and controls, one line each; the probe diffs
 // them against real node.
 const fs = require('node:fs');
 const { Duplex, Transform, Writable, PassThrough } = require('node:stream');
@@ -94,6 +94,18 @@ sub(true);
   }
   const r = new R();
   r.on('data', (c) => got.push(`Readable subclass _read: ${c}`));
+}
+// crypto's sha512 (exceljs worksheet.protect).
+{
+  const crypto = require('node:crypto');
+  got.push(`crypto.getHashes() has sha512: ${crypto.getHashes().includes('sha512')}`);
+  try {
+    got.push(
+      `crypto.createHash('sha512'): ${crypto.createHash('sha512').update('x').digest('hex').slice(0, 8)}`,
+    );
+  } catch (e) {
+    got.push(`crypto.createHash('sha512'): ${e.name}: ${e.message}`);
+  }
 }
 // JSZip's entry list for a nested file (control: equal on both).
 {
