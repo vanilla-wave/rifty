@@ -54,8 +54,8 @@ consumer-side routes past a stop, no rifty change.
 |---|---|---|---|---|
 | pdf-lib | 1.17.1 | ✅ valid PDF, = node's (masked) | — | — |
 | docx | 9.15.3 | ✅ valid docx, = node's (masked) | — | — (`Packer.toBlob` ❌ Blob) |
-| pptxgenjs | 4.0.1 | ❌ exit 1 (`writeFile`; `write()` too: `pptx-write`) | `import('node:https')` → `NotImplementedError('isolate-host.https')`, unhandled | ✅ `pptx-handled`: an `unhandledRejection` listener drops those rejections (one per slide); ✅ `pptx-notnode`: `process.release.name` ≠ `'node'` + `write({outputType:'nodebuffer'})` + `fs.writeFileSync`. Image by `path` still fails on the `pptx-handled` route (pass `data:`; not run on `pptx-notnode`). ❌ `pptx-bundle` (browser bundle): `navigator.userAgent` |
-| exceljs | 4.4.0 | ❌ exit 1 at `require('exceljs')` | `node:zlib` → `NotImplementedError('isolate-host.zlib')` | ✅ `xlsx-workbook` / `xlsx-workbook-file`: `require('exceljs/lib/doc/workbook')` + `xlsx.writeBuffer()` / `xlsx.writeFile()`, both verified as files. ✅ read back with `xlsx.load(fs.readFileSync(f))` of a `writeFile` output (one cell checked, `diag-outputs`). ❌ on that route: `csv.writeBuffer` (#5), `xlsx.read(fs.createReadStream)`, `xlsx.readFile`, `csv.read` (#6, #7), `worksheet.protect` (#9). ❌ `xlsx-browser` (`dist/exceljs.min.js`): `navigator.userAgent`. Streaming `WorkbookWriter`/`WorkbookReader` not reachable (zlib) |
+| pptxgenjs | 4.0.1 | ❌ exit 1 (`writeFile`; `write()` too: `pptx-write`) | `import('node:https')` → `NotImplementedError('isolate-host.https')`, unhandled | ✅ `pptx-handled`: an `unhandledRejection` listener drops those rejections (one per slide); ✅ `pptx-notnode`: `process.release.name` ≠ `'node'` + `write({outputType:'nodebuffer'})` + `fs.writeFileSync`. Image by `path` still fails on the `pptx-handled` route (pass `data:`; not run on `pptx-notnode`). ❌ `pptx-bundle` (browser bundle): `navigator.userAgent`; after PR #436 (2026-11-24): `NotImplementedError: isolate-host.https` at `write()` (the bundle's own `require('https')`, row #2) |
+| exceljs | 4.4.0 | ❌ exit 1 at `require('exceljs')` | `node:zlib` → `NotImplementedError('isolate-host.zlib')` | ✅ `xlsx-workbook` / `xlsx-workbook-file`: `require('exceljs/lib/doc/workbook')` + `xlsx.writeBuffer()` / `xlsx.writeFile()`, both verified as files. ✅ read back with `xlsx.load(fs.readFileSync(f))` of a `writeFile` output (one cell checked, `diag-outputs`). ❌ on that route: `csv.writeBuffer` (#5), `xlsx.read(fs.createReadStream)`, `xlsx.readFile`, `csv.read` (#6, #7), `worksheet.protect` (#9). ❌ `xlsx-browser` (`dist/exceljs.min.js`): `navigator.userAgent`; after PR #436 (2026-11-24): `NotImplementedError: isolate-host.crypto.subtle` at `require` (`exceljs.min.js:22`, the bundled crypto-browserify pbkdf2 `default-encoding` module, declared ❌). Streaming `WorkbookWriter`/`WorkbookReader` not reachable (zlib) |
 
 Every ✅ guest output passes the same checks as the oracle's and equals it (`vsNode.equal`);
 python-pptx/python-docx/openpyxl read the ✅ OOXML outputs, guest and oracle
@@ -70,14 +70,14 @@ from the package source at the lock version, not traced.
 
 | # | API | compat | called from (`node_modules`) | blocks |
 |---|---|---|---|---|
-| 1 | `node:zlib` at require | declared ❌ (`isolate-host.md:28`; its message: "needs web CompressionStream") | traced (`xlsx`): `exceljs/excel.js:13` → `lib/exceljs.nodejs.js:6` → `stream/xlsx/workbook-writer.js:2` → `archiver/index.js:80` → `archiver/lib/plugins/zip.js:8` → `zip-stream/index.js:10` → compress-commons → `crc32-stream/lib/deflate-crc32-stream.js:11`; source: also `exceljs.nodejs.js:7` → `workbook-reader.js:5` → `unzipper/lib/parse.js:2` | `require('exceljs')`, even when the write itself uses JSZip/pako; the streaming writer/reader for real |
+| 1 | `node:zlib` at require | declared ❌ (`isolate-host.md:30`; its message: "needs web CompressionStream") | traced (`xlsx`): `exceljs/excel.js:13` → `lib/exceljs.nodejs.js:6` → `stream/xlsx/workbook-writer.js:2` → `archiver/index.js:80` → `archiver/lib/plugins/zip.js:8` → `zip-stream/index.js:10` → compress-commons → `crc32-stream/lib/deflate-crc32-stream.js:11`; source: also `exceljs.nodejs.js:7` → `workbook-reader.js:5` → `unzipper/lib/parse.js:2` | `require('exceljs')`, even when the write itself uses JSZip/pako; the streaming writer/reader for real |
 | 2 | `node:https` at load | declared ❌ (`isolate-host.md:25` Network; host README "throw at require") | traced (`pptx`, `pptx-write`): `pptxgenjs/dist/pptxgen.cjs.js:4845`; source: `encodeSlideMediaRels` `:4842-4850` starts `loadNodeDeps()` per slide without awaiting or catching it, and awaits it for an image by `path` (`:4871-4872`) | `pptx.writeFile` and `write()` (measured); the listener route for a `path` image (measured). Node loads the module without network |
 | 3 | `Blob` | declared ❌ (`:26`) | traced read: `jszip/lib/support.js:17` (detection in `try`, so `generateAsync({type:'blob'})` → `blob is not supported by this platform`); source: `docx/dist/index.cjs:23939` (`toBlob`) | `Packer.toBlob`, `pptx.write({outputType:'blob'})` only |
-| 4 | `navigator.userAgent` | declared ❌ (`:26`, `navigator.*`) | traced read: `exceljs/dist/exceljs.min.js:10` (core-js `engine-user-agent`, per the guest's stack); pptxgenjs bundle evaluated via `new Function`, no frame | the browser-bundle routes only. Node 24 has it |
-| 5 | `stream.Transform` subclass `_transform`/`_flush`, `Duplex` subclass `_write` | **undeclared** (streams.md `Transform` was ✅; now ⚠️ + a `Duplex` subclass row) | source: `@fast-csv/format/build/src/CsvFormatterStream.js:6-55` → `exceljs/lib/utils/stream-buf.js:239` | exceljs CSV write (chunks pass through unchanged; silent where a sink accepts them) — `runtime-js/stream-subclass-hooks-ignored` |
+| 4 | `navigator.userAgent` | ✅ since 2026-11-24 (PR #436; was declared ❌ `navigator.*`) | traced read: `exceljs/dist/exceljs.min.js:10` (core-js `engine-user-agent`, per the guest's stack); pptxgenjs bundle evaluated via `new Function`, no frame | was the browser-bundle routes only; their next stops: `crypto.subtle` (xlsx-browser), `node:https` (pptx-bundle, #2) |
+| 5 | `stream.Transform` subclass `_transform`/`_flush`, `Duplex` subclass `_write` | **undeclared** when measured (streams.md `Transform` was ✅); fixed by PR #433, 2026-11-24 — the probe's subclass and `csv.writeBuffer` lines equal Node's (the latter prints type and length only; `distribution/isolate-exceljs-csv-write-acceptance-row`) | source: `@fast-csv/format/build/src/CsvFormatterStream.js:6-55` → `exceljs/lib/utils/stream-buf.js:239` | exceljs CSV write (chunks passed through unchanged; silent where a sink accepts them) — fixed, PR #433 |
 | 6 | web `ReadableStream`, under rifty's own `fs.createReadStream` | **undeclared** (isolate-host.md row "`fs.createReadStream` reads" added) | guest stack: `new ReadableStream < MemoryVfs.openReadable < FileReadStream.start` (`diag-fsread`); source: exceljs `xlsx.js:244-253` (`read`), `csv/csv.js:32-43` | every fs read stream in the guest: exceljs `xlsx.read(stream)`, `readFile`, `csv.read` — `distribution/isolate-host-fs-read-stream-needs-web-readablestream` |
 | 7 | `fs.ReadStream#close`/`WriteStream#close`, `ReadStream[Symbol.asyncIterator]` | **undeclared** (fs.md row now names them) | source: `exceljs/lib/xlsx/xlsx.js:56`, `:59` (its catch's `close()` masks #6), `:247` | `xlsx.readFile` — `runtime-js/fs-stream-close-method-missing` |
-| 8 | `process.umask` | **undeclared** (process.md row added) | source: `fstream/lib/writer.js:8` at load (unzipper → exceljs main) | exceljs main after #1 (`diag`: `require('fstream')`) — `runtime-js/process-umask-missing` |
+| 8 | `process.umask` | fixed (PR #432: reads 0, another mask loud) | source: `fstream/lib/writer.js:8` at load (unzipper → exceljs main) | was exceljs main's stop after #1; fstream's next stop is graceful-fs `fs$WriteStream.apply` — `runtime-js/fs-stream-class-call-shape` |
 | 9 | `crypto.createHash('sha512')` / `getHashes()` | declared (`runtime-js/crypto-sync-subset-expansion`; consumer added there) | traced load: `exceljs/lib/utils/encryptor.js:3`; source: `:27-30` checks `getHashes()` | `worksheet.protect(password)` |
 | 10 | `require()` of a `"type": "module"` package | declared ❌ (`isolate-host.md` Sandbox row "ES modules" names `NotImplementedError('isolate-host.esm')`; the measured refusal is `TypeError: URLConstructor is not a constructor`, now noted there) | `nanoid` 6.0.2 (`diag`) | nothing measured: docx bundles its own copy — `runtime-js/isolate-require-esm-syntax-gaps` |
 
@@ -92,6 +92,19 @@ path, not a library call); #1 needs `CompressionStream` or a zlib not built on i
 (`runtime-js/isolate-require-esm-syntax-gaps`, `docs/ROADMAP.md` M14 E). The paths behind the
 first stops (exceljs's main entry past #1, its streaming writer/reader) are not measured. #5 is
 the one silent wrong behavior.
+
+### After `isolate-host-egress-modules-load` (2026-11-24)
+
+Same probe, this branch (guest `http`/`https`/`net` load with Node's shape; network use a named
+gap): `results-after-egress-modules.json`. pptxgenjs canonical `gen/pptx.cjs` and `pptx-write` ✅ exit 0, valid,
+= node's (masked); rerun over this probe at `main` a994a6cf9 merged; the diag lines for `require('http')`, `require('https')`, `import('node:https')`
+and "pptx image by path + writeFile" now equal node's. Row 2 above is closed; every other row is
+unchanged. pptxgenjs's next stops (ad-hoc diag, same closure, vs node): `write()` with no
+`outputType` → Blob (row 3: `blob is not supported by this platform`; node returns a `Blob`);
+an image `path` starting `http` → `NotImplementedError('isolate-host.https.get')`, a rejection
+`write()` hands back (node fetches it). `write` as base64/binarystring/uint8array/arraybuffer/
+nodebuffer/STREAM, `stream()`, `writeFile({compression})`, SVG image and video by `path`, a
+master + notes + hyperlink: equal to node.
 
 ## Measures (requirement 3 baseline)
 

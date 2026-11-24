@@ -40,7 +40,7 @@ packages (read from the template), time, memory and size limits.
 ## Invariants
 
 <!-- Drafted at FIT: blocked on the template goal's API (template listing, changed paths), the
-abort item (execute(args, signal)) and the killed-run decision (texts). False on main @ b3731e9c0:
+killed-run decision (texts); `exec`'s `signal` landed (PR #431). False on main @ b3731e9c0:
 `packages/agent/src/index.ts` exports no tools; tools are Pi `AgentTool` + TypeBox
 (`tools.ts:1-3`, `:55-71`); `AgentFiles.read` is `string` only, a binary file is "Binary file is
 not supported by text tools" (`sandbox-host.ts:58`); no `run_node`. -->

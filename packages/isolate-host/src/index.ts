@@ -4,6 +4,7 @@ export { createSandbox } from './sandbox.ts';
 export type {
   ExecOptions,
   ExecResult,
+  OpOptions,
   Sandbox,
   SandboxEntry,
   SandboxOptions,

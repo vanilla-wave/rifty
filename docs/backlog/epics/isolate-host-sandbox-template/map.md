@@ -43,7 +43,7 @@ hypothesis until the carrier hits it:
   owner: agent — probe against `npm ci`, then a compat row or the oracle's value.
 - The four libraries' `require` in the guest (scenario steps 3, 10) — owner: agent — library probe
   (PR #430, `reference/isolate-library-probe/README.md`, @ b3731e9c0): `pdf-lib`, `docx` load and
-  write as Node; `pptxgenjs` stops on `node:https` at load (PR #435 in flight); `require('exceljs')`
+  write as Node; `pptxgenjs` stopped on `node:https` at load (loading fixed: PR #435, merged); `require('exceljs')`
   stops on `node:zlib` at require (`isolate-host.zlib`, declared ❌) — owned by the user's thread «Расширить платформу для офисных библиотек» (engine choice pako / wasm zlib / host bridge; isolate load of zlib in its queue), no item here: the
   carrier stays RED on exceljs until the isolate guest has `node:zlib` (rifty builds it on web
   `CompressionStream`, compat isolate-host `:28`: a `CompressionStream` in the guest or zlib on
@@ -58,10 +58,10 @@ hypothesis until the carrier hits it:
 
 ## Out of scope
 
-- Guest APIs the libraries need (`node:zlib`, `node:https` load, stream hooks, `process.umask`, fs stream `close`; library probe PR #430): their own items / PRs #432–#436; Web API shims: ROADMAP M14 E.
+- Guest APIs the libraries need (`node:zlib`, `node:https` load, stream hooks, `process.umask`, fs stream `close`; library probe PR #430): their own items / PRs #432–#436 (#432, #433, #435, #436 merged; #434 open); Web API shims: ROADMAP M14 E.
 - Building the artifact inside the guest (`npm` in the isolate); a template made by anything but
   `produceDependencySnapshot`.
 - The agent tool set over the sandbox: `epics/isolate-host-agent-tools`.
-- `exec`'s `signal`: `distribution/isolate-host-sandbox-exec-abort-signal` — in progress, branch `t3/isolate-host-exec-abort-signal`.
+- `exec`'s `signal`: `distribution/isolate-host-sandbox-exec-abort-signal` — landed, PR #431.
 - npm publication: `epics/isolate-host-npm-delivery`.
 - Templates shared across consumer processes or machines (one copy per process, one per worker).

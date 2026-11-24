@@ -48,6 +48,13 @@ isolate-host.md "ES modules"). Fault class: `sibling-drift` — one
 runtime path behaves per host on a host-provided global; the leaked internal
 name is not a named gap.
 
+Same capture, other symptom (2026-11-24, `runCode`, Node v24.16.0): an
+fs path that is neither a string nor bytes — `require('fs').readFileSync({})` —
+throws `TypeError: Right-hand side of 'instanceof' is not an object` at
+`fs-path.ts` `pathText` (`p instanceof URLConstructor`); Node: `TypeError
+[ERR_INVALID_ARG_TYPE]: The "path" argument must be of type string or an
+instance of Buffer or URL. Received an instance of Object`.
+
 Owner: runtime-js with isolate-guest (the ceiling `URL`). Trigger: the
 isolate ESM ❌ lifting, or an agent run that hits `URLConstructor`.
 

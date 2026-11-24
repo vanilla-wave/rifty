@@ -137,9 +137,25 @@ sandbox paths. rifty's FS has no links: every entry is a file or a directory.
 | `readFile(path)` | `Uint8Array`, a copy (and `writeFile` copies its input) |
 | `list(path = '/workspace')` | `{ name, type: 'file' \| 'directory', size }[]`, by name |
 | `remove(path)` | a file or a directory tree |
-| `exec(path, options?)` | `node <path> [args]` in `/workspace`: `runCode`'s options plus `args` (strings); `env`, `cwd`, `stdin` are `NotImplementedError('isolate-host.sandbox-exec-<option>')`. The path is one file, never a shell command |
+| `exec(path, options?)` | `node <path> [args]` in `/workspace`: `runCode`'s options plus `args` (strings) and `signal`; `env`, `cwd`, `stdin` are `NotImplementedError('isolate-host.sandbox-exec-<option>')`. The path is one file, never a shell command |
 | `snapshot()` | the files as bytes (ADR-0567), taken between operations |
 | `destroy()` | every operation whose promise has not settled yet (a run, a host op) and everything after reject `ERR_ISOLATE_HOST_SANDBOX_DESTROYED`; the state is dropped; resolves once no isolate of the sandbox runs (whenever it is called, also in the microtasks around a run's result) |
+
+Cancel with an `AbortSignal`: `exec(path, { signal })`, and `{ signal }` as the last argument of
+`writeFile`, `readFile`, `list`, `remove`, `snapshot`. Aborted before the operation starts (at the
+call or while it waits its turn), it rejects at once with Node's `AbortError` (`name:
+'AbortError'`, `code: 'ABORT_ERR'`, `cause`: `signal.reason`) and never takes effect; later
+operations keep their order. A run aborted before `exec` has settled rejects the same way: its
+isolate is disposed as at a deadline and the files are those of before the run (row below); the
+sandbox stays usable. A host op once started completes. An abort after the operation settled
+does nothing. `destroy()` wins: an operation not settled when it is called rejects
+`ERR_ISOLATE_HOST_SANDBOX_DESTROYED` whatever its signal does — also one called with an already
+aborted signal, when `destroy()` follows in the same tick: its `AbortError` comes a microtask
+after the call, as with Node's `events.addAbortListener` and `execFile` (`fs.promises.readFile`
+rejects at once), so it is not settled yet (it never runs). The signal is checked and
+listened to as Node's own APIs do (`events.addAbortListener`): a value Node refuses is refused
+with Node's error, a value your signal's own member throws is the rejection as it is, and your
+own `abort` listener calling `stopImmediatePropagation()` does not stop the cancel.
 
 Operations on one sandbox take effect one at a time, in call order, also when
 you do not await them; sandboxes do not wait for each other. A run's
@@ -171,7 +187,7 @@ its own but its files were not kept. What survives a run:
 | the run | the files after it |
 |---|---|
 | exits (any code, `process.exit`, an uncaught throw or rejection) | as the run left them — work the realm still runs before the run's status is out included (compat Sandbox row "A run's lifecycle and exit status"); a guest that replaced intrinsics the capture uses can leave another tree (compat Sandbox row "The guest's realm while its state is captured") |
-| `termination: 'timeout'` or `'memory'` | as before the run: a killed run's writes are rolled back (Node keeps them) |
+| `termination: 'timeout'` or `'memory'`, or aborted by its `signal` (`exec` rejects `AbortError`) | as before the run: a killed run's writes are rolled back (Node keeps them) |
 | its worker lost (rerun once, alone; then `ERR_ISOLATE_HOST_WORKER_LOST`) | as before the run; the rerun starts from the same files |
 | its state could not be sent whole (a throw while writing it to the worker, e.g. out of memory): `exec` rejects with that error, no rerun; that worker ends, its other calls rerun | as before the run |
 | `stateRefused` (`ERR_FS_SNAPSHOT_TOO_LARGE`: the run's files are over `maxFsBytes` (write fewer or smaller files, or raise `maxFsBytes` with `memoryLimitMb`); `ERR_ISOLATE_HOST_SANDBOX_CAPTURE`: the end state could not be captured — most often the files did not fit the run's isolate memory (same remedies), else the run hit the `import()` gap or broke its own capture (rewrite that code); another `ERR_FS_SNAPSHOT_*`: the consumer's codec refused the bytes; `ERR_ISOLATE_HOST_SANDBOX_RESTORE`: the files did not fit the run's isolate or its worker, no guest code ran, `exitCode: null`; an isolate too small for the runtime itself is `termination: 'memory'`, as for `runCode`) | as before the run |
@@ -180,7 +196,7 @@ Each run is a fresh isolate, like a new `node` process: only files carry over.
 **`exitCode: 0` with `stateRefused` means the run's writes were lost.** Check
 `stateRefused` before you trust the files.
 
-An unknown option name of `createSandbox` or `exec` is refused
+An unknown option name of `createSandbox`, `exec` or a host op is refused
 (`ERR_INVALID_ARG_VALUE`), so a typo never leaves a limit unapplied. Every
 input — paths, `args`, options, bytes (`writeFile`, `createSandbox({ snapshot })`)
 — is read and copied at the call, even when the operation waits behind a run:
@@ -226,13 +242,14 @@ snippets (`tests/parity.test.ts`).
 
 Not available. Each of these throws `NotImplementedError` naming the API:
 
-- network: `fetch`, `WebSocket`, `node:http`/`https`/`net` (throw at
-  require), `node:tls`/`dgram`/`http2`;
+- network: `fetch`, `WebSocket`, any network use of `node:http`/`https`/`net`
+  (they load with Node's shape; a request, server, socket or an Agent's pool
+  throws when used), `node:tls`/`dgram`/`http2`;
 - `URL`, `URLSearchParams`, `structuredClone`, web streams,
   `AbortController`/`AbortSignal`, `Event`/`EventTarget`/`CustomEvent`,
   `Blob`/`File`, `Request`/`Response`/`Headers`/`FormData`,
   `MessageChannel`/`MessagePort`/`BroadcastChannel`, the other web-stream,
-  `Performance*`, `Crypto*` and event classes, `URLPattern`, `navigator.*`,
+  `Performance*`, `Crypto*` and event classes, `URLPattern`, `navigator.locks`,
   `crypto.subtle`, `performance.mark`/`measure`/`nodeTiming`/…. Static members of these (`URL.canParse`,
   `AbortSignal.timeout`, …) are missing and give a plain `TypeError`;
 - ESM syntax in the code (`import … from`, top-level `await`). Node runs such
