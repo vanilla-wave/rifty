@@ -18,8 +18,10 @@ fstream comes from unzipper, which exceljs 4.4.0's main entry loads
 `node:zlib` ❌ on the same chain, so it is the next stop once zlib exists. compat process.md names
 `umask` as an ESM link-time miss (row "`node:process` named imports") and a ❌ row for the call.
 
-Node invariant under any umask: a new file stats `mode & 0o777 === 0o666 & ~process.umask()`,
-a new directory `0o777 & ~process.umask()`. rifty's VFS has no modes: `fs.Stats` reports
+Node invariant under any umask, for creation with the default mode: a new file stats
+`mode & 0o777 === 0o666 & ~process.umask()`, a new directory `0o777 & ~process.umask()`. Not
+for an explicit `mode`, `mkdtemp` (Node `0o700 & ~umask`) or a mode-preserving copy
+(`runtime-js/fs-mode-arguments-ignored`). rifty's VFS has no modes: `fs.Stats` reports
 0o100666/0o40777 for every file/directory (`fs-stats.ts`), `open`/`mkdir` ignore `mode`, no
 `chmod` exists — so the mask rifty's FS creates under is 0.
 

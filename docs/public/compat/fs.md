@@ -10,7 +10,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat / exact-vers
 |---|---|---|
 | `readFileSync` / `writeFileSync` | ✅ | utf8 strings and binary `Uint8Array`/Buffer-like reads |
 | `mkdirSync({ recursive })` | ✅ | Creates parent directories |
-| `mode` argument of `writeFile*` / `mkdir*` / `open*` | ⚠️ | Ignored: the entry is created and reports 0o100666/0o40777 whatever `mode` asks (Node: `mode & ~umask`, e.g. 0o600); no `chmod` family — backlog `runtime-js/fs-mode-arguments-ignored` |
+| `mode` of `writeFile*` / `appendFile*` / `mkdir*` / `open*` / `createWriteStream`, `mkdtemp*` | ⚠️ | Ignored: the entry is created and reports 0o100666/0o40777 whatever `mode` asks (Node: `mode & ~umask`, e.g. 0o600; `mkdtemp` 0o700 & ~umask); no `chmod` family — backlog `runtime-js/fs-mode-arguments-ignored` |
 | `readdirSync` / `Dirent[]` | ✅ | Sorted names; `withFileTypes`; `{ recursive: true }` BFS walk + `Dirent.parentPath` (no removed-in-v24 `path` alias) |
 | `existsSync` / `statSync` | ⚠️ | Numeric `Stats` shape/entry identity and `throwIfNoEntry: false` parity; rename ctime transitions remain incomplete (`runtime-js/fs-stats-node-fields`), atime-value fidelity separately tracked. |
 | `rmSync({ recursive })` | ✅ | Tree removal |

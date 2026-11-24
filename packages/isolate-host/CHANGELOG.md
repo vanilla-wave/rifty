@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Guest `process.umask()` reads `0`, the mask its FS creates under; another mask throws `NotImplementedError('process.umask(mask)')`. `require('fstream')` loads (corpus rows `process-umask-*`).
+- Guest `process.umask()` reads `0`, the mask its FS creates under; another mask throws `NotImplementedError('process.umask(mask)')`. Corpus rows `process-umask-*`.
 - Sandbox: a run's output is fixed when its status is out — what the guest's realm prints while its end state is captured (code reached through intrinsics it replaced) is not the run's output.
 - Sandbox: an unhandled rejection delivered after the run ended no longer runs its listener or adds a report (an endless listener no longer makes the run a rolled-back `timeout`); a timer, interval or `setImmediate` still pending when the run's status is out (queued before an uncaught throw of the entry, or beside its `process.exit()`) no longer runs after the run ended: no output, no file, and an endless one no longer turns the run into a `timeout` that rolls its writes back (it ran while the end state was being captured). `runCode` is unchanged.
 - `runCode` fatal frames: a `setImmediate`, `nextTick`, cleared-interval or EventEmitter-listener throw and the caller of `new Function` read Node's names and columns (`Immediate.<anonymous>`, `EventEmitter.onX`); a throwing `stack` getter prints Node's report. Still not Node's: the `eval at …` origin of string-compiled code (compat process.md "Fatal error stderr bytes").

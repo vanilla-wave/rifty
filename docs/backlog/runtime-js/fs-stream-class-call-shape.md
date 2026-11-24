@@ -27,6 +27,19 @@ only; the fs streams extend `EventEmitter`, not io `Readable`/`Writable` — the
 `fs-stream-close-method-missing`. Compat fs.md `createReadStream` / `createWriteStream` row
 names it (added with this capture).
 
+A callable constructor alone does not reach Node (PR #432 review, reproduced 2026-11-24, isolate
+`runCode` vs `node -e`): graceful-fs 4.2.11 replaces `open` on its prototype
+(`graceful-fs.js:243`, `:249`) and its `open` runs `open(that.path, that.flags, that.mode, cb)`, then
+sets `that.fd`, emits `'open'`, and ReadStream calls `that.read()` (`:306`, `:315`, `:329`). rifty's
+constructor calls `this.open()` through the prototype (`fs-streams.ts:584`), so rifty's own open
+never runs, and its fields are not Node's: `[flags, mode, fd]` → Node `["w", 438, null]`, rifty
+`[{append,exclusive,truncate,mustExist}, null, absent]`. A `Reflect.construct` subclass with a
+graceful-fs-style `open` → rifty `EINVAL: invalid argument, open`, no file; Node writes `hello`.
+So the unit is: Node's fields (`flags` string, `mode`, `fd`), the overridden-`open` branch (wait
+for `'open'`, then I/O by `this.fd`), acceptance on the real graceful-fs. Part of
+`runtime-js/fs-streams-not-node-streams` (manager's item; fs streams are not Node streams — a user
+decision).
+
 Owner: runtime-js (fs streams). Trigger: library-compat work (fstream/unzipper, exceljs main),
 or any graceful-fs stream call.
 

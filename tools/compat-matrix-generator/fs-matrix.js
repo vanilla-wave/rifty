@@ -12,9 +12,9 @@ export const fsMatrix = {
     ],
     ['`mkdirSync({ recursive })`', '✅', 'Creates parent directories'],
     [
-      '`mode` argument of `writeFile*` / `mkdir*` / `open*`',
+      '`mode` of `writeFile*` / `appendFile*` / `mkdir*` / `open*` / `createWriteStream`, `mkdtemp*`',
       '⚠️',
-      'Ignored: the entry is created and reports 0o100666/0o40777 whatever `mode` asks (Node: `mode & ~umask`, e.g. 0o600); no `chmod` family — backlog `runtime-js/fs-mode-arguments-ignored`',
+      'Ignored: the entry is created and reports 0o100666/0o40777 whatever `mode` asks (Node: `mode & ~umask`, e.g. 0o600; `mkdtemp` 0o700 & ~umask); no `chmod` family — backlog `runtime-js/fs-mode-arguments-ignored`',
     ],
     [
       '`readdirSync` / `Dirent[]`',
