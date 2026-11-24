@@ -22,5 +22,10 @@ core-js 3.51.0: 51 WPT differences. Host bridge: rejected (goal Decisions). With
 installed before the runtime (`seam-esm` variant `url-first`), every `URL` row of the
 captured-at-load table equals Node.
 
-Next: ADR (semantic copy of Node's wrapper over a pinned whatwg-url; tr46 pin shared with
-`runtime-js/node-url-legacy-api-port`), then the contract. Compat ❌ isolate-host.md ceiling row.
+Host IDNA: whatwg-url's tr46 differs from Node's ada on 308/6 357 IdnaTestV2 17.0.0 hosts in
+`new URL` (all Bidi; `reference/sources-native` §IDNA, `idna-url-host.cjs`), so the host step binds
+a port of Node's `ada::idna` instead (tables 82–97 KB gzip, implementation thread's estimate; cost
+is the goal's question 3); the WPT/setter numbers above are the parser's without that step.
+
+Next: ADR (semantic copy of Node's wrapper over a pinned whatwg-url, `ada::idna` port shared with
+`runtime-js/node-url-legacy-api-port` if its user choice is (d)), then the contract. Compat ❌ isolate-host.md ceiling row.

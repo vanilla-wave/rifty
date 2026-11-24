@@ -1,0 +1,15 @@
+node v24.16.0 ada 3.4.4 unicode 17.0; whatwg-url 15.1.0
+sources 6391, non-ASCII or xn-- 6357
+differ 308 (non-ASCII/xn-- 308)
+  "àא" node=xn--0ca24w whatwg-url=<throws>
+  "àא" node=xn--0ca24w whatwg-url=<throws>
+  "Àא" node=xn--0ca24w whatwg-url=<throws>
+  "Àא" node=xn--0ca24w whatwg-url=<throws>
+  "xn--0ca24w" node=xn--0ca24w whatwg-url=<throws>
+  "0à.א" node=xn--0-sfa.xn--4db whatwg-url=<throws>
+  "0à.א" node=xn--0-sfa.xn--4db whatwg-url=<throws>
+  "0À.א" node=xn--0-sfa.xn--4db whatwg-url=<throws>
+  "0À.א" node=xn--0-sfa.xn--4db whatwg-url=<throws>
+  "xn--0-sfa.xn--4db" node=xn--0-sfa.xn--4db whatwg-url=<throws>
+  "àˇ.א" node=xn--0ca88g.xn--4db whatwg-url=<throws>
+  "àˇ.א" node=xn--0ca88g.xn--4db whatwg-url=<throws>

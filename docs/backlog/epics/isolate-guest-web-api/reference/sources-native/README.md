@@ -115,3 +115,20 @@ reproduce:
 
 Files: `probe.mjs`, `cases.js`, `src/` (prelude, bridge candidates), `deps/` (manifest + lock),
 `results-parity.json`, `results-timing.json`.
+
+## IDNA in `new URL` host parsing (added 2026-11-24, after the manager's IdnaTestV2 measurement)
+
+```sh
+curl -sSL -o /tmp/IdnaTestV2.txt https://www.unicode.org/Public/17.0.0/idna/IdnaTestV2.txt
+mkdir -p /tmp/w && (cd /tmp/w && npm init -y && npm i whatwg-url@15.1.0)
+node docs/backlog/epics/isolate-guest-web-api/reference/sources-native/idna-url-host.cjs /tmp/IdnaTestV2.txt /tmp/w
+```
+
+`new URL('http://' + h + '/').hostname` over every IdnaTestV2 17.0.0 source, Node v24.16.0 (ada
+3.4.4, Unicode 17.0) vs whatwg-url 15.1.0 (tr46 6.0.0): 308 of 6 357 non-ASCII/`xn--` sources
+differ, all Bidi (`àא`: Node `xn--0ca24w`, whatwg-url throws as the URL spec's CheckBidi demands;
+`results-idna-url-host.txt`). WPT `urltestdata.json`'s 0/886 does not cover them. So whatwg-url's
+host step is not Node's: the guest `URL` needs Node's IDNA — a port of `ada::idna` from Node's
+pinned `deps/ada/ada.cpp` (implementation thread's estimate: tables 230 KB raw, 82–97 KB gzip;
+109 KB / 53 KB gzip with NFC from `String.prototype.normalize` if the isolate's ICU is Unicode 17,
+not verified here) bound into whatwg-url's domain-to-ASCII step; tr46 is then not needed.

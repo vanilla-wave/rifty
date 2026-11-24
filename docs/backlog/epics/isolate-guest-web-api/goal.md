@@ -97,7 +97,8 @@ asked, goal/map/seeded drafts and the five probes. Verified; dispositions:
    dropped from map.md.
 5. url-legacy unit ready with challenge pending, eager tr46 — fixed in that item (its own
    Challenge record).
-6. tr46 pin 5.1.1 vs whatwg-url 15.1.0's ^6.0.0 — one pin, 6.0.0 (40/40 vs Node).
+6. tr46 pin 5.1.1 vs whatwg-url 15.1.0's ^6.0.0 — superseded: tr46 differs from Node on
+   IdnaTestV2 (Decisions); the IDNA source is a port of `ada::idna`.
 7. Shared substrate without owner (Node-source generator, `primordials`/`ERR_*`/validators
    binding) — map.md names the url-legacy ADR as its first owner.
 8. Blob seeded though `Blob.stream()` depends on Q1 — the Blob item states the stream member's
@@ -119,11 +120,15 @@ asked, goal/map/seeded drafts and the five probes. Verified; dispositions:
   `crypto.subtle` and `MessageChannel` lazily). Measured: with `URL` first, every `URL` row of the
   captured-at-load table equals Node with no runtime change.
 - 2026-11-24 — agent, probe `reference/sources-native`: `URL` parser whatwg-url 15.1.0 (0/886 WPT,
-  0/278 setters vs Node; tr46 6.0.0 evaluated on the first non-`file:` parse) under Node's
-  `lib/internal/url.js` wrapper; `URLSearchParams`, `Blob`/`File` (over a JS byte store) generated
+  0/278 setters vs Node) under Node's `lib/internal/url.js` wrapper, its domain-to-ASCII step bound
+  to a port of Node's `ada::idna` (whatwg-url's tr46 differs from Node on 308/6 357 IdnaTestV2
+  17.0.0 hosts, all Bidi — `idna-url-host.cjs`); the IDNA tables' cost is question 3; `URLSearchParams`, `Blob`/`File` (over a JS byte store) generated
   from pinned Node v24.16.0 sources (ADR-0541 pattern). Each needs an ADR (semantic copy).
 - 2026-11-24 — cost is measured per unit (warm `runCode` median, guest bundle bytes) and recorded
   in the unit's ADR and the host README; whether growth is bounded is map.md question 3.
+- rejected route: tr46 for IDNA (in `URL` or the legacy `toASCII`) — 308/6 357 IdnaTestV2 hosts
+  differ from Node's ada in `new URL` (this branch), 304 in `toASCII` (implementation thread) —
+  violates I1, I5.
 - rejected route: npm polyfills (core-js `URL`: 51 WPT differ; `formdata-node` Blob: 9/19;
   for answer (b): `web-streams-polyfill` 4.5.1 + `event-target-shim` 6.0.2 +
   `abortcontroller-polyfill` 1.7.8: 41/86, `@ungap/structured-clone`: 13/33) — violates I1.
