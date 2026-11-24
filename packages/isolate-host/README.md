@@ -149,10 +149,12 @@ operations keep their order. A run aborted before `exec` has settled rejects the
 isolate is disposed as at a deadline and the files are those of before the run (row below); the
 sandbox stays usable. A host op once started completes. An abort after the operation settled
 does nothing. `destroy()` wins: an operation not settled when it is called rejects
-`ERR_ISOLATE_HOST_SANDBOX_DESTROYED` whatever its signal does. The signal is checked and
+`ERR_ISOLATE_HOST_SANDBOX_DESTROYED` whatever its signal does — also one called with an already
+aborted signal, when `destroy()` follows in the same tick: its `AbortError` comes a microtask
+after the call, as in Node, so it is not settled yet (it never runs). The signal is checked and
 listened to as Node's own APIs do (`events.addAbortListener`): a value Node refuses is refused
-with Node's error, and your own `abort` listener calling `stopImmediatePropagation()` does not
-stop the cancel.
+with Node's error, a value your signal's own member throws is the rejection as it is, and your
+own `abort` listener calling `stopImmediatePropagation()` does not stop the cancel.
 
 Operations on one sandbox take effect one at a time, in call order, also when
 you do not await them; sandboxes do not wait for each other. A run's

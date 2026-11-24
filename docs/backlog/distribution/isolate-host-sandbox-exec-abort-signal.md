@@ -38,7 +38,8 @@ challenge: 2026-11-24 — clear (existing-baseline extension of an internal mech
 1. `exec(path, { signal })` accepts an `AbortSignal`; any other value → `ERR_INVALID_ARG_TYPE`;
    `signal` is no longer an unknown option. → scenario
 2. Already aborted at the call → rejects `AbortError` with no pool call placed (no worker spawned,
-   no isolate). → scenario
+   no isolate); a `destroy()` in the same tick → `DESTROYED` instead (item 7: the `AbortError` comes
+   a microtask after the call, as Node's, so the op is unsettled at `destroy()`). → scenario
 3. Aborted while queued → the operation rejects at the abort and never takes effect; later
    operations keep their order (ADR-0568 §4). → scenario
 4. Aborted in flight (restore, run or capture) → rejects at the abort; the isolate is disposed as at
@@ -103,7 +104,9 @@ challenge: 2026-11-24 — clear (existing-baseline extension of an internal mech
   value" reads as "any value Node refuses".
 - 2026-11-24 — agent (implementation): fault row "a member throws" — the consumer's error itself
   is the refusal, at the call, nothing placed (Node's `fs.promises.readFile` rejects with a throwing
-  `reason` getter's error, probe 2026-11-24); not wrapped in `ERR_INVALID_ARG_TYPE`. Like every
+  `reason` getter's error, probe 2026-11-24); not wrapped in `ERR_INVALID_ARG_TYPE`. Only Node's
+  own refusal of a non-signal is reworded for `options.signal`; what a signal-shaped value's member
+  throws (`null`, `undefined`, a coded `TypeError` included) is handed on as is, as `execFile` does. Like every
   error leaving the API, its `stack` is cut to its first line.
 - 2026-11-24 — agent (implementation): a run's end state is applied in the microtask that settles
   the caller's promise (the abort races the result there), so an `AbortError` always leaves the

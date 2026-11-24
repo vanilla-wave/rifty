@@ -227,9 +227,11 @@ function onAbort(signal: AbortSignal, listener: () => void): Disposable {
   try {
     return addAbortListener(signal, listener);
   } catch (error) {
-    const { code } = error as { code?: unknown };
-    if (code !== 'ERR_INVALID_ARG_TYPE' || !(error instanceof Error)) throw error;
-    // Its refusal names its own argument; here it is an option, in Node's fs wording.
+    // A signal-shaped value (Node's check: `'aborted' in signal`) got past the check: what
+    // threw is its own member (a consumer bug), handed on as is.
+    const shaped = typeof signal === 'object' && signal !== null && 'aborted' in signal;
+    if (shaped || !(error instanceof Error)) throw error;
+    // Node's own refusal names its argument; here it is an option, in Node's fs wording.
     throw coded(
       new TypeError(
         error.message.replace('The "signal" argument', 'The "options.signal" property'),
