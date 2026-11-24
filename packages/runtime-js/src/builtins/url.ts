@@ -4,7 +4,6 @@
  * `resolve` functions are still used by older packages.
  */
 
-import { loadedGlobal } from '../internal/late-global.ts';
 import {
   URLConstructor,
   fileURLFromResolvedPath,
@@ -13,7 +12,7 @@ import {
 import { resolve as resolvePath } from './path.ts';
 
 export const URL = URLConstructor;
-export const URLSearchParams = loadedGlobal<typeof globalThis.URLSearchParams>('URLSearchParams');
+export const URLSearchParams = globalThis.URLSearchParams;
 
 /**
  * Legacy URL shape. `search`, `query`, and `hash` are `string | null` in

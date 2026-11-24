@@ -114,12 +114,11 @@ prints its verdict on a generator, an async, a plain and an arrow function. Toda
 7. compat isolate-host.md rows say "as Node launched with `--no-require-module`" → ADR-0557
 8. The runtime's default: `import()` from a CommonJS file still detects ESM syntax in a typeless
    `.js` (`require-module-switch.test.ts`) → ADR-0557
-9. Every internal `URL`/`URLSearchParams` use the guest reaches gives the ceiling's
-   `NotImplementedError('isolate-host.URL' | 'isolate-host.URLSearchParams')` where Node works —
-   `import()` by `file:` URL of an ES module and of a CommonJS file, `url.pathToFileURL`,
-   `url.fileURLToPath`, `new url.URL`, `new url.URLSearchParams`, `createRequire(file URL)` — never
-   `URLConstructor`; with them present at load the runtime keeps what it loaded
-   (`internal/posix-file-url.test.ts`) → ADR-0557
+9. Every internal `URL` use the guest reaches (`URLConstructor`, `posix-file-url.ts`) gives the
+   URL ceiling's `NotImplementedError('isolate-host.URL')` where Node works — `import()` by `file:`
+   URL of an ES module and of a CommonJS file, `url.pathToFileURL`, `url.fileURLToPath`,
+   `new url.URL`, `createRequire(file URL)` — never `URLConstructor`; with `URL` present at load
+   the runtime keeps its loaded `URL` (`internal/posix-file-url.test.ts`) → ADR-0557
 
 ## Reference contract
 
@@ -164,6 +163,7 @@ prints its verdict on a generator, an async, a plain and an arrow function. Toda
   as Node, but rifty's text and `ModuleLoadError` — `runtime-js/exports-no-main-message`.
 - `fs` path type errors: `readFileSync({})` → rifty's code-less `TypeError: fs path must be string,
   Buffer, or URL` on every host (Node `ERR_INVALID_ARG_TYPE`): `runtime-js/fs-path-invalid-arg-type`.
+- `require('url').URLSearchParams` `undefined` in the guest (a sibling load-time capture): `runtime-js/isolate-url-searchparams-export`.
 - `process.getBuiltinModule` absent (`runtime-js/process-get-builtin-module`); `import()` of JSON
   without an attribute loads (`runtime-js/import-attributes`); `module.require`/`Module._load`
   (`runtime-js/require-resolve-paths-module-require`, `runtime-js/node-module-builtin-module-class`).
@@ -173,7 +173,6 @@ prints its verdict on a generator, an async, a plain and an arrow function. Toda
 - One host fact in runtime-js, "no ES module loader" with the host's gap (`declareNoEsmLoader`, `internal/esm-loader.ts`), declared by the guest before guest code; `require` without `require(esm)` derives from it (manager, round 1: no separate knob, no case needs `require(esm)` off with a loader); not a startup-options token (fork/Worker would start accepting it — a browser change).
 - The guest's own ESM-entry check is gone: `executeEsm` throws the declared gap for the entry too (same stderr, tests unchanged).
 - `loadAsync` (`import()` from CommonJS by id) resolves as `import` (`esm: true`): browser-neutral, detection is on there either way.
-- Class closed: module-level captures of web globals in `packages/runtime-js/src` (search `= globalThis.`, `= g.`, 2026-11-24), each reachable from the isolate guest or not: `posix-file-url.ts` `URL` and `url.ts` `URLSearchParams` — ceilings, reachable → `loadedGlobal` forwarder (`internal/late-global.ts`), the ceiling's gap; `node-ipc-advanced.ts` `structuredClone` — ceiling, unreachable (IPC advanced serialization; reachable once the guest has an IPC channel); `node-ipc-advanced.ts` `DOMException`, `util.ts` `TextEncoder`/`TextDecoder`, `crypto.ts` `crypto`, `timers.ts`/`child_process-exec.ts` timers, `process-lifecycle-events.ts` `queueMicrotask` — the guest shim defines them before the runtime loads, captured real. Read at call time, not captures: `fetch/platform.ts` `Response`, `message-port-ref.ts` `MessageChannel` (inside functions).
 - `URLConstructor` with no `URL` at load is a forwarder (name `URL`, `Symbol.hasInstance` against the current global) to the global at use time; the two catches that reinterpret a `URL` failure as bad input (`resolver.ts` `fileUrlToVfsPath`, `create-require-path.ts`) rethrow a `NotImplementedError` (a host's gap). `readFileSync({})` then gives rifty's every-host fs path `TypeError`, not Node's `ERR_INVALID_ARG_TYPE` — fs argument names vary per call, outside this seam (`runtime-js/fs-path-invalid-arg-type`).
 - Typeless `.js`: `require` skips syntax detection when the mode is off (Node compiles it as CJS); `import`/entry resolution (`esm: true`) still detects.
 - `module-sync` is dropped from both condition sets when off, as Node's `initializeDefaultConditions`.
