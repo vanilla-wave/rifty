@@ -46,6 +46,14 @@ import {
 } from './web-shim.ts';
 
 bindNotImplemented(NotImplementedError);
+// No ES module loader here (it needs `URL`, a ceiling): every ES module load throws this
+// gap, and `require` is Node's with `--no-require-module` until one exists.
+const esmGap = (): NotImplementedError =>
+  new NotImplementedError(
+    'isolate-host.esm',
+    'ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568',
+  );
+declareNoEsmLoader(esmGap);
 
 const CWD = '/workspace';
 // The realm's FS exists from load, so a restore before `run` is the tree `run` sees (ADR-0567 §6).
@@ -347,15 +355,6 @@ function runFile(path: string, args: readonly string[]): Promise<number> {
     return runNodeEntry({ vfs: syncMirror(), entryPath, cwd: CWD });
   });
 }
-
-const esmGap = (): NotImplementedError =>
-  new NotImplementedError(
-    'isolate-host.esm',
-    'ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568',
-  );
-// No ES module loader here: every ES module load throws this gap, and `require` is
-// Node's with `--no-require-module` until one exists.
-declareNoEsmLoader(esmGap);
 
 /** POSIX `path.resolve(base, p)` for an absolute `base`. */
 function resolvePosix(base: string, p: string): string {

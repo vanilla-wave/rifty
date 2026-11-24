@@ -1,8 +1,34 @@
-export const URLConstructor = globalThis.URL;
+const reflectConstructPrimordial = Reflect.construct;
+const reflectApplyPrimordial = Reflect.apply;
+const loadedURL: typeof URL | undefined = globalThis.URL;
+
+/**
+ * `URL` as the runtime loaded it. A host that installs `URL` only after load (the isolate
+ * guest's ceiling global) gets a forwarder to the global at use time — its named gap there,
+ * never `undefined`; with `URL` present at load (browser hosts) the capture stands, so a guest
+ * replacing the global later changes nothing.
+ */
+export const URLConstructor: typeof URL = loadedURL ?? forwardingURL();
+
+function forwardingURL(): typeof URL {
+  const current = (): typeof URL => (globalThis as unknown as { URL: typeof URL }).URL;
+  function forward(this: unknown, ...args: unknown[]): unknown {
+    return new.target === undefined
+      ? reflectApplyPrimordial(current(), this, args)
+      : reflectConstructPrimordial(current(), args, new.target);
+  }
+  Object.defineProperty(forward, 'name', { value: 'URL' });
+  Object.defineProperty(forward, Symbol.hasInstance, {
+    value: (value: unknown): boolean => {
+      const ctor = current();
+      return typeof ctor === 'function' && value instanceof ctor;
+    },
+  });
+  return forward as unknown as typeof URL;
+}
 
 const encodeURIPrimordial = globalThis.encodeURI;
 const decodeURIComponentPrimordial = globalThis.decodeURIComponent;
-const reflectApplyPrimordial = Reflect.apply;
 
 type CodedTypeError = TypeError & { code: string };
 
