@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
@@ -43,20 +44,48 @@ const WORKER_BODY = [
   'installBundleLocalBuffer(); readKernelSyncApi();\n',
   'const { createModuleLoader } = await import("./module-loader-SE2E5KRJ.js");\n',
 ].join('');
+const SIBLINGS = [
+  'chunk-S2ASLTLJ.js',
+  'chunk-HXPMOJXM.js',
+  'chunk-2ESYSVXG.js',
+  'chunk-KTR54RDO.js',
+  'chunk-33QWLS3Y.js',
+  'chunk-ONZOAA7V.js',
+  'chunk-ABCDEFGH.js',
+  'chunk-ABC.js',
+  'module-loader-SE2E5KRJ.js',
+  'module-loader-A575V22B.js',
+];
+const ASSETS = 'packages/workbench/dist/assets/';
 const workerBytes = (header: readonly string[], body = WORKER_BODY) =>
   Buffer.from(header.join('') + body, 'latin1');
-const WORKER_PINS = { 'typescript-worker.js': compilerOutputPin(workerBytes(WORKER_HEADER)) };
+const WORKER_PINS = {
+  'typescript-worker.js': {
+    ...compilerOutputPin(workerBytes(WORKER_HEADER), new Set(SIBLINGS)),
+    siblingImports: true,
+  },
+  'chunk-EMDIREKY.js': compilerOutputPin(Buffer.from(WORKER_BODY, 'latin1'), null),
+};
 
-function workerViolations(bytes: Buffer): string[] {
+function workerViolations(bytes: Buffer, name = 'typescript-worker.js'): string[] {
   return evaluateEsbuildBundleInventory(
     ROOT,
-    ['packages/workbench/dist/assets/typescript-worker.js'],
-    () => bytes,
+    [`${ASSETS}${name}`, ...SIBLINGS.map((sibling) => `${ASSETS}${sibling}`)],
+    (path: string) => (path === `${ASSETS}${name}` ? bytes : Buffer.from('export {};\n')),
     WORKER_PINS,
   ).filter((violation: string) => !violation.startsWith('emitted generated esbuild client count'));
 }
 
 describe('esbuild carrier retirement', () => {
+  it('pins the TypeScript worker as its body with sibling hashes zeroed', () => {
+    const body = Buffer.from(WORKER_BODY.replace('SE2E5KRJ', '00000000'), 'latin1');
+    expect(WORKER_PINS['typescript-worker.js']).toEqual({
+      bytes: body.byteLength,
+      sha256: createHash('sha256').update(body).digest('hex'),
+      siblingImports: true,
+    });
+  });
+
   it('keeps the TypeScript worker pin across runtime edits that only change sibling chunks', () => {
     expect(workerViolations(workerBytes(WORKER_HEADER))).toEqual([]);
     const renamed = [
@@ -68,24 +97,63 @@ describe('esbuild carrier retirement', () => {
     const reloaded = WORKER_BODY.replace('module-loader-SE2E5KRJ', 'module-loader-A575V22B');
     expect(workerViolations(workerBytes(renamed, reloaded))).toEqual([]);
     expect(workerViolations(workerBytes([WORKER_HEADER[0], WORKER_HEADER[2]]))).toEqual([]);
+    const reordered = [
+      'import {\n  __toESM,\n  __commonJS\n} from "./chunk-2ESYSVXG.js";\n',
+      WORKER_HEADER[1],
+      WORKER_HEADER[0],
+    ];
+    expect(workerViolations(workerBytes(reordered))).toEqual([]);
   });
 
   it('rejects any change to the TypeScript worker outside its sibling-chunk names', () => {
     const ceiling = [expect.stringContaining('2 MB carrier ceiling')];
-    for (const [header, body] of [
+    const spaced = (gap: string) =>
+      `import {\n  installBundleLocalBuffer,${gap}\n  readKernelSyncApi\n} from "./chunk-S2ASLTLJ.js";\n`;
+    const mutants = [
       [WORKER_HEADER, WORKER_BODY.replace('"5.9.3"', '"5.9.4"')],
       [WORKER_HEADER, `${WORKER_BODY}globalThis.extra = 1;\n`],
       [WORKER_HEADER, WORKER_BODY.replace('  ts.k = 0;\n', '')],
       [WORKER_HEADER, WORKER_BODY.replace('module-loader-SE2E5KRJ', 'esbuild-wasm-SE2E5KRJ')],
+      // Hashed body name must be a built sibling.
+      [WORKER_HEADER, WORKER_BODY.replace('module-loader-SE2E5KRJ', 'module-loader-NOPENOPE')],
+      [WORKER_HEADER, WORKER_BODY.replace('module-loader-SE2E5KRJ', 'module-loader-ABC')],
       [[WORKER_HEADER[0], 'globalThis.extra = 1;\n', ...WORKER_HEADER.slice(1)], WORKER_BODY],
-      [[...WORKER_HEADER, 'import "./esbuild-runtime-ABCDEFGH.js";\n'], WORKER_BODY],
+      // Exact esbuild form only: no free whitespace, no other spacing.
+      [[spaced(' '.repeat(100_000)), ...WORKER_HEADER.slice(1)], WORKER_BODY],
+      [[spaced('\t'), ...WORKER_HEADER.slice(1)], WORKER_BODY],
+      [[spaced('\u00a0'), ...WORKER_HEADER.slice(1)], WORKER_BODY],
+      [[WORKER_HEADER[0], 'import  "./chunk-HXPMOJXM.js";\n', WORKER_HEADER[2]], WORKER_BODY],
+      [[...WORKER_HEADER, 'import { __toESM } from "./chunk-ABCDEFGH.js";\n'], WORKER_BODY],
+      // Specifier: an existing `chunk-` sibling with an esbuild hash, once.
+      [[...WORKER_HEADER, 'import "./chunk-NOPENOPE.js";\n'], WORKER_BODY],
+      [[...WORKER_HEADER, 'import "./chunk-ABC.js";\n'], WORKER_BODY],
+      [[...WORKER_HEADER, 'import "./module-loader-SE2E5KRJ.js";\n'], WORKER_BODY],
       [[...WORKER_HEADER, 'import "https://example.test/chunk-ABCDEFGH.js";\n'], WORKER_BODY],
       [[...WORKER_HEADER, WORKER_HEADER[1]], WORKER_BODY],
+      // Bindings: identifiers used in the pinned body, each once.
       [[...WORKER_HEADER, 'import {\n  payloadAAAA\n} from "./chunk-ABCDEFGH.js";\n'], WORKER_BODY],
-      [[...WORKER_HEADER, 'import { a as b } from "./chunk-ABCDEFGH.js";\n'], WORKER_BODY],
-    ] as const) {
+      [[...WORKER_HEADER, 'import {\n  __toESM\n} from "./chunk-ABCDEFGH.js";\n'], WORKER_BODY],
+      [[...WORKER_HEADER, 'import {\n  ts-k\n} from "./chunk-ABCDEFGH.js";\n'], WORKER_BODY],
+      [[...WORKER_HEADER, 'import {\n  a as ts\n} from "./chunk-ABCDEFGH.js";\n'], WORKER_BODY],
+    ] as const;
+    const admitted = mutants.flatMap(([header, body], index) =>
+      workerViolations(workerBytes(header, body)).length === 0 ? [index] : [],
+    );
+    expect(admitted).toEqual([]);
+    for (const [header, body] of mutants) {
       expect(workerViolations(workerBytes(header, body))).toEqual(ceiling);
     }
+  });
+
+  it('pins the other compiler output whole: a leading sibling import is red', () => {
+    const compiler = Buffer.from(WORKER_BODY, 'latin1');
+    expect(workerViolations(compiler, 'chunk-EMDIREKY.js')).toEqual([]);
+    expect(
+      workerViolations(
+        Buffer.concat([Buffer.from(WORKER_HEADER[1]), compiler]),
+        'chunk-EMDIREKY.js',
+      ),
+    ).toEqual([expect.stringContaining('2 MB carrier ceiling')]);
   });
 
   it('admits only exact copied QuickJS and SQLite binaries', () => {
