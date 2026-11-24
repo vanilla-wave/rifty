@@ -1,7 +1,7 @@
 /**
  * Node-compatible `node:stream.PassThrough` — owned by `@riftydev/io` per ADR-0012.
  *
- * Trivial Transform with an identity transform; chunks in == chunks out.
+ * Transform whose prototype `_transform` is the identity; a `transform` option still wins (Node).
  */
 
 import {
@@ -10,18 +10,13 @@ import {
 } from './callable-constructor.ts';
 import { Transform, type TransformOptions } from './transform.ts';
 
-function passThroughOptions(opts: TransformOptions = {}): TransformOptions {
-  return {
-    ...opts,
-    transform(chunk, _encoding, cb) {
-      cb(null, chunk);
-    },
-  };
-}
-
 class PassThroughImplementation extends Transform {
-  constructor(opts: TransformOptions = {}) {
-    super(passThroughOptions(opts));
+  override _transform(
+    chunk: unknown,
+    _encoding: string,
+    cb: (err?: Error | null, value?: unknown) => void,
+  ): void {
+    cb(null, chunk);
   }
 }
 
@@ -37,6 +32,6 @@ export const PassThrough: PassThroughConstructor = /* @__PURE__ */ makeCallableS
   'PassThrough',
   PassThroughImplementation,
   (receiver, options) => {
-    Transform.call(receiver, passThroughOptions(options));
+    Transform.call(receiver, options);
   },
 );

@@ -11,6 +11,7 @@
  */
 
 import { NotImplementedError } from '@riftydev/io';
+import { outOfRange } from '../../internal/node-received.ts';
 import { recordDivergence } from '../../telemetry/divergence-sink.ts';
 import { selectEngine } from './engine-config.ts';
 import { hostScriptSourceURL } from './script-offsets.ts';
@@ -231,28 +232,6 @@ function validateInt32(value: unknown, name: string): void {
   if (value < -2147483648 || value > 2147483647) {
     throw outOfRange(name, '>= -2147483648 && <= 2147483647', value);
   }
-}
-
-function outOfRange(name: string, range: string, value: number): RangeError {
-  const received =
-    Number.isInteger(value) && Math.abs(value) > 2 ** 32
-      ? addNumericalSeparator(String(value))
-      : inspectPrimitive(value);
-  return Object.assign(
-    new RangeError(
-      `The value of "${name}" is out of range. It must be ${range}. Received ${received}`,
-    ),
-    { code: 'ERR_OUT_OF_RANGE' },
-  );
-}
-
-/** Node's `addNumericalSeparator` (`8_589_934_592`). */
-function addNumericalSeparator(value: string): string {
-  let result = '';
-  let index = value.length;
-  const start = value[0] === '-' ? 1 : 0;
-  for (; index >= start + 4; index -= 3) result = `_${value.slice(index - 3, index)}${result}`;
-  return `${value.slice(0, index)}${result}`;
 }
 
 function assertSupportedCompileOptions(options: CompileFunctionOptions): void {

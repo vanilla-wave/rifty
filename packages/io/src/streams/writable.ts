@@ -17,6 +17,7 @@ import {
   makeCallableStreamConstructor,
 } from './callable-constructor.ts';
 import { acquireWritableFromWeb } from './from-web-validation.ts';
+import { methodNotImplementedError } from './method-not-implemented.ts';
 import { chunkSize } from './readable.ts';
 
 export interface WritableOptions {
@@ -181,8 +182,22 @@ function admitWrite(
   return { chunk, encoding };
 }
 
+type WriteCallback = (err?: Error | null) => void;
+type WritevHook = (this: unknown, chunks: WriteChunk[], cb: WriteCallback) => void;
+
+/** Whose hooks the drain loop calls: the stream itself, or the Duplex embedding it as its writable side. */
+export interface WritableHookOwner {
+  _write(chunk: unknown, encoding: string, cb: WriteCallback): void;
+  _writev?: WritevHook | null;
+  _final?: (cb: WriteCallback) => void;
+}
+
+/** Set only by `Duplex` on its embedded side; not exported from `src/index.ts`. */
+export const WRITABLE_HOOK_OWNER: unique symbol = Symbol('rifty/io:writable-hook-owner');
+
 class WritableImplementation extends EventEmitter {
   readonly _writableState!: WritableState;
+  declare [WRITABLE_HOOK_OWNER]?: WritableHookOwner;
   private readonly endCallbacks!: EndCallback[];
 
   constructor(opts: WritableOptions = {}) {
@@ -190,21 +205,15 @@ class WritableImplementation extends EventEmitter {
     initializeWritable(this as unknown as Writable, opts);
   }
 
-  _write(_chunk: unknown, _encoding: string, cb: (err?: Error | null) => void): void {
-    cb();
+  /** Node's base: a `_writev`-only stream writes through it; otherwise the hook is missing. */
+  _write(chunk: unknown, encoding: string, cb: (err?: Error | null) => void): void {
+    if (typeof this._writev !== 'function') throw methodNotImplementedError('_write()');
+    this._writev([{ chunk, encoding }], cb);
   }
 
-  /**
-   * Batched-write hook. DELIBERATELY no base implementation (declared optional)
-   * — like Node, `_writev` is absent unless a subclass defines it, and the drain
-   * loop only batches via `_writev` when it is present (a single buffered chunk
-   * always routes to `_write`). A subclass assigns it as a prototype method.
-   */
-  _writev?(chunks: WriteChunk[], cb: (err?: Error | null) => void): void;
-
-  _final(cb: (err?: Error | null) => void): void {
-    cb();
-  }
+  /** Optional like Node: `_writev` is `null` on the prototype (constructor call), no base `_final`. */
+  _writev?(chunks: WriteChunk[], cb: WriteCallback): void;
+  _final?(cb: WriteCallback): void;
 
   get writable(): boolean {
     const state = this._writableState;
@@ -380,9 +389,10 @@ class WritableImplementation extends EventEmitter {
         if (state.ending && !state.finished && !state.errored) this.doFinal();
         return;
       }
-      const writev = this.resolveWritev();
+      // Node reads `_writev` only for a batch: a single write never touches it.
       const canBatch = state.writevBatch && state.buffered.length - state.bufferedIndex > 1;
-      if (writev && (canBatch || !this.hasRealWrite())) {
+      const writev = canBatch ? this.resolveWritev() : undefined;
+      if (writev) {
         state.writevBatch = false;
         if (this.flushViaWritev(writev)) continue;
         return;
@@ -422,8 +432,8 @@ class WritableImplementation extends EventEmitter {
           this.publishWriteCompletion([next], undefined, false, false);
         }
       };
-      const writeImpl = this._write;
-      writeImpl.call(this, next.chunk, next.encoding, done);
+      const owner = this.hookOwner();
+      owner._write(next.chunk, next.encoding, done);
       inSyncWrite = false;
       // Continue only on a clean synchronous completion; stop on async-pending
       // (`done` deferred → re-arms via scheduleDrain), error, or destroy.
@@ -437,25 +447,16 @@ class WritableImplementation extends EventEmitter {
     }
   }
 
-  private resolveWritev():
-    | ((this: Writable, chunks: WriteChunk[], cb: (err?: Error | null) => void) => void)
-    | undefined {
-    return typeof this._writev === 'function' ? this._writev : undefined;
+  private hookOwner(): WritableHookOwner {
+    return this[WRITABLE_HOOK_OWNER] ?? this;
   }
 
-  /**
-   * Whether a REAL `_write` exists — the `{ write }` ctor option or a subclass
-   * `_write` override (NOT the base no-op). When false and a `_writev` exists,
-   * `_writev` is the write impl and a single buffered chunk routes through it
-   * (matches Node, which uses `_writev` whenever `_write` is not provided).
-   */
-  private hasRealWrite(): boolean {
-    return this._write !== Writable.prototype._write;
+  private resolveWritev(): WritevHook | undefined {
+    const owner = this.hookOwner();
+    return typeof owner._writev === 'function' ? owner._writev : undefined;
   }
 
-  private flushViaWritev(
-    writev: (this: Writable, chunks: WriteChunk[], cb: (err?: Error | null) => void) => void,
-  ): boolean {
+  private flushViaWritev(writev: WritevHook): boolean {
     const state = this._writableState;
     const batch = takeBuffered(state);
     let removed = 0;
@@ -486,7 +487,7 @@ class WritableImplementation extends EventEmitter {
         this.publishWriteCompletion(batch, undefined, false, false);
       }
     };
-    writev.call(this, chunks, done);
+    writev.call(this.hookOwner(), chunks, done);
     inSyncWrite = false;
     return mayContinueSync;
   }
@@ -569,8 +570,15 @@ class WritableImplementation extends EventEmitter {
         });
       }
     };
-    const finalImpl = this._final;
-    finalImpl.call(this, finalize);
+    const owner = this.hookOwner();
+    if (typeof owner._final !== 'function') finalize();
+    else {
+      try {
+        owner._final(finalize);
+      } catch (error) {
+        finalize(error as Error); // Node's callFinal: a sync throw destroys, never escapes end()
+      }
+    }
     inSyncFinal = false;
   }
 
@@ -778,6 +786,7 @@ export const Writable: WritableConstructor = /* @__PURE__ */ makeCallableStreamC
     EventEmitter.call(receiver);
     initializeWritable(receiver, options);
   },
+  () => ({ _writev: null }),
 );
 
 function abortError(): Error {
