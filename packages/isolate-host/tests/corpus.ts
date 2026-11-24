@@ -1,3 +1,4 @@
+import readStream from '../../../tools/node-parity-runner/cases/fs/read-stream.case.ts';
 /**
  * The model-style `node -e` corpus (ADR-0557 §1), shared by
  * `runCode` parity and the custom-embedder parity of `@riftydev/isolate-guest`
@@ -25,6 +26,20 @@ export interface Row {
  * allocations, and when it tiers up depends on load (no GC → the report survives).
  */
 export const GC_CHURN = 'for (let i = 0; i < 2e6; i++) globalThis.gcChurn = { i };';
+
+/** One stream per line (`'abcdefghij'`, hwm 4): events and chunk text. */
+const READ_STREAM_ROWS = `const fs = require('fs');
+const watch = (label, s, ev) => {
+  for (const n of ['open', 'ready', 'end', 'close']) s.on(n, () => ev.push(n));
+  s.on('error', (e) => ev.push('error:' + e.code + ':' + e.syscall));
+  s.on('close', () => console.log(label + ': ' + ev.join(' ')));
+};
+const data = (s, ev) => s.on('data', (c) => ev.push(c.toString()));
+`;
+const READ_STREAM_CHANGED =
+  "a read stream reads the file's bytes taken at one moment, not the opened file (runtime-js/fs-read-stream-reads-snapshot-not-open-file)";
+const READ_STREAM_LATE =
+  'a read stream flows with no consumer and reads in the microtasks of its creation: one attached after an asynchronous step loses data, work queued at create runs after it (runtime-js/fs-read-stream-flows-without-consumer)';
 
 const NATURAL_EXIT_QUEUED =
   "at a natural exit only the output of the first microtask hop an 'exit' listener queues is kept; a status change there is lost (distribution/isolate-host-natural-exit-listener-queued-work)";
@@ -78,6 +93,65 @@ export const CORPUS: readonly Row[] = [
   {
     label: 'fs-promises',
     code: "const fsp = require('fs/promises'); (async () => { await fsp.writeFile('p.json', JSON.stringify({ k: [1, 2] })); const j = JSON.parse(await fsp.readFile('p.json', 'utf8')); console.log(j.k.length) })()",
+  },
+  // exceljs `xlsx.readFile`'s shape: read to the end, then `close(cb)`.
+  {
+    label: 'fs-read-stream-close',
+    code: "const fs = require('fs'); fs.writeFileSync('c.txt', 'abc'); const s = fs.createReadStream('c.txt'); s.on('data', (c) => console.log('data', String(c))); s.on('end', () => s.close((e) => console.log('closed', e)))",
+    ceiling: 'fs.ReadStream has no close() (runtime-js/fs-stream-close-method-missing)',
+  },
+  { label: 'fs-read-stream', code: readStream.code },
+  {
+    label: 'fs-read-stream-changed',
+    code: `${READ_STREAM_ROWS}(async () => {
+  for (const [label, when, change] of [
+    ['rewrite-in-data', 'data', (f) => fs.writeFileSync(f, 'ABCDEFGHIJKLMNOP')],
+    ['append-in-data', 'data', (f) => fs.appendFileSync(f, 'XYZ')],
+    ['truncate-in-data', 'data', (f) => fs.writeFileSync(f, 'ab')],
+    ['unlink-in-open', 'open', (f) => fs.unlinkSync(f)],
+    ['rewrite-in-open', 'open', (f) => fs.writeFileSync(f, 'OPEN-REWRITE')],
+  ]) {
+    const f = label + '.txt';
+    fs.writeFileSync(f, 'abcdefghij');
+    const ev = [];
+    const s = fs.createReadStream(f, { highWaterMark: 4 });
+    data(s, ev);
+    s.once(when, () => change(f));
+    watch(label, s, ev);
+    await new Promise((r) => s.on('close', r));
+  }
+})()`,
+    ceiling: READ_STREAM_CHANGED,
+  },
+  {
+    label: 'fs-read-stream-late-consumer',
+    code: `const fs = require('fs');
+fs.writeFileSync('late.txt', 'abcdefghij');
+const hops = (n) => async () => { for (let i = 0; i < n; i++) await null; };
+const late = async (label, opts, wait) => {
+  const ev = [];
+  const s = fs.createReadStream('late.txt', opts);
+  await wait();
+  s.on('data', (c) => ev.push(c.toString()));
+  for (const n of ['end', 'close']) s.on(n, () => ev.push(n));
+  await new Promise((r) => setTimeout(r, 20));
+  console.log(label + ': ' + (ev.join(' ') || '(nothing)'));
+};
+(async () => {
+  // \`await wait()\` is one microtask step more than its \`await null\`s.
+  for (const n of [0, 1, 2, 3]) await late('hwm4 steps ' + (n + 1), { highWaterMark: 4 }, hops(n));
+  for (const n of [0, 1]) await late('one-chunk steps ' + (n + 1), {}, hops(n));
+  await late('setTimeout0', {}, () => new Promise((r) => setTimeout(r, 0)));
+  await late('setImmediate', {}, () => new Promise((r) => setImmediate(r)));
+  const ev = [];
+  const s = fs.createReadStream('late.txt');
+  process.nextTick(() => ev.push('tick'));
+  Promise.resolve().then(() => ev.push('micro'));
+  s.on('data', (c) => ev.push(c.toString()));
+  for (const n of ['open', 'end']) s.on(n, () => ev.push(n));
+  s.on('close', () => console.log('queued-at-create: ' + ev.join(' ')));
+})()`,
+    ceiling: READ_STREAM_LATE,
   },
   {
     label: 'fs-enoent',
@@ -134,7 +208,7 @@ export const CORPUS: readonly Row[] = [
     ceiling: 'import() ends the run (ADR-0557 §5)',
   },
   {
-    // Invariant only: the oracle's umask depends on its environment (runtime-js/process-umask-missing).
+    // Invariant only: the oracle's umask depends on its environment (PR #432).
     label: 'process-umask-invariant',
     code: "const fs = require('fs'), m = process.umask(), perm = (p) => fs.statSync(p).mode & 0o777; fs.mkdirSync('u/r', { recursive: true }); fs.writeFileSync('u/f', 'x'); console.log(typeof m, perm('u/f') === (0o666 & ~m), perm('u') === (0o777 & ~m), perm('u/r') === (0o777 & ~m), process.umask(m) === m, process.umask(m.toString(8)) === m, process.umask() === m)",
   },
