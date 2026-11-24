@@ -66,5 +66,10 @@ plus ada's punycode round trip on 307 (305 Bidi, 2 IPv4 from mapped digits).
 
 - One `node:url` behaviour on every host for ASCII hosts; `Url` shape, errors, DEP0169/DEP0170.
 - Browser hosts: `toASCII` residual declared (compat ⚠️); isolate: non-ASCII hosts loud (❌).
-- Cost: recorded in the contract's GREEN line (bundle bytes, warm call) before merge.
+- Cost, 2026-11-24 (Node v24.16.0, esbuild 0.28.0, Chromium 148): generated `legacy.js` 19 139 B;
+  isolate `guest.js` 7 123 270 → 7 170 362 B (+47 092; gzip +10 855); `client-bundle-budget`
+  generic 932 920 → 955 554 min (+22 634; gzip 279 754 → 287 956, +8 202 of 332 000), toolchain
+  1 061 998 → 1 084 631 (+22 633; gzip +7 896 of 386 000), main/sw unchanged; ceilings untouched.
+  Warm `runCode` median (40) of 1 000 `parse(…, true)` + `resolve`: 31.4 → 19.3 ms (empty run
+  13.5 / 13.9 ms). Chromium, `toASCII` of a non-ASCII host warm: ~1.8 µs (two `URL` parses).
 - Re-pin of Node: rerun the generator, the corpus and IdnaTestV2 suites.

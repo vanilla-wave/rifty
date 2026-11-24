@@ -6,9 +6,13 @@ import type { ParityCase } from '../../src/types.ts';
  * Acceptance 4), pinned in tests/browser-unit, not here.
  */
 const c: ParityCase = {
+  // A seeded rifty process: its stderr (and `noDeprecation`) is the guest's, as in Node.
+  stdin: [],
   code: `
     const url = require('node:url');
-    const show = (f) => { try { const v = f(); console.log(JSON.stringify(v === undefined ? "<undefined>" : v), v && typeof v === "object" ? [Object.getPrototypeOf(v)?.constructor?.name ?? null, Object.keys(v).join(",")] : ""); } catch (e) { console.log("throw", e.name, e.code, e.message); } };
+    // JSON only (console.log's own line breaking is not under test); DEP0169/0170 rows: url-legacy.test.ts.
+    process.noDeprecation = true;
+    const show = (f) => { try { const v = f(); console.log(JSON.stringify(v === undefined ? '<undefined>' : v), JSON.stringify(v && typeof v === 'object' ? [Object.getPrototypeOf(v)?.constructor?.name ?? null, Object.keys(v)] : '')); } catch (e) { console.log('throw', e.name, e.code, e.message); } };
     for (const s of [
       'http://user:pa%20ss@a.com:8080/x',
       'http://[::1]:8/', 'http://[fe80::1%25en0]/', 'http://a.com:xx/',

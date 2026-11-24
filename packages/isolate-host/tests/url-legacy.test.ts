@@ -201,7 +201,7 @@ describe('user scenario: parseurl 1.3.3 + legacy url in a sandbox (Acceptance 1)
     expect(rifty.exitCode).toBe(1);
     const warning = mask(node.stderr);
     expect(mask(rifty.stderr).startsWith(warning), rifty.stderr).toBe(true);
-    expect(rifty.stderr.slice(warning.length)).toContain(
+    expect(mask(rifty.stderr).slice(warning.length)).toContain(
       'NotImplementedError: Not implemented: url.toASCII',
     );
   }, 120_000);

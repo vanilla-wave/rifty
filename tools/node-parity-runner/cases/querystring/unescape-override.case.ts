@@ -2,10 +2,14 @@ import type { ParityCase } from '../../src/types.ts';
 
 /** ADR-0574: `querystring.parse` and `url.parse(s, true)` call the module's own (patchable) `unescape`. */
 const c: ParityCase = {
+  // A seeded rifty process: its stderr (and `noDeprecation`) is the guest's, as in Node.
+  stdin: [],
   code: `
     const qs = require('node:querystring');
     const url = require('node:url');
-    const show = (f) => { try { const v = f(); console.log(JSON.stringify(v === undefined ? "<undefined>" : v), v && typeof v === "object" ? [Object.getPrototypeOf(v)?.constructor?.name ?? null, Object.keys(v).join(",")] : ""); } catch (e) { console.log("throw", e.name, e.code, e.message); } };
+    // JSON only (console.log's own line breaking is not under test); DEP0169/0170 rows: url-legacy.test.ts.
+    process.noDeprecation = true;
+    const show = (f) => { try { const v = f(); console.log(JSON.stringify(v === undefined ? '<undefined>' : v), JSON.stringify(v && typeof v === 'object' ? [Object.getPrototypeOf(v)?.constructor?.name ?? null, Object.keys(v)] : '')); } catch (e) { console.log('throw', e.name, e.code, e.message); } };
     show(() => qs.parse('=x&&y='));
     show(() => qs.unescape('%41%zz+'));
     show(() => qs.unescapeBuffer('a+b%2', true));

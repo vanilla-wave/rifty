@@ -38,7 +38,8 @@ function oracle(corpus: string): unknown[] {
 function rifty(corpus: string): unknown[] {
   const vfs = new MemoryFsSync();
   vfs.mkdirSync('/w', { recursive: true });
-  for (const name of ['codec.cjs', 'replay.cjs']) vfs.writeFileSync(`/w/${name}`, read(name));
+  for (const name of ['codec.cjs', 'replay.cjs'])
+    vfs.writeFileSync(`/w/${name}`, new TextEncoder().encode(read(name)));
   const replay = createModuleLoader(vfs).require('/w/replay.cjs') as {
     replayCorpus(corpus: unknown): unknown[];
   };

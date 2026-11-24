@@ -12,6 +12,8 @@ import type { ParityCase } from '../../src/types.ts';
  * that branch on `typeof query === 'string'` vs `'object'`.
  */
 const c: ParityCase = {
+  // A seeded rifty process: DEP0169 goes to the guest's stderr, as in Node (ADR-0574).
+  stdin: [],
   code: `
     const url = require('node:url');
 

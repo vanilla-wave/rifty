@@ -16,7 +16,7 @@ type Url = {
 const guestUrl = (): Url => {
   const vfs = new MemoryFsSync();
   vfs.mkdirSync('/w', { recursive: true });
-  vfs.writeFileSync('/w/m.cjs', "module.exports = require('url');");
+  vfs.writeFileSync('/w/m.cjs', new TextEncoder().encode("module.exports = require('url');"));
   return createModuleLoader(vfs).require('/w/m.cjs') as Url;
 };
 const thrown = (f: () => unknown): unknown => {

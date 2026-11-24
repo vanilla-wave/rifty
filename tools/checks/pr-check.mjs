@@ -185,6 +185,7 @@ export const TASKS = [
   'check:esbuild-runtime-drift',
   'check:eval-compiler-drift',
   'check:fetch-classes-drift',
+  'check:url-legacy-drift',
   'check:shadow-catalog-drift',
   'check:install-artifact-drift',
   'check:snapshot-artifact-drift',
