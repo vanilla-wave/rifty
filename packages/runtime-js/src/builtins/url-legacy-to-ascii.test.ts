@@ -61,8 +61,10 @@ describe('legacy url toASCII step equals Node where its rules decide', () => {
 
 // A guest replacing an intrinsic the step would read live: its own process (the realm is the
 // guest's, as on the isolate host), the same guest code under live Node.
-const PATCHED = `String.prototype[Symbol.split] = () => { throw new Error('guest @@split'); };
-let out; try { out = JSON.stringify([require('url').parse('http://ñ.com/').hostname, require('url').parse('http://xn--ida.ñ.com/').hostname]); } catch (e) { out = 'THROW ' + e.message; }
+// `url` is required first: rifty's loader itself reads `split` live (outside this step).
+const PATCHED = `const url = require('url');
+String.prototype[Symbol.split] = () => { throw new Error('guest @@split'); };
+let out; try { out = JSON.stringify([url.parse('http://ñ.com/').hostname, url.parse('http://xn--ida.ñ.com/').hostname]); } catch (e) { out = 'THROW ' + e.message; }
 delete String.prototype[Symbol.split];
 module.exports = out;`;
 

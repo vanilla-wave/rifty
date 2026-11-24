@@ -42,8 +42,11 @@ points, 1 mapped `%`), Chromium 148.
    host. Failure → `''` (ada's error; url.js throws `ERR_INVALID_URL`). No `URL` at load →
    `NotImplementedError('url.toASCII')`. A guest's later `globalThis.URL` is never read.
 4. `isInsideNodeModules(4)`: `Error.captureStackTrace` under rifty's one `prepareStackTrace` owner
-   with the guest's hook (restored first) and `stackTraceLimit` set aside through its descriptor (a
-   non-configurable non-writable one below 4 stays: declared row); window = 4 frames from `urlParse`, as
+   with the guest's hook and `stackTraceLimit` set aside through their data slots and restored
+   exactly (hook first). A lookup, never a side effect (review round 2): no guest code runs
+   (an accessor slot is not called), nothing throws; where the walk is impossible (slot unsettable,
+   sealed limit below 4, capture throws) the answer is "unknown" → treated as inside
+   `node_modules`, no DEP0169 (declared); window = 4 frames from `urlParse`, as
    Node's `CurrentStackTrace(4)`. A frame is the guest's iff V8 `isEval()` (rifty compiles guest
    CJS/ESM/`-e` with `Function`/indirect eval); others count as Node's `node:` frames. First guest
    frame with a non-empty name decides (`/node_modules/`).

@@ -169,6 +169,8 @@ stack walk through rifty's one `Error.prepareStackTrace` owner
 (`builtins/vm/script-offsets.ts`) that ignores the guest's `stackTraceLimit`/`prepareStackTrace`
 (a guest frame is one rifty's loader compiled from guest source, V8 `CallSite.isEval()`; every
 other frame is the runtime's and counts as Node's `node:` frame),
+a lookup that never throws nor changes `Error` (an impossible walk → "unknown", no DEP0169; manager's
+rule, review round 2),
 and reproduces Node's window (`node_util.cc` `IsInsideNodeModules`: `CurrentStackTrace(isolate,
 4)` — 4 frames in total, builtin ones included; frames with an empty or `node:` script name are
 skipped; the first remaining frame decides; all 4 skipped → not inside, the warning fires). The

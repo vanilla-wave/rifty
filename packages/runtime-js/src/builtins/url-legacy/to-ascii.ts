@@ -17,14 +17,24 @@ import { NotImplementedError } from '@riftydev/io';
 const apply = Reflect.apply;
 const fromCodePoint = String.fromCodePoint;
 const { trunc } = Math;
-const stringSplit = String.prototype.split;
+const stringIndexOf = String.prototype.indexOf;
 const stringSlice = String.prototype.slice;
 const stringCharCodeAt = String.prototype.charCodeAt;
 const stringLastIndexOf = String.prototype.lastIndexOf;
 const stringEndsWith = String.prototype.endsWith;
 const arrayJoin = Array.prototype.join;
 const arraySplice = Array.prototype.splice;
-const split = (s: string, sep: string): string[] => apply(stringSplit, s, [sep]) as string[];
+/** `s` split at `.` (no `split`: it reads a guest-replaceable `String.prototype[Symbol.split]`). */
+function labelsOf(s: string): string[] {
+  const out: string[] = [];
+  let from = 0;
+  for (;;) {
+    const dot = apply(stringIndexOf, s, ['.', from]) as number;
+    out[out.length] = slice(s, from, dot === -1 ? undefined : dot);
+    if (dot === -1) return out;
+    from = dot + 1;
+  }
+}
 const slice = (s: string, from: number, to?: number): string =>
   apply(stringSlice, s, to === undefined ? [from] : [from, to]) as string;
 const code = (s: string, at: number): number => apply(stringCharCodeAt, s, [at]) as number;
@@ -34,6 +44,10 @@ const isXn = (s: string, at = 0): boolean =>
   code(s, at + 1) === 0x6e &&
   code(s, at + 2) === 0x2d &&
   code(s, at + 3) === 0x2d;
+const includes = (list: string[], item: string): boolean => {
+  for (let i = 0; i < list.length; i++) if (list[i] === item) return true;
+  return false;
+};
 /** Appended for the parse, cut from the result. */
 const NEUTRAL = '.x';
 
@@ -126,11 +140,15 @@ export function createToASCII(hostOf: HostOf | undefined): (hostname: string) =>
       );
     const ascii = hostOf(hostname);
     if (ascii === undefined) return '';
-    const labels = split(ascii, '.');
+    const labels = labelsOf(ascii);
+    const inputLabels = labelsOf(hostname);
     let decoded = false;
     for (let index = 0; index < labels.length; index++) {
       const label = labels[index] as string;
       if (!isXn(label)) continue;
+      // `xn--xn--…` that is not an ASCII label of the input is a Unicode label ada encoded (its
+      // ASCII part starts with `xn--`): ada validates only input `xn--` labels.
+      if (isXn(label, 4) && !includes(inputLabels, label)) continue;
       const points = punycodeToCodePoints(slice(label, 4));
       if (points === undefined) return '';
       let ascii7 = true;
