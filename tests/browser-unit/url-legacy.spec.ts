@@ -33,10 +33,13 @@ const FIXTURES = join(here, '../../packages/runtime-js/tests/fixtures/url-legacy
 const read = (name: string): string => readFileSync(join(FIXTURES, name), 'utf8');
 const requireFixture = createRequire(join(FIXTURES, 'codec.cjs'));
 const DEP_ROWS = requireFixture('./dep0169-rows.cjs') as Record<string, Record<string, string>>;
-const DECLARED = requireFixture('./dep0169-declared.cjs') as Record<
+const ERROR_ROWS = requireFixture('./error-state-rows.cjs') as Record<
   string,
-  { files: Record<string, string>; node: string; rifty: string }
+  { declared: boolean; files: Record<string, string> }
 >;
+/** A declared row: the walk is impossible, DEP0169 not emitted — Node's stdout without its warning. */
+const expectedFor = (row: { declared: boolean }, node: string): string =>
+  row.declared ? node.replace(/^warning DEP0169\n/m, '') : node;
 const GUEST_ROWS = requireFixture('./guest-rows.cjs') as Record<
   string,
   { hosts: string[]; files: Record<string, string> }
@@ -223,12 +226,15 @@ test('legacy node:url / querystring equal Node (COI Workbench)', async ({ page, 
       });
     }
 
-    // Declared DEP0169 rows: each still differs from Node, exactly as pinned.
-    for (const [name, row] of Object.entries(DECLARED)) {
+    // A guest's Error state never breaks url.parse; an impossible walk is "unknown", no DEP0169.
+    for (const [name, row] of Object.entries(ERROR_ROWS)) {
       const node = inNode(row.files, ['main.js']);
       rmSync(node.dir, { recursive: true, force: true });
       const rifty = await inRifty(row.files, ['main.js']);
-      expect.soft([node.stdout, rifty.stdout], name).toEqual([row.node, row.rifty]);
+      expect.soft({ stdout: rifty.stdout, exitCode: rifty.exitCode }, name).toEqual({
+        stdout: expectedFor(row, node.stdout),
+        exitCode: node.exitCode,
+      });
     }
 
     // Acceptance 3: a URL the guest assigns later is never called; the load-time one is.

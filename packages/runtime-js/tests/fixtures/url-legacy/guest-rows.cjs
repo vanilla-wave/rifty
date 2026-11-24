@@ -15,6 +15,17 @@ const patched = call();
 for (const [o, k, v] of saved) o[k] = v;
 console.log(patched);`;
 module.exports = {
+  'patched-symbol-split': {
+    hosts: ['browser'],
+    files: {
+      'main.js': `process.noDeprecation = true; const url = require('url');
+const saved = String.prototype[Symbol.split];
+String.prototype[Symbol.split] = () => { throw new Error('guest @@split'); };
+let out; try { out = JSON.stringify([url.parse('http://ñ.com/').hostname, url.parse('http://xn--ida.ñ.com/').hostname]); } catch (e) { out = 'THROW ' + e.message; }
+String.prototype[Symbol.split] = saved;
+console.log(out);`,
+    },
+  },
   'patched-intrinsics': {
     hosts: ['isolate', 'browser'],
     files: {

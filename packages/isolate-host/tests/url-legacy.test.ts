@@ -199,15 +199,22 @@ describe('isolate guest: DEP0169/DEP0170 by Node v24.16.0s 4-frame window', () =
   }
 });
 
-const DECLARED = requireFixture('./dep0169-declared.cjs') as Record<
+const ERROR_ROWS = requireFixture('./error-state-rows.cjs') as Record<
   string,
-  { files: Record<string, string>; node: string; rifty: string }
+  { declared: boolean; files: Record<string, string> }
 >;
-describe('isolate guest: declared DEP0169 rows (each still differs from Node)', () => {
-  for (const [name, row] of Object.entries(DECLARED)) {
+/** A declared row: the walk is impossible, DEP0169 not emitted — Node's stdout without its warning. */
+const expectedFor = (row: { declared: boolean }, node: string): string =>
+  row.declared ? node.replace(/^warning DEP0169\n/m, '') : node;
+describe("isolate guest: a guest's Error state never breaks url.parse (ADR-0574 §4)", () => {
+  for (const [name, row] of Object.entries(ERROR_ROWS)) {
     it(name, async () => {
-      expect(inNode(row.files, ['main.js']).stdout).toBe(row.node);
-      expect((await inSandbox(row.files, ['main.js'])).stdout).toBe(row.rifty);
+      const node = inNode(row.files, ['main.js']);
+      const rifty = await inSandbox(row.files, ['main.js']);
+      expect({ stdout: rifty.stdout, exitCode: rifty.exitCode }).toEqual({
+        stdout: expectedFor(row, node.stdout),
+        exitCode: node.exitCode,
+      });
     }, 60_000);
   }
 });

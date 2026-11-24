@@ -180,7 +180,16 @@ const hosts = [...idnaHosts, ...probe];
 const hostStep = idnaStep(hosts, (h) => urlCopy.parse(`http://${h}/`));
 const write = (name, value) => fs.writeFileSync(here(name), `${JSON.stringify(value)}\n`);
 write('url-calls.json', { kind: 'url', ...meta, idnaStep: urlStep, calls: url.calls });
-write('querystring-calls.json', { kind: 'querystring', ...meta, calls: qs.calls });
+// `new Date()` arguments are wall-clock: fixed at the epoch, so a rerun is byte-identical.
+const epoch = (v) =>
+  Array.isArray(v)
+    ? v.map(epoch)
+    : v && typeof v === 'object'
+      ? '$date' in v
+        ? { $date: 0 }
+        : Object.fromEntries(Object.entries(v).map(([k, x]) => [k, epoch(x)]))
+      : v;
+write('querystring-calls.json', { kind: 'querystring', ...meta, calls: epoch(qs.calls) });
 write('hosts.json', {
   kind: 'hosts',
   idnaTestV2: crypto.createHash('sha256').update(idna).digest('hex'),
