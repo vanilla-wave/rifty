@@ -76,6 +76,7 @@ const c: ParityCase = {
       s.close(cb('cb'));
     }, 'missing.txt');
     run('directory-in-open', {}, (s, cb) => { s.on('open', () => s.close(cb('cb'))); }, '.');
+    run('directory-after-ready', {}, async (s, cb) => { await ready(s); s.close(cb('cb')); }, '.');
     run('emitclose-false', { emitClose: false }, async (s, cb) => { await ready(s); s.close(cb('cb')); });
     // Twice with emitClose:false: the second cb settles a tick later, no arguments (Node's onclosed).
     run('emitclose-false-twice-after-ready', { emitClose: false }, async (s, cb) => {
