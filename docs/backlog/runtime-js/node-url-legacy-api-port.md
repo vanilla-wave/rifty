@@ -82,7 +82,7 @@ warning on stderr. Target: the same file gives Node's output in a browser-host `
    label, and only the `URL` captured when the runtime loads: with `globalThis.URL` absent at load
    (the isolate guest) row 2 gives the same result as there; a `URL` the guest assigns later is never
    called, on either host (rejects a `URL` fast path with a fallback) → scenario
-4. `toASCII` (manager's default 2026-11-24, reversible, the user's choice pending): Unicode
+4. `toASCII` (the user's choice 2026-11-24: «ок» to the manager's recommendation of the host-`URL` variant): Unicode
    17.0.0 `IdnaTestV2.txt` inputs used as hostnames through `url.parse('http://' + h + '/').hostname`
    (or the `ERR_INVALID_URL` throw) equal live Node on a browser host (Chromium lane) on every
    input except the declared residual, pinned row by row: each pinned row must still differ,
@@ -110,7 +110,9 @@ warning on stderr. Target: the same file gives Node's output in a browser-host `
    and guest/browser bundle bytes before/after recorded in the ADR and the host README;
    `client-bundle-budget` passes with today's ceilings (the user accepted them with 50% headroom,
    that file's header) — a bump, and any warm-call or guest-bundle growth while the goal's
-   question 3 (cost) is unanswered, waits for the user's answer before merge → scenario
+   question 3 (cost) is unanswered, waits for the user's answer before merge (this unit's guest-bundle
+   growth, +47 KB, was shown to the user with the `toASCII` choice on 2026-11-24; the manager reads his
+   «ок» as covering it, no objection followed) → scenario
 9. Out-of-scope members are loud: `url.domainToASCII`/`domainToUnicode`/`urlToHttpOptions`
    (today `undefined`) throw `NotImplementedError('url.<member>')`; `url.format(URL, options)`
    validates `options` as Node (a truthy non-object, array or function → `ERR_INVALID_ARG_TYPE`;
@@ -160,7 +162,7 @@ object, `urlResolve`, `urlResolveObject`, `Url.prototype.*`), `lib/querystring.j
 `lib/internal/querystring.js`. Mechanism: vendored upstream text with the MIT notice; a generator
 binds `primordials`, `ERR_*`, validators, `urlFormat`'s `instanceof URL` (the runtime's own
 `URL` when one exists, else no value is a `URL`) and `bindingUrl.format` (Acceptance 9's
-`format(URL, options)`), `toASCII` (manager's default, Acceptance 4: an ASCII hostname without
+`format(URL, options)`), `toASCII` (the user's choice, Acceptance 4: an ASCII hostname without
 an `xn--` label is returned as is, ada's ASCII path; otherwise the `URL` captured at load parses
 `http://<hostname>.x/` (a neutral last label: no IPv4 rule; `.x` cut), each `xn--` label of its hostname is decoded by ada's `punycode_to_utf32`
 (an all-ASCII or out-of-range decoding is an error, as ada) and the decoded name must parse back to
@@ -209,14 +211,15 @@ the recorded corpus. A Node re-pin regenerates and reruns the suite.
 - rejected route: npm `url@0.11.4` (browserify's port of `lib/url.js`) — 127/1 313 calls differ
   (critic's scratch run 2026-11-24, not in the probe files) — violates Acceptance 2.
 - 2026-11-24 — (superseded the same day by the next line) `toASCII` as `tr46` 6.0.0 on every host.
-- 2026-11-24 — manager's decision, reversible; the choice is the user's (question pending):
+- 2026-11-24 — the user's choice («ок» to the manager's recommendation; taken earlier the same day as the
+  manager's reversible default):
   `toASCII` takes the host's `URL` captured at load plus ada's punycode round trip (Reference
   contract); no `URL` (isolate today) → `NotImplementedError('url.toASCII')` for a non-ASCII or
   `xn--` label. Measured (Context, `reference/url-legacy/idna-step/`): residual (probe form) 307/6 276
   IdnaTestV2 rows (305 Bidi, 2 IPv4) plus mapped `%` — shipped form: Acceptance 4, about 2 KB of code, no dependency; a switch
   to the candidate below replaces one function. Rejected: `tr46` 6.0.0 — 304 rows differ under
   every flag setting (ada's own Bidi check); the bare `URL` — 2 226 rows (no `xn--` check for an
-  ASCII host). Candidate (user's choice): generate `ada::idna` (`to_ascii`, punycode,
+  ASCII host). Not chosen now, a candidate of the isolate Web API goal together with its `URL`: generate `ada::idna` (`to_ascii`, punycode,
   `is_label_valid`, Unicode 17 tables) from Node v24.16.0's `deps/ada/ada.cpp` — Node's result by
   construction on every host, the isolate included; tables 230 KB raw, estimate 307 KB / 97 KB gzip
   as base64, 82 KB gzip / 47 KB brotli as binary, 109 KB raw / 53 KB gzip if NFC comes from

@@ -1,9 +1,9 @@
 # ADR 0574: Generate legacy node:url and node:querystring from pinned Node sources
 
-Status: Proposed
+Status: Accepted
 Date: 2026-11
 
-> TL;DR: `url.parse`/`format`/`resolve`/`resolveObject`, `Url` and `querystring` are Node v24.16.0's own JS, vendored and generated with checked anchors and a drift check; only `toASCII`, `isInsideNodeModules`, errors and intrinsics are bound. `toASCII` of a non-ASCII or `xn--` label uses the host's load-time `URL` (manager's reversible default, the user's choice pending); no `URL` → named gap.
+> TL;DR: `url.parse`/`format`/`resolve`/`resolveObject`, `Url` and `querystring` are Node v24.16.0's own JS, vendored and generated with checked anchors and a drift check; only `toASCII`, `isInsideNodeModules`, errors and intrinsics are bound. `toASCII` of a non-ASCII or `xn--` label uses the host's load-time `URL` (the user's choice 2026-11-24); no `URL` → named gap.
 
 ## Context
 
@@ -60,7 +60,7 @@ points, 1 mapped `%`), Chromium 148.
 
 | Binding | Class / authority | Drift guard | Kill condition |
 |---|---|---|---|
-| `toASCII` via host `URL` | platform-gap; manager 2026-11-24, user's choice pending | IdnaTestV2 rows pinned per host (browser-unit), ASCII rows exact in the isolate | user picks the generated `ada::idna` port, or the isolate gets a `URL` |
+| `toASCII` via host `URL` | platform-gap; the user's choice 2026-11-24 | IdnaTestV2 rows pinned per host (browser-unit), ASCII rows exact in the isolate | the isolate Web API goal delivers a `URL` (its candidate: the generated `ada::idna` port) |
 | `isInsideNodeModules` | platform-gap; this ADR | DEP0169 window parity rows | none (native in Node) |
 | errors, validators, intrinsics | substitution-environment | generator anchors + differential corpus | none |
 
