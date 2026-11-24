@@ -111,7 +111,7 @@ warning on stderr. Target: the same file gives Node's output in a browser-host `
    `client-bundle-budget` passes with today's ceilings (the user accepted them with 50% headroom,
    that file's header) — a bump, and any warm-call or guest-bundle growth while the goal's
    question 3 (cost) is unanswered, waits for the user's answer before merge (this unit's guest-bundle
-   growth, +47 KB, was shown to the user with the `toASCII` choice on 2026-11-24; the manager reads his
+   growth, +47 KB, was shown to the user with the `toASCII` choice on 2026-11-24; the manager reads the user's
    «ок» as covering it, no objection followed) → scenario
 9. Out-of-scope members are loud: `url.domainToASCII`/`domainToUnicode`/`urlToHttpOptions`
    (today `undefined`) throw `NotImplementedError('url.<member>')`; `url.format(URL, options)`
