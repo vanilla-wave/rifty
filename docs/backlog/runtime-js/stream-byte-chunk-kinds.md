@@ -17,6 +17,11 @@ Uint8Array views. Byte-mode object/number values are still accepted instead of
 throwing, while DataView and other TypedArrays do not yet follow Node's Buffer
 conversion. The same classification must not drift across stream surfaces.
 
+Ordering constraint (PR #433 review, 2026-11-24): rejecting a byte-mode array breaks exceljs
+`csv.writeBuffer` and parity row `stream/stream-hook-transform` "fast-csv shape" until
+`writableObjectMode` is honoured (`runtime-js/duplex-writable-surface-gaps`): fast-csv writes row
+arrays into a Transform that sets only that option.
+
 ## Acceptance
 
 - One byte-chunk classifier covers Readable and Writable cores.
