@@ -47,7 +47,10 @@ hypothesis until the carrier hits it:
   stops on `node:zlib` at require (`isolate-host.zlib`, declared ❌) — owned by the user's thread «Расширить платформу для офисных библиотек» (engine choice pako / wasm zlib / host bridge; isolate load of zlib in its queue), no item here: the
   carrier stays RED on exceljs until the isolate guest has `node:zlib` (rifty builds it on web
   `CompressionStream`, compat isolate-host `:28`: a `CompressionStream` in the guest or zlib on
-  another engine — that track's engine choice). No E-list Web API broke a measured route; routes
+  another engine — that track's engine choice). No ceiling Web API broke a measured write route;
+  reading a file through a stream needs web `ReadableStream` on rifty's own fs path
+  (`distribution/isolate-host-fs-read-stream-needs-web-readablestream`, closed by the user's
+  `createReadStream` track: the guest's FS becomes sync-only, ADR-0572 §2); routes
   past the first stop (exceljs main after zlib, its streaming writer/reader) are unmeasured;
   `require()` of an ESM-only package needs `URL` (`runtime-js/isolate-require-esm-syntax-gaps`),
   met on no measured path (docx bundles its own `nanoid`), and the consumer asks CommonJS only. A

@@ -3,7 +3,7 @@
 Disposable probes for the template goal's forks. `packages/*/src` untouched; the probe guest
 bundle is the real guest entry + `probe-guest.ts`, built by `layer.mjs` into a temp file.
 Machine: Apple M3 Pro, macOS, Node v24.16.0, isolated-vm 7.0.2, main @ `b3731e9c0`, load ~4–5.
-Raw output: `mount.out.txt`, `layer.out.txt`.
+Raw output: `mount.out.txt`, `layer.out.txt`. `layer.mjs` drives isolated-vm and rifty's codec from source, not the public API: worker-side costs of each arm, not a consumer's `exec`.
 
 ## M — mount point (`mount.mjs`)
 
