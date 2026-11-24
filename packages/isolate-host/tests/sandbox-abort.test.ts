@@ -203,7 +203,7 @@ describe('the signal option', () => {
           return {};
         } catch (e) {
           const { name, code, message } = e as Record<string, unknown>;
-          return { name, code, message };
+          return code === undefined ? { name, message } : { name, code, message };
         }
       };
       for (const bad of ['x', 1, null, {}, { aborted: false }]) {

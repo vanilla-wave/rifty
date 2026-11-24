@@ -67,18 +67,22 @@ challenge: 2026-11-24 — clear (existing-baseline extension of an internal mech
 ## Parity cases
 
 1. `abort(new Error('turn over'))` → rejection `{name, code, message}` as the oracle, `cause` the same
-   object; `abort()` → `cause` a `DOMException`-named `AbortError` as Node gives. → scenario
-2. Pre-aborted signal → the oracle's shape, synchronously decided (no run output). → scenario
+   object; `abort()` (in flight) → `cause` a `DOMException`-named `AbortError` as Node gives. → scenario
+2. Pre-aborted signal → the oracle's shape, decided before any pool call (no run output). → scenario
+3. A value that is not a signal → Node's refusal (`fs.promises.readFile`'s `ERR_INVALID_ARG_TYPE`;
+   `execFile`'s `TypeError` for a signal-shaped object without `addEventListener`); a consumer's
+   `abort` listener calling `stopImmediatePropagation()` does not stop the cancel (`execFile` on the
+   same signal is cancelled too). → scenario
 
 ## Fault matrix
 
 | axis × operation | honest outcome | artifact / fault target | trace |
 |---|---|---|---|
-| abort × worker lost during the run (rerun pending) | rejects `AbortError`; the rerun is not placed | destroy-table row "abort, lost worker" | → scenario |
+| abort × worker lost during the run (rerun pending) | rejects `AbortError`; the rerun is not placed | abort-table row "its worker lost, the rerun not yet placed: the rerun is never placed" | → scenario |
 | abort × isolate ignoring termination | rejects at once; the worker retires after the stuck grace (ADR-0563 §4); `destroy()` waits for `gone` | table row "abort, stuck builtin" | → ADR-0568 |
 | abort racing the result (same microtask) | exactly one settlement: the result if it settled first, else `AbortError`; state per the outcome reported | table rows 0–3 microtasks | → scenario |
 | abort × destroy | every operation settles once; `DESTROYED` for those unsettled when `destroy()` is called | table row "abort then destroy", "destroy then abort" | → ADR-0568 |
-| a signal whose `reason` getter / `addEventListener` throws (consumer bug) | `ERR_INVALID_ARG_TYPE`-class refusal at the call, nothing placed | unit | → scenario |
+| a signal whose `reason` getter / `addEventListener` throws (consumer bug) | refused at the call with the consumer's own error (as Node's `fs.promises.readFile`), nothing placed | unit "a signal whose own members throw (a consumer bug) …" | → scenario |
 
 ## Out of scope
 
@@ -92,12 +96,15 @@ challenge: 2026-11-24 — clear (existing-baseline extension of an internal mech
   abort handling is Node's.
 - 2026-11-24 — agent: the state after an abort is the killed-run rule (requirements §5 «как у
   `timeout`»), one rule for both.
-- 2026-11-24 — agent (implementation): `signal` must be `instanceof AbortSignal` (Acceptance 1;
-  Node's validator duck-types `'aborted' in signal` under the same message, so `{ aborted: false }`
-  passes `fs.promises.readFile` — refused here).
+- 2026-11-24 — agent (implementation, cross-review round 1): the signal is checked and subscribed
+  by Node's own `events.addAbortListener` — one rule, Node's (`'aborted' in signal`, its
+  `ERR_INVALID_ARG_TYPE` worded for `options.signal` as `fs.promises.readFile` words it), and a
+  listener another listener's `stopImmediatePropagation()` cannot skip. Acceptance 1's "any other
+  value" reads as "any value Node refuses".
 - 2026-11-24 — agent (implementation): fault row "a member throws" — the consumer's error itself
   is the refusal, at the call, nothing placed (Node's `fs.promises.readFile` rejects with a throwing
-  `reason` getter's error, probe 2026-11-24); not wrapped in `ERR_INVALID_ARG_TYPE`.
+  `reason` getter's error, probe 2026-11-24); not wrapped in `ERR_INVALID_ARG_TYPE`. Like every
+  error leaving the API, its `stack` is cut to its first line.
 - 2026-11-24 — agent (implementation): a run's end state is applied in the microtask that settles
   the caller's promise (the abort races the result there), so an `AbortError` always leaves the
   files of before; `exec`'s options are checked at the call (a refusal still rejects in its turn).

@@ -126,8 +126,8 @@ view's whole backing buffer; rifty's program entry has diagnostic gaps and no
    in the consumer). Once `destroy()` is called, DESTROYED wins. No second mechanism: the abort
    settles the op's promise (one settlement per op) and calls the run's handle; the queue, the
    handle and the `gone` event are destroy's. Table `tests/sandbox-abort-table.test.ts`.
-   `signal` must be `instanceof AbortSignal` (stricter than Node's `'aborted' in signal`;
-   compat Sandbox row "`signal` that is not an `AbortSignal` instance").
+   The signal is checked and subscribed by Node's `events.addAbortListener` (Node's rule; another
+   listener's `stopImmediatePropagation()` cannot skip it).
 6. **Limits.** Per run: `runCode`'s; `timeoutMs` covers the consumer's encode
    (done before the call registers, so a throw there settles the call and
    leaves no phantom), the worker's restore, run and capture — not the

@@ -1,3 +1,4 @@
+import { addAbortListener } from 'node:events';
 import { type CallHandle, sharedPool } from './pool.ts';
 /**
  * A live sandbox (ADR-0568): between operations its files are rifty's
@@ -213,7 +214,28 @@ function abortError(signal: AbortSignal): unknown {
   try {
     return bare(new AbortError(signal.reason));
   } catch (error) {
-    return error;
+    return bare(error);
+  }
+}
+
+/**
+ * `listener` on `signal`'s abort as Node's own APIs subscribe (`events.addAbortListener`):
+ * Node's check of the signal, and no other listener's `stopImmediatePropagation()` skips it;
+ * already aborted, it runs in a microtask.
+ */
+function onAbort(signal: AbortSignal, listener: () => void): Disposable {
+  try {
+    return addAbortListener(signal, listener);
+  } catch (error) {
+    const { code } = error as { code?: unknown };
+    if (code !== 'ERR_INVALID_ARG_TYPE' || !(error instanceof Error)) throw error;
+    // Its refusal names its own argument; here it is an option, in Node's fs wording.
+    throw coded(
+      new TypeError(
+        error.message.replace('The "signal" argument', 'The "options.signal" property'),
+      ),
+      'ERR_INVALID_ARG_TYPE',
+    );
   }
 }
 
@@ -249,16 +271,6 @@ function knownOptions(options: object, known: Set<string>, where: string): void 
   }
 }
 
-/** `options.signal`: an `AbortSignal` or nothing. */
-function signalOf(options: { readonly signal?: unknown }): AbortSignal | undefined {
-  const { signal } = options;
-  if (signal === undefined || signal instanceof AbortSignal) return signal;
-  throw coded(
-    new TypeError('The "options.signal" property must be an instance of AbortSignal'),
-    'ERR_INVALID_ARG_TYPE',
-  );
-}
-
 /** A host op's options, read at the call. */
 function opSignal(options: unknown, where: string): AbortSignal | undefined {
   if (options === undefined) return undefined;
@@ -268,7 +280,8 @@ function opSignal(options: unknown, where: string): AbortSignal | undefined {
       'ERR_INVALID_ARG_TYPE',
     );
   knownOptions(options, OP_OPTIONS, where);
-  return signalOf(options);
+  // Checked as it is subscribed (`onAbort`).
+  return (options as OpOptions).signal;
 }
 
 /**
@@ -345,17 +358,14 @@ class LiveSandbox implements Sandbox {
       const error = abortError(signal as AbortSignal);
       reject(error);
       if (started) this.#run?.abort(error instanceof Error ? error : new AbortError(error));
-      signal?.removeEventListener('abort', abort);
     };
-    let aborted: boolean;
+    let subscription: Disposable | undefined;
     try {
-      aborted = signal?.aborted === true;
-      if (!aborted) signal?.addEventListener('abort', abort);
+      if (signal !== undefined) subscription = onAbort(signal, abort);
     } catch (error) {
-      // The signal's own member threw (a consumer bug): refused, nothing placed.
+      // Not a signal, or its own member threw (a consumer bug): refused, nothing placed.
       return this.#refused(error);
     }
-    if (aborted && !this.#destroyed) return Promise.reject(abortError(signal as AbortSignal));
     const next = this.#tail
       .then(() => {
         if (this.#box === undefined || this.#destroyed) throw destroyedError();
@@ -374,13 +384,13 @@ class LiveSandbox implements Sandbox {
             value.apply();
             resolve(value.value as T);
           } else resolve(value as T);
-          signal?.removeEventListener('abort', abort);
+          subscription?.[Symbol.dispose]();
         },
         (error: unknown) => {
           if (done) return;
           done = true;
           reject(bare(this.#destroyed ? destroyedError() : error));
-          signal?.removeEventListener('abort', abort);
+          subscription?.[Symbol.dispose]();
         },
       );
     this.#tail = next.then(settle, settle);
@@ -504,7 +514,7 @@ class LiveSandbox implements Sandbox {
           );
       }
       entry = sandboxPath(path);
-      const given = options.args ?? [];
+      const given = options.args === undefined ? [] : options.args;
       if (!Array.isArray(given) || given.some((a) => typeof a !== 'string'))
         throw coded(
           new TypeError('The "options.args" property must be an array of strings'),
@@ -512,7 +522,7 @@ class LiveSandbox implements Sandbox {
         );
       args = [...given];
       limits = runLimits(options);
-      signal = signalOf(options);
+      signal = options.signal;
     } catch (error) {
       return this.#refused(error);
     }
