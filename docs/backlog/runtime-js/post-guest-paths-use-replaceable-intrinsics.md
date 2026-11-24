@@ -5,7 +5,7 @@ title: Runtime lifecycle work after guest code uses guest-replaceable intrinsics
 created: 2026-11-18
 why: The drain, keepalive and exit paths call `Map.prototype.get`, `Function.prototype.bind`, `Promise.prototype.constructor` and `process.emit` through the live globals, so guest code can change or hang its own run's outcome.
 sources: [docs/public/compat/isolate-host.md]
-code: [packages/runtime-js/src/internal/event-loop-keepalive.ts, packages/runtime-js/src/builtins/timers.ts, packages/runtime-js/src/builtins/process-lifecycle-events.ts]
+code: [packages/runtime-js/src/builtins/os.ts, packages/runtime-js/src/internal/event-loop-keepalive.ts, packages/runtime-js/src/builtins/timers.ts, packages/runtime-js/src/builtins/process-lifecycle-events.ts]
 ---
 
 ## Context
@@ -46,6 +46,15 @@ runtime-js already capture primordials (`reflectApplyPrimordial` in
 its own run is bounded by the deadline (I4); what is not accepted is a wrong
 status where Node has a right one (manager decision 2026-11-18, ADR-0557 §Not the user's words: an open,
 declared fidelity class until this lands).
+
+Same class, every host (2026-11-24, PR #436 external review; `runCode`,
+Node v24.16.0): `os.availableParallelism()`/`os.cpus()` read the live
+`navigator.hardwareConcurrency` (`builtins/os.ts`), which guest code can
+replace (`globalThis.navigator`, or a getter redefined on
+`Navigator.prototype`). A throwing getter makes `os.availableParallelism()`
+throw; a `-1` getter gives `-1` and `os.cpus().length` 0 (Node `12 12`, its
+`os` reads the binding); `5e6` ends the run `termination: 'memory'`. On the
+browser hosts the same read hits the browser's `WorkerNavigator`.
 
 ## Challenge
 
