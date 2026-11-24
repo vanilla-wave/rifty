@@ -171,6 +171,15 @@ describe('esbuild carrier retirement', () => {
     expect(workerViolations(workerBytes([...WORKER_HEADER, alias]))).toEqual([]);
   });
 
+  it('names a leading import outside the admitted form and prints no pin to copy', () => {
+    const tabbed = `import {\t\n${WORKER_HEADER[0].slice('import {\n'.length)}`;
+    const violations = workerViolations(workerBytes([tabbed, ...WORKER_HEADER.slice(1)]));
+    expect(violations).toEqual([
+      expect.stringContaining('leading import not in the admitted form'),
+    ]);
+    expect(violations.join('\n')).not.toContain('compiler pin now');
+  });
+
   it('pins the other compiler output whole: a leading sibling import is red', () => {
     const compiler = Buffer.from(WORKER_BODY, 'latin1');
     expect(workerViolations(compiler, 'chunk-EMDIREKY.js')).toEqual([]);
