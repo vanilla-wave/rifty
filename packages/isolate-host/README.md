@@ -361,5 +361,10 @@ warm worker runCode('console.log(1)'): p50 13.1 ms, max 16.1 ms (20 sequential)
 
 The same machine with a child process per call (ADR-0557, before this pool):
 p50 137 ms per call; 8 concurrent calls peaked at 1118 MiB. Concurrent calls
-sleep 500 ms. A guest's heap counts on top of this, up to `memoryLimitMb`.
+sleep 500 ms. A guest's heap counts on top of this, up to `memoryLimitMb`; its
+files count there too. Reading a file by `fs.createReadStream` adds no copy of it,
+`readFileSync` adds one: the smallest `memoryLimitMb` that writes and reads back a
+16 / 64 MiB file is 31 / 79 by stream (the same as only writing it) and 47 / 142 by
+`readFileSync`. The guest's sync-only FS left the warm p50 unchanged within noise
+(6 interleaved runs each way, loaded machine: 16–46 ms both).
 These are measurements, not promises.

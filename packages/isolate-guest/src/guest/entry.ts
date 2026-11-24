@@ -25,7 +25,7 @@ import {
 } from '@riftydev/runtime-js/internal';
 import { createModuleLoader } from '@riftydev/runtime-js/loader';
 import { syncMirror } from '@riftydev/vfs';
-import { type MemoryFsSync, installMemoryFs } from '@riftydev/vfs/internal';
+import { MemoryFsSync, setSyncMirror } from '@riftydev/vfs/internal';
 import { GUEST_DIRS, UNCOPYABLE_REJECTION } from '../contract.ts';
 import { FsSnapshotError, type SnapshotOptions, restoreFs, snapshotFs } from '../snapshot.ts';
 import { bindNotImplemented } from './loud.ts';
@@ -43,8 +43,9 @@ bindNotImplemented(NotImplementedError);
 
 const CWD = '/workspace';
 // The realm's FS exists from load, so a restore before `run` is the tree `run` sees (ADR-0567 §6).
-installMemoryFs();
-const guestFs = syncMirror() as MemoryFsSync;
+// Sync only: an async `Vfs` streams through web `ReadableStream`, a ceiling here (ADR-0557 §5).
+const guestFs = new MemoryFsSync();
+setSyncMirror(guestFs);
 for (const dir of GUEST_DIRS) guestFs.mkdirSync(dir, { recursive: true });
 /** Guest code has started in this realm: no restore from here on. */
 let started = false;
