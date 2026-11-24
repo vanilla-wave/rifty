@@ -236,6 +236,9 @@ importers:
       '@riftydev/isolate-guest':
         specifier: workspace:*
         version: link:../isolate-guest
+      '@riftydev/runtime-js':
+        specifier: workspace:*
+        version: link:../runtime-js
       '@riftydev/vfs':
         specifier: workspace:*
         version: link:../vfs
