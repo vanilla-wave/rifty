@@ -229,5 +229,9 @@ export class Context {
 /** zlibBufferSync: one chunk with the finish flush. */
 export function oneShotSync(engine, mode, input, opts) {
   const ctx = new Context(engine, mode, opts);
-  return ctx.processChunkSync(input, ctx.finishFlush);
+  try {
+    return ctx.processChunkSync(input, ctx.finishFlush);
+  } finally {
+    ctx.close(); // the matrix shares one wasm instance: free each case's zlib state
+  }
 }

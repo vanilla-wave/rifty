@@ -48,6 +48,10 @@ console.log(`node ${process.version}`);
 for (const s of SCENARIOS) {
   const native = run(s, 'native');
   console.log(`${s} | native ${native.slice(0, 200)}`);
+  if (JSON.parse(native).error) {
+    console.log(`${s} | NATIVE FAILED — scenario not measured`);
+    continue;
+  }
   for (const e of ENGINES.slice(1)) {
     const got = run(s, e);
     console.log(`${s} | ${e} | ${got === native ? 'same as native' : `DIFF ${got.slice(0, 300)}`}`);

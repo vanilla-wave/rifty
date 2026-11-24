@@ -112,15 +112,19 @@ function engineSteps(engine, mode, opts, steps) {
   const def = opts.flush ?? C.Z_NO_FLUSH;
   const E = new Uint8Array(0);
   const out = [];
-  for (const s of steps) {
-    if (s.params) {
-      out.push(ctx.processChunkSync(E, C.Z_SYNC_FLUSH));
-      ctx.params(...s.params);
-    } else if (s.reset) ctx.reset();
-    else if (s.flush !== undefined) out.push(ctx.processChunkSync(E, s.flush));
-    else out.push(ctx.processChunkSync(s.write, def));
+  try {
+    for (const s of steps) {
+      if (s.params) {
+        out.push(ctx.processChunkSync(E, C.Z_SYNC_FLUSH));
+        ctx.params(...s.params);
+      } else if (s.reset) ctx.reset();
+      else if (s.flush !== undefined) out.push(ctx.processChunkSync(E, s.flush));
+      else out.push(ctx.processChunkSync(s.write, def));
+    }
+    out.push(ctx.processChunkSync(E, ctx.finishFlush));
+  } finally {
+    ctx.close();
   }
-  out.push(ctx.processChunkSync(E, ctx.finishFlush));
   return Buffer.concat(out);
 }
 const chunks = (b, n) => {
