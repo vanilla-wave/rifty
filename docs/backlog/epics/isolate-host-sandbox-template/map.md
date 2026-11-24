@@ -41,13 +41,16 @@ hypothesis until the carrier hits it:
 - Template mtimes: the artifact's tar records 0 for every entry (`dep-snapshot-tar.ts` `headerFor`);
   what `fs.statSync` of a template file reports vs `npm ci` (1985-10-26 from npm's tarballs) —
   owner: agent — probe against `npm ci`, then a compat row or the oracle's value.
-- The four libraries' `require` needs Web APIs the guest lacks → the library-probe thread's report
-  (ROADMAP M14 E) — owner: agent — scenario step 3/10 depends on it; a gap there is a dependency,
-  not this goal's scope.
+- The four libraries' `require` in the guest (scenario steps 3, 10) — owner: agent — library probe
+  (PR #430, `reference/isolate-library-probe/README.md`, @ b3731e9c0): `pdf-lib`, `docx` load and
+  write as Node; `pptxgenjs` stops on `node:https` at load (PR #435 in flight); `require('exceljs')`
+  stops on `node:zlib` at require (`isolate-host.zlib`, declared ❌) — no open PR, no item: the
+  carrier stays RED on exceljs until the isolate guest has `node:zlib` (a Node module, not a Web
+  API — ROADMAP M14 E's list blocks none of the four). A dependency of this goal, not its scope.
 
 ## Out of scope
 
-- Web API shims the libraries may need (`URL`, `Blob`, web streams, `zlib`): ROADMAP M14 E.
+- Guest APIs the libraries need (`node:zlib`, `node:https` load, stream hooks, `process.umask`, fs stream `close`; library probe PR #430): their own items / PRs #432–#436; Web API shims: ROADMAP M14 E.
 - Building the artifact inside the guest (`npm` in the isolate); a template made by anything but
   `produceDependencySnapshot`.
 - The agent tool set over the sandbox: `epics/isolate-host-agent-tools`.
