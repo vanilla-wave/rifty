@@ -22,6 +22,12 @@ Source ESM namespaces already match (`export const b…a…default` → both
 order); CJS-file namespaces share that constructor — unverified. Compat ⚠️
 `docs/public/compat/modules.md` `node:` built-ins.
 
+2026-11-24 (PR #438 external review, reproduced): the same namespace also differs in descriptors.
+`import('node:zlib')` from a CJS file: Node v24.16.0 `Object.keys(ns).slice(0,4)` →
+`BrotliCompress,BrotliDecompress,Deflate,DeflateRaw` and `crc32`'s descriptor
+`{writable:true,enumerable:true,configurable:false}` (a data property); the isolate guest →
+`default,crc32,Deflate,Inflate` and `{enumerable:true,configurable:false}` with a getter (an accessor).
+
 ## Next
 
 Owner runtime-js; trigger: a consumer iterating a builtin namespace's keys

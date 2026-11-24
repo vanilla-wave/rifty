@@ -37,7 +37,7 @@ describe('exceljs 4.4.0 loads node:zlib as in Node (Acceptance 4)', () => {
 
   // Past `node:zlib` the main entry stops at other units' gaps (unit §Decisions), not all of them
   // named gaps: only zlib's absence is this unit's claim.
-  it('require(exceljs) no longer stops at node:zlib', { timeout: 180_000 }, async () => {
+  it('require(exceljs) loads with no isolate-host.zlib named gap', { timeout: 180_000 }, async () => {
     const files = withFixture('main-load.cjs');
     const oracle = inNode(files, 'main-load.cjs', 'out/none');
     expect(oracle).toMatchObject({ exitCode: 0, stdout: 'loaded\n', stderr: '' });
