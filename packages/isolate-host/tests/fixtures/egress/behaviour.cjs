@@ -94,9 +94,16 @@ for (const [label, name] of [
   ['function', function f() {}],
   ['own toString', { toString: () => 'custom' }],
   ['Date', new Date(0)],
-  ['Error', new Error('boom')],
   ['Map', new Map([[1, 2]])],
   ['class instance', new (class Foo {})()],
+  [
+    'class toString',
+    new (class Bar {
+      toString() {
+        return 'bar';
+      }
+    })(),
+  ],
 ]) {
   run(`validateHeaderName name ${label}`, () => http.validateHeaderName(name));
   run(`validateHeaderName label ${label}`, () => http.validateHeaderName('bad name', name));

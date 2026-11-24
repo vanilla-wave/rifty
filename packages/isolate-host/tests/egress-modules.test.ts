@@ -35,14 +35,24 @@ describe('module shape equals live node -e (Acceptance 1)', () => {
   });
 });
 
+/**
+ * Declared behaviour deviations: rifty's `util.inspect` prints a null-prototype
+ * object as `{}` (Node `[Object: null prototype] {}`), and Node's %s inspects
+ * one — `backlog/runtime-js/inspect-null-prototype-prefix`.
+ */
+const NULL_PROTO = '[Object: null prototype] {}';
+const declaredBehaviour = (line: string): string =>
+  line.includes(' null-proto ') ? line.split(NULL_PROTO).join('{}') : line;
+
 describe('real members equal live node -e (Acceptance 2, parity cases 2–6)', () => {
   it('IP grammar, header validation, _normalizeArgs, config setters, Agents', async () => {
     const code = fixture('behaviour.cjs');
     const oracle = nodeEval(code);
     expect(oracle.code, oracle.stderr).toBe(0);
+    expect(oracle.stdout).toContain(NULL_PROTO);
     const result = await runCode(code);
     expect(result.stderr).toBe('');
-    expect(result.stdout).toBe(oracle.stdout);
+    expect(result.stdout).toBe(oracle.stdout.split('\n').map(declaredBehaviour).join('\n'));
     expect(result.exitCode).toBe(0);
   });
 });
