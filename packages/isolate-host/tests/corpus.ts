@@ -134,7 +134,7 @@ export const CORPUS: readonly Row[] = [
     ceiling: 'import() ends the run (ADR-0557 §5)',
   },
   {
-    // Invariant only: the oracle's umask depends on its environment (runtime-js/process-umask-missing).
+    // Invariant only: the oracle's umask depends on its environment.
     label: 'process-umask-invariant',
     code: "const fs = require('fs'), m = process.umask(), perm = (p) => fs.statSync(p).mode & 0o777; fs.mkdirSync('u/r', { recursive: true }); fs.writeFileSync('u/f', 'x'); console.log(typeof m, perm('u/f') === (0o666 & ~m), perm('u') === (0o777 & ~m), perm('u/r') === (0o777 & ~m), process.umask(m) === m, process.umask(m.toString(8)) === m, process.umask() === m)",
   },
@@ -180,6 +180,11 @@ export const CORPUS: readonly Row[] = [
   {
     label: 'builtin-module-globals',
     code: "console.log(path.join('a', 'b'), typeof fs.readFileSync, util.format('%d', 1), path === require('path'), typeof crypto.createHash); path = 5; console.log(path)",
+  },
+  {
+    // Node's %s branch: String() unless the toString/toPrimitive is a V8 built-in's.
+    label: 'util-format-percent-s',
+    code: "const f = (v) => { try { return util.format('%s', v) } catch (e) { return 'throw ' + e.message } }, c = (n) => new ({ [n]: class { toString() { return 'S' } } })[n](); console.log([{ toString() { return 'o' } }, new (class { toString() { return 'A' } })(), { [Symbol.toPrimitive]: () => 'p' }, { [Symbol.toPrimitive]() { throw new Error('PRIM') } }, -0, 1n, Buffer.from('ab'), new Uint8Array([1, 2]), new Date(0), { a: { b: 1 } }, [1, [2, [3]]], new Map([[1, 2]]), c('Buffer'), c('URL'), c('TextEncoder'), c('SharedArrayBuffer'), c('Document'), c('Error'), c('Map'), c('Iterator')].map(f).join(' | '))",
   },
   { label: 'throw-sync', code: "console.log('before'); throw new Error('boom')", evalError: true },
   { label: 'reject-unhandled', code: "Promise.reject(new Error('rej'))", evalError: true },

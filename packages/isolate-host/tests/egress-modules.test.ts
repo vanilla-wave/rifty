@@ -37,17 +37,12 @@ describe('module shape equals live node -e (Acceptance 1)', () => {
 
 /**
  * Rows declared to differ from Node, one class: a non-string argument in an error
- * message goes through rifty's `util.format('%s')` / `util.inspect`, which differ
- * from Node's for these shapes (`backlog/runtime-js/util-format-percent-s`,
- * `backlog/runtime-js/inspect-null-prototype-prefix`). Each must still differ: a
+ * message goes through rifty's `util.inspect`, which differs from Node's for these
+ * shapes (`backlog/runtime-js/inspect-null-prototype-prefix`). Each must still differ: a
  * runtime fix turns this red, and the row joins the strict ones.
  */
 const DECLARED_FORMAT_ROWS = [
   ' null-proto ',
-  ' name -0 ', // a -0 label is falsy: Node's 'Header name', strict
-  ' own toString ',
-  ' class toString ',
-  ' Symbol.toPrimitive ',
   ' Number object ',
   ' nested null-proto ',
   ' Error with stack, cause, code, subclass ',

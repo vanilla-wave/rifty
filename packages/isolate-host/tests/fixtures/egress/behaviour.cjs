@@ -107,6 +107,14 @@ for (const [label, name] of [
     })(),
   ],
   ['Symbol.toPrimitive', { [Symbol.toPrimitive]: () => 'prim' }],
+  [
+    'throwing Symbol.toPrimitive',
+    {
+      [Symbol.toPrimitive]() {
+        throw new Error('PRIM');
+      },
+    },
+  ],
   ['user class Request', new (class Request {})()],
   ['Number object', new Number(5)],
   ['nested null-proto', { a: Object.create(null) }],
