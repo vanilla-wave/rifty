@@ -15,12 +15,15 @@ branch `t3/node-url-legacy-port` (under `runtime-js/reference/` there). Each REA
    Node's legacy `url`/`querystring` generated from pinned Node sources on every host (I5). Its ADR
    is the first owner of the shared Node-source mechanism (vendored pinned files, generator with edit
    anchors, drift check, the `primordials`/`ERR_*`/validators binding); later units (4, 7) extend
-   it or supersede it by ADR. Its IDNA choice is the user's (c′ vs d, manager thread). `epic:` returns when both branches meet main.
+   it or supersede it by ADR. PR #444. IDNA: user 2026-11-24 (via the manager, «ок» on (c′)) — the
+   host's `URL` on browser hosts, the named gap `url.toASCII` in the isolate until it has a `URL`;
+   +47 KB guest bundle seen by the user. `epic:` returns when both branches meet main.
 3. `runtime-js/isolate-web-globals-captured-at-load` — draft — the seam: real globals and the
    remaining ceiling throwers both installed before the runtime loads; `crypto.subtle` and
    `MessageChannel` read lazily in runtime-js; the identity sweep as a test (I2, I3).
 4. `runtime-js/isolate-guest-url` — draft — `URL`/`URLSearchParams` (whatwg-url 15.1.0 parser,
-   Node's wrapper, host IDNA from an `ada::idna` port) (I1, I3).
+   Node's wrapper, host IDNA from an `ada::idna` port) (I1, I3); also closes PR #444's isolate gap
+   `url.toASCII`: the legacy API's `toASCII` binding switches to the guest `URL` (one function).
 5. `runtime-js/isolate-esm-files` — draft — the guest's ES module loader once `URL` exists
    (`declareNoEsmLoader` leaves, `require(esm)` Node's default); needs 4 and
    `runtime-js/esm-import-binding-asi` (I4).
@@ -53,13 +56,11 @@ Node-faithful route yet), web streams (+ `TextEncoderStream`/`TextDecoderStream`
   a hard bound — owner: user — re-asked 2026-11-24 with (a) ≈ +1–3 ms, (b) ≥ +9 ms on a 13 ms
   empty `runCode` (601 ms warm `exec` at template scale), bundle +0.3 / +0.9 MB on 7.1 MB, heap
   not measured; recommended measured growth.
-- IDN hostnames in the legacy `url.parse`: the user's choice (c′) host `URL` + punycode check vs
-  (d) `ada::idna` port is carried by the manager (thread `cf2ae711`) for
-  `runtime-js/node-url-legacy-api-port`; withdrawn here 2026-11-24 so the user answers once.
 - IDNA table in the guest bundle: the guest `URL` needs Node's IDNA (tr46 differs on 308/6 357
   IdnaTestV2 hosts, `reference/sources-native` §IDNA); a port of `ada::idna` (82–97 KB gzip, 53 KB
-  with ICU NFC, implementation thread's estimate) is this goal's candidate, with `URL` (item 4),
-  shared with the legacy unit if (d) is chosen there; its cost is question 3.
+  with ICU NFC, implementation thread's estimate) is this goal's candidate, with `URL` (item 4);
+  the legacy API reaches it through the guest `URL` (PR #444, (c′)); its cost is question 3 —
+  owner: agent for the source (only it matches Node), user for the cost.
 - 4. Tier: `works` (recommended: computation inside the isolate, no new boundary) or `robust` —
   owner: user — asked 2026-11-24.
 - 5. ES modules in `-e` (`runCode` with `import()` or ESM syntax: today `isolate-host.dynamic-import`/
