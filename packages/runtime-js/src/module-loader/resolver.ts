@@ -6,6 +6,7 @@ import {
   fileURLToPathPosix,
   hasEncodedPathSeparator,
 } from '../internal/posix-file-url.ts';
+import { requireModuleEnabled } from '../internal/require-module.ts';
 import { hasURLScheme } from '../internal/url-scheme.ts';
 import { ModuleLoadError } from './errors.ts';
 import {
@@ -879,7 +880,7 @@ function readResolved(
   vfs: FsSync,
   pkgCache: PkgCache,
   filePath: string,
-  _esm: boolean,
+  esm: boolean,
 ): ResolvedModule {
   // Node's CJS loader reads the file as is: a BOM stays (whitespace to V8, so
   // `\uFEFF#!` is a SyntaxError); JSON and the ESM loader strip it.
@@ -893,7 +894,8 @@ function readResolved(
   // One scope walk: feed its `type` into detectKind so the `.js`/`.ts`/`.tsx`
   // branch no longer re-walks/re-parses the same package.json (perf #4).
   const scope = findPackageScope(vfs, pkgCache, filePath);
-  const kind = detectKind(filePath, scope?.pkg.type, compiledSource);
+  // Without `require(esm)` Node's `require` compiles a typeless `.js` as CJS, no detection.
+  const kind = detectKind(filePath, scope?.pkg.type, compiledSource, esm || requireModuleEnabled());
   // Node strips a leading `#!` shebang before compiling a JS module (CJS
   // `Module._compile` + the ESM loader). Match it for the compiled kinds so a
   // shebang'd entry — `node <script>`, a child_process spawn, or a
@@ -910,7 +912,12 @@ function readResolved(
   };
 }
 
-function detectKind(filePath: string, scopeType: string | undefined, source: string): ModuleKind {
+function detectKind(
+  filePath: string,
+  scopeType: string | undefined,
+  source: string,
+  syntaxDetection: boolean,
+): ModuleKind {
   if (safeEndsWith(filePath, '.json')) return 'json';
   for (let index = 0; index < TEXT_EXTENSIONS.length; index += 1) {
     if (safeEndsWith(filePath, TEXT_EXTENSIONS[index] as string)) return 'text';
@@ -926,7 +933,11 @@ function detectKind(filePath: string, scopeType: string | undefined, source: str
     // `.ts`/`.tsx`/`.jsx` mirror the `.js` branch (ADR-0053): ESM under a `type:module`
     // scope, else CJS — as a TS-aware Node loader classifies by package scope.
     // `scopeType` is the SAME findPackageScope result readResolved computed.
-    return detectJavaScriptKind(scopeType, source, safeEndsWith(filePath, '.js'));
+    return detectJavaScriptKind(
+      scopeType,
+      source,
+      syntaxDetection && safeEndsWith(filePath, '.js'),
+    );
   }
   // Unknown extension — assume CJS, matches Node's default for `.js` in non-module packages.
   return 'cjs';

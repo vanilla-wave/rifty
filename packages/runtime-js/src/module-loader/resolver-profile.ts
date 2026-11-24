@@ -1,5 +1,6 @@
 import { parse as acornParse } from 'acorn';
 import { nodeStartupOptions } from '../internal/node-startup-options.ts';
+import { requireModuleEnabled } from '../internal/require-module.ts';
 
 export interface FileDirResolutionOrder {
   readonly extensions: readonly string[];
@@ -59,16 +60,23 @@ export function resolutionOrder(esm: boolean): FileDirResolutionOrder {
 const ESM_CONDITIONS: readonly string[] = ['node', 'import', 'module-sync', 'default'];
 const CJS_CONDITIONS: readonly string[] = ['node', 'require', 'module-sync', 'default'];
 let userConditionsFor: readonly string[] = [];
+let moduleSyncFor = true;
 let userEsmConditions = ESM_CONDITIONS;
 let userCjsConditions = CJS_CONDITIONS;
 
-/** Node's defaults plus the realm's `--conditions` (ADR-0449), for every resolution. */
+/**
+ * Node's defaults plus the realm's `--conditions` (ADR-0449), for every resolution;
+ * `module-sync` only with `require(esm)` (Node's `initializeDefaultConditions`).
+ */
 export function activeConditions(esm: boolean): readonly string[] {
   const user = nodeStartupOptions().conditions;
-  if (user !== userConditionsFor) {
+  const moduleSync = requireModuleEnabled();
+  if (user !== userConditionsFor || moduleSync !== moduleSyncFor) {
     userConditionsFor = user;
-    userEsmConditions = [...ESM_CONDITIONS, ...user];
-    userCjsConditions = [...CJS_CONDITIONS, ...user];
+    moduleSyncFor = moduleSync;
+    const keep = (c: string): boolean => moduleSync || c !== 'module-sync';
+    userEsmConditions = [...ESM_CONDITIONS.filter(keep), ...user];
+    userCjsConditions = [...CJS_CONDITIONS.filter(keep), ...user];
   }
   return esm ? userEsmConditions : userCjsConditions;
 }
@@ -81,7 +89,12 @@ export function detectJavaScriptKind(
 ): 'cjs' | 'esm' {
   if (scopeType === 'module') return 'esm';
   if (scopeType === 'commonjs' || !syntaxDetection) return 'cjs';
-  return !parsesAsCommonJs(source) && parsesAsEsm(source) ? 'esm' : 'cjs';
+  return hasModuleSyntax(source) ? 'esm' : 'cjs';
+}
+
+/** Source Node would run as ESM only: CommonJS fails to parse, a module parses. */
+export function hasModuleSyntax(source: string): boolean {
+  return !parsesAsCommonJs(source) && parsesAsEsm(source);
 }
 
 function parsesAsCommonJs(source: string): boolean {

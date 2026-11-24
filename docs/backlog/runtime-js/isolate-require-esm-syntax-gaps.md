@@ -117,8 +117,9 @@ prints its verdict on a generator, an async, a plain and an arrow function. Toda
   `runtime-js/cjs-esm-syntax-load-warning`, compat ⚠️.
 - The CJS compile error's `ModuleLoadError` wrapper (constructor, `code` `SYNTAX_ERROR`, message
   prefix): `runtime-js/module-compile-error-node-syntax-error` (user-deferred), compat ⚠️.
-- `String(e)` of `ERR_REQUIRE_ESM` reads `Error: …`, Node `Error [ERR_REQUIRE_ESM]: …` (Node's
-  `NodeError` prototype `toString`; every rifty Node error is a plain `Error` + `code`), compat ⚠️.
+- `require.extensions['.js'](obj, file)` on a plain object with an own `parent`: rifty names that
+  parent (it reads `module.parent`), Node none (its internal slot); `new Module(id, parent)` is
+  `runtime-js/node-module-builtin-module-class`, compat ⚠️.
 - ES modules in the guest (`import()`, ESM entry): `isolate-host.dynamic-import`, `isolate-host.esm`, compat ❌.
 - `process.execArgv` stays `[]` (Node `['--no-require-module', …]`): the mode is the host's, not a
   launch token; `--no-require-module` in a `fork`/`Worker` `execArgv` stays
@@ -131,7 +132,7 @@ prints its verdict on a generator, an async, a plain and an arrow function. Toda
 - The mode is a realm-level boolean in runtime-js (`internal/require-module.ts`), set by the guest before any guest code; not a startup-options token (fork/Worker would start accepting it — a browser change).
 - Typeless `.js`: `require` skips syntax detection when the mode is off (Node compiles it as CJS); `import`/entry resolution (`esm: true`) still detects.
 - `module-sync` is dropped from both condition sets when off, as Node's `initializeDefaultConditions`.
-- `ERR_REQUIRE_ESM` is a plain `Error` + `code` with Node's `stack` head (constructor, name, own keys equal Node's), not `ModuleLoadError` (constructor would differ).
+- `ERR_REQUIRE_ESM` has Node's `NodeError` shape (prototype with `constructor` Error and the coded `toString`, then `Error.prototype`; own `stack`, `code`, `message`; coded `stack` head), not `ModuleLoadError` (constructor would differ).
 - `process.features.require_module` becomes an enumerable configurable getter (Node's descriptor); value on browser hosts unchanged.
 
 ## Challenge

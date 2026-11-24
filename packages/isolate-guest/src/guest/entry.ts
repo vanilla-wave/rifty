@@ -22,6 +22,7 @@ import {
   installNodeFatalReport,
   readNodeProcessTerminal,
   setDefaultProcessOutputSink,
+  setRequireModule,
 } from '@riftydev/runtime-js/internal';
 import { createModuleLoader } from '@riftydev/runtime-js/loader';
 import { syncMirror } from '@riftydev/vfs';
@@ -45,6 +46,9 @@ import {
 } from './web-shim.ts';
 
 bindNotImplemented(NotImplementedError);
+// No ES module loader here (it needs `URL`, a ceiling): `require` is Node's with
+// `--no-require-module` until one exists.
+setRequireModule(false);
 
 const CWD = '/workspace';
 // The realm's FS exists from load, so a restore before `run` is the tree `run` sees (ADR-0567 §6).

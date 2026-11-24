@@ -79,7 +79,7 @@ from the package source at the lock version, not traced.
 | 7 | `fs.ReadStream#close`/`WriteStream#close`, `ReadStream[Symbol.asyncIterator]` | **undeclared** (fs.md row now names them) | source: `exceljs/lib/xlsx/xlsx.js:56`, `:59` (its catch's `close()` masks #6), `:247` | `xlsx.readFile` — `runtime-js/fs-stream-close-method-missing` |
 | 8 | `process.umask` | **undeclared** (process.md row added) | source: `fstream/lib/writer.js:8` at load (unzipper → exceljs main) | exceljs main after #1 (`diag`: `require('fstream')`) — `runtime-js/process-umask-missing` |
 | 9 | `crypto.createHash('sha512')` / `getHashes()` | declared (`runtime-js/crypto-sync-subset-expansion`; consumer added there) | traced load: `exceljs/lib/utils/encryptor.js:3`; source: `:27-30` checks `getHashes()` | `worksheet.protect(password)` |
-| 10 | `require()` of a `"type": "module"` package | declared ❌ (`isolate-host.md` Sandbox row "ES modules" names `NotImplementedError('isolate-host.esm')`; the measured refusal is `TypeError: URLConstructor is not a constructor`, now noted there) | `nanoid` 6.0.2 (`diag`) | nothing measured: docx bundles its own copy — `runtime-js/isolate-require-esm-syntax-gaps` |
+| 10 | `require()` of a `"type": "module"` package | declared ❌ (`isolate-host.md` Sandbox row "ES modules" names `NotImplementedError('isolate-host.esm')`; the measured refusal was `TypeError: URLConstructor is not a constructor`; since 2026-11-24 Node's `ERR_REQUIRE_ESM`, as `node --no-require-module`, `isolate-host.md` row "`require()` of an ES module") | `nanoid` 6.0.2 (`diag`) | nothing measured: docx bundles its own copy |
 
 Touched but harmless (a `try` or `typeof` around them): `CustomEvent` (bluebird
 `debuggability.js:146`, traced), `Blob` detection (JSZip). `node:http`, `worker_threads`,
@@ -89,7 +89,7 @@ Touched but harmless (a `try` or `typeof` around them): `CustomEvent` (bluebird
 For ROADMAP M14 E (guest Web API shim), what the evidence supports: no ceiling Web API breaks a
 measured write route; reading a file through a stream needs `ReadableStream` (#6, rifty's own fs
 path, not a library call); #1 needs `CompressionStream` or a zlib not built on it; #10 needs `URL`
-(`runtime-js/isolate-require-esm-syntax-gaps`, `docs/ROADMAP.md` M14 E). The paths behind the
+(an isolate ESM loader, `docs/ROADMAP.md` M14 E). The paths behind the
 first stops (exceljs's main entry past #1, its streaming writer/reader) are not measured. #5 is
 the one silent wrong behavior.
 
@@ -113,7 +113,7 @@ compression, process and worker use a named gap), `xlsx` only: `require('exceljs
 its next stop is `module-loader.cjs-global-function-assignment` at
 `es-abstract/2025/IsDetachedBuffer.js:22` (`new global[k](…)`, `runtime-js/cjs-global-function-assignment`).
 Past it (diagnostic patches of a copied `node_modules`, not a route): `require` of a `module-sync`
-ESM entry, `generator-function`/`async-function` → `URLConstructor` (`runtime-js/isolate-require-esm-syntax-gaps`),
+ESM entry, `generator-function`/`async-function` → `URLConstructor` (since 2026-11-24 their CommonJS entry, `isolate-host/tests/require-esm.test.ts`),
 then row 8 (`process.umask`). With `origin/t3/process-umask` merged locally and both patched,
 canonical `gen/xlsx.cjs` exits 0 and equals node's (`vsNode.equal`, 14 parts). The streaming
 `WorkbookWriter#commit` stops at `isolate-host.zlib.DeflateRaw` (no engine). Chains with file and
