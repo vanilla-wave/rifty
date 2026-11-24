@@ -106,7 +106,9 @@ function filler(accept, enough) {
   return out;
 }
 const semverFiles = walkFiles(join(LIBS, 'semver'), '/node_modules/semver', []);
-const allLibFiles = walkFiles(LIBS, '/node_modules', []).filter(([p]) => !p.includes('/.package-lock.json'));
+const allLibFiles = walkFiles(LIBS, '/node_modules', []).filter(
+  ([p]) => !p.includes('/.package-lock.json'),
+);
 const T1 = [
   ...semverFiles,
   ...filler(
@@ -118,10 +120,12 @@ const T95_FILES = 23_654;
 const T95_BYTES = 95_000_000;
 const t95fill = filler(
   (s) => s <= 28 * 1024,
-  (o) => allLibFiles.length + o.length >= T95_FILES || bytesOf(allLibFiles) + bytesOf(o) >= T95_BYTES,
+  (o) =>
+    allLibFiles.length + o.length >= T95_FILES || bytesOf(allLibFiles) + bytesOf(o) >= T95_BYTES,
 );
 const T95 = [...allLibFiles, ...t95fill];
-for (let i = 0; T95.length < T95_FILES; i++) T95.push([T95[i][0].replace('/node_modules/', '/node_modules/.copy/'), T95[i][1]]);
+for (let i = 0; T95.length < T95_FILES; i++)
+  T95.push([T95[i][0].replace('/node_modules/', '/node_modules/.copy/'), T95[i][1]]);
 
 /** Directory set of a file list (with `/`). */
 function dirsOf(files) {
@@ -153,7 +157,9 @@ function storeOf(files) {
   for (const p of entries.keys()) {
     if (p === '/') continue;
     const parent = p.slice(0, p.lastIndexOf('/')) || '/';
-    children.get(parent).push([p.slice(parent === '/' ? 1 : parent.length + 1), entries.get(p).dir ? 1 : 0]);
+    children
+      .get(parent)
+      .push([p.slice(parent === '/' ? 1 : parent.length + 1), entries.get(p).dir ? 1 : 0]);
   }
   for (const list of children.values()) list.sort((a, b) => (a[0] < b[0] ? -1 : 1));
   return { entries, children };
@@ -187,7 +193,15 @@ function workerFs(tpl, diffBlob) {
   const stat = (p) => {
     const u = upper.statSyncOrNull(p);
     if (u)
-      return [u.isDirectory ? 1 : 0, u.size ?? 0, u.mtime, u.atime, u.metadata.ctime, u.metadata.birthtime, u.nlink ?? 1];
+      return [
+        u.isDirectory ? 1 : 0,
+        u.size ?? 0,
+        u.mtime,
+        u.atime,
+        u.metadata.ctime,
+        u.metadata.birthtime,
+        u.nlink ?? 1,
+      ];
     const e = low(p);
     return e ? [e.dir ? 1 : 0, e.dir ? 0 : e.bytes.length, T0, T0, T0, T0, 1] : null;
   };
@@ -209,7 +223,8 @@ function workerFs(tpl, diffBlob) {
     readdir: (p) => {
       const out = new Map();
       if (low(p)?.dir) for (const [n, d] of tpl.store.children.get(p)) out.set(n, d);
-      if (upper.existsSync(p)) for (const d of upper.readdirSync(p)) out.set(d.name, d.isDirectory ? 1 : 0);
+      if (upper.existsSync(p))
+        for (const d of upper.readdirSync(p)) out.set(d.name, d.isDirectory ? 1 : 0);
       else if (out.size === 0) return { e: 'ENOENT' };
       return [...out].sort((a, b) => (a[0] < b[0] ? -1 : 1));
     },
@@ -281,7 +296,7 @@ async function run(arm, tpl, w, memoryLimit) {
   const out = [];
   const guest = {};
   const { functions, timeOrigin, close } = createHostBridge({
-    write: (fd, b) => out.push(Buffer.from(b).toString()),
+    write: (_fd, b) => out.push(Buffer.from(b).toString()),
     fire: (id) => guest.fire.apply(undefined, [id]),
   });
   const iso = new ivm.Isolate({ memoryLimit });
@@ -296,23 +311,24 @@ async function run(arm, tpl, w, memoryLimit) {
       arm === 'worker'
         ? [new ivm.Callback((op, a, b, c) => wfs.call(op, a, b, c))]
         : arm === 'lazy'
-        ? [
-            new ivm.Callback((p) => {
-              const e = tpl.store.entries.get(p);
-              if (!e) return null;
-              return [e.dir ? 1 : 0, e.dir ? 0 : e.bytes.length, T0, T0, T0, T0];
-            }),
-            new ivm.Callback((p) => tpl.store.entries.get(p).bytes),
-            new ivm.Callback((p) => tpl.store.children.get(p) ?? []),
-          ]
-        : [];
+          ? [
+              new ivm.Callback((p) => {
+                const e = tpl.store.entries.get(p);
+                if (!e) return null;
+                return [e.dir ? 1 : 0, e.dir ? 0 : e.bytes.length, T0, T0, T0, T0];
+              }),
+              new ivm.Callback((p) => tpl.store.entries.get(p).bytes),
+              new ivm.Callback((p) => tpl.store.children.get(p) ?? []),
+            ]
+          : [];
+    const extra =
+      arm === 'lazy'
+        ? `globalThis.__probeTpl = { stat: $${names.length}, read: $${names.length + 1}, readdir: $${names.length + 2} };`
+        : arm === 'worker'
+          ? `globalThis.__probeFs = $${names.length};`
+          : '';
     await context.evalClosure(
-      `globalThis.__riftyIsolateHost = { timeOrigin: ${timeOrigin}, ${names.map((n, i) => `${n}: $${i}`).join(', ')} };` +
-        (arm === 'lazy'
-          ? `globalThis.__probeTpl = { stat: $${names.length}, read: $${names.length + 1}, readdir: $${names.length + 2} };`
-          : arm === 'worker'
-            ? `globalThis.__probeFs = $${names.length};`
-            : ''),
+      `globalThis.__riftyIsolateHost = { timeOrigin: ${timeOrigin}, ${names.map((n, i) => `${n}: $${i}`).join(', ')} };${extra}`,
       [...host, ...tplFns],
     );
     const script = await iso.compileScript(bundle, {
@@ -329,16 +345,25 @@ async function run(arm, tpl, w, memoryLimit) {
     const state = arm === 'full' ? tpl.fullBlob[w] : tpl.diffBlob[w];
     const restore = await entry.get('restore', { reference: true });
     if (arm !== 'worker')
-      await restore.apply(undefined, [new ivm.ExternalCopy(state).copyInto({ release: true }), options], {
-        arguments: { copy: true },
-      });
+      await restore.apply(
+        undefined,
+        [new ivm.ExternalCopy(state).copyInto({ release: true }), options],
+        {
+          arguments: { copy: true },
+        },
+      );
     if (arm === 'views') {
       const mat = await probe.get('materialize', { reference: true });
-      await mat.apply(undefined, [new ivm.ExternalCopy(tpl.packed.pack).copyInto({ release: true }), tpl.packed.index], {
-        arguments: { copy: true },
-      });
+      await mat.apply(
+        undefined,
+        [new ivm.ExternalCopy(tpl.packed.pack).copyInto({ release: true }), tpl.packed.index],
+        {
+          arguments: { copy: true },
+        },
+      );
     }
-    if (arm === 'lazy') await (await probe.get('overlay', { reference: true })).apply(undefined, []);
+    if (arm === 'lazy')
+      await (await probe.get('overlay', { reference: true })).apply(undefined, []);
     if (arm === 'worker') {
       wfs = workerFs(tpl, tpl.diffBlob[w]);
       await (await probe.get('remote', { reference: true })).apply(undefined, []);
@@ -354,15 +379,25 @@ async function run(arm, tpl, w, memoryLimit) {
     let end;
     if (arm === 'worker') end = wfs.capture();
     else if (arm === 'views') {
-      end = await (await probe.get('captureDiff', { reference: true })).apply(undefined, [1 << 30], {
-        result: { copy: true },
-      });
+      end = await (await probe.get('captureDiff', { reference: true })).apply(
+        undefined,
+        [1 << 30],
+        {
+          result: { copy: true },
+        },
+      );
     } else {
       const snap = await entry.get('snapshot', { reference: true });
-      end = await snap.apply(undefined, [options], { arguments: { copy: true }, result: { copy: true } });
+      end = await snap.apply(undefined, [options], {
+        arguments: { copy: true },
+        result: { copy: true },
+      });
     }
     t.capture = performance.now();
-    const counters = arm === 'lazy' || arm === 'worker' ? JSON.parse(await (await probe.get('counters', { reference: true })).apply(undefined, [])) : undefined;
+    const counters =
+      arm === 'lazy' || arm === 'worker'
+        ? JSON.parse(await (await probe.get('counters', { reference: true })).apply(undefined, []))
+        : undefined;
     const peakHeap = iso.getHeapStatisticsSync();
     return {
       ok: code === 0,
@@ -392,7 +427,8 @@ async function run(arm, tpl, w, memoryLimit) {
 }
 
 const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
-const round = (o) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, Math.round(v * 10) / 10]));
+const round = (o) =>
+  Object.fromEntries(Object.entries(o).map(([k, v]) => [k, Math.round(v * 10) / 10]));
 
 async function floor(arm, tpl, w) {
   let lo = 8;
@@ -434,15 +470,22 @@ function prepare(label, files, workloads) {
   };
 }
 
-console.log(`node ${process.version}, isolated-vm ${hostReq('isolated-vm/package.json').version}, ${process.platform}/${process.arch}`);
+console.log(
+  `node ${process.version}, isolated-vm ${hostReq('isolated-vm/package.json').version}, ${process.platform}/${process.arch}`,
+);
 const plans = [
-  [prepare('T1', T1, ['semver', 'many', 'stream', 'bigdiff']), ['semver', 'many', 'stream', 'bigdiff']],
+  [
+    prepare('T1', T1, ['semver', 'many', 'stream', 'bigdiff']),
+    ['semver', 'many', 'stream', 'bigdiff'],
+  ],
   [prepare('T95', T95, ['semver', 'pdf', 'many']), ['semver', 'pdf', 'many']],
 ];
 const ARMS = ['full', 'views', 'lazy', 'worker'];
 const REPS = 7;
 for (const [tpl, workloads] of plans) {
-  console.log(`\n## ${tpl.label}: ${tpl.files} files, ${(tpl.bytes / 1e6).toFixed(1)} MB; consumer full-state encode/decode ms ${JSON.stringify(tpl.consumer)}`);
+  console.log(
+    `\n## ${tpl.label}: ${tpl.files} files, ${(tpl.bytes / 1e6).toFixed(1)} MB; consumer full-state encode/decode ms ${JSON.stringify(tpl.consumer)}`,
+  );
   for (const w of workloads) {
     for (const arm of ARMS) {
       await run(arm, tpl, w, 1024); // warm
@@ -488,9 +531,17 @@ for (const w of ['pdf', 'many'])
       const t = performance.now();
       const rs = await Promise.all([0, 1, 2, 3].map(() => run(arm, t95, w, 1024)));
       walls.push(performance.now() - t);
-      if (rs.some((r) => !r.ok)) throw new Error(`${arm} ${w}: ${JSON.stringify(rs.find((r) => !r.ok))}`);
+      if (rs.some((r) => !r.ok))
+        throw new Error(`${arm} ${w}: ${JSON.stringify(rs.find((r) => !r.ok))}`);
       per.push(...rs.map((r) => r.ms.total));
     }
-    console.log(JSON.stringify({ w, arm, wallMedianMs: Math.round(median(walls)), perRunMedianMs: Math.round(median(per)) }));
+    console.log(
+      JSON.stringify({
+        w,
+        arm,
+        wallMedianMs: Math.round(median(walls)),
+        perRunMedianMs: Math.round(median(per)),
+      }),
+    );
   }
 process.exit(0);

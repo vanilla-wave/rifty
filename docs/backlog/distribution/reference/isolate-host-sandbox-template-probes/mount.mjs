@@ -94,6 +94,11 @@ for (const [name, files] of Object.entries(layouts)) {
   console.log('node ', JSON.stringify({ ...n.out, readdirRoot: undefined }, null, 1));
   const strip = (o) => JSON.stringify({ ...o, readdirRoot: undefined, paths: undefined });
   console.log('same (except module.paths, readdir /):', strip(ro) === strip(n.out));
-  console.log('module.paths rifty:', JSON.stringify(ro.paths), ' node (temp-root-relative):', JSON.stringify(n.out.paths));
+  console.log(
+    'module.paths rifty:',
+    JSON.stringify(ro.paths),
+    ' node (temp-root-relative):',
+    JSON.stringify(n.out.paths),
+  );
 }
 process.exit(0);

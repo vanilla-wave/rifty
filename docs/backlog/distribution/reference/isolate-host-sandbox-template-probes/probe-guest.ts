@@ -117,8 +117,9 @@ class Overlay {
   mkdirSync(p: string, o: { recursive?: boolean }): void {
     const n = norm(p);
     if (lowerStat(n)?.isDirectory && !upper.existsSync(n)) {
-      if (o.recursive) return copyUpDir(n);
-      throw new VfsError('EEXIST', p);
+      if (!o.recursive) throw new VfsError('EEXIST', p);
+      copyUpDir(n);
+      return;
     }
     if (!upper.existsSync(parentOf(n)) && lowerStat(parentOf(n))?.isDirectory)
       copyUpDir(parentOf(n));
