@@ -56,69 +56,27 @@
       "stderr": "",
       "trace": {
         "modules": {
-          "assert": [
-            "(generator)"
-          ],
-          "buffer": [
-            "(generator)"
-          ],
-          "constants": [
-            "(generator)"
-          ],
-          "crypto": [
-            "(generator)"
-          ],
-          "events": [
-            "(generator)"
-          ],
-          "fs": [
-            "(generator)"
-          ],
-          "os": [
-            "(generator)"
-          ],
-          "path": [
-            "(generator)"
-          ],
-          "stream": [
-            "(generator)"
-          ],
-          "string_decoder": [
-            "(generator)"
-          ],
-          "util": [
-            "(generator)"
-          ],
-          "zlib": [
-            "(generator)"
-          ],
-          "https": [
-            "(generator)"
-          ],
-          "http": [
-            "(generator)"
-          ],
-          "url": [
-            "(generator)"
-          ],
-          "worker_threads": [
-            "(generator)"
-          ],
-          "child_process": [
-            "(generator)"
-          ],
-          "timers": [
-            "(generator)"
-          ],
-          "process": [
-            "(generator)"
-          ],
-          "fs (import())": [
-            "(generator)"
-          ],
-          "https (import())": [
-            "(generator)"
-          ]
+          "assert": ["(generator)"],
+          "buffer": ["(generator)"],
+          "constants": ["(generator)"],
+          "crypto": ["(generator)"],
+          "events": ["(generator)"],
+          "fs": ["(generator)"],
+          "os": ["(generator)"],
+          "path": ["(generator)"],
+          "stream": ["(generator)"],
+          "string_decoder": ["(generator)"],
+          "util": ["(generator)"],
+          "zlib": ["(generator)"],
+          "https": ["(generator)"],
+          "http": ["(generator)"],
+          "url": ["(generator)"],
+          "worker_threads": ["(generator)"],
+          "child_process": ["(generator)"],
+          "timers": ["(generator)"],
+          "process": ["(generator)"],
+          "fs (import())": ["(generator)"],
+          "https (import())": ["(generator)"]
         },
         "globals": {
           "Blob": [
@@ -143,15 +101,9 @@
             "jszip/lib/object.js:2:12",
             "jszip/lib/index.js:41:19"
           ],
-          "TextEncoder": [
-            "fflate/lib/node.cjs:1701:10"
-          ],
-          "TextDecoder": [
-            "fflate/lib/node.cjs:1703:10"
-          ],
-          "queueMicrotask": [
-            "fflate/lib/node.cjs:2597:10"
-          ],
+          "TextEncoder": ["fflate/lib/node.cjs:1701:10"],
+          "TextDecoder": ["fflate/lib/node.cjs:1703:10"],
+          "queueMicrotask": ["fflate/lib/node.cjs:2597:10"],
           "navigator": [
             "bluebird/js/release/util.js:3:19",
             "bluebird/js/release/promise.js:14:12",
@@ -201,10 +153,7 @@
             "unzipper/unzip.js:8:17"
           ]
         },
-        "textDecoderLabels": [
-          "undefined",
-          "utf-8"
-        ]
+        "textDecoderLabels": ["undefined", "utf-8"]
       }
     },
     {
@@ -222,9 +171,7 @@
       "stderr": "",
       "trace": {
         "modules": {
-          "fs": [
-            "(generator)"
-          ]
+          "fs": ["(generator)"]
         },
         "globals": {},
         "textDecoderLabels": []
@@ -259,9 +206,7 @@
       "stderr": "",
       "trace": {
         "modules": {
-          "fs": [
-            "(generator)"
-          ],
+          "fs": ["(generator)"],
           "stream": [
             "readable-stream/readable.js:1:14",
             "jszip/lib/support.js:35:28",
@@ -362,12 +307,8 @@
             "jszip/lib/index.js:41:19",
             "pptxgenjs/dist/pptxgen.cjs.js:4:13"
           ],
-          "TextEncoder": [
-            "docx/dist/index.cjs:23637:10"
-          ],
-          "TextDecoder": [
-            "docx/dist/index.cjs:23638:10"
-          ],
+          "TextEncoder": ["docx/dist/index.cjs:23637:10"],
+          "TextDecoder": ["docx/dist/index.cjs:23638:10"],
           "btoa": [
             "docx/dist/index.cjs:23937:20",
             "docx/dist/index.cjs:23959:9",
@@ -380,10 +321,7 @@
             "docx/dist/index.cjs:26960:17"
           ]
         },
-        "textDecoderLabels": [
-          "undefined",
-          "utf-8"
-        ]
+        "textDecoderLabels": ["undefined", "utf-8"]
       }
     },
     {
@@ -414,15 +352,9 @@
       "stderr": "",
       "trace": {
         "modules": {
-          "fs": [
-            "(generator)"
-          ],
-          "stream": [
-            "(generator)"
-          ],
-          "crypto": [
-            "(generator)"
-          ],
+          "fs": ["(generator)"],
+          "stream": ["(generator)"],
+          "crypto": ["(generator)"],
           "events": [
             "readable-stream/lib/_stream_readable.js:42:10",
             "readable-stream/readable.js:12:30",
@@ -494,21 +426,13 @@
         },
         "trace": {
           "modules": {
-            "fs": [
-              "(generator)"
-            ]
+            "fs": ["(generator)"]
           },
           "globals": {
-            "TextEncoder": [
-              "docx/dist/index.cjs:23637:10"
-            ],
-            "TextDecoder": [
-              "docx/dist/index.cjs:23638:10"
-            ]
+            "TextEncoder": ["docx/dist/index.cjs:23637:10"],
+            "TextDecoder": ["docx/dist/index.cjs:23638:10"]
           },
-          "textDecoderLabels": [
-            "undefined"
-          ]
+          "textDecoderLabels": ["undefined"]
         }
       },
       "guest": {
@@ -543,9 +467,7 @@
         },
         "trace": {
           "modules": {
-            "fs": [
-              "(generator)"
-            ]
+            "fs": ["(generator)"]
           },
           "globals": {},
           "textDecoderLabels": []
@@ -706,41 +628,19 @@
         },
         "trace": {
           "modules": {
-            "fs": [
-              "(generator)"
-            ],
-            "path": [
-              "(generator)"
-            ],
-            "fs (import())": [
-              "(generator)"
-            ],
-            "https (import())": [
-              "(generator)"
-            ]
+            "fs": ["(generator)"],
+            "path": ["(generator)"],
+            "fs (import())": ["(generator)"],
+            "https (import())": ["(generator)"]
           },
           "globals": {
-            "window (absent in Node too)": [
-              "(generator)"
-            ],
-            "Blob": [
-              "(generator)"
-            ],
-            "self (absent in Node too)": [
-              "(generator)"
-            ],
-            "setImmediate": [
-              "(generator)"
-            ],
-            "document (absent in Node too)": [
-              "(generator)"
-            ],
-            "MessageChannel": [
-              "(generator)"
-            ],
-            "navigator": [
-              "(generator)"
-            ]
+            "window (absent in Node too)": ["(generator)"],
+            "Blob": ["(generator)"],
+            "self (absent in Node too)": ["(generator)"],
+            "setImmediate": ["(generator)"],
+            "document (absent in Node too)": ["(generator)"],
+            "MessageChannel": ["(generator)"],
+            "navigator": ["(generator)"]
           },
           "textDecoderLabels": []
         }
@@ -893,9 +793,7 @@
         },
         "trace": {
           "modules": {
-            "fs": [
-              "(generator)"
-            ],
+            "fs": ["(generator)"],
             "stream": [
               "readable-stream/readable.js:1:14",
               "jszip/lib/support.js:35:28",
@@ -1000,9 +898,7 @@
         },
         "trace": {
           "modules": {
-            "fs": [
-              "(generator)"
-            ],
+            "fs": ["(generator)"],
             "stream": [
               "readable-stream/readable.js:1:14",
               "jszip/lib/support.js:35:28",
@@ -1385,9 +1281,7 @@
               "exceljs/excel.js:13:18"
             ]
           },
-          "textDecoderLabels": [
-            "utf-8"
-          ]
+          "textDecoderLabels": ["utf-8"]
         }
       },
       "guest": {
@@ -1417,9 +1311,7 @@
         },
         "trace": {
           "modules": {
-            "fs": [
-              "(generator)"
-            ],
+            "fs": ["(generator)"],
             "stream": [
               "exceljs/dist/exceljs.min.js:3:403",
               "exceljs/dist/exceljs.min.js:3:578",
@@ -1647,9 +1539,7 @@
               "exceljs/dist/exceljs.min.js:3:271"
             ]
           },
-          "textDecoderLabels": [
-            "utf-8"
-          ]
+          "textDecoderLabels": ["utf-8"]
         }
       },
       "guest": {
@@ -1679,9 +1569,7 @@
         },
         "trace": {
           "modules": {
-            "fs": [
-              "(generator)"
-            ],
+            "fs": ["(generator)"],
             "crypto": [
               "exceljs/lib/utils/encryptor.js:3:16",
               "exceljs/lib/doc/worksheet.js:11:19",
@@ -1781,9 +1669,7 @@
               "exceljs/lib/doc/workbook.js:5:14"
             ]
           },
-          "textDecoderLabels": [
-            "utf-8"
-          ]
+          "textDecoderLabels": ["utf-8"]
         }
       },
       "guest": {
@@ -1829,10 +1715,7 @@
               "exceljs/lib/doc/worksheet.js:11:19",
               "exceljs/lib/doc/workbook.js:3:19"
             ],
-            "fs": [
-              "exceljs/lib/xlsx/xlsx.js:1:12",
-              "exceljs/lib/doc/workbook.js:5:14"
-            ],
+            "fs": ["exceljs/lib/xlsx/xlsx.js:1:12", "exceljs/lib/doc/workbook.js:5:14"],
             "stream": [
               "readable-stream/readable.js:1:14",
               "jszip/lib/support.js:35:28",
@@ -1927,9 +1810,7 @@
               "exceljs/lib/doc/workbook.js:5:14"
             ]
           },
-          "textDecoderLabels": [
-            "utf-8"
-          ]
+          "textDecoderLabels": ["utf-8"]
         }
       },
       "guest": {
