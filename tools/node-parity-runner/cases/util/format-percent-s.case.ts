@@ -51,19 +51,23 @@ const c: ParityCase = {
     row('no argument', () => util.format('x %s y'));
     row('two %s one argument', () => util.format('%s:%s', 'a'));
     // Node reads its primordials: a guest's replacements do not change the branch.
-    const has = Set.prototype.has, is = Object.is;
-    let patched;
+    const has = Set.prototype.has, is = Object.is, sym = globalThis.Symbol;
+    const patched = [];
     try {
       Set.prototype.has = () => true;
       Object.is = () => false;
-      patched = [util.format('%s', new A()), util.format('%s', -0)];
+      globalThis.Symbol = undefined;
+      for (const v of [new A(), -0, new P(), { a: 1 }]) {
+        try { patched.push(util.format('%s', v)); } catch (e) { patched.push('throw ' + e.message); }
+      }
     } finally {
       Set.prototype.has = has;
       Object.is = is;
+      globalThis.Symbol = sym;
     }
-    row('patched Set.prototype.has, Object.is', () => patched.join(' '));
+    row('patched Set.prototype.has, Object.is, Symbol', () => patched.join(' | '));
     row('formatWithOptions depth', () => util.formatWithOptions({ depth: 5 }, '%s', { a: { b: 1 } }));
-    // Built-in = a constructor name Node's inspect.js saw on globalThis at load (V8's own
+    // Built-in = a constructor name Node's inspect.js saw on globalThis at load (V8's
     // globals, not Buffer/URL): a user class so named and with its own toString is inspected.
     const re = /^[A-Z][a-zA-Z0-9]+$/;
     const names = [...Object.getOwnPropertyNames(globalThis), 'Document', 'HTMLElement', 'Window', 'Worker'];
