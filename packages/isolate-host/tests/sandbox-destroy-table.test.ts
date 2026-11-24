@@ -6,12 +6,10 @@
  * workers burns CPU after the return (a worker that dies inside the window
  * keeps its last reading, never a free zero).
  */
-import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import * as pkg from '../src/index.ts';
 import { type CallHandle, type CallSpec, sharedPool } from '../src/pool.ts';
-import { childPids } from './support.ts';
+import { burnedAfter, killRunning } from './support.ts';
 
 interface Sandbox {
   writeFile(path: string, data: string): Promise<void>;
@@ -25,41 +23,6 @@ interface Sandbox {
 const createSandbox = (options?: Record<string, unknown>): Promise<Sandbox> =>
   (pkg as unknown as { createSandbox: (o?: unknown) => Promise<Sandbox> }).createSandbox(options);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-/** CPU seconds of a live process; `undefined` once it is gone. */
-function cpu(pid: number): number | undefined {
-  try {
-    if (process.platform === 'linux') {
-      const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
-      const f = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
-      return (Number(f[11]) + Number(f[12])) / 100;
-    }
-    const t = execFileSync('ps', ['-o', 'time=', '-p', String(pid)], { encoding: 'utf8' }).trim();
-    return t.split(':').reduce((sum, part) => sum * 60 + Number(part), 0);
-  } catch {
-    return undefined;
-  }
-}
-
-/** The most CPU any worker of this process burns over `ms` from now. */
-async function burnedAfter(ms: number): Promise<number> {
-  const first = new Map<number, number>();
-  const last = new Map<number, number>();
-  for (const pid of childPids()) {
-    const c = cpu(pid);
-    if (c === undefined) continue;
-    first.set(pid, c);
-    last.set(pid, c);
-  }
-  for (const end = Date.now() + ms; Date.now() < end; ) {
-    await sleep(25);
-    for (const pid of first.keys()) {
-      const c = cpu(pid);
-      if (c !== undefined) last.set(pid, c);
-    }
-  }
-  return Math.max(0, ...[...first].map(([pid, c]) => (last.get(pid) ?? c) - c));
-}
 
 /** A first sort of 3e6 doubles runs seconds and ignores termination (ADR-0563 §4). */
 const SORT = 'const a = Array.from({ length: 3e6 }, () => Math.random()); a.sort();';
@@ -83,22 +46,6 @@ const ENDS: Readonly<Record<string, End>> = {
 };
 /** Microtasks after the pool's result (0: in its first reaction), or after `await exec`. */
 const MOMENTS = [0, 1, 2, 3, 'after await'] as const;
-
-/** Kill whichever worker is computing, `times` times (each kill loses the run's worker). */
-async function killRunning(times: number): Promise<void> {
-  let before = new Map(childPids().map((p) => [p, cpu(p) ?? 0]));
-  for (let killed = 0; killed < times; ) {
-    await sleep(50);
-    const now = new Map(childPids().map((p) => [p, cpu(p) ?? 0]));
-    for (const [pid, c] of now) {
-      if (c - (before.get(pid) ?? c) > 0.02 && killed < times) {
-        process.kill(pid, 'SIGKILL');
-        killed++;
-      }
-    }
-    before = now;
-  }
-}
 
 /**
  * The caller's side of I5: an operation whose promise had not settled when `destroy()`
