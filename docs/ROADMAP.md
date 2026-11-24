@@ -182,6 +182,6 @@ hypervisor and deploy stay outside rifty; the consumer supplies the outer bounda
   today); D — agent tool set over the host (sandbox `env`/`cwd`/`stdin`, shell syntax); E — guest
   Web API shim (URL, structuredClone, web streams, AbortController, EventTarget — requirements'
   shim list, ceilings in A; ESM entries need `URL` too); F — Node-faithful `node file.js`
-  diagnostics (runtime-js, its own goal). Also: an `AbortSignal` option of `runCode` (a sandbox
-  `exec` has one), a concurrency limit (semaphore) and per-tenant worker affinity in `runCode` — the consumer caps concurrency and
+  diagnostics (runtime-js, its own goal). Also: an `AbortSignal` option of `runCode` (done for a
+  sandbox's `exec` and host ops, PR #431), a concurrency limit (semaphore) and per-tenant worker affinity in `runCode` — the consumer caps concurrency and
   separates tenants by process itself today.

@@ -116,7 +116,7 @@ view's whole backing buffer; rifty's program entry has diagnostic gaps and no
    with a number, a compat row and a user question); round 4 confirmed the
    isolate half by three independent runs and found the outcome half (fixed
    above), so the rollback was not taken.
-   **abort** (2026-11-24, backlog `distribution/isolate-host-sandbox-exec-abort-signal`): `signal`
+   **abort** (2026-11-24, PR #431; requirements 2026-11-24 §5): `signal`
    of `exec` and of every host op. Aborted before the op starts → Node's `AbortError` at the
    abort (`cause` = `signal.reason`), no effect; a run aborted before its caller has the result →
    the same, its call cancelled through destroy's handle (isolate disposed as at a deadline, its
@@ -127,7 +127,16 @@ view's whole backing buffer; rifty's program entry has diagnostic gaps and no
    settles the op's promise (one settlement per op) and calls the run's handle; the queue, the
    handle and the `gone` event are destroy's. Table `tests/sandbox-abort-table.test.ts`.
    The signal is checked and subscribed by Node's `events.addAbortListener` (Node's rule; another
-   listener's `stopImmediatePropagation()` cannot skip it).
+   listener's `stopImmediatePropagation()` cannot skip it), as `child_process.execFile` does: Node's
+   refusal of a non-signal, reworded for `options.signal` as `fs.promises.readFile` words it; a
+   signal-shaped `{ aborted: false }` without `addEventListener` refused as by `execFile`
+   (`readFile` accepts it); a value the signal's own member throws is the rejection as is (stack
+   cut to its first line, as every error leaving the API). The error is Node's `AbortError`, not
+   a rifty code (oracle: Node v24.16.0 `fs.promises.readFile`/`execFile`): the consumer's abort
+   handling is Node's. An already-aborted signal rejects a microtask after the call (as
+   `addAbortListener`/`execFile` deliver it; `readFile` rejects at once), so a `destroy()` in the
+   same tick finds the op unsettled: `DESTROYED`, nothing placed. `exec`'s options are checked at
+   the call (a refusal still rejects in the op's turn).
 6. **Limits.** Per run: `runCode`'s; `timeoutMs` covers the consumer's encode
    (done before the call registers, so a throw there settles the call and
    leaves no phantom), the worker's restore, run and capture — not the

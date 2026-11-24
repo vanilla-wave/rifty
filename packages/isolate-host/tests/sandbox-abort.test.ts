@@ -1,6 +1,6 @@
 /**
- * Cancelling a sandbox operation with an `AbortSignal` (backlog
- * `distribution/isolate-host-sandbox-exec-abort-signal`): its scenario, the
+ * Cancelling a sandbox operation with an `AbortSignal` (ADR-0568 §5 abort,
+ * PR #431): its scenario, the
  * error against live Node's `AbortError`, the option's refusals and the host
  * ops. The table of moments × ends is `sandbox-abort-table.test.ts`.
  */
