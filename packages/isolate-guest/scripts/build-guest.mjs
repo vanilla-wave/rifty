@@ -17,7 +17,7 @@ await build({
   bundle: true,
   target: 'es2022',
   logLevel: 'warning',
-  legalComments: 'none',
+  legalComments: 'eof', // upstream licenses (check:third-party-notices)
   platform: 'browser',
   format: 'iife',
   // The QuickJS vm engine's emscripten loader imports node:module lazily; in

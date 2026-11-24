@@ -3,8 +3,9 @@
  * Third-party notice gate (backlog toolchain-build/third-party-notices-in-published-files).
  *
  * Source = a `generated/` or `vendor/` dir of a publishable package holding
- * upstream code: it carries `<origin>.LICENSE` (verbatim upstream text) or sits
- * on FIRST_PARTY. Every file `npm pack` would ship is scanned for each source
+ * upstream code of one origin: it carries `<origin>.LICENSE` files (verbatim
+ * upstream texts); a dir without one may hold only FIRST_PARTY files, so a new
+ * upstream file anywhere else is red. Every file `npm pack` would ship is scanned for each source
  * artifact's fingerprint; a hit needs every one of the source's licenses in
  * that file, or in a LICENSE/NOTICE file of the same tarball. Run after
  * `pnpm build:libs`.
@@ -12,8 +13,10 @@
  * Fingerprint: WINDOWS evenly spaced WINDOW-char slices of the artifact with
  * whitespace, JSON escapes and `/*! … *\/` legal comments removed (bundlers
  * re-print code; strings and minified bodies survive). Measured 2026-11-24,
- * esbuild 0.28.0: a re-bundled artifact keeps 46–52/64 (undici, TypeScript),
- * every unrelated packed file ≤ 2/64 — THRESHOLD 0.5 sits between.
+ * esbuild 0.28.0, 2300 packed-file × artifact pairs: every copy ≥ 42/62 (0.68);
+ * non-copies ≤ 2/62, except workbench `typescript-worker.js` 12/64 — it inlines
+ * npm `typescript` (same upstream, other build; finding
+ * bundled-npm-dependency-notices). THRESHOLD 0.5 sits between.
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
@@ -27,9 +30,12 @@ export const THRESHOLD = 0.5;
 export const PUBLISH_ROOTS = ['packages/*', 'tools/shadow-registry', 'services/eddy'];
 /** Generated from rifty's own sources/data — no upstream license applies. */
 export const FIRST_PARTY = new Set([
-  'packages/runtime-js/src/internal/generated', // proxy bootstrap compiled from rifty source
-  'packages/workbench/src/generated', // install-artifact identity hashes
-  'tools/shadow-registry/generated', // substitution catalog + esbuild runtime manifest
+  // proxy bootstrap compiled from rifty source
+  'packages/runtime-js/src/internal/generated/proxy-identity.js',
+  'packages/runtime-js/src/internal/generated/proxy-identity.d.ts',
+  'packages/workbench/src/generated/install-artifact-identity.json',
+  'tools/shadow-registry/generated/shadow-substitution-catalog.json',
+  'tools/shadow-registry/generated/esbuild-runtime-manifest.json', // hashes + anchors, no code
 ]);
 const SOURCE_DIRS = new Set(['generated', 'vendor']);
 const SKIP_DIRS = new Set(['node_modules', 'dist', 'tests', 'fixtures', '__tests__']);
@@ -109,15 +115,13 @@ export function discoverSources(root, packageDirs) {
     const licenses = files
       .filter((e) => e.name.endsWith('.LICENSE'))
       .map((e) => ({ name: e.name, text: readFileSync(join(root, dir, e.name), 'utf8') }));
-    if (FIRST_PARTY.has(dir)) {
-      if (licenses.length)
-        violations.push(`${dir}: on FIRST_PARTY but carries ${licenses[0].name}`);
-      return;
-    }
     if (licenses.length === 0) {
-      violations.push(
-        `${dir}: generated/vendored dir without <origin>.LICENSE (upstream code) and not on FIRST_PARTY (rifty's own)`,
-      );
+      for (const e of files) {
+        if (FIRST_PARTY.has(`${dir}/${e.name}`)) continue;
+        violations.push(
+          `${dir}/${e.name}: generated/vendored file without an <origin>.LICENSE in its dir and not on FIRST_PARTY`,
+        );
+      }
       return;
     }
     const artifacts = [];

@@ -424,7 +424,7 @@
   "output": {
     "path": "tools/shadow-registry/src/runtime/generated/esbuild-runtime.js",
     "format": "esm",
-    "bytes": 135402,
-    "sha256": "861f57235acf3609ee15d0a8d7ac9529166d72ce866e8f15a6658722ec70573d"
+    "bytes": 138142,
+    "sha256": "87a0f6a1f6549b1588359bcb90940e90a0ce918217ab4417435874c6d54fd3e8"
   }
 }

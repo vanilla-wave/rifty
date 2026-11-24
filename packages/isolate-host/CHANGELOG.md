@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The byte-copied `dist/guest.js` carries the upstream licenses of the code inside it (see `@riftydev/isolate-guest`).
 - exceljs 4.4.0's main entry writes in a sandbox the xlsx Node writes (`require('exceljs')`, `workbook.xlsx.writeFile`; `tests/library-exceljs.test.ts`).
 - Guest `require` behaves as Node 24 launched with `--no-require-module` (no ES module loader in the guest): `process.features.require_module` is `false`, `module-sync` is not taken (`is-generator-function`/`is-async-function` load their CommonJS entry, as on exceljs's main entry), `require` of an ES module throws Node's `ERR_REQUIRE_ESM`, a typeless `.js` with ESM syntax compiles as CommonJS — was `TypeError: URLConstructor is not a constructor`. `import()` of an ES module from a file rejects with `isolate-host.esm` (was a false compile error or the same `TypeError`). Parity `tests/require-esm.test.ts`.
 - Guest `node:zlib`/`child_process`/`worker_threads` load with Node's shape; compression, process and worker use throws, naming the member (`isolate-host.zlib.gzip`, `isolate-host.child_process.spawn`, `isolate-host.worker_threads.Worker`, …; was `isolate-host.<module>` at require). exceljs's modules that load `node:zlib` (archiver, crc32-stream) now load.

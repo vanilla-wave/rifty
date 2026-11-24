@@ -114,11 +114,23 @@ describe('mutants', () => {
     ]);
   });
 
-  it('new generated dir without <origin>.LICENSE → red', () => {
+  it('new generated source without <origin>.LICENSE → red', () => {
     expect(pkg(false).violations).toEqual([
-      expect.stringContaining(
-        'pkg/src/feature/generated: generated/vendored dir without <origin>.LICENSE',
-      ),
+      'pkg/src/feature/generated/upstream.js: generated/vendored file without an <origin>.LICENSE in its dir and not on FIRST_PARTY',
+    ]);
+  });
+
+  it('upstream file added next to a FIRST_PARTY file → red; the listed file alone → green', () => {
+    expect(discoverSources(process.cwd(), ['packages/runtime-js/src/internal']).violations).toEqual(
+      [],
+    );
+    root = mkdtempSync(join(tmpdir(), 'tpn-'));
+    const dir = join(root, 'packages/runtime-js/src/internal/generated');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'proxy-identity.js'), 'export default "";');
+    writeFileSync(join(dir, 'upstream.js'), code());
+    expect(discoverSources(root, ['packages/runtime-js/src/internal']).violations).toEqual([
+      expect.stringContaining('internal/generated/upstream.js: generated/vendored file without'),
     ]);
   });
 

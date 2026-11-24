@@ -58,6 +58,14 @@ function main() {
   // Stable key order (entries are pre-sorted) for deterministic diffs.
   const out = `${JSON.stringify(bundle, null, 0)}\n`;
   writeFileSync(OUT_FILE, out, 'utf8');
+  // Apache-2.0 §4(a) license copy + notices of the third-party material in lib files.
+  const tsRoot = dirname(libDir);
+  for (const [from, to] of [
+    ['LICENSE.txt', 'typescript.LICENSE'],
+    ['ThirdPartyNoticeText.txt', 'typescript-third-party.LICENSE'],
+  ]) {
+    writeFileSync(join(OUT_DIR, to), readFileSync(join(tsRoot, from), 'utf8'), 'utf8');
+  }
 
   const bytes = Buffer.byteLength(out);
   process.stdout.write(

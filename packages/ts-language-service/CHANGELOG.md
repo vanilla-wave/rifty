@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- `vendor/typescript.LICENSE` (Apache-2.0 `LICENSE.txt`) and `vendor/typescript-third-party.LICENSE` (`ThirdPartyNoticeText.txt`) ship with the vendored TypeScript 5.9.3 lib files; was the short per-file header only.
 - Browser lib.d.ts resources use host fetch, preserving configured relative asset URLs after Node Fetch installs (ADR-0541).
 
 ### Changed

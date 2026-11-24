@@ -91,18 +91,18 @@ const PUBLISHED_PACKAGE_ROOTS = Object.freeze([
   'tools/shadow-registry',
 ]);
 const EXPECTED_PACKAGE_FILES = Object.freeze(['dist', 'CHANGELOG.md']);
-const GENERATED_CLIENT_SHA256 = '861f57235acf3609ee15d0a8d7ac9529166d72ce866e8f15a6658722ec70573d';
+const GENERATED_CLIENT_SHA256 = '87a0f6a1f6549b1588359bcb90940e90a0ce918217ab4417435874c6d54fd3e8';
 const MAX_PUBLISHED_OUTPUT_BYTES = 2_000_000;
 // ADR-0391: exact existing compiler/runtime assets; never a directory-wide waiver.
 const WORKBENCH_ASSET_ROOT = 'packages/workbench/dist/assets/';
 const WORKBENCH_COMPILER_OUTPUTS = Object.freeze({
-  'chunk-EMDIREKY.js': {
-    bytes: 4_893_418,
-    sha256: '39be666ac003c7361e9fbcd88abdda1ed51052350ade9b57b4d2716f1e296498',
+  'chunk-EKDRH6GF.js': {
+    bytes: 4_940_418,
+    sha256: '1acacf53570559ee1f57b78be80859746fbfdfe3c8e1dc218aac58e0a21bfd46',
   },
   'typescript-worker.js': {
     bytes: 10022716,
-    sha256: '3556c3cde751f727e88a242ca40c366cd2e568873beee1684cc84192f734fe49',
+    sha256: 'baf5a4bb7e74867d5641e7e2c97d28831e87808d4486b5066549a6f08ab5d6f0',
   },
 });
 const WORKBENCH_WASM_OUTPUTS = Object.freeze({
