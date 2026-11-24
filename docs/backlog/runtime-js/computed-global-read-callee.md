@@ -57,9 +57,14 @@ passes es-abstract/typed-array-* (Node prints `loaded`); rifty today stops at
 2. Installed `typed-array-length`, `typed-array-byte-offset`,
    `typed-array-byte-length`, `es-abstract/2025/IsDetachedBuffer`,
    `typedarray.prototype.slice` (exceljs closure) load and compute as in Node
-   (same files, Node vs isolate sandbox) → scenario
+   on the shared loader (same files, Node vs `createModuleLoader`,
+   `library-exceljs.test.ts`); the sandbox reaches them only past its
+   `require(esm)` gap (row 3) → scenario
 3. Isolate `library-exceljs.test.ts`: `require('exceljs')` no longer stops at
-   `module-loader.cjs-global-function-assignment`; the new stop is pinned → scenario
+   `module-loader.cjs-global-function-assignment`; the new stop is pinned:
+   `TypeError: URLConstructor is not a constructor` at
+   `is-generator-function/index.js:12` (`require` of generator-function's
+   `module-sync` ES module; owner `runtime-js/isolate-require-esm-syntax-gaps`) → scenario
 4. Declared ceiling: such a read whose key is `'Function'` at runtime (string
    or object key) throws `NotImplementedError('module-loader.{cjs,esm}-global-function-assignment')`
    at that read, after earlier statements ran; the module never gets the host
