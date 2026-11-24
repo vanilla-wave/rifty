@@ -64,6 +64,11 @@ const c: ParityCase = {
     });
     run('after-destroy', {}, async (s, cb) => { await ready(s); s.destroy(); s.close(cb('cb')); });
     run('destroy-after-close', {}, (s, cb) => { s.write('x'); s.close(cb('cb')); s.destroy(); });
+    run('destroy-after-closed', {}, async (s, cb) => {
+      s.close(cb('cb'));
+      await new Promise((r) => s.on('close', r));
+      s.destroy();
+    });
     run('high-water-mark', { highWaterMark: 2 }, (s, cb, ev) => {
       ev.push('write=' + s.write('abcdef'));
       s.close(cb('cb'));

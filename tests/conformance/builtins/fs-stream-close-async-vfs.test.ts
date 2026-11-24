@@ -1,8 +1,9 @@
 /**
  * The `fs/read-stream-close` / `fs/write-stream-close` parity code on the async
- * `Vfs.openReadable` path (`installMemoryFs`, as the browser hosts' workers) vs
- * live `node -e`. The parity runner installs only the sync mirror, so its read
- * rows take the sync fallback; this is the product path.
+ * `Vfs.openReadable` paths vs live `node -e`: `installMemoryFs` (browser hosts'
+ * workers) and workbench's `SyncMirrorVfs`. The parity runner installs only the
+ * sync mirror (also a product path: sync-RPC fs, dev-server child), so its read
+ * rows take the sync fallback. OPFS `openReadable` is not covered here.
  */
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -10,10 +11,16 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as timersPromises from 'node:timers/promises';
 import { asyncVfs } from '@riftydev/vfs';
-import { installMemoryFs, resetSyncMirror } from '@riftydev/vfs/internal';
+import {
+  MemoryFsSync,
+  installMemoryFs,
+  resetSyncMirror,
+  setSyncMirror,
+} from '@riftydev/vfs/internal';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import * as fs from '../../../packages/runtime-js/src/builtins/fs.ts';
 import { getProcessCwd, setProcessCwd } from '../../../packages/runtime-js/src/builtins/process.ts';
+import { SyncMirrorVfs } from '../../../packages/workbench/src/glue/sync-mirror-vfs.ts';
 import readStreamClose from '../../../tools/node-parity-runner/cases/fs/read-stream-close.case.ts';
 import writeStreamClose from '../../../tools/node-parity-runner/cases/fs/write-stream-close.case.ts';
 
@@ -62,15 +69,22 @@ afterEach(() => {
   resetSyncMirror();
 });
 
-describe('fs stream close() on the async openReadable path vs live Node', () => {
-  for (const [label, c, last] of [
-    ['ReadStream', readStreamClose, 'proto close:'],
-    ['WriteStream', writeStreamClose, 'destroySoon === end:'],
-  ] as const) {
-    it(label, async () => {
-      installMemoryFs();
-      expect(asyncVfs()).not.toBeNull();
-      expect(await riftyStdout(c.code, last)).toBe(nodeStdout(c.code));
-    });
+const ASYNC_PATHS: readonly (readonly [string, () => void])[] = [
+  ['installMemoryFs', () => installMemoryFs()],
+  ['SyncMirrorVfs', () => setSyncMirror(new MemoryFsSync(), { async: new SyncMirrorVfs() })],
+];
+
+describe('fs stream close() on the async openReadable paths vs live Node', () => {
+  for (const [path, install] of ASYNC_PATHS) {
+    for (const [label, c, last] of [
+      ['ReadStream', readStreamClose, 'proto close:'],
+      ['WriteStream', writeStreamClose, 'destroySoon === end:'],
+    ] as const) {
+      it(`${label} (${path})`, async () => {
+        install();
+        expect(asyncVfs()).not.toBeNull();
+        expect(await riftyStdout(c.code, last)).toBe(nodeStdout(c.code));
+      });
+    }
   }
 });

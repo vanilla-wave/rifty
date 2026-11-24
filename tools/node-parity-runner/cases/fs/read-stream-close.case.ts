@@ -48,6 +48,19 @@ const c: ParityCase = {
     });
     run('in-end', {}, (s, cb) => { s.on('data', () => {}); s.on('end', () => s.close(cb('cb'))); });
     run('twice', {}, async (s, cb) => { await ready(s); s.close(cb('cb1')); s.close(cb('cb2')); });
+    // A flowing stream ('data' listener) closed/destroyed around the first read: no 'data'
+    // or 'end' after the request (async openReadable read in flight, review 2026-11-24).
+    const flowing = (when, method) => (s, cb, ev) => {
+      const stop = () => { ev.push('request'); if (method === 'close') s.close(cb('cb')); else s.destroy(); };
+      s.on('data', (c) => { ev.push('data:' + c.length); if (when === 'after-data-micro') queueMicrotask(stop); });
+      if (when === 'in-ready') s.on('ready', stop);
+      if (when === 'micro-ready') s.on('ready', () => queueMicrotask(stop));
+      if (when === 'after-ready') return ready(s).then(stop);
+    };
+    for (const when of ['in-ready', 'after-ready', 'micro-ready', 'after-data-micro']) {
+      run('flowing-close-' + when, {}, flowing(when, 'close'));
+      run('flowing-destroy-' + when, {}, flowing(when, 'destroy'));
+    }
     run('twice-preopen', {}, (s, cb) => { s.close(cb('cb1')); s.close(cb('cb2')); });
     run('twice-after-close', {}, async (s, cb) => {
       s.on('data', () => {});
@@ -64,6 +77,15 @@ const c: ParityCase = {
     }, 'missing.txt');
     run('directory-in-open', {}, (s, cb) => { s.on('open', () => s.close(cb('cb'))); }, '.');
     run('emitclose-false', { emitClose: false }, async (s, cb) => { await ready(s); s.close(cb('cb')); });
+    // Twice with emitClose:false: the second cb settles a tick later, no arguments (Node's onclosed).
+    run('emitclose-false-twice-after-ready', { emitClose: false }, async (s, cb) => {
+      await ready(s);
+      s.close(cb('cb1', true));
+      s.close(cb('cb2', true));
+    });
+    run('emitclose-false-twice-in-ready', { emitClose: false }, (s, cb) => {
+      s.on('ready', () => { s.close(cb('cb1', true)); s.close(cb('cb2', true)); });
+    });
     run('emitclose-false-after-end', { emitClose: false }, async (s, cb) => {
       s.on('data', () => {});
       await new Promise((r) => s.on('end', r));
