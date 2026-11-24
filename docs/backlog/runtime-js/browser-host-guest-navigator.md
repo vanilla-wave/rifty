@@ -4,14 +4,14 @@ status: draft
 title: On the browser hosts a guest Node program sees the browser's `WorkerNavigator`, not Node 24's `Navigator`
 created: 2026-11-24
 why: Node 24 code that branches on `navigator.userAgent` (core-js, bundles) or sizes work by `navigator.hardwareConcurrency` sees a Chrome browser and the host's CPU count; undeclared until 2026-11-24
-sources: [docs/public/compat/process.md, docs/backlog/distribution/isolate-host-navigator-node-shape.md, docs/backlog/runtime-js/guest-browser-only-globals.md]
+sources: [docs/public/compat/process.md, docs/adr/distribution/0557-run-guest-code-in-a-disposable-child-process-holding-a-rifty-v8-isolate-isolated-vm.md, docs/backlog/runtime-js/guest-browser-only-globals.md]
 code: [packages/runtime-js/src/builtins/os.ts]
 ---
 
 ## Context
 
 Found while giving the isolate guest Node's `navigator`
-(`distribution/isolate-host-navigator-node-shape`); browser hosts deliberately
+(PR #436 (isolate `navigator` with Node's shape)); browser hosts deliberately
 unchanged there. Scratch Playwright specs 2026-11-24 (Playwright 1.60.0,
 Chromium 148.0.7778.96, darwin-arm64; no-COI toolchain `createSandbox` +
 `node g.cjs`, COI toolchain on `unit-harness.html`, COI playground kernel

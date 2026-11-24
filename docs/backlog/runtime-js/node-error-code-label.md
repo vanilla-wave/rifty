@@ -4,13 +4,13 @@ status: draft
 title: Node errors rifty throws lack Node's `[ERR_X]` label and error class
 created: 2026-11-24
 why: "`String(e)`, the stack's first line, `util.inspect` and fatal reports print `TypeError: …` where Node prints `TypeError [ERR_X]: …`; code matching `e.toString()` or log parsers on the label see a different error"
-sources: [docs/public/compat/isolate-host.md, docs/backlog/distribution/isolate-host-navigator-node-shape.md]
+sources: [docs/public/compat/isolate-host.md, docs/adr/distribution/0557-run-guest-code-in-a-disposable-child-process-holding-a-rifty-v8-isolate-isolated-vm.md]
 code: [packages/runtime-js/src/builtins/process-warnings.ts, packages/isolate-guest/src/guest/navigator.ts]
 ---
 
 ## Context
 
-Found by `distribution/isolate-host-navigator-node-shape` (parity of
+Found by PR #436 (isolate `navigator` with Node's shape) (parity of
 `new Navigator()`). rifty builds Node errors as `Object.assign(new
 TypeError(msg), { code })` (e.g. `process-warnings.ts` `invalid`,
 `web-shim.ts` `argType`, `navigator.ts`). Measured 2026-11-24, `runCode`

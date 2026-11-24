@@ -1,8 +1,8 @@
 /**
- * `navigator` / `Navigator` in the guest (backlog distribution/isolate-host-navigator-node-shape,
- * ADR-0557 §5 2026-11-24 line). Oracle: live `node -e` / `node <file>` of this Node
- * executable. Shape is byte-equal; values are the guest's own identity, related to
- * its `process`/`os`/`Intl` by Node's rules.
+ * `navigator` / `Navigator` in the guest (ADR-0557 §5 2026-11-24 line). Oracle:
+ * live `node -e` / `node <file>` of this Node executable. Shape is byte-equal;
+ * values are the guest's own identity, related to its `process`/`os`/`Intl` by
+ * Node's rules.
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
