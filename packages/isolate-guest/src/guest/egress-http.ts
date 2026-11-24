@@ -7,11 +7,14 @@
  */
 import { EventEmitter, Readable, Stream } from '@riftydev/io';
 import { METHODS, STATUS_CODES, maxHeaderSize } from '@riftydev/net/node-data';
-import { type Base, gap, loudClass, loudFunction, named } from './egress-gaps.ts';
+import { riftyProcess } from '@riftydev/runtime-js/builtins/process';
+import { type Base, NO_CONNECTION, gap, loudClass, loudFunction, named } from './egress-gaps.ts';
 import {
+  formatS,
   nodeError,
   validateInteger,
   validateNumberAtLeast,
+  validateObject,
   validateOneOf,
 } from './node-validators.ts';
 
@@ -52,51 +55,73 @@ const kEmptyObject: Options = Object.freeze({ __proto__: null }) as Options;
 const tokenRegExp = /^[\^_`a-zA-Z\-0-9!#$%&'*+.|~]+$/;
 const headerCharRegex = /[^\t\x20-\x7e\x80-\xff]/;
 
-function validateHeaderNameImpl(name: unknown, label?: unknown): void {
+// Arrows, as Node's (`withoutStackTrace` is the bare `(name, …) => {}`: no name, no prototype).
+const validateHeaderNameImpl = (name: unknown, label?: unknown): void => {
   if (typeof name !== 'string' || !name || !tokenRegExp.test(name))
     throw nodeError(
       TypeError,
       'ERR_INVALID_HTTP_TOKEN',
-      `${label || 'Header name'} must be a valid HTTP token ["${String(name)}"]`,
+      `${formatS(label || 'Header name')} must be a valid HTTP token ["${formatS(name)}"]`,
     );
-}
-function validateHeaderValueImpl(name: unknown, value: unknown): void {
+};
+const validateHeaderValueImpl = (name: unknown, value: unknown): void => {
   if (value === undefined)
     throw nodeError(
       TypeError,
       'ERR_HTTP_INVALID_HEADER_VALUE',
-      `Invalid value "${String(value)}" for header "${String(name)}"`,
+      `Invalid value "${formatS(value)}" for header "${formatS(name)}"`,
     );
   if (headerCharRegex.test(value as string))
     throw nodeError(
       TypeError,
       'ERR_INVALID_CHAR',
-      `Invalid character in header content ["${String(name)}"]`,
+      // Node builds this one with a template literal, not %s.
+      `Invalid character in header content ["${name as string}"]`,
     );
-}
+};
 /** `hideStackFrames`: a `(...args)` wrapper carrying the bare function as `withoutStackTrace`. */
 function hidden(impl: (...args: never[]) => void, name: string) {
   const wrapped = named(function (this: unknown, ...args: never[]): void {
     Reflect.apply(impl, this, args);
   }, name);
-  return Object.assign(wrapped, { withoutStackTrace: impl });
+  return Object.assign(wrapped, { withoutStackTrace: named(impl, '') });
+}
+
+/** Node's `parseProxyUrl` (`internal/http`): the env's proxy URL for `protocol`, or null. */
+function parseProxyUrl(env: Options, protocol: 'http:' | 'https:'): string | null {
+  const proxyUrl = (
+    protocol === 'https:' ? env.https_proxy || env.HTTPS_PROXY : env.http_proxy || env.HTTP_PROXY
+  ) as string;
+  if (!proxyUrl) return null;
+  if (proxyUrl.includes('\r') || proxyUrl.includes('\n'))
+    throw nodeError(Error, 'ERR_PROXY_INVALID_CONFIG', `Invalid proxy URL: ${proxyUrl}`);
+  return proxyUrl;
 }
 
 /**
- * Node's `parseProxyConfigFromEnv` (`internal/http`): null when `env` names no
- * http(s) proxy for `protocol`; a proxy is the route Node's connections take
- * (and its `ProxyConfig` parses a `URL`, a guest ceiling) — the gap.
+ * Node's `parseProxyConfigFromEnv`: null when `env` names no http(s) proxy for
+ * `protocol`; a proxy is the route Node's connections take (and its
+ * `ProxyConfig` parses a `URL`, a guest ceiling) — the gap.
  */
 function proxyConfig(env: Options, protocol: unknown): null {
   if (protocol !== 'http:' && protocol !== 'https:') return null;
-  const url = (
-    protocol === 'https:' ? env.https_proxy || env.HTTPS_PROXY : env.http_proxy || env.HTTP_PROXY
-  ) as string;
-  if (!url) return null;
-  if (url.includes('\r') || url.includes('\n'))
-    throw nodeError(Error, 'ERR_PROXY_INVALID_CONFIG', `Invalid proxy URL: ${url}`);
-  if (!url.startsWith('http://') && !url.startsWith('https://')) return null;
+  const proxyUrl = parseProxyUrl(env, protocol);
+  if (proxyUrl === null) return null;
+  if (!proxyUrl.startsWith('http://') && !proxyUrl.startsWith('https://')) return null;
   throw gap('http.Agent.proxyEnv');
+}
+
+/**
+ * Node's `http.setGlobalProxyFromEnv`: with no http(s) proxy in `env` it changes
+ * nothing and returns a no-op restore; with one it reroutes the global agents
+ * and fetch through it — the gap.
+ */
+function setGlobalProxyFromEnv(env: unknown = riftyProcess.env): () => void {
+  validateObject(env, 'proxyEnv');
+  const httpProxy = parseProxyUrl(env as Options, 'http:');
+  const httpsProxy = parseProxyUrl(env as Options, 'https:');
+  if (!httpProxy && !httpsProxy) return () => {};
+  throw gap('http.setGlobalProxyFromEnv');
 }
 
 function maybeEnableKeylog(this: AgentFields, eventName: unknown): void {
@@ -272,7 +297,13 @@ export function createHttp(netServer: Base): {
   const { WebSocket, CloseEvent, MessageEvent } = globalThis as unknown as Record<string, unknown>;
   const Agent = createAgent();
   let globalAgent = new Agent({ keepAlive: true, scheduling: 'lifo', timeout: 5000 });
-  const OutgoingMessage = loudClass('OutgoingMessage', 1, 'http.OutgoingMessage', Stream);
+  const OutgoingMessage = loudClass(
+    'OutgoingMessage',
+    1,
+    'http.OutgoingMessage',
+    Stream,
+    NO_CONNECTION,
+  );
   const { setMaxIdleHTTPParsers } = {
     // Node sizes its idle parser pool; no connection here ever takes a parser.
     setMaxIdleHTTPParsers(max: unknown): void {
@@ -285,17 +316,29 @@ export function createHttp(netServer: Base): {
     STATUS_CODES: { ...STATUS_CODES },
     Agent,
     ClientRequest: loudClass('ClientRequest', 3, 'http.ClientRequest', OutgoingMessage),
-    IncomingMessage: loudClass('IncomingMessage', 1, 'http.IncomingMessage', Readable),
+    IncomingMessage: loudClass(
+      'IncomingMessage',
+      1,
+      'http.IncomingMessage',
+      Readable,
+      NO_CONNECTION,
+    ),
     OutgoingMessage,
-    Server: loudClass('Server', 2, 'http.Server', netServer),
-    ServerResponse: loudClass('ServerResponse', 2, 'http.ServerResponse', OutgoingMessage),
+    Server: loudClass('Server', 2, 'http.Server', netServer, NO_CONNECTION),
+    ServerResponse: loudClass(
+      'ServerResponse',
+      2,
+      'http.ServerResponse',
+      OutgoingMessage,
+      NO_CONNECTION,
+    ),
     createServer: loudFunction('createServer', 2, 'http.createServer'),
     validateHeaderName: hidden(validateHeaderNameImpl, 'validateHeaderName'),
     validateHeaderValue: hidden(validateHeaderValueImpl, 'validateHeaderValue'),
     get: loudFunction('get', 3, 'http.get'),
     request: loudFunction('request', 3, 'http.request'),
     setMaxIdleHTTPParsers,
-    setGlobalProxyFromEnv: loudFunction('setGlobalProxyFromEnv', 0, 'http.setGlobalProxyFromEnv'),
+    setGlobalProxyFromEnv: named(setGlobalProxyFromEnv, 'setGlobalProxyFromEnv'),
   };
   const accessor = (get: () => unknown, set?: (v: never) => void): PropertyDescriptor => ({
     get,
@@ -320,7 +363,7 @@ export function createHttp(netServer: Base): {
     Agent: HttpsAgent,
     globalAgent: new HttpsAgent({ keepAlive: true, scheduling: 'lifo', timeout: 5000 }),
     // Node: tls.Server; rifty's tls stub is not Node-shaped (unit §Out of scope).
-    Server: loudClass('Server', 2, 'https.Server', netServer),
+    Server: loudClass('Server', 2, 'https.Server', netServer, NO_CONNECTION),
     createServer: loudFunction('createServer', 2, 'https.createServer'),
     get: loudFunction('get', 3, 'https.get'),
     request: loudFunction('request', 0, 'https.request'),

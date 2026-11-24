@@ -7,6 +7,10 @@ import { NotImplementedError } from '@riftydev/io';
 
 export const NO_NETWORK = 'no network in the rifty isolate host, ADR-0557';
 
+/** Loud though Node's constructor opens nothing (unit Decisions, manager-confirmed (а)). */
+export const NO_CONNECTION =
+  "Node's HTTP message, server and socket objects are not in the rifty isolate host, ADR-0557";
+
 export const gap = (feature: string, hint = NO_NETWORK): NotImplementedError =>
   new NotImplementedError(`isolate-host.${feature}`, hint);
 
@@ -26,6 +30,16 @@ export function loudFunction(name: string, length: number, feature: string, hint
   return named(loud, name, length);
 }
 
+/** A loud static (Node's statics are methods: no `prototype`). */
+export function loudMethod(name: string, length: number, feature: string, hint?: string) {
+  const method = {
+    [name](): never {
+      throw gap(feature, hint);
+    },
+  }[name] as () => never;
+  return named(method, name, length);
+}
+
 /** Anything with Node's constructor shape: a class, an ES5 constructor, `Stream`. */
 export type Base = { readonly prototype: object };
 
@@ -34,8 +48,14 @@ export type Base = { readonly prototype: object };
  * extends`, `util.inherits`), Node's prototype chain, and its construction (or
  * call) throws the gap.
  */
-export function loudClass(name: string, length: number, feature: string, base?: Base) {
-  const C = loudFunction(name, length, feature);
+export function loudClass(
+  name: string,
+  length: number,
+  feature: string,
+  base?: Base,
+  hint?: string,
+) {
+  const C = loudFunction(name, length, feature, hint);
   if (base !== undefined) {
     Object.setPrototypeOf(C.prototype, base.prototype);
     Object.setPrototypeOf(C, base);

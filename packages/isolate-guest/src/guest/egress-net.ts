@@ -5,7 +5,7 @@
  */
 import { Duplex, EventEmitter } from '@riftydev/io';
 import { isIP, isIPv4, isIPv6 } from '@riftydev/net/node-data';
-import { gap, loudClass, loudFunction, named } from './egress-gaps.ts';
+import { NO_CONNECTION, gap, loudClass, loudFunction, loudMethod, named } from './egress-gaps.ts';
 import { validateBoolean, validateInteger } from './node-validators.ts';
 
 const NOT_IN_RIFTY = 'not implemented in the rifty isolate host (Node backs it natively), ADR-0557';
@@ -69,18 +69,21 @@ function setDefaultAutoSelectFamilyAttemptTimeout(value: unknown): void {
 }
 
 /** Node's C++-backed address classes: no network, but no rifty implementation. */
-function nativeClass(name: string, statics: readonly string[]) {
-  const C = named(
-    class {
-      constructor() {
-        throw gap(`net.${name}`, NOT_IN_RIFTY);
-      }
-    },
-    name,
-  );
+class BlockList {
+  constructor() {
+    throw gap('net.BlockList', NOT_IN_RIFTY);
+  }
+}
+class SocketAddress {
+  constructor() {
+    throw gap('net.SocketAddress', NOT_IN_RIFTY);
+  }
+}
+function withStatics<C extends object>(C: C, name: string, statics: readonly string[]): C {
+  named(C, name);
   for (const s of statics)
     Object.defineProperty(C, s, {
-      value: loudFunction(s, 1, `net.${name}.${s}`, NOT_IN_RIFTY),
+      value: loudMethod(s, 1, `net.${name}.${s}`, NOT_IN_RIFTY),
       writable: true,
       configurable: true,
     });
@@ -88,11 +91,11 @@ function nativeClass(name: string, statics: readonly string[]) {
 }
 
 export function createNet(): Record<string, unknown> {
-  const Server = loudClass('Server', 2, 'net.Server', EventEmitter);
-  const Socket = loudClass('Socket', 1, 'net.Socket', Duplex);
+  const Server = loudClass('Server', 2, 'net.Server', EventEmitter, NO_CONNECTION);
+  const Socket = loudClass('Socket', 1, 'net.Socket', Duplex, NO_CONNECTION);
   const connect = loudFunction('connect', 0, 'net.connect');
-  const BlockList = nativeClass('BlockList', ['isBlockList']);
-  const SocketAddress = nativeClass('SocketAddress', ['isSocketAddress', 'parse']);
+  withStatics(BlockList, 'BlockList', ['isBlockList']);
+  withStatics(SocketAddress, 'SocketAddress', ['isSocketAddress', 'parse']);
   const net: Record<string, unknown> = {
     _createServerHandle: loudFunction('createServerHandle', 5, 'net._createServerHandle'),
     _normalizeArgs: named(normalizeArgs, 'normalizeArgs'),
