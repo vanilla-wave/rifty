@@ -44,7 +44,7 @@ view's whole backing buffer; rifty's program entry has diagnostic gaps and no
      `ERR_INVALID_ARG_TYPE`; failures are Node-shaped (`code`, `syscall`,
      `path`, message) naming only sandbox paths.
    - `exec(path, {args?, timeoutMs?, memoryLimitMb?, maxOutputBytes?,
-     allowSharedArrayBuffer?}) → RunCodeResult`: `node <path> [args]` with cwd
+     allowSharedArrayBuffer?, signal?}) → RunCodeResult` (`signal`: §5 abort): `node <path> [args]` with cwd
      `/workspace`; `runCode`'s option defaults and result shape, `exitCode:
      null` + `termination` for a killed run (ADR-0557 dated line 2026-11-22).
      `env`, `cwd`, `stdin` → `NotImplementedError('isolate-host.sandbox-exec-<option>')`.
@@ -116,6 +116,18 @@ view's whole backing buffer; rifty's program entry has diagnostic gaps and no
    with a number, a compat row and a user question); round 4 confirmed the
    isolate half by three independent runs and found the outcome half (fixed
    above), so the rollback was not taken.
+   **abort** (2026-11-24, backlog `distribution/isolate-host-sandbox-exec-abort-signal`): `signal`
+   of `exec` and of every host op. Aborted before the op starts → Node's `AbortError` at the
+   abort (`cause` = `signal.reason`), no effect; a run aborted before its caller has the result →
+   the same, its call cancelled through destroy's handle (isolate disposed as at a deadline, its
+   `gone` awaited by `destroy`), its end state not applied: a run's state is applied in the
+   microtask that hands the caller the result, so the files are those of the outcome reported —
+   the killed-run rule (§3) for an abort, one rule. A host op once started completes (synchronous
+   in the consumer). Once `destroy()` is called, DESTROYED wins. No second mechanism: the abort
+   settles the op's promise (one settlement per op) and calls the run's handle; the queue, the
+   handle and the `gone` event are destroy's. Table `tests/sandbox-abort-table.test.ts`.
+   The signal is checked and subscribed by Node's `events.addAbortListener` (Node's rule; another
+   listener's `stopImmediatePropagation()` cannot skip it).
 6. **Limits.** Per run: `runCode`'s; `timeoutMs` covers the consumer's encode
    (done before the call registers, so a throw there settles the call and
    leaves no phantom), the worker's restore, run and capture — not the
