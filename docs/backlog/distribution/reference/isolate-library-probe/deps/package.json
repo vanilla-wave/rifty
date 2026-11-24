@@ -1,0 +1,12 @@
+{
+  "name": "isolate-library-probe-deps",
+  "private": true,
+  "version": "0.0.0",
+  "description": "The four libraries the isolate guest gets as node_modules (probe only).",
+  "dependencies": {
+    "docx": "9.15.3",
+    "exceljs": "4.4.0",
+    "pdf-lib": "1.17.1",
+    "pptxgenjs": "4.0.1"
+  }
+}
