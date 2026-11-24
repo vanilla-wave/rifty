@@ -18,3 +18,6 @@ Probe `sources-native` (2026-11-24, Node v24.16.0): Node's `lib/internal/blob.js
 `fetch-blob` 4.0.0 does not bundle as an IIFE. Node-only behaviour to keep: `endings: 'native'`
 leaves a lone `\r`. Direction: Node's files generated over a JS byte store (ADR-0541 pattern);
 `stream()` needs the web-streams unit. Compat ❌ isolate-host.md ceiling row.
+
+`Blob.stream()`: Node's under goal question 1 (b) (web streams in scope); under (a) it throws the
+`ReadableStream` named gap (`NotImplementedError('isolate-host.ReadableStream')`), compat ❌.

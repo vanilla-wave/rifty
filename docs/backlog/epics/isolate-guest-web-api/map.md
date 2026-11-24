@@ -11,8 +11,10 @@ Probes (2026-11-24, `origin/main` 1c00c6292, Node v24.16.0): `reference/` — `s
    scenario as one `it.fails` sandbox case against live `node main.mjs` (I6); its contract waits
    for questions 1–2.
 2. `runtime-js/node-url-legacy-api-port` — **ready** — Node's legacy `url`/`querystring` generated
-   from pinned Node sources on every host; ADR first (I5). Independent of the `URL` source; its
-   generator and `tr46` pin are the first instance of the Node-source mechanism later units reuse.
+   from pinned Node sources on every host; ADR first (I5). Independent of the `URL` source. Its
+   ADR is the first owner of the shared Node-source mechanism (vendored pinned files, generator
+   with edit anchors, drift check, the `primordials`/`ERR_*`/validators binding) and of the
+   `tr46` 6.0.0 pin; later units (4, 7) extend it or supersede it by ADR.
 3. `runtime-js/isolate-web-globals-captured-at-load` — draft — the seam: real globals and the
    remaining ceiling throwers both installed before the runtime loads; `crypto.subtle` and
    `MessageChannel` read lazily in runtime-js; the identity sweep as a test (I2, I3).
@@ -24,40 +26,43 @@ Probes (2026-11-24, `origin/main` 1c00c6292, Node v24.16.0): `reference/` — `s
 6. `runtime-js/esm-import-binding-asi` — draft — the ESM transform's `(ns().x)` binding continues
    a previous line without `;` (nanoid's stop; every host by source) (I4).
 7. `runtime-js/isolate-guest-blob-file` — draft — `Blob`/`File` from Node's `blob.js`/`file.js`
-   over a JS byte store; `Blob.stream()` needs web streams (I1, I2).
+   over a JS byte store; `Blob.stream()` is Node's under question 1 (b), the `ReadableStream`
+   named gap under (a) (I1, I2).
 8. `distribution/isolate-host-fs-read-stream-needs-web-readablestream` — draft — `fs.createReadStream`
-   reads; closes with the web-streams unit or a read path without the web global (I3).
+   reads; under question 1 (a) a read path without the web global (Node's `ReadStream` uses none),
+   under (b) the web-streams unit (I3).
 9. `runtime-js/fs-stream-close-method-missing` — draft — exceljs `xlsx.readFile` (scenario step 3)
    after 8; a wall the carrier is expected to hit.
 
-Not seeded until question 1 is answered: `structuredClone`, web streams (+ `TextEncoderStream`/
-`TextDecoderStream`), `EventTarget`/`Event`/`CustomEvent`, `AbortController`/`AbortSignal`,
-`DOMException` from Node (sources and costs: `reference/sources-native`, `reference/sources-js`).
+Not seeded until question 1 is answered (seeded only under (b)): `structuredClone` (no measured
+Node-faithful route yet), web streams (+ `TextEncoderStream`/`TextDecoderStream`),
+`EventTarget`/`Event`/`CustomEvent`, `AbortController`/`AbortSignal`, `DOMException` from Node
+(sources and costs: `reference/sources-native`, `reference/sources-js`).
 
 ## Open questions
 
-- 1. API set: (a) URL/URLSearchParams + Blob/File + ES modules + internal uses; (b) (a) + the
-  requirements' list (structuredClone, web streams, AbortController/AbortSignal, Event/EventTarget/
-  CustomEvent); (c) (b) + everything without a host capability (fetch classes without `fetch`,
-  MessageChannel/BroadcastChannel, URLPattern, `performance.mark`/`measure`) — owner: user —
-  asked 2026-11-24, recommended (b).
-- 2. Whose scenario closes the goal: the consumer's agent file (goal §User scenario) or a generic
-  per-API corpus — owner: user — asked 2026-11-24, recommended the agent file with per-API parity
-  as invariant proof.
-- 3. Warm-call budget (today 13 ms): measured growth, no new limit (ADR-0541 precedent), or a hard
-  bound with lazy install — owner: user — asked 2026-11-24; measured since: core-js `URL` first
-  +2.5 ms (seam-esm), whatwg-url eager +3.8 / lazy tr46 +0.8 ms, Node's streams+events+abort eager
-  +5.4 ms (sources-js), structuredClone/Blob own JS not measured.
+- 1. API set: (a) URL/URLSearchParams + Blob/File + ES modules + internal uses (the user's
+  words); (b) (a) + structuredClone, web streams, AbortController/AbortSignal,
+  Event/EventTarget/CustomEvent; (c) (b) + everything without a host capability — owner: user —
+  asked 2026-11-24, re-asked after the critic, recommended (a).
+- 2. Whose scenario closes the goal: the consumer's own generators + the user's ESM entry (goal
+  §User scenario) or a generic per-API corpus — owner: user — re-asked 2026-11-24, recommended the
+  consumer's generators.
+- 3. Cost (warm call, guest bundle bytes, per-isolate heap): measured growth with no new limit, or
+  a hard bound — owner: user — re-asked 2026-11-24 with (a) ≈ +1–3 ms, (b) ≥ +9 ms on a 13 ms
+  empty `runCode` (601 ms warm `exec` at template scale), bundle +0.3 / +0.9 MB on 7.1 MB, heap
+  not measured; recommended measured growth.
+- 3b. `tr46` for IDN hostnames in the legacy `url.parse` (`runtime-js/node-url-legacy-api-port`):
+  the dependency on every host, or non-ASCII/`xn--` labels a named gap without it — owner: user —
+  asked 2026-11-24.
 - 4. Tier: `works` (recommended: computation inside the isolate, no new boundary) or `robust` —
   owner: user — asked 2026-11-24.
 - 5. ES modules in `-e` (`runCode` with `import()` or ESM syntax: today `isolate-host.dynamic-import`/
   `node-eval-esm`; needs the file loader's `import()` rewrite and `-e` module detection,
-  `runtime-js/node-cli-esm-eval-context`) — in this goal or the next — owner: user — asked 2026-11-24.
-- Lazy install of the Node-sourced modules on first global access versus a trimmed `primordials`/
-  `errors` subset — owner: agent — a timing probe inside the real guest bundle once question 3 is
-  answered.
+  `runtime-js/node-cli-esm-eval-context`) — in this goal or the next — owner: user — asked
+  2026-11-24, recommended the next.
 - `structuredClone` own JS: size, warm cost, agreement on the 33 cases — owner: agent — prototype
-  in its unit (not measured: `sources-native` «not verified»).
+  before its unit is seeded, only under question 1 (b).
 
 ## Out of scope
 
@@ -65,6 +70,8 @@ Not seeded until question 1 is answered: `structuredClone`, web streams (+ `Text
 - `crypto.subtle`/`SubtleCrypto`/`CryptoKey`, `CompressionStream`/`DecompressionStream`: need a crypto
   or compression engine in the guest — their own goals.
 - `data:` URL imports: rifty's gap on every host (`runtime-js/process-module-loader-surface`).
+- `fs.*` with an invalid path: Node's `ERR_INVALID_ARG_TYPE` is `runtime-js/fs-path-invalid-arg-type`'s
+  (every host); with a real `URL` the guest gives the every-host error.
 - Text of ESM diagnostics (stack line, file URL in frames, source header): direction F, pinned ⚠️.
 - Browser hosts' Web globals (native there); browser-host `navigator` and browser-only globals
   (`runtime-js/browser-host-guest-navigator`, `runtime-js/guest-browser-only-globals`).
