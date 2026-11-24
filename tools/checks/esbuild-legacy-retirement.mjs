@@ -101,8 +101,8 @@ const WORKBENCH_COMPILER_OUTPUTS = Object.freeze({
     sha256: '39be666ac003c7361e9fbcd88abdda1ed51052350ade9b57b4d2716f1e296498',
   },
   'typescript-worker.js': {
-    bytes: 10022716,
-    sha256: '3556c3cde751f727e88a242ca40c366cd2e568873beee1684cc84192f734fe49',
+    bytes: 10_022_034,
+    sha256: '86ab8d3db8bffe24d00b9404afddcdc51e4b5d5142fcff63cc80e81ee7fff842',
   },
 });
 const WORKBENCH_WASM_OUTPUTS = Object.freeze({
@@ -232,9 +232,41 @@ function outputFiles(root) {
   return files;
 }
 
-/** Pin of an exempt compiler output (ADR-0391). */
+// ADR-0391 §Corrections 2026-11-24: runtime edits rename, add or drop the output's
+// leading sibling-chunk imports and rename hashed sibling specifiers; nothing else.
+const SIBLING_CHUNK_IMPORT = /import (?:\{([^}]*)\} from )?("\.\/chunk-[A-Z0-9]{8}\.js");\n/y;
+const HASHED_SIBLING_NAME = /(?<="\.\/[a-z][a-z-]*-)[A-Z0-9]{8}(?=\.js")/gu;
+const IDENTIFIER = /^[A-Za-z_$][\w$]*$/u;
+
+/**
+ * Pin of an exempt compiler output (ADR-0391): the output without its leading
+ * sibling-chunk imports, sibling hashes zeroed. A leading import is dropped only
+ * if unique and every binding is used in the pinned rest — no unpinned bytes.
+ */
 export function compilerOutputPin(bytes) {
-  return { bytes: bytes.byteLength, sha256: createHash('sha256').update(bytes).digest('hex') };
+  const text = bytes.toString('latin1');
+  const imports = [];
+  const seen = new Set();
+  SIBLING_CHUNK_IMPORT.lastIndex = 0;
+  let match = SIBLING_CHUNK_IMPORT.exec(text);
+  while (match !== null) {
+    const names = match[1]?.split(',').map((name) => name.trim()) ?? [];
+    const keys = [match[2], ...names];
+    if (keys.some((key) => seen.has(key)) || !names.every((name) => IDENTIFIER.test(name))) break;
+    for (const key of keys) seen.add(key);
+    imports.push({ start: match.index, end: SIBLING_CHUNK_IMPORT.lastIndex, names });
+    match = SIBLING_CHUNK_IMPORT.exec(text);
+  }
+  const headerEnd = imports.at(-1)?.end ?? 0;
+  const rest = text.slice(headerEnd);
+  const unused = imports.findIndex(({ names }) =>
+    names.some(
+      (name) => !new RegExp(`(?<![\\w$])${name.replaceAll('$', '\\$')}(?![\\w$])`, 'u').test(rest),
+    ),
+  );
+  const start = unused === -1 ? headerEnd : imports[unused].start;
+  const pinned = Buffer.from(text.slice(start).replace(HASHED_SIBLING_NAME, '00000000'), 'latin1');
+  return { bytes: pinned.byteLength, sha256: createHash('sha256').update(pinned).digest('hex') };
 }
 
 export function evaluateEsbuildBundleInventory(
@@ -262,7 +294,8 @@ export function evaluateEsbuildBundleInventory(
       bytes.byteLength > MAX_PUBLISHED_OUTPUT_BYTES &&
       (pin === undefined || compiler.bytes !== pin.bytes || compiler.sha256 !== pin.sha256)
     ) {
-      violations.push(`${path}: published output exceeds the exact 2 MB carrier ceiling`);
+      const actual = pin === undefined ? '' : ` (compiler pin now ${JSON.stringify(pin)})`;
+      violations.push(`${path}: published output exceeds the exact 2 MB carrier ceiling${actual}`);
     }
     const rawText = bytes.toString('utf8');
     const text =
