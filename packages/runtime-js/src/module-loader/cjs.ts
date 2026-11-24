@@ -1572,12 +1572,28 @@ function isReflectDerivedFunctionConstructorCall(
 function calleeMayBeHostFunction(node: unknown, ctx: FunctionRewriteCtx): boolean {
   if (!node || typeof node !== 'object') return false;
   const n = node as AnyNodeShape;
+  if (isCalledGlobalRead(n, ctx)) return calledGlobalReadKeyCheck(n, ctx);
   if (expressionMayBeHostFunction(n, ctx)) return true;
   if (n.type !== 'MemberExpression') return false;
-  const member = n as unknown as { object?: unknown; property?: AnyNodeShape };
-  if (!member.object || !expressionMayBeHostFunction(member.object, ctx)) return false;
   const propertyName = staticPropertyName(n);
-  return propertyName === 'call' || propertyName === 'apply' || propertyName === 'bind';
+  if (propertyName !== 'call' && propertyName !== 'apply' && propertyName !== 'bind') return false;
+  const object = (n as unknown as { object?: AnyNodeShape }).object;
+  if (object && isCalledGlobalRead(object, ctx)) return calledGlobalReadKeyCheck(object, ctx);
+  return Boolean(object) && expressionMayBeHostFunction(object, ctx);
+}
+
+// Called/constructed `G[k]` (also via call/apply/bind): the key is checked at the read
+// (ADR-0444 helper), so a runtime 'Function' throws there. `G?.[k]` keeps the load ceiling.
+function isCalledGlobalRead(node: AnyNodeShape, ctx: FunctionRewriteCtx): boolean {
+  return (
+    node.type === 'MemberExpression' &&
+    !(node as unknown as { optional?: boolean }).optional &&
+    isGlobalFunctionUnknownReadMember(node, ctx)
+  );
+}
+
+function calledGlobalReadKeyCheck(node: AnyNodeShape, ctx: FunctionRewriteCtx): boolean {
+  return globalWriteKeyMayBeFunction(node.property, ctx.globalKeyHelperName, ctx.edits);
 }
 
 function calleeMayBeDerivedHostFunction(node: unknown, ctx: FunctionRewriteCtx): boolean {
@@ -1781,7 +1797,7 @@ function compileCjsSource(
       routedConstructors.Function,
       createGlobalWriteKeyCheck(
         'module-loader.cjs-global-function-assignment',
-        `CJS module ${filename} writes the global Function property through a runtime key; rifty cannot emulate that without mutating the host constructor`,
+        `CJS module ${filename} writes, calls or constructs the global Function property through a runtime key; rifty cannot emulate that without mutating or handing out the host constructor`,
       ),
     ) as CjsFactory;
   } catch (error) {

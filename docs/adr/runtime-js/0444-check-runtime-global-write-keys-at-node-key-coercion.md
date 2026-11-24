@@ -81,3 +81,19 @@ realm, where that write would corrupt the host constructor.
   object, for `'Function'`/object keys.
 - Guard: parity cases `modules/global-computed-key-{writes,sites}-{esm,cjs}`;
   conformance `tests/conformance/modules/global-computed-key-guard{,-sites}.test.ts`.
+
+## Amendment 2026-11-24 — called/constructed computed reads
+
+§3's "runtime-key reads used as a constructor (`new globalThis[k](…)`)" is no
+longer a load-time ceiling: a tracked global's computed read whose key does not
+fold, used as a callee or constructor (also `?.()`, the object of
+`.call|apply|bind`), gets the same key check at the read; a runtime `'Function'`
+key throws the format's ceiling there (Node constructs). Consumer: es-abstract
+`IsDetachedBuffer`, typed-array-* (exceljs). Kept at load: `Reflect.get(G, k)`
+called, a called alias/destructured binding of the read, `G?.[k](…)`.
+Rejected: handing the routed `Function` (ADR-0171) for that key — a
+value-substituting helper with stashed state, no consumer; trigger to revisit:
+a package constructing `Function` through a computed global key. Unit
+`runtime-js/computed-global-read-callee`; guard: parity
+`modules/global-computed-read-callee-{cjs,esm}`, conformance
+`tests/conformance/modules/global-computed-read-callee.test.ts`.

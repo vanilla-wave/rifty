@@ -1399,12 +1399,27 @@ function isReflectDerivedFunctionConstructorCall(
 function guardCalleeMayBeHostFunction(node: unknown, ctx: EsmFunctionGuardCtx): boolean {
   if (!node || typeof node !== 'object') return false;
   const n = node as GuardNodeShape;
+  if (isCalledGlobalRead(n, ctx)) return calledGlobalReadKeyCheck(n, ctx);
   if (guardExpressionMayBeHostFunction(n, ctx)) return true;
   if (n.type !== 'MemberExpression') return false;
-  const member = n as unknown as { object?: unknown };
-  if (!member.object || !guardExpressionMayBeHostFunction(member.object, ctx)) return false;
   const propertyName = staticPropertyName(n);
-  return propertyName === 'call' || propertyName === 'apply' || propertyName === 'bind';
+  if (propertyName !== 'call' && propertyName !== 'apply' && propertyName !== 'bind') return false;
+  const object = (n as unknown as { object?: GuardNodeShape }).object;
+  if (object && isCalledGlobalRead(object, ctx)) return calledGlobalReadKeyCheck(object, ctx);
+  return Boolean(object) && guardExpressionMayBeHostFunction(object, ctx);
+}
+
+// Twin of cjs.ts `isCalledGlobalRead`: a called/constructed `G[k]` key is checked at the read.
+function isCalledGlobalRead(node: GuardNodeShape, ctx: EsmFunctionGuardCtx): boolean {
+  return (
+    node.type === 'MemberExpression' &&
+    !(node as unknown as { optional?: boolean }).optional &&
+    isGlobalFunctionUnknownReadMember(node, ctx)
+  );
+}
+
+function calledGlobalReadKeyCheck(node: GuardNodeShape, ctx: EsmFunctionGuardCtx): boolean {
+  return globalWriteKeyMayBeFunction(node.property, ctx.keyHelperName, ctx.keyEdits);
 }
 
 function guardCalleeMayBeDerivedHostFunction(node: unknown, ctx: EsmFunctionGuardCtx): boolean {

@@ -41,11 +41,29 @@ these replace host `Function` with no ceiling —
 - CJS: `eval('global[k] = 1')`, `(function(){return this})()[k] = 1`,
   `(0, global)[k] = 1`.
 
+Observed 2026-11-24 at `d27970e43` (paths the unit `runtime-js/computed-global-read-callee`
+does not touch): a CJS module `exports.f = (k) => <form>` loaded with
+`createModuleLoader(MemoryFsSync).require` (`pnpm exec tsx`), then `f('Function')` —
+- `(globalThis?.[k])`, `global[k].valueOf()`, `const C = global[k]; return C`:
+  each loads and returns the host `Function` itself (`=== Function` of the test
+  realm); `(globalThis?.[k])('return 1')` (callee a `ChainExpression`) loads and
+  constructs too;
+- tagged template ``global[k]`return import('node:os')` ``: loads; the returned
+  function is built by host `Function` and its `import()` resolves through the
+  host, not the loader (lexical `Function` routes it).
+A later `import()` through the first three is inferred from the host value, not run.
+
 ## Known false positives
 
 - Non-literal `Object.assign(globalThis, src)` in a dead branch rejects
   `fetch-blob@3.2.0` (`node-fetch@3.3.2`) at load: own finding
   `runtime-js/object-assign-global-nonliteral-load-time-false-positive`.
+- An alias of a computed global read later called — `const C = G[k]; new C()`,
+  `const { [k]: C } = G; new C()` — rejects at load (Node loads; conformance
+  `global-computed-read-callee.test.ts` pins it). Candidate: ADR-0444's key
+  check at the read, as unit `runtime-js/computed-global-read-callee` does for
+  a direct callee (not widened there, manager decision 2026-11-24). Trigger: a
+  real package calling such an alias.
 
 ## Options or Next
 
