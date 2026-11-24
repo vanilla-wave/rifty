@@ -1,6 +1,7 @@
 /**
- * Named gaps of the guest's `http`/`https`/`net` (ADR-0557 §6, 2026-11-24): a
- * member that needs the network keeps Node's name, length and kind and throws
+ * Named gaps of the guest's builtin modules (ADR-0557 §6, 2026-11-24): a member
+ * that needs what the host lacks (network, a compression engine, processes,
+ * workers) keeps Node's name, length and kind and throws
  * `NotImplementedError('isolate-host.<feature>')` when called or constructed.
  */
 import { NotImplementedError } from '@riftydev/io';
@@ -44,9 +45,10 @@ export function loudMethod(name: string, length: number, feature: string, hint?:
 export type Base = { readonly prototype: object };
 
 /**
- * A constructor whose instance would carry a connection: subclassable (`class
- * extends`, `util.inherits`), Node's prototype chain, and its construction (or
- * call) throws the gap.
+ * A constructor whose instance would carry what the host lacks: subclassable
+ * (`class extends`, `util.inherits`), Node's prototype chain, and its
+ * construction (or call) throws the gap. `es6`: Node declares it with `class`
+ * (a call without `new` is V8's `TypeError`).
  */
 export function loudClass(
   name: string,
@@ -54,11 +56,33 @@ export function loudClass(
   feature: string,
   base?: Base,
   hint?: string,
+  es6 = false,
 ) {
-  const C = loudFunction(name, length, feature, hint);
+  const C = es6
+    ? named(
+        class {
+          constructor() {
+            throw gap(feature, hint);
+          }
+        },
+        name,
+        length,
+      )
+    : loudFunction(name, length, feature, hint);
   if (base !== undefined) {
     Object.setPrototypeOf(C.prototype, base.prototype);
     Object.setPrototypeOf(C, base);
   }
   return C;
+}
+
+/** An `async` member (no `prototype`, as Node's): the gap is its rejection, as Node's errors are. */
+export function loudAsync(name: string, length: number, feature: string, hint?: string) {
+  return named(
+    async (): Promise<never> => {
+      throw gap(feature, hint);
+    },
+    name,
+    length,
+  );
 }

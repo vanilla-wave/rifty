@@ -74,7 +74,7 @@ from the package source at the lock version, not traced.
 | 2 | `node:https` at load | declared ❌ (`isolate-host.md:25` Network; host README "throw at require") | traced (`pptx`, `pptx-write`): `pptxgenjs/dist/pptxgen.cjs.js:4845`; source: `encodeSlideMediaRels` `:4842-4850` starts `loadNodeDeps()` per slide without awaiting or catching it, and awaits it for an image by `path` (`:4871-4872`) | `pptx.writeFile` and `write()` (measured); the listener route for a `path` image (measured). Node loads the module without network |
 | 3 | `Blob` | declared ❌ (`:26`) | traced read: `jszip/lib/support.js:17` (detection in `try`, so `generateAsync({type:'blob'})` → `blob is not supported by this platform`); source: `docx/dist/index.cjs:23939` (`toBlob`) | `Packer.toBlob`, `pptx.write({outputType:'blob'})` only |
 | 4 | `navigator.userAgent` | ✅ since 2026-11-24 (PR #436; was declared ❌ `navigator.*`) | traced read: `exceljs/dist/exceljs.min.js:10` (core-js `engine-user-agent`, per the guest's stack); pptxgenjs bundle evaluated via `new Function`, no frame | was the browser-bundle routes only; their next stops: `crypto.subtle` (xlsx-browser), `node:https` (pptx-bundle, #2) |
-| 5 | `stream.Transform` subclass `_transform`/`_flush`, `Duplex` subclass `_write` | **undeclared** when measured (streams.md `Transform` was ✅); fixed by PR #433, 2026-11-24 — the probe's subclass and `csv.writeBuffer` lines equal Node's (the latter prints type and length only; `distribution/isolate-exceljs-csv-write-acceptance-row`) | source: `@fast-csv/format/build/src/CsvFormatterStream.js:6-55` → `exceljs/lib/utils/stream-buf.js:239` | exceljs CSV write (chunks passed through unchanged; silent where a sink accepts them) — fixed, PR #433 |
+| 5 | `stream.Transform` subclass `_transform`/`_flush`, `Duplex` subclass `_write` | **undeclared** when measured (streams.md `Transform` was ✅); fixed by PR #433, 2026-11-24 — the probe's subclass and `csv.writeBuffer` lines equal Node's (the latter prints type and length only; bytes equal Node's in `packages/isolate-host/tests/library-exceljs.test.ts`, PR #438) | source: `@fast-csv/format/build/src/CsvFormatterStream.js:6-55` → `exceljs/lib/utils/stream-buf.js:239` | exceljs CSV write (chunks passed through unchanged; silent where a sink accepts them) — fixed, PR #433 |
 | 6 | web `ReadableStream`, under rifty's own `fs.createReadStream` | **undeclared** (isolate-host.md row "`fs.createReadStream` reads" added) | guest stack: `new ReadableStream < MemoryVfs.openReadable < FileReadStream.start` (`diag-fsread`); source: exceljs `xlsx.js:244-253` (`read`), `csv/csv.js:32-43` | every fs read stream in the guest: exceljs `xlsx.read(stream)`, `readFile`, `csv.read` — `distribution/isolate-host-fs-read-stream-needs-web-readablestream` |
 | 7 | `fs.ReadStream#close`/`WriteStream#close`, `ReadStream[Symbol.asyncIterator]` | **undeclared** (fs.md row now names them) | source: `exceljs/lib/xlsx/xlsx.js:56`, `:59` (its catch's `close()` masks #6), `:247` | `xlsx.readFile` — `runtime-js/fs-stream-close-method-missing` |
 | 8 | `process.umask` | fixed (PR #432: reads 0, another mask loud) | source: `fstream/lib/writer.js:8` at load (unzipper → exceljs main) | was exceljs main's stop after #1; fstream's next stop is graceful-fs `fs$WriteStream.apply` — `runtime-js/fs-stream-class-call-shape` |
@@ -105,6 +105,19 @@ an image `path` starting `http` → `NotImplementedError('isolate-host.https.get
 `write()` hands back (node fetches it). `write` as base64/binarystring/uint8array/arraybuffer/
 nodebuffer/STREAM, `stream()`, `writeFile({compression})`, SVG image and video by `path`, a
 master + notes + hyperlink: equal to node.
+
+### After the isolate ceiling modules, PR #438 (2026-11-24)
+
+Same probe, that branch (guest `zlib`/`child_process`/`worker_threads` load with Node's shape;
+compression, process and worker use a named gap), `xlsx` only: `require('exceljs')` passes row 1;
+its next stop is `module-loader.cjs-global-function-assignment` at
+`es-abstract/2025/IsDetachedBuffer.js:22` (`new global[k](…)`, `runtime-js/cjs-global-function-assignment`).
+Past it (diagnostic patches of a copied `node_modules`, not a route): `require` of a `module-sync`
+ESM entry, `generator-function`/`async-function` → `URLConstructor` (`runtime-js/isolate-require-esm-syntax-gaps`),
+then row 8 (`process.umask`). With `origin/t3/process-umask` merged locally and both patched,
+canonical `gen/xlsx.cjs` exits 0 and equals node's (`vsNode.equal`, 14 parts). The streaming
+`WorkbookWriter#commit` stops at `isolate-host.zlib.DeflateRaw` (no engine). Chains with file and
+line: those two backlog items.
 
 ## Measures (requirement 3 baseline)
 

@@ -46,6 +46,20 @@ ESM. Opaque dynamically composed eval text is tracked under the exhaustive
 metaprogramming backlog rather than rejected merely because the module also
 contains an unrelated lexical `Function` use.
 
+### Consumer: construction through a runtime global key (2026-11-24)
+
+Measured while delivering PR #438 (isolate ceiling modules) (isolate sandbox,
+same CJS file under Node v24.16.0): `var k = ['Uint8Array']; try { new global[k[0]](new
+ArrayBuffer(0)) } catch (e) {} console.log('a ok')` — Node prints `a ok`; rifty refuses the module
+at load with `module-loader.cjs-global-function-assignment`, though no write happens and the key
+is not `Function` (also `new globalThis[k[0]](1)`; `typeof global[k]` loads). The loader already
+checks a runtime key for writes (`createGlobalWriteKeyCheck`, `cjs.ts`). Real path: exceljs 4.4.0's
+main entry → `unzipper/lib/parse.js:4` → binary → chainsaw → traverse → `typedarray.prototype.slice`
+→ `es-abstract@1.24.2/2025/GetValueFromBuffer.js:13` → `2025/IsDetachedBuffer.js:22`
+(`new global[availableTypedArrays[0]](arrayBuffer)`); `typed-array-length@1.0.8/index.js:41` and
+`typed-array-byte-offset@1.0.5/index.js:40` on the same path. `typed-array-byte-length@1.0.3/index.js:44` holds the same construct, off the measured path (Node's trace of `require('exceljs')` does not load it). The first stop of `require('exceljs')`
+after `node:zlib` on every host sharing the loader (isolate measured).
+
 ## Options / Next
 
 Parity-first when a real consumer needs this. Plausible fixes need an isolated
