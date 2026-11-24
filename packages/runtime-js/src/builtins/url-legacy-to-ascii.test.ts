@@ -22,13 +22,16 @@ const HOSTS = [
   'xn--ida.1',
   '０ｘ７ｆ．１',
   'ñ.１',
-  // A Unicode label whose ASCII part starts with `xn--`: ada encodes it, validates only input labels.
-  'Σxn--',
-  'ñxn--a',
   'aσxn--b.com',
-  'ñxn--.com',
-  // Input `xn--` labels stay validated.
+  // Input `xn--` labels stay validated, however the input spells or splits them.
   'xn--xn--ida',
+  'xn--xn---fqa。ñ',
+  'ｘｎ－－xn---fqa',
+  'Σxn--。xn--xn---kod',
+  'ñ.xn--xn---fqa',
+  'xn--xn---fqa.ñ',
+  'ñ。xn--xn--ida',
+  'ＸＮ－－ida.ñ',
   'ñ.xn--xn--ida',
   'ñ.xn--ida',
   'xn--ñ',
@@ -42,6 +45,19 @@ const outcome = (parse: (s: string) => { hostname: string | null }, host: string
   }
 };
 
+/**
+ * Declared (contract Acceptance 4, compat modules.md): a Unicode label whose ASCII part starts with
+ * `xn--` — ada encodes it unchecked, rifty checks every `xn--` label of the host parser's result
+ * (it cannot tell an encoded Unicode label from an input one). Node's value, rifty's
+ * `ERR_INVALID_URL`; each must still differ.
+ */
+const DECLARED: readonly (readonly [string, string])[] = [
+  ['Σxn--', 'xn--xn---kod'],
+  ['ñxn--a', 'xn--xn--a-nta'],
+  ['ñxn--.com', 'xn--xn---fqa.com'],
+  ['xn--ida.Σxn--', 'xn--ida.xn--xn---kod'],
+];
+
 describe('legacy url toASCII step equals Node where its rules decide', () => {
   it('number labels and xn-- prefixed Unicode labels', () => {
     const vfs = new MemoryFsSync();
@@ -53,6 +69,9 @@ describe('legacy url toASCII step equals Node where its rules decide', () => {
     try {
       const rows = HOSTS.map((h) => [h, outcome(guest.parse, h)]);
       expect(rows).toEqual(HOSTS.map((h) => [h, outcome(nodeUrl.parse, h)]));
+      expect(
+        DECLARED.map(([h]) => [h, outcome(nodeUrl.parse, h), outcome(guest.parse, h)]),
+      ).toEqual(DECLARED.map(([h, node]) => [h, node, 'ERR_INVALID_URL']));
     } finally {
       process.noDeprecation = noDeprecation;
     }
