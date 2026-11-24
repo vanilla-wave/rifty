@@ -82,7 +82,9 @@ the packed file and the source whose code is there without its license.
    → red, new generated source without license → red (new dir and next to a
    first-party file), a file without the source's code (false-positive
    candidate) → no requirement → scenario
-4. Notice reaches the packed file: generators embed `/*! <LICENSE> */` (TypeScript:
+4. Notice in the packed file itself (manager, 2026-11-24: no NOTICE-file
+   substitute for generated code; mutant: notice only in a NOTICE file → red;
+   only a JSON artifact is covered by its own packed `.LICENSE`). Notice reaches the packed file: generators embed `/*! <LICENSE> */` (TypeScript:
    `LICENSE.txt` + `ThirdPartyNoticeText.txt` + change line; esbuild runtime:
    esbuild + pinned Go 1.26.1 LICENSE); guest `legalComments:'eof'` (host copies
    `guest.js` byte for byte; its own child/codec bundles hold no upstream code);

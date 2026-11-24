@@ -88,7 +88,7 @@ describe('mutants', () => {
     return discoverSources(root, ['pkg']);
   }
 
-  it('notice removed from the packed file → red; in the file or a tarball LICENSE → green', () => {
+  it('notice removed from the packed file → red, also when only a NOTICE file carries it; in the file → green', () => {
     const { sources, violations } = pkg(true);
     expect(violations).toEqual([]);
     const withNotice = `/*! ${license} */\n${code()}`;
@@ -102,9 +102,12 @@ describe('mutants', () => {
         files: [
           { path: 'dist/a.js', text: code() },
           { path: 'THIRD_PARTY_NOTICES.md', text: license },
+          { path: 'dist/upstream.LICENSE', text: license },
         ],
       }).violations,
-    ).toEqual([]);
+    ).toEqual([
+      expect.stringContaining('dist/a.js: contains pkg/src/feature/generated/upstream.js'),
+    ]);
     const stripped = evaluateTarball(sources, {
       pkg: 'p',
       files: [{ path: 'dist/a.js', text: code() }],
@@ -140,6 +143,25 @@ describe('mutants', () => {
     expect(
       evaluateTarball(sources, { pkg: 'p', files: [{ path: 'vendor/x.json', text }] }).hits,
     ).toHaveLength(1);
+  });
+
+  it('a JSON artifact is covered by its own packed <origin>.LICENSE, not by any NOTICE file', () => {
+    root = mkdtempSync(join(tmpdir(), 'tpn-'));
+    const dir = join(root, 'pkg/vendor');
+    mkdirSync(dir, { recursive: true });
+    const text = JSON.stringify({ 'lib.d.ts': code() });
+    writeFileSync(join(dir, 'bundle.json'), text);
+    writeFileSync(join(dir, 'upstream.LICENSE'), license);
+    const { sources } = discoverSources(root, ['pkg']);
+    const packed = (extra: { path: string; text: string }[]) =>
+      evaluateTarball(sources, {
+        pkg: 'p',
+        files: [{ path: 'vendor/bundle.json', text }, ...extra],
+      }).violations;
+    expect(packed([{ path: 'vendor/upstream.LICENSE', text: license }])).toEqual([]);
+    expect(packed([{ path: 'NOTICE', text: license }])).toEqual([
+      expect.stringContaining('vendor/bundle.json: contains pkg/vendor/bundle.json'),
+    ]);
   });
 
   it('an artifact too small to fingerprint is loud, not skipped', () => {

@@ -7,7 +7,9 @@
  * upstream texts); a dir without one may hold only FIRST_PARTY files, so a new
  * upstream file anywhere else is red. Every file `npm pack` would ship is scanned for each source
  * artifact's fingerprint; a hit needs every one of the source's licenses in
- * that file, or in a LICENSE/NOTICE file of the same tarball. Run after
+ * that file — the notice travels with the chunk; a separate NOTICE file does not
+ * count. Only a JSON artifact (no comment possible) is covered by its own packed
+ * `<origin>.LICENSE` files. Run after
  * `pnpm build:libs`.
  *
  * Fingerprint: WINDOWS evenly spaced WINDOW-char slices of the artifact with
@@ -42,7 +44,6 @@ const SKIP_DIRS = new Set(['node_modules', 'dist', 'tests', 'fixtures', '__tests
 const ARTIFACT_RE = /\.(?:[cm]?js|json)$/u;
 const NOT_ARTIFACT = new Set(['sources.json']);
 const BINARY_EXT = new Set(['.wasm', '.png', '.jpg', '.gif', '.ico', '.woff', '.woff2', '.gz']);
-const LICENSE_FILE_RE = /LICEN[CS]E|NOTICE/iu;
 
 /** Whitespace- and escape-insensitive form: survives re-printing and JSON embedding. */
 export function normalize(text) {
@@ -148,7 +149,6 @@ export function evaluateTarball(sources, tarball) {
   const hits = [];
   const violations = [];
   const files = tarball.files.map((f) => ({ ...f, norm: normalize(f.text) }));
-  const licenseDocs = files.filter((f) => LICENSE_FILE_RE.test(basename(f.path)));
   for (const file of files) {
     for (const source of sources) {
       const found = source.artifacts
@@ -159,9 +159,13 @@ export function evaluateTarball(sources, tarball) {
         .map(({ a, s }) => `${a.path} ${Math.round(s * a.windows.length)}/${a.windows.length}`)
         .join(', ');
       hits.push(`${tarball.pkg} ${file.path}: ${what}`);
+      // A JSON artifact cannot hold a comment: its own `.LICENSE` files, packed, cover it.
+      const json = found.every(({ a }) => a.path.endsWith('.json'));
       for (const license of source.licenses) {
         const n = normalize(license.text);
-        if (file.norm.includes(n) || licenseDocs.some((d) => d.norm.includes(n))) continue;
+        if (file.norm.includes(n)) continue;
+        if (json && files.some((f) => basename(f.path) === license.name && f.norm.includes(n)))
+          continue;
         violations.push(
           `${tarball.pkg} ${file.path}: contains ${what} without ${source.dir}/${license.name}`,
         );
