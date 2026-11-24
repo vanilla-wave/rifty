@@ -197,7 +197,7 @@ export const WRITABLE_HOOK_OWNER: unique symbol = Symbol('rifty/io:writable-hook
 
 class WritableImplementation extends EventEmitter {
   readonly _writableState!: WritableState;
-  [WRITABLE_HOOK_OWNER]?: WritableHookOwner;
+  declare [WRITABLE_HOOK_OWNER]?: WritableHookOwner;
   private readonly endCallbacks!: EndCallback[];
 
   constructor(opts: WritableOptions = {}) {
@@ -211,7 +211,7 @@ class WritableImplementation extends EventEmitter {
     this._writev([{ chunk, encoding }], cb);
   }
 
-  /** Optional like Node: `_writev` is `null` on the prototype (below), there is no base `_final`. */
+  /** Optional like Node: `_writev` is `null` on the prototype (constructor call), no base `_final`. */
   _writev?(chunks: WriteChunk[], cb: WriteCallback): void;
   _final?(cb: WriteCallback): void;
 
@@ -764,14 +764,6 @@ class WritableImplementation extends EventEmitter {
   }
 }
 
-// Node: `Writable.prototype._writev === null`.
-Object.defineProperty(WritableImplementation.prototype, '_writev', {
-  configurable: true,
-  enumerable: false,
-  value: null,
-  writable: true,
-});
-
 export interface Writable extends WritableImplementation {}
 
 export type WritableConstructor = CallableStreamConstructor<
@@ -787,6 +779,7 @@ export const Writable: WritableConstructor = /* @__PURE__ */ makeCallableStreamC
     EventEmitter.call(receiver);
     initializeWritable(receiver, options);
   },
+  () => ({ _writev: null }),
 );
 
 function abortError(): Error {

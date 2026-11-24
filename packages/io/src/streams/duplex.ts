@@ -101,7 +101,7 @@ class DuplexImplementation extends DuplexReadableBase {
     initializeDuplex(this as unknown as Duplex, opts);
   }
 
-  /** Typing only: the loop after the class installs `Writable.prototype._write` itself. */
+  /** Typing only: the constructor call below installs `Writable.prototype._write` itself. */
   _write(chunk: unknown, encoding: string, cb: (err?: Error | null) => void): void {
     Writable.prototype._write.call(this, chunk, encoding, cb);
   }
@@ -336,12 +336,6 @@ class DuplexImplementation extends DuplexReadableBase {
   }
 }
 
-// Writable's hooks, shared like Node's (`Duplex.prototype._write === Writable.prototype._write`).
-for (const key of ['_write', '_writev'] as const) {
-  const descriptor = Object.getOwnPropertyDescriptor(Writable.prototype, key);
-  if (descriptor) Object.defineProperty(DuplexImplementation.prototype, key, descriptor);
-}
-
 export interface Duplex extends DuplexImplementation {}
 
 export type DuplexConstructor = CallableStreamConstructor<
@@ -357,6 +351,8 @@ export const Duplex: DuplexConstructor = /* @__PURE__ */ makeCallableStreamConst
     Readable.call(receiver, options);
     initializeDuplex(receiver, options);
   },
+  // Writable's hooks, shared like Node's (`Duplex.prototype._write === Writable.prototype._write`).
+  () => ({ _write: Writable.prototype._write, _writev: null }),
 );
 
 /** Node `{ readable, writable }` halves (each a stream with the right state bag). */

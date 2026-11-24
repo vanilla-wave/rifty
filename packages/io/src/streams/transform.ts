@@ -77,8 +77,6 @@ class TransformImplementation extends Duplex {
   override _read(): void {}
 }
 
-TransformImplementation.prototype._final = transformFinal;
-
 export interface Transform extends TransformImplementation {}
 
 export type TransformConstructor = CallableStreamConstructor<
@@ -94,4 +92,5 @@ export const Transform: TransformConstructor = /* @__PURE__ */ makeCallableStrea
     Duplex.call(receiver, options);
     initializeTransform(receiver, options);
   },
+  () => ({ _final: transformFinal }),
 );
