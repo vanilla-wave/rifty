@@ -67,7 +67,7 @@ warning on stderr. Target: the same file gives Node's output in a browser-host `
    lane), stdout, stderr and exit code equal `node main.js` over the same files; masked only: the
    pid in `(node:<pid>)` and the program name in the `(Use \`node --trace-deprecation …\`` hint
    (rifty's `argv0` `'rifty'`, `builtins/process-identity.ts:22`; declared by Acceptance 7). Under
-   Acceptance 4's default the isolate run stops at the `ñ.com` line with
+   Acceptance 4 (the user's choice 2026-11-24) the isolate run stops at the `ñ.com` line with
    `NotImplementedError('url.toASCII')` (stderr, exit 1) after Node's first three lines; the browser
    host gives all five → scenario
 2. Differential suite: every legacy `url` call of Node v24.16.0's `test-url-parse-format.js`,
@@ -87,10 +87,13 @@ warning on stderr. Target: the same file gives Node's output in a browser-host `
    (or the `ERR_INVALID_URL` throw) equal live Node on a browser host (Chromium lane) on every
    input except the declared residual, pinned row by row: each pinned row must still differ,
    outcome type and value compared exactly (the PR #435 pin rule). Measured on Chromium 148,
-   2026-11-24 (review round 1), over 6 584 hostnames (IdnaTestV2 + probe hosts + every ASCII char
-   after a non-ASCII label + number labels): 337 rows — 306 Bidi, 30 host code points the WHATWG
-   parser forbids and ada passes (C0 controls, DEL, `*` on Chromium), 1 mapped `%` (`a％41.com`:
-   Node `ERR_INVALID_URL`, rifty `aa.com`); IPv4 ("ends in a number") no longer applies (a neutral
+   2026-11-24 (review round 3), over 6 598 hostnames (IdnaTestV2 + probe hosts + every ASCII char
+   after a non-ASCII label + number labels + `xn--xn--` spellings): 341 rows — 306 Bidi, 30 host code
+   points the WHATWG parser forbids and ada passes (C0 controls, DEL, `*` on Chromium), 1 mapped `%`
+   (`a％41.com`: Node `ERR_INVALID_URL`, rifty `aa.com`), 4 Unicode labels whose ASCII part starts
+   with `xn--` (`Σxn--`: Node `xn--xn---kod`, rifty `ERR_INVALID_URL` — every `xn--` label of the
+   result is checked; an encoded Unicode label cannot be told from an input one, manager's decision
+   review round 3); IPv4 ("ends in a number") no longer applies (a neutral
    label is appended for the parse). The classes are what the corpus shows, not a proof that no
    other input differs; another browser version may differ. In the isolate guest every ASCII input equals Node and every input with a non-ASCII
    or `xn--` label throws `NotImplementedError('url.toASCII')` → scenario

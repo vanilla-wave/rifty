@@ -10,7 +10,8 @@
  * - No `URL` at load (isolate guest): named gap.
  * Declared differences from ada (ADR, compat ⚠️): Bidi (the host checks RFC 5893
  * in full, ada per label and partly), host code points the WHATWG parser forbids
- * and ada passes, mapped `%`.
+ * and ada passes, mapped `%`, a Unicode label whose ASCII part starts with `xn--` (ada encodes it
+ * unchecked; every `xn--` label of the result is checked here: an input one cannot be told apart).
  */
 import { NotImplementedError } from '@riftydev/io';
 
@@ -44,10 +45,6 @@ const isXn = (s: string, at = 0): boolean =>
   code(s, at + 1) === 0x6e &&
   code(s, at + 2) === 0x2d &&
   code(s, at + 3) === 0x2d;
-const includes = (list: string[], item: string): boolean => {
-  for (let i = 0; i < list.length; i++) if (list[i] === item) return true;
-  return false;
-};
 /** Appended for the parse, cut from the result. */
 const NEUTRAL = '.x';
 
@@ -141,14 +138,10 @@ export function createToASCII(hostOf: HostOf | undefined): (hostname: string) =>
     const ascii = hostOf(hostname);
     if (ascii === undefined) return '';
     const labels = labelsOf(ascii);
-    const inputLabels = labelsOf(hostname);
     let decoded = false;
     for (let index = 0; index < labels.length; index++) {
       const label = labels[index] as string;
       if (!isXn(label)) continue;
-      // `xn--xn--…` that is not an ASCII label of the input is a Unicode label ada encoded (its
-      // ASCII part starts with `xn--`): ada validates only input `xn--` labels.
-      if (isXn(label, 4) && !includes(inputLabels, label)) continue;
       const points = punycodeToCodePoints(slice(label, 4));
       if (points === undefined) return '';
       let ascii7 = true;

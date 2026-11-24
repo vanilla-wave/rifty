@@ -17,8 +17,8 @@ with `new URL` plus a regex fallback: 905/1 314 of Node's own url-test calls dif
 differs on 304 under every flag setting — ada always runs its own partial per-label Bidi check
 (`is_label_valid`); Chromium 148 `URL` alone on 2 226 (no `xn--` check for an ASCII host); `URL`
 plus ada's punycode round trip on 307 (305 Bidi, 2 IPv4 from mapped digits); with a neutral label
-appended for the parse (Decision 3), on 6 584 hostnames: 337 (306 Bidi, 30 forbidden host code
-points, 1 mapped `%`), Chromium 148.
+appended for the parse (Decision 3), on 6 598 hostnames: 341 (306 Bidi, 30 forbidden host code
+points, 1 mapped `%`, 4 Unicode labels whose ASCII part starts with `xn--`), Chromium 148.
 
 ## Decision
 

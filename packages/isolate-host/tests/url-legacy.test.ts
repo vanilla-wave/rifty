@@ -4,7 +4,7 @@
  * url-legacy`), each as `node program.cjs <in> <out>` in a sandbox and in live Node over the same
  * files. Equal on every row, except the rows whose hostname reaches Node's `toASCII` with a
  * non-ASCII or `xn--` label (`idnaStep`, recorded from Node's own lib/url.js): there the
- * named gap, until the isolate has a host `URL` (Acceptance 4's default).
+ * named gap, until the isolate has a host `URL` (Acceptance 4, the user's choice 2026-11-24).
  */
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';

@@ -25,7 +25,7 @@ import {
 
 // ADR-0574, COI Workbench host (Chromium, kernel child `node`): legacy node:url / querystring
 // against live Node v24.16.0 over the same files. Corpora: runtime-js/tests/fixtures/url-legacy.
-// `toASCII` takes Chromium's `URL` (contract Acceptance 4, the manager's default): the residual
+// `toASCII` takes Chromium's `URL` (contract Acceptance 4, the user's choice 2026-11-24): the residual
 // rows are pinned exactly (`chromium-residual.json`; each must still differ).
 
 const here = dirname(fileURLToPath(import.meta.url));

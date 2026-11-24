@@ -4719,6 +4719,62 @@
      "message": "Invalid URL"
     }
    }
+  },
+  {
+   "i": 6584,
+   "host": "Σxn--",
+   "node": {
+    "ok": "xn--xn---kod"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6585,
+   "host": "ñxn--a",
+   "node": {
+    "ok": "xn--xn--a-nta"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6587,
+   "host": "ñxn--.com",
+   "node": {
+    "ok": "xn--xn---fqa.com"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6597,
+   "host": "xn--ida.Σxn--",
+   "node": {
+    "ok": "xn--ida.xn--xn---kod"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
   }
  ]
 }
