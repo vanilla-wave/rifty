@@ -226,8 +226,9 @@ snippets (`tests/parity.test.ts`).
 
 Not available. Each of these throws `NotImplementedError` naming the API:
 
-- network: `fetch`, `WebSocket`, `node:http`/`https`/`net` (throw at
-  require), `node:tls`/`dgram`/`http2`;
+- network: `fetch`, `WebSocket`, any network use of `node:http`/`https`/`net`
+  (they load with Node's shape; a request, server, socket or an Agent's pool
+  throws when used), `node:tls`/`dgram`/`http2`;
 - `URL`, `URLSearchParams`, `structuredClone`, web streams,
   `AbortController`/`AbortSignal`, `Event`/`EventTarget`/`CustomEvent`,
   `Blob`/`File`, `Request`/`Response`/`Headers`/`FormData`,

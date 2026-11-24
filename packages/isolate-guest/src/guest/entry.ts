@@ -28,6 +28,9 @@ import { syncMirror } from '@riftydev/vfs';
 import { type MemoryFsSync, installMemoryFs } from '@riftydev/vfs/internal';
 import { GUEST_DIRS, UNCOPYABLE_REJECTION } from '../contract.ts';
 import { FsSnapshotError, type SnapshotOptions, restoreFs, snapshotFs } from '../snapshot.ts';
+import type { Base } from './egress-gaps.ts';
+import { createHttp } from './egress-http.ts';
+import { createNet } from './egress-net.ts';
 import { bindNotImplemented } from './loud.ts';
 // Evaluated before every runtime module: the build injects it first (scripts/build-runtime.mjs).
 import {
@@ -159,7 +162,20 @@ const ESM_SYNTAX: readonly string[] = [
   "Unexpected token 'export'",
   "Cannot use 'import.meta' outside a module",
 ];
+/**
+ * Node-shaped, network use a named gap (ADR-0557 §6, 2026-11-24). Built on the
+ * first `require` of any of them, once per realm: `https.Agent` extends this
+ * realm's `http.Agent`, `http.Server` its `net.Server`.
+ */
 const EGRESS_MODULES = ['http', 'https', 'net'] as const;
+let egress: Record<(typeof EGRESS_MODULES)[number], Record<string, unknown>> | undefined;
+function egressModule(name: (typeof EGRESS_MODULES)[number]): Record<string, unknown> {
+  if (egress === undefined) {
+    const net = createNet();
+    egress = { net, ...createHttp(net.Server as Base) };
+  }
+  return egress[name];
+}
 /** rifty builds these on browser primitives this host lacks (CompressionStream, Workers + SAB). */
 const HOST_CEILING_MODULES = {
   zlib: 'needs web CompressionStream, absent in the rifty isolate host',
@@ -375,14 +391,7 @@ function setUp(): void {
     if (phase === 'natural') writeDiagnostic(error);
     else if (!handleRealmUncaughtError(error)) fatal(error);
   });
-  for (const name of EGRESS_MODULES) {
-    registerBuiltin(name, () => {
-      throw new NotImplementedError(
-        `isolate-host.${name}`,
-        'no network in the rifty isolate host, ADR-0557',
-      );
-    });
-  }
+  for (const name of EGRESS_MODULES) registerBuiltin(name, () => egressModule(name));
   for (const [name, hint] of Object.entries(HOST_CEILING_MODULES)) {
     registerBuiltin(name, () => {
       throw new NotImplementedError(`isolate-host.${name}`, `${hint}, ADR-0557`);

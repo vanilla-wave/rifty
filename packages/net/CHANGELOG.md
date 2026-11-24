@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- `@riftydev/net/node-data`: Node's `METHODS`, `STATUS_CODES`, `maxHeaderSize` and `isIP`/`isIPv4`/`isIPv6`, side-effect free, for the isolate guest's own `node:http`/`node:net` (ADR-0557 §6). Browser modules unchanged (the IP grammar moved to `ip-address.ts`).
+
 - External HTTP(S) egress uses the runtime's native-compatible network boundary, preserving ADR-0181 inputs while sharing Fetch's single response body/ref owner (ADR-0541).
 
 - Cross-realm, ws-bridge and http port channels open the native `BroadcastChannel` (`openHostBroadcastChannel`), so they never hold a guest event loop (ADR-0529).

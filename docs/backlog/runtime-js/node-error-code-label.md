@@ -5,7 +5,7 @@ title: Node errors rifty throws lack Node's `[ERR_X]` label and error class
 created: 2026-11-24
 why: "`String(e)`, the stack's first line, `util.inspect` and fatal reports print `TypeError: …` where Node prints `TypeError [ERR_X]: …`; code matching `e.toString()` or log parsers on the label see a different error"
 sources: [docs/public/compat/isolate-host.md, docs/adr/distribution/0557-run-guest-code-in-a-disposable-child-process-holding-a-rifty-v8-isolate-isolated-vm.md]
-code: [packages/runtime-js/src/builtins/process-warnings.ts, packages/isolate-guest/src/guest/navigator.ts]
+code: [packages/runtime-js/src/builtins/process-warnings.ts, packages/isolate-guest/src/guest/navigator.ts, packages/isolate-guest/src/guest/node-validators.ts, packages/runtime-js/src/internal/node-received.ts]
 ---
 
 ## Context
@@ -24,6 +24,14 @@ try { process.emitWarning(1) } catch (e) { console.log(String(e)) }
   Node : TypeError [ERR_INVALID_ARG_TYPE]: The "warning" argument must be …
   rifty: TypeError: The "warning" argument must be …
 ```
+
+Same class, PR #435 (isolate `http`/`https`/`net`), same probe: `require('net').setDefaultAutoSelectFamily(1)` →
+Node `TypeError [ERR_INVALID_ARG_TYPE]: The "value" argument must be of type boolean. Received type number (1)`
+(`String(e)` and stack), rifty `TypeError: The "value" …` — sites `node-validators.ts` `nodeError`
+(the guest's `http`/`net` validators) and `node-received.ts` `invalidArgType`. Wider on the same
+kind of call, no validation at all: `require(1)` → Node `TypeError [ERR_INVALID_ARG_TYPE]: The "id"
+argument must be of type string. …`, rifty `TypeError: specifier.startsWith is not a function`;
+`require('path').join(1)` → Node the same `ERR_INVALID_ARG_TYPE` (`"path"`), rifty returns a string.
 
 `name`, `message`, own enumerable `code` match. Uncaught, the fatal report
 prints `TypeError: Illegal constructor … { code: 'ERR_ILLEGAL_CONSTRUCTOR' }`

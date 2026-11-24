@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Guest `node:http`/`https`/`net` load with Node's shape; network use throws, naming the member (`isolate-host.http.request`, `isolate-host.net.connect`, …; was `isolate-host.http` at require), and so does constructing an HTTP message, server or socket (`isolate-host.http.ServerResponse`, …) or `net.BlockList`/`SocketAddress`, though Node opens nothing there. pptxgenjs 4.0.1 `writeFile` now works in a sandbox (its unused `import('node:https')`), equal to Node's file; parity `tests/egress-modules.test.ts`, `tests/library-pptxgenjs.test.ts`. No network path is added (`egress.test.ts`).
+
 - Guest `process.umask()` reads `0`, the mask its FS creates under; another mask throws `NotImplementedError('process.umask(mask)')`. Corpus rows `process-umask-*`.
 - Guest `navigator`/`Navigator` as in Node 24 with the guest's identity (`@riftydev/isolate-guest` CHANGELOG): `navigator.userAgent` and `os.cpus()`/`os.availableParallelism()` no longer throw; `require('core-js/actual')` runs as under `node` (`tests/navigator.test.ts`). `navigator.locks` is the named gap.
 - Sandbox: a run's output is fixed when its status is out — what the guest's realm prints while its end state is captured (code reached through intrinsics it replaced) is not the run's output.

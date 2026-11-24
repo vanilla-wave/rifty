@@ -12,6 +12,7 @@ export default defineConfig({
     'sqlite/engine': 'src/sqlite/engine.ts',
     'sqlite/database-sync': 'src/sqlite/database-sync.ts',
     'sqlite/register-builtins': 'src/sqlite/register-builtins.ts',
+    'node-data': 'src/node-data.ts',
   },
   format: ['esm'],
   dts: true,
