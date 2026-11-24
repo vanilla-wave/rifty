@@ -33,6 +33,10 @@ const FIXTURES = join(here, '../../packages/runtime-js/tests/fixtures/url-legacy
 const read = (name: string): string => readFileSync(join(FIXTURES, name), 'utf8');
 const requireFixture = createRequire(join(FIXTURES, 'codec.cjs'));
 const DEP_ROWS = requireFixture('./dep0169-rows.cjs') as Record<string, Record<string, string>>;
+const DECLARED = requireFixture('./dep0169-declared.cjs') as Record<
+  string,
+  { files: Record<string, string>; node: string; rifty: string }
+>;
 const GUEST_ROWS = requireFixture('./guest-rows.cjs') as Record<
   string,
   { hosts: string[]; files: Record<string, string> }
@@ -217,6 +221,14 @@ test('legacy node:url / querystring equal Node (COI Workbench)', async ({ page, 
         stdout: node.stdout,
         exitCode: node.exitCode,
       });
+    }
+
+    // Declared DEP0169 rows: each still differs from Node, exactly as pinned.
+    for (const [name, row] of Object.entries(DECLARED)) {
+      const node = inNode(row.files, ['main.js']);
+      rmSync(node.dir, { recursive: true, force: true });
+      const rifty = await inRifty(row.files, ['main.js']);
+      expect.soft([node.stdout, rifty.stdout], name).toEqual([row.node, row.rifty]);
     }
 
     // Acceptance 3: a URL the guest assigns later is never called; the load-time one is.

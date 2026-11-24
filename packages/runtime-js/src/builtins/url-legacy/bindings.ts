@@ -1,7 +1,9 @@
 /**
- * Inputs of Node v24.16.0's generated legacy `url`/`querystring` (ADR-0574 §2–§5): intrinsics
- * captured at load, Node's error classes and validators, the active process, `toASCII`,
- * `isInsideNodeModules`, `bindingUrl.format`. Everything else is upstream's text.
+ * Inputs of Node v24.16.0's generated legacy `url`/`querystring` (ADR-0574 §2–§5): `primordials`
+ * (captured at load), Node's error classes and validators, the active process, `toASCII`,
+ * `isInsideNodeModules`, `bindingUrl.format`. Everything else is upstream's text. Error message
+ * building and `bindingUrl.format` still call live intrinsics
+ * (`backlog/runtime-js/post-guest-paths-use-replaceable-intrinsics`).
  */
 import { NotImplementedError } from '@riftydev/io';
 import { describeReceived } from '../../internal/node-received.ts';
@@ -13,10 +15,11 @@ import { isInsideNodeModules } from './inside-node-modules.ts';
 import { createToASCII, nativeHostOf } from './to-ascii.ts';
 
 type Fn = (...args: never[]) => unknown;
+const apply = Reflect.apply;
 const uncurry =
   <T extends Fn>(f: T) =>
   (self: unknown, ...args: Parameters<T>): ReturnType<T> =>
-    Reflect.apply(f, self, args) as ReturnType<T>;
+    apply(f, self, args) as ReturnType<T>;
 
 const setProto = Set.prototype;
 /** Node's `SafeSet`: a `Set` whose methods are the ones captured here. */
@@ -171,7 +174,7 @@ const hostnameOf = getter('hostname');
 const usernameOf = getter('username');
 const passwordOf = getter('password');
 const read = (get: ((this: URL) => string) | undefined, url: URL): string =>
-  get === undefined ? '' : (Reflect.apply(get, url, []) as string);
+  get === undefined ? '' : (apply(get, url, []) as string);
 const hostOf = nativeHostOf(NativeURL, hostnameOf);
 
 /**
@@ -206,7 +209,7 @@ const processFacade = {
   },
   emitWarning(...args: unknown[]): unknown {
     const active = publicNodeProcess() as { emitWarning: (...a: unknown[]) => unknown };
-    return Reflect.apply(active.emitWarning, active, args);
+    return apply(active.emitWarning, active, args);
   },
 };
 

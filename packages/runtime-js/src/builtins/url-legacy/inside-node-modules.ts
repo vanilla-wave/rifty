@@ -15,26 +15,48 @@ interface CallSite {
 const errorCtor = Error as unknown as { stackTraceLimit?: unknown };
 const capture = (Error as { captureStackTrace?: (target: object, fn?: unknown) => void })
   .captureStackTrace;
+const { apply, defineProperty, deleteProperty, getOwnPropertyDescriptor } = Reflect;
+const isArray = Array.isArray;
+const regexpExec = RegExp.prototype.exec;
 const rawSites = (_error: unknown, sites: unknown): unknown => sites;
 const NODE_MODULES = /[\\/]node_modules[\\/]/;
+
+/**
+ * Set `Error.stackTraceLimit` for the walk through its descriptor (a guest's non-writable but
+ * configurable limit too) and return the restorer. A non-configurable, non-writable limit stays:
+ * the walk then sees at most that many frames (declared, compat modules.md `node:url`).
+ */
+function setLimit(limit: number): () => void {
+  const saved = getOwnPropertyDescriptor(errorCtor, 'stackTraceLimit');
+  const writable = {
+    value: limit,
+    writable: true,
+    enumerable: saved?.enumerable ?? true,
+    configurable: true,
+  };
+  if (!defineProperty(errorCtor, 'stackTraceLimit', writable)) return () => {};
+  return () => {
+    if (saved === undefined) deleteProperty(errorCtor, 'stackTraceLimit');
+    else defineProperty(errorCtor, 'stackTraceLimit', saved);
+  };
+}
 
 function callSites(limit: number): readonly CallSite[] {
   // Every rifty host is V8 (ADR-0469 tiers); without the API there is no stack to walk.
   if (typeof capture !== 'function') return [];
   const hook = readPrepareStackTrace();
-  const hadLimit = Object.hasOwn(errorCtor, 'stackTraceLimit');
-  const savedLimit = errorCtor.stackTraceLimit;
   const holder: { stack?: unknown } = {};
   writePrepareStackTrace(rawSites);
+  let restoreLimit = (): void => {};
   try {
-    errorCtor.stackTraceLimit = limit;
+    restoreLimit = setLimit(limit);
     capture(holder, isInsideNodeModules);
     const sites = holder.stack;
-    return Array.isArray(sites) ? (sites as CallSite[]) : [];
+    return isArray(sites) ? (sites as CallSite[]) : [];
   } finally {
-    if (hadLimit) errorCtor.stackTraceLimit = savedLimit;
-    else Reflect.deleteProperty(errorCtor, 'stackTraceLimit');
+    // The guest's hook first: nothing below may leave ours installed.
     writePrepareStackTrace(hook);
+    restoreLimit();
   }
 }
 
@@ -44,7 +66,7 @@ export function isInsideNodeModules(frameLimit?: unknown): boolean {
     if (typeof site.isEval !== 'function' || !site.isEval()) continue;
     const name = site.getScriptNameOrSourceURL();
     if (typeof name !== 'string' || name === '') continue;
-    return NODE_MODULES.test(name);
+    return apply(regexpExec, NODE_MODULES, [name]) !== null;
   }
   return false;
 }

@@ -199,6 +199,19 @@ describe('isolate guest: DEP0169/DEP0170 by Node v24.16.0s 4-frame window', () =
   }
 });
 
+const DECLARED = requireFixture('./dep0169-declared.cjs') as Record<
+  string,
+  { files: Record<string, string>; node: string; rifty: string }
+>;
+describe('isolate guest: declared DEP0169 rows (each still differs from Node)', () => {
+  for (const [name, row] of Object.entries(DECLARED)) {
+    it(name, async () => {
+      expect(inNode(row.files, ['main.js']).stdout).toBe(row.node);
+      expect((await inSandbox(row.files, ['main.js'])).stdout).toBe(row.rifty);
+    }, 60_000);
+  }
+});
+
 /** The pid in `(node:<pid>)` and the program name in Node's `--trace-*` hint. */
 const mask = (stderr: string): string =>
   stderr

@@ -3,7 +3,7 @@ area: runtime-js
 status: ready
 title: "`url.parse`, `url.resolve`, `url.resolveObject`, `url.format` and `querystring` give Node v24.16.0's results on every host, the isolate guest included, with no global `URL` for ASCII hostnames (non-ASCII: Acceptance 4)"
 created: 2026-11-24
-why: In the isolate guest `url.resolve('https://example.com/a', 'b')` returns `'b'` and `url.parse` drops `auth`/`hostname`/`port`/`path` with no error. On every host rifty's legacy API is a WHATWG-`URL` approximation: 904 of the 1 313 legacy calls in Node's own url tests differ with a global `URL`, and 1 037 differ in the isolate
+why: In the isolate guest `url.resolve('https://example.com/a', 'b')` returns `'b'` and `url.parse` drops `auth`/`hostname`/`port`/`path` with no error. On every host rifty's legacy API is a WHATWG-`URL` approximation: 905 of the 1 314 legacy calls in Node's own url tests differ with a global `URL`, and 1 038 differ in the isolate (corpus `runtime-js/tests/fixtures/url-legacy`; the probe's 1 313 keyed `NaN` as `null`)
 sources: [docs/backlog/runtime-js/reference/url-legacy/README.md, docs/backlog/runtime-js/reference/url-legacy/idna-step/README.md, docs/adr/runtime-js/0574-generate-legacy-node-url-and-node-querystring-from-pinned-node-sources.md, docs/backlog/runtime-js/isolate-web-globals-captured-at-load.md, docs/backlog/runtime-js/node-url-legacy-format-and-helpers.md, docs/adr/runtime-js/0541-run-node-fetch-classes-over-the-browser-i-o-boundary.md]
 code: [packages/runtime-js/src/builtins/url.ts, packages/runtime-js/src/builtins/querystring.ts, packages/runtime-js/src/builtins/index.ts]
 ---
@@ -32,7 +32,8 @@ Node v24.16.0's ada 3.4.4) under ada's flags equals Node's `toASCII` on all 40 p
 differs from Node on 304 (all Bidi: ada always runs its own per-label, partial RFC 5893 check,
 `is_label_valid`; `checkBidi:false` skips it, `checkBidi:true` rejects 124 others); Chromium 148's
 `URL` alone differs on 2 226 (it validates no `xn--` label of an ASCII host); `URL` plus ada's
-punycode round trip on 307 (305 Bidi, 2 IPv4 from mapped digits); probe hosts 1/40 (`aא.com`).
+punycode round trip on 307 (305 Bidi, 2 IPv4 from mapped digits); probe hosts 1/40 (`aא.com`)
+(the probe's step; the shipped step and its residual: Acceptance 4).
 Commands: probe README, `idna-step/`. Callers that ship today: parseurl
 1.3.3 (Express), node-fetch 2.7.0, request 2.88.2, http-proxy 1.18.1.
 
@@ -71,10 +72,10 @@ warning on stderr. Target: the same file gives Node's output in a browser-host `
    host gives all five → scenario
 2. Differential suite: every legacy `url` call of Node v24.16.0's `test-url-parse-format.js`,
    `test-url-format.js`, `test-url-relative.js`, `test-url-parse-invalid-input.js` and
-   `test-url-parse-query.js` (the probe's `cases.json`, 1 313 calls; Node's real recorded result, not
+   `test-url-parse-query.js` (`runtime-js/tests/fixtures/url-legacy/url-calls.json`, 1 314 calls; Node's real recorded result, not
    a hand-written expectation) gives the same record — own keys in order, values, prototype
    `Url`, thrown `name`/`code`/`message` — in the isolate guest and in runtime-js with a global
-   `URL` and in a browser host (Chromium lane): 0 differ (today 1 037 and 904), except, in the
+   `URL` and in a browser host (Chromium lane): 0 differ (main: 1 038, 905 and 906 in Chromium), except, in the
    isolate, the 44 `parse` calls whose hostname has a non-ASCII label: each throws
    `NotImplementedError('url.toASCII')` (Acceptance 4) → scenario
 3. The legacy API reads the WHATWG `URL` only in the `toASCII` step, for a non-ASCII or `xn--`
@@ -84,10 +85,14 @@ warning on stderr. Target: the same file gives Node's output in a browser-host `
 4. `toASCII` (manager's default 2026-11-24, reversible, the user's choice pending): Unicode
    17.0.0 `IdnaTestV2.txt` inputs used as hostnames through `url.parse('http://' + h + '/').hostname`
    (or the `ERR_INVALID_URL` throw) equal live Node on a browser host (Chromium lane) on every
-   input except the declared residual (305 Bidi rows, 2 IPv4 rows, measured 2026-11-24), pinned row
-   by row: each pinned row must still differ, outcome type and value compared exactly (the PR #435
-   pin rule); a mapped `%` (`a％41.com`: Node `ERR_INVALID_URL`, the host's `URL` `aa.com`) is a pinned
-   row too. In the isolate guest every ASCII input equals Node and every input with a non-ASCII
+   input except the declared residual, pinned row by row: each pinned row must still differ,
+   outcome type and value compared exactly (the PR #435 pin rule). Measured on Chromium 148,
+   2026-11-24 (review round 1), over 6 584 hostnames (IdnaTestV2 + probe hosts + every ASCII char
+   after a non-ASCII label + number labels): 337 rows — 306 Bidi, 30 host code points the WHATWG
+   parser forbids and ada passes (C0 controls, DEL, `*` on Chromium), 1 mapped `%` (`a％41.com`:
+   Node `ERR_INVALID_URL`, rifty `aa.com`); IPv4 ("ends in a number") no longer applies (a neutral
+   label is appended for the parse). The classes are what the corpus shows, not a proof that no
+   other input differs; another browser version may differ. In the isolate guest every ASCII input equals Node and every input with a non-ASCII
    or `xn--` label throws `NotImplementedError('url.toASCII')` → scenario
 5. `querystring`'s `parse`/`stringify`/`escape`/`unescape`/`unescapeBuffer`/`encode`/`decode` and
    their options (`maxKeys`, `decodeURIComponent`, `encodeURIComponent`, separators) equal Node on
@@ -157,7 +162,7 @@ binds `primordials`, `ERR_*`, validators, `urlFormat`'s `instanceof URL` (the ru
 `URL` when one exists, else no value is a `URL`) and `bindingUrl.format` (Acceptance 9's
 `format(URL, options)`), `toASCII` (manager's default, Acceptance 4: an ASCII hostname without
 an `xn--` label is returned as is, ada's ASCII path; otherwise the `URL` captured at load parses
-`http://<hostname>/`, each `xn--` label of its hostname is decoded by ada's `punycode_to_utf32`
+`http://<hostname>.x/` (a neutral last label: no IPv4 rule; `.x` cut), each `xn--` label of its hostname is decoded by ada's `punycode_to_utf32`
 (an all-ASCII or out-of-range decoding is an error, as ada) and the decoded name must parse back to
 the same hostname; a failure is ada's `''`; no `URL` at load → `NotImplementedError('url.toASCII')`) and `isInsideNodeModules(4)`: a V8
 stack walk through rifty's one `Error.prepareStackTrace` owner
@@ -195,7 +200,7 @@ the recorded corpus. A Node re-pin regenerates and reruns the suite.
 
 - 2026-11-24 — a real port on every host, not a named gap in the isolate: Node's legacy API needs
   no `URL`, so a gap would be a throw for working behaviour, and it would leave the browser hosts'
-  904/1 313 wrong results.
+  905/1 314 wrong results.
 - 2026-11-24 — `querystring` is ported in the same unit: `url.js` calls `querystring.parse`/
   `stringify` and `internal/querystring`'s `encodeStr`/`hexTable` through one module object (a guest
   that patches `querystring.unescape` changes `url.parse`), and rifty's `querystring` differs.
@@ -205,8 +210,8 @@ the recorded corpus. A Node re-pin regenerates and reruns the suite.
 - 2026-11-24 — manager's decision, reversible; the choice is the user's (question pending):
   `toASCII` takes the host's `URL` captured at load plus ada's punycode round trip (Reference
   contract); no `URL` (isolate today) → `NotImplementedError('url.toASCII')` for a non-ASCII or
-  `xn--` label. Measured (Context, `reference/url-legacy/idna-step/`): residual 307/6 276
-  IdnaTestV2 rows (305 Bidi, 2 IPv4) plus mapped `%`, about 2 KB of code, no dependency; a switch
+  `xn--` label. Measured (Context, `reference/url-legacy/idna-step/`): residual (probe form) 307/6 276
+  IdnaTestV2 rows (305 Bidi, 2 IPv4) plus mapped `%` — shipped form: Acceptance 4, about 2 KB of code, no dependency; a switch
   to the candidate below replaces one function. Rejected: `tr46` 6.0.0 — 304 rows differ under
   every flag setting (ada's own Bidi check); the bare `URL` — 2 226 rows (no `xn--` check for an
   ASCII host). Candidate (user's choice): generate `ada::idna` (`to_ascii`, punycode,
@@ -214,6 +219,10 @@ the recorded corpus. A Node re-pin regenerates and reruns the suite.
   construction on every host, the isolate included; tables 230 KB raw, estimate 307 KB / 97 KB gzip
   as base64, 82 KB gzip / 47 KB brotli as binary, 109 KB raw / 53 KB gzip if NFC comes from
   `String.prototype.normalize` (valid only on a Unicode 17 ICU; not measured in a bundle).
+- 2026-11-24 — publishing gate (review round 1, S3): the published packages carry no Node
+  license notice (`generated/node.LICENSE` is not in `dist`; undici's too, ADR-0541): no package
+  with this code is published before the unit that ships license notices of generated sources
+  (manager's, all generated sources at once).
 - 2026-11-24 — DEP0169 window: a guest frame is code rifty's loader compiled from guest source
   (V8 `CallSite.isEval()`: CJS, ESM and `-e` bodies are `Function`/indirect-eval code), not a
   per-host list of runtime script names — the runtime's bundles and chunks need no registry, and a

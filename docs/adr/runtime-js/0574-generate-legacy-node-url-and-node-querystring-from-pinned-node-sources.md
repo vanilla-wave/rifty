@@ -9,14 +9,16 @@ Date: 2026-11
 
 Contract `docs/backlog/runtime-js/node-url-legacy-api-port.md`; probe
 `docs/backlog/runtime-js/reference/url-legacy/`. rifty's `url.ts` approximated the legacy API
-with `new URL` plus a regex fallback: 904/1 313 of Node's own url-test calls differ with a global
-`URL`, 1 037 in the isolate guest (no `URL` at load). Node's legacy API is JS; native code is only
+with `new URL` plus a regex fallback: 905/1 314 of Node's own url-test calls differ with a global
+`URL`, 1 038 in the isolate guest (no `URL` at load). Node's legacy API is JS; native code is only
 `toASCII` (ada 3.4.4 `idna::to_ascii`) and `isInsideNodeModules` (DEP0169's caller test).
 
 `toASCII` on Unicode 17.0.0 IdnaTestV2 (6 276 inputs reach it; `idna-step/`): `tr46` 6.0.0
 differs on 304 under every flag setting — ada always runs its own partial per-label Bidi check
 (`is_label_valid`); Chromium 148 `URL` alone on 2 226 (no `xn--` check for an ASCII host); `URL`
-plus ada's punycode round trip on 307 (305 Bidi, 2 IPv4 from mapped digits).
+plus ada's punycode round trip on 307 (305 Bidi, 2 IPv4 from mapped digits); with a neutral label
+appended for the parse (Decision 3), on 6 584 hostnames: 337 (306 Bidi, 30 forbidden host code
+points, 1 mapped `%`), Chromium 148.
 
 ## Decision
 
@@ -26,18 +28,22 @@ plus ada's punycode round trip on 307 (305 Bidi, 2 IPv4 from mapped digits).
    exact-once anchors and writes `builtins/url-legacy/generated/`; `check:url-legacy-drift`
    checks the committed output. Edits only bind inputs; parsing, formatting, resolution, escaping
    and the export objects stay upstream's.
-2. Bindings (`builtins/url-legacy/bindings.ts`): `primordials` → intrinsics captured at load;
+2. Bindings (`builtins/url-legacy/bindings.ts`): `primordials` → intrinsics captured at load
+   (also `Reflect.apply` and what `to-ascii.ts` calls; error-message building and
+   `bindingUrl.format` still call live ones, `backlog/runtime-js/post-guest-paths-use-replaceable-intrinsics`);
    `ERR_INVALID_ARG_TYPE`/`ERR_INVALID_URL`/`ERR_INVALID_URI` → Node's class, code, message, own
    enumerable `code`/`input`; `validateString`/`validateObject` (default options); `spliceOne`;
    `Buffer` → rifty's; `process` → the active process at call time (`emitWarning` patchable).
 3. `toASCII` (`to-ascii.ts`): ASCII without an `xn--` label → unchanged (ada's ASCII path). Else
-   the `URL` constructor and `hostname` getter captured at load parse `http://<host>/`; each
+   the `URL` constructor and `hostname` getter captured at load parse `http://<host>.x/` (the
+   neutral last label keeps WHATWG's IPv4 "ends in a number" rule out; ada has none), `.x` cut; each
    `xn--` label of the result is decoded by ada's `punycode_to_utf32` (hand copy, ~60 lines;
    all-ASCII or > U+10FFFF → error, as ada) and the decoded name must parse back to the same
    host. Failure → `''` (ada's error; url.js throws `ERR_INVALID_URL`). No `URL` at load →
    `NotImplementedError('url.toASCII')`. A guest's later `globalThis.URL` is never read.
 4. `isInsideNodeModules(4)`: `Error.captureStackTrace` under rifty's one `prepareStackTrace` owner
-   with the guest's hook and `stackTraceLimit` set aside; window = 4 frames from `urlParse`, as
+   with the guest's hook (restored first) and `stackTraceLimit` set aside through its descriptor (a
+   non-configurable non-writable one below 4 stays: declared row); window = 4 frames from `urlParse`, as
    Node's `CurrentStackTrace(4)`. A frame is the guest's iff V8 `isEval()` (rifty compiles guest
    CJS/ESM/`-e` with `Function`/indirect eval); others count as Node's `node:` frames. First guest
    frame with a non-empty name decides (`/node_modules/`).
@@ -66,10 +72,12 @@ plus ada's punycode round trip on 307 (305 Bidi, 2 IPv4 from mapped digits).
 
 - One `node:url` behaviour on every host for ASCII hosts; `Url` shape, errors, DEP0169/DEP0170.
 - Browser hosts: `toASCII` residual declared (compat ⚠️); isolate: non-ASCII hosts loud (❌).
-- Cost, 2026-11-24 (Node v24.16.0, esbuild 0.28.0, Chromium 148): generated `legacy.js` 19 139 B;
+- Cost, 2026-11-24 at `313d64326` (Node v24.16.0, esbuild 0.28.0, Chromium 148; review round 1 adds a few hundred bytes, not remeasured): generated `legacy.js` 19 139 B;
   isolate `guest.js` 7 123 270 → 7 170 362 B (+47 092; gzip +10 855); `client-bundle-budget`
   generic 932 920 → 955 554 min (+22 634; gzip 279 754 → 287 956, +8 202 of 332 000), toolchain
   1 061 998 → 1 084 631 (+22 633; gzip +7 896 of 386 000), main/sw unchanged; ceilings untouched.
   Warm `runCode` median (40) of 1 000 `parse(…, true)` + `resolve`: 31.4 → 19.3 ms (empty run
   13.5 / 13.9 ms). Chromium, `toASCII` of a non-ASCII host warm: ~1.8 µs (two `URL` parses).
+- Publishing gate: no package with this code is published before the generated-sources license
+  unit (the Node notice is not in `dist`; review round 1).
 - Re-pin of Node: rerun the generator, the corpus and IdnaTestV2 suites.

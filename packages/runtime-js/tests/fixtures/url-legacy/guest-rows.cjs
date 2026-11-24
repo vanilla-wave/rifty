@@ -6,9 +6,14 @@ const PATCH = (
   list,
 ) => `const call = () => { try { return JSON.stringify(run()); } catch (e) { return 'THROW ' + e.message; } };
 console.log(call());
+const saved = [[Reflect, 'apply', Reflect.apply]];
 Reflect.apply = () => { throw new Error('guest apply'); };
-for (const [o, k] of ${list}) o[k] = function () { throw new Error('guest ' + k); };
-console.log(call());`;
+for (const [o, k] of ${list}) { saved.push([o, k, o[k]]); o[k] = function () { throw new Error('guest ' + k); }; }
+const patched = call();
+// Put back before printing: rifty's console and exit paths read them live
+// (backlog/runtime-js/post-guest-paths-use-replaceable-intrinsics); this row is about url.
+for (const [o, k, v] of saved) o[k] = v;
+console.log(patched);`;
 module.exports = {
   'patched-intrinsics': {
     hosts: ['isolate', 'browser'],

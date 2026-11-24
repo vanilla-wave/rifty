@@ -535,20 +535,6 @@
    }
   },
   {
-   "i": 548,
-   "host": "繱𑖿‍.8。",
-   "node": {
-    "ok": "xn--1ug6928ac48e.8."
-   },
-   "rifty": {
-    "throw": {
-     "name": "TypeError",
-     "code": "ERR_INVALID_URL",
-     "message": "Invalid URL"
-    }
-   }
-  },
-  {
    "i": 643,
    "host": "𝟿𐮋。󠄊",
    "node": {
@@ -3461,16 +3447,6 @@
    }
   },
   {
-   "i": 4820,
-   "host": "𝟠≮‌｡󠅱឴",
-   "node": {
-    "ok": "8"
-   },
-   "rifty": {
-    "ok": "0.0.0.8"
-   }
-  },
-  {
    "i": 4850,
    "host": "ς𑓂𐋢．٨",
    "node": {
@@ -4325,20 +4301,416 @@
    }
   },
   {
-   "i": 6444,
-   "host": "０ｘ７ｆ．１",
+   "i": 6450,
+   "host": "ñ\u0001.com",
    "node": {
-    "ok": "0x7f.1"
+    "ok": "xn--\u0001-qga.com"
    },
    "rifty": {
-    "ok": "127.0.0.1"
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
    }
   },
   {
-   "i": 6445,
-   "host": "ñ.１",
+   "i": 6451,
+   "host": "ñ\u0002.com",
    "node": {
-    "ok": "xn--ida.1"
+    "ok": "xn--\u0002-qga.com"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6452,
+   "host": "ñ\u0003.com",
+   "node": {
+    "ok": "xn--\u0003-qga.com"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6453,
+   "host": "ñ\u0004.com",
+   "node": {
+    "ok": "xn--\u0004-qga.com"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6454,
+   "host": "ñ\u0005.com",
+   "node": {
+    "ok": "xn--\u0005-qga.com"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6455,
+   "host": "ñ\u0006.com",
+   "node": {
+    "ok": "xn--\u0006-qga.com"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6456,
+   "host": "ñ\u0007.com",
+   "node": {
+    "ok": "xn--\u0007-qga.com"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6457,
+   "host": "ñ\b.com",
+   "node": {
+    "ok": "xn--\b-qga.com"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6460,
+   "host": "ñ\u000b.com",
+   "node": {
+    "ok": "xn--\u000b-qga.com"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6461,
+   "host": "ñ\f.com",
+   "node": {
+    "ok": "xn--\f-qga.com"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6463,
+   "host": "ñ\u000e.com",
+   "node": {
+    "ok": "xn--\u000e-qga.com"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6464,
+   "host": "ñ\u000f.com",
+   "node": {
+    "ok": "xn--\u000f-qga.com"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6465,
+   "host": "ñ\u0010.com",
+   "node": {
+    "ok": "xn--\u0010-qga.com"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6466,
+   "host": "ñ\u0011.com",
+   "node": {
+    "ok": "xn--\u0011-qga.com"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6467,
+   "host": "ñ\u0012.com",
+   "node": {
+    "ok": "xn--\u0012-qga.com"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6468,
+   "host": "ñ\u0013.com",
+   "node": {
+    "ok": "xn--\u0013-qga.com"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6469,
+   "host": "ñ\u0014.com",
+   "node": {
+    "ok": "xn--\u0014-qga.com"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6470,
+   "host": "ñ\u0015.com",
+   "node": {
+    "ok": "xn--\u0015-qga.com"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6471,
+   "host": "ñ\u0016.com",
+   "node": {
+    "ok": "xn--\u0016-qga.com"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6472,
+   "host": "ñ\u0017.com",
+   "node": {
+    "ok": "xn--\u0017-qga.com"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6473,
+   "host": "ñ\u0018.com",
+   "node": {
+    "ok": "xn--\u0018-qga.com"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6474,
+   "host": "ñ\u0019.com",
+   "node": {
+    "ok": "xn--\u0019-qga.com"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6475,
+   "host": "ñ\u001a.com",
+   "node": {
+    "ok": "xn--\u001a-qga.com"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6476,
+   "host": "ñ\u001b.com",
+   "node": {
+    "ok": "xn--\u001b-qga.com"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6477,
+   "host": "ñ\u001c.com",
+   "node": {
+    "ok": "xn--\u001c-qga.com"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6478,
+   "host": "ñ\u001d.com",
+   "node": {
+    "ok": "xn--\u001d-qga.com"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6479,
+   "host": "ñ\u001e.com",
+   "node": {
+    "ok": "xn--\u001e-qga.com"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6480,
+   "host": "ñ\u001f.com",
+   "node": {
+    "ok": "xn--\u001f-qga.com"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6491,
+   "host": "ñ*.com",
+   "node": {
+    "ok": "xn--*-qga.com"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6576,
+   "host": "ñ.com",
+   "node": {
+    "ok": "xn---qga.com"
    },
    "rifty": {
     "throw": {
