@@ -1,179 +1,156 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { build } from 'esbuild';
-import { afterEach, describe, expect, it } from 'vitest';
-import {
-  THRESHOLD,
-  WINDOWS,
-  discoverSources,
-  evaluateTarball,
-  fingerprint,
-  normalize,
-  share,
-} from './third-party-notices.mjs';
+import { dirname, join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { LINK, NOTICES, collect, render } from '../publishing/third-party-notices.mjs';
+import { checkPackage } from './third-party-notices.mjs';
 
-const UNDICI = 'packages/runtime-js/src/builtins/fetch/generated';
+let root: string;
+const put = (path: string, text: string) => {
+  mkdirSync(dirname(join(root, path)), { recursive: true });
+  writeFileSync(join(root, path), text);
+};
+const npmPkg = (name: string, version: string, license?: string) => {
+  put(`node_modules/${name}/package.json`, JSON.stringify({ name, version, license: 'MIT' }));
+  put(`node_modules/${name}/index.js`, 'module.exports = 1;');
+  if (license) put(`node_modules/${name}/LICENSE`, license);
+};
+const manifest = {
+  generated: { 'pkg/src/generated': { package: 'upstream', version: '1.0.0', resolveFrom: '.' } },
+  firstParty: ['pkg/src/own/generated/ids.json'],
+  npm: { 'bare@2.0.0': { licenseFiles: ['licenses/bare.LICENSE'] } },
+};
 
-/** Re-bundle as tsup does (esbuild, ESM, unminified, legal comments kept). */
-async function bundle(entry: string, externalRe?: RegExp) {
-  const r = await build({
-    plugins: externalRe
-      ? [
-          {
-            name: 'ext',
-            setup: (b) =>
-              b.onResolve({ filter: externalRe }, (a) => ({ path: a.path, external: true })),
-          },
-        ]
-      : [],
-    entryPoints: [entry],
-    bundle: true,
-    format: 'esm',
-    platform: 'browser',
-    target: 'es2022',
-    write: false,
-    logLevel: 'silent',
-  });
-  return r.outputFiles[0].text;
+/** A built package: dist/a.js bundles dep + the generated upstream file; dist/b.js is rifty's own. */
+function built(inputs: Record<string, string[]>, files: Record<string, string>) {
+  return (extra: Partial<Parameters<typeof checkPackage>[0]> = {}) =>
+    checkPackage({
+      root,
+      dir: 'pkg',
+      name: '@riftydev/pkg',
+      packed: Object.keys(files),
+      read: (p: string) => files[p],
+      inputs,
+      manifest,
+      ...extra,
+    });
 }
 
-const undici = () => discoverSources(process.cwd(), [UNDICI.replace(/\/generated$/u, '')]);
+beforeEach(() => {
+  root = mkdtempSync(join(tmpdir(), 'tpn-'));
+  npmPkg('dep', '3.1.0', 'MIT © Dep Authors');
+  npmPkg('upstream', '1.0.0', 'MIT © Upstream Authors');
+  npmPkg('bare', '2.0.0');
+  put('licenses/bare.LICENSE', 'MIT © Bare Author (from its README)');
+  put('pkg/src/generated/up.js', 'export default 1;');
+});
+afterEach(() => rmSync(root, { recursive: true, force: true }));
 
-describe('fingerprint on real bundles (threshold/window measurement)', () => {
-  it('a re-bundled artifact keeps well above THRESHOLD; first-party code around it stays near 0', async () => {
-    const { sources } = undici();
-    const [artifact] = sources[0].artifacts;
-    const bundled = normalize(await bundle(`${UNDICI}/classes.js`));
-    // False-positive candidate: rifty's own fetch install over the same API names.
-    const ownCode = normalize(
-      await bundle(
-        'packages/runtime-js/src/builtins/fetch/install.ts',
-        /\/generated\/|^@riftydev\//,
-      ),
-    );
-    const hit = share(artifact.windows, bundled);
-    const noise = share(artifact.windows, ownCode);
-    expect(hit).toBeGreaterThan(THRESHOLD + 0.15);
-    expect(noise).toBeLessThan(3 / WINDOWS);
-    expect(
-      evaluateTarball(sources, {
-        pkg: 'p',
-        files: [{ path: 'dist/own.js', text: ownCode }],
-      }),
-    ).toEqual({ hits: [], violations: [] });
+const inputs = {
+  'dist/a.js': ['node_modules/dep/index.js', 'pkg/src/generated/up.js', 'pkg/src/a.ts'],
+  'dist/b.js': ['pkg/src/b.ts', 'pkg/src/own/generated/ids.json'],
+};
+const notices = () => render('@riftydev/pkg', collect(root, 'pkg', manifest, inputs).entries);
+const files = () => ({
+  'dist/a.js': `${LINK}\ncode`,
+  'dist/b.js': 'own code',
+  [NOTICES]: notices(),
+});
+
+describe('check:third-party-notices', () => {
+  it('green: notices file derived from the bundler inputs, link line in the bundling file', () => {
+    expect(built(inputs, files())()).toEqual({ entries: 2, violations: [] });
+    expect(notices()).toContain('## dep@3.1.0');
+    expect(notices()).toContain('MIT © Dep Authors');
+    expect(notices()).toContain('## upstream@1.0.0');
+    expect(notices()).toContain('Included as: generated into pkg/src/generated');
   });
 
-  it('the generated undici artifact reaches its bundle with undici.LICENSE', async () => {
-    const { sources } = undici();
-    const text = await bundle(`${UNDICI}/classes.js`);
-    expect(
-      evaluateTarball(sources, { pkg: 'p', files: [{ path: 'dist/x.js', text }] }).violations,
-    ).toEqual([]);
+  it('mutant: a package removed from the notices file → red', () => {
+    const f = files();
+    f[NOTICES] = f[NOTICES].replace(/## dep@3\.1\.0[\s\S]*?(?=## upstream)/u, '');
+    expect(built(inputs, f)().violations).toEqual([
+      '@riftydev/pkg dist/THIRD_PARTY_NOTICES.md differs from the bundler inputs; run pnpm build:libs',
+    ]);
+  });
+
+  it('mutant: a newly inlined package with no license file and no record → red', () => {
+    npmPkg('fresh', '0.1.0');
+    const more = {
+      ...inputs,
+      'dist/a.js': [...inputs['dist/a.js'], 'node_modules/fresh/index.js'],
+    };
+    expect(built(more, files())().violations).toContain(
+      '@riftydev/pkg fresh@0.1.0: no license file and no manifest record (bundled npm package)',
+    );
+  });
+
+  it('a newly inlined package with its own LICENSE but a stale notices file → red', () => {
+    npmPkg('fresh', '0.1.0', 'ISC © Fresh');
+    const more = {
+      ...inputs,
+      'dist/a.js': [...inputs['dist/a.js'], 'node_modules/fresh/index.js'],
+    };
+    expect(built(more, files())().violations).toEqual([
+      '@riftydev/pkg dist/THIRD_PARTY_NOTICES.md differs from the bundler inputs; run pnpm build:libs',
+    ]);
+  });
+
+  it('mutant: a file in vendor/ without a manifest record → red (bundled or packed as is)', () => {
+    put('pkg/vendor/lib.json', '{}');
+    const more = { ...inputs, 'dist/a.js': [...inputs['dist/a.js'], 'pkg/vendor/lib.json'] };
+    expect(built(more, files())().violations).toContain(
+      '@riftydev/pkg pkg/vendor/lib.json: in pkg/vendor without a third-party-manifest record (pkg dist/a.js)',
+    );
+    const packedAsIs = { ...files(), 'vendor/lib.json': '{}' };
+    expect(built(inputs, packedAsIs)().violations).toContain(
+      '@riftydev/pkg pkg/vendor/lib.json: in pkg/vendor without a third-party-manifest record (pkg vendor/lib.json)',
+    );
+  });
+
+  it('a record covers exactly its own package: a manual record supplies only bare@2.0.0', () => {
+    const more = { ...inputs, 'dist/b.js': [...inputs['dist/b.js'], 'node_modules/bare/index.js'] };
+    const f = {
+      ...files(),
+      [NOTICES]: render('@riftydev/pkg', collect(root, 'pkg', manifest, more).entries),
+    };
+    f['dist/b.js'] = `${LINK}\n${f['dist/b.js']}`;
+    expect(built(more, f)().violations).toEqual([]);
+    expect(f[NOTICES]).toContain('MIT © Bare Author (from its README)');
+  });
+
+  it('bundling file without the link line, dist JS without an input list, stale or missing notices → red', () => {
+    const f = { ...files(), 'dist/a.js': 'code', 'dist/c.js': 'x' };
+    expect(built(inputs, f)().violations).toEqual([
+      '@riftydev/pkg dist/c.js: no bundler input list',
+      '@riftydev/pkg dist/a.js: bundles third-party code without the notices link line',
+    ]);
+    const { [NOTICES]: _, ...noFile } = files();
+    expect(built(inputs, noFile)().violations).toEqual([
+      '@riftydev/pkg dist/THIRD_PARTY_NOTICES.md missing from the tarball',
+    ]);
+    const ownOnly = { 'dist/b.js': inputs['dist/b.js'] };
+    expect(built(ownOnly, { 'dist/b.js': 'x', [NOTICES]: 'old' })().violations).toEqual([
+      '@riftydev/pkg dist/THIRD_PARTY_NOTICES.md packed but nothing third-party is bundled',
+    ]);
+  });
+
+  it('a generated dir pinned to another installed version → red', () => {
+    put(
+      'node_modules/upstream/package.json',
+      JSON.stringify({ name: 'upstream', version: '1.1.0' }),
+    );
+    expect(collect(root, 'pkg', manifest, inputs).violations).toEqual([
+      'pkg/src/generated: manifest pins upstream@1.0.0, installed 1.1.0',
+    ]);
   });
 });
 
-describe('mutants', () => {
-  let root: string;
-  afterEach(() => rmSync(root, { recursive: true, force: true }));
-  const code = () => readFileSync(`${UNDICI}/classes.js`, 'utf8');
-  const license = 'Copyright (c) Upstream Authors\n\nPermission is hereby granted …\n';
-
-  function pkg(withLicense: boolean) {
-    root = mkdtempSync(join(tmpdir(), 'tpn-'));
-    const dir = join(root, 'pkg/src/feature/generated');
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, 'upstream.js'), code());
-    if (withLicense) writeFileSync(join(dir, 'upstream.LICENSE'), license);
-    return discoverSources(root, ['pkg']);
-  }
-
-  it('notice removed from the packed file → red, also when only a NOTICE file carries it; in the file → green', () => {
-    const { sources, violations } = pkg(true);
-    expect(violations).toEqual([]);
-    const withNotice = `/*! ${license} */\n${code()}`;
-    expect(
-      evaluateTarball(sources, { pkg: 'p', files: [{ path: 'dist/a.js', text: withNotice }] })
-        .violations,
-    ).toEqual([]);
-    expect(
-      evaluateTarball(sources, {
-        pkg: 'p',
-        files: [
-          { path: 'dist/a.js', text: code() },
-          { path: 'THIRD_PARTY_NOTICES.md', text: license },
-          { path: 'dist/upstream.LICENSE', text: license },
-        ],
-      }).violations,
-    ).toEqual([
-      expect.stringContaining('dist/a.js: contains pkg/src/feature/generated/upstream.js'),
-    ]);
-    const stripped = evaluateTarball(sources, {
-      pkg: 'p',
-      files: [{ path: 'dist/a.js', text: code() }],
-    });
-    expect(stripped.violations).toEqual([
-      expect.stringContaining('dist/a.js: contains pkg/src/feature/generated/upstream.js'),
-    ]);
-  });
-
-  it('new generated source without <origin>.LICENSE → red', () => {
-    expect(pkg(false).violations).toEqual([
-      'pkg/src/feature/generated/upstream.js: generated/vendored file without an <origin>.LICENSE in its dir and not on FIRST_PARTY',
-    ]);
-  });
-
-  it('upstream file added next to a FIRST_PARTY file → red; the listed file alone → green', () => {
-    expect(discoverSources(process.cwd(), ['packages/runtime-js/src/internal']).violations).toEqual(
-      [],
-    );
-    root = mkdtempSync(join(tmpdir(), 'tpn-'));
-    const dir = join(root, 'packages/runtime-js/src/internal/generated');
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, 'proxy-identity.js'), 'export default "";');
-    writeFileSync(join(dir, 'upstream.js'), code());
-    expect(discoverSources(root, ['packages/runtime-js/src/internal']).violations).toEqual([
-      expect.stringContaining('internal/generated/upstream.js: generated/vendored file without'),
-    ]);
-  });
-
-  it('JSON-embedded copy (vendored .d.ts bundle) is matched through escapes', () => {
-    const { sources } = pkg(true);
-    const text = JSON.stringify({ 'lib.d.ts': code() });
-    expect(
-      evaluateTarball(sources, { pkg: 'p', files: [{ path: 'vendor/x.json', text }] }).hits,
-    ).toHaveLength(1);
-  });
-
-  it('a JSON artifact is covered by its own packed <origin>.LICENSE, not by any NOTICE file', () => {
-    root = mkdtempSync(join(tmpdir(), 'tpn-'));
-    const dir = join(root, 'pkg/vendor');
-    mkdirSync(dir, { recursive: true });
-    const text = JSON.stringify({ 'lib.d.ts': code() });
-    writeFileSync(join(dir, 'bundle.json'), text);
-    writeFileSync(join(dir, 'upstream.LICENSE'), license);
-    const { sources } = discoverSources(root, ['pkg']);
-    const packed = (extra: { path: string; text: string }[]) =>
-      evaluateTarball(sources, {
-        pkg: 'p',
-        files: [{ path: 'vendor/bundle.json', text }, ...extra],
-      }).violations;
-    expect(packed([{ path: 'vendor/upstream.LICENSE', text: license }])).toEqual([]);
-    expect(packed([{ path: 'NOTICE', text: license }])).toEqual([
-      expect.stringContaining('vendor/bundle.json: contains pkg/vendor/bundle.json'),
-    ]);
-  });
-
-  it('an artifact too small to fingerprint is loud, not skipped', () => {
-    expect(fingerprint('x'.repeat(100))).toEqual([]);
-    root = mkdtempSync(join(tmpdir(), 'tpn-'));
-    const dir = join(root, 'pkg/generated');
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, 'a.js'), 'export default 1;');
-    writeFileSync(join(dir, 'a.LICENSE'), license);
-    expect(discoverSources(root, ['pkg']).violations).toEqual([
-      'pkg/generated/a.js: too small to fingerprint',
-      'pkg/generated: carries a license but no artifact',
-    ]);
+describe('repo manifest', () => {
+  it('every manual license file exists', () => {
+    const m = JSON.parse(readFileSync('tools/publishing/third-party-manifest.json', 'utf8'));
+    for (const record of Object.values(m.npm) as { licenseFiles: string[] }[])
+      for (const f of record.licenseFiles)
+        expect(readFileSync(f, 'utf8').length).toBeGreaterThan(100);
   });
 });

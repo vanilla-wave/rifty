@@ -1,3 +1,5 @@
+esbuild-wasm 0.28.0 lib/browser.js embeds Go's lib/wasm/wasm_exec.js (esbuild.wasm is built by go1.26.1); the esbuild-wasm package does not ship Go's license. Go 1.26.1 LICENSE:
+
 Copyright 2009 The Go Authors.
 
 Redistribution and use in source and binary forms, with or without

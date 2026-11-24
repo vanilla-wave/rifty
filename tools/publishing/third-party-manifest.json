@@ -1,0 +1,47 @@
+{
+  "generated": {
+    "packages/runtime-js/src/builtins/fetch/generated": {
+      "package": "undici",
+      "version": "7.25.0",
+      "resolveFrom": "."
+    },
+    "packages/runtime-js/src/module-loader/generated": {
+      "package": "typescript",
+      "version": "5.9.3",
+      "resolveFrom": "."
+    },
+    "packages/ts-language-service/vendor": {
+      "package": "typescript",
+      "version": "5.9.3",
+      "resolveFrom": "packages/ts-language-service"
+    },
+    "tools/shadow-registry/src/runtime/generated": {
+      "package": "esbuild-wasm",
+      "version": "0.28.0",
+      "resolveFrom": "tools/shadow-registry"
+    }
+  },
+  "firstParty": [
+    "packages/runtime-js/src/internal/generated/proxy-identity.js",
+    "packages/workbench/src/generated/install-artifact-identity.json",
+    "tools/shadow-registry/generated/shadow-substitution-catalog.json",
+    "tools/shadow-registry/generated/esbuild-runtime-manifest.json"
+  ],
+  "npm": {
+    "clean-git-ref@2.0.1": {
+      "licenseFiles": ["tools/publishing/third-party-licenses/clean-git-ref@2.0.1.LICENSE"]
+    },
+    "diff3@0.0.3": {
+      "licenseFiles": ["tools/publishing/third-party-licenses/diff3@0.0.3.LICENSE"]
+    },
+    "isarray@1.0.0": {
+      "licenseFiles": ["tools/publishing/third-party-licenses/isarray@1.0.0.LICENSE"]
+    },
+    "pako@1.0.11": {
+      "licenseFiles": ["tools/publishing/third-party-licenses/pako@1.0.11.Zlib.LICENSE"]
+    },
+    "esbuild-wasm@0.28.0": {
+      "licenseFiles": ["tools/publishing/third-party-licenses/go@1.26.1.LICENSE"]
+    }
+  }
+}

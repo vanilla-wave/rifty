@@ -1,0 +1,240 @@
+#!/usr/bin/env node
+/**
+ * Package notices file (backlog toolchain-build/third-party-notices-in-published-files).
+ *
+ * Inputs = the bundler's own list per emitted file: tsup sourcemap `sources`,
+ * or `.bundle-inputs.json` written by the esbuild-direct builds (metafile +
+ * copied files). Counted: npm packages (license files from the package dir)
+ * and whole files under `generated/`/`vendor/` dirs (MANIFEST). Rendered to
+ * `dist/THIRD_PARTY_NOTICES.md`; bundles carry only LINK.
+ *
+ *   node tools/publishing/third-party-notices.mjs --write   (end of build:libs)
+ */
+import { existsSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { basename, dirname, join, relative, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+export const ROOT = fileURLToPath(new URL('../../', import.meta.url));
+export const NOTICES = 'dist/THIRD_PARTY_NOTICES.md';
+export const LINK =
+  '/*! For third-party licenses see dist/THIRD_PARTY_NOTICES.md of this npm package */';
+/** Written next to package.json by esbuild-direct builds; not packed. */
+export const BUNDLE_INPUTS = '.bundle-inputs.json';
+/** Same set `release.yml` publishes. */
+export const PUBLISH_ROOTS = ['packages/*', 'tools/shadow-registry', 'services/eddy'];
+const SOURCE_DIRS = new Set(['generated', 'vendor']);
+const LICENSE_FILE_RE = /licen[cs]e|copying|notice/iu;
+const JS_RE = /\.[cm]?js$/u;
+
+export function loadManifest(root = ROOT) {
+  return JSON.parse(readFileSync(join(root, 'tools/publishing/third-party-manifest.json'), 'utf8'));
+}
+
+/** Publishable package dirs (root-relative), non-private. */
+export function publishableDirs(root = ROOT) {
+  const dirs = [];
+  for (const pattern of PUBLISH_ROOTS) {
+    const candidates = pattern.endsWith('/*')
+      ? readdirSync(join(root, pattern.slice(0, -2)), { withFileTypes: true })
+          .filter((e) => e.isDirectory())
+          .map((e) => `${pattern.slice(0, -2)}/${e.name}`)
+      : [pattern];
+    for (const dir of candidates) {
+      const manifest = join(root, dir, 'package.json');
+      if (existsSync(manifest) && !JSON.parse(readFileSync(manifest, 'utf8')).private)
+        dirs.push(dir);
+    }
+  }
+  return dirs;
+}
+
+const walk = (dir) =>
+  readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+    e.isDirectory() ? walk(join(dir, e.name)) : [join(dir, e.name)],
+  );
+
+/**
+ * Bundler inputs per emitted file of a package, root-relative.
+ * @returns {Record<string, string[]>} packed path → inputs
+ */
+export function bundleInputs(root, pkgDir) {
+  const abs = join(root, pkgDir);
+  /** @type {Record<string, string[]>} */
+  const out = {};
+  const recorded = join(abs, BUNDLE_INPUTS);
+  if (existsSync(recorded)) Object.assign(out, JSON.parse(readFileSync(recorded, 'utf8')));
+  const dist = join(abs, 'dist');
+  if (existsSync(dist)) {
+    for (const file of walk(dist)) {
+      if (!file.endsWith('.js.map')) continue;
+      const js = relative(abs, file.slice(0, -'.map'.length));
+      if (out[js]) continue;
+      const { sources = [] } = JSON.parse(readFileSync(file, 'utf8'));
+      out[js] = sources.map((s) => relative(root, resolve(dirname(file), s)));
+    }
+  }
+  return out;
+}
+
+/** Package dir of a node_modules input, or null. */
+function npmPackageDir(root, input) {
+  const i = input.lastIndexOf('node_modules/');
+  if (i < 0) return null;
+  const rest = input.slice(i + 'node_modules/'.length).split('/');
+  const name = rest[0].startsWith('@') ? `${rest[0]}/${rest[1]}` : rest[0];
+  return join(root, input.slice(0, i), 'node_modules', name);
+}
+
+/** Nearest `generated`/`vendor` dir of a repo input, or null. */
+function sourceDir(input) {
+  const parts = input.split('/');
+  for (let i = parts.length - 2; i >= 0; i--)
+    if (SOURCE_DIRS.has(parts[i])) return parts.slice(0, i + 1).join('/');
+  return null;
+}
+
+const readText = (root, path) => readFileSync(join(root, path), 'utf8');
+
+/** License files in an npm package's root dir. */
+function ownLicenseFiles(dir) {
+  return readdirSync(dir)
+    .filter((f) => LICENSE_FILE_RE.test(f) && statSync(join(dir, f)).isFile())
+    .sort();
+}
+
+/**
+ * @typedef {{ id: string, license: string, from: Set<string>, texts: { name: string, text: string }[] }} Entry
+ * @returns {{ entries: Entry[], counted: Set<string>, violations: string[] }}
+ *   counted = packed paths with a counted input
+ */
+export function collect(
+  root,
+  pkgDir,
+  manifest = loadManifest(root),
+  inputs = bundleInputs(root, pkgDir),
+) {
+  /** @type {Map<string, Entry>} */
+  const entries = new Map();
+  const counted = new Set();
+  const violations = [];
+  const firstParty = new Set(manifest.firstParty);
+  const add = (id, license, from, texts) => {
+    const entry = entries.get(id) ?? { id, license, from: new Set(), texts };
+    entry.from.add(from);
+    entries.set(id, entry);
+  };
+  const npm = (dir, from) => {
+    const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
+    const id = `${pkg.name}@${pkg.version}`;
+    const record = manifest.npm[id];
+    const texts = [
+      ...ownLicenseFiles(dir).map((f) => ({ name: f, text: readFileSync(join(dir, f), 'utf8') })),
+      ...(record?.licenseFiles ?? []).map((f) => ({ name: basename(f), text: readText(root, f) })),
+    ];
+    if (texts.length === 0)
+      violations.push(`${id}: no license file and no manifest record (${from})`);
+    const license = typeof pkg.license === 'string' ? pkg.license : JSON.stringify(pkg.license);
+    add(id, license, from, texts);
+  };
+  for (const [packed, list] of Object.entries(inputs)) {
+    for (const input of list) {
+      const pkgPath = npmPackageDir(root, input);
+      if (pkgPath) {
+        npm(pkgPath, 'bundled npm package');
+        counted.add(packed);
+        continue;
+      }
+      const dir = sourceDir(input);
+      if (!dir || firstParty.has(input)) continue;
+      const record = manifest.generated[dir];
+      if (!record) {
+        violations.push(
+          `${input}: in ${dir} without a third-party-manifest record (${pkgDir} ${packed})`,
+        );
+        continue;
+      }
+      counted.add(packed);
+      const owner = createRequire(join(root, record.resolveFrom ?? '', 'package.json'));
+      const pkgDirOf = dirname(owner.resolve(`${record.package}/package.json`));
+      const { version } = JSON.parse(readFileSync(join(pkgDirOf, 'package.json'), 'utf8'));
+      if (version !== record.version)
+        violations.push(
+          `${dir}: manifest pins ${record.package}@${record.version}, installed ${version}`,
+        );
+      npm(pkgDirOf, `generated into ${dir}`);
+    }
+  }
+  return {
+    entries: [...entries.values()].sort((a, b) => a.id.localeCompare(b.id)),
+    counted,
+    violations,
+  };
+}
+
+/** Packed files of a package under `generated/`/`vendor/` count as their own input. */
+export function withPackedSources(inputs, packedPaths, pkgDir) {
+  const out = { ...inputs };
+  for (const p of packedPaths)
+    if (!p.startsWith('dist/') && sourceDir(p)) out[p] = [`${pkgDir}/${p}`];
+  return out;
+}
+
+const quote = (text) =>
+  text
+    .trimEnd()
+    .split('\n')
+    .map((line) => (line ? `> ${line}` : '>'))
+    .join('\n');
+
+/** @param {string} name @param {Entry[]} entries */
+export function render(name, entries) {
+  const licenses = [...new Set(entries.map((e) => e.license))].sort().join(', ');
+  const head = `# Third-party licenses — ${name}
+
+Generated by \`tools/publishing/third-party-notices.mjs\` from the bundler's input list; do not edit.
+The published files of this package contain code from the packages below under: ${licenses}.
+`;
+  const body = entries.map(
+    (e) => `## ${e.id}
+
+License: ${e.license}
+Included as: ${[...e.from].sort().join('; ')}
+
+${e.texts.map((t) => `${t.name}:\n\n${quote(t.text)}`).join('\n\n')}
+`,
+  );
+  return [head, ...body].join('\n---------------------------------------\n\n');
+}
+
+/** Packed paths npm would ship, from package.json `files` (dist walk) — used by --write only. */
+function localPacked(root, pkgDir) {
+  const { files = [] } = JSON.parse(readText(root, `${pkgDir}/package.json`));
+  return files.flatMap((f) => {
+    const abs = join(root, pkgDir, f);
+    if (!existsSync(abs)) return [];
+    return statSync(abs).isDirectory()
+      ? walk(abs).map((p) => relative(join(root, pkgDir), p))
+      : [f];
+  });
+}
+
+function main() {
+  if (process.argv[2] !== '--write' || process.argv.length !== 3)
+    throw new Error('Usage: node tools/publishing/third-party-notices.mjs --write');
+  const manifest = loadManifest();
+  const failures = [];
+  for (const dir of publishableDirs()) {
+    const { name } = JSON.parse(readText(ROOT, `${dir}/package.json`));
+    const inputs = withPackedSources(bundleInputs(ROOT, dir), localPacked(ROOT, dir), dir);
+    const { entries, violations } = collect(ROOT, dir, manifest, inputs);
+    failures.push(...violations);
+    const target = join(ROOT, dir, NOTICES);
+    if (entries.length) writeFileSync(target, render(name, entries));
+    else rmSync(target, { force: true });
+    console.log(`third-party-notices: ${name}: ${entries.length} entries`);
+  }
+  if (failures.length) throw new Error(`third-party-notices:\n  ${failures.join('\n  ')}`);
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) main();
