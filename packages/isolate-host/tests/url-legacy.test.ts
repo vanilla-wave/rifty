@@ -167,6 +167,25 @@ try { url.parse('http://ñ.com/'); } catch (e) { console.log(e.name, e.message);
 const requireFixture = createRequire(join(FIXTURES, 'codec.cjs'));
 const DEP_ROWS = requireFixture('./dep0169-rows.cjs') as Record<string, Record<string, string>>;
 
+const GUEST_ROWS = requireFixture('./guest-rows.cjs') as Record<
+  string,
+  { hosts: string[]; files: Record<string, string> }
+>;
+
+describe('isolate guest: patched intrinsics do not reach the port where Node does not use them', () => {
+  for (const [name, row] of Object.entries(GUEST_ROWS)) {
+    if (!row.hosts.includes('isolate')) continue;
+    it(name, async () => {
+      const node = inNode(row.files, ['main.js']);
+      const rifty = await inSandbox(row.files, ['main.js']);
+      expect({ stdout: rifty.stdout, exitCode: rifty.exitCode }).toEqual({
+        stdout: node.stdout,
+        exitCode: node.exitCode,
+      });
+    }, 60_000);
+  }
+});
+
 describe('isolate guest: DEP0169/DEP0170 by Node v24.16.0s 4-frame window', () => {
   for (const [name, files] of Object.entries(DEP_ROWS)) {
     it(name, async () => {

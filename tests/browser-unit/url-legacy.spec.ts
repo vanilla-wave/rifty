@@ -33,6 +33,10 @@ const FIXTURES = join(here, '../../packages/runtime-js/tests/fixtures/url-legacy
 const read = (name: string): string => readFileSync(join(FIXTURES, name), 'utf8');
 const requireFixture = createRequire(join(FIXTURES, 'codec.cjs'));
 const DEP_ROWS = requireFixture('./dep0169-rows.cjs') as Record<string, Record<string, string>>;
+const GUEST_ROWS = requireFixture('./guest-rows.cjs') as Record<
+  string,
+  { hosts: string[]; files: Record<string, string> }
+>;
 const PARSEURL = join(here, '../../packages/isolate-host/node_modules/parseurl');
 
 // The shell has no `2>`: a runner spawns `node <argv>` with piped stdio and prints both streams.
@@ -92,7 +96,7 @@ const mask = (stderr: string): string =>
 type Rec = unknown;
 const same = (a: Rec, b: Rec): boolean => JSON.stringify(a) === JSON.stringify(b);
 
-test('legacy node:url / querystring equal Node (COI Workbench)', async ({ page }) => {
+test('legacy node:url / querystring equal Node (COI Workbench)', async ({ page, browser }) => {
   test.setTimeout(900_000);
   await gotoHarness(page);
   await bootOwner(page, {
@@ -169,7 +173,10 @@ test('legacy node:url / querystring equal Node (COI Workbench)', async ({ page }
         return ok ? [] : [{ i, node: r, rifty: rifty[i], pin: pin?.rifty ?? null }];
       });
       expect
-        .soft(wrong.slice(0, 5), `hosts: ${wrong.length} rows off (${pins.size} pinned)`)
+        .soft(
+          wrong.slice(0, 5),
+          `hosts: ${wrong.length} rows off (${pins.size} pinned on Chromium ${pinned.chromium}; this run ${browser.browserType().name()} ${browser.version()})`,
+        )
         .toEqual([]);
     }
 
@@ -185,6 +192,18 @@ test('legacy node:url / querystring equal Node (COI Workbench)', async ({ page }
       expect.soft({ ...rifty, stderr: mask(rifty.stderr) }, 'scenario').toEqual({
         stdout: node.stdout,
         stderr: mask(node.stderr),
+        exitCode: node.exitCode,
+      });
+    }
+
+    // ADR-0574 §2: a guest's patched intrinsics do not reach the port where Node's do not.
+    for (const [name, row] of Object.entries(GUEST_ROWS)) {
+      if (!row.hosts.includes('browser')) continue;
+      const node = inNode(row.files, ['main.js']);
+      rmSync(node.dir, { recursive: true, force: true });
+      const rifty = await inRifty(row.files, ['main.js']);
+      expect.soft({ stdout: rifty.stdout, exitCode: rifty.exitCode }, name).toEqual({
+        stdout: node.stdout,
         exitCode: node.exitCode,
       });
     }

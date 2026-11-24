@@ -47,6 +47,11 @@ w1(); console.log('done');`,
     ...NM(`const url = require('url'); module.exports = () => url.parse('http://a.com/');`),
     'main.js': `${ON}Error.stackTraceLimit = 0; require('p')(); console.log('after p'); url.parse('http://a.com/'); console.log('done', Error.stackTraceLimit);`,
   },
+  'stack-trace-limit-frozen': {
+    ...NM(`const url = require('url'); module.exports = () => url.parse('http://a.com/');`),
+    'main.js': `${ON}Object.defineProperty(Error, 'stackTraceLimit', { value: 0, writable: false });
+require('p')(); console.log('after p', url.parse('http://b.com/').hostname, typeof new Error('x').stack, Error.stackTraceLimit);`,
+  },
   'guest-prepare-stack-trace': {
     ...NM(`const url = require('url'); module.exports = () => url.parse('http://a.com/');`),
     'main.js': `${ON}let calls = 0; Error.prepareStackTrace = () => { calls++; return 'x'; }; require('p')(); console.log('after p'); url.parse('http://a.com/'); console.log('done', calls);`,

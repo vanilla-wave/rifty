@@ -16,7 +16,11 @@ function encode(v, Url) {
       ? v
       : { $num: Object.is(v, -0) ? '-0' : String(v) };
   if (typeof v === 'bigint') return { $bigint: String(v) };
-  if (typeof v === 'function') return { $fn: Function.prototype.toString.call(v) };
+  if (typeof v === 'function')
+    // A global builtin (`Date`, `Math.max` is not one) replays as itself; its source does not parse.
+    return typeof v.name === 'string' && globalThis[v.name] === v
+      ? { $global: v.name }
+      : { $fn: Function.prototype.toString.call(v) };
   if (typeof v !== 'object') return undefined;
   if (Url && v instanceof Url) return { $parsed: v.href };
   if (Array.isArray(v)) {
@@ -51,6 +55,7 @@ function decode(v, url) {
   if (typeof v.$parsed === 'string') return url.parse(v.$parsed);
   if ('$num' in v) return Number(v.$num);
   if ('$bigint' in v) return BigInt(v.$bigint);
+  if ('$global' in v) return globalThis[v.$global];
   if ('$fn' in v) return Function(`return (${v.$fn});`)();
   if ('$re' in v) return new RegExp(v.$re[0], v.$re[1]);
   if ('$date' in v) return new Date(v.$date);
