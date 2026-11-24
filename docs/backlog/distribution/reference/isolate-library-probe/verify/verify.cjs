@@ -84,6 +84,12 @@ const diffBytes = async (x, y) => {
         if (!inner.equal) parts.push({ part: n, inner: inner.parts });
         continue;
       }
+      if (!/\.(xml|rels|vml)$/.test(n)) {
+        // Binary parts (media): bytes, unmasked.
+        const [bx, by] = await Promise.all([px.async('nodebuffer'), py.async('nodebuffer')]);
+        if (!bx.equals(by)) parts.push({ part: n, bytes: [bx.length, by.length] });
+        continue;
+      }
       const [tx, ty] = (await Promise.all([px.async('string'), py.async('string')])).map(mask);
       if (tx !== ty) parts.push({ part: n, ...first(tx, ty) });
     }

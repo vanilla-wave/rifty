@@ -34,7 +34,8 @@ print one line per surface; the probe lists the lines that differ from real node
 (real Node only, `node -r ./trace.cjs gen/<x>.cjs out`) lists the builtins and web globals a run
 touches. Evidence: `results-npm-ci.json`, `results-artifact.json`, `results-produce-artifact.txt`,
 `results-python-readers.txt`. Run-to-run noise: the `diag-outputs` sizes of `docx Packer.toBuffer`/
-`toBase64String`/`toString` can differ by a byte (`core.xml` timestamp under compression).
+`toBase64String`/`toString` and exceljs `xlsx.writeFile`/`writeBuffer` can differ by a byte
+(`core.xml` timestamp under compression).
 
 ## Result
 
@@ -82,9 +83,9 @@ need (#3 Blob outputs, #4 browser bundles).
 | smallest `maxFsBytes` the codec accepts (budget) | 99 458 048 (94.9 MiB); probe ran at 111 MiB |
 | snapshot | 88.1 MB, gzip 19.7 MB (> the ~16 MB per-conversation budget alone); `snapshotFs` 72 ms |
 | `createSandbox({ snapshot })` | 91 ms |
-| warm `exec` of an empty file | 597–628 ms median of 5 over runs (empty sandbox: 14–15 ms) |
-| `exec` of a generator | ✅ ones 0.77–0.97 s, failing ones up to 1.2 s (real node, process start included: 51–132 ms) |
-| smallest `memoryLimitMb` (4 MiB bisection) | 215 empty file; pdf 213, xlsx-workbook 218, pptx-notnode 218, pptx-handled 222, docx 230 — the state, not the library, sets it |
+| warm `exec` of an empty file | 596–619 ms median of 5 (empty sandbox: 14–16 ms) |
+| `exec` of a generator | ✅ ones 0.76–1.01 s, failing ones up to 1.2 s (real node, process start included: 51–144 ms) |
+| smallest `memoryLimitMb` (4 MiB bisection) | 209 empty file; pdf 215, docx 218, xlsx-workbook 218, pptx 222 — the state, not the library, sets it (earlier unsaved runs: 209–230, so ±1–2 steps run to run) |
 | `/node_modules` mount | `require()` from `/workspace` reaches a package at `/node_modules` (prints 42) |
 
 ## produceDependencySnapshot (requirements «Найдено дополнительно»)
