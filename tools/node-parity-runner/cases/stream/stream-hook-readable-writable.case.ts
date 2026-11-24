@@ -40,6 +40,16 @@ for (const way of WAYS) {
     w.end('b');
   });
 }
+for (const Base of [Writable, Duplex]) {
+  scenario(Base.name + ' single write leaves _writev unread', (l) => {
+    class W extends Base {
+      _read() {}
+      _write(c, e, cb) { l.push('W' + c); cb(); }
+      get _writev() { l.push('writev read'); return undefined; }
+    }
+    new W().write('x');
+  });
+}
 scenario('prototype shape', () => () =>
   ['_write', '_writev', '_final'].map((k) => k + ':' + typeof Writable.prototype[k]).join(' ') +
   ' writev-null:' + (Writable.prototype._writev === null) + ' _read:' + typeof Readable.prototype._read);

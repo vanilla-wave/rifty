@@ -66,6 +66,10 @@ scenario('Transform prototype method replaced after construction', (l) => {
   return () => 'data=' + data.join('');
 });
 scenario('Transform subclass with _transform and a public transform() method (fast-csv shape)', (l) => {
+  // Green only because two gaps cancel: \`writableObjectMode\` is ignored
+  // (runtime-js/duplex-writable-surface-gaps) and a byte-mode Writable admits an
+  // array (Node: ERR_INVALID_ARG_TYPE; runtime-js/stream-byte-chunk-kinds). Fixing
+  // the chunk check first breaks this row and exceljs CSV.
   // The runner's rifty realm keeps the host's global Buffer; node:buffer is the guest's.
   const { Buffer } = require('node:buffer');
   class F extends Transform {
@@ -91,6 +95,10 @@ scenario('PassThrough subclass without _transform', (l) => {
 scenario('prototype shape', () => () =>
   ['_transform', '_flush', '_final', '_write', '_read'].map((k) => k + ':' + typeof Transform.prototype[k]).join(' ') +
   ' passthrough-own-transform:' + Object.prototype.hasOwnProperty.call(PassThrough.prototype, '_transform'));
+scenario('shared prototype values', () => () =>
+  [[Writable, '_writev'], [Duplex, '_write'], [Duplex, '_writev'], [Transform, '_final']]
+    .map(([C, k]) => C.name + '.' + k + ':' + Object.getOwnPropertyDescriptor(C.prototype, k).enumerable)
+    .join(' ') + ' Transform._final.name:' + Transform.prototype._final.name);
 done();
 `,
 };
