@@ -79,9 +79,9 @@ challenge: 2026-11-24 — clear (existing-baseline extension of an internal mech
 | axis × operation | honest outcome | artifact / fault target | trace |
 |---|---|---|---|
 | abort × worker lost during the run (rerun pending) | rejects `AbortError`; the rerun is not placed | abort-table row "its worker lost, the rerun not yet placed: the rerun is never placed" | → scenario |
-| abort × isolate ignoring termination | rejects at once; the worker retires after the stuck grace (ADR-0563 §4); `destroy()` waits for `gone` | table row "abort, stuck builtin" | → ADR-0568 |
+| abort × isolate ignoring termination | rejects at once; the worker retires after the stuck grace (ADR-0563 §4); `destroy()` waits for `gone` | abort-table row "during the run of a builtin that ignores termination" | → ADR-0568 |
 | abort racing the result (same microtask) | exactly one settlement: the result if it settled first, else `AbortError`; state per the outcome reported | table rows 0–3 microtasks | → scenario |
-| abort × destroy | every operation settles once; `DESTROYED` for those unsettled when `destroy()` is called | table row "abort then destroy", "destroy then abort" | → ADR-0568 |
+| abort × destroy | every operation settles once; `DESTROYED` for those unsettled when `destroy()` is called | abort-table rows "abort, then destroy", "destroy, then abort" | → ADR-0568 |
 | a signal whose `reason` getter / `addEventListener` throws (consumer bug) | refused at the call with the consumer's own error (as Node's `fs.promises.readFile`), nothing placed | unit "a signal whose own members throw (a consumer bug) …" | → scenario |
 
 ## Out of scope

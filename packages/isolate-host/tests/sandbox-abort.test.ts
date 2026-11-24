@@ -363,3 +363,52 @@ describe('exec options are read at the call', () => {
     }
   });
 });
+
+describe("the abort path's errors and listeners", () => {
+  it('every error it rejects with carries its first line as stack (no frame of this process)', async () => {
+    const sb = await createSandbox();
+    try {
+      await sb.writeFile('m.js', 'for (;;) {}');
+      const firstLine = (e: Record<string, unknown>) =>
+        expect(e.stack).toBe(`${e.name}: ${e.message}`);
+      const c = new AbortController();
+      const inFlight = failure(sb.exec('m.js', { signal: c.signal }));
+      await sleep(100);
+      c.abort(new Error('turn over'));
+      firstLine(await inFlight);
+      firstLine(await failure(sb.exec('m.js', { signal: AbortSignal.abort() })));
+      // A `reason` getter that throws once the run is in flight (a consumer bug).
+      const g = new AbortController();
+      const getter = failure(sb.exec('m.js', { signal: g.signal }));
+      await sleep(100);
+      Object.defineProperty(g.signal, 'reason', {
+        get() {
+          throw new Error('reason getter');
+        },
+      });
+      g.abort();
+      const thrown = await getter;
+      expect(thrown.message).toBe('reason getter');
+      firstLine(thrown);
+      firstLine(await failure(sb.exec('m.js', { signal: 'x' })));
+    } finally {
+      await sb.destroy();
+    }
+  });
+
+  it('an op that rejects on its own leaves no listener on its signal', async () => {
+    const sb = await createSandbox();
+    try {
+      const c = new AbortController();
+      expect(await failure(sb.readFile('missing', { signal: c.signal }))).toMatchObject({
+        code: 'ENOENT',
+      });
+      expect(await failure(sb.remove('missing', { signal: c.signal }))).toMatchObject({
+        code: 'ENOENT',
+      });
+      expect(getEventListeners(c.signal, 'abort')).toHaveLength(0);
+    } finally {
+      await sb.destroy();
+    }
+  });
+});
