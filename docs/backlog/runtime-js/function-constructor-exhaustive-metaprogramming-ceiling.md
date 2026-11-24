@@ -88,7 +88,9 @@ node v24.16.0:  vfs-dep
 rifty (5c74088d2, createModuleLoader(MemoryFsSync).require): loads; reject ERR_MODULE_NOT_FOUND
 ```
 
-The `import()` reaches the host, not the loader. Owner runtime-js (module-loader);
+The `import()` reaches the host's loader, not rifty's; the rejection code is
+the host's (`ERR_MODULE_NOT_FOUND` here; `ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING`
+on a host without a dynamic-import callback, per review 3 — not measured here). Owner runtime-js (module-loader);
 trigger: next guard unit or a package calling a local `eval` binding.
 
 Key `'eval'`: `G[k](s)` with `k === 'eval'` is an indirect eval in Node and rifty

@@ -167,13 +167,21 @@ describe('computed global read used as a callee/constructor (unit computed-globa
       'eval as a let': `let eval = globalThis.eval; eval(${SHADOW}); ${READ}`,
       'eval as a catch binding': `try { throw globalThis.eval; } catch (eval) { eval(${SHADOW}); } ${READ}`,
       'eval?.()': `eval?.(${SHADOW}); ${READ}`,
+      // Pin: round-1 code rejected it already (not RED for the round-2 rule).
       'eval(...args)': `eval(...[${SHADOW}]); ${READ}`,
+      '(eval)(s)': `(eval)(key); ${READ}`,
+      '((eval))(s)': `((eval))(key); ${READ}`,
+      'eval(s)': `eval(key); ${READ}`,
     },
     esm: {
       'a folded direct eval': `${FOLDED} ${ESM_READ}`,
       'a literal direct eval': `${NESTED} ${ESM_READ}`,
       'eval?.()': `eval?.(${SHADOW}); ${ESM_READ}`,
+      // Pin: round-1 code rejected it already (not RED for the round-2 rule).
       'eval(...args)': `eval(...[${SHADOW}]); ${ESM_READ}`,
+      '(eval)(s)': `(eval)(key); ${ESM_READ}`,
+      '((eval))(s)': `((eval))(key); ${ESM_READ}`,
+      'eval(s)': `eval(key); ${ESM_READ}`,
     },
   };
 
@@ -206,9 +214,10 @@ describe('computed global read used as a callee/constructor (unit computed-globa
   }
 
   // An indirect eval runs in the global scope: the read stays admitted.
+  // Each indirect eval declares a global named as the helper (composed, so the helper keeps
+  // its base name): the helper is a factory parameter, so the read still throws.
   it('an indirect eval beside a called computed read loads', async () => {
-    const body =
-      '(0, eval)("var __riftyGlobalKey = 1"); globalThis.eval?.("1"); return new globalThis[key](1);';
+    const body = `(0, eval)(${SHADOW}); globalThis.eval?.(${SHADOW}); return new globalThis[key](1);`;
     const cjs = setup({ '/e.js': `exports.f = function (key) { ${body} };` });
     const esm = setup({ '/e.mjs': `export function f(key) { ${body} }` });
     const sites = [
@@ -218,9 +227,13 @@ describe('computed global read used as a callee/constructor (unit computed-globa
     for (const site of sites) {
       expect(site.f('Uint8Array')).toHaveLength(1);
       expect(() => site.f('Function')).toThrow(
-        expect.objectContaining({ name: 'NotImplementedError' }),
+        expect.objectContaining({
+          name: 'NotImplementedError',
+          feature: expect.stringMatching(/^module-loader\.(cjs|esm)-global-function-assignment$/),
+        }),
       );
     }
+    expect(typeof g.__riftyGlobalKey).toBe('function');
     Reflect.deleteProperty(g, '__riftyGlobalKey');
   });
 });
