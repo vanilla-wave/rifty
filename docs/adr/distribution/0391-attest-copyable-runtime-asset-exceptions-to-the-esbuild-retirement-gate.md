@@ -35,13 +35,34 @@ new machinery; exact two compiler fingerprints — selected despite update cost.
 
 Existing path/reference/packlist/generated-client and gzip/base64 checks remain.
 Negative probes substitute real esbuild bytes under admitted names, mutate
-allowed WASM, add unknown inline WASM and exceed compiler limits. Hash-named
-imports can change the TypeScript worker fingerprint after ordinary runtime
-edits; that pin update stays explicit. No ADR is superseded.
+allowed WASM, add unknown inline WASM and exceed compiler limits. Since
+2026-11-24 the compiler pin excludes hash-named sibling-chunk imports
+(§Corrections), so ordinary runtime edits no longer re-pin. No ADR is superseded.
 
 - 2026-10-20 — upstream-twin runtime changes regenerate TypeScript-worker chunk imports; exact size stays 10,022,664 bytes. Pin refreshed; packed toolchain surface (15 first-party/73 external tarballs, Chromium agent/build) and retirement gate pass. No directory/size exemption added.
 - 2026-10-20 — file-stdout imports refresh that same 10,022,664-byte worker to SHA-256 `03b5b25a62685f215f32e2173a028bb04ec1d1e0a7ae4ee16e17dfd23f085725`; packed toolchain surface and exact retirement gate pass.
 ## Corrections
+
+- 2026-11-24 — compiler pin stops following runtime edits (user «ок», manager
+  thread cf2ae711). Cost since 2026-11-21: 48 re-pin commits on 26 PRs; of 27
+  conflicted main merges 11 hit the gate file (4 only it), 5 this ADR; 5 CI
+  runs red only here; runtime PRs merged one at a time. Fact (main ± one-char
+  runtime edit; #421 round 5 rebuilt): only the worker's leading
+  `import … "./chunk-HASH.js"` lines change (renamed, +30 bytes = one added)
+  and the `import("./module-loader-HASH.js")` hash; 15 main builds 10-20…11-24
+  (15 raw pins, 3 sizes) give one pin. Pin = size + SHA-256 of the output minus those leading imports,
+  sibling hashes zeroed (`compilerOutputPin`). A leading import is skipped only
+  in esbuild's exact form, unique, every binding used in the pinned rest: no
+  unpinned free bytes. Compiler version, injected code, body size stay red
+  (unit + real-build mutants). No longer seen: which sibling chunks/bindings
+  the worker links — build asserts each edge, browser e2e loads it. Rejected:
+  hash placeholder only (an added chunk line still re-pins); unsplit worker
+  build (copies runtime into the pinned body, re-pins on runtime edits);
+  source-map provenance (rejected above). Re-pin only when the worker's own
+  content changes (TypeScript, ts-language-service, worker entry, esbuild or
+  build config, a module moving into/out of its body): copy the pin from the
+  gate's violation, browser proof in the PR, no ADR line. ADR line only when
+  the admission rule changes. Other pins unchanged since introduction.
 
 - 2026-10-20 — ADR-0541 native resource-fetch imports change the TypeScript
   worker fingerprint (+30 bytes); re-pin exact bytes/SHA only. Compiler chunk,

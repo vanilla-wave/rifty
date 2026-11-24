@@ -498,6 +498,7 @@ superseded.
 
 | ADR | corrected by | note |
 |---|---|---|
+| 0391 TypeScript worker exact-bytes pin, "pin update stays explicit" | note 2026-11-24 | pin excludes the worker's leading sibling-chunk imports, sibling hashes zeroed; runtime edits no longer re-pin, no per-re-pin ADR line |
 | 0323 §4 `CI gate` `always()` clause | note 2026-11-24 | `!cancelled()`: cancelled run → gate `cancelled` without a runner; failed/timed-out dependency in a live run still reds it |
 | 0069 D3 TextDecoder set and "matches `StringDecoder`" clause | note 2026-11-17 | utf8/utf16le decoder keeps a leading BOM (`ignoreBOM: true`); `latin1`/`binary` decode via Buffer, not windows-1252 TextDecoder |
 | 0226 / 0384 / 0417 no-COI generated-client activation | 0539 / note 2026-10-20 | upstream Node client through SW children; shared COI client retained |
