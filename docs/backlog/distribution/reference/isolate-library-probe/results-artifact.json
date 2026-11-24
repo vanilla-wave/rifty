@@ -11,14 +11,14 @@
     "skippedLinks": 0,
     "budget": 99364864,
     "snapshotBytes": 88015088,
-    "snapshotGzipBytes": 19678688,
-    "snapshotMs": 75,
+    "snapshotGzipBytes": 19678102,
+    "snapshotMs": 105,
     "maxFsBytes": 116391936,
     "memoryLimitMb": 286
   },
   "measures": {
-    "createMs": 93,
-    "noopExecMedianMs": 619,
+    "createMs": 624,
+    "noopExecMedianMs": 719,
     "emptySandboxNoopExecMedianMs": 16,
     "rootNodeModules": "42"
   },
@@ -59,7 +59,129 @@
         "new CustomEvent('x'): ok",
         "import('node:https'): ok"
       ],
-      "stderr": ""
+      "stderr": "",
+      "trace": {
+        "modules": {
+          "assert": ["(generator)"],
+          "buffer": ["(generator)"],
+          "constants": ["(generator)"],
+          "crypto": ["(generator)"],
+          "events": ["(generator)"],
+          "fs": ["(generator)"],
+          "os": ["(generator)"],
+          "path": ["(generator)"],
+          "stream": ["(generator)"],
+          "string_decoder": ["(generator)"],
+          "util": ["(generator)"],
+          "zlib": ["(generator)"],
+          "https": ["(generator)"],
+          "http": ["(generator)"],
+          "url": ["(generator)"],
+          "worker_threads": ["(generator)"],
+          "child_process": ["(generator)"],
+          "timers": ["(generator)"],
+          "process": ["(generator)"],
+          "fs (import())": ["(generator)"],
+          "https (import())": ["(generator)"]
+        },
+        "globals": {
+          "Blob": [
+            "jszip/lib/support.js:17:28",
+            "jszip/lib/utils.js:3:15",
+            "jszip/lib/utf8.js:3:13",
+            "jszip/lib/object.js:2:12",
+            "jszip/lib/index.js:41:19"
+          ],
+          "self (absent in Node too)": [
+            "setimmediate/setImmediate.js:1:1",
+            "jszip/lib/utils.js:7:1",
+            "jszip/lib/utf8.js:3:13",
+            "jszip/lib/object.js:2:12",
+            "jszip/lib/index.js:41:19"
+          ],
+          "setImmediate": [
+            "setimmediate/setImmediate.js:4:16",
+            "setimmediate/setImmediate.js:186:2",
+            "jszip/lib/utils.js:7:1",
+            "jszip/lib/utf8.js:3:13",
+            "jszip/lib/object.js:2:12",
+            "jszip/lib/index.js:41:19"
+          ],
+          "TextEncoder": ["fflate/lib/node.cjs:1701:10"],
+          "TextDecoder": ["fflate/lib/node.cjs:1703:10"],
+          "queueMicrotask": ["fflate/lib/node.cjs:2597:10"],
+          "navigator": [
+            "bluebird/js/release/util.js:3:19",
+            "bluebird/js/release/promise.js:14:12",
+            "bluebird/js/release/bluebird.js:9:36"
+          ],
+          "window (absent in Node too)": [
+            "bluebird/js/release/util.js:7:50",
+            "bluebird/js/release/promise.js:14:12",
+            "bluebird/js/release/bluebird.js:9:36"
+          ],
+          "CustomEvent": [
+            "bluebird/js/release/debuggability.js:146:9",
+            "bluebird/js/release/debuggability.js:181:3",
+            "bluebird/js/release/promise.js:52:39",
+            "bluebird/js/release/bluebird.js:9:36"
+          ],
+          "document (absent in Node too)": [
+            "is-callable/index.js:57:1",
+            "for-each/index.js:3:18",
+            "which-typed-array/index.js:3:15",
+            "traverse/index.js:1:23",
+            "chainsaw/index.js:1:16",
+            "binary/index.js:1:16",
+            "unzipper/lib/parse.js:4:14",
+            "unzipper/unzip.js:8:17"
+          ],
+          "FinalizationRegistry": [
+            "get-intrinsic/index.js:96:28",
+            "set-function-length/index.js:3:20",
+            "call-bind/index.js:3:25",
+            "which-typed-array/index.js:5:16",
+            "traverse/index.js:1:23",
+            "chainsaw/index.js:1:16",
+            "binary/index.js:1:16",
+            "unzipper/lib/parse.js:4:14",
+            "unzipper/unzip.js:8:17"
+          ],
+          "WeakRef": [
+            "get-intrinsic/index.js:136:15",
+            "set-function-length/index.js:3:20",
+            "call-bind/index.js:3:25",
+            "which-typed-array/index.js:5:16",
+            "traverse/index.js:1:23",
+            "chainsaw/index.js:1:16",
+            "binary/index.js:1:16",
+            "unzipper/lib/parse.js:4:14",
+            "unzipper/unzip.js:8:17"
+          ]
+        },
+        "textDecoderLabels": ["undefined", "utf-8"]
+      }
+    },
+    {
+      "lib": "diag-fsread",
+      "exitCode": 0,
+      "nodeExitCode": 0,
+      "differs": [
+        "typeof fs.createReadStream()[Symbol.asyncIterator]: undefined",
+        "fs.createReadStream 'error': NotImplementedError: Not implemented: isolate-host.ReadableStream (not available in the rifty isolate host, ADR-0557) [notImplemented < new ReadableStream < MemoryVfs.openReadable < FileReadStream.start]"
+      ],
+      "nodeOnly": [
+        "typeof fs.createReadStream()[Symbol.asyncIterator]: function",
+        "fs.createReadStream 'data': abc"
+      ],
+      "stderr": "",
+      "trace": {
+        "modules": {
+          "fs": ["(generator)"]
+        },
+        "globals": {},
+        "textDecoderLabels": []
+      }
     },
     {
       "lib": "diag-outputs",
@@ -68,28 +190,147 @@
       "differs": [
         "pptx.write(blob): Error: blob is not supported by this platform",
         "pptx image by path + writeFile: NotImplementedError: Not implemented: isolate-host.https (no network in the rifty isolate host, ADR-0557)",
-        "docx Packer.toBuffer: ok Uint8Array 9445",
-        "docx Packer.toBase64String: ok string 12592",
-        "docx Packer.toString: ok string 9444",
+        "docx Packer.toBuffer: ok Uint8Array 9444",
+        "docx Packer.toString: ok string 9445",
         "docx Packer.toBlob: NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)",
-        "exceljs xlsx.writeFile: ok Uint8Array 6386",
-        "exceljs xlsx.writeBuffer: ok Uint8Array 6386",
         "exceljs csv.writeBuffer: Error: Chunk must be one of type String, Buffer or StringBuf.",
-        "exceljs xlsx.readFile (read back): TypeError: stream.close is not a function"
+        "exceljs xlsx.readFile (read back): TypeError: stream.close is not a function",
+        "exceljs xlsx.read(fs.createReadStream): NotImplementedError: Not implemented: isolate-host.ReadableStream (not available in the rifty isolate host, ADR-0557)",
+        "exceljs csv.read(fs.createReadStream): NotImplementedError: Not implemented: isolate-host.ReadableStream (not available in the rifty isolate host, ADR-0557)",
+        "exceljs worksheet.protect + writeBuffer: Error: Hash algorithm 'sha512' not supported!"
       ],
       "nodeOnly": [
         "pptx.write(blob): ok Blob 44729",
         "pptx image by path + writeFile: ok Uint8Array 49849",
-        "docx Packer.toBuffer: ok Uint8Array 9444",
-        "docx Packer.toBase64String: ok string 12596",
-        "docx Packer.toString: ok string 9445",
-        "docx Packer.toBlob: ok Blob 9445",
-        "exceljs xlsx.writeFile: ok Uint8Array 6385",
-        "exceljs xlsx.writeBuffer: ok Uint8Array 6385",
+        "docx Packer.toBuffer: ok Uint8Array 9445",
+        "docx Packer.toString: ok string 9444",
+        "docx Packer.toBlob: ok Blob 9444",
         "exceljs csv.writeBuffer: ok Uint8Array 3",
-        "exceljs xlsx.readFile (read back): ok string 1"
+        "exceljs xlsx.readFile (read back): ok string \"a\"",
+        "exceljs xlsx.read(fs.createReadStream): ok string \"a\"",
+        "exceljs csv.read(fs.createReadStream): ok string \"b 2 rows\"",
+        "exceljs worksheet.protect + writeBuffer: ok Uint8Array 6538"
       ],
-      "stderr": ""
+      "stderr": "",
+      "trace": {
+        "modules": {
+          "fs": ["(generator)"],
+          "stream": [
+            "readable-stream/readable.js:1:14",
+            "jszip/lib/support.js:35:28",
+            "jszip/lib/utils.js:3:15",
+            "jszip/lib/utf8.js:3:13",
+            "jszip/lib/object.js:2:12",
+            "jszip/lib/index.js:41:19",
+            "pptxgenjs/dist/pptxgen.cjs.js:4:13"
+          ],
+          "events": [
+            "readable-stream/lib/_stream_readable.js:42:10",
+            "readable-stream/readable.js:12:30",
+            "jszip/lib/support.js:35:28",
+            "jszip/lib/utils.js:3:15",
+            "jszip/lib/utf8.js:3:13",
+            "jszip/lib/object.js:2:12",
+            "jszip/lib/index.js:41:19",
+            "pptxgenjs/dist/pptxgen.cjs.js:4:13"
+          ],
+          "buffer": [
+            "safe-buffer/index.js:2:14",
+            "readable-stream/lib/_stream_readable.js:55:14",
+            "readable-stream/readable.js:12:30",
+            "jszip/lib/support.js:35:28",
+            "jszip/lib/utils.js:3:15",
+            "jszip/lib/utf8.js:3:13",
+            "jszip/lib/object.js:2:12",
+            "jszip/lib/index.js:41:19",
+            "pptxgenjs/dist/pptxgen.cjs.js:4:13"
+          ],
+          "util": [
+            "inherits/inherits.js:2:14",
+            "readable-stream/lib/_stream_readable.js:68:17",
+            "readable-stream/readable.js:12:30",
+            "jszip/lib/support.js:35:28",
+            "jszip/lib/utils.js:3:15",
+            "jszip/lib/utf8.js:3:13",
+            "jszip/lib/object.js:2:12",
+            "jszip/lib/index.js:41:19",
+            "pptxgenjs/dist/pptxgen.cjs.js:4:13"
+          ],
+          "fs (import())": [
+            "pptxgenjs/dist/pptxgen.cjs.js:4844:13",
+            "pptxgenjs/dist/pptxgen.cjs.js:29:71",
+            "pptxgenjs/dist/pptxgen.cjs.js:25:12",
+            "pptxgenjs/dist/pptxgen.cjs.js:4843:17",
+            "pptxgenjs/dist/pptxgen.cjs.js:4850:9",
+            "pptxgenjs/dist/pptxgen.cjs.js:7010:60",
+            "pptxgenjs/dist/pptxgen.cjs.js:7009:25",
+            "pptxgenjs/dist/pptxgen.cjs.js:29:71",
+            "pptxgenjs/dist/pptxgen.cjs.js:25:12",
+            "pptxgenjs/dist/pptxgen.cjs.js:7004:46",
+            "pptxgenjs/dist/pptxgen.cjs.js:7176:31",
+            "pptxgenjs/dist/pptxgen.cjs.js:29:71",
+            "pptxgenjs/dist/pptxgen.cjs.js:25:12",
+            "pptxgenjs/dist/pptxgen.cjs.js:7172:16"
+          ],
+          "https (import())": [
+            "pptxgenjs/dist/pptxgen.cjs.js:4845:13",
+            "pptxgenjs/dist/pptxgen.cjs.js:26:58"
+          ],
+          "crypto": [
+            "exceljs/lib/utils/encryptor.js:3:16",
+            "exceljs/lib/doc/worksheet.js:11:19",
+            "exceljs/lib/doc/workbook.js:3:19"
+          ],
+          "string_decoder": [
+            "@fast-csv/parse/build/src/CsvParserStream.js:4:26",
+            "@fast-csv/parse/build/src/index.js:29:27",
+            "fast-csv/build/src/index.js:13:15",
+            "exceljs/lib/csv/csv.js:2:17",
+            "exceljs/lib/doc/workbook.js:6:13"
+          ]
+        },
+        "globals": {
+          "Blob": [
+            "jszip/lib/support.js:17:28",
+            "jszip/lib/utils.js:3:15",
+            "jszip/lib/utf8.js:3:13",
+            "jszip/lib/object.js:2:12",
+            "jszip/lib/index.js:41:19",
+            "pptxgenjs/dist/pptxgen.cjs.js:4:13"
+          ],
+          "self (absent in Node too)": [
+            "setimmediate/setImmediate.js:1:1",
+            "jszip/lib/utils.js:7:1",
+            "jszip/lib/utf8.js:3:13",
+            "jszip/lib/object.js:2:12",
+            "jszip/lib/index.js:41:19",
+            "pptxgenjs/dist/pptxgen.cjs.js:4:13"
+          ],
+          "setImmediate": [
+            "setimmediate/setImmediate.js:4:16",
+            "setimmediate/setImmediate.js:186:2",
+            "jszip/lib/utils.js:7:1",
+            "jszip/lib/utf8.js:3:13",
+            "jszip/lib/object.js:2:12",
+            "jszip/lib/index.js:41:19",
+            "pptxgenjs/dist/pptxgen.cjs.js:4:13"
+          ],
+          "TextEncoder": ["docx/dist/index.cjs:23637:10"],
+          "TextDecoder": ["docx/dist/index.cjs:23638:10"],
+          "btoa": [
+            "docx/dist/index.cjs:23937:20",
+            "docx/dist/index.cjs:23959:9",
+            "docx/dist/index.cjs:26926:11",
+            "docx/dist/index.cjs:26849:15",
+            "docx/dist/index.cjs:26862:5",
+            "docx/dist/index.cjs:26867:4",
+            "docx/dist/index.cjs:26859:10",
+            "docx/dist/index.cjs:26927:6",
+            "docx/dist/index.cjs:26960:17"
+          ]
+        },
+        "textDecoderLabels": ["undefined", "utf-8"]
+      }
     },
     {
       "lib": "diag-repro",
@@ -98,6 +339,8 @@
       "differs": [
         "typeof fs.createReadStream().close: undefined",
         "typeof fs.createWriteStream().close: undefined",
+        "crypto.getHashes() has sha512: false",
+        "crypto.createHash('sha512'): NotImplementedError: Not implemented: crypto.createHash('sha512')",
         "StreamBuf.write data: Array instanceof Buffer=false isBuffer=false",
         "Transform subclass _transform: x",
         "Transform subclass _transform + transform() method: x",
@@ -107,12 +350,75 @@
         "typeof fs.createReadStream().close: function",
         "typeof fs.createWriteStream().close: function",
         "Duplex subclass _write: d",
+        "crypto.getHashes() has sha512: true",
+        "crypto.createHash('sha512'): a4abd444",
         "StreamBuf.write data: Buffer instanceof Buffer=true isBuffer=true",
         "Transform subclass _transform: <x>",
         "Transform subclass _transform + transform() method: <x>",
         "Transform subclass _flush: y!"
       ],
-      "stderr": ""
+      "stderr": "",
+      "trace": {
+        "modules": {
+          "fs": ["(generator)"],
+          "stream": ["(generator)"],
+          "crypto": ["(generator)"],
+          "events": [
+            "readable-stream/lib/_stream_readable.js:42:10",
+            "readable-stream/readable.js:12:30",
+            "jszip/lib/support.js:35:28",
+            "jszip/lib/utils.js:3:15",
+            "jszip/lib/utf8.js:3:13",
+            "jszip/lib/object.js:2:12",
+            "jszip/lib/index.js:41:19"
+          ],
+          "buffer": [
+            "safe-buffer/index.js:2:14",
+            "readable-stream/lib/_stream_readable.js:55:14",
+            "readable-stream/readable.js:12:30",
+            "jszip/lib/support.js:35:28",
+            "jszip/lib/utils.js:3:15",
+            "jszip/lib/utf8.js:3:13",
+            "jszip/lib/object.js:2:12",
+            "jszip/lib/index.js:41:19"
+          ],
+          "util": [
+            "inherits/inherits.js:2:14",
+            "readable-stream/lib/_stream_readable.js:68:17",
+            "readable-stream/readable.js:12:30",
+            "jszip/lib/support.js:35:28",
+            "jszip/lib/utils.js:3:15",
+            "jszip/lib/utf8.js:3:13",
+            "jszip/lib/object.js:2:12",
+            "jszip/lib/index.js:41:19"
+          ]
+        },
+        "globals": {
+          "Blob": [
+            "jszip/lib/support.js:17:28",
+            "jszip/lib/utils.js:3:15",
+            "jszip/lib/utf8.js:3:13",
+            "jszip/lib/object.js:2:12",
+            "jszip/lib/index.js:41:19"
+          ],
+          "self (absent in Node too)": [
+            "setimmediate/setImmediate.js:1:1",
+            "jszip/lib/utils.js:7:1",
+            "jszip/lib/utf8.js:3:13",
+            "jszip/lib/object.js:2:12",
+            "jszip/lib/index.js:41:19"
+          ],
+          "setImmediate": [
+            "setimmediate/setImmediate.js:4:16",
+            "setimmediate/setImmediate.js:186:2",
+            "jszip/lib/utils.js:7:1",
+            "jszip/lib/utf8.js:3:13",
+            "jszip/lib/object.js:2:12",
+            "jszip/lib/index.js:41:19"
+          ]
+        },
+        "textDecoderLabels": []
+      }
     },
     {
       "lib": "docx",
@@ -120,18 +426,28 @@
       "version": "9.15.3",
       "node": {
         "exitCode": 0,
-        "ms": 55,
+        "ms": 80,
         "verdict": {
           "ok": true,
           "parts": 18,
           "text": "Quarterly report Revenue grew 12% Region Revenue North 120"
+        },
+        "trace": {
+          "modules": {
+            "fs": ["(generator)"]
+          },
+          "globals": {
+            "TextEncoder": ["docx/dist/index.cjs:23637:10"],
+            "TextDecoder": ["docx/dist/index.cjs:23638:10"]
+          },
+          "textDecoderLabels": ["undefined"]
         }
       },
       "guest": {
         "stdout": "wrote out/probe-docx.docx\n",
         "stderr": "",
         "exitCode": 0,
-        "execMs": 774,
+        "execMs": 1039,
         "outBytes": 10247,
         "verdict": {
           "ok": true,
@@ -151,18 +467,25 @@
       "version": "1.17.1",
       "node": {
         "exitCode": 0,
-        "ms": 73,
+        "ms": 75,
         "verdict": {
           "ok": true,
           "pages": 2,
           "title": "Probe PDF"
+        },
+        "trace": {
+          "modules": {
+            "fs": ["(generator)"]
+          },
+          "globals": {},
+          "textDecoderLabels": []
         }
       },
       "guest": {
         "stdout": "wrote out/probe-pdf.pdf\n",
         "stderr": "",
         "exitCode": 0,
-        "execMs": 957,
+        "execMs": 1179,
         "outBytes": 1369,
         "verdict": {
           "ok": true,
@@ -181,18 +504,111 @@
       "version": "4.0.1",
       "node": {
         "exitCode": 0,
-        "ms": 58,
+        "ms": 64,
         "verdict": {
           "ok": true,
           "parts": 32,
           "slides": 3
+        },
+        "trace": {
+          "modules": {
+            "stream": [
+              "readable-stream/readable.js:1:14",
+              "jszip/lib/support.js:35:28",
+              "jszip/lib/utils.js:3:15",
+              "jszip/lib/utf8.js:3:13",
+              "jszip/lib/object.js:2:12",
+              "jszip/lib/index.js:41:19",
+              "pptxgenjs/dist/pptxgen.cjs.js:4:13"
+            ],
+            "events": [
+              "readable-stream/lib/_stream_readable.js:42:10",
+              "readable-stream/readable.js:12:30",
+              "jszip/lib/support.js:35:28",
+              "jszip/lib/utils.js:3:15",
+              "jszip/lib/utf8.js:3:13",
+              "jszip/lib/object.js:2:12",
+              "jszip/lib/index.js:41:19",
+              "pptxgenjs/dist/pptxgen.cjs.js:4:13"
+            ],
+            "buffer": [
+              "safe-buffer/index.js:2:14",
+              "readable-stream/lib/_stream_readable.js:55:14",
+              "readable-stream/readable.js:12:30",
+              "jszip/lib/support.js:35:28",
+              "jszip/lib/utils.js:3:15",
+              "jszip/lib/utf8.js:3:13",
+              "jszip/lib/object.js:2:12",
+              "jszip/lib/index.js:41:19",
+              "pptxgenjs/dist/pptxgen.cjs.js:4:13"
+            ],
+            "util": [
+              "inherits/inherits.js:2:14",
+              "readable-stream/lib/_stream_readable.js:68:17",
+              "readable-stream/readable.js:12:30",
+              "jszip/lib/support.js:35:28",
+              "jszip/lib/utils.js:3:15",
+              "jszip/lib/utf8.js:3:13",
+              "jszip/lib/object.js:2:12",
+              "jszip/lib/index.js:41:19",
+              "pptxgenjs/dist/pptxgen.cjs.js:4:13"
+            ],
+            "fs (import())": [
+              "pptxgenjs/dist/pptxgen.cjs.js:4844:13",
+              "pptxgenjs/dist/pptxgen.cjs.js:29:71",
+              "pptxgenjs/dist/pptxgen.cjs.js:25:12",
+              "pptxgenjs/dist/pptxgen.cjs.js:4843:17",
+              "pptxgenjs/dist/pptxgen.cjs.js:4850:9",
+              "pptxgenjs/dist/pptxgen.cjs.js:7010:60",
+              "pptxgenjs/dist/pptxgen.cjs.js:7009:25",
+              "pptxgenjs/dist/pptxgen.cjs.js:29:71",
+              "pptxgenjs/dist/pptxgen.cjs.js:25:12",
+              "pptxgenjs/dist/pptxgen.cjs.js:7004:46",
+              "pptxgenjs/dist/pptxgen.cjs.js:7203:37",
+              "pptxgenjs/dist/pptxgen.cjs.js:29:71",
+              "pptxgenjs/dist/pptxgen.cjs.js:25:12",
+              "pptxgenjs/dist/pptxgen.cjs.js:7189:16"
+            ],
+            "https (import())": [
+              "pptxgenjs/dist/pptxgen.cjs.js:4845:13",
+              "pptxgenjs/dist/pptxgen.cjs.js:26:58"
+            ]
+          },
+          "globals": {
+            "Blob": [
+              "jszip/lib/support.js:17:28",
+              "jszip/lib/utils.js:3:15",
+              "jszip/lib/utf8.js:3:13",
+              "jszip/lib/object.js:2:12",
+              "jszip/lib/index.js:41:19",
+              "pptxgenjs/dist/pptxgen.cjs.js:4:13"
+            ],
+            "self (absent in Node too)": [
+              "setimmediate/setImmediate.js:1:1",
+              "jszip/lib/utils.js:7:1",
+              "jszip/lib/utf8.js:3:13",
+              "jszip/lib/object.js:2:12",
+              "jszip/lib/index.js:41:19",
+              "pptxgenjs/dist/pptxgen.cjs.js:4:13"
+            ],
+            "setImmediate": [
+              "setimmediate/setImmediate.js:4:16",
+              "setimmediate/setImmediate.js:186:2",
+              "jszip/lib/utils.js:7:1",
+              "jszip/lib/utf8.js:3:13",
+              "jszip/lib/object.js:2:12",
+              "jszip/lib/index.js:41:19",
+              "pptxgenjs/dist/pptxgen.cjs.js:4:13"
+            ]
+          },
+          "textDecoderLabels": []
         }
       },
       "guest": {
         "stdout": "",
         "stderr": "NotImplementedError: Not implemented: isolate-host.https (no network in the rifty isolate host, ADR-0557)\n    at /workspace/node_modules/pptxgenjs/dist/pptxgen.cjs.js:4845:41\n    at Generator.next (<anonymous>)\n    at fulfilled (/workspace/node_modules/pptxgenjs/dist/pptxgen.cjs.js:26:58)\n\nNode.js v24.0.0\n",
         "exitCode": 1,
-        "execMs": 839,
+        "execMs": 1343,
         "verdict": {
           "ok": false
         }
@@ -204,18 +620,36 @@
       "version": "4.0.1",
       "node": {
         "exitCode": 0,
-        "ms": 66,
+        "ms": 95,
         "verdict": {
           "ok": true,
           "parts": 32,
           "slides": 3
+        },
+        "trace": {
+          "modules": {
+            "fs": ["(generator)"],
+            "path": ["(generator)"],
+            "fs (import())": ["(generator)"],
+            "https (import())": ["(generator)"]
+          },
+          "globals": {
+            "window (absent in Node too)": ["(generator)"],
+            "Blob": ["(generator)"],
+            "self (absent in Node too)": ["(generator)"],
+            "setImmediate": ["(generator)"],
+            "document (absent in Node too)": ["(generator)"],
+            "MessageChannel": ["(generator)"],
+            "navigator": ["(generator)"]
+          },
+          "textDecoderLabels": []
         }
       },
       "guest": {
         "stdout": "",
         "stderr": "NotImplementedError: Not implemented: isolate-host.navigator.userAgent (not available in the rifty isolate host, ADR-0557)\n    at 148.70 (eval at routeOrCompile, <anonymous>:5:141955)\n    at s (eval at routeOrCompile, <anonymous>:5:95660)\n    at eval (eval at routeOrCompile, <anonymous>:5:95694)\n    at 232.114 (eval at routeOrCompile, <anonymous>:5:159035)\n    at s (eval at routeOrCompile, <anonymous>:5:95660)\n    at eval (eval at routeOrCompile, <anonymous>:5:95694)\n    at 3.154 (eval at routeOrCompile, <anonymous>:5:97279)\n    at s (eval at routeOrCompile, <anonymous>:5:95660) {\n  feature: 'isolate-host.navigator.userAgent'\n}\n\nNode.js v24.0.0\n",
         "exitCode": 1,
-        "execMs": 974,
+        "execMs": 1003,
         "verdict": {
           "ok": false
         }
@@ -227,18 +661,111 @@
       "version": "4.0.1",
       "node": {
         "exitCode": 0,
-        "ms": 56,
+        "ms": 65,
         "verdict": {
           "ok": true,
           "parts": 32,
           "slides": 3
+        },
+        "trace": {
+          "modules": {
+            "stream": [
+              "readable-stream/readable.js:1:14",
+              "jszip/lib/support.js:35:28",
+              "jszip/lib/utils.js:3:15",
+              "jszip/lib/utf8.js:3:13",
+              "jszip/lib/object.js:2:12",
+              "jszip/lib/index.js:41:19",
+              "pptxgenjs/dist/pptxgen.cjs.js:4:13"
+            ],
+            "events": [
+              "readable-stream/lib/_stream_readable.js:42:10",
+              "readable-stream/readable.js:12:30",
+              "jszip/lib/support.js:35:28",
+              "jszip/lib/utils.js:3:15",
+              "jszip/lib/utf8.js:3:13",
+              "jszip/lib/object.js:2:12",
+              "jszip/lib/index.js:41:19",
+              "pptxgenjs/dist/pptxgen.cjs.js:4:13"
+            ],
+            "buffer": [
+              "safe-buffer/index.js:2:14",
+              "readable-stream/lib/_stream_readable.js:55:14",
+              "readable-stream/readable.js:12:30",
+              "jszip/lib/support.js:35:28",
+              "jszip/lib/utils.js:3:15",
+              "jszip/lib/utf8.js:3:13",
+              "jszip/lib/object.js:2:12",
+              "jszip/lib/index.js:41:19",
+              "pptxgenjs/dist/pptxgen.cjs.js:4:13"
+            ],
+            "util": [
+              "inherits/inherits.js:2:14",
+              "readable-stream/lib/_stream_readable.js:68:17",
+              "readable-stream/readable.js:12:30",
+              "jszip/lib/support.js:35:28",
+              "jszip/lib/utils.js:3:15",
+              "jszip/lib/utf8.js:3:13",
+              "jszip/lib/object.js:2:12",
+              "jszip/lib/index.js:41:19",
+              "pptxgenjs/dist/pptxgen.cjs.js:4:13"
+            ],
+            "fs (import())": [
+              "pptxgenjs/dist/pptxgen.cjs.js:4844:13",
+              "pptxgenjs/dist/pptxgen.cjs.js:29:71",
+              "pptxgenjs/dist/pptxgen.cjs.js:25:12",
+              "pptxgenjs/dist/pptxgen.cjs.js:4843:17",
+              "pptxgenjs/dist/pptxgen.cjs.js:4850:9",
+              "pptxgenjs/dist/pptxgen.cjs.js:7010:60",
+              "pptxgenjs/dist/pptxgen.cjs.js:7009:25",
+              "pptxgenjs/dist/pptxgen.cjs.js:29:71",
+              "pptxgenjs/dist/pptxgen.cjs.js:25:12",
+              "pptxgenjs/dist/pptxgen.cjs.js:7004:46",
+              "pptxgenjs/dist/pptxgen.cjs.js:7203:37",
+              "pptxgenjs/dist/pptxgen.cjs.js:29:71",
+              "pptxgenjs/dist/pptxgen.cjs.js:25:12",
+              "pptxgenjs/dist/pptxgen.cjs.js:7189:16"
+            ],
+            "https (import())": [
+              "pptxgenjs/dist/pptxgen.cjs.js:4845:13",
+              "pptxgenjs/dist/pptxgen.cjs.js:26:58"
+            ]
+          },
+          "globals": {
+            "Blob": [
+              "jszip/lib/support.js:17:28",
+              "jszip/lib/utils.js:3:15",
+              "jszip/lib/utf8.js:3:13",
+              "jszip/lib/object.js:2:12",
+              "jszip/lib/index.js:41:19",
+              "pptxgenjs/dist/pptxgen.cjs.js:4:13"
+            ],
+            "self (absent in Node too)": [
+              "setimmediate/setImmediate.js:1:1",
+              "jszip/lib/utils.js:7:1",
+              "jszip/lib/utf8.js:3:13",
+              "jszip/lib/object.js:2:12",
+              "jszip/lib/index.js:41:19",
+              "pptxgenjs/dist/pptxgen.cjs.js:4:13"
+            ],
+            "setImmediate": [
+              "setimmediate/setImmediate.js:4:16",
+              "setimmediate/setImmediate.js:186:2",
+              "jszip/lib/utils.js:7:1",
+              "jszip/lib/utf8.js:3:13",
+              "jszip/lib/object.js:2:12",
+              "jszip/lib/index.js:41:19",
+              "pptxgenjs/dist/pptxgen.cjs.js:4:13"
+            ]
+          },
+          "textDecoderLabels": []
         }
       },
       "guest": {
         "stdout": "wrote out/probe-pptx-handled.pptx\n",
         "stderr": "",
         "exitCode": 0,
-        "execMs": 981,
+        "execMs": 1048,
         "outBytes": 82017,
         "verdict": {
           "ok": true,
@@ -258,18 +785,92 @@
       "version": "4.0.1",
       "node": {
         "exitCode": 0,
-        "ms": 52,
+        "ms": 57,
         "verdict": {
           "ok": true,
           "parts": 32,
           "slides": 3
+        },
+        "trace": {
+          "modules": {
+            "fs": ["(generator)"],
+            "stream": [
+              "readable-stream/readable.js:1:14",
+              "jszip/lib/support.js:35:28",
+              "jszip/lib/utils.js:3:15",
+              "jszip/lib/utf8.js:3:13",
+              "jszip/lib/object.js:2:12",
+              "jszip/lib/index.js:41:19",
+              "pptxgenjs/dist/pptxgen.cjs.js:4:13"
+            ],
+            "events": [
+              "readable-stream/lib/_stream_readable.js:42:10",
+              "readable-stream/readable.js:12:30",
+              "jszip/lib/support.js:35:28",
+              "jszip/lib/utils.js:3:15",
+              "jszip/lib/utf8.js:3:13",
+              "jszip/lib/object.js:2:12",
+              "jszip/lib/index.js:41:19",
+              "pptxgenjs/dist/pptxgen.cjs.js:4:13"
+            ],
+            "buffer": [
+              "safe-buffer/index.js:2:14",
+              "readable-stream/lib/_stream_readable.js:55:14",
+              "readable-stream/readable.js:12:30",
+              "jszip/lib/support.js:35:28",
+              "jszip/lib/utils.js:3:15",
+              "jszip/lib/utf8.js:3:13",
+              "jszip/lib/object.js:2:12",
+              "jszip/lib/index.js:41:19",
+              "pptxgenjs/dist/pptxgen.cjs.js:4:13"
+            ],
+            "util": [
+              "inherits/inherits.js:2:14",
+              "readable-stream/lib/_stream_readable.js:68:17",
+              "readable-stream/readable.js:12:30",
+              "jszip/lib/support.js:35:28",
+              "jszip/lib/utils.js:3:15",
+              "jszip/lib/utf8.js:3:13",
+              "jszip/lib/object.js:2:12",
+              "jszip/lib/index.js:41:19",
+              "pptxgenjs/dist/pptxgen.cjs.js:4:13"
+            ]
+          },
+          "globals": {
+            "Blob": [
+              "jszip/lib/support.js:17:28",
+              "jszip/lib/utils.js:3:15",
+              "jszip/lib/utf8.js:3:13",
+              "jszip/lib/object.js:2:12",
+              "jszip/lib/index.js:41:19",
+              "pptxgenjs/dist/pptxgen.cjs.js:4:13"
+            ],
+            "self (absent in Node too)": [
+              "setimmediate/setImmediate.js:1:1",
+              "jszip/lib/utils.js:7:1",
+              "jszip/lib/utf8.js:3:13",
+              "jszip/lib/object.js:2:12",
+              "jszip/lib/index.js:41:19",
+              "pptxgenjs/dist/pptxgen.cjs.js:4:13"
+            ],
+            "setImmediate": [
+              "setimmediate/setImmediate.js:4:16",
+              "setimmediate/setImmediate.js:186:2",
+              "jszip/lib/utils.js:7:1",
+              "jszip/lib/utf8.js:3:13",
+              "jszip/lib/object.js:2:12",
+              "jszip/lib/index.js:41:19",
+              "pptxgenjs/dist/pptxgen.cjs.js:4:13"
+            ]
+          },
+          "textDecoderLabels": []
         }
       },
       "guest": {
         "stdout": "wrote out/probe-pptx-notnode.pptx\n",
         "stderr": "",
         "exitCode": 0,
-        "execMs": 1009,
+        "execMs": 983,
         "outBytes": 82017,
         "verdict": {
           "ok": true,
@@ -284,12 +885,129 @@
       }
     },
     {
+      "lib": "pptx-write",
+      "pkg": "pptxgenjs",
+      "version": "4.0.1",
+      "node": {
+        "exitCode": 0,
+        "ms": 59,
+        "verdict": {
+          "ok": true,
+          "parts": 32,
+          "slides": 3
+        },
+        "trace": {
+          "modules": {
+            "fs": ["(generator)"],
+            "stream": [
+              "readable-stream/readable.js:1:14",
+              "jszip/lib/support.js:35:28",
+              "jszip/lib/utils.js:3:15",
+              "jszip/lib/utf8.js:3:13",
+              "jszip/lib/object.js:2:12",
+              "jszip/lib/index.js:41:19",
+              "pptxgenjs/dist/pptxgen.cjs.js:4:13"
+            ],
+            "events": [
+              "readable-stream/lib/_stream_readable.js:42:10",
+              "readable-stream/readable.js:12:30",
+              "jszip/lib/support.js:35:28",
+              "jszip/lib/utils.js:3:15",
+              "jszip/lib/utf8.js:3:13",
+              "jszip/lib/object.js:2:12",
+              "jszip/lib/index.js:41:19",
+              "pptxgenjs/dist/pptxgen.cjs.js:4:13"
+            ],
+            "buffer": [
+              "safe-buffer/index.js:2:14",
+              "readable-stream/lib/_stream_readable.js:55:14",
+              "readable-stream/readable.js:12:30",
+              "jszip/lib/support.js:35:28",
+              "jszip/lib/utils.js:3:15",
+              "jszip/lib/utf8.js:3:13",
+              "jszip/lib/object.js:2:12",
+              "jszip/lib/index.js:41:19",
+              "pptxgenjs/dist/pptxgen.cjs.js:4:13"
+            ],
+            "util": [
+              "inherits/inherits.js:2:14",
+              "readable-stream/lib/_stream_readable.js:68:17",
+              "readable-stream/readable.js:12:30",
+              "jszip/lib/support.js:35:28",
+              "jszip/lib/utils.js:3:15",
+              "jszip/lib/utf8.js:3:13",
+              "jszip/lib/object.js:2:12",
+              "jszip/lib/index.js:41:19",
+              "pptxgenjs/dist/pptxgen.cjs.js:4:13"
+            ],
+            "fs (import())": [
+              "pptxgenjs/dist/pptxgen.cjs.js:4844:13",
+              "pptxgenjs/dist/pptxgen.cjs.js:29:71",
+              "pptxgenjs/dist/pptxgen.cjs.js:25:12",
+              "pptxgenjs/dist/pptxgen.cjs.js:4843:17",
+              "pptxgenjs/dist/pptxgen.cjs.js:4850:9",
+              "pptxgenjs/dist/pptxgen.cjs.js:7010:60",
+              "pptxgenjs/dist/pptxgen.cjs.js:7009:25",
+              "pptxgenjs/dist/pptxgen.cjs.js:29:71",
+              "pptxgenjs/dist/pptxgen.cjs.js:25:12",
+              "pptxgenjs/dist/pptxgen.cjs.js:7004:46",
+              "pptxgenjs/dist/pptxgen.cjs.js:7176:31",
+              "pptxgenjs/dist/pptxgen.cjs.js:29:71",
+              "pptxgenjs/dist/pptxgen.cjs.js:25:12",
+              "pptxgenjs/dist/pptxgen.cjs.js:7172:16"
+            ],
+            "https (import())": [
+              "pptxgenjs/dist/pptxgen.cjs.js:4845:13",
+              "pptxgenjs/dist/pptxgen.cjs.js:26:58"
+            ]
+          },
+          "globals": {
+            "Blob": [
+              "jszip/lib/support.js:17:28",
+              "jszip/lib/utils.js:3:15",
+              "jszip/lib/utf8.js:3:13",
+              "jszip/lib/object.js:2:12",
+              "jszip/lib/index.js:41:19",
+              "pptxgenjs/dist/pptxgen.cjs.js:4:13"
+            ],
+            "self (absent in Node too)": [
+              "setimmediate/setImmediate.js:1:1",
+              "jszip/lib/utils.js:7:1",
+              "jszip/lib/utf8.js:3:13",
+              "jszip/lib/object.js:2:12",
+              "jszip/lib/index.js:41:19",
+              "pptxgenjs/dist/pptxgen.cjs.js:4:13"
+            ],
+            "setImmediate": [
+              "setimmediate/setImmediate.js:4:16",
+              "setimmediate/setImmediate.js:186:2",
+              "jszip/lib/utils.js:7:1",
+              "jszip/lib/utf8.js:3:13",
+              "jszip/lib/object.js:2:12",
+              "jszip/lib/index.js:41:19",
+              "pptxgenjs/dist/pptxgen.cjs.js:4:13"
+            ]
+          },
+          "textDecoderLabels": []
+        }
+      },
+      "guest": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.https (no network in the rifty isolate host, ADR-0557)\n    at /workspace/node_modules/pptxgenjs/dist/pptxgen.cjs.js:4845:41\n    at Generator.next (<anonymous>)\n    at fulfilled (/workspace/node_modules/pptxgenjs/dist/pptxgen.cjs.js:26:58)\n\nNode.js v24.0.0\n",
+        "exitCode": 1,
+        "execMs": 842,
+        "verdict": {
+          "ok": false
+        }
+      }
+    },
+    {
       "lib": "xlsx",
       "pkg": "exceljs",
       "version": "4.4.0",
       "node": {
         "exitCode": 0,
-        "ms": 144,
+        "ms": 145,
         "verdict": {
           "ok": true,
           "parts": 14,
@@ -297,13 +1015,272 @@
           "B2": 120,
           "B4f": "SUM(B2:B3)",
           "B4": 215
+        },
+        "trace": {
+          "modules": {
+            "crypto": [
+              "exceljs/lib/utils/encryptor.js:3:16",
+              "exceljs/lib/doc/worksheet.js:11:19",
+              "exceljs/lib/doc/workbook.js:3:19",
+              "exceljs/lib/exceljs.nodejs.js:2:13",
+              "exceljs/excel.js:13:18"
+            ],
+            "fs": [
+              "exceljs/lib/xlsx/xlsx.js:1:12",
+              "exceljs/lib/doc/workbook.js:5:14",
+              "exceljs/lib/exceljs.nodejs.js:2:13",
+              "exceljs/excel.js:13:18"
+            ],
+            "stream": [
+              "readable-stream/readable.js:1:14",
+              "jszip/lib/support.js:35:28",
+              "jszip/lib/utils.js:3:15",
+              "jszip/lib/utf8.js:3:13",
+              "jszip/lib/object.js:2:12",
+              "jszip/lib/index.js:41:19",
+              "exceljs/lib/xlsx/xlsx.js:2:15",
+              "exceljs/lib/doc/workbook.js:5:14",
+              "exceljs/lib/exceljs.nodejs.js:2:13",
+              "exceljs/excel.js:13:18"
+            ],
+            "events": [
+              "readable-stream/lib/_stream_readable.js:42:10",
+              "readable-stream/readable.js:12:30",
+              "jszip/lib/support.js:35:28",
+              "jszip/lib/utils.js:3:15",
+              "jszip/lib/utf8.js:3:13",
+              "jszip/lib/object.js:2:12",
+              "jszip/lib/index.js:41:19",
+              "exceljs/lib/xlsx/xlsx.js:2:15",
+              "exceljs/lib/doc/workbook.js:5:14",
+              "exceljs/lib/exceljs.nodejs.js:2:13",
+              "exceljs/excel.js:13:18"
+            ],
+            "buffer": [
+              "safe-buffer/index.js:2:14",
+              "readable-stream/lib/_stream_readable.js:55:14",
+              "readable-stream/readable.js:12:30",
+              "jszip/lib/support.js:35:28",
+              "jszip/lib/utils.js:3:15",
+              "jszip/lib/utf8.js:3:13",
+              "jszip/lib/object.js:2:12",
+              "jszip/lib/index.js:41:19",
+              "exceljs/lib/xlsx/xlsx.js:2:15",
+              "exceljs/lib/doc/workbook.js:5:14",
+              "exceljs/lib/exceljs.nodejs.js:2:13",
+              "exceljs/excel.js:13:18"
+            ],
+            "util": [
+              "inherits/inherits.js:2:14",
+              "readable-stream/lib/_stream_readable.js:68:17",
+              "readable-stream/readable.js:12:30",
+              "jszip/lib/support.js:35:28",
+              "jszip/lib/utils.js:3:15",
+              "jszip/lib/utf8.js:3:13",
+              "jszip/lib/object.js:2:12",
+              "jszip/lib/index.js:41:19",
+              "exceljs/lib/xlsx/xlsx.js:2:15",
+              "exceljs/lib/doc/workbook.js:5:14",
+              "exceljs/lib/exceljs.nodejs.js:2:13",
+              "exceljs/excel.js:13:18"
+            ],
+            "string_decoder": [
+              "@fast-csv/parse/build/src/CsvParserStream.js:4:26",
+              "@fast-csv/parse/build/src/index.js:29:27",
+              "fast-csv/build/src/index.js:13:15",
+              "exceljs/lib/csv/csv.js:2:17",
+              "exceljs/lib/doc/workbook.js:6:13",
+              "exceljs/lib/exceljs.nodejs.js:2:13",
+              "exceljs/excel.js:13:18"
+            ],
+            "path": [
+              "readdir-glob/index.js:6:21",
+              "archiver/lib/core.js:9:12",
+              "archiver/index.js:8:16",
+              "exceljs/lib/stream/xlsx/workbook-writer.js:2:18",
+              "exceljs/lib/exceljs.nodejs.js:6:23",
+              "exceljs/excel.js:13:18"
+            ],
+            "constants": [
+              "graceful-fs/polyfills.js:1:17",
+              "graceful-fs/graceful-fs.js:2:17",
+              "archiver-utils/index.js:8:10",
+              "archiver/lib/core.js:12:12",
+              "archiver/index.js:8:16",
+              "exceljs/lib/stream/xlsx/workbook-writer.js:2:18",
+              "exceljs/lib/exceljs.nodejs.js:6:23",
+              "exceljs/excel.js:13:18"
+            ],
+            "assert": [
+              "glob/glob.js:49:14",
+              "archiver-utils/file.js:16:12",
+              "archiver-utils/index.js:19:14",
+              "archiver/lib/core.js:12:12",
+              "archiver/index.js:8:16",
+              "exceljs/lib/stream/xlsx/workbook-writer.js:2:18",
+              "exceljs/lib/exceljs.nodejs.js:6:23",
+              "exceljs/excel.js:13:18"
+            ],
+            "zlib": [
+              "crc32-stream/lib/deflate-crc32-stream.js:11:22",
+              "crc32-stream/lib/index.js:13:23",
+              "compress-commons/lib/archivers/zip/zip-archive-output-stream.js:10:21",
+              "compress-commons/lib/compress-commons.js:12:27",
+              "zip-stream/index.js:10:30",
+              "archiver/lib/plugins/zip.js:8:14",
+              "archiver/index.js:80:31",
+              "exceljs/lib/stream/xlsx/workbook-writer.js:2:18",
+              "exceljs/lib/exceljs.nodejs.js:6:23",
+              "exceljs/excel.js:13:18"
+            ],
+            "os": [
+              "tmp/lib/tmp.js:13:12",
+              "exceljs/lib/stream/xlsx/workbook-reader.js:6:13",
+              "exceljs/lib/exceljs.nodejs.js:7:23",
+              "exceljs/excel.js:13:18"
+            ]
+          },
+          "globals": {
+            "Blob": [
+              "jszip/lib/support.js:17:28",
+              "jszip/lib/utils.js:3:15",
+              "jszip/lib/utf8.js:3:13",
+              "jszip/lib/object.js:2:12",
+              "jszip/lib/index.js:41:19",
+              "exceljs/lib/xlsx/xlsx.js:2:15",
+              "exceljs/lib/doc/workbook.js:5:14",
+              "exceljs/lib/exceljs.nodejs.js:2:13",
+              "exceljs/excel.js:13:18"
+            ],
+            "self (absent in Node too)": [
+              "setimmediate/setImmediate.js:1:1",
+              "jszip/lib/utils.js:7:1",
+              "jszip/lib/utf8.js:3:13",
+              "jszip/lib/object.js:2:12",
+              "jszip/lib/index.js:41:19",
+              "exceljs/lib/xlsx/xlsx.js:2:15",
+              "exceljs/lib/doc/workbook.js:5:14",
+              "exceljs/lib/exceljs.nodejs.js:2:13",
+              "exceljs/excel.js:13:18"
+            ],
+            "setImmediate": [
+              "setimmediate/setImmediate.js:4:16",
+              "setimmediate/setImmediate.js:186:2",
+              "jszip/lib/utils.js:7:1",
+              "jszip/lib/utf8.js:3:13",
+              "jszip/lib/object.js:2:12",
+              "jszip/lib/index.js:41:19",
+              "exceljs/lib/xlsx/xlsx.js:2:15",
+              "exceljs/lib/doc/workbook.js:5:14",
+              "exceljs/lib/exceljs.nodejs.js:2:13",
+              "exceljs/excel.js:13:18"
+            ],
+            "TextEncoder": [
+              "exceljs/lib/utils/browser-buffer-encode.js:2:21",
+              "exceljs/lib/utils/zip-stream.js:5:26",
+              "exceljs/lib/xlsx/xlsx.js:4:19",
+              "exceljs/lib/doc/workbook.js:5:14",
+              "exceljs/lib/exceljs.nodejs.js:2:13",
+              "exceljs/excel.js:13:18"
+            ],
+            "TextDecoder": [
+              "exceljs/lib/utils/browser-buffer-decode.js:2:21",
+              "exceljs/lib/xlsx/xlsx.js:9:26",
+              "exceljs/lib/doc/workbook.js:5:14",
+              "exceljs/lib/exceljs.nodejs.js:2:13",
+              "exceljs/excel.js:13:18"
+            ],
+            "queueMicrotask": [
+              "async/dist/async.js:65:29",
+              "async/dist/async.js:2:68",
+              "async/dist/async.js:5:3",
+              "archiver/lib/core.js:10:13",
+              "archiver/index.js:8:16",
+              "exceljs/lib/stream/xlsx/workbook-writer.js:2:18",
+              "exceljs/lib/exceljs.nodejs.js:6:23",
+              "exceljs/excel.js:13:18"
+            ],
+            "document (absent in Node too)": [
+              "is-callable/index.js:57:1",
+              "for-each/index.js:3:18",
+              "which-typed-array/index.js:3:15",
+              "traverse/index.js:1:23",
+              "chainsaw/index.js:1:16",
+              "binary/index.js:1:16",
+              "unzipper/lib/parse.js:4:14",
+              "unzipper/unzip.js:8:17",
+              "exceljs/lib/stream/xlsx/workbook-reader.js:5:15",
+              "exceljs/lib/exceljs.nodejs.js:7:23",
+              "exceljs/excel.js:13:18"
+            ],
+            "FinalizationRegistry": [
+              "get-intrinsic/index.js:96:28",
+              "set-function-length/index.js:3:20",
+              "call-bind/index.js:3:25",
+              "which-typed-array/index.js:5:16",
+              "traverse/index.js:1:23",
+              "chainsaw/index.js:1:16",
+              "binary/index.js:1:16",
+              "unzipper/lib/parse.js:4:14",
+              "unzipper/unzip.js:8:17",
+              "exceljs/lib/stream/xlsx/workbook-reader.js:5:15",
+              "exceljs/lib/exceljs.nodejs.js:7:23",
+              "exceljs/excel.js:13:18"
+            ],
+            "WeakRef": [
+              "get-intrinsic/index.js:136:15",
+              "set-function-length/index.js:3:20",
+              "call-bind/index.js:3:25",
+              "which-typed-array/index.js:5:16",
+              "traverse/index.js:1:23",
+              "chainsaw/index.js:1:16",
+              "binary/index.js:1:16",
+              "unzipper/lib/parse.js:4:14",
+              "unzipper/unzip.js:8:17",
+              "exceljs/lib/stream/xlsx/workbook-reader.js:5:15",
+              "exceljs/lib/exceljs.nodejs.js:7:23",
+              "exceljs/excel.js:13:18"
+            ],
+            "navigator": [
+              "bluebird/js/release/util.js:3:19",
+              "bluebird/js/release/promise.js:14:12",
+              "bluebird/js/release/bluebird.js:9:36",
+              "unzipper/lib/parse.js:5:15",
+              "unzipper/unzip.js:8:17",
+              "exceljs/lib/stream/xlsx/workbook-reader.js:5:15",
+              "exceljs/lib/exceljs.nodejs.js:7:23",
+              "exceljs/excel.js:13:18"
+            ],
+            "window (absent in Node too)": [
+              "bluebird/js/release/util.js:7:50",
+              "bluebird/js/release/promise.js:14:12",
+              "bluebird/js/release/bluebird.js:9:36",
+              "unzipper/lib/parse.js:5:15",
+              "unzipper/unzip.js:8:17",
+              "exceljs/lib/stream/xlsx/workbook-reader.js:5:15",
+              "exceljs/lib/exceljs.nodejs.js:7:23",
+              "exceljs/excel.js:13:18"
+            ],
+            "CustomEvent": [
+              "bluebird/js/release/debuggability.js:146:9",
+              "bluebird/js/release/debuggability.js:181:3",
+              "bluebird/js/release/promise.js:52:39",
+              "bluebird/js/release/bluebird.js:9:36",
+              "unzipper/lib/parse.js:5:15",
+              "unzipper/unzip.js:8:17",
+              "exceljs/lib/stream/xlsx/workbook-reader.js:5:15",
+              "exceljs/lib/exceljs.nodejs.js:7:23",
+              "exceljs/excel.js:13:18"
+            ]
+          },
+          "textDecoderLabels": ["utf-8"]
         }
       },
       "guest": {
         "stdout": "",
         "stderr": "NotImplementedError: Not implemented: isolate-host.zlib (needs web CompressionStream, absent in the rifty isolate host, ADR-0557)\n    at Object.<anonymous> (/workspace/node_modules/crc32-stream/lib/deflate-crc32-stream.js:11:22) {\n  feature: 'isolate-host.zlib'\n}\n\nNode.js v24.0.0\n",
         "exitCode": 1,
-        "execMs": 995,
+        "execMs": 1011,
         "verdict": {
           "ok": false
         }
@@ -315,7 +1292,7 @@
       "version": "4.4.0",
       "node": {
         "exitCode": 0,
-        "ms": 62,
+        "ms": 66,
         "verdict": {
           "ok": true,
           "parts": 14,
@@ -323,13 +1300,245 @@
           "B2": 120,
           "B4f": "SUM(B2:B3)",
           "B4": 215
+        },
+        "trace": {
+          "modules": {
+            "fs": ["(generator)"],
+            "stream": [
+              "exceljs/dist/exceljs.min.js:3:403",
+              "exceljs/dist/exceljs.min.js:3:578",
+              "exceljs/dist/exceljs.min.js:22:275",
+              "exceljs/dist/exceljs.min.js:22:450",
+              "exceljs/dist/exceljs.min.js:22:17497",
+              "exceljs/dist/exceljs.min.js:22:415",
+              "exceljs/dist/exceljs.min.js:22:450",
+              "exceljs/dist/exceljs.min.js:22:28301",
+              "exceljs/dist/exceljs.min.js:22:415",
+              "exceljs/dist/exceljs.min.js:22:450",
+              "exceljs/dist/exceljs.min.js:22:30891",
+              "exceljs/dist/exceljs.min.js:22:415",
+              "exceljs/dist/exceljs.min.js:22:450",
+              "exceljs/dist/exceljs.min.js:22:28412",
+              "exceljs/dist/exceljs.min.js:22:415",
+              "exceljs/dist/exceljs.min.js:22:450",
+              "exceljs/dist/exceljs.min.js:22:14559",
+              "exceljs/dist/exceljs.min.js:22:415",
+              "exceljs/dist/exceljs.min.js:22:450",
+              "exceljs/dist/exceljs.min.js:22:10332"
+            ]
+          },
+          "globals": {
+            "document (absent in Node too)": [
+              "exceljs/dist/exceljs.min.js:10:30604",
+              "exceljs/dist/exceljs.min.js:3:543",
+              "exceljs/dist/exceljs.min.js:3:578",
+              "exceljs/dist/exceljs.min.js:10:42002",
+              "exceljs/dist/exceljs.min.js:3:543",
+              "exceljs/dist/exceljs.min.js:3:578",
+              "exceljs/dist/exceljs.min.js:10:43561",
+              "exceljs/dist/exceljs.min.js:3:543",
+              "exceljs/dist/exceljs.min.js:3:578",
+              "exceljs/dist/exceljs.min.js:10:72208",
+              "exceljs/dist/exceljs.min.js:3:543",
+              "exceljs/dist/exceljs.min.js:3:578",
+              "exceljs/dist/exceljs.min.js:10:72876",
+              "exceljs/dist/exceljs.min.js:3:543",
+              "exceljs/dist/exceljs.min.js:3:578",
+              "exceljs/dist/exceljs.min.js:10:57708",
+              "exceljs/dist/exceljs.min.js:3:543",
+              "exceljs/dist/exceljs.min.js:3:578",
+              "exceljs/dist/exceljs.min.js:10:32739",
+              "exceljs/dist/exceljs.min.js:3:543"
+            ],
+            "navigator": [
+              "exceljs/dist/exceljs.min.js:10:32048",
+              "exceljs/dist/exceljs.min.js:3:543",
+              "exceljs/dist/exceljs.min.js:3:578",
+              "exceljs/dist/exceljs.min.js:10:32197",
+              "exceljs/dist/exceljs.min.js:3:543",
+              "exceljs/dist/exceljs.min.js:3:578",
+              "exceljs/dist/exceljs.min.js:10:68346",
+              "exceljs/dist/exceljs.min.js:3:543",
+              "exceljs/dist/exceljs.min.js:3:578",
+              "exceljs/dist/exceljs.min.js:10:73858",
+              "exceljs/dist/exceljs.min.js:3:543",
+              "exceljs/dist/exceljs.min.js:3:578",
+              "exceljs/dist/exceljs.min.js:10:44363",
+              "exceljs/dist/exceljs.min.js:3:543",
+              "exceljs/dist/exceljs.min.js:3:578",
+              "exceljs/dist/exceljs.min.js:10:72238",
+              "exceljs/dist/exceljs.min.js:3:543",
+              "exceljs/dist/exceljs.min.js:3:578",
+              "exceljs/dist/exceljs.min.js:10:72876",
+              "exceljs/dist/exceljs.min.js:3:543"
+            ],
+            "setImmediate": [
+              "exceljs/dist/exceljs.min.js:10:69810",
+              "exceljs/dist/exceljs.min.js:3:543",
+              "exceljs/dist/exceljs.min.js:3:578",
+              "exceljs/dist/exceljs.min.js:10:83514",
+              "exceljs/dist/exceljs.min.js:3:543",
+              "exceljs/dist/exceljs.min.js:3:578",
+              "exceljs/dist/exceljs.min.js:10:88276",
+              "exceljs/dist/exceljs.min.js:3:543",
+              "exceljs/dist/exceljs.min.js:3:578",
+              "exceljs/dist/exceljs.min.js:3:55424",
+              "exceljs/dist/exceljs.min.js:3:543",
+              "exceljs/dist/exceljs.min.js:3:703",
+              "exceljs/dist/exceljs.min.js:3:720",
+              "exceljs/dist/exceljs.min.js:3:85",
+              "exceljs/dist/exceljs.min.js:3:271"
+            ],
+            "MessageChannel": [
+              "exceljs/dist/exceljs.min.js:10:69884",
+              "exceljs/dist/exceljs.min.js:3:543",
+              "exceljs/dist/exceljs.min.js:3:578",
+              "exceljs/dist/exceljs.min.js:10:83514",
+              "exceljs/dist/exceljs.min.js:3:543",
+              "exceljs/dist/exceljs.min.js:3:578",
+              "exceljs/dist/exceljs.min.js:10:88276",
+              "exceljs/dist/exceljs.min.js:3:543",
+              "exceljs/dist/exceljs.min.js:3:578",
+              "exceljs/dist/exceljs.min.js:3:55424",
+              "exceljs/dist/exceljs.min.js:3:543",
+              "exceljs/dist/exceljs.min.js:3:703",
+              "exceljs/dist/exceljs.min.js:3:720",
+              "exceljs/dist/exceljs.min.js:3:85",
+              "exceljs/dist/exceljs.min.js:3:271"
+            ],
+            "window (absent in Node too)": [
+              "exceljs/dist/exceljs.min.js:10:58461",
+              "exceljs/dist/exceljs.min.js:3:543",
+              "exceljs/dist/exceljs.min.js:3:578",
+              "exceljs/dist/exceljs.min.js:10:92586",
+              "exceljs/dist/exceljs.min.js:3:543",
+              "exceljs/dist/exceljs.min.js:3:578",
+              "exceljs/dist/exceljs.min.js:10:97915",
+              "exceljs/dist/exceljs.min.js:3:543",
+              "exceljs/dist/exceljs.min.js:3:578",
+              "exceljs/dist/exceljs.min.js:3:55608",
+              "exceljs/dist/exceljs.min.js:3:543",
+              "exceljs/dist/exceljs.min.js:3:703",
+              "exceljs/dist/exceljs.min.js:3:720",
+              "exceljs/dist/exceljs.min.js:3:85",
+              "exceljs/dist/exceljs.min.js:3:271"
+            ],
+            "crypto": [
+              "exceljs/dist/exceljs.min.js:22:148514",
+              "exceljs/dist/exceljs.min.js:22:149011",
+              "exceljs/dist/exceljs.min.js:22:149024",
+              "exceljs/dist/exceljs.min.js:3:543",
+              "exceljs/dist/exceljs.min.js:3:578",
+              "exceljs/dist/exceljs.min.js:10:104050",
+              "exceljs/dist/exceljs.min.js:3:543",
+              "exceljs/dist/exceljs.min.js:3:578",
+              "exceljs/dist/exceljs.min.js:3:62894",
+              "exceljs/dist/exceljs.min.js:3:63423",
+              "exceljs/dist/exceljs.min.js:3:63436",
+              "exceljs/dist/exceljs.min.js:3:543",
+              "exceljs/dist/exceljs.min.js:3:578",
+              "exceljs/dist/exceljs.min.js:3:42991",
+              "exceljs/dist/exceljs.min.js:3:543",
+              "exceljs/dist/exceljs.min.js:3:578",
+              "exceljs/dist/exceljs.min.js:3:39380",
+              "exceljs/dist/exceljs.min.js:3:543",
+              "exceljs/dist/exceljs.min.js:3:578",
+              "exceljs/dist/exceljs.min.js:3:56015"
+            ],
+            "self (absent in Node too)": [
+              "exceljs/dist/exceljs.min.js:3:386148",
+              "exceljs/dist/exceljs.min.js:3:543",
+              "exceljs/dist/exceljs.min.js:3:578",
+              "exceljs/dist/exceljs.min.js:22:128178",
+              "exceljs/dist/exceljs.min.js:3:543",
+              "exceljs/dist/exceljs.min.js:3:578",
+              "exceljs/dist/exceljs.min.js:10:131067",
+              "exceljs/dist/exceljs.min.js:3:543",
+              "exceljs/dist/exceljs.min.js:3:578",
+              "exceljs/dist/exceljs.min.js:10:128112",
+              "exceljs/dist/exceljs.min.js:10:128640",
+              "exceljs/dist/exceljs.min.js:10:128653",
+              "exceljs/dist/exceljs.min.js:3:543",
+              "exceljs/dist/exceljs.min.js:3:578",
+              "exceljs/dist/exceljs.min.js:10:104671",
+              "exceljs/dist/exceljs.min.js:3:543",
+              "exceljs/dist/exceljs.min.js:3:578",
+              "exceljs/dist/exceljs.min.js:3:62894",
+              "exceljs/dist/exceljs.min.js:3:63423",
+              "exceljs/dist/exceljs.min.js:3:63436"
+            ],
+            "Blob": [
+              "exceljs/dist/exceljs.min.js:22:28058",
+              "exceljs/dist/exceljs.min.js:22:415",
+              "exceljs/dist/exceljs.min.js:22:450",
+              "exceljs/dist/exceljs.min.js:22:30891",
+              "exceljs/dist/exceljs.min.js:22:415",
+              "exceljs/dist/exceljs.min.js:22:450",
+              "exceljs/dist/exceljs.min.js:22:28412",
+              "exceljs/dist/exceljs.min.js:22:415",
+              "exceljs/dist/exceljs.min.js:22:450",
+              "exceljs/dist/exceljs.min.js:22:14559",
+              "exceljs/dist/exceljs.min.js:22:415",
+              "exceljs/dist/exceljs.min.js:22:450",
+              "exceljs/dist/exceljs.min.js:22:10332",
+              "exceljs/dist/exceljs.min.js:22:415",
+              "exceljs/dist/exceljs.min.js:22:563",
+              "exceljs/dist/exceljs.min.js:22:580",
+              "exceljs/dist/exceljs.min.js:22:57",
+              "exceljs/dist/exceljs.min.js:22:155",
+              "exceljs/dist/exceljs.min.js:22:96112",
+              "exceljs/dist/exceljs.min.js:22:96125"
+            ],
+            "TextEncoder": [
+              "exceljs/dist/exceljs.min.js:3:56967",
+              "exceljs/dist/exceljs.min.js:3:543",
+              "exceljs/dist/exceljs.min.js:3:578",
+              "exceljs/dist/exceljs.min.js:3:75205",
+              "exceljs/dist/exceljs.min.js:3:76029",
+              "exceljs/dist/exceljs.min.js:3:76042",
+              "exceljs/dist/exceljs.min.js:3:543",
+              "exceljs/dist/exceljs.min.js:3:578",
+              "exceljs/dist/exceljs.min.js:3:224254",
+              "exceljs/dist/exceljs.min.js:3:234665",
+              "exceljs/dist/exceljs.min.js:3:234678",
+              "exceljs/dist/exceljs.min.js:3:543",
+              "exceljs/dist/exceljs.min.js:3:578",
+              "exceljs/dist/exceljs.min.js:3:39422",
+              "exceljs/dist/exceljs.min.js:3:543",
+              "exceljs/dist/exceljs.min.js:3:578",
+              "exceljs/dist/exceljs.min.js:3:56015",
+              "exceljs/dist/exceljs.min.js:3:543",
+              "exceljs/dist/exceljs.min.js:3:703",
+              "exceljs/dist/exceljs.min.js:3:720"
+            ],
+            "TextDecoder": [
+              "exceljs/dist/exceljs.min.js:3:56775",
+              "exceljs/dist/exceljs.min.js:3:543",
+              "exceljs/dist/exceljs.min.js:3:578",
+              "exceljs/dist/exceljs.min.js:3:224374",
+              "exceljs/dist/exceljs.min.js:3:234665",
+              "exceljs/dist/exceljs.min.js:3:234678",
+              "exceljs/dist/exceljs.min.js:3:543",
+              "exceljs/dist/exceljs.min.js:3:578",
+              "exceljs/dist/exceljs.min.js:3:39422",
+              "exceljs/dist/exceljs.min.js:3:543",
+              "exceljs/dist/exceljs.min.js:3:578",
+              "exceljs/dist/exceljs.min.js:3:56015",
+              "exceljs/dist/exceljs.min.js:3:543",
+              "exceljs/dist/exceljs.min.js:3:703",
+              "exceljs/dist/exceljs.min.js:3:720",
+              "exceljs/dist/exceljs.min.js:3:85",
+              "exceljs/dist/exceljs.min.js:3:271"
+            ]
+          },
+          "textDecoderLabels": ["utf-8"]
         }
       },
       "guest": {
         "stdout": "",
         "stderr": "NotImplementedError: Not implemented: isolate-host.navigator.userAgent (not available in the rifty isolate host, ADR-0557)\n    at 256 (/workspace/node_modules/exceljs/dist/exceljs.min.js:10:32106)\n    at i (/workspace/node_modules/exceljs/dist/exceljs.min.js:3:543)\n    at /workspace/node_modules/exceljs/dist/exceljs.min.js:3:578\n    at 257.../internals/engine-user-agent (/workspace/node_modules/exceljs/dist/exceljs.min.js:10:32197)\n    at i (/workspace/node_modules/exceljs/dist/exceljs.min.js:3:543)\n    at /workspace/node_modules/exceljs/dist/exceljs.min.js:3:578\n    at 336.../internals/engine-v8-version (/workspace/node_modules/exceljs/dist/exceljs.min.js:10:68346)\n    at i (/workspace/node_modules/exceljs/dist/exceljs.min.js:3:543) {\n  feature: 'isolate-host.navigator.userAgent'\n}\n\nNode.js v24.0.0\n",
         "exitCode": 1,
-        "execMs": 1195,
+        "execMs": 1201,
         "verdict": {
           "ok": false
         }
@@ -341,7 +1550,7 @@
       "version": "4.4.0",
       "node": {
         "exitCode": 0,
-        "ms": 78,
+        "ms": 84,
         "verdict": {
           "ok": true,
           "parts": 14,
@@ -349,13 +1558,258 @@
           "B2": 120,
           "B4f": "SUM(B2:B3)",
           "B4": 215
+        },
+        "trace": {
+          "modules": {
+            "fs": ["(generator)"],
+            "crypto": [
+              "exceljs/lib/utils/encryptor.js:3:16",
+              "exceljs/lib/doc/worksheet.js:11:19",
+              "exceljs/lib/doc/workbook.js:3:19"
+            ],
+            "stream": [
+              "readable-stream/readable.js:1:14",
+              "jszip/lib/support.js:35:28",
+              "jszip/lib/utils.js:3:15",
+              "jszip/lib/utf8.js:3:13",
+              "jszip/lib/object.js:2:12",
+              "jszip/lib/index.js:41:19",
+              "exceljs/lib/xlsx/xlsx.js:2:15",
+              "exceljs/lib/doc/workbook.js:5:14"
+            ],
+            "events": [
+              "readable-stream/lib/_stream_readable.js:42:10",
+              "readable-stream/readable.js:12:30",
+              "jszip/lib/support.js:35:28",
+              "jszip/lib/utils.js:3:15",
+              "jszip/lib/utf8.js:3:13",
+              "jszip/lib/object.js:2:12",
+              "jszip/lib/index.js:41:19",
+              "exceljs/lib/xlsx/xlsx.js:2:15",
+              "exceljs/lib/doc/workbook.js:5:14"
+            ],
+            "buffer": [
+              "safe-buffer/index.js:2:14",
+              "readable-stream/lib/_stream_readable.js:55:14",
+              "readable-stream/readable.js:12:30",
+              "jszip/lib/support.js:35:28",
+              "jszip/lib/utils.js:3:15",
+              "jszip/lib/utf8.js:3:13",
+              "jszip/lib/object.js:2:12",
+              "jszip/lib/index.js:41:19",
+              "exceljs/lib/xlsx/xlsx.js:2:15",
+              "exceljs/lib/doc/workbook.js:5:14"
+            ],
+            "util": [
+              "inherits/inherits.js:2:14",
+              "readable-stream/lib/_stream_readable.js:68:17",
+              "readable-stream/readable.js:12:30",
+              "jszip/lib/support.js:35:28",
+              "jszip/lib/utils.js:3:15",
+              "jszip/lib/utf8.js:3:13",
+              "jszip/lib/object.js:2:12",
+              "jszip/lib/index.js:41:19",
+              "exceljs/lib/xlsx/xlsx.js:2:15",
+              "exceljs/lib/doc/workbook.js:5:14"
+            ],
+            "string_decoder": [
+              "@fast-csv/parse/build/src/CsvParserStream.js:4:26",
+              "@fast-csv/parse/build/src/index.js:29:27",
+              "fast-csv/build/src/index.js:13:15",
+              "exceljs/lib/csv/csv.js:2:17",
+              "exceljs/lib/doc/workbook.js:6:13"
+            ]
+          },
+          "globals": {
+            "Blob": [
+              "jszip/lib/support.js:17:28",
+              "jszip/lib/utils.js:3:15",
+              "jszip/lib/utf8.js:3:13",
+              "jszip/lib/object.js:2:12",
+              "jszip/lib/index.js:41:19",
+              "exceljs/lib/xlsx/xlsx.js:2:15",
+              "exceljs/lib/doc/workbook.js:5:14"
+            ],
+            "self (absent in Node too)": [
+              "setimmediate/setImmediate.js:1:1",
+              "jszip/lib/utils.js:7:1",
+              "jszip/lib/utf8.js:3:13",
+              "jszip/lib/object.js:2:12",
+              "jszip/lib/index.js:41:19",
+              "exceljs/lib/xlsx/xlsx.js:2:15",
+              "exceljs/lib/doc/workbook.js:5:14"
+            ],
+            "setImmediate": [
+              "setimmediate/setImmediate.js:4:16",
+              "setimmediate/setImmediate.js:186:2",
+              "jszip/lib/utils.js:7:1",
+              "jszip/lib/utf8.js:3:13",
+              "jszip/lib/object.js:2:12",
+              "jszip/lib/index.js:41:19",
+              "exceljs/lib/xlsx/xlsx.js:2:15",
+              "exceljs/lib/doc/workbook.js:5:14"
+            ],
+            "TextEncoder": [
+              "exceljs/lib/utils/browser-buffer-encode.js:2:21",
+              "exceljs/lib/utils/zip-stream.js:5:26",
+              "exceljs/lib/xlsx/xlsx.js:4:19",
+              "exceljs/lib/doc/workbook.js:5:14"
+            ],
+            "TextDecoder": [
+              "exceljs/lib/utils/browser-buffer-decode.js:2:21",
+              "exceljs/lib/xlsx/xlsx.js:9:26",
+              "exceljs/lib/doc/workbook.js:5:14"
+            ]
+          },
+          "textDecoderLabels": ["utf-8"]
         }
       },
       "guest": {
         "stdout": "wrote out/probe-xlsx-workbook.xlsx\n",
         "stderr": "",
         "exitCode": 0,
-        "execMs": 975,
+        "execMs": 983,
+        "outBytes": 8558,
+        "verdict": {
+          "ok": true,
+          "parts": 14,
+          "A1": "Region",
+          "B2": 120,
+          "B4f": "SUM(B2:B3)",
+          "B4": 215,
+          "vsNode": {
+            "ok": true,
+            "equal": true,
+            "parts": []
+          }
+        }
+      }
+    },
+    {
+      "lib": "xlsx-workbook-file",
+      "pkg": "exceljs",
+      "version": "4.4.0",
+      "node": {
+        "exitCode": 0,
+        "ms": 83,
+        "verdict": {
+          "ok": true,
+          "parts": 14,
+          "A1": "Region",
+          "B2": 120,
+          "B4f": "SUM(B2:B3)",
+          "B4": 215
+        },
+        "trace": {
+          "modules": {
+            "crypto": [
+              "exceljs/lib/utils/encryptor.js:3:16",
+              "exceljs/lib/doc/worksheet.js:11:19",
+              "exceljs/lib/doc/workbook.js:3:19"
+            ],
+            "fs": ["exceljs/lib/xlsx/xlsx.js:1:12", "exceljs/lib/doc/workbook.js:5:14"],
+            "stream": [
+              "readable-stream/readable.js:1:14",
+              "jszip/lib/support.js:35:28",
+              "jszip/lib/utils.js:3:15",
+              "jszip/lib/utf8.js:3:13",
+              "jszip/lib/object.js:2:12",
+              "jszip/lib/index.js:41:19",
+              "exceljs/lib/xlsx/xlsx.js:2:15",
+              "exceljs/lib/doc/workbook.js:5:14"
+            ],
+            "events": [
+              "readable-stream/lib/_stream_readable.js:42:10",
+              "readable-stream/readable.js:12:30",
+              "jszip/lib/support.js:35:28",
+              "jszip/lib/utils.js:3:15",
+              "jszip/lib/utf8.js:3:13",
+              "jszip/lib/object.js:2:12",
+              "jszip/lib/index.js:41:19",
+              "exceljs/lib/xlsx/xlsx.js:2:15",
+              "exceljs/lib/doc/workbook.js:5:14"
+            ],
+            "buffer": [
+              "safe-buffer/index.js:2:14",
+              "readable-stream/lib/_stream_readable.js:55:14",
+              "readable-stream/readable.js:12:30",
+              "jszip/lib/support.js:35:28",
+              "jszip/lib/utils.js:3:15",
+              "jszip/lib/utf8.js:3:13",
+              "jszip/lib/object.js:2:12",
+              "jszip/lib/index.js:41:19",
+              "exceljs/lib/xlsx/xlsx.js:2:15",
+              "exceljs/lib/doc/workbook.js:5:14"
+            ],
+            "util": [
+              "inherits/inherits.js:2:14",
+              "readable-stream/lib/_stream_readable.js:68:17",
+              "readable-stream/readable.js:12:30",
+              "jszip/lib/support.js:35:28",
+              "jszip/lib/utils.js:3:15",
+              "jszip/lib/utf8.js:3:13",
+              "jszip/lib/object.js:2:12",
+              "jszip/lib/index.js:41:19",
+              "exceljs/lib/xlsx/xlsx.js:2:15",
+              "exceljs/lib/doc/workbook.js:5:14"
+            ],
+            "string_decoder": [
+              "@fast-csv/parse/build/src/CsvParserStream.js:4:26",
+              "@fast-csv/parse/build/src/index.js:29:27",
+              "fast-csv/build/src/index.js:13:15",
+              "exceljs/lib/csv/csv.js:2:17",
+              "exceljs/lib/doc/workbook.js:6:13"
+            ]
+          },
+          "globals": {
+            "Blob": [
+              "jszip/lib/support.js:17:28",
+              "jszip/lib/utils.js:3:15",
+              "jszip/lib/utf8.js:3:13",
+              "jszip/lib/object.js:2:12",
+              "jszip/lib/index.js:41:19",
+              "exceljs/lib/xlsx/xlsx.js:2:15",
+              "exceljs/lib/doc/workbook.js:5:14"
+            ],
+            "self (absent in Node too)": [
+              "setimmediate/setImmediate.js:1:1",
+              "jszip/lib/utils.js:7:1",
+              "jszip/lib/utf8.js:3:13",
+              "jszip/lib/object.js:2:12",
+              "jszip/lib/index.js:41:19",
+              "exceljs/lib/xlsx/xlsx.js:2:15",
+              "exceljs/lib/doc/workbook.js:5:14"
+            ],
+            "setImmediate": [
+              "setimmediate/setImmediate.js:4:16",
+              "setimmediate/setImmediate.js:186:2",
+              "jszip/lib/utils.js:7:1",
+              "jszip/lib/utf8.js:3:13",
+              "jszip/lib/object.js:2:12",
+              "jszip/lib/index.js:41:19",
+              "exceljs/lib/xlsx/xlsx.js:2:15",
+              "exceljs/lib/doc/workbook.js:5:14"
+            ],
+            "TextEncoder": [
+              "exceljs/lib/utils/browser-buffer-encode.js:2:21",
+              "exceljs/lib/utils/zip-stream.js:5:26",
+              "exceljs/lib/xlsx/xlsx.js:4:19",
+              "exceljs/lib/doc/workbook.js:5:14"
+            ],
+            "TextDecoder": [
+              "exceljs/lib/utils/browser-buffer-decode.js:2:21",
+              "exceljs/lib/xlsx/xlsx.js:9:26",
+              "exceljs/lib/doc/workbook.js:5:14"
+            ]
+          },
+          "textDecoderLabels": ["utf-8"]
+        }
+      },
+      "guest": {
+        "stdout": "wrote out/probe-xlsx-workbook-file.xlsx\n",
+        "stderr": "",
+        "exitCode": 0,
+        "execMs": 1068,
         "outBytes": 8558,
         "verdict": {
           "ok": true,
