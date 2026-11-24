@@ -134,6 +134,15 @@ export const CORPUS: readonly Row[] = [
     ceiling: 'import() ends the run (ADR-0557 §5)',
   },
   {
+    // Invariant only: the oracle's umask depends on its environment (runtime-js/process-umask-missing).
+    label: 'process-umask-invariant',
+    code: "const fs = require('fs'), m = process.umask(), perm = (p) => fs.statSync(p).mode & 0o777; fs.mkdirSync('u/r', { recursive: true }); fs.writeFileSync('u/f', 'x'); console.log(typeof m, perm('u/f') === (0o666 & ~m), perm('u') === (0o777 & ~m), perm('u/r') === (0o777 & ~m), process.umask(m) === m, process.umask(m.toString(8)) === m, process.umask() === m)",
+  },
+  {
+    label: 'process-umask-invalid-args',
+    code: "for (const a of [null, true, 10n, () => 0, 1.5, -1, 2 ** 32, '77777777777', '8', ' 22']) { try { process.umask(a); console.log('accepted') } catch (e) { console.log(e.name, e.code, e.message) } }",
+  },
+  {
     label: 'timer-delay-coercion',
     code: "for (const d of [1n, Symbol('s')]) { try { setTimeout(() => {}, d); console.log('ran') } catch (e) { console.log(e.name + ': ' + e.message) } } setTimeout(() => console.log('string delay'), '5')",
   },
