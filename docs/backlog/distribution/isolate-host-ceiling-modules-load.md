@@ -5,7 +5,7 @@ title: In the isolate guest node:zlib, node:child_process and node:worker_thread
 created: 2026-11-24
 why: Node always loads these modules; the guest throws at load, so a program that loads one and never compresses, spawns or starts a worker (`require('exceljs')`, through archiver and unzipper) works in Node and fails in the isolate.
 user_story: As an agent backend running document libraries in an isolate sandbox, I want exceljs's modules that load `node:zlib` to load as in Node, but today `crc32-stream/lib/deflate-crc32-stream.js:11` (`require('zlib')`) throws `NotImplementedError('isolate-host.zlib')` at load and the run exits 1, although exceljs writes xlsx through JSZip.
-sources: [ADR-0557, ADR-0568, ADR-0159, docs/backlog/distribution/isolate-host-egress-modules-load.md, docs/backlog/distribution/reference/isolate-library-probe/README.md, docs/backlog/runtime-js/zlib-web-compression-subset.md]
+sources: [ADR-0557, ADR-0568, ADR-0159, docs/backlog/distribution/reference/isolate-library-probe/README.md, docs/backlog/runtime-js/zlib-web-compression-subset.md]
 code: [packages/isolate-guest/src/guest/entry.ts, packages/runtime-js/src/builtins/zlib-constants.ts]
 ---
 
@@ -16,7 +16,7 @@ code: [packages/isolate-guest/src/guest/entry.ts, packages/runtime-js/src/builti
 Probe 2026-11-24 (README row 1): exceljs 4.4.0 `excel.js:13` → `lib/exceljs.nodejs.js:6` →
 `stream/xlsx/workbook-writer.js:2` → archiver → zip-stream → compress-commons →
 `crc32-stream/lib/deflate-crc32-stream.js:11`, also `:7` → `workbook-reader.js:5` →
-`unzipper/lib/parse.js:2`. Second half of the class `isolate-host-egress-modules-load` closed for
+`unzipper/lib/parse.js:2`. Second half of the class PR #435 (`isolate-host-egress-modules-load`) closed for
 `http`/`https`/`net`: same mechanism (`egress-gaps.ts`), same rules.
 
 Manager decision 2026-11-24 (not the user's words, reversible): after this unit no Node builtin
