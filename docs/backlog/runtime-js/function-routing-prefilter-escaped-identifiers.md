@@ -19,7 +19,8 @@ the source text. An identifier written with escapes (`\u0046unction`,
 `\u0067lobal`) is the same binding to V8 and acorn but not to the regex: with
 no other unescaped token in the file, the guard does not run.
 
-Probe 2026-11-24 at `657c3e589` and at `c2be2193a` (same output),
+Probe 2026-11-24 at `657c3e589` and at `c2be2193a` (before that PR; same output
+except row 1, which rejected at load there),
 `createModuleLoader(MemoryFsSync)` (`pnpm exec tsx`), `/w/dep.mjs` =
 `export const value = 'vfs-dep'`, `f('Function', 'return 1')`:
 

@@ -148,6 +148,11 @@ Hand-maintained (the `pnpm compat:generate` data-driven sink isn't wired yet —
   `docs/backlog/runtime-js/function-constructor-exhaustive-metaprogramming-ceiling.md`;
   until then, new escapes found by parity/conformance must either be routed or
   promoted to a directed `NotImplementedError` before being claimed as supported.
+- ❌ A module whose only `Function`/`global`/`globalThis` tokens are spelled with
+  `\u` escapes (`\u0046unction`) skips the whole Function guard: its lexical
+  `Function` is not routed (`import()` reaches the host) and a called
+  `\u0067lobal[k]` hands out the host constructor. Tracked in
+  `docs/backlog/runtime-js/function-routing-prefilter-escaped-identifiers.md`.
 
 ### `node:vm` — engines + ES2023-vs-V8 divergences
 
