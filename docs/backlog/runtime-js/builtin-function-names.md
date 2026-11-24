@@ -18,6 +18,13 @@ name: `wrappedFn`, `bound _format`, `''`). The constructors the fatal report
 prints are unit `runtime-js/guest-builtin-names`; this is the rest. Browser
 hosts not swept. Fault class `sibling-drift` (source name vs public name).
 
+Stream prototype methods (PR #433 review, 2026-11-24, Node v24.16.0): Node's
+`Readable/Writable/Duplex/Transform/PassThrough.prototype` methods (`_read`, `_write`, `write`,
+`end`, `push`, `_transform`, …) are enumerable and anonymous (`name` `''`); rifty's are class
+methods — non-enumerable, named (`_write`, `write`). The values shared by identity
+(`Writable/Duplex.prototype._writev` `null`, `Duplex.prototype._write`, `Transform.prototype._final`
+`final`) match Node.
+
 Owner: runtime-js with isolate-guest (bundle). Trigger: a package or agent
 reading a builtin's `name` (feature detection, logging), or the
 `guest-builtin-names` unit's by-construction check landing.

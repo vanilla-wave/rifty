@@ -389,9 +389,10 @@ class WritableImplementation extends EventEmitter {
         if (state.ending && !state.finished && !state.errored) this.doFinal();
         return;
       }
-      const writev = this.resolveWritev();
+      // Node reads `_writev` only for a batch: a single write never touches it.
       const canBatch = state.writevBatch && state.buffered.length - state.bufferedIndex > 1;
-      if (writev && canBatch) {
+      const writev = canBatch ? this.resolveWritev() : undefined;
+      if (writev) {
         state.writevBatch = false;
         if (this.flushViaWritev(writev)) continue;
         return;
@@ -570,8 +571,14 @@ class WritableImplementation extends EventEmitter {
       }
     };
     const owner = this.hookOwner();
-    if (typeof owner._final === 'function') owner._final(finalize);
-    else finalize();
+    if (typeof owner._final !== 'function') finalize();
+    else {
+      try {
+        owner._final(finalize);
+      } catch (error) {
+        finalize(error as Error); // Node's callFinal: a sync throw destroys, never escapes end()
+      }
+    }
     inSyncFinal = false;
   }
 

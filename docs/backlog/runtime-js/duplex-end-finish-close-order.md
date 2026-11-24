@@ -1,16 +1,16 @@
 ---
 area: runtime-js
 status: draft
-title: A Transform emits 'finish' before 'end', a Duplex 'finish' before 'data', and neither emits 'close' after both sides end
+title: A Readable never emits 'close' after 'end'; a Transform emits 'finish' before 'end', a Duplex 'finish' before 'data'
 created: 2026-11-24
-why: Node's Duplex/Transform emit `'close'` once both sides are done (autoDestroy) and a Transform's `'end'` precedes `'finish'`; rifty emits `'finish'` before the pending `'data'` (and a Transform's `'end'`) and never `'close'`.
-sources: [docs/backlog/runtime-js/stream-subclass-hooks-ignored.md, docs/public/compat/streams.md]
+why: Node's autoDestroy emits `'close'` after a Readable's `'end'` (Duplex/Transform: after both sides) and a Transform's `'end'` precedes `'finish'`; rifty never emits `'close'` after `'end'` (a Writable's `'close'` after `'finish'` does fire), and a Duplex/Transform emits `'finish'` before the pending `'data'`.
+sources: ["PR #433 (stream hook dispatch)", docs/public/compat/streams.md]
 code: [packages/io/src/streams/duplex.ts, packages/io/src/streams/transform.ts]
 ---
 
 ## Context
 
-Found by `runtime-js/stream-subclass-hooks-ignored` (PR #433); its parity cases avoid this order.
+Found by PR #433 (stream hook dispatch); its parity cases avoid this order.
 Repro 2026-11-24, same program in Node v24.16.0 and the rifty parity runner at `c957fbe43`:
 
 ```js
@@ -28,7 +28,10 @@ const d = new Duplex({ read() { this.push('r'); this.push(null); }, write(c, e, 
 
 Node's Duplex also emits `'finish'` before `'end'`; the Duplex gap is `'finish'` before `'data'` and the missing `'close'`.
 
-Code: the Duplex forwards its inner writable's `'finish'` as soon as it fires; no autoDestroy joins
+The readable side is the general gap (PR #433 review, 2026-11-24): a plain Readable read to
+`'end'` plus a Writable ended → Node `W finish,R end,W close,R close`, rifty `W finish,W close,R end`.
+
+Code: `Readable` has no autoDestroy (no `'close'` after `'end'`); the Duplex forwards its inner writable's `'finish'` as soon as it fires; no autoDestroy joins
 the two sides into one `'close'`; Transform pushes on the writable side's schedule.
 
 Owner: runtime-js (`@riftydev/io` Duplex). Trigger: a package awaiting `'close'` on a Transform/Duplex

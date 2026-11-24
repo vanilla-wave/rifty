@@ -10,7 +10,7 @@ code: [packages/io/src/streams/readable.ts, packages/io/src/streams/writable.ts,
 
 ## Context
 
-Found by `runtime-js/stream-subclass-hooks-ignored` (PR #433), split out by the manager: that unit
+Found by PR #433 (stream hook dispatch), split out by the manager: that unit
 fixes dispatch of hooks rifty already has; these two need a new destroy/construct lifecycle.
 
 Matrix 2026-11-24 (`reference/stream-destroy-construct-hooks/matrix.cjs`: Readable, Writable, Duplex,

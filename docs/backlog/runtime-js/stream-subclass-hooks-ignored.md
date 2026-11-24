@@ -65,8 +65,9 @@ never runs).
 2. The probe's `gen/diag-repro.cjs` and `gen/diag-outputs.cjs` lines for the Transform/Duplex
    subclass hooks and exceljs `csv.writeBuffer` equal real Node in the isolate-host sandbox
    (`probe.mjs` run, output recorded in the PR) → scenario
-3. compat streams.md `Transform` row returns to ✅ only where the parity cases prove it (one
-   `@riftydev/io` for every host); `_destroy`/`_construct` get an honest ❌ row → scenario
+3. compat streams.md `Transform` row claims only what the parity cases prove (one `@riftydev/io`
+   for every host), naming each remaining divergence (⚠️); `_destroy`/`_construct` get an honest ❌
+   row → scenario
 
 ## Reference contract
 
@@ -90,6 +91,9 @@ never runs).
 4. `stream/stream-hook-missing`: no hook → `write()` throws `ERR_METHOD_NOT_IMPLEMENTED`
    (`_write()` for Writable/Duplex, `_transform()` for Transform), bare and subclassed; Readable
    emits `_read()` → scenario
+5. `stream/stream-hook-sync-throw`: a hook throwing synchronously — `_write`/`_writev`/`_transform`
+   escape `write()`/`uncork()`, stream not destroyed; `_final`/`_flush` (option and subclass)
+   destroy it: `'error'`, `'close'`, then the `end()` callback; `_read` destroys → scenario
 
 ## Out of scope
 
@@ -106,6 +110,9 @@ never runs).
 - Pending-write callback errors after `destroy()` (message/code) — unchanged here.
 
 ## Decisions
+
+- Review round 1: double hook callback (`ERR_MULTIPLE_CALLBACK`) is a finding, not fixed here (`runtime-js/stream-hook-multiple-callback`); `Transform` row ⚠️ names it.
+- Shared prototype values are enumerable like Node's; the rest of the method shape (class methods) is declared, not changed (`runtime-js/builtin-function-names`).
 
 - Node's dispatch model, not more override lookups: options → own `_x`; base prototypes carry Node's defaults.
 - Duplex keeps its embedded Writable; that side calls the Duplex's `_write`/`_writev`/`_final` with `this` = Duplex.

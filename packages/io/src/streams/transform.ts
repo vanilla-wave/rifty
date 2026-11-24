@@ -21,7 +21,7 @@ export interface TransformOptions extends DuplexOptions {
 }
 
 /** Node's `final`: flush, push EOF. Identity matters — see {@link prefinish}. */
-function transformFinal(this: Transform, cb?: (err?: Error | null) => void): void {
+function final(this: Transform, cb?: (err?: Error | null) => void): void {
   if (typeof this._flush !== 'function' || this.destroyed) {
     this.push(null);
     cb?.();
@@ -41,7 +41,7 @@ function transformFinal(this: Transform, cb?: (err?: Error | null) => void): voi
 
 /** A replaced `_final` still flushes once the writable side prefinishes (Node). */
 function prefinish(this: Transform): void {
-  if (this._final !== transformFinal) transformFinal.call(this);
+  if (this._final !== final) final.call(this);
 }
 
 function initializeTransform(receiver: Transform, opts: TransformOptions = {}): void {
@@ -92,5 +92,5 @@ export const Transform: TransformConstructor = /* @__PURE__ */ makeCallableStrea
     Duplex.call(receiver, options);
     initializeTransform(receiver, options);
   },
-  () => ({ _final: transformFinal }),
+  () => ({ _final: final }),
 );

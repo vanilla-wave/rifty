@@ -4,13 +4,13 @@ status: draft
 title: Duplex lacks Writable's cork/uncork/setDefaultEncoding and the per-side objectMode options
 created: 2026-11-24
 why: A Node Duplex/Transform inherits every Writable method and takes `readableObjectMode`/`writableObjectMode`; rifty's Duplex has no `cork`/`uncork`/`setDefaultEncoding`/`writableCorked` (TypeError) and ignores the per-side objectMode options (HWM and mode wrong, silently).
-sources: [docs/backlog/runtime-js/stream-subclass-hooks-ignored.md, docs/public/compat/streams.md]
+sources: ["PR #433 (stream hook dispatch)", docs/public/compat/streams.md]
 code: [packages/io/src/streams/duplex.ts, packages/io/src/streams/callable-constructor.ts]
 ---
 
 ## Context
 
-Found by `runtime-js/stream-subclass-hooks-ignored` (PR #433) while proving Duplex `_writev`.
+Found by PR #433 (stream hook dispatch) while proving Duplex `_writev`.
 Repro 2026-11-24, same program in Node v24.16.0 and the rifty parity runner at `c957fbe43`:
 
 ```js
@@ -27,7 +27,13 @@ new PassThrough({ readableObjectMode: true }).readableObjectMode;
 | Transform `writableObjectMode: true` | `writableObjectMode` true, `writableHighWaterMark` 16 | false, 65536 |
 | PassThrough `readableObjectMode: true` | true | false |
 
-`d.cork()` throws `TypeError: d.cork is not a function`. `writableNeedDrain` is
+`d.cork()` throws `TypeError: d.cork is not a function`.
+
+Coupling: fast-csv's `CsvFormatterStream` (exceljs `csv.writeBuffer`) writes row arrays into a
+Transform built with `writableObjectMode`; it works today only because the ignored option meets
+the byte-mode Writable admitting an array (`runtime-js/stream-byte-chunk-kinds`). Fix this
+option before, or with, that admission check — else CSV write and parity row
+`stream/stream-hook-transform` "fast-csv shape" break (review of PR #433, 2026-11-24). `writableNeedDrain` is
 `runtime-js/writable-sync-dispatch-state`.
 
 Owner: runtime-js (`@riftydev/io` Duplex). Trigger: a package corking a Duplex/socket-like stream, or

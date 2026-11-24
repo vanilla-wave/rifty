@@ -8,7 +8,7 @@ export const streamsMatrix = {
     [
       '`Readable` push/data/end',
       '⚠️',
-      'Late-bound `_read`, bounded refill, object identity, string/Buffer/plain-Uint8Array admission, byte no-ops, and coded EOF failure are parity-tested; other views and invalid byte values remain — backlog `runtime-js/stream-byte-chunk-kinds`',
+      'Late-bound `_read`, bounded refill, object identity, string/Buffer/plain-Uint8Array admission, byte no-ops, and coded EOF failure are parity-tested; other views and invalid byte values remain — backlog `runtime-js/stream-byte-chunk-kinds`; a non-function `read` option throws `TypeError` (Node: ignored, `ERR_METHOD_NOT_IMPLEMENTED`) — backlog `runtime-js/readable-read-option-non-function`',
     ],
     [
       '`Readable.read(n)`',
@@ -48,8 +48,13 @@ export const streamsMatrix = {
     ],
     [
       '`Transform`',
-      '✅',
-      'Transform `_transform`/`_flush`/`_final` and Duplex `_read`/`_write`/`_writev`/`_final` run as in Node however defined (option, own property, ES class, ES5 `util.inherits`, subclass chain, late prototype), `this` = the stream; a missing `_transform`/`_write` throws `ERR_METHOD_NOT_IMPLEMENTED` — parity `stream/stream-hook-*`',
+      '⚠️',
+      "Transform `_transform`/`_flush`/`_final` and Duplex `_read`/`_write`/`_writev`/`_final` run as in Node however defined (option, own property, ES class, ES5 `util.inherits`, subclass chain, late prototype), `this` = the stream; a missing `_transform`/`_write` throws `ERR_METHOD_NOT_IMPLEMENTED`; a sync throw from `_final`/`_flush` destroys the stream — parity `stream/stream-hook-*`. A hook calling back twice raises no `ERR_MULTIPLE_CALLBACK` (a second `_final`/`_flush` callback replays `'prefinish'`) — backlog `runtime-js/stream-hook-multiple-callback`",
+    ],
+    [
+      'Stream prototype method shape',
+      '⚠️',
+      "Node's stream prototype methods are enumerable and anonymous; rifty's are non-enumerable class methods named `_write`/`write`/… (the identity-shared `_writev` `null`, `Duplex.prototype._write`, `Transform.prototype._final` `final` match) — backlog `runtime-js/builtin-function-names`",
     ],
     [
       '`Transform` / `PassThrough` backpressure',

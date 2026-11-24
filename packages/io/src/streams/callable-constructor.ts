@@ -25,13 +25,13 @@ export function makeCallableStreamConstructor<
   name: string,
   implementation: Implementation,
   initializeReceiver: (receiver: Instance, options?: Options) => void,
-  /** Non-enumerable prototype values Node shares by identity (`Duplex.prototype._write`); a thunk, so an unused stream class still tree-shakes. */
+  /** Prototype values Node shares by identity (`Duplex.prototype._write`), enumerable like Node's; a thunk, so an unused stream class still tree-shakes. */
   prototypeValues: () => Readonly<Record<string, unknown>> = () => ({}),
 ): CallableStreamConstructor<Implementation, Instance, Options> {
   for (const [key, value] of Object.entries(prototypeValues())) {
     Object.defineProperty(implementation.prototype, key, {
       configurable: true,
-      enumerable: false,
+      enumerable: true,
       value,
       writable: true,
     });
