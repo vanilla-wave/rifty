@@ -17,6 +17,9 @@ branch: `fs.writeFileSync('f','x'); fs.mkdirSync('d')`, then
 "FS snapshot: … modes"), so the fixed values are rifty's; Node's come from
 0o666/0o777 under umask 022. Whether to report Node's default-umask result is
 the open question (`process.umask()` would have to agree).
+`process.umask()` reports `VFS_UMASK` (`fs-stats.ts`, 0 today), the same constant the default
+modes derive from: switching to 0o644/0o755 is one edit, `VFS_UMASK = 0o022`
+(`runtime-js/process-umask-missing`).
 
 ## Challenge
 
