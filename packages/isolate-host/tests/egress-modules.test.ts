@@ -72,8 +72,14 @@ describe('real members equal live node -e (Acceptance 2, parity cases 2–6)', (
     expect(got.map((l) => l.split(' -> ')[0])).toEqual(want.map((l) => l.split(' -> ')[0]));
     const strict = (lines: string[]) => lines.filter((l) => !declared(l));
     expect(strict(got)).toEqual(strict(want));
-    const differing = want.filter((l, i) => declared(l) && l !== got[i]);
-    expect(differing).toEqual(want.filter(declared));
+    // A declared row hides only its message text: `<label> -> throw <name> <code>` stays strict.
+    const head = (l: string) =>
+      l.split(' ').slice(0, (l.split(' -> ')[0] ?? '').split(' ').length + 4);
+    const rows = want.flatMap((l, i) => (declared(l) ? [[l, got[i] ?? ''] as const] : []));
+    expect(rows.map(([w]) => head(w)[head(w).length - 3])).toEqual(rows.map(() => 'throw'));
+    expect(rows.map(([, g]) => head(g).join(' '))).toEqual(rows.map(([w]) => head(w).join(' ')));
+    // …and must still differ there: a runtime fix turns this red.
+    expect(rows.filter(([w, g]) => w === g).map(([w]) => w)).toEqual([]);
     expect(result.exitCode).toBe(0);
   });
 });
