@@ -45,6 +45,13 @@ exits 0; the file contains `[FETCH-REDIRECT] Warning: redirect-proof`.
 what to externalize or shim sees a different set (found by unit
 `distribution/isolate-host-egress-modules-load`). `process.getBuiltinModule` is still absent there.
 
+2026-11-24 — `require` of the same names (PR #438 external review, reproduced: isolate `runCode`
+requiring each of Node v24.16.0's `builtinModules` plus `node:sea`/`sqlite`/`test`/`test/reporters`;
+Node loads all 76): the 19 unprefixed ones fail `MODULE_NOT_FOUND` `Cannot find module '<name>'`
+(no named gap: they look like a missing package), the four `node:`-only ones `MODULE_NOT_FOUND`
+`Built-in 'node:<name>' is not implemented`. The registry is shared, so every host by source (browser
+hosts not run). Declared in compat `isolate-host.md`.
+
 2026-11-17 — consumer evidence for `getBuiltinModule`: pdfjs-dist@6.5.438
 legacy and pdf-parse@2.4.5 (depends on `pdfjs-dist: 5.4.296`, `npm view
 pdf-parse@2.4.5 dependencies`) print on stderr

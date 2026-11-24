@@ -19,8 +19,8 @@ Probe 2026-11-24 (README row 1): exceljs 4.4.0 `excel.js:13` → `lib/exceljs.no
 `unzipper/lib/parse.js:2`. Second half of the class PR #435 (`isolate-host-egress-modules-load`) closed for
 `http`/`https`/`net`: same mechanism (`egress-gaps.ts`), same rules.
 
-Manager decision 2026-11-24 (not the user's words, reversible): after this unit no Node builtin
-throws at load in the isolate; shape as Node 24 (exports, member kinds, prototype chains;
+Manager decision 2026-11-24 (not the user's words, reversible): after this unit no builtin module rifty registers
+throws at load in the isolate (manager's wording "no Node builtin", narrowed after review: 19 Node names rifty does not register stay `MODULE_NOT_FOUND`, `runtime-js/process-module-loader-surface`); shape as Node 24 (exports, member kinds, prototype chains;
 `class X extends zlib.DeflateRaw` declares as in Node); a member that does not need the missing
 capability is real; one that does is a named gap `isolate-host.<module>.<member>` at call or
 construction; compression and decompression stay loud (no engine; engine choice is the user's,
@@ -33,13 +33,14 @@ Oracle: Node v24.16.0 (`node -e`), member classification by Node's export list a
 | module | real (Node behaviour, no engine/process/worker) | loud (`isolate-host.<module>.<member>`) |
 |---|---|---|
 | zlib | `constants` (null prototype, read-only keys, extensible), `codes` (frozen), the 107 legacy top-level constants (every non-`BROTLI_` key, read-only, not enumerable) | `crc32`; the 11 async one-shots (`asyncBufferWrapper`) and 11 `*Sync` (`syncBufferWrapper`); the 11 `create*` (`value`); construction or call of `Deflate`, `Inflate`, `Gzip`, `Gunzip`, `DeflateRaw`, `InflateRaw`, `Unzip`, `BrotliCompress`, `BrotliDecompress` (ES5), `ZstdCompress`, `ZstdDecompress` (`class`), and of Node's unexported bases `Zlib`, `ZlibBase`, `Brotli`, `Zstd` |
-| child_process | — (every member starts or adopts a process) | `_forkChild`, `exec`, `execFile` (and their `util.promisify.custom` forms), `execFileSync`, `execSync`, `fork`, `spawn`, `spawnSync`; construction or call of `ChildProcess` (Node's constructor creates a `Process` handle) |
+| child_process | — (every member starts or adopts a process) | `_forkChild`, `exec`, `execFile` (their `util.promisify.custom` forms return a promise rejecting with the gap, as Node's return a promise), `execFileSync`, `execSync`, `fork`, `spawn`, `spawnSync`; construction or call of `ChildProcess` (Node's constructor creates a `Process` handle) |
 | worker_threads | `isMainThread` `true`, `isInternalThread` `false`, `threadId` `0`, `threadName` `''`, `parentPort` `null`, `workerData` `null`, `resourceLimits` `{}`, `SHARE_ENV` (`Symbol.for('nodejs.worker_threads.SHARE_ENV')`), `setEnvironmentData`/`getEnvironmentData` (Node's `SafeMap`, `undefined` deletes); `receiveMessageOnPort`/`moveMessagePortToContext` (no port can exist here: every call is Node's `ERR_INVALID_ARG_TYPE` "The \"port\" argument must be a MessagePort instance"); `locks`'s `LockManager` constructor (Node's `TypeError: ERR_ILLEGAL_CONSTRUCTOR is not a constructor`); `MessagePort`/`MessageChannel`/`BroadcastChannel` are the guest's globals (`=== globalThis.X` as in Node; constructing them is their existing gap) | `Worker` (construction); `markAsUncloneable`, `markAsUntransferable`, `isMarkedAsUntransferable`; `postMessageToThread`, `locks.request`, `locks.query` (async: the gap is the rejection) |
 
 ## Challenge
 
 challenge: 2026-11-24 — 6 problems (fresh reviewer, final written-result check): record written before the check → this line; `receiveMessageOnPort`/`moveMessagePortToContext`/`LockManager` loud though Node's result is deliverable → real; `postMessageToThread` and `locks.request`/`query` loud by my own call → returned to the manager as forks (`## Decisions`); `require('exceljs')` past `node:zlib` untested and the user story over-promising → test added, story narrowed; "no host call" unproven → `egress.test.ts`/`guest-seam.test.ts` named; `ChildProcess` loud construction undeclared → declared.
 recheck: 2026-11-24 — 4 problems: ADR line stale on ports/`locks` → updated; the exceljs main-entry test too weak → exit 1 + another named gap asserted; the real port members lacked a kill condition → recorded; `ChildProcess` wording → cites the manager's clause.
+external review round 1: 2026-11-24 — 2 should, 6 nits: "no Node builtin throws at load" wider than the code → narrowed to modules rifty registers, the rest declared (`runtime-js/process-module-loader-surface`); `util.promisify(exec|execFile)` threw synchronously → rejects (RED first); callback forms, `import()` namespace order, the loud-by-decision `postMessageToThread`/`locks` → compat; exceljs main-entry test claims only zlib's absence; CHANGELOG duplicate/ports wording; a fourth `new global[...]` file.
 
 ## User scenario
 
