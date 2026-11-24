@@ -46,7 +46,11 @@ export const streamsMatrix = {
       '⚠️',
       'decodeStrings, covered byte admission, and scalar/batch completion order, HWM returns, drain, errors, and finish are parity-tested; other chunk kinds and `writableNeedDrain` remain — backlogs `runtime-js/stream-byte-chunk-kinds`, `runtime-js/writable-sync-dispatch-state`',
     ],
-    ['`Transform`', '✅', '`_transform` callback path'],
+    [
+      '`Transform`',
+      '⚠️',
+      "The `transform`/`flush` constructor options work; a subclass's own `_transform`/`_flush` never run — its chunks pass through unchanged — and a `Duplex` subclass's own `_write` never runs, its data dropped (measured 2026-11-24: fast-csv's `CsvFormatterStream`, so exceljs `csv.writeBuffer` throws) — backlog `runtime-js/stream-subclass-hooks-ignored`",
+    ],
     ['`PassThrough`', '✅', 'Forwards chunks unchanged'],
     [
       '`pipeline`',

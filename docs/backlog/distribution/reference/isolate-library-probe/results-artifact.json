@@ -1,0 +1,366 @@
+{
+  "base": {
+    "versions": {
+      "pptxgenjs": "4.0.1",
+      "pdf-lib": "1.17.1",
+      "docx": "9.15.3",
+      "exceljs": "4.4.0"
+    },
+    "files": 8006,
+    "bytes": 86610256,
+    "skippedLinks": 0,
+    "budget": 99364864,
+    "snapshotBytes": 88015088,
+    "snapshotGzipBytes": 19678053,
+    "snapshotMs": 72,
+    "maxFsBytes": 116391936,
+    "memoryLimitMb": 286
+  },
+  "measures": {
+    "createMs": 91,
+    "noopExecMedianMs": 628,
+    "emptySandboxNoopExecMedianMs": 15,
+    "rootNodeModules": "42"
+  },
+  "results": [
+    {
+      "lib": "diag",
+      "exitCode": 0,
+      "nodeExitCode": 0,
+      "differs": [
+        "require('zlib'): NotImplementedError: Not implemented: isolate-host.zlib (needs web CompressionStream, absent in the rifty isolate host, ADR-0557)",
+        "require('https'): NotImplementedError: Not implemented: isolate-host.https (no network in the rifty isolate host, ADR-0557)",
+        "require('http'): NotImplementedError: Not implemented: isolate-host.http (no network in the rifty isolate host, ADR-0557)",
+        "require('worker_threads'): NotImplementedError: Not implemented: isolate-host.worker_threads (no Workers in the rifty isolate host, ADR-0557)",
+        "require('child_process'): NotImplementedError: Not implemented: isolate-host.child_process (no child processes in the rifty isolate host, ADR-0557)",
+        "require('nanoid'): TypeError: URLConstructor is not a constructor",
+        "require('fstream'): TypeError: process.umask is not a function",
+        "require('unzipper'): NotImplementedError: Not implemented: isolate-host.zlib (needs web CompressionStream, absent in the rifty isolate host, ADR-0557)",
+        "require('archiver'): NotImplementedError: Not implemented: isolate-host.zlib (needs web CompressionStream, absent in the rifty isolate host, ADR-0557)",
+        "require('exceljs'): NotImplementedError: Not implemented: isolate-host.zlib (needs web CompressionStream, absent in the rifty isolate host, ADR-0557)",
+        "new Blob([]): NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)",
+        "navigator.userAgent: NotImplementedError: Not implemented: isolate-host.navigator.userAgent (not available in the rifty isolate host, ADR-0557)",
+        "new CustomEvent('x'): NotImplementedError: Not implemented: isolate-host.CustomEvent (not available in the rifty isolate host, ADR-0557)",
+        "import('node:https'): NotImplementedError: Not implemented: isolate-host.https (no network in the rifty isolate host, ADR-0557)"
+      ],
+      "nodeOnly": [
+        "require('zlib'): ok",
+        "require('https'): ok",
+        "require('http'): ok",
+        "require('worker_threads'): ok",
+        "require('child_process'): ok",
+        "require('nanoid'): ok",
+        "require('fstream'): ok",
+        "require('unzipper'): ok",
+        "require('archiver'): ok",
+        "require('exceljs'): ok",
+        "new Blob([]): 0",
+        "navigator.userAgent: string",
+        "new CustomEvent('x'): ok",
+        "import('node:https'): ok"
+      ],
+      "stderr": ""
+    },
+    {
+      "lib": "diag-outputs",
+      "exitCode": 0,
+      "nodeExitCode": 0,
+      "differs": [
+        "pptx.write(blob): Error: blob is not supported by this platform",
+        "pptx image by path + writeFile: NotImplementedError: Not implemented: isolate-host.https (no network in the rifty isolate host, ADR-0557)",
+        "docx Packer.toBlob: NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)",
+        "exceljs csv.writeBuffer: Error: Chunk must be one of type String, Buffer or StringBuf.",
+        "exceljs xlsx.readFile (read back): TypeError: stream.close is not a function"
+      ],
+      "nodeOnly": [
+        "pptx.write(blob): ok Blob 44729",
+        "pptx image by path + writeFile: ok Uint8Array 49849",
+        "docx Packer.toBlob: ok Blob 9444",
+        "exceljs csv.writeBuffer: ok Uint8Array 3",
+        "exceljs xlsx.readFile (read back): ok string 1"
+      ],
+      "stderr": ""
+    },
+    {
+      "lib": "diag-repro",
+      "exitCode": 0,
+      "nodeExitCode": 0,
+      "differs": [
+        "typeof fs.createReadStream().close: undefined",
+        "typeof fs.createWriteStream().close: undefined",
+        "StreamBuf.write data: Array instanceof Buffer=false isBuffer=false",
+        "Transform subclass _transform: x",
+        "Transform subclass _transform + transform() method: x",
+        "Transform subclass _flush: y"
+      ],
+      "nodeOnly": [
+        "typeof fs.createReadStream().close: function",
+        "typeof fs.createWriteStream().close: function",
+        "Duplex subclass _write: d",
+        "StreamBuf.write data: Buffer instanceof Buffer=true isBuffer=true",
+        "Transform subclass _transform: <x>",
+        "Transform subclass _transform + transform() method: <x>",
+        "Transform subclass _flush: y!"
+      ],
+      "stderr": ""
+    },
+    {
+      "lib": "docx",
+      "pkg": "docx",
+      "version": "9.15.3",
+      "node": {
+        "exitCode": 0,
+        "ms": 52,
+        "verdict": {
+          "ok": true,
+          "parts": 18,
+          "text": "Quarterly report Revenue grew 12% Region Revenue North 120"
+        }
+      },
+      "guest": {
+        "stdout": "wrote out/probe-docx.docx\n",
+        "stderr": "",
+        "exitCode": 0,
+        "execMs": 770,
+        "outBytes": 10247,
+        "verdict": {
+          "ok": true,
+          "parts": 18,
+          "text": "Quarterly report Revenue grew 12% Region Revenue North 120",
+          "vsNode": {
+            "ok": true,
+            "equal": true,
+            "parts": []
+          }
+        }
+      }
+    },
+    {
+      "lib": "pdf",
+      "pkg": "pdf-lib",
+      "version": "1.17.1",
+      "node": {
+        "exitCode": 0,
+        "ms": 72,
+        "verdict": {
+          "ok": true,
+          "pages": 2,
+          "title": "Probe PDF"
+        }
+      },
+      "guest": {
+        "stdout": "wrote out/probe-pdf.pdf\n",
+        "stderr": "",
+        "exitCode": 0,
+        "execMs": 921,
+        "outBytes": 1369,
+        "verdict": {
+          "ok": true,
+          "pages": 2,
+          "title": "Probe PDF",
+          "vsNode": {
+            "ok": true,
+            "equal": true
+          }
+        }
+      }
+    },
+    {
+      "lib": "pptx",
+      "pkg": "pptxgenjs",
+      "version": "4.0.1",
+      "node": {
+        "exitCode": 0,
+        "ms": 56,
+        "verdict": {
+          "ok": true,
+          "parts": 32,
+          "slides": 3
+        }
+      },
+      "guest": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.https (no network in the rifty isolate host, ADR-0557)\n    at /workspace/node_modules/pptxgenjs/dist/pptxgen.cjs.js:4845:41\n    at Generator.next (<anonymous>)\n    at fulfilled (/workspace/node_modules/pptxgenjs/dist/pptxgen.cjs.js:26:58)\n\nNode.js v24.0.0\n",
+        "exitCode": 1,
+        "execMs": 826,
+        "verdict": {
+          "ok": false
+        }
+      }
+    },
+    {
+      "lib": "pptx-bundle",
+      "pkg": "pptxgenjs",
+      "version": "4.0.1",
+      "node": {
+        "exitCode": 0,
+        "ms": 63,
+        "verdict": {
+          "ok": true,
+          "parts": 32,
+          "slides": 3
+        }
+      },
+      "guest": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.navigator.userAgent (not available in the rifty isolate host, ADR-0557)\n    at 148.70 (eval at routeOrCompile, <anonymous>:5:141955)\n    at s (eval at routeOrCompile, <anonymous>:5:95660)\n    at eval (eval at routeOrCompile, <anonymous>:5:95694)\n    at 232.114 (eval at routeOrCompile, <anonymous>:5:159035)\n    at s (eval at routeOrCompile, <anonymous>:5:95660)\n    at eval (eval at routeOrCompile, <anonymous>:5:95694)\n    at 3.154 (eval at routeOrCompile, <anonymous>:5:97279)\n    at s (eval at routeOrCompile, <anonymous>:5:95660) {\n  feature: 'isolate-host.navigator.userAgent'\n}\n\nNode.js v24.0.0\n",
+        "exitCode": 1,
+        "execMs": 932,
+        "verdict": {
+          "ok": false
+        }
+      }
+    },
+    {
+      "lib": "pptx-handled",
+      "pkg": "pptxgenjs",
+      "version": "4.0.1",
+      "node": {
+        "exitCode": 0,
+        "ms": 56,
+        "verdict": {
+          "ok": true,
+          "parts": 32,
+          "slides": 3
+        }
+      },
+      "guest": {
+        "stdout": "wrote out/probe-pptx-handled.pptx\n",
+        "stderr": "",
+        "exitCode": 0,
+        "execMs": 967,
+        "outBytes": 82017,
+        "verdict": {
+          "ok": true,
+          "parts": 32,
+          "slides": 3,
+          "vsNode": {
+            "ok": true,
+            "equal": true,
+            "parts": []
+          }
+        }
+      }
+    },
+    {
+      "lib": "pptx-notnode",
+      "pkg": "pptxgenjs",
+      "version": "4.0.1",
+      "node": {
+        "exitCode": 0,
+        "ms": 51,
+        "verdict": {
+          "ok": true,
+          "parts": 32,
+          "slides": 3
+        }
+      },
+      "guest": {
+        "stdout": "wrote out/probe-pptx-notnode.pptx\n",
+        "stderr": "",
+        "exitCode": 0,
+        "execMs": 969,
+        "outBytes": 82017,
+        "verdict": {
+          "ok": true,
+          "parts": 32,
+          "slides": 3,
+          "vsNode": {
+            "ok": true,
+            "equal": true,
+            "parts": []
+          }
+        }
+      }
+    },
+    {
+      "lib": "xlsx",
+      "pkg": "exceljs",
+      "version": "4.4.0",
+      "node": {
+        "exitCode": 0,
+        "ms": 130,
+        "verdict": {
+          "ok": true,
+          "parts": 14,
+          "A1": "Region",
+          "B2": 120,
+          "B4f": "SUM(B2:B3)",
+          "B4": 215
+        }
+      },
+      "guest": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.zlib (needs web CompressionStream, absent in the rifty isolate host, ADR-0557)\n    at Object.<anonymous> (/workspace/node_modules/crc32-stream/lib/deflate-crc32-stream.js:11:22) {\n  feature: 'isolate-host.zlib'\n}\n\nNode.js v24.0.0\n",
+        "exitCode": 1,
+        "execMs": 970,
+        "verdict": {
+          "ok": false
+        }
+      }
+    },
+    {
+      "lib": "xlsx-browser",
+      "pkg": "exceljs",
+      "version": "4.4.0",
+      "node": {
+        "exitCode": 0,
+        "ms": 62,
+        "verdict": {
+          "ok": true,
+          "parts": 14,
+          "A1": "Region",
+          "B2": 120,
+          "B4f": "SUM(B2:B3)",
+          "B4": 215
+        }
+      },
+      "guest": {
+        "stdout": "",
+        "stderr": "NotImplementedError: Not implemented: isolate-host.navigator.userAgent (not available in the rifty isolate host, ADR-0557)\n    at 256 (/workspace/node_modules/exceljs/dist/exceljs.min.js:10:32106)\n    at i (/workspace/node_modules/exceljs/dist/exceljs.min.js:3:543)\n    at /workspace/node_modules/exceljs/dist/exceljs.min.js:3:578\n    at 257.../internals/engine-user-agent (/workspace/node_modules/exceljs/dist/exceljs.min.js:10:32197)\n    at i (/workspace/node_modules/exceljs/dist/exceljs.min.js:3:543)\n    at /workspace/node_modules/exceljs/dist/exceljs.min.js:3:578\n    at 336.../internals/engine-v8-version (/workspace/node_modules/exceljs/dist/exceljs.min.js:10:68346)\n    at i (/workspace/node_modules/exceljs/dist/exceljs.min.js:3:543) {\n  feature: 'isolate-host.navigator.userAgent'\n}\n\nNode.js v24.0.0\n",
+        "exitCode": 1,
+        "execMs": 1142,
+        "verdict": {
+          "ok": false
+        }
+      }
+    },
+    {
+      "lib": "xlsx-workbook",
+      "pkg": "exceljs",
+      "version": "4.4.0",
+      "node": {
+        "exitCode": 0,
+        "ms": 76,
+        "verdict": {
+          "ok": true,
+          "parts": 14,
+          "A1": "Region",
+          "B2": 120,
+          "B4f": "SUM(B2:B3)",
+          "B4": 215
+        }
+      },
+      "guest": {
+        "stdout": "wrote out/probe-xlsx-workbook.xlsx\n",
+        "stderr": "",
+        "exitCode": 0,
+        "execMs": 954,
+        "outBytes": 8558,
+        "verdict": {
+          "ok": true,
+          "parts": 14,
+          "A1": "Region",
+          "B2": 120,
+          "B4f": "SUM(B2:B3)",
+          "B4": 215,
+          "vsNode": {
+            "ok": true,
+            "equal": true,
+            "parts": []
+          }
+        }
+      }
+    }
+  ]
+}
