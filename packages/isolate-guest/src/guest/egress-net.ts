@@ -107,7 +107,7 @@ export function createNet(): Record<string, unknown> {
   return Object.assign(net, {
     connect,
     createConnection: connect,
-    createServer: loudFunction('createServer', 2, 'net.createServer'),
+    createServer: loudFunction('createServer', 2, 'net.createServer', NO_CONNECTION),
     isIP: named(netIsIP, 'isIP'),
     isIPv4: named(netIsIPv4, 'isIPv4'),
     isIPv6: named(netIsIPv6, 'isIPv6'),

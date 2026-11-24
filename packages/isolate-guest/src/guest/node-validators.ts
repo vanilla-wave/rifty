@@ -2,7 +2,9 @@
  * Node's `internal/validators` + `internal/errors` texts the guest's `http`/`net`
  * members throw (Node v24.16.0): same constructor, `code` and message.
  */
-import { describeReceived, inspect } from '@riftydev/runtime-js/internal';
+import { describeReceived, format, inspect } from '@riftydev/runtime-js/internal';
+
+export { format };
 
 export function nodeError<E extends Error>(
   Ctor: new (message: string) => E,
@@ -10,36 +12,6 @@ export function nodeError<E extends Error>(
   message: string,
 ): E {
   return Object.assign(new Ctor(message), { code });
-}
-
-let builtInObjects: Set<string> | undefined;
-
-/** Node's `hasBuiltInToString` (`internal/util/inspect`), proxies aside. */
-function hasBuiltInToString(value: object): boolean {
-  if (typeof (value as { toString?: unknown }).toString !== 'function') return true;
-  if (Object.hasOwn(value, 'toString')) return false;
-  let pointer: object | null = value;
-  do pointer = Object.getPrototypeOf(pointer) as object | null;
-  while (pointer !== null && !Object.hasOwn(pointer, 'toString'));
-  const descriptor =
-    pointer === null ? undefined : Object.getOwnPropertyDescriptor(pointer, 'constructor');
-  builtInObjects ??= new Set(
-    Object.getOwnPropertyNames(globalThis).filter((e) => /^[A-Z][a-zA-Z0-9]+$/.test(e)),
-  );
-  return (
-    descriptor !== undefined &&
-    typeof descriptor.value === 'function' &&
-    builtInObjects.has((descriptor.value as { name: string }).name)
-  );
-}
-
-/** `util.format`'s `%s`, the form Node's error messages are built with. */
-export function formatS(value: unknown): string {
-  if (typeof value === 'number') return Object.is(value, -0) ? '-0' : String(value);
-  if (typeof value === 'bigint') return `${value}n`;
-  if (typeof value !== 'object' || value === null || !hasBuiltInToString(value))
-    return String(value);
-  return inspect(value, { depth: 0 });
 }
 
 export function invalidArgType(name: string, type: string, value: unknown): TypeError {

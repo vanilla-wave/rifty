@@ -96,8 +96,8 @@ the one silent wrong behavior.
 ### After `isolate-host-egress-modules-load` (2026-11-24)
 
 Same probe, this branch (guest `http`/`https`/`net` load with Node's shape; network use a named
-gap): `results-after-egress-modules.json`. pptxgenjs canonical `gen/pptx.cjs` ✅ exit 0, valid,
-= node's (masked); the diag lines for `require('http')`, `require('https')`, `import('node:https')`
+gap): `results-after-egress-modules.json`. pptxgenjs canonical `gen/pptx.cjs` and `pptx-write` ✅ exit 0, valid,
+= node's (masked); rerun over this probe at `main` a994a6cf9 merged; the diag lines for `require('http')`, `require('https')`, `import('node:https')`
 and "pptx image by path + writeFile" now equal node's. Row 2 above is closed; every other row is
 unchanged. pptxgenjs's next stops (ad-hoc diag, same closure, vs node): `write()` with no
 `outputType` → Blob (row 3: `blob is not supported by this platform`; node returns a `Blob`);

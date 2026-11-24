@@ -10,7 +10,7 @@ import { METHODS, STATUS_CODES, maxHeaderSize } from '@riftydev/net/node-data';
 import { riftyProcess } from '@riftydev/runtime-js/builtins/process';
 import { type Base, NO_CONNECTION, gap, loudClass, loudFunction, named } from './egress-gaps.ts';
 import {
-  formatS,
+  format,
   nodeError,
   validateInteger,
   validateNumberAtLeast,
@@ -61,7 +61,8 @@ const validateHeaderNameImpl = (name: unknown, label?: unknown): void => {
     throw nodeError(
       TypeError,
       'ERR_INVALID_HTTP_TOKEN',
-      `${formatS(label || 'Header name')} must be a valid HTTP token ["${formatS(name)}"]`,
+      // TODO(backlog: runtime-js/util-format-percent-s): rifty's %s differs from Node's for some objects.
+      format('%s must be a valid HTTP token ["%s"]', label || 'Header name', name),
     );
 };
 const validateHeaderValueImpl = (name: unknown, value: unknown): void => {
@@ -69,7 +70,8 @@ const validateHeaderValueImpl = (name: unknown, value: unknown): void => {
     throw nodeError(
       TypeError,
       'ERR_HTTP_INVALID_HEADER_VALUE',
-      `Invalid value "${formatS(value)}" for header "${formatS(name)}"`,
+      // TODO(backlog: runtime-js/util-format-percent-s)
+      format('Invalid value "%s" for header "%s"', value, name),
     );
   if (headerCharRegex.test(value as string))
     throw nodeError(
@@ -120,6 +122,8 @@ function setGlobalProxyFromEnv(env: unknown = riftyProcess.env): () => void {
   validateObject(env, 'proxyEnv');
   const httpProxy = parseProxyUrl(env as Options, 'http:');
   const httpsProxy = parseProxyUrl(env as Options, 'https:');
+  // Node reads it here, before deciding there is nothing to proxy.
+  void ((env as Options).no_proxy || (env as Options).NO_PROXY);
   if (!httpProxy && !httpsProxy) return () => {};
   throw gap('http.setGlobalProxyFromEnv');
 }
@@ -332,7 +336,7 @@ export function createHttp(netServer: Base): {
       OutgoingMessage,
       NO_CONNECTION,
     ),
-    createServer: loudFunction('createServer', 2, 'http.createServer'),
+    createServer: loudFunction('createServer', 2, 'http.createServer', NO_CONNECTION),
     validateHeaderName: hidden(validateHeaderNameImpl, 'validateHeaderName'),
     validateHeaderValue: hidden(validateHeaderValueImpl, 'validateHeaderValue'),
     get: loudFunction('get', 3, 'http.get'),
@@ -364,7 +368,7 @@ export function createHttp(netServer: Base): {
     globalAgent: new HttpsAgent({ keepAlive: true, scheduling: 'lifo', timeout: 5000 }),
     // Node: tls.Server; rifty's tls stub is not Node-shaped (unit §Out of scope).
     Server: loudClass('Server', 2, 'https.Server', netServer, NO_CONNECTION),
-    createServer: loudFunction('createServer', 2, 'https.createServer'),
+    createServer: loudFunction('createServer', 2, 'https.createServer', NO_CONNECTION),
     get: loudFunction('get', 3, 'https.get'),
     request: loudFunction('request', 0, 'https.request'),
   };

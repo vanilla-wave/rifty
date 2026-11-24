@@ -36,23 +36,44 @@ describe('module shape equals live node -e (Acceptance 1)', () => {
 });
 
 /**
- * Declared behaviour deviations: rifty's `util.inspect` prints a null-prototype
- * object as `{}` (Node `[Object: null prototype] {}`), and Node's %s inspects
- * one — `backlog/runtime-js/inspect-null-prototype-prefix`.
+ * Rows declared to differ from Node, one class: a non-string argument in an error
+ * message goes through rifty's `util.format('%s')` / `util.inspect`, which differ
+ * from Node's for these shapes (`backlog/runtime-js/util-format-percent-s`,
+ * `backlog/runtime-js/inspect-null-prototype-prefix`). Each must still differ: a
+ * runtime fix turns this red, and the row joins the strict ones.
  */
-const NULL_PROTO = '[Object: null prototype] {}';
-const declaredBehaviour = (line: string): string =>
-  line.includes(' null-proto ') ? line.split(NULL_PROTO).join('{}') : line;
+const DECLARED_FORMAT_ROWS = [
+  ' null-proto ',
+  ' name -0 ', // a -0 label is falsy: Node's 'Header name', strict
+  ' own toString ',
+  ' class toString ',
+  ' Symbol.toPrimitive ',
+  ' Number object ',
+  ' nested null-proto ',
+  ' Error with stack, cause, code, subclass ',
+  'new http.Agent scheduling long ',
+];
+const declared = (line: string): boolean => {
+  const label = `${line.split(' -> ')[0]} `;
+  // ERR_INVALID_CHAR is a template literal in Node too, not %s: those rows stay strict.
+  return !label.endsWith(' bad char ') && DECLARED_FORMAT_ROWS.some((row) => label.includes(row));
+};
 
 describe('real members equal live node -e (Acceptance 2, parity cases 2–6)', () => {
   it('IP grammar, header validation, _normalizeArgs, config setters, Agents', async () => {
     const code = fixture('behaviour.cjs');
     const oracle = nodeEval(code);
     expect(oracle.code, oracle.stderr).toBe(0);
-    expect(oracle.stdout).toContain(NULL_PROTO);
     const result = await runCode(code);
     expect(result.stderr).toBe('');
-    expect(result.stdout).toBe(oracle.stdout.split('\n').map(declaredBehaviour).join('\n'));
+    const want = oracle.stdout.split('\n');
+    const got = result.stdout.split('\n');
+    // Same rows in the same order: labels match line for line.
+    expect(got.map((l) => l.split(' -> ')[0])).toEqual(want.map((l) => l.split(' -> ')[0]));
+    const strict = (lines: string[]) => lines.filter((l) => !declared(l));
+    expect(strict(got)).toEqual(strict(want));
+    const differing = want.filter((l, i) => declared(l) && l !== got[i]);
+    expect(differing).toEqual(want.filter(declared));
     expect(result.exitCode).toBe(0);
   });
 });
@@ -68,6 +89,9 @@ const NOT_IN_GUEST: Readonly<Record<string, string>> = Object.fromEntries([
     'https.Server',
     'net.Server',
     'net.Socket',
+    'http.createServer',
+    'https.createServer',
+    'net.createServer',
   ].map((f) => [
     f,
     "Node's HTTP message, server and socket objects are not in the rifty isolate host, ADR-0557",
@@ -87,6 +111,11 @@ const LOUD: readonly (readonly [string, string])[] = [
   ["http.request('http://example.com/')", 'http.request'],
   ["http.get('http://example.com/')", 'http.get'],
   ['http.createServer()', 'http.createServer'],
+  [
+    "process.env.HTTP_PROXY = 'http://proxy.invalid:1'; try { http.setGlobalProxyFromEnv() } finally { delete process.env.HTTP_PROXY }",
+    'http.setGlobalProxyFromEnv',
+  ],
+  ["http.setGlobalProxyFromEnv({ HTTP_PROXY: 'notaurl' })", 'http.setGlobalProxyFromEnv'],
   [
     "http.setGlobalProxyFromEnv({ HTTP_PROXY: 'http://proxy.invalid:1' })",
     'http.setGlobalProxyFromEnv',

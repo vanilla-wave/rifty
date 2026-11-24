@@ -18,7 +18,9 @@ const run = (label, f) => {
   try {
     out.push(`${label} -> ${show(f())}`);
   } catch (e) {
-    out.push(`${label} -> throw ${e.name} ${e.code} ${e.message}`);
+    // One line per row: a multi-line message (an inspected error) as JSON.
+    const message = e.message.includes('\n') ? JSON.stringify(e.message) : e.message;
+    out.push(`${label} -> throw ${e.name} ${e.code} ${message}`);
   }
 };
 
@@ -102,6 +104,21 @@ for (const [label, name] of [
       toString() {
         return 'bar';
       }
+    })(),
+  ],
+  ['Symbol.toPrimitive', { [Symbol.toPrimitive]: () => 'prim' }],
+  ['user class Request', new (class Request {})()],
+  ['Number object', new Number(5)],
+  ['nested null-proto', { a: Object.create(null) }],
+  [
+    'Error with stack, cause, code, subclass',
+    (() => {
+      class BadThing extends Error {}
+      const e = new BadThing('boom', { cause: new Error('root') });
+      e.code = 'E_BAD';
+      e.stack = 'BadThing: boom\n    at fixed (fixed.js:1:1)';
+      e.cause.stack = 'Error: root\n    at fixed (fixed.js:2:2)';
+      return e;
     })(),
   ],
 ]) {
@@ -189,6 +206,7 @@ agent('new http.Agent(bad buffer)', () => new http.Agent({ agentKeepAliveTimeout
 agent('new https.Agent(opts)', () => new https.Agent({ maxCachedSessions: 0, keepAlive: true }));
 agent('https.Agent() no new', () => https.Agent());
 run('new http.Agent scheduling', () => new http.Agent({ scheduling: 'x' }));
+run('new http.Agent scheduling long', () => new http.Agent({ scheduling: 'x'.repeat(140) }));
 run('new http.Agent maxTotalSockets 0', () => new http.Agent({ maxTotalSockets: 0 }));
 run('new http.Agent maxTotalSockets str', () => new http.Agent({ maxTotalSockets: '1' }));
 run('new http.Agent maxTotalSockets NaN', () => new http.Agent({ maxTotalSockets: Number.NaN }));

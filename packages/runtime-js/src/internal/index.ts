@@ -9,6 +9,7 @@ export { installConsole } from '../repl/console.ts';
 export { describeReceived } from './node-received.ts';
 export { inspect } from '../repl/inspect.ts';
 export { ZLIB_CODES, ZLIB_CONSTANTS } from '../builtins/zlib-constants.ts';
+export { format } from '../builtins/util.ts';
 export { setDefaultProcessOutputSink } from '../builtins/process-stdio-writer.ts';
 // The runtime's own first terminal signal: identity, so a host cannot be fooled
 // by a guest-thrown lookalike (isolate host, ADR-0557 §5).
