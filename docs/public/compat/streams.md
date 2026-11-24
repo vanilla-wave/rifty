@@ -23,7 +23,10 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat / exact-vers
 | `finished` | ⚠️ | Resolves on readable end and cleanup cases; a successful callback gets `(null)`, Node no arguments — backlog `runtime-js/stream-pipeline-finished-callback-args` |
 | `compose` / `Readable.wrap` | ✅ | `compose(...stages)` → a `Duplex` wired via `pipeline`; `Readable.wrap(legacy)` adapts streams1 data/end with backpressure — parity-tested |
 | `Duplex.from` | ⚠️ | Accepted shapes are parity-tested. Iterable branches are eager through a second Readable; the returned Duplex incorrectly remains writable and silently discards writes — backlog `runtime-js/duplex-from-source-ownership` |
-| `destroy` / cleanup | ✅ | Writable destroy and async-iterator cleanup parity |
+| `destroy` / cleanup | ⚠️ | Writable destroy and async-iterator cleanup parity; no `_destroy` hook runs (row below) and `errored` is not exposed — backlog `runtime-js/stream-destroy-construct-hooks` |
+| `_destroy` / `_construct` hooks | ❌ | Never called on any stream class, however defined (option, prototype, subclass): no cleanup, no replaced error, work starts before construction (matrix vs Node 2026-11-24) — backlog `runtime-js/stream-destroy-construct-hooks` |
+| `Duplex` Writable surface | ⚠️ | No `cork`/`uncork`/`setDefaultEncoding`/`writableCorked` on Duplex/Transform (`TypeError`); `readableObjectMode`/`writableObjectMode` options ignored — backlog `runtime-js/duplex-writable-surface-gaps` |
+| `Duplex` / `Transform` event order | ⚠️ | `'finish'` fires before pending `'data'` (Transform: before `'end'`); no `'close'` after both sides end — backlog `runtime-js/duplex-end-finish-close-order` |
 | `stream/consumers` | ✅ | Text/buffer/json-style consumers covered |
 | Legacy streams | ✅ | Pipe/unpipe and callable core constructor parity |
 | `Readable.fromWeb` | ⚠️ | Cold demand, chunks, option/error/acquisition order, and invalid-signal lock behavior are parity-tested; terminal reason/events/lock release still diverge — backlog `runtime-js/web-stream-adapter-terminal-lifecycle` |

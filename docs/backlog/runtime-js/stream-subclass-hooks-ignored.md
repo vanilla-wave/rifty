@@ -1,7 +1,7 @@
 ---
 area: runtime-js
 status: ready
-title: Every stream hook (`_transform`, `_flush`, `_write`, `_writev`, `_final`, `_read`, `_destroy`, `_construct`) runs as in Node however it is defined
+title: Every stream hook rifty has (`_transform`, `_flush`, `_write`, `_writev`, `_final`, `_read`) runs as in Node however it is defined
 created: 2026-11-24
 why: Node calls a subclass's `_transform`/`_flush`/`_write`; rifty's Transform and Duplex take only constructor options or instance own properties, so `class X extends Transform { _transform() }` silently becomes a PassThrough and a Duplex subclass's `_write` drops its data — wrong output with exit 0, while compat streams.md claimed `Transform` ✅.
 user_story: As an agent running exceljs in a rifty sandbox, I want `wb.csv.writeBuffer()` to return Node's CSV bytes, but today fast-csv's `CsvFormatterStream extends Transform` passes row arrays through unformatted and exceljs throws
@@ -32,9 +32,8 @@ prototype method assigned after construction. Code read confirms each cause:
   (`ownFunction`, `duplex.ts`); prototype ways drop the data. `write`/`writev`/`final` options run
   with `this` = the internal writable side, not the Duplex. A `writev`-only Duplex drops every chunk
   (the wrapper `write` always exists, so `_writev` is never chosen).
-- `_destroy`: absent on every class and way (no option, no prototype lookup); `destroy(err)` never
-  calls it, so cleanup never runs and a replaced error is never reported.
-- `_construct`: absent on every class and way; operations start before construction.
+- `_destroy`/`_construct`: absent on every class and way — a lifecycle change, split out to
+  `runtime-js/stream-destroy-construct-hooks` (manager, 2026-11-24).
 - Missing hook: Node throws `ERR_METHOD_NOT_IMPLEMENTED` (`_write()`, `_transform()`); rifty's base
   Writable `_write` succeeds silently, a hookless Duplex drops writes, a hookless Transform passes through.
 - Readable `_read` and Writable `_write`/`_writev`/`_final` already dispatch through the prototype
@@ -62,20 +61,17 @@ never runs).
 2. The probe's `gen/diag-repro.cjs` and `gen/diag-outputs.cjs` lines for the Transform/Duplex
    subclass hooks and exceljs `csv.writeBuffer` equal real Node in the isolate-host sandbox
    (`probe.mjs` run, output recorded in the PR) → scenario
-3. Real `@fast-csv/format` (original npm tarballs, parity fixture) formats rows through
-   `CsvFormatterStream` into a Writable with Node's bytes in the parity runner → scenario
-4. compat streams.md `Transform` row returns to ✅ and new rows cover `_destroy`/`_construct`; each
-   row ✅ only where the parity cases prove it (one `@riftydev/io` for every host) → scenario
+3. compat streams.md `Transform` row returns to ✅ only where the parity cases prove it (one
+   `@riftydev/io` for every host); `_destroy`/`_construct` get an honest ❌ row → scenario
 
 ## Reference contract
 
 - Oracle: Node v24.16.0 `lib/internal/streams/{readable,writable,duplex,transform,passthrough,destroy}.js`.
 - Mechanism: hooks are looked up on the stream at call time through its prototype chain;
   constructor options install own `_x` properties; base prototypes carry Node's defaults
-  (`_write` → `_writev` or `ERR_METHOD_NOT_IMPLEMENTED`, `_transform` throws, `_destroy(err, cb)` →
-  `cb(err)`); `_construct` is read once at construction and gates `_read`/`_write`/`_final` until its
-  callback; `_destroy` runs once per stream (Duplex: once for both sides), its callback error replaces
-  the destroy error, `'error'`/`'close'` follow the callback.
+  (`_write` → `_writev` or `ERR_METHOD_NOT_IMPLEMENTED`, `_transform` throws, no base `_final`,
+  `_writev` `null`); Transform's `_final` runs `_flush`, and a replaced `_final` still gets `_flush`
+  on `'prefinish'`; a Duplex calls its hooks with `this` = the Duplex.
 
 ## Parity cases
 
@@ -87,27 +83,20 @@ never runs).
    delivers every chunk → scenario
 3. `stream/stream-hook-readable-writable`: Readable `_read`, Writable `_write`/`_writev`/`_final` ×
    6 ways (already Node; guard) → scenario
-4. `stream/stream-hook-destroy`: `_destroy` × Readable/Writable/Duplex/Transform/PassThrough × 6
-   ways — called with the destroy error and `this` = stream, callback error replaces it, async
-   callback delays `'error'`/`'close'`, `destroyed` true synchronously, Duplex/Transform call it
-   once, a second `destroy()` does not → scenario
-5. `stream/stream-hook-construct`: `_construct` × the 5 classes × 6 ways — option/prototype ways
-   run it on the next tick and defer `_read`/`_write`/`_transform` until its callback; own/late
-   ways never run it; a callback error destroys with it (`_destroy` gets it); `destroy()` during
-   construction waits for the callback before `_destroy` → scenario
-6. `stream/stream-hook-missing`: no hook → `write()` throws `ERR_METHOD_NOT_IMPLEMENTED`
+4. `stream/stream-hook-missing`: no hook → `write()` throws `ERR_METHOD_NOT_IMPLEMENTED`
    (`_write()` for Writable/Duplex, `_transform()` for Transform), bare and subclassed; Readable
    emits `_read()` → scenario
-7. `stream/stream-hook-fast-csv-real`: `@fast-csv/format` 4.3.5 `format()` piped into a Writable,
-   rows `['a', 1]`, `['b,c', 2]` → Node's CSV text → scenario
 
 ## Out of scope
 
+- `_destroy`/`_construct` (no hook on any class; destroy/construct lifecycle) — backlog
+  `runtime-js/stream-destroy-construct-hooks`, RED matrix in its `reference/`; compat ❌ row.
 - `Duplex`/`Transform` `cork`/`uncork`/`writableCorked`/`setDefaultEncoding`: absent on Duplex
   (`TypeError: d.cork is not a function`) — backlog `runtime-js/duplex-writable-surface-gaps`.
-- Transform/Duplex event order (`'finish'` before `'end'`, no `'close'` after both sides end) —
+- Transform/Duplex event order (`'finish'` before `'end'` or `'data'`, no `'close'` after both sides end) —
   backlog `runtime-js/duplex-end-finish-close-order`; parity cases here assert hook calls, data and
   errors, never `'finish'`/`'end'`/`'close'` relative order on a Duplex.
+- `readableObjectMode`/`writableObjectMode` options (ignored) — `runtime-js/duplex-writable-surface-gaps`.
 - Transform callback backpressure (Node holds the `_transform` callback while the readable buffer is
   full): unchanged here.
 - Pending-write callback errors after `destroy()` (message/code) — unchanged here.
@@ -116,7 +105,8 @@ never runs).
 
 - Node's dispatch model, not more override lookups: options → own `_x`; base prototypes carry Node's defaults.
 - Duplex keeps its embedded Writable; that side calls the Duplex's `_write`/`_writev`/`_final` with `this` = Duplex.
-- `_destroy`/`_construct` share one lifecycle module both Readable and Writable call (Node's `destroy.js`).
+- `_destroy`/`_construct` split out (manager): they need a new lifecycle, not dispatch.
+- No real fast-csv fixture: its lock pulls `@types/node`; the probe run (Acceptance 2) and the fast-csv-shape case cover it.
 - The symbol-keyed writable-side factory, symbol hooks and own-property overrides are deleted; their tests go with them.
 - `Writable.prototype._final` is removed (Node has none); Transform's prefinish rule needs that distinction.
 - `_writev` on Duplex is proven by a pile-up behind a pending write, since Duplex `cork` is missing (Out of scope).

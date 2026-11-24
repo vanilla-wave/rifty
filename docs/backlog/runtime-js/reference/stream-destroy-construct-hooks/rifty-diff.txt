@@ -1,0 +1,138 @@
+- Readable option _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
++ Readable option _destroy replaces the error => sync destroyed=true,error boom,close
+- Readable option _construct gates work => pre=sync,C:true post=R
++ Readable option _construct gates work => never-constructed ops=R
+- Writable option _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
++ Writable option _destroy replaces the error => sync destroyed=true,error boom,close
+- Writable option _construct gates work => pre=sync,C:true post=Wx
++ Writable option _construct gates work => never-constructed ops=Wx
+- Duplex option _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
++ Duplex option _destroy replaces the error => sync destroyed=true,error boom,close
+- Duplex option _construct gates work => pre=sync,C:true post=R,Wx
++ Duplex option _construct gates work => never-constructed ops=R,Wx
+- Transform option _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
++ Transform option _destroy replaces the error => sync destroyed=true,error boom,close
+- Transform option _construct gates work => pre=sync,C:true post=Wx
++ Transform option _construct gates work => never-constructed ops=Tx
+- PassThrough option _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
++ PassThrough option _destroy replaces the error => sync destroyed=true,error boom,close
+- PassThrough option _construct gates work => pre=sync,C:true post=Wx
++ PassThrough option _construct gates work => never-constructed ops=
+- Readable own _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
++ Readable own _destroy replaces the error => sync destroyed=true,error boom,close
+- Writable own _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
++ Writable own _destroy replaces the error => sync destroyed=true,error boom,close
+- Duplex own _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
++ Duplex own _destroy replaces the error => sync destroyed=true,error boom,close
+- Transform own _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
++ Transform own _destroy replaces the error => sync destroyed=true,error boom,close
+- PassThrough own _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
++ PassThrough own _destroy replaces the error => sync destroyed=true,error boom,close
+- Readable class _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
++ Readable class _destroy replaces the error => sync destroyed=true,error boom,close
+- Readable class _construct gates work => pre=sync,C:true post=R
++ Readable class _construct gates work => never-constructed ops=R
+- Writable class _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
++ Writable class _destroy replaces the error => sync destroyed=true,error boom,close
+- Writable class _construct gates work => pre=sync,C:true post=Wx
++ Writable class _construct gates work => never-constructed ops=Wx
+- Duplex class _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
++ Duplex class _destroy replaces the error => sync destroyed=true,error boom,close
+- Duplex class _construct gates work => pre=sync,C:true post=R,Wx
++ Duplex class _construct gates work => never-constructed ops=R
+- Transform class _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
++ Transform class _destroy replaces the error => sync destroyed=true,error boom,close
+- Transform class _construct gates work => pre=sync,C:true post=Wx
++ Transform class _construct gates work => never-constructed ops=
+- PassThrough class _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
++ PassThrough class _destroy replaces the error => sync destroyed=true,error boom,close
+- PassThrough class _construct gates work => pre=sync,C:true post=Wx
++ PassThrough class _construct gates work => never-constructed ops=
+- Readable es5 _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
++ Readable es5 _destroy replaces the error => sync destroyed=true,error boom,close
+- Readable es5 _construct gates work => pre=sync,C:true post=R
++ Readable es5 _construct gates work => never-constructed ops=R
+- Writable es5 _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
++ Writable es5 _destroy replaces the error => sync destroyed=true,error boom,close
+- Writable es5 _construct gates work => pre=sync,C:true post=Wx
++ Writable es5 _construct gates work => never-constructed ops=Wx
+- Duplex es5 _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
++ Duplex es5 _destroy replaces the error => sync destroyed=true,error boom,close
+- Duplex es5 _construct gates work => pre=sync,C:true post=R,Wx
++ Duplex es5 _construct gates work => never-constructed ops=R
+- Transform es5 _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
++ Transform es5 _destroy replaces the error => sync destroyed=true,error boom,close
+- Transform es5 _construct gates work => pre=sync,C:true post=Wx
++ Transform es5 _construct gates work => never-constructed ops=
+- PassThrough es5 _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
++ PassThrough es5 _destroy replaces the error => sync destroyed=true,error boom,close
+- PassThrough es5 _construct gates work => pre=sync,C:true post=Wx
++ PassThrough es5 _construct gates work => never-constructed ops=
+- Readable chain _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
++ Readable chain _destroy replaces the error => sync destroyed=true,error boom,close
+- Readable chain _construct gates work => pre=sync,C:true post=R
++ Readable chain _construct gates work => never-constructed ops=R
+- Writable chain _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
++ Writable chain _destroy replaces the error => sync destroyed=true,error boom,close
+- Writable chain _construct gates work => pre=sync,C:true post=Wx
++ Writable chain _construct gates work => never-constructed ops=Wx
+- Duplex chain _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
++ Duplex chain _destroy replaces the error => sync destroyed=true,error boom,close
+- Duplex chain _construct gates work => pre=sync,C:true post=R,Wx
++ Duplex chain _construct gates work => never-constructed ops=R
+- Transform chain _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
++ Transform chain _destroy replaces the error => sync destroyed=true,error boom,close
+- Transform chain _construct gates work => pre=sync,C:true post=Wx
++ Transform chain _construct gates work => never-constructed ops=
+- PassThrough chain _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
++ PassThrough chain _destroy replaces the error => sync destroyed=true,error boom,close
+- PassThrough chain _construct gates work => pre=sync,C:true post=Wx
++ PassThrough chain _construct gates work => never-constructed ops=
+- Readable late _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
++ Readable late _destroy replaces the error => sync destroyed=true,error boom,close
+- Writable late _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
++ Writable late _destroy replaces the error => sync destroyed=true,error boom,close
+- Duplex late _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
++ Duplex late _destroy replaces the error => sync destroyed=true,error boom,close
+- Duplex late _construct gates work => never-constructed ops=R,Wx
++ Duplex late _construct gates work => never-constructed ops=R
+- Transform late _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
++ Transform late _destroy replaces the error => sync destroyed=true,error boom,close
+- Transform late _construct gates work => never-constructed ops=Wx
++ Transform late _construct gates work => never-constructed ops=
+- PassThrough late _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
++ PassThrough late _destroy replaces the error => sync destroyed=true,error boom,close
+- PassThrough late _construct gates work => never-constructed ops=Wx
++ PassThrough late _construct gates work => never-constructed ops=
+- Writable _destroy() without error, callback ok => D null,close
++ Writable _destroy() without error, callback ok => close
+- Writable _destroy() without error, callback error => error X,close
++ Writable _destroy() without error, callback error => close
+- Writable async _destroy callback => D,sync errored=e,t1,Dcb,error e,close
++ Writable async _destroy callback => sync errored=undefined,error e,close,t1
+- Duplex _destroy runs once for both sides => D e,error e,close
++ Duplex _destroy runs once for both sides => error e,close
+- Duplex write error reaches _destroy => D w,error w
++ Duplex write error reaches _destroy => error w
+- Transform _destroy runs once for both sides => D e,error e,close
++ Transform _destroy runs once for both sides => error e,close
+- Transform write error reaches _destroy => D w,error w
++ Transform write error reaches _destroy => error w
+- Readable _construct error destroys => C,D cfail,error cfail,close
++ Readable _construct error destroys => R
+- Writable _construct error destroys => C,D cfail,error cfail,close
++ Writable _construct error destroys => W
+- Duplex _construct error destroys => C,D cfail,error cfail,close
++ Duplex _construct error destroys => W,R
+- Transform _construct error destroys => C,D cfail,error cfail,close
++ Transform _construct error destroys => T,R
+- Readable destroy during _construct => C,Cdone,D early,error early,close
++ Readable destroy during _construct => error early,close
+- Writable destroy during _construct => C,wcb early,Cdone,D early,error early,close
++ Writable destroy during _construct => W,wcb null,error early,close
+- Writable sync _construct still defers to next tick => sync,C,Wa,Wb,FIN
++ Writable sync _construct still defers to next tick => Wa,Wb,FIN,sync
+- Readable read() before _construct => read=null,Cdone,R,dx
++ Readable read() before _construct => R,read=x
+- prototype shape => Readable:function/undefined Writable:function/undefined Duplex:function/undefined Transform:function/undefined PassThrough:function/undefined duplex-destroy-is-readable:true
++ prototype shape => Readable:undefined/undefined Writable:undefined/undefined Duplex:undefined/undefined Transform:undefined/undefined PassThrough:undefined/undefined duplex-destroy-is-readable:true
