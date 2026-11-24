@@ -1,4 +1,3 @@
-import { NotImplementedError } from '@riftydev/io';
 import type { FsSync } from '@riftydev/vfs';
 import { basename, dirname, isAbsolute, joinPath, normalizePath } from '@riftydev/vfs';
 import { ensureRuntimeJsBuiltinsRegistered, isBuiltinSpecifier } from '../builtins/index.ts';
@@ -252,8 +251,6 @@ function fileUrlToVfsPath(specifier: string, fromFile: string): string {
   try {
     url = new URLConstructor(specifier);
   } catch (err) {
-    // A host's missing `URL` is its named gap, not an invalid specifier.
-    if (err instanceof NotImplementedError) throw err;
     const msg = (err as Error).message ?? String(err);
     throw new ModuleLoadError(
       'UNSUPPORTED_PROTOCOL',

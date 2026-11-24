@@ -1,4 +1,3 @@
-import { NotImplementedError } from '@riftydev/io';
 import { isAbsolute } from '@riftydev/vfs';
 import { fileURLToPathPosix } from './posix-file-url.ts';
 import { hasURLScheme } from './url-scheme.ts';
@@ -9,9 +8,7 @@ export function createRequirePath(value: string | URL): string {
     if (typeof value !== 'string') return fileURLToPathPosix(value);
     if (hasURLScheme(value, 'file')) return fileURLToPathPosix(value);
     if (isAbsolute(value)) return value;
-  } catch (error) {
-    // A host's missing `URL` is its named gap, not an invalid base.
-    if (error instanceof NotImplementedError) throw error;
+  } catch {
     // Node presents every invalid createRequire base through one public code.
   }
   const error = new TypeError(
