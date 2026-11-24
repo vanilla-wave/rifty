@@ -2,10 +2,11 @@ import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { copyFile, mkdir, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
-import { dirname, resolve } from 'node:path';
+import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 import { buildSupportAssets, supportAssets } from './build-support-assets.mjs';
+import { LINK, metafileInputs, recordBundleInputs } from './third-party-notices.mjs';
 import { hostBuiltinAliases } from './workbench-asset-builtins.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
@@ -46,6 +47,7 @@ const workerResult = await build({
   define: { __filename: '"/typescript.js"', __dirname: '"/"' },
   // Node-only fallbacks must disappear from the emitted graph below.
   external: ['node:*'],
+  footer: { js: LINK }, // licenses: dist/THIRD_PARTY_NOTICES.md (build:libs)
   metafile: true,
   write: false,
 });
@@ -82,6 +84,7 @@ const swResult = await build({
   format: 'iife',
   platform: 'browser',
   target: 'es2022',
+  footer: { js: LINK },
   metafile: true,
   write: false,
 });
@@ -99,12 +102,30 @@ for (const output of [...workerResult.outputFiles, ...swResult.outputFiles]) {
   await mkdir(dirname(output.path), { recursive: true });
   await writeFile(output.path, output.contents);
 }
-await copyFile(
-  requireRuntime.resolve('@jitl/quickjs-wasmfile-release-sync/wasm'),
-  resolve(outdir, 'quickjs.wasm'),
-);
-await copyFile(requireNet.resolve('sql.js/dist/sql-wasm.wasm'), resolve(outdir, 'sql-wasm.wasm'));
+const copies = {
+  'quickjs.wasm': requireRuntime.resolve('@jitl/quickjs-wasmfile-release-sync/wasm'),
+  'sql-wasm.wasm': requireNet.resolve('sql.js/dist/sql-wasm.wasm'),
+};
+for (const [name, from] of Object.entries(copies)) await copyFile(from, resolve(outdir, name));
 await buildSupportAssets(outdir);
+// Bundler inputs per emitted file, for dist/THIRD_PARTY_NOTICES.md (build:libs).
+recordBundleInputs(
+  workbench,
+  {
+    ...metafileInputs(workerResult.metafile, root),
+    ...metafileInputs(swResult.metafile, root),
+    ...Object.fromEntries(
+      Object.entries(copies).map(([name, from]) => [resolve(outdir, name), [relative(root, from)]]),
+    ),
+    ...Object.fromEntries(
+      supportAssets.map((name) => [
+        resolve(outdir, `${name}.js`),
+        [`packages/workbench/src/support/${name}.ts`],
+      ]),
+    ),
+  },
+  { reset: true },
+);
 // Hosts copy these by filename (docs/public/sandbox-support.md); a missing one fails in a browser.
 for (const name of supportAssets) {
   assert(existsSync(resolve(outdir, `${name}.js`)), `Missing Workbench support asset: ${name}.js`);

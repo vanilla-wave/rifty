@@ -96,14 +96,14 @@ const MAX_PUBLISHED_OUTPUT_BYTES = 2_000_000;
 // ADR-0391: exact existing compiler/runtime assets; never a directory-wide waiver.
 const WORKBENCH_ASSET_ROOT = 'packages/workbench/dist/assets/';
 const WORKBENCH_COMPILER_OUTPUTS = Object.freeze({
-  'chunk-EMDIREKY.js': {
-    bytes: 4_893_418,
-    sha256: '39be666ac003c7361e9fbcd88abdda1ed51052350ade9b57b4d2716f1e296498',
+  'chunk-YYL3CQII.js': {
+    bytes: 4_893_502,
+    sha256: '34024e353c789124ea33f3d8e791fdc43c8a86cbc24398e7c58380ffb63ec793',
   },
   // Pinned without its leading sibling-chunk imports (`compilerOutputPin`).
   'typescript-worker.js': {
-    bytes: 10_022_034,
-    sha256: '86ab8d3db8bffe24d00b9404afddcdc51e4b5d5142fcff63cc80e81ee7fff842',
+    bytes: 10_022_118,
+    sha256: '99d9acb6968693aa0698b9c81e572a79be82b4f45d6f75b08385caf3a28027a6',
     siblingImports: true,
   },
 });

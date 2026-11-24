@@ -25,7 +25,6 @@ export const BUNDLE_INPUTS = '.bundle-inputs.json';
 export const PUBLISH_ROOTS = ['packages/*', 'tools/shadow-registry', 'services/eddy'];
 const SOURCE_DIRS = new Set(['generated', 'vendor']);
 const LICENSE_FILE_RE = /licen[cs]e|copying|notice/iu;
-const JS_RE = /\.[cm]?js$/u;
 
 export function loadManifest(root = ROOT) {
   return JSON.parse(readFileSync(join(root, 'tools/publishing/third-party-manifest.json'), 'utf8'));
@@ -162,7 +161,10 @@ export function collect(
         violations.push(
           `${dir}: manifest pins ${record.package}@${record.version}, installed ${version}`,
         );
-      npm(pkgDirOf, `generated into ${dir}`);
+      npm(
+        pkgDirOf,
+        `generated into ${dir}${record.changes ? ` (changed: ${record.changes})` : ''}`,
+      );
     }
   }
   return {
@@ -182,6 +184,7 @@ export function withPackedSources(inputs, packedPaths, pkgDir) {
 
 const quote = (text) =>
   text
+    .replace(/\r\n?/gu, '\n')
     .trimEnd()
     .split('\n')
     .map((line) => (line ? `> ${line}` : '>'))
@@ -238,3 +241,26 @@ function main() {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) main();
+
+/**
+ * Record an esbuild build's inputs per emitted file in `<pkg>/.bundle-inputs.json`
+ * (merged with what is already there for this build run).
+ * @param {string} pkgAbs package dir @param {Record<string, string[]>} byOutput root-relative inputs keyed by absolute or root-relative output path
+ */
+export function recordBundleInputs(pkgAbs, byOutput, { reset = false } = {}) {
+  const path = join(pkgAbs, BUNDLE_INPUTS);
+  const current = !reset && existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : {};
+  for (const [output, inputs] of Object.entries(byOutput))
+    current[relative(pkgAbs, resolve(ROOT, output))] = [...inputs].sort();
+  writeFileSync(path, `${JSON.stringify(current, null, 2)}\n`);
+}
+
+/** esbuild metafile → root-relative inputs per output (absWorkingDir = `cwd`). */
+export function metafileInputs(metafile, cwd) {
+  return Object.fromEntries(
+    Object.entries(metafile.outputs).map(([out, o]) => [
+      relative(ROOT, resolve(cwd, out)),
+      Object.keys(o.inputs).map((i) => relative(ROOT, resolve(cwd, i))),
+    ]),
+  );
+}

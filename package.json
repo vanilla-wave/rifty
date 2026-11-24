@@ -13,7 +13,7 @@
     "dev": "pnpm --filter @riftydev/playground dev",
     "build": "pnpm -r --filter=!@riftydev/playground build && pnpm --filter @riftydev/playground build",
     "build:playground": "pnpm --filter @riftydev/playground build",
-    "build:libs": "pnpm -r --filter \"./packages/*\" --filter \"@riftydev/shadow-registry\" --filter \"@riftydev/eddy\" build",
+    "build:libs": "pnpm -r --filter \"./packages/*\" --filter \"@riftydev/shadow-registry\" --filter \"@riftydev/eddy\" build && node tools/publishing/third-party-notices.mjs --write",
     "sync:publish": "node tools/publishing/sync-publish-config.mjs && biome format --write packages/*/package.json packages/*/tsup.config.ts tools/shadow-registry/package.json tools/shadow-registry/tsup.config.ts",
     "preview": "pnpm --filter @riftydev/playground preview",
     "typecheck": "pnpm -r --parallel typecheck",

@@ -36,13 +36,14 @@ CI's `lint-and-typecheck` job runs `pnpm build:libs` on every PR, so the publish
 
 ## Third-party notices
 
-Upstream code copied into a package (generated or vendored) ships with its license in the published file itself:
+Like Vite's `LICENSE.md` section of bundled dependencies: one generated file per package, no license texts in bundles.
 
-- Convention: the artifact lives in a `generated/` or `vendor/` dir that also holds `<origin>.LICENSE` (verbatim upstream text), one origin per dir. Rifty's own generated files are listed in `FIRST_PARTY` of `tools/checks/third-party-notices.mjs`; any other file there without a license is red.
-- Delivery: the generator writes the license as a `/*! … */` comment into the artifact (`tools/publishing/legal-comment.mjs`); tsup/esbuild keep it at the end of every chunk holding the code (`legalComments: 'eof'`, default for bundles — never `'none'`), and so do consumer bundlers by default. A JSON artifact (`ts-language-service/vendor/lib-bundle.json`) ships its `.LICENSE` files next to it in `vendor/`.
-- Today: undici (MIT), TypeScript 5.9.3 compiler and lib files (Apache-2.0 `LICENSE.txt` + `ThirdPartyNoticeText.txt`; the compiler also a change line, §4(b)), esbuild-wasm runtime (MIT) + Go `wasm_exec.js` (BSD-3-Clause, `tools/shadow-registry/go1.26.1.LICENSE`).
-- Gate: `pnpm check:third-party-notices` after `build:libs` (in `pr:check`, CI and `release.yml` before publish) reads every publishable package's `npm pack --dry-run` files, finds each artifact by content fingerprint and requires its licenses in that same file — the notice travels with the chunk; a separate NOTICE file does not count. Only a JSON artifact (no comment possible) is covered by its own packed `<origin>.LICENSE` files.
-- Not covered: npm dependencies inlined into bundles and copied `.wasm` (`docs/backlog/toolchain-build/bundled-npm-dependency-notices.md`).
+- `pnpm build:libs` ends with `tools/publishing/third-party-notices.mjs --write`: for each publishable package it reads the bundler's own input list per emitted file — tsup sourcemap `sources`, or `.bundle-inputs.json` that the esbuild-direct builds write from their metafile (isolate guest/host, Workbench assets incl. the copied `.wasm`) — and writes `dist/THIRD_PARTY_NOTICES.md` (dist is already in `files`).
+- Counted: npm packages the bundler inlined (license files from the package's own dir) and whole files under `generated/`/`vendor/` dirs, bundled or packed as is. Fragments are not counted.
+- Manual records, `tools/publishing/third-party-manifest.json`: each `generated/`/`vendor/` dir → upstream package, version, changes (its license files come from the installed package; version mismatch is red); rifty's own generated files (`firstParty`); texts a package does not ship (`npm`, files in `tools/publishing/third-party-licenses/`: clean-git-ref, diff3, isarray, pako's Zlib part, Go's license for esbuild-wasm's `wasm_exec.js`).
+- Every emitted JS file that bundles counted code ends with `/*! For third-party licenses see dist/THIRD_PARTY_NOTICES.md of this npm package */` (esbuild/tsup `footer`; tsup packages via `noticesLink` in the sync SPEC).
+- Gate: `pnpm check:third-party-notices` (in `pr:check` after `build:libs`, CI, `release.yml` and `first-publish.sh` before publish): per package, the file `npm pack --dry-run` ships equals the one derived from the bundler inputs, every packed dist JS file has an input list, every bundling file carries the footer line; a `generated/`/`vendor/` file without a record or an npm package without any license text is red.
+- Residuals: what emscripten's runtime put inside `quickjs.wasm`/`sql-wasm.wasm` is counted at package level, as upstream ships it; a `guest.js` taken out of its package carries only the footer line.
 
 ## Releasing (automated, on a tag) — tokenless OIDC
 

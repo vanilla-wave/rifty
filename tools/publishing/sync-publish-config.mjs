@@ -18,6 +18,7 @@ import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { LINK } from './third-party-notices.mjs';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const args = process.argv.slice(2);
@@ -80,6 +81,7 @@ const SPEC = {
   '@riftydev/git': { dir: 'packages/git', sideEffects: false, keywords: ['git', 'vcs'] },
   '@riftydev/runtime-js': {
     dir: 'packages/runtime-js',
+    noticesLink: true, // bundles third-party code: dist/THIRD_PARTY_NOTICES.md
     sideEffects: ['./dist/index.js', './dist/worker.js'],
     removeDeps: ['acorn-walk'], // declared but never imported (ADR-0070 D6)
     // execSync handler seam (ipc/exec-sync-handler): a host realm that owns the
@@ -141,6 +143,7 @@ const SPEC = {
   },
   '@riftydev/ts-language-service': {
     dir: 'packages/ts-language-service',
+    noticesLink: true, // bundles third-party code: dist/THIRD_PARTY_NOTICES.md
     // The kernel `serve`-worker boot self-installs on load (auto-boot guard) —
     // mark it side-effecting so tree-shaking can't drop it (mirrors kernel/
     // runtime-wasi worker-entry).
@@ -202,6 +205,7 @@ const SPEC = {
   },
   '@riftydev/shadow-registry': {
     dir: 'tools/shadow-registry',
+    noticesLink: true, // bundles third-party code: dist/THIRD_PARTY_NOTICES.md
     sideEffects: false,
     addExports: {
       './runtime': './src/runtime/index.ts',
@@ -318,7 +322,7 @@ function rebuildPkg(orig, name, spec) {
   return out;
 }
 
-function tsupConfig(entries) {
+function tsupConfig(entries, spec) {
   // Emit Biome's style: single quotes, object keys unquoted when valid idents.
   const isIdent = (k) => /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(k);
   const entryBody = (selectedEntries, indent = '    ') =>
@@ -340,7 +344,7 @@ ${entryBody(entries)}
   clean: true,
   treeshake: true,
   target: 'es2022',
-  external: [/^@riftydev\\//],
+  external: [/^@riftydev\\//],${spec.noticesLink ? `\n  footer: {\n    js: '${LINK}',\n  },` : ''}
 });
 `;
 }
@@ -354,7 +358,7 @@ for (const [name, spec] of Object.entries(SPEC)) {
   const { entries } = buildExportsAndEntries(orig, spec);
   const next = rebuildPkg(orig, name, spec);
   const tsupPath = join(ROOT, spec.dir, 'tsup.config.ts');
-  const nextTsup = tsupConfig(entries);
+  const nextTsup = tsupConfig(entries, spec);
   if (checkOnly) {
     if (JSON.stringify(orig) !== JSON.stringify(next)) drift.push(pkgPath);
     if ((await readFile(tsupPath, 'utf8')) !== nextTsup) drift.push(tsupPath);
