@@ -16,6 +16,7 @@ import {
 } from './node-validators.ts';
 
 const kOnKeylog = Symbol('onkeylog');
+const kProxyConfig = Symbol('kProxyConfig');
 type Options = Record<string, unknown>;
 interface AgentFields extends EventEmitter {
   options: Options;
@@ -35,6 +36,7 @@ interface AgentFields extends EventEmitter {
   maxCachedSessions?: unknown;
   _sessionCache?: { map: Record<string, unknown>; list: string[] };
   [kOnKeylog]?: (this: unknown, keylog: unknown) => void;
+  [kProxyConfig]?: null;
   getName(options?: Options): string;
 }
 interface AgentCtor {
@@ -80,6 +82,23 @@ function hidden(impl: (...args: never[]) => void, name: string) {
   return Object.assign(wrapped, { withoutStackTrace: impl });
 }
 
+/**
+ * Node's `parseProxyConfigFromEnv` (`internal/http`): null when `env` names no
+ * http(s) proxy for `protocol`; a proxy is the route Node's connections take
+ * (and its `ProxyConfig` parses a `URL`, a guest ceiling) — the gap.
+ */
+function proxyConfig(env: Options, protocol: unknown): null {
+  if (protocol !== 'http:' && protocol !== 'https:') return null;
+  const url = (
+    protocol === 'https:' ? env.https_proxy || env.HTTPS_PROXY : env.http_proxy || env.HTTP_PROXY
+  ) as string;
+  if (!url) return null;
+  if (url.includes('\r') || url.includes('\n'))
+    throw nodeError(Error, 'ERR_PROXY_INVALID_CONFIG', `Invalid proxy URL: ${url}`);
+  if (!url.startsWith('http://') && !url.startsWith('https://')) return null;
+  throw gap('http.Agent.proxyEnv');
+}
+
 function maybeEnableKeylog(this: AgentFields, eventName: unknown): void {
   if (eventName !== 'keylog') return;
   this.removeListener('newListener', maybeEnableKeylog);
@@ -116,8 +135,8 @@ function createAgent(): AgentCtor {
       this.agentKeepAliveTimeoutBuffer =
         typeof buffer === 'number' && buffer >= 0 && Number.isFinite(buffer) ? buffer : 1000;
       const proxyEnv = this.options.proxyEnv;
-      // Node parses a proxy config here, for the connections it will make.
-      if (typeof proxyEnv === 'object' && proxyEnv !== null) throw gap('http.Agent.proxyEnv');
+      if (typeof proxyEnv === 'object' && proxyEnv !== null)
+        this[kProxyConfig] = proxyConfig(proxyEnv as Options, this.protocol);
       validateOneOf(this.scheduling, 'scheduling', ['fifo', 'lifo']);
       if (this.maxTotalSockets !== undefined)
         validateNumberAtLeast(this.maxTotalSockets, 'maxTotalSockets', 1);
