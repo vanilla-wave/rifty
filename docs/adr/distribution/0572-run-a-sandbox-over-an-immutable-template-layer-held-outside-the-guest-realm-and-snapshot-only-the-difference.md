@@ -49,7 +49,11 @@ Proposed; F1–F4 (§Forks) are the user's, the rest follows from the requiremen
    three sync host functions — `stat`, `read`, `readdir` of a template path: exact lookup in the
    worker's immutable map, copies out, no other effect. The end state is the difference only. A
    sandbox without a template runs the same overlay over an empty template (one lifecycle,
-   ADR-0568 §8). Owner of the FS: F1 (this is option (b)).
+   ADR-0568 §8). The guest's FS is sync only: the overlay is an `FsSync` installed with
+   `setSyncMirror` (no async `Vfs`, whose read stream needs web `ReadableStream`, absent in the
+   isolate — the guest's sync-only FS change on top of PR #434); its upper is the realm's
+   `MemoryFsSync` that `GuestEntry.restore`/`snapshot` already use, so restore and capture touch the
+   difference only. Owner of the FS: F1 (this is option (b)).
 3. **Identity** `{id, version}` = `{rifty/manifest.json templateId, snapshotId}` (sha256 of the
    decoded tar, as the producer computes it; the same for gzip and br).
 4. **Format v2** (ADR-0567 §3: v1 still read; the writer writes v2): v1's layout, version 2; with a

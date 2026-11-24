@@ -44,7 +44,7 @@ hypothesis until the carrier hits it:
 - The four libraries' `require` in the guest (scenario steps 3, 10) — owner: agent — library probe
   (PR #430, `reference/isolate-library-probe/README.md`, @ b3731e9c0): `pdf-lib`, `docx` load and
   write as Node; `pptxgenjs` stops on `node:https` at load (PR #435 in flight); `require('exceljs')`
-  stops on `node:zlib` at require (`isolate-host.zlib`, declared ❌) — no open PR, no item: the
+  stops on `node:zlib` at require (`isolate-host.zlib`, declared ❌) — owned by the user's thread «Расширить платформу для офисных библиотек» (engine choice pako / wasm zlib / host bridge; isolate load of zlib in its queue), no item here: the
   carrier stays RED on exceljs until the isolate guest has `node:zlib` (a Node module, not a Web
   API — ROADMAP M14 E's list blocks none of the four). A dependency of this goal, not its scope.
 
