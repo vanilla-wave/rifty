@@ -76,7 +76,7 @@ isolate-host.https`. Node over the same files: exit 0, `wrote out/probe.pptx`, a
 - Node's argument validation before a loud member's throw (`http.request(1)`: Node `ERR_INVALID_ARG_TYPE`, guest the named gap), compat ⚠️.
 - `https.Server.prototype` chains to the guest's `net.Server.prototype`, not `tls.Server.prototype` (rifty's `tls` stub, `null-net-stubs.ts`, is not Node-shaped), compat ⚠️.
 - A non-string argument in a real member's error message is printed by rifty's `util.format('%s')`/`util.inspect`, differing from Node where they do (own `toString`/`Symbol.toPrimitive`, `-0`, boxed primitives, null-prototype, an Error's own props, long strings): `backlog/runtime-js/util-format-percent-s`, `backlog/runtime-js/inspect-null-prototype-prefix`, compat ⚠️ — declared rows in the parity test, no copy of the rules in the guest.
-- `setGlobalProxyFromEnv` / `Agent({ proxyEnv })` with an unusable proxy URL (`'notaurl'`, `'http://[bad'`, `'ftp://x'` for the global setter): the named gap before Node's own check, compat ⚠️.
+- `setGlobalProxyFromEnv` given any http(s) proxy variable: the named gap before Node's own handling (Node: `ERR_PROXY_INVALID_CONFIG` for `'notaurl'`/`'http://[bad'`/`'http://'`, undici `UND_ERR_INVALID_ARG` for `'ftp://x'`, a rerouted `http.globalAgent` for `'socks5://x:1'`), compat ⚠️.
 - EventEmitter instance internals on an Agent (`_events`, `_eventsCount`, `_maxListeners`, `Symbol(shapeMode)`, `Symbol(kCapture)`): rifty's EventEmitter keys — `backlog/runtime-js/events-prototype-shape`.
 - `node:zlib`, `node:child_process`, `node:worker_threads` (`HOST_CEILING_MODULES`): the next unit.
 - `import()` in `node -e` code: still ends the run (`isolate-host.dynamic-import`, ADR-0557 §5).

@@ -17,6 +17,7 @@ Probe 2026-11-24, isolate guest `runCode` vs live `node -e` v24.16.0, `util.form
 | `{ toString() { return 'o' } }` | `o` | `{ toString: [Function: toString] }` |
 | `new (class A { toString() { return 'A' } })()` | `A` | `A {}` |
 | `{ [Symbol.toPrimitive]: () => 'p' }` | `p` | `{}` |
+| `{ [Symbol.toPrimitive]() { throw new Error('PRIM') } }` | throws `Error: PRIM` (so `http.validateHeaderName(v)` throws it, not `ERR_INVALID_HTTP_TOKEN`) | `{}` (the validator throws `ERR_INVALID_HTTP_TOKEN … ["{}"]`) |
 | `-0` | `-0` | `0` |
 | `new Number(5)` | `[Number: 5]` | `Number {}` |
 | `{ a: Object.create(null) }` | `{ a: [Object: null prototype] {} }` | `{ a: [Object] }` |
