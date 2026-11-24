@@ -26,7 +26,7 @@ export function evaluateGate({ code, changeScope, lint, unit, e2e, browserUnit, 
   } else {
     const next =
       draft === 'true'
-        ? 'heavy lanes withheld on draft — rerun after ready for review'
+        ? 'heavy lanes withheld on draft — mark the PR ready for review (fresh run)'
         : 'heavy suite fails open — rerun it for a green gate';
     errors.push(`change-scope concluded '${changeScope}' before classifying; ${next}`);
   }

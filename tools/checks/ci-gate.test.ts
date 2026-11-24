@@ -116,6 +116,7 @@ describe('CI gate reducer', () => {
     expect(classifier).toBeDefined();
     // heavy lanes are withheld on draft: "fails open — rerun" would mislead.
     expect(classifier).not.toContain('fails open');
+    expect(classifier).not.toContain('rerun');
     expect(classifier).toContain('ready for review');
     expect(errors.some((e: string) => e.startsWith('draft PR'))).toBe(true);
   });
