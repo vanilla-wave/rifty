@@ -33,6 +33,7 @@ import { Buffer } from './buffer.ts';
 import { EventEmitter } from './events.ts';
 import { fsError, toNodeFsError } from './fs-errors.ts';
 import { pathToString, resolvePath } from './fs-path.ts';
+import { ChunkDecoder } from './fs-stream-decoder.ts';
 import {
   type ParsedStreamFlags,
   type ReadStreamOptions,
@@ -65,61 +66,6 @@ const STREAM_DESTROYED = (): Error =>
 const ALREADY_FINISHED = (): Error =>
   streamError('ERR_STREAM_ALREADY_FINISHED', 'Stream is already finished');
 const PREMATURE_CLOSE = (): Error => streamError('ERR_STREAM_PREMATURE_CLOSE', 'Premature close');
-
-/**
- * Incremental bytes→string converter for the read-stream `encoding` option.
- * A chunk boundary must not split an encoding unit (Node routes through
- * StringDecoder): utf8 decodes via a streaming TextDecoder; utf16le/base64
- * carry the remainder to the next chunk; single-byte encodings pass through.
- */
-class ChunkDecoder {
-  private readonly enc: string;
-  private readonly utf8: TextDecoder | null;
-  private readonly unit: number;
-  private carry: Uint8Array = new Uint8Array();
-
-  constructor(enc: string) {
-    this.enc = enc;
-    const low = enc.toLowerCase();
-    // Unknown encodings throw here (loud, sync, as Node's createReadStream).
-    (Buffer.from(new Uint8Array()) as Uint8Array & { toString(e?: string): string }).toString(enc);
-    const utf8 = low === 'utf8' || low === 'utf-8';
-    this.utf8 = utf8 ? new TextDecoder('utf-8', { ignoreBOM: true }) : null; // Node keeps BOM
-    this.unit =
-      low === 'utf16le' || low === 'utf-16le' || low === 'ucs2' || low === 'ucs-2'
-        ? 2
-        : low === 'base64' || low === 'base64url'
-          ? 3
-          : 1;
-  }
-
-  decode(bytes: Uint8Array): string {
-    if (this.utf8) return this.utf8.decode(bytes, { stream: true });
-    let buf = bytes;
-    if (this.carry.length > 0) {
-      const merged = new Uint8Array(this.carry.length + bytes.length);
-      merged.set(this.carry, 0);
-      merged.set(bytes, this.carry.length);
-      buf = merged;
-      this.carry = new Uint8Array();
-    }
-    const rem = this.unit === 1 ? 0 : buf.length % this.unit;
-    if (rem > 0) {
-      this.carry = buf.slice(buf.length - rem);
-      buf = buf.subarray(0, buf.length - rem);
-    }
-    if (buf.length === 0) return '';
-    return (Buffer.from(buf) as Uint8Array & { toString(e?: string): string }).toString(this.enc);
-  }
-
-  flush(): string {
-    if (this.utf8) return this.utf8.decode();
-    if (this.carry.length === 0) return '';
-    const tail = this.carry;
-    this.carry = new Uint8Array();
-    return (Buffer.from(tail) as Uint8Array & { toString(e?: string): string }).toString(this.enc);
-  }
-}
 
 class FileReadStream extends EventEmitter {
   readonly path: string;
@@ -259,11 +205,12 @@ class FileReadStream extends EventEmitter {
     if (hwm === 0) {
       try {
         syncMirror().statSync(np);
-        this.emitOpenReady();
-        this.finishEnd();
       } catch (err) {
         this.emitError(err);
+        return;
       }
+      this.emitOpenReady();
+      this.pump(() => Promise.resolve({ done: true }));
       return;
     }
     // Node's `createReadStream` byte range is INCLUSIVE of `end`; the half-open
@@ -279,35 +226,21 @@ class FileReadStream extends EventEmitter {
     }
     if (openedStat.isDirectory) {
       this.emitOpenReady();
-      // The read fails a step after 'ready' (Node: a separate I/O turn), so a
-      // close()/destroy() issued after 'ready' wins.
-      queueMicrotask(() => {
-        if (!this.destroyed) this.emitError(new VfsError('EISDIR', np), 'read');
-      });
+      this.pump(() => Promise.reject(new VfsError('EISDIR', np)));
       return;
     }
 
-    // Whole-file emit from a byte buffer, chunked across microtasks so the event
-    // loop is not starved. Applies the `start`/`end` window.
-    const emitFromBytes = (data: Uint8Array): void => {
-      if (this.destroyed) return;
-      const start = this.opts.start ?? 0;
+    // Whole-file read from a byte buffer, one `hwm` slice per step. Applies the
+    // `start`/`end` window.
+    const pumpBytes = (data: Uint8Array): void => {
       const end = Math.min(exclusiveEnd ?? data.length, data.length);
-      let i = start;
-      const emitChunk = (): void => {
-        if (this.destroyed) return;
-        if (i >= end) {
-          this.finishEnd();
-          return;
-        }
-        const slice = data.subarray(i, Math.min(i + hwm, end));
-        i += slice.length;
-        this.emitData(slice);
-        queueMicrotask(emitChunk);
-      };
-      // First chunk a step after 'ready', as every later one: a close()/destroy()
-      // issued after 'ready' stops the read before any 'data' (Node).
-      queueMicrotask(emitChunk);
+      let i = this.opts.start ?? 0;
+      this.pump(() => {
+        if (i >= end) return Promise.resolve({ done: true });
+        const value = data.subarray(i, Math.min(i + hwm, end));
+        i += value.length;
+        return Promise.resolve({ value, done: false });
+      });
     };
 
     const vfs = asyncVfs();
@@ -328,31 +261,10 @@ class FileReadStream extends EventEmitter {
           }
           this.emitOpenReady();
           const reader = stream.getReader();
-          try {
-            while (true) {
-              if (this.destroyed) {
-                await reader.cancel().catch(() => {});
-                return;
-              }
-              const { value, done } = await reader.read();
-              // A close()/destroy() while the read was in flight wins: no
-              // 'data' or 'end' after it (Node).
-              if (this.destroyed) {
-                await reader.cancel().catch(() => {});
-                return;
-              }
-              if (done) break;
-              if (value && value.byteLength > 0) this.emitData(value);
-            }
-            this.finishEnd();
-          } catch (err) {
-            if (this.destroyed) {
-              // Read failure racing an abort/destroy — swallowed like Node.
-              this.closeOnce();
-              return;
-            }
-            this.emitError(err, 'read');
-          }
+          this.pump(
+            () => reader.read(),
+            () => reader.cancel(),
+          );
         })
         .catch((err) => {
           if (this.destroyed) this.openFailedAfterDestroy(err);
@@ -361,15 +273,56 @@ class FileReadStream extends EventEmitter {
       return;
     }
 
-    // No async surface: serve from the sync mirror, still chunked over
-    // microtasks to preserve stream event order.
+    // No async surface: serve from the sync mirror, still one slice per step.
     try {
       this.emitOpenReady();
       if (this.destroyed) return;
-      emitFromBytes(syncMirror().readFileBytesSync(np));
+      pumpBytes(syncMirror().readFileBytesSync(np));
     } catch (err) {
       this.emitError(err, 'read');
     }
+  }
+
+  /**
+   * The one read loop, every path (sync slices, async `openReadable`, `highWaterMark: 0`,
+   * a directory's EISDIR): each step's continuation passes the `destroyed` guard, so a
+   * close()/destroy() issued while a step is pending wins — no 'data'/'end'/read error
+   * after it. A read failure after the request ends in 'close' only. Steps are microtask
+   * continuations where Node's are I/O turns: a request two or more steps late sees what
+   * Node never emits — declared, backlog runtime-js/fs-streams-not-node-streams.
+   */
+  private pump(
+    next: () => Promise<ReadStep>,
+    cancel: () => Promise<unknown> = () => Promise.resolve(),
+  ): void {
+    const step = (): void => {
+      next()
+        .then(
+          ({ value, done }) => {
+            if (this.destroyed) {
+              cancel().catch(() => {});
+              return;
+            }
+            if (done) {
+              this.finishEnd();
+              return;
+            }
+            if (value && value.byteLength > 0) this.emitData(value);
+            step();
+          },
+          (err: unknown) => {
+            if (this.destroyed) this.closeOnce();
+            else this.emitError(err, 'read');
+          },
+        )
+        // A throwing listener stays an uncaught exception, not a rejection.
+        .catch((err: unknown) =>
+          queueMicrotask(() => {
+            throw err;
+          }),
+        );
+    };
+    step();
   }
 
   /**
@@ -431,19 +384,29 @@ class FileReadStream extends EventEmitter {
       else if (!this.ended) call(PREMATURE_CLOSE());
       else call();
     };
-    if (this.closedState) {
-      queueMicrotask(onClose);
+    if (!this.emitCloseOpt) {
+      // No 'close' to wait for — one rule (Node's `onclosed`): the error if the
+      // stream errored, else no arguments; a stream still running settles only
+      // by its error.
+      if (this.erroredWith !== null || this.ended || this.destroyed || this.closedState) {
+        queueMicrotask(() => (this.erroredWith !== null ? call(this.erroredWith) : call()));
+      } else {
+        this.on('error', (err) => call(err));
+      }
       return;
     }
-    // emitClose:false with nothing left to wait for: Node's `onclosed` a tick
-    // later — the error if any, else no arguments (no premature-close check).
-    if (!this.emitCloseOpt && (this.erroredWith !== null || this.ended || this.destroyed)) {
-      queueMicrotask(() => (this.erroredWith !== null ? call(this.erroredWith) : call()));
+    if (this.closedState) {
+      queueMicrotask(onClose);
       return;
     }
     this.on('error', (err) => call(err));
     this.on('close', onClose);
   }
+}
+
+interface ReadStep {
+  readonly value?: Uint8Array;
+  readonly done?: boolean;
 }
 
 interface PendingWrite {

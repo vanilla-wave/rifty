@@ -85,8 +85,13 @@ ReadStream (`close(cb)`; cb argument, `this`, `closed`/`destroyed` printed in it
    both async `openReadable` paths (`installMemoryFs`, `SyncMirrorVfs`) → scenario
 9. directory target, `close(cb)` after awaiting `'ready'`: `open|ready|close|cb(ERR_STREAM_PREMATURE_CLOSE)`,
    no `EISDIR` → scenario
-10. `emitClose:false`, `close(cb)` twice after/inside `'ready'`: the first never called, the
-    second a tick later with no arguments (`closed` not printed, see 6) → scenario
+10. `emitClose:false`, `close(cb)` twice after/inside `'ready'` or a microtask apart: the first
+    never called, the second a tick later with no arguments (`closed` not printed, see 6)
+    → scenario
+10a. `highWaterMark: 0`, `close(cb)`/`destroy()` inside `'open'` or `'ready'`: no `'end'`,
+    `close` (+ `cb(ERR_STREAM_PREMATURE_CLOSE)`) → scenario
+
+Rows 8–10a sit on rifty's one-microtask read-step boundary (Out of scope: read steps).
 
 WriteStream (`close(cb)` = `on('close', cb)` + `end()`; file content printed) → scenario:
 
@@ -131,7 +136,12 @@ zero, `this` the stream via `on('close')`, not the stream when already closed (n
   `runtime-js/events-listener-argument-validation`.
 - A pre-aborted `signal` followed by a synchronous `destroy()`/`close()` drops the abort error:
   `runtime-js/fs-readstream-preaborted-signal-sync-destroy`.
-- `destroy(err)` ignores `err` (both streams, every state); ReadStream opening a microtask after
+- Read steps are microtasks where Node's are I/O turns: a request two or more microtasks after
+  `'ready'`/`'data'` sees `'data'`/`'end'`/a successful callback, a directory's EISDIR is lost
+  or early, `highWaterMark: 0` ends later than Node's tick, a late consumer gets nothing
+  (table: `runtime-js/fs-streams-not-node-streams`; compat fs.md). Manager 2026-11-24: declared,
+  not chased per window — the class fix is fs streams on a real `Readable` (user's decision).
+- `destroy(err)` ignores `err` (both streams, every state before `'close'`); ReadStream opening a microtask after
   create (Node: after I/O) reorders a pre-open `emitClose:false` second callback vs `'ready'`:
   `runtime-js/fs-streams-not-node-streams`.
 
@@ -155,11 +165,14 @@ zero, `this` the stream via `on('close')`, not the stream when already closed (n
   pre-aborted-signal case.
 - No `'drain'` after `end()` (Node `afterWrite` checks `!ending`): case 17 is `close()` with
   unwritten data.
-- A request wins over a read in flight (review 2026-11-24, B1): the async loop re-checks
-  `destroyed` after every `reader.read()`; the sync fallback emits its first chunk (and a
-  directory's `EISDIR`) a microtask after `'ready'` — same race for `destroy()`, fixed for both.
-- `emitClose:false` with nothing to wait for settles via Node's `onclosed` (error or no
-  arguments), not `onclose`'s premature-close check (review S1).
+- A request wins over a pending read step (review 2026-11-24, B1, S2): one loop
+  (`FileReadStream.pump`) carries every read path — sync slices, async `openReadable`,
+  `highWaterMark: 0`, a directory's EISDIR — and its one `destroyed` guard runs on every
+  step's continuation; same race for `destroy()`, fixed for both. A throwing listener stays
+  an uncaught exception (the async loop had turned it into a read `'error'`).
+- `emitClose:false`: one callback rule, Node's `onclosed` — the error if the stream errored,
+  else no arguments, whatever `closed`/`ended` (review S1, S3); a running stream settles only
+  by its error.
 - `destroy(err)` ignoring `err` is the whole `destroy()` surface on both streams, not this
   branch: declared (compat fs.md, `runtime-js/fs-streams-not-node-streams`), not fixed here.
 - `fs-streams.ts` sat at its ratchet (1016): option/flag helpers move to

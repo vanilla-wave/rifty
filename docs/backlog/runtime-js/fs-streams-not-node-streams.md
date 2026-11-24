@@ -23,19 +23,42 @@ node:  late data listener got: "hello"
 rifty: late listener after 50ms got: ""            (no 'end' either)
 ```
 
-How late (review of PR #434, `xreview-434-codex/late.mts`, `'data'`+`'end'` listeners added after N
-`await Promise.resolve()` or a 20 ms timer, 5-byte file; rifty on that PR's branch after its
-first-chunk deferral; Node gets `hello` + `'end'` in every row):
+### Read steps are microtasks (declared class)
+
+rifty's read stream advances by microtask continuations (open a microtask after create; each
+read step, `highWaterMark: 0`'s end, a directory's `EISDIR` one microtask after the previous —
+one guarded loop, `FileReadStream.pump`); Node's are I/O turns, some end-of-read events
+`nextTick`s. Every consequence below is this one class, on all three read paths alike (sync
+mirror, `installMemoryFs`, workbench `SyncMirrorVfs`; measured on PR #434's head, Node
+v24.16.0; reviewer scripts `xreview-434-r2-claude/sc-hops.mjs`, `sc-windows.mjs`,
+`xreview-434-codex/late.mts` + `nextTick`/`setImmediate`/`pipe`). A request (close/destroy)
+up to one microtask after `'ready'`/`'data'` behaves as Node (parity `fs/read-stream-close`
+rows sit on that boundary); later ones do not:
+
+| situation | Node v24.16.0 | rifty |
+|---|---|---|
+| `close(cb)` 2 microtask hops after `'ready'`, `'data'` listener | `REQ\|close\|cb(PREMATURE)` | `data\|REQ\|close\|cb(PREMATURE)` |
+| the same ≥3 hops, `nextTick`, `setImmediate`; `const s = await open(); await null; s.close()` | `REQ\|close\|cb(PREMATURE)` | `data…\|end\|close\|REQ\|cb()` |
+| `const s = await open(); s.close()` (`open` awaits `'ready'`) | `REQ\|close\|cb(PREMATURE)` | `data\|REQ\|close\|cb(PREMATURE)` |
+| directory, `'data'` listener, `close(cb)` a microtask after `'ready'` | `REQ\|error:EISDIR\|cb(EISDIR)\|close` | `REQ\|close\|cb(PREMATURE)`; `destroy()`: the error is lost silently |
+| directory, the same ≥2 hops | as above | `error:EISDIR\|close\|REQ\|cb(EISDIR)` |
+| `highWaterMark: 0`, `close(cb)` a microtask after `'ready'` | `ready\|end\|REQ\|close\|cb()` (end on a tick) | `ready\|REQ\|close\|cb(PREMATURE)` |
+| `close(cb)` in the `'data'` of a decoder's flushed tail | `end\|cb()\|close` | `end\|close\|cb()` |
+| `close()` a microtask after `'end'` | `end\|REQ\|close\|cb()` | `end\|close\|REQ\|cb()` (`'close'` timing, below) |
+
+Late consumers — `'data'`+`'end'` listeners, or `pipe(createWriteStream(…))`, attached after
+N `await Promise.resolve()` / a `nextTick` / a `setImmediate` / a 20 ms timer, 5-byte file
+(Node: `hello` + `'end'`, pipe copies, in every row):
 
 | attached after | sync mirror (parity runner, sync-RPC fs, dev-server child) | async `openReadable` (`installMemoryFs`) |
 |---|---|---|
-| 0–1 awaits | `hello`, end | `hello`, end |
-| 2 awaits | `""`, end | `hello`, end |
-| 3 awaits | `""`, no end | `""`, end |
-| ≥4 awaits / a timer | `""`, no end | `""`, no end |
+| 0–1 awaits | `hello`, end, pipe copies | `hello`, end, pipe copies |
+| 2 awaits | `""`, end, pipe empty | `hello`, end, pipe copies |
+| 3 awaits | `""`, no end, pipe empty | `""`, end, pipe empty |
+| ≥4 awaits, `nextTick`, `setImmediate`, a timer | `""`, no end, pipe empty | `""`, no end, pipe empty |
 
-Each further step loses one more chunk on a multi-chunk file. `pipe` attached after an `await`
-on the sync path writes an empty file (reviewer's measurement).
+Each further step loses one more chunk on a multi-chunk file. The read also runs with no
+`'data'` listener (non-flowing): `close(cb)` ≥3 hops after `'ready'` gives `end|close|REQ|cb()`.
 
 Absent or different public members (`typeof` / value right after create, Node | rifty):
 
@@ -56,12 +79,13 @@ Absent or different public members (`typeof` / value right after create, Node | 
   `writableLength`, `writableNeedDrain`, `writableObjectMode`, `writableCorked` | undefined.
 - `stream.finished(rs, cb)` success: cb gets 0 arguments | 1 (`null`) —
   `runtime-js/stream-pipeline-finished-callback-args`. `stream.pipeline(rs, ws, cb)` copies.
-- `destroy(err)` ignores `err` on both streams in every state (Node: `'error'` with it, then
+- `destroy(err)` ignores `err` on both streams in every state before `'close'` (after it Node
+  ignores it too) (Node: `'error'` with it, then
   `'close'`; `errored` = it): pre-open existing file → rifty `open|ready|close`, missing file →
   rifty `error:ENOENT|close` (Node `error:mine|close`), after `'ready'` → `close`; `errored`
   undefined (Node `null`, then the error). Scratch case, Node v24.16.0.
-- ReadStream opens a microtask after create (Node: after I/O), so a callback Node delivers a tick
-  after a pre-open `close()` lands after rifty's `'ready'` (`emitClose:false` + `close(cb)` twice
+- The open is a microtask after create (class above): a callback Node delivers a tick after a
+  pre-open `close()` lands after rifty's `'ready'` (`emitClose:false` + `close(cb)` twice
   pre-open: Node `cb2|ready`, rifty `ready|cb2`).
 - `'close'` follows `'end'` / `'finish'` in the same tick; Node emits it after the async
   `fs.close` (a `closed` read or `WriteStream#close(cb)` between microtasks differs; e.g. the second
