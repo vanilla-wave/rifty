@@ -1,6 +1,6 @@
 /**
  * `node:zlib`, `node:child_process`, `node:worker_threads` in the isolate guest (unit
- * `backlog/distribution/isolate-host-ceiling-modules-load`, ADR-0557 §6 correction
+ * PR #438 (isolate ceiling modules), ADR-0557 §6 correction
  * 2026-11-24): Node's shape and real members, against live `node`; every use of the
  * missing compression engine, processes or workers a named gap at use, never at load.
  */

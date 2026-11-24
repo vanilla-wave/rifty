@@ -48,7 +48,7 @@ contains an unrelated lexical `Function` use.
 
 ### Consumer: construction through a runtime global key (2026-11-24)
 
-Measured while delivering `distribution/isolate-host-ceiling-modules-load` (isolate sandbox,
+Measured while delivering PR #438 (isolate ceiling modules) (isolate sandbox,
 same CJS file under Node v24.16.0): `var k = ['Uint8Array']; try { new global[k[0]](new
 ArrayBuffer(0)) } catch (e) {} console.log('a ok')` — Node prints `a ok`; rifty refuses the module
 at load with `module-loader.cjs-global-function-assignment`, though no write happens and the key
