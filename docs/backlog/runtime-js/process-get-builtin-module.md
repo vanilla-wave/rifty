@@ -4,7 +4,7 @@ status: draft
 title: "`process.getBuiltinModule(id)` returns the builtin as in Node"
 created: 2026-11-24
 why: Node 24 has `process.getBuiltinModule` (libraries use it to reach `fs` without `require`); rifty's `process` has none on any host, so the call throws `TypeError: process.getBuiltinModule is not a function`
-sources: [docs/backlog/runtime-js/isolate-require-esm-syntax-gaps.md]
+sources: [PR-440]
 code: [packages/runtime-js/src/builtins/process.ts]
 ---
 

@@ -4,7 +4,7 @@ status: draft
 title: "Whether source has ESM syntax is decided as Node decides it, from V8's CommonJS compile error, not a whole-file parse"
 created: 2026-11-24
 why: Node's `containsModuleSyntax` reads V8's CJS compile error (`Unexpected token 'export'`, `Cannot use import statement outside a module`, a redeclared wrapper name → module parse); rifty requires the whole file to parse as a module, so source that fails to parse is classified differently
-sources: [docs/backlog/runtime-js/isolate-require-esm-syntax-gaps.md]
+sources: [PR-440]
 code: [packages/runtime-js/src/module-loader/resolver-profile.ts, packages/runtime-js/src/module-loader/require-esm-refusal.ts]
 ---
 

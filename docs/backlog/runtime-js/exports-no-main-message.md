@@ -4,7 +4,7 @@ status: draft
 title: "A package whose exports define no entry for require throws Node's ERR_PACKAGE_PATH_NOT_EXPORTED text and shape"
 created: 2026-11-24
 why: Node says `No "exports" main defined in <pkg>/package.json` (an `Error`); rifty says `Package subpath '.' is not defined by 'exports' in <pkg>/package.json` (a `ModuleLoadError`), same code
-sources: [docs/backlog/runtime-js/isolate-require-esm-syntax-gaps.md]
+sources: [PR-440]
 code: [packages/runtime-js/src/module-loader/resolver.ts, packages/runtime-js/src/module-loader/errors.ts]
 ---
 

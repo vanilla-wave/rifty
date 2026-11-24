@@ -1,5 +1,5 @@
 /**
- * Unit `runtime-js/isolate-require-esm-syntax-gaps`: with no ES module loader the guest's
+ * PR #440 (ADR-0557 2026-11-24 line): with no ES module loader the guest's
  * `require` behaves as Node 24 launched with `--no-require-module` — the oracle here, live,
  * over the same files. `<root>` = the oracle's cwd (realpath) and the guest's `/workspace`.
  */

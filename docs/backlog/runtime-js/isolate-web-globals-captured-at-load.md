@@ -4,7 +4,7 @@ status: draft
 title: "In the isolate guest a runtime-internal use of a web global installed after the runtime loads gives the global's named gap or Node's result, never a leaked internal name or a wrong value"
 created: 2026-11-24
 why: runtime-js captures `URL`, `URLSearchParams`, `Blob`, `File`, `crypto.subtle` at module load, where the isolate guest has none yet (ceilings installed after); its internal uses then throw `URLConstructor is not a constructor`-style errors, and `url.parse`/`url.resolve` return wrong values silently
-sources: [docs/backlog/runtime-js/isolate-require-esm-syntax-gaps.md, PR-440-review-rounds-2-3]
+sources: [PR-440, PR-440-review-rounds-2-3]
 code: [packages/runtime-js/src/internal/posix-file-url.ts, packages/runtime-js/src/builtins/url.ts, packages/runtime-js/src/builtins/buffer.ts, packages/runtime-js/src/builtins/crypto.ts, packages/runtime-js/src/builtins/fs-path.ts, packages/runtime-js/src/module-loader/resolver.ts, packages/runtime-js/src/internal/create-require-path.ts, packages/isolate-guest/src/guest/web-shim.ts]
 ---
 
@@ -14,8 +14,8 @@ The isolate guest installs its ceiling globals (`web-shim.ts` `CEILING_GLOBALS`:
 `URLSearchParams`, `Blob`, `File`, …, and the `crypto.subtle` getter) after runtime-js loads, so the
 runtime's load-time feature detection sees them absent. Every module-level capture of one is then
 `undefined` (or a value read before the ceiling). Fault class `sibling-drift`: one runtime path
-behaves per host on a host-provided global. Found while measuring unit
-`runtime-js/isolate-require-esm-syntax-gaps` (PR #440) and its review rounds 2–3; absorbs the former
+behaves per host on a host-provided global. Found while measuring PR #440
+(isolate `require` as Node `--no-require-module`) and its review rounds 2–3; absorbs the former
 drafts `isolate-fs-path-url-instanceof` and `isolate-url-searchparams-export`.
 
 Measured 2026-11-24, `sandbox.exec` of one CommonJS file over the same files, PR #440 at

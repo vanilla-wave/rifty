@@ -4,13 +4,13 @@ status: draft
 title: "A CommonJS compile SyntaxError of source that parses as an ES module emits Node's \"Failed to load the ES module\" warning"
 created: 2026-11-24
 why: Node writes `(node:<pid>) Warning: Failed to load the ES module: <file>. Make sure to set "type": "module" …` to stderr before rethrowing the SyntaxError; rifty writes nothing on any host
-sources: [docs/backlog/runtime-js/isolate-require-esm-syntax-gaps.md]
+sources: [PR-440]
 code: [packages/runtime-js/src/module-loader/cjs.ts]
 ---
 
 ## Context
 
-Found by unit `runtime-js/isolate-require-esm-syntax-gaps` (2026-11-24), outside its boundary
+Found by PR #440 (2026-11-24), outside its boundary
 (the shared CJS compile path; adding the warning would change browser hosts). Probe, Node v24.16.0:
 `node -e "try{require('./a.cjs')}catch(e){console.log(e.name)}"` with `a.cjs` = `let require = 1`
 (also `export const a = 1`) → stderr

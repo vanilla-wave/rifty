@@ -34,8 +34,8 @@ after HEAD eccbe3a9d), program writes `./f.cjs` then
 Cause (read): `readResolved` strips `/^#![^\n]*/` — LF only, where V8's
 HashbangComment ends at any LineTerminator (LF, CR, LS, PS); with no LF the
 whole file is the "shebang". The ESM kind takes the same strip (code read;
-isolate `require('./f.mjs')` stops earlier at `URLConstructor`,
-`isolate-require-esm-syntax-gaps`), as does a browser `node <file>` entry
+isolate `require('./f.mjs')` stops earlier at `ERR_REQUIRE_ESM`,
+PR #440), as does a browser `node <file>` entry
 (`node-entry.ts` → `loader.import` → `readResolved`; code read, not probed).
 Fault: `sibling-drift` (rifty's copy of V8's hashbang lexing) shown as a
 silent success. Dedup: no backlog/traps/ADR-declined match for a non-LF hashbang end;

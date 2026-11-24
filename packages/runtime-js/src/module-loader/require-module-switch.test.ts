@@ -1,6 +1,6 @@
 /**
  * The runtime's default, no host-declared ESM loader gap (unit
- * `runtime-js/isolate-require-esm-syntax-gaps`, Acceptance 5): what the isolate guest turns
+ * PR #440, ADR-0557 2026-11-24 line): what the isolate guest turns
  * off stays Node 24's on every other host. The switched-off side is proven in the isolate against live Node
  * (`packages/isolate-host/tests/require-esm.test.ts`).
  */
