@@ -5,7 +5,7 @@ title: fs.WriteStream / fs.ReadStream cannot be applied to an existing object as
 created: 2026-11-24
 why: graceful-fs wraps `fs.WriteStream`/`fs.ReadStream` with `fs$WriteStream.apply(this, arguments)`; rifty's ES classes throw `Class constructor FileWriteStream cannot be invoked without 'new'`, so every graceful-fs `createWriteStream`/`createReadStream` fails (fstream's next stop after `process.umask`).
 sources: [docs/backlog/runtime-js/process-umask-missing.md, docs/backlog/runtime-js/zlib-class-call-shape.md, docs/backlog/net/http-agent-call-shape.md, docs/adr/runtime-js/0353-callable-node-stream-constructors-preserve-legacy-initialization.md]
-code: [packages/runtime-js/src/builtins/fs-streams.ts, packages/io/src/streams/callable-constructor.ts]
+code: [packages/runtime-js/src/builtins/fs-streams.ts, tools/compat-matrix-generator/fs-matrix.js]
 ---
 
 ## Context
@@ -21,8 +21,11 @@ via `createWriteStream` (`:345`) ← `fstream/lib/file-writer.js:36` → uncaugh
 Node writes the file. fstream comes through unzipper → exceljs 4.4.0 main entry (behind
 `node:zlib` ❌ today). graceful-fs is a dependency of many packages, so the reach is wider than
 fstream. Same defect class as `runtime-js/zlib-class-call-shape` and `net/http-agent-call-shape`;
-`packages/io/src/streams/callable-constructor.ts` (ADR-0353) is the existing mechanism for
-stream classes. Not in compat fs.md.
+ADR-0353's `packages/io/src/streams/callable-constructor.ts` covers the io stream classes
+only; the fs streams extend `EventEmitter`, not io `Readable`/`Writable` — the same root as
+`runtime-js/fs-readstream-set-encoding`, `fs-readstream-pipe-node-options`,
+`fs-stream-close-method-missing`. Compat fs.md `createReadStream` / `createWriteStream` row
+names it (added with this capture).
 
 Owner: runtime-js (fs streams). Trigger: library-compat work (fstream/unzipper, exceljs main),
 or any graceful-fs stream call.

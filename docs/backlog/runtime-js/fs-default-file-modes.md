@@ -19,7 +19,8 @@ branch: `fs.writeFileSync('f','x'); fs.mkdirSync('d')`, then
 the open question (`process.umask()` would have to agree).
 `process.umask()` reports `VFS_UMASK` (`fs-stats.ts`, 0 today), the same constant the default
 modes derive from: switching to 0o644/0o755 is one edit, `VFS_UMASK = 0o022`
-(`runtime-js/process-umask-missing`).
+(`runtime-js/process-umask-missing`). Explicit `mode` arguments are dropped too:
+`runtime-js/fs-mode-arguments-ignored` (same fork: does the VFS keep modes).
 
 ## Challenge
 
