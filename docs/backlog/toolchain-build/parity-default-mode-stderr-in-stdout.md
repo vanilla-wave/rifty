@@ -1,27 +1,35 @@
 ---
 area: toolchain-build
 status: draft
-title: "Parity runner default mode compares rifty's stderr as stdout"
+title: "Parity runner default mode compares rifty's stderr as stdout, and shares process-once state across cases"
 created: 2026-11-24
-why: in the default (non-seeded) mode `run-in-rifty.ts` pushes rifty's `console.error`/`warn` output into the same buffer as stdout, while the Node side compares stdout only — a case where rifty correctly writes stderr (a deprecation warning) goes red
-sources: [docs/adr/runtime-js/0574-generate-legacy-node-url-and-node-querystring-from-pinned-node-sources.md]
-code: [tools/node-parity-runner/src/run-in-rifty.ts]
+why: in the default (non-seeded) mode rifty's stderr lands in the buffer compared to Node's stdout, and module-level once-per-process state (DEP0169's flag) is shared by every case of the run — a case where rifty correctly warns goes red, depending on case order
+sources: [docs/adr/runtime-js/0574-generate-legacy-node-url-and-node-querystring-from-pinned-node-sources.md, tools/node-parity-runner/cases/url/legacy-parse-query.case.ts]
+code: [tools/node-parity-runner/src/run-in-rifty.ts, tools/node-parity-runner/src/run-in-node.ts, packages/runtime-js/src/builtins/process-stdio-writer.ts, packages/runtime-js/src/builtins/process-public.ts]
 ---
 
 ## Context
 
-Found by the legacy `node:url` port (ADR-0574, 2026-11-24). `run-in-rifty.ts` (≈ line 1830):
-without a seeded process both `writeStdout` and `writeStderr` push to one `captured` array;
-the Node child's stderr is not compared. With the port, `url.parse` from user code emits DEP0169
-(Node too, on stderr): `pnpm test:parity url/legacy-parse-query` showed `+ (node:1) [DEP0169] …`
-as a stdout diff. In this lane the guest's `process` is the host's, so `process.noDeprecation`
-does not reach rifty's process, and the once-per-process warning flag is shared by every case
-of the run (only the first case to call `url.parse` warns: results depend on case order).
-Workaround in the cases: `stdin: []` (seeded process: its own stderr, `noDeprecation` works).
-Harness gap, not a product defect; product stderr is covered by isolate-host and browser-unit.
+Found by the legacy `node:url` port (ADR-0574), 2026-11-24, before the cases' workaround.
+`run-in-rifty.ts:1833-1842`: without a seeded process (`isSeededProcessCase`, :406) both
+`writeStdout` and `writeStderr` push to one `captured` array; the Node side (`run-in-node.ts`
+~:431) compares stdout only. Chain: `url.parse` from user code → `emitWarning` →
+`host.stderr.write` (`process-warnings.ts:154`) → fd 2 of the default process falls back to
+`console.error` (`process-stdio-writer.ts:170`) → `captured`. Observed:
+`pnpm test:parity url/legacy-parse-query` → `+ (node:1) [DEP0169] …` as a stdout diff (Node also
+warns, on stderr). Second, independent: default cases run in the current realm
+(`runInRiftyInCurrentRealm`, :2029), whose guest global `process` is the host Node's, while the
+url binding emits through `publicNodeProcess()`'s `riftyProcess` fallback
+(`process-public.ts`, `url-legacy/bindings.ts`) — a guest `process.noDeprecation` does not reach
+it, and the once-per-process flag is set by the first case that calls `url.parse`, so results
+depend on case order. Workaround now: `stdin: []` (seeded Worker process) in
+`cases/url/legacy-*.case.ts` and `cases/querystring/unescape-override.case.ts`. Possibly older
+workarounds of the same gap: `url/file-url-consumers`, `worker_threads/script-entry-contract`,
+`worker_threads/parent-event-surface` silence `console.warn` (not checked). Harness gap; product
+stderr is covered by isolate-host and browser-unit (`url-legacy` tests).
 
-## Next
+## Question
 
-Owner toolchain-build (parity runner). Trigger: the next default-mode case that writes stderr.
-First step: route `writeStderr` to its own buffer (compared to Node's stderr or dropped, as the
-Node side does) with a runner self-test row.
+Default-mode stderr: compare it to Node's stderr (every default case would then face Node's own
+warnings) or keep it out of the compared stream? And per-case process state: a fresh realm per
+case, or a seeded process as the default?
