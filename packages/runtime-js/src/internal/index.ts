@@ -8,6 +8,7 @@ export { installConsole } from '../repl/console.ts';
 // Node's error text pieces, for host-side Node-shaped modules (isolate guest, ADR-0557 §6).
 export { describeReceived } from './node-received.ts';
 export { inspect } from '../repl/inspect.ts';
+export { format } from '../builtins/util.ts';
 export { setDefaultProcessOutputSink } from '../builtins/process-stdio-writer.ts';
 // The runtime's own first terminal signal: identity, so a host cannot be fooled
 // by a guest-thrown lookalike (isolate host, ADR-0557 §5).

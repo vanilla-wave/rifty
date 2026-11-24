@@ -44,7 +44,7 @@ describe('module shape equals live node -e (Acceptance 1)', () => {
  */
 const DECLARED_FORMAT_ROWS = [
   ' null-proto ',
-  ' -0 ',
+  ' name -0 ', // a -0 label is falsy: Node's 'Header name', strict
   ' own toString ',
   ' class toString ',
   ' Symbol.toPrimitive ',
