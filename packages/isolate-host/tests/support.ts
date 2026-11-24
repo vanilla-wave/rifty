@@ -204,3 +204,57 @@ export function nodeSequence(steps: readonly NodeStep[]): NodeStepOutcome[] {
     rmSync(dir, { recursive: true, force: true });
   }
 }
+
+/** CPU seconds of a live process; `undefined` once it is gone. */
+export function cpu(pid: number): number | undefined {
+  try {
+    if (process.platform === 'linux') {
+      const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
+      const f = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
+      return (Number(f[11]) + Number(f[12])) / 100;
+    }
+    const t = execFileSync('ps', ['-o', 'time=', '-p', String(pid)], { encoding: 'utf8' }).trim();
+    return t.split(':').reduce((sum, part) => sum * 60 + Number(part), 0);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The most CPU any worker of this process burns over `ms` from now (a worker that
+ * dies inside the window keeps its last reading, never a free zero).
+ */
+export async function burnedAfter(ms: number): Promise<number> {
+  const first = new Map<number, number>();
+  const last = new Map<number, number>();
+  for (const pid of childPids()) {
+    const c = cpu(pid);
+    if (c === undefined) continue;
+    first.set(pid, c);
+    last.set(pid, c);
+  }
+  for (const end = Date.now() + ms; Date.now() < end; ) {
+    await new Promise((r) => setTimeout(r, 25));
+    for (const pid of first.keys()) {
+      const c = cpu(pid);
+      if (c !== undefined) last.set(pid, c);
+    }
+  }
+  return Math.max(0, ...[...first].map(([pid, c]) => (last.get(pid) ?? c) - c));
+}
+
+/** Kill whichever worker is computing, `times` times (each kill loses the run's worker). */
+export async function killRunning(times: number): Promise<void> {
+  let before = new Map(childPids().map((p) => [p, cpu(p) ?? 0]));
+  for (let killed = 0; killed < times; ) {
+    await new Promise((r) => setTimeout(r, 50));
+    const now = new Map(childPids().map((p) => [p, cpu(p) ?? 0]));
+    for (const [pid, c] of now) {
+      if (c - (before.get(pid) ?? c) > 0.02 && killed < times) {
+        process.kill(pid, 'SIGKILL');
+        killed++;
+      }
+    }
+    before = now;
+  }
+}
