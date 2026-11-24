@@ -4,13 +4,14 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 // Unit runtime-js/computed-global-read-callee. A computed global read called or
 // constructed loads (Node parity: tools/node-parity-runner/cases/modules/
-// global-computed-read-callee-*). A key that is 'Function' at runtime yields the
-// module's routed lexical Function (ADR-0171): its import() resolves from the VFS
-// module, never through the host constructor. Other forms keep the load-time ceiling.
+// global-computed-read-callee-*). A key that is 'Function' at runtime throws the
+// format's named ceiling at that read (ADR-0444 key check): the module never gets
+// the host constructor, which would bypass ADR-0171's import() routing. Other
+// forms keep the load-time ceiling.
 
 function setup(files: Record<string, string>): ReturnType<typeof createModuleLoader> {
   const vfs = new MemoryFsSync();
-  vfs.loadFixture({ '/pkg/dep.mjs': "export const value = 'vfs-dep';\n", ...files });
+  vfs.loadFixture(files);
   return createModuleLoader(vfs);
 }
 
@@ -29,51 +30,85 @@ afterEach(() => {
   Reflect.deleteProperty(g, '__riftyGuardBefore__');
 });
 
-type Importer = () => Promise<{ value: string }>;
+type Site = (key: unknown, arg: unknown) => unknown;
 interface Sites {
-  construct(key: unknown, body: string): Importer;
-  call(key: unknown, body: string): Importer;
-  callMethod(key: unknown, body: string): Importer;
-  lexical(body: string): Importer;
+  construct: Site;
+  call: Site;
+  optionalCall: Site;
+  callMethod: Site;
+  applyMethod: Site;
+  bindMethod: Site;
 }
 
-const BODY = 'return import("./dep.mjs")';
-const objectKey = { toString: () => 'Function' };
-
-async function expectRouted(sites: Sites): Promise<void> {
-  expect((await sites.lexical(BODY)()).value).toBe('vfs-dep');
-  for (const key of ['Function', objectKey]) {
-    expect((await sites.construct(key, BODY)()).value).toBe('vfs-dep');
-    expect((await sites.call(key, BODY)()).value).toBe('vfs-dep');
-    expect((await sites.callMethod(key, BODY)()).value).toBe('vfs-dep');
+function expectRuntimeCeiling(sites: Sites, feature: string): void {
+  expect(sites.construct('Uint8Array', 3)).toHaveLength(3);
+  expect(sites.call('String', 1)).toBe('1');
+  for (const site of Object.values(sites)) {
+    for (const key of ['Function', { toString: () => 'Function' }]) {
+      expect(() => site(key, 'return 1')).toThrow(
+        expect.objectContaining({ name: 'NotImplementedError', feature }),
+      );
+    }
   }
-  expect(sites.construct('Uint8Array', '3' as never)).toHaveLength(3);
   expect(globalThis.Function).toBe(HostFunction);
 }
 
 describe('computed global read used as a callee/constructor (unit computed-global-read-callee)', () => {
-  it('ESM: a runtime Function key yields the routed Function; host Function intact', async () => {
+  it('ESM loads; only a runtime Function key throws, at the read', async () => {
     const loader = setup({
-      '/pkg/sites.mjs': `
-        export function construct(key, body) { return new globalThis[key](body); }
-        export function call(key, body) { return global[key](body); }
-        export function callMethod(key, body) { return globalThis[key].call(null, body); }
-        export function lexical(body) { return new Function(body); }
+      '/sites.mjs': `
+        globalThis.__riftyGuardBefore__ = 'ran';
+        export function construct(key, arg) { return new globalThis[key](arg); }
+        export function call(key, arg) { return global[key](arg); }
+        export function optionalCall(key, arg) { return globalThis[key]?.(arg); }
+        export function callMethod(key, arg) { return globalThis[key].call(null, arg); }
+        export function applyMethod(key, arg) { const g = globalThis; return g[key].apply(null, [arg]); }
+        export function bindMethod(key, arg) { return global[key].bind(null, arg)(); }
       `,
     });
-    await expectRouted((await loader.import('/pkg/sites.mjs', '/entry.mjs')) as unknown as Sites);
+    const sites = (await loader.import('/sites.mjs', '/entry.mjs')) as unknown as Sites;
+    expect(g.__riftyGuardBefore__).toBe('ran');
+    expectRuntimeCeiling(sites, 'module-loader.esm-global-function-assignment');
   });
 
-  it('CJS: a runtime Function key yields the routed Function; host Function intact', async () => {
+  it('CJS loads; only a runtime Function key throws, at the read', () => {
     const loader = setup({
-      '/pkg/sites.js': `
-        exports.construct = function (key, body) { return new global[key](body); };
-        exports.call = function (key, body) { return globalThis[key](body); };
-        exports.callMethod = function (key, body) { return global[key].call(null, body); };
-        exports.lexical = function (body) { return new Function(body); };
+      '/sites.js': `
+        global.__riftyGuardBefore__ = 'ran';
+        exports.construct = function (key, arg) { return new global[key](arg); };
+        exports.call = function (key, arg) { return globalThis[key](arg); };
+        exports.optionalCall = function (key, arg) { return global[key]?.(arg); };
+        exports.callMethod = function (key, arg) { return global[key].call(null, arg); };
+        exports.applyMethod = function (key, arg) { const g = global; return g[key].apply(null, [arg]); };
+        exports.bindMethod = function (key, arg) { return globalThis[key].bind(null, arg)(); };
       `,
     });
-    await expectRouted(loader.require('./pkg/sites.js', '/entry.js') as Sites);
+    const sites = loader.require('./sites.js', '/entry.js') as Sites;
+    expect(g.__riftyGuardBefore__).toBe('ran');
+    expectRuntimeCeiling(sites, 'module-loader.cjs-global-function-assignment');
+  });
+
+  it('a top-level runtime Function read throws at that statement, after earlier ones ran', async () => {
+    const esm = setup({
+      '/top.mjs': `globalThis.__riftyGuardBefore__ = 'ran';\nconst k = ['Function'];\nnew globalThis[k[0]]('return 1');`,
+    });
+    await expect(esm.import('/top.mjs', '/entry.mjs')).rejects.toMatchObject({
+      name: 'NotImplementedError',
+      feature: 'module-loader.esm-global-function-assignment',
+    });
+    expect(g.__riftyGuardBefore__).toBe('ran');
+    Reflect.deleteProperty(g, '__riftyGuardBefore__');
+    const cjs = setup({
+      '/top.js': `global.__riftyGuardBefore__ = 'ran';\nvar k = ['Function'];\nnew global[k[0]]('return 1');`,
+    });
+    expect(() => cjs.require('./top.js', '/entry.js')).toThrow(
+      expect.objectContaining({
+        name: 'NotImplementedError',
+        feature: 'module-loader.cjs-global-function-assignment',
+      }),
+    );
+    expect(g.__riftyGuardBefore__).toBe('ran');
+    expect(globalThis.Function).toBe(HostFunction);
   });
 
   // Out of scope (unit §Out of scope): each still rejects before any statement runs.
@@ -89,9 +124,9 @@ describe('computed global read used as a callee/constructor (unit computed-globa
   for (const [name, body] of Object.entries(ceilings)) {
     it(`ESM keeps the load-time ceiling: ${name}`, async () => {
       const loader = setup({
-        '/pkg/c.mjs': `globalThis.__riftyGuardBefore__ = 'ran';\nexport function f(key) { ${body}; }`,
+        '/c.mjs': `globalThis.__riftyGuardBefore__ = 'ran';\nexport function f(key) { ${body}; }`,
       });
-      await expect(loader.import('/pkg/c.mjs', '/entry.mjs')).rejects.toMatchObject({
+      await expect(loader.import('/c.mjs', '/entry.mjs')).rejects.toMatchObject({
         name: 'NotImplementedError',
         feature: 'module-loader.esm-global-function-assignment',
       });
@@ -100,9 +135,9 @@ describe('computed global read used as a callee/constructor (unit computed-globa
 
     it(`CJS keeps the load-time ceiling: ${name}`, () => {
       const loader = setup({
-        '/pkg/c.js': `global.__riftyGuardBefore__ = 'ran';\nexports.f = function (key) { ${body}; };`,
+        '/c.js': `global.__riftyGuardBefore__ = 'ran';\nexports.f = function (key) { ${body}; };`,
       });
-      expect(() => loader.require('./pkg/c.js', '/entry.js')).toThrow(
+      expect(() => loader.require('./c.js', '/entry.js')).toThrow(
         expect.objectContaining({
           name: 'NotImplementedError',
           feature: 'module-loader.cjs-global-function-assignment',

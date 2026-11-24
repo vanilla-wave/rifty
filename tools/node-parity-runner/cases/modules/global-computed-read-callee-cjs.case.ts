@@ -2,14 +2,9 @@ import type { ParityCase } from '../../src/types.ts';
 
 // Unit runtime-js/computed-global-read-callee: a computed read of a global member
 // called or constructed. es-abstract 2025/IsDetachedBuffer.js:22 and
-// typed-array-length index.js:41 shapes, call forms, key coercion, and a key that
-// is 'Function' (its constructed import() resolves from this module, ADR-0171).
+// typed-array-length index.js:41 shapes, call forms, key coercion. A key that is
+// 'Function' at runtime is a declared ceiling (conformance global-computed-read-callee).
 const c: ParityCase = {
-  setup: {
-    files: {
-      'dep.mjs': "export const value = 'computed-read-import';\n",
-    },
-  },
   code: `
     const out = [];
     const log = [];
@@ -37,12 +32,7 @@ const c: ParityCase = {
     out.push(['objectKey', new global[key](arg(2)).length, global[primitive](arg(5)), log.join(',')]);
     out.push(['nested', new global[(log.length, names)[1]](1).length, new globalThis[\`\${names[0]}\`](1).length]);
     try { new global[k + 'x'](); } catch (e) { out.push(['notConstructor', e.name]); }
-    const F = 'Function';
-    out.push(['fn', new global[F]('a', 'return a + 1')(1), global[F]('return 2')(), global[F].call(null, 'return 3')(), new globalThis[{ toString: () => F }]('return 4')()]);
-    new global[F]('return import("./dep.mjs")')().then(
-      (m) => { out.push(['fnImport', m.value]); console.log(JSON.stringify(out)); },
-      (e) => { out.push(['fnImport', e && e.code]); console.log(JSON.stringify(out)); },
-    );
+    console.log(JSON.stringify(out));
   `,
 };
 

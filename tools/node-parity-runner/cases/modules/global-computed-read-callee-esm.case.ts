@@ -3,11 +3,6 @@ import type { ParityCase } from '../../src/types.ts';
 // ESM twin of global-computed-read-callee-cjs (unit runtime-js/computed-global-read-callee).
 const c: ParityCase = {
   kind: 'esm',
-  setup: {
-    files: {
-      'dep.mjs': "export const value = 'computed-read-import';\n",
-    },
-  },
   code: `
     const out = [];
     const log = [];
@@ -35,10 +30,6 @@ const c: ParityCase = {
     out.push(['objectKey', new globalThis[key](arg(2)).length, globalThis[primitive](arg(5)), log.join(',')]);
     out.push(['await', new globalThis[await names[1]](1).length]);
     try { new globalThis[k + 'x'](); } catch (e) { out.push(['notConstructor', e.name]); }
-    const F = 'Function';
-    out.push(['fn', new globalThis[F]('a', 'return a + 1')(1), global[F]('return 2')(), globalThis[F].call(null, 'return 3')(), new globalThis[{ toString: () => F }]('return 4')()]);
-    const m = await new globalThis[F]('return import("./dep.mjs")')();
-    out.push(['fnImport', m.value]);
     console.log(JSON.stringify(out));
   `,
 };

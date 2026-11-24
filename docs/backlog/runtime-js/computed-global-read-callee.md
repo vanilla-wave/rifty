@@ -60,11 +60,11 @@ passes es-abstract/typed-array-* (Node prints `loaded`); rifty today stops at
    (same files, Node vs isolate sandbox) → scenario
 3. Isolate `library-exceljs.test.ts`: `require('exceljs')` no longer stops at
    `module-loader.cjs-global-function-assignment`; the new stop is pinned → scenario
-4. A computed global read used as a callee/constructor whose key is
-   `'Function'` at runtime yields the module's routed `Function` (the lexical
-   `Function` binding): its `import()` resolves through the VFS loader from the
-   constructing module; host `globalThis.Function` unchanged
-   (conformance `global-computed-read-callee`) → ADR-0171
+4. Declared ceiling: such a read whose key is `'Function'` at runtime (string
+   or object key) throws `NotImplementedError('module-loader.{cjs,esm}-global-function-assignment')`
+   at that read, after earlier statements ran; the module never gets the host
+   constructor; host `globalThis.Function` unchanged (conformance
+   `global-computed-read-callee`; Node constructs there) → ADR-0171
 5. Forms outside the boundary keep their load-time ceiling (conformance):
    writes, static/folded `'Function'` reads, `Reflect.get(G, k)` called,
    an alias of the read called, `G?.[k](…)` → ADR-0444
@@ -80,10 +80,10 @@ passes es-abstract/typed-array-* (Node prints `loaded`); rifty today stops at
    global; missing key `?.()` → `undefined` → scenario
 3. CJS: object / `Symbol.toPrimitive` key coerced once, before arguments
    (`key,arg,string,arg`); nested key expressions; non-constructor → `TypeError` → ADR-0444
-4. CJS: key `'Function'` (string and object key): `new global[F]('a','return a + 1')(1)` → 2,
-   `global[F]('return 2')()`, `.call`, constructed `import("./dep.mjs")` →
-   the dep's value (Node v24.16.0: `["fnImport","computed-read-import"]`) → ADR-0171
-5. ESM twins of 1–4 (`globalThis`/`global`, `await` key) → scenario
+4. ESM twins of 1–3 (`globalThis`/`global`, `await` key) → scenario
+
+Key `'Function'` is not a parity row: Node constructs (probe below, `fn`,
+`fnImport`), rifty throws the declared ceiling (Acceptance 4).
 
 Node v24.16.0 (`/tmp/gfr/n`, `node main.js` / `node main.mjs`):
 
@@ -93,7 +93,7 @@ Node v24.16.0 (`/tmp/gfr/n`, `node main.js` / `node main.mjs`):
 ```
 
 (The CJS probe's `global[F] === Function` is a non-callee read, outside this
-unit and ADR-0171's claim; the case omits it.)
+unit and ADR-0171's claim.)
 
 ## Out of scope
 
@@ -106,6 +106,8 @@ unit and ADR-0171's claim; the case omits it.)
   `global['Fun' + 'ction']`); `Reflect.get(G, k)` called; an alias of the read
   called (`const C = G[k]; new C()`, `{ [k]: C } = G`); optional member
   `G?.[k](…)`.
+- Key `'Function'` at runtime: ❌ `module-loader.{cjs,esm}-global-function-assignment`
+  at the read (Node constructs; routing it is deferred, §Decisions).
 - Reads not called/constructed (`typeof G[k]`, `x = G[k]` compared):
   unchanged, already load; identity `G[k] === Function` is outside ADR-0171's claim.
 - Global objects the guard does not track (`(0, globalThis)[k]`,
@@ -114,6 +116,12 @@ unit and ADR-0171's claim; the case omits it.)
   (`backlog/runtime-js/function-rewrite-visible`, ADR-0444 class).
 
 ## Decisions
+
+- Carrier (manager, checkpoint 2026-11-24): ADR-0444's key check at the read, `G[$k(k)]`; no value-substituting helper — no consumer reads `Function` through a computed global key.
+- Deferred: a runtime `'Function'` key yielding the routed `Function` (ADR-0171) — trigger: a real package constructing `Function` through a computed global key.
+- Feature id: the format's existing `module-loader.{cjs,esm}-global-function-assignment` (same ceiling, moved to the read); message names write or call/construct.
+- Contract change (manager): `global-computed-key-guard.test.ts` drops ESM `new globalThis[key](…)` from its kept load-time ceilings; `Reflect.get` stays.
+- Not widened (manager): an alias of the read or a destructured read called stays a load-time ceiling even though this carrier could check it; candidate filed as a finding.
 
 - Applies to tracked global objects only (`globalThis`, `global`, tracked aliases), as every other guard site.
 - `self`/`window`: undefined in rifty CJS/ESM as in Node (probe `typeof self` → `undefined`); nothing to route.
