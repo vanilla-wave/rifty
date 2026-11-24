@@ -8,7 +8,7 @@ export const streamsMatrix = {
     [
       '`Readable` push/data/end',
       '⚠️',
-      'Late-bound `_read`, bounded refill, object identity, string/Buffer/plain-Uint8Array admission, byte no-ops, and coded EOF failure are parity-tested; other views and invalid byte values remain — backlog `runtime-js/stream-byte-chunk-kinds`; a non-function `read` option throws `TypeError` (Node: ignored, `ERR_METHOD_NOT_IMPLEMENTED`) — backlog `runtime-js/readable-read-option-non-function`',
+      'Late-bound `_read`, bounded refill, object identity, string/Buffer/plain-Uint8Array admission, byte no-ops, and coded EOF failure are parity-tested; other views and invalid byte values remain — backlog `runtime-js/stream-byte-chunk-kinds`; a non-function `read` option makes the stream emit a `TypeError` error event (Node: option ignored, error event `ERR_METHOD_NOT_IMPLEMENTED`) — backlog `runtime-js/readable-read-option-non-function`',
     ],
     [
       '`Readable.read(n)`',
@@ -49,12 +49,12 @@ export const streamsMatrix = {
     [
       '`Transform`',
       '⚠️',
-      "Transform `_transform`/`_flush`/`_final` and Duplex `_read`/`_write`/`_writev`/`_final` run as in Node however defined (option, own property, ES class, ES5 `util.inherits`, subclass chain, late prototype), `this` = the stream; a missing `_transform`/`_write` throws `ERR_METHOD_NOT_IMPLEMENTED`; a sync throw from `_final`/`_flush` destroys the stream — parity `stream/stream-hook-*`. A hook calling back twice raises no `ERR_MULTIPLE_CALLBACK` (a second `_final`/`_flush` callback replays `'prefinish'`) — backlog `runtime-js/stream-hook-multiple-callback`",
+      "Transform `_transform`/`_flush`/`_final` and Duplex `_read`/`_write`/`_writev`/`_final` run as in Node however defined (option, own property, ES class, ES5 `util.inherits`, subclass chain, late prototype), `this` = the stream; a missing `_transform`/`_write` throws `ERR_METHOD_NOT_IMPLEMENTED`; a sync throw from `_final`/`_flush` destroys the stream — parity `stream/stream-hook-*`. A hook calling back twice raises no `ERR_MULTIPLE_CALLBACK` (a second `_final`/`_flush` callback replays `'prefinish'`; `cb()` then a throw loses `'finish'`) — backlog `runtime-js/stream-hook-multiple-callback`; after a failing `_final`/`_flush` the stream is destroyed a tick later than Node (`destroyed` false right after `end()`, later `end()`/`write()` get the original error, not `ERR_STREAM_DESTROYED`/`ERR_STREAM_WRITE_AFTER_END`) — backlog `runtime-js/stream-destroy-construct-hooks`",
     ],
     [
       'Stream prototype method shape',
       '⚠️',
-      "Node's stream prototype methods are enumerable and anonymous; rifty's are non-enumerable class methods named `_write`/`write`/… (the identity-shared `_writev` `null`, `Duplex.prototype._write`, `Transform.prototype._final` `final` match) — backlog `runtime-js/builtin-function-names`",
+      "Node's stream prototype methods are mostly enumerable and anonymous (named: `destroy`, `setDefaultEncoding`, `compose`, `final`, iterator helpers); rifty's are non-enumerable class methods named by key, so `Object.keys(Writable.prototype)` is `['_writev']` (Node 11 keys) and `for…in` on a Transform misses `_write`; identity-shared `_writev` `null`, `Duplex.prototype._write`, `Transform.prototype._final` match in identity and enumerability (`Duplex.prototype._write.name` `_write`, Node `''`) — backlog `runtime-js/builtin-function-names`",
     ],
     [
       '`Transform` / `PassThrough` backpressure',

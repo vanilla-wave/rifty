@@ -30,6 +30,13 @@ hook-dispatch gap of the parent unit — `ops=R`, `ops=` — which PR #433 fixes
   the callback. rifty: never called, work runs immediately.
 - `Readable/Writable/Duplex/Transform/PassThrough.prototype._destroy` is a function in Node
   (`Duplex.prototype._destroy === Readable.prototype._destroy`); rifty: `undefined`.
+- Destroy moment after a failing `_final`/`_flush` (PR #433 review round 2, reproduced 2026-11-24;
+  `new Writable({ write(c,e,cb){cb()}, final(){ throw new Error('boom') } })`, `end('x', cb1)`, then
+  `destroyed`, `end(cb2)`, `write('y', cb3)`): Node `sync destroyed=true | end1 boom | end2
+  ERR_STREAM_DESTROYED | wcb ERR_STREAM_WRITE_AFTER_END`; rifty `sync destroyed=false | wcb boom |
+  end1 boom | end2 boom` — rifty destroys a tick later (`finalize` defers `destroyInternal`), so later
+  calls see an errored, not destroyed, stream. Same for a synchronous `cb(err)` from `_final`, before
+  PR #433 too.
 - Sibling, outside the title: rifty has no `errored` getter on Readable/Writable (`sync errored=undefined` row).
 
 Code: `Readable.destroy`/`Writable.destroyInternal` emit directly, no hook; no `constructed` state;
