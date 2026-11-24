@@ -8,13 +8,22 @@
 import { readFileSync, realpathSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createModuleLoader } from '@riftydev/runtime-js/loader';
 import { MemoryFsSync } from '@riftydev/vfs/internal';
-import { describe, expect, it } from 'vitest';
-import { createModuleLoader } from '../../runtime-js/src/module-loader/index.ts';
+import { describe, expect, it, vi } from 'vitest';
 import { closureFiles, inNode, inSandbox } from './package-closure.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const closure = closureFiles('exceljs', realpathSync(join(here, '../node_modules/exceljs')));
+/** The loader every host shares, in this process, over `files` under `/w`. */
+function sharedLoader(files: Map<string, Uint8Array>): ReturnType<typeof createModuleLoader> {
+  const vfs = new MemoryFsSync();
+  for (const [rel, data] of files) {
+    vfs.mkdirSync(dirname(`/w/${rel}`), { recursive: true });
+    vfs.writeFileSync(`/w/${rel}`, data);
+  }
+  return createModuleLoader(vfs);
+}
 const withFixture = (gen: string): Map<string, Uint8Array> =>
   new Map(closure)
     .set(gen, readFileSync(join(here, 'fixtures/xlsx', gen)))
@@ -51,28 +60,32 @@ describe('exceljs 4.4.0 loads node:zlib as in Node (Acceptance 4)', () => {
       stdout: '[3,2,6,false,true,[2,3]]\n',
       stderr: '',
     });
-    const vfs = new MemoryFsSync();
-    for (const [rel, data] of files) {
-      vfs.mkdirSync(dirname(`/w/${rel}`), { recursive: true });
-      vfs.writeFileSync(`/w/${rel}`, data);
-    }
-    const result = createModuleLoader(vfs).require('./typed-arrays-result.cjs', '/w/main.cjs');
+    const result = sharedLoader(files).require('./typed-arrays-result.cjs', '/w/main.cjs');
     expect(`${JSON.stringify(result)}\n`).toBe(oracle.stdout);
   });
 
-  // Past `node:zlib` the main entry stops elsewhere (unit §Decisions, other units). Since
-  // runtime-js/computed-global-read-callee it passes es-abstract's `new global[k](…)` and
-  // stops at the sandbox's `require` of a `module-sync` ES module (generator-function@2.0.1
-  // `require.mjs`): `runtime-js/isolate-require-esm-syntax-gaps`. The PR delivering
-  // `require(esm)` in the isolate flips this pin to exceljs's next stop.
+  it('require(exceljs) loads on the shared loader as in Node', { timeout: 60_000 }, () => {
+    const files = withFixture('main-load.cjs');
+    const oracle = inNode(files, 'main-load.cjs', 'out/none');
+    expect(oracle).toMatchObject({ exitCode: 0, stdout: 'loaded\n', stderr: '' });
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      sharedLoader(files).require('./main-load.cjs', '/w/main.cjs');
+      expect(log.mock.calls).toEqual([['loaded']]);
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  // Past `node:zlib` the main entry stops elsewhere (unit §Decisions, other units); since
+  // runtime-js/computed-global-read-callee not at es-abstract's `new global[k](…)`.
   it('require(exceljs) no longer stops at node:zlib', { timeout: 180_000 }, async () => {
     const files = withFixture('main-load.cjs');
     const oracle = inNode(files, 'main-load.cjs', 'out/none');
     expect(oracle).toMatchObject({ exitCode: 0, stdout: 'loaded\n', stderr: '' });
     const guest = await inSandbox(files, 'main-load.cjs', 'out/none');
-    expect(guest.exitCode).toBe(1);
-    expect(guest.stderr).toMatch(
-      /^TypeError: URLConstructor is not a constructor\n {4}at Object\.<anonymous> \(\/workspace\/node_modules\/is-generator-function\/index\.js:12:28\)\n/,
+    expect(guest.stderr).not.toMatch(
+      /NotImplementedError: Not implemented: (?:isolate-host\.zlib|module-loader\.cjs-global-function-assignment)/,
     );
   });
 

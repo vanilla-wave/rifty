@@ -146,4 +146,62 @@ describe('computed global read used as a callee/constructor (unit computed-globa
       expect(g.__riftyGuardBefore__).toBeUndefined();
     });
   }
+
+  // Review S1: `with` or a non-literal direct eval can shadow the key-check helper, so a
+  // module with both and a called computed read keeps a load-time ceiling (dynamic scope).
+  const SHADOW = "'var __rifty' + 'GlobalKey = (x) => x'";
+  const dynamicScope = {
+    cjs: {
+      with: 'with ({}) { return new global[key]("return 1"); }',
+      'non-literal direct eval': `eval(${SHADOW}); return new global[key]("return 1");`,
+    },
+    esm: { 'non-literal direct eval': `eval(${SHADOW}); return new globalThis[key]("return 1");` },
+  };
+
+  for (const [name, body] of Object.entries(dynamicScope.cjs)) {
+    it(`CJS: a called computed read beside ${name} keeps a load-time ceiling`, () => {
+      const loader = setup({
+        '/d.js': `global.__riftyGuardBefore__ = 'ran';\nexports.f = function (key) { ${body} };`,
+      });
+      expect(() => loader.require('./d.js', '/entry.js')).toThrow(
+        expect.objectContaining({
+          name: 'NotImplementedError',
+          feature: 'module-loader.cjs-dynamic-function-scope',
+        }),
+      );
+      expect(g.__riftyGuardBefore__).toBeUndefined();
+    });
+  }
+
+  for (const [name, body] of Object.entries(dynamicScope.esm)) {
+    it(`ESM: a called computed read beside ${name} keeps a load-time ceiling`, async () => {
+      const loader = setup({
+        '/d.mjs': `globalThis.__riftyGuardBefore__ = 'ran';\nexport function f(key) { ${body} }`,
+      });
+      await expect(loader.import('/d.mjs', '/entry.mjs')).rejects.toMatchObject({
+        name: 'NotImplementedError',
+        feature: 'module-loader.esm-dynamic-function-scope',
+      });
+      expect(g.__riftyGuardBefore__).toBeUndefined();
+    });
+  }
+
+  // A literal direct eval cannot name the helper (its name avoids the source text); an
+  // indirect eval runs in the global scope. Both keep the read admitted.
+  it('a literal direct eval or an indirect eval beside a called computed read loads', async () => {
+    const body = 'eval("1"); (0, eval)("var __riftyGlobalKey = 1"); return new globalThis[key](1);';
+    const cjs = setup({ '/e.js': `exports.f = function (key) { ${body} };` });
+    const esm = setup({ '/e.mjs': `export function f(key) { ${body} }` });
+    const sites = [
+      cjs.require('./e.js', '/entry.js') as { f(key: string): unknown },
+      (await esm.import('/e.mjs', '/entry.mjs')) as unknown as { f(key: string): unknown },
+    ];
+    for (const site of sites) {
+      expect(site.f('Uint8Array')).toHaveLength(1);
+      expect(() => site.f('Function')).toThrow(
+        expect.objectContaining({ name: 'NotImplementedError' }),
+      );
+    }
+    Reflect.deleteProperty(g, '__riftyGlobalKey');
+  });
 });
