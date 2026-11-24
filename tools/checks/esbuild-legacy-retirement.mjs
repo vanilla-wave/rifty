@@ -301,14 +301,26 @@ export function evaluateEsbuildBundleInventory(
       compiler === undefined
         ? undefined
         : compilerOutputPin(bytes, compiler.siblingImports === true ? siblings : null);
+    const header = pin === undefined ? 0 : bytes.byteLength - pin.bytes;
     if (
       bytes.byteLength > MAX_PUBLISHED_OUTPUT_BYTES &&
       (pin === undefined || compiler.bytes !== pin.bytes || compiler.sha256 !== pin.sha256)
     ) {
-      const actual = pin === undefined ? '' : ` (compiler pin now ${JSON.stringify(pin)})`;
-      violations.push(`${path}: published output exceeds the exact 2 MB carrier ceiling${actual}`);
+      // A pin over an unadmitted header line would re-pin on every chunk change.
+      if (
+        compiler?.siblingImports === true &&
+        bytes.toString('latin1', header, header + 6) === 'import'
+      ) {
+        violations.push(
+          `${path}: leading import not in the admitted form (esbuild's, of a built chunk) — do not re-pin; extend the form or fix the build (ADR-0391)`,
+        );
+      } else {
+        const actual = pin === undefined ? '' : ` (compiler pin now ${JSON.stringify(pin)})`;
+        violations.push(
+          `${path}: published output exceeds the exact 2 MB carrier ceiling${actual}`,
+        );
+      }
     }
-    const header = pin === undefined ? 0 : bytes.byteLength - pin.bytes;
     if (header > HEADER_MAX_BYTES) {
       violations.push(
         `${path}: leading sibling imports are ${header} bytes, over the ${HEADER_MAX_BYTES}-byte header ceiling (ADR-0391)`,

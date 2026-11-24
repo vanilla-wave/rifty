@@ -137,8 +137,13 @@ describe('esbuild carrier retirement', () => {
       workerViolations(workerBytes(header, body)).length === 0 ? [index] : [],
     );
     expect(admitted).toEqual([]);
+    // A rejected leading line that is itself an import is named, with no pin to copy.
+    const form = [expect.stringContaining('not in the admitted form')];
     for (const [header, body] of mutants) {
-      expect(workerViolations(workerBytes(header, body))).toEqual(ceiling);
+      const unadmitted = header.some(
+        (line) => line.startsWith('import') && !WORKER_HEADER.includes(line),
+      );
+      expect(workerViolations(workerBytes(header, body))).toEqual(unadmitted ? form : ceiling);
     }
   });
 
