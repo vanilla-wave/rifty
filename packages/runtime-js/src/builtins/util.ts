@@ -125,6 +125,7 @@ const NODE_BUILTIN_OBJECTS: ReadonlySet<string> = new Set(
     'Set Iterator WeakMap WeakSet Proxy Reflect FinalizationRegistry WeakRef'
   ).split(' '),
 );
+const toPrimitivePrimordial: typeof Symbol.toPrimitive = Symbol.toPrimitive;
 const setHasPrimordial = Set.prototype.has;
 const objectIsPrimordial = Object.is;
 const StringPrimordial = String;
@@ -142,25 +143,28 @@ const returnFalse: HasOwn = () => false;
  * realm cannot see a Proxy (`util.types.isProxy`), so here its traps run.
  */
 function hasBuiltInToString(value: object): boolean {
-  const v = value as { toString?: unknown; [Symbol.toPrimitive]?: unknown };
+  const v = value as { toString?: unknown; [toPrimitivePrimordial]?: unknown };
   let hasOwnToString = hasOwn;
   let hasOwnToPrimitive = hasOwn;
   if (typeof v.toString !== 'function') {
-    if (typeof v[Symbol.toPrimitive] !== 'function') return true;
-    if (hasOwn(value, Symbol.toPrimitive)) return false;
+    if (typeof v[toPrimitivePrimordial] !== 'function') return true;
+    if (hasOwn(value, toPrimitivePrimordial)) return false;
     hasOwnToString = returnFalse;
   } else if (hasOwn(value, 'toString')) {
     return false;
-  } else if (typeof v[Symbol.toPrimitive] !== 'function') {
+  } else if (typeof v[toPrimitivePrimordial] !== 'function') {
     hasOwnToPrimitive = returnFalse;
-  } else if (hasOwn(value, Symbol.toPrimitive)) {
+  } else if (hasOwn(value, toPrimitivePrimordial)) {
     return false;
   }
   // The prototype owning that `toString`/`Symbol.toPrimitive` (as Node: a null end throws).
   let pointer: object | null = value;
   do {
     pointer = getPrototypeOfPrimordial(pointer) as object | null;
-  } while (!hasOwnToString(pointer, 'toString') && !hasOwnToPrimitive(pointer, Symbol.toPrimitive));
+  } while (
+    !hasOwnToString(pointer, 'toString') &&
+    !hasOwnToPrimitive(pointer, toPrimitivePrimordial)
+  );
   const descriptor = getOwnPropertyDescriptorPrimordial(pointer as object, 'constructor');
   return (
     descriptor !== undefined &&
