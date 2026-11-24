@@ -412,3 +412,60 @@ describe("the abort path's errors and listeners", () => {
     }
   });
 });
+
+describe("a value a signal's own addEventListener throws is the refusal as is (as Node's execFile)", () => {
+  const coded = Object.assign(new TypeError('consumer'), { code: 'ERR_INVALID_ARG_TYPE' });
+  for (const [name, value] of [
+    ['null', null],
+    ['undefined', undefined],
+    ['a TypeError coded ERR_INVALID_ARG_TYPE', coded],
+  ] as const)
+    it(name, async () => {
+      const throwing = (): AbortSignal => {
+        const signal = new AbortController().signal;
+        signal.addEventListener = () => {
+          throw value;
+        };
+        return signal;
+      };
+      let node: unknown = 'nothing thrown';
+      try {
+        execFile(process.execPath, ['-e', ''], { signal: throwing() }, () => {});
+      } catch (e) {
+        node = e;
+      }
+      expect(node).toBe(value);
+      const sb = await createSandbox();
+      try {
+        await sb.writeFile('m.js', '');
+        const { value: got, calls } = await placed(async () => [
+          await failure(sb.exec('m.js', { signal: throwing() })),
+          await failure(sb.writeFile('w', 'x', { signal: throwing() })),
+        ]);
+        expect(got[0]).toBe(value);
+        expect(got[1]).toBe(value);
+        expect(calls).toBe(0);
+        expect(await names(sb)).toEqual(['m.js']);
+      } finally {
+        await sb.destroy();
+      }
+    });
+});
+
+describe('an already-aborted signal × destroy() in the same tick', () => {
+  it('both reject DESTROYED: the AbortError comes a microtask after the call (as Node), so the op is unsettled at destroy()', async () => {
+    const sb = await createSandbox();
+    await sb.writeFile('m.js', "require('fs').writeFileSync('ran', '1')");
+    const { value, calls } = await placed(async () => {
+      const exec = failure(sb.exec('m.js', { signal: AbortSignal.abort() }));
+      const write = failure(sb.writeFile('w', 'x', { signal: AbortSignal.abort() }));
+      await sb.destroy();
+      return [await exec, await write];
+    });
+    expect(value).toMatchObject([
+      { code: 'ERR_ISOLATE_HOST_SANDBOX_DESTROYED' },
+      { code: 'ERR_ISOLATE_HOST_SANDBOX_DESTROYED' },
+    ]);
+    expect(calls).toBe(0);
+  });
+});
