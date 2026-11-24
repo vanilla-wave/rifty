@@ -17,7 +17,7 @@ import {
   createGlobalWriteKeyCheck,
   globalWriteKeyMayBeFunction,
   isComputedMember,
-  isDirectEval,
+  isEvalIdentifierCall,
   literalString,
   staticPropertyKeyName,
   staticPropertyName,
@@ -156,7 +156,7 @@ interface FunctionRewriteCtx {
   hasRoutedFunctionReference: boolean;
   hasFunctionEvalText: boolean;
   hasCalledGlobalRead: boolean;
-  hasDirectEval: boolean;
+  hasEvalCall: boolean;
 }
 
 // TODO(backlog: runtime-js/function-constructor-exhaustive-metaprogramming-ceiling):
@@ -265,7 +265,7 @@ function rewriteCjsFunctionConstructorReferences(
     hasRoutedFunctionReference: false,
     hasFunctionEvalText: false,
     hasCalledGlobalRead: false,
-    hasDirectEval: false,
+    hasEvalCall: false,
   };
   walkFunctionReferences(program as unknown as AnyNodeShape, ctx);
   if (ctx.hasDerivedHostFunctionConstructor) {
@@ -277,7 +277,7 @@ function rewriteCjsFunctionConstructorReferences(
   if (
     ctx.hasFunctionEvalText ||
     (ctx.hasWithDynamicFunctionScope && ctx.hasRoutedFunctionReference) ||
-    (ctx.hasCalledGlobalRead && (ctx.hasWithDynamicFunctionScope || ctx.hasDirectEval))
+    (ctx.hasCalledGlobalRead && (ctx.hasWithDynamicFunctionScope || ctx.hasEvalCall))
   ) {
     throw new NotImplementedError(
       'module-loader.cjs-dynamic-function-scope',
@@ -719,7 +719,7 @@ function walkFunctionReferences(node: unknown, ctx: FunctionRewriteCtx): void {
         isShadowed(ctx, 'eval'),
       );
       if (directEvalImportEdit !== null) ctx.edits.push(directEvalImportEdit);
-      if (isDirectEval(n, isShadowed(ctx, 'eval'))) ctx.hasDirectEval = true;
+      if (isEvalIdentifierCall(n)) ctx.hasEvalCall = true;
       if (expressionMayBeGlobalEval(callee, ctx)) {
         ctx.hasDynamicFunctionScope = true;
         ctx.hasFunctionEvalText =

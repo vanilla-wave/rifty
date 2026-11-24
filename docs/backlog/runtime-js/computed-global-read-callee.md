@@ -112,7 +112,7 @@ unit and ADR-0171's claim.)
   `global['Fun' + 'ction']`); `Reflect.get(G, k)` called; an alias of the read
   called (`const C = G[k]; new C()`, `{ [k]: C } = G`); optional member
   `G?.[k](…)`.
-- A module with such a read and `with` or a direct `eval`:
+- A module with such a read and `with` or a call to the identifier `eval`:
   `module-loader.{cjs,esm}-dynamic-function-scope` at load (compat modules.md).
 - Key `'Function'` at runtime: ❌ `module-loader.{cjs,esm}-global-function-assignment`
   at the read (Node constructs; routing it is deferred, §Decisions).
@@ -129,7 +129,7 @@ unit and ADR-0171's claim.)
 - Deferred: a runtime `'Function'` key yielding the routed `Function` (ADR-0171) — trigger: a real package constructing `Function` through a computed global key.
 - Feature id: the format's existing `module-loader.{cjs,esm}-global-function-assignment` (same ceiling, moved to the read); message names write or call/construct.
 - Contract change (manager): `global-computed-key-guard.test.ts` drops ESM `new globalThis[key](…)` from its kept load-time ceilings; `Reflect.get` stays.
-- Helper shadowing (review 1 S1, manager: variant b): a called computed read plus `with` or a direct `eval` → `module-loader.{cjs,esm}-dynamic-function-scope` at load. Any direct `eval`, not only a non-literal one (my call, stricter): a folded text and a plain literal nesting one both shadow (probe, conformance rows). Write side: finding in `function-constructor-exhaustive-metaprogramming-ceiling`.
+- Helper shadowing (reviews 1–2, manager rule after review 2): a called computed read plus `with` or any call whose callee is the identifier `eval` (any binding — parameter, `var`, `let`, `catch` —, `eval?.()`, `eval(...a)`) → `module-loader.{cjs,esm}-dynamic-function-scope` at load. Class closed: at runtime only `with` and a direct eval add a binding to a module scope, and a direct eval is syntactically always a call of the identifier `eval`; `(0, eval)(…)`, `globalThis.eval(…)`, `Function(…)` run in the global scope and cannot see the helper. No exceptions in the predicate (each exception reopened the hole twice). Cost: refused where Node would run (`eval?.()`, `eval(...a)` indirect in V8; `eval` bound to a non-eval value) — zero against the base, which refused all such modules.
 - Not widened (manager): an alias of the read or a destructured read called stays a load-time ceiling even though this carrier could check it; candidate filed as a finding.
 
 - Applies to tracked global objects only (`globalThis`, `global`, tracked aliases), as every other guard site.

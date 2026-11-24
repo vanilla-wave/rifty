@@ -73,8 +73,23 @@ evalWrite  exports.f=function(k){ eval('var __rifty'+'GlobalKey=x=>x'); global[k
 ```
 
 The read side (`new G[k](…)`) keeps a load-time ceiling for a module with
-`with` or a direct `eval` (unit `runtime-js/computed-global-read-callee`); the
+`with` or any call of the identifier `eval` (unit `runtime-js/computed-global-read-callee`); the
 write side does not. Owner runtime-js (module-loader); trigger: next guard unit.
+
+Direct eval through a local `eval` binding skips import routing (PR #439
+review 2, not that unit's code): `rewriteDirectEvalImportCallArgument` and the
+eval-text ceiling key on `isShadowed('eval')`, but a call of a local binding
+named `eval` holding the real eval is a direct eval. Same file, `/w/n.js`
+`exports.f=function(eval){ return eval('import("./dep.mjs")') }`, beside
+`/w/dep.mjs` (`export const value = 'vfs-dep'`), `f(globalThis.eval)`:
+
+```
+node v24.16.0:  vfs-dep
+rifty (5c74088d2, createModuleLoader(MemoryFsSync).require): loads; reject ERR_MODULE_NOT_FOUND
+```
+
+The `import()` reaches the host, not the loader. Owner runtime-js (module-loader);
+trigger: next guard unit or a package calling a local `eval` binding.
 
 Key `'eval'`: `G[k](s)` with `k === 'eval'` is an indirect eval in Node and rifty
 (`var x = 'module-local'; global[k]('typeof x')` → `'undefined'`), as

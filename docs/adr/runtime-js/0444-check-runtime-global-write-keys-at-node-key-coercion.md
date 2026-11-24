@@ -92,7 +92,8 @@ key throws the format's ceiling there (Node constructs). Consumer: es-abstract
 `IsDetachedBuffer`, typed-array-* (exceljs). Kept at load: `Reflect.get(G, k)`
 called, a called alias/destructured binding of the read, `G?.[k](…)`, and
 (`*-dynamic-function-scope`) a module holding such a read with `with` or a
-direct `eval`, which can shadow the per-module helper (PR #439 review 1).
+call to the identifier `eval` (any binding, `?.`, spread), which can shadow
+the per-module helper (PR #439 reviews 1–2; rule in the unit's Decisions).
 Rejected, manager decision (not the user's words, reversible): handing the
 routed `Function` (ADR-0171) for that key — a value-substituting helper with
 stashed state, no consumer; trigger to revisit: a package constructing

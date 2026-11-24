@@ -84,9 +84,9 @@ describe('exceljs 4.4.0 loads node:zlib as in Node (Acceptance 4)', () => {
     const oracle = inNode(files, 'main-load.cjs', 'out/none');
     expect(oracle).toMatchObject({ exitCode: 0, stdout: 'loaded\n', stderr: '' });
     const guest = await inSandbox(files, 'main-load.cjs', 'out/none');
-    expect(guest.stderr).not.toMatch(
-      /NotImplementedError: Not implemented: (?:isolate-host\.zlib|module-loader\.cjs-global-function-assignment)/,
-    );
+    // The run ended (no timeout), with no loader ceiling and not at zlib's gap.
+    expect(guest.exitCode).not.toBeNull();
+    expect(guest.stderr).not.toMatch(/module-loader\.\w+|isolate-host\.zlib/);
   });
 
   it(

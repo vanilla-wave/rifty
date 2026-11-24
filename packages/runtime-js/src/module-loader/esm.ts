@@ -6,7 +6,7 @@ import { rewriteDirectEvalImportCallArgument } from './direct-eval-import.ts';
 import {
   globalWriteKeyMayBeFunction,
   isComputedMember,
-  isDirectEval,
+  isEvalIdentifierCall,
   literalString,
   staticPropertyKeyName,
   staticPropertyName,
@@ -39,7 +39,7 @@ interface EsmFunctionGuardCtx {
   hasRoutedFunctionReference: boolean;
   hasFunctionEvalText: boolean;
   hasCalledGlobalRead: boolean;
-  hasDirectEval: boolean;
+  hasEvalCall: boolean;
 }
 
 // TODO(backlog: runtime-js/function-constructor-exhaustive-metaprogramming-ceiling):
@@ -82,7 +82,7 @@ export function assertNoEsmFunctionRoutingCeiling(
     hasRoutedFunctionReference: false,
     hasFunctionEvalText: false,
     hasCalledGlobalRead: false,
-    hasDirectEval: false,
+    hasEvalCall: false,
   };
   walkEsmFunctionGuard(program as unknown as GuardNodeShape, ctx);
 
@@ -95,7 +95,7 @@ export function assertNoEsmFunctionRoutingCeiling(
   if (
     ctx.hasFunctionEvalText ||
     (ctx.hasWithDynamicFunctionScope && ctx.hasRoutedFunctionReference) ||
-    (ctx.hasCalledGlobalRead && (ctx.hasWithDynamicFunctionScope || ctx.hasDirectEval))
+    (ctx.hasCalledGlobalRead && (ctx.hasWithDynamicFunctionScope || ctx.hasEvalCall))
   ) {
     throw new NotImplementedError(
       'module-loader.esm-dynamic-function-scope',
@@ -488,7 +488,7 @@ function walkEsmFunctionGuard(node: unknown, ctx: EsmFunctionGuardCtx): void {
           directEvalImportProbeHelper,
           isGuardShadowed(ctx, 'eval'),
         ) !== null;
-      if (isDirectEval(n, isGuardShadowed(ctx, 'eval'))) ctx.hasDirectEval = true;
+      if (isEvalIdentifierCall(n)) ctx.hasEvalCall = true;
       if (guardExpressionMayBeGlobalEval(callee, ctx)) {
         ctx.hasDynamicFunctionScope = true;
         ctx.hasFunctionEvalText =

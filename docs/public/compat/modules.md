@@ -118,8 +118,9 @@ Hand-maintained (the `pnpm compat:generate` data-driven sink isn't wired yet —
   same ceiling at that read (Node constructs). Still rejected at load: a called
   alias or destructured binding of such a read (`const C = global[k]; new C()`),
   `Reflect.get(globalThis, k)` called, `global?.[k](…)`; a module holding such a
-  read and `with` or a direct `eval` (either can shadow the key check) throws
-  `module-loader.{cjs,esm}-dynamic-function-scope`. V8 messages, stack
+  read and `with` or any call of the identifier `eval` (either can shadow the key
+  check) throws `module-loader.{cjs,esm}-dynamic-function-scope` — also where Node
+  would run it (`eval?.()`, `eval(...a)`, `eval` bound to another function). V8 messages, stack
   columns and `fn.toString()` of that line show the helper
   (`global[__riftyGlobalKey(...)] is not a constructor`, Node `global[k] is not a constructor`;
   `backlog/runtime-js/function-rewrite-visible`).
