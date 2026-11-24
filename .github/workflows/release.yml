@@ -67,6 +67,9 @@ jobs:
       - name: Build libraries
         run: pnpm build:libs
 
+      - name: Third-party notices in packed files
+        run: pnpm check:third-party-notices
+
       - name: Bundle LICENSE into each package
         run: |
           for d in packages/*/ tools/shadow-registry/ services/eddy/; do

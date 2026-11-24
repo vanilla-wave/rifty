@@ -42,6 +42,8 @@ describe('pr:check lanes follow the diff class', () => {
     expect(names.indexOf('check:es-floor')).toBeGreaterThan(names.indexOf('build:playground'));
     expect(SOURCE_LANES.has('check:es-floor')).toBe(true);
     expect(SOURCE_LANES.has('build:playground')).toBe(true);
+    expect(names.indexOf('check:third-party-notices')).toBeGreaterThan(names.indexOf('build:libs'));
+    expect(SOURCE_LANES.has('check:third-party-notices')).toBe(true);
   });
 
   it('a documentation-only working tree skips exactly the source lanes and keeps every other check', () => {
