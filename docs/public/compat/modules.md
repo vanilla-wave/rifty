@@ -95,8 +95,8 @@ Hand-maintained (the `pnpm compat:generate` data-driven sink isn't wired yet —
   statically tracked aliases of `globalThis`/`global` (direct assignment,
   CJS sloppy implicit assignment,
   object/array destructuring, default parameters), computed `globalThis[...]`
-  Function-like mutations or use-as-constructor reads (including dynamic computed keys
-  and folded string expressions like `"Fun" + "ction"`), `delete globalThis.Function`,
+  Function-like mutations (including dynamic computed keys) or use-as-constructor
+  reads of a key folding to `'Function'` (`"Fun" + "ction"`), `delete globalThis.Function`,
   `Object.defineProperty(globalThis, "Function", ...)`,
   `Object.defineProperties(...)`, `Object.assign(globalThis, ...)`, `Reflect.set(...)`,
   `Reflect.get(globalThis, ...)` when used as a possible constructor, `Reflect.deleteProperty(...)`,
@@ -111,6 +111,20 @@ Hand-maintained (the `pnpm compat:generate` data-driven sink isn't wired yet —
   write only when it is `'Function'` (earlier statements have run; `??=`/`||=`
   throw even where Node would skip the write). `fn.toString()` and stack
   columns of such a line show the loader's key-check helper (ADR-0444).
+  A computed read of a tracked global called or constructed with such a key
+  (`new global[k](…)`, `global[k](…)`, `global[k]?.(…)`, `global[k].call|apply|bind(…)`
+  — es-abstract `IsDetachedBuffer`, typed-array-length/-byte-offset/-byte-length)
+  loads and runs as in Node; a key that is `'Function'` at runtime throws the
+  same ceiling at that read (Node constructs). Still rejected at load: a called
+  alias or destructured binding of such a read (`const C = global[k]; new C()`),
+  `Reflect.get(globalThis, k)` called, `global?.[k](…)`; a module holding such a
+  read and `with` or any call of the identifier `eval` (either can shadow the key
+  check) throws `module-loader.{cjs,esm}-dynamic-function-scope` at load, where
+  Node runs the module (a conservative rule: no exception for `eval?.()`,
+  `eval(...a)` or a local `eval` bound to another function). V8 messages, stack
+  columns and `fn.toString()` of that line show the helper
+  (`global[__riftyGlobalKey(...)] is not a constructor`, Node `global[k] is not a constructor`;
+  `backlog/runtime-js/function-rewrite-visible`).
   Tracked in `docs/backlog/runtime-js/cjs-global-function-assignment.md`.
   ❌ False positive: a non-literal `Object.assign(globalThis, src)` rejects the
   module at load even in a branch that never runs — `fetch-blob@3.2.0`
@@ -134,6 +148,11 @@ Hand-maintained (the `pnpm compat:generate` data-driven sink isn't wired yet —
   `docs/backlog/runtime-js/function-constructor-exhaustive-metaprogramming-ceiling.md`;
   until then, new escapes found by parity/conformance must either be routed or
   promoted to a directed `NotImplementedError` before being claimed as supported.
+- ❌ A module whose only `Function`/`global`/`globalThis` tokens are spelled with
+  `\u` escapes (`\u0046unction`) skips the whole Function guard: its lexical
+  `Function` is not routed (`import()` reaches the host) and a called
+  `\u0067lobal[k]` hands out the host constructor. Tracked in
+  `docs/backlog/runtime-js/function-routing-prefilter-escaped-identifiers.md`.
 
 ### `node:vm` — engines + ES2023-vs-V8 divergences
 

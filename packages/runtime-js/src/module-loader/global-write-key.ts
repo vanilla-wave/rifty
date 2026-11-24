@@ -66,6 +66,16 @@ export function createGlobalWriteKeyCheck(
   };
 }
 
+/**
+ * A call whose callee is the identifier `eval` — the only syntax of a direct eval,
+ * whatever binding `eval` names (review 2): its code can declare a binding that
+ * shadows the key-check helper. No exceptions (shadowed, `?.`, spread) by rule.
+ */
+export function isEvalIdentifierCall(node: KeyNode): boolean {
+  const callee = (node as unknown as { callee?: { type?: string; name?: string } }).callee;
+  return callee?.type === 'Identifier' && callee.name === 'eval';
+}
+
 export function staticPropertyName(node: KeyNode): string | undefined {
   const n = unwrapChain(node) as KeyNode;
   const member = n as unknown as { computed?: boolean; property?: KeyNode };

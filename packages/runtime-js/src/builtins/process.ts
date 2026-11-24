@@ -64,6 +64,7 @@ import {
   makeDefaultStdioWriter,
   makeStdioWriter,
 } from './process-stdio-writer.ts';
+import { wrappedUmask } from './process-umask.ts';
 import { type EmitWarning, installProcessWarnings } from './process-warnings.ts';
 import { captureProcessStdio } from './stdio-fd-source.ts';
 
@@ -356,6 +357,7 @@ export class NodeProcess extends EventEmitter {
   chdir = chdir;
   hrtime = hrtime;
   uptime = uptime;
+  umask = wrappedUmask;
   // Named-loud (ADR-0443): vitest pool workers bind it at load; every call throws.
   memoryUsage = memoryUsage;
 

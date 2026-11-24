@@ -12,6 +12,11 @@ export const fsMatrix = {
     ],
     ['`mkdirSync({ recursive })`', '✅', 'Creates parent directories'],
     [
+      '`mode` of `writeFile*` / `appendFile*` / `mkdir*` / `open*` / `createWriteStream`, `mkdtemp*`',
+      '⚠️',
+      'Ignored: the entry is created and reports 0o100666/0o40777 whatever `mode` asks (Node: `mode & ~umask`, e.g. 0o600; `mkdtemp` 0o700 & ~umask); no `chmod` family — backlog `runtime-js/fs-mode-arguments-ignored`',
+    ],
+    [
       '`readdirSync` / `Dirent[]`',
       '✅',
       'Sorted names; `withFileTypes`; `{ recursive: true }` BFS walk + `Dirent.parentPath` (no removed-in-v24 `path` alias)',
@@ -80,7 +85,7 @@ export const fsMatrix = {
     [
       '`createReadStream` / `createWriteStream`',
       '⚠️',
-      "Async `Vfs.openReadable` first, cwd-resolved paths, chunked reads, write flags (`w`/`a`/`x`/`r+` subset), read-stream abort `signal` (Node event order incl. pre-abort), TypedArray/DataView chunks, string-options overload (`createReadStream(p, 'utf8')` emits strings; `createWriteStream(p, 'base64')` decodes string writes, per-write encoding overrides), destroy() on Node's write-dispatch boundary (in-flight bytes land + 'error'; pre-dispatch discards silently), pipe and `end` parity tests. Gap: `ReadStream.pipe` ignores options and always calls `dest.end()` (`{ end: false }` still ends; `pipe(process.stdout)` throws `dest.end is not a function`) — backlog `runtime-js/fs-readstream-pipe-node-options`; `ReadStream`/`WriteStream` have no `close()` and `ReadStream` is not async-iterable (`TypeError`; exceljs `xlsx.readFile`) — backlog `runtime-js/fs-stream-close-method-missing`",
+      "Async `Vfs.openReadable` first, cwd-resolved paths, chunked reads, write flags (`w`/`a`/`x`/`r+` subset), read-stream abort `signal` (Node event order incl. pre-abort), TypedArray/DataView chunks, string-options overload (`createReadStream(p, 'utf8')` emits strings; `createWriteStream(p, 'base64')` decodes string writes, per-write encoding overrides), destroy() on Node's write-dispatch boundary (in-flight bytes land + 'error'; pre-dispatch discards silently), pipe and `end` parity tests. Gap: `ReadStream.pipe` ignores options and always calls `dest.end()` (`{ end: false }` still ends; `pipe(process.stdout)` throws `dest.end is not a function`) — backlog `runtime-js/fs-readstream-pipe-node-options`; `ReadStream`/`WriteStream` have no `close()` and `ReadStream` is not async-iterable (`TypeError`; exceljs `xlsx.readFile`) — backlog `runtime-js/fs-stream-close-method-missing`; `fs.WriteStream`/`fs.ReadStream` are ES classes, so `fs$WriteStream.apply(this, args)` (graceful-fs `createWriteStream`/`createReadStream`, fstream) throws `Class constructor FileWriteStream cannot be invoked without 'new'` — backlog `runtime-js/fs-stream-class-call-shape`",
     ],
     [
       'Stream unsupported options',

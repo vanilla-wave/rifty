@@ -272,7 +272,7 @@ function factoryArguments(
     routedConstructors.Function,
     createGlobalWriteKeyCheck(
       'module-loader.esm-global-function-assignment',
-      `ESM module ${resolved.id} writes the global Function property through a runtime key; rifty cannot emulate that without mutating the host constructor`,
+      `ESM module ${resolved.id} writes, calls or constructs the global Function property through a runtime key; rifty cannot emulate that without mutating or handing out the host constructor`,
     ),
   ];
 }

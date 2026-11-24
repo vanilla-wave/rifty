@@ -1,6 +1,6 @@
 /**
  * `node:zlib`, `node:child_process`, `node:worker_threads` in the isolate guest (unit
- * `backlog/distribution/isolate-host-ceiling-modules-load`, ADR-0557 §6 correction
+ * PR #438 (isolate ceiling modules), ADR-0557 §6 correction
  * 2026-11-24): Node's shape and real members, against live `node`; every use of the
  * missing compression engine, processes or workers a named gap at use, never at load.
  */
@@ -110,8 +110,6 @@ const LOUD: readonly (readonly [string, string])[] = [
   ["child_process.fork('m.js')", 'child_process.fork'],
   ["child_process.spawn('ls')", 'child_process.spawn'],
   ["child_process.spawnSync('ls')", 'child_process.spawnSync'],
-  ["util.promisify(child_process.exec)('ls')", 'child_process.exec'],
-  ["util.promisify(child_process.execFile)('ls')", 'child_process.execFile'],
   ['new child_process.ChildProcess()', 'child_process.ChildProcess'],
   ['child_process.ChildProcess()', 'child_process.ChildProcess'],
   ['new (class extends child_process.ChildProcess {})()', 'child_process.ChildProcess'],
@@ -138,6 +136,9 @@ const LOUD: readonly (readonly [string, string])[] = [
 
 /** Node's `async` members: the gap is the rejection. */
 const LOUD_ASYNC: readonly (readonly [string, string])[] = [
+  // Node's `util.promisify.custom` forms return a promise; a failed start rejects it.
+  ["util.promisify(child_process.exec)('ls')", 'child_process.exec'],
+  ["util.promisify(child_process.execFile)('ls')", 'child_process.execFile'],
   ["worker_threads.postMessageToThread(1, 'x')", 'worker_threads.postMessageToThread'],
   ["worker_threads.locks.request('l', () => {})", 'worker_threads.locks.request'],
   ['worker_threads.locks.query()', 'worker_threads.locks.query'],

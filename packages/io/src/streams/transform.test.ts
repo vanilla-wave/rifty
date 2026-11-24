@@ -7,7 +7,6 @@ import { describe, expect, it } from 'vitest';
 import { Duplex } from './duplex.ts';
 import { PassThrough } from './pass-through.ts';
 import { Transform } from './transform.ts';
-import { Writable } from './writable.ts';
 
 describe('Transform subclassing', () => {
   it('subclass that passes transform to super() transforms chunks', async () => {
@@ -34,13 +33,8 @@ describe('Transform subclassing', () => {
   });
 
   it('subclass calling super({}) then assigning options later still works via super-provided transform', async () => {
-    // Updated per ADR-0034: pre-ADR, `Transform` rebound `this.write` /
-    // `this.end` per instance and the only supported subclass path was
-    // passing `transform` to `super(...)`. Post-ADR, `write`/`end` live on
-    // the prototype and the writable-side factory captures the transform via
-    // a ref-cell so subclassing is plain `super({...})`. The test still pins
-    // the canonical path — passing `transform` to super() — as the contract
-    // both pre- and post-ADR uphold.
+    // `write`/`end` live on the prototype (ADR-0034); the `transform` option
+    // becomes the instance's own `_transform` (Node).
     class Identity extends Transform {
       constructor() {
         super({
@@ -118,31 +112,5 @@ describe('Duplex.write routes to the writable side', () => {
     await ended;
 
     expect(seen).toEqual([{ path: 'file-0' }]);
-  });
-
-  it('Duplex public options interface does not expose the internal writable-side hook', () => {
-    // Type-level guard: the internal writable-side factory is keyed by a
-    // module-scoped Symbol (`INTERNAL_WRITABLE_SIDE`) that is NOT exported
-    // from `src/index.ts`. A subclass written outside `@riftydev/io` cannot
-    // reach the symbol and therefore cannot inject a custom writable side.
-    // We simulate that here by reaching only through the public option
-    // surface: `_internalWritableSide` is no longer a field on the public
-    // bag, so this construct does NOT override the writable side — it just
-    // silently passes through as an unknown property (Writable's options
-    // don't reject it).
-    const factoryCalled = { hit: false };
-    new Duplex({
-      objectMode: true,
-      // @ts-expect-error — `_internalWritableSide` is intentionally absent
-      // from the public Duplex constructor options after the Symbol-keyed
-      // refactor; only `INTERNAL_WRITABLE_SIDE` (module-private Symbol) is
-      // honoured. The cast below would not type-check if the public bag
-      // still carried the field.
-      _internalWritableSide: () => {
-        factoryCalled.hit = true;
-        return new Writable({});
-      },
-    });
-    expect(factoryCalled.hit).toBe(false);
   });
 });
