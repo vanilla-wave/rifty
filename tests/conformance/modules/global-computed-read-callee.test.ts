@@ -147,15 +147,21 @@ describe('computed global read used as a callee/constructor (unit computed-globa
     });
   }
 
-  // Review S1: `with` or a non-literal direct eval can shadow the key-check helper, so a
-  // module with both and a called computed read keeps a load-time ceiling (dynamic scope).
-  const SHADOW = "'var __rifty' + 'GlobalKey = (x) => x'";
+  // Review S1: `with` or a direct eval can shadow the key-check helper — a folded text, or a
+  // plain literal holding a nested eval of one — so a module with both and a called computed
+  // read keeps a load-time ceiling (dynamic scope).
+  const FOLDED = "eval('var __rifty' + 'GlobalKey = (x) => x');";
+  const NESTED = `eval("eval('var __rif' + 'tyGlobalKey = (x) => x')");`;
   const dynamicScope = {
     cjs: {
       with: 'with ({}) { return new global[key]("return 1"); }',
-      'non-literal direct eval': `eval(${SHADOW}); return new global[key]("return 1");`,
+      'a folded direct eval': `${FOLDED} return new global[key]("return 1");`,
+      'a literal direct eval': `${NESTED} return new global[key]("return 1");`,
     },
-    esm: { 'non-literal direct eval': `eval(${SHADOW}); return new globalThis[key]("return 1");` },
+    esm: {
+      'a folded direct eval': `${FOLDED} return new globalThis[key]("return 1");`,
+      'a literal direct eval': `${NESTED} return new globalThis[key]("return 1");`,
+    },
   };
 
   for (const [name, body] of Object.entries(dynamicScope.cjs)) {
@@ -186,10 +192,10 @@ describe('computed global read used as a callee/constructor (unit computed-globa
     });
   }
 
-  // A literal direct eval cannot name the helper (its name avoids the source text); an
-  // indirect eval runs in the global scope. Both keep the read admitted.
-  it('a literal direct eval or an indirect eval beside a called computed read loads', async () => {
-    const body = 'eval("1"); (0, eval)("var __riftyGlobalKey = 1"); return new globalThis[key](1);';
+  // An indirect eval runs in the global scope: the read stays admitted.
+  it('an indirect eval beside a called computed read loads', async () => {
+    const body =
+      '(0, eval)("var __riftyGlobalKey = 1"); globalThis.eval?.("1"); return new globalThis[key](1);';
     const cjs = setup({ '/e.js': `exports.f = function (key) { ${body} };` });
     const esm = setup({ '/e.mjs': `export function f(key) { ${body} }` });
     const sites = [
