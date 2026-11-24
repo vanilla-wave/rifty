@@ -105,7 +105,8 @@ prints its verdict on a generator, an async, a plain and an arrow function. Toda
    `import`, a typeless ESM-syntax `.js` loaded by `require` as ESM, `require` of `.mjs`
    returning its namespace (`packages/runtime-js/src/module-loader/require-module-switch.test.ts`) → ADR-0557
 6. ESM entry (`node m.mjs`, `node tm/x.js`, `node b.js`) and `import()` in the guest: their
-   named gaps, no `URLConstructor` (same isolate test file); `import()` from a file of a typeless
+   named gaps, no `URLConstructor` (same isolate test file); `import()` by a relative or package
+   specifier (by `file:` URL: `runtime-js/isolate-web-globals-captured-at-load`) from a file of a typeless
    ESM-syntax `.js`, an `.mjs` or a `"type": "module"` `.js` rejects with `isolate-host.esm`, a
    later `require` of it gives Node's row; `import()` of a CommonJS file and of `node:path` loads
    as in Node → ADR-0557
@@ -154,8 +155,9 @@ prints its verdict on a generator, an async, a plain and an arrow function. Toda
   `NotImplementedError('child_process.fork.execArgv')` on browser hosts.
 - A package whose `exports` has only `module-sync`/`import` entries: `ERR_PACKAGE_PATH_NOT_EXPORTED`
   as Node, but rifty's text and `ModuleLoadError` — `runtime-js/exports-no-main-message`.
-- `fs` path type errors: `readFileSync({})` → rifty's code-less `TypeError: fs path must be string,
-  Buffer, or URL` on every host (Node `ERR_INVALID_ARG_TYPE`): `runtime-js/fs-path-invalid-arg-type`.
+- `fs` path type errors: `readFileSync({})` → on browser hosts rifty's code-less `TypeError: fs path
+  must be string, Buffer, or URL`, in the isolate guest `Right-hand side of 'instanceof' is not an
+  object` (Node `ERR_INVALID_ARG_TYPE`): `runtime-js/fs-path-invalid-arg-type`, `runtime-js/isolate-web-globals-captured-at-load`.
 - Web globals absent when runtime-js loads in the guest (`import()` by `file:` URL, `url` helpers, `buffer.Blob`/`File`, `crypto.subtle`, `url.parse`/`resolve` wrong values): `runtime-js/isolate-web-globals-captured-at-load`, compat ❌.
 - `process.getBuiltinModule` absent (`runtime-js/process-get-builtin-module`); `import()` of JSON
   without an attribute loads (`runtime-js/import-attributes`); `module.require`/`Module._load`

@@ -3,7 +3,7 @@ area: runtime-js
 status: draft
 title: "An fs path that is neither a string, bytes nor a URL throws Node's ERR_INVALID_ARG_TYPE"
 created: 2026-11-24
-why: rifty throws a code-less `TypeError('fs path must be string, Buffer, or URL')` on every host; Node `TypeError [ERR_INVALID_ARG_TYPE]` naming the argument
+why: rifty's browser hosts throw a code-less `TypeError('fs path must be string, Buffer, or URL')` (the isolate guest `Right-hand side of 'instanceof' is not an object`); Node `TypeError [ERR_INVALID_ARG_TYPE]` naming the argument
 sources: [docs/backlog/runtime-js/isolate-require-esm-syntax-gaps.md]
 code: [packages/runtime-js/src/builtins/fs-path.ts]
 ---

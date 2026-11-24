@@ -31,7 +31,7 @@ Measured 2026-11-24, `sandbox.exec` of one CommonJS file over the same files, PR
 | `fs-path.ts:33` `p instanceof URLConstructor`, `fs.readFileSync({})` | `TypeError: Right-hand side of 'instanceof' is not an object` (browser hosts: code-less `fs path must be string, Buffer, or URL`, `runtime-js/fs-path-invalid-arg-type`) | `ERR_INVALID_ARG_TYPE` |
 | `buffer.ts:42-43` `Blob: g.Blob, File: g.File`, `new (require('buffer').Blob)(['a'])`, `({}) instanceof require('buffer').File` | `… is not a constructor`; `Right-hand side of 'instanceof' is not an object` | `size` 1, `false`; `=== Blob` |
 | `crypto.ts:504` `subtle: webcrypto?.subtle` (read before the ceiling getter), `require('crypto').subtle.digest` | `TypeError: Cannot read properties of undefined (reading 'digest')` | a function |
-| `url.ts:76` `parse`, `:161` `resolve` (an empty `catch {}` around the `URL` use) — **wrong value, no error** | `url.resolve('https://example.com/a', 'b')` → `'b'`; `url.resolve('http://a.com/b/c', '../d')` → `'../d'`; `url.parse('http://u:p@a.com:8/b?c=d#e')` → `auth` `null`, `host` `'u:p@a.com:8'`, `hostname`/`port` `null` | `'https://example.com/b'`; `'http://a.com/d'`; `'u:p'`, `'a.com:8'`, `'a.com'`, `'8'` |
+| `url.ts:76` `parse`, `:161` `resolve` (an empty `catch {}` around the `URL` use) — **wrong value, no error** | `url.resolve('https://example.com/a', 'b')` → `'b'`; `url.resolve('http://a.com/b/c', '../d')` → `'../d'`; `url.parse('http://u:p@a.com:8/b?c=d#e')` → `host` `'u:p@a.com:8'`, no `auth`/`hostname`/`port`/`path` keys (keys `protocol,slashes,host,pathname,search,query,hash,href`) | `'https://example.com/b'`; `'http://a.com/d'`; ``auth` `'u:p'`, `host` `'a.com:8'`, `hostname` `'a.com'`, `port` `'8'`, plus `path` |
 
 Review round 3 also named, not measured here: `io/src/streams/from-web-validation.ts:33-40`,
 `host-async-keepalive.ts:16`, `timers.ts:267`, `stream-web.ts:37-51` (`require('stream/web').ReadableStream
@@ -49,6 +49,9 @@ because:
 - the runtime's internals then depend on what the guest puts in `globalThis.URL` (`delete
   globalThis.URL` → `undefined is not a constructor`; an arrow function → a throw in `instanceof`);
   a mutant without `Symbol.hasInstance` survived;
+  (if this variant returns: the review's checked fix for the first point is
+  `Reflect.construct(current(), args, new.target === forward ? current() : new.target)` — with it the
+  whole core-js probe passes; the second and third points stand);
 - its inventory (search `= globalThis.`) missed object literals (`buffer.ts`), reads before a getter
   (`crypto.ts`), silent `catch {}` (`url.ts`) and the other bundled packages.
 
