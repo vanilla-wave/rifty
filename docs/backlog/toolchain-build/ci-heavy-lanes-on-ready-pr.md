@@ -27,7 +27,7 @@ Agent opens PR as draft, pushes 3×: each run = `Change scope`, `lint-and-typech
 5. push to `main` / `merge_group`: unchanged full gate (no PR payload → `!draft` true); change-scope death on ready PR still fails open → ADR-0323
 6. Workflow contract + reducer covered by `tools/checks/ci-change-scope.test.ts`, `tools/checks/ci-gate.test.ts` → ADR-0323
 
-Evidence (PR #446): draft run 45453748956 (3 light jobs, heavy skipped, gate red); ready run 45454866951 (full, same head); ready push run 45455294277 (full).
+Evidence (PR #446): draft runs 45453748956 (`420323cc7`) and 45455993791 (`6bb847dfb`, after ready→draft + push): 3 light jobs, heavy `skipped` without runner, gate red. Runs 45454866951 (`ready_for_review`, `420323cc7`) and 45455294277 (ready push, `bc0738faf`): full matrix expanded, then `cancelled` by the next push — heavy never ran. Completed full green: 45457070784 (`ready_for_review`, `6bb847dfb`).
 
 ## Fault matrix
 

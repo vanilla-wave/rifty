@@ -112,8 +112,12 @@ describe('CI gate reducer', () => {
   it('names the dead classifier and the withheld lanes on a draft PR', () => {
     const errors = gate({ draft: 'true', code: '', changeScope: 'failure', ...heavySkipped });
     expect(errors).toHaveLength(2);
-    expect(errors.some((e: string) => e.includes('change-scope'))).toBe(true);
-    expect(errors.some((e: string) => e.includes('draft'))).toBe(true);
+    const classifier = errors.find((e: string) => e.includes('change-scope'));
+    expect(classifier).toBeDefined();
+    // heavy lanes are withheld on draft: "fails open — rerun" would mislead.
+    expect(classifier).not.toContain('fails open');
+    expect(classifier).toContain('ready for review');
+    expect(errors.some((e: string) => e.startsWith('draft PR'))).toBe(true);
   });
 
   it('treats push and merge_group (no PR payload) as non-draft', () => {

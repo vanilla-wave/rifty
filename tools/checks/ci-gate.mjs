@@ -24,9 +24,11 @@ export function evaluateGate({ code, changeScope, lint, unit, e2e, browserUnit, 
   } else if (changeScope === 'success') {
     errors.push(`change-scope emitted invalid code='${code}'`);
   } else {
-    errors.push(
-      `change-scope concluded '${changeScope}' before classifying; heavy suite fails open — rerun it for a green gate`,
-    );
+    const next =
+      draft === 'true'
+        ? 'heavy lanes withheld on draft — rerun after ready for review'
+        : 'heavy suite fails open — rerun it for a green gate';
+    errors.push(`change-scope concluded '${changeScope}' before classifying; ${next}`);
   }
 
   if (draft === 'true' && code !== 'false') {
