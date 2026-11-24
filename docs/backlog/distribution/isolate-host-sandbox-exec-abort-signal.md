@@ -39,7 +39,8 @@ challenge: 2026-11-24 — clear (existing-baseline extension of an internal mech
    `signal` is no longer an unknown option. → scenario
 2. Already aborted at the call → rejects `AbortError` with no pool call placed (no worker spawned,
    no isolate); a `destroy()` in the same tick → `DESTROYED` instead (item 7: the `AbortError` comes
-   a microtask after the call, as Node's, so the op is unsettled at `destroy()`). → scenario
+   a microtask after the call, as `addAbortListener`/`execFile` deliver it — `fs.promises.readFile`
+   rejects at once — so the op is unsettled at `destroy()`). → scenario
 3. Aborted while queued → the operation rejects at the abort and never takes effect; later
    operations keep their order (ADR-0568 §4). → scenario
 4. Aborted in flight (restore, run or capture) → rejects at the abort; the isolate is disposed as at
