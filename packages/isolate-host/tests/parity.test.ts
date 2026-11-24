@@ -206,9 +206,9 @@ describe('declared ceilings fail loudly (I1 ceilings, scenario step 4)', () => {
   }
 
   for (const [api, code] of [
-    ['zlib', "require('zlib').gzip('x', () => {})"],
-    ['child_process', "require('child_process').execSync('ls')"],
-    ['worker_threads', "new (require('worker_threads').Worker)('1', { eval: true })"],
+    ['zlib.gzip', "require('zlib').gzip('x', () => {})"],
+    ['child_process.execSync', "require('child_process').execSync('ls')"],
+    ['worker_threads.Worker', "new (require('worker_threads').Worker)('1', { eval: true })"],
   ] as const) {
     it(`host-specific ceilings name their own API: ${api}`, async () => {
       const result = await runCode(code);

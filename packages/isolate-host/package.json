@@ -54,6 +54,7 @@
     "@riftydev/isolate-guest": "workspace:*",
     "@riftydev/vfs": "workspace:*",
     "esbuild": "0.28.0",
+    "exceljs": "4.4.0",
     "pptxgenjs": "4.0.1"
   },
   "engines": {

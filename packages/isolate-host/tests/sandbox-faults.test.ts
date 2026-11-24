@@ -807,7 +807,7 @@ describe("runCode's hardening and options through exec (I6)", () => {
         await sb.writeFile(
           'h.js',
           `(async () => {
-  for (const f of [() => fetch('http://x'), () => require('http').request('http://x'), () => require('child_process')]) {
+  for (const f of [() => fetch('http://x'), () => require('http').request('http://x'), () => require('child_process').spawn('ls')]) {
     try { await f(); console.log('ran') } catch (e) { console.log(e.name, String(e.message).split(' (')[0]) }
   }
   console.log(typeof SharedArrayBuffer, typeof globalThis.ivm, typeof process.binding);
@@ -819,7 +819,7 @@ describe("runCode's hardening and options through exec (I6)", () => {
           [
             'NotImplementedError Not implemented: isolate-host.fetch',
             'NotImplementedError Not implemented: isolate-host.http.request',
-            'NotImplementedError Not implemented: isolate-host.child_process',
+            'NotImplementedError Not implemented: isolate-host.child_process.spawn',
             'undefined undefined undefined',
             '',
           ].join('\n'),
