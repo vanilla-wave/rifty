@@ -28,6 +28,15 @@ The guest entry runs `installMemoryFs()` (`entry.ts:46`), so `asyncVfs()` is set
 `ENOENT` (stat first). Was undeclared (the isolate-host compat ✅ row claimed "fs on the in-memory VFS"); declared
 by `runtime-js/fs-stream-close-method-missing`: compat isolate-host.md row ❌.
 
+Probe `gen/diag-fsread.cjs` (folded in from the duplicate record
+`isolate-host-fs-read-stream-needs-web-readablestream`): with no `'error'` listener the run ends
+exit 1. exceljs 4.4.0 stops here on `wb.xlsx.read(fs.createReadStream(f))`,
+`wb.csv.read(fs.createReadStream(f))` and `wb.xlsx.readFile(f)` (source `xlsx.js:244-253`,
+`csv/csv.js:32-43`); consumer-side route `wb.xlsx.load(fs.readFileSync(f))`. Same mechanism class
+as `runtime-js/isolate-require-esm-syntax-gaps` (a runtime path on a host global the isolate
+withholds). Browser hosts have the global (async path proven by
+`tests/conformance/builtins/fs-stream-close-async-vfs.test.ts`).
+
 Library effect: probe `isolate-library-probe` `diag-outputs` after the close() fix —
 `exceljs xlsx.readFile (read back): NotImplementedError: … isolate-host.ReadableStream`
 (node: `ok string 1`); before it, exceljs's `stream.close()` in its catch threw the
@@ -47,5 +56,6 @@ streaming without web streams) — undecided. Dedup: grep `ReadableStream` / `op
 `createReadStream` over `docs/backlog`, `docs/process/traps.md` — `vfs/memory-vfs-openreadable-true-backpressure`
 (backpressure, not availability), no match.
 
-Owner: distribution (isolate guest) with vfs. Trigger: any guest program reading a file by
-stream (exceljs `xlsx.readFile`, `readline` over a file, `pipeline(createReadStream…)`).
+Owner: distribution (isolate guest) with vfs/runtime-js (the read path). Trigger: the guest's
+web-stream ceiling lifted (ROADMAP M14 E), or a guest program reading a file as a stream
+(exceljs read-back) — whichever comes first.

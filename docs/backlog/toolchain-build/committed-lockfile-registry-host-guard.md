@@ -24,3 +24,11 @@ registry.npmjs.org). Known clean: `weavix` (6/6 npmjs), baked snapshot locks
 under `apps/playground/public/snapshots/` (written by rifty's own installer
 against REGISTRY_BASE_URL default npmjs). The guard's value is refusing the
 NEXT mirror-poisoned fixture at commit time instead of at post-merge CI triage.
+
+Second incident 2026-11-24 (PR #430, library probe): `docs/backlog/distribution/reference/isolate-library-probe/deps/package-lock.json`
+(209/209) and `verify/package-lock.json` (42/42) were committed with `resolved` on
+`npm.yandex-team.ru`; the probe `npm ci`s them, so outside that network it did not reproduce.
+Repaired in the same PR (hosts rewritten to `registry.npmjs.org`, `integrity` unchanged;
+`npm ci --cache <empty> --registry=https://registry.npmjs.org/` fetched all 251 tarballs from
+npmjs and their integrity matched). No gate caught it: the guard is still unbuilt.
+

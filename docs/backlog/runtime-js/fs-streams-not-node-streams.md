@@ -45,6 +45,10 @@ Absent or different public members (`typeof` / value right after create, Node | 
 - `'close'` follows `'end'` / `'finish'` in the same tick; Node emits it after the async
   `fs.close` (a `closed` read or `WriteStream#close(cb)` between microtasks differs).
 
+Async iteration (also probed by `isolate-library-probe/gen/diag-fsread.cjs`): `for await (const c
+of rs)` → rifty `TypeError: … is not async iterable`; exceljs `xlsx.read(stream)` iterates when
+`Symbol.asyncIterator` exists and falls back to `pipe` otherwise (`xlsx.js:247-253`).
+
 Not declared: compat fs.md's `createReadStream` row is ⚠️ but named only `pipe` and `close`.
 Same as Node: `path` (the given path), `destroy`, `write`/`end` overloads. Same root as
 `fs-readstream-set-encoding` and `fs-readstream-pipe-node-options` (no inherited
