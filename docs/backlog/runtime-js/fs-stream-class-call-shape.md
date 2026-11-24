@@ -4,7 +4,7 @@ status: draft
 title: fs.WriteStream / fs.ReadStream cannot be applied to an existing object as Node's callable constructors can
 created: 2026-11-24
 why: graceful-fs wraps `fs.WriteStream`/`fs.ReadStream` with `fs$WriteStream.apply(this, arguments)`; rifty's ES classes throw `Class constructor FileWriteStream cannot be invoked without 'new'`, so every graceful-fs `createWriteStream`/`createReadStream` fails (fstream's next stop after `process.umask`).
-sources: [docs/backlog/runtime-js/process-umask-missing.md, docs/backlog/runtime-js/zlib-class-call-shape.md, docs/backlog/net/http-agent-call-shape.md, docs/adr/runtime-js/0353-callable-node-stream-constructors-preserve-legacy-initialization.md]
+sources: [docs/public/compat/process.md, docs/backlog/runtime-js/zlib-class-call-shape.md, docs/backlog/net/http-agent-call-shape.md, docs/adr/runtime-js/0353-callable-node-stream-constructors-preserve-legacy-initialization.md]
 code: [packages/runtime-js/src/builtins/fs-streams.ts, tools/compat-matrix-generator/fs-matrix.js]
 ---
 
@@ -36,9 +36,9 @@ never runs, and its fields are not Node's: `[flags, mode, fd]` → Node `["w", 4
 `[{append,exclusive,truncate,mustExist}, null, absent]`. A `Reflect.construct` subclass with a
 graceful-fs-style `open` → rifty `EINVAL: invalid argument, open`, no file; Node writes `hello`.
 So the unit is: Node's fields (`flags` string, `mode`, `fd`), the overridden-`open` branch (wait
-for `'open'`, then I/O by `this.fd`), acceptance on the real graceful-fs. Part of
-`runtime-js/fs-streams-not-node-streams` (manager's item; fs streams are not Node streams — a user
-decision).
+for `'open'`, then I/O by `this.fd`), acceptance on the real graceful-fs. Related:
+`runtime-js/fs-streams-not-node-streams` (record arrives with PR #434): fs streams are not Node
+streams; no carrier chosen; whether and how to take this work is put to the user, no answer yet.
 
 Owner: runtime-js (fs streams). Trigger: library-compat work (fstream/unzipper, exceljs main),
 or any graceful-fs stream call.

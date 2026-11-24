@@ -4,7 +4,7 @@ status: draft
 title: process.umask(mask) and process.chdir() in a worker_threads Worker do not throw ERR_WORKER_UNSUPPORTED_OPERATION as Node does
 created: 2026-11-24
 why: Node refuses process-wide setters inside a Worker; rifty's Worker runs them like the main thread, so a program that probes the refusal (or relies on it) sees other behavior.
-sources: [docs/backlog/runtime-js/process-umask-missing.md, docs/public/compat/process.md]
+sources: [docs/public/compat/process.md]
 code: [packages/runtime-js/src/builtins/process-umask.ts, packages/runtime-js/src/builtins/process.ts]
 ---
 

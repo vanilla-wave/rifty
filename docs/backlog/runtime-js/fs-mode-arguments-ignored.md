@@ -4,7 +4,7 @@ status: draft
 title: The mode of writeFile, appendFile, mkdir, mkdtemp, open and createWriteStream is ignored silently
 created: 2026-11-24
 why: Node creates the entry with `mode & ~umask`; rifty drops `mode` and reports 0o666/0o777, so a program that writes a private file (0o600) or checks modes sees other bits; fixed modes are declared (compat isolate-host.md), the dropped `mode` argument was not.
-sources: [docs/backlog/runtime-js/process-umask-missing.md, docs/backlog/runtime-js/fs-default-file-modes.md, docs/public/compat/fs.md, docs/public/compat/isolate-host.md]
+sources: [docs/public/compat/process.md, docs/backlog/runtime-js/fs-default-file-modes.md, docs/public/compat/fs.md, docs/public/compat/isolate-host.md]
 code: [packages/runtime-js/src/builtins/fs.ts, packages/runtime-js/src/builtins/fs-stats.ts]
 ---
 

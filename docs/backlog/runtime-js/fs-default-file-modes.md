@@ -17,9 +17,12 @@ branch: `fs.writeFileSync('f','x'); fs.mkdirSync('d')`, then
 "FS snapshot: … modes"), so the fixed values are rifty's; Node's come from
 0o666/0o777 under umask 022. Whether to report Node's default-umask result is
 the open question (`process.umask()` would have to agree).
-`process.umask()` reports `VFS_UMASK` (`fs-stats.ts`, 0 today), the same constant the default
-modes derive from: switching to 0o644/0o755 is one edit, `VFS_UMASK = 0o022`
-(`runtime-js/process-umask-missing`). Explicit `mode` arguments are dropped too:
+`process.umask()` (PR #432) reports `VFS_UMASK` (`fs-stats.ts`, 0 today), the same constant the
+default modes derive from, so the value always agrees with the FS's modes: switching to
+0o644/0o755 is one edit, `VFS_UMASK = 0o022`, and `umask()` follows. Setting any other mask
+(high bits such as `0o1000` included: `process.platform` is `rifty`, neither Linux's drop nor
+macOS's keep applies) throws `NotImplementedError('process.umask(mask)')`. Decisions of the
+thread-cf2ae711 manager, not the user; reversible. Explicit `mode` arguments are dropped too:
 `runtime-js/fs-mode-arguments-ignored` (same fork: does the VFS keep modes).
 
 ## Challenge
