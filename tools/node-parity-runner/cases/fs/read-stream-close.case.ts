@@ -57,6 +57,17 @@ const c: ParityCase = {
       if (when === 'micro-ready') s.on('ready', () => queueMicrotask(stop));
       if (when === 'after-ready') return ready(s).then(stop);
     };
+    // highWaterMark 0 reads nothing and ends: a request from 'open'/'ready' still wins.
+    for (const ev of ['open', 'ready']) {
+      run('hwm0-close-in-' + ev, { highWaterMark: 0 }, (s, cb, log) => {
+        s.on(ev, () => { log.push('request'); s.close(cb('cb')); });
+      });
+      run('hwm0-destroy-in-' + ev, { highWaterMark: 0 }, (s, cb, log) => {
+        s.on(ev, () => { log.push('request'); s.destroy(); });
+      });
+    }
+    // The one-microtask boundary below is a property of rifty's read steps (microtasks; Node:
+    // I/O turns) — declared in backlog runtime-js/fs-streams-not-node-streams, not a Node rule.
     for (const when of ['in-ready', 'after-ready', 'micro-ready', 'after-data-micro']) {
       run('flowing-close-' + when, {}, flowing(when, 'close'));
       run('flowing-destroy-' + when, {}, flowing(when, 'destroy'));
@@ -82,6 +93,12 @@ const c: ParityCase = {
     run('emitclose-false-twice-after-ready', { emitClose: false }, async (s, cb) => {
       await ready(s);
       s.close(cb('cb1', true));
+      s.close(cb('cb2', true));
+    });
+    run('emitclose-false-twice-a-microtask-apart', { emitClose: false }, async (s, cb) => {
+      await ready(s);
+      s.close(cb('cb1', true));
+      await Promise.resolve();
       s.close(cb('cb2', true));
     });
     run('emitclose-false-twice-in-ready', { emitClose: false }, (s, cb) => {
