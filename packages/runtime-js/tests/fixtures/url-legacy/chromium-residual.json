@@ -1,0 +1,4352 @@
+{
+ "chromium": "148.0.7778.96",
+ "node": "v24.16.0",
+ "rows": [
+  {
+   "i": 4,
+   "host": "àא",
+   "node": {
+    "ok": "xn--0ca24w"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 5,
+   "host": "àא",
+   "node": {
+    "ok": "xn--0ca24w"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6,
+   "host": "Àא",
+   "node": {
+    "ok": "xn--0ca24w"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 7,
+   "host": "Àא",
+   "node": {
+    "ok": "xn--0ca24w"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 8,
+   "host": "xn--0ca24w",
+   "node": {
+    "ok": "xn--0ca24w"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 9,
+   "host": "0à.א",
+   "node": {
+    "ok": "xn--0-sfa.xn--4db"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 10,
+   "host": "0à.א",
+   "node": {
+    "ok": "xn--0-sfa.xn--4db"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 11,
+   "host": "0À.א",
+   "node": {
+    "ok": "xn--0-sfa.xn--4db"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 12,
+   "host": "0À.א",
+   "node": {
+    "ok": "xn--0-sfa.xn--4db"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 13,
+   "host": "xn--0-sfa.xn--4db",
+   "node": {
+    "ok": "xn--0-sfa.xn--4db"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 31,
+   "host": "àˇ.א",
+   "node": {
+    "ok": "xn--0ca88g.xn--4db"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 32,
+   "host": "àˇ.א",
+   "node": {
+    "ok": "xn--0ca88g.xn--4db"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 33,
+   "host": "Àˇ.א",
+   "node": {
+    "ok": "xn--0ca88g.xn--4db"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 34,
+   "host": "Àˇ.א",
+   "node": {
+    "ok": "xn--0ca88g.xn--4db"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 35,
+   "host": "xn--0ca88g.xn--4db",
+   "node": {
+    "ok": "xn--0ca88g.xn--4db"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 60,
+   "host": "xn--a-ccba213a",
+   "node": {
+    "ok": "xn--a-ccba213a"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 62,
+   "host": "aب̈‌̈بb",
+   "node": {
+    "ok": "xn--ab-uuba211bca8057b"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 63,
+   "host": "Aب̈‌̈بB",
+   "node": {
+    "ok": "xn--ab-uuba211bca8057b"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 64,
+   "host": "Aب̈‌̈بb",
+   "node": {
+    "ok": "xn--ab-uuba211bca8057b"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 66,
+   "host": "xn--ab-uuba211bca8057b",
+   "node": {
+    "ok": "xn--ab-uuba211bca8057b"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 336,
+   "host": "0A.א",
+   "node": {
+    "ok": "0a.xn--4db"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 337,
+   "host": "0a.א",
+   "node": {
+    "ok": "0a.xn--4db"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 338,
+   "host": "0a.xn--4db",
+   "node": {
+    "ok": "0a.xn--4db"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 339,
+   "host": "c.xn--0-eha.xn--4db",
+   "node": {
+    "ok": "c.xn--0-eha.xn--4db"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 340,
+   "host": "b-.א",
+   "node": {
+    "ok": "b-.xn--4db"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 341,
+   "host": "B-.א",
+   "node": {
+    "ok": "b-.xn--4db"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 342,
+   "host": "b-.xn--4db",
+   "node": {
+    "ok": "b-.xn--4db"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 343,
+   "host": "d.xn----dha.xn--4db",
+   "node": {
+    "ok": "d.xn----dha.xn--4db"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 344,
+   "host": "aא",
+   "node": {
+    "ok": "xn--a-0hc"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 345,
+   "host": "Aא",
+   "node": {
+    "ok": "xn--a-0hc"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 346,
+   "host": "xn--a-0hc",
+   "node": {
+    "ok": "xn--a-0hc"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 469,
+   "host": "c.0ü.א",
+   "node": {
+    "ok": "c.xn--0-eha.xn--4db"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 470,
+   "host": "c.0ü.א",
+   "node": {
+    "ok": "c.xn--0-eha.xn--4db"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 471,
+   "host": "C.0Ü.א",
+   "node": {
+    "ok": "c.xn--0-eha.xn--4db"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 472,
+   "host": "C.0Ü.א",
+   "node": {
+    "ok": "c.xn--0-eha.xn--4db"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 473,
+   "host": "C.0ü.א",
+   "node": {
+    "ok": "c.xn--0-eha.xn--4db"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 474,
+   "host": "C.0ü.א",
+   "node": {
+    "ok": "c.xn--0-eha.xn--4db"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 536,
+   "host": "-.xn--1-0i8r.",
+   "node": {
+    "ok": "-.xn--1-0i8r."
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 548,
+   "host": "繱𑖿‍.8。",
+   "node": {
+    "ok": "xn--1ug6928ac48e.8."
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 643,
+   "host": "𝟿𐮋。󠄊",
+   "node": {
+    "ok": "xn--9-rv5i."
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 644,
+   "host": "9𐮋。󠄊",
+   "node": {
+    "ok": "xn--9-rv5i."
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 645,
+   "host": "xn--9-rv5i.",
+   "node": {
+    "ok": "xn--9-rv5i."
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 654,
+   "host": ".xn--yo0d",
+   "node": {
+    "ok": ".xn--yo0d"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 660,
+   "host": "xn--le9c.xn----ogo9956r",
+   "node": {
+    "ok": "xn--le9c.xn----ogo9956r"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 746,
+   "host": "xn--3gb910r.",
+   "node": {
+    "ok": "xn--3gb910r."
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 750,
+   "host": "󠆸｡₆０𐺧ݖ",
+   "node": {
+    "ok": ".xn--60-cke9470y"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 751,
+   "host": "󠆸。60𐺧ݖ",
+   "node": {
+    "ok": ".xn--60-cke9470y"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 752,
+   "host": ".xn--60-cke9470y",
+   "node": {
+    "ok": ".xn--60-cke9470y"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 753,
+   "host": "6ࡏ｡-𑈴",
+   "node": {
+    "ok": "xn--6-jjd.xn----6n8i"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 754,
+   "host": "6ࡏ。-𑈴",
+   "node": {
+    "ok": "xn--6-jjd.xn----6n8i"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 755,
+   "host": "xn--6-jjd.xn----6n8i",
+   "node": {
+    "ok": "xn--6-jjd.xn----6n8i"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 836,
+   "host": "xn----e3j6620g.xn--jlju661e.",
+   "node": {
+    "ok": "xn----e3j6620g.xn--jlju661e."
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 893,
+   "host": "xn--0-o7j.xn--9ib.xn----ek5i065b",
+   "node": {
+    "ok": "xn--0-o7j.xn--9ib.xn----ek5i065b"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 917,
+   "host": "-𐋱𐰽1..Ⴓ",
+   "node": {
+    "ok": "xn---1-895nq11a..xn--blj"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 918,
+   "host": "-𐋱𐰽1..ⴓ",
+   "node": {
+    "ok": "xn---1-895nq11a..xn--blj"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 919,
+   "host": "xn---1-895nq11a..xn--blj",
+   "node": {
+    "ok": "xn---1-895nq11a..xn--blj"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 991,
+   "host": "xn--uo0d.ss",
+   "node": {
+    "ok": "xn--uo0d.ss"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 1016,
+   "host": "ꡀ𞀟｡٫֙",
+   "node": {
+    "ok": "xn--8b9a1720d.xn--kcb33b"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 1017,
+   "host": "ꡀ𞀟。٫֙",
+   "node": {
+    "ok": "xn--8b9a1720d.xn--kcb33b"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 1018,
+   "host": "xn--8b9a1720d.xn--kcb33b",
+   "node": {
+    "ok": "xn--8b9a1720d.xn--kcb33b"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 1081,
+   "host": "xn--1ch.xn----vqc",
+   "node": {
+    "ok": "xn--1ch.xn----vqc"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 1123,
+   "host": "xn--ewb302xhu1l.xn--4xa0426k",
+   "node": {
+    "ok": "xn--ewb302xhu1l.xn--4xa0426k"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 1168,
+   "host": "Ⴒ。デß𞤵్",
+   "node": {
+    "ok": "xn--9kj.xn--zca669cmr3a0f28a"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 1169,
+   "host": "Ⴒ。デß𞤵్",
+   "node": {
+    "ok": "xn--9kj.xn--zca669cmr3a0f28a"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 1170,
+   "host": "ⴒ。デß𞤵్",
+   "node": {
+    "ok": "xn--9kj.xn--zca669cmr3a0f28a"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 1171,
+   "host": "ⴒ。デß𞤵్",
+   "node": {
+    "ok": "xn--9kj.xn--zca669cmr3a0f28a"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 1172,
+   "host": "Ⴒ。デSS𞤓్",
+   "node": {
+    "ok": "xn--9kj.xn--ss-9nh3648ahh20b"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 1173,
+   "host": "Ⴒ。デSS𞤓్",
+   "node": {
+    "ok": "xn--9kj.xn--ss-9nh3648ahh20b"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 1174,
+   "host": "ⴒ。デss𞤵్",
+   "node": {
+    "ok": "xn--9kj.xn--ss-9nh3648ahh20b"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 1175,
+   "host": "ⴒ。デss𞤵్",
+   "node": {
+    "ok": "xn--9kj.xn--ss-9nh3648ahh20b"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 1176,
+   "host": "Ⴒ。デSs𞤵్",
+   "node": {
+    "ok": "xn--9kj.xn--ss-9nh3648ahh20b"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 1177,
+   "host": "Ⴒ。デSs𞤵్",
+   "node": {
+    "ok": "xn--9kj.xn--ss-9nh3648ahh20b"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 1178,
+   "host": "xn--9kj.xn--ss-9nh3648ahh20b",
+   "node": {
+    "ok": "xn--9kj.xn--ss-9nh3648ahh20b"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 1179,
+   "host": "xn--9kj.xn--zca669cmr3a0f28a",
+   "node": {
+    "ok": "xn--9kj.xn--zca669cmr3a0f28a"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 1182,
+   "host": "Ⴒ。デSS𞤵్",
+   "node": {
+    "ok": "xn--9kj.xn--ss-9nh3648ahh20b"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 1183,
+   "host": "Ⴒ。デSS𞤵్",
+   "node": {
+    "ok": "xn--9kj.xn--ss-9nh3648ahh20b"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 1268,
+   "host": "ࡅ6,𐼗。。𐹻𑜫",
+   "node": {
+    "ok": "xn--6,-r4e4420y..xn--zo0di2m"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 1269,
+   "host": "xn--6,-r4e4420y..xn--zo0di2m",
+   "node": {
+    "ok": "xn--6,-r4e4420y..xn--zo0di2m"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 1683,
+   "host": "𐹣．߂",
+   "node": {
+    "ok": "xn--bo0d.xn--dsb"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 1684,
+   "host": "𐹣.߂",
+   "node": {
+    "ok": "xn--bo0d.xn--dsb"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 1685,
+   "host": "xn--bo0d.xn--dsb",
+   "node": {
+    "ok": "xn--bo0d.xn--dsb"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 1686,
+   "host": "-ߡ｡Ↄ",
+   "node": {
+    "ok": "xn----8cd.xn--r5g"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 1687,
+   "host": "-ߡ。Ↄ",
+   "node": {
+    "ok": "xn----8cd.xn--r5g"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 1688,
+   "host": "-ߡ。ↄ",
+   "node": {
+    "ok": "xn----8cd.xn--r5g"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 1689,
+   "host": "xn----8cd.xn--r5g",
+   "node": {
+    "ok": "xn----8cd.xn--r5g"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 1690,
+   "host": "-ߡ｡ↄ",
+   "node": {
+    "ok": "xn----8cd.xn--r5g"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 1697,
+   "host": "-..xn--ss-h46c5711e",
+   "node": {
+    "ok": "-..xn--ss-h46c5711e"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 1773,
+   "host": "≯-ꡋ𑲣.1.𐹭",
+   "node": {
+    "ok": "xn----ogox061d5i8d.1.xn--lo0d"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 1775,
+   "host": "xn----ogox061d5i8d.1.xn--lo0d",
+   "node": {
+    "ok": "xn----ogox061d5i8d.1.xn--lo0d"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 1856,
+   "host": "xn--8sb.xn-----iw2a",
+   "node": {
+    "ok": "xn--8sb.xn-----iw2a"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 1914,
+   "host": "xn--eo0d6a.",
+   "node": {
+    "ok": "xn--eo0d6a."
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 1945,
+   "host": "xn--tcb323r.xn--yda4409k",
+   "node": {
+    "ok": "xn--tcb323r.xn--yda4409k"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2021,
+   "host": "-ࢨ.𱠖",
+   "node": {
+    "ok": "xn----mod.xn--5o9n"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2022,
+   "host": "xn----mod.xn--5o9n",
+   "node": {
+    "ok": "xn----mod.xn--5o9n"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2025,
+   "host": "≯𞱸󠇀。誆1.",
+   "node": {
+    "ok": "xn--hdh7151p.xn--1-dy1d."
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2027,
+   "host": "xn--hdh7151p.xn--1-dy1d.",
+   "node": {
+    "ok": "xn--hdh7151p.xn--1-dy1d."
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2087,
+   "host": "ςოٻ.ςܔ",
+   "node": {
+    "ok": "xn--3xa80l26n.xn--3xa41o"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2088,
+   "host": "ΣᲝٻ.Σܔ",
+   "node": {
+    "ok": "xn--4xa60l26n.xn--4xa21o"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2089,
+   "host": "σოٻ.σܔ",
+   "node": {
+    "ok": "xn--4xa60l26n.xn--4xa21o"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2090,
+   "host": "Σოٻ.σܔ",
+   "node": {
+    "ok": "xn--4xa60l26n.xn--4xa21o"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2091,
+   "host": "xn--4xa60l26n.xn--4xa21o",
+   "node": {
+    "ok": "xn--4xa60l26n.xn--4xa21o"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2092,
+   "host": "Σოٻ.ςܔ",
+   "node": {
+    "ok": "xn--4xa60l26n.xn--3xa41o"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2093,
+   "host": "σოٻ.ςܔ",
+   "node": {
+    "ok": "xn--4xa60l26n.xn--3xa41o"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2094,
+   "host": "xn--4xa60l26n.xn--3xa41o",
+   "node": {
+    "ok": "xn--4xa60l26n.xn--3xa41o"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2095,
+   "host": "xn--3xa80l26n.xn--3xa41o",
+   "node": {
+    "ok": "xn--3xa80l26n.xn--3xa41o"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2096,
+   "host": "Σოٻ.Σܔ",
+   "node": {
+    "ok": "xn--4xa60l26n.xn--4xa21o"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2125,
+   "host": "-≯딾｡ࡇ",
+   "node": {
+    "ok": "xn----pgow547d.xn--5vb"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2127,
+   "host": "-≯딾。ࡇ",
+   "node": {
+    "ok": "xn----pgow547d.xn--5vb"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2129,
+   "host": "xn----pgow547d.xn--5vb",
+   "node": {
+    "ok": "xn----pgow547d.xn--5vb"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2171,
+   "host": "Ⴜᰯ𐳒≯。۠ᜲྺ",
+   "node": {
+    "ok": "xn--r1fz43e5h3o"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2172,
+   "host": "ⴜᰯ𐳒≯。۠ᜲྺ",
+   "node": {
+    "ok": "xn--r1fz43e5h3o"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2175,
+   "host": "Ⴜᰯ𐲒≯。۠ᜲྺ",
+   "node": {
+    "ok": "xn--r1fz43e5h3o"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2178,
+   "host": "𐋵。ﳬ",
+   "node": {
+    "ok": "xn--p97c.xn--fhbe"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2179,
+   "host": "𐋵。كم",
+   "node": {
+    "ok": "xn--p97c.xn--fhbe"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2180,
+   "host": "xn--p97c.xn--fhbe",
+   "node": {
+    "ok": "xn--p97c.xn--fhbe"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2181,
+   "host": "𐋵.كم",
+   "node": {
+    "ok": "xn--p97c.xn--fhbe"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2200,
+   "host": "-ש。19.",
+   "node": {
+    "ok": "xn----gjc.19."
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2201,
+   "host": "xn----gjc.1j.",
+   "node": {
+    "ok": "xn----gjc.1j."
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2238,
+   "host": "Ⴔ≠Ⴀ.𐹥𐹰",
+   "node": {
+    "ok": "xn--1ch603bxb.xn--do0dwa"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2239,
+   "host": "Ⴔ≠Ⴀ.𐹥𐹰",
+   "node": {
+    "ok": "xn--1ch603bxb.xn--do0dwa"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2240,
+   "host": "ⴔ≠ⴀ.𐹥𐹰",
+   "node": {
+    "ok": "xn--1ch603bxb.xn--do0dwa"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2241,
+   "host": "ⴔ≠ⴀ.𐹥𐹰",
+   "node": {
+    "ok": "xn--1ch603bxb.xn--do0dwa"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2242,
+   "host": "xn--1ch603bxb.xn--do0dwa",
+   "node": {
+    "ok": "xn--1ch603bxb.xn--do0dwa"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2251,
+   "host": "。.ʌᠣ-𐹽",
+   "node": {
+    "ok": "..xn----73a596nuh9t"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2252,
+   "host": "。.Ʌᠣ-𐹽",
+   "node": {
+    "ok": "..xn----73a596nuh9t"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2253,
+   "host": "..xn----73a596nuh9t",
+   "node": {
+    "ok": "..xn----73a596nuh9t"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2357,
+   "host": "-𞣄。1.",
+   "node": {
+    "ok": "xn----xc8r.1."
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2358,
+   "host": "xn----xc8r.b.",
+   "node": {
+    "ok": "xn----xc8r.b."
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2365,
+   "host": "xn--hhbb5hc956w.",
+   "node": {
+    "ok": "xn--hhbb5hc956w."
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2479,
+   "host": "16.𞤬。-𑚶",
+   "node": {
+    "ok": "16.xn--ke6h.xn----4j0j"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2480,
+   "host": "16.𞤊。-𑚶",
+   "node": {
+    "ok": "16.xn--ke6h.xn----4j0j"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2481,
+   "host": "16.xn--ke6h.xn----4j0j",
+   "node": {
+    "ok": "16.xn--ke6h.xn----4j0j"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2668,
+   "host": "ڶ۟。₇꠆",
+   "node": {
+    "ok": "xn--pkb6f.xn--7-x93e"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2669,
+   "host": "ڶ۟。7꠆",
+   "node": {
+    "ok": "xn--pkb6f.xn--7-x93e"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2670,
+   "host": "xn--pkb6f.xn--7-x93e",
+   "node": {
+    "ok": "xn--pkb6f.xn--7-x93e"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2671,
+   "host": "ڶ۟.7꠆",
+   "node": {
+    "ok": "xn--pkb6f.xn--7-x93e"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2686,
+   "host": "8.𐹧。Ⴣ྄彦",
+   "node": {
+    "ok": "8.xn--fo0d.xn--3ed972m6o8a"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2687,
+   "host": "8.𐹧。ⴣ྄彦",
+   "node": {
+    "ok": "8.xn--fo0d.xn--3ed972m6o8a"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2688,
+   "host": "8.xn--fo0d.xn--3ed972m6o8a",
+   "node": {
+    "ok": "8.xn--fo0d.xn--3ed972m6o8a"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2715,
+   "host": "xn--so0d.xn--6x6a",
+   "node": {
+    "ok": "xn--so0d.xn--6x6a"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2787,
+   "host": "𐠰ࢷ𞤌𐫭。𐋦៍𝩃",
+   "node": {
+    "ok": "xn--dzb5191kezbrw47a.xn--p4e3841jz9tf"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2788,
+   "host": "𐠰ࢷ𞤮𐫭。𐋦៍𝩃",
+   "node": {
+    "ok": "xn--dzb5191kezbrw47a.xn--p4e3841jz9tf"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2789,
+   "host": "xn--dzb5191kezbrw47a.xn--p4e3841jz9tf",
+   "node": {
+    "ok": "xn--dzb5191kezbrw47a.xn--p4e3841jz9tf"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2790,
+   "host": "𐠰ࢷ𞤮𐫭.𐋦៍𝩃",
+   "node": {
+    "ok": "xn--dzb5191kezbrw47a.xn--p4e3841jz9tf"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2791,
+   "host": "𐠰ࢷ𞤌𐫭.𐋦៍𝩃",
+   "node": {
+    "ok": "xn--dzb5191kezbrw47a.xn--p4e3841jz9tf"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2796,
+   "host": "xn--2---u58b.xn--jlb8024k14g",
+   "node": {
+    "ok": "xn--2---u58b.xn--jlb8024k14g"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2974,
+   "host": "xn--3-lvs.xn-----vue617w",
+   "node": {
+    "ok": "xn--3-lvs.xn-----vue617w"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2998,
+   "host": "🜑𐹧ع.ς𑍍蜹",
+   "node": {
+    "ok": "xn--4gb3736kk4zf.xn--3xa4248dy27d"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 2999,
+   "host": "🜑𐹧ع.Σ𑍍蜹",
+   "node": {
+    "ok": "xn--4gb3736kk4zf.xn--4xa2248dy27d"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3000,
+   "host": "🜑𐹧ع.σ𑍍蜹",
+   "node": {
+    "ok": "xn--4gb3736kk4zf.xn--4xa2248dy27d"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3001,
+   "host": "xn--4gb3736kk4zf.xn--4xa2248dy27d",
+   "node": {
+    "ok": "xn--4gb3736kk4zf.xn--4xa2248dy27d"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3002,
+   "host": "xn--4gb3736kk4zf.xn--3xa4248dy27d",
+   "node": {
+    "ok": "xn--4gb3736kk4zf.xn--3xa4248dy27d"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3191,
+   "host": "-｡ݻ",
+   "node": {
+    "ok": "-.xn--cqb"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3192,
+   "host": "-。ݻ",
+   "node": {
+    "ok": "-.xn--cqb"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3193,
+   "host": "-.xn--cqb",
+   "node": {
+    "ok": "-.xn--cqb"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3198,
+   "host": "璛᜴گ.-",
+   "node": {
+    "ok": "xn--ikb175frt4e.-"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3199,
+   "host": "xn--ikb175frt4e.-",
+   "node": {
+    "ok": "xn--ikb175frt4e.-"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3243,
+   "host": "≯𞤟。ᡨ",
+   "node": {
+    "ok": "xn--hdhz520p.xn--48e"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3246,
+   "host": "≯𞥁。ᡨ",
+   "node": {
+    "ok": "xn--hdhz520p.xn--48e"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3247,
+   "host": "xn--hdhz520p.xn--48e",
+   "node": {
+    "ok": "xn--hdhz520p.xn--48e"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3294,
+   "host": "℻⩷𝆆。𞤠󠆁᠌",
+   "node": {
+    "ok": "xn--fax-4c9a1676t.xn--6e6h"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3295,
+   "host": "FAX⩷𝆆。𞤠󠆁᠌",
+   "node": {
+    "ok": "xn--fax-4c9a1676t.xn--6e6h"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3296,
+   "host": "fax⩷𝆆。𞥂󠆁᠌",
+   "node": {
+    "ok": "xn--fax-4c9a1676t.xn--6e6h"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3297,
+   "host": "Fax⩷𝆆。𞤠󠆁᠌",
+   "node": {
+    "ok": "xn--fax-4c9a1676t.xn--6e6h"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3298,
+   "host": "xn--fax-4c9a1676t.xn--6e6h",
+   "node": {
+    "ok": "xn--fax-4c9a1676t.xn--6e6h"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3299,
+   "host": "℻⩷𝆆。𞥂󠆁᠌",
+   "node": {
+    "ok": "xn--fax-4c9a1676t.xn--6e6h"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3300,
+   "host": "FAX⩷𝆆。𞥂󠆁᠌",
+   "node": {
+    "ok": "xn--fax-4c9a1676t.xn--6e6h"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3301,
+   "host": "fax⩷𝆆。𞤠󠆁᠌",
+   "node": {
+    "ok": "xn--fax-4c9a1676t.xn--6e6h"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3302,
+   "host": "fax⩷𝆆.𞥂",
+   "node": {
+    "ok": "xn--fax-4c9a1676t.xn--6e6h"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3303,
+   "host": "FAX⩷𝆆.𞤠",
+   "node": {
+    "ok": "xn--fax-4c9a1676t.xn--6e6h"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3304,
+   "host": "Fax⩷𝆆.𞤠",
+   "node": {
+    "ok": "xn--fax-4c9a1676t.xn--6e6h"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3305,
+   "host": "FAX⩷𝆆.𞥂",
+   "node": {
+    "ok": "xn--fax-4c9a1676t.xn--6e6h"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3306,
+   "host": "Fax⩷𝆆.𞥂",
+   "node": {
+    "ok": "xn--fax-4c9a1676t.xn--6e6h"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3321,
+   "host": "⏹𐧀．𐫯",
+   "node": {
+    "ok": "xn--qoh9161g.xn--1x9c"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3322,
+   "host": "⏹𐧀.𐫯",
+   "node": {
+    "ok": "xn--qoh9161g.xn--1x9c"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3323,
+   "host": "xn--qoh9161g.xn--1x9c",
+   "node": {
+    "ok": "xn--qoh9161g.xn--1x9c"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3435,
+   "host": "𞤃．𐹦",
+   "node": {
+    "ok": "xn--de6h.xn--eo0d"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3436,
+   "host": "𞤃.𐹦",
+   "node": {
+    "ok": "xn--de6h.xn--eo0d"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3437,
+   "host": "𞤥.𐹦",
+   "node": {
+    "ok": "xn--de6h.xn--eo0d"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3438,
+   "host": "xn--de6h.xn--eo0d",
+   "node": {
+    "ok": "xn--de6h.xn--eo0d"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3439,
+   "host": "𞤥．𐹦",
+   "node": {
+    "ok": "xn--de6h.xn--eo0d"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3469,
+   "host": "𐹴𑘷。-",
+   "node": {
+    "ok": "xn--so0do6k.-"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3470,
+   "host": "xn--so0do6k.-",
+   "node": {
+    "ok": "xn--so0do6k.-"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3509,
+   "host": "-≠ᠻ．ݭ𞥃≮󟷺",
+   "node": {
+    "ok": "xn----g6j886c.xn--xpb4187v"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3511,
+   "host": "-≠ᠻ.ݭ𞥃≮󟷺",
+   "node": {
+    "ok": "xn----g6j886c.xn--xpb4187v"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3512,
+   "host": "-≠ᠻ.ݭ𞤡≮󟷺",
+   "node": {
+    "ok": "xn----g6j886c.xn--xpb4187v"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3515,
+   "host": "-≠ᠻ．ݭ𞤡≮󟷺",
+   "node": {
+    "ok": "xn----g6j886c.xn--xpb4187v"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3578,
+   "host": "≯ݭ．₄",
+   "node": {
+    "ok": "xn--xpb149k.4"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3580,
+   "host": "≯ݭ.e",
+   "node": {
+    "ok": "xn--xpb149k.e"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3583,
+   "host": "≯ݭ.E",
+   "node": {
+    "ok": "xn--xpb149k.e"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3584,
+   "host": "xn--xpb149k.e",
+   "node": {
+    "ok": "xn--xpb149k.e"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3677,
+   "host": "ς≯｡𐹽",
+   "node": {
+    "ok": "xn--3xa028m.xn--1o0d"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3679,
+   "host": "ς≯。𐹽",
+   "node": {
+    "ok": "xn--3xa028m.xn--1o0d"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3682,
+   "host": "Σ≯。𐹽",
+   "node": {
+    "ok": "xn--4xa818m.xn--1o0d"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3683,
+   "host": "σ≯。𐹽",
+   "node": {
+    "ok": "xn--4xa818m.xn--1o0d"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3685,
+   "host": "xn--4xa818m.xn--1o0d",
+   "node": {
+    "ok": "xn--4xa818m.xn--1o0d"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3686,
+   "host": "xn--3xa028m.xn--1o0d",
+   "node": {
+    "ok": "xn--3xa028m.xn--1o0d"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3688,
+   "host": "Σ≯｡𐹽",
+   "node": {
+    "ok": "xn--4xa818m.xn--1o0d"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3689,
+   "host": "σ≯｡𐹽",
+   "node": {
+    "ok": "xn--4xa818m.xn--1o0d"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3787,
+   "host": "歷｡𐹻≯󳛽‍",
+   "node": {
+    "ok": "xn--nmw.xn--zo0d"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3789,
+   "host": "歷。𐹻≯󳛽‍",
+   "node": {
+    "ok": "xn--nmw.xn--zo0d"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3800,
+   "host": "xn--9d6h.xn--wh0dj799f",
+   "node": {
+    "ok": "xn--9d6h.xn--wh0dj799f"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3854,
+   "host": "⫞𐹶𖫴。⭠1.",
+   "node": {
+    "ok": "xn--53ix188et88b.xn--1-h6r."
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3855,
+   "host": "xn--53ix188et88b.xn--1-h6r.",
+   "node": {
+    "ok": "xn--53ix188et88b.xn--1-h6r."
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3986,
+   "host": "≮．឵ࡕ𐫔",
+   "node": {
+    "ok": "xn--gdh.xn--kwb4643k"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3988,
+   "host": "≮.឵ࡕ𐫔",
+   "node": {
+    "ok": "xn--gdh.xn--kwb4643k"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 3990,
+   "host": "xn--gdh.xn--kwb4643k",
+   "node": {
+    "ok": "xn--gdh.xn--kwb4643k"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4178,
+   "host": "xn--4xa25ks2j.-",
+   "node": {
+    "ok": "xn--4xa25ks2j.-"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4240,
+   "host": "ܜ𐫒خ.𐋲",
+   "node": {
+    "ok": "xn--tgb98b8643d.xn--m97c"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4241,
+   "host": "xn--tgb98b8643d.xn--m97c",
+   "node": {
+    "ok": "xn--tgb98b8643d.xn--m97c"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4263,
+   "host": "𐹯-𑄴ࢼ。。䖐舌",
+   "node": {
+    "ok": "xn----rpd7902rclc..xn--fpo216m"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4264,
+   "host": "xn----rpd7902rclc..xn--fpo216m",
+   "node": {
+    "ok": "xn----rpd7902rclc..xn--fpo216m"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4377,
+   "host": "≠𐮂.↑6,1.",
+   "node": {
+    "ok": "xn--1chy492g.xn--6,1-pw1a."
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4378,
+   "host": "≠𐮂.↑6,1.",
+   "node": {
+    "ok": "xn--1chy492g.xn--6,1-pw1a."
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4379,
+   "host": "xn--1chy492g.xn--6,1-pw1a.",
+   "node": {
+    "ok": "xn--1chy492g.xn--6,1-pw1a."
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4560,
+   "host": ".xn--1chx23bzj4p",
+   "node": {
+    "ok": ".xn--1chx23bzj4p"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4566,
+   "host": "ݐ。≯ς",
+   "node": {
+    "ok": "xn--3ob.xn--3xa918m"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4569,
+   "host": "ݐ。≯Σ",
+   "node": {
+    "ok": "xn--3ob.xn--4xa718m"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4570,
+   "host": "ݐ。≯σ",
+   "node": {
+    "ok": "xn--3ob.xn--4xa718m"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4572,
+   "host": "xn--3ob.xn--4xa718m",
+   "node": {
+    "ok": "xn--3ob.xn--4xa718m"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4573,
+   "host": "xn--3ob.xn--3xa918m",
+   "node": {
+    "ok": "xn--3ob.xn--3xa918m"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4592,
+   "host": "≮ࡆ。섖쮖ß",
+   "node": {
+    "ok": "xn--4vb505k.xn--zca7259goug"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4595,
+   "host": "≮ࡆ。섖쮖SS",
+   "node": {
+    "ok": "xn--4vb505k.xn--ss-5z4j006a"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4596,
+   "host": "≮ࡆ。섖쮖ss",
+   "node": {
+    "ok": "xn--4vb505k.xn--ss-5z4j006a"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4598,
+   "host": "xn--4vb505k.xn--ss-5z4j006a",
+   "node": {
+    "ok": "xn--4vb505k.xn--ss-5z4j006a"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4599,
+   "host": "≮ࡆ。섖쮖Ss",
+   "node": {
+    "ok": "xn--4vb505k.xn--ss-5z4j006a"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4601,
+   "host": "xn--4vb505k.xn--zca7259goug",
+   "node": {
+    "ok": "xn--4vb505k.xn--zca7259goug"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4620,
+   "host": "xn--ho0d.-",
+   "node": {
+    "ok": "xn--ho0d.-"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4647,
+   "host": "1.걾6.𐱁ې",
+   "node": {
+    "ok": "1.xn--6-945e.xn--glb1794k"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4648,
+   "host": "1.걾6.𐱁ې",
+   "node": {
+    "ok": "1.xn--6-945e.xn--glb1794k"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4649,
+   "host": "1.xn--6-945e.xn--glb1794k",
+   "node": {
+    "ok": "1.xn--6-945e.xn--glb1794k"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4674,
+   "host": "xn--wnb859grzfzw60c.xn----kcd",
+   "node": {
+    "ok": "xn--wnb859grzfzw60c.xn----kcd"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4724,
+   "host": "-Ⴞ.-𝩨⅔𐦕",
+   "node": {
+    "ok": "xn----zws.xn---23-pt0a0433lk3jj"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4725,
+   "host": "-Ⴞ.-𝩨2⁄3𐦕",
+   "node": {
+    "ok": "xn----zws.xn---23-pt0a0433lk3jj"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4726,
+   "host": "-ⴞ.-𝩨2⁄3𐦕",
+   "node": {
+    "ok": "xn----zws.xn---23-pt0a0433lk3jj"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4727,
+   "host": "xn----zws.xn---23-pt0a0433lk3jj",
+   "node": {
+    "ok": "xn----zws.xn---23-pt0a0433lk3jj"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4728,
+   "host": "-ⴞ.-𝩨⅔𐦕",
+   "node": {
+    "ok": "xn----zws.xn---23-pt0a0433lk3jj"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4737,
+   "host": "۱。≠٨",
+   "node": {
+    "ok": "xn--emb.xn--hib334l"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4738,
+   "host": "۱。≠٨",
+   "node": {
+    "ok": "xn--emb.xn--hib334l"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4739,
+   "host": "xn--emb.xn--hib334l",
+   "node": {
+    "ok": "xn--emb.xn--hib334l"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4752,
+   "host": "ۯ｡𐹧𞤽",
+   "node": {
+    "ok": "xn--cmb.xn--fo0dy848a"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4753,
+   "host": "ۯ。𐹧𞤽",
+   "node": {
+    "ok": "xn--cmb.xn--fo0dy848a"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4754,
+   "host": "ۯ。𐹧𞤛",
+   "node": {
+    "ok": "xn--cmb.xn--fo0dy848a"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4755,
+   "host": "xn--cmb.xn--fo0dy848a",
+   "node": {
+    "ok": "xn--cmb.xn--fo0dy848a"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4756,
+   "host": "ۯ｡𐹧𞤛",
+   "node": {
+    "ok": "xn--cmb.xn--fo0dy848a"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4777,
+   "host": "𐹶.𐫂",
+   "node": {
+    "ok": "xn--uo0d.xn--rw9c"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4778,
+   "host": "xn--uo0d.xn--rw9c",
+   "node": {
+    "ok": "xn--uo0d.xn--rw9c"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4820,
+   "host": "𝟠≮‌｡󠅱឴",
+   "node": {
+    "ok": "8"
+   },
+   "rifty": {
+    "ok": "0.0.0.8"
+   }
+  },
+  {
+   "i": 4850,
+   "host": "ς𑓂𐋢．٨",
+   "node": {
+    "ok": "xn--3xa8371khhl.xn--hib"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4851,
+   "host": "ς𑓂𐋢.٨",
+   "node": {
+    "ok": "xn--3xa8371khhl.xn--hib"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4852,
+   "host": "Σ𑓂𐋢.٨",
+   "node": {
+    "ok": "xn--4xa6371khhl.xn--hib"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4853,
+   "host": "σ𑓂𐋢.٨",
+   "node": {
+    "ok": "xn--4xa6371khhl.xn--hib"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4854,
+   "host": "xn--4xa6371khhl.xn--hib",
+   "node": {
+    "ok": "xn--4xa6371khhl.xn--hib"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4855,
+   "host": "xn--3xa8371khhl.xn--hib",
+   "node": {
+    "ok": "xn--3xa8371khhl.xn--hib"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4856,
+   "host": "Σ𑓂𐋢．٨",
+   "node": {
+    "ok": "xn--4xa6371khhl.xn--hib"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4857,
+   "host": "σ𑓂𐋢．٨",
+   "node": {
+    "ok": "xn--4xa6371khhl.xn--hib"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4928,
+   "host": "ᡷ。𐹢࣠",
+   "node": {
+    "ok": "xn--k9e.xn--j0b5005k"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4929,
+   "host": "xn--k9e.xn--j0b5005k",
+   "node": {
+    "ok": "xn--k9e.xn--j0b5005k"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4986,
+   "host": "-.𞸚",
+   "node": {
+    "ok": "-.xn--3gb"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4987,
+   "host": "-.ظ",
+   "node": {
+    "ok": "-.xn--3gb"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 4988,
+   "host": "-.xn--3gb",
+   "node": {
+    "ok": "-.xn--3gb"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 5000,
+   "host": "㸳ߊ≮．ێß-‍",
+   "node": {
+    "ok": "xn--lsb179y"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 5002,
+   "host": "㸳ߊ≮.ێß-‍",
+   "node": {
+    "ok": "xn--lsb179y"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 5003,
+   "host": "㸳ߊ≮.ێSS-‍",
+   "node": {
+    "ok": "xn--lsb179y"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 5006,
+   "host": "㸳ߊ≮.ێss-‍",
+   "node": {
+    "ok": "xn--lsb179y"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 5010,
+   "host": "㸳ߊ≮．ێSS-‍",
+   "node": {
+    "ok": "xn--lsb179y"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 5013,
+   "host": "㸳ߊ≮．ێss-‍",
+   "node": {
+    "ok": "xn--lsb179y"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 5014,
+   "host": "㸳ߊ≮.ێSs-‍",
+   "node": {
+    "ok": "xn--lsb179y"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 5016,
+   "host": "㸳ߊ≮．ێSs-‍",
+   "node": {
+    "ok": "xn--lsb179y"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 5163,
+   "host": "Ⴘۂ𑲭｡-",
+   "node": {
+    "ok": "xn--1kb147qfk3n.-"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 5164,
+   "host": "Ⴘۂ𑲭｡-",
+   "node": {
+    "ok": "xn--1kb147qfk3n.-"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 5165,
+   "host": "Ⴘۂ𑲭。-",
+   "node": {
+    "ok": "xn--1kb147qfk3n.-"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 5166,
+   "host": "Ⴘۂ𑲭。-",
+   "node": {
+    "ok": "xn--1kb147qfk3n.-"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 5167,
+   "host": "ⴘۂ𑲭。-",
+   "node": {
+    "ok": "xn--1kb147qfk3n.-"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 5168,
+   "host": "ⴘۂ𑲭。-",
+   "node": {
+    "ok": "xn--1kb147qfk3n.-"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 5169,
+   "host": "xn--1kb147qfk3n.-",
+   "node": {
+    "ok": "xn--1kb147qfk3n.-"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 5170,
+   "host": "ⴘۂ𑲭｡-",
+   "node": {
+    "ok": "xn--1kb147qfk3n.-"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 5171,
+   "host": "ⴘۂ𑲭｡-",
+   "node": {
+    "ok": "xn--1kb147qfk3n.-"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 5446,
+   "host": "xn-----ujv.xn--fo0d",
+   "node": {
+    "ok": "xn-----ujv.xn--fo0d"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 5606,
+   "host": "軥ڳ.-𖬵",
+   "node": {
+    "ok": "xn--mkb5480e.xn----6u5m"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 5607,
+   "host": "xn--mkb5480e.xn----6u5m",
+   "node": {
+    "ok": "xn--mkb5480e.xn----6u5m"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 5677,
+   "host": "xn--ss-uze.xn--0ib.xn--f-tcoa9162d",
+   "node": {
+    "ok": "xn--ss-uze.xn--0ib.xn--f-tcoa9162d"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 5704,
+   "host": "𞤤.-ࢣ。",
+   "node": {
+    "ok": "xn--ce6h.xn----cod."
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 5705,
+   "host": "𞤂.-ࢣ。",
+   "node": {
+    "ok": "xn--ce6h.xn----cod."
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 5706,
+   "host": "xn--ce6h.xn----cod.",
+   "node": {
+    "ok": "xn--ce6h.xn----cod."
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 5731,
+   "host": "xn--0vb1535kdb6e.xn--8kjz186s",
+   "node": {
+    "ok": "xn--0vb1535kdb6e.xn--8kjz186s"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 5834,
+   "host": "𐹢．Ⴍ₉⁸",
+   "node": {
+    "ok": "xn--9n0d.xn--98-u61a"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 5835,
+   "host": "𐹢.Ⴍ98",
+   "node": {
+    "ok": "xn--9n0d.xn--98-u61a"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 5836,
+   "host": "𐹢.ⴍ98",
+   "node": {
+    "ok": "xn--9n0d.xn--98-u61a"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 5837,
+   "host": "xn--9n0d.xn--98-u61a",
+   "node": {
+    "ok": "xn--9n0d.xn--98-u61a"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 5838,
+   "host": "𐹢．ⴍ₉⁸",
+   "node": {
+    "ok": "xn--9n0d.xn--98-u61a"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 5959,
+   "host": "ٱ．ςߜ",
+   "node": {
+    "ok": "xn--qib.xn--3xa41s"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 5960,
+   "host": "ٱ.ςߜ",
+   "node": {
+    "ok": "xn--qib.xn--3xa41s"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 5961,
+   "host": "ٱ.Σߜ",
+   "node": {
+    "ok": "xn--qib.xn--4xa21s"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 5962,
+   "host": "ٱ.σߜ",
+   "node": {
+    "ok": "xn--qib.xn--4xa21s"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 5963,
+   "host": "xn--qib.xn--4xa21s",
+   "node": {
+    "ok": "xn--qib.xn--4xa21s"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 5964,
+   "host": "xn--qib.xn--3xa41s",
+   "node": {
+    "ok": "xn--qib.xn--3xa41s"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 5965,
+   "host": "ٱ．Σߜ",
+   "node": {
+    "ok": "xn--qib.xn--4xa21s"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 5966,
+   "host": "ٱ．σߜ",
+   "node": {
+    "ok": "xn--qib.xn--4xa21s"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 5998,
+   "host": "𐹨。8𑁆",
+   "node": {
+    "ok": "xn--go0d.xn--8-yu7i"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 5999,
+   "host": "xn--go0d.xn--8-yu7i",
+   "node": {
+    "ok": "xn--go0d.xn--8-yu7i"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6015,
+   "host": "xn--gqb743q.",
+   "node": {
+    "ok": "xn--gqb743q."
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6022,
+   "host": "xn--4,-1-w401a..xn--7jb180g",
+   "node": {
+    "ok": "xn--4,-1-w401a..xn--7jb180g"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6150,
+   "host": "𐹡ݷ。ꡂ",
+   "node": {
+    "ok": "xn--7pb5275k.xn--bc9a"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6151,
+   "host": "xn--7pb5275k.xn--bc9a",
+   "node": {
+    "ok": "xn--7pb5275k.xn--bc9a"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6271,
+   "host": "󠅽。。𐹯。⬳᩸",
+   "node": {
+    "ok": "..xn--no0d.xn--7of309e"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6272,
+   "host": "..xn--no0d.xn--7of309e",
+   "node": {
+    "ok": "..xn--no0d.xn--7of309e"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6424,
+   "host": "aא.com",
+   "node": {
+    "ok": "xn--a-0hc.com"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6443,
+   "host": "a％41.com",
+   "node": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   },
+   "rifty": {
+    "ok": "aa.com"
+   }
+  },
+  {
+   "i": 6444,
+   "host": "０ｘ７ｆ．１",
+   "node": {
+    "ok": "0x7f.1"
+   },
+   "rifty": {
+    "ok": "127.0.0.1"
+   }
+  },
+  {
+   "i": 6445,
+   "host": "ñ.１",
+   "node": {
+    "ok": "xn--ida.1"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  }
+ ]
+}
