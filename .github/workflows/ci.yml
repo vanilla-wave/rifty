@@ -331,7 +331,8 @@ jobs:
   ci-gate:
     name: CI gate
     # !cancelled() is false only for a cancelled run (superseded push): the gate
-    # then skips instead of waiting for a runner. A failed or individually
+    # then never starts, no runner (conclusion `cancelled`, not `skipped` —
+    # a skipped required check would count as passed). A failed or individually
     # cancelled (timed-out) dependency in a live run still reaches the reducer
     # and turns it red (ADR-0323 §4).
     if: ${{ !cancelled() }}

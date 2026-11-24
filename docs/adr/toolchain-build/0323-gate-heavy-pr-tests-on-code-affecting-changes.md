@@ -54,4 +54,4 @@ matrix child names disappear. Requiring a child such as
 
 ## Corrections (active)
 
-- 2026-11-24 — §4 `always()` → `!cancelled()` (manager, on user's "давай" to PR-scoped `concurrency` + `cancel-in-progress`): a run cancelled by a newer push skips `CI gate` instead of holding a runner; a failed or individually cancelled dependency in a live run still turns it red. push/merge_group runs get a per-run group, never cancelled.
+- 2026-11-24 — §4 `always()` → `!cancelled()` (manager, on user's "давай" to PR-scoped `concurrency` + `cancel-in-progress`): in a run cancelled by a newer push `CI gate` never starts, no runner (conclusion `cancelled`, not `skipped`); a failed or individually cancelled dependency in a live run still turns it red. push/merge_group runs get a per-run group, never cancelled.
