@@ -63,7 +63,8 @@ describe('exceljs 4.4.0 loads node:zlib as in Node (Acceptance 4)', () => {
   // Past `node:zlib` the main entry stops elsewhere (unit §Decisions, other units). Since
   // runtime-js/computed-global-read-callee it passes es-abstract's `new global[k](…)` and
   // stops at the sandbox's `require` of a `module-sync` ES module (generator-function@2.0.1
-  // `require.mjs`): `runtime-js/isolate-require-esm-syntax-gaps`.
+  // `require.mjs`): `runtime-js/isolate-require-esm-syntax-gaps`. The PR delivering
+  // `require(esm)` in the isolate flips this pin to exceljs's next stop.
   it('require(exceljs) no longer stops at node:zlib', { timeout: 180_000 }, async () => {
     const files = withFixture('main-load.cjs');
     const oracle = inNode(files, 'main-load.cjs', 'out/none');
