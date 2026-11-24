@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `fs.createReadStream` reads files in the guest (every read emitted `NotImplementedError('isolate-host.ReadableStream')`); exceljs `xlsx.read(fs.createReadStream(f))` reads a workbook as in Node (`xlsx.readFile` next stops at the missing `ReadStream#close`). Declared gaps: compat isolate-host.md "`fs.createReadStream`".
 - Guest `process.umask()` reads `0`, the mask its FS creates under; another mask throws `NotImplementedError('process.umask(mask)')`. Corpus rows `process-umask-*`.
 - Guest `navigator`/`Navigator` as in Node 24 with the guest's identity (`@riftydev/isolate-guest` CHANGELOG): `navigator.userAgent` and `os.cpus()`/`os.availableParallelism()` no longer throw; `require('core-js/actual')` runs as under `node` (`tests/navigator.test.ts`). `navigator.locks` is the named gap.
 - Sandbox: a run's output is fixed when its status is out — what the guest's realm prints while its end state is captured (code reached through intrinsics it replaced) is not the run's output.
