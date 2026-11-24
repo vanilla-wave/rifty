@@ -63,7 +63,7 @@ has a verified route today; two need code the agent would not write by itself.
 | 4 | `navigator.userAgent` | declared ❌ (`navigator.*`) | core-js `engine-user-agent` inside `exceljs/dist/exceljs.min.js:10`, `pptxgenjs/dist/pptxgen.bundle.js` | the browser-bundle routes only. Node 24 has it |
 | 5 | `stream.Transform` subclass `_transform`/`_flush`, `Duplex` subclass `_write` | **undeclared** (streams.md said ✅; now ⚠️) | `@fast-csv/format/build/src/CsvFormatterStream.js:6-55` → `exceljs/lib/utils/stream-buf.js:239` | exceljs CSV write (chunks pass through unchanged; silent where a sink accepts them) — `runtime-js/stream-subclass-hooks-ignored` |
 | 6 | `fs.ReadStream#close`/`WriteStream#close` | **undeclared** (fs.md row now names it) | `exceljs/lib/xlsx/xlsx.js:56`, `:59` | `xlsx.readFile` — `runtime-js/fs-stream-close-method-missing` |
-| 7 | `process.umask` | **undeclared** (process.md row added) | `fstream/lib/writer.js:8` at load (unzipper → exceljs main) | next stop of exceljs main after #1 — `runtime-js/process-umask-missing` |
+| 7 | `process.umask` | fixed (PR #432: reads 0, another mask loud) | `fstream/lib/writer.js:8` at load (unzipper → exceljs main) | was the next stop of exceljs main after #1; now fstream's next stop is graceful-fs `fs$WriteStream.apply` — `runtime-js/fs-stream-class-call-shape` |
 | 8 | `require()` of an ESM-only package | declared ❌ | `nanoid` 6 (`"type":"module"`): `TypeError: URLConstructor is not a constructor` | nothing measured: docx bundles its own copy |
 
 Touched but harmless (a `try` or `typeof` around them): `CustomEvent` (bluebird
