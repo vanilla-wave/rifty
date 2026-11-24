@@ -8,7 +8,7 @@
 import { describe, expect, it } from 'vitest';
 import * as pkg from '../src/index.ts';
 import { type CallHandle, type CallSpec, sharedPool } from '../src/pool.ts';
-import { burnedAfter, killRunning } from './support.ts';
+import { burnedAfter, childPids, cpu, killRunning } from './support.ts';
 
 interface Sandbox {
   writeFile(path: string, data: string | Uint8Array, options?: object): Promise<void>;
@@ -176,6 +176,26 @@ describe('an abort before the run has a result: AbortError at once, files of bef
         pool.run = run;
       }
     });
+
+  it('its worker lost, the rerun not yet placed: the rerun is never placed', async () => {
+    const sb = await sandboxWith(`${WRITE} for (;;) {}`);
+    const controller = new AbortController();
+    const exec = outcomeOf(sb.exec('r.js', { timeoutMs: 20_000, signal: controller.signal }));
+    await sleep(300);
+    const before = new Map(childPids().map((p) => [p, cpu(p) ?? 0]));
+    await sleep(100);
+    const busy = [...before].find(([p, c]) => (cpu(p) ?? c) - c > 0.02)?.[0];
+    expect(busy).toBeDefined();
+    // The loss is judged at the worker's 'close', later: the abort comes first.
+    process.kill(busy as number, 'SIGKILL');
+    controller.abort();
+    expect(await exec).toEqual({ rejected: ABORTED });
+    await sleep(300);
+    expect(childPids().filter((p) => !before.has(p))).toEqual([]);
+    expect(await burnedAfter(400)).toBeLessThan(0.1);
+    expect(await names(sb)).toEqual(BEFORE);
+    await usableThenGone(sb);
+  });
 
   it('queued behind another run: it never starts', async () => {
     const sb = await sandboxWith(`${WRITE} for (;;) {}`);
