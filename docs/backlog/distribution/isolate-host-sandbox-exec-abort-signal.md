@@ -92,3 +92,12 @@ challenge: 2026-11-24 — clear (existing-baseline extension of an internal mech
   abort handling is Node's.
 - 2026-11-24 — agent: the state after an abort is the killed-run rule (requirements §5 «как у
   `timeout`»), one rule for both.
+- 2026-11-24 — agent (implementation): `signal` must be `instanceof AbortSignal` (Acceptance 1;
+  Node's validator duck-types `'aborted' in signal` under the same message, so `{ aborted: false }`
+  passes `fs.promises.readFile` — refused here).
+- 2026-11-24 — agent (implementation): fault row "a member throws" — the consumer's error itself
+  is the refusal, at the call, nothing placed (Node's `fs.promises.readFile` rejects with a throwing
+  `reason` getter's error, probe 2026-11-24); not wrapped in `ERR_INVALID_ARG_TYPE`.
+- 2026-11-24 — agent (implementation): a run's end state is applied in the microtask that settles
+  the caller's promise (the abort races the result there), so an `AbortError` always leaves the
+  files of before; `exec`'s options are checked at the call (a refusal still rejects in its turn).

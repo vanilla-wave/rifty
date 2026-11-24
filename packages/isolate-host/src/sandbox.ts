@@ -63,9 +63,21 @@ export interface SandboxOptions {
   readonly maxFsBytes?: number;
 }
 
+/** The options of a host op. */
+export interface OpOptions {
+  /** Aborted before the op starts: it rejects Node's `AbortError` and never takes effect. */
+  readonly signal?: AbortSignal;
+}
+
 export interface ExecOptions extends RunCodeOptions {
   /** `process.argv.slice(2)` of the run. */
   readonly args?: readonly string[];
+  /**
+   * Aborted before the run's result is out: `exec` rejects Node's `AbortError`
+   * at once, the run's isolate is disposed as at a deadline and the files stay
+   * those of before the run; the sandbox stays usable.
+   */
+  readonly signal?: AbortSignal;
 }
 
 export interface ExecResult extends RunCodeResult {
@@ -88,16 +100,16 @@ export interface SandboxEntry {
 
 export interface Sandbox {
   /** Write a file (parents created); a string is UTF-8. */
-  writeFile(path: string, data: Uint8Array | string): Promise<void>;
-  readFile(path: string): Promise<Uint8Array>;
+  writeFile(path: string, data: Uint8Array | string, options?: OpOptions): Promise<void>;
+  readFile(path: string, options?: OpOptions): Promise<Uint8Array>;
   /** Entries of a directory, by name. Default `/workspace`. */
-  list(path?: string): Promise<SandboxEntry[]>;
+  list(path?: string, options?: OpOptions): Promise<SandboxEntry[]>;
   /** Remove a file or a directory tree. */
-  remove(path: string): Promise<void>;
+  remove(path: string, options?: OpOptions): Promise<void>;
   /** `node <path> [args]`, cwd `/workspace`. */
   exec(path: string, options?: ExecOptions): Promise<ExecResult>;
   /** The files as ADR-0567 bytes; `createSandbox({ snapshot })` restores them. */
-  snapshot(): Promise<Uint8Array>;
+  snapshot(options?: OpOptions): Promise<Uint8Array>;
   /** Pending, running and later operations reject `ERR_ISOLATE_HOST_SANDBOX_DESTROYED`. */
   destroy(): Promise<void>;
 }
@@ -186,6 +198,25 @@ function opPath(p: unknown, syscall: string): string {
   return path;
 }
 
+/** Node's `AbortError` of a cancelled async API (`fs.promises.readFile(p, { signal })`). */
+class AbortError extends Error {
+  readonly code: string;
+  constructor(cause: unknown) {
+    super('The operation was aborted', { cause });
+    this.code = 'ABORT_ERR';
+    this.name = 'AbortError';
+  }
+}
+
+/** The rejection of an aborted op; a `reason` getter that throws (a consumer bug) gives its error, as in Node. */
+function abortError(signal: AbortSignal): unknown {
+  try {
+    return bare(new AbortError(signal.reason));
+  } catch (error) {
+    return error;
+  }
+}
+
 const destroyedError = (): Error =>
   coded(new Error('isolate-host sandbox: destroyed'), 'ERR_ISOLATE_HOST_SANDBOX_DESTROYED');
 
@@ -204,7 +235,9 @@ const EXEC_OPTIONS = new Set([
   'env',
   'cwd',
   'stdin',
+  'signal',
 ]);
+const OP_OPTIONS = new Set(['signal']);
 
 function knownOptions(options: object, known: Set<string>, where: string): void {
   for (const name of Object.keys(options)) {
@@ -214,6 +247,28 @@ function knownOptions(options: object, known: Set<string>, where: string): void 
         'ERR_INVALID_ARG_VALUE',
       );
   }
+}
+
+/** `options.signal`: an `AbortSignal` or nothing. */
+function signalOf(options: { readonly signal?: unknown }): AbortSignal | undefined {
+  const { signal } = options;
+  if (signal === undefined || signal instanceof AbortSignal) return signal;
+  throw coded(
+    new TypeError('The "options.signal" property must be an instance of AbortSignal'),
+    'ERR_INVALID_ARG_TYPE',
+  );
+}
+
+/** A host op's options, read at the call. */
+function opSignal(options: unknown, where: string): AbortSignal | undefined {
+  if (options === undefined) return undefined;
+  if (options === null || typeof options !== 'object')
+    throw coded(
+      new TypeError('The "options" argument must be of type object'),
+      'ERR_INVALID_ARG_TYPE',
+    );
+  knownOptions(options, OP_OPTIONS, where);
+  return signalOf(options);
 }
 
 /**
@@ -233,6 +288,14 @@ function inputBytes(data: unknown, maxFileBytes: number): Uint8Array {
 }
 
 const settle = (): void => {};
+
+/** A run's value and the state it leaves: applied only in the microtask that hands the caller the value. */
+class Commit<T> {
+  constructor(
+    readonly value: T,
+    readonly apply: () => void,
+  ) {}
+}
 
 class LiveSandbox implements Sandbox {
   /**
@@ -256,26 +319,72 @@ class LiveSandbox implements Sandbox {
     this.#options = { template: null, maxBytes: maxFsBytes };
   }
 
-  /** One operation, after every earlier one (ADR-0568 §4). The queue keeps no result. */
-  #op<T>(fn: (box: { fs: Fs }) => T | Promise<T>): Promise<T> {
+  /**
+   * One operation, after every earlier one (ADR-0568 §4). The queue keeps no result.
+   * `signal` aborted before the op starts: it rejects `AbortError` at the abort and never
+   * takes effect. `run`: also once started, until its caller has the result — the run in
+   * flight is cancelled as by `destroy()`, and a `Commit` it returned is never applied.
+   * Each op settles once; once `destroy()` is called, DESTROYED wins (ADR-0568 §5).
+   */
+  #op<T>(
+    fn: (box: { fs: Fs }) => T | Commit<T> | Promise<T | Commit<T>>,
+    signal?: AbortSignal,
+    run = false,
+  ): Promise<T> {
+    let resolve: (value: T) => void = settle;
+    let reject: (error: unknown) => void = settle;
+    const caller = new Promise<T>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    let done = false;
+    let started = false;
+    const abort = (): void => {
+      if (done || this.#destroyed || (started && !run)) return;
+      done = true;
+      const error = abortError(signal as AbortSignal);
+      reject(error);
+      if (started) this.#run?.abort(error instanceof Error ? error : new AbortError(error));
+      signal?.removeEventListener('abort', abort);
+    };
+    let aborted: boolean;
+    try {
+      aborted = signal?.aborted === true;
+      if (!aborted) signal?.addEventListener('abort', abort);
+    } catch (error) {
+      // The signal's own member threw (a consumer bug): refused, nothing placed.
+      return this.#refused(error);
+    }
+    if (aborted && !this.#destroyed) return Promise.reject(abortError(signal as AbortSignal));
     const next = this.#tail
       .then(() => {
         if (this.#box === undefined || this.#destroyed) throw destroyedError();
+        if (done) return undefined;
+        started = true;
         return fn(this.#box);
       })
       // The last link, in the microtask that settles the caller's promise: an op still
       // in flight when destroy() was called rejects, whatever it had done (ADR-0568 §5).
       .then(
         (value) => {
-          if (this.#destroyed) throw bare(destroyedError());
-          return value;
+          if (done) return;
+          done = true;
+          if (this.#destroyed) reject(bare(destroyedError()));
+          else if (value instanceof Commit) {
+            value.apply();
+            resolve(value.value as T);
+          } else resolve(value as T);
+          signal?.removeEventListener('abort', abort);
         },
         (error: unknown) => {
-          throw bare(this.#destroyed ? destroyedError() : error);
+          if (done) return;
+          done = true;
+          reject(bare(this.#destroyed ? destroyedError() : error));
+          signal?.removeEventListener('abort', abort);
         },
       );
     this.#tail = next.then(settle, settle);
-    return next;
+    return caller;
   }
 
   /** An op whose input failed validation at the call: it rejects in its turn. */
@@ -285,11 +394,13 @@ class LiveSandbox implements Sandbox {
     });
   }
 
-  writeFile(path: string, data: Uint8Array | string): Promise<void> {
+  writeFile(path: string, data: Uint8Array | string, options?: OpOptions): Promise<void> {
     let bytes: Uint8Array;
+    let signal: AbortSignal | undefined;
     try {
       // The bytes at the call, not when the op reaches its turn.
       bytes = inputBytes(data, this.#maxFileBytes);
+      signal = opSignal(options, 'writeFile');
     } catch (error) {
       return this.#refused(error);
     }
@@ -323,20 +434,32 @@ class LiveSandbox implements Sandbox {
           );
         throw error;
       }
-    });
+    }, signal);
   }
 
-  readFile(path: string): Promise<Uint8Array> {
+  readFile(path: string, options?: OpOptions): Promise<Uint8Array> {
+    let signal: AbortSignal | undefined;
+    try {
+      signal = opSignal(options, 'readFile');
+    } catch (error) {
+      return this.#refused(error);
+    }
     return this.#op(({ fs }) => {
       const target = opPath(path, 'open');
       const stat = vfs('open', target, () => fs.statSync(target));
       if (stat.isDirectory) throw fsError('EISDIR', 'read', target);
       if ((stat.size ?? 0) > this.#maxFileBytes) throw tooLarge(stat.size ?? 0, this.#maxFileBytes);
       return copyOf(vfs('open', target, () => fs.readFileBytesSync(target)));
-    });
+    }, signal);
   }
 
-  list(path: string = WORKSPACE): Promise<SandboxEntry[]> {
+  list(path: string = WORKSPACE, options?: OpOptions): Promise<SandboxEntry[]> {
+    let signal: AbortSignal | undefined;
+    try {
+      signal = opSignal(options, 'list');
+    } catch (error) {
+      return this.#refused(error);
+    }
     return this.#op(({ fs }) => {
       const dir = opPath(path, 'scandir');
       const entries = vfs('scandir', dir, () => fs.readdirSync(dir));
@@ -347,29 +470,31 @@ class LiveSandbox implements Sandbox {
           size: isDirectory ? 0 : (fs.statSync(`${dir === '/' ? '' : dir}/${name}`).size ?? 0),
         }))
         .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
-    });
+    }, signal);
   }
 
-  remove(path: string): Promise<void> {
+  remove(path: string, options?: OpOptions): Promise<void> {
+    let signal: AbortSignal | undefined;
+    try {
+      signal = opSignal(options, 'remove');
+    } catch (error) {
+      return this.#refused(error);
+    }
     return this.#op(({ fs }) => {
       const target = opPath(path, 'rm');
       if (!fs.existsSync(target)) throw fsError('ENOENT', 'rm', target);
       vfs('rm', target, () => fs.rmSync(target, { recursive: true }));
-    });
+    }, signal);
   }
 
   exec(path: string, options: ExecOptions = {}): Promise<ExecResult> {
-    // Everything the call passes is fixed at the call (ADR-0568 §1): the options and
-    // their `args` are copied now, read later.
-    const given: ExecOptions =
-      options !== null && typeof options === 'object'
-        ? {
-            ...options,
-            ...(Array.isArray(options.args) ? { args: [...options.args] } : {}),
-          }
-        : options;
-    return this.#op(async (box) => {
-      const options = given;
+    // Everything the call passes is read and checked at the call (ADR-0568 §1); a refusal
+    // rejects in the op's turn.
+    let entry: string;
+    let args: string[];
+    let limits: ReturnType<typeof runLimits>;
+    let signal: AbortSignal | undefined;
+    try {
       knownOptions(options, EXEC_OPTIONS, 'exec');
       for (const option of ['env', 'cwd', 'stdin'] as const) {
         if (option in options)
@@ -378,55 +503,73 @@ class LiveSandbox implements Sandbox {
             'a sandbox run is `node <path> [args]` in /workspace, ADR-0568',
           );
       }
-      const entry = sandboxPath(path);
-      const { args = [] } = options;
-      if (!Array.isArray(args) || args.some((a) => typeof a !== 'string'))
+      entry = sandboxPath(path);
+      const given = options.args ?? [];
+      if (!Array.isArray(given) || given.some((a) => typeof a !== 'string'))
         throw coded(
           new TypeError('The "options.args" property must be an array of strings'),
           'ERR_INVALID_ARG_TYPE',
         );
-      const limits = runLimits(options);
-      // Encoded per attempt (a rerun encodes the same files again): the call keeps no copy.
-      const fs = box.fs;
-      const state = (): Uint8Array => this.#codec.snapshotFs(fs, this.#options);
-      const result = await sharedPool()
-        .run(
-          {
-            code: '',
-            ...limits,
-            sandbox: { path: entry, args: [...args], state, maxFsBytes: this.#options.maxBytes },
-          },
-          (h) => {
-            this.#run = h;
-            // Registered with the call itself and removed only by its own "left" event:
-            // destroy() waits for it in every phase of this exec (ADR-0568 §5).
-            const gone = h.left();
-            this.#leaving.add(gone);
-            void gone.then(() => this.#leaving.delete(gone));
-          },
-        )
-        .finally(() => {
-          // Whatever the end — a destroy in flight too: no stale hold on the call (and its state).
-          this.#run = undefined;
+      args = [...given];
+      limits = runLimits(options);
+      signal = signalOf(options);
+    } catch (error) {
+      return this.#refused(error);
+    }
+    return this.#op(
+      async (box) => {
+        // Encoded per attempt (a rerun encodes the same files again): the call keeps no copy.
+        const fs = box.fs;
+        const state = (): Uint8Array => this.#codec.snapshotFs(fs, this.#options);
+        const result = await sharedPool()
+          .run(
+            {
+              code: '',
+              ...limits,
+              sandbox: { path: entry, args, state, maxFsBytes: this.#options.maxBytes },
+            },
+            (h) => {
+              this.#run = h;
+              // Registered with the call itself and removed only by its own "left" event:
+              // destroy() waits for it in every phase of this exec (ADR-0568 §5).
+              const gone = h.left();
+              this.#leaving.add(gone);
+              void gone.then(() => this.#leaving.delete(gone));
+            },
+          )
+          .finally(() => {
+            // Whatever the end — a destroy in flight too: no stale hold on the call (and its state).
+            this.#run = undefined;
+          });
+        const { state: end, stateRefused, ...run } = result;
+        if (stateRefused !== undefined) return { ...run, stateRefused };
+        // Killed (timeout, memory): the state of before the run (ADR-0568 §3).
+        if (end === undefined || run.termination !== undefined) return run;
+        const next = new this.#codec.MemoryFsSync();
+        try {
+          // The run's bytes are the guest's: they become state only through the codec's checks.
+          this.#codec.restoreFs(next, end, this.#options);
+        } catch (error) {
+          return { ...run, stateRefused: isCodec(error) ? error.code : REFUSED[1] };
+        }
+        // Kept only if the caller gets this result (an abort before that rolls it back).
+        return new Commit<ExecResult>(run, () => {
+          box.fs = next;
         });
-      const { state: end, stateRefused, ...run } = result;
-      if (stateRefused !== undefined) return { ...run, stateRefused };
-      // Killed (timeout, memory): the state of before the run (ADR-0568 §3).
-      if (end === undefined || run.termination !== undefined) return run;
-      const next = new this.#codec.MemoryFsSync();
-      try {
-        // The run's bytes are the guest's: they become state only through the codec's checks.
-        this.#codec.restoreFs(next, end, this.#options);
-      } catch (error) {
-        return { ...run, stateRefused: isCodec(error) ? error.code : REFUSED[1] };
-      }
-      box.fs = next;
-      return run;
-    });
+      },
+      signal,
+      true,
+    );
   }
 
-  snapshot(): Promise<Uint8Array> {
-    return this.#op(({ fs }) => copyOf(this.#codec.snapshotFs(fs, this.#options)));
+  snapshot(options?: OpOptions): Promise<Uint8Array> {
+    let signal: AbortSignal | undefined;
+    try {
+      signal = opSignal(options, 'snapshot');
+    } catch (error) {
+      return this.#refused(error);
+    }
+    return this.#op(({ fs }) => copyOf(this.#codec.snapshotFs(fs, this.#options)), signal);
   }
 
   destroy(): Promise<void> {
