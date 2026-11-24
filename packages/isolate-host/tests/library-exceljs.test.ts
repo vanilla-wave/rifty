@@ -44,7 +44,9 @@ describe('exceljs 4.4.0 loads node:zlib as in Node (Acceptance 4)', () => {
     const guest = await inSandbox(files, 'main-load.cjs', 'out/none');
     // Another named gap, not zlib's (and not a crash or a timeout).
     expect(guest.exitCode).toBe(1);
-    expect(guest.stderr).toMatch(/^NotImplementedError: Not implemented: (?!isolate-host\.zlib)\S+ \(/);
+    expect(guest.stderr).toMatch(
+      /^NotImplementedError: Not implemented: (?!isolate-host\.zlib)\S+ \(/,
+    );
   });
 
   it(
