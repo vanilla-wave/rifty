@@ -58,7 +58,9 @@ longer re-pin. No ADR is superseded.
   Header: only esbuild-form lines (`import "./chunk-XXXXXXXX.js";`,
   `import {\n  a,\n  b as c\n} from "./chunk-XXXXXXXX.js";`) of chunks built in
   `dist/assets`, at most 2048 bytes (3× the largest of 249 built workers and
-  15 main builds, 630–682 bytes); over → violation naming both sizes. Each
+  15 main builds, 630–682 bytes); over → violation naming both sizes. A
+  rejected leading import line → its own violation, no pin printed (re-pinning
+  it would bring re-pins back): extend the form or fix the build. Each
   check has a file it alone rejects: form — code or a tab inside `{…}`;
   built sibling — `import "./chunk-NOPENOPE.js"`, body
   `module-loader-NOPENOPE`; ceiling — 100 000 repeated bindings. Token-in-body
@@ -73,10 +75,12 @@ longer re-pin. No ADR is superseded.
   tokens), like any other entry's chunks. Red before, green now: a static
   import of a new built sibling ≤2 MB with foreign runtime and no signature;
   of the exempt 4.9 MB `chunk-EMDIREKY.js`; a swapped sibling exporting
-  `__commonJS`/`__toESM`; reordered imports (side-effect order); bindings that
-  repeat, go unused, shadow a global (`Object`) or are keywords (invalid JS);
+  `__commonJS`/`__toESM`; reordered imports (side-effect order); lines or
+  bindings that repeat, go unused, shadow a global (`Object`) or are keywords (invalid JS);
   the `module-loader` hash pointing at another built one — all within 2048
   header bytes.
+  Not reproduced on a real runtime edit: an alias or reordered worker header
+  (unit tests only).
   Rejected: hash placeholder only (an added chunk line still re-pins); unsplit
   worker build (copies runtime into the pinned body); source-map provenance
   (rejected above). Re-pin only on the worker's own content (TypeScript,
