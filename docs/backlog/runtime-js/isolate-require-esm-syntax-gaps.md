@@ -54,6 +54,14 @@ isolate ESM ❌ lifting, or an agent run that hits `URLConstructor`.
 Compat: no row in `docs/public/compat/isolate-host.md` for a required ESM
 `.js`; to add with the fix or as ❌ when the gap is declared.
 
+Probe 2026-11-24 (`distribution/isolate-host-ceiling-modules-load`): a package whose `exports`
+lists `"module-sync"` first — Node 24 `require` takes that ESM entry — fails the same way:
+`generator-function@2.0.1` (`"module-sync": "./require.mjs"`) from
+`is-generator-function@1.1.2/index.js:12` → `TypeError: URLConstructor is not a constructor`;
+`async-function@1.0.0` from `is-async-function@2.1.1/index.js:13` likewise. Both sit on exceljs
+4.4.0's main entry (es-abstract → `reflect.getprototypeof` → `which-builtin-type`); its second stop
+after `node:zlib`. Node loads both.
+
 ## Acceptance
 
 1. Isolate parity (`packages/isolate-host/tests`, oracle live `node -e`): each

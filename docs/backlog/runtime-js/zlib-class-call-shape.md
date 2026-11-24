@@ -53,3 +53,11 @@ Parity first: no-`new`, `inherits` + `call`, `name` / `length`.
 The pattern recurs: EventEmitter, streams and StringDecoder are fixed; http.Agent
 and zlib are open. A repo-wide inventory of the remaining ES-class builtins is
 not taken.
+
+2026-11-24 (`distribution/isolate-host-ceiling-modules-load`, Node v24.16.0 shape dump): Node's
+classes chain through unexported bases — `Gzip` → `Zlib` (`params`) → `ZlibBase` (`flush`,
+`close`, `reset`, `_transform`, `_processChunk`, …) → `Transform`; `Brotli*` → `Brotli` → `Zlib`;
+`Zstd*` → `Zstd` (`class`) → `ZlibBase`. The `create*` members are named `value`, length 1,
+read-only (`EC-`); `constants`/`codes` are read-only and non-configurable. The isolate guest
+carries this shape (loud); browser hosts' `zlib.ts` does not (not measured there per member).
+

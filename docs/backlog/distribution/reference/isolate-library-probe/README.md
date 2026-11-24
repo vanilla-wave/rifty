@@ -106,6 +106,19 @@ an image `path` starting `http` → `NotImplementedError('isolate-host.https.get
 nodebuffer/STREAM, `stream()`, `writeFile({compression})`, SVG image and video by `path`, a
 master + notes + hyperlink: equal to node.
 
+### After `isolate-host-ceiling-modules-load` (2026-11-24)
+
+Same probe, that branch (guest `zlib`/`child_process`/`worker_threads` load with Node's shape;
+compression, process and worker use a named gap), `xlsx` only: `require('exceljs')` passes row 1;
+its next stop is `module-loader.cjs-global-function-assignment` at
+`es-abstract/2025/IsDetachedBuffer.js:22` (`new global[k](…)`, `runtime-js/cjs-global-function-assignment`).
+Past it (diagnostic patches of a copied `node_modules`, not a route): `require` of a `module-sync`
+ESM entry, `generator-function`/`async-function` → `URLConstructor` (`runtime-js/isolate-require-esm-syntax-gaps`),
+then row 8 (`process.umask`). With `origin/t3/process-umask` merged locally and both patched,
+canonical `gen/xlsx.cjs` exits 0 and equals node's (`vsNode.equal`, 14 parts). The streaming
+`WorkbookWriter#commit` stops at `isolate-host.zlib.DeflateRaw` (no engine). Chains with file and
+line: those two backlog items.
+
 ## Measures (requirement 3 baseline)
 
 From `results-npm-ci.json` unless named; `results-artifact.json` ran under heavier load.

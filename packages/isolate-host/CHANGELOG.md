@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Guest `node:zlib`/`child_process`/`worker_threads` load with Node's shape; compression, process and worker use throws, naming the member (`isolate-host.zlib.gzip`, `isolate-host.child_process.spawn`, `isolate-host.worker_threads.Worker`, …; was `isolate-host.<module>` at require). exceljs's modules that load `node:zlib` (archiver, crc32-stream) now load.
 - Guest `node:http`/`https`/`net` load with Node's shape; network use throws, naming the member (`isolate-host.http.request`, `isolate-host.net.connect`, …; was `isolate-host.http` at require), and so does constructing an HTTP message, server or socket (`isolate-host.http.ServerResponse`, …) or `net.BlockList`/`SocketAddress`, though Node opens nothing there. pptxgenjs 4.0.1 `writeFile` now works in a sandbox (its unused `import('node:https')`), equal to Node's file; parity `tests/egress-modules.test.ts`, `tests/library-pptxgenjs.test.ts`. No network path is added (`egress.test.ts`).
 
 - Sandbox: a run's output is fixed when its status is out — what the guest's realm prints while its end state is captured (code reached through intrinsics it replaced) is not the run's output.
