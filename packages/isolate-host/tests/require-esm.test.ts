@@ -305,6 +305,73 @@ describe('isolate ES modules stay named gaps, no URLConstructor', () => {
 const here = dirname(fileURLToPath(import.meta.url));
 const pkgRoot = (name: string): string => realpathSync(join(here, '../node_modules', name));
 
+/**
+ * The runtime's internal `URL` uses where the guest has no `URL` (a ceiling global installed
+ * after the runtime loaded): each reaches the ceiling's named gap, never the leaked
+ * `URLConstructor` name (round 2 of the PR #440 review).
+ */
+describe('isolate internal URL uses give the URL ceiling gap', () => {
+  it(
+    'file: import(), url helpers, createRequire(file URL), fs path objects',
+    { timeout: 60_000 },
+    async () => {
+      const files = fileMap({
+        'url.js': `const path = require('path');
+const abs = (f) => 'file://' + path.resolve(f);
+const rows = [];
+const show = (e) => [e.constructor === Error ? 'Error' : e.constructor.name, e.code ?? null, e.message];
+const sync = (label, fn) => { try { rows.push([label, 'ok', fn()]); } catch (e) { rows.push([label, ...show(e)]); } };
+(async () => {
+  for (const f of ['m.mjs', 'c.cjs']) {
+    try { const m = await import(abs(f)); rows.push(['import ' + f, 'ok', (m.default ?? m).a]); }
+    catch (e) { rows.push(['import ' + f, ...show(e)]); }
+  }
+  const url = require('url');
+  sync('pathToFileURL', () => url.pathToFileURL(path.resolve('c.cjs')).href);
+  sync('fileURLToPath', () => url.fileURLToPath(abs('c.cjs')));
+  sync('new url.URL', () => new url.URL(abs('c.cjs')).pathname);
+  sync('createRequire(file URL)', () => require('module').createRequire(abs('url.js'))('./c.cjs').a);
+  sync('readFileSync({})', () => require('fs').readFileSync({}));
+  console.log(JSON.stringify(rows).split(process.cwd()).join('<root>'));
+})();`,
+      });
+      const node = inNode(files, 'url.js', 'out/none', [FLAG]);
+      expect(JSON.parse(node.stdout)).toEqual([
+        ['import m.mjs', 'ok', 1],
+        ['import c.cjs', 'ok', 2],
+        ['pathToFileURL', 'ok', 'file://<root>/c.cjs'],
+        ['fileURLToPath', 'ok', '<root>/c.cjs'],
+        ['new url.URL', 'ok', '<root>/c.cjs'],
+        ['createRequire(file URL)', 'ok', 2],
+        [
+          'readFileSync({})',
+          'TypeError',
+          'ERR_INVALID_ARG_TYPE',
+          'The "path" argument must be of type string or an instance of Buffer or URL. Received an instance of Object',
+        ],
+      ]);
+      const guest = await inSandbox(files, 'url.js', 'out/none');
+      expect(guest.stderr).toBe('');
+      expect(guest.stdout).not.toContain('URLConstructor');
+      const gap = [
+        'NotImplementedError',
+        null,
+        'Not implemented: isolate-host.URL (not available in the rifty isolate host, ADR-0557)',
+      ];
+      expect(JSON.parse(guest.stdout)).toEqual([
+        ['import m.mjs', ...gap],
+        ['import c.cjs', ...gap],
+        ['pathToFileURL', ...gap],
+        ['fileURLToPath', ...gap],
+        ['new url.URL', ...gap],
+        ['createRequire(file URL)', ...gap],
+        // rifty's fs path check on every host (`backlog/runtime-js/fs-path-invalid-arg-type`).
+        ['readFileSync({})', 'TypeError', null, 'fs path must be string, Buffer, or URL'],
+      ]);
+    },
+  );
+});
+
 describe('module-sync dual packages load their CommonJS entry (user scenario)', () => {
   it(
     'is-generator-function 1.1.2 and is-async-function 2.1.1 give Node’s verdicts',
