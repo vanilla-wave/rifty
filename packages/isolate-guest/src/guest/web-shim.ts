@@ -6,6 +6,7 @@
  */
 import type { GuestHost } from '../contract.ts';
 import { notImplemented } from './loud.ts';
+import { installNavigator } from './navigator.ts';
 import { TextDecoder, TextEncoder, encodeUtf8 } from './text-codec.ts';
 
 const g = globalThis as unknown as Record<string, unknown>;
@@ -383,7 +384,6 @@ export const CEILING_GLOBALS = [
   'Crypto',
   'CryptoKey',
   'SubtleCrypto',
-  'Navigator',
   'Performance',
   'PerformanceEntry',
   'PerformanceMark',
@@ -393,9 +393,6 @@ export const CEILING_GLOBALS = [
   'PerformanceResourceTiming',
 ] as const;
 
-/** `navigator` members Node 24 defines; each read is the named gap. */
-const NAVIGATOR_MEMBERS = ['hardwareConcurrency', 'language', 'languages', 'platform', 'userAgent'];
-
 export function installCeilingGlobals(): void {
   for (const name of CEILING_GLOBALS) {
     const thrower = loud(name);
@@ -403,14 +400,9 @@ export function installCeilingGlobals(): void {
     define(name, thrower);
   }
   Object.defineProperty(crypto, 'subtle', { get: loud('crypto.subtle'), configurable: true });
-  const navigator = {};
-  for (const member of NAVIGATOR_MEMBERS) {
-    Object.defineProperty(navigator, member, {
-      get: loud(`navigator.${member}`),
-      enumerable: true,
-    });
-  }
-  define('navigator', navigator);
+  // Not a ceiling (Node's shape, guest values); installed here so the runtime's
+  // load-time detection still sees no `navigator`, as before.
+  installNavigator();
   Object.defineProperty(performance, 'nodeTiming', {
     get: loud('performance.nodeTiming'),
     configurable: true,
