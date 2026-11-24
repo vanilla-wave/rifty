@@ -141,15 +141,13 @@ describe('ESM Function guard — runtime computed global keys (ADR-0444)', () =>
     expect(globalThis.Function).toBe(HostFunction);
   });
 
+  // `new globalThis[key](…)` loads since unit computed-global-read-callee
+  // (global-computed-read-callee.test.ts); a called Reflect.get keeps the ceiling.
   it('keeps the load-time ceiling for runtime-key reads used as a constructor', async () => {
     const cases: Record<string, string> = {
       '/reflect-get-param.mjs': `
         globalThis.__riftyGuardBefore__ = 'ran';
         export function make(key) { const F = Reflect.get(globalThis, key); return F('return 1'); }
-      `,
-      '/computed-read-param.mjs': `
-        globalThis.__riftyGuardBefore__ = 'ran';
-        export function make(key) { return new globalThis[key]('return 1'); }
       `,
     };
     for (const [path, source] of Object.entries(cases)) {

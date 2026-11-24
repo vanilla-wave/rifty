@@ -35,8 +35,25 @@ describe('exceljs 4.4.0 loads node:zlib as in Node (Acceptance 4)', () => {
     },
   );
 
-  // Past `node:zlib` the main entry stops elsewhere (unit §Decisions, other units): first at
-  // `module-loader.cjs-global-function-assignment` (es-abstract `new global[k](…)`).
+  // Unit runtime-js/computed-global-read-callee: the closure's `new global[name](…)` sites.
+  it(
+    'es-abstract IsDetachedBuffer and typed-array-* construct a computed global as in Node',
+    { timeout: 180_000 },
+    async () => {
+      const files = withFixture('typed-arrays.cjs');
+      const oracle = inNode(files, 'typed-arrays.cjs', 'out/none');
+      expect(oracle).toMatchObject({
+        exitCode: 0,
+        stdout: '[3,2,6,false,true,[2,3]]\n',
+        stderr: '',
+      });
+      const guest = await inSandbox(files, 'typed-arrays.cjs', 'out/none');
+      expect(guest).toEqual({ stdout: oracle.stdout, stderr: '', exitCode: 0 });
+    },
+  );
+
+  // Past `node:zlib` the main entry stops elsewhere (unit §Decisions, other units); since
+  // runtime-js/computed-global-read-callee not at es-abstract's `new global[k](…)`.
   it('require(exceljs) no longer stops at node:zlib', { timeout: 180_000 }, async () => {
     const files = withFixture('main-load.cjs');
     const oracle = inNode(files, 'main-load.cjs', 'out/none');
@@ -45,7 +62,7 @@ describe('exceljs 4.4.0 loads node:zlib as in Node (Acceptance 4)', () => {
     // Another named gap, not zlib's (and not a crash or a timeout).
     expect(guest.exitCode).toBe(1);
     expect(guest.stderr).toMatch(
-      /^NotImplementedError: Not implemented: (?!isolate-host\.zlib)\S+ \(/,
+      /^NotImplementedError: Not implemented: (?!isolate-host\.zlib|module-loader\.cjs-global-function-assignment)\S+ \(/,
     );
   });
 
