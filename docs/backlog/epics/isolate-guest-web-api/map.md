@@ -52,9 +52,16 @@ Node-faithful route yet), web streams (+ `TextEncoderStream`/`TextDecoderStream`
   a hard bound — owner: user — re-asked 2026-11-24 with (a) ≈ +1–3 ms, (b) ≥ +9 ms on a 13 ms
   empty `runCode` (601 ms warm `exec` at template scale), bundle +0.3 / +0.9 MB on 7.1 MB, heap
   not measured; recommended measured growth.
-- 3b. `tr46` for IDN hostnames in the legacy `url.parse` (`runtime-js/node-url-legacy-api-port`):
-  the dependency on every host, or non-ASCII/`xn--` labels a named gap without it — owner: user —
-  asked 2026-11-24.
+- 3b. IDN hostnames in the legacy `url.parse` (`runtime-js/node-url-legacy-api-port`): (a) `tr46`
+  on every host (+241 KB min / 62 KB gzip per bundle with `node:url`); (b) non-ASCII/`xn--` labels a
+  named gap, no dependency (a throw where browser hosts work today); (c) the host's own `URL` where
+  one exists (browser hosts), a named gap where none (the isolate until this goal's `URL`) — owner:
+  user — asked 2026-11-24; (c) added by the manager 2026-11-24, its agreement of Chromium's host
+  parser with Node's `toASCII` measured first by the implementation thread (the url-legacy probe
+  saw IPv4 normalisation, percent-decoding and Bidi checks the native parser applies and ada's
+  `to_ascii` does not); recommendation (c) if it matches, else (a).
+- IDNA table in the guest bundle: any real `URL` in the isolate needs one (whatwg-url 15.1.0 →
+  `tr46` 6.0.0, ~241 KB) — its cost is this goal's question 3, not the url-legacy unit's.
 - 4. Tier: `works` (recommended: computation inside the isolate, no new boundary) or `robust` —
   owner: user — asked 2026-11-24.
 - 5. ES modules in `-e` (`runCode` with `import()` or ESM syntax: today `isolate-host.dynamic-import`/
