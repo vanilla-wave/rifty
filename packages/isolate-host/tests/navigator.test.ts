@@ -145,7 +145,7 @@ console.log(JSON.stringify([
 
 describe('core-js loads in a sandbox (acceptance 2)', () => {
   it("require('core-js/actual') runs as under node <file> over the same node_modules", async () => {
-    const files = { ...coreJsFiles(), 'main.js': CORE_JS_MAIN };
+    const files = { ...coreJsFiles(), 'main.js': new TextEncoder().encode(CORE_JS_MAIN) };
     const [oracle] = nodeSequence([{ files, run: ['main.js'] }]);
     expect(oracle?.exitCode).toBe(0);
     const fs = new MemoryFsSync();

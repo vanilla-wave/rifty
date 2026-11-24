@@ -38,9 +38,10 @@ read `Node.js/24`, `Rifty wasm`. Compat process.md row "Guest `navigator`
 Which `navigator` does a guest Node program see on the browser hosts: the
 browser's (today; rifty itself and pdfjs-style detectors read browser members),
 Node 24's shape with the guest's identity (as the isolate host since
-2026-11-24), or Node's shape over host values? Part of the browser-globals
-policy (`runtime-js/guest-browser-only-globals`); hiding members is observable
-both ways.
+2026-11-24), or Node's shape over host values? Adjacent to the
+browser-only-globals question (`runtime-js/guest-browser-only-globals`, globals
+Node lacks); here Node has the global with another shape. Changing members is
+observable both ways.
 
 ## Next
 

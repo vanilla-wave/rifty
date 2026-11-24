@@ -23,7 +23,7 @@ guest `process.version` `v24.0.0`, `process.platform` `rifty`, `process.arch` `w
 
 ## Challenge
 
-challenge: 2026-11-24 — no premise critic: existing-baseline repair (a Node divergence; README §Challenge), direction is the manager's decision
+challenge: 2026-11-24 — clear (no premise critic: existing-baseline repair, README §Challenge; direction is the manager's decision. Final written-result check 2026-11-24, fresh reviewer: 4 problems in the sibling drafts, resolved)
 
 ## User scenario
 

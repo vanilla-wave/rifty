@@ -5,7 +5,7 @@ title: "`Buffer.alloc(-1)` and `events.once(1)` throw V8/internal errors instead
 created: 2026-11-24
 why: code that checks `e.code` for invalid input (or prints it to the user) sees an engine message and no code
 sources: [docs/backlog/distribution/isolate-host-navigator-node-shape.md]
-code: [packages/io/src/buffer.ts]
+code: [packages/io/src/buffer.ts, packages/io/src/event-emitter.ts]
 ---
 
 ## Context
@@ -20,7 +20,7 @@ rifty's error shapes), `runCode` vs `node -e`, Node v24.16.0, 2026-11-24:
 
 Browser hosts share the code (not measured). Label gap aside
 (`runtime-js/node-error-code-label`), message, `code` and (for `once`) sync vs
-rejection differ. No compat row names them (buffer.md `Buffer.alloc` ✅).
+rejection differ. Compat buffer.md `Buffer.alloc` ⚠️ (2026-11-24); `events.once` has no row.
 
 ## Next
 
