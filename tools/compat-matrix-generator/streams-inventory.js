@@ -54,7 +54,7 @@ export const streamsMatrix = {
     [
       'Stream prototype method shape',
       '⚠️',
-      "Node's stream prototype methods are mostly enumerable and anonymous (named: `destroy`, `setDefaultEncoding`, `compose`, `final`, iterator helpers); rifty's are non-enumerable class methods named by key, so `Object.keys(Writable.prototype)` is `['_writev']` (Node 11 keys) and `for…in` on a Transform misses `_write`; identity-shared `_writev` `null`, `Duplex.prototype._write`, `Transform.prototype._final` match in identity and enumerability (`Duplex.prototype._write.name` `_write`, Node `''`) — backlog `runtime-js/builtin-function-names`",
+      "Node's stream prototype methods are mostly enumerable and anonymous (named: `Readable.prototype.destroy`, `_undestroy` (`undestroy`), `setDefaultEncoding`, `compose`, `Transform.prototype._final` (`final`), iterator helpers; `Writable.prototype.destroy` is anonymous); rifty's are non-enumerable class methods named by key, so `Object.keys(Writable.prototype)` is `['_writev']` (Node 11 keys) and `for…in` on a Transform misses `_write`; identity-shared `_writev` `null`, `Duplex.prototype._write`, `Transform.prototype._final` match in identity and enumerability (`Duplex.prototype._write.name` `_write`, Node `''`) — backlog `runtime-js/builtin-function-names`",
     ],
     [
       '`Transform` / `PassThrough` backpressure',

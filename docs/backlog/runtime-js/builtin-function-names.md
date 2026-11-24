@@ -21,7 +21,7 @@ hosts not swept. Fault class `sibling-drift` (source name vs public name).
 Stream prototype methods (PR #433 reviews, re-measured 2026-11-24, Node v24.16.0): Node's
 `Readable/Writable/Duplex/Transform/PassThrough.prototype` methods are mostly enumerable and
 anonymous (`name` `''`: `_read`, `_write`, `write`, `end`, `push`, `_transform`, …); named ones are
-`destroy`, `_undestroy` (`undestroy`), `setDefaultEncoding`, `compose`, `Transform._final` (`final`)
+`Readable.prototype.destroy` (`Writable.prototype.destroy` is anonymous), `_undestroy` (`undestroy`), `setDefaultEncoding`, `compose`, `Transform._final` (`final`)
 and the iterator helpers (`map`, `filter`, … — those non-enumerable). rifty's are class methods:
 non-enumerable, named by their key. Identity-shared values (`Writable/Duplex.prototype._writev`
 `null`, `Duplex.prototype._write === Writable.prototype._write`, `Transform.prototype._final`) match
