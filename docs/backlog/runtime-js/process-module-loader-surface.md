@@ -36,6 +36,15 @@ item owns warning delivery; no matching goal/trap/declined redirection item.
 Node 24.16.0 probe: `node --redirect-warnings=/tmp/rifty-fetch-warning-redirect-proof.log -e "process.emitWarning('redirect-proof', {code:'FETCH-REDIRECT'})"`
 exits 0; the file contains `[FETCH-REDIRECT] Warning: redirect-proof`.
 
+2026-11-24 — `require('module').builtinModules` lacks 23 of Node v24.16.0's names (isolate guest
+`runCode` vs live `node -e`): `_http_agent`, `_http_client`, `_http_common`, `_http_incoming`,
+`_http_outgoing`, `_http_server`, `_stream_duplex`, `_stream_passthrough`, `_stream_readable`,
+`_stream_transform`, `_stream_wrap`, `_stream_writable`, `_tls_common`, `_tls_wrap`, `domain`,
+`inspector/promises`, `path/win32`, `readline/promises`, `trace_events`, `node:sea`, `node:sqlite`,
+`node:test`, `node:test/reporters`; no extras. A package that filters `builtinModules` to decide
+what to externalize or shim sees a different set (found by unit
+`distribution/isolate-host-egress-modules-load`). `process.getBuiltinModule` is still absent there.
+
 2026-11-17 — consumer evidence for `getBuiltinModule`: pdfjs-dist@6.5.438
 legacy and pdf-parse@2.4.5 (depends on `pdfjs-dist: 5.4.296`, `npm view
 pdf-parse@2.4.5 dependencies`) print on stderr
