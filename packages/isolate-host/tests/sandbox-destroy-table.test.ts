@@ -141,9 +141,15 @@ describe('after destroy() no isolate of the sandbox runs: every end × every mom
     expect(burned).toBeLessThan(0.1);
   });
   it('in flight: the run is cancelled and stopped', async () => {
-    const { outcome, burned } = await destroyAt(ENDS.timeout as End, 'in flight');
+    // A deadline far past the observation: only the cancel can stop it in time.
+    const at = performance.now();
+    const { outcome, burned } = await destroyAt(
+      { code: 'for (;;) {}', options: { timeoutMs: 20_000 } },
+      'in flight',
+    );
     expect(outcome).toEqual({ rejected: 'ERR_ISOLATE_HOST_SANDBOX_DESTROYED' });
     expect(burned).toBeLessThan(0.1);
+    expect(performance.now() - at).toBeLessThan(5000);
   });
   for (const [name, end] of Object.entries(ENDS))
     for (const moment of MOMENTS)

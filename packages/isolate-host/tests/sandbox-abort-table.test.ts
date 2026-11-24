@@ -215,8 +215,9 @@ describe('an abort before the run has a result: AbortError at once, files of bef
       controller.abort();
       expect(await exec).toEqual({ rejected: ABORTED });
       expect(await first).toMatchObject({ exitCode: 0 });
-      expect(calls).toBe(1);
+      // Past the aborted exec's turn: what it placed is counted.
       expect(await names(sb)).toEqual(['first.js', ...BEFORE]);
+      expect(calls).toBe(1);
       await usableThenGone(sb);
     } finally {
       pool.run = run;
@@ -377,30 +378,43 @@ const HOST_OPS: Readonly<
   remove: { op: (sb, signal) => sb.remove('g', { signal }), effect: ['f'] },
   snapshot: { op: (sb, signal) => sb.snapshot({ signal }), effect: ['f', 'g'] },
 };
+/** `op` on a fresh idle sandbox, aborted `k` microtasks after its call: its outcome and the files after. */
+async function hostOpAbortedAt(
+  op: (sb: Sandbox, signal: AbortSignal) => Promise<unknown>,
+  k: number,
+): Promise<{ outcome: { value?: unknown; rejected?: string }; files: string[] }> {
+  const sb = await createSandbox();
+  try {
+    await sb.writeFile('f', 'data');
+    await sb.writeFile('g', 'gone');
+    const controller = new AbortController();
+    const call = outcomeOf(op(sb, controller.signal));
+    if (k === 0) controller.abort();
+    else {
+      let p = Promise.resolve();
+      for (let i = 1; i < k; i++) p = p.then(() => {});
+      void p.then(() => controller.abort());
+    }
+    const outcome = await call;
+    return { outcome, files: await names(sb) };
+  } finally {
+    await sb.destroy();
+  }
+}
 describe('every host op × abort 0–5 microtasks after its call: AbortError unless it had started', () => {
   for (const [name, { op, effect }] of Object.entries(HOST_OPS))
     for (const k of [0, 1, 2, 3, 4, 5])
       it(`${name} × abort ${k} microtask(s) after the call`, async () => {
-        const sb = await createSandbox();
-        try {
-          await sb.writeFile('f', 'data');
-          await sb.writeFile('g', 'gone');
-          const controller = new AbortController();
-          const call = outcomeOf(op(sb, controller.signal));
-          if (k === 0) controller.abort();
-          else {
-            let p = Promise.resolve();
-            for (let i = 1; i < k; i++) p = p.then(() => {});
-            void p.then(() => controller.abort());
-          }
-          const outcome = await call;
-          // In the call's own tick it cannot have started (it waits its turn).
-          if (k === 0) expect(outcome).toEqual({ rejected: ABORTED });
-          const aborted = outcome.rejected === ABORTED;
-          if (!aborted) expect(outcome.rejected, JSON.stringify(outcome)).toBeUndefined();
-          expect(await names(sb), JSON.stringify(outcome)).toEqual(aborted ? ['f', 'g'] : effect);
-        } finally {
-          await sb.destroy();
-        }
+        // Whether an op had started at k: a write's effect shows it, and every host op
+        // starts at the same point of the one queue.
+        const probe = await hostOpAbortedAt(HOST_OPS.writeFile?.op ?? op, k);
+        const started = probe.files.includes('w');
+        const { outcome, files } = await hostOpAbortedAt(op, k);
+        // In the call's own tick it cannot have started (it waits its turn).
+        if (k === 0) expect(outcome).toEqual({ rejected: ABORTED });
+        const aborted = outcome.rejected === ABORTED;
+        expect(aborted, JSON.stringify({ outcome, started })).toBe(!started);
+        if (!aborted) expect(outcome.rejected, JSON.stringify(outcome)).toBeUndefined();
+        expect(files, JSON.stringify(outcome)).toEqual(aborted ? ['f', 'g'] : effect);
       });
 });

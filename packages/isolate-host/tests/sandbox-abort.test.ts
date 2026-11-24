@@ -4,7 +4,10 @@
  * error against live Node's `AbortError`, the option's refusals and the host
  * ops. The table of moments × ends is `sandbox-abort-table.test.ts`.
  */
+import { execFile } from 'node:child_process';
 import { getEventListeners } from 'node:events';
+import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import * as pkg from '../src/index.ts';
 import { type CallHandle, type CallSpec, sharedPool } from '../src/pool.ts';
@@ -78,7 +81,11 @@ describe('the turn signal cancels a run without destroying the sandbox (scenario
         const at = performance.now();
         controller.abort(reason);
         const e = await run;
-        return { e, ms: performance.now() - at, queued: await queued };
+        const ms = performance.now() - at;
+        const rest = await queued;
+        // The queue has reached the aborted exec's turn: what it placed is counted.
+        await names(sb);
+        return { e, ms, queued: rest };
       });
       expect(value.e).toMatchObject({ name: 'AbortError', code: 'ABORT_ERR' });
       expect(value.e.cause).toBe(reason);
@@ -131,21 +138,23 @@ describe('the turn signal cancels a run without destroying the sandbox (scenario
 });
 
 describe("the rejection is Node's AbortError (parity, Node fs.promises.readFile)", () => {
-  // Node's own: an in-flight readFile aborted with a reason, and a pre-aborted one without.
-  const oracle = (): { reason: unknown; pre: unknown } => {
+  // Node's own: an in-flight readFile aborted with and without a reason, a pre-aborted one without.
+  const oracle = (): { reason: unknown; bare: unknown; pre: unknown } => {
     const r =
       nodeEval(`const fs = require('fs'); fs.writeFileSync('f', 'x'); const shape = ${SHAPE};
       (async () => {
         const reason = new Error('turn over');
         const c = new AbortController(); const p = fs.promises.readFile('f', { signal: c.signal }); c.abort(reason);
         const a = await p.catch((e) => shape(e, reason));
+        const c2 = new AbortController(); const p2 = fs.promises.readFile('f', { signal: c2.signal }); c2.abort();
+        const b = await p2.catch((e) => shape(e, c2.signal.reason));
         const s = AbortSignal.abort();
-        const b = await fs.promises.readFile('f', { signal: s }).catch((e) => shape(e, s.reason));
-        process.stdout.write(JSON.stringify({ reason: a, pre: b }));
+        const d = await fs.promises.readFile('f', { signal: s }).catch((e) => shape(e, s.reason));
+        process.stdout.write(JSON.stringify({ reason: a, bare: b, pre: d }));
       })()`);
-    return JSON.parse(r.stdout) as { reason: unknown; pre: unknown };
+    return JSON.parse(r.stdout) as { reason: unknown; bare: unknown; pre: unknown };
   };
-  it('abort(reason) in flight and abort() before the call give the oracle shape', async () => {
+  it('abort(reason) and abort() in flight, abort() before the call give the oracle shape', async () => {
     const node = oracle();
     const sb = await createSandbox();
     try {
@@ -155,9 +164,17 @@ describe("the rejection is Node's AbortError (parity, Node fs.promises.readFile)
       const run = failure(sb.exec('main.js', { signal: c.signal }));
       await sleep(100);
       c.abort(reason);
+      const c2 = new AbortController();
+      const run2 = failure(sb.exec('main.js', { signal: c2.signal }));
+      await sleep(100);
+      c2.abort();
       const s = AbortSignal.abort();
       const pre = await failure(sb.exec('main.js', { signal: s }));
-      expect({ reason: shape(await run, reason), pre: shape(pre, s.reason) }).toEqual(node);
+      expect({
+        reason: shape(await run, reason),
+        bare: shape(await run2, c2.signal.reason),
+        pre: shape(pre, s.reason),
+      }).toEqual(node);
     } finally {
       await sb.destroy();
     }
@@ -165,7 +182,7 @@ describe("the rejection is Node's AbortError (parity, Node fs.promises.readFile)
 });
 
 describe('the signal option', () => {
-  it('is an option of exec and of every host op; any value but an AbortSignal is ERR_INVALID_ARG_TYPE', async () => {
+  it("is an option of exec and of every host op; a value Node refuses is refused with Node's error", async () => {
     const sb = await createSandbox();
     try {
       await sb.writeFile('m.js', '');
@@ -176,7 +193,22 @@ describe('the signal option', () => {
       expect(await sb.list(undefined, { signal: ok })).toHaveLength(2);
       await sb.remove('w', { signal: ok });
       expect(await sb.snapshot({ signal: ok })).toBeInstanceOf(Uint8Array);
+      // The oracle: this very Node — `fs.promises.readFile` (its validator), `execFile` for a
+      // signal-shaped object without `addEventListener` (it subscribes, as here).
+      const node = async (bad: unknown): Promise<Record<string, unknown>> => {
+        try {
+          if (typeof bad === 'object' && bad !== null && 'aborted' in bad)
+            execFile(process.execPath, ['-e', ''], { signal: bad as AbortSignal }, () => {});
+          else await readFile(fileURLToPath(import.meta.url), { signal: bad as AbortSignal });
+          return {};
+        } catch (e) {
+          const { name, code, message } = e as Record<string, unknown>;
+          return { name, code, message };
+        }
+      };
       for (const bad of ['x', 1, null, {}, { aborted: false }]) {
+        const expected = await node(bad);
+        expect(expected.name, String(bad)).toBe('TypeError');
         const ops = [
           sb.exec('m.js', { signal: bad }),
           sb.writeFile('w', 'x', { signal: bad }),
@@ -185,12 +217,18 @@ describe('the signal option', () => {
           sb.remove('m.js', { signal: bad }),
           sb.snapshot({ signal: bad }),
         ];
-        for (const op of ops)
-          expect(await failure(op), String(bad)).toMatchObject({
-            code: 'ERR_INVALID_ARG_TYPE',
-            message: 'The "options.signal" property must be an instance of AbortSignal',
-          });
+        for (const op of ops) expect(await failure(op), String(bad)).toMatchObject(expected);
       }
+      // A signal-shaped object already aborted: Node's readFile takes it as aborted.
+      const shaped = { aborted: true, reason: 'r' };
+      expect(await failure(sb.exec('m.js', { signal: shaped }))).toMatchObject({
+        name: 'AbortError',
+        code: 'ABORT_ERR',
+        cause: 'r',
+      });
+      expect(
+        await failure(readFile(fileURLToPath(import.meta.url), { signal: shaped as never })),
+      ).toMatchObject({ name: 'AbortError', code: 'ABORT_ERR', cause: 'r' });
       expect(await names(sb)).toEqual(['m.js']);
       for (const op of [
         sb.writeFile('w', 'x', { sinal: ok } as Signalled),
@@ -279,4 +317,49 @@ describe('host ops: aborted at the call or while queued → AbortError, no effec
       }
     });
   }
+});
+
+describe('a consumer listener that stops the abort event does not stop the cancel (as Node)', () => {
+  it('the run in flight and an op queued behind it are cancelled; execFile on the same signal too', async () => {
+    const sb = await createSandbox();
+    try {
+      await sb.writeFile('main.js', 'for (;;) {}');
+      const c = new AbortController();
+      c.signal.addEventListener('abort', (e) => e.stopImmediatePropagation());
+      const run = failure(sb.exec('main.js', { signal: c.signal, timeoutMs: 5000 }));
+      const queued = failure(sb.writeFile('w', 'x', { signal: c.signal }));
+      const node = new Promise<unknown>((resolve) =>
+        execFile(
+          process.execPath,
+          ['-e', 'setTimeout(() => {}, 5000)'],
+          { signal: c.signal },
+          resolve,
+        ),
+      );
+      await sleep(200);
+      const at = performance.now();
+      c.abort();
+      expect(await run).toMatchObject({ name: 'AbortError', code: 'ABORT_ERR' });
+      expect(performance.now() - at).toBeLessThan(50);
+      expect(await queued).toMatchObject({ name: 'AbortError', code: 'ABORT_ERR' });
+      expect(await node).toMatchObject({ name: 'AbortError', code: 'ABORT_ERR' });
+      expect(await names(sb)).toEqual(['main.js']);
+    } finally {
+      await sb.destroy();
+    }
+  });
+});
+
+describe('exec options are read at the call', () => {
+  it('`args: null` is ERR_INVALID_ARG_TYPE, as an args that is not an array', async () => {
+    const sb = await createSandbox();
+    try {
+      await sb.writeFile('m.js', '');
+      expect(await failure(sb.exec('m.js', { args: null }))).toMatchObject({
+        code: 'ERR_INVALID_ARG_TYPE',
+      });
+    } finally {
+      await sb.destroy();
+    }
+  });
 });
