@@ -100,9 +100,11 @@ const WORKBENCH_COMPILER_OUTPUTS = Object.freeze({
     bytes: 4_893_418,
     sha256: '39be666ac003c7361e9fbcd88abdda1ed51052350ade9b57b4d2716f1e296498',
   },
+  // Pinned without its leading sibling-chunk imports (`compilerOutputPin`).
   'typescript-worker.js': {
     bytes: 10_022_034,
     sha256: '86ab8d3db8bffe24d00b9404afddcdc51e4b5d5142fcff63cc80e81ee7fff842',
+    siblingImports: true,
   },
 });
 const WORKBENCH_WASM_OUTPUTS = Object.freeze({
@@ -232,40 +234,55 @@ function outputFiles(root) {
   return files;
 }
 
-// ADR-0391 §Corrections 2026-11-24: runtime edits rename, add or drop the output's
+// ADR-0391 §Corrections 2026-11-24: runtime edits rename, add or drop the worker's
 // leading sibling-chunk imports and rename hashed sibling specifiers; nothing else.
-const SIBLING_CHUNK_IMPORT = /import (?:\{([^}]*)\} from )?("\.\/chunk-[A-Z0-9]{8}\.js");\n/y;
-const HASHED_SIBLING_NAME = /(?<="\.\/[a-z][a-z-]*-)[A-Z0-9]{8}(?=\.js")/gu;
-const IDENTIFIER = /^[A-Za-z_$][\w$]*$/u;
+// esbuild's emitted forms only (dist/assets, main 841fa5300); an alias import
+// (`a as b`, other chunks only) stays pinned.
+const IDENTIFIER = '[A-Za-z_$][\\w$]*';
+const SIBLING_CHUNK_IMPORT = new RegExp(
+  `import (?:\\{\\n((?:  ${IDENTIFIER},\\n)*  ${IDENTIFIER})\\n\\} from )?"\\./(chunk-[A-Z0-9]{8}\\.js)";\\n`,
+  'y',
+);
+const HASHED_SIBLING = /"\.\/([a-z][a-z-]*-)([A-Z0-9]{8})\.js"/gu;
 
 /**
- * Pin of an exempt compiler output (ADR-0391): the output without its leading
- * sibling-chunk imports, sibling hashes zeroed. A leading import is dropped only
- * if unique and every binding is used in the pinned rest — no unpinned bytes.
+ * Pin of an exempt compiler output (ADR-0391): whole bytes, or — given the built
+ * sibling names — the output without its leading sibling-chunk imports, built
+ * sibling hashes zeroed. A leading import is dropped only for a built sibling,
+ * once, each binding once and used in the pinned rest: bounds what the unpinned
+ * header can carry to tokens of the pinned body, not a check of linkage.
  */
-export function compilerOutputPin(bytes) {
-  const text = bytes.toString('latin1');
-  const imports = [];
-  const seen = new Set();
-  SIBLING_CHUNK_IMPORT.lastIndex = 0;
-  let match = SIBLING_CHUNK_IMPORT.exec(text);
-  while (match !== null) {
-    const names = match[1]?.split(',').map((name) => name.trim()) ?? [];
-    const keys = [match[2], ...names];
-    if (keys.some((key) => seen.has(key)) || !names.every((name) => IDENTIFIER.test(name))) break;
-    for (const key of keys) seen.add(key);
-    imports.push({ start: match.index, end: SIBLING_CHUNK_IMPORT.lastIndex, names });
-    match = SIBLING_CHUNK_IMPORT.exec(text);
+export function compilerOutputPin(bytes, siblings = null) {
+  let pinned = bytes;
+  if (siblings !== null) {
+    const text = bytes.toString('latin1');
+    const imports = [];
+    const seen = new Set();
+    SIBLING_CHUNK_IMPORT.lastIndex = 0;
+    let match = SIBLING_CHUNK_IMPORT.exec(text);
+    while (match !== null) {
+      const names = match[1]?.split(',\n').map((name) => name.slice(2)) ?? [];
+      const keys = [match[2], ...names];
+      if (!siblings.has(match[2]) || keys.some((key) => seen.has(key))) break;
+      for (const key of keys) seen.add(key);
+      imports.push({ start: match.index, end: SIBLING_CHUNK_IMPORT.lastIndex, names });
+      match = SIBLING_CHUNK_IMPORT.exec(text);
+    }
+    const headerEnd = imports.at(-1)?.end ?? 0;
+    const rest = text.slice(headerEnd);
+    const unused = imports.findIndex(({ names }) =>
+      names.some(
+        (name) => !new RegExp(`(?<![\\w$])${name.replaceAll('$', '\\$')}(?![\\w$])`).test(rest),
+      ),
+    );
+    const start = unused === -1 ? headerEnd : imports[unused].start;
+    const body = text
+      .slice(start)
+      .replace(HASHED_SIBLING, (literal, name, hash) =>
+        siblings.has(`${name}${hash}.js`) ? `"./${name}00000000.js"` : literal,
+      );
+    pinned = Buffer.from(body, 'latin1');
   }
-  const headerEnd = imports.at(-1)?.end ?? 0;
-  const rest = text.slice(headerEnd);
-  const unused = imports.findIndex(({ names }) =>
-    names.some(
-      (name) => !new RegExp(`(?<![\\w$])${name.replaceAll('$', '\\$')}(?![\\w$])`, 'u').test(rest),
-    ),
-  );
-  const start = unused === -1 ? headerEnd : imports[unused].start;
-  const pinned = Buffer.from(text.slice(start).replace(HASHED_SIBLING_NAME, '00000000'), 'latin1');
   return { bytes: pinned.byteLength, sha256: createHash('sha256').update(pinned).digest('hex') };
 }
 
@@ -278,6 +295,11 @@ export function evaluateEsbuildBundleInventory(
   if (files === null) return ['build outputs missing; run pnpm build:libs'];
   const violations = [];
   const generatedClients = [];
+  const siblings = new Set(
+    files
+      .filter((path) => path.startsWith(WORKBENCH_ASSET_ROOT))
+      .map((path) => path.slice(WORKBENCH_ASSET_ROOT.length)),
+  );
   for (const path of files) {
     const bytes = readOutput(path);
     const assetName = path.startsWith(WORKBENCH_ASSET_ROOT)
@@ -289,7 +311,10 @@ export function evaluateEsbuildBundleInventory(
     if (path.endsWith('.wasm')) violations.push(`${path}: runtime wasm shipped in package output`);
     // Only the two exact compiler artifacts bypass the original carrier ceiling.
     const compiler = assetName === null ? undefined : compilerOutputs[assetName];
-    const pin = compiler === undefined ? undefined : compilerOutputPin(bytes);
+    const pin =
+      compiler === undefined
+        ? undefined
+        : compilerOutputPin(bytes, compiler.siblingImports === true ? siblings : null);
     if (
       bytes.byteLength > MAX_PUBLISHED_OUTPUT_BYTES &&
       (pin === undefined || compiler.bytes !== pin.bytes || compiler.sha256 !== pin.sha256)

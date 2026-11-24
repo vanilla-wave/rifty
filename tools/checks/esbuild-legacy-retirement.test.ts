@@ -53,6 +53,7 @@ const SIBLINGS = [
   'chunk-ONZOAA7V.js',
   'chunk-ABCDEFGH.js',
   'chunk-ABC.js',
+  'module-loader-ABC.js',
   'module-loader-SE2E5KRJ.js',
   'module-loader-A575V22B.js',
 ];
@@ -133,7 +134,7 @@ describe('esbuild carrier retirement', () => {
       // Bindings: identifiers used in the pinned body, each once.
       [[...WORKER_HEADER, 'import {\n  payloadAAAA\n} from "./chunk-ABCDEFGH.js";\n'], WORKER_BODY],
       [[...WORKER_HEADER, 'import {\n  __toESM\n} from "./chunk-ABCDEFGH.js";\n'], WORKER_BODY],
-      [[...WORKER_HEADER, 'import {\n  ts-k\n} from "./chunk-ABCDEFGH.js";\n'], WORKER_BODY],
+      [[...WORKER_HEADER, 'import {\n  ts.k\n} from "./chunk-ABCDEFGH.js";\n'], WORKER_BODY],
       [[...WORKER_HEADER, 'import {\n  a as ts\n} from "./chunk-ABCDEFGH.js";\n'], WORKER_BODY],
     ] as const;
     const admitted = mutants.flatMap(([header, body], index) =>
