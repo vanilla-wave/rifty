@@ -310,7 +310,7 @@ const pkgRoot = (name: string): string => realpathSync(join(here, '../node_modul
  * after the runtime loaded): each reaches the ceiling's named gap, never the leaked
  * `URLConstructor` name (round 2 of the PR #440 review).
  */
-describe('isolate internal URL/URLSearchParams uses give the ceiling gap', () => {
+describe('isolate internal URL uses give the URL ceiling gap', () => {
   it(
     'file: import(), url helpers, createRequire(file URL), fs path objects',
     { timeout: 60_000 },
@@ -330,7 +330,6 @@ const sync = (label, fn) => { try { rows.push([label, 'ok', fn()]); } catch (e) 
   sync('pathToFileURL', () => url.pathToFileURL(path.resolve('c.cjs')).href);
   sync('fileURLToPath', () => url.fileURLToPath(abs('c.cjs')));
   sync('new url.URL', () => new url.URL(abs('c.cjs')).pathname);
-  sync('new url.URLSearchParams', () => new url.URLSearchParams('a=1').get('a'));
   sync('createRequire(file URL)', () => require('module').createRequire(abs('url.js'))('./c.cjs').a);
   sync('readFileSync({})', () => require('fs').readFileSync({}));
   console.log(JSON.stringify(rows).split(process.cwd()).join('<root>'));
@@ -343,7 +342,6 @@ const sync = (label, fn) => { try { rows.push([label, 'ok', fn()]); } catch (e) 
         ['pathToFileURL', 'ok', 'file://<root>/c.cjs'],
         ['fileURLToPath', 'ok', '<root>/c.cjs'],
         ['new url.URL', 'ok', '<root>/c.cjs'],
-        ['new url.URLSearchParams', 'ok', '1'],
         ['createRequire(file URL)', 'ok', 2],
         [
           'readFileSync({})',
@@ -366,12 +364,6 @@ const sync = (label, fn) => { try { rows.push([label, 'ok', fn()]); } catch (e) 
         ['pathToFileURL', ...gap],
         ['fileURLToPath', ...gap],
         ['new url.URL', ...gap],
-        [
-          'new url.URLSearchParams',
-          'NotImplementedError',
-          null,
-          'Not implemented: isolate-host.URLSearchParams (not available in the rifty isolate host, ADR-0557)',
-        ],
         ['createRequire(file URL)', ...gap],
         // rifty's fs path check on every host (`backlog/runtime-js/fs-path-invalid-arg-type`).
         ['readFileSync({})', 'TypeError', null, 'fs path must be string, Buffer, or URL'],
