@@ -32,6 +32,8 @@ const c: ParityCase = {
     row('null proto own toString', s(Object.assign(Object.create(null), { toString() { return 'np'; } })));
     row('transparent proxy toString', s(new Proxy({ toString() { return 'px'; } }, {})));
     row('transparent proxy plain', s(new Proxy({ a: 1 }, {})));
+    row('transparent proxy toString not a function', s(new Proxy({ toString: 1 }, {})));
+    row('transparent proxy null proto own toString', s(new Proxy(Object.assign(Object.create(null), { toString() { return 'np'; } }), {})));
     for (const n of [-0, 0, 1.5, NaN, -Infinity, 1e21]) row('number ' + Object.is(n, -0), s(n));
     for (const v of [10n, -10n, 'str', Symbol('sy'), null, undefined, true]) row(typeof v, s(v));
     row('function', s(function f() { return 1; }));
@@ -48,6 +50,18 @@ const c: ParityCase = {
     row('Error', s(Object.assign(new Error('m'), { stack: 'Error: m\\n    at x' })));
     row('no argument', () => util.format('x %s y'));
     row('two %s one argument', () => util.format('%s:%s', 'a'));
+    // Node reads its primordials: a guest's replacements do not change the branch.
+    const has = Set.prototype.has, is = Object.is;
+    let patched;
+    try {
+      Set.prototype.has = () => true;
+      Object.is = () => false;
+      patched = [util.format('%s', new A()), util.format('%s', -0)];
+    } finally {
+      Set.prototype.has = has;
+      Object.is = is;
+    }
+    row('patched Set.prototype.has, Object.is', () => patched.join(' '));
     row('formatWithOptions depth', () => util.formatWithOptions({ depth: 5 }, '%s', { a: { b: 1 } }));
     // Built-in = a constructor name Node's inspect.js saw on globalThis at load (V8's own
     // globals, not Buffer/URL): a user class so named and with its own toString is inspected.
