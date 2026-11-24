@@ -4,7 +4,6 @@ import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { legalComment } from '../../publishing/legal-comment.mjs';
 import {
   ESBUILD_RUNTIME_PATCH_ANCHORS,
   ESBUILD_RUNTIME_PATCH_IDS,
@@ -68,11 +67,6 @@ interface NativeValidationLocations {
 const policyUrl = new URL('../esbuild-runtime-policy.json', import.meta.url);
 const manifestUrl = new URL('../generated/esbuild-runtime-manifest.json', import.meta.url);
 const outputUrl = new URL('../src/runtime/generated/esbuild-runtime.js', import.meta.url);
-const licenseUrl = new URL('../src/runtime/generated/esbuild.LICENSE', import.meta.url);
-// browser.js embeds Go's lib/wasm/wasm_exec.js; esbuild.wasm 0.28.0 is built by go1.26.1
-// (its version string). The Go LICENSE is not in the esbuild-wasm package: pinned copy.
-const goLicenseInputUrl = new URL('../go1.26.1.LICENSE', import.meta.url);
-const goLicenseUrl = new URL('../src/runtime/generated/go.LICENSE', import.meta.url);
 const policy = JSON.parse(readFileSync(policyUrl, 'utf8')) as RuntimePolicy;
 const require = createRequire(import.meta.url);
 const lines = (...parts: readonly string[]): string => parts.join('\n');
@@ -400,12 +394,7 @@ function requiredValidationLocation(
   return location;
 }
 
-function derive(): {
-  readonly manifest: string;
-  readonly output: string;
-  readonly license: string;
-  readonly goLicense: string;
-} {
+function derive(): { readonly manifest: string; readonly output: string } {
   assertEqual('policy schema', policy.schema, 1);
   assertEqual('policy/source version', policy.version, '0.28.0');
   assertEqual(
@@ -447,18 +436,7 @@ function derive(): {
     replacement: replacementFor(anchor, validationLocations),
   }));
   const generated = applyExactTextPatches(source, patches);
-  const license = readFileSync(join(wasmRoot, 'LICENSE.md'), 'utf8');
-  const notice = legalComment(
-    license,
-    `${policy.source.package} ${policy.version} ${policy.source.member} (MIT), patched by rifty (tools/shadow-registry/tools/generate-esbuild-runtime.ts).`,
-  );
-  assertEqual('esbuild.wasm Go toolchain', wasm.includes(Buffer.from('go1.26.1')), true);
-  const goLicense = readFileSync(goLicenseInputUrl, 'utf8');
-  const goNotice = legalComment(
-    goLicense,
-    'Go 1.26.1 lib/wasm/wasm_exec.js (BSD-3-Clause), embedded by esbuild-wasm.',
-  );
-  const output = `${notice}${goNotice}${generated.output}\n`;
+  const output = `${generated.output}\n`;
   const manifest = {
     schema: 1,
     source: {
@@ -487,7 +465,7 @@ function derive(): {
       sha256: sha256(output),
     },
   };
-  return { output, license, goLicense, manifest: `${JSON.stringify(manifest, null, 2)}\n` };
+  return { output, manifest: `${JSON.stringify(manifest, null, 2)}\n` };
 }
 
 function checkFile(path: string, expected: string): void {
@@ -507,16 +485,12 @@ function main(): void {
   if (mode === '--check') {
     checkFile(outputPath, derived.output);
     checkFile(manifestPath, derived.manifest);
-    checkFile(fileURLToPath(licenseUrl), derived.license);
-    checkFile(fileURLToPath(goLicenseUrl), derived.goLicense);
     return;
   }
   mkdirSync(dirname(outputPath), { recursive: true });
   mkdirSync(dirname(manifestPath), { recursive: true });
   writeFileSync(outputPath, derived.output);
   writeFileSync(manifestPath, derived.manifest);
-  writeFileSync(fileURLToPath(licenseUrl), derived.license);
-  writeFileSync(fileURLToPath(goLicenseUrl), derived.goLicense);
 }
 
 main();
