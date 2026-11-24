@@ -229,6 +229,21 @@ run('https session cache disabled', () => {
   a._cacheSession('a', 1);
   return JSON.stringify(a._sessionCache);
 });
+for (const [label, make] of [
+  ['empty', () => new http.Agent({ proxyEnv: {} })],
+  ['other protocol', () => new http.Agent({ proxyEnv: { https_proxy: 'http://p:1' } })],
+  ['ftp proxy', () => new http.Agent({ proxyEnv: { http_proxy: 'ftp://p' } })],
+  ['protocol x:', () => new http.Agent({ protocol: 'x:', proxyEnv: { http_proxy: 'http://p' } })],
+  ['https, http proxy only', () => new https.Agent({ proxyEnv: { HTTP_PROXY: 'http://p' } })],
+  ['crlf', () => new http.Agent({ proxyEnv: { http_proxy: 'http://p\n' } })],
+])
+  run(`proxyEnv ${label}`, () => {
+    const a = make();
+    return Object.getOwnPropertySymbols(a)
+      .filter((s) => String(s) === 'Symbol(kProxyConfig)')
+      .map((s) => String(a[s]))
+      .join();
+  });
 run('keylog hook', () => {
   const a = new http.Agent();
   const before = a.listenerCount('newListener');

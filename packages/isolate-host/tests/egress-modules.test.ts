@@ -75,7 +75,17 @@ const LOUD: readonly (readonly [string, string])[] = [
   ['new http.Agent().keepSocketAlive({})', 'http.Agent.keepSocketAlive'],
   ['new http.Agent().reuseSocket({}, {})', 'http.Agent.reuseSocket'],
   ["new http.Agent().emit('free', {}, {})", 'http.Agent.free'],
-  ['new http.Agent({ proxyEnv: {} })', 'http.Agent.proxyEnv'],
+  ["new http.Agent({ proxyEnv: { HTTP_PROXY: 'http://proxy.invalid:1' } })", 'http.Agent.proxyEnv'],
+  [
+    "new https.Agent({ proxyEnv: { https_proxy: 'https://proxy.invalid' } })",
+    'http.Agent.proxyEnv',
+  ],
+  ['function S() { http.Server.call(this) } util.inherits(S, http.Server); new S()', 'http.Server'],
+  [
+    'function R(req) { http.ServerResponse.call(this, req) } util.inherits(R, http.ServerResponse); new R({})',
+    'http.ServerResponse',
+  ],
+  ['function K() { net.Socket.call(this) } util.inherits(K, net.Socket); new K()', 'net.Socket'],
   ["https.request('https://example.com/')", 'https.request'],
   ["https.get('https://example.com/')", 'https.get'],
   ['https.createServer()', 'https.createServer'],
@@ -131,10 +141,10 @@ describe('network use is a named gap; load, reads and subclassing are not (Accep
 
   it('each network member throws NotImplementedError naming itself, at use', async () => {
     const result = await runCode(`
-      const http = require('http'), https = require('https'), net = require('net');
+      const http = require('http'), https = require('https'), net = require('net'), util = require('util');
       const out = [];
       for (const [expr, feature] of ${JSON.stringify(LOUD)}) {
-        try { new Function('http', 'https', 'net', expr)(http, https, net); out.push(expr + ' REACHED'); }
+        try { new Function('http', 'https', 'net', 'util', expr)(http, https, net, util); out.push(expr + ' REACHED'); }
         catch (e) {
           const ok = e instanceof Error && e.name === 'NotImplementedError' &&
             e.message.startsWith('Not implemented: isolate-host.' + feature + ' (');

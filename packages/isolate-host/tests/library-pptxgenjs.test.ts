@@ -5,7 +5,7 @@
  * `node <file> <out>` on both sides. `fixtures/pptx/pptx.cjs` is the library probe's
  * canonical `gen/pptx.cjs`, byte for byte; no `unhandledRejection` listener, no
  * `process.release` change. Output: every part of the package equal to Node's once
- * ISO timestamps (`docProps/core.xml`) are masked, nested packages (chart data) by part.
+ * the ISO timestamps of `docProps/core.xml` are masked, nested packages (chart data) by part.
  */
 import { spawnSync } from 'node:child_process';
 import {
@@ -125,8 +125,10 @@ async function parts(bytes: Uint8Array, prefix = ''): Promise<Record<string, str
     if (entry.dir) continue;
     const data = await entry.async('nodebuffer');
     if (/\.(xlsx|docx|pptx|zip)$/.test(name)) Object.assign(out, await parts(data, `${name}!`));
-    else if (/\.(xml|rels|vml)$/.test(name)) out[prefix + name] = mask(data.toString('utf8'));
-    else out[prefix + name] = data.toString('base64');
+    else if (/\.(xml|rels|vml)$/.test(name)) {
+      const text = data.toString('utf8');
+      out[prefix + name] = name === 'docProps/core.xml' ? mask(text) : text;
+    } else out[prefix + name] = data.toString('base64');
   }
   return out;
 }
