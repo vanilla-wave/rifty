@@ -55,7 +55,7 @@ class a1); the captured-at-load table (runtime-js/isolate-web-globals-captured-a
 `isolate-host.ReadableStream`; `pptx.write()` → `blob is not supported by this platform`
 (library probe); `main.mjs` → `NotImplementedError('isolate-host.esm')` (seam-esm/);
 `url.resolve('https://example.com/a','b')` → `'b'`, 1 037 of 1 313 Node url-test calls differ in
-the guest (url-legacy/). -->
+the guest (url-legacy probe, branch `t3/node-url-legacy-port`). -->
 
 - I1. `URL`, `URLSearchParams`, `Blob`, `File` and their static members behave as Node v24.16.0's
   in the guest on fixed external corpora: WPT `urltestdata.json`/`setters_tests.json` as vendored

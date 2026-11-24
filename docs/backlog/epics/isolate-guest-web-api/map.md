@@ -2,19 +2,20 @@
 
 Probes (2026-11-24, `origin/main` 1c00c6292, Node v24.16.0): `reference/` — `sources-native`
 (URL, Blob, structuredClone sources), `sources-js` (streams, EventTarget, Abort sources), `seam-esm`
-(load-order seam, ESM), `enumerate` (builtin-export identity sweep, `catch` pass), `url-legacy`
-(legacy `node:url`). Each README holds its command, results and «not verified».
+(load-order seam, ESM), `enumerate` (builtin-export identity sweep, `catch` pass); the legacy `node:url` probe moved to
+branch `t3/node-url-legacy-port` (under `runtime-js/reference/` there). Each README holds its command, results and «not verified».
 
 ## Items
 
 1. `distribution/isolate-guest-web-api-acceptance` — draft — the acceptance carrier: goal §User
    scenario as one `it.fails` sandbox case against live `node main.mjs` (I6); its contract waits
    for questions 1–2.
-2. `runtime-js/node-url-legacy-api-port` — **ready** — Node's legacy `url`/`querystring` generated
-   from pinned Node sources on every host; ADR first (I5). Independent of the `URL` source. Its
-   ADR is the first owner of the shared Node-source mechanism (vendored pinned files, generator
-   with edit anchors, drift check, the `primordials`/`ERR_*`/validators binding) and of the
-   `tr46` 6.0.0 pin; later units (4, 7) extend it or supersede it by ADR.
+2. `runtime-js/node-url-legacy-api-port` — **in progress, branch `t3/node-url-legacy-port`**
+   (contract and its probe live there, probe under `runtime-js/reference/` there) —
+   Node's legacy `url`/`querystring` generated from pinned Node sources on every host (I5). Its ADR
+   is the first owner of the shared Node-source mechanism (vendored pinned files, generator with edit
+   anchors, drift check, the `primordials`/`ERR_*`/validators binding) and of the `tr46` 6.0.0 pin;
+   later units (4, 7) extend it or supersede it by ADR. `epic:` returns when both branches meet main.
 3. `runtime-js/isolate-web-globals-captured-at-load` — draft — the seam: real globals and the
    remaining ceiling throwers both installed before the runtime loads; `crypto.subtle` and
    `MessageChannel` read lazily in runtime-js; the identity sweep as a test (I2, I3).
