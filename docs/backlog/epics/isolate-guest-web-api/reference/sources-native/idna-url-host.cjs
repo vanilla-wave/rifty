@@ -30,7 +30,7 @@ let differIdn = 0;
 const examples = [];
 for (const h of sources) {
   total++;
-  const isIdn = /[^\x00-\x7f]/.test(h) || /(^|\.)xn--/i.test(h);
+  const isIdn = [...h].some((c) => c.codePointAt(0) > 0x7f) || /(^|\.)xn--/i.test(h);
   if (isIdn) idn++;
   const a = host(URL, h);
   const b = host(WURL, h);
