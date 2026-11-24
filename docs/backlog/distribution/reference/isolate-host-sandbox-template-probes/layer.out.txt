@@ -1,0 +1,35 @@
+node v24.16.0, isolated-vm 7.0.2, darwin/arm64
+
+## T1: 296 files, 1.0 MB; consumer full-state encode/decode ms {"semver":{"encodeFull":3.2,"decodeFull":2.9},"many":{"encodeFull":1.9,"decodeFull":2.9}}
+{"tpl":"T1","w":"semver","arm":"full","msMedian":{"boot":8.6,"restore":4.6,"run":57.8,"capture":2.6,"total":73.9},"heapMiB":{"usedAfterRun":6.4,"external":17,"totalAfterCapture":16},"minMemoryLimitMiB":19,"endStateBytes":1067190}
+{"tpl":"T1","w":"semver","arm":"views","msMedian":{"boot":9.1,"restore":2.8,"run":59.8,"capture":1.1,"total":72.7},"heapMiB":{"usedAfterRun":6.4,"external":15,"totalAfterCapture":15.5},"minMemoryLimitMiB":19,"endStateBytes":527}
+{"tpl":"T1","w":"semver","arm":"lazy","msMedian":{"boot":9,"restore":0.8,"run":77.1,"capture":0.4,"total":87.4},"heapMiB":{"usedAfterRun":7.3,"external":14,"totalAfterCapture":15.5},"minMemoryLimitMiB":19,"endStateBytes":527,"bridge":{"stat":870,"read":165,"readBytes":469796,"readdir":0}}
+{"tpl":"T1","w":"semver","arm":"worker","msMedian":{"boot":9.1,"restore":0.2,"run":75.6,"capture":0.1,"total":85.1},"heapMiB":{"usedAfterRun":6.4,"external":14,"totalAfterCapture":15.2},"minMemoryLimitMiB":19,"endStateBytes":527,"bridge":{"stat":882,"read":168,"readBytes":470207,"readdir":0}}
+{"tpl":"T1","w":"many","arm":"full","msMedian":{"boot":8.5,"restore":4.5,"run":18.6,"capture":5.5,"total":37.3},"heapMiB":{"usedAfterRun":5.6,"external":18.1,"totalAfterCapture":10.2},"minMemoryLimitMiB":19,"endStateBytes":2184122}
+{"tpl":"T1","w":"many","arm":"views","msMedian":{"boot":8.6,"restore":2.8,"run":18.6,"capture":7.3,"total":37.1},"heapMiB":{"usedAfterRun":4.4,"external":16.1,"totalAfterCapture":14.2},"minMemoryLimitMiB":19,"endStateBytes":1117459}
+{"tpl":"T1","w":"many","arm":"lazy","msMedian":{"boot":8.5,"restore":0.7,"run":21.1,"capture":4.3,"total":34.5},"heapMiB":{"usedAfterRun":4.3,"external":15.1,"totalAfterCapture":10},"minMemoryLimitMiB":19,"endStateBytes":1117459,"bridge":{"stat":8,"read":0,"readBytes":0,"readdir":0}}
+{"tpl":"T1","w":"many","arm":"worker","msMedian":{"boot":8.7,"restore":0.1,"run":42.1,"capture":2.7,"total":53.7},"heapMiB":{"usedAfterRun":4.4,"external":14.2,"totalAfterCapture":9},"minMemoryLimitMiB":19,"endStateBytes":1117459,"bridge":{"stat":2018,"read":1003,"readBytes":1024921,"readdir":0}}
+
+## T95: 23654 files, 88.8 MB; consumer full-state encode/decode ms {"semver":{"encodeFull":151.5,"decodeFull":177.9},"pdf":{"encodeFull":152.4,"decodeFull":181.1},"many":{"encodeFull":160.7,"decodeFull":182.3}}
+{"tpl":"T95","w":"semver","arm":"full","msMedian":{"boot":9,"restore":191.4,"run":55.5,"capture":157.7,"total":419},"heapMiB":{"usedAfterRun":33.8,"external":190.2,"totalAfterCapture":55.5},"minMemoryLimitMiB":215,"endStateBytes":95970091}
+{"tpl":"T95","w":"semver","arm":"views","msMedian":{"boot":8.7,"restore":93.5,"run":57,"capture":38.7,"total":197.7},"heapMiB":{"usedAfterRun":17,"external":98.7,"totalAfterCapture":42.2},"minMemoryLimitMiB":123,"endStateBytes":527}
+{"tpl":"T95","w":"semver","arm":"lazy","msMedian":{"boot":8.6,"restore":0.7,"run":70.9,"capture":0.4,"total":80.5},"heapMiB":{"usedAfterRun":9,"external":14,"totalAfterCapture":15.5},"minMemoryLimitMiB":19,"endStateBytes":527,"bridge":{"stat":870,"read":165,"readBytes":469796,"readdir":0}}
+{"tpl":"T95","w":"semver","arm":"worker","msMedian":{"boot":8.7,"restore":0.1,"run":68.9,"capture":0.1,"total":77.8},"heapMiB":{"usedAfterRun":6.2,"external":14,"totalAfterCapture":15.2},"minMemoryLimitMiB":19,"endStateBytes":527,"bridge":{"stat":882,"read":168,"readBytes":470207,"readdir":0}}
+{"tpl":"T95","w":"pdf","arm":"full","msMedian":{"boot":8.9,"restore":185.7,"run":330.8,"capture":154.2,"total":676.1},"heapMiB":{"usedAfterRun":21.7,"external":190.6,"totalAfterCapture":52},"minMemoryLimitMiB":219,"endStateBytes":95971164}
+{"tpl":"T95","w":"pdf","arm":"views","msMedian":{"boot":8.6,"restore":94.7,"run":321.3,"capture":38.6,"total":465.5},"heapMiB":{"usedAfterRun":27.9,"external":99.1,"totalAfterCapture":50.7},"minMemoryLimitMiB":123,"endStateBytes":1600}
+{"tpl":"T95","w":"pdf","arm":"lazy","msMedian":{"boot":8.8,"restore":0.7,"run":422.1,"capture":0.4,"total":432},"heapMiB":{"usedAfterRun":13.8,"external":15.4,"totalAfterCapture":29},"minMemoryLimitMiB":23,"endStateBytes":1600,"bridge":{"stat":6192,"read":915,"readBytes":7051569,"readdir":0}}
+{"tpl":"T95","w":"pdf","arm":"worker","msMedian":{"boot":8.7,"restore":0.1,"run":395,"capture":0.1,"total":403.9},"heapMiB":{"usedAfterRun":13.9,"external":15.4,"totalAfterCapture":29},"minMemoryLimitMiB":23,"endStateBytes":1599,"bridge":{"stat":6204,"read":918,"readBytes":7052685,"readdir":0}}
+{"tpl":"T95","w":"many","arm":"full","msMedian":{"boot":8.7,"restore":185.6,"run":18.3,"capture":154.2,"total":366.5},"heapMiB":{"usedAfterRun":26.6,"external":191.3,"totalAfterCapture":53.5},"minMemoryLimitMiB":215,"endStateBytes":97087023}
+{"tpl":"T95","w":"many","arm":"views","msMedian":{"boot":8.7,"restore":95.2,"run":19.1,"capture":42.5,"total":167},"heapMiB":{"usedAfterRun":15.9,"external":99.8,"totalAfterCapture":41.2},"minMemoryLimitMiB":123,"endStateBytes":1117459}
+{"tpl":"T95","w":"many","arm":"lazy","msMedian":{"boot":9.2,"restore":0.9,"run":22.3,"capture":4.5,"total":36.7},"heapMiB":{"usedAfterRun":4.3,"external":15.1,"totalAfterCapture":10},"minMemoryLimitMiB":19,"endStateBytes":1117459,"bridge":{"stat":8,"read":0,"readBytes":0,"readdir":0}}
+{"tpl":"T95","w":"many","arm":"worker","msMedian":{"boot":9.1,"restore":0.1,"run":39.2,"capture":2.8,"total":51.4},"heapMiB":{"usedAfterRun":4.5,"external":14.2,"totalAfterCapture":9.2},"minMemoryLimitMiB":19,"endStateBytes":1117459,"bridge":{"stat":2018,"read":1003,"readBytes":1024921,"readdir":0}}
+
+## concurrency: 4 runs at once, T95
+{"w":"pdf","arm":"full","wallMedianMs":1053,"perRunMedianMs":966}
+{"w":"pdf","arm":"views","wallMedianMs":729,"perRunMedianMs":700}
+{"w":"pdf","arm":"lazy","wallMedianMs":787,"perRunMedianMs":773}
+{"w":"pdf","arm":"worker","wallMedianMs":684,"perRunMedianMs":672}
+{"w":"many","arm":"full","wallMedianMs":503,"perRunMedianMs":487}
+{"w":"many","arm":"views","wallMedianMs":213,"perRunMedianMs":207}
+{"w":"many","arm":"lazy","wallMedianMs":45,"perRunMedianMs":43}
+{"w":"many","arm":"worker","wallMedianMs":81,"perRunMedianMs":76}
