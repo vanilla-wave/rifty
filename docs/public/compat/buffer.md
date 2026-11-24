@@ -13,7 +13,7 @@ implemented (throws `NotImplementedError` or `TypeError`).
 | `Buffer.from(string, encoding?)` | ✅ | utf8 default; honors hex/base64/base64url/ascii/latin1/utf16le |
 | `Buffer.from(Uint8Array | array)` | ✅ | Copies input bytes, matching Node |
 | `Buffer.from(ArrayBuffer | SharedArrayBuffer, byteOffset?, length?)` | ✅ | Aliases the supplied store (ADR-0350); omitted `length` tracks resizable/growable stores, explicit `length` is fixed; coercion/bounds, detach, WASM growth, and cross-realm stores are tested |
-| `Buffer.alloc(size, fill?, encoding?)` | ✅ | Tiles encoded fill bytes; honors `encoding` for string fill |
+| `Buffer.alloc(size, fill?, encoding?)` | ⚠️ | Tiles encoded fill bytes; honors `encoding` for string fill. A negative `size` throws V8's `RangeError: Invalid typed array length` without `code` (Node `ERR_OUT_OF_RANGE`): `backlog/runtime-js/buffer-alloc-events-once-arg-errors` |
 | `Buffer.allocUnsafe(size)` | ✅ | Alias of `Buffer.alloc` semantics (no init guarantee deferred) |
 | `Buffer.concat(list, totalLength?)` | ✅ | |
 | `Buffer.byteLength(string, encoding?)` | ✅ | |
