@@ -28,5 +28,5 @@ this audit.
 REVERSIBLE - documentation and audit follow-up only. Dependency changes or release gates need their own task or
 ADR when proposed.
 
-Measured slice (2026-11-24): inlined npm code and copied `.wasm` in published bundles without notices —
-`docs/backlog/toolchain-build/bundled-npm-dependency-notices.md`.
+Measured slice (2026-11-24): code bundled into published files and its notices —
+`docs/backlog/toolchain-build/third-party-notices-in-published-files.md`.

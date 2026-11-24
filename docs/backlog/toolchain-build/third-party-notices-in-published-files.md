@@ -1,106 +1,87 @@
 ---
 area: toolchain-build
 status: ready
-title: Every published file carrying a generated or vendored third-party source carries that source's license notice
+title: Every published package that bundles third-party code ships one generated notices file listing it
 created: 2026-11-24
-why: undici, the TypeScript compiler + lib files and the esbuild runtime (with Go's wasm_exec.js) ship inside published @riftydev tarballs without their license text (MIT/Apache-2.0 require it); PR #444 adds Node's url/querystring the same way
-user_story: As a maintainer about to publish @riftydev packages, I want every copied upstream source to reach npm with its license, but today undici's `src/**/generated/undici.LICENSE` is not packed, the TypeScript compiler and esbuild runtime have no license file at all, the TypeScript lib files carry only a short header, and the guest build strips legal comments
-sources: [docs/adr/runtime-js/0541-run-node-fetch-classes-over-the-browser-i-o-boundary.md, docs/public/publishing.md]
-code: [tools/publishing/generate-fetch-classes.mjs, tools/publishing/generate-eval-compiler.mjs, tools/shadow-registry/tools/generate-esbuild-runtime.ts, packages/ts-language-service/scripts/vendor-ts-lib.mjs, packages/isolate-guest/scripts/build-guest.mjs, packages/isolate-host/scripts/build-runtime.mjs]
+why: bundlers inline npm packages and whole generated/vendored upstream files into published @riftydev tarballs without their licenses (MIT/ISC/BSD/Zlib/Apache-2.0 require them with every copy)
+user_story: As a maintainer about to publish @riftydev packages, I want each tarball to carry the licenses of the code bundled into it, but today workbench inlines 49 npm packages, the isolate guest 4, and undici/TypeScript/esbuild generated sources ship without any license text
+sources: [docs/adr/runtime-js/0541-run-node-fetch-classes-over-the-browser-i-o-boundary.md, docs/public/publishing.md, docs/backlog/distribution/dependency-license-audit.md]
+code: [tools/publishing/third-party-notices.mjs, tools/publishing/third-party-manifest.json, tools/checks/third-party-notices.mjs, tools/publishing/build-workbench-assets.mjs, packages/isolate-guest/scripts/build-guest.mjs, packages/isolate-host/scripts/build-runtime.mjs]
 ---
 
 ## Context
 
-Class: upstream code copied into the repo as a generated/vendored artifact
-(`<pkg>/**/generated/`, `<pkg>/vendor/`) and bundled into published files.
-Measured 2026-11-24 on main `841fa5300` after `pnpm build:libs`:
+Measured 2026-11-24 on main `841fa5300` (esbuild 0.28.0 metafile, tsup sourcemap
+`sources`):
 
-| source (license) | artifact | lands in (published) | notice there |
-|---|---|---|---|
-| undici 7.25.0 (MIT) | runtime-js `src/builtins/fetch/generated/classes.js` | runtime-js dist chunk, workbench `dist/assets` chunk | none (`undici.LICENSE` stays in `src`) |
-| TypeScript 5.9.3 compiler (Apache-2.0) | runtime-js `src/module-loader/generated/typescript-browser.js` | runtime-js chunk, workbench chunk, isolate-guest/-host `dist/guest.js` | short header only; guest: none (`legalComments:'none'`) |
-| TypeScript 5.9.3 lib `.d.ts` (Apache-2.0) | ts-language-service `vendor/lib-bundle.json` | `vendor/`, `dist/vendor/lib-bundle.json.js` | short header per file, no license text |
-| esbuild-wasm 0.28.0 (MIT) + embedded Go 1.26.1 `lib/wasm/wasm_exec.js` (BSD-3-Clause; Go version string in `esbuild.wasm`) | shadow-registry `src/runtime/generated/esbuild-runtime.js` | shadow-registry chunk, workbench chunk | none; Go's 3-line header survives only inside a string, its LICENSE text is not in the esbuild-wasm package |
-| Node v24.16.0 url/querystring (MIT), PR #444 | runtime-js `src/builtins/url-legacy/generated/legacy.js` | runtime-js, workbench, guest | `node.LICENSE` stays in `src` |
-
-Published without notice (npm, 2026-11-24): runtime-js 0.6.0–0.11.0, workbench
-0.1.0–0.11.0, shadow-registry 0.7.0–0.11.0, ts-language-service 0.1.0–0.11.0
-(re-release/deprecation: user decision, reported to the manager).
-
-License text, quoted:
-
-- MIT (undici, esbuild, Node): "The above copyright notice and this permission
-  notice shall be included in all copies or substantial portions of the Software."
-- Apache-2.0 §4 (TypeScript `LICENSE.txt`; its four paragraphs are unlettered,
-  letters (a)–(d) added here): "(a) You must give any other
-  recipients of the Work or Derivative Works a copy of this License; and (b) You
-  must cause any modified files to carry prominent notices stating that You
-  changed the files; and (c) You must retain, in the Source form of any
-  Derivative Works that You distribute, all copyright, patent, trademark, and
-  attribution notices from the Source form of the Work […]; and (d) If the Work
-  includes a "NOTICE" text file as part of its distribution, then any Derivative
-  Works that You distribute must include a readable copy of the attribution
-  notices contained within such NOTICE file […]".
-  `typescript@5.9.3` ships no `NOTICE` file; it ships `ThirdPartyNoticeText.txt`
-  ("The TypeScript software incorporates third party material from the projects
-  listed below" — DefinitelyTyped, Unicode, W3C …; the compiler's Unicode
-  identifier tables included). So, for compiler and lib files alike: (a) full
-  `LICENSE.txt` + `ThirdPartyNoticeText.txt`; (b) a change line on the
-  wrapped+minified compiler; (c) the Microsoft header stays.
-- BSD-3-Clause (Go): "Redistributions of source code must retain the above
-  copyright notice, this list of conditions and the following disclaimer."
-
-Inlined npm dependencies (workbench `dist/assets` 49 packages, guest 4) and
-copied `.wasm` (quickjs, sql.js) are the same legal class but a different
-mechanism (build graph, not a committed artifact): finding
-`docs/backlog/toolchain-build/bundled-npm-dependency-notices.md`.
+- tsup `dist/` of the 19 publishable packages inlines no npm package; it inlines
+  whole generated/vendored upstream files: runtime-js (undici 7.25.0
+  `fetch/generated/classes.js`, TypeScript 5.9.3 `module-loader/generated/typescript-browser.js`),
+  ts-language-service (TypeScript lib `vendor/lib-bundle.json`, also packed as is),
+  shadow-registry (esbuild-wasm 0.28.0 `runtime/generated/esbuild-runtime.js`,
+  embedding Go 1.26.1 `lib/wasm/wasm_exec.js`, BSD-3-Clause; Go's LICENSE is not
+  in esbuild-wasm).
+- workbench `dist/assets` (since 0.7.0): 49 npm packages (41 MIT, 3 Apache-2.0
+  — typescript, crc-32, clean-git-ref —, 2 ISC, 1 BSD-3-Clause, pako MIT AND
+  Zlib, sha.js MIT AND BSD-3-Clause), the three generated sources above, copies
+  of `quickjs.wasm` and `sql-wasm.wasm`. License files: 71 585 B.
+- isolate-guest `dist/guest.js` (unpublished): acorn, cjs-module-lexer,
+  quickjs-emscripten-core, @jitl/quickjs-ffi-types + the TypeScript compiler;
+  isolate-host copies it byte for byte.
+- No own license file: `diff3@0.0.3` (MIT in source headers, two notices),
+  `clean-git-ref@2.0.1` (Apache-2.0 declared, no text in npm or upstream repo
+  at v2.0.1), `isarray@1.0.0` (MIT in README). pako's Zlib part lives only in
+  `lib/zlib/*.js` headers. typescript ships `ThirdPartyNoticeText.txt`; no
+  Apache `NOTICE` file in any of the three Apache packages.
+- Published without notices (npm, 2026-11-24): runtime-js 0.6.0–0.11.0,
+  workbench 0.1.0–0.11.0, shadow-registry 0.7.0–0.11.0, ts-language-service
+  0.1.0–0.11.0. Fixed by the next version; nothing is (re)published here.
 
 ## Challenge
 
-challenge: 2026-11-24 — clear — existing-baseline repair (README §Challenge: no premise critic); manager fixed scope to generated/vendored sources and split inlined npm dependencies into the finding below
+challenge: 2026-11-24 — clear — existing-baseline repair (README §Challenge: no premise critic); approach chosen by the user ("как Vite"), recorded below
 
 ## User scenario
 
-Maintainer runs `pnpm build:libs && pnpm check:third-party-notices`; for each
-publishable package it reads `npm pack --dry-run` and fails naming the package,
-the packed file and the source whose code is there without its license.
+Maintainer runs `pnpm build:libs` then `pnpm check:third-party-notices`;
+`npm pack` of workbench, isolate-guest, isolate-host (and runtime-js,
+ts-language-service, shadow-registry) contains `dist/THIRD_PARTY_NOTICES.md`
+listing every package and copied file the bundler put into that tarball.
 
 ## Acceptance
 
-1. `check:third-party-notices` (in `pnpm pr:check` after `build:libs`, in CI and
-   before `npm publish` in `release.yml`) reads every publishable package's
-   `npm pack --dry-run` file list from disk; red on today's main for undici,
-   TypeScript (compiler + lib) and esbuild → scenario
-2. Discovery by convention, no per-source registry: a `generated/`/`vendor/` dir
-   of a publishable package holds one origin and its `<origin>.LICENSE` files;
-   without one, each file must be on the check's file-level first-party list —
-   a new upstream file there, or in a new dir, is red; PR #444's
-   `generated/node.LICENSE` is picked up with no check edit → scenario
-3. Presence by content fingerprint of the committed artifact (whitespace-free
-   windows), threshold and window size justified by measurement (all packed
-   files × artifacts) and a real re-bundle in the test; unit test: notice removed
-   → red, new generated source without license → red (new dir and next to a
-   first-party file), a file without the source's code (false-positive
-   candidate) → no requirement → scenario
-4. Notice in the packed file itself (manager, 2026-11-24: no NOTICE-file
-   substitute for generated code; mutant: notice only in a NOTICE file → red;
-   only a JSON artifact is covered by its own packed `.LICENSE`). Notice reaches the packed file: generators embed `/*! <LICENSE> */` (TypeScript:
-   `LICENSE.txt` + `ThirdPartyNoticeText.txt` + change line; esbuild runtime:
-   esbuild + pinned Go 1.26.1 LICENSE); guest `legalComments:'eof'` (host copies
-   `guest.js` byte for byte; its own child/codec bundles hold no upstream code);
-   `vendor/typescript{,-third-party}.LICENSE` for the JSON lib bundle → ADR-0541
-5. Sizes before/after: isolate guest bundle + warm `runCode` p50 (manager's ask),
-   packed client bundles (`pnpm test:client-bundles`, budget unchanged) → scenario
-6. `docs/public/publishing.md` and ADR-0541 state how notices travel → ADR-0541
+1. Counted: npm packages the bundler inlined (esbuild metafile / tsup
+   sourcemap `sources`) and whole files under `generated/`/`vendor/` dirs
+   (bundled or packed as is); fragments and lines are not → scenario
+2. One `dist/THIRD_PARTY_NOTICES.md` per publishable package with any counted
+   input, written by `build:libs` from the bundler's input list; manual records
+   (`tools/publishing/third-party-manifest.json`) only for generated/vendored
+   dirs and for texts missing from a package's own files → scenario
+3. Bundles carry no license text, only the line
+   `/*! For third-party licenses see dist/THIRD_PARTY_NOTICES.md of this npm package */`;
+   guest `legalComments` stays `'none'`; `guest.js` bytes before/after named → scenario
+4. One check before publish (`pr:check` after `build:libs`, CI, `release.yml`,
+   `first-publish.sh`): for every publishable package the packed notices file
+   (`npm pack --dry-run`) equals the one derived from the bundler inputs, and
+   every packed JS file with counted inputs carries the link line; red on
+   mutants: package removed from the file, new inlined package without license
+   and record, file in `vendor/` without manifest record; no content
+   fingerprinting → scenario
+5. Client-bundle budgets (`pnpm test:client-bundles`) unchanged; sizes before/after named → scenario
+6. `docs/public/publishing.md` and ADR-0541 say how it works → ADR-0541
 
 ## Out of scope
 
-- Notices of inlined npm dependencies and copied `.wasm` — finding `bundled-npm-dependency-notices.md`.
-- Hand-ported code (agent `src/pi-cli`, ADR-0569): already ships `THIRD_PARTY_NOTICES.md`; no artifact to fingerprint.
+- What emscripten's runtime put inside `quickjs.wasm`/`sql-wasm.wasm`: counted at package level as upstream ships them (declared residual).
+- Someone taking one `guest.js` out of the package gets only the link line (as with webpack); accepted by the user.
+- Hand-ported code (agent `src/pi-cli`, ADR-0569): already ships `THIRD_PARTY_NOTICES.md`; not a bundler input.
 - Re-release or deprecation of published versions: user decision.
 
 ## Decisions
 
-- In-artifact legal comment over a package notices file: survives tsup chunking, copying `guest.js`, and consumer re-bundling (bundlers keep `/*!` by default).
-- One check over packed files; generators own delivery; no build plugin.
-- No ADR: delivery recorded in ADR-0541 §notices + publishing.md.
+- User, 2026-11-24: the Vite-style package notices file; no license texts in bundles; no content fingerprint.
+- Manager, 2026-11-24 (reversible): list from the bundler's metafile; node_modules inputs → package + its license files; generated/vendor inputs → small manual manifest; one mechanism for both.
+- Manager, 2026-11-24: emscripten wasm counted per upstream package; contents not analysed.
+- Manager, 2026-11-24: a record covers exactly its own package/file; no "any NOTICE in the tarball" fallback.
+- File in `dist/` (already in `files`): npm packs it with no `files` change.
+- No ADR: recorded in ADR-0541 §Notices + publishing.md.
