@@ -254,7 +254,26 @@ for (let i = 0; i < 1000; i++) fs.writeFileSync('many/f' + i + '.txt', chunk);
 let n = 0;
 for (const name of fs.readdirSync('many')) n += fs.readFileSync('many/' + name).length;
 console.log('ok', n);`;
-const diffFiles = (w) => [['/workspace/main.js', Buffer.from(W[w])], ['/tmp/.keep', Buffer.alloc(0)]];
+// Chunked I/O on the agent's own files: 8 MiB through a write stream (64 KiB chunks), then a
+// read stream and 128 appendFileSync of 64 KiB (each fd write reads + rewrites the whole file).
+W.stream = `const fs = require('fs');
+const chunk = Buffer.alloc(65536, 97);
+const ws = fs.createWriteStream('big.bin');
+for (let i = 0; i < 128; i++) ws.write(chunk);
+ws.end(() => {
+  let n = 0;
+  fs.createReadStream('big.bin').on('data', (d) => { n += d.length; }).on('end', () => {
+    for (let i = 0; i < 128; i++) fs.appendFileSync('app.bin', chunk);
+    console.log('ok', n, fs.statSync('app.bin').size);
+  });
+});`;
+// A difference near the requirements' 16 MB budget: a 16 MiB input the run only stats.
+W.bigdiff = `console.log('ok', require('fs').statSync('input.bin').size);`;
+const diffFiles = (w) => [
+  ['/workspace/main.js', Buffer.from(W[w])],
+  ['/tmp/.keep', Buffer.alloc(0)],
+  ...(w === 'bigdiff' ? [['/workspace/input.bin', Buffer.alloc(16 << 20, 7)]] : []),
+];
 
 // ---- one run -------------------------------------------------------------------
 let cachedData;
@@ -271,12 +290,11 @@ async function run(arm, tpl, w, memoryLimit) {
     const context = await iso.createContext();
     const names = Object.keys(functions);
     const host = names.map((n) => new ivm.Callback(functions[n]));
-    // The worker arm's FS is built before the isolate's clock starts mattering: its diff
-    // restore is the worker's own (measured inside `restore` below would double count).
-    const wfs = arm === 'worker' ? workerFs(tpl, tpl.diffBlob[w]) : undefined;
+    // The worker arm's FS (its diff restored in the worker realm) is built in the restore phase.
+    let wfs;
     const tplFns =
       arm === 'worker'
-        ? [new ivm.Callback(wfs.call)]
+        ? [new ivm.Callback((op, a, b, c) => wfs.call(op, a, b, c))]
         : arm === 'lazy'
         ? [
             new ivm.Callback((p) => {
@@ -321,7 +339,10 @@ async function run(arm, tpl, w, memoryLimit) {
       });
     }
     if (arm === 'lazy') await (await probe.get('overlay', { reference: true })).apply(undefined, []);
-    if (arm === 'worker') await (await probe.get('remote', { reference: true })).apply(undefined, []);
+    if (arm === 'worker') {
+      wfs = workerFs(tpl, tpl.diffBlob[w]);
+      await (await probe.get('remote', { reference: true })).apply(undefined, []);
+    }
     t.restore = performance.now();
     const runFile = await entry.get('runFile', { reference: true });
     const code = await runFile.apply(undefined, ['/workspace/main.js', []], {
@@ -415,7 +436,7 @@ function prepare(label, files, workloads) {
 
 console.log(`node ${process.version}, isolated-vm ${hostReq('isolated-vm/package.json').version}, ${process.platform}/${process.arch}`);
 const plans = [
-  [prepare('T1', T1, ['semver', 'many']), ['semver', 'many']],
+  [prepare('T1', T1, ['semver', 'many', 'stream', 'bigdiff']), ['semver', 'many', 'stream', 'bigdiff']],
   [prepare('T95', T95, ['semver', 'pdf', 'many']), ['semver', 'pdf', 'many']],
 ];
 const ARMS = ['full', 'views', 'lazy', 'worker'];

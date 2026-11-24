@@ -3,7 +3,7 @@
 Status: Proposed
 Date: 2026-11
 
-> TL;DR: A sandbox's template (`produceDependencySnapshot` artifact) is decoded once per consumer process and once per worker and never enters the per-run state; during a run the guest's FS is an overlay — template under the sandbox's difference — whose owner the user picks (§Forks F1; recommended: the worker); `snapshot()` is format v2: the difference plus the template's `{id, version}`.
+> TL;DR: A sandbox's template (`produceDependencySnapshot` artifact) is decoded once per consumer process and once per worker and never enters the per-run state; during a run the guest reads template files on demand from the worker through read-only host functions, its own files stay in its realm (§Forks F1, recommended (b)); `snapshot()` is format v2: the difference plus the template's `{id, version}`.
 
 ## Context
 
@@ -21,15 +21,17 @@ for a template at `/node_modules` and at `/workspace/node_modules` (main, export
 hoisted/nested, missing). L — per-run cost of four ways a fresh isolate sees a template, T1 (1 MB,
 296 files) vs T95 (88.8 MB, 23 654 files), worker-side medians:
 
-| arm | T1 semver | T95 semver | T95 pdf-lib | T95 1 000 writes | isolate floor T1 / T95 |
-|---|---|---|---|---|---|
-| full (today: template in the state) | 74 ms | 419 ms | 676 ms | 367 ms | 19 / 215–219 MiB |
-| views (materialized, one buffer, no per-file copy) | 73 | 198 | 466 | 167 | 19 / 123 |
-| lazy (template read through 3 host functions) | 87 | 81 | 432 | 37 | 19 / 19–23 |
-| worker (whole FS in the worker, every call crosses) | 85 | 78 | 404 | 51 | 19 / 19–23 |
+| arm | T1 semver | T95 semver | T95 pdf-lib | T95 1 000 writes | T1 8 MiB chunked I/O | isolate floor T1 / T95 |
+|---|---|---|---|---|---|---|
+| full (today: template in the state) | 70 ms | 392 ms | 647 ms | 359 ms | 55 ms | 19 / 215–219 MiB |
+| views (materialized, one buffer, no per-file copy) | 66 | 190 | 454 | 157 | 48 | 19 / 123 |
+| lazy (template read through 3 host functions) | 78 | 80 | 406 | 34 | 64 | 19 / 19–23 |
+| worker (whole FS in the worker, every call crosses) | 75 | 77 | 393 | 51 | 259 (541 MB copied) | 19 / 19–23 |
 
-`full` adds the consumer's encode + decode of the whole state per `exec` (T95 151 + 178 ms).
-Four concurrent runs on one process, T95 pdf-lib wall: 1 053 / 729 / 787 / 684 ms.
+`full` adds the consumer's encode + decode of the whole state per `exec` (T95 ~150 + ~170 ms).
+Four concurrent runs on one process, T95 pdf-lib wall: 801 / 570 / 528 / 507 ms. `worker`'s
+chunked-I/O row: runtime-js's fd layer reads or rewrites the whole file per chunk, a memcpy in the
+guest realm, a bridge copy per chunk across it.
 
 ## Decision
 
@@ -42,9 +44,12 @@ Proposed; F1–F4 (§Forks) are the user's, the rest follows from the requiremen
    and the lock are visible); `rifty/*` never. A worker receives a template once, as bytes in a
    binary request frame (`distribution/isolate-host-binary-request-frame`), keeps it for its life,
    counts it in its RSS ceiling and idle watermark; a call names its template by identity.
-2. **A run's FS** is an overlay: the template under the sandbox's difference. Its owner is F1
-   (recommended: the worker — rifty's `MemoryFsSync` in the worker realm, every guest `FsSync` call
-   one sync isolated-vm callback, the end state the worker's own snapshot of the difference).
+2. **A run's FS** is an overlay in the guest realm: the sandbox's difference (rifty's
+   `MemoryFsSync`, restored from the state as today) over the template, read on demand through
+   three sync host functions — `stat`, `read`, `readdir` of a template path: exact lookup in the
+   worker's immutable map, copies out, no other effect. The end state is the difference only. A
+   sandbox without a template runs the same overlay over an empty template (one lifecycle,
+   ADR-0568 §8). Owner of the FS: F1 (this is option (b)).
 3. **Identity** `{id, version}` = `{rifty/manifest.json templateId, snapshotId}` (sha256 of the
    decoded tar, as the producer computes it; the same for gzip and br).
 4. **Format v2** (ADR-0567 §3: v1 still read; the writer writes v2): v1's layout, version 2; with a
@@ -53,28 +58,48 @@ Proposed; F1–F4 (§Forks) are the user's, the rest follows from the requiremen
    path, and a directory record flag "opaque" (a template directory removed and recreated).
    Read-only template: entries under the mount are refused (`_CORRUPT`), no new kinds.
 5. **Cap and cost.** `maxFsBytes` counts the difference (codec budget units); a host write costs
-   O(write + difference). Under F1 = worker the cap is checked at the guest's write (`ENOSPC`, as
-   a full disk in Node) instead of a `stateRefused` at capture; `memoryLimitMb` no longer has to
-   hold the files.
+   O(write + difference); `stateRefused` and `ERR_ISOLATE_HOST_SANDBOX_FULL` as today, over the
+   difference. (Under F1 (c) the cap would move to the guest's write, `ENOSPC`, reversing `REV-7`.)
 6. **Changed paths.** `exec`'s result adds `changes: { path, type, size }[]` (created, changed,
    deleted), derived from the difference before and after the run.
 7. **Killed run** (`timeout`, `memory`, abort): F4. **Lost worker:** the state of before (the run
    reruns from it, ADR-0563 §6 unchanged).
+8. **Capture outside the guest realm** (`distribution/isolate-host-sandbox-capture-outside-guest-realm`,
+   live-sandbox I1): under (b) the difference is still captured in the guest's realm; the unit
+   is a child of the template goal (scenario step 9, requirements §7 «проверяются на диффовом
+   снапшоте») whose mechanism is chosen at its PICKUP among its candidates and (b′).
 
 ## Forks (user)
 
-- **F1 — who owns the guest's FS during a run.** (a) materialize in the isolate (`views`): keeps
-  every recorded decision; cost and isolate memory linear in the template (T95 +124 ms, +104 MiB)
-  — fails requirements §3. (b) lazy template: only template reads cross (3 read-only host
-  functions over immutable shared data); the difference stays in the guest realm and is captured
-  there — `capture-outside-guest-realm` stays open, a killed run's writes stay lost. (c) worker
-  owns the FS: closes the capture unit by construction (no capture in the guest realm), makes a
-  killed run's writes keepable; every `fs` call is a host function (~14 µs), a write crosses too.
+- **F1 — who owns the guest's FS during a run.**
+  (a) materialize the template in the isolate (`views`): keeps every recorded decision; per-run
+  cost and isolate memory linear in the template (T95 +110 ms, +100 MiB) — fails requirements §3.
+  (b) **recommended** — lazy template: only template reads cross, 3 read-only host functions over
+  immutable data shared by every sandbox; the agent's files stay in the guest realm as today.
+  Meets §2–3; the capture unit stays open (§8); a killed run's writes stay lost (F4 = rollback).
+  (c) the worker owns the whole FS: closes the capture unit by construction and makes a killed
+  run's writes keepable; but every `fs` call is a host function (~11 of them, guest-chosen paths
+  and bytes, per-call state in the multi-tenant worker), chunked I/O on the agent's own files turns
+  quadratic across the bridge (8 MiB: 259 vs 64 ms, 541 MB copied) until rifty's FS interface gains
+  ranged operations (vfs + runtime-js, every host), and the cap moves to the write (`ENOSPC`).
+  (b′) (b) + the difference captured in the guest realm only through intrinsics captured before
+  guest code (the capture unit's third candidate): not measured; the codec and the MemoryFs walk
+  would both have to be primordial-safe — a class audit (`runtime-js/post-guest-paths-use-replaceable-intrinsics`).
 - **F2 — template files writable (copy-on-write, deletions in the format) or read-only (`EROFS`).**
 - **F3 — mount `/node_modules` or `/workspace/node_modules`; `payload/package.json`/lock visible.**
 - **F4 — a killed run's writes: kept as Node, or rolled back (documented, the tools say so).**
+  Keeping needs (c) (or a write journal to the worker); even then a lost worker loses them.
 
 ## Trust (what F1 changes in recorded decisions)
+
+- Goal `isolate-host-live-sandbox` Outcome (user-owned): «The files stay rifty's in-memory
+  filesystem in the guest's own realm; between operations the sandbox is bytes held by the
+  consumer, and only bytes and plain data cross the isolate boundary.» (b): the agent's files stay
+  there; template files are read across the boundary as bytes. (c): no file stays in the guest's
+  realm — an amendment of that Outcome.
+- The goal's own reading (Decisions, host-disk rejection): «every guest `fs` call becomes an exposed
+  host function … against «харденинг нужен только на внешнем шве: выставленные хостовые функции…»».
+  (c) has that seam; (b) adds 3 read-only functions.
 
 - «rifty целиком внутри isolate, один одноразовый экземпляр на гостя. «Гость ломает собственный
   rifty» допустимо; харденинг нужен только на внешнем шве: выставленные хостовые функции,
@@ -138,8 +163,13 @@ Proposed; F1–F4 (§Forks) are the user's, the rest follows from the requiremen
 ## Consequences
 
 - Memory: the consumer holds one copy per template; each worker that served it holds one more
-  ((workers + 1) × template bytes at peak).
-- `runCode` unchanged; a sandbox without a template runs the same overlay with an empty template
-  (one code path).
+  ((workers + 1) × template bytes at peak); a worker's idle watermark and RSS ceiling include its
+  templates, else an idle worker holding a ~95 MB template sits at the 256 MiB retire line.
+- A template arriving at a worker is decoded on its main thread, which every slot's host calls
+  share: a delay for its neighbours (ADR-0563 §7 class), bounded by the template's size.
+- Identity: any rebuild that changes the artifact's tar (a dependency bump, replay ↔ frozen) gives
+  a new `version`; snapshots over the old one restore only over the old one (a named error
+  otherwise, requirements §2); the consumer keeps old artifacts it still has snapshots for.
+- `runCode` unchanged.
 - Not the user's words: identity, format v2 layout, the binary frame, the worker cache policy are
   agent decisions.

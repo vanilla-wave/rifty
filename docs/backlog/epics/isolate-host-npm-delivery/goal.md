@@ -40,4 +40,4 @@ challenge: pending
 ## Decisions
 
 - 2026-11-24 — agent: `@riftydev/isolate-guest` stays a separate public package (ADR-0558, custom embedders); the host bundles its bytes and does not depend on it at runtime (`scripts/build-runtime.mjs`), so it ships in the same release, not as a dependency.
-- 2026-11-24 — agent: no new name for the agent tools (`epics/isolate-host-agent-tools` Decisions: a subpath export), so the token action covers two names.
+- 2026-11-24 — agent: the agent tools' shared core is a new package (`epics/isolate-host-agent-tools` Decisions), so the token action covers three names.

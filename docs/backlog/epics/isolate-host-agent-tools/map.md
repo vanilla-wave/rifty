@@ -3,7 +3,7 @@
 ## Items
 
 Seeded at FIT. Order: carrier (the User scenario over a real sandbox, texts asserted) → neutral
-helpers moved below `@riftydev/agent` and the host → tools → packed-consumer import test.
+core extracted from `@riftydev/agent` (Pi-free) → isolate-host adapter → packed-consumer import test.
 `run_node`'s killed / `stateRefused` texts can be written now; they are pinned at FIT to the
 killed-run decision.
 
@@ -18,9 +18,7 @@ killed-run decision.
   `'exit'` listener, the guest's replaced intrinsics): fix the cases, or the `run_node` description
   and the examples recommend `.catch(e => { console.error(e); process.exitCode = 1 })` and the host
   checks the expected output file — owner: user — asked 2026-11-24 with the template forks.
-- Where the neutral helpers live (a package both `@riftydev/agent` and `@riftydev/isolate-host`
-  may import under `tools/checks/arch-rules.cjs`; isolate-host bundles its deps) — owner: agent —
-  `pnpm check:arch`.
+- The shared core package's name and layer (`tools/checks/arch-rules.cjs`; `@riftydev/agent` and the isolate-host adapter both import it) — owner: agent — `pnpm check:arch` at FIT.
 
 ## Out of scope
 

@@ -51,5 +51,5 @@ challenge: pending
 
 ## Decisions
 
-- 2026-11-24 — agent: shipped as a subpath export of `@riftydev/isolate-host` (`@riftydev/isolate-host/agent-tools`), not a new package: requirements §4 allow «пакет (или экспорт)»; one version with the host by construction (§8 «его версия совместима с isolate-host»), and no new npm name needing a first publication with a token.
-- 2026-11-24 — agent: one implementation of the exact-edit match and the text cap — `packages/agent`'s neutral `edit-hint.ts` / `text.ts` move below both consumers (owner decided at FIT; `pnpm check:arch`), never copied.
+- 2026-11-17 — user: «согласен» to «Файловые инструменты в перспективе: никакой второй независимой реализации; нужен общий набор инструментов, адаптированный под выбранный движок» (wrap-up 2026-11-17 :113) — the tools are one core shared with `@riftydev/agent`, adapted per host, never a second copy.
+- 2026-11-24 — agent: the core is a new package with no Pi / workbench / sdk / browser dependency (requirements §4), which `@riftydev/agent` and the isolate-host adapter both use; a subpath of `@riftydev/isolate-host` would make the browser agent install isolated-vm. It is a third new npm name (`epics/isolate-host-npm-delivery`: first publication with a token). The name is set at FIT.

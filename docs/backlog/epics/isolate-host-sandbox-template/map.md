@@ -14,8 +14,10 @@ hypothesis until the carrier hits it:
 3. Template intake in the consumer: artifact → decoded template (gzip/br, ustar + PAX), named
    refusals, identity, one copy per process.
 4. Snapshot format v2 (ADR-0567 §3/§4): a layer over a bound template; v1 still read.
-5. The run's FS over the template (ADR-0572 §2), the end state taken outside the guest's realm
-   (absorbs `distribution/isolate-host-sandbox-capture-outside-guest-realm`), the changed-paths list.
+5. The run's FS over the template (ADR-0572 §2) and the changed-paths list.
+6′. The end state taken where the guest's code cannot reach (absorbs
+   `distribution/isolate-host-sandbox-capture-outside-guest-realm`): by construction under F1 (c);
+   under (b) its own mechanism at PICKUP (ADR-0572 §8, option (b′) among the unit's candidates).
 6. Host ops and the cap over the difference only (absorbs
    `distribution/isolate-host-sandbox-write-cost-per-state`).
 7. Worker template cache: by identity, in the RSS ceiling, evicted with the worker.
