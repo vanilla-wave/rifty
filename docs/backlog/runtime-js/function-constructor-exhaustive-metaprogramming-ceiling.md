@@ -41,7 +41,7 @@ these replace host `Function` with no ceiling —
 - CJS: `eval('global[k] = 1')`, `(function(){return this})()[k] = 1`,
   `(0, global)[k] = 1`.
 
-Observed 2026-11-24 at `d27970e43` (paths the unit `runtime-js/computed-global-read-callee`
+Observed 2026-11-24 at `d27970e43` (paths PR #439
 does not touch): a CJS module `exports.f = (k) => <form>` loaded with
 `createModuleLoader(MemoryFsSync).require` (`pnpm exec tsx`), then `f('Function')` —
 - `(globalThis?.[k])`, `global[k].valueOf()`, `const C = global[k]; return C`:
@@ -73,7 +73,7 @@ evalWrite  exports.f=function(k){ eval('var __rifty'+'GlobalKey=x=>x'); global[k
 ```
 
 The read side (`new G[k](…)`) keeps a load-time ceiling for a module with
-`with` or any call of the identifier `eval` (unit `runtime-js/computed-global-read-callee`); the
+`with` or any call of the identifier `eval` (PR #439, ADR-0444 amendment 2026-11-24); the
 write side does not. Owner runtime-js (module-loader); trigger: next guard unit.
 
 Direct eval through a local `eval` binding skips import routing (PR #439
@@ -106,7 +106,7 @@ Key `'eval'`: `G[k](s)` with `k === 'eval'` is an indirect eval in Node and rift
 - An alias of a computed global read later called — `const C = G[k]; new C()`,
   `const { [k]: C } = G; new C()` — rejects at load (Node loads; conformance
   `global-computed-read-callee.test.ts` pins it). Candidate: ADR-0444's key
-  check at the read, as unit `runtime-js/computed-global-read-callee` does for
+  check at the read, as PR #439 does for
   a direct callee (not widened there, manager decision 2026-11-24). Trigger: a
   real package calling such an alias.
 

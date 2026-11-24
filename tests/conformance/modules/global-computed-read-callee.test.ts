@@ -2,7 +2,7 @@ import { createModuleLoader } from '@riftydev/runtime-js/loader';
 import { MemoryFsSync } from '@riftydev/vfs/internal';
 import { afterEach, describe, expect, it } from 'vitest';
 
-// Unit runtime-js/computed-global-read-callee. A computed global read called or
+// PR #439 (ADR-0444 amendment 2026-11-24). A computed global read called or
 // constructed loads (Node parity: tools/node-parity-runner/cases/modules/
 // global-computed-read-callee-*). A key that is 'Function' at runtime throws the
 // format's named ceiling at that read (ADR-0444 key check): the module never gets
@@ -53,7 +53,7 @@ function expectRuntimeCeiling(sites: Sites, feature: string): void {
   expect(globalThis.Function).toBe(HostFunction);
 }
 
-describe('computed global read used as a callee/constructor (unit computed-global-read-callee)', () => {
+describe('computed global read used as a callee/constructor (ADR-0444 amendment)', () => {
   it('ESM loads; only a runtime Function key throws, at the read', async () => {
     const loader = setup({
       '/sites.mjs': `
@@ -111,7 +111,7 @@ describe('computed global read used as a callee/constructor (unit computed-globa
     expect(globalThis.Function).toBe(HostFunction);
   });
 
-  // Out of scope (unit §Out of scope): each still rejects before any statement runs.
+  // Kept load-time ceilings (ADR-0444 amendment): each still rejects before any statement runs.
   const ceilings = {
     'static read': 'new globalThis.Function("return 1")',
     'folded read': 'new globalThis["Fun" + "ction"]("return 1")',

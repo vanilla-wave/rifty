@@ -61,7 +61,7 @@ isolate ESM ❌ lifting, or an agent run that hits `URLConstructor`.
 Compat: no row in `docs/public/compat/isolate-host.md` for a required ESM
 `.js`; to add with the fix or as ❌ when the gap is declared.
 
-Probe 2026-11-24 (`distribution/isolate-host-ceiling-modules-load`): a package whose `exports`
+Probe 2026-11-24 (PR #438 (isolate ceiling modules)): a package whose `exports`
 lists `"module-sync"` first — Node 24 `require` takes that ESM entry — fails the same way:
 `generator-function@2.0.1` (`"module-sync": "./require.mjs"`) from
 `is-generator-function@1.1.2/index.js:12` → `TypeError: URLConstructor is not a constructor`;

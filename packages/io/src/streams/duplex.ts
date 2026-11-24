@@ -7,11 +7,9 @@
  * is safe and `Object.getPrototypeOf(duplex).write === Duplex.prototype.write`
  * matches Node.
  *
- * Subclasses inside `@riftydev/io` (e.g. `Transform`) customise the writable side
- * via a factory passed through the {@link INTERNAL_WRITABLE_SIDE} symbol, which is
- * not exported via `src/index.ts`. Outside subclasses cannot construct it, making
- * the wall between public option bag and internal hook real — not a `_`-prefixed
- * field any cast can pass through.
+ * The embedded side calls the Duplex's own `_write`/`_writev`/`_final` (late
+ * lookup, `this` = Duplex), so options, own properties and subclass prototypes
+ * dispatch as in Node.
  */
 
 import {
@@ -21,52 +19,15 @@ import {
 import { acquireDuplexFromWeb } from './from-web-validation.ts';
 import { Readable, type ReadableOptions } from './readable.ts';
 import {
+  WRITABLE_HOOK_OWNER,
   Writable,
   type WritableOptions,
   type WritableState,
+  type WriteChunk,
   streamDestroyedError,
 } from './writable.ts';
 
-type WriteOverride = (
-  this: Duplex,
-  chunk: unknown,
-  encoding: string,
-  cb: (err?: Error | null) => void,
-) => void;
-
-type FinalOverride = (this: Duplex, cb: (err?: Error | null) => void) => void;
 type DuplexEndCallback = (error?: Error | null) => void;
-
-const DUPLEX_WRITE_HOOK = Symbol('rifty/io:duplex-write-hook');
-const DUPLEX_WRITEV_HOOK = Symbol('rifty/io:duplex-writev-hook');
-const DUPLEX_FINAL_HOOK = Symbol('rifty/io:duplex-final-hook');
-
-function ownFunction(target: object, name: '_write' | '_final'): unknown {
-  if (!Object.prototype.hasOwnProperty.call(target, name)) return undefined;
-  return (target as Record<string, unknown>)[name];
-}
-
-export function ownWriteOverride(target: Duplex): WriteOverride | null {
-  const value = ownFunction(target, '_write');
-  return typeof value === 'function' ? (value as WriteOverride) : null;
-}
-
-export function ownFinalOverride(target: Duplex): FinalOverride | null {
-  const value = ownFunction(target, '_final');
-  return typeof value === 'function' ? (value as FinalOverride) : null;
-}
-
-/**
- * Internal subclass hook key. Symbol-keyed so it cannot appear in the public
- * `ReadableOptions & WritableOptions` shape — outside subclasses can't construct
- * it, so they can't inject a custom writable side. {@link Transform} imports it directly.
- */
-export const INTERNAL_WRITABLE_SIDE: unique symbol = Symbol('rifty/io:duplex-internal-writable');
-
-/** Carrier for the symbol-keyed factory hook. Internal to `@riftydev/io`; not in `src/index.ts`. */
-export interface DuplexInternalOptions {
-  [INTERNAL_WRITABLE_SIDE]?: (opts: ReadableOptions & WritableOptions, owner: Duplex) => Writable;
-}
 
 /** The WHATWG pair returned by `Duplex.toWeb`. */
 export interface DuplexWebPair {
@@ -102,51 +63,15 @@ type DuplexReadableConstructor = Omit<typeof Readable, 'toWeb'> &
 const DuplexReadableBase = Readable as DuplexReadableConstructor;
 
 function initializeDuplex(receiver: Duplex, opts: DuplexOptions = {}): void {
-  const target = receiver as unknown as {
-    allowHalfOpen: boolean;
-    writableSide: Writable;
-    [DUPLEX_WRITE_HOOK]?: NonNullable<WritableOptions['write']>;
-    [DUPLEX_WRITEV_HOOK]?: NonNullable<WritableOptions['writev']>;
-    [DUPLEX_FINAL_HOOK]?: NonNullable<WritableOptions['final']>;
-  };
+  const target = receiver as unknown as { allowHalfOpen: boolean; writableSide: Writable };
   target.allowHalfOpen = opts.allowHalfOpen ?? true;
-  const factory = (opts as DuplexInternalOptions)[INTERNAL_WRITABLE_SIDE];
-  if (typeof opts.write === 'function') target[DUPLEX_WRITE_HOOK] = opts.write;
-  if (typeof opts.writev === 'function') target[DUPLEX_WRITEV_HOOK] = opts.writev;
-  if (typeof opts.final === 'function') target[DUPLEX_FINAL_HOOK] = opts.final;
-  const writeOpt = target[DUPLEX_WRITE_HOOK];
-  const writevOpt = target[DUPLEX_WRITEV_HOOK];
-  const finalOpt = target[DUPLEX_FINAL_HOOK];
-  target.writableSide = factory
-    ? factory(opts, receiver)
-    : new Writable({
-        ...opts,
-        write: (chunk, encoding, cb): void => {
-          const override = ownWriteOverride(receiver);
-          if (override) {
-            override.call(receiver, chunk, encoding, cb);
-            return;
-          }
-          if (writeOpt) {
-            writeOpt.call(target.writableSide, chunk, encoding, cb);
-            return;
-          }
-          cb();
-        },
-        writev: writevOpt,
-        final: (cb): void => {
-          const override = ownFinalOverride(receiver);
-          if (override) {
-            override.call(receiver, cb);
-            return;
-          }
-          if (finalOpt) {
-            finalOpt.call(target.writableSide, cb);
-            return;
-          }
-          cb();
-        },
-      });
+  // Node's Writable ctor: hook options become the Duplex's own `_write`/`_writev`/`_final`.
+  if (typeof opts.write === 'function') receiver._write = opts.write;
+  if (typeof opts.writev === 'function') receiver._writev = opts.writev;
+  if (typeof opts.final === 'function') receiver._final = opts.final;
+  const { highWaterMark, objectMode, decodeStrings } = opts;
+  target.writableSide = new Writable({ highWaterMark, objectMode, decodeStrings });
+  target.writableSide[WRITABLE_HOOK_OWNER] = receiver;
   target.writableSide.on('finish', () => receiver.emit('finish'));
   target.writableSide.on('prefinish', () => receiver.emit('prefinish'));
   target.writableSide.on('error', (err) => {
@@ -175,6 +100,14 @@ class DuplexImplementation extends DuplexReadableBase {
     super(opts);
     initializeDuplex(this as unknown as Duplex, opts);
   }
+
+  /** Typing only: the constructor call below installs `Writable.prototype._write` itself. */
+  _write(chunk: unknown, encoding: string, cb: (err?: Error | null) => void): void {
+    Writable.prototype._write.call(this, chunk, encoding, cb);
+  }
+
+  _writev?(chunks: WriteChunk[], cb: (err?: Error | null) => void): void;
+  _final?(cb: (err?: Error | null) => void): void;
 
   /**
    * Expose `_writableState` for Node's `d._writableState.{destroyed,length,…}`
@@ -418,6 +351,8 @@ export const Duplex: DuplexConstructor = /* @__PURE__ */ makeCallableStreamConst
     Readable.call(receiver, options);
     initializeDuplex(receiver, options);
   },
+  // Writable's hooks, shared like Node's (`Duplex.prototype._write === Writable.prototype._write`).
+  () => ({ _write: Writable.prototype._write, _writev: null }),
 );
 
 /** Node `{ readable, writable }` halves (each a stream with the right state bag). */

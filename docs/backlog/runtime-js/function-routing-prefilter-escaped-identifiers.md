@@ -10,7 +10,7 @@ code: [packages/runtime-js/src/module-loader/cjs.ts, packages/runtime-js/src/mod
 
 ## Context
 
-Found by PR #439 review round 3 (unit `runtime-js/computed-global-read-callee`);
+Found by PR #439 review round 3 (PR #439, ADR-0444 amendment 2026-11-24);
 present before that PR. `cjs.ts` `functionRoutingAnalysisToken` (regex over the
 raw source, checked before the acorn pass in
 `rewriteCjsFunctionConstructorReferences`) and its twin in `esm.ts`

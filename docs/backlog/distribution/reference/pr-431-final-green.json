@@ -1,0 +1,334 @@
+{
+  "overall_verdict": "pass",
+  "merge_call": "Final+GREEN PASS @ 9aa1a3054 (local, unpushed; PR CI not yet run at HEAD — merge only on all-green `gh pr checks 431` at HEAD). 8b8b18eda..9aa1a3054 is README + contract text only (Acceptance 2, README:152-155): the 'as in Node' nit resolved — names addAbortListener/execFile as delivering later, fs.promises.readFile as rejecting at once (matches reviewer probe on node v24.16.0); tests and code unchanged, so the runs below hold. Since 2696b0682: RED 13926e4d0 (tests), fix 8b8b18eda (sandbox.ts onAbort :226-240, README, compat, contract). Reviewer runs, root gate config (`pnpm vitest run --project isolate-host <files>`), load ~8–26: HEAD sandbox-abort 24/24 + sandbox-abort-table 65/65 + sandbox-destroy-table 62/62 = 151/151 (no flake); isolate-host tsc, biome OK; sandbox.ts 726 lines. Implementer reports isolate-host 933/933 + pnpm pr:check pass at 8b8b18eda (not rerun by the reviewer). 2696b0682's sandbox.ts under HEAD tests: 3 failed / 21 passed — exactly the N2 rows (null, undefined, coded TypeError); N1 row green there (safety row). onAbort mutants (sandbox-abort.test.ts): shaped=false → 'a TypeError coded ERR_INVALID_ARG_TYPE' red; shaped = any object (no `'aborted' in`) → 'the signal option' row red; shaped=true (never reword) → 'the signal option' row red; old code-check (2696b0682) → 3 N2 rows red. All 4 killed. Earlier 16 sandbox.ts mutants (round 2/2b) stay killed: the rest of the product code and their rows are unchanged since ece1eb7fc (not rerun).",
+  "checkpoint": "Final+GREEN",
+  "reviewed_sha": "9aa1a30549b1060b41ab8d259e47879b24eaa8a7",
+  "unit_goal_source": "docs/backlog/distribution/isolate-host-sandbox-exec-abort-signal.md (Acceptance 1–9, Parity cases 1–3, Fault matrix 5 rows, Decisions); ADR-0568 §3 (killed-run rollback), §4 (queue order), §5 + I5 (destroy guarantees). Whole PR b3731e9c0..9aa1a3054; deltas reviewed 42a30fab1..ece1eb7fc (c7cdca859 RED tests only, d2948b6ac fixes, d7e6a6bda test robustness, ece1eb7fc round-2 rows + contract artifact names) and 2696b0682..8b8b18eda (13926e4d0 RED, 8b8b18eda fix). Oracle: live node v24.16.0 (in-test nodeEval/readFile/execFile). Round history: round 1 (earlier reviewer) GREEN @ a2de4b50f, review fixes + PASS @ 54a4da09c (verdict commit 42a30fab1); external cross-review round 1 @ 42a30fab1 → findings A1–A8; round 2 (this reviewer) @ d7e6a6bda → CONCERN: A6 fix and AbortError bare unpinned, rejection-path listener dispose unpinned; round 2b @ ece1eb7fc → rows added, PASS (verdict commit 2696b0682); external cross-review round 2 @ 2696b0682 → no blocker/should, nits N1 (pre-aborted × same-tick destroy undocumented/unpinned), N2 (onAbort replaced a consumer's thrown null/undefined/coded TypeError), N3 (compat row wording) → fixed 13926e4d0/8b8b18eda; round 3 (this reviewer) @ 8b8b18eda → PASS, one wording nit (README 'as in Node'); 9aa1a3054 → nit fixed (text only), PASS. History correction: the round-1 verdict's '10 sandbox.ts mutants, all killed' held for its own mutants (e.g. M6 = drop `if (done) return undefined` entirely), but the cross-review's run-only mutant `if (done && !run) return undefined;` on 42a30fab1's sandbox.ts with 42a30fab1's tests passes 81/81 under the root gate config (reviewer run) — so its Acceptance 3 citation 'queued behind another run: it never starts' was not discriminating for exec; likewise the old destroy-table 'in flight' row stayed green (2.4 s) with destroy() not calling #run.abort, and the old host-op × k rows caught 'abort a started host op' only at writeFile/remove k=2 (reviewer run: 2 failed / 28 passed).",
+  "unit_residuals": [],
+  "goal_residuals": [],
+  "goal_complete": false,
+  "coverage": [
+    {
+      "row": "Acceptance 1: exec/host ops accept an AbortSignal; refusals; signal no longer unknown",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-abort.test.ts 'the signal option' > \"is an option of exec and of every host op; a value Node refuses is refused with Node's error\"",
+      "note": "Oracle in-test from this Node: fs.promises.readFile for 'x', 1, null, {} (ERR_INVALID_ARG_TYPE 'The \"options.signal\" property must be an instance of AbortSignal. Received …'), execFile for {aborted:false} (TypeError 'signal.addEventListener is not a function'); {aborted:true, reason:'r'} → AbortError cause 'r' as readFile. RED on 42a30fab1 (message lacked Node's 'Received …' tail). Mutant MSG (drop the 'options.signal' rewording, sandbox.ts:235) killed. Acceptance 1's text still says 'any other value → ERR_INVALID_ARG_TYPE'; reconciled by the Decision 'reads as any value Node refuses' (nit)."
+    },
+    {
+      "row": "Acceptance 2: pre-aborted → AbortError, no pool call",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-abort.test.ts 'the turn signal cancels a run without destroying the sandbox (scenario)' > 'an already-aborted signal rejects without a pool call'; packages/isolate-host/tests/sandbox-abort-table.test.ts 'an abort before the run has a result: AbortError at once, files of before, the isolate stopped' > 'before the call: no pool call'; packages/isolate-host/tests/sandbox-abort.test.ts 'host ops: aborted at the call or while queued → AbortError, no effect; started → they complete' > '<op>: an aborted signal at the call' (×5); packages/isolate-host/tests/sandbox-abort.test.ts 'an already-aborted signal × destroy() in the same tick' > 'both reject DESTROYED: the AbortError comes a microtask after the call (as Node), so the op is unsettled at destroy()'",
+      "note": "Via addAbortListener's queued microtask (done set before the queue link runs). Mutant IGNORE_PREABORTED killed (10 rows). Pre-aborted op + destroy() in the same tick → DESTROYED (was ABORT_ERR at 42a30fab1); now in Acceptance 2, README and pinned by the N1 row (safety: green at 2696b0682). Wording (9aa1a3054): addAbortListener/execFile deliver later, fs.promises.readFile rejects at once — matches reviewer probe on node v24.16.0."
+    },
+    {
+      "row": "Acceptance 3: aborted while queued → never takes effect; order kept",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-abort-table.test.ts 'an abort before the run has a result: AbortError at once, files of before, the isolate stopped' > 'queued behind another run: it never starts'; packages/isolate-host/tests/sandbox-abort.test.ts 'the turn signal cancels a run without destroying the sandbox (scenario)' > 'an endless run rejects AbortError at the abort; the files are those of before; the next exec runs'; packages/isolate-host/tests/sandbox-abort.test.ts 'host ops: aborted at the call or while queued → AbortError, no effect; started → they complete' > '<op>: aborted while queued behind a run, it rejects at the abort; later ops keep their order' (×5)",
+      "note": "A2 resolved: both rows now count pool calls after the queue passed the aborted exec's turn. Mutant A2 (`if (done && !run) return undefined;`) killed at HEAD (15 rows) and on 42a30fab1's sandbox.ts by exactly the two strengthened rows (2 failed, ~30 s each); survived 81/81 with 42a30fab1's tests."
+    },
+    {
+      "row": "Acceptance 4: aborted in flight → rejects at the abort, isolate disposed as at a deadline, files of before, sandbox usable",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-abort-table.test.ts 'an abort before the run has a result: AbortError at once, files of before, the isolate stopped' > 'in its rerun after a lost worker', 'during restore (aborted as the call is placed, a 24 MiB state)', 'during the run (an endless loop)', 'during the capture (an endless replaced intrinsic)', 'during the run of a builtin that ignores termination'",
+      "note": "d7e6a6bda relaxed the post-abort CPU window (sleep 250 then burnedAfter(500) < 0.15; usableThenGone sleeps 200 before burnedAfter): still discriminating — mutant NO_HANDLE_ABORT (drop #run.abort in the abort listener) killed 17 rows; NOT_RUN_STARTED (no abort once started) killed 30 rows. Cancel goes only through destroy's pool handle (sandbox.ts:360 → pool.ts:509-512); onStart is synchronous in pool.run, so no started-without-handle window."
+    },
+    {
+      "row": "Acceptance 5: abort after the result → no effect, no listener",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-abort.test.ts 'the turn signal cancels a run without destroying the sandbox (scenario)' > 'an abort after the result has no effect and leaves no listener'; packages/isolate-host/tests/sandbox-abort-table.test.ts 'an abort around the result: one outcome, files per the outcome reported' > '<end> × abort after await' (×5); packages/isolate-host/tests/sandbox-abort.test.ts \"the abort path's errors and listeners\" > 'an op that rejects on its own leaves no listener on its signal'",
+      "note": "Mutant LEAK (no dispose on success) killed; LEAKREJ (no dispose on rejection, sandbox.ts:393) killed by the ece1eb7fc listener row."
+    },
+    {
+      "row": "Acceptance 6: host ops — at call/queued → AbortError, no effect; started → complete",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-abort-table.test.ts 'every host op × abort 0–5 microtasks after its call: AbortError unless it had started' > '<op> × abort <k> microtask(s) after the call' (5 ops × k 0–5); packages/isolate-host/tests/sandbox-abort.test.ts 'host ops: aborted at the call or while queued → AbortError, no effect; started → they complete'",
+      "note": "A4 resolved: each row now derives 'started at k' from a writeFile probe and asserts aborted === !started. Mutant A4 (drop `|| (started && !run)`) fails all 5 ops at k=2 (was writeFile/remove only)."
+    },
+    {
+      "row": "Acceptance 7: destroy guarantees (I5) unchanged, abort/destroy either order",
+      "source": "acceptance",
+      "trace": "ADR-0568",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-abort-table.test.ts 'abort × destroy, either order: every operation settles once, DESTROYED for those unsettled at destroy()' > 'abort, then destroy', 'destroy, then abort'; packages/isolate-host/tests/sandbox-destroy-table.test.ts 'after destroy() no isolate of the sandbox runs: every end × every moment (I5)' (62 rows)",
+      "note": "Mutant NO_DESTROYED_GUARD killed by 'destroy, then abort'. A8 resolved: 'in flight: the run is cancelled and stopped' now uses timeoutMs 20 000 + <5 s bound; destroy() without #run.abort fails it (20.6 s) where the old row passed. destroy-table 62/62 at HEAD."
+    },
+    {
+      "row": "Acceptance 8: outcome × abort moment table on workers' CPU",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-abort-table.test.ts 'an abort around the result: one outcome, files per the outcome reported' > '<exit|timeout|memory|refused state|lost worker> × abort <0–3 microtask(s) after the result|after await>' (25 rows); packages/isolate-host/tests/sandbox-abort-table.test.ts 'an abort before the run has a result: AbortError at once, files of before, the isolate stopped' (8 rows)",
+      "note": "Mutant COMMIT_EARLY (apply Commit before the done check) fails exactly 'exit × abort 0–3' → an AbortError never leaves the run's end state; rollback = killed-run rule."
+    },
+    {
+      "row": "Acceptance 9: README/compat/CHANGELOG/ADR claim no more than code",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/isolate-host/README.md 'Cancel with an AbortSignal' paragraph (:143-155); docs/public/compat/isolate-host.md row '`signal` (`AbortSignal`) of `exec` and of every host op'; packages/isolate-host/CHANGELOG.md Unreleased first bullet; ADR-0568 §5 abort paragraph",
+      "note": "A7 resolved: one rule (addAbortListener), compat ⚠️ row and 'stricter than Node' caveat removed (git grep: no 'instance of AbortSignal'/'stricter than Node' left outside this file). README:177 stack claim pinned for the abort path by the ece1eb7fc stack row. N3: compat row now names execFile-like refusals, {aborted:false} refused where readFile accepts, and the untested cross-realm (vm) signal."
+    },
+    {
+      "row": "Parity 1: abort(reason) and abort() in flight = Node AbortError",
+      "source": "parity",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-abort.test.ts \"the rejection is Node's AbortError (parity, Node fs.promises.readFile)\" > 'abort(reason) and abort() in flight, abort() before the call give the oracle shape'",
+      "note": "A5: in-flight abort() without reason now compared to live readFile (cause DOMException AbortError). Green on 42a30fab1 (safety row: the behaviour was right, only unchecked)."
+    },
+    {
+      "row": "Parity 2: pre-aborted → oracle shape, no run output",
+      "source": "parity",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "same test (pre half); packages/isolate-host/tests/sandbox-abort.test.ts 'the turn signal cancels a run without destroying the sandbox (scenario)' > 'an already-aborted signal rejects without a pool call'",
+      "note": ""
+    },
+    {
+      "row": "Parity 3: Node's refusals; stopImmediatePropagation does not stop the cancel",
+      "source": "parity",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-abort.test.ts 'the signal option' > \"is an option of exec and of every host op; a value Node refuses is refused with Node's error\"; packages/isolate-host/tests/sandbox-abort.test.ts 'a consumer listener that stops the abort event does not stop the cancel (as Node)' > 'the run in flight and an op queued behind it are cancelled; execFile on the same signal too'",
+      "note": "A1 resolved: the stop row is RED on 42a30fab1 (run resolved at its 5 s deadline), GREEN at HEAD, execFile on the same signal cancelled too (live Node). Mutant A1 (plain addEventListener + own validation) kills both rows; A1b (Node's validation kept, plain once-listener) kills the stop row alone. Covers the queued op on the same signal."
+    },
+    {
+      "row": "Fault: abort × lost worker (rerun pending)",
+      "source": "fault",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-abort-table.test.ts 'an abort before the run has a result: AbortError at once, files of before, the isolate stopped' > 'its worker lost, the rerun not yet placed: the rerun is never placed'",
+      "note": "d7e6a6bda polls up to 30×100 ms for the busy worker (robustness, no weakening). A5: fault row 1 artifact now names this test."
+    },
+    {
+      "row": "Fault: abort × isolate ignoring termination",
+      "source": "fault",
+      "trace": "ADR-0568",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-abort-table.test.ts 'an abort before the run has a result: AbortError at once, files of before, the isolate stopped' > 'during the run of a builtin that ignores termination'",
+      "note": "Contract artifact names this test verbatim (ece1eb7fc)."
+    },
+    {
+      "row": "Fault: abort racing the result",
+      "source": "fault",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-abort-table.test.ts 'an abort around the result: one outcome, files per the outcome reported' > '<end> × abort 0–3 microtask(s) after the result'",
+      "note": "See Acceptance 8."
+    },
+    {
+      "row": "Fault: abort × destroy",
+      "source": "fault",
+      "trace": "ADR-0568",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-abort-table.test.ts 'abort × destroy, either order: every operation settles once, DESTROYED for those unsettled at destroy()' > 'abort, then destroy', 'destroy, then abort'",
+      "note": "Contract artifact names both tests verbatim (ece1eb7fc)."
+    },
+    {
+      "row": "Fault: a signal whose own members throw → the consumer's error at the call, nothing placed",
+      "source": "fault",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-abort.test.ts 'the signal option' > 'a signal whose own members throw (a consumer bug) is refused at the call with that error; nothing is placed'; packages/isolate-host/tests/sandbox-abort.test.ts \"a value a signal's own addEventListener throws is the refusal as is (as Node's execFile)\" > 'null', 'undefined', 'a TypeError coded ERR_INVALID_ARG_TYPE'",
+      "note": "Consumer's thrown value handed on as is, identity vs live execFile (null, undefined, coded TypeError included — N2). Stack pinned by the stack row."
+    },
+    {
+      "row": "Cross-review A1 (stopImmediatePropagation silenced the cancel)",
+      "source": "cross-review",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-abort.test.ts 'a consumer listener that stops the abort event does not stop the cancel (as Node)' > 'the run in flight and an op queued behind it are cancelled; execFile on the same signal too'",
+      "note": "RED on 42a30fab1, GREEN at HEAD; fix sandbox.ts:226-240 (events.addAbortListener, kResistStopPropagation)."
+    },
+    {
+      "row": "Cross-review A2 (pool-call count read before the aborted op's turn)",
+      "source": "cross-review",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-abort.test.ts 'the turn signal cancels a run without destroying the sandbox (scenario)' > 'an endless run rejects AbortError…'; packages/isolate-host/tests/sandbox-abort-table.test.ts 'an abort before the run has a result: AbortError at once, files of before, the isolate stopped' > 'queued behind another run: it never starts'",
+      "note": "Mutant red under root gate config (both rows, on HEAD and on 42a30fab1 sandbox.ts)."
+    },
+    {
+      "row": "Cross-review A3 (args null accepted)",
+      "source": "cross-review",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-abort.test.ts 'exec options are read at the call' > '`args: null` is ERR_INVALID_ARG_TYPE, as an args that is not an array'",
+      "note": "RED on 42a30fab1; mutant `?? []` killed."
+    },
+    {
+      "row": "Cross-review A4 (host-op × k rows accepted both outcomes)",
+      "source": "cross-review",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-abort-table.test.ts 'every host op × abort 0–5 microtasks after its call: AbortError unless it had started'",
+      "note": "Mutant now fails 5/5 ops at k=2."
+    },
+    {
+      "row": "Cross-review A5 (contract vs code)",
+      "source": "cross-review",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "docs/backlog/distribution/isolate-host-sandbox-exec-abort-signal.md Parity cases 1–3, Fault matrix rows 1 and 5",
+      "note": "Row 5 class, row 1 artifact, in-flight abort() parity fixed (d2948b6ac); rows 2/4 artifact names verbatim (ece1eb7fc)."
+    },
+    {
+      "row": "Cross-review A6 (throwing reason getter's error in flight not bared)",
+      "source": "cross-review",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-abort.test.ts \"the abort path's errors and listeners\" > 'every error it rejects with carries its first line as stack (no frame of this process)'",
+      "note": "Fix sandbox.ts:217 (d2948b6ac). Row (in-flight AbortError, pre-aborted, in-flight throwing reason getter, signal refusal 'x') red on 42a30fab1's sandbox.ts (getter error stack had host frames), green at HEAD; mutants A6 (:217), BARE_ABORT (:215), NO_REFUSED_BARE each fail exactly it."
+    },
+    {
+      "row": "Cross-review A7 (one signal rule)",
+      "source": "cross-review",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "docs/public/compat/isolate-host.md signal row; ADR-0568 §5; backlog Decisions",
+      "note": "Node's rule; ⚠️ row and caveat gone."
+    },
+    {
+      "row": "Cross-review A8 (destroy in-flight row not discriminating)",
+      "source": "cross-review",
+      "trace": "ADR-0568",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-destroy-table.test.ts 'after destroy() no isolate of the sandbox runs: every end × every moment (I5)' > 'in flight: the run is cancelled and stopped'",
+      "note": "Old row green under mutant (2.4 s), new row red (20.6 s)."
+    },
+    {
+      "row": "Listener hygiene",
+      "source": "acceptance",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-abort.test.ts 'the turn signal cancels a run without destroying the sandbox (scenario)' > 'an endless run rejects AbortError…' (getEventListeners 0), 'an abort after the result has no effect and leaves no listener'; packages/isolate-host/tests/sandbox-abort.test.ts \"the abort path's errors and listeners\" > 'an op that rejects on its own leaves no listener on its signal'",
+      "note": "Probe: 21 listeners on one signal (run + 20 queued writes), no warning, 0 after. Rejection-path dispose pinned (LEAKREJ killed by the listener row)."
+    },
+    {
+      "row": "Cross-review round 2 N1 (pre-aborted × same-tick destroy)",
+      "source": "cross-review",
+      "trace": "ADR-0568",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-abort.test.ts 'an already-aborted signal × destroy() in the same tick' > 'both reject DESTROYED: the AbortError comes a microtask after the call (as Node), so the op is unsettled at destroy()'",
+      "note": "Safety row (green at 2696b0682); outcome and why stated in Acceptance 2 and README:152-154."
+    },
+    {
+      "row": "Cross-review round 2 N2 (onAbort rewrapped a consumer's thrown value)",
+      "source": "cross-review",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "packages/isolate-host/tests/sandbox-abort.test.ts \"a value a signal's own addEventListener throws is the refusal as is (as Node's execFile)\" > 'null', 'undefined', 'a TypeError coded ERR_INVALID_ARG_TYPE'",
+      "note": "RED at 2696b0682 (3 rows), GREEN at HEAD; fix sandbox.ts:232-233 rewords only Node's refusal of a non-signal (`'aborted' in signal` false). 4 onAbort mutants killed."
+    },
+    {
+      "row": "Cross-review round 2 N3 (compat wording)",
+      "source": "cross-review",
+      "trace": "scenario",
+      "status": "pass",
+      "citation": "docs/public/compat/isolate-host.md row '`signal` (`AbortSignal`) of `exec` and of every host op'",
+      "note": "Claims match the rows in sandbox-abort.test.ts; cross-realm declared untested."
+    }
+  ],
+  "axes": [
+    {
+      "axis": "Completeness",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "packages/isolate-host/tests/sandbox-abort.test.ts:367",
+          "evidence": "Mutants A6, BARE_ABORT, NO_REFUSED_BARE, LEAKREJ each 1 failed / 84 passed.",
+          "summary": "Resolved: abort-path stack and rejection-path listener disposal now pinned.",
+          "authority": "AGENTS Fidelity"
+        }
+      ]
+    },
+    {
+      "axis": "Mission and architecture",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "packages/isolate-host/src/sandbox.ts:226",
+          "evidence": "A1/A1b mutants killed; live execFile on the same signal cancelled in-test.",
+          "summary": "Signal checked and subscribed by Node's own events.addAbortListener: one rule, Node's.",
+          "authority": "Fidelity"
+        }
+      ]
+    },
+    {
+      "axis": "Goal drift",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "docs/backlog/distribution/isolate-host-sandbox-exec-abort-signal.md",
+          "evidence": "Acceptance 1 text unchanged; Decision 2026-11-24 (cross-review round 1) reinterprets it.",
+          "summary": "Acceptance 1 'any other value → ERR_INVALID_ARG_TYPE' now read as 'any value Node refuses' ({aborted:false} → plain TypeError, {aborted:true} accepted, as Node).",
+          "authority": "Acceptance 1"
+        }
+      ]
+    },
+    {
+      "axis": "Approach cost",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "packages/isolate-host/src/sandbox.ts:355",
+          "evidence": "",
+          "summary": "Delta removes signalOf and the pre-aborted fast path; one subscription helper, no new mechanism.",
+          "authority": "Simplicity"
+        }
+      ]
+    },
+    {
+      "axis": "Scope",
+      "verdict": "pass",
+      "findings": []
+    },
+    {
+      "axis": "Bugs",
+      "verdict": "pass",
+      "findings": [
+        {
+          "severity": "nit",
+          "location": "packages/isolate-host/README.md:153",
+          "evidence": "8b8b18eda..9aa1a3054 text only; node v24.16.0 probe: pre-aborted readFile already rejected at return, addAbortListener listener after a microtask.",
+          "summary": "Resolved: README/Acceptance 2 no longer say 'as in Node'; they name which Node APIs defer and which reject at once.",
+          "authority": "Fidelity (wording)"
+        }
+      ]
+    },
+    {
+      "axis": "Regressions",
+      "verdict": "concern",
+      "findings": [
+        {
+          "severity": "concern",
+          "location": "packages/isolate-host/src/sandbox.ts:1",
+          "evidence": "HEAD 8b8b18eda unpushed; PR CI not yet run at HEAD.",
+          "summary": "Merge only on all-green PR CI at HEAD.",
+          "authority": "DoD"
+        }
+      ]
+    },
+    {
+      "axis": "Ecosystem UX",
+      "verdict": "pass",
+      "findings": []
+    }
+  ]
+}

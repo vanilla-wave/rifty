@@ -6,7 +6,7 @@
  * exist here). Processes, workers, transfer marks, Web Locks: named gaps.
  */
 import { EventEmitter } from '@riftydev/io';
-import { loudAsync, loudClass, loudFunction, named } from './egress-gaps.ts';
+import { gap, loudAsync, loudClass, loudFunction, named } from './egress-gaps.ts';
 import { nodeError } from './node-validators.ts';
 
 const NO_PROCESS = 'no child processes in the rifty isolate host, ADR-0557';
@@ -44,9 +44,14 @@ export function createChildProcess(): Record<string, unknown> {
     spawn: fn('spawn', 3),
     spawnSync: fn('spawnSync', 3),
   };
-  // Node's `util.promisify` forms: `function(...args)` calling the original.
-  for (const name of ['exec', 'execFile'])
-    Object.defineProperty(cp[name], promisifyCustom, { value: fn(name, 0) });
+  // Node's `util.promisify` forms: `function(...args)` returning a promise a failed start rejects.
+  for (const name of ['exec', 'execFile']) {
+    // A declaration, not an arrow: Node's form has a `prototype`.
+    function custom(): Promise<never> {
+      return Promise.reject(gap(`child_process.${name}`, NO_PROCESS));
+    }
+    Object.defineProperty(cp[name], promisifyCustom, { value: named(custom, name, 0) });
+  }
   return cp;
 }
 

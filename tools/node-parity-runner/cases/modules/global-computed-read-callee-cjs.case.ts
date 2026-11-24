@@ -1,6 +1,6 @@
 import type { ParityCase } from '../../src/types.ts';
 
-// Unit runtime-js/computed-global-read-callee: a computed read of a global member
+// PR #439 (ADR-0444 amendment 2026-11-24): a computed read of a global member
 // called or constructed. es-abstract 2025/IsDetachedBuffer.js:22 and
 // typed-array-length index.js:41 shapes, call forms, key coercion. A key that is
 // 'Function' at runtime is a declared ceiling (conformance global-computed-read-callee).

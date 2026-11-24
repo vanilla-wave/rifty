@@ -93,11 +93,23 @@ key throws the format's ceiling there (Node constructs). Consumer: es-abstract
 called, a called alias/destructured binding of the read, `G?.[k](…)`, and
 (`*-dynamic-function-scope`) a module holding such a read with `with` or a
 call to the identifier `eval` (any binding, `?.`, spread), which can shadow
-the per-module helper (PR #439 reviews 1–2; rule in the unit's Decisions).
+the per-module helper (PR #439 reviews 1–2, manager rule). Why the rule
+closes the class: at runtime only `with` and a direct eval add a binding to a
+module scope, and a direct eval is syntactically always a call of the
+identifier `eval`; `(0, eval)(…)`, `globalThis.eval(…)`, `Function(…)` run in
+the global scope and cannot reach the helper (a factory parameter). No
+exceptions in the predicate (each one reopened the hole); cost: refused where
+Node runs (`eval?.()`, `eval(...a)`, a local `eval` bound to another value),
+zero against the base, which refused all such modules. The read's ceiling keeps
+the feature id `module-loader.{cjs,esm}-global-function-assignment` (message:
+"writes, calls or constructs"). Applies to tracked global objects only, as
+every guard site; `self`/`window` are undefined in rifty as in Node.
 Rejected, manager decision (not the user's words, reversible): handing the
 routed `Function` (ADR-0171) for that key — a value-substituting helper with
 stashed state, no consumer; trigger to revisit: a package constructing
-`Function` through a computed global key. Unit
-`runtime-js/computed-global-read-callee`; guard: parity
+`Function` through a computed global key. Also not widened (manager): a
+called alias/destructured binding of the read, though the same check could
+admit it (candidate in `runtime-js/function-constructor-exhaustive-metaprogramming-ceiling`).
+PR #439; guard: parity
 `modules/global-computed-read-callee-{cjs,esm}`, conformance
 `tests/conformance/modules/global-computed-read-callee.test.ts`.

@@ -141,7 +141,7 @@ describe('ESM Function guard — runtime computed global keys (ADR-0444)', () =>
     expect(globalThis.Function).toBe(HostFunction);
   });
 
-  // `new globalThis[key](…)` loads since unit computed-global-read-callee
+  // `new globalThis[key](…)` loads since PR #439 (ADR-0444 amendment 2026-11-24)
   // (global-computed-read-callee.test.ts); a called Reflect.get keeps the ceiling.
   it('keeps the load-time ceiling for runtime-key reads used as a constructor', async () => {
     const cases: Record<string, string> = {

@@ -1,0 +1,76 @@
+Readable option _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
+Readable option _construct gates work => pre=sync,C:true post=R
+Writable option _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
+Writable option _construct gates work => pre=sync,C:true post=Wx
+Duplex option _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
+Duplex option _construct gates work => pre=sync,C:true post=R,Wx
+Transform option _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
+Transform option _construct gates work => pre=sync,C:true post=Wx
+PassThrough option _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
+PassThrough option _construct gates work => pre=sync,C:true post=Wx
+Readable own _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
+Readable own _construct gates work => never-constructed ops=R
+Writable own _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
+Writable own _construct gates work => never-constructed ops=Wx
+Duplex own _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
+Duplex own _construct gates work => never-constructed ops=R,Wx
+Transform own _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
+Transform own _construct gates work => never-constructed ops=Wx
+PassThrough own _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
+PassThrough own _construct gates work => never-constructed ops=Wx
+Readable class _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
+Readable class _construct gates work => pre=sync,C:true post=R
+Writable class _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
+Writable class _construct gates work => pre=sync,C:true post=Wx
+Duplex class _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
+Duplex class _construct gates work => pre=sync,C:true post=R,Wx
+Transform class _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
+Transform class _construct gates work => pre=sync,C:true post=Wx
+PassThrough class _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
+PassThrough class _construct gates work => pre=sync,C:true post=Wx
+Readable es5 _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
+Readable es5 _construct gates work => pre=sync,C:true post=R
+Writable es5 _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
+Writable es5 _construct gates work => pre=sync,C:true post=Wx
+Duplex es5 _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
+Duplex es5 _construct gates work => pre=sync,C:true post=R,Wx
+Transform es5 _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
+Transform es5 _construct gates work => pre=sync,C:true post=Wx
+PassThrough es5 _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
+PassThrough es5 _construct gates work => pre=sync,C:true post=Wx
+Readable chain _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
+Readable chain _construct gates work => pre=sync,C:true post=R
+Writable chain _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
+Writable chain _construct gates work => pre=sync,C:true post=Wx
+Duplex chain _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
+Duplex chain _construct gates work => pre=sync,C:true post=R,Wx
+Transform chain _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
+Transform chain _construct gates work => pre=sync,C:true post=Wx
+PassThrough chain _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
+PassThrough chain _construct gates work => pre=sync,C:true post=Wx
+Readable late _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
+Readable late _construct gates work => never-constructed ops=R
+Writable late _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
+Writable late _construct gates work => never-constructed ops=Wx
+Duplex late _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
+Duplex late _construct gates work => never-constructed ops=R,Wx
+Transform late _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
+Transform late _construct gates work => never-constructed ops=Wx
+PassThrough late _destroy replaces the error => D:boom:true,sync destroyed=true,error replaced,close
+PassThrough late _construct gates work => never-constructed ops=Wx
+Writable _destroy() without error, callback ok => D null,close
+Writable _destroy() without error, callback error => error X,close
+Writable async _destroy callback => D,sync errored=e,t1,Dcb,error e,close
+Duplex _destroy runs once for both sides => D e,error e,close
+Duplex write error reaches _destroy => D w,error w
+Transform _destroy runs once for both sides => D e,error e,close
+Transform write error reaches _destroy => D w,error w
+Readable _construct error destroys => C,D cfail,error cfail,close
+Writable _construct error destroys => C,D cfail,error cfail,close
+Duplex _construct error destroys => C,D cfail,error cfail,close
+Transform _construct error destroys => C,D cfail,error cfail,close
+Readable destroy during _construct => C,Cdone,D early,error early,close
+Writable destroy during _construct => C,wcb early,Cdone,D early,error early,close
+Writable sync _construct still defers to next tick => sync,C,Wa,Wb,FIN
+Readable read() before _construct => read=null,Cdone,R,dx
+prototype shape => Readable:function/undefined Writable:function/undefined Duplex:function/undefined Transform:function/undefined PassThrough:function/undefined duplex-destroy-is-readable:true

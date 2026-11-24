@@ -47,7 +47,7 @@ metaprogramming backlog rather than rejected merely because the module also
 contains an unrelated lexical `Function` use.
 
 Computed global reads used as a callee/constructor (es-abstract, typed-array-*,
-exceljs's main entry): own unit `runtime-js/computed-global-read-callee`.
+exceljs's main entry) load since PR #439 (ADR-0444 amendment 2026-11-24).
 
 ## Options / Next
 

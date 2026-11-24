@@ -1,6 +1,6 @@
 import type { ParityCase } from '../../src/types.ts';
 
-// ESM twin of global-computed-read-callee-cjs (unit runtime-js/computed-global-read-callee).
+// ESM twin of global-computed-read-callee-cjs (PR #439, ADR-0444 amendment 2026-11-24).
 const c: ParityCase = {
   kind: 'esm',
   code: `
