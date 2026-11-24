@@ -15,6 +15,41 @@ const patched = call();
 for (const [o, k, v] of saved) o[k] = v;
 console.log(patched);`;
 module.exports = {
+  // Review rounds 1–3: guest programs that broke DEP0169's caller detection (url.parse threw, or
+  // `.stack` of later errors became an array). DEP0169 is not emitted any more (ADR-0574, user's
+  // choice 2026-11-24); each must give Node's stdout but for its DEP0169 line.
+  'descriptor-attack-on-owner': {
+    hosts: ['isolate', 'browser'],
+    files: {
+      'main.js': `const url = require('url'); require('vm').runInThisContext('0', { lineOffset: 1 });
+Error.prepareStackTrace = () => 'guest'; const descriptor = Object.getOwnPropertyDescriptor; let reads = 0;
+Object.getOwnPropertyDescriptor = function (o, k) { if (o === Error && k === 'prepareStackTrace' && ++reads === 4) throw new Error('guest descriptor'); return descriptor(o, k); };
+let out; try { out = url.parse('http://a.com/').hostname; } catch (e) { out = 'THROW ' + e.message; }
+Object.getOwnPropertyDescriptor = descriptor;
+console.log(out); console.log('next stack', Array.isArray(new Error().stack) ? 'ARRAY' : typeof new Error().stack);`,
+    },
+  },
+  'stack-edge-with-owner': {
+    hosts: ['isolate', 'browser'],
+    files: {
+      'node_modules/p/package.json': '{"name":"p","main":"index.js"}',
+      'node_modules/p/index.js':
+        "const url = require('url'); module.exports = () => url.parse('http://a.com/');",
+      'main.js': `const p = require('p'); require('vm').runInThisContext('1', { lineOffset: 3 });
+Error.prepareStackTrace = function g() { return 'G'; };
+function f() { try { f(); } catch {} try { p(); } catch {} }
+for (let i = 0; i < 40; i++) new Function('f', 'let ' + Array.from({ length: i + 1 }, (_, j) => 'v' + j + '=' + j).join(',') + '; return f() + v0;')(f);
+const s = new Error('x').stack; console.log(typeof s, Array.isArray(s) ? 'array' : s);`,
+    },
+  },
+  'error-frozen-then-stack': {
+    hosts: ['isolate', 'browser'],
+    files: {
+      'main.js': `const url = require('url'); Object.freeze(Error);
+let out; try { out = url.parse('http://a.com/').hostname; } catch (e) { out = 'THROW ' + e.message; }
+console.log(out, typeof new Error('x').stack);`,
+    },
+  },
   'patched-symbol-split': {
     hosts: ['browser'],
     files: {
