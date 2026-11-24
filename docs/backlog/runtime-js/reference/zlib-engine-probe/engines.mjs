@@ -101,6 +101,7 @@ export function wasmEngine(bytes, name = 'wasm-node-zlib') {
   const x = inst.exports;
   x._initialize?.();
   const SZ = 56;
+  const malloc = (n) => x.malloc(n) >>> 0; // i32 export: pointers ≥ 2 GiB come back negative
   const ver = x.zlibVersion();
   const u8 = () => new Uint8Array(x.memory.buffer);
   const u32 = () => new Uint32Array(x.memory.buffer);
@@ -115,7 +116,7 @@ export function wasmEngine(bytes, name = 'wasm-node-zlib') {
     name,
     exports: x,
     crc32(value, bytes) {
-      const p = x.malloc(bytes.length || 1);
+      const p = malloc(bytes.length || 1);
       new Uint8Array(x.memory.buffer).set(bytes, p);
       const r = x.crc32(value, p, bytes.length) >>> 0;
       x.free(p);
@@ -123,7 +124,7 @@ export function wasmEngine(bytes, name = 'wasm-node-zlib') {
     },
     stream(kind) {
       const isDeflate = kind === 'deflate';
-      const s = x.malloc(SZ);
+      const s = malloc(SZ);
       u8().fill(0, s, s + SZ);
       let inPtr = 0;
       let inCap = 0;
@@ -133,17 +134,17 @@ export function wasmEngine(bytes, name = 'wasm-node-zlib') {
         if (which === 'in' && len > inCap) {
           if (inPtr) x.free(inPtr);
           inCap = len;
-          inPtr = x.malloc(len || 1);
+          inPtr = malloc(len || 1);
         }
         if (which === 'out' && len > outCap) {
           if (outPtr) x.free(outPtr);
           outCap = len;
-          outPtr = x.malloc(len || 1);
+          outPtr = malloc(len || 1);
         }
       };
-      const f = (i) => u32()[(s >> 2) + i];
+      const f = (i) => u32()[(s >>> 2) + i];
       const setF = (i, v) => {
-        u32()[(s >> 2) + i] = v;
+        u32()[(s >>> 2) + i] = v;
       };
       return {
         init(o) {

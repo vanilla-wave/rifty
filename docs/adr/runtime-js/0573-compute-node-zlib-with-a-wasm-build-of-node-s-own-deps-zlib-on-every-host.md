@@ -1,6 +1,6 @@
 # ADR 0573: Compute node:zlib with a wasm build of Node's own deps/zlib on every host
 
-Status: Proposed (draft — engine choice is the manager's, goal `node-zlib-on-every-host`)
+Status: Accepted — manager decision 2026-11-24 by the user's delegation («исследуй и запускай»), not the user's choice
 Date: 2026-11
 
 > TL;DR: one wasm build of Node v24.16.0's `deps/zlib` (Chromium's zlib 1.3.1 fork, no SIMD), vendored
@@ -40,8 +40,16 @@ own `lib/zlib.js` also runs on each engine via a swapped `binding.Zlib`.
   toolchain +37 KB gzip (323.6 → 360.5 of 386); guest +37 KB gzip. pako: +14 KB gzip client,
   +21 KB guest.
 - Memory: 200 streams 38 MiB linear memory, kept after close (reused, never shrunk), outside the isolate
-  `memoryLimit` — the class ADR-0563 already settles (memory outside the heap → the worker's RSS
-  ceiling; a guest can allocate wasm memory itself today). pako 33 MiB JS heap, collected, counted.
+  `memoryLimit`. Not a new guest capability (probe `guest-wasm.mjs`, `runCode({ memoryLimitMb: 64 })`):
+  a guest already allocates and fills a 128 MiB `WebAssembly.Memory`, exit 0 (3/3); 512 MiB ends
+  `termination: 'memory'` (3/3; one earlier single run exited 0). So the class is ADR-0563's (memory
+  outside the heap → the worker's RSS ceiling); the engine's memory is the same kind. pako 33 MiB JS heap,
+  collected, counted.
+- Per-stream state and the wasm32 ceiling (probe `streams-cap.mjs`): an open deflate stream costs
+  302776 B of linear memory (default options; 450232 B at `memLevel: 9`); an inflate stream 58327 B (20000 open: 1113 MiB).
+  10000 open deflate streams hold 2888 MiB; one realm's wasm32 space (4 GiB) ends at 14182 deflate
+  streams (9538 at `memLevel: 9`): the next stream's first write errors `Zlib error` `Z_MEM_ERROR`
+  through Node's own error path. Real Node keeps 10000 open deflate streams on native memory (RSS +2201 MiB).
 
 ## Decision
 
@@ -51,7 +59,7 @@ own `lib/zlib.js` also runs on each engine via a swapped `binding.Zlib`.
    build script + sha256; rebuilt when rifty's claimed Node version moves. Licenses: Zlib + Chromium
    BSD-3, credited as Node does.
 2. Placement: runtime-js, shared by every host (browser realms and the isolate guest bundle). Inline
-   bytes, compiled synchronously on first `node:zlib` use, one instance per realm; no preload gate
+   bytes (base64), compiled synchronously on first `node:zlib` use, one instance per realm; no preload gate
    (ADR-0351/0352 machinery not needed: sync compile works in the isolate, a Chromium worker and
    Chromium 148's main thread). Chromium 108's main thread refuses > 4 KB — same owner as
    `runtime-js/chromium108-sdk-sync-wasm-import`.
@@ -69,6 +77,14 @@ own `lib/zlib.js` also runs on each engine via a swapped `binding.Zlib`.
    streams and sees the allocator reuse their blocks. Linear memory itself never shrinks: a realm keeps
    its peak until it ends.
 7. Boundary: brotli and zstd stay `NotImplementedError` on every host.
+8. Bundle budget: inline costs +36950 B gzip in the client generic bundle (279754 → 316704 of 332000:
+   15296 B left) and +36855 B in toolchain (323615 → 360470 of 386000: 25530 B left). Kill condition:
+   a PR that would cross a `CLIENT_BUNDLE_BUDGETS` cap re-opens this placement — in order: the builtin
+   `zlib` module (engine included) in its own lazily loaded chunk, if `require('zlib')` stays
+   synchronous; the wasm as a host-published asset with a pre-entry preload (ADR-0351/0352); pako
+   (Alternatives). None of the three is measured. Unit 2 (`runtime-js/zlib-engine-one-shots`)
+   measures first whether the builtin can leave the generic eager graph without changing
+   `require('zlib')`'s synchronous semantics.
 
 ## Alternatives
 

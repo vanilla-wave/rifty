@@ -23,5 +23,7 @@ node bench-isolate.mjs "$DEPS" "$BUILD" "$REPO" > "$R/bench-isolate.txt"
 node bench-browser.mjs "$DEPS" "$BUILD" "$REPO" > "$R/bench-browser.txt"
 node bench-bridge.mjs "$REPO" > "$R/bench-bridge.txt"
 node --expose-gc memory.mjs "$DEPS" "$BUILD" > "$R/memory.txt"
+node streams-cap.mjs "$DEPS" "$BUILD" > "$R/streams-cap.txt"
+node --import tsx guest-wasm.mjs "$REPO" > "$R/guest-wasm.txt"
 for v in none pako wasm none; do echo "== $v"; sh measure-bundles.sh "$REPO" "$DEPS" "$BUILD" "$v"; done > "$R/bundles.txt" 2>&1
 node --import tsx main-red.mjs "$REPO" > "$R/main-red.txt"

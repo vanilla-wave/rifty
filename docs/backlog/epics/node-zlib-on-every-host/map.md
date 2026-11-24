@@ -10,7 +10,11 @@
    `runtime-js/zlib-web-compression-subset` (each deleted when this lands). → I1–I3, scenario 3–5, 7.
 3. `runtime-js/zlib-node-stream-classes` — **streams** — Node's classes, `create*`, members and
    internals over the same handle; absorbs `runtime-js/zlib-class-call-shape` and the rest of
-   `runtime-js/zlib-web-compression-subset`. → I1, I4, I5, scenario 1–3, 6.
+   `runtime-js/zlib-web-compression-subset`. → I1, I4, I5, scenario 1–3, 6. **Blocked on rifty's
+   streams**: it stands on rifty's `Transform` (no backpressure, no `_destroy`) — the same wall as the
+   parked PRs #434 (`fs` ReadStream/WriteStream close) and #437 (isolate `fs.createReadStream`), whose
+   streams goal waits on the user. Units 1–2 run now; unit 3 starts after that decision, or with the
+   named walls as declared residuals (compat ⚠️ + backlog). Streams are not fixed inside zlib.
 4. Walls the carrier exposes after 3 (hypotheses until hit): rifty `Transform` backpressure
    (`runtime-js/transform-readable-backpressure`), `_destroy` (`runtime-js/stream-destroy-construct-hooks`
    — zlib's frees the engine state), event order (`runtime-js/duplex-end-finish-close-order`).
@@ -27,10 +31,11 @@
 
 ## Decisions
 
-- Engine: ADR-0573 (Proposed) recommends the wasm build of Node's `deps/zlib`; pako 3.0.3 + a
-  `deflateParams` port measured the same Node-observable behaviour. Units 2–3 do not depend on the
-  choice: both put the same port of Node's handle over z_stream primitives (probe `driver.mjs` ran
-  both). The manager accepts or replaces ADR-0573 before unit 2 starts.
+- Engine: the wasm build of Node v24.16.0's `deps/zlib` on every host — ADR-0573 accepted by the
+  manager 2026-11-24 under the user's delegation («исследуй и запускай»), not the user's choice.
+  Ground: the only candidate at 1418/1418 and 62/62 with no zlib code written in rifty (pako needs a
+  rifty `deflateParams` port and a rifty `crc32`); no difference observable against Node.
+- Order: units 1–2 now, in a thread from `main` after this map merges; unit 3 per its line above.
 
 ## Out of scope
 

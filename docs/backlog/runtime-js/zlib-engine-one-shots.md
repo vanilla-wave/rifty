@@ -27,6 +27,12 @@ Probe facts on the wasm build through this shape: 1418/1418 matrix (incl. `crc32
 47 deflate-family `test-zlib*.js` files pass (its `crc32` test ran on Node's native `binding.crc32`);
 pdfkit and pngjs `PNG.sync.write` byte-identical.
 
+Acceptance seeds (manager 2026-11-24): the vendored `zlib.wasm` is rebuilt from the pinned Node
+tarball on the CI runner (another machine, Linux x64) by the committed script and gives the
+committed sha256; before wiring, measure whether the builtin `zlib` module (engine included) can
+leave the client generic eager graph as a lazily loaded chunk without changing `require('zlib')`'s
+synchronous semantics (ADR-0573 §8: 15296 B gzip left under the generic cap with it inline).
+
 ## Challenge
 
 challenge: 2026-11-24 — reuses the goal's FIT challenge (goal.md §Challenge); findings 3, 5, 6, 12 touched these drafts and are fixed.

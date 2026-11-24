@@ -25,6 +25,8 @@ for one build and restores it on exit — run it on a clean tree.
 | `consumers.mjs` + `consumer-scenarios.cjs` | exceljs streaming writer, unzipper, ws permessage-deflate, pngjs sync, pdfkit — digest of their output, native vs engine |
 | `highlevel.mjs` | controls without a z_stream API: fflate, wasm-flate |
 | `bench-*.mjs`, `bench-core.js`, `memory.mjs` | speed (Node, isolate, Chromium worker), first use, memory, host bridge |
+| `guest-wasm.mjs` | whether a guest already allocates wasm memory outside its `memoryLimit` (`runCode`) |
+| `streams-cap.mjs` | wasm bytes per open stream; streams one realm opens before the wasm32 4 GiB space ends; 10000 native streams |
 | `measure-bundles.sh` | real bundle cost: `pnpm test:client-bundles` + isolate guest build per engine |
 | `main-red.mjs` | the same calls on main: real Node vs rifty isolate host vs rifty's browser-host module |
 
@@ -65,7 +67,8 @@ engine writes 3. All other bytes: no CPU dependence by source (deflate hash is C
 | client bundles generic / toolchain, Δ min / Δ gzip, B | baseline 932920/279754, 1061998/323615 (caps 1124000/332000, 1284000/386000) | +44561/+14198, +44626/+13945 | +86372/+36950, +86456/+36855 (inline base64) |
 | isolate guest.js Δ raw / Δ gzip, B (unminified bundle) | baseline 7123270/1497917 | +110158/+20573 | +86545/+36857 |
 | 100 deflate + 100 inflate streams open → closed | — | 33.4 → 0.2 MiB JS heap (GC'd) | 38 → 38 MiB linear memory (never shrinks; reused on reopen) |
-| counted by isolate `memoryLimit` | — | yes (JS ArrayBuffers) | **no**: 512 MiB `memory.grow` under a 64 MiB limit succeeds (a guest can already do this with its own wasm) |
+| counted by isolate `memoryLimit` | — | yes (JS ArrayBuffers) | **no**: 512 MiB `memory.grow` under a 64 MiB limit succeeds (bare isolated-vm). A `runCode` guest already fills its own 128 MiB `WebAssembly.Memory` under 64 MiB, exit 0 (3/3); 512 MiB ends `termination: 'memory'` (3/3) — `guest-wasm.txt` |
+| open streams, wasm (`streams-cap.txt`) | 10000 deflate: RSS +2201 MiB | — | deflate 302776 B each (450232 at `memLevel: 9`), inflate 58327 B; 10000 deflate = 2888 MiB; the 4 GiB space ends at 14182 deflate (9538 at `memLevel: 9`): next one `Zlib error` `Z_MEM_ERROR` |
 | reproducible build | npm tarball | npm tarball | same sha256 twice on one machine (`15b6a5b0…`); other machines not tried |
 | license | — | MIT + Zlib | Zlib + Chromium BSD-3 (`cpu_features.c`, `insert_string.h`), as Node ships them |
 
