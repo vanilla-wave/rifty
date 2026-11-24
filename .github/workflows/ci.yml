@@ -44,7 +44,6 @@ jobs:
 
   lint-and-typecheck:
     runs-on: ubuntu-24.04
-    timeout-minutes: 1 # RED proof: job-level cancel
     steps:
       - uses: actions/checkout@v4
         with:
@@ -101,7 +100,6 @@ jobs:
       matrix:
         suite: [run, parity]
     steps:
-      - run: exit 1 # RED proof: job failure
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0 # committed perf provenance resolves measured + artifact commits
@@ -155,7 +153,6 @@ jobs:
           - { lane: prod }
           - { lane: hosted }
     steps:
-      - run: exit 1 # RED proof: job failure
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4 # version from package.json `packageManager`
       - uses: actions/setup-node@v4
@@ -267,7 +264,6 @@ jobs:
     # boot. Own job (not an e2e matrix lane): different tier, different config.
     runs-on: ubuntu-24.04
     steps:
-      - run: exit 1 # RED proof: job failure
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4 # version from package.json `packageManager`
       - uses: actions/setup-node@v4
@@ -303,7 +299,6 @@ jobs:
     if: ${{ !cancelled() && needs.change-scope.outputs.code != 'false' }}
     runs-on: ubuntu-24.04
     steps:
-      - run: exit 1 # RED proof: job failure
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
