@@ -53,7 +53,8 @@ resolves, `getWorksheet('S').getCell('A1').value === 'a'`.
 
 - Oracle: Node v24.16.0 (`lib/internal/fs/streams.js` close/destroySoon; `finished` from
   `lib/internal/streams/end-of-stream.js` for ReadStream's callback).
-- Mechanism: reproduced on rifty's EventEmitter streams; no copy of `finished`.
+- Mechanism: reproduced on rifty's EventEmitter streams; no copy of `finished`. Rows run
+  concurrently (one per stream, own file): the parity harness caps a case's drain at 1 s.
 
 ## Parity cases
 
@@ -70,8 +71,8 @@ ReadStream (`close(cb)`; cb argument, `this`, `closed`/`destroyed` printed in it
    → scenario
 5. directory target after `'open'`: `open|ready|close|cb(ERR_STREAM_PREMATURE_CLOSE)` → scenario
 6. `emitClose:false`: post-open close → no `'close'`, cb never called, `closed=true`; after or
-   inside `'end'` → `cb()` with `closed=false destroyed=true`; with a missing file →
-   `cb(ENOENT)` → scenario
+   inside `'end'` → `cb()` with `destroyed=true` (`closed` not printed: Node's flips after its
+   async `fs.close`, out of scope below); with a missing file → `cb(ENOENT)` → scenario
 7. `close()` returns `undefined`; non-function arg ignored; synchronously after `close()`
    `closed=false destroyed=true`; in `'end'` handler `destroyed=false`, after settle `true`;
    in `'error'` handler `closed=true destroyed=true` → scenario
@@ -96,8 +97,7 @@ zero, `this` the stream via `on('close')`, not the stream when already closed (n
 13. after `destroy()`, and `destroy()` right after `close()`: `close|cb()`, no `'finish'`,
     pending pre-open bytes discarded → scenario
 14. `highWaterMark: 2` write then `close()`: `write()` returns `false`, no `'drain'` → scenario
-15. `close()` returns `undefined`; `close('notfn')` throws `ERR_INVALID_ARG_TYPE` and leaves
-    the stream open; after `close()` sync `closed=false destroyed=false`; in `'finish'` handler
+15. `close()` returns `undefined`; after `close()` sync `closed=false destroyed=false`; in `'finish'` handler
     `destroyed=false`, after settle `true`; in `'error'` handler `closed=true destroyed=true`
     → scenario
 16. `destroySoon === end`, returns the stream; `destroySoon(chunk, cb)`; a second
@@ -114,6 +114,9 @@ zero, `this` the stream via `on('close')`, not the stream when already closed (n
   `runtime-js/fs-streams-not-node-streams`.
 - `'close'` timing vs Node's async `fs.close` (rifty emits it in the tick of `'end'`/`'finish'`;
   observable only between microtasks) — same item.
+- `WriteStream#close('notfn')`: Node throws `ERR_INVALID_ARG_TYPE` from `on('close', cb)`;
+  rifty's EventEmitter accepts any listener and throws at `'close'`:
+  `runtime-js/events-listener-argument-validation`.
 - A pre-aborted `signal` followed by a synchronous `destroy()`/`close()` drops the abort error:
   `runtime-js/fs-readstream-preaborted-signal-sync-destroy`.
 

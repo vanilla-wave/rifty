@@ -15,13 +15,16 @@ Discovered during `runtime-js/fs-stream-close-method-missing` (2026-11-24). Node
 ```
 const s = fs.createReadStream('r.txt', { signal: AbortSignal.abort() });
 s.close(cb);   // or s.destroy()
-node: error:ABORT_ERR | cb(ABORT_ERR) | close | open | ready
+node  close:   error:ABORT_ERR | cb(ABORT_ERR) | close | open | ready
+rifty close:   open | ready | close | cb(ERR_STREAM_PREMATURE_CLOSE)
+node  destroy: error:ABORT_ERR | close | open | ready
+rifty destroy: open | ready | close
 ```
 
+(scratch parity case, Node v24.16.0 vs rifty on this unit's branch.)
 Node's `addAbortSignal` destroys with the AbortError synchronously in the constructor.
 rifty's `FileReadStream` constructor queues `this.abort()` in a microtask; a synchronous
-`destroy()` sets `destroyed` first and `abort()` returns early — no `'error'`, `close(cb)` gets
-`ERR_STREAM_PREMATURE_CLOSE` (by code reading; rifty run pending the close() fix). Existing
+`destroy()` sets `destroyed` first and `abort()` returns early — no `'error'`. Existing
 parity `fs/read-stream-abort-destroy` covers pre-abort without a following destroy only.
 Dedup: grep `abort` over `docs/backlog/runtime-js` — `add-abort-signal-reason-identity`
 (Readable `addAbortSignal` cause) is a different surface.
