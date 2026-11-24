@@ -94,14 +94,19 @@ export interface Outcome {
   readonly file?: Uint8Array;
 }
 
-export function inNode(files: Map<string, Uint8Array>, gen: string, out: string): Outcome {
+export function inNode(
+  files: Map<string, Uint8Array>,
+  gen: string,
+  out: string,
+  flags: readonly string[] = [],
+): Outcome {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'isolate-host-library-oracle-')));
   try {
     for (const [rel, data] of files) {
       mkdirSync(dirname(join(dir, rel)), { recursive: true });
       writeFileSync(join(dir, rel), data);
     }
-    const r = spawnSync(process.execPath, [gen, out], {
+    const r = spawnSync(process.execPath, [...flags, gen, out], {
       cwd: dir,
       env: {},
       encoding: 'utf8',
