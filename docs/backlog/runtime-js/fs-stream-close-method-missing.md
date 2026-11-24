@@ -79,31 +79,41 @@ ReadStream (`close(cb)`; cb argument, `this`, `closed`/`destroyed` printed in it
    `closed=false destroyed=true`; in `'end'` handler `destroyed=false`, after settle `true`;
    in `'error'` handler `closed=true destroyed=true` → scenario
 
+8. a flowing stream (`'data'` listener), `close(cb)` or `destroy()` inside `'ready'`, after
+   awaiting it, a microtask after it, or a microtask after the only `'data'`: no `'data'`/`'end'`
+   after the request, `close` (+ `cb(ERR_STREAM_PREMATURE_CLOSE)`) — on the sync mirror and
+   both async `openReadable` paths (`installMemoryFs`, `SyncMirrorVfs`) → scenario
+9. directory target, `close(cb)` after awaiting `'ready'`: `open|ready|close|cb(ERR_STREAM_PREMATURE_CLOSE)`,
+   no `EISDIR` → scenario
+10. `emitClose:false`, `close(cb)` twice after/inside `'ready'`: the first never called, the
+    second a tick later with no arguments (`closed` not printed, see 6) → scenario
+
 WriteStream (`close(cb)` = `on('close', cb)` + `end()`; file content printed) → scenario:
 
 WriteStream rows print `wcb`/`ecb`/`dcb` with one (`null`/`undefined`) argument; `cb` gets
 zero, `this` the stream via `on('close')`, not the stream when already closed (nextTick).
 
-8. pending write pre-open / post-open / inside `'ready'`: data lands,
+11. pending write pre-open / post-open / inside `'ready'`: data lands,
    `wcb|finish|close|cb()` → scenario
-9. no cb; twice (same tick and after `'close'`, the latter `this` not the stream); after
+12. no cb; twice (same tick and after `'close'`, the latter `this` not the stream); after
    `end(chunk, cb)`; inside `'finish'`: one `finish|close`, every cb called once → scenario
-10. `write()` after `close()`: `wcb(ERR_STREAM_WRITE_AFTER_END)` with `destroyed=true` before
+13. `write()` after `close()`: `wcb(ERR_STREAM_WRITE_AFTER_END)` with `destroyed=true` before
     `'open'`, then `open|ready|error:ERR_STREAM_WRITE_AFTER_END|close|cb()`, file empty
     → scenario
-11. open failure (`EISDIR`, `wx` on an existing file) with close before the error, inside
+14. open failure (`EISDIR`, `wx` on an existing file) with close before the error, inside
     `'error'`, after `'close'`: `error|close|cb()`; inside `'error'` and after `'close'`
     `this` is not the stream (`closed` already true) → scenario
-12. `emitClose:false`: before finish → cb never called; 10 ms after `'finish'` (past Node's
+15. `emitClose:false`: before finish → cb never called; 10 ms after `'finish'` (past Node's
     async `fs.close`) → `cb()` → scenario
-13. after `destroy()`, and `destroy()` right after `close()`: `close|cb()`, no `'finish'`,
+16. after `destroy()`, and `destroy()` right after `close()`: `close|cb()`, no `'finish'`,
     pending pre-open bytes discarded → scenario
-14. `highWaterMark: 2` write then `close()`: `write()` returns `false`, no `'drain'` → scenario
-15. `close()` returns `undefined`; after `close()` sync `closed=false destroyed=false`; in `'finish'` handler
+17. `highWaterMark: 2` write then `close()`: `write()` returns `false`, no `'drain'` → scenario
+18. `close()` returns `undefined`; after `close()` sync `closed=false destroyed=false`; in `'finish'` handler
     `destroyed=false`, after settle `true`; in `'error'` handler `closed=true destroyed=true`
     → scenario
-16. `destroySoon === end`, returns the stream; `destroySoon(chunk, cb)`; a second
+19. `destroySoon === end`, returns the stream; `destroySoon(chunk, cb)`; a second
     `destroySoon(cb)` after `'close'` → `cb(ERR_STREAM_ALREADY_FINISHED)` → scenario
+20. `destroy()` after `'close'`: no second `'close'`, the close cb once → scenario
 
 ## Out of scope
 
@@ -121,6 +131,9 @@ zero, `this` the stream via `on('close')`, not the stream when already closed (n
   `runtime-js/events-listener-argument-validation`.
 - A pre-aborted `signal` followed by a synchronous `destroy()`/`close()` drops the abort error:
   `runtime-js/fs-readstream-preaborted-signal-sync-destroy`.
+- `destroy(err)` ignores `err` (both streams, every state); ReadStream opening a microtask after
+  create (Node: after I/O) reorders a pre-open `emitClose:false` second callback vs `'ready'`:
+  `runtime-js/fs-streams-not-node-streams`.
 
 ## Decisions
 
@@ -133,14 +146,21 @@ zero, `this` the stream via `on('close')`, not the stream when already closed (n
   (or not, `emitClose:false`), reimplemented in `fs-streams.ts`; rifty `stream.finished` is
   not reused (approximate: `runtime-js/stream-pipeline-finished-callback-args`).
 - `closed`, Node `destroyed` and `end()` returning the stream ship here: `close()`'s
-  contract reads `closed`, parity case 7/15 prints both, and `destroySoon` is `end`.
+  contract reads `closed`, parity cases 7/18 print both, and `destroySoon` is `end`.
 - `autoClose:false` not built here: a mode with its own corners (fd kept past `'end'`/
   `'finish'`; Node's `close()` after `'finish'` never closes) — beyond `close()`; the create-time
   throw keeps it loud.
 - Pre-open `destroy()` of a missing file emits the open error unless the stream already
   errored (Node); the old rule swallowed it for every pre-open destroy, generalized from the
   pre-aborted-signal case.
-- No `'drain'` after `end()` (Node `afterWrite` checks `!ending`): case 14 is `close()` with
+- No `'drain'` after `end()` (Node `afterWrite` checks `!ending`): case 17 is `close()` with
   unwritten data.
-- `fs-streams.ts` sits at its ratchet (1016): option/flag helpers move to
-  `fs-stream-options.ts` to make room.
+- A request wins over a read in flight (review 2026-11-24, B1): the async loop re-checks
+  `destroyed` after every `reader.read()`; the sync fallback emits its first chunk (and a
+  directory's `EISDIR`) a microtask after `'ready'` — same race for `destroy()`, fixed for both.
+- `emitClose:false` with nothing to wait for settles via Node's `onclosed` (error or no
+  arguments), not `onclose`'s premature-close check (review S1).
+- `destroy(err)` ignoring `err` is the whole `destroy()` surface on both streams, not this
+  branch: declared (compat fs.md, `runtime-js/fs-streams-not-node-streams`), not fixed here.
+- `fs-streams.ts` sat at its ratchet (1016): option/flag helpers move to
+  `fs-stream-options.ts`; the pin follows the new size.

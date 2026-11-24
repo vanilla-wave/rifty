@@ -80,7 +80,7 @@ export const BASELINE = [
   { file: 'apps/playground/src/components/FileExplorer.tsx', max: 1043 },
   { file: 'packages/workbench/src/glue/npm-shell-command.ts', max: 1042 },
   { file: 'packages/runtime-js/src/builtins/vm/rewrite-engine.ts', max: 1021 },
-  { file: 'packages/runtime-js/src/builtins/fs-streams.ts', max: 1016 },
+  { file: 'packages/runtime-js/src/builtins/fs-streams.ts', max: 977 },
   { file: 'packages/workbench/src/glue/pty-client.ts', max: 1012 },
   { file: 'packages/net/src/http/server.ts', max: 1010 },
   { file: 'packages/runtime-js/src/builtins/process.ts', max: 1003 },

@@ -23,6 +23,20 @@ node:  late data listener got: "hello"
 rifty: late listener after 50ms got: ""            (no 'end' either)
 ```
 
+How late (review of PR #434, `xreview-434-codex/late.mts`, `'data'`+`'end'` listeners added after N
+`await Promise.resolve()` or a 20 ms timer, 5-byte file; rifty on that PR's branch after its
+first-chunk deferral; Node gets `hello` + `'end'` in every row):
+
+| attached after | sync mirror (parity runner, sync-RPC fs, dev-server child) | async `openReadable` (`installMemoryFs`) |
+|---|---|---|
+| 0–1 awaits | `hello`, end | `hello`, end |
+| 2 awaits | `""`, end | `hello`, end |
+| 3 awaits | `""`, no end | `""`, end |
+| ≥4 awaits / a timer | `""`, no end | `""`, no end |
+
+Each further step loses one more chunk on a multi-chunk file. `pipe` attached after an `await`
+on the sync path writes an empty file (reviewer's measurement).
+
 Absent or different public members (`typeof` / value right after create, Node | rifty):
 
 - both: `instanceof stream.Readable` / `Writable` true | false; `stream.isReadable(rs)`
@@ -42,8 +56,16 @@ Absent or different public members (`typeof` / value right after create, Node | 
   `writableLength`, `writableNeedDrain`, `writableObjectMode`, `writableCorked` | undefined.
 - `stream.finished(rs, cb)` success: cb gets 0 arguments | 1 (`null`) —
   `runtime-js/stream-pipeline-finished-callback-args`. `stream.pipeline(rs, ws, cb)` copies.
+- `destroy(err)` ignores `err` on both streams in every state (Node: `'error'` with it, then
+  `'close'`; `errored` = it): pre-open existing file → rifty `open|ready|close`, missing file →
+  rifty `error:ENOENT|close` (Node `error:mine|close`), after `'ready'` → `close`; `errored`
+  undefined (Node `null`, then the error). Scratch case, Node v24.16.0.
+- ReadStream opens a microtask after create (Node: after I/O), so a callback Node delivers a tick
+  after a pre-open `close()` lands after rifty's `'ready'` (`emitClose:false` + `close(cb)` twice
+  pre-open: Node `cb2|ready`, rifty `ready|cb2`).
 - `'close'` follows `'end'` / `'finish'` in the same tick; Node emits it after the async
-  `fs.close` (a `closed` read or `WriteStream#close(cb)` between microtasks differs).
+  `fs.close` (a `closed` read or `WriteStream#close(cb)` between microtasks differs; e.g. the second
+  `close(cb)` with `emitClose:false` sees `closed=true`, Node `false`).
 
 Async iteration (also probed by `isolate-library-probe/gen/diag-fsread.cjs`): `for await (const c
 of rs)` → rifty `TypeError: … is not async iterable`; exceljs `xlsx.read(stream)` iterates when

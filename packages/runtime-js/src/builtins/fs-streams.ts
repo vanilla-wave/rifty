@@ -279,8 +279,11 @@ class FileReadStream extends EventEmitter {
     }
     if (openedStat.isDirectory) {
       this.emitOpenReady();
-      if (this.destroyed) return;
-      this.emitError(new VfsError('EISDIR', np), 'read');
+      // The read fails a step after 'ready' (Node: a separate I/O turn), so a
+      // close()/destroy() issued after 'ready' wins.
+      queueMicrotask(() => {
+        if (!this.destroyed) this.emitError(new VfsError('EISDIR', np), 'read');
+      });
       return;
     }
 
@@ -302,7 +305,9 @@ class FileReadStream extends EventEmitter {
         this.emitData(slice);
         queueMicrotask(emitChunk);
       };
-      emitChunk();
+      // First chunk a step after 'ready', as every later one: a close()/destroy()
+      // issued after 'ready' stops the read before any 'data' (Node).
+      queueMicrotask(emitChunk);
     };
 
     const vfs = asyncVfs();
@@ -330,6 +335,12 @@ class FileReadStream extends EventEmitter {
                 return;
               }
               const { value, done } = await reader.read();
+              // A close()/destroy() while the read was in flight wins: no
+              // 'data' or 'end' after it (Node).
+              if (this.destroyed) {
+                await reader.cancel().catch(() => {});
+                return;
+              }
               if (done) break;
               if (value && value.byteLength > 0) this.emitData(value);
             }
@@ -420,9 +431,14 @@ class FileReadStream extends EventEmitter {
       else if (!this.ended) call(PREMATURE_CLOSE());
       else call();
     };
-    const settled = this.erroredWith !== null || this.ended || this.destroyed;
-    if (this.closedState || (!this.emitCloseOpt && settled)) {
+    if (this.closedState) {
       queueMicrotask(onClose);
+      return;
+    }
+    // emitClose:false with nothing left to wait for: Node's `onclosed` a tick
+    // later — the error if any, else no arguments (no premature-close check).
+    if (!this.emitCloseOpt && (this.erroredWith !== null || this.ended || this.destroyed)) {
+      queueMicrotask(() => (this.erroredWith !== null ? call(this.erroredWith) : call()));
       return;
     }
     this.on('error', (err) => call(err));
