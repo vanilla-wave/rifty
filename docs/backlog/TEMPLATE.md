@@ -21,7 +21,7 @@ code: []
 
 challenge: <YYYY-MM-DD> — <clear | N problems, one grounded line each below>
 
-<!-- A draft stops here. Ready rules: README + docs/process/README.md (RDY-2..4). -->
+<!-- A draft stops here. Ready shape: README §Shape. -->
 
 ## User scenario
 
@@ -29,8 +29,8 @@ challenge: <YYYY-MM-DD> — <clear | N problems, one grounded line each below>
 
 ## Acceptance
 
-<!-- Each row ends with its trace: → I3 | → scenario | → ADR-NNNN (RDY-3).
-     Untraced and rule-id-only (→ REV-7) rows are notes, never obligations. One intent per unit (RDY-4). -->
+<!-- Each row ends with its trace: → I3 | → scenario | → ADR-NNNN.
+     Untraced rows are notes, never obligations. One intent per unit. -->
 
 1. <Testable done-definition + proof path; an approximation must fail> → I#
 
@@ -59,11 +59,6 @@ challenge: <YYYY-MM-DD> — <clear | N problems, one grounded line each below>
 
 ## Decisions
 
-<!-- One-line records only (docs/process/README.md). At pickup the first
-     line is the Contract+RED verdict, copied verbatim:
-     ready-verdict: <date> — Contract+RED @ <sha>
-     re-cut: <date> — <what> — trace: none               (RDY-5)
-     Evidence lives in the carrier and the verdict (REV-8); run state in the
-     ledger, or the PR body without a goal (RDY-4) — never here. -->
+<!-- One-line records only. -->
 
 <Every fork resolved, or linked to its ADR. No open "Decide X".>

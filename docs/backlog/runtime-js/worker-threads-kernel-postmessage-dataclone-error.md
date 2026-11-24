@@ -25,4 +25,4 @@ Owner runtime-js; trigger: the next kernel Worker messaging unit, or a claimed
 path posting an uncloneable value (vitest's I5 threads pool landed green:
 `runtime-js/reference/vitest-run-acceptance-evidence.md`). Parity first: the probe rows above, plus
 `DataCloneError` name/message and that the channel stays usable after the
-throw. Route via `rifty-fix` (observed defect).
+throw. Route: observed defect, RED first.

@@ -1,12 +1,11 @@
 ---
 name: rifty-review-inline
-description: User-driven inline review of a PR or branch along the rifty-review axes. Not a checkpoint - no verdict.json, no merge authority. Invoke only on explicit user request.
+description: User-driven inline review of a PR or branch along eight axes. No verdict file, no merge authority. Invoke only on explicit user request.
 argument-hint: "[PR number | base ref]  (default: origin/main)"
 disable-model-invocation: true
 ---
 
-Review here, in this context. No subagent, no `codex exec`, no `verdict.json`,
-no `tools/review/blockers.mjs`. A look at work, not a checkpoint.
+Review here, in this context. No subagent, no `codex exec`, no verdict file.
 
 ## Input
 

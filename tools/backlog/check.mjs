@@ -42,11 +42,10 @@ const EPIC_TIER_SET = new Set(EPIC_TIERS);
 
 const ITEM_REQUIRED_KEYS = ['area', 'status', 'title', 'created', 'why'];
 const EPIC_REQUIRED_KEYS = ['kind', 'status', 'title', 'created', 'value'];
-// Parity cases only where an oracle exists (docs/backlog/README.md); the reviewer grades absence (REV-4).
+// Parity cases only where an oracle exists (docs/backlog/README.md).
 const READY_ITEM_SECTIONS = ['Acceptance', 'Out of scope', 'Decisions'];
-// Trace gate on ready items (docs/process/README.md RDY-3); ratchet by
-// creation date — older ready items get traces at their next re-cut. No size
-// gate: one intent is a reviewer concern (RDY-4), not a count.
+// Trace gate on ready items (docs/backlog/README.md §Shape); ratchet by
+// creation date. No size gate: one intent is a judgment, not a count.
 const TRACE_SINCE = '2026-09-03';
 const TRACED_SECTIONS = ['Acceptance', 'Parity cases', 'Fault matrix'];
 const TRACE_RE = /→\s*(?:I\d+|scenario|ADR-\d{4}|[A-Z]{2,5}-\d+)\b/u;
@@ -143,7 +142,7 @@ function obligationRows(body) {
   return rows;
 }
 
-// RDY-3 trace on ready items created at/after the cutoff.
+// Trace on ready items created at/after the cutoff.
 function checkTrace(rel, fm, text) {
   if (fm?.status !== 'ready' || typeof fm.created !== 'string' || fm.created < TRACE_SINCE) return;
   for (const name of TRACED_SECTIONS) {
@@ -152,7 +151,7 @@ function checkTrace(rel, fm, text) {
     for (const row of obligationRows(body)) {
       if (TRACE_RE.test(row)) continue;
       errors.push(
-        `${rel}: '## ${name}' row without trace (→ I# | → scenario | → ADR-NNNN | → <rule-id>; RDY-3): ${row.slice(0, 60)}`,
+        `${rel}: '## ${name}' row without trace (→ I# | → scenario | → ADR-NNNN): ${row.slice(0, 60)}`,
       );
     }
   }
@@ -189,6 +188,7 @@ const dirEpics = new Map(); // slug -> { rel, files: Set<name>, goal: {rel, fm, 
 const itemKeys = new Set(); // "<area>/<slug>"
 const epicKeys = new Set(); // "<slug>"
 
+// ledger.md: journal of goals fitted before 2026-11-22; allowed, never required.
 const DIR_EPIC_FILES = new Set(['goal.md', 'map.md', 'ledger.md']);
 
 for (const file of mdFiles) {
@@ -200,7 +200,7 @@ for (const file of mdFiles) {
   const fm = parseFrontmatter(text);
 
   if (parts[0] === EPICS_DIR_NAME && parts.length === 3) {
-    // dir-format epic (goal/map/ledger split): docs/backlog/epics/<slug>/goal.md
+    // dir-format epic (goal/map split): docs/backlog/epics/<slug>/goal.md
     const epicSlug = parts[1];
     const name = parts[2];
     epicKeys.add(epicSlug);
@@ -332,7 +332,7 @@ for (const { rel, fm, text } of epicRecords) {
   epicCounts[EPIC_STATUS_SET.has(fm?.status) ? fm.status : 'invalid'] += 1;
 }
 
-// --- Pass 3b: validate dir-format epics (goal/map/ledger) ---------------------
+// --- Pass 3b: validate dir-format epics (goal/map) ----------------------------
 
 const DIR_EPIC_STATUSES = new Set(['draft', 'ready']);
 const READY_GOAL_SECTIONS = ['Outcome', 'User scenario', 'Invariants'];
@@ -357,9 +357,7 @@ for (const record of dirEpics.values()) {
   }
   if (fm.kind !== 'epic') errors.push(`${record.goal.rel}: epic must set 'kind: epic'`);
   if (fm.status != null && !DIR_EPIC_STATUSES.has(fm.status)) {
-    errors.push(
-      `${record.goal.rel}: invalid status '${fm.status}' (draft|ready — activity = non-empty ledger/linked children)`,
-    );
+    errors.push(`${record.goal.rel}: invalid status '${fm.status}' (draft|ready)`);
   }
   if (fm.tier != null && !EPIC_TIER_SET.has(fm.tier)) {
     errors.push(`${record.goal.rel}: invalid tier '${fm.tier}' (must be ${EPIC_TIERS.join('|')})`);
@@ -377,10 +375,8 @@ for (const record of dirEpics.values()) {
         errors.push(`${record.goal.rel}: ready goal missing '## ${s}' section`);
       }
     }
-    for (const sibling of ['map.md', 'ledger.md']) {
-      if (!record.files.has(sibling)) {
-        errors.push(`${rel}: ready goal requires ${sibling} beside goal.md`);
-      }
+    if (!record.files.has('map.md')) {
+      errors.push(`${rel}: ready goal requires map.md beside goal.md`);
     }
   }
   checkChallenge(record.goal.rel, fm, text);

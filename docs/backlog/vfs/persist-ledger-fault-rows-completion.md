@@ -15,8 +15,8 @@ code: [packages/vfs/src/opfs-sync.ts, packages/npm-client/src/tarball-cache.ts, 
 Test-completion item: storage rows pin existing expected behavior; the saved-open
 consumer consequence follows ADR-0415 (PR #323); these consumer-specific fault injections still need RED.
 A failing row stays
-inside this planned contract's normal RED→implementation lane; it does not
-trigger `rifty-fix`. Rows came from the #107 retro + explorer sweep;
+inside this planned contract's normal RED→implementation lane; it is not a
+separate defect repair. Rows came from the #107 retro + explorer sweep;
 expected-green is NOT assumed — that's what the pins are for.
 
 ## Acceptance

@@ -1,4 +1,4 @@
-# Moved
+# Removed
 
-Reversibility checklist, reconsidering, subagent budget, backlog readiness and
-goal runs: `docs/process/README.md`. Stub kept because immutable ADRs cite this path.
+The process canon (reversibility checklist, review checkpoints, goal runs) was
+cut 2026-11-22: `AGENTS.md`. Stub kept because immutable ADRs cite this path.

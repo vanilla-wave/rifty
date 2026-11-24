@@ -1,6 +1,6 @@
 # Architecture Decision Records
 
-ADRs are immutable while active, except dated lines under `## Decisions` / `§Corrections` that add or correct a decision on the seam the ADR owns (`DEC-2`). An ADR whose every decision is overturned is REMOVED (git keeps history) and listed under [Superseded (removed)](#superseded-removed), the successor naming the overturned decisions; when only some decisions (or a single *wrong/evolved clause*) are overtaken, the ADR stays active with a dated note listed in [Corrections (active)](#corrections-active) — never a silent edit, never a remove of the still-active remainder. New decisions get new ADRs via `pnpm adr:new <area> "Title"`.
+ADRs are immutable while active, except dated lines under `## Decisions` / `§Corrections` that add or correct a decision on the seam the ADR owns. An ADR whose every decision is overturned is REMOVED (git keeps history) and listed under [Superseded (removed)](#superseded-removed), the successor naming the overturned decisions; when only some decisions (or a single *wrong/evolved clause*) are overtaken, the ADR stays active with a dated note listed in [Corrections (active)](#corrections-active) — never a silent edit, never a remove of the still-active remainder. New decisions get new ADRs via `pnpm adr:new <area> "Title"`.
 
 ## Index
 
@@ -697,7 +697,7 @@ Removed, no successor (resolve to git history):
 - `docs/backlog/kernel/worker-per-process-residuals.md` — completed backlog item, removed on close; ADR-0230 + runtime stdin parity are the record (ADR-0155/0157 still cite it)
 - `docs/backlog/shell/pty-live-resize.md` — completed backlog item, removed on close; ADR-0225 + terminal/worker resize tests are the record
 
-Retired ADR numbers (process moved to `AGENTS.md` / `docs/process/decision-workflow.md`, no longer recorded as ADRs): **0008, 0022, 0024, 0033, 0063, 0064, 0081**. Older ADRs may still cite these — they resolve there, not to a file. Older docs may also cite `CLAUDE.md` — it is a symlink to `AGENTS.md`. `tools/refs/check.mjs` treats them as retired so the citations don't dangle. (0081 = reversibility rule 4 "record decisions, not diffs"; its rule text is grafted into `docs/process/decision-workflow.md`.)
+Retired ADR numbers (process moved to `AGENTS.md`, no longer recorded as ADRs; `docs/process/decision-workflow.md` is a stub): **0008, 0022, 0024, 0033, 0063, 0064, 0081**. Older ADRs may still cite these — they resolve there, not to a file. Older docs may also cite `CLAUDE.md` — it is a symlink to `AGENTS.md`. `tools/refs/check.mjs` treats them as retired so the citations don't dangle. (0081 = reversibility rule 4 "record decisions, not diffs"; its rule text is in git history.)
 
 ## Declined concepts
 

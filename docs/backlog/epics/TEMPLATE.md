@@ -1,8 +1,8 @@
-# Epic template — directory format (goal/map/ledger)
+# Epic template — directory format (goal/map)
 
-An epic is a directory `docs/backlog/epics/<slug>/` with three files split by
-owner × mutability (`docs/process/README.md §Artifacts`). Procedure:
-`docs/process/README.md`. No new single-file epics.
+An epic is a directory `docs/backlog/epics/<slug>/` with two files split by
+owner: `goal.md` (user) and `map.md` (agent). Procedure: `docs/backlog/README.md`
+§Epic fit. No new single-file epics.
 
 ## `goal.md` — user-owned destination
 
@@ -31,8 +31,8 @@ tier: <works|robust|production — required at ready>
      from Outcome/User scenario/Decisions — never new scope.
      Each checked false on current main (evidence comment above the list).
      Reported to the user at FIT completion (README §Report).
-     A run only proves them; every child row traces to one (RDY-3).
-     Amend a ready goal with the user's recorded decision (RDY-6). -->
+     A run only proves them; every child row traces to one.
+     Amend a ready goal with the user's recorded decision (README §Scope authority). -->
 
 - I1. <user-observable statement>
 
@@ -48,9 +48,9 @@ challenge: <YYYY-MM-DD> — <clear | N problems, one grounded line each below>
 - rejected route: <cheaper/rival route considered> — violates <I#|Outcome clause>
 ```
 
-## `map.md` — live plan (freely edited at every re-chart)
+## `map.md` — live plan (agent-owned, freely edited)
 
-Index, not store: one line + link per entry; content lives on items/ledger.
+Index, not store: one line + link per entry; content lives on items.
 
 ```md
 ## Items
@@ -63,25 +63,12 @@ Index, not store: one line + link per entry; content lives on items/ledger.
      contract depends on an open question is not seeded. Don't pre-slice fog.
      A user-owned question is ASKED at FIT (README §FIT 3); unanswered →
      the goal stays draft, the question recorded here as owner: user. A ready
-     map is agent-owned; owner: user otherwise only mid-run (STOP-1). Split a
-     mixed question by owner. -->
+     map is agent-owned; owner: user otherwise only mid-run (a goal conflict —
+     AGENTS.md §Fidelity). Split a mixed question by owner. -->
 
 - <question> — owner: agent — <what settles it: probe/spike/design>
 
 ## Out of scope
 
 - <consciously ruled beyond the destination — never graduates>
-```
-
-## `ledger.md` — append-only journal
-
-One-line decisions (what + where the full answer lives), reception verdicts,
-observations/diagnoses (or links to `reference/`), the landed slice's PASS
-(`docs/process/README.md`). Lines are never edited or removed; the
-closure (`docs/process/README.md`) resolves obligations and exports useful
-knowledge; routine observations remain git history.
-
-```md
-- <YYYY-MM-DD> — decided <one line>; full answer: <link>
-- <YYYY-MM-DD> — re-chart after <slice> (final-green PASS @ <sha>): <n> graduated / <m> invalidated
 ```

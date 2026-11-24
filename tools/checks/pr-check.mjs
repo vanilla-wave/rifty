@@ -192,7 +192,6 @@ export const TASKS = [
   'check:source-grep',
   'check:dir-owner',
   'check:file-size',
-  'check:contract-drift',
   'check:install-stamp-writers',
   'check:runtime-adapter-boundary',
   'check:esbuild-legacy-retirement',

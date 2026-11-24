@@ -10,7 +10,7 @@ it to the user as an alternative entry.
 ## Preconditions
 
 - User in session. Mid-task or agent-only context → `rifty-to-backlog` + request manual refine; never self-run the interview.
-- Target: a raw idea (no doc yet) or one `draft` item/epic. A `ready` item with a live fork is demoted first (`docs/process/README.md` `RDY-5`); a ready `goal.md` changes with the user's recorded amendment (`RDY-6`).
+- Target: a raw idea (no doc yet) or one `draft` item/epic. A `ready` item with a live fork is demoted to `draft` first; a ready `goal.md` changes only with the user's recorded amendment (`docs/backlog/README.md` §Scope authority).
 - Research informs the user's next choice; it does not require a full implementation design.
 
 ## 1. Scan — no mint
@@ -24,7 +24,7 @@ Use code, ADRs and reference evidence to identify alternatives that could change
 the observable result, feasibility or value. Run a disposable discriminating
 probe for a live technical uncertainty affecting that choice; record command,
 output and version, or keep the claim explicitly unresolved. Facts needed only
-to implement a chosen route belong to FIT/PICKUP, not a speculative full design.
+to implement a chosen route belong to FIT or the implementation, not a speculative full design.
 
 When recommending a new direction, apply `docs/backlog/README.md` §Challenge
 before presenting the affected user choice as settled. Bring verified critic
@@ -33,8 +33,8 @@ next choice is informed; a new fact can open or close dependent forks.
 Explicit just-file and settled factual captures need honest sources, not an
 extra study or premise critic; proceed to Formalize and the final written-result check.
 
-Before treating a no-fork result as settled, apply `docs/process/README.md`
-`RDY-6`. Research discovers material choices from the raw
+Before treating a no-fork result as settled, apply `docs/backlog/README.md`
+§Scope authority. Research discovers material choices from the raw
 request and reachable interactions, not just from the current question list.
 
 ## 3. Grill
@@ -44,25 +44,24 @@ user asked to just file it — → skip to Formalize; a no-fork entry is normal
 completion, not a refusal.
 
 1. Restate the real package/program, exact action, and observed result. No real software unblocked → stop as off-mission or `process-meta`.
-2. Ask in frontier rounds: one numbered round holds ALL currently-independent open forks, each with a recommendation, decisive evidence and tradeoff. A fork whose scope depends on a still-open fork (or a running spike) waits for a later round. After answers, return to Research for affected dependent choices. Close by `RDY-6`, not merely an empty frontier. The user chooses observable scope; the agent chooses carriers and other internal mechanisms.
-3. Do not ask what code/ADR/Node already answers. Apply reachability and refine-altitude rules (`docs/process/README.md` `RDY-6`, `RDY-7`).
+2. Ask in frontier rounds: one numbered round holds ALL currently-independent open forks, each with a recommendation, decisive evidence and tradeoff. A fork whose scope depends on a still-open fork (or a running spike) waits for a later round. After answers, return to Research for affected dependent choices. Close by §Scope authority, not merely an empty frontier. The user chooses observable scope; the agent chooses carriers and other internal mechanisms.
+3. Do not ask what code/ADR/Node already answers. Apply the reachability rules (`docs/backlog/README.md` §Scope authority).
 4. For infra, ask only physically reachable fault branches within the epic tier; use `docs/process/rules/fault-classes.md` and `docs/backlog/README.md` §Tier.
-5. Treat dropping or weakening a traced (`I#` / `scenario`) row as user-owned (`RDY-5`); never soften it through ADR, backlog, Out of scope, or rewritten acceptance.
+5. Treat dropping or weakening a traced (`I#` / `scenario`) row as user-owned; never soften it through ADR, backlog, Out of scope, or rewritten acceptance.
 6. For an epic, grill until the outcome is statable as numbered `## Invariants`, each false on main (shape: `docs/backlog/README.md` §Epic fit); FIT step 4 lands them in this session (§4).
 
 ## 4. Formalize and report
 
 Hand the settled result to `rifty-to-backlog` in this invocation: mint/update
 with evidence, decisions and any early Challenge record. An epic not yet
-`ready` continues into `docs/process/README.md` §FIT here, in this session on
-its branch — Invariants, tier, final check, `status: ready`. A goal stays
-`draft` only when the user asked to just file it or a user question is still
-unanswered (`STOP-1`): a ready goal carries no `owner: user` fog, its run is
+`ready` continues into `docs/backlog/README.md` §Epic fit (FIT) here, in this
+session on its branch — Invariants, tier, final check, `status: ready`. A goal
+stays `draft` only when the user asked to just file it or a user question is
+still unanswered: a ready goal carries no `owner: user` fog, its run is
 autonomous. FIT resumes when the answer arrives — here (§3) or at the next
-hand-off (`rifty-goal`); no merge is required in between (`PR-3`). A
-ready `goal.md` is amended in place (`RDY-6`). One `RDY-6` final written-result check in a
-fresh context on the actual final drafts (`docs/process/README.md` §FIT 8 for an epic); FIT/PICKUP
-reuse it only for an unchanged result. Item `draft → ready` stays with PICKUP
-(`RDY-1`). The driver delivers `docs/backlog/README.md` §Report before
-implementation; a build authorized in this session continues to PICKUP on
-this branch without another permission request.
+hand-off; no merge is required in between. A ready `goal.md` is amended in
+place. One final written-result check (§Scope authority) in a fresh context on
+the actual final drafts (FIT step 7 for an epic); FIT reuses it only for an
+unchanged result. The driver delivers `docs/backlog/README.md` §Report before
+implementation; a build authorized in this session continues to implementation
+on this branch without another permission request.

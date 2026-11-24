@@ -1,6 +1,6 @@
 # Fault classes — one taxonomy for infra honesty
 
-One vocabulary across the behavioral-correctness pipeline: contract (`## Fault matrix`) → implementation (fault tests) → review (`docs/process/README.md` §Review rules) → unplanned defect repair (`rifty-fix`). Goal/budget/process blockers cite their violated rule id; never invent a fault class for them.
+One vocabulary across the behavioral-correctness pipeline: contract (`## Fault matrix`) → implementation (fault tests) → review → unplanned defect repair. Never invent a fault class for a goal or process problem.
 
 ## Axes
 
@@ -38,7 +38,6 @@ fix a missing/wrong model before adding machinery.
 | Browser diagnostic observer → native target | CDP requests are ordered; target can stop before inspection | observer reads a stopped target and aborts the browser (`false-fallback`, Chromium crbug 573662744); omit unsupported telemetry, retain the native operation and its verdict | transport duplicate delivery, reorder |
 | Owned async continuation → builtin context | synchronous prefix executes in scope; suspension resumes a later job | lost continuation-local scope, nested/racing contexts, early restore before resumed read | transport duplicate/reorder within one direct call |
 | Rendered UI → owned semantic judge | visible text/layout may vary under the same public promise | frozen-assumption rejects allowed representation; corrupt-input admits hidden, extra, wrong-direction or imprecise values; lossy-aggregate hides duplicate rows | transport replay/reorder during one settled DOM read |
-| Retained verdict → reviewed Git contract | a commit identifies immutable source bytes | current document deleted/changed/weakened; reviewed object unavailable; incomplete coverage under a substituted authority | transport replay/reorder within a local read |
 | Isolate guest realm → its host after a run's end | the guest's microtask checkpoint runs to its end; host deliveries (a timer's expiry, an unhandled rejection) arrive while the result is in flight | work after the run's end changes what a later read of the realm sees (`torn-state`: a capture after the run) and output after it; every host delivery passes one gate on the guest's run phase (PR #424); work the realm runs before the status is out is not gated | nothing runs once the isolate is disposed |
 | Native child stdout/stderr pipe | each pipe carries ordered bytes with backpressure; chunks can split UTF-8 | collector capacity, producer stall/death, spawn/nonzero exit; partial output cannot prove completion | transport duplicate/reorder within one pipe |
 | Network (registry, CDN, eddy) | none | the full distributed set: loss, duplicate, reorder, replay, stall, partial/corrupt body | — |
@@ -90,7 +89,3 @@ Two authorities exchanging lifecycle (reserve/commit/teardown, admission/close)
 → the seam carries one settlement contract: which peer errors are expected
 cancellation outcomes, ONE owner, one fault test crossing both sides.
 Locally-proven ends never prove the seam.
-
-## Review
-
-Scope, authority, severity, evidence bar, stops: `docs/process/README.md` (`REV`, `STOP`).

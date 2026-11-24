@@ -92,10 +92,8 @@ Install and run the package.
       expect(result.status).toBe(1);
       expect(result.stderr).toContain('goal_baseline marker is retired');
       expect(result.stderr).toContain('ready goal requires map.md beside goal.md');
-      expect(result.stderr).toContain('ready goal requires ledger.md beside goal.md');
 
       writeFileSync(join(goalDir, 'map.md'), '## Items\n\n## Open questions\n');
-      writeFileSync(join(goalDir, 'ledger.md'), '# Ledger\n');
       const goal = readFileSync(join(goalDir, 'goal.md'), 'utf8');
       writeFileSync(
         join(goalDir, 'goal.md'),
@@ -109,7 +107,7 @@ Install and run the package.
     }
   });
 
-  it('enforces trace, never size, on ready items created at/after 2026-09-03 (RDY-3, RDY-4)', () => {
+  it('enforces trace, never size, on ready items created at/after 2026-09-03', () => {
     const run = (body: string) => {
       const root = mkdtempSync(join(tmpdir(), 'rifty-backlog-check-'));
       try {
@@ -163,7 +161,7 @@ ${extra}`;
     const untraced = run(ready('1. exact bytes → I1\n2. hardening demand'));
     expect(untraced.status).toBe(1);
     expect(untraced.stderr).toContain("'## Acceptance' row without trace");
-    // Size is a reviewer concern, not a gate (RDY-4): many traced rows and a long body pass.
+    // Size is a judgment, not a gate: many traced rows and a long body pass.
     const many = run(
       ready(Array.from({ length: 15 }, (_, i) => `${i + 1}. row ${i} → I1`).join('\n')),
     );

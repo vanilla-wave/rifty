@@ -31,7 +31,7 @@ reused the edge range). Remaining: after the pin both requests print
 version` — the substitute is not installed at the requested name (npm's alias
 form `node_modules/bcrypt` with `name: bcryptjs`), so the save path finds no
 `node_modules/bcrypt` lock entry (`npm-shell-command.ts`). Found by the inventory sweep of goal
-`honest-guest-package-adaptations` I3 (the row records it). Route: `rifty-fix`
+`honest-guest-package-adaptations` I3 (the row records it). Route: observed defect, RED first,
 with a real-Node baseline (`npm install bcrypt` + `bcryptjs` API parity).
 
 ## Challenge
