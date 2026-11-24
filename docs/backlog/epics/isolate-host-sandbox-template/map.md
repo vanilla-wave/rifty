@@ -45,8 +45,13 @@ hypothesis until the carrier hits it:
   (PR #430, `reference/isolate-library-probe/README.md`, @ b3731e9c0): `pdf-lib`, `docx` load and
   write as Node; `pptxgenjs` stops on `node:https` at load (PR #435 in flight); `require('exceljs')`
   stops on `node:zlib` at require (`isolate-host.zlib`, declared ❌) — owned by the user's thread «Расширить платформу для офисных библиотек» (engine choice pako / wasm zlib / host bridge; isolate load of zlib in its queue), no item here: the
-  carrier stays RED on exceljs until the isolate guest has `node:zlib` (a Node module, not a Web
-  API — ROADMAP M14 E's list blocks none of the four). A dependency of this goal, not its scope.
+  carrier stays RED on exceljs until the isolate guest has `node:zlib` (rifty builds it on web
+  `CompressionStream`, compat isolate-host `:28`: a `CompressionStream` in the guest or zlib on
+  another engine — that track's engine choice). No E-list Web API broke a measured route; routes
+  past the first stop (exceljs main after zlib, its streaming writer/reader) are unmeasured;
+  `require()` of an ESM-only package needs `URL` (`runtime-js/isolate-require-esm-syntax-gaps`),
+  met on no measured path (docx bundles its own `nanoid`), and the consumer asks CommonJS only. A
+  dependency of this goal, not its scope.
 
 ## Out of scope
 
