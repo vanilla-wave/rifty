@@ -2,8 +2,9 @@
  * `events.addAbortListener(signal, listener)` (Node ≥ 20.5, `lib/internal/events/abort_listener.js`):
  * argument checks, an already-aborted signal (listener in a microtask, no arguments, even after
  * dispose), a later abort (once, Event argument, `this` = signal), the `Disposable` it returns,
- * order among other abort listeners. Not here: an earlier listener's `stopImmediatePropagation()`
- * (host `EventTarget` difference, backlog runtime-js/stream-core-abort-listeners-host-event-target).
+ * order among other abort listeners, a guest-replaced `queueMicrotask`. Not here (declared, pinned:
+ * `builtins/events-add-abort-listener.test.ts`, node-file `builtinPrograms`): an earlier listener's
+ * `stopImmediatePropagation()` (backlog runtime-js/stream-core-abort-listeners-host-event-target).
  */
 import type { ParityCase } from '../../src/types.ts';
 
@@ -151,12 +152,36 @@ const c: ParityCase = {
         log('same: done ' + typeof d1);
       }
 
-      // AbortSignal.abort() and AbortSignal.timeout(0).
+      // A guest-replaced global queueMicrotask: Node queues through its own.
+      {
+        const ac = new AbortController();
+        ac.abort();
+        const original = globalThis.queueMicrotask;
+        globalThis.queueMicrotask = (fn) => {
+          log('replaced queueMicrotask called');
+          original(fn);
+        };
+        try {
+          addAbortListener(ac.signal, () => log('replaced: listener ran'));
+        } finally {
+          globalThis.queueMicrotask = original;
+        }
+        await turn();
+      }
+
+      // AbortSignal.abort() and AbortSignal.timeout(1).
       {
         addAbortListener(AbortSignal.abort('static'), () => log('static: ran'));
         const t = AbortSignal.timeout(1);
-        addAbortListener(t, (event) => log('timeout: ran ' + event.type + ' ' + t.reason.name));
-        await new Promise((r) => setTimeout(r, 20));
+        // Node's timeout signal holds no loop ref: a ref'd timer keeps the process up meanwhile.
+        const hold = setTimeout(() => {}, 30000);
+        await new Promise((resolve) =>
+          addAbortListener(t, (event) => {
+            log('timeout: ran ' + event.type + ' ' + t.reason.name);
+            resolve();
+          }),
+        );
+        clearTimeout(hold);
       }
       log('end');
     })();

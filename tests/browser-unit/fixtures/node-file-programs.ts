@@ -214,6 +214,23 @@ console.log('done');
     },
     argv: ['main.js'],
   },
+  {
+    // Node's `EventTarget` rethrows a listener's error on a later tick; a host one reports it
+    // during dispatch: pinned, same owner.
+    name: 'events-add-abort-listener-throw',
+    files: {
+      'main.js': `const { addAbortListener } = require('node:events');
+process.on('uncaughtException', (error) => console.log('uncaughtException: ' + error.message));
+const ac = new AbortController();
+addAbortListener(ac.signal, () => {
+  throw new Error('from listener');
+});
+ac.abort();
+console.log('after abort');
+`,
+    },
+    argv: ['main.js'],
+  },
 ];
 
 /** Fatal diagnostics: every program dies; stderr bytes and status are the contract. */
@@ -781,7 +798,7 @@ export type NodeFileHost = 'no-COI' | 'COI' | 'isolate';
  * Node; otherwise rifty's exact normalized outcome, which must also still
  * differ from Node, so any change (a fix or a new defect) fails until the pin
  * moves. Every pinned row is a named compat row (process.md "Fatal error
- * stderr bytes", modules.md, isolate-host.md). Regenerate from
+ * stderr bytes" and `events.addAbortListener`, modules.md, isolate-host.md). Regenerate from
  * `NODE_FILE_DUMP` output only after reading the diff.
  */
 export const nodeFilePins = JSON.parse(
