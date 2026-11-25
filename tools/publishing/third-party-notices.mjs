@@ -200,11 +200,45 @@ export function unusedRecords(manifest, usedSets) {
   ].filter((k) => !used.has(k));
 }
 
-/** Packed files of a package under `generated/`/`vendor/` count as their own input. */
-export function withPackedSources(inputs, packedPaths, pkgDir) {
+/**
+ * Packed files outside `dist/` are copied as is: each is its own input. A
+ * package without its own LICENSE gets the workspace root's (pnpm pack does so).
+ */
+export function withPackedSources(inputs, packedPaths, pkgDir, root = ROOT) {
   const out = { ...inputs };
-  for (const p of packedPaths)
-    if (!p.startsWith('dist/') && sourceDir(p)) out[p] = [`${pkgDir}/${p}`];
+  for (const p of packedPaths) {
+    if (p.startsWith('dist/')) continue;
+    const own = `${pkgDir}/${p}`;
+    out[p] = [/^licen[cs]e/iu.test(p) && !existsSync(join(root, own)) ? 'LICENSE' : own];
+  }
+  return out;
+}
+
+/** Static manifest faults: each record must name real files and add text. */
+export function validateManifest(root, manifest) {
+  const out = [];
+  const bad = (k, m) => out.push(`third-party-manifest ${k}: ${m}`);
+  const noText = (r) => 'licenseFiles' in r && r.licenseFiles.length === 0;
+  for (const [dir, r] of Object.entries(manifest.generated)) {
+    for (const f of r.files)
+      if (!existsSync(join(root, dir, f)))
+        bad(`generated ${dir}`, `lists ${f}, which is not in the dir`);
+    if (noText(r) || (!r.package && !r.licenseFiles))
+      bad(`generated ${dir}`, 'adds no license text');
+    const sources = join(root, dir, 'sources.json');
+    if (
+      existsSync(sources) &&
+      !Object.values(JSON.parse(readFileSync(sources, 'utf8'))).includes(r.version)
+    )
+      bad(`generated ${dir}`, `version ${r.version} is not in its sources.json`);
+  }
+  for (const [id, r] of Object.entries(manifest.npm))
+    if (noText(r)) bad(`npm ${id}`, 'adds no license text');
+  for (const f of manifest.firstParty) {
+    const dir = dirname(f);
+    if (manifest.generated[dir]?.files.includes(basename(f)))
+      bad(`firstParty ${f}`, `also listed in generated ${dir}`);
+  }
   return out;
 }
 
@@ -286,7 +320,10 @@ export function metafileInputs(metafile, cwd) {
   return Object.fromEntries(
     Object.entries(metafile.outputs).map(([out, o]) => [
       relative(ROOT, resolve(cwd, out)),
-      Object.keys(o.inputs).map((i) => relative(ROOT, resolve(cwd, i))),
+      // `(disabled):x` is esbuild's empty stub for a module a package's `browser` map turns off.
+      Object.keys(o.inputs)
+        .filter((i) => !i.startsWith('(disabled):'))
+        .map((i) => relative(ROOT, resolve(cwd, i))),
     ]),
   );
 }

@@ -13,7 +13,7 @@
       "version": "v24.16.0",
       "license": "MIT",
       "licenseFiles": ["packages/runtime-js/src/builtins/url-legacy/generated/node.LICENSE"],
-      "changes": "lib/url.js, lib/querystring.js, lib/internal/{querystring,constants}.js bundled and minified by esbuild, tools/publishing/generate-url-legacy.mjs"
+      "changes": "lib/url.js, lib/querystring.js, lib/internal/{querystring,constants}.js and the internal/url protocol sets bundled and minified by esbuild, tools/publishing/generate-url-legacy.mjs"
     },
     "packages/runtime-js/src/module-loader/generated": {
       "files": ["typescript-browser.js"],

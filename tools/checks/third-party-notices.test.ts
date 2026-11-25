@@ -146,7 +146,7 @@ describe('check:third-party-notices', () => {
   it('bundling file without the link line, dist JS without an input list, stale or missing notices → red', () => {
     const f = { ...files(), 'dist/a.js': 'code', 'dist/c.js': 'x' };
     expect(built(inputs, f)().violations).toEqual([
-      '@riftydev/pkg dist/c.js: no bundler input list',
+      '@riftydev/pkg dist/c.js: not accounted — no bundler input list and not an own build output',
       '@riftydev/pkg dist/a.js: bundles third-party code without the notices link line',
     ]);
     const { [NOTICES]: _, ...noFile } = files();
@@ -179,7 +179,7 @@ describe('closed by default (review S1, S2)', () => {
       'dist/a.js.map': '{}',
     };
     expect(built(inputs, f)().violations).toEqual([
-      '@riftydev/pkg dist/assets/brotli.wasm: no bundler input list',
+      '@riftydev/pkg dist/assets/brotli.wasm: not accounted — no bundler input list and not an own build output',
     ]);
   });
 
