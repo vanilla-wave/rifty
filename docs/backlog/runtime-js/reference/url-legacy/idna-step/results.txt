@@ -1,0 +1,56 @@
+# 2026-11-24, Chromium 148.0.7778.96, Node v24.16.0; IdnaTestV2 17.0.0 + 40 probe hosts
+## (c) bare URL
+{
+ "chromium": "148.0.7778.96",
+ "stats": {
+  "idna": {
+   "rows": 6391,
+   "step": 6276,
+   "diff": 2226,
+   "cls": {
+    "bidi": 203,
+    "other": 2022,
+    "ipv4": 1
+   }
+  },
+  "probe": {
+   "rows": 40,
+   "step": 33,
+   "diff": 5,
+   "cls": {
+    "other": 4,
+    "bidi": 1
+   }
+  }
+ },
+ "plainAsciiNodeDiff": 0,
+ "tr46VsNodeDiffOnStep": 304
+## (c') URL + punycode round trip
+{
+ "chromium": "148.0.7778.96",
+ "stats": {
+  "idna": {
+   "rows": 6391,
+   "step": 6276,
+   "diff": 307,
+   "cls": {
+    "bidi": 305,
+    "other": 1,
+    "ipv4": 1
+   }
+  },
+  "probe": {
+   "rows": 40,
+   "step": 33,
+   "diff": 1,
+   "cls": {
+    "bidi": 1
+   }
+  }
+ },
+ "plainAsciiNodeDiff": 0,
+ "tr46VsNodeDiffOnStep": 304
+}
+## ada tables
+mappings: 5264×4B, table: 16396×4B, decomposition_index: 4352×1B, decomposition_block: 17219×2B, decomposition_data: 9102×4B, canonical_combining_class_index: 4352×1B, canonical_combining_class_block: 16896×1B, composition_index: 4352×1B, composition_block: 6168×2B, composition_data: 1883×4B, dir_table: 2898×4B, combining: 2295×4B, virama: 61×4B, R: 71×4B, L: 1×4B, D: 326×4B
+raw 229914 B; base64 js 306924 B; gzip 97040 B

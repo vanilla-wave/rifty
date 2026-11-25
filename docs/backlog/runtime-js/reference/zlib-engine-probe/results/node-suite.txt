@@ -1,0 +1,6 @@
+node v24.16.0; 62 test-zlib*.js, 62 pass natively
+pako@1.0.11: 59/62 — fails: test-zlib-flush.js (exit 1); test-zlib-params.js (if (!(e instanceof ZlibError)) throw e;); test-zlib-reset-before-write.js (if (!(e instanceof ZlibError)) throw e;)
+pako@2.2.0: 60/62 — fails: test-zlib-params.js (if (!(e instanceof ZlibError)) throw e;); test-zlib-reset-before-write.js (if (!(e instanceof ZlibError)) throw e;)
+pako@3.0.3: 60/62 — fails: test-zlib-params.js (if (!(e instanceof ZlibError)) throw e;); test-zlib-reset-before-write.js (if (!(e instanceof ZlibError)) throw e;)
+pako@3.0.3+params: 62/62
+wasm-node-zlib: 62/62

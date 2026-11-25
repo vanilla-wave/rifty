@@ -1,0 +1,12 @@
+node v24.16.0 isolated-vm 7.0.2
+{"firstUseMedianMs":{"pakoScriptCompileAndRun":1.63,"pakoFirstUse1KiBRoundTrip":2.85,"wasmSyncCompile":0.16,"wasmInstantiate":0.09,"wasmFirstUse1KiBRoundTripInclCompile":1.42},"n":15}
+{"moduleAcrossIsolates":true}
+{"realm":"isolate","engine":"pako","mib":1,"deflateMs":47,"inflateMs":6,"ratio":2.4,"roundTrip":true,"wasmMemoryBytes":null,"heapUsed":2017720,"externallyAllocated":9070039}
+{"realm":"isolate","engine":"wasm","mib":1,"deflateMs":30,"inflateMs":3,"ratio":2.4,"roundTrip":true,"wasmMemoryBytes":1441792,"heapUsed":529216,"externallyAllocated":13847647}
+{"realm":"isolate","engine":"pako","mib":50,"deflateMs":2379,"inflateMs":304,"ratio":2.4,"roundTrip":true,"wasmMemoryBytes":null,"heapUsed":1502904,"externallyAllocated":179213004}
+{"realm":"isolate","engine":"wasm","mib":50,"deflateMs":1551,"inflateMs":141,"ratio":2.4,"roundTrip":true,"wasmMemoryBytes":1441792,"heapUsed":1223440,"externallyAllocated":179213008}
+{"memoryLimitMb":64,"probe":"wasm memory.grow to 512 MiB","ok":536870912,"disposed":false,"externallyAllocated":124366}
+{"memoryLimitMb":64,"probe":"wasm malloc 400 MiB and touch it","ok":419561472,"disposed":false,"externallyAllocated":124366}
+{"memoryLimitMb":64,"probe":"Uint8Array 400 MiB (JS ArrayBuffer)","error":"Array buffer allocation failed","disposed":false,"externallyAllocated":124362}
+{"memoryLimitMb":64,"probe":"pako 50 MiB deflate","error":"Array buffer allocation failed","disposed":false,"externallyAllocated":68319554}
+{"memoryLimitMb":64,"probe":"wasm 50 MiB deflate","error":"Array buffer allocation failed","disposed":false,"externallyAllocated":69372654}
