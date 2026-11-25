@@ -177,20 +177,31 @@ export class LayeredFs {
     }
     this.#changed.add(p);
   }
-  /** Origins, marks and change records under `from` follow a rename to `to`, or go (`to` null). */
-  #rekey(from: string, to: string | null): void {
-    for (const m of [this.#dirOrigin, this.#origin] as Map<string, unknown>[]) {
-      for (const [k, v] of [...m]) {
-        if (!under(k, from)) continue;
+  /** The upper's paths at and below `p` (a lazy directory is a leaf): the op's own footprint. */
+  #subtree(p: string): string[] {
+    if (!this.upper.existsSync(p)) return [];
+    const out = [p];
+    if (this.upper.statSync(p).isDirectory && !this.#lazy.has(p))
+      for (const d of this.upper.readdirSync(p)) out.push(...this.#subtree(join(p, d.name)));
+    return out;
+  }
+  /**
+   * Origins, marks and change records of `paths` (collected under `from` before the call) follow a
+   * rename to `to`, or go (`to` null). O(those paths), never a scan of every record.
+   */
+  #rekey(from: string, to: string | null, paths: readonly string[]): void {
+    for (const k of paths) {
+      const n = to === null ? null : to + k.slice(from.length);
+      for (const m of [this.#dirOrigin, this.#origin] as Map<string, unknown>[]) {
+        if (!m.has(k)) continue;
+        const v = m.get(k);
         m.delete(k);
-        if (to !== null) m.set(to + k.slice(from.length), v);
+        if (n !== null) m.set(n, v);
       }
-    }
-    for (const s of [this.#lazy, this.#changed]) {
-      for (const k of [...s]) {
-        if (!under(k, from)) continue;
-        s.delete(k);
-        if (to !== null) s.add(to + k.slice(from.length));
+      for (const set of [this.#lazy, this.#changed]) {
+        if (!set.has(k)) continue;
+        set.delete(k);
+        if (n !== null) set.add(n);
       }
     }
   }
@@ -246,10 +257,10 @@ export class LayeredFs {
     this.#touch(n);
     // A non-recursive rm of a template directory must see its children (ENOTEMPTY).
     if (!o.recursive) this.#materialize(n);
-    const existed = this.upper.existsSync(n);
+    const gone = this.#subtree(n);
     this.upper.rmSync(p, o);
-    if (existed && !this.upper.existsSync(n)) {
-      this.#rekey(n, null);
+    if (gone.length > 0 && !this.upper.existsSync(n)) {
+      this.#rekey(n, null, gone);
       this.#dirty(parentOf(n));
     }
   };
@@ -291,10 +302,12 @@ export class LayeredFs {
     this.#touch(dn);
     // Replacing a directory needs its real children (ENOTEMPTY).
     if (this.upper.existsSync(dn) && this.upper.statSync(dn).isDirectory) this.#materialize(dn);
+    const replaced = sn === dn ? [] : this.#subtree(dn);
+    const moved = sn === dn ? [] : this.#subtree(sn);
     this.upper.renameSync(s, d);
     if (sn !== dn && !under(dn, sn) && !this.upper.existsSync(sn)) {
-      this.#rekey(dn, null);
-      this.#rekey(sn, dn);
+      this.#rekey(dn, null, replaced);
+      this.#rekey(sn, dn, moved);
       this.#dirty(parentOf(sn));
       this.#dirty(parentOf(dn));
     }

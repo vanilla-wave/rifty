@@ -46,8 +46,8 @@ const MUTANTS = {
   ],
   'cp-dest-only': ['this.#copied(sn, dn, (to) => this.#dirty(to));', 'this.#dirty(dn);'],
   'rm-no-dirty': [
-    '      this.#rekey(n, null);\n      this.#dirty(parentOf(n));',
-    '      this.#rekey(n, null);',
+    '      this.#rekey(n, null, gone);\n      this.#dirty(parentOf(n));',
+    '      this.#rekey(n, null, gone);',
   ],
   'write-no-dirty': [
     '    this.upper.writeFileSync(p, d);\n    this.#dirty(n);',

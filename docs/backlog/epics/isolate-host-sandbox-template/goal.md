@@ -21,24 +21,23 @@ shared by every sandbox over it, never part of a sandbox's state; the state cap 
 sandbox's difference from it, and only the difference crosses to the worker and back per run. A
 fresh isolate per run holds the template in its heap (copied in per run, user 2026-11-25), so a
 run's latency and isolate memory grow with the template — measured and published (the agent's
-reading of the user's «ок», Decisions). Neither the template's bytes, nor its total number of
-entries, nor its depth changes the cost of a host op, the per-run wire or an idle sandbox, and
-reading never changes the state; a host op that touches no template directory is constant (probe
-W). One dependency is open: **every operation that touches a template directory — its first read,
-`list` or `stat`, a write, removal, rename or copy inside it — costs, and if it changes the
-directory carries on the wire and in the cap, in proportion to that directory's width (number of
-entries), and so does a `/workspace` write after such a change and an idle sandbox's memory after
-such a touch** (probe W, 10 → 5 000 packages in `/node_modules`: first touch 0.01 → 5.5 ms, a write
-in a package 0.04 → 10.6 ms and 10 → 5 000 rows, ~730 cap units per row, an idle sandbox after one
-listing 11 KiB → 3.3 MiB; `/workspace` untouched 0.007 ms and one row throughout; on the
-four-library template, `/node_modules` 180 wide: first touch 0.2 ms, a write in `pdf-lib` 0.44 ms
-and 189 rows / 33 KB on the wire / 147 k cap units — 0.2 % of the default 64 MiB cap —, an idle
-sandbox after one listing 134 KiB instead of 4). It comes from
-materializing a template directory whole on first touch and from an explicit directory being
-opaque. That is a narrowing of requirements §3 («Хостовая запись стоит O(размер записи + дифф)»;
-costs on ~1 MB and ~95 MB «отличаются не больше чем на константу»; «Память простаивающей
-песочницы у потребителя не включает шаблон») — the user's word is pending (map.md); the goal stays
-draft until it. What the host sees is what the next run sees, after any sequence of host ops and runs,
+reading of the user's «ок», Decisions). The template's bytes and total number of entries do not
+change the cost of a host op, the per-run wire or an idle sandbox, and reading never changes the
+state; a first touch of a template path costs O(its path length) more (probe W). One dependency is
+open: **every operation that touches a template directory — its first read, `list` or `stat`, a
+write, removal, rename or copy inside it — costs, and if it changes the directory carries on the
+wire and in the cap, in proportion to that directory's width (number of entries); so does a
+`/workspace` write after such a change, and an idle sandbox's memory after such a touch** (probe W,
+`/node_modules` 10 → 5 000 packages: first `list` 0.016 → 5.63 ms, a write in a package 0.046 →
+10.654 ms and 10 → 5 000 rows on the wire, ~730 cap units per row, an idle sandbox after one listing
+11 → 3 297 KiB; a `/workspace` write touching no template directory 0.005–0.009 ms and one row
+throughout; on the four-library template, `/node_modules` 180 wide: first touch 0.197–0.212 ms, a
+write in `pdf-lib` 0.437 ms, 189 rows, 32 690 wire bytes, 147 386 cap units — 0.2 % of the default
+64 MiB cap —, an idle sandbox after one listing 132 KiB instead of 4). It comes from materializing a
+template directory whole on first touch and from an explicit directory being opaque. That is a
+narrowing of requirements §3 («Хостовая запись стоит O(размер записи + дифф)»; costs on ~1 MB and
+~95 MB «отличаются не больше чем на константу»; «Память простаивающей песочницы у потребителя не
+включает шаблон») — the user's word is pending (map.md); the goal stays draft until it. What the host sees is what the next run sees, after any sequence of host ops and runs,
 as rifty's FS without a template would show it, and as live Node over a real directory where
 rifty's FS itself agrees with Node (I11). `exec` reports the paths the run changed, with sizes, deletions included. A broken,
 truncated or unsupported artifact is a named error before a sandbox exists. Persisting a template
@@ -67,10 +66,11 @@ trip (its I9), deferred with persistence.
    of it is kept.
 7. The agent runs `node` many times per turn: the README's cost table gives a warm `exec`'s latency
    and its isolate memory over a ~1 MB and a ~95 MB template; a host `writeFile`/`list`/`remove` and
-   the consumer's peak memory per run do not grow with the template; an empty sandbox over the
-   ~95 MB template runs with the default `maxFsBytes` and `memoryLimitMb`; N sandboxes over one
-   template hold one copy of it in the consumer, each idle one only its own changes (with, while
-   the width dependency stands, the template directories it touched — map.md).
+   the consumer's peak memory per run do not grow with the template (while the width dependency
+   stands, those touching a template directory grow with its width — map.md); an empty sandbox
+   over the ~95 MB template runs with the default `maxFsBytes` and `memoryLimitMb`; N sandboxes
+   over one template hold one copy of it in the consumer, each idle one only its own changes (with,
+   while the width dependency stands, the template directories it touched).
 8. A guest that breaks its own runtime (replaced intrinsics) cannot leave a tree its file
    operations did not produce while its run reads as success (live-sandbox I1).
 9. The README shows building the template from `package.json` + lock and requiring each of the
@@ -209,6 +209,8 @@ Recheck @ 7cda4de03 (same reviewer, five mutants of the new rule all caught: 93�
 Fourth external review of PR #429 @ 1594114f5 (the manager's reviewer; N2 closed on content, kind and times, 30 000 new seeds and 20 000 sequences of its own generator clean): Б1 (blocker) — a write inside a template directory costs and carries rows by that directory's width, a narrowing of §3 presented as meeting it («neither grows with the template's bytes», «not by its size», «meets both»), the third round of «a bound weaker than §3, claimed met» (B1 → S1 → Б1), each time found by a reviewer; S-a — `stat` of a lazy template directory gave another `nlink` (2 vs 3), `stat` absent from G; S-b — `cpSync` marked only its destination root, a nested overwrite held by a backend mtime side effect; S-c — the rifty-fs finding misdescribed its two silent successes; minors. Dispositions — Б1: claims removed, the dependency named with probe W's sweep (bytes × width × files × depth × operation × place; only width at template places has a non-zero slope), the fork to the user (map.md), goal back to draft; S-a: `stat` materializes a lazy directory, G gains `stat` with the whole returned value, a `stat-lazy` mutant red (18 / 1 000, minimized to one `stat('/node_modules')`); S-b: `cpSync` marks every destination path, G gains a times-independent mark audit, a `cp-dest-only` mutant red (named row + 1 / 1 000); six mutants reproducible by `--mutant`; S-c: the finding rewritten (minimal calls, `rifty-fix`, the coupling with S-b); minors fixed.
 
 Fresh final check after review 4's fixes (2026-11-25, new reviewer): the `cpSync` fix marked the whole destination tree (a 1-file copy into `/node_modules` → 25 000 rows) — fixed: a copy materializes only the directories it writes into and marks only the paths it writes; the sweep had measured reads, `list` and `stat` after a write (hiding the first-touch cost), varied no rows already on the wire, no idle memory, no `cp` / `rename` — sweep W rebuilt (first touch, write, remove, rename, copy, a `/workspace` write after a template write, idle fresh and after a listing; plus the real four-library template): width is the one axis with a slope, every operation touching a template directory grows with its width; the Б1 dependency and the user's question widened to that (sent to the manager, who asks the user in that wording); minors (ratio wording, cap figure range, oracle `ctime` artifact, whole `stat` in the guest sample) fixed.
+
+Second fresh check (2026-11-25 @ d8ac024aa): a record scan in `rm`/`rename` grew `/workspace` ops with every materialized template entry (4.1 ms at 52 001) — fixed: records move or go over the op's own subtree; claims the sweep did not back (ADR F1 (b) «meets §2–3», the TL;DR's cost, depth «flat», scenario 7 unqualified, figures not from the committed output, «209 packages ≈ 150–170 KiB») fixed from `sweep.out.txt` (scenarios added: removal of a template file, `/workspace` remove / rename after listing the template); the rifty-fs finding gains `cpSync` with a missing destination parent (rifty `ENOENT`, Node ok).
 
 ## Decisions
 

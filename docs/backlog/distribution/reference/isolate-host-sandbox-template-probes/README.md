@@ -158,7 +158,7 @@ Mutants (`gen.mjs 1000 0 0 --mutant=NAME`, `gen-mutants.out.txt`), each a one-li
 rule — all exit 1: `stat-lazy` (no materialize before `stat`) 18 / 1 000, minimized to one
 `stat('/node_modules')`; `cp-dest-only` (a copy marks only its destination root) the S-b named row
 + 1 / 1 000, minimized to a host write of `/node_modules/b/lib/x.js` + `cp b → a`; `rm-no-dirty`
-141 / 1 000; `write-no-dirty` 214 / 1 000, minimized to one write; `changed-ignored` 728 / 1 000;
+143 / 1 000; `write-no-dirty` 214 / 1 000, minimized to one write; `changed-ignored` 728 / 1 000;
 `rename-no-dirty` 61 / 1 000, minimized to one rename.
 
 ## W — the cost sweep (`sweep.mjs`, `sweep.out.txt`)
@@ -175,45 +175,51 @@ fresh and after one `list('/node_modules')`. Not varied: the number of sandboxes
 own), the in-isolate cost per run (template copy + index: grows with bytes and entries — the
 user-accepted F1 dependency, probes L and F).
 
+Scenarios added after review 5: removing a template file on a fresh sandbox; removing and
+renaming a `/workspace` file after the host listed `/node_modules` and every package.
+
 Ratio last / first value along each axis (≈ 1 = flat; sub-0.05 ms times are noisy):
 
 | axis | every scenario: time, rows, wire, cap, idle |
 |---|---|
 | bytes ×16 | flat |
-| files ×10 | flat (a write at depth 2 ×1.4–1.5: its own `lib` lists 5 → 50 children) |
-| depth ×6 | flat |
-| **width ×500** | `/workspace` with no template touch flat; **every scenario touching a template directory ×200–500** |
+| files ×10 | flat except a write at depth 2 (×1.70 time, ×1.43 rows: its own `lib` lists 5 → 50 children) and a first read of a file in `lib` (×1.77: `lib` 5 → 50 wide) — the width dependency at that level |
+| depth ×6 | flat except a first read of a template file (×1.54): O(path length), each directory on the path materialized once |
+| **width ×500** | `/workspace` with no template touch flat; **every scenario touching a template directory ×190–500**; `/workspace` remove / rename after the host touched the whole template ×9–15 (0.006 → 0.088 ms: the held records, no walk) |
 
-Width, 10 → 100 → 1 000 → 5 000 packages (ms; rows on the wire after it):
+Width, `/node_modules` 10 → 100 → 1 000 → 5 000 packages (ms; rows on the wire after it):
 
 | scenario | 10 | 100 | 1 000 | 5 000 |
 |---|---|---|---|---|
-| write `/workspace` | 0.007, 1 | 0.007, 1 | 0.006, 1 | 0.008, 1 |
-| write in a package (depth 1) | 0.036, 10 | 0.24, 100 | 2.10, 1 000 | 10.6, 5 000 |
-| removal in a package | 0.020, 10 | 0.12, 100 | 1.07, 1 000 | 5.46, 5 000 |
-| first read of a template file | 0.027, 1 | 0.13, 1 | 1.05, 1 | 5.46, 1 |
-| first `list` / `stat` of `/node_modules` | 0.011, 1 | 0.12, 1 | 1.07–1.14, 1 | 5.50–5.57, 1 |
-| rename a package | 0.029, 10 | 0.23, 100 | 2.19, 1 000 | 11.2, 5 000 |
-| copy 1 file into a package | 0.039, 10 | 0.23, 100 | 2.12, 1 000 | 10.9, 5 000 |
-| write `/workspace` after one template write | 0.017, 10 | 0.11, 100 | 1.03, 1 000 | 5.21, 5 000 |
-| idle sandbox, fresh / after one listing | 3 / 11 KiB | 3 / 73 KiB | 3 / 625 KiB | 4 / 3 300 KiB |
+| write `/workspace` | 0.008, 1 | 0.007, 1 | 0.005, 1 | 0.009, 1 |
+| write in a package (depth 1) | 0.046, 10 | 0.245, 100 | 2.115, 1 000 | 10.654, 5 000 |
+| removal of a file just written in a package | 0.019, 10 | 0.109, 100 | 1.025, 1 000 | 5.228, 5 000 |
+| removal of a template file | 0.057, 13 | 0.255, 103 | 2.127, 1 003 | 10.896, 5 003 |
+| first read of a template file | 0.029, 1 | 0.113, 1 | 1.065, 1 | 5.534, 1 |
+| first `list` / `stat` of `/node_modules` | 0.016 / 0.014, 1 | 0.108 / 0.105, 1 | 1.087 / 1.082, 1 | 5.63 / 5.523, 1 |
+| rename a package | 0.035, 10 | 0.222, 100 | 2.094, 1 000 | 10.798, 5 000 |
+| copy 1 file into a package | 0.047, 10 | 0.235, 100 | 2.112, 1 000 | 10.891, 5 000 |
+| write `/workspace` after one template write | 0.019, 10 | 0.104, 100 | 1.025, 1 000 | 5.231, 5 000 |
+| remove / rename a `/workspace` file after listing the template | 0.006 / 0.009, 1 | 0.006 / 0.009, 1 | 0.016 / 0.019, 1 | 0.088 / 0.083, 1 |
+| idle sandbox, fresh / after one listing | 3 / 11 KiB | 3 / 75 KiB | 3 / 625 KiB | 4 / 3 297 KiB |
 
 The four-library template itself (`sweep.mjs <node_modules of npm ci ../isolate-library-probe/deps>`:
 8 793 entries, 86.6 MB, `/node_modules` width 180; package `pdf-lib`):
 
 | scenario | ms | rows on the wire | wire bytes | cap units |
 |---|---|---|---|---|
-| write `/workspace` | 0.006 | 1 | 388 | 2 282 |
-| first read of a template file / first `list` / first `stat` of `/node_modules` | 0.20–0.21 | 1 | 303 | 1 608 |
-| write in `pdf-lib` (depth 1) | 0.44 | 189 | 32.7 KB | 147 386 (0.2 % of the 64 MiB cap) |
-| removal / rename / copy of 1 file in `pdf-lib` | 0.24 / 0.47 / 0.44 | 181–189 | 31–33 KB | 139–149 k |
-| write `/workspace` after one write in `pdf-lib` | 0.21 | 189 | 32.8 KB | 148 060 |
-| idle sandbox, fresh / after one `list('/node_modules')` | — | — | — | 4 / 134 KiB |
+| write `/workspace` | 0.005 | 1 | 388 | 2 282 |
+| first read of a template file / first `list` / first `stat` of `/node_modules` | 0.212 / 0.206 / 0.197 | 1 | 303 | 1 608 |
+| write in `pdf-lib` (depth 1) | 0.437 | 189 | 32 690 | 147 386 (0.2 % of the 64 MiB cap) |
+| removal of a template file / rename of `pdf-lib` / copy of 1 file into it | 0.423 / 0.399 / 0.438 | 188 / 181 / 189 | 32 395 / 31 102 / 32 852 | 145 632 / 138 888 / 148 844 |
+| write `/workspace` after one write in `pdf-lib` | 0.207 | 189 | 32 775 | 148 060 |
+| idle sandbox, fresh / after one `list('/node_modules')` | — | — | — | 4 / 132 KiB |
 
-Cap: ~730 units per row (path-length dependent): 2 282 units for a `/workspace` write at every
-width, 3.64 M after a write in a package at 5 000. The one non-flat axis is the width of the
-template directories an operation touches: they are materialized whole on first touch, and a
-changed one is explicit and opaque (ADR-0572 Consequences, the user fork in the goal map).
+Cap: ~730 units per row (path-length dependent). Not timed here: `toWire`, the rebuild from the
+wire and the changed-paths diff — each linear in the rows, i.e. the same width dependency. The one
+non-flat axis is the width of the template directories an operation touches: they are materialized
+whole on first touch, and a changed one is explicit and opaque (ADR-0572 Consequences, the user
+fork in the goal map).
 
 ## F — the F1 return condition's metric on real programs (`gens.mjs`, `gens.out.txt`)
 

@@ -112,6 +112,35 @@ const SCENARIOS = {
       L.budget();
     },
   },
+  'remove a tpl file (fresh)': {
+    op: (L, t) => {
+      L.rmSync(t.firstFile, { recursive: true });
+      L.budget();
+    },
+  },
+  // After the host listed every template directory it can reach in one level (records held).
+  'remove /workspace file after listing the template': {
+    setup: (L, t) => {
+      hostWrite(L, '/workspace/z.js');
+      for (const n of L.readdirSync('/node_modules'))
+        if (n.isDirectory) L.readdirSync(`/node_modules/${n.name}`);
+    },
+    op: (L) => {
+      L.rmSync('/workspace/z.js', { recursive: true });
+      L.budget();
+    },
+  },
+  'rename /workspace file after listing the template': {
+    setup: (L) => {
+      hostWrite(L, '/workspace/z.js');
+      for (const n of L.readdirSync('/node_modules'))
+        if (n.isDirectory) L.readdirSync(`/node_modules/${n.name}`);
+    },
+    op: (L) => {
+      L.renameSync('/workspace/z.js', '/workspace/z2.js');
+      L.budget();
+    },
+  },
   'write /workspace after one tpl write': {
     setup: (L, t) => hostWrite(L, `${t.pkg}/new.js`),
     op: (L) => hostWrite(L, '/workspace/y.js'),

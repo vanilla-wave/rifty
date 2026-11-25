@@ -32,6 +32,12 @@ Minimal calls (Node v24.16.0 verified 2026-11-25; rifty from `gen.out.txt` and t
   `runtime-js/fs-cp-type-mismatch-error-codes`).
 - `renameSync` of a directory onto a non-directory or a missing parent: rifty `EINVAL`, Node
   `ENOTDIR` / `ENOENT`.
+- **rifty throws where Node succeeds** — `cpSync('/a/x', '/m/n', { recursive: true })` with the
+  destination's parent missing: rifty `ENOENT`, Node creates the parents (90 × at the `FsSync`
+  level, 7 × in the guest sample).
+- At the `FsSync` level a non-recursive `rm` of a directory is `ENOTEMPTY` (Node's `fs.rmSync`:
+  `ERR_FS_EISDIR`); the guest's `fs.rmSync` maps it (absent from the guest sample) — interface,
+  not observable.
 - Directory times: rifty bumps a directory's mtime when a file in it is overwritten
   (`MemoryBackend.writeFile`, `parentNode.mtime = Date.now()`); Node does not.
 - Directory `nlink`: rifty counts subdirectories (as Linux); Node on macOS APFS counts every entry

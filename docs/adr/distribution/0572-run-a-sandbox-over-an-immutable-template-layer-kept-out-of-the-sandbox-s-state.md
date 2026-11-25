@@ -3,7 +3,7 @@
 Status: Proposed
 Date: 2026-11
 
-> TL;DR: A sandbox's template (`produceDependencySnapshot` artifact) is decoded once per consumer process and once per worker and never enters the per-run state; one layered FS class (rifty's `MemoryFsSync` with template entries materialized lazily; its state by node identity — an untouched template node is one row, anything else explicit) runs a sandbox's host ops in the consumer and its `fs` in each run, over one shared template index (host ops O(the write + the state)); each run's fresh isolate gets the template copied in (F1 (a), user 2026-11-25); writable or read-only per sandbox; persisting a template sandbox is deferred.
+> TL;DR: A sandbox's template (`produceDependencySnapshot` artifact) is decoded once per consumer process and once per worker and never enters the per-run state; one layered FS class (rifty's `MemoryFsSync` with template entries materialized lazily; its state by node identity — an untouched template node is one row, anything else explicit) runs a sandbox's host ops in the consumer and its `fs` in each run, over one shared template index (host ops independent of the template's bytes and total entries, linear in the width of the template directories they touch — the open user fork); each run's fresh isolate gets the template copied in (F1 (a), user 2026-11-25); writable or read-only per sandbox; persisting a template sandbox is deferred.
 
 ## Context
 
@@ -78,7 +78,10 @@ the user's words»).
    the same nodes. So reading never changes the state; an untouched template directory is one row
    wherever it is (a rename moves it as a row, no bytes); a changed directory lists its children,
    rows for the untouched ones. The state cap is the count of that description, computed by the
-   same walk, which enters only changed directories. Probe G (`gen.mjs`): 3 000 seeded random
+   same walk, which enters only changed directories. Cost: an operation touching a template
+   directory is linear in its width (whole materialization, opaque listing — Consequences, the
+   open fork); records move with a rename or go with a removal over the op's own subtree, never a
+   scan of all records. Probe G (`gen.mjs`): 3 000 seeded random
    sequences — `mkdir`, write, `rm`, `rename`, `cpSync`, `copyFileSync`, `utimes`, read, `readdir` —
    equal rifty's FS without a template in every call, in the tree rebuilt from the wire, with a
    rebuild at a seeded run boundary, and in the cap's count; reads alone leave the state a fresh
@@ -166,7 +169,8 @@ the user's words»).
   simplest: a plain FS, writes and deletions of template files need no overlay.
   (b) lazy template (recommended before F2's answer): only template reads cross, 3 read-only host functions over
   immutable data shared by every sandbox; the agent's files stay in the guest realm as today.
-  Meets §2–3; the capture unit stays open (§9); a killed run's writes stay lost (F4 = rollback).
+  Meets §2–3 inside the isolate (the consumer-side width dependency of §2 is independent of F1);
+  the capture unit stays open (§9); a killed run's writes stay lost (F4 = rollback).
   (c) the worker owns the whole FS: closes the capture unit by construction and makes a killed
   run's writes keepable; but every `fs` call is a host call (~11 operations — one dispatcher in the probe —, guest-chosen paths
   and bytes, per-call state in the multi-tenant worker), chunked I/O on the agent's own files turns
@@ -229,10 +233,11 @@ the user's words»).
    of it is kept.
 7. The agent runs `node` many times per turn: the README's cost table gives a warm `exec`'s latency
    and its isolate memory over a ~1 MB and a ~95 MB template; a host `writeFile`/`list`/`remove` and
-   the consumer's peak memory per run do not grow with the template; an empty sandbox over the
-   ~95 MB template runs with the default `maxFsBytes` and `memoryLimitMb`; N sandboxes over one
-   template hold one copy of it in the consumer, each idle one only its own changes (with, while
-   the width dependency stands, the template directories it touched — map.md).
+   the consumer's peak memory per run do not grow with the template (while the width dependency
+   stands, those touching a template directory grow with its width — map.md); an empty sandbox
+   over the ~95 MB template runs with the default `maxFsBytes` and `memoryLimitMb`; N sandboxes
+   over one template hold one copy of it in the consumer, each idle one only its own changes (with,
+   while the width dependency stands, the template directories it touched).
 8. A guest that breaks its own runtime (replaced intrinsics) cannot leave a tree its file
    operations did not produce while its run reads as success (live-sandbox I1).
 9. The README shows building the template from `package.json` + lock and requiring each of the
@@ -358,22 +363,24 @@ the user's words»).
   directory is materialized whole on first touch and an explicit directory is opaque, so every
   operation touching one — its first read, `list` or `stat`; a write, removal, rename or copy
   inside it — costs in proportion to its width; a change makes it carry a row per child on the wire
-  and in the cap (~730 units per row; 209 packages ≈ 150–170 KiB), and the rows stay for later
-  writes (a `/workspace` write after it pays them too); an idle sandbox after a touch holds its
-  children. Probe W, 10 → 5 000 packages: first touch 0.01 → 5.5 ms, a write in a package 0.04 →
-  10.6 ms / 10 → 5 000 rows, idle after one listing 11 KiB → 3.3 MiB; the four-library template
-  (`/node_modules` 180 wide): first touch 0.2 ms, a write in a package 0.44 ms, 189 rows, 33 KB,
-  147 k cap units (0.2 % of 64 MiB), idle after a listing 134 KiB. Template bytes, total entries
-  and depth are flat on every scenario; `/workspace` with no template touch is constant.
-  Requirements §3 ask constant costs between ~1 MB and ~95 MB templates and an idle memory without
-  the template: a narrowing until the user accepts it, or a redesign (a directory delta +
-  per-entry lazy lookup) replaces it.
+  and in the cap (~730 units per row), and the rows stay for later writes (a `/workspace` write
+  after it pays them too); an idle sandbox after a touch holds its children. Probe W, 10 → 5 000
+  packages: first `list` 0.016 → 5.63 ms, a write in a package 0.046 → 10.654 ms / 10 → 5 000 rows,
+  idle after one listing 11 → 3 297 KiB; the four-library template (`/node_modules` 180 wide): first
+  touch 0.197–0.212 ms, a write in `pdf-lib` 0.437 ms, 189 rows, 32 690 wire bytes, 147 386 cap
+  units (0.2 % of 64 MiB), idle after a listing 132 KiB. Template bytes and total entries are flat;
+  depth adds O(path length) to a first touch; `/workspace` with no template touch is constant
+  (after the host touched the whole template, 0.006 → 0.088 ms at 5 000 packages: the held
+  records, not a walk). Requirements §3 ask constant costs between ~1 MB and ~95 MB templates and an
+  idle memory without the template: a narrowing until the user accepts it, or a redesign (a
+  directory delta + per-entry lazy lookup) replaces it.
 - Per-call overhead of the layered class in a run (probe F, load ~5): +18…+25 ms on the four
   libraries' generators, four at once +7…+41 ms — inside the F1 return condition; map item 5
   re-measures it on landed code.
-- The state cap is counted over the state: a host write costs O(the write + the state) — T95
-  0.02 ms, the same after the host listed the whole template (probe H, equal own files); N writes
-  in a row cost O(N × the state).
+- The state cap is counted over the state by §2's walk: a host write in `/workspace` costs O(the
+  write + the state) — T95 0.02 ms, the same after the host listed the whole template (probe H,
+  equal own files); N writes in a row cost O(N × the state); a state holding a changed template
+  directory carries its width (above).
 - `runCode` unchanged.
 - Overlap with PR #437 (open, the user's track: every guest's FS sync-only): a template run installs
   `LayeredFsSync` as the realm's only FS surface (§3), the same move for template runs; whichever

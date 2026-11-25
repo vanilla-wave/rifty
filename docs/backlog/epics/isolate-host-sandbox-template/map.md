@@ -45,15 +45,15 @@ the carrier hits it:
   template directory — first read / `list` / `stat`, write, removal, rename, copy inside it — costs
   in proportion to its width, a change puts a row per child on the wire and in the cap (~730 units
   per row), and the rows stay for later writes; an idle sandbox after a touch holds its children
-  (11 KiB → 3.3 MiB at 10 → 5 000 packages; the four-library template, 180 wide: first touch 0.2
-  ms, a write in a package 0.44 ms / 189 rows / 33 KB / 0.2 % of the cap, idle after a listing
-  134 KiB) — owner: user — asked 2026-11-25 by the manager, the
-  agent's proposed wording sent to him: (1) accept as a declared narrowing of requirements §3 + a
-  backlog item (owner, trigger «a template directory wider than N», lifting condition); (2)
-  redesign — a directory delta (`lazy(O)` + changed children + removed names, only a recreated
-  directory opaque) and per-entry lazy lookup (no sibling materialization): back to merging
-  layers, the N1/N2 class, then under probe G. Bytes, entries and depth are flat already. The
-  goal is draft until the answer; (2) is its own round after it.
+  (11 → 3 297 KiB at 10 → 5 000 packages; the four-library template, 180 wide: first touch ~0.2
+  ms, a write in a package 0.437 ms / 189 rows / 32 690 wire bytes / 0.2 % of the cap, idle after a
+  listing 132 KiB) — owner: user — asked 2026-11-25 by the manager in the agent's wording: (1)
+  accept as a declared narrowing of requirements §3 + a backlog item (owner, trigger «a template
+  directory wider than N», lifting condition); (2) redesign — a directory delta (`lazy(O)` +
+  changed children + removed names, only a recreated directory opaque) and per-entry lazy lookup
+  (no sibling materialization): back to merging layers, the N1/N2 class, then under probe G.
+  Bytes and total entries are flat already; depth adds O(path length) to a first touch. The goal is
+  draft until the answer; (2) is its own round after it.
 - The process registry's lifetime: unregistering or evicting a template (a long-lived consumer
   that rebuilds its template keeps every old version, ~90 MB each) — owner: agent — settled at item
   3's PICKUP (an explicit release or one held while a sandbox references it), I4 documented.
