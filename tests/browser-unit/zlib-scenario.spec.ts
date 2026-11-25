@@ -5,9 +5,9 @@ import {
   type Pin,
   STEPS,
   type StepId,
+  browserMasks,
   observed,
   outPath,
-  browserMasks,
   pinOf,
   runOracle,
 } from '../../packages/isolate-host/tests/zlib-scenario.ts';
@@ -46,7 +46,7 @@ const PINS: Readonly<Record<StepId, Pin>> = {
   '1': {
     exitCode: 1,
     stdout: '',
-    stderr: `Uncaught NotImplementedError: Not implemented: zlib.DeflateRaw (this stream not implemented yet; buffer the input, then call async zlib.deflateRaw: zlib.deflateRaw(buf, cb) or await util.promisify(zlib.deflateRaw)(buf)) (<dev-server>/packages/runtime-js/src/builtins/zlib.ts:11)
+    stderr: `Uncaught NotImplementedError: Not implemented: zlib.DeflateRaw (this stream not implemented yet; buffer the input, then call async zlib.deflateRaw: zlib.deflateRaw(buf, cb) or await util.promisify(zlib.deflateRaw)(buf)) (<dev-server>/packages/runtime-js/src/builtins/zlib.ts:<line>)
 `,
     output: null,
   },
@@ -131,7 +131,8 @@ const PINS: Readonly<Record<StepId, Pin>> = {
   },
   '6': {
     exitCode: 1,
-    stdout: 'params {"client_max_window_bits":11,"server_max_window_bits":10}\n',
+    stdout: `params {"client_max_window_bits":11,"server_max_window_bits":10}
+`,
     stderr: `NotImplementedError: Not implemented: zlib.createDeflateRaw (this stream not implemented yet; buffer the input, then call async zlib.deflateRaw: zlib.deflateRaw(buf, cb) or await util.promisify(zlib.deflateRaw)(buf))
     at <rifty frames>
     at PerMessageDeflate._compress (/tmp/z6/node_modules/ws/lib/permessage-deflate.js:416:28)
@@ -158,8 +159,8 @@ const PINS: Readonly<Record<StepId, Pin>> = {
   },
   '7b': {
     exitCode: 0,
-    stdout:
-      '{"error":true,"name":"TypeError","message":"The compressed data was not valid: invalid code -- missing end-of-block."}\n',
+    stdout: `{"error":true,"name":"TypeError","message":"The compressed data was not valid: invalid code -- missing end-of-block."}
+`,
     stderr: '',
     output: null,
   },

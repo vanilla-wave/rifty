@@ -4,17 +4,14 @@ import {
   type Pin,
   STEPS,
   type StepId,
+  browserMasks,
+  masked,
   observed,
   outPath,
-  browserMasks,
   pinOf,
   runOracle,
 } from '../../packages/isolate-host/tests/zlib-scenario.ts';
-import {
-  STEP_URL,
-  UNPACK,
-  serveSteps,
-} from '../browser-unit/fixtures/zlib-scenario.ts';
+import { STEP_URL, UNPACK, serveSteps } from '../browser-unit/fixtures/zlib-scenario.ts';
 import { type Page, expect, test } from './fixtures/test.ts';
 
 // node:zlib goal carrier (backlog epics/node-zlib-on-every-host/map.md item 1), no-COI SDK host
@@ -23,10 +20,12 @@ import { type Page, expect, test } from './fixtures/test.ts';
 // Today's outcome pinned whole per step (with the run's `status` and failure); the unit
 // delivering it compares with Node instead. COI Workbench twin: tests/browser-unit.
 
-/** The completion's `error` without its `stack` (its frames are dev-server URLs). */
+/** The completion's `error`, its `stack` under `browserMasks`. */
 type Failure = Readonly<Record<string, string>>;
 interface SdkPin extends Pin {
   readonly status: string;
+  readonly worker: string;
+  readonly effects: unknown;
   readonly failure: Failure | null;
 }
 /**
@@ -42,6 +41,11 @@ const PINS: Readonly<Record<StepId, SdkPin>> = {
     stderr: '',
     output: null,
     status: 'failed',
+    worker: 'replaced',
+    effects: {
+      applied: 'unknown',
+      persistence: 'unknown',
+    },
     failure: {
       name: 'Error',
       message:
@@ -67,10 +71,27 @@ const PINS: Readonly<Record<StepId, SdkPin>> = {
 `,
     output: null,
     status: 'failed',
+    worker: 'replaced',
+    effects: {
+      applied: 'unknown',
+      persistence: 'unknown',
+    },
     failure: {
       name: 'NotImplementedError',
       message:
         'Not implemented: zlib.createInflateRaw (this stream not implemented yet; buffer the input, then call async zlib.inflateRaw: zlib.inflateRaw(buf, cb) or await util.promisify(zlib.inflateRaw)(buf))',
+      stack: `NotImplementedError: Not implemented: zlib.createInflateRaw (this stream not implemented yet; buffer the input, then call async zlib.inflateRaw: zlib.inflateRaw(buf, cb) or await util.promisify(zlib.inflateRaw)(buf))
+    at <rifty frames>
+    at eval (/zs/z2/node_modules/unzipper/lib/Open/unzip.js:89:52)
+    at tryCatcher (/zs/z2/node_modules/bluebird/js/release/util.js:16:23)
+    at Promise._settlePromiseFromHandler (/zs/z2/node_modules/bluebird/js/release/promise.js:510:31)
+    at Promise._settlePromise (/zs/z2/node_modules/bluebird/js/release/promise.js:567:18)
+    at Promise._settlePromise0 (/zs/z2/node_modules/bluebird/js/release/promise.js:612:10)
+    at Promise._settlePromises (/zs/z2/node_modules/bluebird/js/release/promise.js:691:18)
+    at Async._drainQueue (/zs/z2/node_modules/bluebird/js/release/async.js:133:16)
+    at Async._drainQueues (/zs/z2/node_modules/bluebird/js/release/async.js:143:10)
+    at Async.drainQueues (/zs/z2/node_modules/bluebird/js/release/async.js:17:14)
+    at <rifty frames>`,
       feature: 'zlib.createInflateRaw',
     },
   },
@@ -87,10 +108,22 @@ const PINS: Readonly<Record<StepId, SdkPin>> = {
 `,
     output: null,
     status: 'failed',
+    worker: 'replaced',
+    effects: {
+      applied: 'unknown',
+      persistence: 'unknown',
+    },
     failure: {
       name: 'NotImplementedError',
       message:
         'Not implemented: zlib.createDeflate (this stream not implemented yet; buffer the input, then call async zlib.deflate: zlib.deflate(buf, cb) or await util.promisify(zlib.deflate)(buf))',
+      stack: `NotImplementedError: Not implemented: zlib.createDeflate (this stream not implemented yet; buffer the input, then call async zlib.deflate: zlib.deflate(buf, cb) or await util.promisify(zlib.deflate)(buf))
+    at <rifty frames>
+    at Packer.createDeflate (/zs/z3w/node_modules/pngjs/lib/packer.js:73:24)
+    at new module.exports (/zs/z3w/node_modules/pngjs/lib/packer-async.js:14:32)
+    at new exports.PNG (/zs/z3w/node_modules/pngjs/lib/png.js:44:18)
+    at Object.<anonymous> (/zs/z3w/3w-pngjs-write.js:6:42)
+    at <rifty frames>`,
       feature: 'zlib.createDeflate',
     },
   },
@@ -107,6 +140,11 @@ const PINS: Readonly<Record<StepId, SdkPin>> = {
 `,
     output: null,
     status: 'exited',
+    worker: 'retained',
+    effects: {
+      applied: 'no',
+      persistence: 'flushed',
+    },
     failure: null,
   },
   '4': {
@@ -124,10 +162,24 @@ const PINS: Readonly<Record<StepId, SdkPin>> = {
 `,
     output: null,
     status: 'failed',
+    worker: 'replaced',
+    effects: {
+      applied: 'unknown',
+      persistence: 'unknown',
+    },
     failure: {
       name: 'NotImplementedError',
       message:
         'Not implemented: zlib.deflateSync (sync zlib not implemented yet; async zlib.deflate works: zlib.deflate(buf, cb) or await util.promisify(zlib.deflate)(buf))',
+      stack: `NotImplementedError: Not implemented: zlib.deflateSync (sync zlib not implemented yet; async zlib.deflate works: zlib.deflate(buf, cb) or await util.promisify(zlib.deflate)(buf))
+    at <rifty frames>
+    at PDFReference.finalize (/zs/z4/node_modules/pdfkit/js/pdfkit.js:201:28)
+    at PDFReference.end (/zs/z4/node_modules/pdfkit/js/pdfkit.js:193:10)
+    at PDFPage.end (/zs/z4/node_modules/pdfkit/js/pdfkit.js:434:25)
+    at PDFDocument.flushPages (/zs/z4/node_modules/pdfkit/js/pdfkit.js:5855:12)
+    at PDFDocument.end (/zs/z4/node_modules/pdfkit/js/pdfkit.js:5912:10)
+    at Object.<anonymous> (/zs/z4/4-pdfkit.js:26:5)
+    at <rifty frames>`,
       feature: 'zlib.deflateSync',
     },
   },
@@ -141,10 +193,19 @@ const PINS: Readonly<Record<StepId, SdkPin>> = {
 `,
     output: null,
     status: 'failed',
+    worker: 'replaced',
+    effects: {
+      applied: 'unknown',
+      persistence: 'unknown',
+    },
     failure: {
       name: 'NotImplementedError',
       message:
         'Not implemented: zlib.gunzipSync (sync zlib not implemented yet; async zlib.gunzip works: zlib.gunzip(buf, cb) or await util.promisify(zlib.gunzip)(buf))',
+      stack: `NotImplementedError: Not implemented: zlib.gunzipSync (sync zlib not implemented yet; async zlib.gunzip works: zlib.gunzip(buf, cb) or await util.promisify(zlib.gunzip)(buf))
+    at <rifty frames>
+    at Object.<anonymous> (/zs/z5a/5a-gunzip-members.js:5:33)
+    at <rifty frames>`,
       feature: 'zlib.gunzipSync',
     },
   },
@@ -158,16 +219,26 @@ const PINS: Readonly<Record<StepId, SdkPin>> = {
 `,
     output: null,
     status: 'failed',
+    worker: 'replaced',
+    effects: {
+      applied: 'unknown',
+      persistence: 'unknown',
+    },
     failure: {
       name: 'NotImplementedError',
       message:
         'Not implemented: zlib.unzip (gzip/zlib auto-detect not implemented yet; pick by header: gzip input (starts 1f 8b) → async zlib.gunzip, else → async zlib.inflate; both take (buf, cb) and work with util.promisify)',
+      stack: `NotImplementedError: Not implemented: zlib.unzip (gzip/zlib auto-detect not implemented yet; pick by header: gzip input (starts 1f 8b) → async zlib.gunzip, else → async zlib.inflate; both take (buf, cb) and work with util.promisify)
+    at <rifty frames>
+    at Object.<anonymous> (/zs/z5b/5b-unzip.js:6:6)
+    at <rifty frames>`,
       feature: 'zlib.unzip',
     },
   },
   '6': {
     exitCode: null,
-    stdout: 'params {"client_max_window_bits":11,"server_max_window_bits":10}\n',
+    stdout: `params {"client_max_window_bits":11,"server_max_window_bits":10}
+`,
     stderr: `NotImplementedError: Not implemented: zlib.createDeflateRaw (this stream not implemented yet; buffer the input, then call async zlib.deflateRaw: zlib.deflateRaw(buf, cb) or await util.promisify(zlib.deflateRaw)(buf))
     at <rifty frames>
     at PerMessageDeflate._compress (/zs/z6/node_modules/ws/lib/permessage-deflate.js:416:28)
@@ -182,10 +253,26 @@ const PINS: Readonly<Record<StepId, SdkPin>> = {
 `,
     output: null,
     status: 'failed',
+    worker: 'replaced',
+    effects: {
+      applied: 'unknown',
+      persistence: 'unknown',
+    },
     failure: {
       name: 'NotImplementedError',
       message:
         'Not implemented: zlib.createDeflateRaw (this stream not implemented yet; buffer the input, then call async zlib.deflateRaw: zlib.deflateRaw(buf, cb) or await util.promisify(zlib.deflateRaw)(buf))',
+      stack: `NotImplementedError: Not implemented: zlib.createDeflateRaw (this stream not implemented yet; buffer the input, then call async zlib.deflateRaw: zlib.deflateRaw(buf, cb) or await util.promisify(zlib.deflateRaw)(buf))
+    at <rifty frames>
+    at PerMessageDeflate._compress (/zs/z6/node_modules/ws/lib/permessage-deflate.js:416:28)
+    at eval (/zs/z6/node_modules/ws/lib/permessage-deflate.js:326:12)
+    at [kRun] (/zs/z6/node_modules/ws/lib/limiter.js:50:7)
+    at Limiter.add (/zs/z6/node_modules/ws/lib/limiter.js:35:15)
+    at PerMessageDeflate.compress (/zs/z6/node_modules/ws/lib/permessage-deflate.js:325:17)
+    at eval (/zs/z6/6-ws.js:6:54)
+    at new Promise (<anonymous>)
+    at call (/zs/z6/6-ws.js:6:28)
+    at eval (/zs/z6/6-ws.js:24:21)`,
       feature: 'zlib.createDeflateRaw',
     },
   },
@@ -199,25 +286,40 @@ const PINS: Readonly<Record<StepId, SdkPin>> = {
 `,
     output: null,
     status: 'failed',
+    worker: 'replaced',
+    effects: {
+      applied: 'unknown',
+      persistence: 'unknown',
+    },
     failure: {
       name: 'NotImplementedError',
       message:
         'Not implemented: zlib.crc32 (crc32 not implemented yet; node:zlib has no working alternative)',
+      stack: `NotImplementedError: Not implemented: zlib.crc32 (crc32 not implemented yet; node:zlib has no working alternative)
+    at <rifty frames>
+    at Object.<anonymous> (/zs/z7a/7a-crc32.js:6:37)
+    at <rifty frames>`,
       feature: 'zlib.crc32',
     },
   },
   '7b': {
     exitCode: 0,
-    stdout:
-      '{"error":true,"name":"TypeError","message":"The compressed data was not valid: invalid code -- missing end-of-block."}\n',
+    stdout: `{"error":true,"name":"TypeError","message":"The compressed data was not valid: invalid code -- missing end-of-block."}
+`,
     stderr: '',
     output: null,
     status: 'exited',
+    worker: 'retained',
+    effects: {
+      applied: 'no',
+      persistence: 'flushed',
+    },
     failure: null,
   },
 };
 
 const root = process.cwd().replaceAll('\\', '/');
+const masks = browserMasks(root);
 let oracle: ReadonlyMap<StepId, OracleStep> | undefined;
 const oracleOf = (): ReadonlyMap<StepId, OracleStep> => {
   oracle ??= runOracle();
@@ -230,6 +332,8 @@ interface SdkRun {
   readonly stderr: string;
   readonly exitCode: number | null;
   readonly status: string;
+  readonly worker: string;
+  readonly effects: unknown;
   readonly failure: Failure | null;
   readonly file: number[] | null;
 }
@@ -242,6 +346,8 @@ async function inSdk(step: OracleStep['step']): Promise<SdkPin> {
         stderr: string;
         exitCode: number | null;
         status: string;
+        worker: string;
+        effects: unknown;
         error?: Record<string, string>;
       }
       const sandbox = (globalThis as Record<string, unknown>).__zlibScenario as {
@@ -270,10 +376,9 @@ async function inSdk(step: OracleStep['step']): Promise<SdkPin> {
         stderr: done.stderr,
         exitCode: done.exitCode,
         status: done.status,
-        failure:
-          e === undefined
-            ? null
-            : Object.fromEntries(Object.entries(e).filter(([key]) => key !== 'stack')),
+        worker: done.worker,
+        effects: done.effects,
+        failure: e === undefined ? null : { ...e },
         file,
       };
     },
@@ -287,9 +392,15 @@ async function inSdk(step: OracleStep['step']): Promise<SdkPin> {
   );
   const pin = pinOf(
     observed({ ...r, file: r.file === null ? undefined : Uint8Array.from(r.file) }),
-    browserMasks(root),
+    masks,
   );
-  return { ...pin, status: r.status, failure: r.failure };
+  const failure =
+    r.failure === null
+      ? null
+      : Object.fromEntries(
+          Object.entries(r.failure).map(([k, v]) => [k, k === 'stack' ? masked(v, masks) : v]),
+        );
+  return { ...pin, status: r.status, worker: r.worker, effects: r.effects, failure };
 }
 
 test.describe('node:zlib goal scenario vs Node (no-COI SDK)', () => {
@@ -323,7 +434,13 @@ test.describe('node:zlib goal scenario vs Node (no-COI SDK)', () => {
       if (s === undefined) throw new Error(`no oracle for ${step.id}`);
       const rifty = await inSdk(step);
       expect(rifty).toEqual(PINS[step.id]);
-      const node = { ...pinOf(observed(s.node)), status: 'exited', failure: null };
+      const node = {
+        ...pinOf(observed(s.node)),
+        status: 'exited',
+        worker: 'retained',
+        effects: rifty.effects,
+        failure: null,
+      };
       expect(rifty, 'the pin is a gap against live Node').not.toEqual(node);
     });
   }

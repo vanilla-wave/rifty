@@ -216,17 +216,30 @@ export interface Mask {
   readonly to: string;
 }
 
-/** A browser host's stderr masks for checkout `_root`; nothing else of it is rewritten. */
-export const browserMasks = (_root: string): readonly Mask[] => [
+const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * A browser host's stderr masks for the checkout at `root` (the dev server serves it under
+ * `/@fs<root>`); applied in order, nothing else of the stderr is rewritten.
+ */
+export const browserMasks = (root: string): readonly Mask[] => [
   {
-    why: "the dev server's origin (port) and this checkout's path in rifty's own source URLs",
-    pattern: /https?:\/\/(?:localhost|127\.0\.0\.1):\d+\/@fs\/\S*?\/packages\//g,
-    to: '<dev-server>/packages/',
+    why: "the dev server's origin (port) and this checkout's path, in a URL of rifty's own source",
+    pattern: new RegExp(
+      `https?://(?:localhost|127\\.0\\.0\\.1):\\d+/@fs${escapeRegExp(root)}/`,
+      'g',
+    ),
+    to: '<dev-server>/',
   },
   {
-    why: "a run of rifty's own stack frames (their line:col move with any runtime edit); guest frames stay",
-    pattern: /(?:^ {4}at (?:.*\()?<dev-server>\/packages\/.*\n)+/gm,
-    to: '    at <rifty frames>\n',
+    why: "the make-up and number of rifty's own stack frames (`    at [fn (]<rifty file>:L:C[)]`, not an `eval at` frame, which is the guest's): each run of them is one line; the message, guest frames, exit, stdout and output are compared",
+    pattern: /(?:\n {4}at (?![^\n]*eval at)(?:[^\n(]* \()?<dev-server>\/[^\s()]+:\d+:\d+\)?(?=\n|$))+/g,
+    to: '\n    at <rifty frames>',
+  },
+  {
+    why: "the line (and column) of a rifty source location left outside those frames (an `Uncaught` line's source, an `eval at` origin); the file stays",
+    pattern: /(<dev-server>\/[^\s():]+):\d+(?::\d+)?/g,
+    to: '$1:<line>',
   },
 ];
 
@@ -240,9 +253,11 @@ export interface Pin {
   readonly stderr: string;
   readonly output: string | null;
 }
+export const masked = (text: string, masks: readonly Mask[]): string =>
+  masks.reduce((t, m) => t.replace(m.pattern, m.to), text);
 export const pinOf = (o: Observed, masks: readonly Mask[] = []): Pin => ({
   exitCode: o.exitCode,
   stdout: o.stdout,
-  stderr: masks.reduce((text, m) => text.replace(m.pattern, m.to), o.stderr),
+  stderr: masked(o.stderr, masks),
   output: o.output,
 });
