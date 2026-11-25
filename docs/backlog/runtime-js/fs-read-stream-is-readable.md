@@ -25,7 +25,7 @@ It stands on unit 1: `_construct`/`_destroy` are never called today (`m1`). It b
 with unit 5: Node's one `_construct` (`:50-84`, with the monkey-patched `open` path), `_destroy`
 closing the fd, and the callable constructor shape. Unit 5 reuses it, so 4 comes before 5.
 
-Run at `71919b2b0` (main `b6d37fc01`'s code), `m4`: 3 of 20 rows equal Node in-process and 2 of 20 in
+Run at `8ec679b04` (main `b6d37fc01`'s code), `m4`: 3 of 20 rows equal Node in-process and 2 of 20 in
 the isolate.
 
 - `instanceof Readable` is false.

@@ -1,6 +1,6 @@
 // pipeline/compose stages that are functions or async generators, and the success-callback arguments
 // of pipeline/finished (lib/internal/streams/pipeline.js, end-of-stream.js).
-const { Readable, Writable, PassThrough, pipeline, finished } = require('node:stream');
+const { Readable, Writable, PassThrough, Transform, pipeline, finished } = require('node:stream');
 const sp = require('node:stream/promises');
 const e2s = (e) =>
   e ? `${e.code ? `${e.code}:` : ''}${String(e.message).split('\n')[0].slice(0, 60)}` : String(e);
@@ -94,6 +94,27 @@ row('finished on a Readable destroyed before end', async (L) => {
   const r = new Readable({ read() {} });
   finished(r, (...a) => L.push(`cb args=${a.length} ${a[0] ? e2s(a[0]) : ''}`));
   r.destroy();
+});
+row('finished on a Transform destroyed after a write', async (L) => {
+  const t = new Transform({
+    transform(c, _e, cb) {
+      cb(null, c);
+    },
+  });
+  finished(t, (...a) => L.push(`cb args=${a.length} ${a[0] ? e2s(a[0]) : ''}`));
+  t.write('a', () => t.destroy());
+});
+row('close(cb)-shape (finished + destroy) on a Transform that already errored', async (L) => {
+  const t = new Transform({
+    transform(_c, _e, cb) {
+      cb(new Error('tfail'));
+    },
+  });
+  t.on('error', () => {});
+  t.write('a');
+  await settle(5);
+  finished(t, (...a) => L.push(`cb args=${a.length} ${a[0] ? e2s(a[0]) : ''}`));
+  t.destroy();
 });
 (async () => {
   for (const [name, fn] of rows) {

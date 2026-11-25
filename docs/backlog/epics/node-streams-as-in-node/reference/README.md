@@ -2,7 +2,7 @@
 
 What a Node program gets from rifty's streams today, per unit of the goal
 (`docs/backlog/epics/node-streams-as-in-node/`). Oracle: live Node v24.16.0, macOS arm64.
-rifty: `71919b2b0`, which is main `b6d37fc01`'s code (this branch is docs-only).
+rifty: `8ec679b04`, which is main `b6d37fc01`'s code (this branch is docs-only).
 
 ## Run
 

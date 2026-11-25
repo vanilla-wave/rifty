@@ -1,6 +1,6 @@
 # Map — node-streams-as-in-node
 
-Probe: `reference/` (README, programs, `results/summary.txt`). Rows equal to Node, run at `71919b2b0`
+Probe: `reference/` (README, programs, `results/summary.txt`). Rows equal to Node, run at `8ec679b04`
 (main `b6d37fc01`'s code; this branch is docs-only), are given per unit; one number = every rifty
 column.
 
@@ -11,13 +11,13 @@ column.
    line, exit status and stderr. First, before any stream code. → I8.
 1. `runtime-js/stream-destroy-construct-hooks` — **lifecycle** — `_construct`/`_destroy`, callback
    once, destroy moment, `errored`/`closed`, `autoDestroy` `'close'` after `'end'`/`'finish'`.
-   Stands on nothing. Unlocks 4, 5, the `'close'` rows of 6, zlib unit 3 (with 2, 7) and zlib unit 4's order (with 6). `m1` 0/14, hook matrix
+   Stands on nothing. Unlocks 4, 5, the `'close'` rows of 6 and, with 2, 7 and 6's order, zlib unit 3. `m1` 0/14, hook matrix
    10/76. Absorbs 2, plus the readable half of a third. → I1.
 2. `runtime-js/readable-flowing-property` — **stream state: constructor options and members** —
    option validation as Node's `ReadableState`/`WritableState` (`getHighWaterMark`, `signal`,
    `defaultEncoding`) and `write(chunk, '', cb)` (`m8` 6/16), `readableFlowing`, `isPaused()`,
    `writableNeedDrain`, `[Symbol.asyncDispose]` (`m2` 0/7).
-   Closes on the plain-stream rows. Unlocks, with 1 and 7, zlib unit 3. Absorbs 2. → I2.
+   Closes on the plain-stream rows. Unlocks, with 1, 7 and 6's order, zlib unit 3. Absorbs 2. → I2.
 3. `runtime-js/stream-classes-skip-legacy-stream` — **legacy `Stream` in the chain** — Closes on the
    plain-stream rows. Its own unit because it changes the prototype chain of every class and falls under
    the io bundle budget (trap `io-treeshake-side-effect`). `m3` 0/4. Absorbs 1. → I3.
@@ -32,9 +32,9 @@ column.
 6. `runtime-js/transform-readable-backpressure` — **`Transform` backpressure, `Duplex` surface and
    order** — Backpressure and members are independent. The three `'close'` rows of `m6` (Transform
    order, Duplex order, `allowHalfOpen: false`) close after 1. Unlocks scenario 5 (with 4, 5) and,
-   with 1, zlib unit 4. `m6` 0/8. Absorbs 3, one of them shared with 1. → I6.
+   with 1, 2 and 7 (its order), zlib unit 3, and alone (its backpressure) zlib unit 4. `m6` 0/8. Absorbs 3, one of them shared with 1. → I6.
 7. `runtime-js/stream-pipeline-function-stages` — **pipeline function/async-generator stages,
-   `pipeline`/`finished` completion (callback arguments, premature close)** — Independent. Unlocks scenario 6 (with 4, 5) and, with 1 and 2, zlib unit 3. `m7` 0/9. Absorbs 1, plus 1
+   `pipeline`/`finished` completion (callback arguments, premature close)** — Independent. Unlocks scenario 6 (with 4, 5) and, with 1, 2 and 6's order, zlib unit 3. `m7` 0/11. Absorbs 1, plus 1
    branch-only. → I7.
 
 Order: 0 first. Then 1, 2, 3, 6 and 7 in any order; 1 first unblocks the most. Then 4, then 5.
@@ -91,11 +91,11 @@ The node:zlib drafts (`zlib-class-call-shape`, `zlib-crc32`, `zlib-trailing-byte
 
 ## Links
 
-- **Goal node-zlib-on-every-host** (branch `t3/zlib-engine-probe` at `da3ae64cb`, `map.md` items 2–4
-  and §Dependencies on the streams goal). The same line goes into both maps: «zlib unit 2 (engine +
-  `crc32`) needs no streams unit. zlib unit 3 (Node's `lib/zlib.js` whole; entry criterion
-  `zlib-diff` = 0) needs streams units 1, 2 and 7. zlib unit 4 (streams under load) needs streams unit
-  6, plus 1 for the `'close'` order.» Evidence:
+- **Goal node-zlib-on-every-host** (branch `t3/zlib-engine-probe` at `ed8c785f1`; its `map.md` items
+  2–4 and §Dependencies on the streams goal). The same line goes into both maps: «zlib unit 2 (engine +
+  `crc32`) needs no streams unit. zlib unit 3 (Node's `lib/zlib.js` whole) has as entry criterion
+  `zlib-diff` state group = 0, which needs streams units 1, 2 and 7 and unit 6's Transform event
+  order. zlib unit 4 (streams under load) needs unit 6's backpressure.» Evidence:
   - Node's `zlibBuffer` runs on a `Transform`: `on('data'/'error'/'end')`, `end(buf)`, then `close()`,
     which is `finished` + `destroy()` → `_destroy` → `_close(handle)` (`lib/zlib.js:113-160,367-375`).
   - The error path is `zlibOnError` → `destroy(err)` → `_destroy` → `'error'` (`:185-194`).
@@ -108,21 +108,29 @@ The node:zlib drafts (`zlib-class-call-shape`, `zlib-crc32`, `zlib-trailing-byte
     unzipper `Extract` on a DEFLATE zip (fstream → graceful-fs → `fs.WriteStream`) and
     `fs.ReadStream → createGzip → fs.WriteStream` are in no carrier today. They are proposed for the
     zlib carrier, via the manager; this goal's STORE `Extract` case covers the streams half.
-  - **`zlib-diff` = 0 is the consumer check of units 1, 2 and 7**
-    (on branch `t3/zlib-engine-probe` at `da3ae64cb`: `runtime-js/reference/zlib-engine-probe/zlib-diff.mjs` →
-    `results/zlib-diff.txt`; linked, not copied, not on main yet). It runs Node's verbatim `lib/zlib.js` over
-    Node's `Transform` and over rifty's, 16 scenarios; 10 differ, in 48 fields. zlib unit 3, which
-    ports `lib/zlib.js`, starts when it reaches 0. Its gaps, placed by unit and measured here too:
-    - constructor options → 2 (`m8`);
-    - `_destroy` not called → 1 (`m1`, hook matrix);
-    - `autoDestroy` `'close'`/`destroyed` after `'end'` → 1 (`m1` «async Transform success», «close
-      after end»; the Transform order part of those rows is unit 6, see the joint rows above);
-    - `errored`/`closed` → 1 (`m1` «closed/destroyed/errored»);
-    - `readableFlowing` → 2 (`m2`);
-    - `finished` premature close → 7 (`m7`);
-    - `write(chunk, '', cb)` → 2 (`m8`).
-    - `[Symbol.asyncDispose]` (zlib review, `extra-diff`) → 2 (`m2`).
-    Unit 6 (backpressure) is not in that measurement; zlib unit 4 checks it.
+  - **`zlib-diff` state group = 0 is the consumer acceptance of units 1, 2, 7 and unit 6's order**
+    (on branch `t3/zlib-engine-probe` at `ed8c785f1`: `runtime-js/reference/zlib-engine-probe/zlib-diff.mjs`
+    → `results/zlib-diff.txt`, gap table in `runtime-js/zlib-node-lib-port.md`; linked, not copied, not
+    on main yet). It runs Node's verbatim `lib/zlib.js` over Node's `Transform` and over rifty's in 46
+    scenarios. Over Node's base all 46 equal Node. Over rifty's, 26 of 45 state paths differ (154
+    fields), plus 1 load path. zlib unit 3 starts when the state group reaches 0.
+
+    Each row of its gap table goes to one unit, and is measured here too:
+
+    | `zlib-node-lib-port` gap row | unit | here |
+    |---|---|---|
+    | `Symbol.asyncDispose` | 2 | `m2` |
+    | constructor option validation | 2 | `m8` |
+    | `_destroy` never runs, handle never closes | 1 | `m1`, hook matrix |
+    | `autoDestroy` after `'end'` | 1 | `m1` «async Transform success», «close after end» |
+    | `errored`, `closed` / `readableFlowing` | 1 / 2 | `m1` «closed/destroyed/errored» / `m2` |
+    | `finished` on a closed stream (before a write, after a write, after an error) | 7 | `m7` |
+    | `write(chunk, '', cb)`, which breaks every `flush` kind and `params()` | 2 | `m8` |
+    | `'end'`/`'finish'` order (inflate with a tail) | 6 | `m6` «Transform event order» |
+    | load: an extra `'drain'` (5 MB, `highWaterMark: 1024`, stalled consumer) | 6 | `m6` backpressure rows; that exact path not measured here |
+
+    `m7` «after an error» differs from zlib's row: Node calls `finished`'s cb with the stored error,
+    not `ERR_STREAM_PREMATURE_CLOSE`, and rifty does not call it at all.
 - **PR #434** (`t3/fs-stream-close`, parked). Its parity cases `cases/fs/read-stream-close.case.ts`
   (rows 1–10a) and `cases/fs/write-stream-close.case.ts` (rows 11–20), its conformance
   `fs-stream-close-async-vfs.test.ts` and its corpus rows `fs-read-stream-close`/`fs-write-stream-close`

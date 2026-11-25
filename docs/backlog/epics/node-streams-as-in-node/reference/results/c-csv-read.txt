@@ -1,4 +1,4 @@
-# c-csv-read.cjs — node v24.16.0, rifty 71919b2b0
+# c-csv-read.cjs — node v24.16.0, rifty 8ec679b04
 columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate
 
 exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 0

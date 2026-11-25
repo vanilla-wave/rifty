@@ -23,7 +23,7 @@ Unit 5 of the goal (I5). Node's `WriteStream` (`lib/internal/fs/streams.js:325-5
 It stands on unit 1 and reuses unit 4's shared part (`_construct` with the monkey-patched `open`
 path, `_destroy` closing the fd, the callable constructor shape), so it comes after 4.
 
-Run at `71919b2b0` (main `b6d37fc01`'s code), `m5`: 4 of 14 rows equal on every rifty column.
+Run at `8ec679b04` (main `b6d37fc01`'s code), `m5`: 4 of 14 rows equal on every rifty column.
 
 - `instanceof Writable` is false.
 - `cork`, `uncork`, `setDefaultEncoding`, `close`, `destroySoon`, `_write`, `_construct` are

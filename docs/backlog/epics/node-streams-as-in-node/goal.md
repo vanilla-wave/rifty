@@ -48,7 +48,7 @@ The stdout and every file written are what real Node produces from the same file
 
 ## Invariants
 
-<!-- False on main b6d37fc01 (probe run at 71919b2b0 = main's code + this docs-only branch; reference/results/, real Node v24.16.0 vs rifty modules in-process
+<!-- False on main b6d37fc01 (probe run at 8ec679b04 = main's code + this docs-only branch; reference/results/, real Node v24.16.0 vs rifty modules in-process
 with and without the async VFS surface vs isolate sandbox exec; summary.txt):
 - carrier, 9 programs, every one differs on every rifty column:
   - xlsx.readFile: "TypeError: stream.close is not a function" (in-process and isolate).
@@ -64,7 +64,7 @@ with and without the async VFS surface vs isolate sandbox exec; summary.txt):
   - pipeline with async generator: "pipeline: argument must be a stream (index 1 …)"; isolate exit 1.
 - rows equal to Node, in-process / isolate: m1 0/14, 0/14; hook matrix 10/76, 10/76;
   m2 0/7; m3 0/4; m4 3/20, 2/20 (plus uncaught-error lines: 2 in the sync-only column, 10 in the
-  isolate); m5 4/14; m6 0/8; m7 0/9;
+  isolate); m5 4/14; m6 0/8; m7 0/11;
   m8 6/16 (the 6 are options both accept or both reject). -->
 
 - I1. Lifecycle is Node's on every stream class and every way of defining a hook (option, own,
@@ -143,8 +143,11 @@ Re-check 2026-11-25 (a second fresh reviewer over the fix commit `71919b2b0`) fo
 - nit — the per-column extra lines; the `m8` comment (a non-function hook option is ignored, not
   validated); `lib/zlib.js:565-566`; the README order.
 
-Added after it, from the zlib review via the manager: `[Symbol.asyncDispose]` → unit 2 (`m2`: Node has
-it on all five classes, rifty on none). Not re-reviewed.
+Added after it, from the zlib goal via the manager, not re-reviewed:
+
+- `[Symbol.asyncDispose]` → unit 2 (`m2`: Node has it on all five classes, rifty on none).
+- The 46-scenario `zlib-diff` (`ed8c785f1`). Each gap row is assigned to a unit in map §Links.
+- `m7` rows for `finished` after a write and after an error.
 
 ## Decisions
 
