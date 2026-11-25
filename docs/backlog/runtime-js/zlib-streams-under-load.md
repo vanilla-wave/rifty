@@ -18,7 +18,9 @@ order); otherwise this item is deleted — a unit without a measured wall is mac
 What hints at one today: `zlib-diff.mjs`'s load group (5 MB through a deflate stream with
 `highWaterMark: 1024` and a paused consumer) differs on main by one `'drain'` (rifty 1, Node 0); compat
 `streams.md` lists `runtime-js/transform-readable-backpressure` and
-`runtime-js/duplex-end-finish-close-order`. A delegate's run (round 3 review) of Node's verbatim
+`runtime-js/duplex-end-finish-close-order`. The streams goal's route B (ADR-0575) absorbs both and
+measures this load group at 0/1 (`docs/backlog/epics/node-streams-as-in-node/reference/results/route-b-zlib-diff.txt`).
+A delegate's run (round 3 review) of Node's verbatim
 `lib/zlib.js` over rifty's `Transform` gave Node's output for exceljs, unzipper, pngjs and pdfkit.
 
 ## Challenge

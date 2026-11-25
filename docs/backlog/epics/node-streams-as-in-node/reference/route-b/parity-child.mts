@@ -33,17 +33,38 @@ setProcessCwd(cwd);
 refreshRuntimeJsProcessBuiltin();
 let loader = createModuleLoader(code, { cwd: '/work' });
 globalThis.Buffer = loader.require('buffer', '/work/main.js').Buffer;
-if (process.env.ROUTE_B === '1') {
+if (process.env.ROUTE_B === '1' || process.env.ROUTE_B === 'product') {
   const nodeRequire = createRequire(import.meta.url);
-  const { loadVerbatim } = nodeRequire('./verbatim.cjs');
   const base = loader;
   const riftyRequire = (id: string) => base.require(id, '/work/main.js');
-  const v = loadVerbatim({
-    lib: join(process.env.NODE_SRC ?? '', 'lib'),
-    riftyRequire,
-    nodeRequire,
-    process,
-  });
+  let v: {
+    stream: Record<string, unknown>;
+    promises: Record<string, unknown>;
+    fsStreams: Record<string, new (p: unknown, o: unknown) => unknown>;
+  };
+  if (process.env.ROUTE_B === 'product') {
+    // ROUTE_B=product: generated module (ROUTE_B_GEN) over product/bindings.ts, no Node internals.
+    const { createRouteB } = await import('./product/bindings.ts');
+    const gen = await import(pathToFileURL(process.env.ROUTE_B_GEN ?? '').href);
+    const { NotImplementedError } = await load('packages/io/src/index.ts');
+    // The stream core sees rifty's process (its nextTick), as in a product build.
+    const req = createRouteB(gen.default, {
+      module: riftyRequire,
+      process: riftyRequire('process'),
+      NotImplementedError,
+    });
+    v = {
+      stream: req('stream'),
+      promises: req('stream/promises'),
+      fsStreams: req('internal/fs/streams'),
+    } as typeof v;
+  } else
+    v = nodeRequire('./verbatim.cjs').loadVerbatim({
+      lib: join(process.env.NODE_SRC ?? '', 'lib'),
+      riftyRequire,
+      nodeRequire,
+      process,
+    });
   const fsB = Object.create(riftyRequire('fs')) as Record<string, unknown>;
   Object.assign(fsB, {
     ReadStream: v.fsStreams.ReadStream,

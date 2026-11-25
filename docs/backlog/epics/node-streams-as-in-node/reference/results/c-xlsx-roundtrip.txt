@@ -1,7 +1,7 @@
-# c-xlsx-roundtrip.cjs — node v24.16.0, rifty a83aea388
-columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate | rifty-inproc-B
+# c-xlsx-roundtrip.cjs — node v24.16.0, rifty 725576a88
+columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate | rifty-inproc-B | rifty-inproc-Bp
 
-exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 0 | rifty-inproc-B 0
+exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 0 | rifty-inproc-B 0 | rifty-inproc-Bp 0
 
 ## line 1
 node: writeBuffer ok 
@@ -9,21 +9,25 @@ rifty-inproc (same): writeBuffer ok
 rifty-inproc-sync (same): writeBuffer ok 
 rifty-isolate (same): writeBuffer ok 
 rifty-inproc-B (same): writeBuffer ok 
+rifty-inproc-Bp (same): writeBuffer ok 
 ## line 2
 node: readFile ok 120
 rifty-inproc (DIFF): readFile threw TypeError: stream.close is not a function
 rifty-inproc-sync (DIFF): readFile threw TypeError: stream.close is not a function
 rifty-isolate (DIFF): readFile threw TypeError: stream.close is not a function
 rifty-inproc-B (same): readFile ok 120
+rifty-inproc-Bp (same): readFile ok 120
 ## line 3
 node: writeFile ok 
 rifty-inproc (DIFF): (no line)
 rifty-inproc-sync (DIFF): (no line)
 rifty-isolate (DIFF): (no line)
 rifty-inproc-B (same): writeFile ok 
+rifty-inproc-Bp (same): writeFile ok 
 ## line 4
 node: reload ok [[null,"Region","Revenue"],[null,"North",999],[null,"South",95]]
 rifty-inproc (DIFF): (no line)
 rifty-inproc-sync (DIFF): (no line)
 rifty-isolate (DIFF): (no line)
 rifty-inproc-B (same): reload ok [[null,"Region","Revenue"],[null,"North",999],[null,"South",95]]
+rifty-inproc-Bp (same): reload ok [[null,"Region","Revenue"],[null,"North",999],[null,"South",95]]

@@ -159,6 +159,43 @@ row('setEncoding utf8, highWaterMark 5, split code points', async (L) => {
   await new Promise((r) => rs.on('end', r));
   L.push(parts.join('|'));
 });
+row(
+  'encoding option base64 / utf16le / latin1 with highWaterMark 4 (decoder across chunks)',
+  async (L) => {
+    const f = path.join(__dirname, 'r-enc.bin');
+    fs.writeFileSync(f, Buffer.from('abcdefghij\u00e9\u00ff\u0100\ud83d\ude00!', 'utf16le'));
+    for (const encoding of ['base64', 'utf16le', 'latin1', 'hex']) {
+      const parts = [];
+      try {
+        for await (const c of fs.createReadStream(f, { encoding, highWaterMark: 4 })) parts.push(c);
+        L.push(`${encoding}:${parts.join('|')}`);
+      } catch (e) {
+        L.push(`${encoding}:threw ${e2s(e)}`);
+      }
+    }
+  },
+);
+row(
+  "encoding option through 'data' (no for await): base64 / utf16le / latin1 / hex, highWaterMark 4",
+  async (L) => {
+    const f = path.join(__dirname, 'r-enc2.bin');
+    fs.writeFileSync(f, Buffer.from('abcdefghij\u00e9\u00ff\u0100\ud83d\ude00!', 'utf16le'));
+    for (const encoding of ['base64', 'utf16le', 'latin1', 'hex']) {
+      try {
+        const parts = [];
+        await new Promise((res, rej) => {
+          const rs = fs.createReadStream(f, { encoding, highWaterMark: 4 });
+          rs.on('data', (c) => parts.push(c))
+            .on('end', res)
+            .on('error', rej);
+        });
+        L.push(`${encoding}:${parts.join('|')}`);
+      } catch (e) {
+        L.push(`${encoding}:threw ${e2s(e)}`);
+      }
+    }
+  },
+);
 row('read(3) sized reads', async (L) => {
   const rs = fs.createReadStream(F);
   const got = [];

@@ -1,7 +1,7 @@
-# m7-pipeline-stages.cjs — node v24.16.0, rifty a83aea388
-columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate | rifty-inproc-B
+# m7-pipeline-stages.cjs — node v24.16.0, rifty 725576a88
+columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate | rifty-inproc-B | rifty-inproc-Bp
 
-exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 0 | rifty-inproc-B 0
+exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 0 | rifty-inproc-B 0 | rifty-inproc-Bp 0
 
 ## promises.pipeline(Readable, async gen, Writable)
 node: w A,w B,resolved
@@ -9,63 +9,74 @@ rifty-inproc (DIFF): threw pipeline: argument must be a stream (index 1 received
 rifty-inproc-sync (DIFF): threw pipeline: argument must be a stream (index 1 received a non-
 rifty-isolate (DIFF): threw pipeline: argument must be a stream (index 1 received a non-
 rifty-inproc-B (same): w A,w B,resolved
+rifty-inproc-Bp (same): w A,w B,resolved
 ## promises.pipeline(async gen source, Writable)
 node: w q,resolved
 rifty-inproc (DIFF): threw pipeline: argument must be a stream (index 0 received a non-
 rifty-inproc-sync (DIFF): threw pipeline: argument must be a stream (index 0 received a non-
 rifty-isolate (DIFF): threw pipeline: argument must be a stream (index 0 received a non-
 rifty-inproc-B (same): w q,resolved
+rifty-inproc-Bp (same): w q,resolved
 ## promises.pipeline(Readable, async fn sink) returns value
 node: value xy
 rifty-inproc (DIFF): no settle in 3s
 rifty-inproc-sync (DIFF): no settle in 3s
 rifty-isolate (DIFF): no settle in 3s
 rifty-inproc-B (same): value xy
+rifty-inproc-Bp (same): value xy
 ## callback pipeline(Readable, async gen, Writable)
 node: w C,cb args=2 undef undef
 rifty-inproc (DIFF): threw pipeline: argument must be a stream (index 1 received a non-
 rifty-inproc-sync (DIFF): threw pipeline: argument must be a stream (index 1 received a non-
 rifty-isolate (DIFF): threw pipeline: argument must be a stream (index 1 received a non-
 rifty-inproc-B (same): w C,cb args=2 undef undef
+rifty-inproc-Bp (same): w C,cb args=2 undef undef
 ## async gen stage throws: error reaches callback
 node: cb gen boom
 rifty-inproc (DIFF): threw pipeline: argument must be a stream (index 1 received a non-
 rifty-inproc-sync (DIFF): threw pipeline: argument must be a stream (index 1 received a non-
 rifty-isolate (DIFF): threw pipeline: argument must be a stream (index 1 received a non-
 rifty-inproc-B (same): cb gen boom
+rifty-inproc-Bp (same): cb gen boom
 ## pipeline(Readable, PassThrough, Writable) success cb args
 node: w z,cb args=2 undef undef
 rifty-inproc (DIFF): w z,cb args=1 null
 rifty-inproc-sync (DIFF): w z,cb args=1 null
 rifty-isolate (DIFF): w z,cb args=1 null
 rifty-inproc-B (same): w z,cb args=2 undef undef
+rifty-inproc-Bp (same): w z,cb args=2 undef undef
 ## finished(readable) success cb args
 node: cb args=0
 rifty-inproc (DIFF): cb args=1
 rifty-inproc-sync (DIFF): cb args=1
 rifty-isolate (DIFF): cb args=1
 rifty-inproc-B (same): cb args=0
+rifty-inproc-Bp (same): cb args=0
 ## finished on a Writable destroyed before any write
 node: cb args=1 ERR_STREAM_PREMATURE_CLOSE:Premature close
 rifty-inproc (DIFF): cb args=1 
 rifty-inproc-sync (DIFF): cb args=1 
 rifty-isolate (DIFF): cb args=1 
 rifty-inproc-B (same): cb args=1 ERR_STREAM_PREMATURE_CLOSE:Premature close
+rifty-inproc-Bp (same): cb args=1 ERR_STREAM_PREMATURE_CLOSE:Premature close
 ## finished on a Readable destroyed before end
 node: cb args=1 ERR_STREAM_PREMATURE_CLOSE:Premature close
 rifty-inproc (DIFF): cb args=1 
 rifty-inproc-sync (DIFF): cb args=1 
 rifty-isolate (DIFF): cb args=1 
 rifty-inproc-B (same): cb args=1 ERR_STREAM_PREMATURE_CLOSE:Premature close
+rifty-inproc-Bp (same): cb args=1 ERR_STREAM_PREMATURE_CLOSE:Premature close
 ## finished on a Transform destroyed after a write
 node: cb args=1 ERR_STREAM_PREMATURE_CLOSE:Premature close
 rifty-inproc (DIFF): cb args=1 
 rifty-inproc-sync (DIFF): cb args=1 
 rifty-isolate (DIFF): cb args=1 
 rifty-inproc-B (same): cb args=1 ERR_STREAM_PREMATURE_CLOSE:Premature close
+rifty-inproc-Bp (same): cb args=1 ERR_STREAM_PREMATURE_CLOSE:Premature close
 ## close(cb)-shape (finished + destroy) on a Transform that already errored
 node: cb args=1 tfail
 rifty-inproc (DIFF): 
 rifty-inproc-sync (DIFF): 
 rifty-isolate (DIFF): 
 rifty-inproc-B (same): cb args=1 tfail
+rifty-inproc-Bp (same): cb args=1 tfail

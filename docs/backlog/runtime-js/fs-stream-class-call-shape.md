@@ -3,6 +3,7 @@ area: runtime-js
 status: draft
 title: fs.WriteStream / fs.ReadStream cannot be applied to an existing object as Node's callable constructors can
 created: 2026-11-24
+epic: node-streams-as-in-node
 why: graceful-fs wraps `fs.WriteStream`/`fs.ReadStream` with `fs$WriteStream.apply(this, arguments)`; rifty's ES classes throw `Class constructor FileWriteStream cannot be invoked without 'new'`, so every graceful-fs `createWriteStream`/`createReadStream` fails (fstream's next stop after `process.umask`).
 sources: [docs/public/compat/process.md, docs/backlog/runtime-js/zlib-class-call-shape.md, docs/backlog/net/http-agent-call-shape.md, docs/adr/runtime-js/0353-callable-node-stream-constructors-preserve-legacy-initialization.md]
 code: [packages/runtime-js/src/builtins/fs-streams.ts, tools/compat-matrix-generator/fs-matrix.js]

@@ -9,6 +9,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const [repo, nodeSrc, dirs, filter] = process.argv.slice(2);
+// ROUTE_B_GEN (product/generate.mjs output): a third column, Bp = the same sources over product/bindings.ts.
+const gen = process.env.ROUTE_B_GEN;
 const here = dirname(fileURLToPath(import.meta.url));
 const { runInNode } = await import(
   pathToFileURL(join(repo, 'tools/node-parity-runner/src/run-in-node.ts')).href
@@ -21,11 +23,23 @@ const run = (c, routeB) => {
   writeFileSync(f, JSON.stringify({ code: c.code, files: c.setup?.files, cwd: c.cwd }));
   const r = spawnSync(
     process.execPath,
-    ['--expose-internals', '--import', tsx, join(here, 'parity-child.mts'), repo, f],
+    [
+      ...(routeB === true ? ['--expose-internals'] : []),
+      '--import',
+      tsx,
+      join(here, 'parity-child.mts'),
+      repo,
+      f,
+    ],
     {
       encoding: 'utf8',
       timeout: 60_000,
-      env: routeB ? { ROUTE_B: '1', NODE_SRC: nodeSrc } : {},
+      env:
+        routeB === 'product'
+          ? { ROUTE_B: 'product', ROUTE_B_GEN: gen }
+          : routeB
+            ? { ROUTE_B: '1', NODE_SRC: nodeSrc }
+            : {},
     },
   );
   return {
@@ -41,7 +55,7 @@ const run = (c, routeB) => {
     })(),
   };
 };
-const counts = { cases: 0, skipped: 0, A: 0, B: 0 };
+const counts = { cases: 0, skipped: 0, A: 0, B: 0, Bp: 0 };
 for (const dir of dirs.split(',')) {
   for (const name of readdirSync(join(repo, 'tools/node-parity-runner/cases', dir))
     .filter((n) => n.endsWith('.case.ts'))
@@ -66,15 +80,16 @@ for (const dir of dirs.split(',')) {
     }
     const a = run(c, false);
     const b = run(c, true);
+    const bp = gen ? run(c, 'product') : undefined;
     if (a.out === node) counts.A++;
     if (b.out === node) counts.B++;
-    console.log(
-      `${dir}/${name} | A ${a.out === node ? 'same' : `DIFF ${a.err.slice(0, 100)}`} | B ${b.out === node ? 'same' : `DIFF ${b.err.slice(0, 100)}`}`,
-    );
+    if (bp?.out === node) counts.Bp++;
+    const col = (r) => (r.out === node ? 'same' : `DIFF ${r.err.slice(0, 100)}`);
+    console.log(`${dir}/${name} | A ${col(a)} | B ${col(b)}${bp ? ` | Bp ${col(bp)}` : ''}`);
   }
 }
 console.log(
-  `total plain cases ${counts.cases}, skipped ${counts.skipped}; equal to Node: route A ${counts.A}, route B ${counts.B}`,
+  `total plain cases ${counts.cases}, skipped ${counts.skipped}; equal to Node: route A ${counts.A}, route B ${counts.B}${gen ? `, route B product bindings ${counts.Bp}` : ''}`,
 );
 rmSync(tmp, { recursive: true, force: true });
 process.exit(0);

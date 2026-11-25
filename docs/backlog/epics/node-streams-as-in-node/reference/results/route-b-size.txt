@@ -6,3 +6,7 @@ verbatim lib/internal/fs/streams.js | min 8409 | gzip 2433
   of which internal/streams/duplexify.js | min 4518 | gzip 1538
 rifty packages/io/src/streams (bundle, siblings external) | min 38382 | gzip 11064
 rifty runtime-js fs-streams.ts | min 14407 | gzip 4359
+isolate AbortController binding: internal/abort_controller.js | min 9036 | gzip 2646
+isolate AbortController binding: internal/event_target.js | min 16768 | gzip 4296
+isolate AbortController binding: internal/webidl.js | min 5131 | gzip 1889
+isolate AbortController binding: internal/perf/utils.js | min 520 | gzip 265

@@ -19,4 +19,5 @@ for f in operators compose duplexify; do row "  of which internal/streams/$f.js"
 echo "rifty packages/io/src/streams (bundle, siblings external) | min $(wc -c < "$T/r.min" | tr -d ' ') | gzip $(gzip -9c "$T/r.min" | wc -c | tr -d ' ')"
 "$E" "$REPO/packages/runtime-js/src/builtins/fs-streams.ts" --bundle --format=esm --minify --log-level=error --external:'@riftydev/*' --external:'./*' > "$T/f.min"
 echo "rifty runtime-js fs-streams.ts | min $(wc -c < "$T/f.min" | tr -d ' ') | gzip $(gzip -9c "$T/f.min" | wc -c | tr -d ' ')"
+for f in internal/abort_controller internal/event_target internal/webidl internal/perf/utils; do row "isolate AbortController binding: $f.js" "$L/$f.js"; done
 rm -rf "$T"

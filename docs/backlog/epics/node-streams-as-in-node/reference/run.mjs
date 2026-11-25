@@ -3,7 +3,7 @@
 // from stdout; a row is `same` only when the line and the exit status both match Node's.
 // With NODE_SRC (an extracted node-v24.16.0 source tree) a fifth run, rifty-inproc-B: route B, Node's stream
 // core and fs stream classes verbatim over rifty's modules (route-b/verbatim.cjs).
-// usage: node --import tsx run.mjs REPO [NODE_SRC]   (writes results/<program>.txt, results/summary.txt)
+// usage: [ROUTE_B_GEN=…/node-streams.js] node --import tsx run.mjs REPO [NODE_SRC]   (writes results/<program>.txt, results/summary.txt)
 import { spawnSync } from 'node:child_process';
 import {
   mkdirSync,
@@ -20,6 +20,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const [repo, nodeSrc] = process.argv.slice(2);
 const here = dirname(fileURLToPath(import.meta.url));
+// RESULTS: another output dir (default results/).
+const results = process.env.RESULTS ?? join(here, 'results');
 const { closureFiles, inSandbox } = await import(
   pathToFileURL(join(repo, 'packages/isolate-host/tests/package-closure.ts')).href
 );
@@ -122,6 +124,16 @@ if (nodeSrc) {
     return { ...r, stderr: keep.join('\n') };
   };
 }
+// ROUTE_B_GEN (route-b/product/generate.mjs output): rifty-inproc-Bp, the same sources over product bindings.
+if (process.env.ROUTE_B_GEN)
+  runs['rifty-inproc-Bp'] = (files, name) =>
+    spawnIn(
+      files,
+      process.execPath,
+      tsx,
+      { ROUTE_B: 'product', ROUTE_B_GEN: process.env.ROUTE_B_GEN },
+      name,
+    );
 const COLS = Object.keys(runs);
 // The thrown error's line (`Name: message`), else the first non-frame line.
 const firstLine = (s) => {
@@ -139,7 +151,7 @@ const rowsOf = (stdout) => {
     });
   return m;
 };
-mkdirSync(join(here, 'results'), { recursive: true });
+mkdirSync(results, { recursive: true });
 const summary = [
   `node ${process.version}; rifty ${head}; columns: ${COLS.join(' | ')}`,
   'program | Node rows | same as Node per rifty column (+ lines only that run printed)',
@@ -176,10 +188,7 @@ for (const [name, path] of programs) {
       lines.push(`${COLS[i]}${tag}: ${v}`);
     });
   }
-  writeFileSync(
-    join(here, 'results', `${name.replace(/\.cjs$/, '')}.txt`),
-    `${lines.join('\n')}\n`,
-  );
+  writeFileSync(join(results, `${name.replace(/\.cjs$/, '')}.txt`), `${lines.join('\n')}\n`);
   summary.push(
     `${name} | ${nodeRows} | ${COLS.slice(1)
       .map((c, i) => `${c} ${same[i]}/${nodeRows}${extra[i] ? ` +${extra[i]} extra` : ''}`)
@@ -187,10 +196,10 @@ for (const [name, path] of programs) {
   );
   console.log(summary.at(-1));
 }
-if (!only) writeFileSync(join(here, 'results', 'summary.txt'), `${summary.join('\n')}\n`);
+if (!only) writeFileSync(join(results, 'summary.txt'), `${summary.join('\n')}\n`);
 if (nodeSrc && !only)
   writeFileSync(
-    join(here, 'results', 'route-b-bindings.txt'),
+    join(results, 'route-b-bindings.txt'),
     `route B, ids the verbatim files required over all programs\nrifty: ${[...routeBUsed.rifty].sort().join(' ')}\nnode internals: ${[...routeBUsed.node].sort().join(' ')}\n`,
   );
 process.exit(0);

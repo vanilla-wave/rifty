@@ -1,7 +1,7 @@
-# c-late-listener.cjs — node v24.16.0, rifty a83aea388
-columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate | rifty-inproc-B
+# c-late-listener.cjs — node v24.16.0, rifty 725576a88
+columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate | rifty-inproc-B | rifty-inproc-Bp
 
-exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 1 | rifty-inproc-B 0
+exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 1 | rifty-inproc-B 0 | rifty-inproc-Bp 0
 stderr rifty-isolate: NotImplementedError: Not implemented: isolate-host.ReadableStream (not available in the rifty isolate host, ADR-0557)
 
 ## line 1
@@ -10,3 +10,4 @@ rifty-inproc (DIFF): exit bytes 0 end false
 rifty-inproc-sync (DIFF): exit bytes 0 end false
 rifty-isolate (DIFF): exit bytes 0 end false
 rifty-inproc-B (same): exit bytes 200000 end true
+rifty-inproc-Bp (same): exit bytes 200000 end true

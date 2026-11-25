@@ -3,6 +3,7 @@ area: runtime-js
 status: draft
 title: Readable#setEncoding decodes base64, utf16le and the stream tail like StringDecoder
 created: 2026-11-17
+epic: node-streams-as-in-node
 why: setEncoding('base64') emits padded per-chunk base64 (wrong concatenation), utf16le replaces lone surrogates, and a truncated utf8 tail is dropped
 sources: [docs/adr/runtime-js/0069-readable-set-encoding.md]
 code: [packages/io/src/streams/readable.ts]

@@ -3,6 +3,7 @@ area: runtime-js
 status: draft
 title: "`stream.pipeline` / `stream.finished` success callbacks get Node's arguments, not `null`"
 created: 2026-09-24
+epic: node-streams-as-in-node
 why: Node calls a successful `pipeline` callback with `(undefined, value)` and `finished`'s with no arguments; rifty passes `null` to both, so `err === undefined` / `arguments.length` checks take the error branch
 sources: [docs/backlog/runtime-js/reference/readable-pipe-never-ends-process-stdio-evidence.md, docs/backlog/runtime-js/reference/readable-pipe-never-ends-process-stdio-final-green.json, docs/public/compat/streams.md]
 code: [packages/io/src/streams/pipeline.ts, tools/compat-matrix-generator/streams-inventory.js]

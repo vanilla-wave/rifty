@@ -1,70 +1,70 @@
-stream/add-abort-signal.case.ts | A same | B same
-stream/async-iterator-cleanup.case.ts | A same | B same
-stream/backpressure.case.ts | A same | B same
-stream/callable-constructor-reentry.case.ts | A same | B same
-stream/callable-constructors.case.ts | A same | B same
-stream/callable-prototype-reassignment.case.ts | A same | B same
-stream/compose-error.case.ts | A same | B same
-stream/compose-fn-stage.case.ts | A same | B same
-stream/compose-mixed-stage.case.ts | A same | B same
-stream/compose.case.ts | A same | B same
-stream/consumers-bom.case.ts | A same | B same
-stream/consumers.case.ts | A same | B same
-stream/cork-backpressure-drain.case.ts | A same | B same
-stream/cork-nested.case.ts | A same | B same
-stream/cork-write-fallback.case.ts | A same | B same
-stream/cork-writev.case.ts | A same | B same
-stream/default-highwatermark.case.ts | A same | B same
-stream/duplex-from-fn.case.ts | A same | B same
-stream/duplex-from.case.ts | A same | B same
-stream/duplex-prototype-methods.case.ts | A same | B same
-stream/duplex-web-bridge.case.ts | A same | B DIFF 
-stream/from-web-options.case.ts | A same | B same
-stream/pipe-end-false-unpipe.case.ts | A same | B same
-stream/pipe-end-option-coercion.case.ts | A same | B same
+stream/add-abort-signal.case.ts | A same | B same | Bp same
+stream/async-iterator-cleanup.case.ts | A same | B same | Bp same
+stream/backpressure.case.ts | A same | B same | Bp same
+stream/callable-constructor-reentry.case.ts | A same | B same | Bp same
+stream/callable-constructors.case.ts | A same | B same | Bp same
+stream/callable-prototype-reassignment.case.ts | A same | B same | Bp same
+stream/compose-error.case.ts | A same | B same | Bp same
+stream/compose-fn-stage.case.ts | A same | B same | Bp same
+stream/compose-mixed-stage.case.ts | A same | B same | Bp same
+stream/compose.case.ts | A same | B same | Bp same
+stream/consumers-bom.case.ts | A same | B same | Bp same
+stream/consumers.case.ts | A same | B same | Bp same
+stream/cork-backpressure-drain.case.ts | A same | B same | Bp same
+stream/cork-nested.case.ts | A same | B same | Bp same
+stream/cork-write-fallback.case.ts | A same | B same | Bp same
+stream/cork-writev.case.ts | A same | B same | Bp same
+stream/default-highwatermark.case.ts | A same | B same | Bp same
+stream/duplex-from-fn.case.ts | A same | B same | Bp same
+stream/duplex-from.case.ts | A same | B same | Bp same
+stream/duplex-prototype-methods.case.ts | A same | B same | Bp same
+stream/duplex-web-bridge.case.ts | A same | B DIFF  | Bp same
+stream/from-web-options.case.ts | A same | B same | Bp same
+stream/pipe-end-false-unpipe.case.ts | A same | B same | Bp same
+stream/pipe-end-option-coercion.case.ts | A same | B same | Bp same
 stream/pipe-process-stdio-end-calls.case.ts | skipped (kind cjs, stdin)
 stream/pipe-process-stdio-exit.case.ts | skipped (kind node-cli-eval)
 stream/pipe-process-stdio.case.ts | skipped (kind cjs, stdin)
-stream/pipe-unpipe.case.ts | A same | B same
-stream/pipeline-destroy-upstream.case.ts | A same | B same
-stream/pipeline-multi.case.ts | A same | B same
-stream/pipeline-transform.case.ts | A same | B same
-stream/predicates.case.ts | A same | B same
-stream/readable-async-helpers-concurrency.case.ts | A same | B same
-stream/readable-async-helpers-errors.case.ts | A same | B same
-stream/readable-async-helpers-iterator.case.ts | A same | B same
-stream/readable-async-helpers-signal.case.ts | A same | B same
-stream/readable-async-helpers.case.ts | A same | B same
-stream/readable-async-iter.case.ts | A same | B same
-stream/readable-from-options.case.ts | A same | B same
-stream/readable-read-hook-contract.case.ts | A same | B DIFF 
-stream/readable-read-n.case.ts | A same | B same
-stream/readable-refill-terminal.case.ts | A same | B DIFF 
-stream/readable-set-encoding-bom.case.ts | A same | B DIFF NotImplementedError: Not implemented: string_decoder encoding 'utf16le'
-stream/readable-set-encoding-latin1.case.ts | A same | B DIFF NotImplementedError: Not implemented: string_decoder encoding 'latin1'
-stream/readable-set-encoding.case.ts | A same | B same
-stream/readable-stream-v2-real.case.ts | A same | B same
-stream/readable-stream-v3-real.case.ts | A same | B same
-stream/readable-stream-v4-real.case.ts | A same | B same
-stream/readable-to-web-backpressure.case.ts | A same | B same
-stream/readable-to-web-cancel.case.ts | A same | B same
-stream/readable-to-web-error.case.ts | A same | B same
-stream/readable-to-web.case.ts | A same | B same
-stream/readable-wrap.case.ts | A same | B same
-stream/stream-hook-duplex.case.ts | A same | B same
-stream/stream-hook-missing.case.ts | A same | B same
-stream/stream-hook-readable-writable.case.ts | A same | B same
-stream/stream-hook-sync-throw.case.ts | A same | B same
-stream/stream-hook-transform.case.ts | A same | B same
-stream/stream-web-module.case.ts | A same | B same
-stream/writable-admission.case.ts | A same | B DIFF Error: Unsupported encoding: UTF8
-stream/writable-completion-boundary.case.ts | A same | B same
-stream/writable-destroy.case.ts | A same | B same
-stream/writable-drain.case.ts | A same | B same
-stream/writable-from-web-errors.case.ts | A same | B same
-stream/writable-from-web.case.ts | A same | B DIFF 
-stream/writable-to-web-abort.case.ts | A same | B same
-stream/writable-to-web-errors.case.ts | A same | B same
-stream/writable-to-web.case.ts | A same | B same
-stream/writable-write-error.case.ts | A same | B same
-total plain cases 66, skipped 3; equal to Node: route A 66, route B 59
+stream/pipe-unpipe.case.ts | A same | B same | Bp same
+stream/pipeline-destroy-upstream.case.ts | A same | B same | Bp same
+stream/pipeline-multi.case.ts | A same | B same | Bp same
+stream/pipeline-transform.case.ts | A same | B same | Bp same
+stream/predicates.case.ts | A same | B same | Bp same
+stream/readable-async-helpers-concurrency.case.ts | A same | B same | Bp same
+stream/readable-async-helpers-errors.case.ts | A same | B same | Bp same
+stream/readable-async-helpers-iterator.case.ts | A same | B same | Bp same
+stream/readable-async-helpers-signal.case.ts | A same | B same | Bp same
+stream/readable-async-helpers.case.ts | A same | B same | Bp same
+stream/readable-async-iter.case.ts | A same | B same | Bp same
+stream/readable-from-options.case.ts | A same | B same | Bp same
+stream/readable-read-hook-contract.case.ts | A same | B DIFF  | Bp same
+stream/readable-read-n.case.ts | A same | B same | Bp same
+stream/readable-refill-terminal.case.ts | A same | B DIFF  | Bp same
+stream/readable-set-encoding-bom.case.ts | A same | B DIFF NotImplementedError: Not implemented: string_decoder encoding 'utf16le' | Bp DIFF NotImplementedError: Not implemented: string_decoder encoding 'utf16le'
+stream/readable-set-encoding-latin1.case.ts | A same | B DIFF NotImplementedError: Not implemented: string_decoder encoding 'latin1' | Bp DIFF NotImplementedError: Not implemented: string_decoder encoding 'latin1'
+stream/readable-set-encoding.case.ts | A same | B same | Bp same
+stream/readable-stream-v2-real.case.ts | A same | B same | Bp same
+stream/readable-stream-v3-real.case.ts | A same | B same | Bp same
+stream/readable-stream-v4-real.case.ts | A same | B same | Bp same
+stream/readable-to-web-backpressure.case.ts | A same | B same | Bp same
+stream/readable-to-web-cancel.case.ts | A same | B same | Bp same
+stream/readable-to-web-error.case.ts | A same | B same | Bp same
+stream/readable-to-web.case.ts | A same | B same | Bp same
+stream/readable-wrap.case.ts | A same | B same | Bp same
+stream/stream-hook-duplex.case.ts | A same | B same | Bp same
+stream/stream-hook-missing.case.ts | A same | B same | Bp same
+stream/stream-hook-readable-writable.case.ts | A same | B same | Bp same
+stream/stream-hook-sync-throw.case.ts | A same | B same | Bp same
+stream/stream-hook-transform.case.ts | A same | B same | Bp same
+stream/stream-web-module.case.ts | A same | B same | Bp same
+stream/writable-admission.case.ts | A same | B DIFF Error: Unsupported encoding: UTF8 | Bp DIFF Error: Unsupported encoding: UTF8
+stream/writable-completion-boundary.case.ts | A same | B same | Bp same
+stream/writable-destroy.case.ts | A same | B same | Bp same
+stream/writable-drain.case.ts | A same | B same | Bp same
+stream/writable-from-web-errors.case.ts | A same | B same | Bp same
+stream/writable-from-web.case.ts | A same | B DIFF  | Bp same
+stream/writable-to-web-abort.case.ts | A same | B same | Bp same
+stream/writable-to-web-errors.case.ts | A same | B same | Bp same
+stream/writable-to-web.case.ts | A same | B same | Bp same
+stream/writable-write-error.case.ts | A same | B same | Bp same
+total plain cases 66, skipped 3; equal to Node: route A 66, route B 59, route B product bindings 63

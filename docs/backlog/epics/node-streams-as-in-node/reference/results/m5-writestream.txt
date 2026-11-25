@@ -1,7 +1,7 @@
-# m5-writestream.cjs — node v24.16.0, rifty a83aea388
-columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate | rifty-inproc-B
+# m5-writestream.cjs — node v24.16.0, rifty 725576a88
+columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate | rifty-inproc-B | rifty-inproc-Bp
 
-exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 0 | rifty-inproc-B 0
+exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 0 | rifty-inproc-B 0 | rifty-inproc-Bp 0
 
 ## instanceof Writable; prototype chain; isWritable
 node: true,true,true
@@ -9,81 +9,95 @@ rifty-inproc (DIFF): false,false,
 rifty-inproc-sync (DIFF): false,false,
 rifty-isolate (DIFF): false,false,
 rifty-inproc-B (same): true,true,true
+rifty-inproc-Bp (same): true,true,true
 ## member types
 node: write:function end:function cork:function uncork:function setDefaultEncoding:function destroy:function close:function destroySoon:function _write:function _writev:function _final:undefined _destroy:function _construct:function open:function
 rifty-inproc (DIFF): write:function end:function cork:undefined uncork:undefined setDefaultEncoding:undefined destroy:function close:undefined destroySoon:undefined _write:undefined _writev:undefined _final:undefined _destroy:undefined _construct:undefined open:function
 rifty-inproc-sync (DIFF): write:function end:function cork:undefined uncork:undefined setDefaultEncoding:undefined destroy:function close:undefined destroySoon:undefined _write:undefined _writev:undefined _final:undefined _destroy:undefined _construct:undefined open:function
 rifty-isolate (DIFF): write:function end:function cork:undefined uncork:undefined setDefaultEncoding:undefined destroy:function close:undefined destroySoon:undefined _write:undefined _writev:undefined _final:undefined _destroy:undefined _construct:undefined open:function
 rifty-inproc-B (DIFF): write:function end:function cork:function uncork:function setDefaultEncoding:function destroy:function close:function destroySoon:function _write:function _writev:object _final:undefined _destroy:function _construct:function open:function
+rifty-inproc-Bp (DIFF): write:function end:function cork:function uncork:function setDefaultEncoding:function destroy:function close:function destroySoon:function _write:function _writev:object _final:undefined _destroy:function _construct:function open:function
 ## property values at create
 node: writable=true writableLength=0 writableHighWaterMark=65536 writableEnded=false writableFinished=false writableCorked=0 writableObjectMode=false destroyed=false closed=false errored=null pending=true bytesWritten=0 fd=null flags='w' mode=438 start=undefined pos=undefined autoClose=true
 rifty-inproc (DIFF): writable=undefined writableLength=undefined writableHighWaterMark=undefined writableEnded=undefined writableFinished=undefined writableCorked=undefined writableObjectMode=undefined destroyed=false closed=undefined errored=undefined pending=undefined bytesWritten=undefined fd=undefined flags={ append: false, exclusive: false, truncate: true, mustExist: false } mode=undefined start=undefined pos=0 autoClose=undefined
 rifty-inproc-sync (DIFF): writable=undefined writableLength=undefined writableHighWaterMark=undefined writableEnded=undefined writableFinished=undefined writableCorked=undefined writableObjectMode=undefined destroyed=false closed=undefined errored=undefined pending=undefined bytesWritten=undefined fd=undefined flags={ append: false, exclusive: false, truncate: true, mustExist: false } mode=undefined start=undefined pos=0 autoClose=undefined
 rifty-isolate (DIFF): writable=undefined writableLength=undefined writableHighWaterMark=undefined writableEnded=undefined writableFinished=undefined writableCorked=undefined writableObjectMode=undefined destroyed=false closed=undefined errored=undefined pending=undefined bytesWritten=undefined fd=undefined flags={ append: false, exclusive: false, truncate: true, mustExist: false } mode=undefined start=undefined pos=0 autoClose=undefined
 rifty-inproc-B (same): writable=true writableLength=0 writableHighWaterMark=65536 writableEnded=false writableFinished=false writableCorked=0 writableObjectMode=false destroyed=false closed=false errored=null pending=true bytesWritten=0 fd=null flags='w' mode=438 start=undefined pos=undefined autoClose=true
+rifty-inproc-Bp (same): writable=true writableLength=0 writableHighWaterMark=65536 writableEnded=false writableFinished=false writableCorked=0 writableObjectMode=false destroyed=false closed=false errored=null pending=true bytesWritten=0 fd=null flags='w' mode=438 start=undefined pos=undefined autoClose=true
 ## property values after end
 node: writable=false writableLength=0 writableHighWaterMark=65536 writableEnded=true writableFinished=true writableCorked=0 writableObjectMode=false destroyed=true closed=true errored=null pending=true bytesWritten=3 fd=null flags='w' mode=438 start=undefined pos=undefined autoClose=true
 rifty-inproc (DIFF): writable=undefined writableLength=undefined writableHighWaterMark=undefined writableEnded=undefined writableFinished=undefined writableCorked=undefined writableObjectMode=undefined destroyed=false closed=undefined errored=undefined pending=undefined bytesWritten=undefined fd=undefined flags={ append: false, exclusive: false, truncate: true, mustExist: false } mode=undefined start=undefined pos=3 autoClose=undefined
 rifty-inproc-sync (DIFF): writable=undefined writableLength=undefined writableHighWaterMark=undefined writableEnded=undefined writableFinished=undefined writableCorked=undefined writableObjectMode=undefined destroyed=false closed=undefined errored=undefined pending=undefined bytesWritten=undefined fd=undefined flags={ append: false, exclusive: false, truncate: true, mustExist: false } mode=undefined start=undefined pos=3 autoClose=undefined
 rifty-isolate (DIFF): writable=undefined writableLength=undefined writableHighWaterMark=undefined writableEnded=undefined writableFinished=undefined writableCorked=undefined writableObjectMode=undefined destroyed=false closed=undefined errored=undefined pending=undefined bytesWritten=undefined fd=undefined flags={ append: false, exclusive: false, truncate: true, mustExist: false } mode=undefined start=undefined pos=3 autoClose=undefined
 rifty-inproc-B (same): writable=false writableLength=0 writableHighWaterMark=65536 writableEnded=true writableFinished=true writableCorked=0 writableObjectMode=false destroyed=true closed=true errored=null pending=true bytesWritten=3 fd=null flags='w' mode=438 start=undefined pos=undefined autoClose=true
+rifty-inproc-Bp (same): writable=false writableLength=0 writableHighWaterMark=65536 writableEnded=true writableFinished=true writableCorked=0 writableObjectMode=false destroyed=true closed=true errored=null pending=true bytesWritten=3 fd=null flags='w' mode=438 start=undefined pos=undefined autoClose=true
 ## WriteStream(path) without new
 node: true,"x"
 rifty-inproc (DIFF): threw Class constructor FileWriteStream cannot be invoked without 
 rifty-inproc-sync (DIFF): threw Class constructor FileWriteStream cannot be invoked without 
 rifty-isolate (DIFF): threw Class constructor FileWriteStream cannot be invoked without 
 rifty-inproc-B (same): true,"x"
+rifty-inproc-Bp (same): true,"x"
 ## graceful-fs shape: WriteStream.apply(this) + prototype open override
 node: open number,"graceful"
 rifty-inproc (DIFF): threw Class constructor FileWriteStream cannot be invoked without 
 rifty-inproc-sync (DIFF): threw Class constructor FileWriteStream cannot be invoked without 
 rifty-isolate (DIFF): threw Class constructor FileWriteStream cannot be invoked without 
 rifty-inproc-B (same): open number,"graceful"
+rifty-inproc-Bp (same): open number,"graceful"
 ## class extends fs.WriteStream
 node: "cls"
 rifty-inproc (same): "cls"
 rifty-inproc-sync (same): "cls"
 rifty-isolate (same): "cls"
 rifty-inproc-B (same): "cls"
+rifty-inproc-Bp (same): "cls"
 ## write() returns false over highWaterMark, then drain
 node: w1=true,w2=false,drain
 rifty-inproc (same): w1=true,w2=false,drain
 rifty-inproc-sync (same): w1=true,w2=false,drain
 rifty-isolate (same): w1=true,w2=false,drain
 rifty-inproc-B (same): w1=true,w2=false,drain
+rifty-inproc-Bp (same): w1=true,w2=false,drain
 ## cork/uncork: one file content
 node: corked=1,"abc"
 rifty-inproc (DIFF): threw ws.cork is not a function
 rifty-inproc-sync (DIFF): threw ws.cork is not a function
 rifty-isolate (DIFF): threw ws.cork is not a function
 rifty-inproc-B (same): corked=1,"abc"
+rifty-inproc-Bp (same): corked=1,"abc"
 ## event order end(cb): finish/close/cb
 node: open,ready,prefinish,end cb,finish,close
 rifty-inproc (DIFF): open,ready,end cb,finish,close
 rifty-inproc-sync (DIFF): open,ready,end cb,finish,close
 rifty-isolate (DIFF): open,ready,end cb,finish,close
 rifty-inproc-B (same): open,ready,prefinish,end cb,finish,close
+rifty-inproc-Bp (same): open,ready,prefinish,end cb,finish,close
 ## close(cb) before end: pending writes land
 node: cb undefined,"keep"
 rifty-inproc (DIFF): threw ws.close is not a function
 rifty-inproc-sync (DIFF): threw ws.close is not a function
 rifty-isolate (DIFF): threw ws.close is not a function
 rifty-inproc-B (same): cb undefined,"keep"
+rifty-inproc-Bp (same): cb undefined,"keep"
 ## write after end: callback and error
 node: cb ERR_STREAM_WRITE_AFTER_END:write after end,error ERR_STREAM_WRITE_AFTER_END:write after end
 rifty-inproc (same): cb ERR_STREAM_WRITE_AFTER_END:write after end,error ERR_STREAM_WRITE_AFTER_END:write after end
 rifty-inproc-sync (same): cb ERR_STREAM_WRITE_AFTER_END:write after end,error ERR_STREAM_WRITE_AFTER_END:write after end
 rifty-isolate (same): cb ERR_STREAM_WRITE_AFTER_END:write after end,error ERR_STREAM_WRITE_AFTER_END:write after end
 rifty-inproc-B (same): cb ERR_STREAM_WRITE_AFTER_END:write after end,error ERR_STREAM_WRITE_AFTER_END:write after end
+rifty-inproc-Bp (same): cb ERR_STREAM_WRITE_AFTER_END:write after end,error ERR_STREAM_WRITE_AFTER_END:write after end
 ## destroy(err): error, close, errored
 node: error stop,close errored=stop
 rifty-inproc (DIFF): close errored=undefined
 rifty-inproc-sync (DIFF): close errored=undefined
 rifty-isolate (DIFF): close errored=undefined
 rifty-inproc-B (same): error stop,close errored=stop
+rifty-inproc-Bp (same): error stop,close errored=stop
 ## Readable.pipe(ws) with slow source: bytes and finish
 node: finish,close,"123"
 rifty-inproc (same): finish,close,"123"
 rifty-inproc-sync (same): finish,close,"123"
 rifty-isolate (same): finish,close,"123"
 rifty-inproc-B (same): finish,close,"123"
+rifty-inproc-Bp (same): finish,close,"123"

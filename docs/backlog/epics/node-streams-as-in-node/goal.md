@@ -14,14 +14,16 @@ On every rifty host behaviour is Node v24.16.0's. The hosts are the browser host
 and the isolate host guest. Covered:
 
 - The stream lifecycle: `_construct`, `_destroy`, a hook's callback called once, the destroy moment,
-  `errored`, `autoDestroy`.
-- The Readable/Writable state every subclass shows: constructor option and `write` encoding validation,
-  `readableFlowing`, `isPaused()`, `writableNeedDrain`, `Symbol.asyncDispose`.
+  `errored`/`closed`, `autoDestroy`.
+- The Readable/Writable state every subclass shows: constructor option and `write` encoding
+  validation, `readableFlowing`, `isPaused()`, `writableNeedDrain`, `Symbol.asyncDispose`.
 - The legacy `Stream` in the class chain.
 - `fs.ReadStream` and `fs.WriteStream` as Node's `Readable`/`Writable` subclasses, in every class
   shape packages use (`new`, without `new`, `X.apply(this)`, `extends`, overridden `open`).
 - `Transform` backpressure, `Duplex` members and event order.
 - `pipeline` with function and async-generator stages; `pipeline`/`finished` completion.
+- What the streams stand on: `string_decoder` and `Buffer` encodings, `events.addAbortListener`,
+  `fs` callbacks completing in an I/O turn, `fs.writev`/`fs.fsync`.
 
 Libraries reading and writing through them get Node's bytes and values. Gaps outside stay named loud
 throws (compat ❌/⚠️).
@@ -30,74 +32,138 @@ throws (compat ❌/⚠️).
 
 One set of programs and their input files, run as `node <program>` by real Node v24.16.0, by the
 isolate host (sandbox `exec`) and by a browser host (Chromium, Workbench and SDK). The programs are
-the `c-*` carrier programs of `reference/programs/`.
+the `c-*` carrier programs of `reference/programs/`. Each file written is compared by content: by
+sha256, or by the values a reload reads.
 
 1. exceljs 4.4.0 writes `in.xlsx`, then `xlsx.readFile` (an `fs.createReadStream` + `for await`
    under it) reads it back. A cell is edited, `xlsx.writeFile` writes `out.xlsx`, and a reload reads
-   Node's values.
+   Node's values. exceljs `csv.writeFile` writes Node's bytes.
 2. exceljs `csv.readFile` reads a CSV (`createReadStream().pipe(fast-csv parse)`).
 3. graceful-fs 4.2.11 `createWriteStream` then `createReadStream`. unzipper 0.10.14 `Extract`
-   (fstream → graceful-fs) unpacks a STORE zip into a directory.
+   (fstream → graceful-fs) unpacks a STORE zip into a directory with Node's bytes.
 4. `for await (const chunk of fs.createReadStream(f))`. A `'data'` listener attached after several
    `await`s. An `on('readable')` + `read()` loop.
-5. A 16 MiB file through an async `Transform` into an `fs.WriteStream`: Node's bytes, with the
-   source held back by backpressure (stdout `maxInFlight<=1MiB true`; Node's in-flight 65536).
+5. A 16 MiB file of distinct bytes through an async `Transform` into an `fs.WriteStream`: Node's
+   bytes, with the source held back by backpressure (stdout `maxInFlight<=1MiB true`; Node's
+   in-flight 65536).
 6. `stream/promises.pipeline(fs.createReadStream(src), async function* (s) {…}, fs.createWriteStream(dst))`.
 
 The stdout and every file written are what real Node produces from the same files.
 
 ## Invariants
 
-<!-- False on main b6d37fc01 (probe run at 8ec679b04 = main's code + this docs-only branch; reference/results/, real Node v24.16.0 vs rifty modules in-process
-with and without the async VFS surface vs isolate sandbox exec; summary.txt):
-- carrier, 9 programs, every one differs on every rifty column:
-  - xlsx.readFile: "TypeError: stream.close is not a function" (in-process and isolate).
-  - csv.readFile: "stream.close is not a function" in-process; isolate "isolate-host.ReadableStream".
-  - graceful-fs: "Class constructor FileWriteStream cannot be invoked without 'new'".
+<!-- False on main (probe run at 725576a88, main b6d37fc01's code + this docs-only branch;
+reference/results/summary.txt; columns: real Node v24.16.0, rifty modules in-process with and
+without the async VFS surface, isolate sandbox exec):
+- carrier, 10 programs; 9 differ on every rifty column, `c-csv-write-file` (exceljs csv.writeFile)
+  is equal today:
+  - xlsx.readFile: "TypeError: stream.close is not a function" (in-process and isolate);
+  - csv.readFile: "stream.close is not a function" in-process; isolate "isolate-host.ReadableStream";
+  - graceful-fs: "Class constructor FileWriteStream cannot be invoked without 'new'";
   - unzipper STORE: in-process 'close' with nothing extracted (listing → ENOENT); isolate
-    "isolate-host.ReadableStream".
-  - for await: "is not async iterable"; isolate also exit 1 (uncaught isolate-host.ReadableStream).
-  - late listener: 0 of 200000 bytes, no 'end'; isolate exit 1.
-  - readable/read: 0 of 150000 bytes; isolate exit 1, no 'end'.
-  - 16 MiB Transform: maxInFlight<=1MiB false, in-flight 16777216 (Node 65536); isolate
-    "isolate-host.ReadableStream".
+    "isolate-host.ReadableStream";
+  - for await: "is not async iterable"; isolate also exit 1 (uncaught isolate-host.ReadableStream);
+  - late listener: 0 of 200000 bytes, no 'end'; isolate exit 1;
+  - readable/read: 0 of 150000 bytes; isolate exit 1, no 'end';
+  - 16 MiB Transform: bytes equal, maxInFlight<=1MiB false (in-flight 16777216, Node 65536); isolate
+    "isolate-host.ReadableStream";
   - pipeline with async generator: "pipeline: argument must be a stream (index 1 …)"; isolate exit 1.
-- rows equal to Node, in-process / isolate: m1 0/14, 0/14; hook matrix 10/76, 10/76;
-  m2 0/7; m3 0/4; m4 3/20, 2/20 (plus uncaught-error lines: 2 in the sync-only column, 10 in the
-  isolate); m5 4/14; m6 0/8; m7 0/11;
-  m8 6/16 (the 6 are options both accept or both reject). -->
+- rows equal to Node, in-process / isolate:
+  - m1 0/14; hook matrix 10/76; m2 0/7; m3 0/4;
+  - m4 3/22 / 2/22 (plus uncaught-error lines: 2 in the sync-only column, 14 in the isolate);
+  - m5 4/14; m6 0/8; m7 0/11; m8 6/16 (the 6 are options both accept or both reject);
+  - b1 (bindings) 3/8.
+- I9–I10 false: b1 (StringDecoder utf8 only, 'UTF8' "Unsupported encoding", no addAbortListener, no
+  writev/fsync); m4 fs.read loop ticks>0=false.
+- candidate I11: fact pending (map §Open questions). -->
 
 - I1. Lifecycle is Node's on every stream class and every way of defining a hook (option, own,
   class, ES5, chain, late): `_construct` before the first `_read`/`_write`, `_destroy` with its error
   replacement, a hook's callback once (`ERR_MULTIPLE_CALLBACK`), the synchronous destroy moment,
   `errored`, `closed`, and `'close'` after `'end'`/`'finish'` (`autoDestroy`).
 - I2. Every Readable/Writable/Duplex/Transform and every subclass validates its constructor options
-  as Node does (`highWaterMark`, `readableHighWaterMark`/`writableHighWaterMark`, `signal`,
-  `encoding`, `defaultEncoding`) and the `write` encoding argument (`''` = default) as Node does. It
-  reports Node's `readableFlowing`, `isPaused()` and `writableNeedDrain`, and has Node's
-  `[Symbol.asyncDispose]` (destroy with an `AbortError`).
-- I3. `Readable` and `Writable` inherit the legacy `Stream` (`instanceof Stream`, `Stream.prototype.pipe`)
-  as in Node.
+  (`highWaterMark`, `readableHighWaterMark`/`writableHighWaterMark`, `signal`, `encoding`,
+  `defaultEncoding`) and the `write` encoding argument (`''` = default) as Node does. It reports
+  Node's `readableFlowing`, `isPaused()` and `writableNeedDrain`, and has Node's
+  `[Symbol.asyncDispose]`.
+- I3. `Readable` and `Writable` inherit the legacy `Stream` (`instanceof Stream`,
+  `Stream.prototype.pipe`) as in Node.
 - I4. `fs.ReadStream` is Node's `Readable` subclass on every host:
   - every member and value Node shows;
   - the class shapes (`ReadStream(p)` without `new`, `ReadStream.apply(this)`, `extends`, an
     overridden `open`);
   - paused-mode buffering, so no data is lost to a late listener;
-  - `for await`, `read()`, `setEncoding`, `pause`/`resume`, `close(cb)`, `destroy(err)`, `pipe`
-    backpressure;
+  - `for await`, `read()`, `setEncoding` and the `encoding` option for every encoding across chunk
+    boundaries, `pause`/`resume`, `close(cb)`, `destroy(err)`, `pipe` backpressure;
   - timers and other callbacks keep running while a file streams, as Node interleaves them.
 - I5. `fs.WriteStream` is Node's `Writable` subclass on every host, with the same class shapes
-  (graceful-fs `WriteStream.apply(this)` + overridden `open`), members, `drain`, `cork`,
-  `close(cb)`, `destroy(err)` and event order.
+  (graceful-fs `WriteStream.apply(this)` + overridden `open`), members (`_writev` included),
+  `drain`, `cork`, `close(cb)`, `destroy(err)` and event order.
 - I6. `Transform`/`PassThrough` hold backpressure as in Node (`write()` turns false, `_transform`
   waits for the reader). `Duplex` has Node's writable members and per-side options, and emits
   `'data'`/`'finish'`/`'end'`/`'close'` in Node's order.
 - I7. `pipeline`/`stream/promises.pipeline` accept function and async-generator stages as Node does
-  (source, transform, sink, returned value, errors). `finished` reports `ERR_STREAM_PREMATURE_CLOSE`
-  for a stream closed before it ended. The success callbacks of both get Node's arguments.
+  (source, transform, sink, returned value, errors, the `signal` passed to stages). `finished`
+  reports `ERR_STREAM_PREMATURE_CLOSE` for a stream closed before it ended. The success callbacks
+  of both get Node's arguments.
 - I8. The scenario programs print Node's stdout and write Node's files on every host.
+- I9. `string_decoder` decodes every encoding Node's does (latin1, utf16le included) and rejects an
+  unknown one with `ERR_UNKNOWN_ENCODING`. `Buffer` accepts every spelling of an encoding name
+  Node's `normalizeEncoding` accepts (`'UTF8'`, `'LATIN1'`, …). `events.addAbortListener` exists as
+  in Node.
+- I10. `fs` callback APIs complete in an I/O turn as in Node, so timers interleave with a chain of
+  `fs.read`/`fs.write` callbacks. `fs.writev` and `fs.fsync` (and their `Sync` forms) exist as in
+  Node.
+
+<!-- Candidate I11 (review S7: a WriteStream file complete after 'finish' + exit + reload on
+Workbench/OPFS) waits on its fact: map §Open questions. -->
 
 ## Challenge
+
+challenge: 2026-11-25 — 1 blocker, 5 major, 14 minor, nits. One fresh read-only critic ran over the
+route-B rewrite: goal, map, ADR-0575, the probe, the seeded drafts and the zlib edits. Its verdict:
+«не готово». It reproduced the generator (sha `53e386…`), S1 and the AbortController sizes. Each
+finding was verified:
+
+1. blocker — the bundle budget. The «≈+27 KB» for the zlib engine had no source; measured it is
+   +36 950 B gzip (ADR-0573 §8). With route B, generic comes to 340 390 of 332 000. This is now an
+   `owner: user` question in map §Open questions, so the goal stays draft. ADR-0575 Consequences were
+   rewritten.
+2. major — the Chromium 108 floor: `AbortSignal.any`, `Symbol.dispose`/`asyncDispose`, and the probe's
+   `Promise.withResolvers`. Now in ADR-0575 §2 and unit 8's acceptance (`check:es-floor`, floor lane).
+3. major — the «write before close lands» half of I10 is true on main (`b1`, fs parity A 6/6). It was
+   removed from I5, I10, unit 4 and the ADR, and is a guard row now.
+4. major — a hidden 8→9 dependency: the fs-stream rows of `m2`/`m3` moved into unit 9's acceptance.
+5. major — `pipe` into `ServerResponse` would lose backpressure after unit 8 (Promise-returning
+   `write`, ADR-0154 D3). It now has a regression row and unit 8 moves `ServerResponse.write` to
+   `false` + `'drain'`. ADR-0154 D3 is listed as superseded.
+6. major — the Superseded section was inaccurate: 0034 §1 stays, 0069 is superseded wholly, the 0237
+   reference is fixed, 0239 and 0154 D3 are added, and 0458 stays.
+7–20. minor, all fixed:
+   - the order wording was made consistent;
+   - unit 8's entry criteria were corrected, and `m4` numbers updated;
+   - the AbortController choice is stated in one place;
+   - Decision 2's binding list completed, with the host `EventTarget` gap;
+   - regression list fixed (`egress-http.ts`; `upgrade-socket` and `ending`/`ended` corrected);
+   - B2 measured through `'data'`: today base64/latin1/hex equal Node in-process, and route B throws
+     until unit 1;
+   - the rejected route A is now argued on risk and §Simplicity;
+   - I11 became a candidate and its child is not seeded;
+   - I8 is owned by unit 9;
+   - `zlib-diff` became zlib unit 3's own entry check (unit 8 commits its differential as a CI test);
+   - stale zlib docs were updated;
+   - probe limits are named in the README;
+   - AbortController sizes are in `results/route-b-size.txt`;
+   - README columns and units fixed.
+
+   Nits fixed: 23 + 5 modules, `AbortController2`, the 6402 test lines, «compared by content»,
+   `flush: true` → `ERR_INVALID_ARG_TYPE`, 13/14 adapter cases, `main`/`sw` −27/−43 B, the zlib
+   probe label, the zlib map path. Duplicate noted: `node-builtins-loud-stub-capability-gaps` overlaps
+   unit 1.
+
+Not re-reviewed after these fixes.
+
+Previous checks of the route-A draft (kept as history; their fixes carried over where still meant):
 
 challenge: 2026-11-25 — 14 problems. One fresh read-only critic ran a premise and final-result check
 in one pass over the request, the user's relayed answer, the manager's extensions, goal, map, probe
@@ -151,38 +217,30 @@ Added after it, from the zlib goal via the manager, not re-reviewed:
 
 ## Decisions
 
-- 2026-11-25 — manager: fs streams become subclasses of `@riftydev/io` `Readable`/`Writable`, and the
-  hand-written EventEmitter classes are retired. Basis:
-  - Node's own `ReadStream`/`WriteStream` are `Readable`/`Writable` subclasses driven by `_construct`,
-    `_read`/`_write` and `_destroy` (`lib/internal/fs/streams.js:230,250,300,401,421,526`).
-  - ADR-0020 already decided "exposes a Node `Readable` honoring backpressure"; it was not done.
-  - PR #434 completed the EventEmitter classes over three review rounds, and each round found another
-    missing piece of `Readable`.
-  - No cost of, or reason against, the subclass is recorded in the repo.
-- 2026-11-25 — manager's extension of the user-approved composition, user informed (adds, narrows
-  nothing), on the probe's facts:
-  - `pipeline` function/async-generator stages, I7 (`m7`: rifty rejects every non-stream stage);
-  - the Readable/Writable state members, I2;
-  - constructor option validation, I2 (from the zlib goal's review 2026-11-25: Node's `lib/zlib.js` over
-    rifty's `Transform` accepts `{highWaterMark: -1}` and `{signal: 1}` silently; `m8`);
-  - the legacy `Stream` chain, I3;
-  - `'close'` after `'end'` (`autoDestroy`) moved into the lifecycle, I1;
-  - `Duplex` surface and order with `Transform` backpressure, I6.
-- 2026-11-25 — the zlib goal's `zlib-diff` (Node's `lib/zlib.js` over Node's vs rifty's `Transform`)
-  adds two gaps, placed by mechanism, manager informed:
-  - `finished` premature close → I7 (end-of-stream, same completion path);
-  - `write(chunk, '', cb)` → I2 (`write` argument normalization);
-  - `[Symbol.asyncDispose]` (absent on every rifty class; Node has it on all five, and `Symbol.dispose`
-    on none) → I2, per the manager. Its `errored` value after dispose also needs I1.
-- 2026-11-25 — agent, by mechanism, reported to the manager:
-  - `finished`/`pipeline` callback arguments go with the pipeline stages (same `pipeline.ts`
-    completion path), not with the state members;
-  - the legacy `Stream` chain is its own unit: it changes the prototype chain of every stream class,
-    and the `@riftydev/io` bundle budget (trap `io-treeshake-side-effect`) applies to it.
+- 2026-11-25 — manager, under the user's delegation («проектируешь ты сам»); the user is informed,
+  confirmation pending. Route B: the stream core is Node v24.16.0's `lib/stream.js`,
+  `lib/stream/promises.js` and `lib/internal/streams/*.js`, and fs streams are
+  `lib/internal/fs/streams.js`, all unedited (ADR-0575). Ground: the probe's route B equals Node on
+  every row of the carrier and of `m1`–`m3`, `m6`, `m7` and the hook matrix, in-process; every other
+  difference traces to a binding.
+- 2026-11-25 — manager: fs streams are subclasses of the core `Readable`/`Writable`, and the
+  hand-written EventEmitter classes are retired. Under route B this is Node's own `streams.js`.
+  Basis:
+  - Node's `ReadStream`/`WriteStream` are subclasses driven by `_construct`, `_read`/`_write` and
+    `_destroy` (`lib/internal/fs/streams.js:230,250,300,401,421,526`);
+  - ADR-0020 decided «exposes a Node `Readable` honoring backpressure», and that was not done;
+  - PR #434 needed three review rounds on the EventEmitter classes.
+- 2026-11-25 — manager: the binding gaps the probe found are fixed as their own units, before the unit
+  that needs them. They are parity fixes that hold without the core. I9–I10 are new obligations
+  after the user's «ок» (the manager's extension; user informed, confirmation pending). I11 is a
+  candidate (review S7) until its fact.
 - 2026-11-25 — the user, in the manager thread cf2ae711: «про потоки тут ок» to the manager's «Нужно от тебя: «ок» на состав и порядок и на уровень works, как у остальных целей». What that message put before the user: four parts in order — (1) `_destroy`/`_construct` hooks in the core, (2) `fs.ReadStream` as a `Readable` subclass, (3) `fs.WriteStream` as a `Writable` subclass in the shape graceful-fs expects, (4) `Transform` backpressure; outside the goal `http.ServerResponse`, `net.Socket`, `process.stdin` as the next goal's candidates; PRs #434 and #437 stay parked until the goal absorbs them; tier works. The later growth to the present units (the manager's extensions above) was reported to the user in the same thread on 2026-11-25 as «возрази, если не согласен»; no objection recorded.
 - tier: works — the user's choice (line above). Faults outside Node's own
   behaviour, so not covered by parity, are listed in map §Faults outside parity.
-- rejected route: complete the EventEmitter classes (PR #434's route) — violates I4/I5. They stay
+- rejected route: route A, rifty's hand-written streams fixed per member in 8 units. It could meet the
+  invariants in principle; it is rejected on delivery risk and §Simplicity, not on an invariant. Its
+  unit graph had three hidden dependencies after one review, the same class that broke the zlib goal
+  twice and PR #434 three times (ADR-0575 §Alternatives).
+- rejected route: complete the EventEmitter fs classes (PR #434's route) — violates I4/I5. They stay
   outside `instanceof Readable`/`Writable`, `stream.isReadable`, `Readable.from` and every
-  `Readable.prototype` member, and would be a second hand copy of `Readable` (PR #434, three review
-  rounds). The read source per host (fd reads vs `openReadable`) is unit 4's ADR, map §Open questions.
+  `Readable.prototype` member.

@@ -31,14 +31,40 @@ walk(dir, '/workspace');
 let loader = createModuleLoader(vfs, { cwd: '/workspace' });
 // ROUTE_B=1 (node --expose-internals): `stream`, `stream/promises` and fs's stream classes are Node's
 // verbatim sources (route-b/verbatim.cjs) over rifty's events/buffer/string_decoder/fs.
-if (process.env.ROUTE_B === '1') {
+// ROUTE_B=product: the same sources generated into one module (route-b/product/generate.mjs, path in
+// ROUTE_B_GEN) over route-b/product/bindings.ts — rifty modules and host globals, no Node internals.
+if (process.env.ROUTE_B === '1' || process.env.ROUTE_B === 'product') {
   const { createRequire } = await import('node:module');
   const nodeRequire = createRequire(import.meta.url);
-  const { loadVerbatim } = nodeRequire('./route-b/verbatim.cjs');
   const base = loader;
   const riftyRequire = (id: string) => base.require(id, '/workspace/[main].cjs');
-  const lib = join(process.env.NODE_SRC ?? '', 'lib');
-  const v = loadVerbatim({ lib, riftyRequire, nodeRequire, process });
+  let v: {
+    stream: Record<string, unknown>;
+    promises: Record<string, unknown>;
+    fsStreams: Record<string, new (p: unknown, o: unknown) => unknown>;
+    used: { rifty: Set<string>; node: Set<string> };
+  };
+  if (process.env.ROUTE_B === 'product') {
+    const { createRouteB } = await import('./route-b/product/bindings.ts');
+    const gen = await import(pathToFileURL(process.env.ROUTE_B_GEN ?? '').href);
+    const { NotImplementedError } = await load('packages/io/src/index.ts');
+    // The stream core sees rifty's process (its nextTick), as in a product build.
+    const req = createRouteB(gen.default, {
+      module: riftyRequire,
+      process: riftyRequire('process'),
+      NotImplementedError,
+    });
+    v = {
+      stream: req('stream'),
+      promises: req('stream/promises'),
+      fsStreams: req('internal/fs/streams'),
+      used: { rifty: new Set(), node: new Set() },
+    } as typeof v;
+  } else {
+    const { loadVerbatim } = nodeRequire('./route-b/verbatim.cjs');
+    const lib = join(process.env.NODE_SRC ?? '', 'lib');
+    v = loadVerbatim({ lib, riftyRequire, nodeRequire, process });
+  }
   const fsRifty = riftyRequire('fs') as Record<string, unknown>;
   const fsB = Object.create(fsRifty) as Record<string, unknown>;
   Object.assign(fsB, {

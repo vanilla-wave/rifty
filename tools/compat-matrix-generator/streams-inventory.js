@@ -103,7 +103,11 @@ export const streamsMatrix = {
       "`'finish'` fires before pending `'data'` (Transform: before `'end'`); no `'close'` after both sides end — backlog `runtime-js/duplex-end-finish-close-order`",
     ],
     ['`stream/consumers`', '✅', 'Text/buffer/json-style consumers covered'],
-    ['Legacy streams', '✅', 'Pipe/unpipe and callable core constructor parity'],
+    [
+      'Legacy streams',
+      '⚠️',
+      'Pipe/unpipe and callable core constructors parity-tested; `Readable`/`Writable` skip the legacy `Stream` in their chain (`instanceof Stream` false, no `Stream.prototype.pipe`) — backlog `runtime-js/stream-classes-skip-legacy-stream`, goal `node-streams-as-in-node`',
+    ],
     [
       '`Readable.fromWeb`',
       '⚠️',

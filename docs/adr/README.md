@@ -121,6 +121,7 @@ ADRs are immutable while active, except dated lines under `## Decisions` / `§Co
 | 0571 | Prove node file entry and fatal report parity against live Node, Node's report in the isolate guest only |
 | 0573 | Compute node:zlib with a wasm build of Node's own deps/zlib on every host |
 | 0574 | Generate legacy node:url and node:querystring from pinned Node sources |
+| 0575 | Stream core and fs streams are Node v24.16.0's own sources |
 
 ### runtime-wasi
 

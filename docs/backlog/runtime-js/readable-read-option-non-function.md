@@ -3,6 +3,7 @@ area: runtime-js
 status: draft
 title: A non-function `read` option replaces Readable's `_read` instead of being ignored
 created: 2026-11-24
+epic: node-streams-as-in-node
 why: Node installs the `read` option only when it is a function, so `new Readable({ read: 5 })` emits `ERR_METHOD_NOT_IMPLEMENTED`; rifty installs any defined value and fails with `TypeError: this._read is not a function`.
 sources: ["PR #433 review round 1", docs/public/compat/streams.md]
 code: [packages/io/src/streams/callable-constructor.ts]

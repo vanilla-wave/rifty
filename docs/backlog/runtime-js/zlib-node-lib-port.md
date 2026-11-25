@@ -27,7 +27,7 @@ Entry criterion — the state group of `zlib-diff.mjs` (Node's `lib/zlib.js` ver
 tarball, identical to the binary's builtin source, over the probe handle; `stream.Transform` and the
 stream helpers = Node's vs rifty's; everything else Node's) shows 0 differences between `port/N` and
 `port/R`, or only rows already declared in compat `streams.md` with their number. The scenarios are
-the paths I1–I4 promise, including guards that are equal today; the load group belongs to unit 4.
+the paths I1–I4 promise, including guards that are equal today; the load group belongs to unit 4 (on the streams goal's route B it is 0/1, so unit 4 may become a guard).
 Today on main (`results/zlib-diff.txt`): `port/N` = real Node in the state group 45/45 and the load group 1/1 (stable field: the `'drain'` count); state group `port/R` ≠ `port/N`
 in 26/45 scenarios, 154 fields; load group 1/1 (one `'drain'` more):
 
@@ -38,7 +38,7 @@ in 26/45 scenarios, 154 fields; load group 1/1 (one `'drain'` more):
 | `_destroy` never runs, so the handle never closes | sync error, `close()`, `close(cb)` ×3, missing dictionary, `rejectGarbageAfterEnd`, destroy mid-write | `_closed: true`, `_handle: null`; after a sync error `reset()` → `ERR_INTERNAL_ASSERTION`, the next `_processChunk` → `TypeError …writeSync` | handle open; `reset()` passes; the next `_processChunk` throws the previous `Z_DATA_ERROR` again |
 | `autoDestroy` after `'end'` | every stream that ends | `destroy()` → `_destroy` → `'close'`, `destroyed: true` | no destroy, no `'close'` |
 | `errored`, `closed`, `readableFlowing` | every scenario reading them | the error / `true`·`false` / `null`·`true` | `null` / `undefined` / `undefined` |
-| `finished` on a closed stream | `close(cb)` before writing, after a write, after an error | `ERR_STREAM_PREMATURE_CLOSE` | `cb()` |
+| `finished` on a closed stream | `close(cb)` before writing, after a write, «after an error» (the probe's label: the inflate's output is unread and held at its `highWaterMark`, so it has not ended; after a real stored error Node passes that error instead) | `ERR_STREAM_PREMATURE_CLOSE` | `cb()` |
 | `write(chunk, '', cb)` (Node's `flush()` marker) | `flush()` default, `Z_SYNC_FLUSH`, `Z_FULL_FLUSH`, `Z_BLOCK`, `Z_PARTIAL_FLUSH`, `params()` | accepted with the default encoding | `ERR_UNKNOWN_ENCODING: ''`; the flush is lost and the output differs |
 | `'end'` / `'finish'` order | inflate with a trailing tail | `'end'` before `'finish'` | `'finish'` before `'end'` |
 

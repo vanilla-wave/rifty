@@ -3,6 +3,7 @@ area: runtime-js
 status: draft
 title: Readable sized-read high-water-mark growth
 created: 2026-07-12
+epic: node-streams-as-in-node
 why: Readable.read(n) leaves highWaterMark below n instead of growing it like Node
 user_story: As a stream consumer using sized reads, I want readableHighWaterMark and refill demand to match Node after requesting more than the configured capacity.
 blocked_by: []

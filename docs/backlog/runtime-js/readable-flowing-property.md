@@ -23,15 +23,8 @@ so `r.isPaused()` throws `TypeError` where Node returns `false` after
 
 ## Goal unit
 
-Unit 2 of goal `node-streams-as-in-node` (map item 2, I2) is wider than this title. It covers:
-
-- constructor option validation as Node's `ReadableState`/`WritableState` (`highWaterMark`,
-  `readableHighWaterMark`/`writableHighWaterMark`, `signal`, `encoding`, `defaultEncoding`);
-- `write(chunk, '', cb)` taking the default encoding;
-- `readableFlowing` and `isPaused()`, `writableNeedDrain` (`writable-sync-dispatch-state`);
-- `[Symbol.asyncDispose]`.
-
-Matrices: the goal's `reference/results/m2-core-members.txt` and `m8-constructor-options.txt`.
+Absorbed by unit 8 «Core» of goal `node-streams-as-in-node` (ADR-0575): Node's `readable.js`
+defines these members; this draft's repro is an acceptance row there.
 
 ## Next
 

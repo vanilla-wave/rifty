@@ -3,6 +3,7 @@ area: runtime-js
 status: draft
 title: "`Readable.pipe` from a source whose `'end'` already fired ends the destination on `nextTick`"
 created: 2026-09-24
+epic: node-streams-as-in-node
 why: Node's `pipe()` sees `endEmitted` and schedules the end step on `nextTick`; rifty waits for an `'end'` that never comes, so the destination never ends or unpipes
 sources: [docs/backlog/runtime-js/reference/readable-pipe-never-ends-process-stdio-evidence.md, docs/public/compat/streams.md]
 code: [packages/io/src/streams/readable.ts]

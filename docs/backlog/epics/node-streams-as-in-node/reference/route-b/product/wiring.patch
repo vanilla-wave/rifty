@@ -1,0 +1,391 @@
+# Product-build wiring at b1270101a (throwaway tree). Also: cp bindings.ts packages/io/src/streams/node/;
+# node generate.mjs REPO NODE_SRC packages/io/src/streams/node/generated --minify. fs-streams.ts was replaced whole (last file).
+diff --git a/packages/io/src/index.ts b/packages/io/src/index.ts
+index 8a5546863..8ef0b42ce 100644
+--- a/packages/io/src/index.ts
++++ b/packages/io/src/index.ts
+@@ -57,6 +57,9 @@ export {
+   type DuplexOptions,
+   type DuplexFromWebOptions,
+   type TransformOptions,
++  nodeStream,
++  nodeStreamPromises,
++  nodeFsStreams,
+ } from './streams/index.ts';
+ export {
+   registerBuiltin,
+diff --git a/packages/io/src/streams/index.ts b/packages/io/src/streams/index.ts
+index c63730ed1..85fdd8a33 100644
+--- a/packages/io/src/streams/index.ts
++++ b/packages/io/src/streams/index.ts
+@@ -1,127 +1,50 @@
+ /**
+- * Aggregator for the split stream primitives. The runtime-js `node:stream`
+- * adapter pulls its `default` export (object shape) from here.
++ * PROBE (route B product shape): the Node-named stream exports are Node v24.16.0's own
++ * (`node/`), same names as before; types stay the old declarations (type-only).
+  */
+-
+-import { compose } from './compose.ts';
+-import { getDefaultHighWaterMark, setDefaultHighWaterMark } from './default-highwatermark.ts';
+-import { Duplex } from './duplex.ts';
+-import { Stream } from './legacy-stream.ts';
+-import { PassThrough } from './pass-through.ts';
+-import { finished, pipeline } from './pipeline.ts';
+-import { Readable, type ReadableState, addAbortSignal } from './readable.ts';
+-import { Transform } from './transform.ts';
+-import { Writable, type WritableState } from './writable.ts';
+-
+-export {
+-  Readable,
+-  type ReadableFromWebOptions,
+-  type ReadableOptions,
+-  type AsyncHelperOptions,
+-} from './readable.ts';
+-export {
+-  Writable,
+-  type WritableOptions,
+-  type WritableFromWebOptions,
+-  type WriteChunk,
+-} from './writable.ts';
+-export {
+-  Duplex,
+-  type DuplexOptions,
+-  type DuplexFromWebOptions,
+-  type DuplexWebPair,
+-} from './duplex.ts';
+-export { Transform, type TransformOptions } from './transform.ts';
+-export { PassThrough } from './pass-through.ts';
+-export { pipeline, finished } from './pipeline.ts';
+-export { compose } from './compose.ts';
+-export { Stream } from './legacy-stream.ts';
+-export { addAbortSignal } from './readable.ts';
+-export {
+-  getDefaultHighWaterMark,
+-  setDefaultHighWaterMark,
++import type { compose as ComposeT } from './compose.ts';
++import type {
++  getDefaultHighWaterMark as GetT,
++  setDefaultHighWaterMark as SetT,
+ } from './default-highwatermark.ts';
+-
+-// ──────────────────────────── stream predicates ─────────────────────────────
+-// `stream.isReadable`/`isWritable`/`isErrored`/`isDisturbed` (Node v16.14/v17.3),
+-// reading the EXISTING `_readableState`/`_writableState` — no new machinery.
+-// Return shapes pin REAL Node exactly (verified vs the parity runner):
+-//   - `isReadable`/`isWritable` → `null` for a non-stream (or the wrong half);
+-//   - `isErrored`/`isDisturbed` → `false` for a non-stream.
+-// A non-stream input NEVER throws. We duck-type on the state container (not
+-// `instanceof`): a `Duplex` has both states, a pure `Writable` has no
+-// `_readableState`, a pure `Readable` has no `_writableState`.
+-
+-function readableStateOf(stream: unknown): ReadableState | undefined {
+-  if (typeof stream !== 'object' || stream === null) return undefined;
+-  const state = (stream as { _readableState?: unknown })._readableState;
+-  return typeof state === 'object' && state !== null ? (state as ReadableState) : undefined;
+-}
+-
+-function writableStateOf(stream: unknown): WritableState | undefined {
+-  if (typeof stream !== 'object' || stream === null) return undefined;
+-  const state = (stream as { _writableState?: unknown })._writableState;
+-  return typeof state === 'object' && state !== null ? (state as WritableState) : undefined;
+-}
+-
+-/**
+- * `true` only for a not-yet-ended/destroyed/errored Readable (or Duplex
+- * readable side); `null` for a non-Readable input (Node's exact shape).
+- */
+-export function isReadable(stream: unknown): boolean | null {
+-  const state = readableStateOf(stream);
+-  if (!state) return null;
+-  return !state.destroyed && !state.endEmitted && state.errored === null;
+-}
+-
+-/**
+- * `true` only for a not-yet-ended/destroyed/errored Writable (or Duplex
+- * writable side); `null` for a non-Writable input (Node's exact shape).
+- */
+-export function isWritable(stream: unknown): boolean | null {
+-  const state = writableStateOf(stream);
+-  if (!state) return null;
+-  return !state.destroyed && !state.ending && !state.finished && state.errored === null;
+-}
+-
+-/**
+- * `true` once a stream (either half) has errored; `false` otherwise, including
+- * for a non-stream input (never throws).
+- */
+-export function isErrored(stream: unknown): boolean {
+-  const r = readableStateOf(stream);
+-  const w = writableStateOf(stream);
+-  if (!r && !w) return false;
+-  return (r?.errored ?? null) !== null || (w?.errored ?? null) !== null;
+-}
+-
+-/**
+- * `true` once a Readable has been read-from (a chunk delivered) or destroyed —
+- * backed by the EXPLICIT `disturbed` bit on `_readableState`, never inferred.
+- * `false` for a non-Readable input (never throws).
+- */
+-export function isDisturbed(stream: unknown): boolean {
+-  const state = readableStateOf(stream);
+-  if (!state) return false;
+-  return state.disturbed;
+-}
+-
+-const stream = {
+-  Readable,
+-  Writable,
+-  Duplex,
+-  Transform,
+-  PassThrough,
+-  pipeline,
+-  finished,
+-  compose,
+-  Stream,
+-  addAbortSignal,
+-  getDefaultHighWaterMark,
+-  setDefaultHighWaterMark,
+-  isReadable,
+-  isWritable,
+-  isErrored,
+-  isDisturbed,
+-};
+-export default stream;
++import type { Duplex as DuplexT } from './duplex.ts';
++import type { Stream as StreamT } from './legacy-stream.ts';
++import { pick } from './node/index.ts';
++import type { PassThrough as PassThroughT } from './pass-through.ts';
++import type { finished as FinishedT, pipeline as PipelineT } from './pipeline.ts';
++import type { Readable as ReadableT, addAbortSignal as AddAbortSignalT } from './readable.ts';
++import type { Transform as TransformT } from './transform.ts';
++import type { Writable as WritableT } from './writable.ts';
++
++export type {
++  ReadableFromWebOptions,
++  ReadableOptions,
++  AsyncHelperOptions,
++} from './readable.ts';
++export type { WritableOptions, WritableFromWebOptions, WriteChunk } from './writable.ts';
++export type { DuplexOptions, DuplexFromWebOptions, DuplexWebPair } from './duplex.ts';
++export type { TransformOptions } from './transform.ts';
++export { nodeStream, nodeStreamPromises, nodeFsStreams } from './node/index.ts';
++
++export const Readable: typeof ReadableT = /* @__PURE__ */ pick('Readable');
++export const Writable: typeof WritableT = /* @__PURE__ */ pick('Writable');
++export const Duplex: typeof DuplexT = /* @__PURE__ */ pick('Duplex');
++export const Transform: typeof TransformT = /* @__PURE__ */ pick('Transform');
++export const PassThrough: typeof PassThroughT = /* @__PURE__ */ pick('PassThrough');
++export const pipeline: typeof PipelineT = /* @__PURE__ */ pick('pipeline');
++export const finished: typeof FinishedT = /* @__PURE__ */ pick('finished');
++export const compose: typeof ComposeT = /* @__PURE__ */ pick('compose');
++export const Stream: typeof StreamT = /* @__PURE__ */ pick('Stream');
++export const addAbortSignal: typeof AddAbortSignalT = /* @__PURE__ */ pick('addAbortSignal');
++export const getDefaultHighWaterMark: typeof GetT = /* @__PURE__ */ pick('getDefaultHighWaterMark');
++export const setDefaultHighWaterMark: typeof SetT = /* @__PURE__ */ pick('setDefaultHighWaterMark');
++export const isReadable: (s: unknown) => boolean | null = /* @__PURE__ */ pick('isReadable');
++export const isWritable: (s: unknown) => boolean | null = /* @__PURE__ */ pick('isWritable');
++export const isErrored: (s: unknown) => boolean = /* @__PURE__ */ pick('isErrored');
++export const isDisturbed: (s: unknown) => boolean = /* @__PURE__ */ pick('isDisturbed');
++export type Readable = ReadableT;
++export type Writable = WritableT;
++export type Duplex = DuplexT;
++export type Transform = TransformT;
++export type PassThrough = PassThroughT;
++export type Stream = StreamT;
+diff --git a/packages/runtime-js/src/builtins/fs.ts b/packages/runtime-js/src/builtins/fs.ts
+index 15910fa43..6598391fd 100644
+--- a/packages/runtime-js/src/builtins/fs.ts
++++ b/packages/runtime-js/src/builtins/fs.ts
+@@ -1521,15 +1521,10 @@ export function opendir(
+ export { Stats, Dirent, Dir };
+ export { createReadStream, createWriteStream } from './fs-streams.ts';
+ export { watch, watchFile, unwatchFile, FSWatcher } from './fs-watch.ts';
+-import {
+-  FileReadStream,
+-  FileWriteStream,
+-  createReadStream,
+-  createWriteStream,
+-} from './fs-streams.ts';
++import { createReadStream, createWriteStream, defineStreamClasses } from './fs-streams.ts';
+ import { FSWatcher, unwatchFile, watch, watchFile } from './fs-watch.ts';
+ 
+-const fs = {
++const fs = /* @__PURE__ */ defineStreamClasses({
+   promises,
+   open,
+   close,
+@@ -1593,15 +1588,11 @@ const fs = {
+   Dir,
+   createReadStream,
+   createWriteStream,
+-  // Node-named stream classes: `destroy`/`send` probe `stream instanceof
+-  // fs.ReadStream` on cleanup — an absent class makes that probe throw.
+-  ReadStream: FileReadStream,
+-  WriteStream: FileWriteStream,
+   watch,
+   watchFile,
+   unwatchFile,
+   FSWatcher,
+-};
++});
+ export default fs;
+ 
+ // eslint-disable-next-line @typescript-eslint/no-namespace
+diff --git a/packages/runtime-js/src/builtins/index.ts b/packages/runtime-js/src/builtins/index.ts
+index 661824465..03d46e97d 100644
+--- a/packages/runtime-js/src/builtins/index.ts
++++ b/packages/runtime-js/src/builtins/index.ts
+@@ -1,4 +1,4 @@
+-import { registerBuiltin } from '@riftydev/io';
++import { nodeStreamPromises, registerBuiltin } from '@riftydev/io';
+ import assertModule, { strict as assertStrict } from './assert.ts';
+ import bufferModule from './buffer.ts';
+ import childProcessModule, { ensureExecSyncHandlerInstalled } from './child_process.ts';
+@@ -97,10 +97,7 @@ export function ensureRuntimeJsBuiltinsRegistered(): void {
+   registerBuiltin('fs', () => fsModule);
+   registerBuiltin('fs/promises', () => fsPromises);
+   registerBuiltin('stream', () => streamModule);
+-  registerBuiltin('stream/promises', () => ({
+-    pipeline: streamModule.pipeline,
+-    finished: streamModule.finished,
+-  }));
++  registerBuiltin('stream/promises', nodeStreamPromises);
+   registerBuiltin('stream/consumers', () => streamConsumers);
+   // `node:stream/web` re-exports the host WHATWG globals (Node's impl IS the
+   // WHATWG API). Registered beside `stream`/`stream/promises`/`stream/consumers`.
+diff --git a/packages/io/src/streams/node/index.ts b/packages/io/src/streams/node/index.ts
+new file mode 100644
+index 000000000..1cad7dc11
+--- /dev/null
++++ b/packages/io/src/streams/node/index.ts
+@@ -0,0 +1,81 @@
++/**
++ * PROBE (route B product shape): Node v24.16.0's stream core + fs streams, generated
++ * (`generated/node-streams.js`) over `bindings.ts`. Built on first read; every export is a pure call.
++ */
++import { Buffer } from '../../buffer.ts';
++import { loadBuiltin, readBuiltinUncached } from '../../builtin-registry.ts';
++import { NotImplementedError } from '../../errors.ts';
++import { EventEmitter } from '../../event-emitter.ts';
++import { createRouteB } from './bindings.ts';
++import createNodeStreams from './generated/node-streams.js';
++
++type Mod = Record<string, unknown>;
++type Proc = {
++  nextTick?: (cb: (...a: unknown[]) => void, ...a: unknown[]) => void;
++  emitWarning: (...a: unknown[]) => void;
++} & Mod;
++
++function builtin(id: string): Mod {
++  const m = loadBuiltin(id);
++  if (m === null) throw new Error(`route B: node:${id} is not registered`);
++  return m;
++}
++const active = (): Proc | null => readBuiltinUncached('process') as Proc | null;
++/** The active process at call time (ADR-0458); io used without runtime-js defers as io does today. */
++const processFacade = {
++  nextTick(cb: (...a: unknown[]) => void, ...args: unknown[]): void {
++    const p = active();
++    if (typeof p?.nextTick === 'function') p.nextTick(cb, ...args);
++    else queueMicrotask(() => cb(...args));
++  },
++  emitWarning(...args: unknown[]): void {
++    const p = active() as Proc;
++    p.emitWarning(...args);
++  },
++  get platform(): unknown {
++    return active()?.platform;
++  },
++  get noDeprecation(): unknown {
++    return active()?.noDeprecation;
++  },
++  get stdout(): unknown {
++    return active()?.stdout;
++  },
++  get stderr(): unknown {
++    return active()?.stderr;
++  },
++};
++/** `string_decoder` is runtime-js's: resolved per construction (the stream core loads before it registers). */
++function StringDecoder(encoding?: unknown): object {
++  const SD = builtin('string_decoder').StringDecoder as new (e?: unknown) => object;
++  return new SD(encoding);
++}
++
++let load: ((id: string) => unknown) | undefined;
++function nodeModule(id: string): Mod {
++  load ??= createRouteB(createNodeStreams, {
++    module: (m) =>
++      m === 'buffer'
++        ? { Buffer }
++        : m === 'events'
++          ? EventEmitter
++          : m === 'string_decoder'
++            ? { StringDecoder }
++            : (loadBuiltin(m) ?? undefined),
++    process: processFacade,
++    NotImplementedError,
++  });
++  return load(id) as Mod;
++}
++export function nodeStream(): Mod {
++  return nodeModule('stream');
++}
++export function nodeStreamPromises(): Mod {
++  return nodeModule('stream/promises');
++}
++export function nodeFsStreams(): Mod {
++  return nodeModule('internal/fs/streams');
++}
++export function pick(name: string): never {
++  return nodeStream()[name] as never;
++}
+diff --git a/packages/io/src/streams/node/generated/node-streams.d.ts b/packages/io/src/streams/node/generated/node-streams.d.ts
+new file mode 100644
+index 000000000..2d9dd24ca
+--- /dev/null
++++ b/packages/io/src/streams/node/generated/node-streams.d.ts
+@@ -0,0 +1,9 @@
++export const PRIMORDIALS: string[];
++export const BINDINGS: string[];
++export const INTERNAL_BINDINGS: string[];
++export default function createNodeStreams(
++  primordials: Record<string, unknown>,
++  internalBinding: (id: string) => unknown,
++  bind: (id: string) => unknown,
++  process: unknown,
++): (id: string) => unknown;
+diff --git a/packages/runtime-js/src/builtins/fs-streams.ts b/packages/runtime-js/src/builtins/fs-streams.ts
+new file mode 100644
+index 000000000..1e71eac44
+--- /dev/null
++++ b/packages/runtime-js/src/builtins/fs-streams.ts
+@@ -0,0 +1,27 @@
++/** PROBE (route B): fs streams are Node v24.16.0's lib/internal/fs/streams.js (io `nodeFsStreams`). */
++import { nodeFsStreams } from '@riftydev/io';
++
++type Ctor = new (path: unknown, options?: unknown) => unknown;
++const cls = (name: 'ReadStream' | 'WriteStream') => nodeFsStreams()[name] as Ctor;
++// lib/fs.js: `createReadStream(path, options) { lazyLoadStreams(); return new ReadStream(path, options); }`
++export function createReadStream(path: unknown, options?: unknown): unknown {
++  return new (cls('ReadStream'))(path, options);
++}
++export function createWriteStream(path: unknown, options?: unknown): unknown {
++  return new (cls('WriteStream'))(path, options);
++}
++/** lib/fs.js's lazy `ReadStream`/`WriteStream` accessors. */
++export function defineStreamClasses<T extends object>(fs: T): T {
++  for (const name of ['ReadStream', 'WriteStream'] as const) {
++    let value: Ctor | undefined;
++    Object.defineProperty(fs, name, {
++      get: () => value ?? cls(name),
++      set: (v: Ctor) => {
++        value = v;
++      },
++      enumerable: true,
++      configurable: true,
++    });
++  }
++  return fs;
++}

@@ -3,6 +3,7 @@ area: runtime-js
 status: draft
 title: WHATWG fromWeb terminal lifecycle, signal, and reason identity
 created: 2026-07-12
+epic: node-streams-as-in-node
 why: fromWeb adapters split terminal ownership, lose reasons, and loudly reject the still-unsupported valid signal lifecycle
 user_story: As a Node program adapting fetch or web streams, I want abort, destroy, and web failures to preserve Node reason identity and event order exactly once.
 blocked_by: []
