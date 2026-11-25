@@ -216,6 +216,20 @@ export interface Mask {
   readonly to: string;
 }
 
+/** A browser host's stderr masks for checkout `_root`; nothing else of it is rewritten. */
+export const browserMasks = (_root: string): readonly Mask[] => [
+  {
+    why: "the dev server's origin (port) and this checkout's path in rifty's own source URLs",
+    pattern: /https?:\/\/(?:localhost|127\.0\.0\.1):\d+\/@fs\/\S*?\/packages\//g,
+    to: '<dev-server>/packages/',
+  },
+  {
+    why: "a run of rifty's own stack frames (their line:col move with any runtime edit); guest frames stay",
+    pattern: /(?:^ {4}at (?:.*\()?<dev-server>\/packages\/.*\n)+/gm,
+    to: '    at <rifty frames>\n',
+  },
+];
+
 /**
  * Today's rifty outcome of a step, pinned whole: exit code, stdout, the whole stderr (only the
  * host's enumerated masks applied), the output written.

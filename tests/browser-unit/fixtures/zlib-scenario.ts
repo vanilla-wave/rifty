@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import type { Mask, OracleStep } from '../../../packages/isolate-host/tests/zlib-scenario.ts';
+import type { OracleStep } from '../../../packages/isolate-host/tests/zlib-scenario.ts';
 
 // node:zlib goal carrier on the browser hosts (Workbench: ../zlib-scenario.spec.ts, SDK:
 // tests/no-coi/zlib-scenario.spec.ts): a step's workspace (thousands of closure files) reaches the
@@ -46,17 +46,3 @@ for (const [rel, length] of JSON.parse(b.subarray(4, at).toString('utf8'))) {
 }
 fs.rmSync(body);
 `;
-
-/** The masks of a browser host's stderr; nothing else of it is rewritten. */
-export const BROWSER_MASKS: readonly Mask[] = [
-  {
-    why: "the dev server's origin (port) and this checkout's path in rifty's own source URLs",
-    pattern: /https?:\/\/(?:localhost|127\.0\.0\.1):\d+\/@fs\/\S*?\/packages\//g,
-    to: '<dev-server>/packages/',
-  },
-  {
-    why: "a run of rifty's own stack frames (their line:col move with any runtime edit); guest frames stay",
-    pattern: /(?:^ {4}at (?:.*\()?<dev-server>\/packages\/.*\n)+/gm,
-    to: '    at <rifty frames>\n',
-  },
-];

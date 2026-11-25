@@ -13,6 +13,7 @@ import {
   type Pin,
   STEPS,
   type StepId,
+  browserMasks,
   observed,
   outPath,
   pinOf,
@@ -221,4 +222,46 @@ describe('a pin holds the whole stderr', () => {
     const stderr = base.stderr.replace('(why)\n', '(why)\nCHANGED ERROR DETAIL\n');
     expect(pinOf({ ...base, stderr })).not.toEqual(pinOf(base));
   });
+});
+
+// External review of PR #453, round 2: the browser masks hide only rifty's own frames and locations.
+describe('browserMasks', () => {
+  const root = '/r/rifty';
+  const at = (origin: string, rest: string) => `${origin}/@fs${root}/packages/${rest}`;
+  const dev = 'http://localhost:5341';
+  const sdk = 'http://127.0.0.1:5441';
+  const lines = {
+    message: 'NotImplementedError: Not implemented: zlib.x (why)',
+    riftyTop: `    at Object.x (${at(dev, 'runtime-js/src/builtins/zlib.ts:6:9')})`,
+    guest: '    at eval (/tmp/z2/node_modules/a/b.js:89:52)',
+    evalAt: `    at eval (eval at <anonymous> (${at(dev, 'runtime-js/src/builtins/vm/index.ts:20:25')}), <anonymous>:1:5)`,
+    nonFrame: `    at diagnostic (${at(dev, 'NOT-A-FRAME')}`,
+    riftyRun: `    at compileCjsSource (${at(sdk, 'runtime-js/src/module-loader/cjs.ts:1426:6')})\n    at ${at(sdk, 'runtime-js/src/module-loader/cjs.ts:1465:7')}`,
+    uncaught: `Uncaught NotImplementedError: x (${at(dev, 'runtime-js/src/builtins/zlib.ts:11')})`,
+    elsewhere: '    at f (http://localhost:5341/@fs/elsewhere/packages/x.ts:1:1)',
+  };
+  const out = pinOf(
+    { exitCode: 1, stdout: '', stderr: `${Object.values(lines).join('\n')}\n`, output: null },
+    browserMasks(root),
+  ).stderr.split('\n');
+  it("collapses each run of rifty's own frames into one line", () => {
+    expect([out[1], out[5]]).toEqual(['    at <rifty frames>', '    at <rifty frames>']);
+  });
+  it('keeps a guest frame', () => expect(out[2]).toBe(lines.guest));
+  it('keeps an `eval at` frame, its rifty origin line-masked', () => {
+    expect(out[3]).toBe(
+      '    at eval (eval at <anonymous> (<dev-server>/packages/runtime-js/src/builtins/vm/index.ts:<line>), <anonymous>:1:5)',
+    );
+  });
+  it('keeps a line that is not a frame', () => {
+    expect(out[4]).toBe('    at diagnostic (<dev-server>/packages/NOT-A-FRAME');
+  });
+  it("masks a rifty location's line outside frames, keeps a URL outside this checkout", () => {
+    expect(out.slice(6)).toEqual([
+      'Uncaught NotImplementedError: x (<dev-server>/packages/runtime-js/src/builtins/zlib.ts:<line>)',
+      lines.elsewhere,
+      '',
+    ]);
+  });
+  it('rewrites nothing else', () => expect(out[0]).toBe(lines.message));
 });

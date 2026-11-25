@@ -7,6 +7,7 @@ import {
   type StepId,
   observed,
   outPath,
+  browserMasks,
   pinOf,
   runOracle,
 } from '../../packages/isolate-host/tests/zlib-scenario.ts';
@@ -17,7 +18,7 @@ import {
   gotoHarness,
   sealedWorkbenchFixtureUrl,
 } from './fixtures.ts';
-import { BROWSER_MASKS, STEP_URL, UNPACK, serveSteps } from './fixtures/zlib-scenario.ts';
+import { STEP_URL, UNPACK, serveSteps } from './fixtures/zlib-scenario.ts';
 
 // node:zlib goal carrier (backlog epics/node-zlib-on-every-host/map.md item 1), COI Workbench host
 // (kernel child `node`, Chromium): each step's workspace unpacked by a guest `node` to `/tmp/z<id>`
@@ -40,7 +41,7 @@ child.on('close', (exitCode) => {
 });
 `;
 
-/** Today's outcome, measured on main dfad6553e: whole stderr under `BROWSER_MASKS`. */
+/** Today's outcome, measured on main dfad6553e: whole stderr under `browserMasks`. */
 const PINS: Readonly<Record<StepId, Pin>> = {
   '1': {
     exitCode: 1,
@@ -164,6 +165,7 @@ const PINS: Readonly<Record<StepId, Pin>> = {
   },
 };
 
+const root = process.cwd().replaceAll('\\', '/');
 let oracle: ReadonlyMap<StepId, OracleStep> | undefined;
 const oracleOf = (): ReadonlyMap<StepId, OracleStep> => {
   oracle ??= runOracle();
@@ -228,7 +230,7 @@ test.describe('node:zlib goal scenario vs Node (COI Workbench)', () => {
       test.setTimeout(300_000);
       const s = oracleOf().get(step.id);
       if (s === undefined) throw new Error(`no oracle for ${step.id}`);
-      const rifty = pinOf(await inWorkbench(step), BROWSER_MASKS);
+      const rifty = pinOf(await inWorkbench(step), browserMasks(root));
       expect(rifty).toEqual(PINS[step.id]);
       expect(rifty, 'the pin is a gap against live Node').not.toEqual(pinOf(observed(s.node)));
     });

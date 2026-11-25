@@ -6,11 +6,11 @@ import {
   type StepId,
   observed,
   outPath,
+  browserMasks,
   pinOf,
   runOracle,
 } from '../../packages/isolate-host/tests/zlib-scenario.ts';
 import {
-  BROWSER_MASKS,
   STEP_URL,
   UNPACK,
   serveSteps,
@@ -30,7 +30,7 @@ interface SdkPin extends Pin {
   readonly failure: Failure | null;
 }
 /**
- * Today's outcome, measured on main dfad6553e: whole stderr under `BROWSER_MASKS`. A throw from an
+ * Today's outcome, measured on main dfad6553e: whole stderr under `browserMasks`. A throw from an
  * async task or of a `NotImplementedError` at a file entry's top level fails the run (exit code
  * null; backlog distribution/no-coi-command-unhandled-rejection-exit); step 1's reaches no stderr,
  * only the Worker-crash failure.
@@ -287,7 +287,7 @@ async function inSdk(step: OracleStep['step']): Promise<SdkPin> {
   );
   const pin = pinOf(
     observed({ ...r, file: r.file === null ? undefined : Uint8Array.from(r.file) }),
-    BROWSER_MASKS,
+    browserMasks(root),
   );
   return { ...pin, status: r.status, failure: r.failure };
 }
