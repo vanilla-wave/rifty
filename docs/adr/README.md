@@ -437,6 +437,7 @@ ADRs are immutable while active, except dated lines under `## Decisions` / `§Co
 | 0568 | Run guest files in a live sandbox whose state is filesystem bytes held by the consumer |
 | 0569 | Port pi CLI 1.6.0 compaction into the agent |
 | 0570 | Depend on typebox directly for the public Type export |
+| 0572 | Run a sandbox over an immutable template layer kept out of the sandbox's state |
 
 ## Superseded (removed)
 

@@ -169,7 +169,7 @@ hypervisor and deploy stay outside rifty; the consumer supplies the outer bounda
   after a restore (`distribution/isolate-host-fs-snapshot-restore-then-snapshot-peak`); the
   16 383-unit name cap stays reachable from guest code until rifty refuses names over NAME_MAX
   (`vfs/file-names-over-name-max-accepted`).
-- B — delivered (PR #419, #424); the goal `isolate-host-live-sandbox` stays open on one unit, a run's end state captured where the guest's code cannot reach (`distribution/isolate-host-sandbox-capture-outside-guest-realm`): live sandbox — `createSandbox()` with host binary file ops, `exec` = `node <path>
+- B — delivered (PR #419, #424); the goal `isolate-host-live-sandbox` stays open on one unit, a run's end state captured where the guest's code cannot reach (`distribution/isolate-host-sandbox-capture-outside-guest-realm`, carried by the template goal, C below): live sandbox — `createSandbox()` with host binary file ops, `exec` = `node <path>
   [args]` with `runCode`'s limits, one sandbox through write → run → error → fix (every run end
   keeps the sandbox; killed runs roll back), `snapshot()` / create-from-snapshot, `destroy()`
   after which no isolate of the sandbox runs and no operation still in flight resolves —
@@ -178,8 +178,12 @@ hypervisor and deploy stay outside rifty; the consumer supplies the outer bounda
   missing (compat ⚠️, the lifecycle class). Open as backlog: a byte request frame (`distribution/isolate-host-binary-request-frame`),
   host-write cost O(state) (`distribution/isolate-host-sandbox-write-cost-per-state`), keeping a
   killed run's writes (`distribution/isolate-host-sandbox-killed-run-partial-writes`).
-- Directions (not fitted): C — library template (`createSandbox({ template })`, a loud gap
-  today); D — agent tool set over the host (sandbox `env`/`cwd`/`stdin`, shell syntax); E — guest
+- C — library template: goal `isolate-host-sandbox-template` (ADR-0572 Proposed; a
+  `produceDependencySnapshot` artifact at `/node_modules`, outside the sandbox's state; its
+  snapshot and lazy reads deferred). D — agent tool set over the host: goal
+  `isolate-host-agent-tools` (draft). npm publication of the host: goal `isolate-host-npm-delivery`
+  (draft, user-deferred).
+- Directions (not fitted): D's sandbox `env`/`cwd`/`stdin` and shell syntax; E — guest
   Web API shim (URL, structuredClone, web streams, AbortController, EventTarget — requirements'
   shim list, ceilings in A; ESM entries need `URL` too); F — Node-faithful `node file.js`
   diagnostics (runtime-js, its own goal). Also: an `AbortSignal` option of `runCode` (done for a

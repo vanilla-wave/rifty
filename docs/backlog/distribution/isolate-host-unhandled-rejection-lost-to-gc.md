@@ -86,6 +86,10 @@ Upstream: https://github.com/laverdet/isolated-vm/issues/589 (filed 2026-11-19 b
   fixing https://github.com/laverdet/isolated-vm/issues/589 (bump the pin, promote the ceiling rows, delete this
   item), or a user decision for the fork.
 
+## Decisions
+
+- 2026-11-25 — user: no upstream PR to isolated-vm for now («…кроме отправления [PR в isolated-vm], а его пока не отправляем»); stays declared ⚠️; the agent tools' `run_node` text and the examples recommend `.catch` (`epics/isolate-host-agent-tools`).
+
 ## Challenge
 
 challenge: 2026-11-19 — finding capture; no premise critic (README §Challenge)
