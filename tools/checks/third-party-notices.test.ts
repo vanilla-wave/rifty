@@ -6,6 +6,7 @@ import {
   LINK,
   NOTICES,
   collect,
+  publishableDirs,
   render,
   unusedRecords,
   validateManifest,
@@ -183,14 +184,13 @@ describe('closed by default (review S1, S2)', () => {
     ]);
   });
 
-  it('S2: a manifest record no package used → red (npm, generated, firstParty)', () => {
+  it('S2: a manifest record no package used → red (npm, generated; firstParty is checked statically)', () => {
     const used = collect(root, 'pkg', manifest, inputs).used;
     expect(unusedRecords(manifest, [used])).toEqual(['npm bare@2.0.0']);
     const all = collect(root, 'pkg', manifest, { 'dist/a.js': ['pkg/src/a.ts'] }).used;
     expect(unusedRecords(manifest, [all])).toEqual([
       'npm bare@2.0.0',
       'generated pkg/src/generated',
-      'firstParty pkg/src/own/generated/ids.json',
     ]);
   });
 
@@ -262,15 +262,6 @@ describe('one accounting rule for every packed file (review 2)', () => {
 });
 
 describe('manifest records work or are red (review 2)', () => {
-  it('S3: a generated record whose version is not in its sources.json → red', () => {
-    put('pkg/src/generated/sources.json', JSON.stringify({ version: '1.0.0' }));
-    expect(validateManifest(root, manifest)).toEqual([]);
-    put('pkg/src/generated/sources.json', JSON.stringify({ node: 'v24.16.0' }));
-    expect(validateManifest(root, manifest)).toEqual([
-      'third-party-manifest generated pkg/src/generated: version 1.0.0 is not in its sources.json',
-    ]);
-  });
-
   it('S4: a record that adds no license text → red; ghost file; firstParty also in a generated record', () => {
     const m = {
       generated: {
@@ -301,12 +292,12 @@ describe('manifest records work or are red (review 2)', () => {
 
   it('the real manifest validates; a mutated Node version or emptied licenseFiles → red', () => {
     const real = JSON.parse(readFileSync('tools/publishing/third-party-manifest.json', 'utf8'));
-    expect(validateManifest(process.cwd(), real)).toEqual([]);
+    expect(validateManifest(process.cwd(), real, publishableDirs(process.cwd()))).toEqual([]);
     const dir = 'packages/runtime-js/src/builtins/url-legacy/generated';
     const bumped = structuredClone(real);
     bumped.generated[dir].version = 'v24.99.0';
     expect(validateManifest(process.cwd(), bumped)).toEqual([
-      `third-party-manifest generated ${dir}: version v24.99.0 is not in its sources.json`,
+      `third-party-manifest generated ${dir}: version v24.99.0 is not sources.json "node" (v24.16.0)`,
     ]);
     const emptied = structuredClone(real);
     emptied.generated[dir].licenseFiles = [];
@@ -314,6 +305,106 @@ describe('manifest records work or are red (review 2)', () => {
     expect(validateManifest(process.cwd(), emptied)).toEqual([
       `third-party-manifest generated ${dir}: adds no license text`,
       'third-party-manifest npm pako@1.0.11: adds no license text',
+    ]);
+  });
+});
+
+describe('closed list of packed-file categories (review 3)', () => {
+  const NOT = 'not accounted — no bundler input list and not an own build output';
+  it('(a) a recorded input list anywhere in the package is never overwritten', () => {
+    const recorded = { ...inputs, 'bin/cli.js': ['node_modules/dep/index.js'] };
+    const own = { 'dist/b.js': inputs['dist/b.js'], 'bin/cli.js': ['node_modules/dep/index.js'] };
+    expect(built(own, { 'dist/b.js': 'x', 'bin/cli.js': 'x' })().violations).toContain(
+      '@riftydev/pkg dist/THIRD_PARTY_NOTICES.md missing from the tarball',
+    );
+    expect(built(recorded, { ...files(), 'bin/cli.js': `${LINK}\nx` })().violations).toEqual([]);
+  });
+
+  it('(b) metadata only by fixed name at the package root; any other packed file → red', () => {
+    const meta = {
+      'package.json': '{}',
+      'README.md': '',
+      'CHANGELOG.md': '',
+      LICENSE: '',
+      'THIRD_PARTY_NOTICES.md': '',
+    };
+    expect(built(inputs, { ...files(), ...meta })().violations).toEqual([]);
+    expect(
+      built(inputs, { ...files(), 'docs/README.md': '', 'bin/x.js': '' })().violations,
+    ).toEqual([`@riftydev/pkg docs/README.md: ${NOT}`, `@riftydev/pkg bin/x.js: ${NOT}`]);
+  });
+
+  it('(d) a map only next to its packed, accounted file (.js/.cjs/.mjs)', () => {
+    const more = { ...inputs, 'dist/c.cjs': ['pkg/src/a.ts'] };
+    const f = {
+      ...files(),
+      'dist/a.js.map': '{}',
+      'dist/c.cjs': 'x',
+      'dist/c.cjs.map': '{}',
+      'dist/ghost.js.map': '{}',
+    };
+    expect(built(more, f)().violations).toEqual([`@riftydev/pkg dist/ghost.js.map: ${NOT}`]);
+  });
+
+  it('(e) only declarations reach declarations: an own .d.ts importing ./x.json does not own it', () => {
+    const f = {
+      ...files(),
+      'dist/a.d.ts': "export type J = typeof import('./x.json');",
+      'dist/x.json': '{}',
+    };
+    expect(built(inputs, f)().violations).toEqual([`@riftydev/pkg dist/x.json: ${NOT}`]);
+  });
+
+  it('(c) every file of a vendor/generated dir is in a record or firstParty, any extension', () => {
+    put('pkg/src/generated/up.LICENSE', 'MIT');
+    put('pkg/src/vendor/review-x.d.ts', 'export {};');
+    const m = {
+      ...manifest,
+      generated: {
+        'pkg/src/generated': {
+          ...manifest.generated['pkg/src/generated'],
+          files: ['up.js', 'up.LICENSE'],
+        },
+      },
+    };
+    expect(validateManifest(root, m, ['pkg'])).toEqual([
+      'third-party-manifest: pkg/src/vendor/review-x.d.ts is in no record and not firstParty',
+    ]);
+  });
+});
+
+describe('manifest records (review 3)', () => {
+  it('an npm record needs non-empty licenseFiles with non-empty texts', () => {
+    put('licenses/empty.LICENSE', '');
+    const m = {
+      ...manifest,
+      npm: { 'bare@2.0.0': {}, 'dep@3.1.0': { licenseFiles: ['licenses/empty.LICENSE'] } },
+    };
+    expect(validateManifest(root, m, [])).toEqual([
+      'third-party-manifest npm bare@2.0.0: adds no license text',
+      'third-party-manifest npm dep@3.1.0: adds no license text',
+    ]);
+  });
+
+  it('a generated version is compared with one named key of sources.json', () => {
+    put('pkg/src/generated/sources.json', JSON.stringify({ version: '0.28.0', node: 'v24.16.0' }));
+    const at = (version: string, sourcesKey?: string) => ({
+      ...manifest,
+      generated: {
+        'pkg/src/generated': {
+          ...manifest.generated['pkg/src/generated'],
+          files: ['up.js', 'sources.json'],
+          version,
+          sourcesKey,
+        },
+      },
+    });
+    expect(validateManifest(root, at('v24.16.0', 'node'), [])).toEqual([]);
+    expect(validateManifest(root, at('0.28.0', 'node'), [])).toEqual([
+      'third-party-manifest generated pkg/src/generated: version 0.28.0 is not sources.json "node" (v24.16.0)',
+    ]);
+    expect(validateManifest(root, at('0.28.0'), [])).toEqual([
+      'third-party-manifest generated pkg/src/generated: has sources.json but no sourcesKey',
     ]);
   });
 });
