@@ -81,7 +81,8 @@ describe('zlib-engine under wasm memory exhaustion', () => {
     expect(errors.length).toBe(1);
     const [message, errno, code] = errors[0] ?? [];
     expect({ errno, code }).toEqual({ errno: zlib.constants.Z_MEM_ERROR, code: 'Z_MEM_ERROR' });
-    expect(['Zlib error', 'insufficient memory']).toContain(message);
+    // deflateInit2_: the state fits, its window does not → zlib's own ERR_MSG(Z_MEM_ERROR).
+    expect(message).toBe('insufficient memory');
     for (const h of opened) h.close();
     for (const b of blocks) engine.free(b);
     const after: unknown[][] = [];

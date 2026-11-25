@@ -23,6 +23,7 @@
   },
   "binaryen": {
     "release": "version_133",
+    "node": "v24.16.0",
     "url": "https://github.com/WebAssembly/binaryen/releases/download/version_133/binaryen-version_133-node.tar.gz",
     "sha256": "3507aedecef25c46f2889530a7da304677e97122869274125f782b586cb508ab"
   },

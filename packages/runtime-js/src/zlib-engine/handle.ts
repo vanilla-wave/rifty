@@ -63,6 +63,10 @@ interface CompressionError {
   err: number;
 }
 
+/** V8's Uint32Value / Int32Value: ToNumber (a BigInt or Symbol throws TypeError), then wrap. */
+const u32 = (v: unknown): number => +(v as number) >>> 0;
+const i32 = (v: unknown): number => +(v as number) | 0;
+
 /** Buffer::Data/Length of an ArrayBufferView: its bytes, never its elements. */
 function viewBytes(view: ArrayBufferView): Uint8Array {
   return new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
@@ -81,6 +85,25 @@ class ZlibContext {
   private windowBits = 0;
   private gzipIdBytesRead = 0;
   private dictionary: Uint8Array = new Uint8Array(0);
+  /**
+   * Port-only wasm copies of the caller's buffers. They live between writes, as Node's z_stream
+   * keeps pointing into the caller's buffers: `params` may flush into the previous `out`, and the
+   * continuation write lib/zlib.js issues for the rest of an input (same buffer, starting where zlib
+   * stopped, same end) reuses the copy — one copy per input, not per call. Any other write copies
+   * afresh, so a buffer refilled after its write completed is read anew.
+   */
+  private inCopy: {
+    ptr: number;
+    cap: number;
+    buffer: ArrayBufferLike | null;
+    start: number;
+    end: number;
+    /** byteOffset where the last write's unconsumed input begins. */
+    next: number;
+  } = { ptr: 0, cap: 0, buffer: null, start: 0, end: 0, next: -1 };
+  private outCopy = { ptr: 0, cap: 0 };
+  /** The caller's `out` of the last write: where zlib's next_out points, in JS. */
+  private outView: Uint8Array | null = null;
 
   constructor(
     private readonly engineOf: () => ZlibEngine,
@@ -148,11 +171,54 @@ class ZlibContext {
   }
 
   private release(): void {
-    if (this.strm !== 0) this.engine.free(this.strm);
+    if (this.strm === 0 && this.inCopy.ptr === 0 && this.outCopy.ptr === 0) return;
+    const e = this.engine;
+    for (const ptr of [this.strm, this.inCopy.ptr, this.outCopy.ptr]) if (ptr !== 0) e.free(ptr);
     this.strm = 0;
+    this.inCopy = { ptr: 0, cap: 0, buffer: null, start: 0, end: 0, next: -1 };
+    this.outCopy = { ptr: 0, cap: 0 };
+    this.outView = null;
   }
 
-  /** SetBuffers + SetFlush + DoThreadPoolWork + GetAfterWriteOffsets over wasm copies. */
+  /** Wasm address of `bytes` (a view of the caller's input): the kept copy on a continuation. */
+  private inputAddress(bytes: Uint8Array): number {
+    const c = this.inCopy;
+    const start = bytes.byteOffset;
+    const end = start + bytes.byteLength;
+    if (c.buffer === bytes.buffer && start === c.next && end === c.end)
+      return c.ptr + (start - c.start);
+    const e = this.engine;
+    if (bytes.byteLength > c.cap) {
+      const ptr = e.malloc(bytes.byteLength);
+      if (c.ptr !== 0) e.free(c.ptr);
+      this.inCopy = { ptr, cap: bytes.byteLength, buffer: null, start: 0, end: 0, next: -1 };
+    }
+    e.heap().set(bytes, this.inCopy.ptr);
+    Object.assign(this.inCopy, { buffer: bytes.buffer, start, end });
+    return this.inCopy.ptr;
+  }
+
+  private outputAddress(size: number): number {
+    if (size > this.outCopy.cap || this.outCopy.ptr === 0) {
+      const e = this.engine;
+      const ptr = e.malloc(Math.max(size, 1));
+      if (this.outCopy.ptr !== 0) e.free(this.outCopy.ptr);
+      this.outCopy = { ptr, cap: Math.max(size, 1) };
+    }
+    return this.outCopy.ptr;
+  }
+
+  /** deflate's bytes since next_out was `from` → the caller's last `out` (C writes there directly). */
+  private copyOut(from: number): void {
+    const to = this.engine.u32(this.strm + ZS.nextOut);
+    if (this.outView === null || to <= from) return;
+    this.outView.set(this.engine.heap().subarray(from, to), from - this.outCopy.ptr);
+  }
+
+  /**
+   * SetBuffers + SetFlush + DoThreadPoolWork + GetAfterWriteOffsets over the wasm copies. A null
+   * pointer where Node's would be one: no input, or a buffer over an empty ArrayBuffer.
+   */
   work(
     flush: number,
     input: Uint8Array | null,
@@ -160,23 +226,26 @@ class ZlibContext {
   ): { availIn: number; availOut: number } {
     this.stream();
     const e = this.engine;
-    const inPtr = input === null ? 0 : e.copyIn(input);
-    let outPtr = 0;
-    try {
-      outPtr = e.malloc(Math.max(out.byteLength, 1));
-      e.setU32(this.strm + ZS.nextIn, inPtr);
-      e.setU32(this.strm + ZS.availIn, input === null ? 0 : input.byteLength);
-      e.setU32(this.strm + ZS.nextOut, outPtr);
-      e.setU32(this.strm + ZS.availOut, out.byteLength);
-      this.flush = flush;
-      this.doThreadPoolWork();
-      const availOut = e.u32(this.strm + ZS.availOut);
-      out.set(e.heap().subarray(outPtr, outPtr + out.byteLength - availOut));
-      return { availIn: e.u32(this.strm + ZS.availIn), availOut };
-    } finally {
-      if (inPtr !== 0) e.free(inPtr);
-      if (outPtr !== 0) e.free(outPtr);
-    }
+    const inPtr =
+      input === null || input.buffer.byteLength === 0 || input.byteLength === 0
+        ? 0
+        : this.inputAddress(input);
+    const outPtr = out.buffer.byteLength === 0 ? 0 : this.outputAddress(out.byteLength);
+    this.outView = outPtr === 0 ? null : out;
+    // zlib may write anywhere in the window it is given (inflate past next_out before an error):
+    // it starts as the caller's bytes and goes back whole.
+    if (outPtr !== 0) e.heap().set(out, outPtr);
+    e.setU32(this.strm + ZS.nextIn, inPtr);
+    e.setU32(this.strm + ZS.availIn, input === null ? 0 : input.byteLength);
+    e.setU32(this.strm + ZS.nextOut, outPtr);
+    e.setU32(this.strm + ZS.availOut, out.byteLength);
+    this.flush = flush;
+    this.doThreadPoolWork();
+    if (outPtr !== 0) out.set(e.heap().subarray(outPtr, outPtr + out.byteLength));
+    const availIn = e.u32(this.strm + ZS.availIn);
+    this.inCopy.next =
+      inPtr === 0 || input === null ? -1 : input.byteOffset + input.byteLength - availIn;
+    return { availIn, availOut: e.u32(this.strm + ZS.availOut) };
   }
 
   private doThreadPoolWork(): void {
@@ -299,8 +368,11 @@ class ZlibContext {
     if (firstInitCall && this.err !== Z_OK)
       return this.errorForMessage('Failed to init stream before set parameters');
     this.err = Z_OK;
-    if (this.mode === DEFLATE || this.mode === DEFLATERAW)
-      this.err = this.engine.x.deflateParams(this.strm, level, strategy);
+    if (this.mode === DEFLATE || this.mode === DEFLATERAW) {
+      const from = this.engine.u32(this.strm + ZS.nextOut);
+      this.err = this.engine.x.deflateParams(this.strm, level, strategy); // may deflate(Z_BLOCK)
+      this.copyOut(from);
+    }
     if (this.err !== Z_OK && this.err !== Z_BUF_ERROR)
       return this.errorForMessage('Failed to set parameters');
     return null;
@@ -339,8 +411,8 @@ class ZlibContext {
       this.mode = NONE;
       return true;
     }
+    this.zlibInitDone = true; // before the dictionary's wasm copy, whose RangeError must not undo it
     this.setDictionary(); // InitZlib ignores the result: err_ stays set, the write reports it
-    this.zlibInitDone = true;
     return true;
   }
 
@@ -463,16 +535,19 @@ export function createZlibBinding(
       writeCallback: () => void,
       dictionary: unknown,
     ): void {
+      const [wb, lv, ml, st] = [u32(windowBits), i32(level), u32(memLevel), u32(strategy)];
       check(writeResult instanceof Uint32Array && writeResult.length >= 2, 'writeResult');
       check(typeof writeCallback === 'function', 'writeCallback');
       const dict = ArrayBuffer.isView(dictionary)
         ? viewBytes(dictionary).slice()
         : new Uint8Array(0);
-      this.writeResult = writeResult;
+      // Node writes the result at the start of the array's ArrayBuffer (`ab->Data()`).
+      this.writeResult = new Uint32Array(writeResult.buffer, 0, 2);
       this.writeCallback = writeCallback;
       this.initDone = true;
-      this.ctx = new ZlibContext(getEngine, this.mode);
-      this.ctx.init(level | 0, windowBits >>> 0, memLevel >>> 0, strategy >>> 0, dict);
+      // A second init() re-reads the options into the same context: the zlib stream continues.
+      this.ctx ??= new ZlibContext(getEngine, this.mode);
+      this.ctx.init(lv, wb, ml, st, dict);
     }
 
     close(): void {
@@ -495,7 +570,7 @@ export function createZlibBinding(
     }
 
     params(level: number, strategy: number): void {
-      const err = this.context().setParams(level | 0, strategy | 0);
+      const err = this.context().setParams(i32(level), i32(strategy));
       if (err) this.emitError(err);
     }
 
@@ -515,19 +590,21 @@ export function createZlibBinding(
       check(args.length === 7, 'write(flush, in, in_off, in_len, out, out_off, out_len)');
       const [flushArg, input, inOff, inLen, out, outOff, outLen] = args;
       check(flushArg !== undefined, 'must provide flush value');
-      const flush = Number(flushArg) >>> 0;
+      const flush = u32(flushArg);
       check(FLUSHES.has(flush), 'Invalid flush value');
       let inView: Uint8Array | null = null;
       if (input !== null) {
         check(ArrayBuffer.isView(input), 'input is not a buffer');
         const bytes = viewBytes(input);
-        const [off, len] = [inOff >>> 0, inLen >>> 0];
+        const off = u32(inOff);
+        const len = u32(inLen);
         check(off + len <= bytes.byteLength, 'input out of bounds');
         inView = bytes.subarray(off, off + len);
       }
       check(ArrayBuffer.isView(out), 'output is not a buffer');
       const outBytes = viewBytes(out);
-      const [oOff, oLen] = [outOff >>> 0, outLen >>> 0];
+      const oOff = u32(outOff);
+      const oLen = u32(outLen);
       check(oOff + oLen <= outBytes.byteLength, 'output out of bounds');
       const outView = outBytes.subarray(oOff, oOff + oLen);
 
@@ -550,8 +627,11 @@ export function createZlibBinding(
         this.writeInProgress = false;
         if (!this.checkError()) return;
         this.updateWriteResult(after);
-        (this.writeCallback as () => void).call(this);
-        if (this.pendingClose) this.close();
+        try {
+          (this.writeCallback as () => void).call(this);
+        } finally {
+          if (this.pendingClose) this.close();
+        }
       });
     }
 
@@ -578,10 +658,14 @@ export function createZlibBinding(
       return false;
     }
 
+    /** MakeCallback(onerror): Node runs the rest even when onerror throws. */
     private emitError(err: CompressionError): void {
-      this.onerror?.call(this, err.message, err.err, err.code);
-      this.writeInProgress = false; // no hope of rescue
-      if (this.pendingClose) this.close();
+      try {
+        this.onerror?.call(this, err.message, err.err, err.code);
+      } finally {
+        this.writeInProgress = false; // no hope of rescue
+        if (this.pendingClose) this.close();
+      }
     }
   }
 
@@ -590,6 +674,7 @@ export function createZlibBinding(
     crc32(data, value) {
       check(ArrayBuffer.isView(data) || typeof data === 'string', 'crc32 data');
       check(Number.isInteger(value) && value >= 0 && value <= 0xffffffff, 'crc32 value');
+      // Utf8Value: lone surrogates → U+FFFD, as TextEncoder.
       const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : viewBytes(data);
       return getEngine().crc32(bytes, value);
     },

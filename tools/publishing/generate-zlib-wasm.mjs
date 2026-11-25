@@ -358,6 +358,11 @@ async function check() {
 
 if (mode === '--check') await check();
 else {
+  // wasm-opt.js runs on this Node: part of the toolchain, pinned like the rest (the oracle's Node).
+  if (process.version !== pins.binaryen.node)
+    throw new Error(
+      `zlib-wasm ${mode}: needs Node ${pins.binaryen.node} (wasm-opt's runtime), running ${process.version}`,
+    );
   const out = await render();
   const sources = JSON.parse(out[join(GEN, 'sources.json')]);
   if (mode === '--write') {

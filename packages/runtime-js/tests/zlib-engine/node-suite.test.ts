@@ -1,9 +1,9 @@
 /**
  * Unit 2 Acceptance 2 (ADR-0573), suite half: Node v24.16.0's own deflate-family
  * `test/parallel/test-zlib*.js` (47; brotli/zstd out of scope), each in its own Node process with
- * `binding.Zlib` swapped for the product handle (swap-binding.cjs) under Node's own lib/zlib.js and
- * `stream.Transform`. Every file passes; the files that write through a handle are counted, not
- * assumed (the probe: 36 write, 8 open a handle and never write, 3 open none).
+ * `binding.Zlib` and `binding.crc32` swapped for the product's (swap-binding.cjs), under Node's own
+ * lib/zlib.js and `stream.Transform`. Every file passes; the files that write through a handle are
+ * counted, not assumed (36 write; `test-zlib-crc32.js` calls the product's crc32).
  */
 import { execFile } from 'node:child_process';
 import { cpSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
@@ -42,7 +42,9 @@ const NO_WRITE = [
 ];
 
 let serial = 0;
-function run(file: string): Promise<{ file: string; ok: boolean; why: string; writes: number }> {
+function run(
+  file: string,
+): Promise<{ file: string; ok: boolean; why: string; writes: number; crcs: number }> {
   const src = readFileSync(join(dir, file), 'utf8');
   const flags = (src.match(/^\/\/ Flags: (.*)$/m)?.[1] ?? '').split(/\s+/).filter(Boolean);
   const id = ++serial;
@@ -60,16 +62,18 @@ function run(file: string): Promise<{ file: string; ok: boolean; why: string; wr
       { cwd: root, env, timeout: 180_000, maxBuffer: 64 << 20 },
       (err, _out, stderr) => {
         let writes = 0;
+        let crcs = 0;
         try {
-          writes = readFileSync(trace, 'utf8')
-            .split('\n')
-            .filter(Boolean)
-            .reduce((a, n) => a + Number(n), 0);
+          for (const line of readFileSync(trace, 'utf8').split('\n').filter(Boolean)) {
+            const [w, c] = line.split(' ').map(Number);
+            writes += w ?? 0;
+            crcs += c ?? 0;
+          }
         } catch {}
         const why = err
           ? (stderr.split('\n').find((l) => /Error|assert|not ok/.test(l)) ?? `exit ${err.code}`)
           : '';
-        res({ file, ok: !err, why: why.trim().slice(0, 200), writes });
+        res({ file, ok: !err, why: why.trim().slice(0, 200), writes, crcs });
       },
     );
   });
@@ -96,5 +100,7 @@ describe("Node v24.16.0's deflate-family test-zlib*.js over the product handle",
     expect(results.filter((r) => !r.ok).map((r) => `${r.file}: ${r.why}`)).toEqual([]);
     expect(results.filter((r) => r.writes === 0).map((r) => r.file)).toEqual(NO_WRITE);
     expect(results.filter((r) => r.writes > 0).length).toBe(36);
+    // test-zlib-crc32.js goes through lib/zlib.js's binding.crc32: the product's.
+    expect(results.find((r) => r.file === 'test-zlib-crc32.js')?.crcs).toBeGreaterThan(0);
   });
 });

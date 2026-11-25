@@ -86,12 +86,15 @@ own `lib/zlib.js` also runs on each engine via a swapped `binding.Zlib`.
    `wasm-opt -O3` as its own step, both sha256-pinned in `runtime-js/src/zlib-engine/generated/
    sources.json`, run with an empty environment (clang's driver runs any `wasm-opt` on PATH — the
    probe's «raw» build already had Homebrew's); 63202 B, sha256 `f40cd936…`, equal on darwin-arm64,
-   linux-arm64, linux-x64; CI: `zlib-wasm:rebuild` in `unit-and-conformance`/`run`. Licence:
-   `generated/LICENSE` until PR #445's manifest is on `main`.
+   linux-arm64, linux-x64; no pin for darwin-x64 or Windows (the generator refuses them by name);
+   wasm-opt.js runs on the pinned Node v24.16.0. CI: `zlib-wasm:rebuild` in `unit-and-conformance`/
+   `run`. Licence: `generated/LICENSE`, and the PR #445 manifest entry when this PR, held, is brought
+   up to `main` before its final ready.
 2. Placement: runtime-js, shared by every host (browser Workers and the isolate guest bundle). The engine
    and the handle enter the bundles in unit 3, with `lib/zlib.js` and `crc32` (manager 2026-11-24,
    round 3: shipping the engine earlier for `crc32` alone would put ≈ 24 KB gzip of deflate/inflate
-   without a caller into every bundle against ≈ 15 KB of generic headroom — §Simplicity); unit 2 builds
+   without a caller into every bundle against ≈ 15 KB of generic headroom at the probe, 4.3 KB measured
+   2026-11-25 (§8) — §Simplicity); unit 2 builds
    and proves them unbundled, and its merge is held until unit 3 can follow. Inline
    bytes (base64), compiled synchronously on the first `node:zlib` call that needs the engine, never at
    module load (the SDK page imports the builtins on the main thread, where Chromium 108 refuses sync
@@ -125,9 +128,14 @@ own `lib/zlib.js` also runs on each engine via a swapped `binding.Zlib`.
    (ADR-0351/0352; in browser Workers both `installNodeRuntime` and `worker-entry.ts`'s boot would
    need it); pako (Alternatives). None of the three is measured; unit 3 measures the first before
    wiring the engine.
-   Correction 2026-11-25 (unit 2): wasm-opt stays — inline base64 gzips to 36541 B without it, 34954 B
-   with (≈ 1.6 KB per bundle, ≈ 10 % of the headroom). Main's generic baseline is now 288027 B gzip
-   (was 279754): ≈ 7 KB would be left after the engine at the probe's +36950 B, before the port.
+   Correction 2026-11-25 (unit 2; `main` c2d03ce05 with this unit's engine + handle + wasm wired into
+   the eager `zlib` builtin for one build): generic 288027 → 327680 B gzip (+39653, min +95161), 4320 B
+   left under 332000 before Node's `lib/zlib.js` (≈ 8.5 KB gzip unminified, probe) minus today's
+   `zlib.ts` — ≈ 4 KB short: this kill condition fires in unit 3; toolchain 331575 → 370684 (+39109,
+   15316 left). wasm-opt is part of it: inline base64 36541 B gzip without, 34954 B with (≈ 1.6 KB,
+   ≈ 37 % of what is left). The manager put the budget to the user 2026-11-25 (re-derive the cap by
+   its own ×1.5 rule / the engine as a separate file / pako); no answer yet — unit 3 does not start
+   without it.
 
 ## Alternatives
 
@@ -153,8 +161,8 @@ own `lib/zlib.js` also runs on each engine via a swapped `binding.Zlib`.
 
 - (+) One engine, one byte stream on every host, by construction Node's; zlib updates follow Node's.
 - (+) The rest of the goal is a port of Node's own JS/C++ logic, testable against Node's own suite.
-- (−) +37 KB gzip in client bundles for the engine alone (15 KB left under the generic cap before the
-  port); a vendored binary whose toolchain unit 2 pins; manual free of zlib state; linear memory never
+- (−) +39.7 KB gzip in the client generic bundle for engine + handle (4.3 KB left under its cap before
+  the port, §8); a vendored binary whose toolchain unit 2 pins; manual free of zlib state; linear memory never
   shrinks; async calls block the realm's loop.
 - (−) Order: everything guest-visible in `node:zlib`, `crc32` included, waits for the streams goal's
   core (map); until then main's behaviour stays per host. Units 2 and 3 merge back to back.
