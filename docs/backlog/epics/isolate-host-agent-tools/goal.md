@@ -53,3 +53,4 @@ challenge: pending
 
 - 2026-11-17 — user: «согласен» to «Файловые инструменты в перспективе: никакой второй независимой реализации; нужен общий набор инструментов, адаптированный под выбранный движок» (wrap-up 2026-11-17 :113) — the tools are one core shared with `@riftydev/agent`, adapted per host, never a second copy.
 - 2026-11-24 — agent: the core is a new package with no Pi / workbench / sdk / browser dependency (requirements §4), which `@riftydev/agent` and the isolate-host adapter both use; a subpath of `@riftydev/isolate-host` would make the browser agent install isolated-vm. It is a third new npm name (`epics/isolate-host-npm-delivery`: first publication with a token). The name is set at FIT.
+- 2026-11-25 — user: «…оставим как есть» (killed-run writes, template goal F4) — `run_node`'s text for `termination` / an abort says the process was killed and its run's writes were rolled back.

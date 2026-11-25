@@ -33,8 +33,6 @@ hypothesis until the carrier hits it:
 - Mount point: `/node_modules` or `/workspace/node_modules`; the artifact's `payload/package.json`
   and lock visible or not — owner: user — both resolve as Node (probe M); what the agent sees in its
   cwd differs.
-- A killed run's writes (`timeout`, `memory`, abort): kept as Node or rolled back — owner: user —
-  answered once for this goal, the agent tools' texts and `exec`'s `signal`.
 - Guest-side cache of template stats/bytes during a run (pdf-lib's `require`: ~6 200 stats, 915
   reads → +100 ms in probe L without one; `fs.readSync` reads the whole file per call) — owner:
   agent — settled by the carrier's timing against the cost invariant.

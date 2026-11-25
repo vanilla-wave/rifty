@@ -13,8 +13,6 @@ killed-run decision.
   `list_files`, the changed-paths field) — owner: agent — settled when it lands. `exec`'s `signal`
   for `execute(args, signal)`: landed, PR #431 (`AbortError` as Node; the state after an abort is
   the killed-run rule).
-- The killed-run text: «the writes of this run were rolled back» or «kept» — owner: user — asked in
-  the template goal (one answer for both).
 - «Ложный успех по коду выхода» (exit 0 where Node exits 1: GC-collected rejection, a rejection in an
   `'exit'` listener, the guest's replaced intrinsics): fix the cases, or the `run_node` description
   and the examples recommend `.catch(e => { console.error(e); process.exitCode = 1 })` and the host

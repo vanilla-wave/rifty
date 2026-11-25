@@ -91,7 +91,7 @@ Proposed; F1–F4 (§Forks) are the user's, the rest follows from the requiremen
   would both have to be primordial-safe — a class audit (`runtime-js/post-guest-paths-use-replaceable-intrinsics`).
 - **F2 — template files writable (copy-on-write, deletions in the format) or read-only (`EROFS`).**
 - **F3 — mount `/node_modules` or `/workspace/node_modules`; `payload/package.json`/lock visible.**
-- **F4 — a killed run's writes: kept as Node, or rolled back (documented, the tools say so).**
+- **F4 — a killed run's writes: kept as Node, or rolled back (documented, the tools say so).** Answered 2026-11-25: rolled back (goal Decisions).
   Keeping needs (c) (or a write journal to the worker); even then a lost worker loses them.
 
 ## Trust (what F1 changes in recorded decisions)

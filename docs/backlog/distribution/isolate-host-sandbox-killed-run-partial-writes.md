@@ -20,6 +20,19 @@ after writing its output loses that output today.
 
 Owner: distribution (isolate host). Trigger: a consumer needing a killed run's output (a model that loops after writing it), or a worker-side capture becoming available.
 
+Measured route (template goal, 2026-11-24, ADR-0572 §Forks F1 (c);
+`reference/isolate-host-sandbox-template-probes/` arm `worker`): the worker owns the run's whole
+FS, every guest `fs` call is one sync host call, so a killed isolate leaves its writes in the
+worker — keepable (a lost worker still loses them). Its costs: ~11 exposed host functions with
+guest-chosen paths and bytes, chunked I/O on the agent's files quadratic across the bridge until
+`FsSync` gains ranged operations (8 MiB: 259 vs 64 ms, 541 MB copied), the state cap moving to the
+write (`ENOSPC`), an amendment of the live-sandbox Outcome «The files stay rifty's in-memory
+filesystem in the guest's own realm».
+
+## Decisions
+
+- 2026-11-25 — user (asked F4 «записи убитого прогона: сохранять как Node или откат + текст инструмента», scenario «генератор записал `out.pptx` и завис → `timeout` → `out.pptx` пропадает»): «Давай запишем бэклок, но пока делать не будем. И оставим как есть.» — rollback stays (ADR-0568 §3, compat ⚠️); `run_node` says the run's writes were rolled back (`epics/isolate-host-agent-tools`); this item stays draft, its trigger unchanged.
+
 ## Challenge
 
 challenge: 2026-11-23 — none yet (factual capture, live-sandbox goal, ADR-0568)
