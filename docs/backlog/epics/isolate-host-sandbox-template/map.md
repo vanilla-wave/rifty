@@ -9,7 +9,7 @@ the carrier hits it:
 
 1. Acceptance carrier — the User scenario as an e2e over a real `produceDependencySnapshot`
    artifact of the four libraries (published `@riftydev/workbench`, as the library probe), committed
-   RED (`it.fails`), I1–I9.
+   RED (`it.fails`), I1–I10.
 2. Binary request frame (absorbs `distribution/isolate-host-binary-request-frame`): the template
    goes to a worker once, as bytes; base64 inside a JSON line is +33 % and a ~90 MB string.
 3. Template intake in the consumer: artifact → decoded template (gzip/br, ustar + PAX), named

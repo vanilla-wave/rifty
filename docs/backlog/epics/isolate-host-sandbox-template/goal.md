@@ -1,6 +1,6 @@
 ---
 kind: epic
-status: draft
+status: ready
 title: Isolate host sandbox template — libraries from a dependency artifact, mounted at /node_modules, outside the sandbox's state
 created: 2026-11-24
 value: A Node service starts every agent sandbox over one prebuilt `node_modules` (pptxgenjs, pdf-lib, docx, exceljs) from `produceDependencySnapshot`, held once per process and per worker, with only the sandbox's own changes moving per run and per host write.
@@ -120,6 +120,8 @@ challenge: 2026-11-24 — 9 problems (fresh critic on the requirements, earlier 
 9. Tools as a fresh subpath export would be a second implementation against the user's «никакой второй независимой реализации; нужен общий набор инструментов» — `epics/isolate-host-agent-tools` Decisions changed to one shared core.
 
 Reconsidered 2026-11-25 for the user's amendments (no persistence; F1 (a); both modes): the route is the user's informed choice between measured arms (critic findings 1–6 bear on (b)/(c), now deferred items); the switch from (b) to (a) is the agent's recommendation the user accepted with the cost in front of them, and the 2026-11-24 critic saw the measured `views` arm; premise reused.
+
+Final written-result check 2026-11-25 (fresh reviewer, goal/map/ADR-0572/new items with the requirements and the user's answers): 9 findings — I9 contradicted the deferred snapshot (fixed: live-sandbox I1–I8), scenario step 9 untraced (I10 added), identity/registry id (I1), stale texts and refs (fixed); recheck at 923e15568: one stale I# range (fixed), no new findings.
 
 ## Decisions
 
