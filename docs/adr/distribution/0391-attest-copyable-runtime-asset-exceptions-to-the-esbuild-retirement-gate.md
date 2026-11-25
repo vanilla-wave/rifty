@@ -35,13 +35,58 @@ new machinery; exact two compiler fingerprints — selected despite update cost.
 
 Existing path/reference/packlist/generated-client and gzip/base64 checks remain.
 Negative probes substitute real esbuild bytes under admitted names, mutate
-allowed WASM, add unknown inline WASM and exceed compiler limits. Hash-named
-imports can change the TypeScript worker fingerprint after ordinary runtime
-edits; that pin update stays explicit. No ADR is superseded.
+allowed WASM, add unknown inline WASM and exceed compiler limits. Since
+2026-11-24 the TypeScript worker pin excludes its hash-named sibling-chunk
+imports (§Corrections, with what it stops seeing), so ordinary runtime edits no
+longer re-pin. No ADR is superseded.
 
 - 2026-10-20 — upstream-twin runtime changes regenerate TypeScript-worker chunk imports; exact size stays 10,022,664 bytes. Pin refreshed; packed toolchain surface (15 first-party/73 external tarballs, Chromium agent/build) and retirement gate pass. No directory/size exemption added.
 - 2026-10-20 — file-stdout imports refresh that same 10,022,664-byte worker to SHA-256 `03b5b25a62685f215f32e2173a028bb04ec1d1e0a7ae4ee16e17dfd23f085725`; packed toolchain surface and exact retirement gate pass.
 ## Corrections
+
+- 2026-11-24 — TypeScript worker pin stops following runtime edits (user «ок»,
+  manager thread cf2ae711). Cost since 2026-11-21: 48 re-pin commits on 26 PRs;
+  of 27 conflicted main merges 11 hit the gate file (4 only it), 5 this ADR; 5
+  CI runs red only here; runtime PRs merged one at a time. Fact (main ± one-char
+  edit in runtime-js, vfs, kernel; #421 round 5 rebuilt): only the worker's
+  leading `import … "./chunk-HASH.js"` lines change (renamed; +30 bytes = one
+  added) and the `import("./module-loader-HASH.js")` hash; 15 main builds
+  10-20…11-24 (15 raw pins, 3 sizes) give one pin.
+  Rule (`compilerOutputPin`, opt-in per pin via `siblingImports`; the
+  `chunk-EMDIREKY.js` pin stays whole-file). Pinned: the worker body — all
+  after its leading imports — with hashes zeroed only for built siblings.
+  Header: only esbuild-form lines (`import "./chunk-XXXXXXXX.js";`,
+  `import {\n  a,\n  b as c\n} from "./chunk-XXXXXXXX.js";`) of chunks built in
+  `dist/assets`, at most 2048 bytes (3× the largest of 249 built workers and
+  15 main builds, 630–682 bytes); over → violation naming both sizes. A
+  rejected leading import line → its own violation, no pin printed (re-pinning
+  it would bring re-pins back): extend the form or fix the build. Each
+  check has a file it alone rejects: form — code or a tab inside `{…}`;
+  built sibling — `import "./chunk-NOPENOPE.js"`, body
+  `module-loader-NOPENOPE`; ceiling — 100 000 repeated bindings. Token-in-body
+  and no-repeat checks removed: under the ceiling they only narrowed an
+  already bounded channel. Compiler version, injected code, body size stay red
+  (unit mutants; real-build mutants in PR #447).
+  No longer seen (the price): the worker's linkage — which built siblings it
+  imports, in what order, which bindings. An esbuild chunk hash covers the
+  hashes it imports, so the old exact pin indirectly fixed the content of the
+  worker's whole transitive chunk graph, `module-loader` included; now those
+  siblings meet only their own checks (2 MB ceiling, WASM/base64/gzip, map
+  tokens), like any other entry's chunks. Red before, green now: a static
+  import of a new built sibling ≤2 MB with foreign runtime and no signature;
+  of the exempt 4.9 MB `chunk-EMDIREKY.js`; a swapped sibling exporting
+  `__commonJS`/`__toESM`; reordered imports (side-effect order); lines or
+  bindings that repeat, go unused, shadow a global (`Object`) or are keywords (invalid JS);
+  the `module-loader` hash pointing at another built one — all within 2048
+  header bytes.
+  Not reproduced on a real runtime edit: an alias or reordered worker header
+  (unit tests only).
+  Rejected: hash placeholder only (an added chunk line still re-pins); unsplit
+  worker build (copies runtime into the pinned body); source-map provenance
+  (rejected above). Re-pin only on the worker's own content (TypeScript,
+  ts-language-service, worker entry, esbuild or build config, a module moving
+  into/out of its body): copy the pin from the gate's violation, browser proof
+  in the PR, no ADR line. ADR line only when the admission rule changes.
 
 - 2026-10-20 — ADR-0541 native resource-fetch imports change the TypeScript
   worker fingerprint (+30 bytes); re-pin exact bytes/SHA only. Compiler chunk,
@@ -86,3 +131,4 @@ edits; that pin update stays explicit. No ADR is superseded.
 - 2026-11-24 — PR #438 isolate ceiling modules on top of #433 (runtime-js `zlib.constants` in Node's order and shape; `./internal` exports `ZLIB_CONSTANTS`/`ZLIB_CODES`): 10022716 bytes, SHA-256 `fc955d6dbbcf04b9d626298d74986e5c22b590aff51ee949b92ec3706dd000d1`. Exact pin only; ceilings and negative probes unchanged.
 - 2026-11-24 — PR #439 on top of #438 (runtime-js loader: a called/constructed computed global read checks its key at the read; beside `with` or a call of the identifier `eval` it keeps a load ceiling): 10022716 bytes, SHA-256 `ba692b20146bccd5db1b3099cb72f1845ba2c20f06e87392e445f353140fd634`. Exact pin only; ceilings and negative probes unchanged.
 - 2026-11-24 — PR #440 isolate `require` as Node `--no-require-module`, on top of #439 (runtime-js `declareNoEsmLoader`, `ERR_REQUIRE_ESM`, `process.features.require_module` getter, `import()` of an ES module rejects with the declared gap): 10022716 bytes, SHA-256 `3556c3cde751f727e88a242ca40c366cd2e568873beee1684cc84192f734fe49`. Exact pin only; ceilings and negative probes unchanged.
+- 2026-11-24 — legacy `node:url`/`querystring` port on top of #440 (runtime-js generated Node v24.16.0 `lib/url.js`/`lib/querystring.js`, ADR-0574, review rounds 1–2 included; only shared-chunk content changes): 10022716 bytes, SHA-256 `f1cc5b33b7b5b82a5d53aadc6d7650cdff48f5b255a85d9520ef325c161da2c0`. Exact pin only; ceilings and negative probes unchanged.

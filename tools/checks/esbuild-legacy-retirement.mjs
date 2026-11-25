@@ -100,9 +100,11 @@ const WORKBENCH_COMPILER_OUTPUTS = Object.freeze({
     bytes: 4_893_418,
     sha256: '39be666ac003c7361e9fbcd88abdda1ed51052350ade9b57b4d2716f1e296498',
   },
+  // Pinned without its leading sibling-chunk imports (`compilerOutputPin`).
   'typescript-worker.js': {
-    bytes: 10022716,
-    sha256: '3556c3cde751f727e88a242ca40c366cd2e568873beee1684cc84192f734fe49',
+    bytes: 10_022_034,
+    sha256: '86ab8d3db8bffe24d00b9404afddcdc51e4b5d5142fcff63cc80e81ee7fff842',
+    siblingImports: true,
   },
 });
 const WORKBENCH_WASM_OUTPUTS = Object.freeze({
@@ -232,14 +234,58 @@ function outputFiles(root) {
   return files;
 }
 
+// ADR-0391 §Corrections 2026-11-24: runtime edits rename, add or drop the worker's
+// leading sibling-chunk imports and rename hashed sibling specifiers; nothing else.
+// esbuild's emitted import forms (dist/assets, main 841fa5300), alias included.
+const BINDING = '[A-Za-z_$][\\w$]*(?: as [A-Za-z_$][\\w$]*)?';
+const SIBLING_CHUNK_IMPORT = new RegExp(
+  `import (?:\\{\\n(?:  ${BINDING},\\n)*  ${BINDING}\\n\\} from )?"\\./(chunk-[A-Z0-9]{8}\\.js)";\\n`,
+  'y',
+);
+const HASHED_SIBLING = /"\.\/([a-z][a-z-]*-)([A-Z0-9]{8})\.js"/gu;
+// 3× the largest header of 249 built workers and 15 main builds (630–682 bytes).
+const HEADER_MAX_BYTES = 2_048;
+
+/**
+ * Pin of an exempt compiler output (ADR-0391): whole bytes, or — given the built
+ * sibling names — the output without its leading esbuild-form imports of built
+ * sibling chunks, built sibling hashes zeroed (length kept). The caller bounds
+ * the unpinned header: raw size − pinned size ≤ HEADER_MAX_BYTES.
+ */
+export function compilerOutputPin(bytes, siblings = null) {
+  let pinned = bytes;
+  if (siblings !== null) {
+    const text = bytes.toString('latin1');
+    let start = 0;
+    SIBLING_CHUNK_IMPORT.lastIndex = 0;
+    for (let match = SIBLING_CHUNK_IMPORT.exec(text); match !== null && siblings.has(match[1]); ) {
+      start = SIBLING_CHUNK_IMPORT.lastIndex;
+      match = SIBLING_CHUNK_IMPORT.exec(text);
+    }
+    const body = text
+      .slice(start)
+      .replace(HASHED_SIBLING, (literal, name, hash) =>
+        siblings.has(`${name}${hash}.js`) ? `"./${name}00000000.js"` : literal,
+      );
+    pinned = Buffer.from(body, 'latin1');
+  }
+  return { bytes: pinned.byteLength, sha256: createHash('sha256').update(pinned).digest('hex') };
+}
+
 export function evaluateEsbuildBundleInventory(
   root,
   files = outputFiles(root),
   readOutput = (path) => readFileSync(`${root}/${path}`),
+  compilerOutputs = WORKBENCH_COMPILER_OUTPUTS,
 ) {
   if (files === null) return ['build outputs missing; run pnpm build:libs'];
   const violations = [];
   const generatedClients = [];
+  const siblings = new Set(
+    files
+      .filter((path) => path.startsWith(WORKBENCH_ASSET_ROOT))
+      .map((path) => path.slice(WORKBENCH_ASSET_ROOT.length)),
+  );
   for (const path of files) {
     const bytes = readOutput(path);
     const assetName = path.startsWith(WORKBENCH_ASSET_ROOT)
@@ -249,13 +295,36 @@ export function evaluateEsbuildBundleInventory(
     const wasm = assetName === null ? undefined : WORKBENCH_WASM_OUTPUTS[assetName];
     if (wasm?.bytes === bytes.byteLength && wasm.sha256 === digest) continue;
     if (path.endsWith('.wasm')) violations.push(`${path}: runtime wasm shipped in package output`);
-    // Only the two exact compiler artifacts bypass the original carrier ceiling.
-    const compiler = assetName === null ? undefined : WORKBENCH_COMPILER_OUTPUTS[assetName];
+    // Only the pinned compiler outputs bypass the 2 MB carrier ceiling.
+    const compiler = assetName === null ? undefined : compilerOutputs[assetName];
+    const pin =
+      compiler === undefined
+        ? undefined
+        : compilerOutputPin(bytes, compiler.siblingImports === true ? siblings : null);
+    const header = pin === undefined ? 0 : bytes.byteLength - pin.bytes;
     if (
       bytes.byteLength > MAX_PUBLISHED_OUTPUT_BYTES &&
-      (compiler?.bytes !== bytes.byteLength || compiler.sha256 !== digest)
+      (pin === undefined || compiler.bytes !== pin.bytes || compiler.sha256 !== pin.sha256)
     ) {
-      violations.push(`${path}: published output exceeds the exact 2 MB carrier ceiling`);
+      // A pin over an unadmitted header line would re-pin on every chunk change.
+      if (
+        compiler?.siblingImports === true &&
+        bytes.toString('latin1', header, header + 6) === 'import'
+      ) {
+        violations.push(
+          `${path}: leading import not in the admitted form (esbuild's, of a built chunk) — do not re-pin; extend the form or fix the build (ADR-0391)`,
+        );
+      } else {
+        const actual = pin === undefined ? '' : ` (compiler pin now ${JSON.stringify(pin)})`;
+        violations.push(
+          `${path}: published output exceeds the exact 2 MB carrier ceiling${actual}`,
+        );
+      }
+    }
+    if (header > HEADER_MAX_BYTES) {
+      violations.push(
+        `${path}: leading sibling imports are ${header} bytes, over the ${HEADER_MAX_BYTES}-byte header ceiling (ADR-0391)`,
+      );
     }
     const rawText = bytes.toString('utf8');
     const text =

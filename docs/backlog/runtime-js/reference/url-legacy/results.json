@@ -1,0 +1,1041 @@
+{
+  "node": "v24.16.0",
+  "report": {
+    "isolate": {
+      "differ": 1037,
+      "of": 1313,
+      "byFn": {
+        "parse": {
+          "cases": 436,
+          "differ": 436,
+          "differLax": 436,
+          "differLaxNoPath": 436
+        },
+        "format": {
+          "cases": 431,
+          "differ": 177,
+          "differLax": 177,
+          "differLaxNoPath": 177
+        },
+        "resolveObject": {
+          "cases": 223,
+          "differ": 223,
+          "differLax": 223,
+          "differLaxNoPath": 223
+        },
+        "resolve": {
+          "cases": 223,
+          "differ": 201,
+          "differLax": 201,
+          "differLaxNoPath": 201
+        }
+      },
+      "examples": [
+        {
+          "fn": "parse",
+          "args": ["//some_path"],
+          "node": {
+            "ok": {
+              "$proto": "Url",
+              "$keys": [
+                "protocol",
+                "slashes",
+                "auth",
+                "host",
+                "port",
+                "hostname",
+                "hash",
+                "search",
+                "query",
+                "pathname",
+                "path",
+                "href"
+              ],
+              "protocol": null,
+              "slashes": null,
+              "auth": null,
+              "host": null,
+              "port": null,
+              "hostname": null,
+              "hash": null,
+              "search": null,
+              "query": null,
+              "pathname": "//some_path",
+              "path": "//some_path",
+              "href": "//some_path"
+            }
+          },
+          "rifty": {
+            "ok": {
+              "$proto": "Object",
+              "$keys": [
+                "protocol",
+                "slashes",
+                "host",
+                "pathname",
+                "search",
+                "query",
+                "hash",
+                "href"
+              ],
+              "protocol": {
+                "$undefined": true
+              },
+              "slashes": true,
+              "host": "some_path",
+              "pathname": "",
+              "search": null,
+              "query": null,
+              "hash": null,
+              "href": "//some_path"
+            }
+          }
+        },
+        {
+          "fn": "parse",
+          "args": ["     \t  //some_path\n\t"],
+          "node": {
+            "ok": {
+              "$proto": "Url",
+              "$keys": [
+                "protocol",
+                "slashes",
+                "auth",
+                "host",
+                "port",
+                "hostname",
+                "hash",
+                "search",
+                "query",
+                "pathname",
+                "path",
+                "href"
+              ],
+              "protocol": null,
+              "slashes": null,
+              "auth": null,
+              "host": null,
+              "port": null,
+              "hostname": null,
+              "hash": null,
+              "search": null,
+              "query": null,
+              "pathname": "//some_path",
+              "path": "//some_path",
+              "href": "//some_path"
+            }
+          },
+          "rifty": {
+            "ok": {
+              "$proto": "Object",
+              "$keys": [
+                "protocol",
+                "slashes",
+                "host",
+                "pathname",
+                "search",
+                "query",
+                "hash",
+                "href"
+              ],
+              "protocol": {
+                "$undefined": true
+              },
+              "slashes": false,
+              "host": {
+                "$undefined": true
+              },
+              "pathname": "     \t  //some_path\n\t",
+              "search": null,
+              "query": null,
+              "hash": null,
+              "href": "     \t  //some_path\n\t"
+            }
+          }
+        },
+        {
+          "fn": "parse",
+          "args": ["http:\\\\evil-phisher\\foo.html#h\\a\\s\\h"],
+          "node": {
+            "ok": {
+              "$proto": "Url",
+              "$keys": [
+                "protocol",
+                "slashes",
+                "auth",
+                "host",
+                "port",
+                "hostname",
+                "hash",
+                "search",
+                "query",
+                "pathname",
+                "path",
+                "href"
+              ],
+              "protocol": "http:",
+              "slashes": true,
+              "auth": null,
+              "host": "evil-phisher",
+              "port": null,
+              "hostname": "evil-phisher",
+              "hash": "#h%5Ca%5Cs%5Ch",
+              "search": null,
+              "query": null,
+              "pathname": "/foo.html",
+              "path": "/foo.html",
+              "href": "http://evil-phisher/foo.html#h%5Ca%5Cs%5Ch"
+            }
+          },
+          "rifty": {
+            "ok": {
+              "$proto": "Object",
+              "$keys": [
+                "protocol",
+                "slashes",
+                "host",
+                "pathname",
+                "search",
+                "query",
+                "hash",
+                "href"
+              ],
+              "protocol": "http:",
+              "slashes": false,
+              "host": {
+                "$undefined": true
+              },
+              "pathname": "\\\\evil-phisher\\foo.html",
+              "search": null,
+              "query": null,
+              "hash": "#h\\a\\s\\h",
+              "href": "http:\\\\evil-phisher\\foo.html#h\\a\\s\\h"
+            }
+          }
+        },
+        {
+          "fn": "parse",
+          "args": ["     \t  http:\\\\evil-phisher\\foo.html#h\\a\\s\\h\n\t"],
+          "node": {
+            "ok": {
+              "$proto": "Url",
+              "$keys": [
+                "protocol",
+                "slashes",
+                "auth",
+                "host",
+                "port",
+                "hostname",
+                "hash",
+                "search",
+                "query",
+                "pathname",
+                "path",
+                "href"
+              ],
+              "protocol": "http:",
+              "slashes": true,
+              "auth": null,
+              "host": "evil-phisher",
+              "port": null,
+              "hostname": "evil-phisher",
+              "hash": "#h%5Ca%5Cs%5Ch",
+              "search": null,
+              "query": null,
+              "pathname": "/foo.html",
+              "path": "/foo.html",
+              "href": "http://evil-phisher/foo.html#h%5Ca%5Cs%5Ch"
+            }
+          },
+          "rifty": {
+            "ok": {
+              "$proto": "Object",
+              "$keys": ["href", "pathname", "search", "query", "hash"],
+              "href": "     \t  http:\\\\evil-phisher\\foo.html#h\\a\\s\\h\n\t",
+              "pathname": "     \t  http:\\\\evil-phisher\\foo.html#h\\a\\s\\h\n\t",
+              "search": null,
+              "query": null,
+              "hash": null
+            }
+          }
+        },
+        {
+          "fn": "format",
+          "args": ["http://example.com?"],
+          "node": {
+            "ok": "http://example.com/?"
+          },
+          "rifty": {
+            "throw": {
+              "name": "TypeError",
+              "message": "o.search.startsWith is not a function"
+            }
+          }
+        },
+        {
+          "fn": "format",
+          "args": ["http://example.com?foo=bar#frag"],
+          "node": {
+            "ok": "http://example.com/?foo=bar#frag"
+          },
+          "rifty": {
+            "throw": {
+              "name": "TypeError",
+              "message": "o.search.startsWith is not a function"
+            }
+          }
+        },
+        {
+          "fn": "format",
+          "args": ["http://example.com?foo=@bar#frag"],
+          "node": {
+            "ok": "http://example.com/?foo=@bar#frag"
+          },
+          "rifty": {
+            "throw": {
+              "name": "TypeError",
+              "message": "o.search.startsWith is not a function"
+            }
+          }
+        },
+        {
+          "fn": "format",
+          "args": ["http://example.com?foo=/bar/#frag"],
+          "node": {
+            "ok": "http://example.com/?foo=/bar/#frag"
+          },
+          "rifty": {
+            "throw": {
+              "name": "TypeError",
+              "message": "o.search.startsWith is not a function"
+            }
+          }
+        },
+        {
+          "fn": "resolveObject",
+          "args": ["", "foo"],
+          "node": {
+            "ok": "foo"
+          },
+          "rifty": {
+            "throw": {
+              "name": "TypeError",
+              "message": "url[c.fn] is not a function"
+            }
+          }
+        },
+        {
+          "fn": "resolve",
+          "args": ["/foo/bar/baz", "quux"],
+          "node": {
+            "ok": "/foo/bar/quux"
+          },
+          "rifty": {
+            "ok": "quux"
+          }
+        },
+        {
+          "fn": "resolve",
+          "args": ["/foo/bar/baz", "quux/asdf"],
+          "node": {
+            "ok": "/foo/bar/quux/asdf"
+          },
+          "rifty": {
+            "ok": "quux/asdf"
+          }
+        },
+        {
+          "fn": "resolve",
+          "args": ["/foo/bar/baz", "quux/baz"],
+          "node": {
+            "ok": "/foo/bar/quux/baz"
+          },
+          "rifty": {
+            "ok": "quux/baz"
+          }
+        },
+        {
+          "fn": "resolve",
+          "args": ["/foo/bar/baz", "../quux/baz"],
+          "node": {
+            "ok": "/foo/quux/baz"
+          },
+          "rifty": {
+            "ok": "../quux/baz"
+          }
+        },
+        {
+          "fn": "resolveObject",
+          "args": [
+            {
+              "$parsed": "/foo/bar/baz"
+            },
+            "quux"
+          ],
+          "node": {
+            "ok": {
+              "$proto": "Url",
+              "$keys": [
+                "protocol",
+                "slashes",
+                "auth",
+                "host",
+                "port",
+                "hostname",
+                "hash",
+                "search",
+                "query",
+                "pathname",
+                "path",
+                "href"
+              ],
+              "protocol": null,
+              "slashes": null,
+              "auth": null,
+              "host": null,
+              "port": null,
+              "hostname": null,
+              "hash": null,
+              "search": null,
+              "query": null,
+              "pathname": "/foo/bar/quux",
+              "path": "/foo/bar/quux",
+              "href": "/foo/bar/quux"
+            }
+          },
+          "rifty": {
+            "throw": {
+              "name": "TypeError",
+              "message": "url[c.fn] is not a function"
+            }
+          }
+        },
+        {
+          "fn": "resolveObject",
+          "args": [
+            {
+              "$parsed": "/foo/bar/baz"
+            },
+            "quux/asdf"
+          ],
+          "node": {
+            "ok": {
+              "$proto": "Url",
+              "$keys": [
+                "protocol",
+                "slashes",
+                "auth",
+                "host",
+                "port",
+                "hostname",
+                "hash",
+                "search",
+                "query",
+                "pathname",
+                "path",
+                "href"
+              ],
+              "protocol": null,
+              "slashes": null,
+              "auth": null,
+              "host": null,
+              "port": null,
+              "hostname": null,
+              "hash": null,
+              "search": null,
+              "query": null,
+              "pathname": "/foo/bar/quux/asdf",
+              "path": "/foo/bar/quux/asdf",
+              "href": "/foo/bar/quux/asdf"
+            }
+          },
+          "rifty": {
+            "throw": {
+              "name": "TypeError",
+              "message": "url[c.fn] is not a function"
+            }
+          }
+        },
+        {
+          "fn": "resolveObject",
+          "args": [
+            {
+              "$parsed": "/foo/bar/baz"
+            },
+            "quux/baz"
+          ],
+          "node": {
+            "ok": {
+              "$proto": "Url",
+              "$keys": [
+                "protocol",
+                "slashes",
+                "auth",
+                "host",
+                "port",
+                "hostname",
+                "hash",
+                "search",
+                "query",
+                "pathname",
+                "path",
+                "href"
+              ],
+              "protocol": null,
+              "slashes": null,
+              "auth": null,
+              "host": null,
+              "port": null,
+              "hostname": null,
+              "hash": null,
+              "search": null,
+              "query": null,
+              "pathname": "/foo/bar/quux/baz",
+              "path": "/foo/bar/quux/baz",
+              "href": "/foo/bar/quux/baz"
+            }
+          },
+          "rifty": {
+            "throw": {
+              "name": "TypeError",
+              "message": "url[c.fn] is not a function"
+            }
+          }
+        }
+      ]
+    },
+    "urlPresent": {
+      "differ": 904,
+      "of": 1313,
+      "byFn": {
+        "parse": {
+          "cases": 436,
+          "differ": 436,
+          "differLax": 436,
+          "differLaxNoPath": 226
+        },
+        "format": {
+          "cases": 431,
+          "differ": 187,
+          "differLax": 187,
+          "differLaxNoPath": 187
+        },
+        "resolveObject": {
+          "cases": 223,
+          "differ": 223,
+          "differLax": 223,
+          "differLaxNoPath": 223
+        },
+        "resolve": {
+          "cases": 223,
+          "differ": 58,
+          "differLax": 58,
+          "differLaxNoPath": 58
+        }
+      },
+      "examples": [
+        {
+          "fn": "parse",
+          "args": ["//some_path"],
+          "node": {
+            "ok": {
+              "$proto": "Url",
+              "$keys": [
+                "protocol",
+                "slashes",
+                "auth",
+                "host",
+                "port",
+                "hostname",
+                "hash",
+                "search",
+                "query",
+                "pathname",
+                "path",
+                "href"
+              ],
+              "protocol": null,
+              "slashes": null,
+              "auth": null,
+              "host": null,
+              "port": null,
+              "hostname": null,
+              "hash": null,
+              "search": null,
+              "query": null,
+              "pathname": "//some_path",
+              "path": "//some_path",
+              "href": "//some_path"
+            }
+          },
+          "rifty": {
+            "ok": {
+              "$proto": "Object",
+              "$keys": [
+                "protocol",
+                "slashes",
+                "host",
+                "pathname",
+                "search",
+                "query",
+                "hash",
+                "href"
+              ],
+              "protocol": {
+                "$undefined": true
+              },
+              "slashes": true,
+              "host": "some_path",
+              "pathname": "",
+              "search": null,
+              "query": null,
+              "hash": null,
+              "href": "//some_path"
+            }
+          }
+        },
+        {
+          "fn": "parse",
+          "args": ["     \t  //some_path\n\t"],
+          "node": {
+            "ok": {
+              "$proto": "Url",
+              "$keys": [
+                "protocol",
+                "slashes",
+                "auth",
+                "host",
+                "port",
+                "hostname",
+                "hash",
+                "search",
+                "query",
+                "pathname",
+                "path",
+                "href"
+              ],
+              "protocol": null,
+              "slashes": null,
+              "auth": null,
+              "host": null,
+              "port": null,
+              "hostname": null,
+              "hash": null,
+              "search": null,
+              "query": null,
+              "pathname": "//some_path",
+              "path": "//some_path",
+              "href": "//some_path"
+            }
+          },
+          "rifty": {
+            "ok": {
+              "$proto": "Object",
+              "$keys": [
+                "protocol",
+                "slashes",
+                "host",
+                "pathname",
+                "search",
+                "query",
+                "hash",
+                "href"
+              ],
+              "protocol": {
+                "$undefined": true
+              },
+              "slashes": false,
+              "host": {
+                "$undefined": true
+              },
+              "pathname": "     \t  //some_path\n\t",
+              "search": null,
+              "query": null,
+              "hash": null,
+              "href": "     \t  //some_path\n\t"
+            }
+          }
+        },
+        {
+          "fn": "parse",
+          "args": ["http:\\\\evil-phisher\\foo.html#h\\a\\s\\h"],
+          "node": {
+            "ok": {
+              "$proto": "Url",
+              "$keys": [
+                "protocol",
+                "slashes",
+                "auth",
+                "host",
+                "port",
+                "hostname",
+                "hash",
+                "search",
+                "query",
+                "pathname",
+                "path",
+                "href"
+              ],
+              "protocol": "http:",
+              "slashes": true,
+              "auth": null,
+              "host": "evil-phisher",
+              "port": null,
+              "hostname": "evil-phisher",
+              "hash": "#h%5Ca%5Cs%5Ch",
+              "search": null,
+              "query": null,
+              "pathname": "/foo.html",
+              "path": "/foo.html",
+              "href": "http://evil-phisher/foo.html#h%5Ca%5Cs%5Ch"
+            }
+          },
+          "rifty": {
+            "ok": {
+              "$proto": "Object",
+              "$keys": [
+                "protocol",
+                "slashes",
+                "auth",
+                "host",
+                "hostname",
+                "port",
+                "pathname",
+                "search",
+                "query",
+                "hash",
+                "href"
+              ],
+              "protocol": "http:",
+              "slashes": false,
+              "auth": {
+                "$undefined": true
+              },
+              "host": "evil-phisher",
+              "hostname": "evil-phisher",
+              "port": {
+                "$undefined": true
+              },
+              "pathname": "/foo.html",
+              "search": null,
+              "query": null,
+              "hash": "#h\\a\\s\\h",
+              "href": "http://evil-phisher/foo.html#h\\a\\s\\h"
+            }
+          }
+        },
+        {
+          "fn": "parse",
+          "args": ["     \t  http:\\\\evil-phisher\\foo.html#h\\a\\s\\h\n\t"],
+          "node": {
+            "ok": {
+              "$proto": "Url",
+              "$keys": [
+                "protocol",
+                "slashes",
+                "auth",
+                "host",
+                "port",
+                "hostname",
+                "hash",
+                "search",
+                "query",
+                "pathname",
+                "path",
+                "href"
+              ],
+              "protocol": "http:",
+              "slashes": true,
+              "auth": null,
+              "host": "evil-phisher",
+              "port": null,
+              "hostname": "evil-phisher",
+              "hash": "#h%5Ca%5Cs%5Ch",
+              "search": null,
+              "query": null,
+              "pathname": "/foo.html",
+              "path": "/foo.html",
+              "href": "http://evil-phisher/foo.html#h%5Ca%5Cs%5Ch"
+            }
+          },
+          "rifty": {
+            "ok": {
+              "$proto": "Object",
+              "$keys": [
+                "protocol",
+                "slashes",
+                "auth",
+                "host",
+                "hostname",
+                "port",
+                "pathname",
+                "search",
+                "query",
+                "hash",
+                "href"
+              ],
+              "protocol": "http:",
+              "slashes": false,
+              "auth": {
+                "$undefined": true
+              },
+              "host": "evil-phisher",
+              "hostname": "evil-phisher",
+              "port": {
+                "$undefined": true
+              },
+              "pathname": "/foo.html",
+              "search": null,
+              "query": null,
+              "hash": "#h\\a\\s\\h",
+              "href": "http://evil-phisher/foo.html#h\\a\\s\\h"
+            }
+          }
+        },
+        {
+          "fn": "format",
+          "args": ["http://example.com?"],
+          "node": {
+            "ok": "http://example.com/?"
+          },
+          "rifty": {
+            "throw": {
+              "name": "TypeError",
+              "message": "o.search.startsWith is not a function"
+            }
+          }
+        },
+        {
+          "fn": "format",
+          "args": ["http://example.com?foo=bar#frag"],
+          "node": {
+            "ok": "http://example.com/?foo=bar#frag"
+          },
+          "rifty": {
+            "throw": {
+              "name": "TypeError",
+              "message": "o.search.startsWith is not a function"
+            }
+          }
+        },
+        {
+          "fn": "format",
+          "args": ["http://example.com?foo=@bar#frag"],
+          "node": {
+            "ok": "http://example.com/?foo=@bar#frag"
+          },
+          "rifty": {
+            "throw": {
+              "name": "TypeError",
+              "message": "o.search.startsWith is not a function"
+            }
+          }
+        },
+        {
+          "fn": "format",
+          "args": ["http://example.com?foo=/bar/#frag"],
+          "node": {
+            "ok": "http://example.com/?foo=/bar/#frag"
+          },
+          "rifty": {
+            "throw": {
+              "name": "TypeError",
+              "message": "o.search.startsWith is not a function"
+            }
+          }
+        },
+        {
+          "fn": "resolveObject",
+          "args": ["", "foo"],
+          "node": {
+            "ok": "foo"
+          },
+          "rifty": {
+            "throw": {
+              "name": "TypeError",
+              "message": "url[c.fn] is not a function"
+            }
+          }
+        },
+        {
+          "fn": "resolve",
+          "args": ["/foo/bar/baz", "quux"],
+          "node": {
+            "ok": "/foo/bar/quux"
+          },
+          "rifty": {
+            "ok": "quux"
+          }
+        },
+        {
+          "fn": "resolve",
+          "args": ["/foo/bar/baz", "quux/asdf"],
+          "node": {
+            "ok": "/foo/bar/quux/asdf"
+          },
+          "rifty": {
+            "ok": "quux/asdf"
+          }
+        },
+        {
+          "fn": "resolve",
+          "args": ["/foo/bar/baz", "quux/baz"],
+          "node": {
+            "ok": "/foo/bar/quux/baz"
+          },
+          "rifty": {
+            "ok": "quux/baz"
+          }
+        },
+        {
+          "fn": "resolve",
+          "args": ["/foo/bar/baz", "../quux/baz"],
+          "node": {
+            "ok": "/foo/quux/baz"
+          },
+          "rifty": {
+            "ok": "../quux/baz"
+          }
+        },
+        {
+          "fn": "resolveObject",
+          "args": [
+            {
+              "$parsed": "/foo/bar/baz"
+            },
+            "quux"
+          ],
+          "node": {
+            "ok": {
+              "$proto": "Url",
+              "$keys": [
+                "protocol",
+                "slashes",
+                "auth",
+                "host",
+                "port",
+                "hostname",
+                "hash",
+                "search",
+                "query",
+                "pathname",
+                "path",
+                "href"
+              ],
+              "protocol": null,
+              "slashes": null,
+              "auth": null,
+              "host": null,
+              "port": null,
+              "hostname": null,
+              "hash": null,
+              "search": null,
+              "query": null,
+              "pathname": "/foo/bar/quux",
+              "path": "/foo/bar/quux",
+              "href": "/foo/bar/quux"
+            }
+          },
+          "rifty": {
+            "throw": {
+              "name": "TypeError",
+              "message": "url[c.fn] is not a function"
+            }
+          }
+        },
+        {
+          "fn": "resolveObject",
+          "args": [
+            {
+              "$parsed": "/foo/bar/baz"
+            },
+            "quux/asdf"
+          ],
+          "node": {
+            "ok": {
+              "$proto": "Url",
+              "$keys": [
+                "protocol",
+                "slashes",
+                "auth",
+                "host",
+                "port",
+                "hostname",
+                "hash",
+                "search",
+                "query",
+                "pathname",
+                "path",
+                "href"
+              ],
+              "protocol": null,
+              "slashes": null,
+              "auth": null,
+              "host": null,
+              "port": null,
+              "hostname": null,
+              "hash": null,
+              "search": null,
+              "query": null,
+              "pathname": "/foo/bar/quux/asdf",
+              "path": "/foo/bar/quux/asdf",
+              "href": "/foo/bar/quux/asdf"
+            }
+          },
+          "rifty": {
+            "throw": {
+              "name": "TypeError",
+              "message": "url[c.fn] is not a function"
+            }
+          }
+        },
+        {
+          "fn": "resolveObject",
+          "args": [
+            {
+              "$parsed": "/foo/bar/baz"
+            },
+            "quux/baz"
+          ],
+          "node": {
+            "ok": {
+              "$proto": "Url",
+              "$keys": [
+                "protocol",
+                "slashes",
+                "auth",
+                "host",
+                "port",
+                "hostname",
+                "hash",
+                "search",
+                "query",
+                "pathname",
+                "path",
+                "href"
+              ],
+              "protocol": null,
+              "slashes": null,
+              "auth": null,
+              "host": null,
+              "port": null,
+              "hostname": null,
+              "hash": null,
+              "search": null,
+              "query": null,
+              "pathname": "/foo/bar/quux/baz",
+              "path": "/foo/bar/quux/baz",
+              "href": "/foo/bar/quux/baz"
+            }
+          },
+          "rifty": {
+            "throw": {
+              "name": "TypeError",
+              "message": "url[c.fn] is not a function"
+            }
+          }
+        }
+      ]
+    }
+  }
+}
