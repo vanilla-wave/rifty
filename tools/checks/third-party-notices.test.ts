@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   LINK,
   NOTICES,
+  bundleInputs,
   collect,
   publishableDirs,
   render,
@@ -405,6 +406,73 @@ describe('manifest records (review 3)', () => {
     ]);
     expect(validateManifest(root, at('0.28.0'), [])).toEqual([
       'third-party-manifest generated pkg/src/generated: has sources.json but no sourcesKey',
+    ]);
+  });
+});
+
+describe('review 4', () => {
+  const NOT = 'not accounted — no bundler input list and not an own build output';
+  const dts = () => ({ ...files(), 'dist/a.d.ts': 'export {};' });
+
+  it('(e) dts resolve through an identifier or the CLI flag → declarations are not own', () => {
+    put('pkg/tsup.config.ts', "const resolve = ['esbuild'];\nexport default { dts: { resolve } };");
+    expect(built(inputs, dts())().violations).toEqual([`@riftydev/pkg dist/a.d.ts: ${NOT}`]);
+    put('pkg/tsup.config.ts', 'export default { dts: true };');
+    put('pkg/package.json', JSON.stringify({ scripts: { build: 'tsup --dts-resolve' } }));
+    expect(built(inputs, dts())().violations).toEqual([`@riftydev/pkg dist/a.d.ts: ${NOT}`]);
+  });
+
+  it('(e) the word resolve in a comment is no resolve option', () => {
+    put(
+      'pkg/tsup.config.ts',
+      '// no on-disk package to `require.\n// resolve`\n/* resolve */\nexport default { dts: true };',
+    );
+    expect(built(inputs, dts())().violations).toEqual([]);
+  });
+
+  it('(b) metadata names are exact: README.js, LICENSE.wasm → red', () => {
+    const f = {
+      ...files(),
+      'README.txt': '',
+      'LICENSE.md': '',
+      'README.js': '',
+      'LICENSE.wasm': '',
+    };
+    expect(built(inputs, f)().violations).toEqual([
+      `@riftydev/pkg README.js: ${NOT}`,
+      `@riftydev/pkg LICENSE.wasm: ${NOT}`,
+    ]);
+  });
+
+  it('(a)/(d) maps anywhere in the packed dirs, .js/.cjs/.mjs, give input lists', () => {
+    put('pkg/package.json', JSON.stringify({ files: ['dist', 'bin'] }));
+    put('pkg/dist/c.mjs.map', JSON.stringify({ sources: ['../src/a.ts'] }));
+    put('pkg/bin/cli.cjs.map', JSON.stringify({ sources: ['../../node_modules/dep/index.js'] }));
+    expect(bundleInputs(root, 'pkg')).toEqual({
+      'dist/c.mjs': ['pkg/src/a.ts'],
+      'bin/cli.cjs': ['node_modules/dep/index.js'],
+    });
+  });
+
+  it('(c) vendor/generated dirs are walked recursively; files match by path inside the dir', () => {
+    put('pkg/src/generated/sub/deep.js', 'x');
+    expect(validateManifest(root, manifest, ['pkg'])).toEqual([
+      'third-party-manifest: pkg/src/generated/sub/deep.js is in no record and not firstParty',
+    ]);
+    const m = {
+      ...manifest,
+      generated: {
+        'pkg/src/generated': {
+          ...manifest.generated['pkg/src/generated'],
+          files: ['up.js', 'sub/deep.js'],
+        },
+      },
+    };
+    expect(validateManifest(root, m, ['pkg'])).toEqual([]);
+    const more = { 'dist/a.js': ['pkg/src/generated/sub/deep.js'] };
+    expect(collect(root, 'pkg', m, more).violations).toEqual([]);
+    expect(collect(root, 'pkg', manifest, more).violations).toEqual([
+      'pkg/src/generated/sub/deep.js: in pkg/src/generated without a third-party-manifest record (pkg dist/a.js)',
     ]);
   });
 });
