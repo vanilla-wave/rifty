@@ -1,0 +1,9 @@
+node v24.16.0, darwin/arm64
+
+## T1: 296 files, 1.0 MB
+{"tpl":"T1","arm":"views","createMs":1.94,"writeFile10KiBMs":1.11,"writeTemplateFileMs":1.32,"readTemplateFileMs":0,"listNodeModulesMs":0,"removeMs":0,"idleKiBPerSandbox":112}
+{"tpl":"T1","arm":"overlay","createMs":0.15,"writeFile10KiBMs":0.2,"writeTemplateFileMs":0.34,"readTemplateFileMs":0,"listNodeModulesMs":0,"removeMs":0,"idleKiBPerSandbox":-3}
+
+## T95: 23654 files, 72.5 MB
+{"tpl":"T95","arm":"views","createMs":97.17,"writeFile10KiBMs":30.34,"writeTemplateFileMs":31.12,"readTemplateFileMs":0,"listNodeModulesMs":0,"removeMs":0,"idleKiBPerSandbox":9592}
+{"tpl":"T95","arm":"overlay","createMs":0.01,"writeFile10KiBMs":0.16,"writeTemplateFileMs":0.3,"readTemplateFileMs":0,"listNodeModulesMs":0,"removeMs":0,"idleKiBPerSandbox":-480}

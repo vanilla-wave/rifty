@@ -4,6 +4,7 @@ status: draft
 title: Isolate host — a promise rejected inside an `'exit'` listener exits 0 with no diagnostic
 created: 2026-11-19
 why: Silent false success: Node exits 1 with the rejection's `[eval]` diagnostic; runCode exits 0, stderr empty.
+epic: isolate-host-agent-tools
 sources: [docs/public/compat/isolate-host.md, docs/backlog/runtime-js/process-exit-listener-effects.md]
 code: [packages/isolate-host/src/child/main.ts, packages/isolate-guest/src/guest/entry.ts]
 ---
@@ -23,7 +24,7 @@ the run's terminal was already reported. Cause beyond that unverified (where Nod
 rejections from `'exit'` listeners vs rifty's eval lifecycle ending at `exit()`). Neighbour, different surface:
 `runtime-js/process-exit-listener-effects` (throw / `exitCode` in `'exit'`). Deterministic: exit 0 in 160/160 runs, 16 concurrent
 under CPU load — the run's status is fixed before the report arrives; ceiling row `reject-in-exit-listener`
-(`packages/isolate-host/tests/corpus.ts`, both lanes). Owner: next isolate-host runtime-fidelity pickup; trigger: any change to the eval lifecycle's exit path.
+(`packages/isolate-host/tests/corpus.ts`, both lanes). Owner: `epics/isolate-host-agent-tools` (map item 1; the user agreed 2026-11-25 to fix it, F5); trigger: that goal's run.
 
 ## Challenge
 

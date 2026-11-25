@@ -4,7 +4,7 @@ status: draft
 title: A sandbox run's end state is captured where the guest's code cannot reach
 created: 2026-11-23
 why: The capture runs in the guest's realm after the run's status is out, through intrinsics the guest can replace — a guest that broke its own snapshot can leave a tree the codec accepts with no `stateRefused`, against the goal's I1.
-epic: isolate-host-live-sandbox
+epic: isolate-host-sandbox-template
 sources: [ADR-0568, docs/public/compat/isolate-host.md, docs/backlog/distribution/reference/isolate-host-sandbox-lifecycle-class.md, PR-424-cross-review]
 code: [packages/isolate-guest/src/snapshot.ts, packages/isolate-guest/src/guest/entry.ts, packages/isolate-host/src/child/main.ts]
 ---
@@ -24,8 +24,7 @@ Open, for PICKUP (`RDY-1`/`RDY-2`), not a design: where can the end state be cap
 guest's code never runs in it — a fresh realm over the guest's FS records, the worker reading the
 isolate's FS through copies, or a codec that uses no guest-replaceable intrinsic? The `runCode`
 goal kept the same class open for the runtime's own paths
-(`runtime-js/post-guest-paths-use-replaceable-intrinsics`). Owner: the goal
-`isolate-host-live-sandbox`. Trigger: its next PICKUP.
+(`runtime-js/post-guest-paths-use-replaceable-intrinsics`). Owner: the goal `isolate-host-sandbox-template` (map item 5, I7; since 2026-11-25 — the capture is rewritten for the template's difference there); the goal `isolate-host-live-sandbox` closes when it lands. Trigger: that goal's run.
 
 ## Challenge
 

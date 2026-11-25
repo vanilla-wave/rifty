@@ -13,8 +13,8 @@ user_story: As a Node service deploying the isolate host, I want `npm install @r
 (`.github/workflows/release.yml`, OIDC). `npm install @riftydev/isolate-host` in a clean project on
 Node 24, linux-x64 glibc, needs no compiler, and the README's `runCode` / `createSandbox` snippets
 run from the installed package — proven in CI from the registry tarball. The README lists the
-platform CI proves (linux-x64 glibc), those it does not (musl, arm64, darwin, Windows — prebuilds
-exist, untested) and the upgrade rule (Node / V8 point releases).
+platform CI proves (linux-x64 glibc), those it does not (musl, arm64, darwin, Windows — isolated-vm
+7.0.2 ships prebuilds for them in its `prebuilds/`, untested here) and the upgrade rule (Node / V8 point releases).
 
 ## User scenario
 

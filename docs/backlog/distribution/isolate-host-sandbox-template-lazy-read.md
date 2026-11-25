@@ -3,7 +3,7 @@ area: distribution
 status: draft
 title: A sandbox run reads template files on demand from the worker instead of copying the whole template into its isolate
 created: 2026-11-25
-why: The template goal copies the template into every run's isolate (user 2026-11-25), so a run pays ~90–100 MiB of isolate memory and ~+50 ms per `exec` for a four-library template — growing with the template; reading template files lazily makes both independent of it (requirements §3).
+why: The template goal copies the template into every run's isolate (user 2026-11-25), so a run pays isolate memory and latency growing with the template (four-library template, extrapolated from probe L, not measured: ~90–100 MiB, ~+50 ms per `exec`); reading template files lazily makes both independent of it (requirements §3).
 sources: [/Users/vanilla-wave/ai/rifty-requirements/2026-11-24-server-sandbox-requirements.md §3, ADR-0572, docs/backlog/distribution/reference/isolate-host-sandbox-template-probes/README.md]
 code: [packages/isolate-guest/src/guest/entry.ts, packages/isolate-host/src/child/main.ts]
 ---

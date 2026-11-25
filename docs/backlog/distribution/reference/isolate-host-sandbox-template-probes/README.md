@@ -66,6 +66,29 @@ differed by ≤ 10 % per row.
   lazy 41, worker 78. The probe's main thread does nothing else (no frame parsing, no template
   decode on arrival).
 
-Not probed: a guest-side cache of template stats/bytes; a worker's RSS while it holds templates
-(the pool retires an idle worker above 256 MiB, README); the probe overlay is partial (no
-whiteouts, no cross-layer rename).
+## H — the consumer's side: host ops and an idle sandbox (`host.mjs`)
+
+Same T1/T95 builders over the pnpm store at main @ 57152054d (T95's filler bytes moved with the
+store: 23 654 files, 72.5 MB here vs 88.8 MB in L). rifty's MemoryFsSync + codec from source;
+the sandbox logic is the probe's. Medians of 21 (ms); idle = heap + ArrayBuffers per sandbox over 20
+held sandboxes, one 10 KiB own file each. Load average ~12 on 12 cores.
+
+| arm | create T1 / T95 | `writeFile` 10 KiB + cap check | write a template file | idle per sandbox T1 / T95 |
+|---|---|---|---|---|
+| views (a `MemoryFsSync` of views per sandbox, cap check walks it) | 1.9 / 97 ms | T1 1.1, T95 30.3 | T1 1.3, T95 31.1 | 112 KiB / 9.4 MiB |
+| overlay (one shared index; a sandbox = its difference + deleted paths) | 0.15 / 0.01 ms | T1 0.20, T95 0.16 | T1 0.34, T95 0.30 | ≈ 0 / ≈ 0 (noise, ±0.5 MiB) |
+
+`readFile`, `list('/node_modules')`, `remove` < 0.01 ms in both. The overlay meets requirements
+§3's «O(размер записи + дифф)» and «память простаивающей песочницы … не включает шаблон»; the
+per-sandbox views tree does not (ADR-0572 §2).
+
+Not probed:
+- a guest-side cache of template stats/bytes (`lazy`); a worker's RSS while it holds templates (the
+  pool retires an idle worker above 256 MiB, README);
+- the `lazy`/`worker` overlays are partial (no deletion marks, no cross-layer rename); H's overlay
+  covers the four host ops only;
+- arm `views` restores the difference before materializing (ADR-0572 §3 applies it after), so a
+  difference shadowing template paths was not exercised; its `captureDiff` recognises template
+  files by view identity only and emits no deletions;
+- the read-only (`EROFS`) wrapper; decoding the artifact (gzip/br, tar) and sending it to a worker;
+- the real four-library template (the library probe ran it in the state, not as a template).
