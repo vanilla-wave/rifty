@@ -1,0 +1,63 @@
+{
+  "base": {
+    "guest": {
+      "bytes": 7173116,
+      "gzip9": 1512671
+    },
+    "minified": {
+      "bytes": 4391866,
+      "gzip9": 1274919
+    }
+  },
+  "td-full": {
+    "guest": {
+      "bytes": 7769505,
+      "gzip9": 1625168
+    },
+    "minified": {
+      "bytes": 4611470,
+      "gzip9": 1376571
+    }
+  },
+  "td-gb": {
+    "guest": {
+      "bytes": 7360337,
+      "gzip9": 1563006
+    },
+    "minified": {
+      "bytes": 4496617,
+      "gzip9": 1317751
+    }
+  },
+  "td-none": {
+    "guest": {
+      "bytes": 7227086,
+      "gzip9": 1524090
+    },
+    "minified": {
+      "bytes": 4420522,
+      "gzip9": 1283988
+    }
+  },
+  "part:node single-byte.js": {
+    "bytes": 9332,
+    "gzip9": 3501
+  },
+  "part:node encoding.js + util.js + shim.cjs": {
+    "bytes": 18128,
+    "gzip9": 5966
+  },
+  "part:@exodus/bytes 1.16.0 (full)": {
+    "bytes": 189358,
+    "gzip9": 91148
+  },
+  "part:@exodus/bytes 1.16.0 (gb)": {
+    "bytes": 74505,
+    "gzip9": 33597
+  },
+  "versions": {
+    "node": "v24.16.0 sources",
+    "exodus": "1.16.0",
+    "esbuild": "0.28.0"
+  }
+}

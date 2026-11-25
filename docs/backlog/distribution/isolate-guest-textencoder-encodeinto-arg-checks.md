@@ -18,6 +18,10 @@ class). No compat row yet. Owner: isolate-guest; natural carrier: the `TextDecod
 `isolate-guest-web-api` (`distribution/isolate-guest-textdecoder-legacy-encodings`), which ports
 Node's `encoding.js` — its `TextEncoder` too.
 
+2026-11-25 — closed by `distribution/isolate-guest-textdecoder-legacy-encodings` (Acceptance 5:
+Node's `TextEncoder` from the same `encoding.js`; its `reference/textdecoder/bundle` variant gives
+Node's `ERR_INVALID_ARG_TYPE` for both cases); delete with that unit.
+
 ## Challenge
 
 challenge: 2026-11-25 — not run (factual capture)

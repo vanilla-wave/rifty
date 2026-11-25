@@ -1,28 +1,67 @@
 ---
 area: distribution
-status: draft
-title: The isolate-guest-web-api scenario — pptxgenjs `write()`, docx `Packer.toBlob`, pdfkit's built-in font — runs as sandbox cases against live `node`, committed RED
+status: ready
+title: The isolate-guest-web-api scenario runs as committed-RED isolate-host cases against live `node` — pptxgenjs `write()` and docx `Packer.toBlob` as new cases, pdfkit as the zlib carrier's case 4
 created: 2026-11-24
-why: the goal's acceptance carrier; today the three generators stop at `blob is not supported by this platform`, `isolate-host.Blob` and `isolate-host.TextDecoder(ascii) (only utf-8)`
+why: the goal's acceptance carrier; today the three generators stop at `blob is not supported by this platform`, `isolate-host.Blob` and `isolate-host.TextDecoder(ascii) (only utf-8)` where Node exits 0
 epic: isolate-guest-web-api
 sources: [docs/backlog/epics/isolate-guest-web-api/goal.md, docs/backlog/epics/isolate-guest-web-api/reference/today/README.md, docs/backlog/distribution/reference/isolate-library-probe/README.md]
-code: [packages/isolate-host/tests]
+code: [packages/isolate-host/tests, packages/isolate-host/tests/closure-files.ts, packages/isolate-host/tests/zlib-scenario.test.ts]
 ---
 
 ## Context
 
-Goal `isolate-guest-web-api` §User scenario: the pptx and docx generators as two
-`packages/isolate-host/tests` cases, `it.fails` (RED) before any wall is fixed, plus the zlib
-carrier's case 4 (pdfkit, `zlib-scenario.test.ts`) reused, not duplicated: the generators run in a sandbox over a `node_modules`
-closure (the library probe's way, or `tests/closure-files.ts` / `zlib-scenario.test.ts`) and as
-`node <file>` in a temp dir over the same files — stdout, stderr, exit code, output files (OOXML
-timestamps masked as the library probe does). For pdfkit, case 4 pins «red after unit 3 too: at least
-`TextDecoder(ascii)`» (`zlib-scenario.test.ts:182`); this goal removes that stop — if it lands before
-the zlib goal's unit 3 the isolate then stops at its zlib gap
-(`NotImplementedError('isolate-host.zlib.*')`), and with both landed case 4 equals Node.
+Goal `isolate-guest-web-api` §User scenario as executable cases on the one host this goal
+changes, the isolate (`createSandbox` + `exec`), oracle live `node` v24.16.0 over the same files in
+a temp dir. Committed before any wall is fixed; each case pins today's outcome so a RED run fails
+for the known reason, not another.
 
-Today (`reference/today`, main bc3412420, Node v24.16.0): `pptx.write()` → `Error: blob is not
-supported by this platform` (`jszip/lib/utils.js:378`), `Packer.toBlob` →
-`NotImplementedError: isolate-host.Blob` (`docx/dist/index.cjs:23940`), pdfkit →
-`NotImplementedError: isolate-host.TextDecoder(ascii)` (`fontkit/dist/main.cjs:5424`); Node exit 0
-for all three.
+Today (`reference/today/results.txt`, main bc3412420 product code, Node v24.16.0):
+
+| program | Node | isolate guest |
+|---|---|---|
+| `pptx-write.cjs` (`await pptx.write()` → `Blob` → `deck.pptx`) | exit 0, `[object Blob] Blob` / `bytes true` | exit 1, `Error: blob is not supported by this platform` (`jszip/lib/utils.js:378`: JSZip's `support.blob` probe failed at load) |
+| `docx-toblob.cjs` (`Packer.toBlob(doc)` → `report.docx`) | exit 0, `[object Blob]` / `bytes true` | exit 1, `NotImplementedError: Not implemented: isolate-host.Blob (…)` (`docx/dist/index.cjs:23940`) |
+| pdfkit 0.17.2, Helvetica | exit 0 | exit 1, `NotImplementedError: … isolate-host.TextDecoder(ascii) (only utf-8)` (`fontkit/dist/main.cjs:5424`) — `zlib-scenario.test.ts` case 4 pins it |
+
+## Acceptance
+
+1. `packages/isolate-host/tests/web-api-scenario.test.ts` runs `pptx-write.cjs` over pptxgenjs
+   4.0.1's installed closure (`tests/closure-files.ts`): the sandbox's stdout, stderr, exit code and
+   `deck.pptx` equal live `node pptx-write.cjs` over the same files — OOXML parts compared as the
+   library probe does (XML text with `docProps/core.xml` timestamps masked, binary parts as bytes)
+   → I5
+2. The same for `docx-toblob.cjs` over docx 9.15.3 (exact devDependency pin) and `report.docx` → I5
+3. pdfkit: `zlib-scenario.test.ts` case 4 is this goal's reuse, not a copy: its `GREEN` note names
+   this goal for the `TextDecoder(ascii)` stop; once map unit 3 lands its isolate pin is the stop
+   after fontkit's load (the zlib gap while the zlib goal's unit 3 is open), and with both landed
+   case 4 equals Node → I5
+4. RED, committed: cases 1–2 are `it.fails` whose failure is today's pinned outcome above (exit 1
+   and the stderr's first line); a different failure fails the run → I5
+5. Each case flips to a plain `it` in the PR of the unit that makes it pass (map units 2, 3), never
+   by editing the expectation → I5
+
+## Parity cases
+
+- `pptx-write.cjs` (as `reference/today/run.mjs`): `p.addSlide().addText('Hi', {x:1,y:1})`,
+  `const b = await p.write()`, print `Object.prototype.toString.call(b)` and `b.constructor.name`,
+  `fs.writeFileSync('deck.pptx', Buffer.from(await b.arrayBuffer()))`, print
+  `'bytes', buf.length > 1000` — RED → I5
+- `docx-toblob.cjs`: one paragraph document, `const blob = await Packer.toBlob(doc)`, the same print
+  and write — RED → I5
+- zlib carrier case 4 (pdfkit) — RED, existing → I5
+
+## Out of scope
+
+- Browser hosts: their `Blob`/`TextDecoder` are native; this goal changes only the isolate.
+- pdfkit's compressed output: the zlib goal's (`node-zlib-on-every-host`).
+
+## Decisions
+
+- 2026-11-25 — closures through the existing `tests/closure-files.ts` (owner: the library tests,
+  ADR-0568), no new installer.
+- 2026-11-25 — pdfkit stays one case, the zlib carrier's case 4 (goal Challenge 12).
+
+## Challenge
+
+challenge: 2026-11-25 — none (child of a goal; premise in goal §Challenge)

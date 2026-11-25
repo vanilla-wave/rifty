@@ -1,9 +1,9 @@
 ---
 kind: epic
-status: draft
+status: ready
 title: Isolate guest Web API for document generators — Node 24's Blob/File, TextDecoder encodings and AbortController/AbortSignal/EventTarget/Event in the isolate guest
 created: 2026-11-24
-value: A document generator in `runCode` or a sandbox `exec` that hands back a `Blob`, decodes a legacy text encoding (fontkit) or uses `AbortController`/`AbortSignal`/`EventTarget`/`Event` — directly or through Node's own stream code — gets what `node` gives over the same files, and these APIs' module exports (`buffer.Blob`/`buffer.File`, `util.TextDecoder`/`TextEncoder`) are the same objects, never `undefined`.
+value: A document generator in `runCode` or a sandbox `exec` that hands back a `Blob`, decodes a legacy text encoding (fontkit) or uses `AbortController`/`AbortSignal`/`EventTarget`/`Event`/`CustomEvent` — directly or through Node's own stream code — gets what `node` gives over the same files, and these APIs' module exports (`buffer.Blob`/`buffer.File`, `util.TextDecoder`/`TextEncoder`) are the same objects, never `undefined`.
 user_story: As a Node service running model-written document generators in an isolate-host sandbox, I want `pptx.write()` and `Packer.toBlob()` to give a `Blob`, pdfkit to load its built-in font and `new AbortController()` to work as in `node`, but today the first two stop at `isolate-host.Blob`/`blob is not supported by this platform`, fontkit at `isolate-host.TextDecoder(ascii) (only utf-8)`, and every `signal` option at `isolate-host.AbortController`
 tier: works
 ---
@@ -14,15 +14,15 @@ Three groups of Node 24 Web API land in the isolate guest (`runCode` and sandbox
 ADR-0557/0568), each as Node v24.16.0's — proven against live Node, never approximated:
 
 - `Blob`/`File`, with `buffer.Blob`/`buffer.File` as the same objects;
-- `TextDecoder` with the encodings Node 24 decodes (WHATWG Encoding labels → Node's decoders),
-  `TextEncoder` utf-8 only as in Node;
-- `AbortController`/`AbortSignal`/`EventTarget`/`Event` as ordinary guest globals from Node's own
-  sources, so Node's APIs taking a `signal` and Node's stream code (goal `node-streams-as-in-node`)
-  work in the isolate.
+- `TextDecoder` for utf-8 and the 33 encodings where Node's decoders equal WHATWG Encoding (the
+  five Node decodes through ICU stay a named gap), `TextEncoder` utf-8 only as in Node;
+- `AbortController`/`AbortSignal`/`EventTarget`/`Event`/`CustomEvent` as ordinary guest globals from
+  Node's own sources, so Node's APIs taking a `signal` and Node's stream code (goal
+  `node-streams-as-in-node`, which delivers this group as its unit 7) work in the isolate.
 
 The module exports of these APIs are the same objects as the globals (`buffer.Blob`, `buffer.File`,
 `util.TextDecoder`, `util.TextEncoder`); a member of them the guest still lacks
-(`Blob.prototype.stream`: web streams stay outside) is a named gap. The implementations run inside
+(`Blob.prototype.stream`, `TextDecoderStream`: web streams stay outside) is a named gap. The implementations run inside
 the guest isolate under their limits; their cost is measured and recorded. `URL`/`URLSearchParams`
 and ES modules are goal `isolate-guest-modern-code`; other Web API ceilings are unchanged.
 
@@ -61,29 +61,36 @@ scenario: `pptx.write()` → `blob is not supported by this platform`, `Packer.t
   and `Blob-constructor`'s `MessageChannel` cases (listed in the unit); plus the probe
   cases (values, thrown `name`/`code`/`message`, prototype chains, descriptors) — 0 differences.
   `Blob.prototype.stream` is the `ReadableStream` named gap.
-- I2. `TextDecoder`/`TextEncoder` as Node's: for every WHATWG label of an encoding in the set (map
-  question T), `new TextDecoder(label)` gives Node's `encoding`, and decoding equals Node on the
+- I2. `TextDecoder`/`TextEncoder` as Node's: for every WHATWG label of utf-8 and the 33 encodings
+  where Node equals WHATWG (28 single-byte, `x-user-defined`, utf-16le/be, gbk, gb18030),
+  `new TextDecoder(label)` gives Node's `encoding`, and decoding equals Node on the
   probe's corpus (every single byte and 2-byte sequence; gb18030 4-byte and euc-jp 3-byte forms
   sampled; random and `stream: true` splits; `fatal`, `ignoreBOM`); Node's errors for unknown labels and `replacement`
   (`RangeError [ERR_ENCODING_NOT_SUPPORTED]`) and for invalid data in `fatal` mode; a label of an
-  encoding outside the set throws its named gap at construction. Node's WPT `test/wpt/test-encoding.js`
+  encoding outside the set (big5, euc-jp, shift_jis, euc-kr, iso-2022-jp) throws its named gap at
+  construction. Node's WPT `test/wpt/test-encoding.js`
   results for the set as Node's status records, except `encoding/streams/*` and the streams part of
-  `idlharness.any.js` (`TextDecoderStream`: map question M2). `TextEncoder` (utf-8 only) equals Node, `encodeInto`
+  `idlharness.any.js` (`TextDecoderStream`) and the five's tests. `TextEncoder` (utf-8 only) equals Node, `encodeInto`
   argument checks included.
 - I3. `AbortController`, `AbortSignal` (with `abort`/`timeout`/`any`/`throwIfAborted`),
-  `EventTarget`, `Event` are the guest's globals from Node's sources and give Node's results on
+  `EventTarget`, `Event`, `CustomEvent` are the guest's globals from Node's sources and give Node's results on
   Node's WPT runs `test/wpt/test-abort.js`/`test-events.js` (`dom/abort`, `dom/events`) as Node's
-  status records, except tests needing `MessageChannel` or GC, and those constructing `CustomEvent`
-  while map question M1 is open (listed in the unit); `signal.reason` is an instance of the guest's
+  status records, except tests needing `MessageChannel` or GC (listed in the unit); `signal.reason` is an instance of the guest's
   global `DOMException` (today's class, equal to Node's per `reference/today`; Node's code is bound to
   it); Node's APIs taking a `signal` (`events.once`/`on`, `timers/promises`, `fs.readFile`,
-  `fs.promises.readFile`) equal Node in the guest.
+  `fs.promises.readFile`) equal Node in the guest. Carried by `node-streams-as-in-node` unit 7
+  (`distribution/isolate-stream-core-abort-controller`) as its acceptance.
 - I4. Same objects: `buffer.Blob`/`buffer.File` and `util.TextDecoder`/`util.TextEncoder` are `===`
   the guest's globals in a file run and in `runCode`; `({}) instanceof require('buffer').Blob` is
   `false`.
 - I5. The user scenario (§User scenario) passes as executable cases against live `node`.
 
 ## Challenge
+
+challenge: 2026-11-25 — reused for the ready goal: the promises are unchanged since the critic and
+the final-check below except the manager's answers (T: the five a named gap; M1: `CustomEvent` in;
+M2: web streams outside both goals; the events/abort unit in the streams goal), which close the
+questions those passes raised. Final check of the ready result: line `final-check (ready)` below.
 
 challenge: 2026-11-25 — 15 problems (1 blocker, 2 cheaper-route, 9 concerns, 3 nits) + 3 omitted
 choices — fresh read-only critic over the manager's instruction, the narrowed goal/map/drafts, the
@@ -133,9 +140,6 @@ the split-out of `URL`/ESM.
 - 2026-11-25 — user, question 1 (API set), in the manager thread cf2ae711. Asked first «а без них что не работает» and «я про поддержку офисных пакетов. Мы же не просто так начали эту цель»; the manager answered that of the four document libraries only the `Blob` outputs (`Packer.toBlob`, `pptx.write({outputType:'blob'})`) stop on a Web API, and recommended a narrowed goal. The user then answered «ок» to the manager's «Цель Web API — рекомендую сузить до Blob и кодировок TextDecoder, а URL и ES-модули вынести отдельной целью» and «ок» to «AbortController, EventTarget, Event в isolate — сделать обычными глобальными, как в Node».
 - 2026-11-25 — manager, by the user's delegation of this goal's design (questions 2–4 were not taken up by the user; reversible): the consumer's scenario closes the goal; cost is measured and recorded, no hard limit; tier works. Question 5 (ES modules in `-e`) left with ES modules.
 - 2026-11-25 — manager, on the questions this narrowing raised: (T) the five encodings Node decodes through ICU (big5, euc-jp, shift_jis, euc-kr, iso-2022-jp) stay a named loud gap — Node's results there are ICU's, not WHATWG's, so neither a WHATWG decoder nor a guess is Node; no measured consumer; a draft carries them. (M1) `CustomEvent` becomes a global with the four — same Node file, no added bytes. (M2) web streams in the isolate stay outside both goals: `Blob.stream()` and `TextDecoderStream` are named gaps, a draft carries them. The events-and-abort unit lives in the streams goal (its first consumer is Node's `pipeline`); this goal's I3 rows are that unit's acceptance.
-- 2026-11-25 — manager, reversible (questions 2–4 not taken up by the user): the scenario is the
-  consumer's generators; cost is measured and recorded, no hard bound; tier `works`. Question 5
-  (ESM in `-e`) dropped with ESM.
 - 2026-11-25 — agent: all three groups' Node sources need the runtime (`blob.js` requires
   `internal/util/inspect`, `timers`, `task_queues`, `internal/encoding`, `internal/url`; the
   event/abort files `util.inspect`/`process.nextTick` and the stream core's `primordials`/`errors`),
@@ -144,14 +148,15 @@ the split-out of `URL`/ESM.
   real classes at that install, not captured `undefined`. `blob.js`'s `internal/url` use
   (`URL.createObjectURL`/blob URLs) stays a named gap. Other ceilings stay as today.
 - 2026-11-25 — agent, sources: `AbortController`/`AbortSignal`/`EventTarget`/`Event`/`CustomEvent`
-  from Node's `internal/abort_controller.js` + `event_target.js` + `webidl.js` verbatim (`CustomEvent`,
-  in the same `event_target.js`, is map question M1)
+  from Node's `internal/abort_controller.js` + `event_target.js` + `webidl.js` verbatim (`CustomEvent` included, manager
+  decision M1)
   (`reference/sources-js`: 0/31 cases differ; ≈31 KB min / 9 KB gzip beside the streams core's
   shared `primordials`/`errors`, goal `node-streams-as-in-node` `route-b-size`; 88 KB / 30 KB gzip
   standalone); `TextDecoder` class from Node's `lib/internal/encoding.js`, single-byte and
   `x-user-defined` from Node's `encoding/single-byte.js` verbatim, utf-16/gbk/gb18030 decoders from
-  @exodus/bytes 1.16.0 (equal to Node, which decodes them through ICU, on the exhaustive corpus;
-  `reference/textdecoder`); `Blob`/`File` from Node's `lib/internal/blob.js`/`file.js` over a JS byte
+  @exodus/bytes 1.16.0 (equal to Node, which decodes them through ICU, on the corpus;
+  `reference/textdecoder`; the whole composition in the guest bundle: +50.3 KB gzip, +3.1 ms warm,
+  0 differences, `reference/textdecoder/bundle`); `Blob`/`File` from Node's `lib/internal/blob.js`/`file.js` over a JS byte
   store (`reference/sources-native`). Each source gets an ADR (semantic copy) before its unit.
 - rejected route: npm polyfills (`event-target-shim` 6.0.2 + `abortcontroller-polyfill` 1.7.8:
   22/31 differ; `formdata-node` Blob 9/19, `blob-polyfill` 13/19; `text-encoding` 0.7.0 differs on
