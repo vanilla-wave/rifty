@@ -21,8 +21,8 @@ How Node v24.16.0 decodes (`reference/textdecoder`): `lib/internal/encoding.js` 
 labels (`replacement`'s 6 throw `ERR_ENCODING_NOT_SUPPORTED`; `ascii`/`latin1`/`iso-8859-1` →
 `windows-1252`); utf-8 in C++; the 28 single-byte encodings and `x-user-defined` in JS
 (`lib/internal/encoding/single-byte.js`, WHATWG tables); utf-16le/be, gbk (gb18030's decoder),
-gb18030, big5, euc-jp, iso-2022-jp, shift_jis, euc-kr through ICU `ucnv`. On the exhaustive 1-/2-byte
-corpus Node equals WHATWG except big5, euc-jp, shift_jis, euc-kr, iso-2022-jp — those five stay a
+gb18030, big5, euc-jp, iso-2022-jp, shift_jis, euc-kr through ICU `ucnv`. On the 1-/2-byte corpus
+Node equals WHATWG except big5, euc-jp, shift_jis, euc-kr, iso-2022-jp — those five stay a
 named gap (manager decision 2026-11-25, `distribution/isolate-guest-textdecoder-icu-only-encodings`).
 
 Today — pins (`reference/today/results.txt`, main bc3412420 product code; `exec` and `runCode`
@@ -33,7 +33,7 @@ equal):
 | labels accepted | 222 / 228 | 3 / 228 (`utf-8`, `utf8`, `unicode-1-1-utf-8`) |
 | `new TextDecoder('unicode11utf8'\|'unicode20utf8'\|'x-unicode20utf8').encoding` | `utf-8` | `NotImplementedError: … isolate-host.TextDecoder(<label>) (only utf-8)` |
 | each other label (`ascii`, `latin1`, `cp1252`, `koi8-r`, `gbk`, `utf-16le`, `x-user-defined`, …) | its WHATWG `encoding` | the same `NotImplementedError` |
-| `new TextDecoder('replacement')` | `RangeError [ERR_ENCODING_NOT_SUPPORTED]: The "replacement" encoding is not supported` | `NotImplementedError … TextDecoder(csiso2022kr)` |
+| a `replacement` label (the probe used its first, `csiso2022kr`) | `RangeError [ERR_ENCODING_NOT_SUPPORTED]: The "replacement" encoding is not supported` | `NotImplementedError … TextDecoder(<label>) (only utf-8)` |
 | `new TextDecoder('nope')` | `RangeError [ERR_ENCODING_NOT_SUPPORTED]: The "nope" encoding is not supported` | `NotImplementedError … TextDecoder(nope) (only utf-8)` |
 | decode `68 69 e9 80 ff` as latin1 / utf-16le / utf-16be / gbk | `hié€ÿ` / `楨胩�` / `桩�` / `hi閫�` | the `NotImplementedError` |
 | utf-8 `fatal` on `ff`; `ignoreBOM`; `stream` split of `é` | `TypeError [ERR_ENCODING_INVALID_ENCODED_DATA]`; `﻿A`; `é` | same |
@@ -81,8 +81,9 @@ Goal §User scenario step 3: pdfkit with its built-in font loads in the isolate 
 6. `util.TextDecoder === TextDecoder` and `util.TextEncoder === TextEncoder` in a file run and in
    `runCode`; `Buffer#toString` paths that go through the global keep their results → I4
 7. pdfkit 0.17.2 with `Helvetica`, `compress: false`, sandbox `exec` over its closure: exit 0 and
-   `out.pdf` byte-identical to live `node` (fixed `CreationDate`); `zlib-scenario.test.ts` case 4's
-   isolate pin moves past fontkit's load (the zlib gap while the zlib goal's unit 3 is open) → I5
+   `out.pdf` byte-identical to live `node` (fixed `CreationDate`) → I2; the scenario's
+   `compress: true` run (`zlib-scenario.test.ts` case 4): its isolate pin moves past fontkit's load
+   (the zlib gap while the zlib goal's unit 3 is open) → I5
 8. Mechanism: Node v24.16.0's `lib/internal/encoding.js`, `encoding/single-byte.js`,
    `encoding/util.js` vendored verbatim (sha256-pinned, MIT notice) with checked edit anchors and a
    drift check (ADR-0541 pattern); `encoding_binding` utf-8 → the guest's codec (`text-codec.ts`);
@@ -100,7 +101,8 @@ Goal §User scenario step 3: pdfkit with its built-in font loads in the isolate 
 ## Parity cases
 
 - the pin table's rows (labels 3→222 accepted, the `utf-8` aliases, `replacement`, `nope`, the four
-  decodes, `encodeInto` checks, pdfkit) — RED except the four rows equal today → I2, I4, I5
+  decodes, `encodeInto` checks, pdfkit) — RED except the two rows equal today (utf-8
+  `fatal`/`ignoreBOM`/`stream`; the `util` identities), which are guards → I2, I4, I5
 - corpus per encoding (`cases.cjs` hashes) for the 33 — RED → I2
 - `new TextDecoder('big5')` → `NotImplementedError('isolate-host.TextDecoder(big5)')` — RED (today
   the message says `(only utf-8)`) → I2

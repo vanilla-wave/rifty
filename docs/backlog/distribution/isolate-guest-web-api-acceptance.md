@@ -31,7 +31,7 @@ Today (`reference/today/results.txt`, main bc3412420 product code, Node v24.16.0
    `deck.pptx` equal live `node pptx-write.cjs` over the same files — OOXML parts compared as the
    library probe does (XML text with `docProps/core.xml` timestamps masked, binary parts as bytes)
    → I5
-2. The same for `docx-toblob.cjs` over docx 9.15.3 (exact devDependency pin) and `report.docx` → I5
+2. The same for `docx-toblob.cjs` over docx 9.15.3 (added to isolate-host's devDependencies, exact pin) and `report.docx` → I5
 3. pdfkit: `zlib-scenario.test.ts` case 4 is this goal's reuse, not a copy: its `GREEN` note names
    this goal for the `TextDecoder(ascii)` stop; once map unit 3 lands its isolate pin is the stop
    after fontkit's load (the zlib gap while the zlib goal's unit 3 is open), and with both landed

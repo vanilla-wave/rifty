@@ -31,8 +31,10 @@ Delivered elsewhere: `distribution/isolate-stream-core-abort-controller` — goa
 globals (`AbortController`, `AbortSignal`, `EventTarget`, `Event`, `CustomEvent`). Its acceptance is
 this goal's I3 (WPT `dom/abort`/`dom/events` under Node's status, minus `MessageChannel`/GC tests;
 the statics; `signal.reason` an instance of the guest's `DOMException`; Node's `signal` APIs
-`events.once`/`on`, `timers/promises`, `fs.readFile`, `fs.promises.readFile`). **This goal closes
-when units 1–3 and that unit have landed with I3's rows green.**
+`events.once`/`on`, `timers/promises`, `fs.readFile`, `fs.promises.readFile`). On 2026-11-25 that
+unit lists four globals and has no Acceptance; the manager hands it I3's rows and `CustomEvent`.
+**This goal closes when units 1–3 and that unit have landed, its merged contract carrying I3's rows
+and `CustomEvent`, green.**
 
 Order: 1 first (RED); 2 and 3 independent of each other; the carrier's docx case turns green with 2,
 pptx with 2 (if nothing else stops it), pdfkit's isolate stop moves with 3.

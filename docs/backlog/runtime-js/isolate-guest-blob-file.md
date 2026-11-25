@@ -28,7 +28,11 @@ equal):
 | call | Node v24.16.0 | isolate guest |
 |---|---|---|
 | global `Blob`/`File` descriptor | data, function, writable, non-enumerable, configurable | same |
-| `new Blob(['a'])`; `.size`/`.type`, `.text()`, `.arrayBuffer()`, `.bytes()`, `.slice(1,2).text()`, `.stream()` | `Blob`; `3 text/plain`, `hé`, `ArrayBuffer(3)`, `Uint8Array[97,98,99]`, `b`, `ReadableStream` | `NotImplementedError: … isolate-host.Blob (…)` |
+| `new Blob(['a'])` | a `Blob` | `NotImplementedError: … isolate-host.Blob (…)` |
+| `new Blob(['ab', new Uint8Array([99])], {type: 'Text/Plain'})` `.size`/`.type` | `3 text/plain` | the same `NotImplementedError` |
+| `new Blob(['h', 'é']).text()` | `hé` | the same |
+| `new Blob(['abc'])` `.arrayBuffer()` / `.bytes()` / `.slice(1, 2).text()` | `ArrayBuffer(3)` / `Uint8Array[97,98,99]` / `b` | the same |
+| `new Blob(['abc']).stream()` | a `ReadableStream` | the same |
 | `new File(['x'], 'n', {lastModified: 5})` | `n 5 1` | `NotImplementedError: … isolate-host.File (…)` |
 | `typeof buffer.Blob` / `buffer.File` | `function` | `undefined` (`buffer.ts:42-43` reads them at load) |
 | `buffer.Blob === Blob`, `buffer.File === File` | `true` | `false` |
@@ -49,8 +53,8 @@ are written as the document (carrier `distribution/isolate-guest-web-api-accepta
    Node's `test/wpt/status/FileAPI/blob.cjs` and `file.json` record for Node, except
    `Blob-stream.any.js` (needs `stream()`, GC) and the `MessageChannel` subtests of
    `Blob-constructor.any.js`, both listed in the test → I1
-2. Every Blob/File row of §Context's pin table equals Node in `exec` and `runCode` (the `stream()`
-   row: row 5) → I1, I4
+2. Every row of §Context's pin table equals Node in `exec` and `runCode`, except the `stream()` row,
+   which is Acceptance 5 → I1, I4
 3. Node behaviours beyond WPT, against live Node: `endings: 'native'` with a lone `\r`, type
    lower-casing and invalid-type → `''`, `bytes()`, `slice` with negative and out-of-range bounds,
    `File` default `lastModified` (`Date.now()` at construction), `name` and part coercion
@@ -73,13 +77,15 @@ are written as the document (carrier `distribution/isolate-guest-web-api-accepta
 8. Compat `docs/public/compat/isolate-host.md`: `Blob`/`File` leave the ceiling row and the row
    "Web globals absent when the runtime loads"; a `Blob`/`File` row ✅ names the `stream()` gap ❌ →
    I1, I4
-9. The carrier's `docx-toblob.cjs` case passes (plain `it`); `pptx-write.cjs` passes too if it
-   needs nothing else (JSZip's `support.blob` probe sees a real `Blob`) → I5
+9. The carrier's `docx-toblob.cjs` case passes (plain `it`); `pptx-write.cjs` passes or its new
+   first stop is recorded in the carrier as a wall (a backlog item), never left as `blob is not
+   supported by this platform` → I5
 
 ## Parity cases
 
 - WPT `FileAPI/blob`, `FileAPI/file` under Node's status files, exclusions listed — RED → I1
-- the pin table's 11 Blob/File rows — RED except the two that equal today → I1, I4
+- the pin table's 13 rows — RED except the three equal today (descriptor, `({}) instanceof Blob`,
+  `typeof buffer.resolveObjectURL`), which are guards → I1, I4
 - `new Blob(['a\rb'], {endings: 'native'}).text()`, `new Blob([], {type: 'TEXT/Plain'}).type`,
   `new Blob([], {type: 'aé'}).type`, `new Blob(['abc']).slice(-2).text()`,
   `new Blob(['abc']).slice(5, 1).size`, `new File([], Symbol())` (Node's `TypeError`),

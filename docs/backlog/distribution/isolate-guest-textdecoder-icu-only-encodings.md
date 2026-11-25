@@ -1,7 +1,7 @@
 ---
 area: distribution
 status: draft
-title: In the isolate guest `TextDecoder` for big5, euc-jp, shift_jis, euc-kr and iso-2022-jp stays a named gap — Node decodes them through ICU, not by WHATWG
+title: In the isolate guest `TextDecoder` for big5, euc-jp, shift_jis, euc-kr and iso-2022-jp stays a named gap — Node's ICU decoders differ from WHATWG there
 created: 2026-11-25
 why: Node v24.16.0 decodes these five through ICU `ucnv`, whose results differ from the WHATWG Encoding Standard; no WHATWG decoder is Node's there, and no measured consumer needs them
 sources: [docs/backlog/epics/isolate-guest-web-api/reference/textdecoder/README.md, docs/backlog/epics/isolate-guest-web-api/goal.md]

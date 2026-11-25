@@ -93,8 +93,8 @@ Answered by probes 2026-11-24 (goal `isolate-guest-web-api`, `reference/seam-esm
 `AbortSignal`, `EventTarget`, `Event`, `CustomEvent` are read at use, `reference/today`); the `URL`/
 `URLSearchParams` rows go to goal `isolate-guest-modern-code`; the web-streams, `structuredClone`,
 `MessageChannel` and `crypto.subtle` reads stay ceilings installed after the runtime — their leaks
-in the table (`require('crypto').subtle` `undefined`, `stream/web.*` throwing `stream/web.X`) belong
-to no goal yet and stay this item's (the two load-breaking sites `timers.ts:267`, `crypto.ts:504`
+in the table (`require('crypto').subtle` `undefined`, `stream/web.*` throwing `stream/web.X`) moved
+to `distribution/isolate-guest-ceiling-module-exports-silent` (the two load-breaking sites `timers.ts:267`, `crypto.ts:504`
 matter only if a goal installs them before).
 
 Owner: runtime-js with isolate-guest, goal `isolate-guest-modern-code` (its `URL` rows, the seam). Compat ❌

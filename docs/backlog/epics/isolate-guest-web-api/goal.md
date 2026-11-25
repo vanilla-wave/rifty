@@ -15,7 +15,7 @@ ADR-0557/0568), each as Node v24.16.0's — proven against live Node, never appr
 
 - `Blob`/`File`, with `buffer.Blob`/`buffer.File` as the same objects;
 - `TextDecoder` for utf-8 and the 33 encodings where Node's decoders equal WHATWG Encoding (the
-  five Node decodes through ICU stay a named gap), `TextEncoder` utf-8 only as in Node;
+  five where Node's ICU decoders differ from WHATWG stay a named gap), `TextEncoder` utf-8 only as in Node;
 - `AbortController`/`AbortSignal`/`EventTarget`/`Event`/`CustomEvent` as ordinary guest globals from
   Node's own sources, so Node's APIs taking a `signal` and Node's stream code (goal
   `node-streams-as-in-node`, which delivers this group as its unit 7) work in the isolate.
@@ -76,8 +76,8 @@ scenario: `pptx.write()` → `blob is not supported by this platform`, `Packer.t
   `EventTarget`, `Event`, `CustomEvent` are the guest's globals from Node's sources and give Node's results on
   Node's WPT runs `test/wpt/test-abort.js`/`test-events.js` (`dom/abort`, `dom/events`) as Node's
   status records, except tests needing `MessageChannel` or GC (listed in the unit); `signal.reason` is an instance of the guest's
-  global `DOMException` (today's class, equal to Node's per `reference/today`; Node's code is bound to
-  it); Node's APIs taking a `signal` (`events.once`/`on`, `timers/promises`, `fs.readFile`,
+  global `DOMException` (today's class; its descriptor and `.code` equal Node's per
+  `reference/today`; Node's code is bound to it); Node's APIs taking a `signal` (`events.once`/`on`, `timers/promises`, `fs.readFile`,
   `fs.promises.readFile`) equal Node in the guest. Carried by `node-streams-as-in-node` unit 7
   (`distribution/isolate-stream-core-abort-controller`) as its acceptance.
 - I4. Same objects: `buffer.Blob`/`buffer.File` and `util.TextDecoder`/`util.TextEncoder` are `===`
@@ -108,7 +108,7 @@ split-out epic and the probes. Verified; dispositions:
 7. `TextEncoder` without an invariant — in I2.
 8. web streams have no owner after the split (the streams goal points here) — manager question M2.
 9. the I3 rows had no carrier if unit 7 lives in the streams goal — unit 7 already carries the
-   globals (its former 7g); I3's rows join its acceptance (map unit 4).
+   globals (its former 7g); I3's rows join its acceptance (map «Delivered elsewhere»).
 10. cheaper-route: the seam unit is only `buffer.ts:42-43` here — folded into the Blob unit (map 2); the
     captured-at-load item moved to `isolate-guest-modern-code`.
 11. «every global before the runtime» forced a standalone event/abort copy — Decisions now load all
@@ -128,6 +128,16 @@ carries them; re-pass: not seeded here until its home and M1 are settled); carri
 `buffer` exports bound then; `DOMException` identity in I3; captured-at-load's `crypto.subtle` row
 owner; unit numbers; `owner:` values; «exhaustive» → sampled forms named; I1 exclusions match
 the files; modern-code wording.
+
+final-check (ready): 2026-11-25 — fresh reviewer over the ready goal, map and units 1–3 with the
+new drafts: NOT PASS (1 blocker, 4 concerns, 6 nits), fixed: I3's carrier (unit 7 has no
+acceptance and four globals today) — the hand-over recorded in Decisions and the closure condition
+in map; captured-at-load's leak rows point to the silent-exports draft; unit 2's pins rewritten to the
+probe's literal inputs; pin and guard counts; the `replacement` row; `DOMException` wording; «the
+five» wording; unit 2 Acceptance 9 testable; unit 3 Acceptance 7 traces split (`compress: false` →
+I2, case 4 → I5); docx devDependency to add. Raised for the report, not fixable here: T and M1 rest
+on the manager's delegation; the streams goal's map still names exceljs as this goal's scenario 3 and
+the isolate `ReadableStream` as this goal's.
 
 challenge: 2026-11-24 — 12 problems (4 value/cheaper-route, 8 advisory) + 1 omitted user choice —
 answered by the user's narrowing (value: the consumer's measured stops), the re-asked questions and
@@ -158,6 +168,9 @@ the split-out of `URL`/ESM.
   `reference/textdecoder`; the whole composition in the guest bundle: +50.3 KB gzip, +3.1 ms warm,
   0 differences, `reference/textdecoder/bundle`); `Blob`/`File` from Node's `lib/internal/blob.js`/`file.js` over a JS byte
   store (`reference/sources-native`). Each source gets an ADR (semantic copy) before its unit.
+- 2026-11-25 — manager: I3's rows and `CustomEvent` are handed to `node-streams-as-in-node` unit 7
+  by the manager («Цели потоков это передам я»); on 2026-11-25 that unit lists four globals and has
+  no `## Acceptance` yet, so this goal's closure checks that its merged contract carries I3.
 - rejected route: npm polyfills (`event-target-shim` 6.0.2 + `abortcontroller-polyfill` 1.7.8:
   22/31 differ; `formdata-node` Blob 9/19, `blob-polyfill` 13/19; `text-encoding` 0.7.0 differs on
   `iso-8859-8-i` and gbk/gb18030; iconv-lite has no `fatal`) — violates I1–I3.
