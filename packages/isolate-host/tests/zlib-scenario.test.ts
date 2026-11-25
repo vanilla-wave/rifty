@@ -72,3 +72,22 @@ describe('node:zlib goal scenario vs Node (isolate host)', () => {
     );
   }
 });
+
+// External review of PR #453 (B1): a pin that kept one stderr line let these pass.
+describe('a pin holds the whole stderr', () => {
+  const base = {
+    exitCode: 1,
+    stdout: '',
+    stderr: 'NotImplementedError: Not implemented: zlib.x (why)\n    at f (/workspace/a.js:1:1)\n',
+    output: null,
+  };
+  it('an extra stderr line changes it', () => {
+    expect(pinOf({ ...base, stderr: `unexpected stderr\n${base.stderr}` })).not.toEqual(
+      pinOf(base),
+    );
+  });
+  it('a message line after the first changes it', () => {
+    const stderr = base.stderr.replace('(why)\n', '(why)\nCHANGED ERROR DETAIL\n');
+    expect(pinOf({ ...base, stderr })).not.toEqual(pinOf(base));
+  });
+});
