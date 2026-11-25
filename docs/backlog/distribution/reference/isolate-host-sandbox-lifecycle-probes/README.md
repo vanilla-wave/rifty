@@ -43,8 +43,8 @@ Host disk (ADR-0568 B) is not built: rejected by the user.
 
 ## What the numbers say (no recommendation)
 
-v2bs trades memory that grows with every open turn (22–34 MiB after one generator, 55–112 after
-four; Memory) for a faster repeated `exec` (20–109 ms against v1 back to back, 32–149 ms in §think;
+v2bs trades memory that grows with every open turn (after GC 22–34 MiB after one generator, 55–74
+after four; RSS +105–112 after four; Memory) for a faster repeated `exec` (20–109 ms against v1 back to back, 32–149 ms in §think;
 Cost); its first `exec` is not faster, its
 correctness needs a restore point, a rebuild path and a guard against dead realms (§haunt).
 v1w removes only v1's fixed cost, at 2× v1's memory and only when its spare is ready. Most of v2's
@@ -289,12 +289,12 @@ worker for every arm.
 - v1: a crashed worker loses ≤ 4 runs in flight; each reruns alone from consumer bytes (ADR-0563
   §6); idle sandboxes are not on any worker. Retiring a worker needs nothing.
 - v2 without a restore point: every sandbox pinned to that worker, idle ones included, is lost. With
-  v2bs at 55–112 MiB idle (after four generators), a worker holding T_w sandboxes loses T_w turns' files.
+  v2bs at 55–74 MiB idle after GC (RSS +105–112) after four generators, a worker holding T_w sandboxes loses T_w turns' files.
 - v2bs+rp: the same crash costs T_w rebuilds elsewhere (12–43 ms each + IPC of the point) and reruns
   of the runs in flight from their points (the point is the state before the run, so a rerun is
   idempotent). Retiring a worker (RSS line, recycle) = moving its T_w sandboxes the same way; the
   idle-retire line has to count live sandboxes (a worker with the template ~130–150 MiB + one idle
-  v2bs sandbox 55–112 already crosses 256).
+  v2bs sandbox (55–74 after GC, RSS +105–112) already crosses 256).
 
 ## What moving to v2bs+rp redoes and reuses (merged code)
 
@@ -353,7 +353,7 @@ rollback (ADR-0568 §Not the user's words), the I-list's wording, one op at a ti
 | I1 no ending loses the sandbox; killed run rolled back | holds by rebuild (measured in one process) | holds only with a point; kills keep partial writes unless rebuilt — F4 asked again |
 | I2 fresh process per run | holds (context per run, §escape) | holds |
 | I5 destroy | dispose the isolate | drop the worker FS + dispose the run |
-| I6 «an idle sandbox holds no process and no isolate» | breaks (22–34 MiB per idle turn after one generator, 55–112 after four) | holds no isolate; ~1.6 MiB of worker memory |
+| I6 «an idle sandbox holds no process and no isolate» | breaks (after GC 22–34 MiB per idle turn after one generator, 55–74 after four; RSS +105–112) | holds no isolate; ~1.6 MiB of worker memory |
 | I7 trust | the seam unchanged; A shares the guest's isolate (a V8 bug reaches it) | the FS becomes exposed host functions |
 | «Владелец ФС … в том же realm (внутри isolate)» | same isolate, another realm | breaks |
 | template open fork (touched-entries bound in the consumer) | gone from the consumer; the idle isolate grows with the libraries touched instead | gone from the consumer, into the worker |
@@ -361,8 +361,8 @@ rollback (ADR-0568 §Not the user's words), the I-list's wording, one op at a ti
 ## Open questions (recorded, not probed)
 
 - A V8 code cache for the template's sources in fresh isolates: can isolated-vm hand a function
-  compiled host-side with cached data into the guest's realm, and can runtime-js's loader use it? The
-  only route by which v1 could get v2's repeated-`exec` gain.
+  compiled host-side with cached data into the guest's realm, and can runtime-js's loader use it? A
+  route by which v1 could get v2's repeated-`exec` gain.
 - Every module compiled twice: `runtime-js/src/module-loader/cjs-factory.ts:52-64` (a checking `new
   Function` of the source, then the wrapper) — a cheaper candidate for part of the same gain.
 - A cheap guard against §haunt for v2: synchronous compilation instead of async
