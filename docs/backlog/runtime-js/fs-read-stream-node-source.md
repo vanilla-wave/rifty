@@ -10,11 +10,17 @@ sources: [docs/adr/runtime-js/0575-stream-core-and-fs-streams-are-node-v24-16-0-
 
 ## Context
 
-Unit 9r (map). Stands on 8 (8a–8c), 4, 4b. The file holds both classes; it is loaded whole and only
-`ReadStream`/`createReadStream` are wired, `fs.WriteStream` stays today's class until 9w. Measured
-in-process (product bindings, today's WriteStream): carrier 8/10 programs = Node; the two left
-(`c-graceful-fs`, `c-unzip-stored`) fail on today's write class exactly as today; `c-transform-big`
-through today's WriteStream keeps Node's backpressure (in-flight 65536) (`results/route-b-9r/`).
+Unit 9r (map). Stands on 8c (8a–8c), 1, 4, 4b and 7 (map §Row ownership). In Workbench, `for await`
+over 16 MiB on route B takes 21 s, against Node's 11 ms (`results/chromium-d/`): that is the 4b edge. The file holds both classes; it is loaded whole and only
+`ReadStream`/`createReadStream` are wired, `fs.WriteStream` stays today's class until 9w. Measured in-process (product bindings, today's WriteStream; `results/route-b-9r/`):
+- carrier 8/10 programs = Node;
+- `c-graceful-fs` fails on today's write class exactly as today;
+- `c-unzip-stored` changes in this window, declared and pinned: today it exits 0 with a silently
+  empty directory; on 9r it exits 1 with `TypeError: Class constructor FileWriteStream cannot be
+  invoked without 'new'`;
+- `c-transform-big` through today's WriteStream keeps Node's backpressure (in-flight 65536).
+
+The window rows are in map §Regression risk.
 Acceptance: `m4` and the read rows of `m2`/`m3` = Node on every host; carrier read programs = Node;
 PR #437's cases; the isolate `ReadableStream` wall gone (absorbs #437, conditional).
 

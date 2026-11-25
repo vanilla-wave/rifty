@@ -278,6 +278,45 @@ export function createRouteB(createNodeStreams: CreateNodeStreams, host: RouteBH
     // Node's FastBuffer is a Uint8Array subclass sharing Buffer.prototype; rifty's Buffer is that class.
     'internal/buffer': () => ({ FastBuffer: rifty('buffer').Buffer }),
     'internal/encoding': () => ({ TextEncoder: g.TextEncoder }),
+    // Node's addAbortListener attaches with kResistStopPropagation, which a host EventTarget ignores:
+    // a guest listener that stops immediate propagation would hide the abort (S1). A dependent signal
+    // is aborted by the abort algorithm, not by a listener, so it cannot be stopped. Without
+    // AbortSignal.any (Chromium < 116) the plain listener stays: a declared gap there.
+    'internal/events/abort_listener': () => ({
+      addAbortListener(signal: AbortSignal | undefined, listener: () => void) {
+        const v = nodeReq('internal/validators') as Record<string, (x: unknown, n: string) => void>;
+        if (signal === undefined) {
+          const { ERR_INVALID_ARG_TYPE } = (
+            nodeReq('internal/errors') as { codes: Record<string, new (...a: unknown[]) => Error> }
+          ).codes;
+          throw new ERR_INVALID_ARG_TYPE('signal', 'AbortSignal', signal);
+        }
+        v.validateAbortSignal(signal, 'signal');
+        v.validateFunction(listener, 'listener');
+        let remove: (() => void) | undefined;
+        if (signal.aborted) {
+          g.queueMicrotask(() => listener());
+        } else {
+          const any = (g.AbortSignal as { any?: (s: AbortSignal[]) => AbortSignal }).any;
+          // Only a host AbortSignal gets a dependent; a signal-like object keeps Node's own call (and
+          // its V8 TypeError text, which names `signal`).
+          if (any && signal instanceof (g.AbortSignal as typeof AbortSignal)) {
+            const dependent = any([signal]);
+            dependent.addEventListener('abort', listener, { once: true });
+            remove = () => dependent.removeEventListener('abort', listener);
+          } else {
+            signal.addEventListener('abort', listener, { once: true });
+            remove = () => signal.removeEventListener('abort', listener);
+          }
+        }
+        return {
+          __proto__: null,
+          [Symbol.dispose]() {
+            remove?.();
+          },
+        };
+      },
+    }),
     'internal/event_target': () => ({
       kWeakHandler: Symbol('kWeak'),
       kResistStopPropagation: Symbol('kResistStopPropagation'),
@@ -357,10 +396,15 @@ export function createRouteB(createNodeStreams: CreateNodeStreams, host: RouteBH
       return cache.get(id);
     };
   };
-  return createNodeStreams(
+  // The generated modules' own require, for bindings that reuse Node's code (validators, errors).
+  let nodeReq: (id: string) => unknown = () => {
+    throw new Error('route B: generated modules not created yet');
+  };
+  nodeReq = createNodeStreams(
     primordials,
     lookup(INTERNAL, 'internalBinding'),
     lookup(MODULES, 'binding'),
     host.process,
   );
+  return nodeReq;
 }

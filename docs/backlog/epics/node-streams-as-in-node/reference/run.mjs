@@ -134,6 +134,20 @@ if (process.env.ROUTE_B_GEN)
       { ROUTE_B: 'product', ROUTE_B_GEN: process.env.ROUTE_B_GEN },
       name,
     );
+// With ROUTE_B_GEN also rifty-inproc-Bp8c: product bindings, today's fs classes (after 8c, before 9r).
+if (process.env.ROUTE_B_GEN)
+  runs['rifty-inproc-Bp8c'] = (files, name) =>
+    spawnIn(
+      files,
+      process.execPath,
+      tsx,
+      { ROUTE_B: 'product', ROUTE_B_GEN: process.env.ROUTE_B_GEN, ROUTE_B_FS: 'none' },
+      name,
+    );
+// With ROUTE_B_GEN also rifty-inproc-Bp9w: product bindings, Node's WriteStream, today's ReadStream.
+if (process.env.ROUTE_B_GEN)
+  runs['rifty-inproc-Bp9w'] = (files, name) =>
+    spawnIn(files, process.execPath, tsx, { ROUTE_B: 'product', ROUTE_B_GEN: process.env.ROUTE_B_GEN, ROUTE_B_FS: 'write' }, name);
 // With ROUTE_B_GEN also rifty-inproc-Bp9r: product bindings, Node's ReadStream, rifty's WriteStream (unit 9r alone).
 if (process.env.ROUTE_B_GEN)
   runs['rifty-inproc-Bp9r'] = (files, name) =>

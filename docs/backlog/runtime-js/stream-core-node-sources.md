@@ -10,8 +10,8 @@ sources: [docs/adr/runtime-js/0575-stream-core-and-fs-streams-are-node-v24-16-0-
 
 ## Context
 
-Unit 8c «Core wiring» of goal node-streams-as-in-node (map item 8c, ADR-0575 §7). Stands on 8a, 8b and
-the bindings 1–2 (and 7 in the isolate).
+Unit 8c «Core wiring» of goal node-streams-as-in-node (map item 8c, ADR-0575 §7). Stands on 8a, 8b, the
+bindings 1–2 and 7 (the isolate's pipeline rows; `results/ownership.txt`).
 
 Scope:
 - wire the generated core into `@riftydev/io` and `node:stream`;
@@ -26,10 +26,9 @@ Acceptance:
 - parity `cases/stream` 66/66 and each absorbed draft's repro (map §Absorption, 21 drafts);
 - `check:es-floor` lists extended with `AbortSignal.any`, `Symbol.dispose`/`asyncDispose` and
   `Promise.withResolvers`, and/or the Chromium 108 lane on those rows;
-- identifier renaming: measured on 1 of 105 parity cases (`stream/from-web-options`: V8's own
-  `TypeError` names a local, `results/route-b-minify.txt`). So 8c declares a ⚠️ for V8
-  property-access messages inside the core, lists the measured one, and runs that case as a row on
-  the Workbench consumer bundle.
+- identifier renaming changes 0 of 105 parity cases (`results/route-b-minify.txt`). The earlier
+  1/105 (`stream/from-web-options`) named Node's `signal` in `abort_listener`, which is now 8a's
+  binding. A guard row runs `from-web-options` on the Workbench consumer bundle.
 
 zlib unit 3 starts after this unit.
 

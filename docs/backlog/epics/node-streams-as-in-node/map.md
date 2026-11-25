@@ -6,7 +6,10 @@ Rows equal to Node, run at `725576a88` (main `b6d37fc01`'s code; this branch is 
 
 ## Items
 
-- **0** `runtime-js/node-streams-acceptance-carrier` — **carrier**. It runs the 10 `c-*` programs (files
+- **0** `runtime-js/node-streams-acceptance-carrier` — **carrier**. In Workbench it lays the exceljs
+  closure out in the guest's `/tmp` through `packages/isolate-host/tests/closure-files.ts` and the zlib
+  carrier's `serveSteps`/`UNPACK`/`RUNNER` (PR #453). That takes 11–12 s per program, so there is no
+  edge 0 ← P (`results/chromium-c/`). It runs the 10 `c-*` programs (files
   compared by content) as cases against live Node, in the isolate host and in Chromium on both
   browser hosts (Workbench, SDK; Chromium 108 is the tier floor, ADR-0469). It also runs the
   m-matrices in Chromium. It comes first, before any code, and has one owner for the Chromium line.
@@ -28,10 +31,19 @@ against Node:
   on every fd path, `results/chromium-fd/`). A write before close lands today, so that is a guard
   row. It has its own regression row. → I10.
 - **4b** `runtime-js/fs-fd-read-by-range` — positional fd reads move only the range. In Workbench
-  today each 64 KiB call moves the whole file: 16 MiB in 20–26 s, against Node's 3 ms. Acceptance is
+  today each 64 KiB call moves the whole file: 16 MiB in 18.5–26 s, against Node's 3 ms.
+  Per host:
+  - in-process and isolate (memory) read linearly already (a view, no copy);
+  - the SDK reads quadratically (review round 3);
+  - Workbench reads quadratically.
+
+  It absorbs the read half of `perf/fs-rpc-chunk-perf` (its «Route 1»). Acceptance is
   by byte/RPC counter, with an explicit decision per implementation. → I10.
 - **4c** `runtime-js/fs-fd-write-by-range` — positional fd writes move only the range. Today
-  16 MiB takes 50–82 s, and positional writes 114–199 s. Same acceptance as 4b. → I10.
+  16 MiB takes 50–82 s in Workbench, and positional writes 114–199 s. The memory hosts are quadratic
+  too, through memcpy: 4 → 16 MiB goes 7 → 101 ms in-process and 4 → 126 ms in the isolate
+  (`results/fd-hosts.txt`). Same acceptance as 4b, plus Storage fault rows. It absorbs the
+  `writeChunk` half of `perf/fs-rpc-chunk-perf`; that draft keeps its base64 write inflation. → I10.
 - **5** `runtime-js/fs-writev-fsync` — `fs.writev`/`writevSync`/`fsync`/`fsyncSync`/`fdatasync`
   (`b1`). Without `writev`, Node's `WriteStream` sets `_writev = null`; without `fsync`, `flush: true`
   throws a misleading `ERR_INVALID_ARG_TYPE` (`streams.js:373-374`). → I10.
@@ -49,38 +61,52 @@ Core, three adjacent PRs (ADR-0575 §7):
 - **8a** `runtime-js/stream-core-node-sources-unwired`:
   - vendored sources, license manifest entry, generator, bindings, zlib constants without the zlib
     module;
-  - not wired: `check:arch` «no product importer» and byte-identical `main` bundles;
-  - a CI differential «Node's bindings = rifty's» on `m1`–`m8`, the hook matrix, `cases/stream` and
-    `zlib-diff`.
+  - the abort-listener binding: a dependent signal, measured in `m9` and
+    `results/route-b-abort-semantics.txt`;
+  - not wired: `check:arch` «no product importer» and 0 B on every bundle artifact;
+  - a CI differential «Node's bindings = rifty's» over the rows `results/ownership.txt` gives to the
+    core. The rows of units 1, 2, 4 and 5 stay pinned as expected RED with their owner. `zlib-diff`
+    is not part of 8a: it is zlib unit 3's entry criterion, measured there after 8c.
 - **8b** `runtime-js/stream-core-consumer-guard-rows`: regression rows for internal consumers
   and non-stream objects, green on today's core (§Regression risk).
 - **8c** `runtime-js/stream-core-node-sources`:
   - wiring and consumer moves (`ServerResponse.write` → `false`; a stream shape `finished`
     accepts for `PortRegistrySocket`), and removal of `packages/io/src/streams`;
   - the es-floor extension;
-  - identifier renaming changes 1 of 105 parity cases (`results/route-b-minify.txt`): a declared ⚠️
-    with that message listed and a row on the consumer bundle.
+  - identifier renaming changes 0 of 105 parity cases (`results/route-b-minify.txt`). The one case
+    it changed before, `from-web-options`, named Node's `signal` inside `abort_listener`, and that
+    code is now the binding. So no ⚠️; one guard row runs on the Workbench consumer bundle.
 
   Stands on 8a, 8b, 1, 2 and, in the isolate, 7. Absorbs 21 drafts. → I1–I3, I6, I7.
 
-  Merge order: 8a and 8b merge once 8c is in work; 8a never sits unwired on `main` open-ended.
+  Merge order: 8a and 8b merge only once 8c's PR is open and its CI differential is green, so the
+  arrow 8a → 8b → 8c is the build order and the three merges are adjacent.
 
 fs streams, split by side:
 
 - **9r** `runtime-js/fs-read-stream-node-source` — `fs.ReadStream` from Node's
-  `lib/internal/fs/streams.js`, which is loaded whole; only `ReadStream` is wired. Stands on 8, 4
-  and 4b. In the meantime `fs.WriteStream` is today's class. Measured in-process
-  (`results/route-b-9r/`): carrier 8/10 programs = Node. The two left fail on today's write class as
-  they do today, and backpressure into today's `WriteStream` holds (in-flight 65536). → I4, I8 (read
-  programs).
+  `lib/internal/fs/streams.js`, which is loaded whole; only `ReadStream` is wired. Stands on 8c, 1, 4,
+  4b and 7 (§Row ownership). In the meantime `fs.WriteStream` is today's class. Measured in-process
+  (`results/route-b-9r/`): carrier 8/10 programs = Node, and backpressure into today's `WriteStream`
+  holds (in-flight 65536). The two other programs fail on today's write class:
+  - `c-graceful-fs` exactly as today;
+  - `c-unzip-stored` changes, and that is declared: today it exits 0 with a silently empty directory;
+    in the 9r window it exits 1 with `TypeError: Class constructor FileWriteStream cannot be invoked
+    without 'new'`. A loud error replaces a silent wrong result.
+
+  The window rows are pinned (§Regression risk, windows). → I4, I8 (read programs).
 - **9w** `runtime-js/fs-write-stream-node-source` — `fs.WriteStream` from the same file. Stands on
-  8, 4, 4c, 5 and the publication cost unit. Today's 16 MiB write stream on Workbench takes 518 ms,
+  8c, 9r, 4c, 5 and the publication cost unit P (§Row ownership). Today's 16 MiB write stream on Workbench takes 518 ms,
   and it stays so until 9w. → I5, I8 (write programs).
 
+The graph is derived from `results/ownership.txt` (`ownership.mjs`), not from this prose: a row with
+two or more units is an edge. Its summary is under §Row ownership.
+
 Implementation order once the goal is ready:
-- 1, 2, 3 (independent) → 4, 4b → 8a → 8b → 8c → 9r;
-- in parallel and after: 4c, 5 and P (publication cost) → 9w;
-- 7 by the user's answer on `AbortController`.
+- 1, 2, 3 (independent) → 4, 4b → 7 → 8a → 8b → 8c → 9r;
+- in parallel and after: 4c, 5 and P (publication cost), then 9w after 9r;
+- 7 comes before 8c: the isolate's pipeline rows need it, and `pipeline` works there today. The
+  user's answer decides only its globals.
 
 Probe totals on route B, in-process (`summary.txt`):
 
@@ -112,6 +138,60 @@ Remainder by binding:
 - `m8` unknown encoding → 1;
 - parity `cases/stream` 63/66 with product bindings: latin1/utf16le → 1, `'UTF8'` → 2.
 
+## Row ownership
+
+`results/ownership.txt` is generated by `reference/ownership.mjs` from `results/`; nothing in it is
+written by hand.
+
+- Each row of each matrix and carrier program, on each host, gets the units it needs before it equals
+  Node, read from the window columns (`-Bp8c`, `-Bp9w`, `-Bp9r`), the binding cause and the host.
+- Its owner is the last of those units in the implementation order.
+- Two or more units on a row make an edge.
+- A unit's acceptance: its own rows go green, and later owners' rows stay pinned on today's outcome.
+
+Summary of `results/ownership.txt` (rows by owner; `guard` = equal today and not broken by route B):
+
+| owner | rows |
+|---|---|
+| 1 | 1 |
+| 2 | 2 |
+| 3 | 1 |
+| 4 | 1 |
+| 4b | 12 |
+| 8c | 129 |
+| 9r | 33 |
+| 4c | 24 |
+| 5 | 1 |
+| 9w | 20 |
+| 7g | 5 |
+| guard | 95 |
+
+Edges, as owner ← unit, with the number of rows:
+
+- 7g ← 8c: 3
+- 8c ← 1: 3
+- 8c ← 2: 1
+- 8c ← 7: 5
+- 9r ← 1: 2
+- 9r ← 4: 1
+- 9r ← 4b: 1
+- 9r ← 7: 1
+- 9r ← 8c: 31
+- 9w ← 4c: 2
+- 9w ← 5: 1
+- 9w ← 8c: 20
+- 9w ← 9r: 2
+- 9w ← P: 1
+
+So the graph is:
+- 8c ← 1, 2, 7;
+- 9r ← 1, 4, 4b, 7, 8c;
+- 9w ← 4c, 5, 8c, 9r, P;
+- 7g (the isolate guest `AbortController` globals, the user's fork) ← 8c;
+- 3 has no edge.
+
+8a and 8b are 8c's build steps, so 8c's rows are theirs to keep pinned.
+
 ## Absorption
 
 There are 37 stream drafts on main: 26 inside the goal, 11 outside. Nothing is deleted here; each
@@ -137,7 +217,8 @@ Drafts that exist only on parked branches:
 
 - **Goal node-zlib-on-every-host.** Its `map.md` §Dependencies is updated in this branch. The line in
   both maps: «zlib unit 2 (engine) needs no streams unit. zlib unit 3 (`lib/zlib.js` whole) starts
-  after streams units 8a–8c «Core»; 8a's differential includes `zlib-diff` = 0 (state and load).»
+  after streams units 8a–8c «Core». `zlib-diff` = 0 is zlib unit 3's own entry criterion; if its state
+  group is ≠ 0 after 8c, that is a finding against the streams goal.»
   - The earlier per-member mapping of `zlib-node-lib-port`'s gap rows is moot: in unit 8 they are all
     Node's code.
   - Route B measured `zlib-diff` at 6/45 state scenarios (`results/route-b-zlib-diff.txt`). All are
@@ -230,6 +311,21 @@ Measured on route B in-process (`results/route-b-s5-consumers.txt`, cases `route
 Not measured on route B yet: `ClientRequest`, `process.stdout` (parity `stream/pipe-process-stdio*`),
 the upgrade socket. These are 8b's to write.
 
+Windows between units (`programs/w1-fs-windows.cjs`, `results/w1-fs-windows.txt`). The columns are
+Node, today, after 8c before 9r (`rifty-inproc-Bp8c`: Node's core with today's fs classes) and after
+9r before 9w (`rifty-inproc-Bp9r`). Each row is pinned as declared:
+
+- `ws instanceof Writable` / `isWritable(ws)`: Node true/true, today false, both windows false.
+- `pipeline(rs, ws)` then `destroyed`/`closed`: Node true/true; today and both windows false/undefined.
+  The bytes are right everywhere.
+- `pipeline(rs, PassThrough, ws)`: Node's bytes everywhere.
+- `promises.pipeline(rs, async gen, ws)`: Node resolves. Today throws `TypeError`; the 8c window
+  throws `ERR_STREAM_PREMATURE_CLOSE`, which is still loud; the 9r window resolves.
+- `ws.destroy(err)` mid-`pipe`: Node emits `'error'` on `ws`; today and both windows emit none.
+- A late `finished(ws)` after close: Node calls the callback; today and both windows do not.
+
+All of these close at 9w.
+
 Unit 4 changes the timing of every `fs` callback API. Its own row: the fs callback parity cases
 (`cases/fs`, 41) plus an ordering case of `fs.readFile`/`stat`/`write` callbacks against timers and
 `setImmediate`.
@@ -258,7 +354,7 @@ Each outcome must still be honest, never a silent truncation. Durability after `
     `c-transform-big` 73.5 s (`results/chromium-b/`).
   - Chromium 108 not run.
 - fd I/O in Workbench (Chromium 148, main `692babe13`; `results/chromium-fd/`, probes `chromium/fd*`):
-  every fd read and write path moves the whole file per call. 16 MiB in 64 KiB calls takes 20–26 s
+  every fd read and write path moves the whole file per call. 16 MiB in 64 KiB calls takes 18.5–26 s
   to read and 50–82 s to write; positional writes take 114–199 s. Node takes 3–7 ms; `readFileSync`
   and `writeFileSync` are linear. Timer ticks are 0 on every path → units 4b, 4c, 4.
 - S7, measured (`results/chromium/durability.jsonl`): Workbench, OPFS `persistence: 'required'`,

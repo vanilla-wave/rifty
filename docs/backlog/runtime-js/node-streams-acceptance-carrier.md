@@ -57,7 +57,14 @@ Route B (main `692babe13` + the product wiring, `results/chromium-b/`):
 - SDK: all 12 programs = Node;
 - Workbench: the 7 without the closure = Node, and the 5 closure programs did not run (seeding).
 
-The Workbench harness for the closure is this unit's to settle.
+The Workbench closure harness, decided: the closure goes into the guest's `/tmp` through
+`packages/isolate-host/tests/closure-files.ts` and the zlib carrier's `serveSteps`/`UNPACK`/`RUNNER`
+(PR #453). That takes 11–12 s per program (`results/chromium-c/route-*/seed-timing.log`), so there is
+no edge to the publication-cost unit.
+
+Workbench, 5 closure programs (main `5763d8fa1`):
+- route A: 2/8 rows = Node;
+- route B: 8/8 = Node.
 
 ## Challenge
 

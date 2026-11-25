@@ -10,9 +10,12 @@ sources: [docs/adr/runtime-js/0575-stream-core-and-fs-streams-are-node-v24-16-0-
 
 ## Context
 
-Unit 9w (map). Stands on 8, 4, 4c, 5 and `perf/workbench-guest-write-cost-grows-with-project`. Node's
+Unit 9w (map). Stands on 8c, 9r, 4c, 5 and `perf/workbench-guest-write-cost-grows-with-project` (map
+§Row ownership). Node's
 `WriteStream` issues one `fs.write`/`writev` per chunk where today's class writes once per burst, so
-on Workbench it multiplies per-write publication cost (16 MiB = 256 writes). Acceptance: `m5` and the
+on Workbench it multiplies per-write publication cost (16 MiB = 256 writes). Measured in Workbench
+(`results/chromium-d/`): route B 16 MiB writes in 46.5 s (today 488 ms), and in a 1000-file project
+they hit the 900 s cap (today 7.75 s). Acceptance: `m5` and the
 write rows of `m2`/`m3` = Node on every host; carrier write programs (`c-graceful-fs`,
 `c-unzip-stored`, `c-xlsx-roundtrip` write half) = Node; the 16 MiB stream on Workbench within a small
 factor of today's 518 ms in a project with many files; the durability guard; PR #434's cases.

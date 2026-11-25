@@ -3,7 +3,7 @@ area: runtime-js
 status: draft
 title: fs.read and fs.readSync by fd transfer only the requested range on every host
 created: 2026-11-25
-why: In Workbench every fs.read/readSync(fd) call moves the whole file (fs.ts:944 readFileBytesSync): 16 MiB read in 64 KiB calls takes 20–26 s against Node's 3 ms; any positional reader (zip, tar, seek) is quadratic there
+why: In Workbench every fs.read/readSync(fd) call moves the whole file (fs.ts:944 readFileBytesSync): 16 MiB read in 64 KiB calls takes 18.5–26 s against Node's 3 ms; any positional reader (zip, tar, seek) is quadratic there
 epic: node-streams-as-in-node
 sources: [docs/backlog/epics/node-streams-as-in-node/reference/results/chromium-fd/workbench.jsonl, docs/backlog/epics/node-streams-as-in-node/reference/results/chromium-fd/node.jsonl]
 ---
@@ -18,12 +18,25 @@ call ≈ a whole-file read (1.4 / 8.3 / 87 ms). The RPC layer already has a rang
 
 Mechanism: a positional read on `FsSync`/`Vfs` (path or open-file handle + offset + length). Each
 implementation decides explicitly, never a silent whole-file fallback:
-- memory: slice of the stored bytes (no copy beyond the range);
-- OPFS (`OpfsFsSync`): `SyncAccessHandle.read({ at })`;
-- relay / owner (Workbench kernel ↔ owner): the existing chunk RPC;
+- memory: a slice of the stored bytes, no copy beyond the range; it is linear already
+  (`memory-backend.ts:113`; `results/fd-hosts.txt`);
+- OPFS (`OpfsFsSync`): a slice of its authoritative content cache, as memory. It must not read the
+  disk directly: `readFileBytesSync` serves the cache by reference (`opfs-sync.ts:509`), and the disk
+  lags until the write-through drains (`:569`);
+- relay / owner (Workbench kernel ↔ owner): the chunk RPC. The owner side today re-reads the whole
+  file per chunk (`readChunkReplyOf`, `sync-rpc-fs.ts:89-93`), so it must serve a range of its store
+  through the same new positional read. This absorbs the read half of `perf/fs-rpc-chunk-perf` (its
+  «Route 1»);
 - sync mirror (`SyncMirrorVfs`, workbench glue): forwards to its source;
 - isolate guest (`MemoryFsSync`): memory;
 - any other implementation without a range: a loud `NotImplementedError` naming it.
+
+Host table, measured: in-process and isolate read linearly already (`results/fd-hosts.txt`); the SDK
+reads quadratically (review round 3, not in `results/`); Workbench is quadratic.
+`results/chromium-fd/workbench.jsonl`: 16 MiB takes 18.5–26 s.
+
+The `FsSync`/`Vfs` positional read is a `vfs` contract change, so this unit records an ADR (as
+`perf/fs-rpc-chunk-perf` noted).
 
 Acceptance: bytes transferred per call ≤ the requested length + constant, by an RPC/byte counter, not
 milliseconds; doubling the file size costs ≤ ×2.2; a whole read by 64 KiB calls within a small factor of

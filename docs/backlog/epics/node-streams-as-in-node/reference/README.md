@@ -27,8 +27,8 @@ unzipper 0.10.14, fast-csv 4.3.6 and jszip 3.10.2. A row is `same` only when its
 status both equal Node's. A line only a rifty run printed, such as an uncaught error, counts as
 `extra`. Paths are masked (`<dir>`, `<repo>`).
 
-Not measured: Chromium. The in-process runs use Node's timers and microtasks, not a browser realm's.
-Owner of the Chromium column: the goal's carrier unit (map item 0).
+The in-process runs use Node's timers and microtasks, not a browser realm's. Chromium runs are in
+§Chromium below. The goal's carrier unit (map item 0) owns the Chromium line.
 
 Limits: `route-b/parity.mjs` compares stdout only; exit status and stderr are not compared.
 
@@ -94,4 +94,26 @@ Each was compared against a Node oracle laid out the same way (`oracle.mjs`, `co
 
 To rerun, copy the specs into `tests/browser-unit/` and `tests/no-coi/`, run Playwright on dedicated
 ports, and delete them afterwards. They ran the program set as it was when copied (`m4` 20 rows).
+
+## How each results directory is made
+
+| results | made by |
+|---|---|
+| `summary.txt`, `<program>.txt` | `run.mjs REPO NODE_SRC` with `ROUTE_B_GEN` set (`route-b/run-all.sh`). Columns `-Bp8c`/`-Bp9w`/`-Bp9r` are the unit windows. |
+| `route-b-*.txt` | `route-b/run-all.sh` (parity, zlib-diff, size, bench) |
+| `route-b-s5-consumers.txt` | `VERBOSE=1 route-b/parity.mjs REPO NODE_SRC <abs path to route-b/s5>` |
+| `route-b-minify.txt` | `route-b/parity.mjs` with `ROUTE_B_GEN` from `product/generate.mjs --minify` vs `--minify-all` |
+| `route-b-abort-semantics.txt` | `node route-b/abort-semantics.mjs` |
+| `route-b-9r/` | `run.mjs` with `ONLY=c-`, `RESULTS=` that dir (column `rifty-inproc-Bp9r`) |
+| `route-b-product-*.txt` | `route-b/product/run.sh` + a throwaway product build (its header) |
+| `fd-hosts.txt` | `node --import tsx fd/fd-hosts.mjs REPO` |
+| `ownership.txt` | `node ownership.mjs` over the directories above |
+| `chromium/` | route A Chromium baseline: `chromium/zz-nsg-workbench.spec.ts`, `zz-nsg-sdk.spec.ts`, `zz-nsg-durability*.spec.ts` |
+| `chromium-b/` | the same specs on a route-B product build (main `692babe13`); the 5 closure programs on Workbench are in `chromium-c/` |
+| `chromium-c/` | `chromium/closure-tmp/zz-nsg-closure-tmp.spec.ts`: closure in the guest's `/tmp` (PR #453 helpers), routes A and B, main `5763d8fa1`; `b-c-transform-big-route-b-workbench.log` holds the 73.5 s row |
+| `chromium-d/` | `chromium/zz-nsg-streamprobe.spec.ts` with `streamprobe.cjs`/`streamplan.mjs`/`streamoracle.mjs`: 4/16 MiB stream read/write and a write in a 1000-file project, routes A/B, main `5763d8fa1`; `summary.txt` by `chromium/streamsummary.mjs` |
+| `chromium-fd/` | `chromium/zz-nsg-fdread.spec.ts`, `zz-nsg-fdwrite.spec.ts` with `fdread.cjs`/`fdwrite.cjs` |
+
+Each Chromium spec is copied into `tests/browser-unit/` or `tests/no-coi/` of a throwaway worktree, run
+on dedicated ports, and deleted.
 

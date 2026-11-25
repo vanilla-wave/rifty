@@ -68,11 +68,14 @@ if (process.env.ROUTE_B === '1' || process.env.ROUTE_B === 'product') {
   const fsRifty = riftyRequire('fs') as Record<string, unknown>;
   const fsB = Object.create(fsRifty) as Record<string, unknown>;
   // ROUTE_B_FS=read (unit 9r alone): only Node's ReadStream; WriteStream stays rifty's class.
-  Object.assign(fsB, {
-    ReadStream: v.fsStreams.ReadStream,
-    createReadStream: (p: unknown, o: unknown) => new v.fsStreams.ReadStream(p, o),
-  });
-  if (process.env.ROUTE_B_FS !== 'read')
+  // ROUTE_B_FS=none (after 8c, before 9r): Node's core with today's fs classes; =write: Node's
+  // WriteStream with today's ReadStream (to tell a row's 9r need from its 9w need).
+  if (process.env.ROUTE_B_FS !== 'none' && process.env.ROUTE_B_FS !== 'write')
+    Object.assign(fsB, {
+      ReadStream: v.fsStreams.ReadStream,
+      createReadStream: (p: unknown, o: unknown) => new v.fsStreams.ReadStream(p, o),
+    });
+  if (process.env.ROUTE_B_FS !== 'read' && process.env.ROUTE_B_FS !== 'none')
     Object.assign(fsB, {
       WriteStream: v.fsStreams.WriteStream,
       createWriteStream: (p: unknown, o: unknown) => new v.fsStreams.WriteStream(p, o),

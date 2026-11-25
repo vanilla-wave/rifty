@@ -1,0 +1,75 @@
+# w1-fs-windows.cjs — node v24.16.0, rifty 4e0b2b4ba
+columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate | rifty-inproc-B | rifty-inproc-Bp | rifty-inproc-Bp8c | rifty-inproc-Bp9w | rifty-inproc-Bp9r
+
+exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 0 | rifty-inproc-B 0 | rifty-inproc-Bp 0 | rifty-inproc-Bp8c 0 | rifty-inproc-Bp9w 0 | rifty-inproc-Bp9r 0
+
+## ws instanceof Writable / isWritable
+node: true,true
+rifty-inproc (DIFF): false,
+rifty-inproc-sync (DIFF): false,
+rifty-isolate (DIFF): false,
+rifty-inproc-B (same): true,true
+rifty-inproc-Bp (same): true,true
+rifty-inproc-Bp8c (DIFF): false,
+rifty-inproc-Bp9w (same): true,true
+rifty-inproc-Bp9r (DIFF): false,
+## callback pipeline(rs, ws): cb, destroyed/closed, bytes
+node: cb none,destroyed=true,closed=true,bytes=100000
+rifty-inproc (DIFF): cb none,destroyed=false,closed=undefined,bytes=100000
+rifty-inproc-sync (DIFF): cb none,destroyed=false,closed=undefined,bytes=100000
+rifty-isolate (DIFF): cb NotImplementedError,destroyed=true,closed=undefined,bytes=0
+rifty-inproc-B (same): cb none,destroyed=true,closed=true,bytes=100000
+rifty-inproc-Bp (same): cb none,destroyed=true,closed=true,bytes=100000
+rifty-inproc-Bp8c (DIFF): cb none,destroyed=false,closed=undefined,bytes=100000
+rifty-inproc-Bp9w (same): cb none,destroyed=true,closed=true,bytes=100000
+rifty-inproc-Bp9r (DIFF): cb none,destroyed=false,closed=undefined,bytes=100000
+## callback pipeline(rs, PassThrough, ws): cb, bytes
+node: cb none,bytes=100000
+rifty-inproc (same): cb none,bytes=100000
+rifty-inproc-sync (same): cb none,bytes=100000
+rifty-isolate (DIFF): cb NotImplementedError,bytes=0
+rifty-inproc-B (same): cb none,bytes=100000
+rifty-inproc-Bp (same): cb none,bytes=100000
+rifty-inproc-Bp8c (same): cb none,bytes=100000
+rifty-inproc-Bp9w (same): cb none,bytes=100000
+rifty-inproc-Bp9r (same): cb none,bytes=100000
+## promises.pipeline(rs, async gen, ws)
+node: resolved,bytes=100000
+rifty-inproc (DIFF): threw TypeError
+rifty-inproc-sync (DIFF): threw TypeError
+rifty-isolate (DIFF): threw TypeError
+rifty-inproc-B (same): resolved,bytes=100000
+rifty-inproc-Bp (same): resolved,bytes=100000
+rifty-inproc-Bp8c (DIFF): threw ERR_STREAM_PREMATURE_CLOSE
+rifty-inproc-Bp9w (DIFF): threw ERR_STREAM_PREMATURE_CLOSE
+rifty-inproc-Bp9r (same): resolved,bytes=100000
+## ws.destroy(err) mid-pipe: error event on ws
+node: ws error EX
+rifty-inproc (DIFF): 
+rifty-inproc-sync (DIFF): 
+rifty-isolate (DIFF): ws error NotImplementedError
+rifty-inproc-B (same): ws error EX
+rifty-inproc-Bp (same): ws error EX
+rifty-inproc-Bp8c (DIFF): 
+rifty-inproc-Bp9w (same): ws error EX
+rifty-inproc-Bp9r (DIFF): 
+## late finished(ws) after close
+node: cb none
+rifty-inproc (DIFF): no cb
+rifty-inproc-sync (DIFF): no cb
+rifty-isolate (DIFF): no cb
+rifty-inproc-B (same): cb none
+rifty-inproc-Bp (same): cb none
+rifty-inproc-Bp8c (DIFF): no cb
+rifty-inproc-Bp9w (same): cb none
+rifty-inproc-Bp9r (DIFF): no cb
+## uncaught 1
+node: (no line)
+rifty-inproc: (no line)
+rifty-inproc-sync: (no line)
+rifty-isolate (DIFF): Error
+rifty-inproc-B: (no line)
+rifty-inproc-Bp: (no line)
+rifty-inproc-Bp8c: (no line)
+rifty-inproc-Bp9w: (no line)
+rifty-inproc-Bp9r: (no line)

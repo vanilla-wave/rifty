@@ -1,7 +1,9 @@
-# c-unzip-stored.cjs — node v24.16.0, rifty 725576a88
-columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate | rifty-inproc-B | rifty-inproc-Bp
+# c-unzip-stored.cjs — node v24.16.0, rifty 4e0b2b4ba
+columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate | rifty-inproc-B | rifty-inproc-Bp | rifty-inproc-Bp8c | rifty-inproc-Bp9w | rifty-inproc-Bp9r
 
-exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 0 | rifty-inproc-B 0 | rifty-inproc-Bp 0
+exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 0 | rifty-inproc-B 0 | rifty-inproc-Bp 0 | rifty-inproc-Bp8c 1 | rifty-inproc-Bp9w 0 | rifty-inproc-Bp9r 1
+stderr rifty-inproc-Bp8c: TypeError: Class constructor FileWriteStream cannot be invoked without 'new'
+stderr rifty-inproc-Bp9r: TypeError: Class constructor FileWriteStream cannot be invoked without 'new'
 
 ## line 1
 node: extracted a.txt=eb06cb57b0a7944a dir/b.txt=0f882365d720e9c4
@@ -10,3 +12,6 @@ rifty-inproc-sync (DIFF): close, then listing threw Error [ENOENT]: ENOENT: no s
 rifty-isolate (DIFF): extract error NotImplementedError: Not implemented: isolate-host.ReadableStream (not available in the rifty isolate host, ADR-0557)
 rifty-inproc-B (same): extracted a.txt=eb06cb57b0a7944a dir/b.txt=0f882365d720e9c4
 rifty-inproc-Bp (same): extracted a.txt=eb06cb57b0a7944a dir/b.txt=0f882365d720e9c4
+rifty-inproc-Bp8c (DIFF): (no line)
+rifty-inproc-Bp9w (same): extracted a.txt=eb06cb57b0a7944a dir/b.txt=0f882365d720e9c4
+rifty-inproc-Bp9r (DIFF): (no line)

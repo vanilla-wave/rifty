@@ -4,7 +4,7 @@ pipe 64 MiB ms 1
 1e5 writes ms 5
 ## route A (rifty streams today, in-process)
 pipe 64 MiB ms 1
-1e5 writes ms 41
+1e5 writes ms 40
 ## route B (Node stream core verbatim, in-process)
 pipe 64 MiB ms 1
 1e5 writes ms 22

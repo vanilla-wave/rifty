@@ -114,7 +114,8 @@ The earlier `b1270101a` record is `results/route-b-product-build.txt`.
    Node's `LICENSE`, and generate them the ADR-0574 way: exact-once anchors only for binding
    inputs, plus a drift check.
    - `lib/stream.js`, `lib/stream/promises.js`;
-   - `lib/internal/streams/*.js`, except `fast-utf8-stream.js`, which nothing in the set requires;
+   - `lib/internal/streams/*.js`, except `fast-utf8-stream.js` and `lazy_transform.js`, which nothing in
+     the set requires (17 of 19);
    - `lib/internal/fs/streams.js`;
    - `internal/assert`, `internal/events/abort_listener` and `internal/webstreams/adapters` whole;
    - `internal/{errors,validators,util,fs/utils,url}` as the statements the others read (Node's `E()`
@@ -123,9 +124,8 @@ The earlier `b1270101a` record is `results/route-b-product-build.txt`.
    That is 28 modules: 23 whole files and 5 cut down.
 
    Minify keeps identifiers: renaming changes V8's own `TypeError` text (parity `from-web-options`).
-   This is not guarded in the product, where the Workbench consumer build renames. The unit that
-   wires the core (map 8c) decides by measurement: either parity on the consumer bundle, or a
-   declared ⚠️ that lists the affected messages. The generator needs `acorn` as a dev dependency.
+   The Workbench consumer build renames, and that was measured: renamed, 0 of 105 parity cases
+   change (`results/route-b-minify.txt`). Map 8c keeps one guard row on the consumer bundle. The generator needs `acorn` as a dev dependency.
 
    License: an entry in `tools/publishing/third-party-manifest.json` (PR #445's mechanism), as for
    ADR-0574. Nothing is published before that entry exists (map 8a).
@@ -139,8 +139,13 @@ The earlier `b1270101a` record is `results/route-b-product-build.txt`.
    - `internal/util/types`, `debuglog`, `assert`;
    - `internal/buffer.FastBuffer`, which is rifty's `Buffer`;
    - `internal/event_target` symbols;
-   - `internal/events/abort_listener` whole, so the core reads nothing from rifty's `events` for it.
-     `events.addAbortListener` for guest code is its own unit;
+   - `internal/events/abort_listener` as a binding, not Node's file. Node attaches with
+     `kResistStopPropagation`, which a host `EventTarget` ignores, so a guest listener that calls
+     `stopImmediatePropagation` would hide the abort: `pipeline`/`finished`/`addAbortSignal` would hang
+     (`m9`). The binding keeps Node's validation, reusing Node's validators, and listens on
+     `AbortSignal.any([signal])`. That dependent signal is aborted by the algorithm, not by a listener
+     (`results/route-b-abort-semantics.txt`: Node v24 and Chromium 148). It is a declared gap on
+     Chromium 108–115, which have no `any`. `events.addAbortListener` for guest code is its own unit;
    - `internal/blob.isBlob`;
    - `internal/fs/utils` (`copyObject`, `getOptions`, `getValidatedFd`, `validatePath`);
    - `internal/url.toPathIfFileURL`;
@@ -156,7 +161,8 @@ The earlier `b1270101a` record is `results/route-b-product-build.txt`.
    zlib. 8a provides the constants without loading the zlib module.
 
    Named gap: on a host `EventTarget`, `internal/event_target`'s `kResistStopPropagation` and
-   `kWeakHandler` have no effect. Unit 3 measures whether `addAbortListener` observes this.
+   `kWeakHandler` have no effect. The abort-listener binding above covers the stop-propagation part.
+   `operators.js:255` (`reduce`) attaches directly, but the reduce row of `m9` still equals Node.
 
    Chromium 108 (the tier floor, ADR-0469) lacks APIs this code reaches, so the bindings supply them
    or the core waits on a floor shim. `check:es-floor` and the floor lane prove it:
@@ -172,7 +178,7 @@ The earlier `b1270101a` record is `results/route-b-product-build.txt`.
    by range (map 4b/4c).
    - In Workbench today `fs.read`/`readSync`/`write`/`writeSync` by fd move the whole file on every
      call (`fs.ts:944`, `fs.ts:424-441`).
-   - 16 MiB in 64 KiB calls takes 20–26 s to read and 50–82 s to write; Node takes 3–7 ms.
+   - 16 MiB in 64 KiB calls takes 18.5–26 s to read and 50–82 s to write; Node takes 3–7 ms.
    - Without 4b/4c, this decision would regress today's linear `openReadable`/`writeFileSync`
      streams.
 
@@ -206,9 +212,12 @@ The earlier `b1270101a` record is `results/route-b-product-build.txt`.
    `EventTarget`/`Event` isolate globals from the same sources is the user's fork, carried with the
    Web API goal's question 1. Browser hosts bind the host globals.
 7. The core lands in three adjacent PRs. No `main` ever runs two cores, and none holds an unwired
-   core for an open-ended time; 8a and 8b merge once 8c is in work.
+   core for an open-ended time. 8a and 8b merge only once 8c's PR is open and its CI differential is
+   green.
    - 8a: generator, vendored sources and bindings, not wired. `check:arch` has no product importer,
-     the `main` bundles stay byte-identical, and a CI differential checks Node's bindings = rifty's.
+     every bundle artifact gains 0 B, and a CI differential checks Node's bindings = rifty's over the
+     rows `results/ownership.txt` gives to the core. Rows of later units stay pinned RED with their
+     owner. `zlib-diff` is zlib unit 3's entry criterion, after 8c, not part of 8a.
    - 8b: regression rows for internal consumers and non-stream objects, green on today's core first.
    - 8c: wiring. Consumers move to Node's API (io's `onDestroy` for `Writable.fromWeb`,
      `ServerResponse.write` → `false` + `'drain'`, the stream shape `finished(req.socket)` needs).
@@ -261,7 +270,8 @@ Stays in force: ADR-0458 (io reads `node:process` through the registry factory);
   - generic +23 633 B gzip (288 404 → 312 037 of 332 000);
   - toolchain +23 695 (331 931 → 355 626 of 386 000).
 
-  With the zlib engine and its handle wired (#452, the PR #450 reviewer's measurement): generic 351 690
+  With the zlib engine and its handle wired (#452; measured by the PR #450 reviewer on 2026-11-25, as
+  one build with the engine; not rerun here): generic 351 690
   and toolchain 394 735, which is +19 690 and +8 735 over the caps, before `lib/zlib.js` itself.
   - A lazy stream chunk is doubtful: `require('stream')` is synchronous, and the core is needed at
     boot (child stdio, `process-file-stdout`, `IncomingMessage`).
@@ -286,4 +296,4 @@ These are entry criteria of the core units (goal `map.md`):
 - the user's answer on isolate `AbortController` globals (Decision 6);
 - route B in Chromium: SDK 12/12 programs = Node, and Workbench 7/7 of the programs run, with the 5
   closure programs not run (`results/chromium-b/`); Chromium 108 not run;
-- positional fd I/O by range (map 4b/4c) before the fs-stream units.
+- positional fd I/O by range: 4b before 9r, 4c before 9w.

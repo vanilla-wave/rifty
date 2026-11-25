@@ -1,7 +1,7 @@
-# c-csv-read.cjs — node v24.16.0, rifty 725576a88
-columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate | rifty-inproc-B | rifty-inproc-Bp
+# c-csv-read.cjs — node v24.16.0, rifty 4e0b2b4ba
+columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate | rifty-inproc-B | rifty-inproc-Bp | rifty-inproc-Bp8c | rifty-inproc-Bp9w | rifty-inproc-Bp9r
 
-exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 0 | rifty-inproc-B 0 | rifty-inproc-Bp 0
+exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 0 | rifty-inproc-B 0 | rifty-inproc-Bp 0 | rifty-inproc-Bp8c 0 | rifty-inproc-Bp9w 0 | rifty-inproc-Bp9r 0
 
 ## line 1
 node: csv [[null,"Region","Revenue"],[null,"North",120],[null,"South, East",95.5],[null,"Zürich ✓",-3]]
@@ -10,3 +10,6 @@ rifty-inproc-sync (DIFF): csv threw TypeError: stream.close is not a function
 rifty-isolate (DIFF): csv threw NotImplementedError: Not implemented: isolate-host.ReadableStream (not available in the rifty isolate host, ADR-0557)
 rifty-inproc-B (same): csv [[null,"Region","Revenue"],[null,"North",120],[null,"South, East",95.5],[null,"Zürich ✓",-3]]
 rifty-inproc-Bp (same): csv [[null,"Region","Revenue"],[null,"North",120],[null,"South, East",95.5],[null,"Zürich ✓",-3]]
+rifty-inproc-Bp8c (DIFF): csv threw TypeError: stream.close is not a function
+rifty-inproc-Bp9w (DIFF): csv threw TypeError: stream.close is not a function
+rifty-inproc-Bp9r (same): csv [[null,"Region","Revenue"],[null,"North",120],[null,"South, East",95.5],[null,"Zürich ✓",-3]]

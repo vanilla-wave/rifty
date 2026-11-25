@@ -29,6 +29,9 @@ The fact, not a security property: without being globals, the classes stay reach
 - an event's `constructor` is `Event`;
 - the globals stay ceiling throws, so `signal instanceof AbortSignal` throws.
 
+This unit comes before 8c: the isolate's pipeline rows need it, and `pipeline` works there today.
+The user's answer decides only the globals.
+
 Open fork — owner: user, carried with the isolate Web API goal's question 1:
 - (a) keep the classes unreachable as globals (as above);
 - (b) make `AbortController`/`AbortSignal`/`EventTarget`/`Event` isolate globals from the same sources.

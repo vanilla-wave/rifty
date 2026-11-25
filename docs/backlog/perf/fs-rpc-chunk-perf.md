@@ -11,6 +11,13 @@ code: [packages/runtime-js/src/ipc/fs-handlers.ts, packages/runtime-js/src/ipc/s
 
 ## Context
 
+Goal `node-streams-as-in-node` absorbs half of this draft:
+- its read half (1) goes to unit 4b, `runtime-js/fs-fd-read-by-range`;
+- its `writeChunk` append half (2) goes to unit 4c, `runtime-js/fs-fd-write-by-range`.
+
+The base64 write inflation stays here.
+
+
 2026-08-26: small-read double hops and JSON hot requests were removed; proof is
 `reference/child-fs-rpc-hot-path.md`. THIS item keeps only >256 KiB O(N²)
 read/write plus base64 write inflation.

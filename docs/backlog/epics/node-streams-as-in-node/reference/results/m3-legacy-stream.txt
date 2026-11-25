@@ -1,7 +1,7 @@
-# m3-legacy-stream.cjs — node v24.16.0, rifty 725576a88
-columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate | rifty-inproc-B | rifty-inproc-Bp
+# m3-legacy-stream.cjs — node v24.16.0, rifty 4e0b2b4ba
+columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate | rifty-inproc-B | rifty-inproc-Bp | rifty-inproc-Bp8c | rifty-inproc-Bp9w | rifty-inproc-Bp9r
 
-exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 0 | rifty-inproc-B 0 | rifty-inproc-Bp 0
+exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 0 | rifty-inproc-B 0 | rifty-inproc-Bp 0 | rifty-inproc-Bp8c 0 | rifty-inproc-Bp9w 0 | rifty-inproc-Bp9r 0
 
 ## prototype chain
 node: Readable:true Writable:true Duplex:false Transform:false PassThrough:false,Stream->EE:true
@@ -10,6 +10,9 @@ rifty-inproc-sync (DIFF): Readable:false Writable:false Duplex:false Transform:f
 rifty-isolate (DIFF): Readable:false Writable:false Duplex:false Transform:false PassThrough:false,Stream->EE:true
 rifty-inproc-B (same): Readable:true Writable:true Duplex:false Transform:false PassThrough:false,Stream->EE:true
 rifty-inproc-Bp (same): Readable:true Writable:true Duplex:false Transform:false PassThrough:false,Stream->EE:true
+rifty-inproc-Bp8c (same): Readable:true Writable:true Duplex:false Transform:false PassThrough:false,Stream->EE:true
+rifty-inproc-Bp9w (same): Readable:true Writable:true Duplex:false Transform:false PassThrough:false,Stream->EE:true
+rifty-inproc-Bp9r (same): Readable:true Writable:true Duplex:false Transform:false PassThrough:false,Stream->EE:true
 ## instanceof Stream
 node: true,true,true,true
 rifty-inproc (DIFF): false,false,false,false
@@ -17,6 +20,9 @@ rifty-inproc-sync (DIFF): false,false,false,false
 rifty-isolate (DIFF): false,false,false,false
 rifty-inproc-B (same): true,true,true,true
 rifty-inproc-Bp (same): true,true,true,true
+rifty-inproc-Bp8c (same): true,true,true,true
+rifty-inproc-Bp9w (same): true,true,true,true
+rifty-inproc-Bp9r (same): true,true,true,true
 ## fs streams instanceof Stream
 node: true,true
 rifty-inproc (DIFF): false,false
@@ -24,6 +30,9 @@ rifty-inproc-sync (DIFF): false,false
 rifty-isolate (DIFF): false,false
 rifty-inproc-B (same): true,true
 rifty-inproc-Bp (same): true,true
+rifty-inproc-Bp8c (DIFF): false,false
+rifty-inproc-Bp9w (DIFF): false,true
+rifty-inproc-Bp9r (DIFF): true,false
 ## Stream.prototype.pipe is the legacy pipe
 node: function,false
 rifty-inproc (DIFF): undefined,true
@@ -31,3 +40,6 @@ rifty-inproc-sync (DIFF): undefined,true
 rifty-isolate (DIFF): undefined,true
 rifty-inproc-B (same): function,false
 rifty-inproc-Bp (same): function,false
+rifty-inproc-Bp8c (same): function,false
+rifty-inproc-Bp9w (same): function,false
+rifty-inproc-Bp9r (same): function,false

@@ -1,7 +1,7 @@
-# m2-core-members.cjs — node v24.16.0, rifty 725576a88
-columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate | rifty-inproc-B | rifty-inproc-Bp
+# m2-core-members.cjs — node v24.16.0, rifty 4e0b2b4ba
+columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate | rifty-inproc-B | rifty-inproc-Bp | rifty-inproc-Bp8c | rifty-inproc-Bp9w | rifty-inproc-Bp9r
 
-exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 0 | rifty-inproc-B 0 | rifty-inproc-Bp 0
+exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 0 | rifty-inproc-B 0 | rifty-inproc-Bp 0 | rifty-inproc-Bp8c 0 | rifty-inproc-Bp9w 0 | rifty-inproc-Bp9r 0
 
 ## Readable readableFlowing/isPaused: new, on(data), pause, resume
 node: new null/false,on(data) true/false,pause false/true,resume true/false
@@ -10,6 +10,9 @@ rifty-inproc-sync (DIFF): new undefined/no isPaused,on(data) undefined/no isPaus
 rifty-isolate (DIFF): new undefined/no isPaused,on(data) undefined/no isPaused,pause undefined/no isPaused,resume undefined/no isPaused
 rifty-inproc-B (same): new null/false,on(data) true/false,pause false/true,resume true/false
 rifty-inproc-Bp (same): new null/false,on(data) true/false,pause false/true,resume true/false
+rifty-inproc-Bp8c (same): new null/false,on(data) true/false,pause false/true,resume true/false
+rifty-inproc-Bp9w (same): new null/false,on(data) true/false,pause false/true,resume true/false
+rifty-inproc-Bp9r (same): new null/false,on(data) true/false,pause false/true,resume true/false
 ## fs.ReadStream readableFlowing/isPaused: new, on(data), pause, resume
 node: new null/false,on(data) true/false,pause false/true,resume true/false
 rifty-inproc (DIFF): new undefined/no isPaused,on(data) undefined/no isPaused,threw r.pause is not a function
@@ -17,6 +20,9 @@ rifty-inproc-sync (DIFF): new undefined/no isPaused,on(data) undefined/no isPaus
 rifty-isolate (DIFF): new undefined/no isPaused,on(data) undefined/no isPaused,threw r.pause is not a function
 rifty-inproc-B (same): new null/false,on(data) true/false,pause false/true,resume true/false
 rifty-inproc-Bp (same): new null/false,on(data) true/false,pause false/true,resume true/false
+rifty-inproc-Bp8c (DIFF): new undefined/no isPaused,on(data) undefined/no isPaused,threw r.pause is not a function
+rifty-inproc-Bp9w (DIFF): new undefined/no isPaused,on(data) undefined/no isPaused,threw r.pause is not a function
+rifty-inproc-Bp9r (same): new null/false,on(data) true/false,pause false/true,resume true/false
 ## Writable writableNeedDrain below/over hwm, after drain
 node: start false,below false,over true,drain false
 rifty-inproc (DIFF): start undefined,below undefined,over undefined,drain undefined
@@ -24,6 +30,9 @@ rifty-inproc-sync (DIFF): start undefined,below undefined,over undefined,drain u
 rifty-isolate (DIFF): start undefined,below undefined,over undefined,drain undefined
 rifty-inproc-B (same): start false,below false,over true,drain false
 rifty-inproc-Bp (same): start false,below false,over true,drain false
+rifty-inproc-Bp8c (same): start false,below false,over true,drain false
+rifty-inproc-Bp9w (same): start false,below false,over true,drain false
+rifty-inproc-Bp9r (same): start false,below false,over true,drain false
 ## Duplex writableNeedDrain
 node: start false,below false,over true,drain false
 rifty-inproc (DIFF): start undefined,below undefined,over undefined,drain undefined
@@ -31,6 +40,9 @@ rifty-inproc-sync (DIFF): start undefined,below undefined,over undefined,drain u
 rifty-isolate (DIFF): start undefined,below undefined,over undefined,drain undefined
 rifty-inproc-B (same): start false,below false,over true,drain false
 rifty-inproc-Bp (same): start false,below false,over true,drain false
+rifty-inproc-Bp8c (same): start false,below false,over true,drain false
+rifty-inproc-Bp9w (same): start false,below false,over true,drain false
+rifty-inproc-Bp9r (same): start false,below false,over true,drain false
 ## fs.WriteStream writableNeedDrain
 node: start false,below false,over true,drain false
 rifty-inproc (DIFF): start undefined,below undefined,over undefined,drain undefined
@@ -38,6 +50,9 @@ rifty-inproc-sync (DIFF): start undefined,below undefined,over undefined,drain u
 rifty-isolate (DIFF): start undefined,below undefined,over undefined,drain undefined
 rifty-inproc-B (same): start false,below false,over true,drain false
 rifty-inproc-Bp (same): start false,below false,over true,drain false
+rifty-inproc-Bp8c (DIFF): start undefined,below undefined,over undefined,drain undefined
+rifty-inproc-Bp9w (same): start false,below false,over true,drain false
+rifty-inproc-Bp9r (DIFF): start undefined,below undefined,over undefined,drain undefined
 ## Symbol.asyncDispose / Symbol.dispose on each class prototype
 node: Readable:function/undefined Writable:function/undefined Duplex:function/undefined Transform:function/undefined PassThrough:function/undefined
 rifty-inproc (DIFF): Readable:undefined/undefined Writable:undefined/undefined Duplex:undefined/undefined Transform:undefined/undefined PassThrough:undefined/undefined
@@ -45,6 +60,9 @@ rifty-inproc-sync (DIFF): Readable:undefined/undefined Writable:undefined/undefi
 rifty-isolate (DIFF): Readable:undefined/undefined Writable:undefined/undefined Duplex:undefined/undefined Transform:undefined/undefined PassThrough:undefined/undefined
 rifty-inproc-B (same): Readable:function/undefined Writable:function/undefined Duplex:function/undefined Transform:function/undefined PassThrough:function/undefined
 rifty-inproc-Bp (same): Readable:function/undefined Writable:function/undefined Duplex:function/undefined Transform:function/undefined PassThrough:function/undefined
+rifty-inproc-Bp8c (same): Readable:function/undefined Writable:function/undefined Duplex:function/undefined Transform:function/undefined PassThrough:function/undefined
+rifty-inproc-Bp9w (same): Readable:function/undefined Writable:function/undefined Duplex:function/undefined Transform:function/undefined PassThrough:function/undefined
+rifty-inproc-Bp9r (same): Readable:function/undefined Writable:function/undefined Duplex:function/undefined Transform:function/undefined PassThrough:function/undefined
 ## await r[Symbol.asyncDispose](): destroyed, errored
 node: destroyed=true,errored=AbortError
 rifty-inproc (DIFF): no asyncDispose
@@ -52,3 +70,6 @@ rifty-inproc-sync (DIFF): no asyncDispose
 rifty-isolate (DIFF): no asyncDispose
 rifty-inproc-B (same): destroyed=true,errored=AbortError
 rifty-inproc-Bp (same): destroyed=true,errored=AbortError
+rifty-inproc-Bp8c (same): destroyed=true,errored=AbortError
+rifty-inproc-Bp9w (same): destroyed=true,errored=AbortError
+rifty-inproc-Bp9r (same): destroyed=true,errored=AbortError

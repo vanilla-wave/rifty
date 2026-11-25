@@ -1,0 +1,10 @@
+node v24.16.0; rifty 5763d8fa1 + route B; workbench: Chromium 148.0.7778.96 (rifty process.version v24.0.0)
+columns: node | workbench
+program | Node rows | same as Node per host (+ lines only that host printed)
+c-csv-read.cjs | 1 | workbench 1/1
+c-csv-write-file.cjs | 1 | workbench 1/1
+c-graceful-fs.cjs | 1 | workbench 1/1
+c-unzip-stored.cjs | 1 | workbench 1/1
+c-xlsx-roundtrip.cjs | 4 | workbench 4/4
+notes: Workbench (COI, ephemeral VFS) via the zlib carrier's seeding: closure from packages/isolate-host/tests/closure-files.ts closureFiles('exceljs') (5941 files, 35461447 B) + the program, served by fixtures/zlib-scenario.ts serveSteps, written as one /nsg-<name>.bin, unpacked by guest `node zunpack.cjs` (fixtures/zlib-scenario.ts UNPACK) to /tmp/nsg-<name>; run by a project-root `node nsgrun.cjs /tmp/nsg-<name> <name>.cjs` (zlib RUNNER shape: child `node`, cwd /tmp/nsg-<name>, piped stdio). Node oracle: same files in one dir, `node <name>.cjs` piped. Seed timings: seed-timing.log.
+route: B = origin/main 5763d8fa1 + route-B wiring.patch (old packages/runtime-js/src/builtins/fs-streams.ts removed first) + bindings.ts + generate.mjs --minify; pnpm build:libs: all package builds succeeded, the trailing third-party-notices --write step failed (generated/node-streams.js has no third-party-manifest record)

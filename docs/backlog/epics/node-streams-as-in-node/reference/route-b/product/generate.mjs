@@ -15,12 +15,7 @@ const acorn = hoisted('acorn');
 const walk = hoisted('acorn-walk');
 const esbuild = createRequire(join(repo, 'package.json'))('esbuild');
 
-const WHOLE = new Set([
-  'internal/fs/streams',
-  'internal/assert',
-  'internal/events/abort_listener',
-  'internal/webstreams/adapters',
-]);
+const WHOLE = new Set(['internal/fs/streams', 'internal/assert', 'internal/webstreams/adapters']);
 const isWhole = (id) =>
   id === 'stream' ||
   id === 'stream/promises' ||

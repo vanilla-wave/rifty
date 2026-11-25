@@ -5,8 +5,6 @@ Commands: ROUTE_B_GEN=<gen>/node-streams.js node --import tsx route-b/parity.mjs
 ## --minify
 total plain cases 105, skipped 5; equal to Node: route A 105, route B 95, route B product bindings 102
 ## --minify-all
-total plain cases 105, skipped 5; equal to Node: route A 105, route B 95, route B product bindings 101
+total plain cases 105, skipped 5; equal to Node: route A 105, route B 95, route B product bindings 102
 
 ## cases that differ between the two (Bp column)
-< stream/from-web-options.case.ts | Bp 
-> stream/from-web-options.case.ts | Bp DIFF

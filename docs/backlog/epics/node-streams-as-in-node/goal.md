@@ -75,7 +75,7 @@ without the async VFS surface, isolate sandbox exec):
   - b1 (bindings) 3/8.
 - I9–I10 false: b1 (StringDecoder utf8 only, 'UTF8' "Unsupported encoding", no addAbortListener, no
   writev/fsync); m4 fs.read loop ticks>0=false; Workbench fd read/write 16 MiB in 64 KiB calls
-  20–26 s / 50–82 s vs Node 3–7 ms (results/chromium-fd/).
+  18.5–26 s / 50–82 s vs Node 3–7 ms (results/chromium-fd/).
 - Chromium 148 on main c2d03ce05 (results/chromium/summary.txt): Workbench and SDK give the same
   route-A outcomes as in-process, row for row (e.g. m1 0/14, hook matrix 10/76, m6 0/8). -->
 
@@ -241,6 +241,29 @@ reproduced. All items were fixed:
   - nits fixed.
 - Not re-reviewed after these fixes.
 
+External review of PR #450, round 3 (at `4e0b2b4ba`, relayed by the manager): 4 blocker, 6 should,
+nits. All are verified and fixed:
+
+- **Blockers.**
+  - B1: 9r's `c-unzip-stored` changes from a silently empty directory to a loud `TypeError`; this is
+    now declared, not called «as today».
+  - B2: OPFS range I/O goes through the authoritative cache plus a range-aware write-through, not the
+    disk.
+  - B3: 8a's acceptance follows `results/ownership.txt`, with later units' rows pinned RED;
+    `zlib-diff` moved out of 8a into zlib unit 3.
+  - B4: the Workbench carrier puts the closure in `/tmp` (PR #453 helpers, 11–12 s). Route B: 5/5
+    closure programs equal Node; no edge 0 ← P.
+- **Should items.**
+  - S1: the abort hidden by a guest `stopImmediatePropagation` is fixed in 8a's binding, through a
+    dependent `AbortSignal.any`. `m9` equals Node; it stays a declared gap on Chromium 108–115.
+  - S2: Storage fault rows were added to 4c.
+  - S3/S4: a per-host fd table (`results/fd-hosts.txt`); `perf/fs-rpc-chunk-perf` absorbed in halves.
+  - S5: window rows measured and pinned (`w1-fs-windows`).
+  - S6: every reference is derivable from the tree (README provenance table; logs in `results/`).
+- **Mechanism.** The graph is derived from the row-ownership table (`ownership.mjs`), not from prose.
+
+Not re-reviewed after these fixes.
+
 ## Decisions
 
 - 2026-11-25 — manager, under the user's delegation («проектируешь ты сам»); the user is informed,
@@ -274,6 +297,9 @@ reproduced. All items were fixed:
 
   Ground: Workbench fd I/O moves the whole file per call (`results/chromium-fd/`), and the read side
   (exceljs `readFile`, `for await`, late listener, isolate read) needs none of the write work.
+- 2026-11-25 — manager, round 3: the unit graph is derived from a generated row-ownership table, so a
+  unit's acceptance is «my rows green, later owners' rows pinned on today's outcome». The carrier's
+  Workbench closure goes to the guest's `/tmp`. The S1 abort fix is the core binding's (8a).
 - rejected route: route A, rifty's hand-written streams fixed per member in 8 units. It could meet the
   invariants in principle; it is rejected on delivery risk and §Simplicity, not on an invariant. Its
   unit graph had three hidden dependencies after one review, the same class that broke the zlib goal

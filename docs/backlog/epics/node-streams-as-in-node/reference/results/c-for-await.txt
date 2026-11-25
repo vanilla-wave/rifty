@@ -1,7 +1,7 @@
-# c-for-await.cjs — node v24.16.0, rifty 725576a88
-columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate | rifty-inproc-B | rifty-inproc-Bp
+# c-for-await.cjs — node v24.16.0, rifty 4e0b2b4ba
+columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate | rifty-inproc-B | rifty-inproc-Bp | rifty-inproc-Bp8c | rifty-inproc-Bp9w | rifty-inproc-Bp9r
 
-exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 1 | rifty-inproc-B 0 | rifty-inproc-Bp 0
+exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 1 | rifty-inproc-B 0 | rifty-inproc-Bp 0 | rifty-inproc-Bp8c 0 | rifty-inproc-Bp9w 0 | rifty-inproc-Bp9r 0
 stderr rifty-isolate: NotImplementedError: Not implemented: isolate-host.ReadableStream (not available in the rifty isolate host, ADR-0557)
 
 ## line 1
@@ -11,3 +11,6 @@ rifty-inproc-sync (DIFF): for-await threw TypeError: fs.createReadStream(...) is
 rifty-isolate (DIFF): for-await threw TypeError: fs.createReadStream(...) is not a function or its return value is not async iterable
 rifty-inproc-B (same): for-await 300000 5 d08928a16895
 rifty-inproc-Bp (same): for-await 300000 5 d08928a16895
+rifty-inproc-Bp8c (DIFF): for-await threw TypeError: fs.createReadStream(...) is not a function or its return value is not async iterable
+rifty-inproc-Bp9w (DIFF): for-await threw TypeError: fs.createReadStream(...) is not a function or its return value is not async iterable
+rifty-inproc-Bp9r (same): for-await 300000 5 d08928a16895
