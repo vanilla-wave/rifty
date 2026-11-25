@@ -3,7 +3,7 @@
 Status: Proposed
 Date: 2026-11
 
-> TL;DR: A sandbox's template (`produceDependencySnapshot` artifact) is decoded once per consumer process and once per worker and never enters the per-run state; the consumer keeps each sandbox as its difference over one shared template index (host ops O(write + difference)); each run's fresh isolate gets the template copied in as one buffer and materialized as views into it, under the difference (F1 (a), user 2026-11-25); writable or read-only per sandbox; persisting a template sandbox is deferred.
+> TL;DR: A sandbox's template (`produceDependencySnapshot` artifact) is decoded once per consumer process and once per worker and never enters the per-run state; one layered FS class (rifty's `MemoryFsSync` with template entries materialized lazily, the difference derived) runs a sandbox's host ops in the consumer and its `fs` in each run, over one shared template index (host ops O(touched + difference)); each run's fresh isolate gets the template copied in (F1 (a), user 2026-11-25); writable or read-only per sandbox; persisting a template sandbox is deferred.
 
 ## Context
 
@@ -29,7 +29,10 @@ hoisted/nested, missing). L — per-run cost of four ways a fresh isolate sees a
 | worker (whole FS in the worker, every call crosses) | 75 | 77 | 393 | 51 | 259 (541 MB copied) | 19 / 19–23 |
 
 `full` adds the consumer's encode + decode of the whole state per `exec` (T95 ~150 + ~170 ms).
-Four concurrent runs on one process, T95 pdf-lib wall: 801 / 570 / 528 / 507 ms. `worker`'s
+Four concurrent runs on one process, T95 pdf-lib wall: 801 / 570 / 528 / 507 ms. The chosen
+construction (§2, arm `layered`, a later run on T95 = 23 654 files / 72.5 MB): semver 92 ms, pdf-lib
+318, 1 000 writes 106, floor 99–103 MiB, against `views` 184 / 341 / 195 / 107 in the same run; probe
+S: 21/21 operation sequences equal live Node. `worker`'s
 chunked-I/O row: runtime-js's fd layer reads or rewrites the whole file per chunk, a memcpy in the
 guest realm, a bridge copy per chunk across it.
 
@@ -40,78 +43,95 @@ the user's words»).
 
 1. **Template = an immutable layer outside the state.** The consumer decodes the artifact (gzip or
    br, ustar + PAX, profile `replay` or `frozen`) once per process into one buffer of file bytes and
-   an immutable index (path → kind, range, times; directory → children), keyed by identity (§4); a
-   broken, truncated or unsupported artifact is a named error before any sandbox. Registering
-   returns the identity and the packages (from `rifty/manifest.json`). Mounted at `/node_modules`:
-   `payload/node_modules` only (F3, user 2026-11-25) — no `payload/package.json`, no lock, never
-   `rifty/*`. Per sandbox writable (default, the agent's) or read-only (F2, user 2026-11-25: both).
-   A worker receives a template once, as bytes in a binary request frame
-   (`distribution/isolate-host-binary-request-frame`), keeps it by identity for its life, counted in
-   its RSS ceiling and idle watermark; a call names its template by identity.
-2. **The consumer's sandbox** is its difference over the shared index: its own `MemoryFsSync`
-   (the entries that differ from the template, parents of new entries included) plus the set of
-   deleted template paths. Host ops resolve the difference first, then the index: `readFile`,
-   `list` (merged, deleted paths hidden), `writeFile` (parents created in the difference), `remove`
-   (from the difference; a template path joins the deleted set). The cap check encodes the
-   difference only: a host op is O(the write + the difference) and an idle sandbox holds no
-   per-template structure (probe H, T95: `writeFile` 10 KiB 0.16 ms, idle ≈ 0 over the index,
-   against 30 ms and 9.4 MiB for a per-sandbox tree of views). A sandbox without a template is the
-   same with an empty index (one lifecycle, ADR-0568 §8).
+   an immutable index (path → kind, range, times; directory → sorted children), keyed by identity
+   (§4); a broken, truncated or unsupported artifact is a named error before any sandbox.
+   Registering returns the identity and the packages: the names of the root's dependencies in
+   `payload/package-lock.json` (`packages[""]`) with the versions installed for them
+   (`packages["node_modules/<name>"].version`) — the manifest's `deps` are only declared ranges.
+   Mounted at `/node_modules`: `payload/node_modules` only (F3, user 2026-11-25) — no
+   `payload/package.json`, no lock, never `rifty/*`. Per sandbox writable (default, the agent's) or
+   read-only (F2, user 2026-11-25: both). A worker receives a template once, as bytes in a binary
+   request frame (`distribution/isolate-host-binary-request-frame`), keeps it by identity for its
+   life, counted in its RSS ceiling and idle watermark; a call names its template by identity.
+2. **One layered FS on both sides** (review of PR #429, N1/S-a). A `LayeredFsSync` in
+   `@riftydev/vfs` (an `FsSync`, bundled into the guest and into the consumer's codec module like
+   `MemoryFsSync` today): its upper is rifty's own `MemoryFsSync`; template entries are
+   materialized into the upper lazily — a directory's children on first touch of a path through it
+   (files as references into the template's buffer, directories as not-yet-materialized markers,
+   all with the template's times) — and every operation then runs on the upper unchanged, so every
+   semantics and error is `MemoryFsSync`'s by construction (`rename` of a template directory moves
+   its markers, `rm` of a template directory removes its materialized children and hides the rest,
+   `mkdir` after it starts empty). The consumer's host ops and the guest's `fs` in a run go through
+   the same class over the same index format. Its difference is derived, never accumulated: the
+   upper's entries that are not pristine materializations (same path, same bytes reference, same
+   times), with their directories, plus the template paths that were materialized and are gone
+   (topmost only). Applying a difference to a fresh view = removing the deleted paths, then writing
+   the entries (pre-order, times restored). Probe S: 21 sequences (remove → write, remove dir →
+   write child, `rmdir` + `mkdir`, renames and moves in and out, `utimes`, same-bytes overwrite,
+   `EISDIR`/`EEXIST`/`ENOTEMPTY` errors, host ops, host ops → run → host) equal live `node` over a
+   real directory, guest and consumer, round trip included; dropping the deletions fails 8 of 21.
+   A sandbox without a template is the same class over an empty index (one lifecycle, ADR-0568 §8).
 3. **A run** (F1 (a), user 2026-11-25): the worker copies the template's buffer and index into the
-   fresh isolate (one ivm copy); the guest writes every template entry as a view into that buffer
-   (no per-file copy, the template's times), then applies the difference over it (its entries,
-   then the deleted paths removed); the run; the capture walks the tree and emits the entries that
-   are not the template's own views with the template's times, and the template paths now absent.
-   The consumer validates both (§5) and replaces the sandbox's difference. Read-only mode: every
-   mutating call under `/node_modules` fails as Node on a read-only mount (goal I3) — on the guest's
-   sync mirror and, until the guest's FS is sync-only (PR #437, open), on its async `Vfs`
-   too; host ops refuse the same way in the consumer. Measured (probe L `views`, T95): ~+90 ms to
-   materialize and ~+37 ms for the capture walk per run, isolate floor 123 MiB; for the four-library
-   artifact (8 001 files, 86.7 MB) extrapolated — latency by entries ~+50 ms, memory by bytes
-   ~+90 MiB — the carrier measures it (return condition: goal Decisions).
+   fresh isolate (one ivm copy); the guest builds the index, installs a `LayeredFsSync` over it as
+   the realm's only FS surface (sync; promise and stream forms go through it, as PR #437 does for
+   every guest), applies the difference, runs, and hands back the derived difference. The consumer
+   validates it (§5) and applies it to a fresh view, which becomes the sandbox. Read-only mode: the
+   same class refuses every mutating call under `/node_modules` as Node on a read-only mount (goal
+   I3, its oracle in `map.md`), in both realms. Measured (probe L `layered`, T95 23 654 files /
+   72.5 MB, M3 Pro, load 7–13): restore (copy + index) 41–48 ms, capture 0.8–10 ms, isolate floor
+   99–103 MiB, against 19 MiB and ~2 ms without a template (`views`: 93–109 ms, 36–53 ms,
+   107 MiB); the four-library artifact is the carrier's to measure (return condition: goal
+   Decisions).
 4. **Identity** (registry and worker cache key) = `{rifty/manifest.json templateId, snapshotId}`
    (sha256 of the decoded tar, as the producer computes it; the same for gzip and br).
 5. **The difference on the wire** (consumer ↔ worker, internal, never handed out): an ADR-0567 v1
-   blob of the difference's entries (unchanged format, its §5 validation unchanged) plus a list of
-   deleted template paths. The list from a run is guest-authored: the consumer refuses it unless
-   every path is canonical (ADR-0567 §5 rules), names an entry of the template, appears once, in
-   code-unit order, with no path below another listed one, and its charge (384 + 8 per code unit per
-   path, ADR-0567 §7) fits the cap with the blob — else `stateRefused` with the codec's code.
-   `snapshot()` and `createSandbox({ snapshot })` over a template:
-   `NotImplementedError('isolate-host.sandbox-template-snapshot')` + compat ❌, deferred to
+   blob of the difference's entries (template header: none; its §5 validation unchanged) plus the
+   list of deleted template paths. The list from a run is guest-authored: the consumer refuses it
+   unless every path is canonical (ADR-0567 §5 rules), names an entry of the template, appears
+   once, in code-unit order, with no path below another listed one, and its charge (384 + 8 per
+   code unit + 80 per level of depth per path, ADR-0567 §7) fits the cap with the blob — else
+   `stateRefused` with the codec's code. `snapshot()` and `createSandbox({ snapshot })` over a
+   template: `NotImplementedError('isolate-host.sandbox-template-snapshot')` + compat ❌, deferred to
    `distribution/isolate-host-sandbox-template-snapshot` (user 2026-11-25).
 6. **Cap and limits.** `maxFsBytes` counts the difference (codec budget units, the deleted list
    charged as above); `ERR_ISOLATE_HOST_SANDBOX_FULL` and `stateRefused: ERR_FS_SNAPSHOT_TOO_LARGE`
-   as today, over the difference. A run's isolate now holds the template as well: it needs
-   `memoryLimitMb` ≥ 2 × `maxFsBytes` + 16 MiB + the template's materialized size (its bytes plus
-   ~400 B per entry); a template that does not fit the run's isolate is the named result of a state
-   the run cannot restore — `stateRefused: ERR_ISOLATE_HOST_SANDBOX_RESTORE`, `exitCode: null`,
-   before any guest code (ADR-0568 §3). By this rule the defaults hold for the four-library
-   artifact and for T95 even at a full difference (2 × 64 + 16 + ~86–100 — four-library ~83 MiB of
-   bytes + 8 001 × 400 B, T95 ~91 MiB + 23 654 × 400 B — ≈ 230–244 of 256 MiB); the
-   README states the rule and the carrier measures the floor.
-7. **Changed paths.** `exec`'s result adds `changes: { path, type, size }[]` (created, changed,
-   deleted), from the difference before and after the run — O(the difference).
-8. **Killed run** (`timeout`, `memory`, abort): rolled back to the difference of before (F4, user
+   as today, over the difference. A run's isolate also holds the template: it needs
+   `memoryLimitMb` ≥ 2 × `maxFsBytes` + 16 MiB + the template's in-isolate size (its bytes plus its
+   index); a template that does not fit the run's isolate is the named result of a state the run
+   cannot restore — `stateRefused: ERR_ISOLATE_HOST_SANDBOX_RESTORE`, `exitCode: null`, before any
+   guest code (ADR-0568 §3). The README states both cases with the defaults (256 MiB): an empty
+   sandbox over the four-library artifact leaves its guest code ~130 MiB (the figure the user saw,
+   2026-11-25) instead of ~235, and a full 64 MiB difference fits by the rule (2 × 64 + 16 + the
+   template's in-isolate size ≈ 230–245 MiB) — the carrier measures both floors.
+7. **Changed paths.** `exec`'s result adds `changes: { path, type, size }[]` — `created`,
+   `changed` (kind or bytes differ; a change of times alone is not listed), `deleted` (a deleted
+   directory listed once, its contents implied) — computed over the paths of the differences
+   before and after the run: O(the differences).
+8. **Killed run** (`timeout`, `memory`, abort): rolled back to the sandbox of before (F4, user
    2026-11-25). **Lost worker:** the same; the rerun starts from it (ADR-0563 §6 unchanged).
 9. **Capture outside the guest realm** (`distribution/isolate-host-sandbox-capture-outside-guest-realm`,
-   now owned by the template goal): the difference is still captured in the guest's realm; the
-   unit's mechanism is chosen at its PICKUP among its candidates (a fresh realm over the FS records,
-   the worker reading the isolate's FS through copies, a capture using only intrinsics captured
-   before guest code).
+   owned by the template goal): the difference is still derived in the guest's realm; the unit's
+   mechanism is chosen at its PICKUP among its candidates (a fresh realm over the FS records, the
+   worker reading the isolate's FS through copies, a capture using only intrinsics captured before
+   guest code).
 
 ## Amends
 
 - ADR-0568 §1: `options.template` is accepted (no longer `NotImplementedError`); `createSandbox`
-  gains the template options (artifact or id; read-only). §2: the consumer's state of a template
-  sandbox is its difference over the shared index (idle: the difference, not ~400 B per template
-  entry). §6: the isolate rule adds the template's materialized size (§6 above).
+  gains the template options (artifact or id; read-only). §2 («decoded in the consumer realm into
+  rifty's own `MemoryFsSync` for host file ops — no second implementation»): a template sandbox's
+  host ops run on `LayeredFsSync` over rifty's `MemoryFsSync` — the same class as the guest's run,
+  so still one implementation; idle it holds its difference and its materialized entries
+  (references into the shared buffer), not ~400 B per template entry. §6: the isolate rule adds the
+  template's in-isolate size (§6 above).
+- ADR-0558 (guest contract): `GuestEntry` gains installing a template view + a difference before
+  the run and handing back the derived difference after it (beside `restore` / `snapshot`).
 - ADR-0567 §4 («v1 snapshots the whole FS»): on the internal consumer ↔ worker wire of a template
   sandbox, a v1 blob (template header: none) carries the difference's entries only, read as a layer
   only by a template run; never handed out, so no format version changes. ADR-0567 §6 («restore …
-  replaces the whole target FS») holds for `restoreFs`; a template run restores the template views,
-  then applies the difference blob over them (its entries written, then the deleted list removed).
-  ADR-0567 §5 validates the blob unchanged; the deleted list beside it is validated by §5 above.
+  replaces the whole target FS») holds for `restoreFs`; the difference is applied over a template
+  view by `LayeredFsSync` (§2). ADR-0567 §5 validates the blob unchanged; the deleted list beside
+  it is validated by §5 above.
 
 ## Forks (user)
 
@@ -119,7 +139,8 @@ the user's words»).
   **Answered 2026-11-25: (a)** (goal Decisions; (b) deferred to
   `distribution/isolate-host-sandbox-template-lazy-read`, (c) recorded in
   `distribution/isolate-host-sandbox-killed-run-partial-writes`).
-  (a) materialize the template in the isolate (`views`): keeps every recorded decision; per-run
+  (a) the template in the isolate per run — first measured as `views`, built as `layered`
+  (§2–3: lazily materialized, the difference derived): keeps every recorded decision; per-run
   cost and isolate memory linear in the template (T95 ~+125 ms, +100 MiB); with both modes (F2) the
   simplest: a plain FS, writes and deletions of template files need no overlay.
   (b) lazy template (recommended before F2's answer): only template reads cross, 3 read-only host functions over
@@ -198,7 +219,8 @@ the user's words»).
 - I1. Intake: `createSandbox({ template })` accepts a `produceDependencySnapshot` artifact (gzip or
   br, profile `replay` or `frozen`) or the id of one registered in the process; registering returns
   the template's identity `{id, version}`, derived from the artifact alone and documented, and its
-  packages (names and versions, from its manifest); that identity is the id `createSandbox` takes; a corrupted, truncated or unsupported artifact, or an
+  packages (the root's dependencies in the artifact's `payload/package-lock.json` with the versions
+  installed for them); that identity is the id `createSandbox` takes; a corrupted, truncated or unsupported artifact, or an
   unknown id, is refused by name before any sandbox exists; no other conversion is needed on the
   consumer's side.
 - I2. Mount: the guest sees the artifact's `payload/node_modules` at `/node_modules` and nothing
@@ -212,27 +234,28 @@ the user's words»).
   `EEXIST` for `mkdir` of an existing directory; oracle: `map.md` Open questions), and the template
   stays as it was.
 - I4. Layer: a template is held once per consumer process and once per worker per identity; N
-  sandboxes over it share that one copy and its index — an idle sandbox holds only its difference
-  (its own entries and its deleted template paths); per run only the difference crosses to the
-  worker and back; `maxFsBytes`, `ERR_ISOLATE_HOST_SANDBOX_FULL` and
+  sandboxes over it share that one copy and its index — an idle sandbox holds its difference and
+  the entries it touched as references into that copy, never a copy of the template's bytes or a
+  per-sandbox index of it; per run only the difference crosses to the worker and back; `maxFsBytes`, `ERR_ISOLATE_HOST_SANDBOX_FULL` and
   `stateRefused: ERR_FS_SNAPSHOT_TOO_LARGE` count the difference only.
 - I5. Cost. Templates: T1 (~1 MB, ~300 files) and T95 (23 654 files, 95 MB), generated
   deterministically by the carrier (fixed names, sizes and bytes — not the pnpm store), plus the
-  four-library artifact. A host op (`writeFile`, `readFile`, `remove`, `list`, the cap check
-  included) costs O(the write + the difference): a unit test counts its template-index lookups —
-  one per path component it names, plus, for `list(dir)`, the template children of `dir` only —
-  and never a walk of the template; an idle sandbox holds no per-template structure (a unit test:
-  its own entries are exactly its difference, its deleted set exactly its deletions, the index the
-  process's one); a run holds, in the consumer, only the encoded difference going out and the one
-  coming back with its decode — never a copy of the template's buffer or index (a unit test over the
-  run's consumer-side allocations, and the README's peak per run over T1 and T95 differing by under
-  1 MiB). Measured on landed code and published in the README for T1, T95 and the
-  four-library artifact (`scripts/measure.mjs`, the cost table's method): host-op medians, idle
-  memory per sandbox, the consumer's peak memory per run, a warm `exec`'s latency and isolate
-  memory. An empty sandbox over T95 and over the four-library artifact runs with the default
-  `maxFsBytes` and `memoryLimitMb`.
-- I6. Changed paths: `exec`'s result names exactly the paths the run created, changed or deleted
-  (template paths included), with their sizes, against a walk of the state before and after.
+  four-library artifact. Structural, by unit tests: a host op (`writeFile`, `readFile`, `remove`,
+  `list`, the cap check included) reads the template index only to materialize the not yet
+  materialized directories on its path (and, for `list(dir)`, `dir`) — exactly their children,
+  counted — never a walk of the template; the cap check encodes only the derived difference; a
+  warm `exec`'s request frame carries the encoded difference and the deleted list and nothing of
+  the template (frame bytes counted), the template travels to a worker once per identity (frames
+  counted, cold and warm); the consumer's buffers for a run are those encodings and their decode,
+  never a copy of the template's buffer or index (the codec's inputs and outputs counted). Measured
+  on landed code and published in the README for T1, T95 and the four-library artifact
+  (`scripts/measure.mjs`): host-op medians, idle memory per sandbox, the consumer's peak memory per
+  run, a warm `exec`'s latency and isolate memory. An empty sandbox over T95 and over the
+  four-library artifact runs with the default `maxFsBytes` and `memoryLimitMb`.
+- I6. Changed paths: `exec`'s result names exactly the paths the run created, changed (kind or
+  bytes differ; times alone are not a change) or deleted (a deleted directory once, its contents
+  implied), template paths included, with their sizes — equal to a walk of live Node's tree before
+  and after the same run (probe S's comparison).
 - I7. The end state: a guest that breaks its own runtime (replaced intrinsics) cannot leave a tree
   its file operations did not produce while its run reads as success — it gets the tree its
   operations produced or `stateRefused` with the state of before (live-sandbox I1).
@@ -246,6 +269,15 @@ the user's words»).
   `produceDependencySnapshot` run in plain Node (the published `@riftydev/workbench`), passes it to
   `createSandbox`, and requires each of the four libraries from a sandbox run — each `require`
   succeeding, proven by the carrier on that artifact.
+- I11. Sequences: for each row of the sequence table — remove → write the same path, remove a
+  directory → write a child (with and without `mkdir`), `rmdir` + `mkdir`, `rename` of a template
+  directory, a template file moved out and a file moved in, a rename onto a non-empty directory,
+  `utimes`, an overwrite with the same bytes, a write on a directory path, `mkdir` of an existing
+  directory, a non-recursive `rm` of a non-empty directory, a copy out — done by the guest, by host
+  ops, or host ops then a run, the files the host then sees (`list`, `readFile`, `stat` kind, size
+  and file mtime) equal what the next run sees and what live `node` v24.16.0 leaves over a real
+  directory holding the same template and files, each call's error code included (probe S's table
+  is the seed).
 
 ## Alternatives
 
@@ -266,7 +298,8 @@ the user's words»).
 ## Consequences
 
 - Memory: the consumer holds one copy of each template (buffer + index); each worker that served it
-  holds one more; each run in flight holds one more inside its isolate. Peak ≈ (1 + workers +
+  holds one more; each run in flight holds one more inside its isolate (buffer + index, its touched
+  entries materialized). Peak ≈ (1 + workers +
   concurrent runs) × the template's materialized size; a worker's idle watermark and RSS ceiling
   include its held templates, else an idle worker holding a ~90 MB template sits at the 256 MiB
   retire line.
@@ -276,12 +309,12 @@ the user's words»).
   the template's entries and bytes (ADR-0568 Consequences' fork, brought back and answered by the
   user 2026-11-25). The wire, the consumer's per-run memory and host ops carry the difference only.
 - `runCode` unchanged.
-- External dependency: the read-only mode's guest half needs the sync-only guest FS (PR #437, open)
-  or an async-surface wrapper; never a sync-only wrapper over a guest that still has async
-  writes.
-- Not the user's words (agent decisions, not probed unless noted): identity (§4); writable as the
-  default; the consumer-side overlay (§2, probed: H); the guest-side materialization order (§3,
-  probed in the reverse order: L restores the difference first); the deleted-path list beside a v1
-  blob and its validation (§5); the isolate rule and the restore refusal for a template that does
-  not fit (§6); the binary frame; the worker cache policy; the read-only refusal table (its oracle:
-  goal I3 / `map.md`).
+- Overlap with PR #437 (open, the user's track: every guest's FS sync-only): a template run installs
+  `LayeredFsSync` as the realm's only FS surface (§3), the same move for template runs; whichever
+  lands second rebases. No async `Vfs` stays beside it, so read-only mode has no unguarded surface.
+- Not the user's words (agent decisions, probed where noted): identity (§4); the packages' source
+  (§1); writable as the default; `LayeredFsSync` and its place in `@riftydev/vfs` (§2, probed: S
+  sequences, H host-op cost, L per-run cost); the difference beside a v1 blob and its validation
+  (§5); the isolate rule and the restore refusal for a template that does not fit (§6, not
+  probed); the definition of `changed` (§7, probed in S); the binary frame; the worker cache
+  policy; the read-only refusal table (its oracle: goal I3 / `map.md`, not probed).

@@ -42,11 +42,16 @@ const bundleFile = join(tmpdir(), `layer-guest-${process.pid}.js`);
 await build({
   absWorkingDir: guestPkg,
   stdin: {
-    contents: readFileSync(join(here, 'probe-guest.ts'), 'utf8'),
+    contents: readFileSync(join(here, 'probe-guest.ts'), 'utf8').replace(
+      '__LAYERED__',
+      join(here, 'layered.ts'),
+    ),
     resolveDir: join(guestPkg, 'src/guest'),
     loader: 'ts',
     sourcefile: 'probe-guest.ts',
   },
+  // layered.ts lives here, its bare imports resolve from the guest package.
+  nodePaths: [join(guestPkg, 'node_modules')],
   inject: ['src/guest/web-shim.ts'],
   // The guest package declares sideEffects:false; the entry's side effects are the point here.
   ignoreAnnotations: true,
@@ -352,6 +357,12 @@ async function run(arm, tpl, w, memoryLimit) {
           arguments: { copy: true },
         },
       );
+    if (arm === 'layered')
+      await (await probe.get('layered', { reference: true })).apply(
+        undefined,
+        [new ivm.ExternalCopy(tpl.packed.pack).copyInto({ release: true }), tpl.packed.index],
+        { arguments: { copy: true } },
+      );
     if (arm === 'views') {
       const mat = await probe.get('materialize', { reference: true });
       await mat.apply(
@@ -378,6 +389,14 @@ async function run(arm, tpl, w, memoryLimit) {
     const heap = iso.getHeapStatisticsSync();
     let end;
     if (arm === 'worker') end = wfs.capture();
+    else if (arm === 'layered')
+      end = await (await probe.get('layeredCapture', { reference: true })).apply(
+        undefined,
+        [1 << 30],
+        {
+          result: { copy: true },
+        },
+      );
     else if (arm === 'views') {
       end = await (await probe.get('captureDiff', { reference: true })).apply(
         undefined,
@@ -480,7 +499,7 @@ const plans = [
   ],
   [prepare('T95', T95, ['semver', 'pdf', 'many']), ['semver', 'pdf', 'many']],
 ];
-const ARMS = ['full', 'views', 'lazy', 'worker'];
+const ARMS = (process.env.ARMS ?? 'full,views,lazy,worker,layered').split(',');
 const REPS = 7;
 for (const [tpl, workloads] of plans) {
   console.log(

@@ -10,7 +10,11 @@
  *             entries that are not template views (O(template entries) per write).
  *   overlay — one immutable template index per process (path → entry, children), shared; a
  *             sandbox is its own MemoryFsSync of the difference + a set of deleted template paths;
- *             the cap check encodes the difference only (O(write + difference)).
+ *             the cap check encodes the difference only (O(write + difference)). Hand-written
+ *             host-op semantics (the review's N1/S-a: a second tree) — kept for the numbers only.
+ *   layered — the chosen construction (`layered.ts`, the same code as the guest's run): rifty's
+ *             MemoryFsSync with template entries materialized lazily on touch; the cap check
+ *             encodes the derived difference (O(touched + difference)).
  *
  * Usage (repo root): node --expose-gc <this> <libs node_modules dir>   (as layer.mjs)
  */
@@ -27,18 +31,21 @@ if (!LIBS) throw new Error('usage: host.mjs <libs node_modules dir>');
 const realmFile = join(tmpdir(), `host-realm-${process.pid}.mjs`);
 await build({
   stdin: {
-    contents:
-      "export { createMemoryFs } from '@riftydev/vfs/internal'; export { snapshotFs } from './src/snapshot.ts';",
+    contents: `export { createMemoryFs } from '@riftydev/vfs/internal'; export { snapshotFs } from './src/snapshot.ts';
+export { LayeredFs, templateLayer } from ${JSON.stringify(join(fileURLToPath(new URL('.', import.meta.url)), 'layered.ts'))};`,
     resolveDir: guestPkg,
     loader: 'ts',
   },
+  nodePaths: [join(guestPkg, 'node_modules')],
   bundle: true,
   format: 'esm',
   platform: 'node',
   outfile: realmFile,
   logLevel: 'warning',
 });
-const { createMemoryFs, snapshotFs } = await import(pathToFileURL(realmFile).href);
+const { createMemoryFs, snapshotFs, LayeredFs, templateLayer } = await import(
+  pathToFileURL(realmFile).href
+);
 rmSync(realmFile);
 
 // ---- templates (as layer.mjs) ----------------------------------------------------
@@ -127,7 +134,33 @@ function templateOf(files) {
       isDirectory: e.dir,
     });
   }
-  return { files, pack, entries, children };
+  const rows = [];
+  for (const [p, e] of entries) {
+    if (p === '/') continue;
+    rows.push(
+      e.dir
+        ? [1, p, 0, 0, T0, T0, T0, T0]
+        : [2, p, e.bytes.byteOffset, e.bytes.length, T0, T0, T0, T0],
+    );
+  }
+  return { files, pack, entries, children, layer: templateLayer(pack, rows) };
+}
+
+// ---- arm: layered (the chosen construction) ------------------------------------------
+function layeredSandbox(tpl) {
+  const fs = new LayeredFs(tpl.layer);
+  for (const d of ['/workspace', '/tmp']) fs.mkdirSync(d, { recursive: true });
+  const capCheck = () => snapshotFs(fs.difference().entries, BUDGET).length;
+  return {
+    writeFile(p, data) {
+      fs.mkdirSync(parentOf(p), { recursive: true });
+      fs.writeFileSync(p, data);
+      capCheck();
+    },
+    readFile: (p) => fs.readFileBytesSync(p),
+    list: (p) => fs.readdirSync(p).map((d) => d.name),
+    remove: (p) => fs.rmSync(p, { recursive: true }),
+  };
 }
 
 // ---- arm: views ---------------------------------------------------------------------
@@ -239,6 +272,7 @@ for (const [label, files] of [
   for (const [arm, make] of [
     ['views', viewsSandbox],
     ['overlay', overlaySandbox],
+    ['layered', layeredSandbox],
   ]) {
     const t = performance.now();
     const sb = make(tpl);

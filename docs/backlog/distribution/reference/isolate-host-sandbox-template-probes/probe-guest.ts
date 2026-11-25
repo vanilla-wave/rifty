@@ -18,6 +18,8 @@
 import './entry.ts';
 import { VfsError, syncMirror } from '@riftydev/vfs';
 import { MemoryFsSync, setSyncMirror } from '@riftydev/vfs/internal';
+// Replaced by layer.mjs with the absolute path of layered.ts (the chosen construction, arm `layered`).
+import { LayeredFs, templateLayer } from '__LAYERED__';
 import { snapshotFs } from '../snapshot.ts';
 
 type Lower = {
@@ -229,12 +231,27 @@ function captureDiff(maxBytes: number): Uint8Array {
   return snapshotFs(diff as never, { template: null, maxBytes });
 }
 
+/** Arm `layered`: the run's FS is a LayeredFs over the copied template; the restored state becomes its difference. */
+let layeredFs: LayeredFs | undefined;
+function layered(pack: Uint8Array, index: string): void {
+  const L = new LayeredFs(templateLayer(pack, JSON.parse(index)));
+  L.apply(upper, []);
+  layeredFs = L;
+  setSyncMirror(L as never);
+}
+function layeredCapture(maxBytes: number): Uint8Array {
+  const d = (layeredFs as LayeredFs).difference();
+  return snapshotFs(d.entries as never, { template: null, maxBytes });
+}
+
 Object.defineProperty(globalThis, '__probe', {
   value: Object.freeze({
     overlay: () => setSyncMirror(new Overlay() as never),
     remote: () => setSyncMirror(new RemoteFs() as never),
     materialize,
     captureDiff,
+    layered,
+    layeredCapture,
     counters: () => JSON.stringify(counters),
   }),
   configurable: true,

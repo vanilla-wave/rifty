@@ -3,7 +3,7 @@
 Disposable probes for the template goal's forks. `packages/*/src` untouched; the probe guest
 bundle is the real guest entry + `probe-guest.ts`, built by `layer.mjs` into a temp file.
 Machine: Apple M3 Pro, macOS, Node v24.16.0, isolated-vm 7.0.2, main @ `b3731e9c0`, load ~4–5.
-Raw output: `mount.out.txt`, `layer.out.txt`. `layer.mjs` drives isolated-vm and rifty's codec from source, not the public API: worker-side costs of each arm, not a consumer's `exec`.
+Raw output: `mount.out.txt`, `layer.out.txt`, `layer-layered.out.txt`, `host.out.txt`, `seq.out.txt`. `layer.mjs` drives isolated-vm and rifty's codec from source, not the public API: worker-side costs of each arm, not a consumer's `exec`.
 
 ## M — mount point (`mount.mjs`)
 
@@ -82,13 +82,50 @@ held sandboxes, one 10 KiB own file each. Load average ~12 on 12 cores.
 §3's «O(размер записи + дифф)» and «память простаивающей песочницы … не включает шаблон»; the
 per-sandbox views tree does not (ADR-0572 §2).
 
+## S — the chosen construction through operation sequences (`layered.ts`, `seq.mjs`)
+
+`layered.ts` (probe prototype of ADR-0572 §2): rifty's `MemoryFsSync` with template entries
+materialized lazily on touch, every call then on the `MemoryFsSync` unchanged, the difference
+derived (non-pristine entries + materialized template paths now gone). `seq.mjs` runs each sequence
+three ways against live `node` v24.16.0 over a real temp directory holding the same template (times
+set) and the same program: in a fresh isolate (rifty `fs` → the layered class, difference captured
+there, applied by the consumer over a fresh view), as host ops in the consumer, and host ops → a
+run → the host. Compared: each call's error code, the final tree (kind, size, sha1, file mtime), the
+changed-paths list (derived from the two differences vs a walk of Node's before/after), the
+consumer's difference → apply round trip.
+
+Result (`seq.out.txt`): **21/21** — remove → write the same path; remove a directory → write a
+child (`ENOENT`) and with `mkdir`; `rmdir` + `mkdir` (template children stay gone); `rename` of a
+template directory (then `require` from the new path); a template file moved out, a file moved in;
+a rename onto a non-empty directory (`ENOTEMPTY`); `utimes`; an overwrite with the same bytes; a
+write on a directory path (`EISDIR`); `mkdir` of an existing directory (`EEXIST`); a non-recursive
+`rm` of a non-empty directory (`ERR_FS_EISDIR`); a copy out; four host sequences; three host → run
+→ host sequences. Mutation check: dropping the derived deletions fails 8 of 21 (the probe
+discriminates). Directory times are not compared.
+
+Cost of the same class (`layer-layered.out.txt`, arms `views` vs `layered`, T95 = 23 654 files /
+72.5 MB at main @ 57152054d's store, load 7–13; medians of 7, ms; floor MiB):
+
+| | T1 semver | T95 semver | T95 pdf-lib | T95 1 000 writes | floor T95 |
+|---|---|---|---|---|---|
+| views | 51 | 184 (restore 99 + capture 37) | 341 | 195 | 107 |
+| layered | 50 | 92 (restore 41 + capture 0.8) | 318 (run 254 vs 204) | 106 | 99–103 |
+
+Four concurrent T95 runs (wall): pdf-lib 534 vs 653 ms, 1 000 writes 260 vs 150 ms. `layered`'s
+pdf-lib run is slower per call (each call re-walks its ancestors in the prototype). Host ops on the
+same class (`host.out.txt`, arm `layered`): T95 `writeFile` 10 KiB 0.19 ms (T1 0.24), idle 4 KiB
+per sandbox (T1 5). The `stream` workload: `full`/`views` keep rifty's async `Vfs` beside the sync
+mirror and their read stream comes back empty (the gap PR #437 closes; their end states lack
+`app.bin`), the sync-only arms (`lazy`, `worker`, `layered`) write both files as Node.
+
 Not probed:
 - a guest-side cache of template stats/bytes (`lazy`); a worker's RSS while it holds templates (the
   pool retires an idle worker above 256 MiB, README);
-- the `lazy`/`worker` overlays are partial (no deletion marks, no cross-layer rename); H's overlay
-  covers the four host ops only;
+- the `lazy`/`worker` overlays are partial (no deletion marks, no cross-layer rename); H's `overlay`
+  arm covers the four host ops only (kept for numbers; rejected, ADR-0572 §2);
 - arm `views` restores the difference before materializing (ADR-0572 §3 applies it after), so a
   difference shadowing template paths was not exercised; its `captureDiff` recognises template
   files by view identity only and emits no deletions;
-- the read-only (`EROFS`) wrapper; decoding the artifact (gzip/br, tar) and sending it to a worker;
+- the read-only (`EROFS`) mode; decoding the artifact (gzip/br, tar) and sending it to a worker;
+- `layered.ts` on the T95 sequence table (S runs a 5-file template) and directory times;
 - the real four-library template (the library probe ran it in the state, not as a template).

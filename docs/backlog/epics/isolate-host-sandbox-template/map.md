@@ -9,42 +9,47 @@ the carrier hits it:
 
 1. Acceptance carrier — the User scenario as an e2e over a real `produceDependencySnapshot`
    artifact of the four libraries (published `@riftydev/workbench`, as the library probe), committed
-   RED (`it.fails`), I1–I10.
-2. Template intake in the consumer, with the loud gap of I8 in the same unit (from the first
-   `createSandbox({ template })`, `snapshot()` / `createSandbox({ snapshot })` over a template throw,
-   and so does `exec` over a template — `NotImplementedError('isolate-host.sandbox-template-exec')`,
-   removed by item 4 — so no state between items runs silently without its template):
-   artifact → decoded template (gzip/br, ustar + PAX), named refusals, identity and packages, a
-   process registry by id, one shared buffer and index per process; host ops over the consumer-side
-   overlay (difference + deleted paths), the cap over the difference (absorbs
-   `distribution/isolate-host-sandbox-write-cost-per-state`) (I1, I3 host side, I4, I5, I8).
-3. Worker template cache + binary request frame (absorbs
+   RED (`it.fails`), I1–I11; its sequence table seeded from probe S (`seq.mjs`).
+2. `LayeredFsSync` in `@riftydev/vfs` (ADR-0572 §2): the layered class, its derived difference and
+   apply, writable and read-only modes; unit-tested against live Node on the I11 table, both as an
+   `FsSync` and through runtime-js `fs` (I3, I6, I11).
+3. Template intake and host ops in the consumer, with every loud gap of the not-yet-run template in
+   the same unit — `snapshot()` / `createSandbox({ snapshot })` over a template (I8) and `exec` over
+   a template (`NotImplementedError('isolate-host.sandbox-template-exec')`, lifted by item 5), so no
+   state between items runs silently without its template: artifact → decoded template (gzip/br,
+   ustar + PAX), named refusals, identity and packages, a process registry by id, one shared buffer
+   and index per process; host ops on item 2's class, the cap over the derived difference (absorbs
+   `distribution/isolate-host-sandbox-write-cost-per-state`) (I1, I3 host side, I4, I5 host rows,
+   I8).
+4. Worker template cache + binary request frame (absorbs
    `distribution/isolate-host-binary-request-frame`): a worker receives a template once, as bytes
    (base64 inside a JSON line is +33 % and a ~90 MB string), keeps it by identity in its RSS ceiling
-   and idle watermark, evicted with the worker (I4).
-4. Materialization in the run (ADR-0572 §3), lifting item 2's `exec` refusal: the template as views of one buffer, the difference
-   applied over it, the capture walk emitting the difference and deleted template paths, validated
-   by the consumer; writable and read-only modes in the guest; the changed-paths list (I2, I3, I6).
-5. The end state taken where the guest's code cannot reach (absorbs
+   and idle watermark, evicted with the worker (I4, I5 frame rows).
+5. The run over the template (ADR-0572 §3), lifting item 3's `exec` refusal: index built in the
+   isolate, item 2's class as the realm's only FS surface, the difference applied, derived after
+   the run and validated by the consumer; the changed-paths list; the F1 return condition measured
+   here (goal Decisions) (I2, I3, I6, I11).
+6. The end state taken where the guest's code cannot reach (absorbs
    `distribution/isolate-host-sandbox-capture-outside-guest-realm`; mechanism at its PICKUP,
    ADR-0572 §9) (I7).
-6. README cost table (T1, T95, the four-library artifact), compat rows (I5, I10).
+7. README cost table (T1, T95, the four-library artifact), the isolate rule's two cases, compat
+   rows; the F1 return condition re-measured on landed code (I5, I10).
 
 ## Open questions
 
 - The process registry's lifetime: unregistering or evicting a template (a long-lived consumer
   that rebuilds its template keeps every old version, ~90 MB each) — owner: agent — settled at item
   3's PICKUP (an explicit release or one held while a sandbox references it), I4 documented.
-- The guest's FS sync-only (ADR-0572 §3) is an external dependency: PR #437 «isolate guest:
-  fs.createReadStream reads files (sync-only guest FS)», open (rebuilt on main 2026-11-24, no longer on
-  #434; its merge is the user's); main's guest
-  still calls `installMemoryFs()` (`entry.ts:60`) — owner: agent — settled when #437 lands. Until
-  then the read-only mode cannot ship: a wrapper over the sync mirror alone would leave the async
-  `Vfs` (promise and stream writes) under `/node_modules` without `EROFS` — a silent lie; item 4's
-  read-only half waits for #437 (or wraps the async surface too, with the same oracle).
+- Overlap with PR #437 (open, the user's track: every guest's FS sync-only; `entry.ts:60` still
+  calls `installMemoryFs()` on main) — owner: agent — a template run installs item 2's class as
+  the realm's only FS surface itself (ADR-0572 §3), so neither the read-only mode nor streams wait
+  for #437; whichever lands second rebases onto the other.
+- Per-call overhead of the layered class in the guest (probe L: pdf-lib run 254 vs 204 ms for
+  `views`; each call re-walks its path's ancestors) — owner: agent — item 5, against the F1 return
+  condition.
 - The read-only oracle (I3): Node v24.16.0 on a Linux read-only mount (a read-only tmpfs or bind
   mount in a CI container) for every mutating call's code/syscall/path — owner: agent — settled at
-  item 4's PICKUP: the carrier records the table from live Node; without a runnable read-only mount
+  item 2's PICKUP: the carrier records the table from live Node; without a runnable read-only mount
   in CI, the table is recorded once from a Linux machine with command, output and kernel version.
 - Template mtimes: the artifact's tar records 0 for every entry (`dep-snapshot-tar.ts` `headerFor`);
   what `fs.statSync` of a template file reports vs `npm ci` (1985-10-26 from npm's tarballs) —
