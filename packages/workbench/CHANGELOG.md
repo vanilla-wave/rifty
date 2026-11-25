@@ -1,5 +1,6 @@
 # Changelog
 
+- The dependency snapshot tar reader moved to `@riftydev/npm-client` (internal), shared with `@riftydev/isolate-host`; same acceptance and messages.
 - `dist/THIRD_PARTY_NOTICES.md` lists every package bundled into `dist/assets` (49 npm packages, the generated undici/TypeScript/esbuild-wasm/Node `url` sources, the copied `quickjs.wasm`/`sql-wasm.wasm` packages) with their license texts; each asset ends with a link line to it. Was: no notices.
 - No-COI project commands: a `node -e`/`-p` invocation's `[eval]` globals (`require`, `module`, `exports`, `__filename`, `__dirname`) end with it — restored once the process ends (normal exit, throw, `exit()`, a settled Stop) — so a later `node` no longer sees them and a guest value under one survives unchanged; no project-command `node` sees the console `require` mirror (ES modules read `typeof require` `'undefined'`, as Node). When the realm cannot be returned (an `-e`/`-p` binding made non-configurable, a `node` that makes `globalThis` non-extensible while the mirror is hidden) the command fails naming the binding and the Worker is replaced. ADR-0418 correction 2026-11-18. Was: the bindings stayed on `globalThis` for every later command. `tests/no-coi/no-coi-shared-realm.spec.ts` vs live Node.
 

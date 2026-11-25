@@ -20,16 +20,18 @@ exactly like the agent's (ADR-0568: a fresh isolate per `exec`, the state = byte
 consumer). `require('<lib>')` from `/workspace/main.js` resolves into them as Node's resolution
 does, and the four libraries write the files Node writes. Per sandbox the template is writable (a
 change or deletion seen by that sandbox's later runs and host ops) or read-only (a write under the
-mount fails as on a read-only mount). The template counts in `maxFsBytes` and in the run's isolate
-memory like any files; what has to be raised is a named error with the number and is in the README,
-with a cost table measured through the public API on the four-library artifact. Everything
+mount fails as on a read-only mount). `maxFsBytes` bounds the sandbox's own files as it does without
+a template — the template's budget comes on top, so the defaults hold; a run's default isolate
+memory is derived from that cap, and a value below what the state needs is a named outcome. The
+README has a cost table measured through the public API on the four-library artifact. Everything
 `isolate-host-live-sandbox` holds for a sandbox without a template holds over one, except its
 snapshot round trip: persisting a template sandbox is deferred, a loud refusal.
 
 Declared deferred, by the user's choice (Decisions 2026-11-25): requirements §3 «стоимость не
 зависит от размера шаблона» — here every `exec` restores and captures the whole state (~0.6 s for
 an empty file, 0.83–0.99 s per generator), each sandbox holds ~88 MB, a host write encodes the
-whole state. The next steps (`distribution/isolate-host-sandbox-template-layer`,
+whole state, each concurrent run holds up to 5 × S + 16 MiB in the consumer (ADR-0568 §6) and
+blocks its event loop while the state is encoded and decoded. The next steps (`distribution/isolate-host-sandbox-template-layer`,
 `distribution/isolate-host-sandbox-live-isolate-per-turn`) are meant to change only that price; the
 template layer keeps the service's contract, the live isolate cannot keep two of its properties —
 `exec`'s per-call `memoryLimitMb` and «an idle sandbox holds no process or isolate» (Decisions
@@ -42,8 +44,7 @@ template layer keeps the service's contract, the live isolate cannot keep two of
 2. At start it calls `registerTemplate(artifact)` and keeps the returned `{ id, version }` (or hands
    the artifact itself to `createSandbox`). A corrupted, truncated or unknown-format artifact is
    refused by name, before any sandbox exists.
-3. Per agent turn it calls `createSandbox({ template, maxFsBytes })` with the `maxFsBytes` the README
-   names for its template (too low → a named error with the number), writes `/workspace/main.js`
+3. Per agent turn it calls `createSandbox({ template })` with the default limits, writes `/workspace/main.js`
    and runs `exec('main.js', { args: ['out.pptx'] })`: `require` of each of the four libraries
    resolves into `/node_modules` as Node resolves `require` from a file below a `node_modules`;
    `rifty/*` is not visible to the guest; the generator writes a valid document and the host reads
@@ -72,11 +73,17 @@ rifty's FS (no `EROFS` producer in `packages/vfs/src`, `runtime-js`, `isolate-gu
   `produceDependencySnapshot` artifact — gzip or br, profile `replay` or `frozen` — and
   `createSandbox` also the identity `registerTemplate` returned; the identity `{ id, version }` is
   the manifest's `templateId` and the producer's `snapshotId` (sha256 of the decoded tar, the same
-  for gzip and br), documented; an artifact already registered in the process is not decoded again
-  (counted); a corrupted, truncated or unsupported artifact, and an unknown identity, are refused
-  with a named error before any sandbox exists; the consumer converts nothing.
+  for gzip and br), documented; an artifact already registered in the process is not decoded again,
+  concurrent calls included (counted); the bytes are read at the call; a truncated or unsupported
+  artifact, one whose container checks fail (gzip CRC, tar header checksums and envelope), and an
+  unknown identity, are refused with a named error before any sandbox exists, and a refusal leaves
+  the registry as it was; br carries no checksum — a corrupted br artifact is refused or yields
+  another `version` than the producer's `snapshotId`, never the same one (the consumer compares
+  them); the consumer converts nothing. The artifact is the consumer's own CI output: trusted
+  input, no decompression bound beyond Node's own.
 - I2. Mount: the guest sees exactly the artifact's `payload/node_modules` at `/node_modules`,
-  byte for byte, and nothing else of the artifact (`rifty/*`, `payload/package.json`, the lock);
+  byte for byte with the tar's mtimes, and nothing else of the artifact (`rifty/*` of either
+  profile, `payload/package.json`, the lock);
   `require('<lib>')`, `require.resolve` and `module.paths` from `/workspace/main.js` give what live
   Node v24.16.0 gives over the same tree.
 - I3. Libraries, public API only: the four canonical generators of the library probe (`gen/pdf.cjs`,
@@ -91,25 +98,28 @@ rifty's FS (no `EROFS` producer in `packages/vfs/src`, `runtime-js`, `isolate-gu
 - I5. Read-only, per sandbox (user: both modes): every call whose writes reach `/node_modules`, from
   the guest (sync, callback, promise and stream forms) and from host ops, fails as Node v24.16.0
   fails it on a read-only mount (code, syscall, path) and leaves the template as it was.
-- I6. Limits, honest: the template counts in `maxFsBytes` as any files. `createSandbox` over a
-  template with `maxFsBytes` below the codec's budget of an empty sandbox over it rejects
-  `ERR_OUT_OF_RANGE` naming that number; past it a host write is `ERR_ISOLATE_HOST_SANDBOX_FULL`
-  and a run's end state `stateRefused: ERR_FS_SNAPSHOT_TOO_LARGE`; a `memoryLimitMb` below what the
-  state needs is the named outcome it is without a template (`stateRefused:
-  ERR_ISOLATE_HOST_SANDBOX_RESTORE` or `termination: 'memory'`). The README names the four-library
-  artifact's `maxFsBytes` budget and its smallest `memoryLimitMb` for an empty file and each
-  generator.
+- I6. Limits, honest: `maxFsBytes` bounds the sandbox's own files exactly as without a template
+  (the codec's cap = `maxFsBytes` + the template's budget − an empty sandbox's), so the defaults
+  hold and the same refusals carry the consumer's number: below an empty sandbox's budget
+  `ERR_OUT_OF_RANGE`; past the cap a host write `ERR_ISOLATE_HOST_SANDBOX_FULL` and a run's end
+  state `stateRefused: ERR_FS_SNAPSHOT_TOO_LARGE`. A run's default `memoryLimitMb` is derived from
+  the cap (max(256, 3 × cap + 32 MiB)), measured with repeats to keep every generator's files
+  (≥ 100 runs each, zero refusals); an explicit `memoryLimitMb` below what the state needs is the
+  named outcome it is without a template (`stateRefused`, `termination: 'memory'`). The README
+  gives the rule and the measured refusal rates.
 - I7. Unchanged guarantees: what `isolate-host-live-sandbox` I1–I8 hold for a sandbox without a
   template holds over one — a killed or aborted run rolls back its writes under `/node_modules`
   too; destroy, ordering, limits, trust — and its open part stays open for both (I1's «a guest that
   broke its own snapshot», `distribution/isolate-host-sandbox-capture-outside-guest-realm`);
-  sandboxes without a template and `runCode` do not change (their suites unchanged and green).
+  sandboxes without a template and `runCode` keep their behavior (their suites green; the package
+  root's export list gains `registerTemplate`).
 - I8. Persistence deferred, loud: `snapshot()` of a sandbox over a template and
   `createSandbox({ template, snapshot })` throw `NotImplementedError('isolate-host.sandbox-template-snapshot')`
   + compat ❌.
 - I9. Price, published: the README's cost table, measured through the public API on the
   four-library artifact — `registerTemplate`, `createSandbox`, a warm `exec` of an empty file and
-  of each generator, a host `writeFile`, the consumer's memory per idle sandbox, the I6 numbers —
+  of each generator, a host `writeFile`, the consumer's memory per idle sandbox and its peak per
+  run, the longest stall of the consumer's event loop during an `exec`, the I6 numbers —
   and requirements §3 named as deferred with its backlog items.
 - I10. Documented route: the README builds the template from `package.json` + lock with
   `produceDependencySnapshot` in plain Node (published `@riftydev/workbench`), registers it, and
@@ -134,9 +144,11 @@ Final-check findings resolved: I7 no longer promises live-sandbox I1's open capt
 - 2026-11-25 — agent: API — `registerTemplate(artifact: Uint8Array) → Promise<{ id, version }>`; `createSandbox({ template: Uint8Array | { id, version } })`. Bytes handed to `createSandbox` register too (requirements §1 name both forms; one decode per artifact per process, I1); a registered template is kept for the process's life (no unregister: one template per deployment is the scenario; a consumer rotating templates passes bytes and holds ~1 template-size per registration — README).
 - 2026-11-25 — agent: identity = `{ id: rifty/manifest.json templateId, version: snapshotId }` — `snapshotId` is the producer's own (`dep-snapshot-producer.ts`: sha256 of the decoded tar), recomputable from the artifact alone; `installArtifactIdentity` is a build constant, it identifies no template.
 - 2026-11-25 — agent: one artifact reader — the envelope reader (`dep-snapshot-tar.ts`: ustar + PAX, envelope paths, manifest v4/v5) moves from `@riftydev/workbench` to `@riftydev/npm-client` internal, which workbench and isolate-host (bundled into `dist/codec.js`) both use; isolate-host may not import workbench (`tools/checks/arch-rules.cjs` tiers). Decompression in the consumer realm by `node:zlib` (gzip by magic, otherwise br).
-- 2026-11-25 — agent: template file times are the tar's (`mtime` header / PAX; the producer writes 0 → the epoch), as extracting the artifact gives; npm's tarballs carry 1985-10-26, `npm ci` keeps it — the artifact does not (compat row).
+- 2026-11-25 — agent: template file times are the tar's (`mtime` header / PAX; the producer writes 0 → the epoch; all four times), as `tar -x` of the artifact gives — not what `npm ci` gives (pacote `noMtime`: the install time; the manager's reviewer, npm 11.17.0) — a declared difference (compat row).
+- 2026-11-25 — agent (manager's review S4): `maxFsBytes` means the sandbox's own files, the template's budget on top — the meaning a layer keeps (its cap over the difference), so the contract does not change with it; named difference: deleting template files frees cap room here, a layer may count their removal instead.
+- 2026-11-25 — agent (manager's review S3; repeats through the public API): `memoryLimitMb` 256 on the four-library template (cap 108.9 MiB) lost pdf's files in 5 / 100 runs (`stateRefused: ERR_ISOLATE_HOST_SANDBOX_CAPTURE`), 0 / 100 in a second series; 224, 320 and 384 0 / 100 (288: 0 / 20; empty file and xlsx 0 at every value) — rare and not monotonic, so one bisection is no limit; at the derived default 0 / 100 for each of the five files; the run's default is derived from the cap (I6) instead of 256; ADR-0568 §6's «2 × `maxFsBytes` + 16 MiB» understates at this scale (ADR-0568 dated line).
 - 2026-11-25 — agent: `snapshot()` over a template is a loud refusal (I8), not today's v1 blob of the whole state: the user dropped persistence, and a later layer's diff format would change what such a blob means (contract stability); lifting the refusal only adds.
 - 2026-11-25 — agent (reversible default; raised with the manager as a fork, the user owns dropping a row): out of this goal, each with a record — the template's package list (`epics/isolate-host-agent-tools` reads it; requirements §1 ask only identity), `exec`'s changed-paths report (`distribution/isolate-host-exec-changed-paths`, requirements «Найдено дополнительно»), the end state taken outside the guest's realm (`distribution/isolate-host-sandbox-capture-outside-guest-realm`, back to `isolate-host-live-sandbox`: nothing here rewrites the capture).
-- 2026-11-25 — agent, contract stability (the manager's promise «контракт для сервиса потом не меняется»), per observable property — a next step may only lower a number or lift a refusal: `createSandbox({ template })` / `registerTemplate` forms and errors — same; identity — same derivation; `/node_modules` content, writable semantics, read-only semantics — same (the layer's modes are these, ADR-0572 §1); `maxFsBytes` — the template counts at most its codec budget, the error names the budget, a layer counts less (only lowers the named minimum); `memoryLimitMb` — the README's minimum only falls (a layer or lazy read copies less); limit errors — same codes; host ops over `/node_modules` — same results, cheaper; `snapshot()` — a refusal, liftable (above); a killed run — rolled back (F4); `exec`'s result — `RunCodeResult` + `stateRefused`, unchanged. Not stable, named: the timing and memory figures (the deferred §3, meant to fall); and one property the live-isolate step cannot keep as is — `exec`'s per-call `memoryLimitMb` bounds that run's own fresh isolate (ADR-0568 §6), while a live isolate holds the sandbox's files and every run in one isolate whose limit is fixed at its creation (isolated-vm) — and «an idle sandbox holds no process or isolate» (live-sandbox I6, ADR-0568 §2) — a live isolate is held between runs by definition; forks for that step, recorded in its item, not this goal's.
+- 2026-11-25 — agent, contract stability (the manager's promise «контракт для сервиса потом не меняется»), per observable property — a next step may only lower a number or lift a refusal: `createSandbox({ template })` / `registerTemplate` forms and errors — same; identity — same derivation; `/node_modules` content, writable and read-only semantics — same (the layer's modes are these, ADR-0572 §1); `maxFsBytes` — the sandbox's own files, the template on top (I6), the meaning a layer's cap over the difference keeps (named difference: deleted template files free room here); `memoryLimitMb` — a run's default derived from the cap, only falls with a layer or lazy reads; limit errors — same codes and numbers; host ops over `/node_modules` — same results, cheaper; `snapshot()` — a refusal, liftable; a killed run — rolled back (F4); `exec`'s result — `RunCodeResult` + `stateRefused`. Costs that move, not the API: a layer's workers each hold a template copy (worker RSS, ADR-0572 Consequences). Not stable, named: the timing and memory figures (the deferred §3, meant to fall); and the live-isolate step — `exec`'s per-call `memoryLimitMb` bounds that run's own fresh isolate (ADR-0568 §6), while a live isolate holds the sandbox's files and every run under one limit fixed at its creation (isolated-vm); «an idle sandbox holds no process or isolate» (live-sandbox I6, ADR-0568 §2); rollback and surviving a lost worker only through a restore point; host ops become calls into the isolate — forks for that step, recorded in its item, not this goal's.
 - rejected route: the consumer lays `node_modules` out with the internal codec and passes `createSandbox({ snapshot })` (library probe, PR #430) — violates I3 (public API only) and I1 (no conversion on the consumer's side).
-- rejected route: a second artifact reader inside isolate-host beside workbench's — violates the Outcome's «named error» parity with the producer's own reader (two readers drift on what is broken); one reader, Decisions above.
+- rejected route: a second artifact reader inside isolate-host beside workbench's — violates I1 (two readers drift on what «corrupted or unsupported» is); one reader, Decisions above.

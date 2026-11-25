@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `snapshotBudget(fs)`: the codec's budget of a tree (the least `maxBytes` its snapshot fits), counted by the walk `snapshotFs` runs, without encoding.
 - `dist/THIRD_PARTY_NOTICES.md` lists what `guest.js` bundles (acorn, cjs-module-lexer, quickjs-emscripten-core, @jitl/quickjs-ffi-types, the generated TypeScript compiler and Node v24.16.0 `url`/`querystring`); `guest.js` ends with a link line to it (+84 B).
 - `http.validateHeaderName`/`validateHeaderValue` messages print a non-string argument as Node's `%s` (its `toString`/`Symbol.toPrimitive`, `-0`); a throwing `Symbol.toPrimitive` rethrows as in Node instead of `ERR_INVALID_HTTP_TOKEN`.
 - The guest bundle carries runtime-js's generated legacy `node:url`/`querystring` (ADR-0574): `guest.js` 7 123 270 → 7 170 976 B (+47 706; gzip 1 497 917 → 1 509 064, +11 147).

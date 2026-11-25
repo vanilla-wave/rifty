@@ -16,5 +16,9 @@ console.log(
       fs.existsSync(path.join(root, p)),
     ]),
     root: fs.readdirSync(root).sort(),
+    // The tar's mtimes (the producer writes 0), as `tar -x` sets them.
+    mtimeMs: ['node_modules', 'node_modules/pdf-lib', 'node_modules/pdf-lib/package.json'].map(
+      (p) => fs.statSync(path.join(root, p)).mtimeMs,
+    ),
   }),
 );

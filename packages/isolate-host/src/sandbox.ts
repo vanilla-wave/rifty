@@ -1,4 +1,12 @@
 import { addAbortListener } from 'node:events';
+import {
+  type Codec,
+  type EntryTimes,
+  type Fs,
+  type SnapshotOptions,
+  emptySandboxCost,
+  loadCodec,
+} from './codec-loader.ts';
 import { type CallHandle, sharedPool } from './pool.ts';
 /**
  * A live sandbox (ADR-0568): between operations its files are rifty's
@@ -9,48 +17,12 @@ import { type CallHandle, sharedPool } from './pool.ts';
  */
 import { REFUSED } from './protocol.ts';
 import { type RunCodeOptions, type RunCodeResult, limit, runLimits } from './run-code.ts';
-import type { TemplateIdentity } from './template.ts';
-
-/** `dist/codec.js`: rifty's MemoryFs and the snapshot codec, bundled (`src/codec.ts`). */
-interface Fs {
-  existsSync(path: string): boolean;
-  readFileBytesSync(path: string): Uint8Array;
-  writeFileSync(path: string, data: Uint8Array): void;
-  readdirSync(path: string): readonly { name: string; isFile: boolean; isDirectory: boolean }[];
-  mkdirSync(path: string, options: { recursive?: boolean }): void;
-  rmSync(path: string, options: { recursive?: boolean; force?: boolean }): void;
-  statSync(path: string): {
-    isFile: boolean;
-    isDirectory: boolean;
-    size?: number;
-    mtime?: number;
-    atime?: number;
-    metadata?: { ctime: number; birthtime: number };
-  };
-  restoreStatSync(path: string, stat: EntryTimes): void;
-}
-interface EntryTimes {
-  readonly mtimeMs: number;
-  readonly atimeMs: number;
-  readonly ctimeMs: number;
-  readonly birthtimeMs: number;
-}
-interface Codec {
-  MemoryFsSync: new () => Fs;
-  GUEST_DIRS: readonly string[];
-  snapshotFs(fs: Fs, options: SnapshotOptions): Uint8Array;
-  restoreFs(fs: Fs, bytes: Uint8Array, options: SnapshotOptions): void;
-}
-interface SnapshotOptions {
-  readonly template: null;
-  readonly maxBytes: number;
-}
-// `src/` in the workspace and `dist/` when packed are both one level under the package root.
-let codec: Promise<Codec> | undefined;
-function loadCodec(): Promise<Codec> {
-  codec ??= import(new URL('../dist/codec.js', import.meta.url).href) as Promise<Codec>;
-  return codec;
-}
+import {
+  type Template,
+  type TemplateIdentity,
+  registeredTemplate,
+  templateOf,
+} from './template.ts';
 
 export interface SandboxOptions {
   /** Bytes of `sandbox.snapshot()` (ADR-0567): the new sandbox starts with their files. */
@@ -115,7 +87,10 @@ export interface Sandbox {
   remove(path: string, options?: OpOptions): Promise<void>;
   /** `node <path> [args]`, cwd `/workspace`. */
   exec(path: string, options?: ExecOptions): Promise<ExecResult>;
-  /** The files as ADR-0567 bytes; `createSandbox({ snapshot })` restores them. */
+  /**
+   * The files as ADR-0567 bytes; `createSandbox({ snapshot })` restores them. Over a template:
+   * `NotImplementedError('isolate-host.sandbox-template-snapshot')` (persistence deferred).
+   */
   snapshot(options?: OpOptions): Promise<Uint8Array>;
   /** Pending, running and later operations reject `ERR_ISOLATE_HOST_SANDBOX_DESTROYED`. */
   destroy(): Promise<void>;
@@ -331,13 +306,23 @@ class LiveSandbox implements Sandbox {
   #destroyed = false;
   readonly #codec: Codec;
   readonly #maxFileBytes: number;
+  /** The codec's cap: `maxFsBytes` plus, over a template, the template's own budget. */
   readonly #options: SnapshotOptions;
+  readonly #maxFsBytes: number;
+  readonly #template: boolean;
 
-  constructor(codec: Codec, fs: Fs, maxFileBytes: number, maxFsBytes: number) {
+  constructor(
+    codec: Codec,
+    fs: Fs,
+    maxFileBytes: number,
+    { maxFsBytes, cap, template }: { maxFsBytes: number; cap: number; template: boolean },
+  ) {
     this.#codec = codec;
+    this.#template = template;
     this.#box = { fs };
     this.#maxFileBytes = maxFileBytes;
-    this.#options = { template: null, maxBytes: maxFsBytes };
+    this.#maxFsBytes = maxFsBytes;
+    this.#options = { template: null, maxBytes: cap };
   }
 
   /**
@@ -446,7 +431,7 @@ class LiveSandbox implements Sandbox {
         if (isCodec(error) && error.code === REFUSED[2])
           throw coded(
             new RangeError(
-              `isolate-host sandbox: the sandbox is over maxFsBytes (${this.#options.maxBytes})`,
+              `isolate-host sandbox: the sandbox is over maxFsBytes (${this.#maxFsBytes})`,
             ),
             'ERR_ISOLATE_HOST_SANDBOX_FULL',
           );
@@ -530,6 +515,9 @@ class LiveSandbox implements Sandbox {
         );
       args = [...given];
       limits = runLimits(options);
+      // A run restores, runs and captures a state up to the cap: its default isolate covers that.
+      if (options.memoryLimitMb === undefined)
+        limits.memoryLimitMb = runMemoryFor(this.#options.maxBytes);
       signal = options.signal;
     } catch (error) {
       return this.#refused(error);
@@ -587,7 +575,10 @@ class LiveSandbox implements Sandbox {
     } catch (error) {
       return this.#refused(error);
     }
-    return this.#op(({ fs }) => copyOf(this.#codec.snapshotFs(fs, this.#options)), signal);
+    return this.#op(({ fs }) => {
+      if (this.#template) throw templateSnapshot();
+      return copyOf(this.#codec.snapshotFs(fs, this.#options));
+    }, signal);
   }
 
   destroy(): Promise<void> {
@@ -600,6 +591,15 @@ class LiveSandbox implements Sandbox {
     // Every call this sandbox placed has left: the cancelled one and any still stopping.
     return this.#tail.then(() => Promise.all(this.#leaving)).then(settle);
   }
+}
+
+/**
+ * The default `memoryLimitMb` of a run in a sandbox whose codec cap is `cap`: 256, or ~3 × the cap
+ * (a capture holds the restored state, the run's garbage and the blob: ADR-0567 §7) + 32 MiB
+ * when that is more — the cap of a sandbox over a template (goal isolate-host-sandbox-template I6).
+ */
+export function runMemoryFor(cap: number): number {
+  return Math.max(256, Math.ceil((3 * cap) / 2 ** 20) + 32);
 }
 
 function tooLarge(size: number, max: number): Error {
@@ -652,16 +652,33 @@ function firstMissingDir(fs: Fs, dir: string): string | undefined {
   return hi <= parts.length ? at(hi) : undefined;
 }
 
+const templateSnapshot = (): Error =>
+  notImplemented(
+    'isolate-host.sandbox-template-snapshot',
+    'persisting a sandbox over a template is deferred, backlog distribution/isolate-host-sandbox-template-snapshot',
+  );
+
+/** `options.template` at the call: the artifact's template (decoded once) or a registered one. */
+function templateOption(template: unknown): Promise<Template> {
+  if (template instanceof Uint8Array) return templateOf(template);
+  if (template === null || typeof template !== 'object')
+    throw coded(
+      new TypeError(
+        'The "options.template" property must be a Uint8Array or a template identity { id, version }',
+      ),
+      'ERR_INVALID_ARG_TYPE',
+    );
+  const { id, version } = template as TemplateIdentity;
+  return Promise.resolve(registeredTemplate({ id, version }));
+}
+
 export function createSandbox(options: SandboxOptions = {}): Promise<Sandbox> {
   let snapshot: Uint8Array | undefined;
   let limits: { maxFsBytes: number; maxFileBytes: number };
+  let template: Promise<Template> | undefined;
   try {
     knownOptions(options, SANDBOX_OPTIONS, 'createSandbox');
-    if ('template' in options)
-      throw notImplemented(
-        'isolate-host.sandbox-template',
-        'a sandbox starts empty or from its own snapshot, ADR-0568',
-      );
+    if (options.template !== undefined && options.snapshot !== undefined) throw templateSnapshot();
     const maxFsBytes = Math.floor(limit('maxFsBytes', options.maxFsBytes, 64 << 20, 0));
     const maxFileBytes = Math.floor(limit('maxFileBytes', options.maxFileBytes, 32 << 20, 0));
     limits = { maxFsBytes, maxFileBytes };
@@ -679,44 +696,23 @@ export function createSandbox(options: SandboxOptions = {}): Promise<Sandbox> {
       // The bytes at the call: the caller may change its buffer while the codec loads.
       snapshot = copyOf(options.snapshot);
     }
+    // Last: nothing after it may throw and leave its decode unobserved.
+    if (options.template !== undefined) template = templateOption(options.template);
   } catch (error) {
     return Promise.reject(bare(error));
   }
-  return open(limits, snapshot).catch((error: unknown) => {
+  return open(limits, snapshot, template).catch((error: unknown) => {
     throw bare(error);
   });
-}
-
-/** The codec's budget for an empty sandbox (`GUEST_DIRS`): no cap may be lower. */
-let emptyCost: number | undefined;
-function emptySandboxCost(c: Codec): number {
-  if (emptyCost !== undefined) return emptyCost;
-  const fs = new c.MemoryFsSync();
-  for (const dir of c.GUEST_DIRS) fs.mkdirSync(dir, { recursive: true });
-  const fits = (maxBytes: number): boolean => {
-    try {
-      c.snapshotFs(fs, { template: null, maxBytes });
-      return true;
-    } catch {
-      return false;
-    }
-  };
-  let lo = 0; // does not fit
-  let hi = 1 << 20; // fits
-  while (hi - lo > 1) {
-    const mid = (lo + hi) >> 1;
-    if (fits(mid)) hi = mid;
-    else lo = mid;
-  }
-  emptyCost = hi;
-  return hi;
 }
 
 async function open(
   { maxFsBytes, maxFileBytes }: { maxFsBytes: number; maxFileBytes: number },
   snapshot: Uint8Array | undefined,
+  template: Promise<Template> | undefined,
 ): Promise<Sandbox> {
   const c = await loadCodec();
+  const base = template === undefined ? undefined : await template;
   const least = emptySandboxCost(c);
   if (maxFsBytes < least)
     throw coded(
@@ -725,8 +721,13 @@ async function open(
       ),
       'ERR_OUT_OF_RANGE',
     );
+  // `maxFsBytes` bounds the sandbox's own files: a template's budget comes on top of it, so a
+  // sandbox over one holds what an empty one may (goal isolate-host-sandbox-template I6).
+  const cap = base === undefined ? maxFsBytes : maxFsBytes + base.budget - least;
   const fs = new c.MemoryFsSync();
-  if (snapshot !== undefined) c.restoreFs(fs, snapshot, { template: null, maxBytes: maxFsBytes });
+  // A template is its empty sandbox's state: restored as a snapshot (ADR-0567), its files the sandbox's own.
+  const state = snapshot ?? base?.state;
+  if (state !== undefined) c.restoreFs(fs, state, { template: null, maxBytes: cap });
   else for (const dir of c.GUEST_DIRS) fs.mkdirSync(dir, { recursive: true });
-  return new LiveSandbox(c, fs, maxFileBytes, maxFsBytes);
+  return new LiveSandbox(c, fs, maxFileBytes, { maxFsBytes, cap, template: base !== undefined });
 }

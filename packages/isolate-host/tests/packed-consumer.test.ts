@@ -50,7 +50,7 @@ it('packed tarball installs and runs under plain node', () => {
     stdout: '42\n',
     stderr: '',
     exitCode: 0,
-    exports: ['createSandbox', 'runCode'],
+    exports: ['createSandbox', 'registerTemplate', 'runCode'],
   });
 }, 240_000);
 

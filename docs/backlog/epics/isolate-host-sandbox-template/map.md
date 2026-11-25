@@ -23,14 +23,18 @@ Children are seeded when the carrier runs (README §FIT 5); planned order:
 
 ## Open questions
 
-- Read-only (I5) cost — owner: agent (reported to the manager 2026-11-25 as a fork on scheduling,
-  not scope): rifty's FS has no read-only mode; it needs an `EROFS` refusal by path prefix on every
-  mutating call of both guest FS surfaces (the async `Vfs` and the sync mirror while PR #437 is
-  open) and the host ops, Node's semantics for calls reaching the mount through an ancestor
-  (`rm -rf /`, `cpSync` onto `/`, `rename` of `/`), and a Linux read-only-mount oracle (Node
-  v24.16.0, every mutating call's code/syscall/path).
-- Template file times vs `npm ci` — owner: agent — settled in item 2: the tar's times (Decisions);
-  compat row.
+- Read-only (I5): this goal's next unit, or backlog — owner: user — asked 2026-11-25 via the
+  manager with the cost (variants: full parity with a Linux read-only mount; `EROFS` by a pinned
+  table of written paths, the rest a declared ⚠️; backlog). Until answered the option is refused as
+  unknown (`ERR_INVALID_ARG_VALUE`) + compat ❌.
+- `exec`'s changed paths and the template's package list: in this goal or backlog — owner: user —
+  asked 2026-11-25 via the manager (the agent's reversible default: out, records
+  `distribution/isolate-host-exec-changed-paths`, `epics/isolate-host-agent-tools`).
+- «Контракт для сервиса потом не меняется» holds for the layer, not for a live isolate per turn
+  (`memoryLimitMb` per run, an idle sandbox without an isolate) — owner: user — told 2026-11-25 via
+  the manager; the answer may change what the live-isolate item promises, not this goal's scope.
+- Template file times vs `npm ci` — owner: agent — settled: the tar's times, a declared difference
+  (Decisions; compat row).
 - The four libraries over the template — owner: agent — main @ 3d16cb7b8: pdf-lib, docx, pptxgenjs
   `writeFile` and exceljs `require('exceljs')` + `xlsx.writeFile` write Node's documents from a
   state (`library-*.test.ts`, compat «Document libraries…»); the carrier re-proves it from the
