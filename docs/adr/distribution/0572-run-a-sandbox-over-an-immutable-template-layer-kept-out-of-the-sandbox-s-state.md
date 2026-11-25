@@ -40,7 +40,7 @@ the user's words»).
 
 1. **Template = an immutable layer outside the state.** The consumer decodes the artifact (gzip or
    br, ustar + PAX, profile `replay` or `frozen`) once per process into one buffer of file bytes and
-   an immutable index (path → kind, range, times; directory → children), keyed by identity (§3); a
+   an immutable index (path → kind, range, times; directory → children), keyed by identity (§4); a
    broken, truncated or unsupported artifact is a named error before any sandbox. Registering
    returns the identity and the packages (from `rifty/manifest.json`). Mounted at `/node_modules`:
    `payload/node_modules` only (F3, user 2026-11-25) — no `payload/package.json`, no lock, never
@@ -64,7 +64,7 @@ the user's words»).
    are not the template's own views with the template's times, and the template paths now absent.
    The consumer validates both (§5) and replaces the sandbox's difference. Read-only mode: every
    mutating call under `/node_modules` fails as Node on a read-only mount (goal I3) — on the guest's
-   sync mirror and, until the guest's FS is sync-only (PR #437, open, on #434), on its async `Vfs`
+   sync mirror and, until the guest's FS is sync-only (PR #437, open), on its async `Vfs`
    too; host ops refuse the same way in the consumer. Measured (probe L `views`, T95): ~+90 ms to
    materialize and ~+37 ms for the capture walk per run, isolate floor 123 MiB; for the four-library
    artifact (8 001 files, 86.7 MB) extrapolated — latency by entries ~+50 ms, memory by bytes
@@ -86,9 +86,9 @@ the user's words»).
    `memoryLimitMb` ≥ 2 × `maxFsBytes` + 16 MiB + the template's materialized size (its bytes plus
    ~400 B per entry); a template that does not fit the run's isolate is the named result of a state
    the run cannot restore — `stateRefused: ERR_ISOLATE_HOST_SANDBOX_RESTORE`, `exitCode: null`,
-   before any guest code (ADR-0568 §3). The defaults hold for the four-library artifact only with an
-   empty or small difference (2 × 64 + 16 + ~90 ≈ 234 of 256 MiB): the README states the rule and
-   the carrier measures the floor.
+   before any guest code (ADR-0568 §3). By this rule the defaults hold for the four-library
+   artifact and for T95 even at a full difference (2 × 64 + 16 + ~90–95 ≈ 234–239 of 256 MiB); the
+   README states the rule and the carrier measures the floor.
 7. **Changed paths.** `exec`'s result adds `changes: { path, type, size }[]` (created, changed,
    deleted), from the difference before and after the run — O(the difference).
 8. **Killed run** (`timeout`, `memory`, abort): rolled back to the difference of before (F4, user
@@ -105,10 +105,12 @@ the user's words»).
   gains the template options (artifact or id; read-only). §2: the consumer's state of a template
   sandbox is its difference over the shared index (idle: the difference, not ~400 B per template
   entry). §6: the isolate rule adds the template's materialized size (§6 above).
-- ADR-0567 §6 («restore … replaces the whole target FS») holds for `restoreFs`; a template run
-  restores the template views, then applies the difference blob by `restoreFs` semantics into a
-  fresh `MemoryFsSync` merged over them — no new format version (§4: records unchanged; the deleted
-  list travels beside the blob, validated by §5 above).
+- ADR-0567 §4 («v1 snapshots the whole FS»): on the internal consumer ↔ worker wire of a template
+  sandbox, a v1 blob (template header: none) carries the difference's entries only, read as a layer
+  only by a template run; never handed out, so no format version changes. ADR-0567 §6 («restore …
+  replaces the whole target FS») holds for `restoreFs`; a template run restores the template views,
+  then applies the difference blob over them (its entries written, then the deleted list removed).
+  ADR-0567 §5 validates the blob unchanged; the deleted list beside it is validated by §5 above.
 
 ## Forks (user)
 
@@ -121,7 +123,7 @@ the user's words»).
   simplest: a plain FS, writes and deletions of template files need no overlay.
   (b) lazy template (recommended before F2's answer): only template reads cross, 3 read-only host functions over
   immutable data shared by every sandbox; the agent's files stay in the guest realm as today.
-  Meets §2–3; the capture unit stays open (§8); a killed run's writes stay lost (F4 = rollback).
+  Meets §2–3; the capture unit stays open (§9); a killed run's writes stay lost (F4 = rollback).
   (c) the worker owns the whole FS: closes the capture unit by construction and makes a killed
   run's writes keepable; but every `fs` call is a host call (~11 operations — one dispatcher in the probe —, guest-chosen paths
   and bytes, per-call state in the multi-tenant worker), chunked I/O on the agent's own files turns
@@ -130,7 +132,7 @@ the user's words»).
   (b′) (b) + the difference captured in the guest realm only through intrinsics captured before
   guest code (the capture unit's third candidate): not measured; the codec and the MemoryFs walk
   would both have to be primordial-safe — a class audit (`runtime-js/post-guest-paths-use-replaceable-intrinsics`).
-- **F2 — template files writable or read-only.** Answered 2026-11-25: both, per sandbox (§1).
+- **F2 — template files writable or read-only.** Answered 2026-11-25: both, per sandbox (§1; «per sandbox» the agent's reading).
 - **F3 — mount `/node_modules` or `/workspace/node_modules`; `payload/package.json`/lock visible.**
   Answered 2026-11-25: `/node_modules`, `node_modules` only (§1).
 - **F4 — a killed run's writes: kept as Node, or rolled back (documented, the tools say so).** Answered 2026-11-25: rolled back (goal Decisions).
@@ -183,8 +185,8 @@ the user's words»).
 7. The agent runs `node` many times per turn: the README's cost table gives a warm `exec`'s latency
    and its isolate memory over a ~1 MB and a ~95 MB template; a host `writeFile`/`list`/`remove` and
    the consumer's peak memory per run do not grow with the template; an empty sandbox over the
-   four-library template runs with the default `maxFsBytes` and `memoryLimitMb`; N sandboxes over
-   one template hold one copy of it in the consumer, each idle one only its own changes.
+   ~95 MB template runs with the default `maxFsBytes` and `memoryLimitMb`; N sandboxes over one
+   template hold one copy of it in the consumer, each idle one only its own changes.
 8. A guest that breaks its own runtime (replaced intrinsics) cannot leave a tree its file
    operations did not produce while its run reads as success (live-sandbox I1).
 9. The README shows building the template from `package.json` + lock and requiring each of the
@@ -213,14 +215,17 @@ the user's words»).
   (its own entries and its deleted template paths); per run only the difference crosses to the
   worker and back; `maxFsBytes`, `ERR_ISOLATE_HOST_SANDBOX_FULL` and
   `stateRefused: ERR_FS_SNAPSHOT_TOO_LARGE` count the difference only.
-- I5. Cost: a host op (`writeFile`, `readFile`, `list`, `remove`, its cap check included) costs
-  O(the write + the difference) — it visits no template entry other than the paths it names (a
-  unit test counts the template-index visits), and its median on T1 and on T95 (the probe's
-  templates, `reference/isolate-host-sandbox-template-probes/README.md`) differs by under 1 ms;
-  an idle sandbox's memory in the consumer is the same over T1 and T95 within 64 KiB; the
-  consumer's peak memory per run does not grow with the template. A warm `exec`'s latency and
-  isolate memory are measured on landed code over T1, T95 and the four-library artifact and
-  published in the README; an empty sandbox over the four-library artifact runs with the default
+- I5. Cost. Templates: T1 (~1 MB, ~300 files) and T95 (23 654 files, 95 MB), generated
+  deterministically by the carrier (fixed names, sizes and bytes — not the pnpm store), plus the
+  four-library artifact. A host op (`writeFile`, `readFile`, `remove`, `list`, the cap check
+  included) costs O(the write + the difference): a unit test counts its template-index lookups —
+  one per path component it names, plus, for `list(dir)`, the template children of `dir` only —
+  and never a walk of the template; an idle sandbox holds no per-template structure (a unit test:
+  its own entries are exactly its difference, its deleted set exactly its deletions, the index the
+  process's one). Measured on landed code and published in the README for T1, T95 and the
+  four-library artifact (`scripts/measure.mjs`, the cost table's method): host-op medians, idle
+  memory per sandbox, the consumer's peak memory per run, a warm `exec`'s latency and isolate
+  memory. An empty sandbox over T95 and over the four-library artifact runs with the default
   `maxFsBytes` and `memoryLimitMb`.
 - I6. Changed paths: `exec`'s result names exactly the paths the run created, changed or deleted
   (template paths included), with their sizes, against a walk of the state before and after.
@@ -267,8 +272,8 @@ the user's words»).
   the template's entries and bytes (ADR-0568 Consequences' fork, brought back and answered by the
   user 2026-11-25). The wire, the consumer's per-run memory and host ops carry the difference only.
 - `runCode` unchanged.
-- External dependency: the read-only mode's guest half needs the sync-only guest FS (PR #437, open,
-  on #434) or an async-surface wrapper; never a sync-only wrapper over a guest that still has async
+- External dependency: the read-only mode's guest half needs the sync-only guest FS (PR #437, open)
+  or an async-surface wrapper; never a sync-only wrapper over a guest that still has async
   writes.
 - Not the user's words (agent decisions, not probed unless noted): identity (§4); writable as the
   default; the consumer-side overlay (§2, probed: H); the guest-side materialization order (§3,

@@ -50,8 +50,8 @@ trip (its I9), deferred with persistence.
 7. The agent runs `node` many times per turn: the README's cost table gives a warm `exec`'s latency
    and its isolate memory over a ~1 MB and a ~95 MB template; a host `writeFile`/`list`/`remove` and
    the consumer's peak memory per run do not grow with the template; an empty sandbox over the
-   four-library template runs with the default `maxFsBytes` and `memoryLimitMb`; N sandboxes over
-   one template hold one copy of it in the consumer, each idle one only its own changes.
+   ~95 MB template runs with the default `maxFsBytes` and `memoryLimitMb`; N sandboxes over one
+   template hold one copy of it in the consumer, each idle one only its own changes.
 8. A guest that breaks its own runtime (replaced intrinsics) cannot leave a tree its file
    operations did not produce while its run reads as success (live-sandbox I1).
 9. The README shows building the template from `package.json` + lock and requiring each of the
@@ -89,14 +89,17 @@ consumer encode/decode per exec, isolate floor 215 MiB, state 96 MB, every host 
   (its own entries and its deleted template paths); per run only the difference crosses to the
   worker and back; `maxFsBytes`, `ERR_ISOLATE_HOST_SANDBOX_FULL` and
   `stateRefused: ERR_FS_SNAPSHOT_TOO_LARGE` count the difference only.
-- I5. Cost: a host op (`writeFile`, `readFile`, `list`, `remove`, its cap check included) costs
-  O(the write + the difference) — it visits no template entry other than the paths it names (a
-  unit test counts the template-index visits), and its median on T1 and on T95 (the probe's
-  templates, `reference/isolate-host-sandbox-template-probes/README.md`) differs by under 1 ms;
-  an idle sandbox's memory in the consumer is the same over T1 and T95 within 64 KiB; the
-  consumer's peak memory per run does not grow with the template. A warm `exec`'s latency and
-  isolate memory are measured on landed code over T1, T95 and the four-library artifact and
-  published in the README; an empty sandbox over the four-library artifact runs with the default
+- I5. Cost. Templates: T1 (~1 MB, ~300 files) and T95 (23 654 files, 95 MB), generated
+  deterministically by the carrier (fixed names, sizes and bytes — not the pnpm store), plus the
+  four-library artifact. A host op (`writeFile`, `readFile`, `remove`, `list`, the cap check
+  included) costs O(the write + the difference): a unit test counts its template-index lookups —
+  one per path component it names, plus, for `list(dir)`, the template children of `dir` only —
+  and never a walk of the template; an idle sandbox holds no per-template structure (a unit test:
+  its own entries are exactly its difference, its deleted set exactly its deletions, the index the
+  process's one). Measured on landed code and published in the README for T1, T95 and the
+  four-library artifact (`scripts/measure.mjs`, the cost table's method): host-op medians, idle
+  memory per sandbox, the consumer's peak memory per run, a warm `exec`'s latency and isolate
+  memory. An empty sandbox over T95 and over the four-library artifact runs with the default
   `maxFsBytes` and `memoryLimitMb`.
 - I6. Changed paths: `exec`'s result names exactly the paths the run created, changed or deleted
   (template paths included), with their sizes, against a walk of the state before and after.
@@ -143,6 +146,7 @@ S6 amendments of ADR-0567/0568 unnamed → ADR-0572 §Amends, the isolate rule a
 S7 I3/I5 uncheckable → oracle named (map fog), T1/T95/four-library and tolerances;
 S8 map order → I8's loud gap with intake (item 2), cache with the frame (item 3);
 S9 probe gaps → README «Not probed» extended.
+Fresh final check after these fixes (2026-11-25, new reviewer): 9 findings — scenario 7 had narrowed «~95 MB» to the four-library template without the user (restored), I5 tolerances not checkable (restated: deterministic T1/T95, structural unit tests, published measurement), a silent `exec` between map items 2 and 4 (item 2 refuses it by name), stale section refs, #437's base, ADR §6 arithmetic, ADR-0567 §4 wording, a duplicate owner line, the prebuild list — all fixed.
 
 ## Decisions
 
@@ -154,7 +158,7 @@ S9 probe gaps → README «Not probed» extended.
 - 2026-11-25 — user: «И сохранение снапшота песочницы не нужно. Решили, что сохранять все это не будем. Агент может [поработать] с песочницей и забрать из живой песочницы файл. После этого песочницу уничтожаем. Так что все задачи про сохранение и изменение снапшота мы кладем в бэк-лог, и пока не делаем.» (bracket: the voice input's «подъем кто-то», the agent's reading) — requirements §2 (diff-only snapshot, restore by template identity, format v2, compressed budget) leave this goal for `distribution/isolate-host-sandbox-template-snapshot`; over a template, `snapshot()` and `createSandbox({ snapshot })` are `NotImplementedError('isolate-host.sandbox-template-snapshot')` + compat ❌. Kept: the template, cost independence of host ops and consumer memory (§3, narrowed for runs by F1 below), changed paths, the capture unit (a run's end state still becomes the state for the sandbox's next run).
 - 2026-11-25 — user: «Я бы на самом деле поддержал оба варианта, чтобы можно было выбирать, как ты хочешь написать, сделать [read-only] или [не read-only].» (F2; brackets: the voice input's «редогли или нередонгли», the agent's reading) — a template is writable or read-only, chosen per sandbox (the agent's reading of «выбирать»). Agent: writable by default (an `npm ci`'d `node_modules` is writable), read-only an option of `createSandbox`.
 - 2026-11-25 — user: «ок» (F3, «`/node_modules`, без `package.json` и lock — рекомендую») — the mount is `/node_modules`, only the artifact's `payload/node_modules`.
-- 2026-11-25 — user, F1 (who holds the run's FS), in three replies: «правильно понимаю, что проще пока оставить как есть? Если так давай оставим + обсужденную версию в бэклог запишем»; then «давай Не с формальной точки зрения про соответствие требования, а с точки зрения того, какую пользу это нам даст.»; then «ок» to the agent's message, whose figures and recommendation were: «Память. Копирование добавляет ~90–100 МиБ памяти изолята на каждый одновременный прогон. При лимите по умолчанию 256 МиБ коду агента остаётся ~130 МиБ вместо ~235 …», «Задержка. Примерно +50 мс на `exec` (на шаблоне в 23 тыс. файлов было +120 мс)», «Рекомендация: сейчас копировать шаблон в изолят — это ближе всего к «оставить как есть», как вы и предлагали. Ленивое чтение записать в backlog с поводом взяться: память на одновременный прогон становится узким местом или шаблон заметно растёт. Цена: требование потребителя «стоимость не зависит от размера шаблона» по памяти и задержке выполнится не полностью. Снапшот по-прежнему будет только диффом, а стоимость хостовых записей от шаблона не зависит.» The four-library figures were extrapolated from probe L's T95 arm `views` by entries and bytes, not measured. — A fresh isolate materializes the template per run (ADR-0572 §2); the agent's reading: requirements §3's constant `exec` latency and isolate memory become «measured and published» (I5), host-op cost stays independent (as the message promised). Return condition: if the carrier measures, on the four-library artifact, more than +100 ms per warm `exec` or more than 120 MiB of isolate memory over a sandbox without a template, the run stops and the numbers go back to the user (goal conflict, `AGENTS.md` §Fidelity). Lazy template reads: `distribution/isolate-host-sandbox-template-lazy-read`.
+- 2026-11-25 — user, F1 (who holds the run's FS), in three replies: «правильно понимаю, что проще пока оставить как есть? Если так давай оставим + обсужденную версию в бэклог запишем»; then «давай Не с формальной точки зрения про соответствие требования, а с точки зрения того, какую пользу это нам даст.»; then «ок» to the agent's message, whose figures and recommendation were: «Память. Копирование добавляет ~90–100 МиБ памяти изолята на каждый одновременный прогон. При лимите по умолчанию 256 МиБ коду агента остаётся ~130 МиБ вместо ~235 …», «Задержка. Примерно +50 мс на `exec` (на шаблоне в 23 тыс. файлов было +120 мс)», «Рекомендация: сейчас копировать шаблон в изолят — это ближе всего к «оставить как есть», как вы и предлагали. Ленивое чтение записать в backlog с поводом взяться: память на одновременный прогон становится узким местом или шаблон заметно растёт. Цена: требование потребителя «стоимость не зависит от размера шаблона» по памяти и задержке выполнится не полностью. Снапшот по-прежнему будет только диффом, а стоимость хостовых записей от шаблона не зависит.» The four-library figures were extrapolated from probe L's T95 arm `views` by entries and bytes, not measured. — A fresh isolate materializes the template per run (ADR-0572 §3); the agent's reading: requirements §3's constant `exec` latency and isolate memory become «measured and published» (I5), host-op cost stays independent (as the message promised). Return condition: if the carrier measures, on the four-library artifact, more than +100 ms per warm `exec` or more than 120 MiB of isolate memory over a sandbox without a template, the run stops and the numbers go back to the user (goal conflict, `AGENTS.md` §Fidelity). Lazy template reads: `distribution/isolate-host-sandbox-template-lazy-read`.
 - rejected route: the template inside the sandbox's state (a hand-laid `node_modules` in the snapshot, today's only path) — violates I4.
 - rejected route: a per-sandbox `MemoryFsSync` of views into the template in the consumer, the cap check walking it (ADR-0572 draft before 2026-11-25 review) — violates I4/I5: probe H, T95 — `writeFile` 10 KiB 30 ms vs 0.16 ms, idle 9.4 MiB per sandbox vs ~0.
 - rejected route: the worker owns the run's whole FS (ADR-0572 §Forks F1 (c)) — violates the live-sandbox Outcome clause «The files stay rifty's in-memory filesystem in the guest's own realm», which this goal's Outcome keeps; recorded with its costs in `distribution/isolate-host-sandbox-killed-run-partial-writes`.

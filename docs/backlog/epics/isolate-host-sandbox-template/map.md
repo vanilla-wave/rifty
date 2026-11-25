@@ -11,7 +11,9 @@ the carrier hits it:
    artifact of the four libraries (published `@riftydev/workbench`, as the library probe), committed
    RED (`it.fails`), I1–I10.
 2. Template intake in the consumer, with the loud gap of I8 in the same unit (from the first
-   `createSandbox({ template })`, `snapshot()` / `createSandbox({ snapshot })` over a template throw):
+   `createSandbox({ template })`, `snapshot()` / `createSandbox({ snapshot })` over a template throw,
+   and so does `exec` over a template — `NotImplementedError('isolate-host.sandbox-template-exec')`,
+   removed by item 4 — so no state between items runs silently without its template):
    artifact → decoded template (gzip/br, ustar + PAX), named refusals, identity and packages, a
    process registry by id, one shared buffer and index per process; host ops over the consumer-side
    overlay (difference + deleted paths), the cap over the difference (absorbs
@@ -20,12 +22,12 @@ the carrier hits it:
    `distribution/isolate-host-binary-request-frame`): a worker receives a template once, as bytes
    (base64 inside a JSON line is +33 % and a ~90 MB string), keeps it by identity in its RSS ceiling
    and idle watermark, evicted with the worker (I4).
-4. Materialization in the run (ADR-0572 §2): the template as views of one buffer, the difference
+4. Materialization in the run (ADR-0572 §3), lifting item 2's `exec` refusal: the template as views of one buffer, the difference
    applied over it, the capture walk emitting the difference and deleted template paths, validated
    by the consumer; writable and read-only modes in the guest; the changed-paths list (I2, I3, I6).
 5. The end state taken where the guest's code cannot reach (absorbs
    `distribution/isolate-host-sandbox-capture-outside-guest-realm`; mechanism at its PICKUP,
-   ADR-0572 §8) (I7).
+   ADR-0572 §9) (I7).
 6. README cost table (T1, T95, the four-library artifact), compat rows (I5, I10).
 
 ## Open questions
@@ -33,8 +35,9 @@ the carrier hits it:
 - The process registry's lifetime: unregistering or evicting a template (a long-lived consumer
   that rebuilds its template keeps every old version, ~90 MB each) — owner: agent — settled at item
   3's PICKUP (an explicit release or one held while a sandbox references it), I4 documented.
-- The guest's FS sync-only (ADR-0572 §2) is an external dependency: PR #437 «isolate guest:
-  fs.createReadStream reads files (sync-only guest FS)», open, on top of PR #434 (open); main's guest
+- The guest's FS sync-only (ADR-0572 §3) is an external dependency: PR #437 «isolate guest:
+  fs.createReadStream reads files (sync-only guest FS)», open (rebuilt on main 2026-11-24, no longer on
+  #434; its merge is the user's); main's guest
   still calls `installMemoryFs()` (`entry.ts:60`) — owner: agent — settled when #437 lands. Until
   then the read-only mode cannot ship: a wrapper over the sync mirror alone would leave the async
   `Vfs` (promise and stream writes) under `/node_modules` without `EROFS` — a silent lie; item 4's
