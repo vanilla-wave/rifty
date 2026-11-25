@@ -12,17 +12,14 @@ const { stdout, stderr, exitCode } = await runCode("console.log(6 * 7)");
 // → { stdout: '42\n', stderr: '', exitCode: 0 }
 ```
 
-## Install (dev)
-
-The package is not on npm yet. Install the packed tarball:
+## Install
 
 ```sh
-# in the rifty checkout
-pnpm install && pnpm --filter @riftydev/isolate-host build
-cd packages/isolate-host && pnpm pack          # → riftydev-isolate-host-0.1.0.tgz
-# in the service
-npm install /path/to/riftydev-isolate-host-0.1.0.tgz
+npm install @riftydev/isolate-host@next   # a draft prerelease (dist-tag next)
 ```
+
+From a rifty checkout: `pnpm install && pnpm --filter @riftydev/isolate-host build`,
+then `pnpm pack` in `packages/isolate-host` and `npm install <tgz>`.
 
 Requirements: Node ≥ 24, an ESM importer. Tested on darwin-arm64 and
 linux-x64 (CI); Windows is not tested. The only runtime dependency is
