@@ -1,5 +1,5 @@
-// Constructor options as Node validates them (getHighWaterMark, addAbortSignal, validateFunction,
-// objectMode/encoding) on Readable, Writable, Duplex, Transform.
+// Constructor options as Node validates them (getHighWaterMark, addAbortSignal, encoding/defaultEncoding;
+// a non-function hook option is ignored, not rejected) on Readable, Writable, Duplex, Transform.
 const { Readable, Writable, Duplex, Transform } = require('node:stream');
 const e2s = (e) =>
   e ? `${e.code ? `${e.code}:` : ''}${String(e.message).split('\n')[0].slice(0, 60)}` : String(e);
@@ -40,7 +40,7 @@ for (const [label, opts] of OPTIONS) {
     );
   });
 }
-row("write(chunk, '', cb): empty encoding (Node's flush marker)", async (L) => {
+row("write(chunk, '', cb): empty encoding (zlib's flush() passes '')", async (L) => {
   const w = new Writable({
     write(c, e, cb) {
       L.push(`_write ${typeof c} ${e}`);

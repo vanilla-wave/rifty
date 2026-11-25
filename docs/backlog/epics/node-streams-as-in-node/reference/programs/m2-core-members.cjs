@@ -69,6 +69,24 @@ row('fs.WriteStream writableNeedDrain', async (L) => {
   await settle(20);
   ws.end();
 });
+row('Symbol.asyncDispose / Symbol.dispose on each class prototype', async (L) => {
+  const s = require('node:stream');
+  L.push(
+    ['Readable', 'Writable', 'Duplex', 'Transform', 'PassThrough']
+      .map(
+        (k) =>
+          `${k}:${typeof s[k].prototype[Symbol.asyncDispose]}/${typeof s[k].prototype[Symbol.dispose]}`,
+      )
+      .join(' '),
+  );
+});
+row('await r[Symbol.asyncDispose](): destroyed, errored', async (L) => {
+  const r = new Readable({ read() {} });
+  r.on('error', () => {});
+  if (typeof r[Symbol.asyncDispose] !== 'function') return L.push('no asyncDispose');
+  await r[Symbol.asyncDispose]();
+  L.push(`destroyed=${r.destroyed}`, `errored=${r.errored?.name}`);
+});
 (async () => {
   for (const [name, fn] of rows) {
     const L = [];

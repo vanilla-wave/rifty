@@ -1,7 +1,7 @@
 ---
 area: runtime-js
 status: draft
-title: fs.ReadStream is Node's Readable subclass, opened and read through fd, in every class shape packages use
+title: fs.ReadStream is Node's Readable subclass in every class shape packages use
 created: 2026-11-25
 why: Today fs.ReadStream is a hand-written EventEmitter. It has no paused mode, no for await, no read/pause/setEncoding/close, and a late listener silently reads nothing. In the isolate it fails at the first read.
 epic: node-streams-as-in-node
@@ -21,9 +21,12 @@ Unit 4 of the goal (I4). Node's `ReadStream` (`lib/internal/fs/streams.js:164-32
 - `_destroy` closes the fd;
 - `close(cb)` is `finished` + `destroy`.
 
-It stands on unit 1: `_construct`/`_destroy` are never called today (`m1`).
+It stands on unit 1: `_construct`/`_destroy` are never called today (`m1`). It builds the part shared
+with unit 5: Node's one `_construct` (`:50-84`, with the monkey-patched `open` path), `_destroy`
+closing the fd, and the callable constructor shape. Unit 5 reuses it, so 4 comes before 5.
 
-Main `b6d37fc01` (`m4`): 3 of 18 rows equal Node in-process and 2 of 18 in the isolate.
+Run at `71919b2b0` (main `b6d37fc01`'s code), `m4`: 3 of 20 rows equal Node in-process and 2 of 20 in
+the isolate.
 
 - `instanceof Readable` is false.
 - `pause`, `resume`, `read`, `setEncoding`, `close`, `_read`, `_construct`, `[Symbol.asyncIterator]`

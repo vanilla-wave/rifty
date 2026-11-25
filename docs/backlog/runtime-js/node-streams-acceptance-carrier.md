@@ -23,7 +23,7 @@ Which e2e harness carries the browser hosts is this unit's to settle (map fog).
 
 Each program is its own case and pins today's exact outcome by name. A bare `it.fails` is not
 enough; follow `library-exceljs.test.ts:159`. A pin is the line, the exit status and the stderr.
-The pins below come from the run at `17c24ffbc` (main `b6d37fc01`'s code), in
+The pins below come from the run at `71919b2b0` (main `b6d37fc01`'s code), in
 `reference/results/c-*.txt`. "In-process" means rifty's modules in Node, with rifty's `Buffer`.
 Chromium has not been run. Every case exits 0 unless noted.
 

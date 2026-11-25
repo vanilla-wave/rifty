@@ -1,4 +1,4 @@
-# m2-core-members.cjs — node v24.16.0, rifty 17c24ffbc
+# m2-core-members.cjs — node v24.16.0, rifty 71919b2b0
 columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate
 
 exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 0
@@ -28,3 +28,13 @@ node: start false,below false,over true,drain false
 rifty-inproc (DIFF): start undefined,below undefined,over undefined,drain undefined
 rifty-inproc-sync (DIFF): start undefined,below undefined,over undefined,drain undefined
 rifty-isolate (DIFF): start undefined,below undefined,over undefined,drain undefined
+## Symbol.asyncDispose / Symbol.dispose on each class prototype
+node: Readable:function/undefined Writable:function/undefined Duplex:function/undefined Transform:function/undefined PassThrough:function/undefined
+rifty-inproc (DIFF): Readable:undefined/undefined Writable:undefined/undefined Duplex:undefined/undefined Transform:undefined/undefined PassThrough:undefined/undefined
+rifty-inproc-sync (DIFF): Readable:undefined/undefined Writable:undefined/undefined Duplex:undefined/undefined Transform:undefined/undefined PassThrough:undefined/undefined
+rifty-isolate (DIFF): Readable:undefined/undefined Writable:undefined/undefined Duplex:undefined/undefined Transform:undefined/undefined PassThrough:undefined/undefined
+## await r[Symbol.asyncDispose](): destroyed, errored
+node: destroyed=true,errored=AbortError
+rifty-inproc (DIFF): no asyncDispose
+rifty-inproc-sync (DIFF): no asyncDispose
+rifty-isolate (DIFF): no asyncDispose

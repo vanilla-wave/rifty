@@ -1,4 +1,4 @@
-# m7-pipeline-stages.cjs — node v24.16.0, rifty 17c24ffbc
+# m7-pipeline-stages.cjs — node v24.16.0, rifty 71919b2b0
 columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate
 
 exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 0

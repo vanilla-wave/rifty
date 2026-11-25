@@ -21,6 +21,18 @@ after 10 ms → Node `null true`, rifty `undefined false`; after
 so `r.isPaused()` throws `TypeError` where Node returns `false` after
 `resume()` and `true` after `pause()`.
 
+## Goal unit
+
+Unit 2 of goal `node-streams-as-in-node` (map item 2, I2) is wider than this title. It covers:
+
+- constructor option validation as Node's `ReadableState`/`WritableState` (`highWaterMark`,
+  `readableHighWaterMark`/`writableHighWaterMark`, `signal`, `encoding`, `defaultEncoding`);
+- `write(chunk, '', cb)` taking the default encoding;
+- `readableFlowing` and `isPaused()`, `writableNeedDrain` (`writable-sync-dispatch-state`);
+- `[Symbol.asyncDispose]`.
+
+Matrices: the goal's `reference/results/m2-core-members.txt` and `m8-constructor-options.txt`.
+
 ## Next
 
 Owner runtime-js. Trigger: a consumer reading `readableFlowing` (stream

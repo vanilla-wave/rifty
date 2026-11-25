@@ -13,7 +13,7 @@ code: [packages/io/src/streams/pipeline.ts]
 
 Unit 7 of the goal (I7). Node's `pipeline` (`lib/internal/streams/pipeline.js:295-306`) turns a
 function stage into a stage over the previous iterable: a source, a transform, or a sink whose return
-value is the promise's value. Main `b6d37fc01` (`m7`) gives 0 of 7 rows equal on every rifty column.
+value is the promise's value. Run at `71919b2b0` (main `b6d37fc01`'s code), `m7` gives 0 of 9 rows equal on every rifty column.
 
 - Every generator or function stage throws `pipeline: argument must be a stream (index N received a
   non-stream value)`.

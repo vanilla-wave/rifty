@@ -16,7 +16,7 @@ and the isolate host guest. Covered:
 - The stream lifecycle: `_construct`, `_destroy`, a hook's callback called once, the destroy moment,
   `errored`, `autoDestroy`.
 - The Readable/Writable state every subclass shows: constructor option and `write` encoding validation,
-  `readableFlowing`, `isPaused()`, `writableNeedDrain`.
+  `readableFlowing`, `isPaused()`, `writableNeedDrain`, `Symbol.asyncDispose`.
 - The legacy `Stream` in the class chain.
 - `fs.ReadStream` and `fs.WriteStream` as Node's `Readable`/`Writable` subclasses, in every class
   shape packages use (`new`, without `new`, `X.apply(this)`, `extends`, overridden `open`).
@@ -48,7 +48,7 @@ The stdout and every file written are what real Node produces from the same file
 
 ## Invariants
 
-<!-- False on main b6d37fc01 (probe run at 17c24ffbc = main's code + this docs-only branch; reference/results/, real Node v24.16.0 vs rifty modules in-process
+<!-- False on main b6d37fc01 (probe run at 71919b2b0 = main's code + this docs-only branch; reference/results/, real Node v24.16.0 vs rifty modules in-process
 with and without the async VFS surface vs isolate sandbox exec; summary.txt):
 - carrier, 9 programs, every one differs on every rifty column:
   - xlsx.readFile: "TypeError: stream.close is not a function" (in-process and isolate).
@@ -63,7 +63,8 @@ with and without the async VFS surface vs isolate sandbox exec; summary.txt):
     "isolate-host.ReadableStream".
   - pipeline with async generator: "pipeline: argument must be a stream (index 1 …)"; isolate exit 1.
 - rows equal to Node, in-process / isolate: m1 0/14, 0/14; hook matrix 10/76, 10/76;
-  m2 0/5; m3 0/4; m4 3/20, 2/20 (+2/+10 lines of uncaught errors); m5 4/14; m6 0/8; m7 0/9;
+  m2 0/7; m3 0/4; m4 3/20, 2/20 (plus uncaught-error lines: 2 in the sync-only column, 10 in the
+  isolate); m5 4/14; m6 0/8; m7 0/9;
   m8 6/16 (the 6 are options both accept or both reject). -->
 
 - I1. Lifecycle is Node's on every stream class and every way of defining a hook (option, own,
@@ -73,7 +74,8 @@ with and without the async VFS surface vs isolate sandbox exec; summary.txt):
 - I2. Every Readable/Writable/Duplex/Transform and every subclass validates its constructor options
   as Node does (`highWaterMark`, `readableHighWaterMark`/`writableHighWaterMark`, `signal`,
   `encoding`, `defaultEncoding`) and the `write` encoding argument (`''` = default) as Node does. It
-  reports Node's `readableFlowing`, `isPaused()` and `writableNeedDrain`.
+  reports Node's `readableFlowing`, `isPaused()` and `writableNeedDrain`, and has Node's
+  `[Symbol.asyncDispose]` (destroy with an `AbortError`).
 - I3. `Readable` and `Writable` inherit the legacy `Stream` (`instanceof Stream`, `Stream.prototype.pipe`)
   as in Node.
 - I4. `fs.ReadStream` is Node's `Readable` subclass on every host:
@@ -129,6 +131,21 @@ verified and fixed in this draft:
 14. nit — `epic:` added to the reused drafts; the two drafts on an unpushed local commit are marked
     so; io-internal constructions added to the regression risk.
 
+Re-check 2026-11-25 (a second fresh reviewer over the fix commit `71919b2b0`) found 2 major, 4 minor and
+4 nit problems; all verified and fixed:
+
+- major — the zlib links mixed `f4f9c7ded` and `da3ae64cb`. They are re-pinned to `da3ae64cb`, whose
+  units are 2 engine, 3 `lib/zlib.js` (`zlib-diff` = 0), 4 under load, and the line is rewritten.
+- major — the `m1` rows «zlibBuffer shape» and «async Transform success» also carry the Transform
+  order. They are now a fourth joint group (units 1 + 6).
+- minor — stale numbers in two drafts; the shared `_construct` part was missing from the 4/5 drafts;
+  «through fd» in unit 4's title pre-decided its ADR; unit 2's draft lacked its goal scope.
+- nit — the per-column extra lines; the `m8` comment (a non-function hook option is ignored, not
+  validated); `lib/zlib.js:565-566`; the README order.
+
+Added after it, from the zlib review via the manager: `[Symbol.asyncDispose]` → unit 2 (`m2`: Node has
+it on all five classes, rifty on none). Not re-reviewed.
+
 ## Decisions
 
 - 2026-11-25 — manager: fs streams become subclasses of `@riftydev/io` `Readable`/`Writable`, and the
@@ -151,7 +168,9 @@ verified and fixed in this draft:
 - 2026-11-25 — the zlib goal's `zlib-diff` (Node's `lib/zlib.js` over Node's vs rifty's `Transform`)
   adds two gaps, placed by mechanism, manager informed:
   - `finished` premature close → I7 (end-of-stream, same completion path);
-  - `write(chunk, '', cb)` → I2 (`write` argument normalization).
+  - `write(chunk, '', cb)` → I2 (`write` argument normalization);
+  - `[Symbol.asyncDispose]` (absent on every rifty class; Node has it on all five, and `Symbol.dispose`
+    on none) → I2, per the manager. Its `errored` value after dispose also needs I1.
 - 2026-11-25 — agent, by mechanism, reported to the manager:
   - `finished`/`pipeline` callback arguments go with the pipeline stages (same `pipeline.ts`
     completion path), not with the state members;

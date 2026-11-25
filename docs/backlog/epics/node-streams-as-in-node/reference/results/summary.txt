@@ -1,4 +1,4 @@
-node v24.16.0; rifty 17c24ffbc; columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate
+node v24.16.0; rifty 71919b2b0; columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate
 program | Node rows | same as Node per rifty column (+ lines only that run printed)
 c-csv-read.cjs | 1 | rifty-inproc 0/1 | rifty-inproc-sync 0/1 | rifty-isolate 0/1
 c-for-await.cjs | 1 | rifty-inproc 0/1 | rifty-inproc-sync 0/1 | rifty-isolate 0/1
@@ -10,7 +10,7 @@ c-transform-big.cjs | 1 | rifty-inproc 0/1 | rifty-inproc-sync 0/1 | rifty-isola
 c-unzip-stored.cjs | 1 | rifty-inproc 0/1 | rifty-inproc-sync 0/1 | rifty-isolate 0/1
 c-xlsx-roundtrip.cjs | 4 | rifty-inproc 1/4 | rifty-inproc-sync 1/4 | rifty-isolate 1/4
 m1-lifecycle.cjs | 14 | rifty-inproc 0/14 | rifty-inproc-sync 0/14 | rifty-isolate 0/14
-m2-core-members.cjs | 5 | rifty-inproc 0/5 | rifty-inproc-sync 0/5 | rifty-isolate 0/5
+m2-core-members.cjs | 7 | rifty-inproc 0/7 | rifty-inproc-sync 0/7 | rifty-isolate 0/7
 m3-legacy-stream.cjs | 4 | rifty-inproc 0/4 | rifty-inproc-sync 0/4 | rifty-isolate 0/4
 m4-readstream.cjs | 20 | rifty-inproc 3/20 | rifty-inproc-sync 3/20 +2 extra | rifty-isolate 2/20 +10 extra
 m5-writestream.cjs | 14 | rifty-inproc 4/14 | rifty-inproc-sync 4/14 | rifty-isolate 4/14
