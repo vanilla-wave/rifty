@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { bootOwner, closeOwner, execLine, gotoHarness, writeOwnerFile } from './fixtures.ts';
 import {
+  builtinPrograms,
   entryPrograms,
   fatalPrograms,
   nodeFileDump,
@@ -18,7 +19,7 @@ import {
 // line. Normalization: `nodeFileExpected`. no-COI twin:
 // tests/no-coi/node-file-parity.spec.ts.
 
-const programs = [...entryPrograms, ...fatalPrograms];
+const programs = [...entryPrograms, ...builtinPrograms, ...fatalPrograms];
 const RUNNER = `const { spawn } = require('node:child_process');
 const [dir, ...argv] = process.argv.slice(2);
 const cwd = require('node:path').resolve(dir);
