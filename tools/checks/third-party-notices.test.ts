@@ -2,7 +2,13 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { LINK, NOTICES, collect, render } from '../publishing/third-party-notices.mjs';
+import {
+  LINK,
+  NOTICES,
+  collect,
+  render,
+  unusedRecords,
+} from '../publishing/third-party-notices.mjs';
 import { checkPackage } from './third-party-notices.mjs';
 
 let root: string;
@@ -181,6 +187,50 @@ describe('check:third-party-notices', () => {
     );
     expect(collect(root, 'pkg', manifest, inputs).violations).toEqual([
       'pkg/src/generated: manifest pins upstream@1.0.0, installed 1.1.0',
+    ]);
+  });
+});
+
+describe('closed by default (review S1, S2)', () => {
+  it('S1: any packed dist file without a bundler input list → red, not only JS', () => {
+    const f = {
+      ...files(),
+      'dist/assets/brotli.wasm': '\0asm',
+      'dist/a.d.ts': 'x',
+      'dist/a.js.map': '{}',
+    };
+    expect(built(inputs, f)().violations).toEqual([
+      '@riftydev/pkg dist/assets/brotli.wasm: no bundler input list',
+    ]);
+  });
+
+  it('S2: a manifest record no package used → red (npm, generated, firstParty)', () => {
+    const used = collect(root, 'pkg', manifest, inputs).used;
+    expect(unusedRecords(manifest, [used])).toEqual(['npm bare@2.0.0']);
+    const all = collect(root, 'pkg', manifest, { 'dist/a.js': ['pkg/src/a.ts'] }).used;
+    expect(unusedRecords(manifest, [all])).toEqual([
+      'npm bare@2.0.0',
+      'generated pkg/src/generated',
+      'firstParty pkg/src/own/generated/ids.json',
+    ]);
+  });
+
+  it('S2: a renamed npm record no longer supplies its extra text — reported unused, not dropped silently', () => {
+    const renamed = {
+      ...manifest,
+      npm: { 'dep@3.0.0': { licenseFiles: ['licenses/bare.LICENSE'] } },
+    };
+    const { used } = collect(root, 'pkg', renamed, inputs);
+    expect(unusedRecords(renamed, [used])).toContain('npm dep@3.0.0');
+  });
+
+  it('link line without a packed notices file → red; package without dist → red', () => {
+    const own = { 'dist/b.js': inputs['dist/b.js'] };
+    expect(built(own, { 'dist/b.js': `${LINK}\nx` })().violations).toEqual([
+      '@riftydev/pkg dist/b.js: links dist/THIRD_PARTY_NOTICES.md, which is not packed',
+    ]);
+    expect(built({}, { 'package.json': '{}', 'CHANGELOG.md': '' })().violations).toEqual([
+      '@riftydev/pkg: no dist/ in the tarball; run pnpm build:libs',
     ]);
   });
 });
