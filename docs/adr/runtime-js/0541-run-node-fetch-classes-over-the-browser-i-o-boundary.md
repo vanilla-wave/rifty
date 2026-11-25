@@ -191,6 +191,15 @@ no new limit. Node sends explicit Cookie; Chromium cannot.
   package/network support. Source upgrades require fresh differential proof.
 - Browser-only network restrictions remain explicit; no server deployment.
 
+## Notices (2026-11-25)
+
+Packages bundling the generated classes (runtime-js, workbench; the isolate
+guest does not bundle them) list undici 7.25.0 with its `LICENSE` in
+`dist/THIRD_PARTY_NOTICES.md`,
+via the `generated/` record in `tools/publishing/third-party-manifest.json`;
+bundles carry only a footer link (publishing.md §Third-party notices).
+runtime-js/workbench 0.11.0 shipped without it.
+
 ## Bundle measurement (2026-10-20)
 
 Production `pnpm build:playground`, baseline main 7f8d0e8d7 in an isolated

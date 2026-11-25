@@ -6,9 +6,15 @@
  */
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
+import {
+  LINK,
+  metafileInputs,
+  recordBundleInputs,
+} from '../../../tools/publishing/third-party-notices.mjs';
 
-await build({
-  absWorkingDir: fileURLToPath(new URL('..', import.meta.url)),
+const cwd = fileURLToPath(new URL('..', import.meta.url));
+const result = await build({
+  absWorkingDir: cwd,
   entryPoints: ['src/guest/entry.ts'],
   // Runtime modules capture timers/codecs at load: the shim evaluates first,
   // whatever the entry's (formatter-sorted) import order.
@@ -18,9 +24,12 @@ await build({
   target: 'es2022',
   logLevel: 'warning',
   legalComments: 'none',
+  footer: { js: LINK }, // licenses: dist/THIRD_PARTY_NOTICES.md (build:libs)
+  metafile: true,
   platform: 'browser',
   format: 'iife',
   // The QuickJS vm engine's emscripten loader imports node:module lazily; in
   // the isolate that import rejects ("Not supported") — node:vm is a ceiling here.
   external: ['node:module'],
 });
+recordBundleInputs(cwd, metafileInputs(result.metafile, cwd), { reset: true });

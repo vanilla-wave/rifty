@@ -27,3 +27,6 @@ this audit.
 
 REVERSIBLE - documentation and audit follow-up only. Dependency changes or release gates need their own task or
 ADR when proposed.
+
+Done slice (2026-11-25): code bundled into published files ships its notices —
+`docs/public/publishing.md` §Third-party notices.

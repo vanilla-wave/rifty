@@ -30,6 +30,7 @@ export const SOURCE_LANES = new Set([
   'build:libs',
   'build:playground',
   'check:es-floor',
+  'check:third-party-notices',
   'check:arch',
   'test:run',
   'test:parity',
@@ -177,6 +178,7 @@ export const TASKS = [
   'build:libs',
   'build:playground',
   'check:es-floor',
+  'check:third-party-notices', // packed files of build:libs
   'check:arch',
   'check:parity-coverage',
   'check:e2e-coverage',

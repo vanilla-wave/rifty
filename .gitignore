@@ -1,5 +1,6 @@
 node_modules/
 dist/
+.bundle-inputs.json
 build/
 .next/
 .cache/

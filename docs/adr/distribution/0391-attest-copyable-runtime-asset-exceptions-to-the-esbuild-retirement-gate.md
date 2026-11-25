@@ -53,7 +53,7 @@ longer re-pin. No ADR is superseded.
   added) and the `import("./module-loader-HASH.js")` hash; 15 main builds
   10-20…11-24 (15 raw pins, 3 sizes) give one pin.
   Rule (`compilerOutputPin`, opt-in per pin via `siblingImports`; the
-  `chunk-EMDIREKY.js` pin stays whole-file). Pinned: the worker body — all
+  `chunk-YYL3CQII.js` pin stays whole-file). Pinned: the worker body — all
   after its leading imports — with hashes zeroed only for built siblings.
   Header: only esbuild-form lines (`import "./chunk-XXXXXXXX.js";`,
   `import {\n  a,\n  b as c\n} from "./chunk-XXXXXXXX.js";`) of chunks built in
@@ -74,7 +74,7 @@ longer re-pin. No ADR is superseded.
   siblings meet only their own checks (2 MB ceiling, WASM/base64/gzip, map
   tokens), like any other entry's chunks. Red before, green now: a static
   import of a new built sibling ≤2 MB with foreign runtime and no signature;
-  of the exempt 4.9 MB `chunk-EMDIREKY.js`; a swapped sibling exporting
+  of the exempt 4.9 MB `chunk-YYL3CQII.js`; a swapped sibling exporting
   `__commonJS`/`__toESM`; reordered imports (side-effect order); lines or
   bindings that repeat, go unused, shadow a global (`Object`) or are keywords (invalid JS);
   the `module-loader` hash pointing at another built one — all within 2048
@@ -132,3 +132,4 @@ longer re-pin. No ADR is superseded.
 - 2026-11-24 — PR #439 on top of #438 (runtime-js loader: a called/constructed computed global read checks its key at the read; beside `with` or a call of the identifier `eval` it keeps a load ceiling): 10022716 bytes, SHA-256 `ba692b20146bccd5db1b3099cb72f1845ba2c20f06e87392e445f353140fd634`. Exact pin only; ceilings and negative probes unchanged.
 - 2026-11-24 — PR #440 isolate `require` as Node `--no-require-module`, on top of #439 (runtime-js `declareNoEsmLoader`, `ERR_REQUIRE_ESM`, `process.features.require_module` getter, `import()` of an ES module rejects with the declared gap): 10022716 bytes, SHA-256 `3556c3cde751f727e88a242ca40c366cd2e568873beee1684cc84192f734fe49`. Exact pin only; ceilings and negative probes unchanged.
 - 2026-11-24 — legacy `node:url`/`querystring` port on top of #440 (runtime-js generated Node v24.16.0 `lib/url.js`/`lib/querystring.js`, ADR-0574, review rounds 1–2 included; only shared-chunk content changes): 10022716 bytes, SHA-256 `f1cc5b33b7b5b82a5d53aadc6d7650cdff48f5b255a85d9520ef325c161da2c0`. Exact pin only; ceilings and negative probes unchanged.
+- 2026-11-25 — PR #445 third-party notices: every Workbench asset ends with one constant footer line (`/*! For third-party licenses see dist/THIRD_PARTY_NOTICES.md of this npm package */`, 84 bytes with its newline). Worker body pin 10022118 bytes, SHA-256 `99d9acb6968693aa0698b9c81e572a79be82b4f45d6f75b08385caf3a28027a6`; compiler chunk renamed `chunk-YYL3CQII.js`, 4893502 bytes, SHA-256 `34024e353c789124ea33f3d8e791fdc43c8a86cbc24398e7c58380ffb63ec793`. Both +84 bytes, the footer only; ceilings and negative probes unchanged.
