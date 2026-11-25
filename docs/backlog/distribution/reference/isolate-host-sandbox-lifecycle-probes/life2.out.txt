@@ -1,0 +1,407 @@
+# round 2 2026-11-25T14:02:07Z 15:02  up 6 days,  5:05, 4 users, load averages: 2.35 2.67 2.79
+## escape (v2 = round-1 membrane, v2s/v2bs = safe boundary)
+{"sec":"escape","case":"E0 Object.keys (external review)","kind":"v2","exec1":"run1: planted=yes","exec2":"run2: mkdir -p FAILED ENOENT","codes":[0,0]}
+{"sec":"escape","case":"E1 hooks + accessors + species + proxies + getters + stack exhaustion + callbacks","kind":"v2","exec1":"{\"sync\":true,\"depth\":3956,\"foreign\":6,\"where\":[\"map:arg0\",\"isView:arg0\",\"isArray:arg0\",\"keys:arg0\",\"readdir:ret\",\"so:fs\"]}\n{\"async\":true,\"foreign\":6,\"where\":[\"map:arg0\",\"isView:arg0\",\"isArray:arg0\",\"k","exec1End":0,"fsRealmIntrinsicsChanged":true,"exec2":"{\"mkdirP\":\"ok\",\"rw\":\"ok\",\"stat\":\"ok\",\"readdir\":\"b,x.bin\",\"require\":\"ok\",\"pwnedSeen\":\"undefined\"}","codes":[0,0]}
+{"sec":"escape","case":"E0 Object.keys (external review)","kind":"v2s","exec1":"run1: planted=no A object reached","exec2":"run2: mkdir -p ok","codes":[0,0]}
+{"sec":"escape","case":"E1 hooks + accessors + species + proxies + getters + stack exhaustion + callbacks","kind":"v2s","exec1":"{\"sync\":true,\"depth\":3956,\"foreign\":0,\"where\":[]}\n{\"async\":true,\"foreign\":0,\"where\":[]}","exec1End":0,"fsRealmIntrinsicsChanged":false,"exec2":"{\"mkdirP\":\"ok\",\"rw\":\"ok\",\"stat\":\"ok\",\"readdir\":\"b,x.bin\",\"require\":\"ok\",\"pwnedSeen\":\"undefined\"}","codes":[0,0]}
+{"sec":"escape","case":"E0 Object.keys (external review)","kind":"v2bs","exec1":"run1: planted=no A object reached","exec2":"run2: mkdir -p ok","codes":[0,0]}
+{"sec":"escape","case":"E1 hooks + accessors + species + proxies + getters + stack exhaustion + callbacks","kind":"v2bs","exec1":"{\"sync\":true,\"depth\":3956,\"foreign\":0,\"where\":[]}\n{\"async\":true,\"foreign\":0,\"where\":[]}","exec1End":0,"fsRealmIntrinsicsChanged":false,"exec2":"{\"mkdirP\":\"ok\",\"rw\":\"ok\",\"stat\":\"ok\",\"readdir\":\"b,x.bin\",\"require\":\"ok\",\"pwnedSeen\":\"undefined\"}","codes":[0,0]}
+## cost + conc at LIMIT=256
+{"sec":"cost","w":"empty","kind":"v1","load":"2.4","createMs":0.1,"firstMs":30.5,"repMs":29.6,"repRunMs":6.6,"repBootMs":8.9}
+{"sec":"cost","w":"empty","kind":"v1w","load":"2.4","createMs":0.1,"firstMs":8.9,"repMs":8.7,"repRunMs":6.4,"repBootMs":0.9}
+{"sec":"cost","w":"empty","kind":"v1b","load":"2.4","createMs":0.1,"firstMs":20.9,"repMs":16.5,"repRunMs":6.4,"repBootMs":8.8}
+{"sec":"cost","w":"empty","kind":"v2","load":"2.4","createMs":22.9,"firstMs":11.6,"repMs":8,"repRunMs":3,"repBootMs":4.9}
+{"sec":"cost","w":"empty","kind":"v2b","load":"2.4","createMs":9.4,"firstMs":11.8,"repMs":7.8,"repRunMs":3,"repBootMs":4.8}
+{"sec":"cost","w":"empty","kind":"v2s","load":"2.4","createMs":22.6,"firstMs":11.6,"repMs":7.8,"repRunMs":3,"repBootMs":4.8}
+{"sec":"cost","w":"empty","kind":"v2bs","load":"2.4","createMs":9.7,"firstMs":11.7,"repMs":8,"repRunMs":3.1,"repBootMs":4.8}
+{"sec":"cost","w":"empty","kind":"v3","load":"2.4","createMs":0.2,"firstMs":15.5,"repMs":15.3,"repRunMs":6.6,"repBootMs":8.8}
+{"sec":"cost","w":"pdf","kind":"v1","load":"2.5","createMs":0.1,"firstMs":214.4,"repMs":209.5,"repRunMs":185.7,"repBootMs":9.1}
+{"sec":"cost","w":"pdf","kind":"v1w","load":"2.5","createMs":0.1,"firstMs":195.2,"repMs":190.2,"repRunMs":187.8,"repBootMs":0.8}
+{"sec":"cost","w":"pdf","kind":"v1b","load":"2.4","createMs":0.1,"firstMs":203.8,"repMs":208.9,"repRunMs":197.6,"repBootMs":9.3}
+{"sec":"cost","w":"pdf","kind":"v2","load":"2.4","createMs":23,"firstMs":212.7,"repMs":159.2,"repRunMs":153.5,"repBootMs":5.7}
+{"sec":"cost","w":"pdf","kind":"v2b","load":"2.4","createMs":10.4,"firstMs":210.1,"repMs":158.2,"repRunMs":152.7,"repBootMs":5.6}
+{"sec":"cost","w":"pdf","kind":"v2s","load":"2.4","createMs":23,"firstMs":210.5,"repMs":160.6,"repRunMs":155.2,"repBootMs":5.5}
+{"sec":"cost","w":"pdf","kind":"v2bs","load":"3.1","createMs":10,"firstMs":210.9,"repMs":158.6,"repRunMs":152.7,"repBootMs":5.5}
+{"sec":"cost","w":"pdf","kind":"v3","load":"3.1","createMs":0.1,"firstMs":267.8,"repMs":254.9,"repRunMs":245.4,"repBootMs":9.3}
+{"sec":"cost","w":"docx","kind":"v1","load":"3.2","createMs":0.1,"firstMs":185.1,"repMs":179.2,"repRunMs":155.3,"repBootMs":9.2}
+{"sec":"cost","w":"docx","kind":"v1w","load":"3.2","createMs":0.1,"firstMs":157.7,"repMs":158.3,"repRunMs":155.7,"repBootMs":0.8}
+{"sec":"cost","w":"docx","kind":"v1b","load":"3.2","createMs":0.1,"firstMs":176.2,"repMs":175.3,"repRunMs":164,"repBootMs":9.2}
+## floor (new arms)
+{"sec":"floor","w":"empty","kind":"v1w","load":"3.2","floorMiB":107}
+{"sec":"floor","w":"empty","kind":"v2s","load":"3.2","floorMiB":107}
+{"sec":"floor","w":"empty","kind":"v2bs","load":"3.2","floorMiB":19}
+{"sec":"floor","w":"pdf","kind":"v1w","load":"3.5","floorMiB":107}
+{"sec":"floor","w":"pdf","kind":"v2s","load":"3.5","floorMiB":111}
+{"sec":"floor","w":"pdf","kind":"v2bs","load":"3.3","floorMiB":31}
+{"sec":"floor","w":"xlsx","kind":"v1w","load":"3.3","floorMiB":115}
+{"sec":"floor","w":"xlsx","kind":"v2s","load":"3.2","floorMiB":119}
+{"sec":"floor","w":"xlsx","kind":"v2bs","load":"3.2","floorMiB":39}
+## heap at LIMIT=256
+{"sec":"heap","kind":"v2s","w":"pdf","load":"3.2","points":"[exec, usedMiB, totalMiB, ms]","pts":[[1,16.1,37.6,219.2],[5,49.9,58,161.9],[10,40.5,62.2,158.3],[15,59.7,75.6,162],[20,98.3,105.1,175.8],[25,85.6,130.1,166.4],[30,15.8,25.4,180.4],[35,35,52.2,156.6],[40,52.6,69.6,159]]}
+{"sec":"heap","kind":"v2s","w":"xlsx","load":"3.6","points":"[exec, usedMiB, totalMiB, ms]","pts":[[1,21.4,31.7,525.3],[5,70.2,102,352],[10,42.7,62.2,348.3],[15,85.9,123.5,355.4],[20,106.1,143.7,362.2],[25,22.9,42.5,414.8],[30,81.4,95.5,352.6],[35,33.8,131.9,352.5],[40,50.4,69.8,361]]}
+{"sec":"heap","kind":"v2bs","w":"pdf","load":"3.7","points":"[exec, usedMiB, totalMiB, ms]","pts":[[1,17.4,24.3,217.7],[5,52.4,59.4,164.2],[10,42.1,71.4,156.9],[15,70.5,77.5,166.2],[20,75.9,116.4,161.2],[25,105.9,152,166.3],[30,157.8,175,165.5],[35,169.7,182,158.1],[40,148.8,207.4,181.6]]}
+{"sec":"heap","kind":"v2bs","w":"xlsx","load":"3.8","points":"[exec, usedMiB, totalMiB, ms]","pts":[[1,23.3,32.2,507.1],[5,52,69.1,351],[10,86.1,118.3,347.1],[15,165.4,177.6,355.8],[20,155.3,194.4,367],[25,165.9,210.6,364.9],[30,168.2,203,368.1],[35,203.8,219.6,389.9],[40,30.3,43.4,499.7]]}
+## mem: idle after pdf / xlsx / pptx / mix (4 generators in a row), one process per arm
+{"sec":"mem","kind":"v2s","w":"pdf","K":6,"load":"5.9","perSandboxRssMiB":139.3,"perSandboxNodeHeapMiB":0,"perSandboxArrayBuffersMiB":0,"isolateUsedMiB":17.1,"isolateTotalMiB":35.5,"isolateExtMiB":98.6}
+{"sec":"mem","kind":"v2bs","w":"pdf","K":6,"load":"5.4","perSandboxRssMiB":48.3,"perSandboxNodeHeapMiB":-0.1,"perSandboxArrayBuffersMiB":1.1,"isolateUsedMiB":14.8,"isolateTotalMiB":22.3,"isolateExtMiB":18.7}
+{"sec":"mem","kind":"v3","w":"pdf","K":6,"load":"5.4","perSandboxRssMiB":14.8,"perSandboxNodeHeapMiB":0.4,"perSandboxArrayBuffersMiB":0.5}
+{"sec":"mem","kind":"v1w","w":"pdf","K":6,"load":"5.5","perSandboxRssMiB":141.3,"perSandboxNodeHeapMiB":0.1,"perSandboxArrayBuffersMiB":0,"stateBytes":3120}
+{"sec":"mem","kind":"v2s","w":"xlsx","K":6,"load":"5.2","perSandboxRssMiB":146.4,"perSandboxNodeHeapMiB":0,"perSandboxArrayBuffersMiB":0,"isolateUsedMiB":22.4,"isolateTotalMiB":36.2,"isolateExtMiB":100.8}
+{"sec":"mem","kind":"v2bs","w":"xlsx","K":6,"load":"5.2","perSandboxRssMiB":61.8,"perSandboxNodeHeapMiB":-0.1,"perSandboxArrayBuffersMiB":0.9,"isolateUsedMiB":18.4,"isolateTotalMiB":28.8,"isolateExtMiB":21.7}
+{"sec":"mem","kind":"v3","w":"xlsx","K":6,"load":"5.2","perSandboxRssMiB":16.7,"perSandboxNodeHeapMiB":1.3,"perSandboxArrayBuffersMiB":0}
+{"sec":"mem","kind":"v1w","w":"xlsx","K":6,"load":"5.2","perSandboxRssMiB":139.9,"perSandboxNodeHeapMiB":0.1,"perSandboxArrayBuffersMiB":0,"stateBytes":10076}
+{"sec":"mem","kind":"v2s","w":"pptx","K":6,"load":"5.2","perSandboxRssMiB":131.8,"perSandboxNodeHeapMiB":0.1,"perSandboxArrayBuffersMiB":0,"isolateUsedMiB":20.6,"isolateTotalMiB":27.7,"isolateExtMiB":97.2}
+{"sec":"mem","kind":"v2bs","w":"pptx","K":6,"load":"5.2","perSandboxRssMiB":47.4,"perSandboxNodeHeapMiB":-0.1,"perSandboxArrayBuffersMiB":0,"isolateUsedMiB":11.3,"isolateTotalMiB":20.5,"isolateExtMiB":17.6}
+{"sec":"mem","kind":"v3","w":"pptx","K":6,"load":"4.8","perSandboxRssMiB":14.1,"perSandboxNodeHeapMiB":0.3,"perSandboxArrayBuffersMiB":0.3}
+{"sec":"mem","kind":"v1w","w":"pptx","K":6,"load":"4.5","perSandboxRssMiB":137.1,"perSandboxNodeHeapMiB":0.1,"perSandboxArrayBuffersMiB":0.1,"stateBytes":83654}
+{"sec":"mem","kind":"v2s","w":"mix","K":6,"load":"4.3","perSandboxRssMiB":154.4,"perSandboxNodeHeapMiB":0.1,"perSandboxArrayBuffersMiB":0,"isolateUsedMiB":26.7,"isolateTotalMiB":39,"isolateExtMiB":100.6}
+{"sec":"mem","kind":"v2bs","w":"mix","K":6,"load":"4.3","perSandboxRssMiB":105.4,"perSandboxNodeHeapMiB":0,"perSandboxArrayBuffersMiB":0,"isolateUsedMiB":33.8,"isolateTotalMiB":44.2,"isolateExtMiB":46.9}
+{"sec":"mem","kind":"v3","w":"mix","K":6,"load":"4.2","perSandboxRssMiB":18.9,"perSandboxNodeHeapMiB":1.6,"perSandboxArrayBuffersMiB":0.2}
+{"sec":"mem","kind":"v1w","w":"mix","K":6,"load":"4.4","perSandboxRssMiB":139.9,"perSandboxNodeHeapMiB":0.1,"perSandboxArrayBuffersMiB":0.1,"stateBytes":96464}
+## rebuild from a restore point
+{"sec":"rebuild","kind":"v2s","inMiB":0,"load":"4.4","stateBytes":2976,"captureMs":0.5,"wireOutMs":0,"validateMs":0.1,"wireInMs":0,"rebuildMs":24.6,"firstExecAfterMs":219.2,"totalToReadyMs":25.2}
+{"sec":"rebuild","kind":"v2s","inMiB":1,"load":"4.4","stateBytes":1051631,"captureMs":1.8,"wireOutMs":0.2,"validateMs":1.2,"wireInMs":0.2,"rebuildMs":25.2,"firstExecAfterMs":207.8,"totalToReadyMs":28.7}
+{"sec":"rebuild","kind":"v2s","inMiB":8,"load":"4.4","stateBytes":8391663,"captureMs":8,"wireOutMs":1.4,"validateMs":8.8,"wireInMs":2.1,"rebuildMs":29.9,"firstExecAfterMs":206.9,"totalToReadyMs":50.2}
+{"sec":"rebuild","kind":"v2bs","inMiB":0,"load":"4.3","stateBytes":2976,"captureMs":0.5,"wireOutMs":0,"validateMs":0.1,"wireInMs":0,"rebuildMs":11.1,"firstExecAfterMs":215.6,"totalToReadyMs":11.6}
+{"sec":"rebuild","kind":"v2bs","inMiB":1,"load":"4.3","stateBytes":1051631,"captureMs":1.9,"wireOutMs":0.2,"validateMs":1.2,"wireInMs":0.2,"rebuildMs":13,"firstExecAfterMs":221.7,"totalToReadyMs":16.3}
+{"sec":"rebuild","kind":"v2bs","inMiB":8,"load":"4.3","stateBytes":8391663,"captureMs":8.1,"wireOutMs":1.3,"validateMs":8.8,"wireInMs":1.3,"rebuildMs":17.5,"firstExecAfterMs":216,"totalToReadyMs":37}
+## turn (v2bs + restore point, LIMIT=256)
+{"sec":"turn","limitMiB":256,"load":"4.3","step":"createSandbox (template, v2bs)","ms":67.3}
+{"sec":"turn","limitMiB":256,"load":"4.3","step":"writeFile main.js (buggy)","ms":0.5}
+{"sec":"turn","limitMiB":256,"load":"4.3","step":"exec → exit 1","ms":221,"code":1,"stderr":"ReferenceError: undefinedFn is not defined\n    at Object.<an"}
+{"sec":"turn","limitMiB":256,"load":"4.3","step":"writeFile main.js (pdf)","ms":0.2}
+{"sec":"turn","limitMiB":256,"load":"4.3","step":"writeFile input 1 MiB","ms":4.2}
+{"sec":"turn","limitMiB":256,"load":"4.3","step":"exec pdf → out.pdf","ms":186.3,"code":0}
+{"sec":"turn","limitMiB":256,"load":"4.3","step":"exec pdf again","ms":169.1,"code":0}
+{"sec":"turn","limitMiB":256,"load":"4.3","step":"readFile out.pdf","ms":0.1,"bytes":1369,"pdf":"%PDF-"}
+{"sec":"turn","limitMiB":256,"load":"4.3","step":"writeFile main.js (write, then endless loop)","ms":1.6}
+{"sec":"turn","limitMiB":256,"load":"4.3","step":"exec → timeout, rolled back","ms":518.5,"termination":"timeout","rollbackMs":13,"partialKept":false,"outPdfKept":true}
+{"sec":"turn","limitMiB":256,"load":"4.3","step":"writeFile main.js (write, then OOM)","ms":1.9}
+{"sec":"turn","limitMiB":256,"load":"4.3","step":"exec → memory, rolled back","ms":797.5,"termination":"memory","rollbackMs":23.1,"partialKept":false,"outPdfKept":true}
+{"sec":"turn","limitMiB":256,"load":"4.3","step":"writeFile main.js (pdf)","ms":2.1}
+{"sec":"turn","limitMiB":256,"load":"4.3","step":"exec pdf after two rebuilds","ms":222.7,"code":0}
+{"sec":"turn","limitMiB":256,"load":"4.3","step":"exec aborted mid-run (AbortSignal at 50 ms), rolled back","ms":65.7,"termination":"abort","rollbackMs":14,"out3Kept":false}
+{"sec":"turn","limitMiB":256,"load":"4.3","step":"ordering: writeFile + exec + readFile issued without awaiting","ms":19.7,"readBack":"seq"}
+{"sec":"turn","limitMiB":256,"load":"4.3","step":"destroy mid-run, then an op","ms":61.5,"exec":"ERR_ISOLATE_HOST_SANDBOX_DESTROYED","after":"ERR_ISOLATE_HOST_SANDBOX_DESTROYED","isolateAlive":false}
+{"sec":"turn","rebuilds":3,"opTimes":[["create",67.2],["writeFile",0.5],["exec",220.9],["writeFile",0.2],["writeFile",4.2],["exec",186.3],["exec",169.1],["readFile",0],["writeFile",1.6],["exec",518.2],["readFile",0],["writeFile",1.9],["exec",797.3],["readFile",0],["writeFile",2.1],["exec",222.7],["exec",65.4],["writeFile",2.2],["writeFile",1.7],["exec",15.8],["readFile",0],["writeFile",1.6],["exec",59.8]]}
+## life (round-1 arms v1/v2/v3)
+{"sec":"life","case":"L1 carry-over","kind":"v1","run1":"{\"global\":\"undefined\",\"exitCode\":null,\"cwd\":\"/workspace\",\"modN\":0,\"listeners\":0,\"env\":null,\"stackLimit\":10,\"json\":\"undefined\"}","run2":"{\"global\":\"undefined\",\"exitCode\":null,\"cwd\":\"/workspace\",\"modN\":0,\"listeners\":0,\"env\":null,\"stackLimit\":10,\"json\":\"undefined\"}","codes":[0,0]}
+{"sec":"life","case":"L1 carry-over","kind":"v2","run1":"{\"global\":\"undefined\",\"exitCode\":null,\"cwd\":\"/workspace\",\"modN\":0,\"listeners\":0,\"env\":null,\"stackLimit\":10,\"json\":\"undefined\"}","run2":"{\"global\":\"undefined\",\"exitCode\":null,\"cwd\":\"/workspace\",\"modN\":0,\"listeners\":0,\"env\":null,\"stackLimit\":10,\"json\":\"undefined\"}","codes":[0,0]}
+{"sec":"life","case":"L1 carry-over","kind":"v3","run1":"{\"global\":\"undefined\",\"exitCode\":null,\"cwd\":\"/workspace\",\"modN\":0,\"listeners\":0,\"env\":null,\"stackLimit\":10,\"json\":\"undefined\"}","run2":"{\"global\":\"undefined\",\"exitCode\":null,\"cwd\":\"/workspace\",\"modN\":0,\"listeners\":0,\"env\":null,\"stackLimit\":10,\"json\":\"undefined\"}","codes":[0,0]}
+{"sec":"life","case":"L2 reach FS realm","kind":"v2","out":"{\"statProto\":\"Stats\",\"bytesRealm\":true,\"errRealm\":true,\"errCode\":\"ENOENT\",\"lifeGlobals\":[\"__riftyGuest\",\"__probe\",\"__life\",\"__rifty\"]}","code":0}
+{"sec":"life","case":"L3 work after the run ended","chain":1,"kind":"v2","guard":true,"run1":"none","run4":"late-wasm.txt","lateWasm":true,"staleCalls":0}
+{"sec":"life","case":"L3 work after the run ended","chain":1,"kind":"v2","guard":false,"run1":"none","run4":"late-wasm.txt","lateWasm":true,"staleCalls":0}
+{"sec":"life","case":"L3 work after the run ended","chain":1,"kind":"v1","guard":true,"run1":"none","run4":"late-wasm.txt","lateWasm":true}
+{"sec":"life","case":"L3 work after the run ended","chain":1,"kind":"v3","guard":true,"run1":"none","run4":"none","lateWasm":false}
+{"sec":"life","case":"L3 work after the run ended","chain":30,"kind":"v2","guard":true,"run1":"none","run4":"none","lateWasm":false,"staleCalls":0}
+{"sec":"life","case":"L3 work after the run ended","chain":30,"kind":"v2","guard":false,"run1":"none","run4":"none","lateWasm":false,"staleCalls":0}
+{"sec":"life","case":"L3 work after the run ended","chain":30,"kind":"v1","guard":true,"run1":"none","run4":"none","lateWasm":false}
+{"sec":"life","case":"L3 work after the run ended","chain":30,"kind":"v3","guard":true,"run1":"none","run4":"none","lateWasm":false}
+{"sec":"life","case":"L4 kill syncLoop","kind":"v1","killed":"timeout","why":"Script execution timed out.","killMs":415,"isolateAlive":"n/a","next":"before.txt absent","nextCode":0}
+{"sec":"life","case":"L4 kill syncLoop","kind":"v2","killed":"timeout","why":"deadline","killMs":413,"isolateAlive":true,"next":"before.txt kept","nextCode":0}
+{"sec":"life","case":"L4 kill syncLoop","kind":"v3","killed":"timeout","why":"deadline","killMs":411,"isolateAlive":"n/a","next":"before.txt kept","nextCode":0}
+{"sec":"life","case":"L4 kill microtasks","kind":"v1","killed":"timeout","why":"Script execution timed out.","killMs":412,"isolateAlive":"n/a","next":"before.txt absent","nextCode":0}
+{"sec":"life","case":"L4 kill microtasks","kind":"v2","killed":"timeout","why":"deadline","killMs":412,"isolateAlive":true,"next":"before.txt kept","nextCode":0}
+{"sec":"life","case":"L4 kill microtasks","kind":"v3","killed":"timeout","why":"deadline","killMs":410,"isolateAlive":"n/a","next":"before.txt kept","nextCode":0}
+{"sec":"life","case":"L4 kill timerLoop","kind":"v1","killed":"timeout","why":"Script execution timed out.","killMs":407,"isolateAlive":"n/a","next":"before.txt absent","nextCode":0}
+{"sec":"life","case":"L4 kill timerLoop","kind":"v2","killed":"timeout","why":"deadline","killMs":420,"isolateAlive":true,"next":"before.txt kept","nextCode":0}
+{"sec":"life","case":"L4 kill timerLoop","kind":"v3","killed":"timeout","why":"deadline","killMs":411,"isolateAlive":"n/a","next":"before.txt kept","nextCode":0}
+{"sec":"life","case":"L4 kill pending","kind":"v1","killed":"timeout","why":"deadline","killMs":426,"isolateAlive":"n/a","next":"before.txt absent","nextCode":0}
+{"sec":"life","case":"L4 kill pending","kind":"v2","killed":"timeout","why":"deadline","killMs":406,"isolateAlive":true,"next":"before.txt kept","nextCode":0}
+{"sec":"life","case":"L4 kill pending","kind":"v3","killed":"timeout","why":"deadline","killMs":419,"isolateAlive":"n/a","next":"before.txt kept","nextCode":0}
+{"sec":"life","case":"L5 killed inside FS work (v2)","trials":40,"inconsistent":0,"samples":[]}
+{"sec":"life","case":"L5b killed mid-rename (v2): 64 files must stay 64","trials":200,"bad":0,"samples":[]}
+{"sec":"life","case":"L6 out of memory (limit 256)","kind":"v1","killed":"memory","why":"Isolate was disposed during execution due to memory limit","isolateAlive":"n/a","filesAfter":"state of before (rollback)"}
+{"sec":"life","case":"L6 out of memory (limit 256)","kind":"v2","killed":"memory","why":"Isolate was disposed during execution due to memory limit","isolateAlive":false,"filesAfter":"lost with the isolate"}
+{"sec":"life","case":"L6 out of memory (limit 256)","kind":"v3","killed":"memory","why":"Isolate was disposed during execution due to memory limit","isolateAlive":"n/a","filesAfter":"before.txt kept"}
+{"sec":"life","case":"L7 restore point","kind":"v2","rpCaptureMs":0.5,"rpBytes":2976,"rebuildMs":27.6}
+# end 15:06  up 6 days,  5:09, 4 users, load averages: 3.89 3.55 3.15
+## cost docx/pptx/xlsx + conc at LIMIT=256, rerun: the first cost+conc process died silently after docx v1b (no stderr kept: it was the first stage of a pipe)
+{"sec":"cost","w":"docx","kind":"v1","load":"3.4","createMs":0.3,"firstMs":188.8,"repMs":180.1,"repRunMs":154.5,"repBootMs":9.6}
+{"sec":"cost","w":"docx","kind":"v1w","load":"3.4","createMs":0.1,"firstMs":157.4,"repMs":158.8,"repRunMs":156.1,"repBootMs":0.9}
+{"sec":"cost","w":"docx","kind":"v1b","load":"3.4","createMs":0.1,"firstMs":181,"repMs":179.1,"repRunMs":167.4,"repBootMs":9.6}
+{"sec":"cost","w":"docx","kind":"v2","load":"3.3","createMs":24.1,"firstMs":160.4,"repMs":133.9,"repRunMs":127.2,"repBootMs":5.7}
+{"sec":"cost","w":"docx","kind":"v2b","load":"3.3","createMs":10.9,"firstMs":172.5,"repMs":134.9,"repRunMs":129.1,"repBootMs":5.9}
+{"sec":"cost","w":"docx","kind":"v2s","load":"3.3","createMs":24.9,"firstMs":164.2,"repMs":139.5,"repRunMs":132.4,"repBootMs":5.9}
+{"sec":"cost","w":"docx","kind":"v2bs","load":"3.3","createMs":10.6,"firstMs":173.5,"repMs":135.2,"repRunMs":129.2,"repBootMs":5.8}
+{"sec":"cost","w":"docx","kind":"v3","load":"3.4","createMs":0.2,"firstMs":171,"repMs":171.8,"repRunMs":162.1,"repBootMs":9.6}
+{"sec":"cost","w":"pptx","kind":"v1","load":"3.4","createMs":0.1,"firstMs":317,"repMs":314.6,"repRunMs":284.4,"repBootMs":13.7}
+{"sec":"cost","w":"pptx","kind":"v1w","load":"3.5","createMs":0.1,"firstMs":287.8,"repMs":294.4,"repRunMs":290.1,"repBootMs":1.2}
+{"sec":"cost","w":"pptx","kind":"v1b","load":"3.5","createMs":0.1,"firstMs":313.7,"repMs":308.4,"repRunMs":292.9,"repBootMs":13.2}
+{"sec":"cost","w":"pptx","kind":"v2","load":"3.4","createMs":32.4,"firstMs":292.5,"repMs":268.8,"repRunMs":260.3,"repBootMs":8.9}
+{"sec":"cost","w":"pptx","kind":"v2b","load":"3.4","createMs":23.1,"firstMs":342.2,"repMs":284.7,"repRunMs":275.3,"repBootMs":9.2}
+{"sec":"cost","w":"pptx","kind":"v2s","load":"3.5","createMs":36,"firstMs":304.5,"repMs":281.4,"repRunMs":271.5,"repBootMs":9.4}
+{"sec":"cost","w":"pptx","kind":"v2bs","load":"3.5","createMs":12.9,"firstMs":311.5,"repMs":281.8,"repRunMs":271.7,"repBootMs":9.7}
+{"sec":"cost","w":"pptx","kind":"v3","load":"3.3","createMs":0.2,"firstMs":356.8,"repMs":322.9,"repRunMs":308,"repBootMs":14.1}
+{"sec":"cost","w":"xlsx","kind":"v1","load":"3.5","createMs":0.1,"firstMs":467.9,"repMs":458.9,"repRunMs":433.9,"repBootMs":9.9}
+{"sec":"cost","w":"xlsx","kind":"v1w","load":"3.6","createMs":0.1,"firstMs":433.2,"repMs":430,"repRunMs":427.2,"repBootMs":0.9}
+{"sec":"cost","w":"xlsx","kind":"v1b","load":"3.4","createMs":0.1,"firstMs":511.4,"repMs":490.4,"repRunMs":478.7,"repBootMs":9.9}
+{"sec":"cost","w":"xlsx","kind":"v2","load":"3.4","createMs":24.6,"firstMs":452.8,"repMs":350.3,"repRunMs":344.5,"repBootMs":6.1}
+{"sec":"cost","w":"xlsx","kind":"v2b","load":"3.4","createMs":11.2,"firstMs":505.5,"repMs":353.7,"repRunMs":347.8,"repBootMs":6.1}
+{"sec":"cost","w":"xlsx","kind":"v2s","load":"3.2","createMs":24.5,"firstMs":475,"repMs":361.9,"repRunMs":355.9,"repBootMs":6.1}
+{"sec":"cost","w":"xlsx","kind":"v2bs","load":"3.1","createMs":10.6,"firstMs":488.9,"repMs":355.4,"repRunMs":349.5,"repBootMs":6.2}
+{"sec":"cost","w":"xlsx","kind":"v3","load":"3.2","createMs":0.1,"firstMs":638,"repMs":618.6,"repRunMs":608.5,"repBootMs":10}
+{"sec":"conc","w":"pdf","kind":"v1","load":"3.1","wallMs":303.2}
+{"sec":"conc","w":"pdf","kind":"v1w","load":"3.3","wallMs":304}
+{"sec":"conc","w":"pdf","kind":"v1b","load":"3.2","wallMs":279.6}
+{"sec":"conc","w":"pdf","kind":"v2","load":"3.3","wallMs":269.6}
+{"sec":"conc","w":"pdf","kind":"v2b","load":"3.4","wallMs":271.6}
+{"sec":"conc","w":"pdf","kind":"v2s","load":"3.3","wallMs":265.7}
+{"sec":"conc","w":"pdf","kind":"v2bs","load":"3.9","wallMs":273.5}
+{"sec":"conc","w":"pdf","kind":"v3","load":"3.9","wallMs":365.5}
+{"sec":"conc","w":"xlsx","kind":"v1","load":"4.4","wallMs":565.5}
+{"sec":"conc","w":"xlsx","kind":"v1w","load":"4.6","wallMs":578.6}
+{"sec":"conc","w":"xlsx","kind":"v1b","load":"5.2","wallMs":659.4}
+{"sec":"conc","w":"xlsx","kind":"v2","load":"4.5","wallMs":571.8}
+{"sec":"conc","w":"xlsx","kind":"v2b","load":"4.7","wallMs":592}
+{"sec":"conc","w":"xlsx","kind":"v2s","load":"4.4","wallMs":578.6}
+{"sec":"conc","w":"xlsx","kind":"v2bs","load":"4.5","wallMs":582.3}
+{"sec":"conc","w":"xlsx","kind":"v3","load":"4.7","wallMs":893.1}
+## tworealm (v1 + two realms per fresh isolate; v1 in the same run), LIMIT=256  15:25  up 6 days,  5:28, 4 users, load averages: 4.03 5.20 4.95
+{"sec":"tworealm","w":"empty","kind":"v1 (same run)","load":"4.0","repMs":30.9,"bad":0}
+{"sec":"tworealm","w":"empty","kind":"v1s (copy)","load":"4.0","repMs":39.9,"bad":0}
+{"sec":"tworealm","w":"empty","kind":"v1bs (lazy)","load":"4.0","repMs":23.7,"bad":0}
+{"sec":"tworealm","w":"pdf","kind":"v1 (same run)","load":"4.0","repMs":224.9,"bad":0}
+{"sec":"tworealm","w":"pdf","kind":"v1s (copy)","load":"4.1","repMs":243.2,"bad":0}
+{"sec":"tworealm","w":"pdf","kind":"v1bs (lazy)","load":"4.1","repMs":238.1,"bad":0}
+{"sec":"tworealm","w":"docx","kind":"v1 (same run)","load":"4.1","repMs":192.1,"bad":0}
+{"sec":"tworealm","w":"docx","kind":"v1s (copy)","load":"4.6","repMs":195.9,"bad":0}
+{"sec":"tworealm","w":"docx","kind":"v1bs (lazy)","load":"4.6","repMs":184.7,"bad":0}
+{"sec":"tworealm","w":"pptx","kind":"v1 (same run)","load":"4.2","repMs":312.9,"bad":0}
+{"sec":"tworealm","w":"pptx","kind":"v1s (copy)","load":"4.2","repMs":330.8,"bad":0}
+{"sec":"tworealm","w":"pptx","kind":"v1bs (lazy)","load":"4.0","repMs":317.1,"bad":0}
+{"sec":"tworealm","w":"xlsx","kind":"v1 (same run)","load":"4.0","repMs":454.2,"bad":0}
+{"sec":"tworealm","w":"xlsx","kind":"v1s (copy)","load":"4.4","repMs":508.8,"bad":0}
+{"sec":"tworealm","w":"xlsx","kind":"v1bs (lazy)","load":"4.2","repMs":514.4,"bad":0}
+## round 2b 15:37  up 6 days,  5:40, 4 users, load averages: 3.43 3.58 4.16
+## compile cache off (--no-compilation-cache): is the live isolate's repeated-exec gain V8's in-isolate compile cache?
+{"sec":"cost","w":"pdf","kind":"v1w","load":"3.4","createMs":0.3,"firstMs":203.4,"repMs":197.6,"repRunMs":195.2,"repBootMs":0.9}
+{"sec":"cost","w":"pdf","kind":"v2s","load":"3.3","createMs":23.7,"firstMs":212.6,"repMs":187.3,"repRunMs":181.3,"repBootMs":6.1}
+{"sec":"cost","w":"pdf","kind":"v2bs","load":"3.3","createMs":10.6,"firstMs":226.6,"repMs":183.6,"repRunMs":178.2,"repBootMs":5.8}
+{"sec":"cost","w":"xlsx","kind":"v1w","load":"3.3","createMs":0.1,"firstMs":424.4,"repMs":431,"repRunMs":428.1,"repBootMs":0.9}
+{"sec":"cost","w":"xlsx","kind":"v2s","load":"3.5","createMs":25.4,"firstMs":461.6,"repMs":425.3,"repRunMs":419,"repBootMs":6.3}
+{"sec":"cost","w":"xlsx","kind":"v2bs","load":"3.6","createMs":11.3,"firstMs":510.3,"repMs":427.4,"repRunMs":420.8,"repBootMs":6.3}
+## same, compile cache on (right after)
+{"sec":"cost","w":"pdf","kind":"v1w","load":"3.6","createMs":0.2,"firstMs":199.3,"repMs":196.6,"repRunMs":194.1,"repBootMs":0.9}
+{"sec":"cost","w":"pdf","kind":"v2s","load":"3.6","createMs":24.3,"firstMs":212.6,"repMs":167.2,"repRunMs":161.3,"repBootMs":5.8}
+{"sec":"cost","w":"pdf","kind":"v2bs","load":"3.6","createMs":10.9,"firstMs":223.7,"repMs":174.1,"repRunMs":167.8,"repBootMs":6.3}
+{"sec":"cost","w":"xlsx","kind":"v1w","load":"3.7","createMs":0.1,"firstMs":442.6,"repMs":440.2,"repRunMs":436.2,"repBootMs":0.9}
+{"sec":"cost","w":"xlsx","kind":"v2s","load":"3.5","createMs":24.5,"firstMs":487.3,"repMs":370.3,"repRunMs":362.7,"repBootMs":6.3}
+{"sec":"cost","w":"xlsx","kind":"v2bs","load":"3.5","createMs":11.1,"firstMs":514.6,"repMs":366.8,"repRunMs":360.9,"repBootMs":6.2}
+## haunt (from the round-2 critic)
+{"sec":"haunt","hold":"control","kind":"v2bs","run1":0,"next":"[code|termination, ms, used heap after gc MiB]","res":[[0,282.3,4.9],[0,194.9,8.9],[0,161.5,11.5],[0,164.4,11.5]],"alive":true}
+{"sec":"haunt","hold":"control","kind":"v1","run1":"memory","next":"[code|termination, ms, used heap after gc MiB]","res":[["memory",66.1,null],["memory",70.5,null],["memory",69,null],["memory",65.1,null]],"alive":"n/a"}
+{"sec":"haunt","hold":"wasmChain","kind":"v2bs","run1":"memory","next":"[code|termination, ms, used heap after gc MiB]","res":[["memory",0,null]],"alive":false}
+{"sec":"haunt","hold":"wasmChain","kind":"v1","run1":"memory","next":"[code|termination, ms, used heap after gc MiB]","res":[["memory",90.2,null],["memory",90.2,null],["memory",89.8,null],["memory",90.3,null]],"alive":"n/a"}
+{"sec":"haunt","hold":"pendingPromise","kind":"v2bs","run1":0,"next":"[code|termination, ms, used heap after gc MiB]","res":[[0,296.5,10.2],[0,194.6,8.9],[0,160.8,11.5],[0,162.6,11.5]],"alive":true}
+{"sec":"haunt","hold":"pendingPromise","kind":"v1","run1":0,"next":"[code|termination, ms, used heap after gc MiB]","res":[[0,222.8,null],[0,231.5,null],[0,221.2,null],[0,225.2,null]],"alive":"n/a"}
+{"sec":"haunt","hold":"finReg","kind":"v2bs","run1":0,"next":"[code|termination, ms, used heap after gc MiB]","res":[[0,270.1,4.9],[0,226.7,12.4],[0,179.7,11.5],[0,160.9,11.5]],"alive":true}
+{"sec":"haunt","hold":"finReg","kind":"v1","run1":0,"next":"[code|termination, ms, used heap after gc MiB]","res":[[0,221.7,null],[0,222.7,null],[0,234.5,null],[0,219.7,null]],"alive":"n/a"}
+## burst at LIMIT=256, v2s / v2bs (safe boundary)
+{"sec":"burst","kind":"v2s","load":"3.2","startMiB":363.4,"peakMiB":1387.4,"restWithSandboxesMiB":1387.5,"restAfterDropMiB":1296.2}
+{"sec":"burst","kind":"v2bs","load":"3.3","startMiB":363.4,"peakMiB":974.7,"restWithSandboxesMiB":974.6,"restAfterDropMiB":900.4}
+## life L1/L4/L6 incl. v2bs
+{"sec":"life","case":"L1 carry-over","kind":"v2bs","run1":"{\"global\":\"undefined\",\"exitCode\":null,\"cwd\":\"/workspace\",\"modN\":0,\"listeners\":0,\"env\":null,\"stackLimit\":10,\"json\":\"undefined\"}","run2":"{\"global\":\"undefined\",\"exitCode\":null,\"cwd\":\"/workspace\",\"modN\":0,\"listeners\":0,\"env\":null,\"stackLimit\":10,\"json\":\"undefined\"}","codes":[0,0]}
+{"sec":"life","case":"L4 kill syncLoop","kind":"v2bs","killed":"timeout","why":"deadline","killMs":409,"isolateAlive":true,"next":"before.txt kept","nextCode":0}
+{"sec":"life","case":"L4 kill microtasks","kind":"v2bs","killed":"timeout","why":"deadline","killMs":412,"isolateAlive":true,"next":"before.txt kept","nextCode":0}
+{"sec":"life","case":"L4 kill timerLoop","kind":"v2bs","killed":"timeout","why":"deadline","killMs":407,"isolateAlive":true,"next":"before.txt kept","nextCode":0}
+{"sec":"life","case":"L4 kill pending","kind":"v2bs","killed":"timeout","why":"deadline","killMs":406,"isolateAlive":true,"next":"before.txt kept","nextCode":0}
+{"sec":"life","case":"L6 out of memory (limit 256)","kind":"v2bs","killed":"memory","why":"Isolate was disposed during execution due to memory limit","isolateAlive":false,"filesAfter":"lost with the isolate"}
+# end 15:38  up 6 days,  5:41, 4 users, load averages: 3.60 3.59 4.12
+## haunt, MBN=50 (50 × 1 MiB arrays: fits both arms headroom)
+{"sec":"haunt","hold":"control","kind":"v2bs","run1":0,"next":"[code|termination, ms, used heap after gc MiB]","res":[[0,225.4,4.7],[0,198.7,8.9],[0,167.5,11.5],[0,159.4,11.5]],"alive":true}
+{"sec":"haunt","hold":"control","kind":"v1","run1":0,"next":"[code|termination, ms, used heap after gc MiB]","res":[[0,221.6,null],[0,220.2,null],[0,230.6,null],[0,225.1,null]],"alive":"n/a"}
+{"sec":"haunt","hold":"wasmChain","kind":"v2bs","run1":0,"next":"[code|termination, ms, used heap after gc MiB]","res":[[0,267.2,55.9],[0,196.7,63.4],[0,160.9,62.7],[0,158.5,62.7]],"alive":true}
+{"sec":"haunt","hold":"wasmChain","kind":"v1","run1":0,"next":"[code|termination, ms, used heap after gc MiB]","res":[[0,218.4,null],[0,232.3,null],[0,220.7,null],[0,219.1,null]],"alive":"n/a"}
+{"sec":"haunt","hold":"pendingPromise","kind":"v2bs","run1":0,"next":"[code|termination, ms, used heap after gc MiB]","res":[[0,213.7,4.7],[0,190.5,8.9],[0,171.1,11.5],[0,158.8,11.5]],"alive":true}
+{"sec":"haunt","hold":"pendingPromise","kind":"v1","run1":0,"next":"[code|termination, ms, used heap after gc MiB]","res":[[0,220.1,null],[0,220.1,null],[0,221.3,null],[0,227.2,null]],"alive":"n/a"}
+{"sec":"haunt","hold":"finReg","kind":"v2bs","run1":0,"next":"[code|termination, ms, used heap after gc MiB]","res":[[0,213.7,4.7],[0,188,8.9],[0,178.8,11.5],[0,163.9,11.5]],"alive":true}
+{"sec":"haunt","hold":"finReg","kind":"v1","run1":0,"next":"[code|termination, ms, used heap after gc MiB]","res":[[0,240.1,null],[0,222.1,null],[0,221.6,null],[0,222.6,null]],"alive":"n/a"}
+## mem with a GC inside each idle isolate before sampling (v2s / v2bs, mix and pdf)
+{"sec":"mem","kind":"v2s","w":"pdf","K":6,"load":"3.5","perSandboxRssMiB":143.7,"perSandboxNodeHeapMiB":0.1,"perSandboxArrayBuffersMiB":0,"isolateUsedMiB":20.6,"isolateTotalMiB":39.9,"isolateExtMiB":98.8,"afterGcUsedMiB":7.9,"afterGcTotalMiB":19.2,"afterGcExtMiB":96.8}
+{"sec":"mem","kind":"v2bs","w":"pdf","K":6,"load":"3.4","perSandboxRssMiB":49,"perSandboxNodeHeapMiB":0.1,"perSandboxArrayBuffersMiB":1.1,"isolateUsedMiB":15.1,"isolateTotalMiB":23.2,"isolateExtMiB":18.7,"afterGcUsedMiB":4.7,"afterGcTotalMiB":16.7,"afterGcExtMiB":16.8}
+{"sec":"mem","kind":"v2s","w":"mix","K":6,"load":"3.4","perSandboxRssMiB":155.2,"perSandboxNodeHeapMiB":0.1,"perSandboxArrayBuffersMiB":0,"isolateUsedMiB":23.8,"isolateTotalMiB":43.7,"isolateExtMiB":100.9,"afterGcUsedMiB":12.5,"afterGcTotalMiB":28.8,"afterGcExtMiB":96.9}
+{"sec":"mem","kind":"v2bs","w":"mix","K":6,"load":"3.7","perSandboxRssMiB":107.1,"perSandboxNodeHeapMiB":0,"perSandboxArrayBuffersMiB":0,"isolateUsedMiB":32,"isolateTotalMiB":39.8,"isolateExtMiB":49.1,"afterGcUsedMiB":10.2,"afterGcTotalMiB":28.6,"afterGcExtMiB":45.1}
+## think (round 3): pause 1 s before every exec, arms interleaved, caller's wall, LIMIT=256, K=5 turns × (create + first + 2 repeats)  15:55  up 6 days,  5:58, 4 users, load averages: 4.62 4.15 4.01
+{"sec":"think","w":"empty","kind":"v1","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"4.5","createMs":0.5,"firstMs":53.6,"firstAll":[38.7,64.8,33.5,63.2,53.6],"repMs":63.8,"turnMs":160.7}
+{"sec":"think","w":"empty","kind":"v1w","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"4.5","createMs":0.5,"firstMs":67.1,"firstAll":[36.1,69.4,44.2,67.1,68.4],"repMs":23.8,"turnMs":98.3}
+{"sec":"think","w":"empty","kind":"v2s","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"4.5","createMs":54.7,"firstMs":31.2,"firstAll":[16.7,34.8,27.5,31.2,34.1],"repMs":24.4,"turnMs":137.2}
+{"sec":"think","w":"empty","kind":"v2bs","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"4.5","createMs":28,"firstMs":28.1,"firstAll":[26.4,34.4,14.2,30.5,28.1],"repMs":24.6,"turnMs":97.6}
+{"sec":"think","w":"pdf","kind":"v1","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"4.2","createMs":0.4,"firstMs":293.4,"firstAll":[297,293.4,248.2,308.9,231.7],"repMs":272.5,"turnMs":828.2}
+{"sec":"think","w":"pdf","kind":"v1w","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"4.2","createMs":0.3,"firstMs":280.3,"firstAll":[268.2,284.7,255.7,287,280.3],"repMs":271.3,"turnMs":806}
+{"sec":"think","w":"pdf","kind":"v2s","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"4.2","createMs":52.7,"firstMs":272.5,"firstAll":[272.5,257.9,277.9,260,277.2],"repMs":236.5,"turnMs":760.3}
+{"sec":"think","w":"pdf","kind":"v2bs","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"4.2","createMs":31.5,"firstMs":274.2,"firstAll":[265.5,264.7,274.2,298.8,293.7],"repMs":241.1,"turnMs":750.4}
+{"sec":"think","w":"xlsx","kind":"v1","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"11.4","createMs":0.4,"firstMs":530.8,"firstAll":[537,530.8,521.4,496,1367.7],"repMs":560.3,"turnMs":1590.5}
+{"sec":"think","w":"xlsx","kind":"v1w","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"11.4","createMs":0.2,"firstMs":588.4,"firstAll":[532.3,588.4,518.5,705.3,1644.2],"repMs":564,"turnMs":1653.2}
+{"sec":"think","w":"xlsx","kind":"v2s","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"11.4","createMs":42.9,"firstMs":547.9,"firstAll":[531.9,522.9,547.9,895.2,1997.4],"repMs":535.4,"turnMs":1634.6}
+{"sec":"think","w":"xlsx","kind":"v2bs","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"11.4","createMs":32.3,"firstMs":597.1,"firstAll":[597.1,631.4,571.1,555.1,1714.7],"repMs":526.5,"turnMs":1612}
+# end 16:00  up 6 days,  6:03, 4 users, load averages: 11.37 6.14 4.79
+## think xlsx rerun on macOS (the first ran at load 11)  16:04  up 6 days,  6:07, 4 users, load averages: 4.53 5.56 4.98
+{"sec":"think","w":"xlsx","kind":"v1","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"5.4","createMs":0.1,"firstMs":630.2,"firstAll":[630.2,614.9,652.7,733,510.1],"repMs":667.5,"turnMs":1988.6}
+{"sec":"think","w":"xlsx","kind":"v1w","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"5.4","createMs":0.2,"firstMs":647.9,"firstAll":[685.5,606.6,647.9,674.5,511.1],"repMs":632.5,"turnMs":1941}
+{"sec":"think","w":"xlsx","kind":"v2s","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"5.4","createMs":35,"firstMs":645.9,"firstAll":[645.9,706.9,659.6,627.1,534],"repMs":546.5,"turnMs":1851.7}
+{"sec":"think","w":"xlsx","kind":"v2bs","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"5.4","createMs":15.3,"firstMs":730.1,"firstAll":[720.1,740.7,789.5,730.1,590],"repMs":519,"turnMs":1907.9}
+# end 16:06  up 6 days,  6:09, 4 users, load averages: 5.41 5.64 5.09
+## think with PAUSE=0 (back to back, caller's wall incl. v1w waiting for its spare)  16:06  up 6 days,  6:10, 4 users, load averages: 5.43 5.64 5.09
+{"sec":"think","w":"empty","kind":"v1","pauseMs":0,"turns":5,"repeatsPerTurn":2,"load":"5.3","createMs":0.1,"firstMs":35,"firstAll":[41.6,34.8,35,36.7,34.8],"repMs":34.9,"turnMs":104.8}
+{"sec":"think","w":"empty","kind":"v1w","pauseMs":0,"turns":5,"repeatsPerTurn":2,"load":"5.3","createMs":0.1,"firstMs":37.1,"firstAll":[37.6,37.1,36.6,40.6,36.1],"repMs":9.8,"turnMs":57.3}
+{"sec":"think","w":"empty","kind":"v2s","pauseMs":0,"turns":5,"repeatsPerTurn":2,"load":"5.3","createMs":27.6,"firstMs":14.2,"firstAll":[14.3,14.2,13.8,14.5,13.6],"repMs":10.2,"turnMs":62.3}
+{"sec":"think","w":"empty","kind":"v2bs","pauseMs":0,"turns":5,"repeatsPerTurn":2,"load":"5.3","createMs":12.1,"firstMs":13.4,"firstAll":[13.7,13.4,13.2,12.9,13.5],"repMs":10.1,"turnMs":45}
+{"sec":"think","w":"pdf","kind":"v1","pauseMs":0,"turns":5,"repeatsPerTurn":2,"load":"5.9","createMs":0.1,"firstMs":280,"firstAll":[241.7,259.7,280,284.9,292.5],"repMs":277.3,"turnMs":832.7}
+{"sec":"think","w":"pdf","kind":"v1w","pauseMs":0,"turns":5,"repeatsPerTurn":2,"load":"5.9","createMs":0.1,"firstMs":294,"firstAll":[247.1,277.5,294,300.1,315.1],"repMs":271.8,"turnMs":823.6}
+{"sec":"think","w":"pdf","kind":"v2s","pauseMs":0,"turns":5,"repeatsPerTurn":2,"load":"5.9","createMs":29,"firstMs":275.8,"firstAll":[243.2,275.3,281.8,294.2,275.8],"repMs":249.3,"turnMs":807.6}
+{"sec":"think","w":"pdf","kind":"v2bs","pauseMs":0,"turns":5,"repeatsPerTurn":2,"load":"5.9","createMs":12.2,"firstMs":287,"firstAll":[255.9,298.1,312.3,287,260.4],"repMs":252.4,"turnMs":821}
+# end 16:07  up 6 days,  6:10, 4 users, load averages: 5.94 5.73 5.14
+## round 4 (greptile on PR #454): L5/L5b with each run's end counted; §escape with a full-descriptor oracle  16:41  up 6 days,  6:44, 4 users, load averages: 8.01 17.91 16.66
+### L5b with the round-1..3 mover (restarts at i = 0): what the «200 kills» were
+{"sec":"life","case":"L5b killed mid-rename (v2, round-1 mover): 64 files must stay 64","trials":200,"ends":{"timeout":1,"exit 1":199},"bad":0,"samples":[]}
+### L5 / L5b, resuming mover, v2
+### (the escape block of the first round-4 run is superseded below: its oracle compared NaN with ===)
+### L5 / L5b, resuming mover, v2 (L5: 40 trials, L5b: 200)  16:47  up 6 days,  6:51, 4 users, load averages: 2.07 7.73 12.20
+{"sec":"life","case":"L5 killed inside FS work (v2)","trials":40,"ends":{"timeout":40},"inconsistent":0,"samples":[]}
+{"sec":"life","case":"L5b killed mid-rename (v2): 64 files must stay 64","trials":200,"ends":{"timeout":167,"exit 1":33},"bad":34,"samples":["trial 166 (end timeout): 63 files; missing 48 exists w/v=false/false; audit clean","trial 167 (end exit 1): 63 files; missing 48 exists w/v=false/false; audit clean","trial 168 (end exit 1): 63 files; missing 48 exists w/v=false/false; audit clean"]}
+### L5 / L5b, resuming mover, v2s (L5: 40 trials, L5b: 200)  16:48  up 6 days,  6:51, 4 users, load averages: 3.70 7.51 11.94
+{"sec":"life","case":"L5 killed inside FS work (v2s)","trials":40,"ends":{"timeout":40},"inconsistent":0,"samples":[]}
+{"sec":"life","case":"L5b killed mid-rename (v2s): 64 files must stay 64","trials":200,"ends":{"timeout":200},"bad":0,"samples":[]}
+### L5 / L5b, resuming mover, v2b (L5: 40 trials, L5b: 200)  16:49  up 6 days,  6:52, 4 users, load averages: 5.31 7.47 11.74
+{"sec":"life","case":"L5 killed inside FS work (v2b)","trials":40,"ends":{"timeout":40},"inconsistent":0,"samples":[]}
+{"sec":"life","case":"L5b killed mid-rename (v2b): 64 files must stay 64","trials":200,"ends":{"timeout":200},"bad":0,"samples":[]}
+### L5 / L5b, resuming mover, v2bs (L5: 40 trials, L5b: 200)  16:49  up 6 days,  6:52, 4 users, load averages: 4.64 7.08 11.41
+{"sec":"life","case":"L5 killed inside FS work (v2bs)","trials":40,"ends":{"timeout":40},"inconsistent":0,"samples":[]}
+{"sec":"life","case":"L5b killed mid-rename (v2bs): 64 files must stay 64","trials":200,"ends":{"timeout":84,"exit 1":116},"bad":117,"samples":["trial 83 (end timeout): 63 files; missing 63 exists w/v=false/false; audit clean","trial 84 (end exit 1): 63 files; missing 63 exists w/v=false/false; audit clean","trial 85 (end exit 1): 63 files; missing 63 exists w/v=false/false; audit clean"]}
+### L5b containment, v1  16:50  up 6 days,  6:53, 4 users, load averages: 3.60 6.64 11.12
+{"sec":"life","case":"L5b killed mid-rename (v1): 64 files must stay 64","trials":200,"ends":{"timeout":200},"bad":0,"samples":[]}
+### L5b containment, v2bs+rp  16:50  up 6 days,  6:53, 4 users, load averages: 3.08 6.16 10.76
+### escape, full-descriptor oracle (Object.is)  16:51  up 6 days,  6:54, 4 users, load averages: 3.66 6.19 10.72
+{"sec":"escape","case":"E0 Object.keys (external review)","kind":"v2","exec1":"run1: planted=yes","exec2":"run2: mkdir -p FAILED ENOENT","codes":[0,0],"fsRealmDiffsBefore":0,"fsRealmDiffsAfter":1,"fsRealmDiffs":["Object.prototype.recursive: added"]}
+{"sec":"escape","case":"control: an ordinary program twice","kind":"v2","exec1":"{\"mkdirP\":\"ok\",\"rw\":\"ok\",\"stat\":\"ok\",\"readdir\":\"b,x.bin\",\"require\":\"ok\",\"pwnedSeen\":\"undefined\"}","codes":[0,0],"fsRealmDiffsAfter":0,"fsRealmDiffs":[]}
+{"sec":"escape","case":"E1 hooks + accessors + species + proxies + getters + stack exhaustion + callbacks","kind":"v2","exec1":"{\"sync\":true,\"depth\":3956,\"foreign\":6,\"where\":[\"map:arg0\",\"isView:arg0\",\"isArray:arg0\",\"keys:arg0\",\"readdir:ret\",\"so:fs\"]}\n{\"async\":true,\"foreign\":6,\"where\":[\"map:arg0\",\"isView:arg0\",\"isArray:arg0\",\"k","exec1End":0,"fsRealmDiffsBefore":0,"fsRealmDiffsAfter":4,"fsRealmDiffs":["Object.prototype.__pwned: added","Array.prototype.__pwned: added","Function.prototype.__pwned: added","RangeError.prototype.__pwned: added"],"exec2":"{\"mkdirP\":\"ok\",\"rw\":\"ok\",\"stat\":\"ok\",\"readdir\":\"b,x.bin\",\"require\":\"ok\",\"pwnedSeen\":\"undefined\"}","codes":[0,0]}
+{"sec":"escape","case":"E0 Object.keys (external review)","kind":"v2s","exec1":"run1: planted=no A object reached","exec2":"run2: mkdir -p ok","codes":[0,0],"fsRealmDiffsBefore":0,"fsRealmDiffsAfter":0,"fsRealmDiffs":[]}
+{"sec":"escape","case":"control: an ordinary program twice","kind":"v2s","exec1":"{\"mkdirP\":\"ok\",\"rw\":\"ok\",\"stat\":\"ok\",\"readdir\":\"b,x.bin\",\"require\":\"ok\",\"pwnedSeen\":\"undefined\"}","codes":[0,0],"fsRealmDiffsAfter":0,"fsRealmDiffs":[]}
+{"sec":"escape","case":"E1 hooks + accessors + species + proxies + getters + stack exhaustion + callbacks","kind":"v2s","exec1":"{\"sync\":true,\"depth\":3956,\"foreign\":0,\"where\":[]}\n{\"async\":true,\"foreign\":0,\"where\":[]}","exec1End":0,"fsRealmDiffsBefore":0,"fsRealmDiffsAfter":0,"fsRealmDiffs":[],"exec2":"{\"mkdirP\":\"ok\",\"rw\":\"ok\",\"stat\":\"ok\",\"readdir\":\"b,x.bin\",\"require\":\"ok\",\"pwnedSeen\":\"undefined\"}","codes":[0,0]}
+{"sec":"escape","case":"E0 Object.keys (external review)","kind":"v2bs","exec1":"run1: planted=no A object reached","exec2":"run2: mkdir -p ok","codes":[0,0],"fsRealmDiffsBefore":0,"fsRealmDiffsAfter":0,"fsRealmDiffs":[]}
+{"sec":"escape","case":"control: an ordinary program twice","kind":"v2bs","exec1":"{\"mkdirP\":\"ok\",\"rw\":\"ok\",\"stat\":\"ok\",\"readdir\":\"b,x.bin\",\"require\":\"ok\",\"pwnedSeen\":\"undefined\"}","codes":[0,0],"fsRealmDiffsAfter":0,"fsRealmDiffs":[]}
+{"sec":"escape","case":"E1 hooks + accessors + species + proxies + getters + stack exhaustion + callbacks","kind":"v2bs","exec1":"{\"sync\":true,\"depth\":3956,\"foreign\":0,\"where\":[]}\n{\"async\":true,\"foreign\":0,\"where\":[]}","exec1End":0,"fsRealmDiffsBefore":0,"fsRealmDiffsAfter":0,"fsRealmDiffs":[],"exec2":"{\"mkdirP\":\"ok\",\"rw\":\"ok\",\"stat\":\"ok\",\"readdir\":\"b,x.bin\",\"require\":\"ok\",\"pwnedSeen\":\"undefined\"}","codes":[0,0]}
+### burst at LIMIT=256 with each run's end counted  16:51  up 6 days,  6:54, 4 users, load averages: 3.53 6.12 10.67
+{"sec":"burst","kind":"v1","ends":{"exit 0":20},"load":"3.6","startMiB":363.5,"peakMiB":1058.4,"restWithSandboxesMiB":1051.3,"restAfterDropMiB":1051.3}
+{"sec":"burst","kind":"v2s","ends":{"exit 0":20},"load":"3.9","startMiB":363.3,"peakMiB":1338.5,"restWithSandboxesMiB":1338.7,"restAfterDropMiB":1256.1}
+{"sec":"burst","kind":"v2bs","ends":{"exit 0":20},"load":"3.9","startMiB":363.6,"peakMiB":1022.6,"restWithSandboxesMiB":1022.6,"restAfterDropMiB":938.8}
+{"sec":"burst","kind":"v3","ends":{"exit 0":20},"load":"3.9","startMiB":363.3,"peakMiB":676.7,"restWithSandboxesMiB":676.3,"restAfterDropMiB":676.3}
+# end 16:51  up 6 days,  6:54, 4 users, load averages: 3.85 6.03 10.53
+### (the v2bs+rp containment run above crashed in the probe: seed files written before their parent directory; rerun below)
+### L5b containment, v2bs+rp (Turn: rebuild from the point on every kill)  16:53  up 6 days,  6:56, 4 users, load averages: 3.69 5.43 9.82
+{"sec":"life","case":"L5b killed mid-rename (v2bs+rp): 64 files must stay 64","trials":200,"ends":{"timeout":200},"bad":0,"samples":[]}
+## round 5 (2 × 2 matrix): v1f = fresh isolate + libraries as files in the state (today's main), v2f = live isolate + libraries as files in A; v1 / v2bs beside, same run
+### cost, LIMIT=256  16:53  up 6 days,  6:56, 4 users, load averages: 3.14 5.10 9.52
+{"sec":"cost","w":"empty","kind":"v1f","load":"3.1","createMs":118.6,"firstMs":212.5,"repMs":197.6,"repRunMs":6.9,"repBootMs":9.9}
+{"sec":"cost","w":"empty","kind":"v1","load":"3.1","createMs":0.1,"firstMs":31.5,"repMs":33.2,"repRunMs":7.2,"repBootMs":10.2}
+{"sec":"cost","w":"empty","kind":"v2f","load":"3.1","createMs":219.7,"firstMs":24.8,"repMs":8.8,"repRunMs":3,"repBootMs":5.7}
+{"sec":"cost","w":"empty","kind":"v2bs","load":"3.1","createMs":10.8,"firstMs":12.5,"repMs":8.7,"repRunMs":3.1,"repBootMs":5.6}
+{"sec":"cost","w":"pdf","kind":"v1f","load":"3.1","createMs":116.8,"firstMs":362.1,"repMs":371.1,"repRunMs":189.1,"repBootMs":9.9,"bad":{"termination":"memory","why":"ERR_FS_SNAPSHOT_TOO_LARGE: out of memory building the snapshot (size the memory limit for 2 × maxBytes + 16 MiB)"}}
+{"sec":"cost","w":"pdf","kind":"v1","load":"3.1","createMs":0.1,"firstMs":219.4,"repMs":218,"repRunMs":192.5,"repBootMs":9.9}
+{"sec":"cost","w":"pdf","kind":"v2f","load":"3.1","createMs":213.9,"firstMs":204.9,"repMs":157.2,"repRunMs":151.5,"repBootMs":5.9}
+{"sec":"cost","w":"pdf","kind":"v2bs","load":"3.1","createMs":10.7,"firstMs":215.7,"repMs":167.8,"repRunMs":160.4,"repBootMs":6}
+{"sec":"cost","w":"docx","kind":"v1f","load":"3.1","createMs":115.9,"firstMs":343.9,"repMs":351.5,"repRunMs":162.8,"repBootMs":9.9}
+{"sec":"cost","w":"docx","kind":"v1","load":"3.2","createMs":0.1,"firstMs":179.5,"repMs":185.6,"repRunMs":160.2,"repBootMs":9.8}
+{"sec":"cost","w":"docx","kind":"v2f","load":"3.2","createMs":216.6,"firstMs":162.5,"repMs":133.7,"repRunMs":127.3,"repBootMs":6.2}
+### think, LIMIT=256  16:53  up 6 days,  6:57, 4 users, load averages: 3.19 4.98 9.38
+{"sec":"think","w":"empty","kind":"v1f","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"2.8","createMs":140.1,"firstMs":214.1,"firstAll":[214.3,205.7,214.1,221.1,201.4],"repMs":227,"turnMs":796.8}
+{"sec":"think","w":"empty","kind":"v1","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"2.8","createMs":0.4,"firstMs":54.9,"firstAll":[65.8,32.8,60.7,54.9,49.3],"repMs":59.3,"turnMs":161.6}
+{"sec":"think","w":"empty","kind":"v2f","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"2.8","createMs":239.7,"firstMs":27.8,"firstAll":[30.9,18.7,33.9,27.8,22.1],"repMs":23.8,"turnMs":308.5}
+{"sec":"think","w":"empty","kind":"v2bs","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"2.8","createMs":23.8,"firstMs":16.8,"firstAll":[14.8,16.8,31.1,32.8,16.1],"repMs":19.2,"turnMs":91.6}
+{"sec":"think","w":"pdf","kind":"v1f","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"3.6","createMs":129.2,"firstMs":424.7,"firstAll":[516.4,379.3,424.7,431.9,383.1],"repMs":419,"turnMs":1456.4}
+{"sec":"think","w":"pdf","kind":"v1","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"3.6","createMs":0.3,"firstMs":255.9,"firstAll":[252.9,252.1,284.4,274,255.9],"repMs":241,"turnMs":738.8}
+{"sec":"think","w":"pdf","kind":"v2f","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"3.6","createMs":236.1,"firstMs":206.3,"firstAll":[206.3,205.9,204.2,229.9,206.6],"repMs":197.8,"turnMs":813.7}
+{"sec":"think","w":"pdf","kind":"v2bs","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"3.6","createMs":17.4,"firstMs":234.6,"firstAll":[224.5,234.6,253.6,254.7,227],"repMs":212.5,"turnMs":651.6}
+{"sec":"think","w":"xlsx","kind":"v1f","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"2.4","createMs":135.5,"firstMs":642.5,"firstAll":[664.7,644.3,623.7,636.5,642.5],"repMs":632.9,"turnMs":2047.4}
+{"sec":"think","w":"xlsx","kind":"v1","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"2.4","createMs":0.4,"firstMs":509.3,"firstAll":[517.8,500.6,491.5,544.4,509.3],"repMs":507.3,"turnMs":1516.1}
+{"sec":"think","w":"xlsx","kind":"v2f","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"2.4","createMs":236.5,"firstMs":447.4,"firstAll":[447.4,422.3,433.4,451.1,450.1],"repMs":420.4,"turnMs":1490.1}
+{"sec":"think","w":"xlsx","kind":"v2bs","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"2.4","createMs":27.6,"firstMs":529.2,"firstAll":[515.5,529.2,511.3,561,552.5],"repMs":432.4,"turnMs":1424.1}
+### mem (idle after pdf / after the 4 generators), one process per arm  16:58  up 6 days,  7:02, 4 users, load averages: 2.42 3.67 7.48
+{"sec":"mem","kind":"v1f","w":"pdf","K":4,"load":"2.4","perSandboxRssMiB":218.3,"perSandboxNodeHeapMiB":-0.1,"perSandboxArrayBuffersMiB":83.8,"stateBytes":87841098}
+{"sec":"mem","kind":"v2f","w":"pdf","K":4,"load":"2.4","perSandboxRssMiB":247.1,"perSandboxNodeHeapMiB":-0.1,"perSandboxArrayBuffersMiB":41,"isolateUsedMiB":18.5,"isolateTotalMiB":27,"isolateExtMiB":98.8,"afterGcUsedMiB":8,"afterGcTotalMiB":20.2,"afterGcExtMiB":98.3}
+{"sec":"mem","kind":"v1f","w":"mix","K":4,"load":"2.6","perSandboxRssMiB":375.6,"perSandboxNodeHeapMiB":-0.1,"perSandboxArrayBuffersMiB":83.9,"stateBytes":87934442}
+{"sec":"mem","kind":"v2f","w":"mix","K":4,"load":"2.5","perSandboxRssMiB":268.4,"perSandboxNodeHeapMiB":-0.1,"perSandboxArrayBuffersMiB":40.8,"isolateUsedMiB":26.8,"isolateTotalMiB":48.5,"isolateExtMiB":99.2,"afterGcUsedMiB":11.4,"afterGcTotalMiB":29.8,"afterGcExtMiB":97}
+### floor  16:59  up 6 days,  7:02, 4 users, load averages: 2.49 3.58 7.34
+{"sec":"floor","w":"empty","kind":"v1f","load":"2.4","floorMiB":190}
+{"sec":"floor","w":"empty","kind":"v2f","load":"2.4","floorMiB":190}
+{"sec":"floor","w":"pdf","kind":"v1f","load":"2.3","floorMiB":194}
+{"sec":"floor","w":"pdf","kind":"v2f","load":"2.3","floorMiB":190}
+{"sec":"floor","w":"xlsx","kind":"v1f","load":"4.2","floorMiB":202}
+{"sec":"floor","w":"xlsx","kind":"v2f","load":"4.0","floorMiB":190}
+# end 16:59  up 6 days,  7:03, 4 users, load averages: 4.04 3.80 7.26
+### cost docx/pptx/xlsx rerun: the cost process above died silently after docx v2f (a pipe stage, no stderr); rerun with stderr kept: clean, exit 0  17:01  up 6 days,  7:04, 4 users, load averages: 3.08 3.60 6.84
+{"sec":"cost","w":"docx","kind":"v1f","load":"3.7","createMs":122.5,"firstMs":360.8,"repMs":353.2,"repRunMs":164.8,"repBootMs":9.9}
+{"sec":"cost","w":"docx","kind":"v1","load":"3.7","createMs":0.1,"firstMs":190.2,"repMs":191.9,"repRunMs":165.6,"repBootMs":10.5}
+{"sec":"cost","w":"docx","kind":"v2f","load":"3.7","createMs":217.6,"firstMs":171.8,"repMs":138.2,"repRunMs":132,"repBootMs":6.2}
+{"sec":"cost","w":"docx","kind":"v2bs","load":"4.0","createMs":12.2,"firstMs":180.8,"repMs":146.2,"repRunMs":139.7,"repBootMs":6.4}
+{"sec":"cost","w":"pptx","kind":"v1f","load":"4.0","createMs":119.8,"firstMs":507.1,"repMs":481,"repRunMs":288.6,"repBootMs":10.6}
+{"sec":"cost","w":"pptx","kind":"v1","load":"4.0","createMs":0.1,"firstMs":317.4,"repMs":312.1,"repRunMs":283.3,"repBootMs":10.2}
+{"sec":"cost","w":"pptx","kind":"v2f","load":"3.7","createMs":229.7,"firstMs":293,"repMs":275.5,"repRunMs":264.2,"repBootMs":8.4}
+{"sec":"cost","w":"pptx","kind":"v2bs","load":"3.7","createMs":14.4,"firstMs":302.5,"repMs":275.6,"repRunMs":269.4,"repBootMs":8.2}
+{"sec":"cost","w":"xlsx","kind":"v1f","load":"3.6","createMs":116.3,"firstMs":606.3,"repMs":642.1,"repRunMs":450.5,"repBootMs":10.8}
+{"sec":"cost","w":"xlsx","kind":"v1","load":"3.6","createMs":0.1,"firstMs":461.4,"repMs":477.4,"repRunMs":451.9,"repBootMs":10.3}
+{"sec":"cost","w":"xlsx","kind":"v2f","load":"3.7","createMs":220.6,"firstMs":440.3,"repMs":353.9,"repRunMs":347.3,"repBootMs":6.4}
+{"sec":"cost","w":"xlsx","kind":"v2bs","load":"3.5","createMs":11.5,"firstMs":497.6,"repMs":371,"repRunMs":364.5,"repBootMs":6.6}
+## round 4, earlier runs of the same L5/L5b code (first run: /tmp file; diagnostic runs: copied from the console, verbatim)
+{"sec":"life","case":"L5 killed inside FS work (v2)","trials":40,"ends":{"timeout":40},"inconsistent":0,"samples":[]}
+{"sec":"life","case":"L5b killed mid-rename (v2): 64 files must stay 64","trials":200,"ends":{"timeout":200},"bad":0,"samples":[]}
+{"sec":"life","case":"L5 killed inside FS work (v2bs)","trials":40,"ends":{"timeout":40},"inconsistent":0,"samples":[]}
+{"sec":"life","case":"L5b killed mid-rename (v2bs): 64 files must stay 64","trials":200,"ends":{"timeout":92,"exit 1":108},"bad":109,"samples":["trial 91: 63 files; ","trial 92: 63 files; ","trial 93: 63 files; ","trial 94: 63 files; ","trial 95: 63 files; "]}
+{"sec":"life","case":"L5b killed mid-rename (v2bs): 64 files must stay 64","trials":200,"ends":{"timeout":103,"exit 1":97},"bad":98,"samples":["trial 102 (end timeout): 63 files; missing 19 exists w/v=false/false; audit clean","trial 103 (end exit 1): 63 files; missing 19 exists w/v=false/false; audit clean","trial 104 (end exit 1): 63 files; missing 19 exists w/v=false/false; audit clean"]}
+{"sec":"life","case":"L5b killed mid-rename (v2s): 64 files must stay 64","trials":200,"ends":{"timeout":200},"bad":0,"samples":[]}
+{"sec":"life","case":"L5b killed mid-rename (v2b): 64 files must stay 64","trials":200,"ends":{"timeout":153,"exit 1":47},"bad":48,"samples":["trial 152 (end timeout): 63 files; missing 57 exists w/v=false/false; audit clean","trial 153 (end exit 1): 63 files; missing 57 exists w/v=false/false; audit clean","trial 154 (end exit 1): 63 files; missing 57 exists w/v=false/false; audit clean"]}
+## round 6 (fourth external pass)
+### L5b, 600 runs, v2s  17:44  up 6 days,  7:47, 4 users, load averages: 35.57 33.17 26.04
+{"sec":"life","case":"L5b killed mid-rename (v2s): 64 files must stay 64","trials":600,"ends":{"timeout":212,"exit 1":388},"bad":391,"samples":["trial 209 (end timeout): 63 files; missing 33 exists w/v=false/false; audit clean","trial 210 (end exit 1): 63 files; missing 33 exists w/v=false/false; audit clean","trial 211 (end exit 1): 63 files; missing 33 exists w/v=false/false; audit clean"]}
+### L5b, 600 runs, v2f  17:45  up 6 days,  7:48, 4 users, load averages: 34.61 33.25 26.51
+{"sec":"life","case":"L5b killed mid-rename (v2f): 64 files must stay 64","trials":600,"ends":{"timeout":143,"exit 1":457},"bad":458,"samples":["trial 142 (end timeout): 63 files; missing 11 exists w/v=false/false; audit clean","trial 143 (end exit 1): 63 files; missing 11 exists w/v=false/false; audit clean","trial 144 (end exit 1): 63 files; missing 11 exists w/v=false/false; audit clean"]}
+# end 17:46  up 6 days,  7:49, 4 users, load averages: 37.59 34.30 27.21
+### round 6 timing (load 30–78: the noisy run, kept for the counts; timings superseded by the rerun below)
+### cost with a restore point after every exec (RP=1: v2f's point = the whole FS, v2bs's = blob + rows; copy out of A only, the consumer's validation not included), LIMIT=256  17:46  up 6 days,  7:49, 4 users, load averages: 33.58 33.57 27.07
+{"sec":"cost","w":"empty","kind":"v2f","restorePoint":true,"load":"33.6","createMs":500.7,"firstMs":127.7,"repMs":247.6,"repRunMs":6,"repBootMs":15.5,"repRestorePointMs":229.4,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"empty","kind":"v2bs","restorePoint":true,"load":"38.2","createMs":27,"firstMs":22,"repMs":18.5,"repRunMs":5.8,"repBootMs":12,"repRestorePointMs":0.4,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"pdf","kind":"v2f","restorePoint":true,"load":"39.5","createMs":739.4,"firstMs":1982.4,"repMs":1424.9,"repRunMs":959.5,"repBootMs":30.1,"repRestorePointMs":495.5,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"pdf","kind":"v2bs","restorePoint":true,"load":"43.2","createMs":26.6,"firstMs":1565.7,"repMs":1007.8,"repRunMs":927.8,"repBootMs":25.6,"repRestorePointMs":0.6,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"xlsx","kind":"v2f","restorePoint":true,"load":"62.4","createMs":1363.6,"firstMs":4368.3,"repMs":6086.8,"repRunMs":4428.1,"repBootMs":237.9,"repRestorePointMs":1275.4,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"xlsx","kind":"v2bs","restorePoint":true,"load":"65.5","createMs":22.1,"firstMs":6248.6,"repMs":4051,"repRunMs":3978.5,"repBootMs":35.9,"repRestorePointMs":2.3,"repsOk":7,"repsNotOk":0}
+### same minute, no restore point, with v1f beside  17:48  up 6 days,  7:51, 4 users, load averages: 65.49 45.67 32.74
+{"sec":"cost","w":"empty","kind":"v1f","load":"61.8","createMs":1614,"firstMs":2193.9,"repMs":1353,"repRunMs":18,"repBootMs":29.2,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"empty","kind":"v2f","load":"61.8","createMs":1222.4,"firstMs":37.7,"repMs":48.9,"repRunMs":9.2,"repBootMs":43,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"empty","kind":"v2bs","load":"61.8","createMs":25.5,"firstMs":28.8,"repMs":32.3,"repRunMs":5.4,"repBootMs":27.9,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"pdf","kind":"v1f","load":"62.4","createMs":360.5,"firstMs":1860.7,"repMs":4091.7,"repRunMs":1849.5,"repBootMs":34.1,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"pdf","kind":"v2f","load":"60.5","createMs":3187.8,"firstMs":2293.1,"repMs":1684.5,"repRunMs":1674.7,"repBootMs":15,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"pdf","kind":"v2bs","load":"61.3","createMs":16.6,"firstMs":2699.1,"repMs":1792.8,"repRunMs":1709.9,"repBootMs":17.2,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"xlsx","kind":"v1f","load":"65.7","createMs":1098.5,"firstMs":11472.8,"repMs":6376.1,"repRunMs":4184.1,"repBootMs":69.1,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"xlsx","kind":"v2f","load":"77.0","createMs":1058.1,"firstMs":2586.9,"repMs":2462.5,"repRunMs":2447,"repBootMs":16.7,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"xlsx","kind":"v2bs","load":"78.7","createMs":25.8,"firstMs":3305.5,"repMs":1824.8,"repRunMs":1812.2,"repBootMs":12.7,"repsOk":7,"repsNotOk":0}
+### v1f (main's form) at LIMIT=256, 20 repeats: how many end other than 0  17:51  up 6 days,  7:54, 4 users, load averages: 78.68 58.62 40.80
+{"w":"pdf","kind":"v1f","failed":{"termination":"memory","why":"ERR_FS_SNAPSHOT_TOO_LARGE: out of memory building the snapshot (size the memory limit for 2 × maxBytes + 16 MiB)"}}
+{"sec":"cost","w":"xlsx","kind":"v1f","load":"64.2","createMs":213.8,"firstMs":2020.9,"repMs":1364.2,"repRunMs":1044.6,"repBootMs":20.1,"repsOk":20,"repsNotOk":0}
+### v1f (main's form) at LIMIT=288, 20 repeats: how many end other than 0  17:52  up 6 days,  7:55, 4 users, load averages: 64.21 58.00 41.52
+{"sec":"cost","w":"pdf","kind":"v1f","load":"52.0","createMs":154.2,"firstMs":538.6,"repMs":475.8,"repRunMs":250.1,"repBootMs":12.9,"repsOk":20,"repsNotOk":0}
+{"sec":"cost","w":"xlsx","kind":"v1f","load":"40.3","createMs":134.3,"firstMs":794.2,"repMs":781.1,"repRunMs":558.1,"repBootMs":12.8,"repsOk":20,"repsNotOk":0}
+### v1f (main's form) at LIMIT=320, 20 repeats: how many end other than 0  17:53  up 6 days,  7:56, 4 users, load averages: 40.29 52.71 40.25
+{"sec":"cost","w":"pdf","kind":"v1f","load":"36.4","createMs":137.5,"firstMs":475,"repMs":497.3,"repRunMs":267.8,"repBootMs":13.1,"repsOk":20,"repsNotOk":0}
+{"sec":"cost","w":"xlsx","kind":"v1f","load":"30.9","createMs":138.2,"firstMs":727.8,"repMs":760.3,"repRunMs":533.5,"repBootMs":11.2,"repsOk":20,"repsNotOk":0}
+# end 17:53  up 6 days,  7:56, 4 users, load averages: 30.88 49.20 39.41
+### rerun when the 1-min load fell (waited up to 40 min): restore point (RP=1) and the same arms without, LIMIT=256  18:01  up 6 days,  8:05, 4 users, load averages: 5.08 17.30 27.16
+{"sec":"cost","w":"empty","kind":"v2f","restorePoint":true,"load":"4.9","createMs":238.2,"firstMs":110.7,"repMs":93.9,"repRunMs":3.9,"repBootMs":6.6,"repRestorePointMs":83,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"empty","kind":"v2bs","restorePoint":true,"load":"4.9","createMs":10.7,"firstMs":13.2,"repMs":10.3,"repRunMs":3.3,"repBootMs":6.9,"repRestorePointMs":0.2,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"pdf","kind":"v2f","restorePoint":true,"load":"4.9","createMs":223.3,"firstMs":290,"repMs":249.7,"repRunMs":162,"repBootMs":6.4,"repRestorePointMs":80.8,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"pdf","kind":"v2bs","restorePoint":true,"load":"4.9","createMs":12,"firstMs":234.6,"repMs":171.6,"repRunMs":164.2,"repBootMs":6.8,"repRestorePointMs":0.2,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"xlsx","kind":"v2f","restorePoint":true,"load":"5.1","createMs":221.2,"firstMs":543.4,"repMs":449.8,"repRunMs":361.4,"repBootMs":6.7,"repRestorePointMs":80.8,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"xlsx","kind":"v2bs","restorePoint":true,"load":"4.9","createMs":11.5,"firstMs":542.5,"repMs":380.3,"repRunMs":373.6,"repBootMs":6.3,"repRestorePointMs":0.3,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"empty","kind":"v1f","load":"4.8","createMs":120.7,"firstMs":218.8,"repMs":204.5,"repRunMs":7.5,"repBootMs":10.3,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"empty","kind":"v2f","load":"4.8","createMs":222.4,"firstMs":13.1,"repMs":9.6,"repRunMs":3.3,"repBootMs":6.4,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"empty","kind":"v2bs","load":"4.8","createMs":10.7,"firstMs":13.1,"repMs":9.1,"repRunMs":3.2,"repBootMs":5.8,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"pdf","kind":"v1f","load":"4.8","createMs":123.2,"firstMs":381.8,"repMs":382.9,"repRunMs":191.6,"repBootMs":10.3,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"pdf","kind":"v2f","load":"4.8","createMs":228.2,"firstMs":210,"repMs":168.3,"repRunMs":162.1,"repBootMs":6.3,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"pdf","kind":"v2bs","load":"4.8","createMs":11,"firstMs":228.4,"repMs":171.4,"repRunMs":164.8,"repBootMs":6.5,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"xlsx","kind":"v1f","load":"4.6","createMs":123.5,"firstMs":617.7,"repMs":613.6,"repRunMs":421.6,"repBootMs":10.5,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"xlsx","kind":"v2f","load":"4.6","createMs":226.8,"firstMs":456.5,"repMs":366.1,"repRunMs":359.5,"repBootMs":6.6,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"xlsx","kind":"v2bs","load":"4.9","createMs":11.2,"firstMs":524.6,"repMs":382.7,"repRunMs":375.6,"repBootMs":6.7,"repsOk":7,"repsNotOk":0}
+### v1f at LIMIT=256, 20 repeats, rerun  18:02  up 6 days,  8:05, 4 users, load averages: 4.93 15.71 26.12
+{"sec":"cost","w":"pdf","kind":"v1f","load":"4.6","createMs":120,"firstMs":400.9,"repMs":384.7,"repRunMs":192.9,"repBootMs":10.6,"repsOk":20,"repsNotOk":0}
+{"sec":"cost","w":"xlsx","kind":"v1f","load":"4.7","createMs":158.4,"firstMs":617.6,"repMs":617.5,"repRunMs":425.4,"repBootMs":10.4,"repsOk":20,"repsNotOk":0}
+# end 18:03  up 6 days,  8:06, 4 users, load averages: 4.67 14.79 25.49
