@@ -167,9 +167,11 @@ Proposed; F1–F4 (§Forks) are the user's, the rest follows from the requiremen
 ## Invariants (goal `isolate-host-sandbox-template`, verbatim)
 
 - I1. Intake: `createSandbox({ template })` accepts a `produceDependencySnapshot` artifact (gzip or
-  br, profile `replay` or `frozen`) or the id of one registered in the process; a corrupted,
-  truncated or unsupported artifact, or an unknown id, is refused by name before any sandbox
-  exists; no other conversion is needed on the consumer's side.
+  br, profile `replay` or `frozen`) or the id of one registered in the process; registering returns
+  the template's identity `{id, version}`, derived from the artifact alone and documented, and that
+  identity is the id `createSandbox` takes; a corrupted, truncated or unsupported artifact, or an
+  unknown id, is refused by name before any sandbox exists; no other conversion is needed on the
+  consumer's side.
 - I2. Mount: the guest sees the artifact's `payload/node_modules` at `/node_modules` and nothing
   else of it (`rifty/*`, `payload/package.json`, the lock); `require('<lib>')`, `require.resolve`
   and `module.paths` from `/workspace/main.js` resolve into it as Node's do over the same tree.
@@ -193,9 +195,13 @@ Proposed; F1–F4 (§Forks) are the user's, the rest follows from the requiremen
 - I8. Deferred, loud: `snapshot()` and `createSandbox({ snapshot })` over a template throw
   `NotImplementedError('isolate-host.sandbox-template-snapshot')` + compat ❌; sandboxes without a
   template keep ADR-0567 v1 snapshots unchanged.
-- I9. Unchanged guarantees: `isolate-host-live-sandbox` I1–I9 hold for a sandbox over a template
+- I9. Unchanged guarantees: `isolate-host-live-sandbox` I1–I8 hold for a sandbox over a template
   (a killed run rolls back its difference and its template changes; destroy, ordering, limits,
-  trust), and `runCode` does not change.
+  trust) — its I9 (snapshot round trip) is I8's deferred gap here — and `runCode` does not change.
+- I10. Documented route: the README builds the template from `package.json` + lock with
+  `produceDependencySnapshot` run in plain Node (the published `@riftydev/workbench`), passes it to
+  `createSandbox`, and requires each of the four libraries from a sandbox run — each `require`
+  succeeding, proven by the carrier on that artifact.
 
 ## Alternatives
 

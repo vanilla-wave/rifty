@@ -27,7 +27,8 @@ truncated or unsupported artifact is a named error before a sandbox exists. Pers
 sandbox between turns is deferred (`snapshot()` / `createSandbox({ snapshot })` over a template:
 `NotImplementedError('isolate-host.sandbox-template-snapshot')`,
 `distribution/isolate-host-sandbox-template-snapshot`). Everything of `isolate-host-live-sandbox`
-that holds for a sandbox without a template holds over a template too.
+that holds for a sandbox without a template holds over a template too, except its snapshot round
+trip (its I9), deferred with persistence.
 
 ## User scenario
 
@@ -58,18 +59,21 @@ that holds for a sandbox without a template holds over a template too.
 
 ## Invariants
 
-<!-- False on main @ b3731e9c0 (all): `createSandbox({ template })` → NotImplementedError
-(sandbox.ts:499-502); the codec is always called with `template: null` (sandbox.ts:256, :568,
-child/main.ts:310, :355); `ExecResult` has no changed paths (sandbox.ts:66-80); a hand-laid
+<!-- False on main @ 57152054d (all): `createSandbox({ template })` → NotImplementedError
+(sandbox.ts:656); the codec is always called with `template: null` (sandbox.ts:334, :692, :723,
+child/main.ts:310, :355); `ExecResult` has no changed paths (sandbox.ts:84); no README template
+example; a hand-laid
 `node_modules` is part of the state: probe arm `full`, T95 exec 392 ms worker side + ~150 + ~170 ms
 consumer encode/decode per exec, isolate floor 215 MiB, state 96 MB, every host write encodes it
 (README «one `writeFile` … 56 MB 69 ms»)
 (`docs/backlog/distribution/reference/isolate-host-sandbox-template-probes/README.md`). -->
 
 - I1. Intake: `createSandbox({ template })` accepts a `produceDependencySnapshot` artifact (gzip or
-  br, profile `replay` or `frozen`) or the id of one registered in the process; a corrupted,
-  truncated or unsupported artifact, or an unknown id, is refused by name before any sandbox
-  exists; no other conversion is needed on the consumer's side.
+  br, profile `replay` or `frozen`) or the id of one registered in the process; registering returns
+  the template's identity `{id, version}`, derived from the artifact alone and documented, and that
+  identity is the id `createSandbox` takes; a corrupted, truncated or unsupported artifact, or an
+  unknown id, is refused by name before any sandbox exists; no other conversion is needed on the
+  consumer's side.
 - I2. Mount: the guest sees the artifact's `payload/node_modules` at `/node_modules` and nothing
   else of it (`rifty/*`, `payload/package.json`, the lock); `require('<lib>')`, `require.resolve`
   and `module.paths` from `/workspace/main.js` resolve into it as Node's do over the same tree.
@@ -93,9 +97,13 @@ consumer encode/decode per exec, isolate floor 215 MiB, state 96 MB, every host 
 - I8. Deferred, loud: `snapshot()` and `createSandbox({ snapshot })` over a template throw
   `NotImplementedError('isolate-host.sandbox-template-snapshot')` + compat ❌; sandboxes without a
   template keep ADR-0567 v1 snapshots unchanged.
-- I9. Unchanged guarantees: `isolate-host-live-sandbox` I1–I9 hold for a sandbox over a template
+- I9. Unchanged guarantees: `isolate-host-live-sandbox` I1–I8 hold for a sandbox over a template
   (a killed run rolls back its difference and its template changes; destroy, ordering, limits,
-  trust), and `runCode` does not change.
+  trust) — its I9 (snapshot round trip) is I8's deferred gap here — and `runCode` does not change.
+- I10. Documented route: the README builds the template from `package.json` + lock with
+  `produceDependencySnapshot` run in plain Node (the published `@riftydev/workbench`), passes it to
+  `createSandbox`, and requires each of the four libraries from a sandbox run — each `require`
+  succeeding, proven by the carrier on that artifact.
 
 ## Challenge
 
@@ -108,10 +116,10 @@ challenge: 2026-11-24 — 9 problems (fresh critic on the requirements, earlier 
 5. Template decode on the worker's main thread delays every slot — ADR-0572 Consequences.
 6. A write-less shared buffer for `views` — not built: the guest that breaks its rifty can write it (ADR-0572 Alternatives).
 7. (c) amends the live-sandbox Outcome «The files stay rifty's in-memory filesystem in the guest's own realm» and repeats the seam the goal's reading rejected — F1 is the user's, both quoted in ADR-0572 §Trust.
-8. Identity: every tar-changing rebuild orphans stored snapshots — requirements §2 mandate the loud refusal; consequence recorded (ADR-0572 Consequences), not a fork.
+8. Identity: every tar-changing rebuild orphans stored snapshots — requirements §2 mandate the loud refusal; consequence recorded with the deferred snapshot (`distribution/isolate-host-sandbox-template-snapshot`), not a fork.
 9. Tools as a fresh subpath export would be a second implementation against the user's «никакой второй независимой реализации; нужен общий набор инструментов» — `epics/isolate-host-agent-tools` Decisions changed to one shared core.
 
-Reconsidered 2026-11-25 for the user's amendments (no persistence; F1 (a); both modes): the route is the user's informed choice between measured arms (critic findings 1–6 bear on (b)/(c), now deferred items); no new agent-recommended direction, premise reused.
+Reconsidered 2026-11-25 for the user's amendments (no persistence; F1 (a); both modes): the route is the user's informed choice between measured arms (critic findings 1–6 bear on (b)/(c), now deferred items); the switch from (b) to (a) is the agent's recommendation the user accepted with the cost in front of them, and the 2026-11-24 critic saw the measured `views` arm; premise reused.
 
 ## Decisions
 
@@ -120,7 +128,7 @@ Reconsidered 2026-11-25 for the user's amendments (no persistence; F1 (a); both 
 - 2026-11-24 — agent: a template's identity (the registry's and the workers' cache key) = `{ rifty/manifest.json templateId, snapshotId }` — `snapshotId` is the sha256 of the decoded tar (`dep-snapshot-producer.ts:203`), the same for gzip and br, recomputable from the artifact alone; `installArtifactIdentity` is a build constant shared by every template one rifty build makes, so it identifies none.
 - 2026-11-24 — agent: the producer stays `@riftydev/workbench`'s `produceDependencySnapshot`, documented as usable from Node CI: published `@riftydev/workbench@0.11.0` produced the four libraries' artifact in plain Node 24 (library probe, PR #430: 14–16 s, 19.9 MB gzip `frozen`, two runs byte-identical; `payload/node_modules` = the `npm ci` tree minus `.bin`/`.package-lock.json`, no shadow substitution); the repo's own `packages/workbench/dist` does not load in plain Node (`ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`, same probe) — the packed package does (`tests/integration/workbench-packed-consumer.mjs`). The acceptance carrier builds its template with it, so the isolate fit is proven by the scenario.
 - 2026-11-25 — user: «Давай запишем бэклок, но пока делать не будем. И оставим как есть.» (F4, a killed run's writes) — a killed run (`timeout`, `memory`, abort) rolls back to the state of before (the sandbox's difference and its template-file changes); keeping its writes stays `distribution/isolate-host-sandbox-killed-run-partial-writes` (draft, route recorded there).
-- 2026-11-25 — user: «И сохранение снапшота песочницы не нужно. Решили, что сохранять все это не будем. Агент может [поработать] с песочницей и забрать из живой песочницы файл. После этого песочницу уничтожаем. Так что все задачи про сохранение и изменение снапшота мы кладем в бэк-лог, и пока не делаем.» (bracket: the voice input's «подъем кто-то», the agent's reading) — requirements §2 (diff-only snapshot, restore by template identity, format v2, compressed budget) leave this goal for `distribution/isolate-host-sandbox-template-snapshot`; over a template, `snapshot()` and `createSandbox({ snapshot })` are `NotImplementedError('isolate-host.sandbox-template-snapshot')` + compat ❌. Kept: the template, cost independence (§3), changed paths, the capture unit (a run's end state still becomes the state for the sandbox's next run).
+- 2026-11-25 — user: «И сохранение снапшота песочницы не нужно. Решили, что сохранять все это не будем. Агент может [поработать] с песочницей и забрать из живой песочницы файл. После этого песочницу уничтожаем. Так что все задачи про сохранение и изменение снапшота мы кладем в бэк-лог, и пока не делаем.» (bracket: the voice input's «подъем кто-то», the agent's reading) — requirements §2 (diff-only snapshot, restore by template identity, format v2, compressed budget) leave this goal for `distribution/isolate-host-sandbox-template-snapshot`; over a template, `snapshot()` and `createSandbox({ snapshot })` are `NotImplementedError('isolate-host.sandbox-template-snapshot')` + compat ❌. Kept: the template, cost independence of host ops and consumer memory (§3, narrowed for runs by F1 below), changed paths, the capture unit (a run's end state still becomes the state for the sandbox's next run).
 - 2026-11-25 — user: «Я бы на самом деле поддержал оба варианта, чтобы можно было выбирать, как ты хочешь написать, сделать [read-only] или [не read-only].» (F2; brackets: the voice input's «редогли или нередонгли», the agent's reading) — a template is writable or read-only per sandbox. Agent: writable by default (an `npm ci`'d `node_modules` is writable), read-only an option of `createSandbox`.
 - 2026-11-25 — user: «ок» (F3, «`/node_modules`, без `package.json` и lock — рекомендую») — the mount is `/node_modules`, only the artifact's `payload/node_modules`.
 - 2026-11-25 — user: «ок» (F1, to «Рекомендация: сейчас копировать шаблон в изолят … Ленивое чтение записать в backlog с поводом взяться: память на одновременный прогон становится узким местом или шаблон заметно растёт. Цена: требование потребителя «стоимость не зависит от размера шаблона» по памяти и задержке выполнится не полностью» after the numbers ~90–100 MiB isolate memory and ~+50 ms per `exec` on the four-library template) — a fresh isolate materializes the template per run (ADR-0572 §2); requirements §3's constant `exec` latency and isolate memory are narrowed to «measured and published» (I5); lazy template reads: `distribution/isolate-host-sandbox-template-lazy-read`.

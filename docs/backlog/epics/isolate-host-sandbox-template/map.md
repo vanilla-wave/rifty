@@ -29,6 +29,12 @@ the carrier hits it:
 
 ## Open questions
 
+- The process registry's lifetime: unregistering or evicting a template (a long-lived consumer
+  that rebuilds its template keeps every old version, ~90 MB each) — owner: agent — settled at item
+  3's PICKUP (an explicit release or one held while a sandbox references it), I4 documented.
+- The guest's sync-only FS (ADR-0572 §2) rests on the user's `createReadStream` track (on top of
+  PR #434, open) — owner: agent — settled when it lands; before, materialization targets the
+  `MemoryFsSync` the guest entry installs, whichever async pairing it has.
 - Template mtimes: the artifact's tar records 0 for every entry (`dep-snapshot-tar.ts` `headerFor`);
   what `fs.statSync` of a template file reports vs `npm ci` (1985-10-26 from npm's tarballs) —
   owner: agent — probe against `npm ci`, then a compat row or the oracle's value.
