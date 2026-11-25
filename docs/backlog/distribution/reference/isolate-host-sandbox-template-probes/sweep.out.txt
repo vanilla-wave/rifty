@@ -1,71 +1,221 @@
 node v24.16.0, darwin/arm64; base {"width":100,"files":5,"size":4096,"depth":2}
 
 ## axis bytes
-{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"place":"workspace","writeMs":0.016,"readMs":0.002,"listMs":0.001,"removeMs":0.01,"rows":1,"wireBytes":388,"budget":2282}
-{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"place":"tpl depth 0","writeMs":0.314,"readMs":0.001,"listMs":0.001,"removeMs":0.123,"rows":100,"wireBytes":16618,"budget":75122}
-{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"place":"tpl depth 1","writeMs":0.234,"readMs":0.001,"listMs":0.001,"removeMs":0.113,"rows":100,"wireBytes":16729,"budget":76122}
-{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"place":"tpl depth 2","writeMs":0.265,"readMs":0.001,"listMs":0.001,"removeMs":0.124,"rows":104,"wireBytes":17567,"budget":81074}
-{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"place":"workspace","writeMs":0.005,"readMs":0.001,"listMs":0.001,"removeMs":0.005,"rows":1,"wireBytes":388,"budget":2282}
-{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"place":"tpl depth 0","writeMs":0.225,"readMs":0.001,"listMs":0.001,"removeMs":0.115,"rows":100,"wireBytes":16618,"budget":75122}
-{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"place":"tpl depth 1","writeMs":0.225,"readMs":0.001,"listMs":0.001,"removeMs":0.119,"rows":100,"wireBytes":16729,"budget":76122}
-{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"place":"tpl depth 2","writeMs":0.252,"readMs":0.001,"listMs":0.001,"removeMs":0.127,"rows":104,"wireBytes":17567,"budget":81074}
+{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"write /workspace","ms":0.016,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"write tpl depth 0","ms":0.31,"rows":100,"wireBytes":16618,"budget":75122}
+{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"write tpl depth 1","ms":0.223,"rows":100,"wireBytes":16729,"budget":76122}
+{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"write tpl depth 2","ms":0.277,"rows":104,"wireBytes":17567,"budget":81074}
+{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"remove tpl depth 1","ms":0.122,"rows":100,"wireBytes":16614,"budget":75248}
+{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"first read of a tpl file","ms":0.12,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"first list /node_modules","ms":0.102,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"first stat /node_modules","ms":0.099,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"rename a tpl package","ms":0.224,"rows":100,"wireBytes":16523,"budget":74408}
+{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"cp 1 file into a tpl package","ms":0.227,"rows":100,"wireBytes":16891,"budget":77580}
+{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"write /workspace after one tpl write","ms":0.104,"rows":100,"wireBytes":16814,"budget":76796}
+{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"idle fresh","idleKiB":3}
+{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"idle after list /node_modules","idleKiB":67}
+{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"write /workspace","ms":0.008,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"write tpl depth 0","ms":0.309,"rows":100,"wireBytes":16618,"budget":75122}
+{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"write tpl depth 1","ms":0.261,"rows":100,"wireBytes":16729,"budget":76122}
+{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"write tpl depth 2","ms":0.286,"rows":104,"wireBytes":17567,"budget":81074}
+{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"remove tpl depth 1","ms":0.12,"rows":100,"wireBytes":16614,"budget":75248}
+{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"first read of a tpl file","ms":0.119,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"first list /node_modules","ms":0.109,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"first stat /node_modules","ms":0.105,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"rename a tpl package","ms":0.232,"rows":100,"wireBytes":16523,"budget":74408}
+{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"cp 1 file into a tpl package","ms":0.224,"rows":100,"wireBytes":16891,"budget":77580}
+{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"write /workspace after one tpl write","ms":0.095,"rows":100,"wireBytes":16814,"budget":76796}
+{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"idle fresh","idleKiB":4}
+{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"idle after list /node_modules","idleKiB":73}
 
 ## axis width
-{"axis":"width","width":10,"entries":71,"templateMB":0.2,"place":"workspace","writeMs":0.004,"readMs":0.001,"listMs":0.001,"removeMs":0.004,"rows":1,"wireBytes":388,"budget":2282}
-{"axis":"width","width":10,"entries":71,"templateMB":0.2,"place":"tpl depth 0","writeMs":0.025,"readMs":0.001,"listMs":0.001,"removeMs":0.015,"rows":10,"wireBytes":1948,"budget":9602}
-{"axis":"width","width":10,"entries":71,"templateMB":0.2,"place":"tpl depth 1","writeMs":0.03,"readMs":0.001,"listMs":0.001,"removeMs":0.016,"rows":10,"wireBytes":2059,"budget":10602}
-{"axis":"width","width":10,"entries":71,"templateMB":0.2,"place":"tpl depth 2","writeMs":0.051,"readMs":0.001,"listMs":0.001,"removeMs":0.028,"rows":14,"wireBytes":2897,"budget":15554}
-{"axis":"width","width":100,"entries":701,"templateMB":2,"place":"workspace","writeMs":0.004,"readMs":0.001,"listMs":0.001,"removeMs":0.004,"rows":1,"wireBytes":388,"budget":2282}
-{"axis":"width","width":100,"entries":701,"templateMB":2,"place":"tpl depth 0","writeMs":0.214,"readMs":0.001,"listMs":0.001,"removeMs":0.115,"rows":100,"wireBytes":16618,"budget":75122}
-{"axis":"width","width":100,"entries":701,"templateMB":2,"place":"tpl depth 1","writeMs":0.222,"readMs":0.001,"listMs":0.001,"removeMs":0.113,"rows":100,"wireBytes":16729,"budget":76122}
-{"axis":"width","width":100,"entries":701,"templateMB":2,"place":"tpl depth 2","writeMs":0.246,"readMs":0.001,"listMs":0.001,"removeMs":0.127,"rows":104,"wireBytes":17567,"budget":81074}
-{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"place":"workspace","writeMs":0.004,"readMs":0.001,"listMs":0.001,"removeMs":0.004,"rows":1,"wireBytes":388,"budget":2282}
-{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"place":"tpl depth 0","writeMs":2.211,"readMs":0.001,"listMs":0.001,"removeMs":1.24,"rows":1000,"wireBytes":163318,"budget":730322}
-{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"place":"tpl depth 1","writeMs":2.192,"readMs":0.001,"listMs":0.001,"removeMs":1.112,"rows":1000,"wireBytes":163429,"budget":731322}
-{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"place":"tpl depth 2","writeMs":2.199,"readMs":0.001,"listMs":0.001,"removeMs":1.115,"rows":1004,"wireBytes":164267,"budget":736274}
-{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"place":"workspace","writeMs":0.005,"readMs":0.001,"listMs":0.001,"removeMs":0.004,"rows":1,"wireBytes":388,"budget":2282}
-{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"place":"tpl depth 0","writeMs":11.758,"readMs":0.003,"listMs":0.003,"removeMs":6.819,"rows":5000,"wireBytes":815318,"budget":3642322}
-{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"place":"tpl depth 1","writeMs":11.723,"readMs":0.003,"listMs":0.003,"removeMs":5.759,"rows":5000,"wireBytes":815429,"budget":3643322}
-{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"place":"tpl depth 2","writeMs":11.821,"readMs":0.004,"listMs":0.004,"removeMs":5.823,"rows":5004,"wireBytes":816267,"budget":3648274}
+{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"write /workspace","ms":0.007,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"write tpl depth 0","ms":0.034,"rows":10,"wireBytes":1948,"budget":9602}
+{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"write tpl depth 1","ms":0.034,"rows":10,"wireBytes":2059,"budget":10602}
+{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"write tpl depth 2","ms":0.053,"rows":14,"wireBytes":2897,"budget":15554}
+{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"remove tpl depth 1","ms":0.02,"rows":10,"wireBytes":1944,"budget":9728}
+{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"first read of a tpl file","ms":0.025,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"first list /node_modules","ms":0.012,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"first stat /node_modules","ms":0.011,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"rename a tpl package","ms":0.031,"rows":10,"wireBytes":1853,"budget":8888}
+{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"cp 1 file into a tpl package","ms":0.042,"rows":10,"wireBytes":2221,"budget":12060}
+{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"write /workspace after one tpl write","ms":0.017,"rows":10,"wireBytes":2144,"budget":11276}
+{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"idle fresh","idleKiB":3}
+{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"idle after list /node_modules","idleKiB":11}
+{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"write /workspace","ms":0.007,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"write tpl depth 0","ms":0.255,"rows":100,"wireBytes":16618,"budget":75122}
+{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"write tpl depth 1","ms":0.241,"rows":100,"wireBytes":16729,"budget":76122}
+{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"write tpl depth 2","ms":0.265,"rows":104,"wireBytes":17567,"budget":81074}
+{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"remove tpl depth 1","ms":0.118,"rows":100,"wireBytes":16614,"budget":75248}
+{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"first read of a tpl file","ms":0.129,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"first list /node_modules","ms":0.123,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"first stat /node_modules","ms":0.114,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"rename a tpl package","ms":0.249,"rows":100,"wireBytes":16523,"budget":74408}
+{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"cp 1 file into a tpl package","ms":0.241,"rows":100,"wireBytes":16891,"budget":77580}
+{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"write /workspace after one tpl write","ms":0.107,"rows":100,"wireBytes":16814,"budget":76796}
+{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"idle fresh","idleKiB":3}
+{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"idle after list /node_modules","idleKiB":72}
+{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"write /workspace","ms":0.006,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"write tpl depth 0","ms":2.329,"rows":1000,"wireBytes":163318,"budget":730322}
+{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"write tpl depth 1","ms":2.151,"rows":1000,"wireBytes":163429,"budget":731322}
+{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"write tpl depth 2","ms":2.15,"rows":1004,"wireBytes":164267,"budget":736274}
+{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"remove tpl depth 1","ms":1.101,"rows":1000,"wireBytes":163314,"budget":730448}
+{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"first read of a tpl file","ms":1.063,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"first list /node_modules","ms":1.074,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"first stat /node_modules","ms":1.15,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"rename a tpl package","ms":2.205,"rows":1000,"wireBytes":163223,"budget":729608}
+{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"cp 1 file into a tpl package","ms":2.116,"rows":1000,"wireBytes":163591,"budget":732780}
+{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"write /workspace after one tpl write","ms":1.027,"rows":1000,"wireBytes":163514,"budget":731996}
+{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"idle fresh","idleKiB":3}
+{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"idle after list /node_modules","idleKiB":625}
+{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"write /workspace","ms":0.009,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"write tpl depth 0","ms":10.814,"rows":5000,"wireBytes":815318,"budget":3642322}
+{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"write tpl depth 1","ms":11.079,"rows":5000,"wireBytes":815429,"budget":3643322}
+{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"write tpl depth 2","ms":10.995,"rows":5004,"wireBytes":816267,"budget":3648274}
+{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"remove tpl depth 1","ms":5.516,"rows":5000,"wireBytes":815314,"budget":3642448}
+{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"first read of a tpl file","ms":5.461,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"first list /node_modules","ms":5.565,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"first stat /node_modules","ms":5.673,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"rename a tpl package","ms":12.396,"rows":5000,"wireBytes":815223,"budget":3641608}
+{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"cp 1 file into a tpl package","ms":10.927,"rows":5000,"wireBytes":815591,"budget":3644780}
+{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"write /workspace after one tpl write","ms":5.189,"rows":5000,"wireBytes":815514,"budget":3643996}
+{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"idle fresh","idleKiB":4}
+{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"idle after list /node_modules","idleKiB":3297}
 
 ## axis files
-{"axis":"files","files":5,"entries":701,"templateMB":2,"place":"workspace","writeMs":0.004,"readMs":0.001,"listMs":0.001,"removeMs":0.004,"rows":1,"wireBytes":388,"budget":2282}
-{"axis":"files","files":5,"entries":701,"templateMB":2,"place":"tpl depth 0","writeMs":0.216,"readMs":0.001,"listMs":0.001,"removeMs":0.124,"rows":100,"wireBytes":16618,"budget":75122}
-{"axis":"files","files":5,"entries":701,"templateMB":2,"place":"tpl depth 1","writeMs":0.22,"readMs":0.001,"listMs":0.001,"removeMs":0.111,"rows":100,"wireBytes":16729,"budget":76122}
-{"axis":"files","files":5,"entries":701,"templateMB":2,"place":"tpl depth 2","writeMs":0.245,"readMs":0.001,"listMs":0.001,"removeMs":0.121,"rows":104,"wireBytes":17567,"budget":81074}
-{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"place":"workspace","writeMs":0.005,"readMs":0.001,"listMs":0.001,"removeMs":0.004,"rows":1,"wireBytes":388,"budget":2282}
-{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"place":"tpl depth 0","writeMs":0.222,"readMs":0.001,"listMs":0.001,"removeMs":0.122,"rows":100,"wireBytes":16618,"budget":75122}
-{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"place":"tpl depth 1","writeMs":0.217,"readMs":0.001,"listMs":0.001,"removeMs":0.111,"rows":100,"wireBytes":16729,"budget":76122}
-{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"place":"tpl depth 2","writeMs":0.419,"readMs":0.001,"listMs":0.001,"removeMs":0.221,"rows":149,"wireBytes":25837,"budget":124954}
+{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"write /workspace","ms":0.006,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"write tpl depth 0","ms":0.239,"rows":100,"wireBytes":16618,"budget":75122}
+{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"write tpl depth 1","ms":0.215,"rows":100,"wireBytes":16729,"budget":76122}
+{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"write tpl depth 2","ms":0.248,"rows":104,"wireBytes":17567,"budget":81074}
+{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"remove tpl depth 1","ms":0.117,"rows":100,"wireBytes":16614,"budget":75248}
+{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"first read of a tpl file","ms":0.119,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"first list /node_modules","ms":0.109,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"first stat /node_modules","ms":0.107,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"rename a tpl package","ms":0.222,"rows":100,"wireBytes":16523,"budget":74408}
+{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"cp 1 file into a tpl package","ms":0.223,"rows":100,"wireBytes":16891,"budget":77580}
+{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"write /workspace after one tpl write","ms":0.103,"rows":100,"wireBytes":16814,"budget":76796}
+{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"idle fresh","idleKiB":3}
+{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"idle after list /node_modules","idleKiB":73}
+{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"write /workspace","ms":0.006,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"write tpl depth 0","ms":0.227,"rows":100,"wireBytes":16618,"budget":75122}
+{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"write tpl depth 1","ms":0.217,"rows":100,"wireBytes":16729,"budget":76122}
+{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"write tpl depth 2","ms":0.42,"rows":149,"wireBytes":25837,"budget":124954}
+{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"remove tpl depth 1","ms":0.117,"rows":100,"wireBytes":16614,"budget":75248}
+{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"first read of a tpl file","ms":0.192,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"first list /node_modules","ms":0.109,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"first stat /node_modules","ms":0.108,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"rename a tpl package","ms":0.232,"rows":100,"wireBytes":16523,"budget":74408}
+{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"cp 1 file into a tpl package","ms":0.223,"rows":100,"wireBytes":16891,"budget":77580}
+{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"write /workspace after one tpl write","ms":0.103,"rows":100,"wireBytes":16814,"budget":76796}
+{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"idle fresh","idleKiB":4}
+{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"idle after list /node_modules","idleKiB":73}
 
 ## axis depth
-{"axis":"depth","depth":2,"entries":701,"templateMB":2,"place":"workspace","writeMs":0.004,"readMs":0.001,"listMs":0.001,"removeMs":0.004,"rows":1,"wireBytes":388,"budget":2282}
-{"axis":"depth","depth":2,"entries":701,"templateMB":2,"place":"tpl depth 0","writeMs":0.216,"readMs":0.001,"listMs":0.001,"removeMs":0.123,"rows":100,"wireBytes":16618,"budget":75122}
-{"axis":"depth","depth":2,"entries":701,"templateMB":2,"place":"tpl depth 1","writeMs":0.225,"readMs":0.001,"listMs":0.001,"removeMs":0.111,"rows":100,"wireBytes":16729,"budget":76122}
-{"axis":"depth","depth":2,"entries":701,"templateMB":2,"place":"tpl depth 2","writeMs":0.244,"readMs":0.001,"listMs":0.001,"removeMs":0.126,"rows":104,"wireBytes":17567,"budget":81074}
-{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"place":"workspace","writeMs":0.004,"readMs":0.001,"listMs":0.001,"removeMs":0.004,"rows":1,"wireBytes":388,"budget":2282}
-{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"place":"tpl depth 0","writeMs":0.221,"readMs":0.001,"listMs":0.001,"removeMs":0.126,"rows":100,"wireBytes":16618,"budget":75122}
-{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"place":"tpl depth 1","writeMs":0.217,"readMs":0.001,"listMs":0.001,"removeMs":0.112,"rows":100,"wireBytes":16729,"budget":76122}
-{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"place":"tpl depth 2","writeMs":0.227,"readMs":0.001,"listMs":0.001,"removeMs":0.115,"rows":100,"wireBytes":16834,"budget":77178}
-{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"place":"workspace","writeMs":0.004,"readMs":0.001,"listMs":0.001,"removeMs":0.004,"rows":1,"wireBytes":388,"budget":2282}
-{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"place":"tpl depth 0","writeMs":0.218,"readMs":0.001,"listMs":0.001,"removeMs":0.129,"rows":100,"wireBytes":16618,"budget":75122}
-{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"place":"tpl depth 1","writeMs":0.228,"readMs":0.001,"listMs":0.001,"removeMs":0.111,"rows":100,"wireBytes":16729,"budget":76122}
-{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"place":"tpl depth 2","writeMs":0.233,"readMs":0.001,"listMs":0.001,"removeMs":0.119,"rows":100,"wireBytes":16834,"budget":77178}
+{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"write /workspace","ms":0.006,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"write tpl depth 0","ms":0.214,"rows":100,"wireBytes":16618,"budget":75122}
+{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"write tpl depth 1","ms":0.217,"rows":100,"wireBytes":16729,"budget":76122}
+{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"write tpl depth 2","ms":0.251,"rows":104,"wireBytes":17567,"budget":81074}
+{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"remove tpl depth 1","ms":0.117,"rows":100,"wireBytes":16614,"budget":75248}
+{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"first read of a tpl file","ms":0.12,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"first list /node_modules","ms":0.109,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"first stat /node_modules","ms":0.107,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"rename a tpl package","ms":0.215,"rows":100,"wireBytes":16523,"budget":74408}
+{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"cp 1 file into a tpl package","ms":0.222,"rows":100,"wireBytes":16891,"budget":77580}
+{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"write /workspace after one tpl write","ms":0.102,"rows":100,"wireBytes":16814,"budget":76796}
+{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"idle fresh","idleKiB":4}
+{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"idle after list /node_modules","idleKiB":73}
+{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"write /workspace","ms":0.007,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"write tpl depth 0","ms":0.225,"rows":100,"wireBytes":16618,"budget":75122}
+{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"write tpl depth 1","ms":0.215,"rows":100,"wireBytes":16729,"budget":76122}
+{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"write tpl depth 2","ms":0.222,"rows":100,"wireBytes":16834,"budget":77178}
+{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"remove tpl depth 1","ms":0.117,"rows":100,"wireBytes":16614,"budget":75248}
+{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"first read of a tpl file","ms":0.15,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"first list /node_modules","ms":0.108,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"first stat /node_modules","ms":0.105,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"rename a tpl package","ms":0.204,"rows":100,"wireBytes":16523,"budget":74408}
+{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"cp 1 file into a tpl package","ms":0.224,"rows":100,"wireBytes":16891,"budget":77580}
+{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"write /workspace after one tpl write","ms":0.103,"rows":100,"wireBytes":16814,"budget":76796}
+{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"idle fresh","idleKiB":4}
+{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"idle after list /node_modules","idleKiB":73}
+{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"write /workspace","ms":0.006,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"write tpl depth 0","ms":0.228,"rows":100,"wireBytes":16618,"budget":75122}
+{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"write tpl depth 1","ms":0.228,"rows":100,"wireBytes":16729,"budget":76122}
+{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"write tpl depth 2","ms":0.234,"rows":100,"wireBytes":16834,"budget":77178}
+{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"remove tpl depth 1","ms":0.118,"rows":100,"wireBytes":16614,"budget":75248}
+{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"first read of a tpl file","ms":0.196,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"first list /node_modules","ms":0.109,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"first stat /node_modules","ms":0.107,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"rename a tpl package","ms":0.215,"rows":100,"wireBytes":16523,"budget":74408}
+{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"cp 1 file into a tpl package","ms":0.223,"rows":100,"wireBytes":16891,"budget":77580}
+{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"write /workspace after one tpl write","ms":0.103,"rows":100,"wireBytes":16814,"budget":76796}
+{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"idle fresh","idleKiB":4}
+{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"idle after list /node_modules","idleKiB":73}
 
-## ratio last / first value along each axis (≈ 1: does not grow)
-{"axis":"bytes","place":"workspace","writeMs":0.31,"readMs":0.5,"listMs":1,"removeMs":0.5,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"bytes","place":"tpl depth 0","writeMs":0.72,"readMs":1,"listMs":1,"removeMs":0.93,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"bytes","place":"tpl depth 1","writeMs":0.96,"readMs":1,"listMs":1,"removeMs":1.05,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"bytes","place":"tpl depth 2","writeMs":0.95,"readMs":1,"listMs":1,"removeMs":1.02,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"width","place":"workspace","writeMs":1.25,"readMs":1,"listMs":1,"removeMs":1,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"width","place":"tpl depth 0","writeMs":470.32,"readMs":3,"listMs":3,"removeMs":454.6,"rows":500,"wireBytes":418.54,"budget":379.33}
-{"axis":"width","place":"tpl depth 1","writeMs":390.77,"readMs":3,"listMs":3,"removeMs":359.94,"rows":500,"wireBytes":396.03,"budget":343.64}
-{"axis":"width","place":"tpl depth 2","writeMs":231.78,"readMs":4,"listMs":4,"removeMs":207.96,"rows":357.43,"wireBytes":281.76,"budget":234.56}
-{"axis":"files","place":"workspace","writeMs":1.25,"readMs":1,"listMs":1,"removeMs":1,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"files","place":"tpl depth 0","writeMs":1.03,"readMs":1,"listMs":1,"removeMs":0.98,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"files","place":"tpl depth 1","writeMs":0.99,"readMs":1,"listMs":1,"removeMs":1,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"files","place":"tpl depth 2","writeMs":1.71,"readMs":1,"listMs":1,"removeMs":1.83,"rows":1.43,"wireBytes":1.47,"budget":1.54}
-{"axis":"depth","place":"workspace","writeMs":1,"readMs":1,"listMs":1,"removeMs":1,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"depth","place":"tpl depth 0","writeMs":1.01,"readMs":1,"listMs":1,"removeMs":1.05,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"depth","place":"tpl depth 1","writeMs":1.01,"readMs":1,"listMs":1,"removeMs":1,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"depth","place":"tpl depth 2","writeMs":0.95,"readMs":1,"listMs":1,"removeMs":0.94,"rows":0.96,"wireBytes":0.96,"budget":0.95}
+## ratio last / first value along each axis (≈ 1: does not grow; small times are noisy)
+{"axis":"bytes","scenario":"write /workspace","ms":0.5,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"bytes","scenario":"write tpl depth 0","ms":1,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"bytes","scenario":"write tpl depth 1","ms":1.17,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"bytes","scenario":"write tpl depth 2","ms":1.03,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"bytes","scenario":"remove tpl depth 1","ms":0.98,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"bytes","scenario":"first read of a tpl file","ms":0.99,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"bytes","scenario":"first list /node_modules","ms":1.07,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"bytes","scenario":"first stat /node_modules","ms":1.06,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"bytes","scenario":"rename a tpl package","ms":1.04,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"bytes","scenario":"cp 1 file into a tpl package","ms":0.99,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"bytes","scenario":"write /workspace after one tpl write","ms":0.91,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"bytes","scenario":"idle fresh","idleKiB":1.33}
+{"axis":"bytes","scenario":"idle after list /node_modules","idleKiB":1.09}
+{"axis":"width","scenario":"write /workspace","ms":1.29,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"width","scenario":"write tpl depth 0","ms":318.06,"rows":500,"wireBytes":418.54,"budget":379.33}
+{"axis":"width","scenario":"write tpl depth 1","ms":325.85,"rows":500,"wireBytes":396.03,"budget":343.64}
+{"axis":"width","scenario":"write tpl depth 2","ms":207.45,"rows":357.43,"wireBytes":281.76,"budget":234.56}
+{"axis":"width","scenario":"remove tpl depth 1","ms":275.8,"rows":500,"wireBytes":419.4,"budget":374.43}
+{"axis":"width","scenario":"first read of a tpl file","ms":218.44,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"width","scenario":"first list /node_modules","ms":463.75,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"width","scenario":"first stat /node_modules","ms":515.73,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"width","scenario":"rename a tpl package","ms":399.87,"rows":500,"wireBytes":439.95,"budget":409.72}
+{"axis":"width","scenario":"cp 1 file into a tpl package","ms":260.17,"rows":500,"wireBytes":367.22,"budget":302.22}
+{"axis":"width","scenario":"write /workspace after one tpl write","ms":305.24,"rows":500,"wireBytes":380.37,"budget":323.16}
+{"axis":"width","scenario":"idle fresh","idleKiB":1.33}
+{"axis":"width","scenario":"idle after list /node_modules","idleKiB":299.73}
+{"axis":"files","scenario":"write /workspace","ms":1,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"files","scenario":"write tpl depth 0","ms":0.95,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"files","scenario":"write tpl depth 1","ms":1.01,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"files","scenario":"write tpl depth 2","ms":1.69,"rows":1.43,"wireBytes":1.47,"budget":1.54}
+{"axis":"files","scenario":"remove tpl depth 1","ms":1,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"files","scenario":"first read of a tpl file","ms":1.61,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"files","scenario":"first list /node_modules","ms":1,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"files","scenario":"first stat /node_modules","ms":1.01,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"files","scenario":"rename a tpl package","ms":1.05,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"files","scenario":"cp 1 file into a tpl package","ms":1,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"files","scenario":"write /workspace after one tpl write","ms":1,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"files","scenario":"idle fresh","idleKiB":1.33}
+{"axis":"files","scenario":"idle after list /node_modules","idleKiB":1}
+{"axis":"depth","scenario":"write /workspace","ms":1,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"depth","scenario":"write tpl depth 0","ms":1.07,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"depth","scenario":"write tpl depth 1","ms":1.05,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"depth","scenario":"write tpl depth 2","ms":0.93,"rows":0.96,"wireBytes":0.96,"budget":0.95}
+{"axis":"depth","scenario":"remove tpl depth 1","ms":1.01,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"depth","scenario":"first read of a tpl file","ms":1.63,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"depth","scenario":"first list /node_modules","ms":1,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"depth","scenario":"first stat /node_modules","ms":1,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"depth","scenario":"rename a tpl package","ms":1,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"depth","scenario":"cp 1 file into a tpl package","ms":1,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"depth","scenario":"write /workspace after one tpl write","ms":1.01,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"depth","scenario":"idle fresh","idleKiB":1}
+{"axis":"depth","scenario":"idle after list /node_modules","idleKiB":1}
+
+## the four-library template: 8793 entries, 86.6 MB, /node_modules width 180
+{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"write /workspace","ms":0.006,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"write tpl depth 0","ms":0.439,"rows":181,"wireBytes":31195,"budget":139586}
+{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"write tpl depth 1","ms":0.444,"rows":189,"wireBytes":32690,"budget":147386}
+{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"write tpl depth 2","ms":0.433,"rows":189,"wireBytes":32785,"budget":148322}
+{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"remove tpl depth 1","ms":0.236,"rows":189,"wireBytes":32579,"budget":146528}
+{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"first read of a tpl file","ms":0.21,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"first list /node_modules","ms":0.205,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"first stat /node_modules","ms":0.199,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"rename a tpl package","ms":0.468,"rows":181,"wireBytes":31102,"budget":138888}
+{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"cp 1 file into a tpl package","ms":0.439,"rows":189,"wireBytes":32852,"budget":148844}
+{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"write /workspace after one tpl write","ms":0.205,"rows":189,"wireBytes":32775,"budget":148060}
+{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"idle fresh","idleKiB":4}
+{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"idle after list /node_modules","idleKiB":134}

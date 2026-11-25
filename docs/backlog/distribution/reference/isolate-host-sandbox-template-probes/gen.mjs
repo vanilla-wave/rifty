@@ -44,7 +44,7 @@ const MUTANTS = {
     'statSync = (p: string) => this.#atSelf(p, () => this.upper.statSync(p));',
     'statSync = (p: string) => this.#at(p, () => this.upper.statSync(p));',
   ],
-  'cp-dest-only': ['this.#dirtyTree(norm(d));', 'this.#dirty(norm(d));'],
+  'cp-dest-only': ['this.#copied(sn, dn, (to) => this.#dirty(to));', 'this.#dirty(dn);'],
   'rm-no-dirty': [
     '      this.#rekey(n, null);\n      this.#dirty(parentOf(n));',
     '      this.#rekey(n, null);',
@@ -623,7 +623,7 @@ for (const [k, p, a] of ${JSON.stringify(ops)}) {
     else if (k === 'utimes') fs.utimesSync(P + p, a / 1000, a / 1000);
     else if (k === 'read') { out.push('=' + fs.readFileSync(P + p, 'utf8')); continue; }
     else if (k === 'readdir') { out.push('=' + fs.readdirSync(P + p, { withFileTypes: true }).map((d) => d.name + ':' + (d.isDirectory() ? 'd' : 'f')).sort().join(',')); continue; }
-    else if (k === 'stat') { const st = fs.statSync(P + p); out.push('=' + JSON.stringify({ d: st.isDirectory(), size: st.isDirectory() ? 0 : st.size, nlink: st.nlink, m: st.mtimeMs < 1.7e12 ? Math.round(st.mtimeMs) : 'now' })); continue; }
+    else if (k === 'stat') { const st = fs.statSync(P + p); const t = (x) => (x < 1.7e12 ? Math.round(x) : 'now'); out.push('=' + JSON.stringify({ f: st.isFile(), d: st.isDirectory(), size: st.isDirectory() ? 0 : st.size, nlink: st.nlink, m: t(st.mtimeMs), a: t(st.atimeMs), c: t(st.ctimeMs), b: t(st.birthtimeMs) })); continue; }
     out.push('ok');
   } catch (e) { out.push(e.code); }
 }

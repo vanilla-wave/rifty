@@ -26,31 +26,37 @@ node v24.16.0, darwin/arm64; 3000 sequences, seeds 1..3000
      50 × stat: rifty ={"f":false,"d":true,"size":0,"nlink":2,"m":1600000000000,"a":1600000000000,"c":1600000000000,"b":1600000000000} / node ={"f":false,"d":true,"size":0,"nlink":4,"m":1600000000000,"a":1600000000000,"c":"now","b":1600000000000}
      46 × cp: rifty EINVAL / node ERR_FS_CP_EINVAL
 
-## guest sample (fresh isolate, rifty fs): layer = flat in 300/300; equal to node in 126/300; layer ≠ node where flat = node in 0/300
-   59 × rifty fs vs node (flat too), first difference tree (times)
+## guest sample (fresh isolate, rifty fs): layer = flat in 300/300; equal to node in 110/300; layer ≠ node where flat = node in 0/300
+   48 × rifty fs vs node (flat too), first difference tree (times)
+   21 × rifty fs vs node (flat too), first difference stat: rifty ={"f":true,"d":false,"size":1,"nlink":1,"m":1600000000000,"a":1600000000000,"c":1600000000000,"b":1600000000000} / node ={"f":true,"d":false,"size":1,"nlink":1,"m":1600000000000,"a":1600000000000,"c":"now","b":1600000000000}
    13 × rifty fs vs node (flat too), first difference copy: rifty EISDIR / node ENOTSUP
-   11 × rifty fs vs node (flat too), first difference stat: rifty ={"d":true,"size":0,"nlink":2,"m":1600000000000} / node ={"d":true,"size":0,"nlink":4,"m":1600000000000}
-   11 × rifty fs vs node (flat too), first difference stat: rifty ={"d":true,"size":0,"nlink":3,"m":1600000000000} / node ={"d":true,"size":0,"nlink":5,"m":1600000000000}
-   10 × rifty fs vs node (flat too), first difference cp: rifty ENOENT / node ok
-   9 × rifty fs vs node (flat too), first difference rename: rifty EINVAL / node ENOTDIR
+   10 × rifty fs vs node (flat too), first difference stat: rifty ={"f":false,"d":true,"size":0,"nlink":2,"m":1600000000000,"a":1600000000000,"c":1600000000000,"b":1600000000000} / node ={"f":false,"d":true,"size":0,"nlink":4,"m":1600000000000,"a":1600000000000,"c":"now","b":1600000000000}
+   10 × rifty fs vs node (flat too), first difference stat: rifty ={"f":false,"d":true,"size":0,"nlink":3,"m":1600000000000,"a":1600000000000,"c":1600000000000,"b":1600000000000} / node ={"f":false,"d":true,"size":0,"nlink":5,"m":1600000000000,"a":1600000000000,"c":"now","b":1600000000000}
    9 × rifty fs vs node (flat too), first difference rename: rifty ok / node ENOENT
-   9 × rifty fs vs node (flat too), first difference stat: rifty ={"d":true,"size":0,"nlink":2,"m":1600000000000} / node ={"d":true,"size":0,"nlink":3,"m":1600000000000}
-   8 × rifty fs vs node (flat too), first difference copy: rifty EISDIR / node ENOENT
-   5 × rifty fs vs node (flat too), first difference stat: rifty ={"d":true,"size":0,"nlink":2,"m":"now"} / node ={"d":true,"size":0,"nlink":3,"m":"now"}
-   5 × rifty fs vs node (flat too), first difference stat: rifty ={"d":true,"size":0,"nlink":3,"m":1600000000000} / node ={"d":true,"size":0,"nlink":4,"m":1600000000000}
-   4 × rifty fs vs node (flat too), first difference cp: rifty EINVAL / node ERR_FS_CP_EINVAL
+   8 × rifty fs vs node (flat too), first difference rename: rifty EINVAL / node ENOTDIR
+   8 × rifty fs vs node (flat too), first difference stat: rifty ={"f":false,"d":true,"size":0,"nlink":2,"m":1600000000000,"a":1600000000000,"c":1600000000000,"b":1600000000000} / node ={"f":false,"d":true,"size":0,"nlink":3,"m":1600000000000,"a":1600000000000,"c":"now","b":1600000000000}
+   7 × rifty fs vs node (flat too), first difference copy: rifty EISDIR / node ENOENT
+   7 × rifty fs vs node (flat too), first difference cp: rifty ENOENT / node ok
+   6 × rifty fs vs node (flat too), first difference stat: rifty ={"f":false,"d":true,"size":0,"nlink":4,"m":1600000000000,"a":1600000000000,"c":1600000000000,"b":1600000000000} / node ={"f":false,"d":true,"size":0,"nlink":4,"m":1600000000000,"a":1600000000000,"c":"now","b":1600000000000}
+   6 × rifty fs vs node (flat too), first difference stat: rifty ={"f":true,"d":false,"size":21,"nlink":1,"m":1600000000000,"a":1600000000000,"c":1600000000000,"b":1600000000000} / node ={"f":true,"d":false,"size":21,"nlink":1,"m":1600000000000,"a":1600000000000,"c":"now","b":1600000000000}
+   5 × rifty fs vs node (flat too), first difference stat: rifty ={"f":false,"d":true,"size":0,"nlink":3,"m":1600000000000,"a":1600000000000,"c":1600000000000,"b":1600000000000} / node ={"f":false,"d":true,"size":0,"nlink":4,"m":1600000000000,"a":1600000000000,"c":"now","b":1600000000000}
    4 × rifty fs vs node (flat too), first difference cp: rifty EEXIST / node ERR_FS_CP_DIR_TO_NON_DIR
    3 × rifty fs vs node (flat too), first difference cp: rifty EINVAL / node ERR_FS_CP_DIR_TO_NON_DIR
+   3 × rifty fs vs node (flat too), first difference stat: rifty ={"f":true,"d":false,"size":19,"nlink":1,"m":1600000000000,"a":1600000000000,"c":1600000000000,"b":1600000000000} / node ={"f":true,"d":false,"size":19,"nlink":1,"m":1600000000000,"a":1600000000000,"c":"now","b":1600000000000}
    3 × rifty fs vs node (flat too), first difference cp: rifty EISDIR / node ERR_FS_CP_NON_DIR_TO_DIR
+   3 × rifty fs vs node (flat too), first difference cp: rifty EINVAL / node ERR_FS_CP_EINVAL
+   3 × rifty fs vs node (flat too), first difference stat: rifty ={"f":false,"d":true,"size":0,"nlink":2,"m":"now","a":"now","c":"now","b":"now"} / node ={"f":false,"d":true,"size":0,"nlink":3,"m":"now","a":"now","c":"now","b":"now"}
    2 × rifty fs vs node (flat too), first difference cp: rifty ok / node ERR_FS_CP_EINVAL
-   2 × rifty fs vs node (flat too), first difference stat: rifty ={"d":true,"size":0,"nlink":2,"m":"now"} / node ={"d":true,"size":0,"nlink":4,"m":1600000000000}
-   1 × rifty fs vs node (flat too), first difference stat: rifty ={"d":true,"size":0,"nlink":2,"m":"now"} / node ={"d":true,"size":0,"nlink":4,"m":"now"}
+   2 × rifty fs vs node (flat too), first difference stat: rifty ={"f":false,"d":true,"size":0,"nlink":2,"m":"now","a":1600000000000,"c":1600000000000,"b":1600000000000} / node ={"f":false,"d":true,"size":0,"nlink":4,"m":1600000000000,"a":1600000000000,"c":"now","b":1600000000000}
+   1 × rifty fs vs node (flat too), first difference stat: rifty ={"f":false,"d":true,"size":0,"nlink":2,"m":"now","a":1600000000000,"c":1600000000000,"b":1600000000000} / node ={"f":false,"d":true,"size":0,"nlink":4,"m":"now","a":1600000000000,"c":"now","b":1600000000000}
    1 × rifty fs vs node (flat too), first difference cp: rifty ENOTDIR / node ERR_FS_CP_EINVAL
-   1 × rifty fs vs node (flat too), first difference stat: rifty ={"d":true,"size":0,"nlink":3,"m":"now"} / node ={"d":true,"size":0,"nlink":4,"m":"now"}
-   1 × rifty fs vs node (flat too), first difference stat: rifty ={"d":true,"size":0,"nlink":3,"m":"now"} / node ={"d":true,"size":0,"nlink":4,"m":1600000000000}
-   1 × rifty fs vs node (flat too), first difference stat: rifty ={"d":true,"size":0,"nlink":3,"m":"now"} / node ={"d":true,"size":0,"nlink":5,"m":"now"}
-   1 × rifty fs vs node (flat too), first difference stat: rifty ={"d":true,"size":0,"nlink":2,"m":"now"} / node ={"d":true,"size":0,"nlink":3,"m":1600000000000}
-   1 × rifty fs vs node (flat too), first difference stat: rifty ={"d":true,"size":0,"nlink":4,"m":"now"} / node ={"d":true,"size":0,"nlink":5,"m":"now"}
+   1 × rifty fs vs node (flat too), first difference stat: rifty ={"f":false,"d":true,"size":0,"nlink":3,"m":"now","a":1600000000000,"c":1600000000000,"b":1600000000000} / node ={"f":false,"d":true,"size":0,"nlink":4,"m":"now","a":1600000000000,"c":"now","b":1600000000000}
+   1 × rifty fs vs node (flat too), first difference stat: rifty ={"f":false,"d":true,"size":0,"nlink":3,"m":"now","a":1600000000000,"c":1600000000000,"b":1600000000000} / node ={"f":false,"d":true,"size":0,"nlink":4,"m":1600000000000,"a":1600000000000,"c":"now","b":1600000000000}
+   1 × rifty fs vs node (flat too), first difference stat: rifty ={"f":false,"d":true,"size":0,"nlink":3,"m":"now","a":1600000000000,"c":1600000000000,"b":1600000000000} / node ={"f":false,"d":true,"size":0,"nlink":5,"m":"now","a":1600000000000,"c":"now","b":1600000000000}
+   1 × rifty fs vs node (flat too), first difference stat: rifty ={"f":true,"d":false,"size":21,"nlink":1,"m":"now","a":"now","c":"now","b":"now"} / node ={"f":true,"d":false,"size":21,"nlink":1,"m":"now","a":1600000000000,"c":"now","b":1600000000000}
+   1 × rifty fs vs node (flat too), first difference stat: rifty ={"f":false,"d":true,"size":0,"nlink":2,"m":"now","a":1600000000000,"c":1600000000000,"b":1600000000000} / node ={"f":false,"d":true,"size":0,"nlink":3,"m":1600000000000,"a":1600000000000,"c":"now","b":1600000000000}
+   1 × rifty fs vs node (flat too), first difference stat: rifty ={"f":false,"d":true,"size":0,"nlink":2,"m":"now","a":1600000000000,"c":1600000000000,"b":1600000000000} / node ={"f":false,"d":true,"size":0,"nlink":3,"m":"now","a":1600000000000,"c":"now","b":1600000000000}
+   1 × rifty fs vs node (flat too), first difference stat: rifty ={"f":false,"d":true,"size":0,"nlink":4,"m":"now","a":1600000000000,"c":1600000000000,"b":1600000000000} / node ={"f":false,"d":true,"size":0,"nlink":5,"m":"now","a":1600000000000,"c":"now","b":1600000000000}
 
 shared template bytes unchanged after all runs: true
 gen exit=0

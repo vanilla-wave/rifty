@@ -231,8 +231,8 @@ the user's words»).
    and its isolate memory over a ~1 MB and a ~95 MB template; a host `writeFile`/`list`/`remove` and
    the consumer's peak memory per run do not grow with the template; an empty sandbox over the
    ~95 MB template runs with the default `maxFsBytes` and `memoryLimitMb`; N sandboxes over one
-   template hold one copy of it in the consumer, each idle one only its own changes (a changed
-   template directory listed with a row per untouched child).
+   template hold one copy of it in the consumer, each idle one only its own changes (with, while
+   the width dependency stands, the template directories it touched — map.md).
 8. A guest that breaks its own runtime (replaced intrinsics) cannot leave a tree its file
    operations did not produce while its run reads as success (live-sandbox I1).
 9. The README shows building the template from `package.json` + lock and requiring each of the
@@ -281,7 +281,7 @@ the user's words»).
   on landed code and published in the README for T1, T95 and the four-library artifact
   (`scripts/measure.mjs`) as a sweep — template bytes × entries × directory width × depth, host
   `writeFile` / `readFile` / `list` / `remove` and the next `exec`'s wire, at `/workspace` and at
-  template directories of depth 0–2 — each claim «does not grow» a row with a slope ≈ 1, each other
+  template directories of depth 0–2 — each claim «does not grow» a row with a last/first ratio ≈ 1, each other
   slope named in the README (probe W's shape): host-op medians, idle memory per sandbox, the consumer's peak memory per
   run, a warm `exec`'s latency and isolate memory (the smallest passing `memoryLimitMb`, bisection
   in 4 MiB steps). An empty sandbox over T95 and over the
@@ -351,16 +351,23 @@ the user's words»).
   entries and bytes (the capture visits only what the run touched) (ADR-0568 Consequences' fork, brought back and answered by the
   user 2026-11-25). The wire, the consumer's per-run memory and host ops carry the sandbox's own
   nodes and reference rows only.
-- A rename of a template directory moves its marker: no subtree copy, no bytes, no cap pressure
-  (the ceiling of the existence-derived draft is gone).
-- **Open dependency (user fork, goal map):** a changed template directory is opaque, it lists all
-  its children (rows for the untouched ones). So a write or removal inside a template directory
-  costs, carries and counts a row per child of every template directory on its path: linear in
-  their width (probe W, 10 → 5 000 packages, write in `/node_modules/pkg/new.js`: 0.03 → 11.8 ms,
-  10 → 5 000 rows, 1.9 → 815 KB on the wire; ~730 cap units per row — 209 packages ≈ 170 KiB of the
-  cap). Requirements §3 ask O(the write + the difference) and a constant between ~1 MB and ~95 MB
-  templates: this is a narrowing until the user accepts it, or a directory delta replaces it. Every
-  other operation × place × template axis is flat (probe W).
+- A rename of a template directory moves its marker: no subtree copy, no bytes (the ceiling of the
+  existence-derived draft is gone); its parent becomes explicit, so the rename carries a row per
+  sibling (the width dependency below).
+- **Open dependency (user fork, goal map) — the width of template directories.** A template
+  directory is materialized whole on first touch and an explicit directory is opaque, so every
+  operation touching one — its first read, `list` or `stat`; a write, removal, rename or copy
+  inside it — costs in proportion to its width; a change makes it carry a row per child on the wire
+  and in the cap (~730 units per row; 209 packages ≈ 150–170 KiB), and the rows stay for later
+  writes (a `/workspace` write after it pays them too); an idle sandbox after a touch holds its
+  children. Probe W, 10 → 5 000 packages: first touch 0.01 → 5.5 ms, a write in a package 0.04 →
+  10.6 ms / 10 → 5 000 rows, idle after one listing 11 KiB → 3.3 MiB; the four-library template
+  (`/node_modules` 180 wide): first touch 0.2 ms, a write in a package 0.44 ms, 189 rows, 33 KB,
+  147 k cap units (0.2 % of 64 MiB), idle after a listing 134 KiB. Template bytes, total entries
+  and depth are flat on every scenario; `/workspace` with no template touch is constant.
+  Requirements §3 ask constant costs between ~1 MB and ~95 MB templates and an idle memory without
+  the template: a narrowing until the user accepts it, or a redesign (a directory delta +
+  per-entry lazy lookup) replaces it.
 - Per-call overhead of the layered class in a run (probe F, load ~5): +18…+25 ms on the four
   libraries' generators, four at once +7…+41 ms — inside the F1 return condition; map item 5
   re-measures it on landed code.

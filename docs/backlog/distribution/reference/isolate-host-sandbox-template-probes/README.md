@@ -89,9 +89,8 @@ package; idle = heap + ArrayBuffers per sandbox over 20 held sandboxes, one 10 K
 `readFile`, `list('/node_modules')`, `remove` ≤ 0.06 ms in every arm. Requirements §3: «Хостовая
 запись стоит O(размер записи + дифф), а не O(всего состояния)», «Память простаивающей песочницы у
 потребителя не включает шаблон: N песочниц на одном шаблоне держат одну его копию» — `layered`
-meets both for writes in `/workspace` (and a write costs the same after the host listed the whole
-template: the cap check enters only changed directories; listing changes nothing); `views` does
-not. A write **inside a template directory** grows with that directory's width — probe W.
+meets both for writes in `/workspace` that follow no template change (H's rows); `views` does not.
+Every operation **touching a template directory** grows with that directory's width — probe W.
 
 ## S — named sequences against live Node (`layered.ts`, `seq.mjs`, `seq.out.txt`)
 
@@ -146,10 +145,12 @@ counted apart). A failure prints its seed and a greedily minimized sequence.
 | `layered.ts` (node identity, untouched = one row) | **0 / 7** | **0 / 3 000** | **0 / 3 000** | 1 046 / 0 |
 
 1 954 of `layered.ts`'s 3 000 sequences are outside the Node comparison: rifty's FS without a
-layer already differs from `node:fs` there (codes, times, `nlink` on APFS). Guest sample (seeds
+layer already differs from `node:fs` there — codes, `nlink` on APFS, and times; a part of the time
+differences is the oracle's (Node cannot set a past `ctime`, so a `stat` of a template entry shows
+«now» in Node and the template's time in rifty). Guest sample (seeds
 1 000 001..1 000 300, rifty `fs` in a fresh isolate over `layered.ts` vs rifty's plain
 `MemoryFsSync` with the same files in a fresh isolate vs `node` running the same program): layer =
-no layer 300 / 300, equal to Node 126 / 300, the rest differ from Node without a template too
+no layer 300 / 300 (whole `stat` values compared), equal to Node 110 / 300, the rest differ from Node without a template too
 (recorded: `backlog/runtime-js/fs-generated-sequence-divergences-from-node`). The shared template
 bytes hash the same after all runs. Exit 0 only if `layered.ts` is clean on every count.
 
@@ -164,31 +165,55 @@ rule — all exit 1: `stat-lazy` (no materialize before `stat`) 18 / 1 000, mini
 
 Consumer side, `layered.ts`, synthetic `/node_modules/pkg-NNNNN/…` templates, one axis at a time
 from a base of 100 packages × 5 files × 4 KiB at package depth 2: bytes (4 → 64 KiB per file),
-width (10 / 100 / 1 000 / 5 000 packages), files per package (5 → 50), depth (2 → 6 → 12);
-operations: host `writeFile` 10 B, `readFile`, `list`, `remove`, and what the next `exec` carries
-(rows, wire bytes = blob + rows' JSON, the cap's count); places: `/workspace/x.js`,
-`/node_modules/new.js`, `/node_modules/pkg-00000/new.js`, `/node_modules/pkg-00000/lib/new.js`.
-Median of 21, fresh sandbox per cell. Ratio last / first value along each axis (≈ 1 = flat):
+width (10 / 100 / 1 000 / 5 000 packages), files per package (5 → 50), depth (2 → 6 → 12).
+Scenarios, each timed on a fresh sandbox (median of 21), then what the next `exec` carries (rows,
+wire bytes = blob + rows' JSON) and the cap's count: host writes at `/workspace` and in template
+directories of depth 0/1/2; a removal; the FIRST read of a template file, `list` and `stat` of
+`/node_modules`; a rename of a template package; a copy of one file into a package; a `/workspace`
+write after one template write; an idle sandbox's memory (heap + ArrayBuffers per sandbox over 20),
+fresh and after one `list('/node_modules')`. Not varied: the number of sandboxes (each holds its
+own), the in-isolate cost per run (template copy + index: grows with bytes and entries — the
+user-accepted F1 dependency, probes L and F).
 
-| axis | `/workspace` (every op, wire, cap) | template dir, depth 0–2: read, list | template dir, depth 0–2: write, remove, rows, wire, cap |
-|---|---|---|---|
-| bytes ×16 | flat | flat | flat |
-| files ×10 | flat | flat | flat (depth 2: ×1.4–1.8, the package's own `lib` listing 5 → 50 rows) |
-| depth ×6 | flat | flat | flat |
-| **width ×500** | **flat** | flat (µs) | **×230–500: linear in the width** |
+Ratio last / first value along each axis (≈ 1 = flat; sub-0.05 ms times are noisy):
 
-Width at a template place, write in `/node_modules/pkg-00000/new.js`:
+| axis | every scenario: time, rows, wire, cap, idle |
+|---|---|
+| bytes ×16 | flat |
+| files ×10 | flat (a write at depth 2 ×1.4–1.5: its own `lib` lists 5 → 50 children) |
+| depth ×6 | flat |
+| **width ×500** | `/workspace` with no template touch flat; **every scenario touching a template directory ×200–500** |
 
-| packages | write + cap check | rows | wire | cap units |
+Width, 10 → 100 → 1 000 → 5 000 packages (ms; rows on the wire after it):
+
+| scenario | 10 | 100 | 1 000 | 5 000 |
 |---|---|---|---|---|
-| 10 | 0.03 ms | 10 | 2.1 KB | 10 602 |
-| 100 | 0.22 ms | 100 | 16.7 KB | 76 122 |
-| 1 000 | 2.19 ms | 1 000 | 163 KB | 731 322 |
-| 5 000 | 11.7 ms | 5 000 | 815 KB | 3 643 322 |
+| write `/workspace` | 0.007, 1 | 0.007, 1 | 0.006, 1 | 0.008, 1 |
+| write in a package (depth 1) | 0.036, 10 | 0.24, 100 | 2.10, 1 000 | 10.6, 5 000 |
+| removal in a package | 0.020, 10 | 0.12, 100 | 1.07, 1 000 | 5.46, 5 000 |
+| first read of a template file | 0.027, 1 | 0.13, 1 | 1.05, 1 | 5.46, 1 |
+| first `list` / `stat` of `/node_modules` | 0.011, 1 | 0.12, 1 | 1.07–1.14, 1 | 5.50–5.57, 1 |
+| rename a package | 0.029, 10 | 0.23, 100 | 2.19, 1 000 | 11.2, 5 000 |
+| copy 1 file into a package | 0.039, 10 | 0.23, 100 | 2.12, 1 000 | 10.9, 5 000 |
+| write `/workspace` after one template write | 0.017, 10 | 0.11, 100 | 1.03, 1 000 | 5.21, 5 000 |
+| idle sandbox, fresh / after one listing | 3 / 11 KiB | 3 / 73 KiB | 3 / 625 KiB | 4 / 3 300 KiB |
 
-`/workspace/x.js` at every width: 0.004 ms, 1 row, 388 B, 2 282 units. ~730 cap units per row
-(path-length dependent). The per-run cost inside the isolate (template copy + index) grows with the
-template's bytes and entries — the user-accepted F1 dependency, measured in L and F, not here.
+The four-library template itself (`sweep.mjs <node_modules of npm ci ../isolate-library-probe/deps>`:
+8 793 entries, 86.6 MB, `/node_modules` width 180; package `pdf-lib`):
+
+| scenario | ms | rows on the wire | wire bytes | cap units |
+|---|---|---|---|---|
+| write `/workspace` | 0.006 | 1 | 388 | 2 282 |
+| first read of a template file / first `list` / first `stat` of `/node_modules` | 0.20–0.21 | 1 | 303 | 1 608 |
+| write in `pdf-lib` (depth 1) | 0.44 | 189 | 32.7 KB | 147 386 (0.2 % of the 64 MiB cap) |
+| removal / rename / copy of 1 file in `pdf-lib` | 0.24 / 0.47 / 0.44 | 181–189 | 31–33 KB | 139–149 k |
+| write `/workspace` after one write in `pdf-lib` | 0.21 | 189 | 32.8 KB | 148 060 |
+| idle sandbox, fresh / after one `list('/node_modules')` | — | — | — | 4 / 134 KiB |
+
+Cap: ~730 units per row (path-length dependent): 2 282 units for a `/workspace` write at every
+width, 3.64 M after a write in a package at 5 000. The one non-flat axis is the width of the
+template directories an operation touches: they are materialized whole on first touch, and a
+changed one is explicit and opaque (ADR-0572 Consequences, the user fork in the goal map).
 
 ## F — the F1 return condition's metric on real programs (`gens.mjs`, `gens.out.txt`)
 

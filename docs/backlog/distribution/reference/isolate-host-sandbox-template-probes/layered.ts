@@ -204,11 +204,17 @@ export class LayeredFs {
     this.#materialize(n);
     return fn();
   }
-  /** A copy writes every path of its destination tree: each is a mutation. */
-  #dirtyTree(p: string): void {
-    this.#dirty(p);
-    if (!this.upper.existsSync(p) || !this.upper.statSync(p).isDirectory) return;
-    for (const d of this.upper.readdirSync(p)) this.#dirtyTree(join(p, d.name));
+  /**
+   * The destination paths a recursive copy of `s` to `d` writes: `d` + each path of the source
+   * tree. `visit(destinationPath, isDirectory)` for each, the source walked (never the destination).
+   */
+  #copied(s: string, d: string, visit: (to: string, dir: boolean) => void): void {
+    if (!this.upper.existsSync(s)) return;
+    const dir = this.upper.statSync(s).isDirectory;
+    visit(d, dir);
+    if (dir)
+      for (const e of this.upper.readdirSync(s))
+        this.#copied(join(s, e.name), join(d, e.name), visit);
   }
 
   // ---- FsSync: reads change nothing; each mutation marks its path ----
@@ -266,11 +272,17 @@ export class LayeredFs {
     this.#dirty(norm(d));
   };
   cpSync = (s: string, d: string, o?: { recursive?: boolean }): void => {
-    // A recursive copy merges into an existing destination tree: both must hold their real children.
-    this.#touchTree(norm(s));
-    this.#touchTree(norm(d));
+    // A recursive copy merges into the destination: the directories it writes into must hold their
+    // real children — only those, found by walking the source; then every path it wrote is a mutation.
+    const sn = norm(s);
+    const dn = norm(d);
+    this.#touchTree(sn);
+    this.#touch(dn);
+    this.#copied(sn, dn, (to, dir) => {
+      if (dir) this.#materialize(to);
+    });
     this.upper.cpSync(s, d, o);
-    this.#dirtyTree(norm(d));
+    this.#copied(sn, dn, (to) => this.#dirty(to));
   };
   renameSync = (s: string, d: string): void => {
     const sn = norm(s);

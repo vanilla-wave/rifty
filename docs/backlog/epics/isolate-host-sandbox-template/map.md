@@ -41,12 +41,19 @@ the carrier hits it:
 
 ## Open questions
 
-- A write or removal inside a template directory costs, and carries on the wire, a row per child
-  of every template directory on its path (probe W: linear in their width; ~730 cap units per
-  row) — owner: user — asked 2026-11-25 by the manager: (1) accept as a declared narrowing of
-  requirements §3 + a backlog item with owner, trigger and lifting condition; (2) a directory
-  delta (`lazy(O)` + its changed children + its removed names; only a recreated directory
-  opaque). The goal is draft until the answer; (2) is its own round after it.
+- Width of template directories (probe W, the one axis with a slope): any operation touching a
+  template directory — first read / `list` / `stat`, write, removal, rename, copy inside it — costs
+  in proportion to its width, a change puts a row per child on the wire and in the cap (~730 units
+  per row), and the rows stay for later writes; an idle sandbox after a touch holds its children
+  (11 KiB → 3.3 MiB at 10 → 5 000 packages; the four-library template, 180 wide: first touch 0.2
+  ms, a write in a package 0.44 ms / 189 rows / 33 KB / 0.2 % of the cap, idle after a listing
+  134 KiB) — owner: user — asked 2026-11-25 by the manager, the
+  agent's proposed wording sent to him: (1) accept as a declared narrowing of requirements §3 + a
+  backlog item (owner, trigger «a template directory wider than N», lifting condition); (2)
+  redesign — a directory delta (`lazy(O)` + changed children + removed names, only a recreated
+  directory opaque) and per-entry lazy lookup (no sibling materialization): back to merging
+  layers, the N1/N2 class, then under probe G. Bytes, entries and depth are flat already. The
+  goal is draft until the answer; (2) is its own round after it.
 - The process registry's lifetime: unregistering or evicting a template (a long-lived consumer
   that rebuilds its template keeps every old version, ~90 MB each) — owner: agent — settled at item
   3's PICKUP (an explicit release or one held while a sandbox references it), I4 documented.

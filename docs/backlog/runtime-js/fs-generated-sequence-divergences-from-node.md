@@ -14,7 +14,7 @@ Found mid-task by the template goal's generator (`gen.mjs`, 2026-11-25, Node v24
 arm64): random sequences of `mkdir`, write, `rm`, `rename`, `cpSync`, `copyFileSync`, `utimes`,
 read, `readdir` and `stat` over a 6-file tree, run by rifty's flat `MemoryFsSync` (no template)
 and by `node:fs` over a real directory; a 300-sequence sample through rifty's guest `fs` in a fresh
-isolate against `node` running the same program (`gen.out.txt`: 126/300 equal; every other
+isolate against `node` running the same program (`gen.out.txt`: 110/300 equal with whole `stat` values; every other
 difference is there without a template too).
 
 Minimal calls (Node v24.16.0 verified 2026-11-25; rifty from `gen.out.txt` and the code):
