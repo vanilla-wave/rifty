@@ -8,7 +8,7 @@ NM=$1; PRE=$2; shift 2
 HERE=$(cd "$(dirname "$0")" && pwd)
 docker run --rm --cpus 4 -m 6g \
   -v "$HERE":/probe:ro -v "$NM":/nm:ro -v "$PRE":/pre:ro \
-  -e LIFE_PREBUILT=/pre -e LIMIT -e N -e ARMS -e K -e MEMW -e HN \
+  -e LIFE_PREBUILT=/pre -e LIMIT -e N -e ARMS -e K -e MEMW -e HN -e WL -e PAUSE -e TK -e TR \
   node:24.16.0-bookworm bash -c "
     set -e; mkdir -p /w && cd /w && npm init -y >/dev/null && npm i --silent isolated-vm@7.0.2 >/dev/null
     cp /probe/life.mjs /w/life.mjs && mkdir -p /w/attacks && cp /probe/attacks/* /w/attacks/

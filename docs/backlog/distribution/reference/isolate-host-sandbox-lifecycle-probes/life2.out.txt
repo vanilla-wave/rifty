@@ -222,3 +222,33 @@
 {"sec":"mem","kind":"v2bs","w":"pdf","K":6,"load":"3.4","perSandboxRssMiB":49,"perSandboxNodeHeapMiB":0.1,"perSandboxArrayBuffersMiB":1.1,"isolateUsedMiB":15.1,"isolateTotalMiB":23.2,"isolateExtMiB":18.7,"afterGcUsedMiB":4.7,"afterGcTotalMiB":16.7,"afterGcExtMiB":16.8}
 {"sec":"mem","kind":"v2s","w":"mix","K":6,"load":"3.4","perSandboxRssMiB":155.2,"perSandboxNodeHeapMiB":0.1,"perSandboxArrayBuffersMiB":0,"isolateUsedMiB":23.8,"isolateTotalMiB":43.7,"isolateExtMiB":100.9,"afterGcUsedMiB":12.5,"afterGcTotalMiB":28.8,"afterGcExtMiB":96.9}
 {"sec":"mem","kind":"v2bs","w":"mix","K":6,"load":"3.7","perSandboxRssMiB":107.1,"perSandboxNodeHeapMiB":0,"perSandboxArrayBuffersMiB":0,"isolateUsedMiB":32,"isolateTotalMiB":39.8,"isolateExtMiB":49.1,"afterGcUsedMiB":10.2,"afterGcTotalMiB":28.6,"afterGcExtMiB":45.1}
+## think (round 3): pause 1 s before every exec, arms interleaved, caller's wall, LIMIT=256, K=5 turns × (create + first + 2 repeats)  15:55  up 6 days,  5:58, 4 users, load averages: 4.62 4.15 4.01
+{"sec":"think","w":"empty","kind":"v1","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"4.5","createMs":0.5,"firstMs":53.6,"firstAll":[38.7,64.8,33.5,63.2,53.6],"repMs":63.8,"turnMs":160.7}
+{"sec":"think","w":"empty","kind":"v1w","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"4.5","createMs":0.5,"firstMs":67.1,"firstAll":[36.1,69.4,44.2,67.1,68.4],"repMs":23.8,"turnMs":98.3}
+{"sec":"think","w":"empty","kind":"v2s","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"4.5","createMs":54.7,"firstMs":31.2,"firstAll":[16.7,34.8,27.5,31.2,34.1],"repMs":24.4,"turnMs":137.2}
+{"sec":"think","w":"empty","kind":"v2bs","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"4.5","createMs":28,"firstMs":28.1,"firstAll":[26.4,34.4,14.2,30.5,28.1],"repMs":24.6,"turnMs":97.6}
+{"sec":"think","w":"pdf","kind":"v1","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"4.2","createMs":0.4,"firstMs":293.4,"firstAll":[297,293.4,248.2,308.9,231.7],"repMs":272.5,"turnMs":828.2}
+{"sec":"think","w":"pdf","kind":"v1w","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"4.2","createMs":0.3,"firstMs":280.3,"firstAll":[268.2,284.7,255.7,287,280.3],"repMs":271.3,"turnMs":806}
+{"sec":"think","w":"pdf","kind":"v2s","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"4.2","createMs":52.7,"firstMs":272.5,"firstAll":[272.5,257.9,277.9,260,277.2],"repMs":236.5,"turnMs":760.3}
+{"sec":"think","w":"pdf","kind":"v2bs","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"4.2","createMs":31.5,"firstMs":274.2,"firstAll":[265.5,264.7,274.2,298.8,293.7],"repMs":241.1,"turnMs":750.4}
+{"sec":"think","w":"xlsx","kind":"v1","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"11.4","createMs":0.4,"firstMs":530.8,"firstAll":[537,530.8,521.4,496,1367.7],"repMs":560.3,"turnMs":1590.5}
+{"sec":"think","w":"xlsx","kind":"v1w","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"11.4","createMs":0.2,"firstMs":588.4,"firstAll":[532.3,588.4,518.5,705.3,1644.2],"repMs":564,"turnMs":1653.2}
+{"sec":"think","w":"xlsx","kind":"v2s","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"11.4","createMs":42.9,"firstMs":547.9,"firstAll":[531.9,522.9,547.9,895.2,1997.4],"repMs":535.4,"turnMs":1634.6}
+{"sec":"think","w":"xlsx","kind":"v2bs","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"11.4","createMs":32.3,"firstMs":597.1,"firstAll":[597.1,631.4,571.1,555.1,1714.7],"repMs":526.5,"turnMs":1612}
+# end 16:00  up 6 days,  6:03, 4 users, load averages: 11.37 6.14 4.79
+## think xlsx rerun on macOS (the first ran at load 11)  16:04  up 6 days,  6:07, 4 users, load averages: 4.53 5.56 4.98
+{"sec":"think","w":"xlsx","kind":"v1","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"5.4","createMs":0.1,"firstMs":630.2,"firstAll":[630.2,614.9,652.7,733,510.1],"repMs":667.5,"turnMs":1988.6}
+{"sec":"think","w":"xlsx","kind":"v1w","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"5.4","createMs":0.2,"firstMs":647.9,"firstAll":[685.5,606.6,647.9,674.5,511.1],"repMs":632.5,"turnMs":1941}
+{"sec":"think","w":"xlsx","kind":"v2s","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"5.4","createMs":35,"firstMs":645.9,"firstAll":[645.9,706.9,659.6,627.1,534],"repMs":546.5,"turnMs":1851.7}
+{"sec":"think","w":"xlsx","kind":"v2bs","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"5.4","createMs":15.3,"firstMs":730.1,"firstAll":[720.1,740.7,789.5,730.1,590],"repMs":519,"turnMs":1907.9}
+# end 16:06  up 6 days,  6:09, 4 users, load averages: 5.41 5.64 5.09
+## think with PAUSE=0 (back to back, caller's wall incl. v1w waiting for its spare)  16:06  up 6 days,  6:10, 4 users, load averages: 5.43 5.64 5.09
+{"sec":"think","w":"empty","kind":"v1","pauseMs":0,"turns":5,"repeatsPerTurn":2,"load":"5.3","createMs":0.1,"firstMs":35,"firstAll":[41.6,34.8,35,36.7,34.8],"repMs":34.9,"turnMs":104.8}
+{"sec":"think","w":"empty","kind":"v1w","pauseMs":0,"turns":5,"repeatsPerTurn":2,"load":"5.3","createMs":0.1,"firstMs":37.1,"firstAll":[37.6,37.1,36.6,40.6,36.1],"repMs":9.8,"turnMs":57.3}
+{"sec":"think","w":"empty","kind":"v2s","pauseMs":0,"turns":5,"repeatsPerTurn":2,"load":"5.3","createMs":27.6,"firstMs":14.2,"firstAll":[14.3,14.2,13.8,14.5,13.6],"repMs":10.2,"turnMs":62.3}
+{"sec":"think","w":"empty","kind":"v2bs","pauseMs":0,"turns":5,"repeatsPerTurn":2,"load":"5.3","createMs":12.1,"firstMs":13.4,"firstAll":[13.7,13.4,13.2,12.9,13.5],"repMs":10.1,"turnMs":45}
+{"sec":"think","w":"pdf","kind":"v1","pauseMs":0,"turns":5,"repeatsPerTurn":2,"load":"5.9","createMs":0.1,"firstMs":280,"firstAll":[241.7,259.7,280,284.9,292.5],"repMs":277.3,"turnMs":832.7}
+{"sec":"think","w":"pdf","kind":"v1w","pauseMs":0,"turns":5,"repeatsPerTurn":2,"load":"5.9","createMs":0.1,"firstMs":294,"firstAll":[247.1,277.5,294,300.1,315.1],"repMs":271.8,"turnMs":823.6}
+{"sec":"think","w":"pdf","kind":"v2s","pauseMs":0,"turns":5,"repeatsPerTurn":2,"load":"5.9","createMs":29,"firstMs":275.8,"firstAll":[243.2,275.3,281.8,294.2,275.8],"repMs":249.3,"turnMs":807.6}
+{"sec":"think","w":"pdf","kind":"v2bs","pauseMs":0,"turns":5,"repeatsPerTurn":2,"load":"5.9","createMs":12.2,"firstMs":287,"firstAll":[255.9,298.1,312.3,287,260.4],"repMs":252.4,"turnMs":821}
+# end 16:07  up 6 days,  6:10, 4 users, load averages: 5.94 5.73 5.14

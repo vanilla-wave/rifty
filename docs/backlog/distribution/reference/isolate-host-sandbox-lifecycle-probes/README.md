@@ -41,6 +41,16 @@ apart; «consumer» steps (validation, base64) run in the same process.
 `v2` / `v2b` (round 1) are v2s / v2bs with the unsafe boundary; they stay in the code to show it red.
 Host disk (ADR-0568 B) is not built: rejected by the user.
 
+## What the numbers say (no recommendation)
+
+v2bs trades memory that grows with every open turn (55–105 MiB each, Memory) for a faster repeated
+`exec` (21–104 ms against v1, 32–149 ms with pauses; Cost); its first `exec` is not faster, its
+correctness needs a restore point, a rebuild path and a guard against dead realms (§haunt).
+v1w removes only v1's fixed cost, at 2× v1's memory and only when its spare is ready. v2's remaining
+gain over v1w is V8's in-isolate compile cache; whether a fresh isolate can get it is open. Which
+side matters depends on the strategy (an isolate per turn or per run) and on the load (open turns vs
+concurrent runs) — the user's.
+
 ## Boundary (v2): what crosses between the FS realm A and a run realm B (§escape)
 
 Round 1's membrane handed B objects of A and deep-copied them with B's intrinsics: a guest that
@@ -94,23 +104,36 @@ Linux (`life-linux.out.txt`):
 | first `exec`, pdf / xlsx (+ create) | 262 / 583 | 245 / 505 | 288 / 673 | 254 + 35 / 547 + 38 | 304 + 12 / 1 071 + 39 | 510 / 1 470 |
 | 4 at once, pdf / xlsx | 540 / 1 019 | 569 / 1 006 | 492 / 1 149 | 474 / 948 | 464 / 987 | 770 / 2 325 |
 
-- **The strongest v1 (v1w, a pre-warmed spare) removes v1's fixed cost**: empty file 8.7 vs 29.6
-  ms, the same as v2s. What v2s keeps over v1w is only the run phase of a repeated `exec`, 5–26 %
-  shorter (macOS pdf 155 vs 188, xlsx 356 vs 427). **The cause is V8's in-isolate compilation
-  cache** (found by the round-2 critic, rerun here, `life2.out.txt` «compile cache off»): with
-  `--no-compilation-cache` v2s over v1w shrinks from −30 to −10 ms (pdf) and from −70 to −6 ms
-  (xlsx). The template's sources are immutable and per worker, so a V8 code cache for them in fresh
-  isolates would carry the same gain to every `exec`, the first of a turn included — not built:
-  `new Function` (`runtime-js/src/module-loader/cjs-factory.ts:52`, every module compiled twice) has
-  no cached-data path; whether isolated-vm can hand a host-compiled function into the guest's realm is
-  unknown. v2s over v1w, repeated `exec` (empty / pdf / docx / pptx / xlsx): −1 / −30 / −19 / −13 /
-  −68 ms (macOS), +0.5 / −39 / −22 / −11 / −148 (Linux); v2bs: −1 / −32 / −24 / −13 / −75 (macOS),
-  +0.5 / −44 / −19 / +3 / −114 (Linux). v1w's refill of its next spare runs during the measured
-  `exec` (`life.mjs` `prepare` in `exec`), so on the 4-CPU VM its run phase is slower than v1's
-  (xlsx 574 vs 537): the Linux xlsx gap is inflated by ~36 ms.
-  First `exec` of a sandbox: v2s/v2bs equal to or slower than v1w (v2bs Linux xlsx 1 071 + 39 vs 505:
-  the lazy template's first reads). Per turn on Linux (first + 2 repeats, xlsx): v1w ~1.66 s, v2bs
-  ~2.04 s; pdf equal.
+- **Against plain v1 (what is built), v2bs is 21–104 ms faster per warm `exec`** (macOS: empty 29.6
+  → 8.0, pdf 210 → 159, docx 180 → 135, pptx 315 → 282, xlsx 459 → 355; Linux: 41 → 10, 273 → 202,
+  219 → 170, 382 → 362, 573 → 464). It buys that with memory that grows with every open turn
+  (Memory below). Its first `exec` of a sandbox is not faster: v2s ≈ v1, v2bs slower on the lazy
+  template's first reads (§think: Linux xlsx first 738–789 vs v1 618–724 ms).
+- **v1w (a pre-warmed spare, not built) removes only v1's fixed cost**, at 2× v1's memory: its
+  window (`ms`) is 8.7 ms on the empty file, but it excludes waiting for the spare (`life.mjs`
+  `Fresh.exec` awaits `this.next` before `t.start`); the caller's wall is 8.9 → 24 ms back to back
+  and 16.4 ms after a 300 ms pause (external review), and equals v1's whenever the spare is not ready.
+  Its refill also competes with the measured run on few CPUs (Linux xlsx run phase 574 vs v1 537).
+- **What v2 keeps over v1w is the run phase of a repeated `exec`**, 5–26 % shorter, and its cause is
+  V8's in-isolate compilation cache (round-2 critic, rerun here and by the external review): with
+  `--no-compilation-cache` v2s − v1w goes from −30 to −10 ms (pdf) and from −70 to −6 ms (xlsx). Whether
+  a fresh isolate can get that gain (a V8 code cache for the template's sources) is an **open
+  question, not probed** (below); it is not a measured substitute for the live isolate.
+- **§think — a 1 s pause before every `exec`, arms interleaved, the caller's wall** (K = 5 turns ×
+  (create + first + 2 repeats); macOS load 4.2–5.4, the Linux VM on a host at load 5–14):
+
+| ms | v1 | v1w | v2s | v2bs |
+|---|---|---|---|---|
+| macOS pdf: first / repeat / turn | 293 / 273 / 828 | 280 / 271 / 806 | 273 / 237 / 760 | 274 / 241 / 750 |
+| macOS xlsx: first / repeat / turn | 630 / 668 / 1 989 | 648 / 633 / 1 941 | 646 / 547 / 1 852 | 730 / 519 / 1 908 |
+| Linux pdf: first / repeat / turn | 331 / 340 / 974 | 323 / 288 / 894 | 301 / 262 / 909 | 354 / 259 / 904 |
+| Linux xlsx: first / repeat / turn | 655 / 635 / 1 922 | 631 / 636 / 1 886 | 578 / 568 / 1 736 | 746 / 554 / 1 891 |
+
+  With pauses the repeated `exec` of v2 is 32–149 ms faster than v1's, v1w's gain over v1 mostly
+  disappears, and a 3-`exec` turn is 2–10 % shorter on v2 (create and the first `exec` included).
+  The external review's own run (pause 1 s, N = 7, load 3.4–5.2): pdf v1w 251, v1 273, v2s 219, v2bs
+  217; xlsx v1w 511, v1 476, v2s 432, v2bs 388. Round 2's «per turn on Linux v1w 1.66 s vs v2bs 2.04
+  s» rested on one first-`exec` sample (1 071 ms) and is withdrawn.
 - The safe boundary costs ≤ 5 % against round 1's membrane (v2, same run: pdf 161 vs 159, xlsx 362
   vs 350, pptx 281 vs 269).
 - Four at once (the worker's 4 slots) the arms converge (macOS xlsx 566–582 for v1, v1w, v2s, v2bs).
@@ -307,6 +330,19 @@ rollback (ADR-0568 §Not the user's words), the I-list's wording, one op at a ti
 | «Владелец ФС … в том же realm (внутри isolate)» | same isolate, another realm | breaks |
 | template open fork (touched-entries bound in the consumer) | gone from the consumer; the idle isolate grows with the libraries touched instead | gone from the consumer, into the worker |
 
+## Open questions (recorded, not probed)
+
+- A V8 code cache for the template's sources in fresh isolates: can isolated-vm hand a function
+  compiled host-side with cached data into the guest's realm, and can runtime-js's loader use it? The
+  only route by which v1 could get v2's repeated-`exec` gain.
+- Every module compiled twice: `runtime-js/src/module-loader/cjs-factory.ts:52-64` (a checking `new
+  Function` of the source, then the wrapper) — a cheaper candidate for part of the same gain.
+- A cheap guard against §haunt for v2: synchronous compilation instead of async
+  `WebAssembly.compile`/`instantiate` in the guest runtime (pending V8 tasks keep a dead realm alive);
+  else a heap watermark → rebuild.
+- v2bs+rp in the real pool (affinity, IPC under load, lost worker → rebuild, retire with migration).
+- Linux x64 (only arm64 in a VM here).
+
 ## Not verified
 
 - v2bs+rp on the real pool: affinity, IPC under load, lost worker → rebuild elsewhere, retire with
@@ -316,9 +352,6 @@ rollback (ADR-0568 §Not the user's words), the I-list's wording, one op at a ti
 - The boundary beyond the enumerated attacks (§escape) and V8 bugs.
 - The cause of the repeated-`exec` run-phase gain in a live isolate.
 - The two crashed probe processes.
-- A V8 code cache for the template's sources in fresh isolates (the live isolate's gain without a
-  live isolate): feasibility through isolated-vm and runtime-js's loader unknown.
-- The realm-leak guard (heap watermark → rebuild) for v2; §haunt shows the leak, not a fix.
 - v1 two-realm with partial writes kept on a timeout.
 - Template sweep (T1 / T95) for v2/v3; only the four-library template.
 - Linux on bare metal (the VM shares the Mac's CPUs; v3's host-call cost is worst there).

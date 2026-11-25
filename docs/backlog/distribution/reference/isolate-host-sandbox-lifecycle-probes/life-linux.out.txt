@@ -111,3 +111,13 @@ invalid table size
 is_heap_oom = 1
 container pipeline status: 133
 # end 2026-11-25T14:21:23Z
+## think (round 3, Linux): same  host: 16:00  up 6 days,  6:03, 4 users, load averages: 13.67 7.05 5.15
+{"sec":"think","w":"pdf","kind":"v1","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"0.4","createMs":0.7,"firstMs":331.4,"firstAll":[337.7,331.4,300.7,297.1,345.3],"repMs":340,"turnMs":973.5}
+{"sec":"think","w":"pdf","kind":"v1w","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"0.4","createMs":0.5,"firstMs":323.3,"firstAll":[323.3,330.7,279.4,320.1,363.1],"repMs":288.4,"turnMs":893.8}
+{"sec":"think","w":"pdf","kind":"v2s","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"0.4","createMs":54.6,"firstMs":301.2,"firstAll":[313.2,299.3,274.2,301.2,310.1],"repMs":261.8,"turnMs":909.1}
+{"sec":"think","w":"pdf","kind":"v2bs","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"0.4","createMs":31.7,"firstMs":354,"firstAll":[378.3,336.6,297.2,380.8,354],"repMs":259.2,"turnMs":903.8}
+{"sec":"think","w":"xlsx","kind":"v1","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"0.4","createMs":0.4,"firstMs":655.3,"firstAll":[666.9,644.9,655.3,617.9,723.7],"repMs":634.6,"turnMs":1922.1}
+{"sec":"think","w":"xlsx","kind":"v1w","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"0.4","createMs":0.5,"firstMs":630.5,"firstAll":[630.5,618.1,608,649.9,831.3],"repMs":636.2,"turnMs":1885.6}
+{"sec":"think","w":"xlsx","kind":"v2s","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"0.4","createMs":45.6,"firstMs":577.8,"firstAll":[577.8,623.5,566.5,572.6,642.2],"repMs":567.7,"turnMs":1736}
+{"sec":"think","w":"xlsx","kind":"v2bs","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"0.4","createMs":21.5,"firstMs":746.4,"firstAll":[788.8,738,746.4,749.5,741.2],"repMs":553.7,"turnMs":1891.4}
+# end 2026-11-25T15:04:15Z

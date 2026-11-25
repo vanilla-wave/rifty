@@ -1034,6 +1034,53 @@ if (!fs.existsSync('/workspace/m')) { fs.writeFileSync('/workspace/m', '1');
   }
 }
 
+// ---- think: a pause («the model thinking») before every exec, arms interleaved in rotating order;
+// every number is the caller's wall (v1w: waiting for its spare included). Per workload: K turns per
+// arm, each = create + first exec + R repeats.
+if (SECTIONS.has('think')) {
+  const PAUSE = Number(process.env.PAUSE ?? 1000);
+  const K = Number(process.env.TK ?? 5);
+  const R = Number(process.env.TR ?? 2);
+  const arms = (process.env.ARMS ?? 'v1,v1w,v2s,v2bs').split(',');
+  const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
+  for (const w of (process.env.WL ?? 'pdf,xlsx').split(',')) {
+    const acc = Object.fromEntries(arms.map((a) => [a, { create: [], first: [], rep: [], turn: [] }]));
+    for (let k = 0; k < K; k++) {
+      const order = arms.map((_, i) => arms[(i + k) % arms.length]);
+      const sbs = {};
+      for (const a of order) {
+        await sleep(PAUSE);
+        const t = performance.now();
+        sbs[a] = await make(a, W[w]);
+        acc[a].create.push(performance.now() - t);
+      }
+      for (const a of order) {
+        await sleep(PAUSE);
+        const t = performance.now();
+        const r = await sbs[a].exec();
+        if (r.code !== 0) log({ w, a, bad: r });
+        acc[a].first.push(performance.now() - t);
+      }
+      const reps = Object.fromEntries(arms.map((a) => [a, []]));
+      for (let i = 0; i < R; i++)
+        for (const a of order) {
+          await sleep(PAUSE);
+          const t = performance.now();
+          const r = await sbs[a].exec();
+          if (r.code !== 0) log({ w, a, bad: r });
+          reps[a].push(performance.now() - t);
+        }
+      for (const a of arms) {
+        acc[a].rep.push(...reps[a]);
+        acc[a].turn.push(acc[a].create.at(-1) + acc[a].first.at(-1) + reps[a].reduce((x, y) => x + y, 0));
+        sbs[a].dispose();
+      }
+    }
+    for (const a of arms)
+      log({ sec: 'think', w, kind: a, pauseMs: PAUSE, turns: K, repeatsPerTurn: R, load: load(), createMs: r1(median(acc[a].create)), firstMs: r1(median(acc[a].first)), firstAll: acc[a].first.map(r1), repMs: r1(median(acc[a].rep)), turnMs: r1(median(acc[a].turn)) });
+  }
+}
+
 // ---- host: one host op, worker side (v2: a call into context A; v3: the worker's LayeredFs;
 //      v1: the consumer's LayeredFs = probe H/W) --------------------------------------------------
 if (SECTIONS.has('host')) {
