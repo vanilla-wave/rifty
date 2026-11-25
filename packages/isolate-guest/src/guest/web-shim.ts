@@ -7,7 +7,8 @@
 import type { GuestHost } from '../contract.ts';
 import { notImplemented } from './loud.ts';
 import { installNavigator } from './navigator.ts';
-import { TextDecoder, TextEncoder, encodeUtf8 } from './text-codec.ts';
+import { TextDecoder, TextEncoder } from './node-encoding.ts';
+import { encodeUtf8 } from './text-codec.ts';
 
 const g = globalThis as unknown as Record<string, unknown>;
 export const bridge = g.__riftyIsolateHost as GuestHost;

@@ -1,5 +1,23 @@
 {
   "generated": {
+    "packages/isolate-guest/src/guest/exodus-bytes/generated": {
+      "files": ["text-decoder.js", "exodus.LICENSE"],
+      "name": "@exodus/bytes",
+      "version": "1.16.0",
+      "license": "MIT",
+      "licenseFiles": ["packages/isolate-guest/src/guest/exodus-bytes/generated/exodus.LICENSE"],
+      "changes": "encoding.js TextDecoder bundled by esbuild, multi-byte tables trimmed to gb18030, globalThis reads replaced by an empty object, minified, tools/publishing/generate-node-encoding.mjs",
+      "sourcesKey": "version"
+    },
+    "packages/isolate-guest/src/guest/node-encoding/generated": {
+      "files": ["encoding.js", "node.LICENSE"],
+      "name": "node",
+      "version": "v24.16.0",
+      "license": "MIT",
+      "licenseFiles": ["packages/isolate-guest/src/guest/node-encoding/generated/node.LICENSE"],
+      "changes": "lib/internal/encoding.js (line 37: lazy single-byte require), lib/internal/encoding/{single-byte,util}.js bundled and minified by esbuild, tools/publishing/generate-node-encoding.mjs",
+      "sourcesKey": "node"
+    },
     "packages/runtime-js/src/builtins/fetch/generated": {
       "files": ["classes.js", "undici.LICENSE"],
       "package": "undici",
@@ -40,6 +58,10 @@
     }
   },
   "firstParty": [
+    "packages/isolate-guest/src/guest/exodus-bytes/generated/sources.json",
+    "packages/isolate-guest/src/guest/exodus-bytes/generated/text-decoder.d.ts",
+    "packages/isolate-guest/src/guest/node-encoding/generated/encoding.d.ts",
+    "packages/isolate-guest/src/guest/node-encoding/generated/sources.json",
     "packages/runtime-js/src/builtins/fetch/generated/classes.d.ts",
     "packages/runtime-js/src/builtins/fetch/generated/sources.json",
     "packages/runtime-js/src/builtins/url-legacy/generated/legacy.d.ts",

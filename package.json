@@ -63,8 +63,10 @@
     "eval-compiler:generate": "node tools/publishing/generate-eval-compiler.mjs --write",
     "fetch-classes:generate": "node tools/publishing/generate-fetch-classes.mjs --write",
     "url-legacy:generate": "node tools/publishing/generate-url-legacy.mjs --write",
+    "node-encoding:generate": "node tools/publishing/generate-node-encoding.mjs --write",
     "check:fetch-classes-drift": "node tools/publishing/generate-fetch-classes.mjs --check",
     "check:url-legacy-drift": "node tools/publishing/generate-url-legacy.mjs --check",
+    "check:node-encoding-drift": "node tools/publishing/generate-node-encoding.mjs --check",
     "check:eval-compiler-drift": "node tools/publishing/generate-eval-compiler.mjs --check",
     "check:esbuild-runtime-drift": "tsx tools/shadow-registry/tools/generate-esbuild-runtime.ts --check",
     "check:shadow-catalog-drift": "tsx tools/shadow-registry/tools/generate-shadow-substitution-catalog.ts --check",
@@ -84,6 +86,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
+    "@exodus/bytes": "1.16.0",
     "@playwright/test": "^1.49.0",
     "@types/node": "^22.10.0",
     "dependency-cruiser": "^17.4.3",

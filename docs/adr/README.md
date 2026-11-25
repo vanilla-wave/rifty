@@ -439,6 +439,7 @@ ADRs are immutable while active, except dated lines under `## Decisions` / `§Co
 | 0569 | Port pi CLI 1.6.0 compaction into the agent |
 | 0570 | Depend on typebox directly for the public Type export |
 | 0572 | Run a sandbox over an immutable template layer kept out of the sandbox's state |
+| 0577 | The isolate guest's TextDecoder and TextEncoder are Node v24.16.0's encoding.js, with @exodus/bytes for utf-16 and gb18030 |
 
 ## Superseded (removed)
 

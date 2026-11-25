@@ -22,7 +22,7 @@ import {
 
 const NO_ENGINE =
   '(no compression engine in the rifty isolate host (rifty zlib runs on web CompressionStream, absent here), ADR-0557)';
-/** Measured on main dfad6553e: the whole stderr, no mask (the isolate's paths are `/workspace/…`). */
+/** Measured on main dfad6553e (case 4 after ADR-0577's TextDecoder): the whole stderr, no mask (the isolate's paths are `/workspace/…`). */
 const PINS: Readonly<Record<StepId, Pin>> = {
   '1': {
     exitCode: 1,
@@ -101,10 +101,14 @@ Node.js v24.0.0
   '4': {
     exitCode: 1,
     stdout: '',
-    stderr: `NotImplementedError: Not implemented: isolate-host.TextDecoder(ascii) (only utf-8)
-    at Object.<anonymous> (/workspace/node_modules/fontkit/dist/main.cjs:5424:51)
-    at Object.<anonymous> (/workspace/node_modules/pdfkit/js/pdfkit.js:7:15) {
-  feature: 'isolate-host.TextDecoder(ascii)'
+    stderr: `NotImplementedError: Not implemented: isolate-host.zlib.deflateSync ${NO_ENGINE}
+    at PDFReference.finalize (/workspace/node_modules/pdfkit/js/pdfkit.js:201:28)
+    at PDFReference.end (/workspace/node_modules/pdfkit/js/pdfkit.js:193:10)
+    at PDFPage.end (/workspace/node_modules/pdfkit/js/pdfkit.js:434:25)
+    at PDFDocument.flushPages (/workspace/node_modules/pdfkit/js/pdfkit.js:5855:12)
+    at PDFDocument.end (/workspace/node_modules/pdfkit/js/pdfkit.js:5912:10)
+    at Object.<anonymous> (/workspace/4-pdfkit.js:26:5) {
+  feature: 'isolate-host.zlib.deflateSync'
 }
 
 Node.js v24.0.0
@@ -177,10 +181,8 @@ Node.js v24.0.0
     output: null,
   },
 };
-/** Per step, when it stops being a pin. */
-const GREEN: Partial<Record<StepId, string>> = {
-  '4': 'red after unit 3 too: at least isolate-host TextDecoder(ascii), outside this goal',
-};
+/** Per step, when it stops being a pin (case 4 got past fontkit's `TextDecoder('ascii')`: ADR-0577). */
+const GREEN: Partial<Record<StepId, string>> = {};
 
 let oracle: ReadonlyMap<StepId, OracleStep>;
 beforeAll(() => {

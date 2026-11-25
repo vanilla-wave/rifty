@@ -20,7 +20,9 @@ import {
   fatalReportText,
   handleRealmUncaughtError,
   handleRealmUnhandledRejection,
+  inspect,
   installNodeFatalReport,
+  invalidArgTypeMessage,
   readNodeProcessTerminal,
   setDefaultProcessOutputSink,
 } from '@riftydev/runtime-js/internal';
@@ -35,6 +37,7 @@ import type { Base } from './egress-gaps.ts';
 import { createHttp } from './egress-http.ts';
 import { createNet } from './egress-net.ts';
 import { bindNotImplemented } from './loud.ts';
+import { bindEncodingRuntime } from './node-encoding.ts';
 // Evaluated before every runtime module: the build injects it first (scripts/build-runtime.mjs).
 import {
   bridge,
@@ -46,6 +49,7 @@ import {
 } from './web-shim.ts';
 
 bindNotImplemented(NotImplementedError);
+bindEncodingRuntime({ inspect, invalidArgTypeMessage });
 // No ES module loader here (it needs `URL`, a ceiling): every ES module load throws this
 // gap, and `require` is Node's with `--no-require-module` until one exists.
 const esmGap = (): NotImplementedError =>
