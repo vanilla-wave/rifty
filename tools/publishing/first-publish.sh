@@ -49,6 +49,7 @@ done
 
 echo "▶ building libraries (tsup → dist/)…"
 pnpm build:libs
+pnpm check:third-party-notices
 
 echo "▶ bundling LICENSE into each package…"
 for d in packages/*/ tools/shadow-registry/ services/eddy/; do

@@ -6,17 +6,28 @@
  * host tarball stays self-contained; `dist/codec.js`, rifty's MemoryFs and the
  * snapshot codec for the consumer realm.
  */
-import { copyFileSync } from 'node:fs';
+import { copyFileSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
+import {
+  BUNDLE_INPUTS,
+  metafileInputs,
+  recordBundleInputs,
+} from '../../../tools/publishing/third-party-notices.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
-copyFileSync(
-  createRequire(import.meta.url).resolve('@riftydev/isolate-guest/guest.js'),
-  `${root}/dist/guest.js`,
+const guest = createRequire(import.meta.url).resolve('@riftydev/isolate-guest/guest.js');
+copyFileSync(guest, `${root}/dist/guest.js`);
+// The copy keeps the guest build's input list (its notices travel with it).
+const guestInputs = JSON.parse(readFileSync(join(dirname(guest), '..', BUNDLE_INPUTS), 'utf8'));
+recordBundleInputs(
+  root,
+  { [`${root}/dist/guest.js`]: guestInputs['dist/guest.js'] },
+  { reset: true },
 );
-await build({
+const child = await build({
   absWorkingDir: root,
   entryPoints: ['src/child/main.ts'],
   outfile: 'dist/child.js',
@@ -24,12 +35,13 @@ await build({
   target: 'es2022',
   logLevel: 'warning',
   legalComments: 'none',
+  metafile: true,
   platform: 'node',
   format: 'esm',
   external: ['isolated-vm'],
 });
 // The consumer realm's MemoryFs + snapshot codec (ADR-0568 §2), loaded by `src/sandbox.ts`.
-await build({
+const codec = await build({
   absWorkingDir: root,
   entryPoints: ['src/codec.ts'],
   outfile: 'dist/codec.js',
@@ -37,6 +49,8 @@ await build({
   target: 'es2022',
   logLevel: 'warning',
   legalComments: 'none',
+  metafile: true,
   platform: 'node',
   format: 'esm',
 });
+for (const r of [child, codec]) recordBundleInputs(root, metafileInputs(r.metafile, root));
