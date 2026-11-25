@@ -351,3 +351,57 @@
 {"sec":"life","case":"L5b killed mid-rename (v2bs): 64 files must stay 64","trials":200,"ends":{"timeout":103,"exit 1":97},"bad":98,"samples":["trial 102 (end timeout): 63 files; missing 19 exists w/v=false/false; audit clean","trial 103 (end exit 1): 63 files; missing 19 exists w/v=false/false; audit clean","trial 104 (end exit 1): 63 files; missing 19 exists w/v=false/false; audit clean"]}
 {"sec":"life","case":"L5b killed mid-rename (v2s): 64 files must stay 64","trials":200,"ends":{"timeout":200},"bad":0,"samples":[]}
 {"sec":"life","case":"L5b killed mid-rename (v2b): 64 files must stay 64","trials":200,"ends":{"timeout":153,"exit 1":47},"bad":48,"samples":["trial 152 (end timeout): 63 files; missing 57 exists w/v=false/false; audit clean","trial 153 (end exit 1): 63 files; missing 57 exists w/v=false/false; audit clean","trial 154 (end exit 1): 63 files; missing 57 exists w/v=false/false; audit clean"]}
+## round 6 (fourth external pass)
+### L5b, 600 runs, v2s  17:44  up 6 days,  7:47, 4 users, load averages: 35.57 33.17 26.04
+{"sec":"life","case":"L5b killed mid-rename (v2s): 64 files must stay 64","trials":600,"ends":{"timeout":212,"exit 1":388},"bad":391,"samples":["trial 209 (end timeout): 63 files; missing 33 exists w/v=false/false; audit clean","trial 210 (end exit 1): 63 files; missing 33 exists w/v=false/false; audit clean","trial 211 (end exit 1): 63 files; missing 33 exists w/v=false/false; audit clean"]}
+### L5b, 600 runs, v2f  17:45  up 6 days,  7:48, 4 users, load averages: 34.61 33.25 26.51
+{"sec":"life","case":"L5b killed mid-rename (v2f): 64 files must stay 64","trials":600,"ends":{"timeout":143,"exit 1":457},"bad":458,"samples":["trial 142 (end timeout): 63 files; missing 11 exists w/v=false/false; audit clean","trial 143 (end exit 1): 63 files; missing 11 exists w/v=false/false; audit clean","trial 144 (end exit 1): 63 files; missing 11 exists w/v=false/false; audit clean"]}
+# end 17:46  up 6 days,  7:49, 4 users, load averages: 37.59 34.30 27.21
+### round 6 timing (load 30–78: the noisy run, kept for the counts; timings superseded by the rerun below)
+### cost with a restore point after every exec (RP=1: v2f's point = the whole FS, v2bs's = blob + rows; copy out of A only, the consumer's validation not included), LIMIT=256  17:46  up 6 days,  7:49, 4 users, load averages: 33.58 33.57 27.07
+{"sec":"cost","w":"empty","kind":"v2f","restorePoint":true,"load":"33.6","createMs":500.7,"firstMs":127.7,"repMs":247.6,"repRunMs":6,"repBootMs":15.5,"repRestorePointMs":229.4,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"empty","kind":"v2bs","restorePoint":true,"load":"38.2","createMs":27,"firstMs":22,"repMs":18.5,"repRunMs":5.8,"repBootMs":12,"repRestorePointMs":0.4,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"pdf","kind":"v2f","restorePoint":true,"load":"39.5","createMs":739.4,"firstMs":1982.4,"repMs":1424.9,"repRunMs":959.5,"repBootMs":30.1,"repRestorePointMs":495.5,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"pdf","kind":"v2bs","restorePoint":true,"load":"43.2","createMs":26.6,"firstMs":1565.7,"repMs":1007.8,"repRunMs":927.8,"repBootMs":25.6,"repRestorePointMs":0.6,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"xlsx","kind":"v2f","restorePoint":true,"load":"62.4","createMs":1363.6,"firstMs":4368.3,"repMs":6086.8,"repRunMs":4428.1,"repBootMs":237.9,"repRestorePointMs":1275.4,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"xlsx","kind":"v2bs","restorePoint":true,"load":"65.5","createMs":22.1,"firstMs":6248.6,"repMs":4051,"repRunMs":3978.5,"repBootMs":35.9,"repRestorePointMs":2.3,"repsOk":7,"repsNotOk":0}
+### same minute, no restore point, with v1f beside  17:48  up 6 days,  7:51, 4 users, load averages: 65.49 45.67 32.74
+{"sec":"cost","w":"empty","kind":"v1f","load":"61.8","createMs":1614,"firstMs":2193.9,"repMs":1353,"repRunMs":18,"repBootMs":29.2,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"empty","kind":"v2f","load":"61.8","createMs":1222.4,"firstMs":37.7,"repMs":48.9,"repRunMs":9.2,"repBootMs":43,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"empty","kind":"v2bs","load":"61.8","createMs":25.5,"firstMs":28.8,"repMs":32.3,"repRunMs":5.4,"repBootMs":27.9,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"pdf","kind":"v1f","load":"62.4","createMs":360.5,"firstMs":1860.7,"repMs":4091.7,"repRunMs":1849.5,"repBootMs":34.1,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"pdf","kind":"v2f","load":"60.5","createMs":3187.8,"firstMs":2293.1,"repMs":1684.5,"repRunMs":1674.7,"repBootMs":15,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"pdf","kind":"v2bs","load":"61.3","createMs":16.6,"firstMs":2699.1,"repMs":1792.8,"repRunMs":1709.9,"repBootMs":17.2,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"xlsx","kind":"v1f","load":"65.7","createMs":1098.5,"firstMs":11472.8,"repMs":6376.1,"repRunMs":4184.1,"repBootMs":69.1,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"xlsx","kind":"v2f","load":"77.0","createMs":1058.1,"firstMs":2586.9,"repMs":2462.5,"repRunMs":2447,"repBootMs":16.7,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"xlsx","kind":"v2bs","load":"78.7","createMs":25.8,"firstMs":3305.5,"repMs":1824.8,"repRunMs":1812.2,"repBootMs":12.7,"repsOk":7,"repsNotOk":0}
+### v1f (main's form) at LIMIT=256, 20 repeats: how many end other than 0  17:51  up 6 days,  7:54, 4 users, load averages: 78.68 58.62 40.80
+{"w":"pdf","kind":"v1f","failed":{"termination":"memory","why":"ERR_FS_SNAPSHOT_TOO_LARGE: out of memory building the snapshot (size the memory limit for 2 × maxBytes + 16 MiB)"}}
+{"sec":"cost","w":"xlsx","kind":"v1f","load":"64.2","createMs":213.8,"firstMs":2020.9,"repMs":1364.2,"repRunMs":1044.6,"repBootMs":20.1,"repsOk":20,"repsNotOk":0}
+### v1f (main's form) at LIMIT=288, 20 repeats: how many end other than 0  17:52  up 6 days,  7:55, 4 users, load averages: 64.21 58.00 41.52
+{"sec":"cost","w":"pdf","kind":"v1f","load":"52.0","createMs":154.2,"firstMs":538.6,"repMs":475.8,"repRunMs":250.1,"repBootMs":12.9,"repsOk":20,"repsNotOk":0}
+{"sec":"cost","w":"xlsx","kind":"v1f","load":"40.3","createMs":134.3,"firstMs":794.2,"repMs":781.1,"repRunMs":558.1,"repBootMs":12.8,"repsOk":20,"repsNotOk":0}
+### v1f (main's form) at LIMIT=320, 20 repeats: how many end other than 0  17:53  up 6 days,  7:56, 4 users, load averages: 40.29 52.71 40.25
+{"sec":"cost","w":"pdf","kind":"v1f","load":"36.4","createMs":137.5,"firstMs":475,"repMs":497.3,"repRunMs":267.8,"repBootMs":13.1,"repsOk":20,"repsNotOk":0}
+{"sec":"cost","w":"xlsx","kind":"v1f","load":"30.9","createMs":138.2,"firstMs":727.8,"repMs":760.3,"repRunMs":533.5,"repBootMs":11.2,"repsOk":20,"repsNotOk":0}
+# end 17:53  up 6 days,  7:56, 4 users, load averages: 30.88 49.20 39.41
+### rerun when the 1-min load fell (waited up to 40 min): restore point (RP=1) and the same arms without, LIMIT=256  18:01  up 6 days,  8:05, 4 users, load averages: 5.08 17.30 27.16
+{"sec":"cost","w":"empty","kind":"v2f","restorePoint":true,"load":"4.9","createMs":238.2,"firstMs":110.7,"repMs":93.9,"repRunMs":3.9,"repBootMs":6.6,"repRestorePointMs":83,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"empty","kind":"v2bs","restorePoint":true,"load":"4.9","createMs":10.7,"firstMs":13.2,"repMs":10.3,"repRunMs":3.3,"repBootMs":6.9,"repRestorePointMs":0.2,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"pdf","kind":"v2f","restorePoint":true,"load":"4.9","createMs":223.3,"firstMs":290,"repMs":249.7,"repRunMs":162,"repBootMs":6.4,"repRestorePointMs":80.8,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"pdf","kind":"v2bs","restorePoint":true,"load":"4.9","createMs":12,"firstMs":234.6,"repMs":171.6,"repRunMs":164.2,"repBootMs":6.8,"repRestorePointMs":0.2,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"xlsx","kind":"v2f","restorePoint":true,"load":"5.1","createMs":221.2,"firstMs":543.4,"repMs":449.8,"repRunMs":361.4,"repBootMs":6.7,"repRestorePointMs":80.8,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"xlsx","kind":"v2bs","restorePoint":true,"load":"4.9","createMs":11.5,"firstMs":542.5,"repMs":380.3,"repRunMs":373.6,"repBootMs":6.3,"repRestorePointMs":0.3,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"empty","kind":"v1f","load":"4.8","createMs":120.7,"firstMs":218.8,"repMs":204.5,"repRunMs":7.5,"repBootMs":10.3,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"empty","kind":"v2f","load":"4.8","createMs":222.4,"firstMs":13.1,"repMs":9.6,"repRunMs":3.3,"repBootMs":6.4,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"empty","kind":"v2bs","load":"4.8","createMs":10.7,"firstMs":13.1,"repMs":9.1,"repRunMs":3.2,"repBootMs":5.8,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"pdf","kind":"v1f","load":"4.8","createMs":123.2,"firstMs":381.8,"repMs":382.9,"repRunMs":191.6,"repBootMs":10.3,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"pdf","kind":"v2f","load":"4.8","createMs":228.2,"firstMs":210,"repMs":168.3,"repRunMs":162.1,"repBootMs":6.3,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"pdf","kind":"v2bs","load":"4.8","createMs":11,"firstMs":228.4,"repMs":171.4,"repRunMs":164.8,"repBootMs":6.5,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"xlsx","kind":"v1f","load":"4.6","createMs":123.5,"firstMs":617.7,"repMs":613.6,"repRunMs":421.6,"repBootMs":10.5,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"xlsx","kind":"v2f","load":"4.6","createMs":226.8,"firstMs":456.5,"repMs":366.1,"repRunMs":359.5,"repBootMs":6.6,"repsOk":7,"repsNotOk":0}
+{"sec":"cost","w":"xlsx","kind":"v2bs","load":"4.9","createMs":11.2,"firstMs":524.6,"repMs":382.7,"repRunMs":375.6,"repBootMs":6.7,"repsOk":7,"repsNotOk":0}
+### v1f at LIMIT=256, 20 repeats, rerun  18:02  up 6 days,  8:05, 4 users, load averages: 4.93 15.71 26.12
+{"sec":"cost","w":"pdf","kind":"v1f","load":"4.6","createMs":120,"firstMs":400.9,"repMs":384.7,"repRunMs":192.9,"repBootMs":10.6,"repsOk":20,"repsNotOk":0}
+{"sec":"cost","w":"xlsx","kind":"v1f","load":"4.7","createMs":158.4,"firstMs":617.6,"repMs":617.5,"repRunMs":425.4,"repBootMs":10.4,"repsOk":20,"repsNotOk":0}
+# end 18:03  up 6 days,  8:06, 4 users, load averages: 4.67 14.79 25.49

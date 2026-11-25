@@ -589,6 +589,8 @@ log({
 });
 
 // ---- cost: first + repeated exec per workload, per arm ------------------------------------------
+// RP=1: a live sandbox also takes its restore point (copied out of A) after every exec that ends 0.
+const RP = process.env.RP === '1';
 if (SECTIONS.has('cost')) {
   const N = Number(process.env.N ?? 7);
   for (const w of (process.env.WL ?? Object.keys(W).join(',')).split(',')) {
@@ -597,7 +599,7 @@ if (SECTIONS.has('cost')) {
       const warm = await make(kind, W[w]);
       await warm.exec();
       warm.dispose();
-      const s = await make(kind, W[w]);
+      const s = await make(kind, W[w], RP ? { restorePoint: true } : undefined);
       const first = await s.exec();
       if (!('code' in first) || first.code !== 0) {
         log({ w, kind, failed: first });
@@ -609,17 +611,23 @@ if (SECTIONS.has('cost')) {
         globalThis.gc?.();
         reps.push(await s.exec());
       }
+      // medians over the repeats that ended 0 only; the others counted (review of PR #454)
+      const ok = reps.filter((x) => x.code === 0);
       const bad = reps.find((x) => x.code !== 0);
       log({
         sec: 'cost',
         w,
         kind,
+        ...(RP ? { restorePoint: true } : {}),
         load: load(),
         createMs: r1(s.createMs),
         firstMs: r1(first.ms),
-        repMs: r1(median(reps.map((x) => x.ms))),
-        repRunMs: r1(median(reps.map((x) => x.runMs))),
-        repBootMs: r1(median(reps.map((x) => x.boot))),
+        repMs: r1(median(ok.map((x) => x.ms))),
+        repRunMs: r1(median(ok.map((x) => x.runMs))),
+        repBootMs: r1(median(ok.map((x) => x.boot))),
+        ...(RP ? { repRestorePointMs: r1(median(ok.map((x) => x.rp ?? 0))) } : {}),
+        repsOk: ok.length,
+        repsNotOk: reps.length - ok.length,
         ...(bad ? { bad } : {}),
       });
       s.dispose();
