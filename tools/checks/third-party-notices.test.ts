@@ -156,30 +156,6 @@ describe('check:third-party-notices', () => {
     ]);
   });
 
-  it('a generated dir from a non-npm upstream takes name, version and texts from its record', () => {
-    put('pkg/src/node/generated/legacy.js', 'export default 3;');
-    put('licenses/node.LICENSE', 'Copyright Node.js contributors. MIT');
-    const m = {
-      ...manifest,
-      generated: {
-        ...manifest.generated,
-        'pkg/src/node/generated': {
-          files: ['legacy.js'],
-          name: 'node',
-          version: 'v24.16.0',
-          license: 'MIT',
-          licenseFiles: ['licenses/node.LICENSE'],
-        },
-      },
-    };
-    const { entries, violations } = collect(root, 'pkg', m, {
-      'dist/a.js': ['pkg/src/node/generated/legacy.js'],
-    });
-    expect(violations).toEqual([]);
-    expect(render('@riftydev/pkg', entries)).toContain('## node@v24.16.0');
-    expect(render('@riftydev/pkg', entries)).toContain('Copyright Node.js contributors. MIT');
-  });
-
   it('a generated dir pinned to another installed version → red', () => {
     put(
       'node_modules/upstream/package.json',
@@ -236,6 +212,18 @@ describe('closed by default (review S1, S2)', () => {
 });
 
 describe('repo manifest', () => {
+  it("non-npm upstream: Node's url-legacy record yields node@v24.16.0 with Node's LICENSE", () => {
+    const real = JSON.parse(readFileSync('tools/publishing/third-party-manifest.json', 'utf8'));
+    const { entries, violations } = collect(process.cwd(), 'packages/runtime-js', real, {
+      'dist/x.js': ['packages/runtime-js/src/builtins/url-legacy/generated/legacy.js'],
+    });
+    expect(violations).toEqual([]);
+    const text = render('@riftydev/runtime-js', entries);
+    expect(entries.map((e: { id: string }) => e.id)).toEqual(['node@v24.16.0']);
+    expect(text).toContain('Copyright Node.js contributors. All rights reserved.');
+    expect(text).toContain('generated into packages/runtime-js/src/builtins/url-legacy/generated');
+  });
+
   it('every manual license file exists', () => {
     const m = JSON.parse(readFileSync('tools/publishing/third-party-manifest.json', 'utf8'));
     for (const record of Object.values(m.npm) as { licenseFiles: string[] }[])

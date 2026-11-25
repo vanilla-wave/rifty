@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- `dist/THIRD_PARTY_NOTICES.md` lists what `guest.js` bundles (acorn, cjs-module-lexer, quickjs-emscripten-core, @jitl/quickjs-ffi-types, the generated TypeScript compiler); `guest.js` ends with a link line to it (+84 B).
+- `dist/THIRD_PARTY_NOTICES.md` lists what `guest.js` bundles (acorn, cjs-module-lexer, quickjs-emscripten-core, @jitl/quickjs-ffi-types, the generated TypeScript compiler and Node v24.16.0 `url`/`querystring`); `guest.js` ends with a link line to it (+84 B).
 - The guest bundle carries runtime-js's generated legacy `node:url`/`querystring` (ADR-0574): `guest.js` 7 123 270 → 7 170 976 B (+47 706; gzip 1 497 917 → 1 509 064, +11 147).
 - The guest declares it has no ES module loader (`declareNoEsmLoader`, gap `isolate-host.esm`): `require` is Node 24's with `--no-require-module`, every ES module load throws the gap (`import()` from a file rejects with it; was a false compile error or `TypeError: URLConstructor is not a constructor`); the guest's own ESM-entry check is gone (same stderr).
 - `node:zlib`, `node:child_process`, `node:worker_threads` load (`require`, `import()` from CommonJS, `node -e` globals) with Node v24.16.0's export lists, member kinds and class chains instead of throwing `NotImplementedError('isolate-host.<module>')` at load (ADR-0557 §6, 2026-11-24): no builtin throws at load now. Real: `zlib.constants`/`codes` and the legacy constants, `worker_threads`' main-thread identity and environment data. Every compression, decompression and `crc32` member, every `child_process` member, `Worker`, transfer marks, ports and `locks` throw `NotImplementedError('isolate-host.<module>.<member>')` when called or constructed (async ones reject with it).
