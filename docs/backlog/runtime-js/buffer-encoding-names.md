@@ -31,7 +31,7 @@ Absorbs draft `runtime-js/buffer-base64-rejects-base64url-chars` (PR #443): Node
 takes the base64url alphabet. `Buffer.from('a-b', 'base64')` → Node `6be6`,
 `Buffer.from('-_8', 'base64')` → Node `fbff`, `Buffer.byteLength('-_8', 'base64')` → Node `2`; rifty
 throws `InvalidCharacterError` on all three. `@exodus/bytes` stops on it in the isolate guest
-(the `isolate-guest-web-api` goal's textdecoder bundle probe, PR #443).
+(`docs/backlog/epics/isolate-guest-web-api/reference/textdecoder/bundle/README.md` §Finding).
 
 ## Challenge
 
