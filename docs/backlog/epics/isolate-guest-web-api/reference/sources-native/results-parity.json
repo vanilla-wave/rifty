@@ -1,0 +1,3595 @@
+{
+  "date": "2026-11-24T13:55:59.449Z",
+  "node": "v24.16.0",
+  "isolatedVm": "7.0.2",
+  "esbuild": "0.28.0",
+  "loadavg": ["2.2", "3.7", "3.4"],
+  "preludeBytes": 7305,
+  "parity": {
+    "url:whatwg-url": {
+      "bytes": 898178,
+      "gzip": 193177,
+      "minBytes": 495018,
+      "byPackage": {
+        "webidl-conversions": 12686,
+        "whatwg-url": 125764,
+        "@exodus/bytes": 465841,
+        "punycode": 8084,
+        "tr46": 276351,
+        "probe/guest source": 170
+      },
+      "installError": "isolate-host guest: isolate-host.TextDecoder(latin1) before runtime load"
+    },
+    "url:whatwg-url@15": {
+      "bytes": 402016,
+      "gzip": 82790,
+      "minBytes": 293380,
+      "byPackage": {
+        "webidl-conversions": 12686,
+        "whatwg-url-15": 104278,
+        "punycode": 8065,
+        "tr46": 272311,
+        "probe/guest source": 182
+      },
+      "suites": {
+        "url": {
+          "cases": 886,
+          "differ": 275,
+          "valueDiffs": 0,
+          "errorShapeOnly": 275,
+          "valueExamples": [],
+          "errorExamples": [
+            {
+              "case": "http://f:b/c @ http://example.org/foo/bar",
+              "node": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Invalid URL",
+                "code": "ERR_INVALID_URL",
+                "isDOMException": false
+              },
+              "guest": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Invalid URL: http://f:b/c",
+                "isDOMException": false
+              }
+            },
+            {
+              "case": "http://f: /c @ http://example.org/foo/bar",
+              "node": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Invalid URL",
+                "code": "ERR_INVALID_URL",
+                "isDOMException": false
+              },
+              "guest": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Invalid URL: http://f: /c",
+                "isDOMException": false
+              }
+            },
+            {
+              "case": "http://f:fifty-two/c @ http://example.org/foo/bar",
+              "node": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Invalid URL",
+                "code": "ERR_INVALID_URL",
+                "isDOMException": false
+              },
+              "guest": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Invalid URL: http://f:fifty-two/c",
+                "isDOMException": false
+              }
+            }
+          ],
+          "allDiffs": [
+            "http://f:b/c @ http://example.org/foo/bar",
+            "http://f: /c @ http://example.org/foo/bar",
+            "http://f:fifty-two/c @ http://example.org/foo/bar",
+            "http://f:999999/c @ http://example.org/foo/bar",
+            "non-special://f:999999/c @ http://example.org/foo/bar",
+            "http://f: 21 / b ? d # e  @ http://example.org/foo/bar",
+            "http://[1::2]:3:4 @ http://example.org/foo/bar",
+            "http://2001::1 @ http://example.org/foo/bar",
+            "http://2001::1] @ http://example.org/foo/bar",
+            "http://2001::1]:80 @ http://example.org/foo/bar",
+            "http://[::127.0.0.1.] @ http://example.org/foo/bar",
+            "file://example:1/ @ null",
+            "file://example:test/ @ null",
+            "file://example%/ @ null",
+            "file://[example]/ @ null",
+            "http://user:pass@/ @ null",
+            "http://foo:-80/ @ null",
+            "http:/:@/www.example.com @ null",
+            "http://user@/www.example.com @ null",
+            "http:@/www.example.com @ null",
+            "http:/@/www.example.com @ null",
+            "http://@/www.example.com @ null",
+            "https:@/www.example.com @ null",
+            "http:a:b@/www.example.com @ null",
+            "http:/a:b@/www.example.com @ null",
+            "http://a:b@/www.example.com @ null",
+            "http::@/www.example.com @ null",
+            "http:@:www.example.com @ null",
+            "http:/@:www.example.com @ null",
+            "http://@:www.example.com @ null",
+            "http://example example.com @ http://other.com/",
+            "http://Goo%20 goo%7C|.com @ http://other.com/",
+            "http://[] @ http://other.com/",
+            "http://[:] @ http://other.com/",
+            "http://GOO 　goo.com @ http://other.com/",
+            "http://﷐zyx.com @ http://other.com/",
+            "http://%ef%b7%90zyx.com @ http://other.com/",
+            "https://� @ null",
+            "https://%EF%BF%BD @ null",
+            "http://a.b.c.xn--pokxncvks @ null",
+            "http://10.0.0.xn--pokxncvks @ null",
+            "http://a.b.c.XN--pokxncvks @ null",
+            "http://a.b.c.Xn--pokxncvks @ null",
+            "http://10.0.0.XN--pokxncvks @ null",
+            "http://10.0.0.xN--pokxncvks @ null",
+            "http://％４１.com @ http://other.com/",
+            "http://%ef%bc%85%ef%bc%94%ef%bc%91.com @ http://other.com/",
+            "http://％００.com @ http://other.com/",
+            "http://%ef%bc%85%ef%bc%90%ef%bc%90.com @ http://other.com/",
+            "http://%zz%66%a.com @ http://other.com/",
+            "http://%25 @ http://other.com/",
+            "http://hello%00 @ http://other.com/",
+            "http://192.168.0.257 @ http://other.com/",
+            "http://%3g%78%63%30%2e%30%32%35%30%2E.01 @ http://other.com/",
+            "http://192.168.0.1 hello @ http://other.com/",
+            "https://x x:12 @ null",
+            "http://[www.google.com]/ @ null",
+            "http://[google.com] @ http://other.com/",
+            "http://[::1.2.3.4x] @ http://other.com/",
+            "http://[::1.2.3.] @ http://other.com/",
+            "http://[::1.2.] @ http://other.com/",
+            "http://[::.1.2] @ http://other.com/",
+            "http://[::1.] @ http://other.com/",
+            "http://[::.1] @ http://other.com/",
+            "http://[::%31] @ http://other.com/",
+            "http://%5B::1] @ http://other.com/",
+            "i @ sc:sd",
+            "i @ sc:sd/sd",
+            "../i @ sc:sd",
+            "../i @ sc:sd/sd",
+            "/i @ sc:sd",
+            "/i @ sc:sd/sd",
+            "?i @ sc:sd",
+            "?i @ sc:sd/sd",
+            "sc://@/ @ null",
+            "sc://te@s:t@/ @ null",
+            "sc://:/ @ null",
+            "sc://:12/ @ null",
+            "sc://a\u0000b/ @ null",
+            "sc://a b/ @ null",
+            "sc://a<b @ null",
+            "sc://a>b @ null",
+            "sc://a[b/ @ null",
+            "sc://a\\b/ @ null",
+            "sc://a]b/ @ null",
+            "sc://a^b @ null",
+            "sc://a|b/ @ null",
+            "http://a\u0000b/ @ null",
+            "http://a\u0001b/ @ null",
+            "http://a\u0002b/ @ null",
+            "http://a\u0003b/ @ null",
+            "http://a\u0004b/ @ null",
+            "http://a\u0005b/ @ null",
+            "http://a\u0006b/ @ null",
+            "http://a\u0007b/ @ null",
+            "http://a\bb/ @ null",
+            "http://a\u000bb/ @ null",
+            "http://a\fb/ @ null",
+            "http://a\u000eb/ @ null",
+            "http://a\u000fb/ @ null",
+            "http://a\u0010b/ @ null",
+            "http://a\u0011b/ @ null",
+            "http://a\u0012b/ @ null",
+            "http://a\u0013b/ @ null",
+            "http://a\u0014b/ @ null",
+            "http://a\u0015b/ @ null",
+            "http://a\u0016b/ @ null",
+            "http://a\u0017b/ @ null",
+            "http://a\u0018b/ @ null",
+            "http://a\u0019b/ @ null",
+            "http://a\u001ab/ @ null",
+            "http://a\u001bb/ @ null",
+            "http://a\u001cb/ @ null",
+            "http://a\u001db/ @ null",
+            "http://a\u001eb/ @ null",
+            "http://a\u001fb/ @ null",
+            "http://a b/ @ null",
+            "http://a%b/ @ null",
+            "http://a<b @ null",
+            "http://a>b @ null",
+            "http://a[b/ @ null",
+            "http://a]b/ @ null",
+            "http://a^b @ null",
+            "http://a|b/ @ null",
+            "http://ab/ @ null",
+            "http://ho%00st/ @ null",
+            "http://ho%01st/ @ null",
+            "http://ho%02st/ @ null",
+            "http://ho%03st/ @ null",
+            "http://ho%04st/ @ null",
+            "http://ho%05st/ @ null",
+            "http://ho%06st/ @ null",
+            "http://ho%07st/ @ null",
+            "http://ho%08st/ @ null",
+            "http://ho%09st/ @ null",
+            "http://ho%0Ast/ @ null",
+            "http://ho%0Bst/ @ null",
+            "http://ho%0Cst/ @ null",
+            "http://ho%0Dst/ @ null",
+            "http://ho%0Est/ @ null",
+            "http://ho%0Fst/ @ null",
+            "http://ho%10st/ @ null",
+            "http://ho%11st/ @ null",
+            "http://ho%12st/ @ null",
+            "http://ho%13st/ @ null",
+            "http://ho%14st/ @ null",
+            "http://ho%15st/ @ null",
+            "http://ho%16st/ @ null",
+            "http://ho%17st/ @ null",
+            "http://ho%18st/ @ null",
+            "http://ho%19st/ @ null",
+            "http://ho%1Ast/ @ null",
+            "http://ho%1Bst/ @ null",
+            "http://ho%1Cst/ @ null",
+            "http://ho%1Dst/ @ null",
+            "http://ho%1Est/ @ null",
+            "http://ho%1Fst/ @ null",
+            "http://ho%20st/ @ null",
+            "http://ho%23st/ @ null",
+            "http://ho%25st/ @ null",
+            "http://ho%2Fst/ @ null",
+            "http://ho%3Ast/ @ null",
+            "http://ho%3Cst/ @ null",
+            "http://ho%3Est/ @ null",
+            "http://ho%3Fst/ @ null",
+            "http://ho%40st/ @ null",
+            "http://ho%5Bst/ @ null",
+            "http://ho%5Cst/ @ null",
+            "http://ho%5Dst/ @ null",
+            "http://ho%7Cst/ @ null",
+            "http://ho%7Fst/ @ null",
+            "ftp://example.com%80/ @ null",
+            "ftp://example.com%A0/ @ null",
+            "https://example.com%80/ @ null",
+            "https://example.com%A0/ @ null",
+            "http: @ https://example.org/foo/bar",
+            "http://10000000000 @ http://other.com/",
+            "http://4294967296 @ http://other.com/",
+            "http://18446744073709551616 @ http://other.com/",
+            "http://18446744075840258049 @ http://other.com/",
+            "http://0xffffffff1 @ http://other.com/",
+            "http://256.256.256.256 @ http://other.com/",
+            "https://0x100000000/test @ null",
+            "https://256.0.0.1/test @ null",
+            "file://%43%3A @ null",
+            "file://%43%7C @ null",
+            "file://%43| @ null",
+            "file://C%7C @ null",
+            "file://%43%7C/ @ null",
+            "https://%43%7C/ @ null",
+            "asdf://%43|/ @ null",
+            "\\\\\\.\\Y: @ null",
+            "\\\\\\.\\y: @ null",
+            "http://[0:1:2:3:4:5:6:7:8] @ http://example.net/",
+            "https://[0::0::0] @ null",
+            "https://[0:.0] @ null",
+            "https://[0:0:] @ null",
+            "https://[0:1:2:3:4:5:6:7.0.0.0.1] @ null",
+            "https://[0:1.00.0.0.0] @ null",
+            "https://[0:1.290.0.0.0] @ null",
+            "https://[0:1.23.23] @ null",
+            "http://? @ null",
+            "http://# @ null",
+            "http://f:4294967377/c @ http://example.org/",
+            "http://f:18446744073709551697/c @ http://example.org/",
+            "http://f:340282366920938463463374607431768211537/c @ http://example.org/",
+            "non-special://[:80/ @ null",
+            "http://[::127.0.0.0.1] @ null",
+            "a @ null",
+            "a/ @ null",
+            "a// @ null",
+            "test-a-colon.html @ a:",
+            "test-a-colon-b.html @ a:b",
+            "file://­/p @ null",
+            "file://%C2%AD/p @ null",
+            "file://xn--/p @ null",
+            "# @ null",
+            "? @ null",
+            "http://1.2.3.4.5 @ http://other.com/",
+            "http://1.2.3.4.5. @ http://other.com/",
+            "http://0..0x300/ @ null",
+            "http://0..0x300./ @ null",
+            "http://256.256.256.256.256 @ http://other.com/",
+            "http://256.256.256.256.256. @ http://other.com/",
+            "http://1.2.3.08 @ null",
+            "http://1.2.3.08. @ null",
+            "http://1.2.3.09 @ null",
+            "http://09.2.3.4 @ null",
+            "http://09.2.3.4. @ null",
+            "http://01.2.3.4.5 @ null",
+            "http://01.2.3.4.5. @ null",
+            "http://0x100.2.3.4 @ null",
+            "http://0x100.2.3.4. @ null",
+            "http://0x1.2.3.4.5 @ null",
+            "http://0x1.2.3.4.5. @ null",
+            "http://foo.1.2.3.4 @ null",
+            "http://foo.1.2.3.4. @ null",
+            "http://foo.2.3.4 @ null",
+            "http://foo.2.3.4. @ null",
+            "http://foo.09 @ null",
+            "http://foo.09. @ null",
+            "http://foo.0x4 @ null",
+            "http://foo.0x4. @ null",
+            "http://0999999999999999999/ @ null",
+            "http://foo.0x @ null",
+            "http://foo.0XFfFfFfFfFfFfFfFfFfAcE123 @ null",
+            "http://💩.123/ @ null",
+            "https://\u0000y @ null",
+            "https://￿y @ null",
+            " @ null",
+            "https://­/ @ null",
+            "https://%C2%AD/ @ null",
+            "https://xn--/ @ null",
+            "data://:443 @ null",
+            "data://test:test @ null",
+            "data://[:1] @ null",
+            "javascript://:443 @ null",
+            "javascript://test:test @ null",
+            "javascript://[:1] @ null",
+            "mailto://:443 @ null",
+            "mailto://test:test @ null",
+            "mailto://[:1] @ null",
+            "intent://:443 @ null",
+            "intent://test:test @ null",
+            "intent://[:1] @ null",
+            "urn://:443 @ null",
+            "urn://test:test @ null",
+            "urn://[:1] @ null",
+            "turn://:443 @ null",
+            "turn://test:test @ null",
+            "turn://[:1] @ null",
+            "stun://:443 @ null",
+            "stun://test:test @ null",
+            "stun://[:1] @ null",
+            "non-special://host\\a @ null"
+          ]
+        },
+        "urlSetters": {
+          "cases": 278,
+          "differ": 0,
+          "valueDiffs": 0,
+          "errorShapeOnly": 0,
+          "valueExamples": [],
+          "errorExamples": [],
+          "allDiffs": []
+        },
+        "urlShape": {
+          "cases": 13,
+          "differ": 8,
+          "valueDiffs": 4,
+          "errorShapeOnly": 4,
+          "valueExamples": [
+            {
+              "case": "statics",
+              "node": {
+                "ok": [
+                  "canParse:function",
+                  "parse:function",
+                  "createObjectURL:function",
+                  "revokeObjectURL:function"
+                ]
+              },
+              "guest": {
+                "ok": [
+                  "canParse:function",
+                  "parse:function",
+                  "createObjectURL:undefined",
+                  "revokeObjectURL:undefined"
+                ]
+              }
+            },
+            {
+              "case": "own keys",
+              "node": {
+                "ok": []
+              },
+              "guest": {
+                "ok": ["Symbol(impl)"]
+              }
+            },
+            {
+              "case": "proto keys",
+              "node": {
+                "ok": [
+                  "Symbol(Symbol.toStringTag)",
+                  "Symbol(nodejs.util.inspect.custom)",
+                  "constructor",
+                  "hash",
+                  "host",
+                  "hostname",
+                  "href",
+                  "origin",
+                  "password",
+                  "pathname",
+                  "port",
+                  "protocol",
+                  "search",
+                  "searchParams",
+                  "toJSON",
+                  "toString",
+                  "username"
+                ]
+              },
+              "guest": {
+                "ok": [
+                  "Symbol(Symbol.toStringTag)",
+                  "constructor",
+                  "hash",
+                  "host",
+                  "hostname",
+                  "href",
+                  "origin",
+                  "password",
+                  "pathname",
+                  "port",
+                  "protocol",
+                  "search",
+                  "searchParams",
+                  "toJSON",
+                  "toString",
+                  "username"
+                ]
+              }
+            },
+            {
+              "case": "length",
+              "node": {
+                "ok": [1, "URL"]
+              },
+              "guest": {
+                "ok": [1, "URL2"]
+              }
+            }
+          ],
+          "errorExamples": [
+            {
+              "case": "invalid",
+              "node": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Invalid URL",
+                "code": "ERR_INVALID_URL",
+                "isDOMException": false
+              },
+              "guest": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Invalid URL: nope",
+                "isDOMException": false
+              }
+            },
+            {
+              "case": "no-arg",
+              "node": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "The \"url\" argument must be specified",
+                "code": "ERR_MISSING_ARGS",
+                "isDOMException": false
+              },
+              "guest": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Failed to construct 'URL': 1 argument required, but only 0 present.",
+                "isDOMException": false
+              }
+            },
+            {
+              "case": "call",
+              "node": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Class constructor URL cannot be invoked without 'new'",
+                "isDOMException": false
+              },
+              "guest": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Class constructor URL2 cannot be invoked without 'new'",
+                "isDOMException": false
+              }
+            }
+          ],
+          "allDiffs": [
+            "statics",
+            "invalid",
+            "no-arg",
+            "call",
+            "own keys",
+            "proto keys",
+            "href setter invalid",
+            "length"
+          ]
+        },
+        "usp": {
+          "cases": 30,
+          "differ": 5,
+          "valueDiffs": 2,
+          "errorShapeOnly": 3,
+          "valueExamples": [
+            {
+              "case": "null",
+              "node": {
+                "ok": ""
+              },
+              "guest": {
+                "ok": "null="
+              }
+            },
+            {
+              "case": "proto keys",
+              "node": {
+                "ok": [
+                  "Symbol(Symbol.iterator)",
+                  "Symbol(Symbol.toStringTag)",
+                  "Symbol(nodejs.util.inspect.custom)",
+                  "append",
+                  "constructor",
+                  "delete",
+                  "entries",
+                  "forEach",
+                  "get",
+                  "getAll",
+                  "has",
+                  "keys",
+                  "set",
+                  "size",
+                  "sort",
+                  "toString",
+                  "values"
+                ]
+              },
+              "guest": {
+                "ok": [
+                  "Symbol(Symbol.iterator)",
+                  "Symbol(Symbol.toStringTag)",
+                  "append",
+                  "constructor",
+                  "delete",
+                  "entries",
+                  "forEach",
+                  "get",
+                  "getAll",
+                  "has",
+                  "keys",
+                  "set",
+                  "size",
+                  "sort",
+                  "toString",
+                  "values"
+                ]
+              }
+            }
+          ],
+          "errorExamples": [
+            {
+              "case": "bad pair",
+              "node": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Each query pair must be an iterable [name, value] tuple",
+                "code": "ERR_INVALID_TUPLE",
+                "isDOMException": false
+              },
+              "guest": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Failed to construct 'URLSearchParams': parameter 1 sequence's element does not contain exactly two elements.",
+                "isDOMException": false
+              }
+            },
+            {
+              "case": "call no new",
+              "node": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Class constructor URLSearchParams cannot be invoked without 'new'",
+                "isDOMException": false
+              },
+              "guest": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Class constructor URLSearchParams2 cannot be invoked without 'new'",
+                "isDOMException": false
+              }
+            },
+            {
+              "case": "no args append",
+              "node": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "The \"name\" and \"value\" arguments must be specified",
+                "code": "ERR_MISSING_ARGS",
+                "isDOMException": false
+              },
+              "guest": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Failed to execute 'append' on 'URLSearchParams': 2 arguments required, but only 1 present.",
+                "isDOMException": false
+              }
+            }
+          ],
+          "allDiffs": ["bad pair", "null", "call no new", "no args append", "proto keys"]
+        }
+      }
+    },
+    "url:whatwg-url@15 lazy": {
+      "bytes": 400994,
+      "gzip": 82445,
+      "minBytes": 293063,
+      "byPackage": {
+        "webidl-conversions": 12686,
+        "whatwg-url-15": 104235,
+        "punycode": 8071,
+        "tr46": 272311,
+        "probe/guest source": 349
+      },
+      "suites": {
+        "url": {
+          "cases": 886,
+          "differ": 275,
+          "valueDiffs": 0,
+          "errorShapeOnly": 275,
+          "valueExamples": [],
+          "errorExamples": [
+            {
+              "case": "http://f:b/c @ http://example.org/foo/bar",
+              "node": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Invalid URL",
+                "code": "ERR_INVALID_URL",
+                "isDOMException": false
+              },
+              "guest": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Invalid URL: http://f:b/c",
+                "isDOMException": false
+              }
+            },
+            {
+              "case": "http://f: /c @ http://example.org/foo/bar",
+              "node": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Invalid URL",
+                "code": "ERR_INVALID_URL",
+                "isDOMException": false
+              },
+              "guest": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Invalid URL: http://f: /c",
+                "isDOMException": false
+              }
+            },
+            {
+              "case": "http://f:fifty-two/c @ http://example.org/foo/bar",
+              "node": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Invalid URL",
+                "code": "ERR_INVALID_URL",
+                "isDOMException": false
+              },
+              "guest": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Invalid URL: http://f:fifty-two/c",
+                "isDOMException": false
+              }
+            }
+          ],
+          "allDiffs": [
+            "http://f:b/c @ http://example.org/foo/bar",
+            "http://f: /c @ http://example.org/foo/bar",
+            "http://f:fifty-two/c @ http://example.org/foo/bar",
+            "http://f:999999/c @ http://example.org/foo/bar",
+            "non-special://f:999999/c @ http://example.org/foo/bar",
+            "http://f: 21 / b ? d # e  @ http://example.org/foo/bar",
+            "http://[1::2]:3:4 @ http://example.org/foo/bar",
+            "http://2001::1 @ http://example.org/foo/bar",
+            "http://2001::1] @ http://example.org/foo/bar",
+            "http://2001::1]:80 @ http://example.org/foo/bar",
+            "http://[::127.0.0.1.] @ http://example.org/foo/bar",
+            "file://example:1/ @ null",
+            "file://example:test/ @ null",
+            "file://example%/ @ null",
+            "file://[example]/ @ null",
+            "http://user:pass@/ @ null",
+            "http://foo:-80/ @ null",
+            "http:/:@/www.example.com @ null",
+            "http://user@/www.example.com @ null",
+            "http:@/www.example.com @ null",
+            "http:/@/www.example.com @ null",
+            "http://@/www.example.com @ null",
+            "https:@/www.example.com @ null",
+            "http:a:b@/www.example.com @ null",
+            "http:/a:b@/www.example.com @ null",
+            "http://a:b@/www.example.com @ null",
+            "http::@/www.example.com @ null",
+            "http:@:www.example.com @ null",
+            "http:/@:www.example.com @ null",
+            "http://@:www.example.com @ null",
+            "http://example example.com @ http://other.com/",
+            "http://Goo%20 goo%7C|.com @ http://other.com/",
+            "http://[] @ http://other.com/",
+            "http://[:] @ http://other.com/",
+            "http://GOO 　goo.com @ http://other.com/",
+            "http://﷐zyx.com @ http://other.com/",
+            "http://%ef%b7%90zyx.com @ http://other.com/",
+            "https://� @ null",
+            "https://%EF%BF%BD @ null",
+            "http://a.b.c.xn--pokxncvks @ null",
+            "http://10.0.0.xn--pokxncvks @ null",
+            "http://a.b.c.XN--pokxncvks @ null",
+            "http://a.b.c.Xn--pokxncvks @ null",
+            "http://10.0.0.XN--pokxncvks @ null",
+            "http://10.0.0.xN--pokxncvks @ null",
+            "http://％４１.com @ http://other.com/",
+            "http://%ef%bc%85%ef%bc%94%ef%bc%91.com @ http://other.com/",
+            "http://％００.com @ http://other.com/",
+            "http://%ef%bc%85%ef%bc%90%ef%bc%90.com @ http://other.com/",
+            "http://%zz%66%a.com @ http://other.com/",
+            "http://%25 @ http://other.com/",
+            "http://hello%00 @ http://other.com/",
+            "http://192.168.0.257 @ http://other.com/",
+            "http://%3g%78%63%30%2e%30%32%35%30%2E.01 @ http://other.com/",
+            "http://192.168.0.1 hello @ http://other.com/",
+            "https://x x:12 @ null",
+            "http://[www.google.com]/ @ null",
+            "http://[google.com] @ http://other.com/",
+            "http://[::1.2.3.4x] @ http://other.com/",
+            "http://[::1.2.3.] @ http://other.com/",
+            "http://[::1.2.] @ http://other.com/",
+            "http://[::.1.2] @ http://other.com/",
+            "http://[::1.] @ http://other.com/",
+            "http://[::.1] @ http://other.com/",
+            "http://[::%31] @ http://other.com/",
+            "http://%5B::1] @ http://other.com/",
+            "i @ sc:sd",
+            "i @ sc:sd/sd",
+            "../i @ sc:sd",
+            "../i @ sc:sd/sd",
+            "/i @ sc:sd",
+            "/i @ sc:sd/sd",
+            "?i @ sc:sd",
+            "?i @ sc:sd/sd",
+            "sc://@/ @ null",
+            "sc://te@s:t@/ @ null",
+            "sc://:/ @ null",
+            "sc://:12/ @ null",
+            "sc://a\u0000b/ @ null",
+            "sc://a b/ @ null",
+            "sc://a<b @ null",
+            "sc://a>b @ null",
+            "sc://a[b/ @ null",
+            "sc://a\\b/ @ null",
+            "sc://a]b/ @ null",
+            "sc://a^b @ null",
+            "sc://a|b/ @ null",
+            "http://a\u0000b/ @ null",
+            "http://a\u0001b/ @ null",
+            "http://a\u0002b/ @ null",
+            "http://a\u0003b/ @ null",
+            "http://a\u0004b/ @ null",
+            "http://a\u0005b/ @ null",
+            "http://a\u0006b/ @ null",
+            "http://a\u0007b/ @ null",
+            "http://a\bb/ @ null",
+            "http://a\u000bb/ @ null",
+            "http://a\fb/ @ null",
+            "http://a\u000eb/ @ null",
+            "http://a\u000fb/ @ null",
+            "http://a\u0010b/ @ null",
+            "http://a\u0011b/ @ null",
+            "http://a\u0012b/ @ null",
+            "http://a\u0013b/ @ null",
+            "http://a\u0014b/ @ null",
+            "http://a\u0015b/ @ null",
+            "http://a\u0016b/ @ null",
+            "http://a\u0017b/ @ null",
+            "http://a\u0018b/ @ null",
+            "http://a\u0019b/ @ null",
+            "http://a\u001ab/ @ null",
+            "http://a\u001bb/ @ null",
+            "http://a\u001cb/ @ null",
+            "http://a\u001db/ @ null",
+            "http://a\u001eb/ @ null",
+            "http://a\u001fb/ @ null",
+            "http://a b/ @ null",
+            "http://a%b/ @ null",
+            "http://a<b @ null",
+            "http://a>b @ null",
+            "http://a[b/ @ null",
+            "http://a]b/ @ null",
+            "http://a^b @ null",
+            "http://a|b/ @ null",
+            "http://ab/ @ null",
+            "http://ho%00st/ @ null",
+            "http://ho%01st/ @ null",
+            "http://ho%02st/ @ null",
+            "http://ho%03st/ @ null",
+            "http://ho%04st/ @ null",
+            "http://ho%05st/ @ null",
+            "http://ho%06st/ @ null",
+            "http://ho%07st/ @ null",
+            "http://ho%08st/ @ null",
+            "http://ho%09st/ @ null",
+            "http://ho%0Ast/ @ null",
+            "http://ho%0Bst/ @ null",
+            "http://ho%0Cst/ @ null",
+            "http://ho%0Dst/ @ null",
+            "http://ho%0Est/ @ null",
+            "http://ho%0Fst/ @ null",
+            "http://ho%10st/ @ null",
+            "http://ho%11st/ @ null",
+            "http://ho%12st/ @ null",
+            "http://ho%13st/ @ null",
+            "http://ho%14st/ @ null",
+            "http://ho%15st/ @ null",
+            "http://ho%16st/ @ null",
+            "http://ho%17st/ @ null",
+            "http://ho%18st/ @ null",
+            "http://ho%19st/ @ null",
+            "http://ho%1Ast/ @ null",
+            "http://ho%1Bst/ @ null",
+            "http://ho%1Cst/ @ null",
+            "http://ho%1Dst/ @ null",
+            "http://ho%1Est/ @ null",
+            "http://ho%1Fst/ @ null",
+            "http://ho%20st/ @ null",
+            "http://ho%23st/ @ null",
+            "http://ho%25st/ @ null",
+            "http://ho%2Fst/ @ null",
+            "http://ho%3Ast/ @ null",
+            "http://ho%3Cst/ @ null",
+            "http://ho%3Est/ @ null",
+            "http://ho%3Fst/ @ null",
+            "http://ho%40st/ @ null",
+            "http://ho%5Bst/ @ null",
+            "http://ho%5Cst/ @ null",
+            "http://ho%5Dst/ @ null",
+            "http://ho%7Cst/ @ null",
+            "http://ho%7Fst/ @ null",
+            "ftp://example.com%80/ @ null",
+            "ftp://example.com%A0/ @ null",
+            "https://example.com%80/ @ null",
+            "https://example.com%A0/ @ null",
+            "http: @ https://example.org/foo/bar",
+            "http://10000000000 @ http://other.com/",
+            "http://4294967296 @ http://other.com/",
+            "http://18446744073709551616 @ http://other.com/",
+            "http://18446744075840258049 @ http://other.com/",
+            "http://0xffffffff1 @ http://other.com/",
+            "http://256.256.256.256 @ http://other.com/",
+            "https://0x100000000/test @ null",
+            "https://256.0.0.1/test @ null",
+            "file://%43%3A @ null",
+            "file://%43%7C @ null",
+            "file://%43| @ null",
+            "file://C%7C @ null",
+            "file://%43%7C/ @ null",
+            "https://%43%7C/ @ null",
+            "asdf://%43|/ @ null",
+            "\\\\\\.\\Y: @ null",
+            "\\\\\\.\\y: @ null",
+            "http://[0:1:2:3:4:5:6:7:8] @ http://example.net/",
+            "https://[0::0::0] @ null",
+            "https://[0:.0] @ null",
+            "https://[0:0:] @ null",
+            "https://[0:1:2:3:4:5:6:7.0.0.0.1] @ null",
+            "https://[0:1.00.0.0.0] @ null",
+            "https://[0:1.290.0.0.0] @ null",
+            "https://[0:1.23.23] @ null",
+            "http://? @ null",
+            "http://# @ null",
+            "http://f:4294967377/c @ http://example.org/",
+            "http://f:18446744073709551697/c @ http://example.org/",
+            "http://f:340282366920938463463374607431768211537/c @ http://example.org/",
+            "non-special://[:80/ @ null",
+            "http://[::127.0.0.0.1] @ null",
+            "a @ null",
+            "a/ @ null",
+            "a// @ null",
+            "test-a-colon.html @ a:",
+            "test-a-colon-b.html @ a:b",
+            "file://­/p @ null",
+            "file://%C2%AD/p @ null",
+            "file://xn--/p @ null",
+            "# @ null",
+            "? @ null",
+            "http://1.2.3.4.5 @ http://other.com/",
+            "http://1.2.3.4.5. @ http://other.com/",
+            "http://0..0x300/ @ null",
+            "http://0..0x300./ @ null",
+            "http://256.256.256.256.256 @ http://other.com/",
+            "http://256.256.256.256.256. @ http://other.com/",
+            "http://1.2.3.08 @ null",
+            "http://1.2.3.08. @ null",
+            "http://1.2.3.09 @ null",
+            "http://09.2.3.4 @ null",
+            "http://09.2.3.4. @ null",
+            "http://01.2.3.4.5 @ null",
+            "http://01.2.3.4.5. @ null",
+            "http://0x100.2.3.4 @ null",
+            "http://0x100.2.3.4. @ null",
+            "http://0x1.2.3.4.5 @ null",
+            "http://0x1.2.3.4.5. @ null",
+            "http://foo.1.2.3.4 @ null",
+            "http://foo.1.2.3.4. @ null",
+            "http://foo.2.3.4 @ null",
+            "http://foo.2.3.4. @ null",
+            "http://foo.09 @ null",
+            "http://foo.09. @ null",
+            "http://foo.0x4 @ null",
+            "http://foo.0x4. @ null",
+            "http://0999999999999999999/ @ null",
+            "http://foo.0x @ null",
+            "http://foo.0XFfFfFfFfFfFfFfFfFfAcE123 @ null",
+            "http://💩.123/ @ null",
+            "https://\u0000y @ null",
+            "https://￿y @ null",
+            " @ null",
+            "https://­/ @ null",
+            "https://%C2%AD/ @ null",
+            "https://xn--/ @ null",
+            "data://:443 @ null",
+            "data://test:test @ null",
+            "data://[:1] @ null",
+            "javascript://:443 @ null",
+            "javascript://test:test @ null",
+            "javascript://[:1] @ null",
+            "mailto://:443 @ null",
+            "mailto://test:test @ null",
+            "mailto://[:1] @ null",
+            "intent://:443 @ null",
+            "intent://test:test @ null",
+            "intent://[:1] @ null",
+            "urn://:443 @ null",
+            "urn://test:test @ null",
+            "urn://[:1] @ null",
+            "turn://:443 @ null",
+            "turn://test:test @ null",
+            "turn://[:1] @ null",
+            "stun://:443 @ null",
+            "stun://test:test @ null",
+            "stun://[:1] @ null",
+            "non-special://host\\a @ null"
+          ]
+        },
+        "urlShape": {
+          "cases": 13,
+          "differ": 6,
+          "valueDiffs": 3,
+          "errorShapeOnly": 3,
+          "valueExamples": [
+            {
+              "case": "statics",
+              "node": {
+                "ok": [
+                  "canParse:function",
+                  "parse:function",
+                  "createObjectURL:function",
+                  "revokeObjectURL:function"
+                ]
+              },
+              "guest": {
+                "ok": [
+                  "canParse:function",
+                  "parse:function",
+                  "createObjectURL:undefined",
+                  "revokeObjectURL:undefined"
+                ]
+              }
+            },
+            {
+              "case": "own keys",
+              "node": {
+                "ok": []
+              },
+              "guest": {
+                "ok": ["Symbol(impl)"]
+              }
+            },
+            {
+              "case": "proto keys",
+              "node": {
+                "ok": [
+                  "Symbol(Symbol.toStringTag)",
+                  "Symbol(nodejs.util.inspect.custom)",
+                  "constructor",
+                  "hash",
+                  "host",
+                  "hostname",
+                  "href",
+                  "origin",
+                  "password",
+                  "pathname",
+                  "port",
+                  "protocol",
+                  "search",
+                  "searchParams",
+                  "toJSON",
+                  "toString",
+                  "username"
+                ]
+              },
+              "guest": {
+                "ok": [
+                  "Symbol(Symbol.toStringTag)",
+                  "constructor",
+                  "hash",
+                  "host",
+                  "hostname",
+                  "href",
+                  "origin",
+                  "password",
+                  "pathname",
+                  "port",
+                  "protocol",
+                  "search",
+                  "searchParams",
+                  "toJSON",
+                  "toString",
+                  "username"
+                ]
+              }
+            }
+          ],
+          "errorExamples": [
+            {
+              "case": "invalid",
+              "node": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Invalid URL",
+                "code": "ERR_INVALID_URL",
+                "isDOMException": false
+              },
+              "guest": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Invalid URL: nope",
+                "isDOMException": false
+              }
+            },
+            {
+              "case": "no-arg",
+              "node": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "The \"url\" argument must be specified",
+                "code": "ERR_MISSING_ARGS",
+                "isDOMException": false
+              },
+              "guest": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Failed to construct 'URL': 1 argument required, but only 0 present.",
+                "isDOMException": false
+              }
+            },
+            {
+              "case": "href setter invalid",
+              "node": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Invalid URL",
+                "code": "ERR_INVALID_URL",
+                "isDOMException": false
+              },
+              "guest": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Invalid URL: nope",
+                "isDOMException": false
+              }
+            }
+          ],
+          "allDiffs": [
+            "statics",
+            "invalid",
+            "no-arg",
+            "own keys",
+            "proto keys",
+            "href setter invalid"
+          ]
+        },
+        "usp": {
+          "cases": 30,
+          "differ": 4,
+          "valueDiffs": 2,
+          "errorShapeOnly": 2,
+          "valueExamples": [
+            {
+              "case": "null",
+              "node": {
+                "ok": ""
+              },
+              "guest": {
+                "ok": "null="
+              }
+            },
+            {
+              "case": "proto keys",
+              "node": {
+                "ok": [
+                  "Symbol(Symbol.iterator)",
+                  "Symbol(Symbol.toStringTag)",
+                  "Symbol(nodejs.util.inspect.custom)",
+                  "append",
+                  "constructor",
+                  "delete",
+                  "entries",
+                  "forEach",
+                  "get",
+                  "getAll",
+                  "has",
+                  "keys",
+                  "set",
+                  "size",
+                  "sort",
+                  "toString",
+                  "values"
+                ]
+              },
+              "guest": {
+                "ok": [
+                  "Symbol(Symbol.iterator)",
+                  "Symbol(Symbol.toStringTag)",
+                  "append",
+                  "constructor",
+                  "delete",
+                  "entries",
+                  "forEach",
+                  "get",
+                  "getAll",
+                  "has",
+                  "keys",
+                  "set",
+                  "size",
+                  "sort",
+                  "toString",
+                  "values"
+                ]
+              }
+            }
+          ],
+          "errorExamples": [
+            {
+              "case": "bad pair",
+              "node": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Each query pair must be an iterable [name, value] tuple",
+                "code": "ERR_INVALID_TUPLE",
+                "isDOMException": false
+              },
+              "guest": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Failed to construct 'URLSearchParams': parameter 1 sequence's element does not contain exactly two elements.",
+                "isDOMException": false
+              }
+            },
+            {
+              "case": "no args append",
+              "node": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "The \"name\" and \"value\" arguments must be specified",
+                "code": "ERR_MISSING_ARGS",
+                "isDOMException": false
+              },
+              "guest": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Failed to execute 'append' on 'URLSearchParams': 2 arguments required, but only 1 present.",
+                "isDOMException": false
+              }
+            }
+          ],
+          "allDiffs": ["bad pair", "null", "no args append", "proto keys"]
+        }
+      }
+    },
+    "url:whatwg-url@15 lazy-tr46": {
+      "bytes": 402082,
+      "gzip": 82822,
+      "minBytes": 293422,
+      "byPackage": {
+        "webidl-conversions": 12686,
+        "whatwg-url-15": 104344,
+        "punycode": 8065,
+        "tr46": 272311,
+        "probe/guest source": 182
+      },
+      "suites": {
+        "url": {
+          "cases": 886,
+          "differ": 275,
+          "valueDiffs": 0,
+          "errorShapeOnly": 275,
+          "valueExamples": [],
+          "errorExamples": [
+            {
+              "case": "http://f:b/c @ http://example.org/foo/bar",
+              "node": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Invalid URL",
+                "code": "ERR_INVALID_URL",
+                "isDOMException": false
+              },
+              "guest": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Invalid URL: http://f:b/c",
+                "isDOMException": false
+              }
+            },
+            {
+              "case": "http://f: /c @ http://example.org/foo/bar",
+              "node": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Invalid URL",
+                "code": "ERR_INVALID_URL",
+                "isDOMException": false
+              },
+              "guest": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Invalid URL: http://f: /c",
+                "isDOMException": false
+              }
+            },
+            {
+              "case": "http://f:fifty-two/c @ http://example.org/foo/bar",
+              "node": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Invalid URL",
+                "code": "ERR_INVALID_URL",
+                "isDOMException": false
+              },
+              "guest": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Invalid URL: http://f:fifty-two/c",
+                "isDOMException": false
+              }
+            }
+          ],
+          "allDiffs": [
+            "http://f:b/c @ http://example.org/foo/bar",
+            "http://f: /c @ http://example.org/foo/bar",
+            "http://f:fifty-two/c @ http://example.org/foo/bar",
+            "http://f:999999/c @ http://example.org/foo/bar",
+            "non-special://f:999999/c @ http://example.org/foo/bar",
+            "http://f: 21 / b ? d # e  @ http://example.org/foo/bar",
+            "http://[1::2]:3:4 @ http://example.org/foo/bar",
+            "http://2001::1 @ http://example.org/foo/bar",
+            "http://2001::1] @ http://example.org/foo/bar",
+            "http://2001::1]:80 @ http://example.org/foo/bar",
+            "http://[::127.0.0.1.] @ http://example.org/foo/bar",
+            "file://example:1/ @ null",
+            "file://example:test/ @ null",
+            "file://example%/ @ null",
+            "file://[example]/ @ null",
+            "http://user:pass@/ @ null",
+            "http://foo:-80/ @ null",
+            "http:/:@/www.example.com @ null",
+            "http://user@/www.example.com @ null",
+            "http:@/www.example.com @ null",
+            "http:/@/www.example.com @ null",
+            "http://@/www.example.com @ null",
+            "https:@/www.example.com @ null",
+            "http:a:b@/www.example.com @ null",
+            "http:/a:b@/www.example.com @ null",
+            "http://a:b@/www.example.com @ null",
+            "http::@/www.example.com @ null",
+            "http:@:www.example.com @ null",
+            "http:/@:www.example.com @ null",
+            "http://@:www.example.com @ null",
+            "http://example example.com @ http://other.com/",
+            "http://Goo%20 goo%7C|.com @ http://other.com/",
+            "http://[] @ http://other.com/",
+            "http://[:] @ http://other.com/",
+            "http://GOO 　goo.com @ http://other.com/",
+            "http://﷐zyx.com @ http://other.com/",
+            "http://%ef%b7%90zyx.com @ http://other.com/",
+            "https://� @ null",
+            "https://%EF%BF%BD @ null",
+            "http://a.b.c.xn--pokxncvks @ null",
+            "http://10.0.0.xn--pokxncvks @ null",
+            "http://a.b.c.XN--pokxncvks @ null",
+            "http://a.b.c.Xn--pokxncvks @ null",
+            "http://10.0.0.XN--pokxncvks @ null",
+            "http://10.0.0.xN--pokxncvks @ null",
+            "http://％４１.com @ http://other.com/",
+            "http://%ef%bc%85%ef%bc%94%ef%bc%91.com @ http://other.com/",
+            "http://％００.com @ http://other.com/",
+            "http://%ef%bc%85%ef%bc%90%ef%bc%90.com @ http://other.com/",
+            "http://%zz%66%a.com @ http://other.com/",
+            "http://%25 @ http://other.com/",
+            "http://hello%00 @ http://other.com/",
+            "http://192.168.0.257 @ http://other.com/",
+            "http://%3g%78%63%30%2e%30%32%35%30%2E.01 @ http://other.com/",
+            "http://192.168.0.1 hello @ http://other.com/",
+            "https://x x:12 @ null",
+            "http://[www.google.com]/ @ null",
+            "http://[google.com] @ http://other.com/",
+            "http://[::1.2.3.4x] @ http://other.com/",
+            "http://[::1.2.3.] @ http://other.com/",
+            "http://[::1.2.] @ http://other.com/",
+            "http://[::.1.2] @ http://other.com/",
+            "http://[::1.] @ http://other.com/",
+            "http://[::.1] @ http://other.com/",
+            "http://[::%31] @ http://other.com/",
+            "http://%5B::1] @ http://other.com/",
+            "i @ sc:sd",
+            "i @ sc:sd/sd",
+            "../i @ sc:sd",
+            "../i @ sc:sd/sd",
+            "/i @ sc:sd",
+            "/i @ sc:sd/sd",
+            "?i @ sc:sd",
+            "?i @ sc:sd/sd",
+            "sc://@/ @ null",
+            "sc://te@s:t@/ @ null",
+            "sc://:/ @ null",
+            "sc://:12/ @ null",
+            "sc://a\u0000b/ @ null",
+            "sc://a b/ @ null",
+            "sc://a<b @ null",
+            "sc://a>b @ null",
+            "sc://a[b/ @ null",
+            "sc://a\\b/ @ null",
+            "sc://a]b/ @ null",
+            "sc://a^b @ null",
+            "sc://a|b/ @ null",
+            "http://a\u0000b/ @ null",
+            "http://a\u0001b/ @ null",
+            "http://a\u0002b/ @ null",
+            "http://a\u0003b/ @ null",
+            "http://a\u0004b/ @ null",
+            "http://a\u0005b/ @ null",
+            "http://a\u0006b/ @ null",
+            "http://a\u0007b/ @ null",
+            "http://a\bb/ @ null",
+            "http://a\u000bb/ @ null",
+            "http://a\fb/ @ null",
+            "http://a\u000eb/ @ null",
+            "http://a\u000fb/ @ null",
+            "http://a\u0010b/ @ null",
+            "http://a\u0011b/ @ null",
+            "http://a\u0012b/ @ null",
+            "http://a\u0013b/ @ null",
+            "http://a\u0014b/ @ null",
+            "http://a\u0015b/ @ null",
+            "http://a\u0016b/ @ null",
+            "http://a\u0017b/ @ null",
+            "http://a\u0018b/ @ null",
+            "http://a\u0019b/ @ null",
+            "http://a\u001ab/ @ null",
+            "http://a\u001bb/ @ null",
+            "http://a\u001cb/ @ null",
+            "http://a\u001db/ @ null",
+            "http://a\u001eb/ @ null",
+            "http://a\u001fb/ @ null",
+            "http://a b/ @ null",
+            "http://a%b/ @ null",
+            "http://a<b @ null",
+            "http://a>b @ null",
+            "http://a[b/ @ null",
+            "http://a]b/ @ null",
+            "http://a^b @ null",
+            "http://a|b/ @ null",
+            "http://ab/ @ null",
+            "http://ho%00st/ @ null",
+            "http://ho%01st/ @ null",
+            "http://ho%02st/ @ null",
+            "http://ho%03st/ @ null",
+            "http://ho%04st/ @ null",
+            "http://ho%05st/ @ null",
+            "http://ho%06st/ @ null",
+            "http://ho%07st/ @ null",
+            "http://ho%08st/ @ null",
+            "http://ho%09st/ @ null",
+            "http://ho%0Ast/ @ null",
+            "http://ho%0Bst/ @ null",
+            "http://ho%0Cst/ @ null",
+            "http://ho%0Dst/ @ null",
+            "http://ho%0Est/ @ null",
+            "http://ho%0Fst/ @ null",
+            "http://ho%10st/ @ null",
+            "http://ho%11st/ @ null",
+            "http://ho%12st/ @ null",
+            "http://ho%13st/ @ null",
+            "http://ho%14st/ @ null",
+            "http://ho%15st/ @ null",
+            "http://ho%16st/ @ null",
+            "http://ho%17st/ @ null",
+            "http://ho%18st/ @ null",
+            "http://ho%19st/ @ null",
+            "http://ho%1Ast/ @ null",
+            "http://ho%1Bst/ @ null",
+            "http://ho%1Cst/ @ null",
+            "http://ho%1Dst/ @ null",
+            "http://ho%1Est/ @ null",
+            "http://ho%1Fst/ @ null",
+            "http://ho%20st/ @ null",
+            "http://ho%23st/ @ null",
+            "http://ho%25st/ @ null",
+            "http://ho%2Fst/ @ null",
+            "http://ho%3Ast/ @ null",
+            "http://ho%3Cst/ @ null",
+            "http://ho%3Est/ @ null",
+            "http://ho%3Fst/ @ null",
+            "http://ho%40st/ @ null",
+            "http://ho%5Bst/ @ null",
+            "http://ho%5Cst/ @ null",
+            "http://ho%5Dst/ @ null",
+            "http://ho%7Cst/ @ null",
+            "http://ho%7Fst/ @ null",
+            "ftp://example.com%80/ @ null",
+            "ftp://example.com%A0/ @ null",
+            "https://example.com%80/ @ null",
+            "https://example.com%A0/ @ null",
+            "http: @ https://example.org/foo/bar",
+            "http://10000000000 @ http://other.com/",
+            "http://4294967296 @ http://other.com/",
+            "http://18446744073709551616 @ http://other.com/",
+            "http://18446744075840258049 @ http://other.com/",
+            "http://0xffffffff1 @ http://other.com/",
+            "http://256.256.256.256 @ http://other.com/",
+            "https://0x100000000/test @ null",
+            "https://256.0.0.1/test @ null",
+            "file://%43%3A @ null",
+            "file://%43%7C @ null",
+            "file://%43| @ null",
+            "file://C%7C @ null",
+            "file://%43%7C/ @ null",
+            "https://%43%7C/ @ null",
+            "asdf://%43|/ @ null",
+            "\\\\\\.\\Y: @ null",
+            "\\\\\\.\\y: @ null",
+            "http://[0:1:2:3:4:5:6:7:8] @ http://example.net/",
+            "https://[0::0::0] @ null",
+            "https://[0:.0] @ null",
+            "https://[0:0:] @ null",
+            "https://[0:1:2:3:4:5:6:7.0.0.0.1] @ null",
+            "https://[0:1.00.0.0.0] @ null",
+            "https://[0:1.290.0.0.0] @ null",
+            "https://[0:1.23.23] @ null",
+            "http://? @ null",
+            "http://# @ null",
+            "http://f:4294967377/c @ http://example.org/",
+            "http://f:18446744073709551697/c @ http://example.org/",
+            "http://f:340282366920938463463374607431768211537/c @ http://example.org/",
+            "non-special://[:80/ @ null",
+            "http://[::127.0.0.0.1] @ null",
+            "a @ null",
+            "a/ @ null",
+            "a// @ null",
+            "test-a-colon.html @ a:",
+            "test-a-colon-b.html @ a:b",
+            "file://­/p @ null",
+            "file://%C2%AD/p @ null",
+            "file://xn--/p @ null",
+            "# @ null",
+            "? @ null",
+            "http://1.2.3.4.5 @ http://other.com/",
+            "http://1.2.3.4.5. @ http://other.com/",
+            "http://0..0x300/ @ null",
+            "http://0..0x300./ @ null",
+            "http://256.256.256.256.256 @ http://other.com/",
+            "http://256.256.256.256.256. @ http://other.com/",
+            "http://1.2.3.08 @ null",
+            "http://1.2.3.08. @ null",
+            "http://1.2.3.09 @ null",
+            "http://09.2.3.4 @ null",
+            "http://09.2.3.4. @ null",
+            "http://01.2.3.4.5 @ null",
+            "http://01.2.3.4.5. @ null",
+            "http://0x100.2.3.4 @ null",
+            "http://0x100.2.3.4. @ null",
+            "http://0x1.2.3.4.5 @ null",
+            "http://0x1.2.3.4.5. @ null",
+            "http://foo.1.2.3.4 @ null",
+            "http://foo.1.2.3.4. @ null",
+            "http://foo.2.3.4 @ null",
+            "http://foo.2.3.4. @ null",
+            "http://foo.09 @ null",
+            "http://foo.09. @ null",
+            "http://foo.0x4 @ null",
+            "http://foo.0x4. @ null",
+            "http://0999999999999999999/ @ null",
+            "http://foo.0x @ null",
+            "http://foo.0XFfFfFfFfFfFfFfFfFfAcE123 @ null",
+            "http://💩.123/ @ null",
+            "https://\u0000y @ null",
+            "https://￿y @ null",
+            " @ null",
+            "https://­/ @ null",
+            "https://%C2%AD/ @ null",
+            "https://xn--/ @ null",
+            "data://:443 @ null",
+            "data://test:test @ null",
+            "data://[:1] @ null",
+            "javascript://:443 @ null",
+            "javascript://test:test @ null",
+            "javascript://[:1] @ null",
+            "mailto://:443 @ null",
+            "mailto://test:test @ null",
+            "mailto://[:1] @ null",
+            "intent://:443 @ null",
+            "intent://test:test @ null",
+            "intent://[:1] @ null",
+            "urn://:443 @ null",
+            "urn://test:test @ null",
+            "urn://[:1] @ null",
+            "turn://:443 @ null",
+            "turn://test:test @ null",
+            "turn://[:1] @ null",
+            "stun://:443 @ null",
+            "stun://test:test @ null",
+            "stun://[:1] @ null",
+            "non-special://host\\a @ null"
+          ]
+        },
+        "urlSetters": {
+          "cases": 278,
+          "differ": 0,
+          "valueDiffs": 0,
+          "errorShapeOnly": 0,
+          "valueExamples": [],
+          "errorExamples": [],
+          "allDiffs": []
+        },
+        "usp": {
+          "cases": 30,
+          "differ": 5,
+          "valueDiffs": 2,
+          "errorShapeOnly": 3,
+          "valueExamples": [
+            {
+              "case": "null",
+              "node": {
+                "ok": ""
+              },
+              "guest": {
+                "ok": "null="
+              }
+            },
+            {
+              "case": "proto keys",
+              "node": {
+                "ok": [
+                  "Symbol(Symbol.iterator)",
+                  "Symbol(Symbol.toStringTag)",
+                  "Symbol(nodejs.util.inspect.custom)",
+                  "append",
+                  "constructor",
+                  "delete",
+                  "entries",
+                  "forEach",
+                  "get",
+                  "getAll",
+                  "has",
+                  "keys",
+                  "set",
+                  "size",
+                  "sort",
+                  "toString",
+                  "values"
+                ]
+              },
+              "guest": {
+                "ok": [
+                  "Symbol(Symbol.iterator)",
+                  "Symbol(Symbol.toStringTag)",
+                  "append",
+                  "constructor",
+                  "delete",
+                  "entries",
+                  "forEach",
+                  "get",
+                  "getAll",
+                  "has",
+                  "keys",
+                  "set",
+                  "size",
+                  "sort",
+                  "toString",
+                  "values"
+                ]
+              }
+            }
+          ],
+          "errorExamples": [
+            {
+              "case": "bad pair",
+              "node": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Each query pair must be an iterable [name, value] tuple",
+                "code": "ERR_INVALID_TUPLE",
+                "isDOMException": false
+              },
+              "guest": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Failed to construct 'URLSearchParams': parameter 1 sequence's element does not contain exactly two elements.",
+                "isDOMException": false
+              }
+            },
+            {
+              "case": "call no new",
+              "node": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Class constructor URLSearchParams cannot be invoked without 'new'",
+                "isDOMException": false
+              },
+              "guest": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Class constructor URLSearchParams2 cannot be invoked without 'new'",
+                "isDOMException": false
+              }
+            },
+            {
+              "case": "no args append",
+              "node": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "The \"name\" and \"value\" arguments must be specified",
+                "code": "ERR_MISSING_ARGS",
+                "isDOMException": false
+              },
+              "guest": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Failed to execute 'append' on 'URLSearchParams': 2 arguments required, but only 1 present.",
+                "isDOMException": false
+              }
+            }
+          ],
+          "allDiffs": ["bad pair", "null", "call no new", "no args append", "proto keys"]
+        }
+      }
+    },
+    "url:core-js": {
+      "bytes": 203859,
+      "gzip": 32053,
+      "minBytes": 52427,
+      "byPackage": {
+        "core-js": 179975,
+        "probe/guest source": 116
+      },
+      "suites": {
+        "url": {
+          "cases": 886,
+          "differ": 318,
+          "valueDiffs": 51,
+          "errorShapeOnly": 267,
+          "valueExamples": [
+            {
+              "case": "http://a.b.c.xn--pokxncvks @ null",
+              "node": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Invalid URL",
+                "code": "ERR_INVALID_URL",
+                "isDOMException": false
+              },
+              "guest": {
+                "ok": {
+                  "href": "http://a.b.c.xn--pokxncvks/",
+                  "origin": "http://a.b.c.xn--pokxncvks",
+                  "protocol": "http:",
+                  "username": "",
+                  "password": "",
+                  "host": "a.b.c.xn--pokxncvks",
+                  "hostname": "a.b.c.xn--pokxncvks",
+                  "port": "",
+                  "pathname": "/",
+                  "search": "",
+                  "hash": ""
+                }
+              }
+            },
+            {
+              "case": "http://10.0.0.xn--pokxncvks @ null",
+              "node": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Invalid URL",
+                "code": "ERR_INVALID_URL",
+                "isDOMException": false
+              },
+              "guest": {
+                "ok": {
+                  "href": "http://10.0.0.xn--pokxncvks/",
+                  "origin": "http://10.0.0.xn--pokxncvks",
+                  "protocol": "http:",
+                  "username": "",
+                  "password": "",
+                  "host": "10.0.0.xn--pokxncvks",
+                  "hostname": "10.0.0.xn--pokxncvks",
+                  "port": "",
+                  "pathname": "/",
+                  "search": "",
+                  "hash": ""
+                }
+              }
+            },
+            {
+              "case": "http://a.b.c.XN--pokxncvks @ null",
+              "node": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Invalid URL",
+                "code": "ERR_INVALID_URL",
+                "isDOMException": false
+              },
+              "guest": {
+                "ok": {
+                  "href": "http://a.b.c.xn--pokxncvks/",
+                  "origin": "http://a.b.c.xn--pokxncvks",
+                  "protocol": "http:",
+                  "username": "",
+                  "password": "",
+                  "host": "a.b.c.xn--pokxncvks",
+                  "hostname": "a.b.c.xn--pokxncvks",
+                  "port": "",
+                  "pathname": "/",
+                  "search": "",
+                  "hash": ""
+                }
+              }
+            },
+            {
+              "case": "http://a.b.c.Xn--pokxncvks @ null",
+              "node": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Invalid URL",
+                "code": "ERR_INVALID_URL",
+                "isDOMException": false
+              },
+              "guest": {
+                "ok": {
+                  "href": "http://a.b.c.xn--pokxncvks/",
+                  "origin": "http://a.b.c.xn--pokxncvks",
+                  "protocol": "http:",
+                  "username": "",
+                  "password": "",
+                  "host": "a.b.c.xn--pokxncvks",
+                  "hostname": "a.b.c.xn--pokxncvks",
+                  "port": "",
+                  "pathname": "/",
+                  "search": "",
+                  "hash": ""
+                }
+              }
+            },
+            {
+              "case": "http://10.0.0.XN--pokxncvks @ null",
+              "node": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Invalid URL",
+                "code": "ERR_INVALID_URL",
+                "isDOMException": false
+              },
+              "guest": {
+                "ok": {
+                  "href": "http://10.0.0.xn--pokxncvks/",
+                  "origin": "http://10.0.0.xn--pokxncvks",
+                  "protocol": "http:",
+                  "username": "",
+                  "password": "",
+                  "host": "10.0.0.xn--pokxncvks",
+                  "hostname": "10.0.0.xn--pokxncvks",
+                  "port": "",
+                  "pathname": "/",
+                  "search": "",
+                  "hash": ""
+                }
+              }
+            },
+            {
+              "case": "http://10.0.0.xN--pokxncvks @ null",
+              "node": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Invalid URL",
+                "code": "ERR_INVALID_URL",
+                "isDOMException": false
+              },
+              "guest": {
+                "ok": {
+                  "href": "http://10.0.0.xn--pokxncvks/",
+                  "origin": "http://10.0.0.xn--pokxncvks",
+                  "protocol": "http:",
+                  "username": "",
+                  "password": "",
+                  "host": "10.0.0.xn--pokxncvks",
+                  "hostname": "10.0.0.xn--pokxncvks",
+                  "port": "",
+                  "pathname": "/",
+                  "search": "",
+                  "hash": ""
+                }
+              }
+            }
+          ],
+          "errorExamples": [
+            {
+              "case": "http://f:b/c @ http://example.org/foo/bar",
+              "node": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Invalid URL",
+                "code": "ERR_INVALID_URL",
+                "isDOMException": false
+              },
+              "guest": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Invalid port",
+                "isDOMException": false
+              }
+            },
+            {
+              "case": "http://f: /c @ http://example.org/foo/bar",
+              "node": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Invalid URL",
+                "code": "ERR_INVALID_URL",
+                "isDOMException": false
+              },
+              "guest": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Invalid port",
+                "isDOMException": false
+              }
+            },
+            {
+              "case": "http://f:fifty-two/c @ http://example.org/foo/bar",
+              "node": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Invalid URL",
+                "code": "ERR_INVALID_URL",
+                "isDOMException": false
+              },
+              "guest": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Invalid port",
+                "isDOMException": false
+              }
+            }
+          ],
+          "allDiffs": [
+            "http://f:b/c @ http://example.org/foo/bar",
+            "http://f: /c @ http://example.org/foo/bar",
+            "http://f:fifty-two/c @ http://example.org/foo/bar",
+            "http://f:999999/c @ http://example.org/foo/bar",
+            "non-special://f:999999/c @ http://example.org/foo/bar",
+            "http://f: 21 / b ? d # e  @ http://example.org/foo/bar",
+            "http://[1::2]:3:4 @ http://example.org/foo/bar",
+            "http://2001::1 @ http://example.org/foo/bar",
+            "http://2001::1] @ http://example.org/foo/bar",
+            "http://2001::1]:80 @ http://example.org/foo/bar",
+            "http://[::127.0.0.1.] @ http://example.org/foo/bar",
+            "file://example:1/ @ null",
+            "file://example:test/ @ null",
+            "file://example%/ @ null",
+            "file://[example]/ @ null",
+            "http://user:pass@/ @ null",
+            "http://foo:-80/ @ null",
+            "http:/:@/www.example.com @ null",
+            "http://user@/www.example.com @ null",
+            "http:@/www.example.com @ null",
+            "http:/@/www.example.com @ null",
+            "http://@/www.example.com @ null",
+            "https:@/www.example.com @ null",
+            "http:a:b@/www.example.com @ null",
+            "http:/a:b@/www.example.com @ null",
+            "http://a:b@/www.example.com @ null",
+            "http::@/www.example.com @ null",
+            "http:@:www.example.com @ null",
+            "http:/@:www.example.com @ null",
+            "http://@:www.example.com @ null",
+            "http://example example.com @ http://other.com/",
+            "http://Goo%20 goo%7C|.com @ http://other.com/",
+            "http://[] @ http://other.com/",
+            "http://[:] @ http://other.com/",
+            "http://GOO 　goo.com @ http://other.com/",
+            "http://﷐zyx.com @ http://other.com/",
+            "http://%ef%b7%90zyx.com @ http://other.com/",
+            "https://� @ null",
+            "https://%EF%BF%BD @ null",
+            "http://a.b.c.xn--pokxncvks @ null",
+            "http://10.0.0.xn--pokxncvks @ null",
+            "http://a.b.c.XN--pokxncvks @ null",
+            "http://a.b.c.Xn--pokxncvks @ null",
+            "http://10.0.0.XN--pokxncvks @ null",
+            "http://10.0.0.xN--pokxncvks @ null",
+            "http://％４１.com @ http://other.com/",
+            "http://%ef%bc%85%ef%bc%94%ef%bc%91.com @ http://other.com/",
+            "http://％００.com @ http://other.com/",
+            "http://%ef%bc%85%ef%bc%90%ef%bc%90.com @ http://other.com/",
+            "http://%zz%66%a.com @ http://other.com/",
+            "http://%25 @ http://other.com/",
+            "http://hello%00 @ http://other.com/",
+            "http://192.168.0.257 @ http://other.com/",
+            "http://%3g%78%63%30%2e%30%32%35%30%2E.01 @ http://other.com/",
+            "http://192.168.0.1 hello @ http://other.com/",
+            "https://x x:12 @ null",
+            "http://[www.google.com]/ @ null",
+            "http://[google.com] @ http://other.com/",
+            "http://[::1.2.3.4x] @ http://other.com/",
+            "http://[::1.2.3.] @ http://other.com/",
+            "http://[::1.2.] @ http://other.com/",
+            "http://[::.1.2] @ http://other.com/",
+            "http://[::1.] @ http://other.com/",
+            "http://[::.1] @ http://other.com/",
+            "http://[::%31] @ http://other.com/",
+            "http://%5B::1] @ http://other.com/",
+            "i @ sc:sd",
+            "i @ sc:sd/sd",
+            "../i @ sc:sd",
+            "../i @ sc:sd/sd",
+            "/i @ sc:sd",
+            "/i @ sc:sd/sd",
+            "?i @ sc:sd",
+            "?i @ sc:sd/sd",
+            "sc://@/ @ null",
+            "sc://te@s:t@/ @ null",
+            "sc://:/ @ null",
+            "sc://:12/ @ null",
+            "sc://a\u0000b/ @ null",
+            "sc://a b/ @ null",
+            "sc://a<b @ null",
+            "sc://a>b @ null",
+            "sc://a[b/ @ null",
+            "sc://a\\b/ @ null",
+            "sc://a]b/ @ null",
+            "sc://a^b @ null",
+            "sc://a|b/ @ null",
+            "http://a\u0000b/ @ null",
+            "http://a\u0001b/ @ null",
+            "http://a\u0002b/ @ null",
+            "http://a\u0003b/ @ null",
+            "http://a\u0004b/ @ null",
+            "http://a\u0005b/ @ null",
+            "http://a\u0006b/ @ null",
+            "http://a\u0007b/ @ null",
+            "http://a\bb/ @ null",
+            "http://a\u000bb/ @ null",
+            "http://a\fb/ @ null",
+            "http://a\u000eb/ @ null",
+            "http://a\u000fb/ @ null",
+            "http://a\u0010b/ @ null",
+            "http://a\u0011b/ @ null",
+            "http://a\u0012b/ @ null",
+            "http://a\u0013b/ @ null",
+            "http://a\u0014b/ @ null",
+            "http://a\u0015b/ @ null",
+            "http://a\u0016b/ @ null",
+            "http://a\u0017b/ @ null",
+            "http://a\u0018b/ @ null",
+            "http://a\u0019b/ @ null",
+            "http://a\u001ab/ @ null",
+            "http://a\u001bb/ @ null",
+            "http://a\u001cb/ @ null",
+            "http://a\u001db/ @ null",
+            "http://a\u001eb/ @ null",
+            "http://a\u001fb/ @ null",
+            "http://a b/ @ null",
+            "http://a%b/ @ null",
+            "http://a<b @ null",
+            "http://a>b @ null",
+            "http://a[b/ @ null",
+            "http://a]b/ @ null",
+            "http://a^b @ null",
+            "http://a|b/ @ null",
+            "http://ab/ @ null",
+            "http://ho%00st/ @ null",
+            "http://ho%01st/ @ null",
+            "http://ho%02st/ @ null",
+            "http://ho%03st/ @ null",
+            "http://ho%04st/ @ null",
+            "http://ho%05st/ @ null",
+            "http://ho%06st/ @ null",
+            "http://ho%07st/ @ null",
+            "http://ho%08st/ @ null",
+            "http://ho%09st/ @ null",
+            "http://ho%0Ast/ @ null",
+            "http://ho%0Bst/ @ null",
+            "http://ho%0Cst/ @ null",
+            "http://ho%0Dst/ @ null",
+            "http://ho%0Est/ @ null",
+            "http://ho%0Fst/ @ null",
+            "http://ho%10st/ @ null",
+            "http://ho%11st/ @ null",
+            "http://ho%12st/ @ null",
+            "http://ho%13st/ @ null",
+            "http://ho%14st/ @ null",
+            "http://ho%15st/ @ null",
+            "http://ho%16st/ @ null",
+            "http://ho%17st/ @ null",
+            "http://ho%18st/ @ null",
+            "http://ho%19st/ @ null",
+            "http://ho%1Ast/ @ null",
+            "http://ho%1Bst/ @ null",
+            "http://ho%1Cst/ @ null",
+            "http://ho%1Dst/ @ null",
+            "http://ho%1Est/ @ null",
+            "http://ho%1Fst/ @ null",
+            "http://ho%20st/ @ null",
+            "http://ho%23st/ @ null",
+            "http://ho%25st/ @ null",
+            "http://ho%2Fst/ @ null",
+            "http://ho%3Ast/ @ null",
+            "http://ho%3Cst/ @ null",
+            "http://ho%3Est/ @ null",
+            "http://ho%3Fst/ @ null",
+            "http://ho%40st/ @ null",
+            "http://ho%5Bst/ @ null",
+            "http://ho%5Cst/ @ null",
+            "http://ho%5Dst/ @ null",
+            "http://ho%7Cst/ @ null",
+            "http://ho%7Fst/ @ null",
+            "ftp://example.com%80/ @ null",
+            "ftp://example.com%A0/ @ null",
+            "https://example.com%80/ @ null",
+            "https://example.com%A0/ @ null",
+            "http: @ https://example.org/foo/bar",
+            "http://10000000000 @ http://other.com/",
+            "http://4294967296 @ http://other.com/",
+            "http://18446744073709551616 @ http://other.com/",
+            "http://18446744075840258049 @ http://other.com/",
+            "http://0xffffffff1 @ http://other.com/",
+            "http://256.256.256.256 @ http://other.com/",
+            "https://0x100000000/test @ null",
+            "https://256.0.0.1/test @ null",
+            "file://%43%3A @ null",
+            "file://%43%7C @ null",
+            "file://%43| @ null",
+            "file://C%7C @ null",
+            "file://%43%7C/ @ null",
+            "https://%43%7C/ @ null",
+            "asdf://%43|/ @ null",
+            "/ @ file://h/C:/a/b",
+            "file:\\\\// @ null",
+            "file:\\\\\\\\ @ null",
+            "file:\\\\\\\\?fox @ null",
+            "file:\\\\\\\\#guppy @ null",
+            "file://spider/// @ null",
+            "file:\\\\localhost// @ null",
+            "file://\\/localhost//cat @ null",
+            "file://localhost//a//../..// @ null",
+            "/////mouse @ file:///elephant",
+            "\\/localhost//pig @ file://lion/",
+            "//localhost//pig @ file://lion/",
+            "/..//localhost//pig @ file://lion/",
+            "C| @ file://host/dir/file",
+            "C| @ file://host/D:/dir1/dir2/file",
+            "C|# @ file://host/dir/file",
+            "C|? @ file://host/dir/file",
+            "C|/ @ file://host/dir/file",
+            "C|\n/ @ file://host/dir/file",
+            "C|\\ @ file://host/dir/file",
+            "/c:/foo/bar @ file://host/path",
+            ".. @ file://x/C:/",
+            "file://example.net/C:/ @ null",
+            "file://1.2.3.4/C:/ @ null",
+            "file://[1::8]/C:/ @ null",
+            "C|/ @ file://host/",
+            "/C:/ @ file://host/",
+            "file:C:/ @ file://host/",
+            "file:/C:/ @ file://host/",
+            "\\\\\\.\\Y: @ null",
+            "\\\\\\.\\y: @ null",
+            "file://localhost//a//../..//foo @ null",
+            "file://localhost////foo @ null",
+            "file:////foo @ null",
+            "file:////one/two @ file:///",
+            "////one/two @ file:///",
+            "file:///.// @ file:////",
+            "file:.//p @ null",
+            "file:/.//p @ null",
+            "http://[0:1:2:3:4:5:6:7:8] @ http://example.net/",
+            "https://[0::0::0] @ null",
+            "https://[0:.0] @ null",
+            "https://[0:0:] @ null",
+            "https://[0:1:2:3:4:5:6:7.0.0.0.1] @ null",
+            "https://[0:1.00.0.0.0] @ null",
+            "https://[0:1.290.0.0.0] @ null",
+            "https://[0:1.23.23] @ null",
+            "http://? @ null",
+            "http://# @ null",
+            "http://f:4294967377/c @ http://example.org/",
+            "http://f:18446744073709551697/c @ http://example.org/",
+            "http://f:340282366920938463463374607431768211537/c @ http://example.org/",
+            "non-special://[:80/ @ null",
+            "blob:blob:https://example.org/ @ null",
+            "blob:ftp://host/path @ null",
+            "blob:ws://example.org/ @ null",
+            "blob:wss://example.org/ @ null",
+            "http://[::127.0.0.0.1] @ null",
+            "a @ null",
+            "a/ @ null",
+            "a// @ null",
+            "test-a-colon.html @ a:",
+            "test-a-colon-b.html @ a:b",
+            "file://loC𝐀𝐋𝐇𝐨𝐬𝐭/usr/bin @ null",
+            "file://­/p @ null",
+            "file://%C2%AD/p @ null",
+            "file://xn--/p @ null",
+            "# @ null",
+            "? @ null",
+            "http://1.2.3.4.5 @ http://other.com/",
+            "http://1.2.3.4.5. @ http://other.com/",
+            "http://0..0x300/ @ null",
+            "http://0..0x300./ @ null",
+            "http://256.256.256.256.256 @ http://other.com/",
+            "http://256.256.256.256.256. @ http://other.com/",
+            "http://1.2.3.08 @ null",
+            "http://1.2.3.08. @ null",
+            "http://1.2.3.09 @ null",
+            "http://09.2.3.4 @ null",
+            "http://09.2.3.4. @ null",
+            "http://01.2.3.4.5 @ null",
+            "http://01.2.3.4.5. @ null",
+            "http://0x100.2.3.4 @ null",
+            "http://0x100.2.3.4. @ null",
+            "http://0x1.2.3.4.5 @ null",
+            "http://0x1.2.3.4.5. @ null",
+            "http://foo.1.2.3.4 @ null",
+            "http://foo.1.2.3.4. @ null",
+            "http://foo.2.3.4 @ null",
+            "http://foo.2.3.4. @ null",
+            "http://foo.09 @ null",
+            "http://foo.09. @ null",
+            "http://foo.0x4 @ null",
+            "http://foo.0x4. @ null",
+            "http://0999999999999999999/ @ null",
+            "http://foo.0x @ null",
+            "http://foo.0XFfFfFfFfFfFfFfFfFfAcE123 @ null",
+            "http://💩.123/ @ null",
+            "https://\u0000y @ null",
+            "https://￿y @ null",
+            " @ null",
+            "https://­/ @ null",
+            "https://%C2%AD/ @ null",
+            "https://xn--/ @ null",
+            "data://:443 @ null",
+            "data://test:test @ null",
+            "data://[:1] @ null",
+            "javascript://:443 @ null",
+            "javascript://test:test @ null",
+            "javascript://[:1] @ null",
+            "mailto://:443 @ null",
+            "mailto://test:test @ null",
+            "mailto://[:1] @ null",
+            "intent://:443 @ null",
+            "intent://test:test @ null",
+            "intent://[:1] @ null",
+            "urn://:443 @ null",
+            "urn://test:test @ null",
+            "urn://[:1] @ null",
+            "turn://:443 @ null",
+            "turn://test:test @ null",
+            "turn://[:1] @ null",
+            "stun://:443 @ null",
+            "stun://test:test @ null",
+            "stun://[:1] @ null",
+            "/\\//\\/a/../ @ file:///",
+            "non-special://host\\a @ null"
+          ]
+        },
+        "urlSetters": {
+          "cases": 278,
+          "differ": 6,
+          "valueDiffs": 6,
+          "errorShapeOnly": 0,
+          "valueExamples": [
+            {
+              "case": "host https://example.com/ := xn--",
+              "node": {
+                "ok": {
+                  "href": "https://example.com/",
+                  "origin": "https://example.com",
+                  "protocol": "https:",
+                  "username": "",
+                  "password": "",
+                  "host": "example.com",
+                  "hostname": "example.com",
+                  "port": "",
+                  "pathname": "/",
+                  "search": "",
+                  "hash": ""
+                }
+              },
+              "guest": {
+                "ok": {
+                  "href": "https://xn--/",
+                  "origin": "https://xn--",
+                  "protocol": "https:",
+                  "username": "",
+                  "password": "",
+                  "host": "xn--",
+                  "hostname": "xn--",
+                  "port": "",
+                  "pathname": "/",
+                  "search": "",
+                  "hash": ""
+                }
+              }
+            },
+            {
+              "case": "hostname https://example.com/ := xn--",
+              "node": {
+                "ok": {
+                  "href": "https://example.com/",
+                  "origin": "https://example.com",
+                  "protocol": "https:",
+                  "username": "",
+                  "password": "",
+                  "host": "example.com",
+                  "hostname": "example.com",
+                  "port": "",
+                  "pathname": "/",
+                  "search": "",
+                  "hash": ""
+                }
+              },
+              "guest": {
+                "ok": {
+                  "href": "https://xn--/",
+                  "origin": "https://xn--",
+                  "protocol": "https:",
+                  "username": "",
+                  "password": "",
+                  "host": "xn--",
+                  "hostname": "xn--",
+                  "port": "",
+                  "pathname": "/",
+                  "search": "",
+                  "hash": ""
+                }
+              }
+            },
+            {
+              "case": "pathname foo:/some/path := ",
+              "node": {
+                "ok": {
+                  "href": "foo:/",
+                  "origin": "null",
+                  "protocol": "foo:",
+                  "username": "",
+                  "password": "",
+                  "host": "",
+                  "hostname": "",
+                  "port": "",
+                  "pathname": "/",
+                  "search": "",
+                  "hash": ""
+                }
+              },
+              "guest": {
+                "ok": {
+                  "href": "foo:",
+                  "origin": "null",
+                  "protocol": "foo:",
+                  "username": "",
+                  "password": "",
+                  "host": "",
+                  "hostname": "",
+                  "port": "",
+                  "pathname": "",
+                  "search": "",
+                  "hash": ""
+                }
+              }
+            },
+            {
+              "case": "pathname file://monkey/ := \\\\",
+              "node": {
+                "ok": {
+                  "href": "file://monkey//",
+                  "origin": "null",
+                  "protocol": "file:",
+                  "username": "",
+                  "password": "",
+                  "host": "monkey",
+                  "hostname": "monkey",
+                  "port": "",
+                  "pathname": "//",
+                  "search": "",
+                  "hash": ""
+                }
+              },
+              "guest": {
+                "ok": {
+                  "href": "file://monkey/",
+                  "origin": "null",
+                  "protocol": "file:",
+                  "username": "",
+                  "password": "",
+                  "host": "monkey",
+                  "hostname": "monkey",
+                  "port": "",
+                  "pathname": "/",
+                  "search": "",
+                  "hash": ""
+                }
+              }
+            },
+            {
+              "case": "pathname file:///unicorn := //\\/",
+              "node": {
+                "ok": {
+                  "href": "file://////",
+                  "origin": "null",
+                  "protocol": "file:",
+                  "username": "",
+                  "password": "",
+                  "host": "",
+                  "hostname": "",
+                  "port": "",
+                  "pathname": "////",
+                  "search": "",
+                  "hash": ""
+                }
+              },
+              "guest": {
+                "ok": {
+                  "href": "file:///",
+                  "origin": "null",
+                  "protocol": "file:",
+                  "username": "",
+                  "password": "",
+                  "host": "",
+                  "hostname": "",
+                  "port": "",
+                  "pathname": "/",
+                  "search": "",
+                  "hash": ""
+                }
+              }
+            },
+            {
+              "case": "pathname file:///unicorn := //monkey/..//",
+              "node": {
+                "ok": {
+                  "href": "file://///",
+                  "origin": "null",
+                  "protocol": "file:",
+                  "username": "",
+                  "password": "",
+                  "host": "",
+                  "hostname": "",
+                  "port": "",
+                  "pathname": "///",
+                  "search": "",
+                  "hash": ""
+                }
+              },
+              "guest": {
+                "ok": {
+                  "href": "file:///",
+                  "origin": "null",
+                  "protocol": "file:",
+                  "username": "",
+                  "password": "",
+                  "host": "",
+                  "hostname": "",
+                  "port": "",
+                  "pathname": "/",
+                  "search": "",
+                  "hash": ""
+                }
+              }
+            }
+          ],
+          "errorExamples": [],
+          "allDiffs": [
+            "host https://example.com/ := xn--",
+            "hostname https://example.com/ := xn--",
+            "pathname foo:/some/path := ",
+            "pathname file://monkey/ := \\\\",
+            "pathname file:///unicorn := //\\/",
+            "pathname file:///unicorn := //monkey/..//"
+          ]
+        },
+        "urlShape": {
+          "cases": 13,
+          "differ": 6,
+          "valueDiffs": 2,
+          "errorShapeOnly": 4,
+          "valueExamples": [
+            {
+              "case": "statics",
+              "node": {
+                "ok": [
+                  "canParse:function",
+                  "parse:function",
+                  "createObjectURL:function",
+                  "revokeObjectURL:function"
+                ]
+              },
+              "guest": {
+                "ok": [
+                  "canParse:function",
+                  "parse:function",
+                  "createObjectURL:undefined",
+                  "revokeObjectURL:undefined"
+                ]
+              }
+            },
+            {
+              "case": "proto keys",
+              "node": {
+                "ok": [
+                  "Symbol(Symbol.toStringTag)",
+                  "Symbol(nodejs.util.inspect.custom)",
+                  "constructor",
+                  "hash",
+                  "host",
+                  "hostname",
+                  "href",
+                  "origin",
+                  "password",
+                  "pathname",
+                  "port",
+                  "protocol",
+                  "search",
+                  "searchParams",
+                  "toJSON",
+                  "toString",
+                  "username"
+                ]
+              },
+              "guest": {
+                "ok": [
+                  "Symbol(Symbol.toStringTag)",
+                  "constructor",
+                  "hash",
+                  "host",
+                  "hostname",
+                  "href",
+                  "origin",
+                  "password",
+                  "pathname",
+                  "port",
+                  "protocol",
+                  "search",
+                  "searchParams",
+                  "toJSON",
+                  "toString",
+                  "username"
+                ]
+              }
+            }
+          ],
+          "errorExamples": [
+            {
+              "case": "invalid",
+              "node": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Invalid URL",
+                "code": "ERR_INVALID_URL",
+                "isDOMException": false
+              },
+              "guest": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Invalid scheme",
+                "isDOMException": false
+              }
+            },
+            {
+              "case": "no-arg",
+              "node": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "The \"url\" argument must be specified",
+                "code": "ERR_MISSING_ARGS",
+                "isDOMException": false
+              },
+              "guest": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Not enough arguments",
+                "isDOMException": false
+              }
+            },
+            {
+              "case": "call",
+              "node": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Class constructor URL cannot be invoked without 'new'",
+                "isDOMException": false
+              },
+              "guest": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Incorrect invocation",
+                "isDOMException": false
+              }
+            }
+          ],
+          "allDiffs": ["statics", "invalid", "no-arg", "call", "proto keys", "href setter invalid"]
+        },
+        "usp": {
+          "cases": 30,
+          "differ": 5,
+          "valueDiffs": 2,
+          "errorShapeOnly": 3,
+          "valueExamples": [
+            {
+              "case": "null",
+              "node": {
+                "ok": ""
+              },
+              "guest": {
+                "ok": "null="
+              }
+            },
+            {
+              "case": "proto keys",
+              "node": {
+                "ok": [
+                  "Symbol(Symbol.iterator)",
+                  "Symbol(Symbol.toStringTag)",
+                  "Symbol(nodejs.util.inspect.custom)",
+                  "append",
+                  "constructor",
+                  "delete",
+                  "entries",
+                  "forEach",
+                  "get",
+                  "getAll",
+                  "has",
+                  "keys",
+                  "set",
+                  "size",
+                  "sort",
+                  "toString",
+                  "values"
+                ]
+              },
+              "guest": {
+                "ok": [
+                  "Symbol(Symbol.iterator)",
+                  "Symbol(Symbol.toStringTag)",
+                  "append",
+                  "constructor",
+                  "delete",
+                  "entries",
+                  "forEach",
+                  "get",
+                  "getAll",
+                  "has",
+                  "keys",
+                  "set",
+                  "size",
+                  "sort",
+                  "toString",
+                  "values"
+                ]
+              }
+            }
+          ],
+          "errorExamples": [
+            {
+              "case": "bad pair",
+              "node": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Each query pair must be an iterable [name, value] tuple",
+                "code": "ERR_INVALID_TUPLE",
+                "isDOMException": false
+              },
+              "guest": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Expected sequence with length 2",
+                "isDOMException": false
+              }
+            },
+            {
+              "case": "call no new",
+              "node": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Class constructor URLSearchParams cannot be invoked without 'new'",
+                "isDOMException": false
+              },
+              "guest": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Incorrect invocation",
+                "isDOMException": false
+              }
+            },
+            {
+              "case": "no args append",
+              "node": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "The \"name\" and \"value\" arguments must be specified",
+                "code": "ERR_MISSING_ARGS",
+                "isDOMException": false
+              },
+              "guest": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Not enough arguments",
+                "isDOMException": false
+              }
+            }
+          ],
+          "allDiffs": ["bad pair", "null", "call no new", "no args append", "proto keys"]
+        }
+      }
+    },
+    "url:bridge": {
+      "bytes": 1997,
+      "gzip": 822,
+      "minBytes": 1208,
+      "byPackage": {
+        "probe/guest source": 1896
+      },
+      "suites": {
+        "url": {
+          "cases": 886,
+          "differ": 0,
+          "valueDiffs": 0,
+          "errorShapeOnly": 0,
+          "valueExamples": [],
+          "errorExamples": [],
+          "allDiffs": []
+        },
+        "urlSetters": {
+          "cases": 278,
+          "differ": 0,
+          "valueDiffs": 0,
+          "errorShapeOnly": 0,
+          "valueExamples": [],
+          "errorExamples": [],
+          "allDiffs": []
+        },
+        "urlShape": {
+          "cases": 13,
+          "differ": 6,
+          "valueDiffs": 5,
+          "errorShapeOnly": 1,
+          "valueExamples": [
+            {
+              "case": "statics",
+              "node": {
+                "ok": [
+                  "canParse:function",
+                  "parse:function",
+                  "createObjectURL:function",
+                  "revokeObjectURL:function"
+                ]
+              },
+              "guest": {
+                "ok": [
+                  "canParse:function",
+                  "parse:function",
+                  "createObjectURL:undefined",
+                  "revokeObjectURL:undefined"
+                ]
+              }
+            },
+            {
+              "case": "tag",
+              "node": {
+                "ok": "[object URL]"
+              },
+              "guest": {
+                "ok": "[object Object]"
+              }
+            },
+            {
+              "case": "proto keys",
+              "node": {
+                "ok": [
+                  "Symbol(Symbol.toStringTag)",
+                  "Symbol(nodejs.util.inspect.custom)",
+                  "constructor",
+                  "hash",
+                  "host",
+                  "hostname",
+                  "href",
+                  "origin",
+                  "password",
+                  "pathname",
+                  "port",
+                  "protocol",
+                  "search",
+                  "searchParams",
+                  "toJSON",
+                  "toString",
+                  "username"
+                ]
+              },
+              "guest": {
+                "ok": [
+                  "constructor",
+                  "hash",
+                  "host",
+                  "hostname",
+                  "href",
+                  "origin",
+                  "password",
+                  "pathname",
+                  "port",
+                  "protocol",
+                  "search",
+                  "searchParams",
+                  "toJSON",
+                  "toString",
+                  "username"
+                ]
+              }
+            },
+            {
+              "case": "searchParams link",
+              "node": {
+                "ok": ["https://a/?x=1&y=2+3", "9", true]
+              },
+              "guest": {
+                "threw": "Error",
+                "name": "Error",
+                "message": "url-bridge probe: searchParams not modelled",
+                "isDOMException": false
+              }
+            },
+            {
+              "case": "length",
+              "node": {
+                "ok": [1, "URL"]
+              },
+              "guest": {
+                "ok": [2, "_URL"]
+              }
+            }
+          ],
+          "errorExamples": [
+            {
+              "case": "call",
+              "node": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Class constructor URL cannot be invoked without 'new'",
+                "isDOMException": false
+              },
+              "guest": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Class constructor _URL cannot be invoked without 'new'",
+                "isDOMException": false
+              }
+            }
+          ],
+          "allDiffs": ["statics", "call", "tag", "proto keys", "searchParams link", "length"]
+        }
+      }
+    },
+    "clone:@ungap": {
+      "bytes": 8216,
+      "gzip": 2110,
+      "minBytes": 3053,
+      "byPackage": {
+        "@ungap/structured-clone": 7474,
+        "probe/guest source": 44
+      },
+      "suites": {
+        "clone": {
+          "cases": 33,
+          "differ": 15,
+          "valueDiffs": 13,
+          "errorShapeOnly": 2,
+          "valueExamples": [
+            {
+              "case": "subarray",
+              "node": {
+                "ok": {
+                  "tag": "[object Uint8Array]",
+                  "proto": "Uint8Array",
+                  "byteOffset": 1,
+                  "byteLength": 2,
+                  "bufferLength": 4,
+                  "bytes": [2, 3],
+                  "own": []
+                }
+              },
+              "guest": {
+                "ok": {
+                  "tag": "[object Uint8Array]",
+                  "proto": "Uint8Array",
+                  "byteOffset": 0,
+                  "byteLength": 2,
+                  "bufferLength": 2,
+                  "bytes": [2, 3],
+                  "own": []
+                }
+              }
+            },
+            {
+              "case": "dataview",
+              "node": {
+                "ok": {
+                  "tag": "[object DataView]",
+                  "proto": "DataView",
+                  "byteOffset": 1,
+                  "byteLength": 2,
+                  "bufferLength": 4,
+                  "bytes": [0, 0],
+                  "own": []
+                }
+              },
+              "guest": {
+                "ok": {
+                  "tag": "[object DataView]",
+                  "proto": "DataView",
+                  "byteOffset": 0,
+                  "byteLength": 4,
+                  "bufferLength": 4,
+                  "bytes": [0, 0, 0, 0],
+                  "own": []
+                }
+              }
+            },
+            {
+              "case": "resizable ab",
+              "node": {
+                "ok": {
+                  "tag": "[object ArrayBuffer]",
+                  "proto": "ArrayBuffer",
+                  "byteLength": 8,
+                  "resizable": true,
+                  "maxByteLength": 16,
+                  "bytes": [0, 0, 0, 0, 0, 0, 0, 0],
+                  "own": []
+                }
+              },
+              "guest": {
+                "ok": {
+                  "tag": "[object ArrayBuffer]",
+                  "proto": "ArrayBuffer",
+                  "byteLength": 8,
+                  "resizable": false,
+                  "maxByteLength": 8,
+                  "bytes": [0, 0, 0, 0, 0, 0, 0, 0],
+                  "own": []
+                }
+              }
+            },
+            {
+              "case": "error cause",
+              "node": {
+                "ok": {
+                  "tag": "[object Error]",
+                  "proto": "Error",
+                  "name": "Error",
+                  "message": "m",
+                  "hasCause": true,
+                  "cause": {
+                    "tag": "[object Object]",
+                    "proto": "Object",
+                    "own": ["c=num:1"]
+                  },
+                  "stackType": "string",
+                  "own": []
+                }
+              },
+              "guest": {
+                "ok": {
+                  "tag": "[object Error]",
+                  "proto": "Error",
+                  "name": "Error",
+                  "message": "m",
+                  "hasCause": false,
+                  "stackType": "string",
+                  "own": []
+                }
+              }
+            },
+            {
+              "case": "aggregate",
+              "node": {
+                "ok": {
+                  "tag": "[object Error]",
+                  "proto": "Error",
+                  "name": "Error",
+                  "message": "agg",
+                  "hasCause": false,
+                  "stackType": "string",
+                  "own": []
+                }
+              },
+              "guest": {
+                "ok": {
+                  "tag": "[object Error]",
+                  "proto": "AggregateError",
+                  "name": "AggregateError",
+                  "message": "",
+                  "hasCause": false,
+                  "stackType": "string",
+                  "own": ["errors(ne)=[object Object]"]
+                }
+              }
+            },
+            {
+              "case": "sparse",
+              "node": {
+                "ok": {
+                  "tag": "[object Array]",
+                  "proto": "Array",
+                  "own": ["0=num:1", "2=num:3", "length(ne)=num:3", "x=num:1"],
+                  "length": 3
+                }
+              },
+              "guest": {
+                "ok": {
+                  "tag": "[object Array]",
+                  "proto": "Array",
+                  "own": ["0=num:1", "1=undefined:undefined", "2=num:3", "length(ne)=num:3"],
+                  "length": 3
+                }
+              }
+            }
+          ],
+          "errorExamples": [
+            {
+              "case": "function",
+              "node": {
+                "threw": "DOMException",
+                "name": "DataCloneError",
+                "message": "() => 1 could not be cloned.",
+                "code": 25,
+                "isDOMException": true
+              },
+              "guest": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "unable to serialize function",
+                "isDOMException": false
+              }
+            },
+            {
+              "case": "symbol value",
+              "node": {
+                "threw": "DOMException",
+                "name": "DataCloneError",
+                "message": "Symbol(x) could not be cloned.",
+                "code": 25,
+                "isDOMException": true
+              },
+              "guest": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "unable to serialize symbol",
+                "isDOMException": false
+              }
+            }
+          ],
+          "allDiffs": [
+            "subarray",
+            "dataview",
+            "resizable ab",
+            "error cause",
+            "aggregate",
+            "sparse",
+            "function",
+            "symbol value",
+            "transfer",
+            "transfer bad",
+            "no args",
+            "options non-object",
+            "weakmap",
+            "promise",
+            "length/name"
+          ]
+        }
+      }
+    },
+    "clone:core-js": {
+      "bytes": 181499,
+      "gzip": 27054,
+      "minBytes": 43892,
+      "byPackage": {
+        "core-js": 156322,
+        "probe/guest source": 70
+      },
+      "suites": {
+        "clone": {
+          "cases": 33,
+          "differ": 9,
+          "valueDiffs": 2,
+          "errorShapeOnly": 7,
+          "valueExamples": [
+            {
+              "case": "aggregate",
+              "node": {
+                "ok": {
+                  "tag": "[object Error]",
+                  "proto": "Error",
+                  "name": "Error",
+                  "message": "agg",
+                  "hasCause": false,
+                  "stackType": "string",
+                  "own": []
+                }
+              },
+              "guest": {
+                "ok": {
+                  "tag": "[object Error]",
+                  "proto": "AggregateError",
+                  "name": "AggregateError",
+                  "message": "agg",
+                  "hasCause": false,
+                  "stackType": "string",
+                  "own": ["errors(ne)=[object Object]"]
+                }
+              }
+            },
+            {
+              "case": "length/name",
+              "node": {
+                "ok": [2, "structuredClone"]
+              },
+              "guest": {
+                "ok": [1, "structuredClone"]
+              }
+            }
+          ],
+          "errorExamples": [
+            {
+              "case": "function",
+              "node": {
+                "threw": "DOMException",
+                "name": "DataCloneError",
+                "message": "() => 1 could not be cloned.",
+                "code": 25,
+                "isDOMException": true
+              },
+              "guest": {
+                "threw": "DOMException",
+                "name": "DataCloneError",
+                "message": "Uncloneable type: Function",
+                "code": 25,
+                "isDOMException": true
+              }
+            },
+            {
+              "case": "symbol value",
+              "node": {
+                "threw": "DOMException",
+                "name": "DataCloneError",
+                "message": "Symbol(x) could not be cloned.",
+                "code": 25,
+                "isDOMException": true
+              },
+              "guest": {
+                "threw": "DOMException",
+                "name": "DataCloneError",
+                "message": "Uncloneable type: Symbol",
+                "code": 25,
+                "isDOMException": true
+              }
+            },
+            {
+              "case": "transfer bad",
+              "node": {
+                "threw": "DOMException",
+                "name": "DataCloneError",
+                "message": "Found invalid value in transferList.",
+                "code": 25,
+                "isDOMException": true
+              },
+              "guest": {
+                "threw": "DOMException",
+                "name": "DataCloneError",
+                "message": "This object cannot be transferred: Object",
+                "code": 25,
+                "isDOMException": true
+              }
+            }
+          ],
+          "allDiffs": [
+            "aggregate",
+            "function",
+            "symbol value",
+            "transfer bad",
+            "no args",
+            "options non-object",
+            "weakmap",
+            "promise",
+            "length/name"
+          ]
+        }
+      }
+    },
+    "clone:bridge": {
+      "bytes": 629,
+      "gzip": 370,
+      "minBytes": 413,
+      "byPackage": {
+        "probe/guest source": 526
+      },
+      "suites": {
+        "clone": {
+          "cases": 33,
+          "differ": 9,
+          "valueDiffs": 3,
+          "errorShapeOnly": 6,
+          "valueExamples": [
+            {
+              "case": "resizable ab",
+              "node": {
+                "ok": {
+                  "tag": "[object ArrayBuffer]",
+                  "proto": "ArrayBuffer",
+                  "byteLength": 8,
+                  "resizable": true,
+                  "maxByteLength": 16,
+                  "bytes": [0, 0, 0, 0, 0, 0, 0, 0],
+                  "own": []
+                }
+              },
+              "guest": {
+                "ok": {
+                  "tag": "[object ArrayBuffer]",
+                  "proto": "ArrayBuffer",
+                  "byteLength": 8,
+                  "resizable": false,
+                  "maxByteLength": 8,
+                  "bytes": [0, 0, 0, 0, 0, 0, 0, 0],
+                  "own": []
+                }
+              }
+            },
+            {
+              "case": "transfer",
+              "node": {
+                "ok": {
+                  "tag": "[object Array]",
+                  "proto": "Array",
+                  "own": ["0=num:0", "1=num:4", "length(ne)=num:2"],
+                  "length": 2
+                }
+              },
+              "guest": {
+                "ok": {
+                  "tag": "[object Array]",
+                  "proto": "Array",
+                  "own": ["0=num:4", "1=num:4", "length(ne)=num:2"],
+                  "length": 2
+                }
+              }
+            },
+            {
+              "case": "transfer bad",
+              "node": {
+                "threw": "DOMException",
+                "name": "DataCloneError",
+                "message": "Found invalid value in transferList.",
+                "code": 25,
+                "isDOMException": true
+              },
+              "guest": {
+                "ok": "num:1"
+              }
+            }
+          ],
+          "errorExamples": [
+            {
+              "case": "function",
+              "node": {
+                "threw": "DOMException",
+                "name": "DataCloneError",
+                "message": "() => 1 could not be cloned.",
+                "code": 25,
+                "isDOMException": true
+              },
+              "guest": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "() => 1 could not be cloned.",
+                "isDOMException": false
+              }
+            },
+            {
+              "case": "symbol value",
+              "node": {
+                "threw": "DOMException",
+                "name": "DataCloneError",
+                "message": "Symbol(x) could not be cloned.",
+                "code": 25,
+                "isDOMException": true
+              },
+              "guest": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Symbol(x) could not be cloned.",
+                "isDOMException": false
+              }
+            },
+            {
+              "case": "no args",
+              "node": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "The \"The value argument must be specified\" argument must be specified",
+                "code": "ERR_MISSING_ARGS",
+                "isDOMException": false
+              },
+              "guest": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "The \"value\" argument must be specified",
+                "code": "ERR_MISSING_ARGS",
+                "isDOMException": false
+              }
+            }
+          ],
+          "allDiffs": [
+            "resizable ab",
+            "function",
+            "symbol value",
+            "transfer",
+            "transfer bad",
+            "no args",
+            "options non-object",
+            "weakmap",
+            "promise"
+          ]
+        }
+      }
+    },
+    "blob:formdata-node": {
+      "bytes": 14501,
+      "gzip": 3892,
+      "minBytes": 4794,
+      "byPackage": {
+        "formdata-node": 14269,
+        "probe/guest source": 45
+      },
+      "suites": {
+        "blob": {
+          "cases": 19,
+          "differ": 13,
+          "valueDiffs": 9,
+          "errorShapeOnly": 4,
+          "valueExamples": [
+            {
+              "case": "parts",
+              "node": {
+                "ok": "abcdef"
+              },
+              "guest": {
+                "threw": "ReferenceError",
+                "name": "ReferenceError",
+                "message": "ReadableStream is not defined",
+                "isDOMException": false
+              }
+            },
+            {
+              "case": "type lower",
+              "node": {
+                "ok": ["text/plain", "", ""]
+              },
+              "guest": {
+                "ok": ["Text/Plain", "", ""]
+              }
+            },
+            {
+              "case": "slice",
+              "node": {
+                "ok": ["bc", "ef", "x/y", 0]
+              },
+              "guest": {
+                "ok": ["bc", "ef", "X/Y", 0]
+              }
+            },
+            {
+              "case": "bytes",
+              "node": {
+                "ok": [97]
+              },
+              "guest": {
+                "ok": "no bytes()"
+              }
+            },
+            {
+              "case": "endings",
+              "node": {
+                "ok": ["a\nb\rc\n", "a\r\nb"]
+              },
+              "guest": {
+                "ok": ["a\r\nb\rc\n", "a\r\nb"]
+              }
+            },
+            {
+              "case": "endings invalid",
+              "node": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "The property 'options.endings' is invalid. Received 'x'",
+                "code": "ERR_INVALID_ARG_VALUE",
+                "isDOMException": false
+              },
+              "guest": {
+                "ok": {}
+              }
+            }
+          ],
+          "errorExamples": [
+            {
+              "case": "not sequence",
+              "node": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Value can not be converted to sequence.",
+                "code": "ERR_INVALID_ARG_TYPE",
+                "isDOMException": false
+              },
+              "guest": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Failed to construct 'Blob': The provided value cannot be converted to a sequence.",
+                "isDOMException": false
+              }
+            },
+            {
+              "case": "file no name",
+              "node": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "The \"fileBits\" and \"fileName\" arguments must be specified",
+                "code": "ERR_MISSING_ARGS",
+                "isDOMException": false
+              },
+              "guest": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Failed to construct 'File': 2 arguments required, but only 1 present.",
+                "isDOMException": false
+              }
+            },
+            {
+              "case": "text on non-blob",
+              "node": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Value of \"this\" must be of type Blob",
+                "code": "ERR_INVALID_THIS",
+                "isDOMException": false
+              },
+              "guest": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Cannot read from private field",
+                "isDOMException": false
+              }
+            }
+          ],
+          "allDiffs": [
+            "parts",
+            "type lower",
+            "slice",
+            "bytes",
+            "endings",
+            "endings invalid",
+            "not sequence",
+            "file",
+            "file no name",
+            "tag",
+            "text on non-blob",
+            "proto keys",
+            "call no new"
+          ]
+        }
+      }
+    },
+    "blob:blob-polyfill": {
+      "bytes": 24452,
+      "gzip": 5673,
+      "minBytes": 9680,
+      "byPackage": {
+        "blob-polyfill": 22761,
+        "probe/guest source": 142
+      },
+      "suites": {
+        "blob": {
+          "cases": 19,
+          "differ": 16,
+          "valueDiffs": 13,
+          "errorShapeOnly": 3,
+          "valueExamples": [
+            {
+              "case": "parts",
+              "node": {
+                "ok": "abcdef"
+              },
+              "guest": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "The \"input\" argument must be an instance of ArrayBuffer, SharedArrayBuffer, or ArrayBufferView.",
+                "code": "ERR_INVALID_ARG_TYPE",
+                "isDOMException": false
+              }
+            },
+            {
+              "case": "size",
+              "node": {
+                "ok": 5
+              },
+              "guest": {
+                "ok": 4
+              }
+            },
+            {
+              "case": "slice",
+              "node": {
+                "ok": ["bc", "ef", "x/y", 0]
+              },
+              "guest": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "The \"input\" argument must be an instance of ArrayBuffer, SharedArrayBuffer, or ArrayBufferView.",
+                "code": "ERR_INVALID_ARG_TYPE",
+                "isDOMException": false
+              }
+            },
+            {
+              "case": "arrayBuffer",
+              "node": {
+                "ok": [195, 169]
+              },
+              "guest": {
+                "ok": [0]
+              }
+            },
+            {
+              "case": "bytes",
+              "node": {
+                "ok": [97]
+              },
+              "guest": {
+                "ok": "no bytes()"
+              }
+            },
+            {
+              "case": "endings",
+              "node": {
+                "ok": ["a\nb\rc\n", "a\r\nb"]
+              },
+              "guest": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "The \"input\" argument must be an instance of ArrayBuffer, SharedArrayBuffer, or ArrayBufferView.",
+                "code": "ERR_INVALID_ARG_TYPE",
+                "isDOMException": false
+              }
+            }
+          ],
+          "errorExamples": [
+            {
+              "case": "not sequence",
+              "node": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Value can not be converted to sequence.",
+                "code": "ERR_INVALID_ARG_TYPE",
+                "isDOMException": false
+              },
+              "guest": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Cannot assign to read only property '0' of string 'abc'",
+                "isDOMException": false
+              }
+            },
+            {
+              "case": "file no name",
+              "node": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "The \"fileBits\" and \"fileName\" arguments must be specified",
+                "code": "ERR_MISSING_ARGS",
+                "isDOMException": false
+              },
+              "guest": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Cannot read properties of undefined (reading 'replace')",
+                "isDOMException": false
+              }
+            },
+            {
+              "case": "call no new",
+              "node": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Class constructor Blob cannot be invoked without 'new'",
+                "isDOMException": false
+              },
+              "guest": {
+                "threw": "TypeError",
+                "name": "TypeError",
+                "message": "Cannot set properties of undefined (setting '_buffer')",
+                "isDOMException": false
+              }
+            }
+          ],
+          "allDiffs": [
+            "parts",
+            "size",
+            "slice",
+            "arrayBuffer",
+            "bytes",
+            "endings",
+            "endings invalid",
+            "not sequence",
+            "number part",
+            "lone surrogate",
+            "file",
+            "file no name",
+            "tag",
+            "text on non-blob",
+            "proto keys",
+            "call no new"
+          ]
+        }
+      }
+    },
+    "blob:fetch-blob": {
+      "buildError": "Top-level await is currently not supported with the \"iife\" output format"
+    }
+  }
+}

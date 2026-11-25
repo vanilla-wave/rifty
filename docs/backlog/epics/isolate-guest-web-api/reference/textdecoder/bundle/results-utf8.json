@@ -1,0 +1,65 @@
+{
+  "runs": 9,
+  "loadavgBefore": [3.2275390625, 3.52880859375, 3.806640625],
+  "loadavgAfter": [3.31787109375, 3.53466796875, 3.8037109375],
+  "medianMs": {
+    "base": {
+      "freshDecoderSmall": 7.72,
+      "reusedDecoderSmall": 3.73,
+      "bufferToStringSmall": 6.14,
+      "decode1MiBx20": 199.23,
+      "bufferToString1MiBx20": 197.84
+    },
+    "td-gb": {
+      "freshDecoderSmall": 10.1,
+      "reusedDecoderSmall": 5.11,
+      "bufferToStringSmall": 7.47,
+      "decode1MiBx20": 199.93,
+      "bufferToString1MiBx20": 198.39
+    },
+    "td-lazy": {
+      "freshDecoderSmall": 10.19,
+      "reusedDecoderSmall": 5.12,
+      "bufferToStringSmall": 7.54,
+      "decode1MiBx20": 200.22,
+      "bufferToString1MiBx20": 196.77
+    },
+    "td-lazy-fast": {
+      "freshDecoderSmall": 6.22,
+      "reusedDecoderSmall": 3.64,
+      "bufferToStringSmall": 5.56,
+      "decode1MiBx20": 98.32,
+      "bufferToString1MiBx20": 97.41
+    }
+  },
+  "p10p90Ms": {
+    "base": {
+      "freshDecoderSmall": [7.66, 8.03],
+      "reusedDecoderSmall": [3.66, 3.8],
+      "bufferToStringSmall": [6.05, 6.32],
+      "decode1MiBx20": [197.59, 204.84],
+      "bufferToString1MiBx20": [196.2, 199.65]
+    },
+    "td-gb": {
+      "freshDecoderSmall": [10.03, 10.2],
+      "reusedDecoderSmall": [5.07, 5.17],
+      "bufferToStringSmall": [7.39, 7.52],
+      "decode1MiBx20": [197.65, 205.83],
+      "bufferToString1MiBx20": [194.6, 203.64]
+    },
+    "td-lazy": {
+      "freshDecoderSmall": [10.11, 10.25],
+      "reusedDecoderSmall": [4.99, 5.23],
+      "bufferToStringSmall": [7.51, 7.7],
+      "decode1MiBx20": [197, 201.56],
+      "bufferToString1MiBx20": [195.99, 197.85]
+    },
+    "td-lazy-fast": {
+      "freshDecoderSmall": [6.12, 6.24],
+      "reusedDecoderSmall": [3.61, 3.7],
+      "bufferToStringSmall": [5.48, 5.6],
+      "decode1MiBx20": [98.1, 102.86],
+      "bufferToString1MiBx20": [96.74, 101.32]
+    }
+  }
+}

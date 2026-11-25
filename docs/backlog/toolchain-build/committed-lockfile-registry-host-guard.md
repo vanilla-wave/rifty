@@ -32,3 +32,7 @@ Repaired in the same PR (hosts rewritten to `registry.npmjs.org`, `integrity` un
 `npm ci --cache <empty> --registry=https://registry.npmjs.org/` fetched all 251 tarballs from
 npmjs and their integrity matched). No gate caught it: the guard is still unbuilt.
 
+Third incident 2026-11-25 (PR #443, isolate Web API goal probes): `docs/backlog/epics/isolate-guest-web-api/reference/textdecoder/deps/package-lock.json`
+was committed and pushed with `resolved` on the internal mirror (rewritten to `registry.npmjs.org`
+in a later commit of the same PR; `npm ci` rechecked). The guard must scan lockfiles in every
+directory of the repository, the `reference/` probe directories under the backlog included, not only test fixtures.

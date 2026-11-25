@@ -1,0 +1,2017 @@
+{
+  "node": "v24.16.0",
+  "tests": {
+    "FileAPI/blob/Blob-slice.any.js": {
+      "bytes": 208531,
+      "node": {
+        "acHidden": false,
+        "harness": 0,
+        "ms": 4,
+        "counts": {
+          "PASS": 144,
+          "FAIL": 6
+        },
+        "wallMs": 30,
+        "exitCode": 0
+      },
+      "packages/isolate-host/dist": {
+        "acHidden": true,
+        "harness": 0,
+        "ms": 12,
+        "counts": {
+          "FAIL": 28
+        },
+        "wallMs": 183,
+        "exitCode": 0,
+        "differFromNode": 28,
+        "notRunVsNode": 122,
+        "firstDiffs": [
+          {
+            "name": "Slices",
+            "status": 1,
+            "message": "Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "no-argument Blob slice",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Invalid contentType (\"ÿ\")",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Invalid contentType (\"te\\txt/plain\")",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Invalid contentType (\"te\\0xt/plain\")",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Invalid contentType (\"te\\x1fxt/plain\")",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Invalid contentType (\"text/plain\")",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Valid contentType (\"te(xt/plain\")",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Valid contentType (\"te)xt/plain\")",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Valid contentType (\"te<xt/plain\")",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Valid contentType (\"te>xt/plain\")",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Valid contentType (\"te@xt/plain\")",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Valid contentType (\"te,xt/plain\")",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Valid contentType (\"te;xt/plain\")",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Valid contentType (\"te:xt/plain\")",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Valid contentType (\"te\\\\xt/plain\")",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Valid contentType (\"te\\\"xt/plain\")",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Valid contentType (\"te/xt/plain\")",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Valid contentType (\"te[xt/plain\")",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Valid contentType (\"te]xt/plain\")",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          }
+        ]
+      },
+      "packages/isolate-host/node_modules/.web-api-probe/td-gb/dist": {
+        "acHidden": true,
+        "harness": 0,
+        "ms": 15,
+        "counts": {
+          "FAIL": 28
+        },
+        "wallMs": 193,
+        "exitCode": 0,
+        "differFromNode": 28,
+        "notRunVsNode": 122,
+        "firstDiffs": [
+          {
+            "name": "Slices",
+            "status": 1,
+            "message": "Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "no-argument Blob slice",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Invalid contentType (\"ÿ\")",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Invalid contentType (\"te\\txt/plain\")",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Invalid contentType (\"te\\0xt/plain\")",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Invalid contentType (\"te\\x1fxt/plain\")",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Invalid contentType (\"text/plain\")",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Valid contentType (\"te(xt/plain\")",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Valid contentType (\"te)xt/plain\")",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Valid contentType (\"te<xt/plain\")",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Valid contentType (\"te>xt/plain\")",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Valid contentType (\"te@xt/plain\")",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Valid contentType (\"te,xt/plain\")",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Valid contentType (\"te;xt/plain\")",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Valid contentType (\"te:xt/plain\")",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Valid contentType (\"te\\\\xt/plain\")",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Valid contentType (\"te\\\"xt/plain\")",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Valid contentType (\"te/xt/plain\")",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Valid contentType (\"te[xt/plain\")",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Valid contentType (\"te]xt/plain\")",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          }
+        ]
+      }
+    },
+    "FileAPI/blob/Blob-constructor.any.js": {
+      "bytes": 217235,
+      "node": {
+        "acHidden": false,
+        "harness": 0,
+        "ms": 17,
+        "counts": {
+          "PASS": 73
+        },
+        "wallMs": 43,
+        "exitCode": 0
+      },
+      "packages/isolate-host/dist": {
+        "acHidden": true,
+        "harness": 0,
+        "ms": 15,
+        "counts": {
+          "PASS": 1,
+          "FAIL": 72
+        },
+        "wallMs": 71,
+        "exitCode": 0,
+        "differFromNode": 72,
+        "notRunVsNode": 0,
+        "firstDiffs": [
+          {
+            "name": "Blob constructor with no arguments",
+            "status": 1,
+            "message": "Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "Blob constructor with no arguments, without 'new'",
+            "status": 1,
+            "message": "assert_throws_js: function \"function() { var blob = Blob(); }\" threw object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\" (\"NotImplementedError\") expected instance of function \"function TypeError() { [native code] }\" (\"TypeError\")"
+          },
+          {
+            "name": "Blob constructor without brackets",
+            "status": 1,
+            "message": "Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "Blob constructor with undefined as first argument",
+            "status": 1,
+            "message": "Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "Passing non-objects, Dates and RegExps for blobParts should throw a TypeError.",
+            "status": 1,
+            "message": "assert_throws_js: Should throw for argument null. function \"function() {\n      new Blob(arg);\n    }\" threw object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\" (\"NotImplementedError\") expected instance of function \"function TypeError() { [native code] }\" (\"TypeError\")"
+          },
+          {
+            "name": "A plain object with custom @@iterator should be treated as a sequence for the blobParts argument.",
+            "status": 1,
+            "message": "Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "blobParts not an object: boolean",
+            "status": 1,
+            "message": "assert_throws_js: function \"function() { new Blob(true) }\" threw object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\" (\"NotImplementedError\") expected instance of function \"function TypeError() { [native code] }\" (\"TypeError\")"
+          },
+          {
+            "name": "blobParts not an object: boolean with Boolean.prototype[Symbol.iterator]",
+            "status": 1,
+            "message": "assert_throws_js: function \"function() { new Blob(true) }\" threw object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\" (\"NotImplementedError\") expected instance of function \"function TypeError() { [native code] }\" (\"TypeError\")"
+          },
+          {
+            "name": "blobParts not an object: string",
+            "status": 1,
+            "message": "assert_throws_js: function \"function() { new Blob(\"fail\") }\" threw object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\" (\"NotImplementedError\") expected instance of function \"function TypeError() { [native code] }\" (\"TypeError\")"
+          },
+          {
+            "name": "blobParts not an object: string with String.prototype[Symbol.iterator]",
+            "status": 1,
+            "message": "assert_throws_js: function \"function() { new Blob(\"fail\") }\" threw object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\" (\"NotImplementedError\") expected instance of function \"function TypeError() { [native code] }\" (\"TypeError\")"
+          },
+          {
+            "name": "blobParts not an object: number",
+            "status": 1,
+            "message": "assert_throws_js: function \"function() { new Blob(7) }\" threw object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\" (\"NotImplementedError\") expected instance of function \"function TypeError() { [native code] }\" (\"TypeError\")"
+          },
+          {
+            "name": "blobParts not an object: number with Number.prototype[Symbol.iterator]",
+            "status": 1,
+            "message": "assert_throws_js: function \"function() { new Blob(7) }\" threw object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\" (\"NotImplementedError\") expected instance of function \"function TypeError() { [native code] }\" (\"TypeError\")"
+          },
+          {
+            "name": "blobParts not an object: BigInt",
+            "status": 1,
+            "message": "assert_throws_js: function \"function() { new Blob(7n) }\" threw object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\" (\"NotImplementedError\") expected instance of function \"function TypeError() { [native code] }\" (\"TypeError\")"
+          },
+          {
+            "name": "blobParts not an object: BigInt with BigInt.prototype[Symbol.iterator]",
+            "status": 1,
+            "message": "assert_throws_js: function \"function() { new Blob(7n) }\" threw object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\" (\"NotImplementedError\") expected instance of function \"function TypeError() { [native code] }\" (\"TypeError\")"
+          },
+          {
+            "name": "blobParts not an object: Symbol",
+            "status": 1,
+            "message": "assert_throws_js: function \"function() { new Blob(symbol) }\" threw object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\" (\"NotImplementedError\") expected instance of function \"function TypeError() { [native code] }\" (\"TypeError\")"
+          },
+          {
+            "name": "blobParts not an object: Symbol with Symbol.prototype[Symbol.iterator]",
+            "status": 1,
+            "message": "assert_throws_js: function \"function() { new Blob(symbol) }\" threw object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\" (\"NotImplementedError\") expected instance of function \"function TypeError() { [native code] }\" (\"TypeError\")"
+          },
+          {
+            "name": "The length getter should be invoked and any exceptions should be propagated.",
+            "status": 1,
+            "message": "assert_throws_exactly: function \"function() {\n    new Blob(obj);\n  }\" threw object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\" but we expected it to throw object \"[object Object]\""
+          },
+          {
+            "name": "ToUint32 should be applied to the length and any exceptions should be propagated.",
+            "status": 1,
+            "message": "assert_throws_exactly: function \"function() {\n    var obj = {\n      [Symbol.iterator]: Array.prototype[Symbol.iterator],\n      length: {\n        valueOf: null,\n        toString: function() { throw test_error; }\n      }\n    };\n    new Blob(obj);\n  }\" threw object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\" but we expected it to throw object \"[object Object]\""
+          },
+          {
+            "name": "Getters and value conversions should happen in order until an exception is thrown.",
+            "status": 1,
+            "message": "assert_throws_exactly: function \"function() {\n    new Blob(obj);\n  }\" threw object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\" but we expected it to throw object \"[object Object]\""
+          },
+          {
+            "name": "ToString should be called on elements of the blobParts array and any exceptions should be propagated.",
+            "status": 1,
+            "message": "assert_throws_exactly: Throwing toString function \"function() {\n    new Blob([{ toString: function() { throw test_error; } }]);\n  }\" threw object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\" but we expected it to throw object \"[object Object]\""
+          }
+        ]
+      },
+      "packages/isolate-host/node_modules/.web-api-probe/td-gb/dist": {
+        "acHidden": true,
+        "harness": 0,
+        "ms": 14,
+        "counts": {
+          "PASS": 1,
+          "FAIL": 72
+        },
+        "wallMs": 74,
+        "exitCode": 0,
+        "differFromNode": 72,
+        "notRunVsNode": 0,
+        "firstDiffs": [
+          {
+            "name": "Blob constructor with no arguments",
+            "status": 1,
+            "message": "Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "Blob constructor with no arguments, without 'new'",
+            "status": 1,
+            "message": "assert_throws_js: function \"function() { var blob = Blob(); }\" threw object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\" (\"NotImplementedError\") expected instance of function \"function TypeError() { [native code] }\" (\"TypeError\")"
+          },
+          {
+            "name": "Blob constructor without brackets",
+            "status": 1,
+            "message": "Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "Blob constructor with undefined as first argument",
+            "status": 1,
+            "message": "Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "Passing non-objects, Dates and RegExps for blobParts should throw a TypeError.",
+            "status": 1,
+            "message": "assert_throws_js: Should throw for argument null. function \"function() {\n      new Blob(arg);\n    }\" threw object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\" (\"NotImplementedError\") expected instance of function \"function TypeError() { [native code] }\" (\"TypeError\")"
+          },
+          {
+            "name": "A plain object with custom @@iterator should be treated as a sequence for the blobParts argument.",
+            "status": 1,
+            "message": "Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "blobParts not an object: boolean",
+            "status": 1,
+            "message": "assert_throws_js: function \"function() { new Blob(true) }\" threw object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\" (\"NotImplementedError\") expected instance of function \"function TypeError() { [native code] }\" (\"TypeError\")"
+          },
+          {
+            "name": "blobParts not an object: boolean with Boolean.prototype[Symbol.iterator]",
+            "status": 1,
+            "message": "assert_throws_js: function \"function() { new Blob(true) }\" threw object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\" (\"NotImplementedError\") expected instance of function \"function TypeError() { [native code] }\" (\"TypeError\")"
+          },
+          {
+            "name": "blobParts not an object: string",
+            "status": 1,
+            "message": "assert_throws_js: function \"function() { new Blob(\"fail\") }\" threw object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\" (\"NotImplementedError\") expected instance of function \"function TypeError() { [native code] }\" (\"TypeError\")"
+          },
+          {
+            "name": "blobParts not an object: string with String.prototype[Symbol.iterator]",
+            "status": 1,
+            "message": "assert_throws_js: function \"function() { new Blob(\"fail\") }\" threw object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\" (\"NotImplementedError\") expected instance of function \"function TypeError() { [native code] }\" (\"TypeError\")"
+          },
+          {
+            "name": "blobParts not an object: number",
+            "status": 1,
+            "message": "assert_throws_js: function \"function() { new Blob(7) }\" threw object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\" (\"NotImplementedError\") expected instance of function \"function TypeError() { [native code] }\" (\"TypeError\")"
+          },
+          {
+            "name": "blobParts not an object: number with Number.prototype[Symbol.iterator]",
+            "status": 1,
+            "message": "assert_throws_js: function \"function() { new Blob(7) }\" threw object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\" (\"NotImplementedError\") expected instance of function \"function TypeError() { [native code] }\" (\"TypeError\")"
+          },
+          {
+            "name": "blobParts not an object: BigInt",
+            "status": 1,
+            "message": "assert_throws_js: function \"function() { new Blob(7n) }\" threw object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\" (\"NotImplementedError\") expected instance of function \"function TypeError() { [native code] }\" (\"TypeError\")"
+          },
+          {
+            "name": "blobParts not an object: BigInt with BigInt.prototype[Symbol.iterator]",
+            "status": 1,
+            "message": "assert_throws_js: function \"function() { new Blob(7n) }\" threw object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\" (\"NotImplementedError\") expected instance of function \"function TypeError() { [native code] }\" (\"TypeError\")"
+          },
+          {
+            "name": "blobParts not an object: Symbol",
+            "status": 1,
+            "message": "assert_throws_js: function \"function() { new Blob(symbol) }\" threw object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\" (\"NotImplementedError\") expected instance of function \"function TypeError() { [native code] }\" (\"TypeError\")"
+          },
+          {
+            "name": "blobParts not an object: Symbol with Symbol.prototype[Symbol.iterator]",
+            "status": 1,
+            "message": "assert_throws_js: function \"function() { new Blob(symbol) }\" threw object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\" (\"NotImplementedError\") expected instance of function \"function TypeError() { [native code] }\" (\"TypeError\")"
+          },
+          {
+            "name": "The length getter should be invoked and any exceptions should be propagated.",
+            "status": 1,
+            "message": "assert_throws_exactly: function \"function() {\n    new Blob(obj);\n  }\" threw object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\" but we expected it to throw object \"[object Object]\""
+          },
+          {
+            "name": "ToUint32 should be applied to the length and any exceptions should be propagated.",
+            "status": 1,
+            "message": "assert_throws_exactly: function \"function() {\n    var obj = {\n      [Symbol.iterator]: Array.prototype[Symbol.iterator],\n      length: {\n        valueOf: null,\n        toString: function() { throw test_error; }\n      }\n    };\n    new Blob(obj);\n  }\" threw object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\" but we expected it to throw object \"[object Object]\""
+          },
+          {
+            "name": "Getters and value conversions should happen in order until an exception is thrown.",
+            "status": 1,
+            "message": "assert_throws_exactly: function \"function() {\n    new Blob(obj);\n  }\" threw object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\" but we expected it to throw object \"[object Object]\""
+          },
+          {
+            "name": "ToString should be called on elements of the blobParts array and any exceptions should be propagated.",
+            "status": 1,
+            "message": "assert_throws_exactly: Throwing toString function \"function() {\n    new Blob([{ toString: function() { throw test_error; } }]);\n  }\" threw object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\" but we expected it to throw object \"[object Object]\""
+          }
+        ]
+      }
+    },
+    "FileAPI/blob/Blob-text.any.js": {
+      "bytes": 203714,
+      "node": {
+        "acHidden": false,
+        "harness": 0,
+        "ms": 1,
+        "counts": {
+          "PASS": 8
+        },
+        "wallMs": 27,
+        "exitCode": 0
+      },
+      "packages/isolate-host/dist": {
+        "acHidden": true,
+        "harness": 0,
+        "ms": 11,
+        "counts": {
+          "FAIL": 8
+        },
+        "wallMs": 60,
+        "exitCode": 0,
+        "differFromNode": 8,
+        "notRunVsNode": 0,
+        "firstDiffs": [
+          {
+            "name": "Blob.text()",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Blob.text() empty blob data",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Blob.text() multi-element array in constructor",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Blob.text() non-unicode",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Blob.text() different charset param in type option",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Blob.text() different charset param with non-ascii input",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Blob.text() invalid utf-8 input",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Blob.text() concurrent reads",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          }
+        ]
+      },
+      "packages/isolate-host/node_modules/.web-api-probe/td-gb/dist": {
+        "acHidden": true,
+        "harness": 0,
+        "ms": 10,
+        "counts": {
+          "FAIL": 8
+        },
+        "wallMs": 64,
+        "exitCode": 0,
+        "differFromNode": 8,
+        "notRunVsNode": 0,
+        "firstDiffs": [
+          {
+            "name": "Blob.text()",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Blob.text() empty blob data",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Blob.text() multi-element array in constructor",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Blob.text() non-unicode",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Blob.text() different charset param in type option",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Blob.text() different charset param with non-ascii input",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Blob.text() invalid utf-8 input",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          },
+          {
+            "name": "Blob.text() concurrent reads",
+            "status": 1,
+            "message": "promise_test: Unhandled rejection with value: object \"NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\""
+          }
+        ]
+      }
+    },
+    "FileAPI/file/File-constructor.any.js": {
+      "bytes": 205523,
+      "node": {
+        "acHidden": false,
+        "harness": 0,
+        "ms": 2,
+        "counts": {
+          "PASS": 49
+        },
+        "wallMs": 28,
+        "exitCode": 0
+      },
+      "packages/isolate-host/dist": {
+        "acHidden": true,
+        "harness": 0,
+        "ms": 9,
+        "counts": {
+          "PASS": 1,
+          "FAIL": 5
+        },
+        "wallMs": 63,
+        "exitCode": 0,
+        "differFromNode": 5,
+        "notRunVsNode": 43,
+        "firstDiffs": [
+          {
+            "name": "Required arguments",
+            "status": 1,
+            "message": "assert_throws_js: Bits argument is required function \"() => new File()\" threw object \"NotImplementedError: Not implemented: isolate-host.File (not available in the rifty isolate host, ADR-0557)\" (\"NotImplementedError\") expected instance of function \"function TypeError() { [native code] }\" (\"TypeError\")"
+          },
+          {
+            "name": "empty fileBits",
+            "status": 1,
+            "message": "Not implemented: isolate-host.File (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "DOMString fileBits",
+            "status": 1,
+            "message": "Not implemented: isolate-host.File (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "Unicode DOMString fileBits",
+            "status": 1,
+            "message": "Not implemented: isolate-host.File (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "String object fileBits",
+            "status": 1,
+            "message": "Not implemented: isolate-host.File (not available in the rifty isolate host, ADR-0557)"
+          }
+        ]
+      },
+      "packages/isolate-host/node_modules/.web-api-probe/td-gb/dist": {
+        "acHidden": true,
+        "harness": 0,
+        "ms": 9,
+        "counts": {
+          "PASS": 1,
+          "FAIL": 5
+        },
+        "wallMs": 67,
+        "exitCode": 0,
+        "differFromNode": 5,
+        "notRunVsNode": 43,
+        "firstDiffs": [
+          {
+            "name": "Required arguments",
+            "status": 1,
+            "message": "assert_throws_js: Bits argument is required function \"() => new File()\" threw object \"NotImplementedError: Not implemented: isolate-host.File (not available in the rifty isolate host, ADR-0557)\" (\"NotImplementedError\") expected instance of function \"function TypeError() { [native code] }\" (\"TypeError\")"
+          },
+          {
+            "name": "empty fileBits",
+            "status": 1,
+            "message": "Not implemented: isolate-host.File (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "DOMString fileBits",
+            "status": 1,
+            "message": "Not implemented: isolate-host.File (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "Unicode DOMString fileBits",
+            "status": 1,
+            "message": "Not implemented: isolate-host.File (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "String object fileBits",
+            "status": 1,
+            "message": "Not implemented: isolate-host.File (not available in the rifty isolate host, ADR-0557)"
+          }
+        ]
+      }
+    },
+    "encoding/api-basics.any.js": {
+      "bytes": 201838,
+      "node": {
+        "acHidden": false,
+        "harness": 0,
+        "ms": 1,
+        "counts": {
+          "PASS": 6
+        },
+        "wallMs": 28,
+        "exitCode": 0
+      },
+      "packages/isolate-host/dist": {
+        "acHidden": true,
+        "harness": 0,
+        "ms": 12,
+        "counts": {
+          "PASS": 3,
+          "FAIL": 3
+        },
+        "wallMs": 67,
+        "exitCode": 0,
+        "differFromNode": 3,
+        "notRunVsNode": 0,
+        "firstDiffs": [
+          {
+            "name": "Decode sample: utf-16le",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(utf-16le) (only utf-8)"
+          },
+          {
+            "name": "Decode sample: utf-16be",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(utf-16be) (only utf-8)"
+          },
+          {
+            "name": "Decode sample: utf-16",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(utf-16) (only utf-8)"
+          }
+        ]
+      },
+      "packages/isolate-host/node_modules/.web-api-probe/td-gb/dist": {
+        "acHidden": true,
+        "harness": 0,
+        "ms": 5,
+        "counts": {
+          "PASS": 6
+        },
+        "wallMs": 69,
+        "exitCode": 0,
+        "differFromNode": 0,
+        "notRunVsNode": 0,
+        "firstDiffs": []
+      }
+    },
+    "encoding/textdecoder-labels.any.js": {
+      "bytes": 210223,
+      "node": {
+        "acHidden": false,
+        "harness": 0,
+        "ms": 5,
+        "counts": {
+          "PASS": 222
+        },
+        "wallMs": 32,
+        "exitCode": 0
+      },
+      "packages/isolate-host/dist": {
+        "acHidden": true,
+        "harness": 0,
+        "ms": 11,
+        "counts": {
+          "PASS": 3,
+          "FAIL": 219
+        },
+        "wallMs": 66,
+        "exitCode": 0,
+        "differFromNode": 219,
+        "notRunVsNode": 0,
+        "firstDiffs": [
+          {
+            "name": "unicode11utf8 => UTF-8",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(unicode11utf8) (only utf-8)"
+          },
+          {
+            "name": "unicode20utf8 => UTF-8",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(unicode20utf8) (only utf-8)"
+          },
+          {
+            "name": "x-unicode20utf8 => UTF-8",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(x-unicode20utf8) (only utf-8)"
+          },
+          {
+            "name": "866 => IBM866",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(866) (only utf-8)"
+          },
+          {
+            "name": "cp866 => IBM866",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(cp866) (only utf-8)"
+          },
+          {
+            "name": "csibm866 => IBM866",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(csibm866) (only utf-8)"
+          },
+          {
+            "name": "ibm866 => IBM866",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(ibm866) (only utf-8)"
+          },
+          {
+            "name": "csisolatin2 => ISO-8859-2",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(csisolatin2) (only utf-8)"
+          },
+          {
+            "name": "iso-8859-2 => ISO-8859-2",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(iso-8859-2) (only utf-8)"
+          },
+          {
+            "name": "iso-ir-101 => ISO-8859-2",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(iso-ir-101) (only utf-8)"
+          },
+          {
+            "name": "iso8859-2 => ISO-8859-2",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(iso8859-2) (only utf-8)"
+          },
+          {
+            "name": "iso88592 => ISO-8859-2",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(iso88592) (only utf-8)"
+          },
+          {
+            "name": "iso_8859-2 => ISO-8859-2",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(iso_8859-2) (only utf-8)"
+          },
+          {
+            "name": "iso_8859-2:1987 => ISO-8859-2",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(iso_8859-2:1987) (only utf-8)"
+          },
+          {
+            "name": "l2 => ISO-8859-2",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(l2) (only utf-8)"
+          },
+          {
+            "name": "latin2 => ISO-8859-2",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(latin2) (only utf-8)"
+          },
+          {
+            "name": "csisolatin3 => ISO-8859-3",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(csisolatin3) (only utf-8)"
+          },
+          {
+            "name": "iso-8859-3 => ISO-8859-3",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(iso-8859-3) (only utf-8)"
+          },
+          {
+            "name": "iso-ir-109 => ISO-8859-3",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(iso-ir-109) (only utf-8)"
+          },
+          {
+            "name": "iso8859-3 => ISO-8859-3",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(iso8859-3) (only utf-8)"
+          }
+        ]
+      },
+      "packages/isolate-host/node_modules/.web-api-probe/td-gb/dist": {
+        "acHidden": true,
+        "harness": 0,
+        "ms": 14,
+        "counts": {
+          "PASS": 194,
+          "FAIL": 28
+        },
+        "wallMs": 68,
+        "exitCode": 0,
+        "differFromNode": 28,
+        "notRunVsNode": 0,
+        "firstDiffs": [
+          {
+            "name": "big5 => Big5",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(big5) (decoded by ICU in Node, not in the rifty isolate host)"
+          },
+          {
+            "name": "big5-hkscs => Big5",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(big5) (decoded by ICU in Node, not in the rifty isolate host)"
+          },
+          {
+            "name": "cn-big5 => Big5",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(big5) (decoded by ICU in Node, not in the rifty isolate host)"
+          },
+          {
+            "name": "csbig5 => Big5",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(big5) (decoded by ICU in Node, not in the rifty isolate host)"
+          },
+          {
+            "name": "x-x-big5 => Big5",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(big5) (decoded by ICU in Node, not in the rifty isolate host)"
+          },
+          {
+            "name": "cseucpkdfmtjapanese => EUC-JP",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(euc-jp) (decoded by ICU in Node, not in the rifty isolate host)"
+          },
+          {
+            "name": "euc-jp => EUC-JP",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(euc-jp) (decoded by ICU in Node, not in the rifty isolate host)"
+          },
+          {
+            "name": "x-euc-jp => EUC-JP",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(euc-jp) (decoded by ICU in Node, not in the rifty isolate host)"
+          },
+          {
+            "name": "csiso2022jp => ISO-2022-JP",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(iso-2022-jp) (decoded by ICU in Node, not in the rifty isolate host)"
+          },
+          {
+            "name": "iso-2022-jp => ISO-2022-JP",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(iso-2022-jp) (decoded by ICU in Node, not in the rifty isolate host)"
+          },
+          {
+            "name": "csshiftjis => Shift_JIS",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(shift_jis) (decoded by ICU in Node, not in the rifty isolate host)"
+          },
+          {
+            "name": "ms932 => Shift_JIS",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(shift_jis) (decoded by ICU in Node, not in the rifty isolate host)"
+          },
+          {
+            "name": "ms_kanji => Shift_JIS",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(shift_jis) (decoded by ICU in Node, not in the rifty isolate host)"
+          },
+          {
+            "name": "shift-jis => Shift_JIS",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(shift_jis) (decoded by ICU in Node, not in the rifty isolate host)"
+          },
+          {
+            "name": "shift_jis => Shift_JIS",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(shift_jis) (decoded by ICU in Node, not in the rifty isolate host)"
+          },
+          {
+            "name": "sjis => Shift_JIS",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(shift_jis) (decoded by ICU in Node, not in the rifty isolate host)"
+          },
+          {
+            "name": "windows-31j => Shift_JIS",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(shift_jis) (decoded by ICU in Node, not in the rifty isolate host)"
+          },
+          {
+            "name": "x-sjis => Shift_JIS",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(shift_jis) (decoded by ICU in Node, not in the rifty isolate host)"
+          },
+          {
+            "name": "cseuckr => EUC-KR",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(euc-kr) (decoded by ICU in Node, not in the rifty isolate host)"
+          },
+          {
+            "name": "csksc56011987 => EUC-KR",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(euc-kr) (decoded by ICU in Node, not in the rifty isolate host)"
+          }
+        ]
+      }
+    },
+    "encoding/textdecoder-fatal-single-byte.any.js": {
+      "bytes": 205023,
+      "node": {
+        "acHidden": false,
+        "harness": 0,
+        "ms": 20,
+        "counts": {
+          "PASS": 7168
+        },
+        "wallMs": 47,
+        "exitCode": 0
+      },
+      "packages/isolate-host/dist": {
+        "acHidden": true,
+        "harness": 0,
+        "ms": 79,
+        "counts": {
+          "FAIL": 7168
+        },
+        "wallMs": 145,
+        "exitCode": 0,
+        "differFromNode": 7168,
+        "notRunVsNode": 0,
+        "firstDiffs": [
+          {
+            "name": "Not throw: IBM866 has a pointer 0",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(ibm866) (only utf-8)"
+          },
+          {
+            "name": "Not throw: IBM866 has a pointer 1",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(ibm866) (only utf-8)"
+          },
+          {
+            "name": "Not throw: IBM866 has a pointer 2",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(ibm866) (only utf-8)"
+          },
+          {
+            "name": "Not throw: IBM866 has a pointer 3",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(ibm866) (only utf-8)"
+          },
+          {
+            "name": "Not throw: IBM866 has a pointer 4",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(ibm866) (only utf-8)"
+          },
+          {
+            "name": "Not throw: IBM866 has a pointer 5",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(ibm866) (only utf-8)"
+          },
+          {
+            "name": "Not throw: IBM866 has a pointer 6",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(ibm866) (only utf-8)"
+          },
+          {
+            "name": "Not throw: IBM866 has a pointer 7",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(ibm866) (only utf-8)"
+          },
+          {
+            "name": "Not throw: IBM866 has a pointer 8",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(ibm866) (only utf-8)"
+          },
+          {
+            "name": "Not throw: IBM866 has a pointer 9",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(ibm866) (only utf-8)"
+          },
+          {
+            "name": "Not throw: IBM866 has a pointer 10",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(ibm866) (only utf-8)"
+          },
+          {
+            "name": "Not throw: IBM866 has a pointer 11",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(ibm866) (only utf-8)"
+          },
+          {
+            "name": "Not throw: IBM866 has a pointer 12",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(ibm866) (only utf-8)"
+          },
+          {
+            "name": "Not throw: IBM866 has a pointer 13",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(ibm866) (only utf-8)"
+          },
+          {
+            "name": "Not throw: IBM866 has a pointer 14",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(ibm866) (only utf-8)"
+          },
+          {
+            "name": "Not throw: IBM866 has a pointer 15",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(ibm866) (only utf-8)"
+          },
+          {
+            "name": "Not throw: IBM866 has a pointer 16",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(ibm866) (only utf-8)"
+          },
+          {
+            "name": "Not throw: IBM866 has a pointer 17",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(ibm866) (only utf-8)"
+          },
+          {
+            "name": "Not throw: IBM866 has a pointer 18",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(ibm866) (only utf-8)"
+          },
+          {
+            "name": "Not throw: IBM866 has a pointer 19",
+            "status": 1,
+            "message": "Not implemented: isolate-host.TextDecoder(ibm866) (only utf-8)"
+          }
+        ]
+      },
+      "packages/isolate-host/node_modules/.web-api-probe/td-gb/dist": {
+        "acHidden": true,
+        "harness": 0,
+        "ms": 17,
+        "counts": {
+          "PASS": 7168
+        },
+        "wallMs": 81,
+        "exitCode": 0,
+        "differFromNode": 0,
+        "notRunVsNode": 0,
+        "firstDiffs": []
+      }
+    },
+    "encoding/encodeInto.any.js": {
+      "bytes": 205413,
+      "node": {
+        "acHidden": false,
+        "harness": 0,
+        "ms": 4,
+        "counts": {
+          "PASS": 111
+        },
+        "wallMs": 30,
+        "exitCode": 0
+      },
+      "packages/isolate-host/dist": {
+        "acHidden": true,
+        "harness": 0,
+        "ms": 12,
+        "counts": {
+          "PASS": 84,
+          "FAIL": 27
+        },
+        "wallMs": 67,
+        "exitCode": 0,
+        "differFromNode": 27,
+        "notRunVsNode": 0,
+        "firstDiffs": [
+          {
+            "name": "Invalid encodeInto() destination: DataView, backed by: ArrayBuffer",
+            "status": 1,
+            "message": "assert_throws_js: function \"() => new TextEncoder().encodeInto(\"\", viewInstance)\" did not throw"
+          },
+          {
+            "name": "Invalid encodeInto() destination: DataView, backed by: SharedArrayBuffer",
+            "status": 1,
+            "message": "assert_throws_js: function \"() => new TextEncoder().encodeInto(\"\", viewInstance)\" did not throw"
+          },
+          {
+            "name": "Invalid encodeInto() destination: Int8Array, backed by: ArrayBuffer",
+            "status": 1,
+            "message": "assert_throws_js: function \"() => new TextEncoder().encodeInto(\"\", viewInstance)\" did not throw"
+          },
+          {
+            "name": "Invalid encodeInto() destination: Int8Array, backed by: SharedArrayBuffer",
+            "status": 1,
+            "message": "assert_throws_js: function \"() => new TextEncoder().encodeInto(\"\", viewInstance)\" did not throw"
+          },
+          {
+            "name": "Invalid encodeInto() destination: Int16Array, backed by: ArrayBuffer",
+            "status": 1,
+            "message": "assert_throws_js: function \"() => new TextEncoder().encodeInto(\"\", viewInstance)\" did not throw"
+          },
+          {
+            "name": "Invalid encodeInto() destination: Int16Array, backed by: SharedArrayBuffer",
+            "status": 1,
+            "message": "assert_throws_js: function \"() => new TextEncoder().encodeInto(\"\", viewInstance)\" did not throw"
+          },
+          {
+            "name": "Invalid encodeInto() destination: Int32Array, backed by: ArrayBuffer",
+            "status": 1,
+            "message": "assert_throws_js: function \"() => new TextEncoder().encodeInto(\"\", viewInstance)\" did not throw"
+          },
+          {
+            "name": "Invalid encodeInto() destination: Int32Array, backed by: SharedArrayBuffer",
+            "status": 1,
+            "message": "assert_throws_js: function \"() => new TextEncoder().encodeInto(\"\", viewInstance)\" did not throw"
+          },
+          {
+            "name": "Invalid encodeInto() destination: Uint16Array, backed by: ArrayBuffer",
+            "status": 1,
+            "message": "assert_throws_js: function \"() => new TextEncoder().encodeInto(\"\", viewInstance)\" did not throw"
+          },
+          {
+            "name": "Invalid encodeInto() destination: Uint16Array, backed by: SharedArrayBuffer",
+            "status": 1,
+            "message": "assert_throws_js: function \"() => new TextEncoder().encodeInto(\"\", viewInstance)\" did not throw"
+          },
+          {
+            "name": "Invalid encodeInto() destination: Uint32Array, backed by: ArrayBuffer",
+            "status": 1,
+            "message": "assert_throws_js: function \"() => new TextEncoder().encodeInto(\"\", viewInstance)\" did not throw"
+          },
+          {
+            "name": "Invalid encodeInto() destination: Uint32Array, backed by: SharedArrayBuffer",
+            "status": 1,
+            "message": "assert_throws_js: function \"() => new TextEncoder().encodeInto(\"\", viewInstance)\" did not throw"
+          },
+          {
+            "name": "Invalid encodeInto() destination: Uint8ClampedArray, backed by: ArrayBuffer",
+            "status": 1,
+            "message": "assert_throws_js: function \"() => new TextEncoder().encodeInto(\"\", viewInstance)\" did not throw"
+          },
+          {
+            "name": "Invalid encodeInto() destination: Uint8ClampedArray, backed by: SharedArrayBuffer",
+            "status": 1,
+            "message": "assert_throws_js: function \"() => new TextEncoder().encodeInto(\"\", viewInstance)\" did not throw"
+          },
+          {
+            "name": "Invalid encodeInto() destination: BigInt64Array, backed by: ArrayBuffer",
+            "status": 1,
+            "message": "assert_throws_js: function \"() => new TextEncoder().encodeInto(\"\", viewInstance)\" did not throw"
+          },
+          {
+            "name": "Invalid encodeInto() destination: BigInt64Array, backed by: SharedArrayBuffer",
+            "status": 1,
+            "message": "assert_throws_js: function \"() => new TextEncoder().encodeInto(\"\", viewInstance)\" did not throw"
+          },
+          {
+            "name": "Invalid encodeInto() destination: BigUint64Array, backed by: ArrayBuffer",
+            "status": 1,
+            "message": "assert_throws_js: function \"() => new TextEncoder().encodeInto(\"\", viewInstance)\" did not throw"
+          },
+          {
+            "name": "Invalid encodeInto() destination: BigUint64Array, backed by: SharedArrayBuffer",
+            "status": 1,
+            "message": "assert_throws_js: function \"() => new TextEncoder().encodeInto(\"\", viewInstance)\" did not throw"
+          },
+          {
+            "name": "Invalid encodeInto() destination: Float16Array, backed by: ArrayBuffer",
+            "status": 1,
+            "message": "assert_throws_js: function \"() => new TextEncoder().encodeInto(\"\", viewInstance)\" did not throw"
+          },
+          {
+            "name": "Invalid encodeInto() destination: Float16Array, backed by: SharedArrayBuffer",
+            "status": 1,
+            "message": "assert_throws_js: function \"() => new TextEncoder().encodeInto(\"\", viewInstance)\" did not throw"
+          }
+        ]
+      },
+      "packages/isolate-host/node_modules/.web-api-probe/td-gb/dist": {
+        "acHidden": true,
+        "harness": 0,
+        "ms": 12,
+        "counts": {
+          "PASS": 110,
+          "FAIL": 1
+        },
+        "wallMs": 67,
+        "exitCode": 0,
+        "differFromNode": 1,
+        "notRunVsNode": 0,
+        "firstDiffs": [
+          {
+            "name": "encodeInto() and a detached output buffer",
+            "status": 1,
+            "message": "Not implemented: isolate-host.MessageChannel (not available in the rifty isolate host, ADR-0557)"
+          }
+        ]
+      }
+    },
+    "dom/abort/event.any.js": {
+      "bytes": 206338,
+      "node": {
+        "acHidden": false,
+        "harness": 0,
+        "ms": 1,
+        "counts": {
+          "PASS": 16
+        },
+        "wallMs": 26,
+        "exitCode": 0
+      },
+      "packages/isolate-host/dist": {
+        "acHidden": true,
+        "harness": 0,
+        "ms": 11,
+        "counts": {
+          "FAIL": 16
+        },
+        "wallMs": 63,
+        "exitCode": 0,
+        "differFromNode": 16,
+        "notRunVsNode": 0,
+        "firstDiffs": [
+          {
+            "name": "AbortController abort() should fire event synchronously",
+            "status": 1,
+            "message": "AbortController is not defined"
+          },
+          {
+            "name": "controller.signal should always return the same object",
+            "status": 1,
+            "message": "AbortController is not defined"
+          },
+          {
+            "name": "controller.abort() should do nothing the second time it is called",
+            "status": 1,
+            "message": "AbortController is not defined"
+          },
+          {
+            "name": "event handler should not be called if added after controller.abort()",
+            "status": 1,
+            "message": "AbortController is not defined"
+          },
+          {
+            "name": "the abort event should have the right properties",
+            "status": 1,
+            "message": "AbortController is not defined"
+          },
+          {
+            "name": "AbortController abort(reason) should set signal.reason",
+            "status": 1,
+            "message": "AbortController is not defined"
+          },
+          {
+            "name": "aborting AbortController without reason creates an \"AbortError\" DOMException",
+            "status": 1,
+            "message": "AbortController is not defined"
+          },
+          {
+            "name": "AbortController abort(undefined) creates an \"AbortError\" DOMException",
+            "status": 1,
+            "message": "AbortController is not defined"
+          },
+          {
+            "name": "AbortController abort(null) should set signal.reason",
+            "status": 1,
+            "message": "AbortController is not defined"
+          },
+          {
+            "name": "static aborting signal should have right properties",
+            "status": 1,
+            "message": "AbortSignal.abort is not a function"
+          },
+          {
+            "name": "static aborting signal with reason should set signal.reason",
+            "status": 1,
+            "message": "AbortSignal.abort is not a function"
+          },
+          {
+            "name": "throwIfAborted() should throw abort.reason if signal aborted",
+            "status": 1,
+            "message": "AbortSignal.abort is not a function"
+          },
+          {
+            "name": "throwIfAborted() should throw primitive abort.reason if signal aborted",
+            "status": 1,
+            "message": "AbortSignal.abort is not a function"
+          },
+          {
+            "name": "throwIfAborted() should not throw if signal not aborted",
+            "status": 1,
+            "message": "AbortController is not defined"
+          },
+          {
+            "name": "AbortSignal.reason returns the same DOMException",
+            "status": 1,
+            "message": "AbortSignal.abort is not a function"
+          },
+          {
+            "name": "AbortController.signal.reason returns the same DOMException",
+            "status": 1,
+            "message": "AbortController is not defined"
+          }
+        ]
+      },
+      "packages/isolate-host/node_modules/.web-api-probe/td-gb/dist": {
+        "acHidden": true,
+        "harness": 0,
+        "ms": 12,
+        "counts": {
+          "FAIL": 16
+        },
+        "wallMs": 67,
+        "exitCode": 0,
+        "differFromNode": 16,
+        "notRunVsNode": 0,
+        "firstDiffs": [
+          {
+            "name": "AbortController abort() should fire event synchronously",
+            "status": 1,
+            "message": "AbortController is not defined"
+          },
+          {
+            "name": "controller.signal should always return the same object",
+            "status": 1,
+            "message": "AbortController is not defined"
+          },
+          {
+            "name": "controller.abort() should do nothing the second time it is called",
+            "status": 1,
+            "message": "AbortController is not defined"
+          },
+          {
+            "name": "event handler should not be called if added after controller.abort()",
+            "status": 1,
+            "message": "AbortController is not defined"
+          },
+          {
+            "name": "the abort event should have the right properties",
+            "status": 1,
+            "message": "AbortController is not defined"
+          },
+          {
+            "name": "AbortController abort(reason) should set signal.reason",
+            "status": 1,
+            "message": "AbortController is not defined"
+          },
+          {
+            "name": "aborting AbortController without reason creates an \"AbortError\" DOMException",
+            "status": 1,
+            "message": "AbortController is not defined"
+          },
+          {
+            "name": "AbortController abort(undefined) creates an \"AbortError\" DOMException",
+            "status": 1,
+            "message": "AbortController is not defined"
+          },
+          {
+            "name": "AbortController abort(null) should set signal.reason",
+            "status": 1,
+            "message": "AbortController is not defined"
+          },
+          {
+            "name": "static aborting signal should have right properties",
+            "status": 1,
+            "message": "AbortSignal.abort is not a function"
+          },
+          {
+            "name": "static aborting signal with reason should set signal.reason",
+            "status": 1,
+            "message": "AbortSignal.abort is not a function"
+          },
+          {
+            "name": "throwIfAborted() should throw abort.reason if signal aborted",
+            "status": 1,
+            "message": "AbortSignal.abort is not a function"
+          },
+          {
+            "name": "throwIfAborted() should throw primitive abort.reason if signal aborted",
+            "status": 1,
+            "message": "AbortSignal.abort is not a function"
+          },
+          {
+            "name": "throwIfAborted() should not throw if signal not aborted",
+            "status": 1,
+            "message": "AbortController is not defined"
+          },
+          {
+            "name": "AbortSignal.reason returns the same DOMException",
+            "status": 1,
+            "message": "AbortSignal.abort is not a function"
+          },
+          {
+            "name": "AbortController.signal.reason returns the same DOMException",
+            "status": 1,
+            "message": "AbortController is not defined"
+          }
+        ]
+      }
+    },
+    "dom/abort/timeout.any.js": {
+      "bytes": 200848,
+      "node": {
+        "acHidden": false,
+        "harness": 0,
+        "ms": 6,
+        "counts": {
+          "PASS": 3
+        },
+        "wallMs": 31,
+        "exitCode": 0
+      },
+      "packages/isolate-host/dist": {
+        "acHidden": true,
+        "harness": 0,
+        "ms": 10,
+        "counts": {
+          "FAIL": 3
+        },
+        "wallMs": 60,
+        "exitCode": 0,
+        "differFromNode": 3,
+        "notRunVsNode": 0,
+        "firstDiffs": [
+          {
+            "name": "AbortSignal.timeout() returns a non-aborted signal",
+            "status": 1,
+            "message": "AbortSignal.timeout is not a function"
+          },
+          {
+            "name": "Signal returned by AbortSignal.timeout() times out",
+            "status": 1,
+            "message": "AbortSignal.timeout is not a function"
+          },
+          {
+            "name": "AbortSignal timeouts fire in order",
+            "status": 1,
+            "message": "AbortSignal.timeout is not a function"
+          }
+        ]
+      },
+      "packages/isolate-host/node_modules/.web-api-probe/td-gb/dist": {
+        "acHidden": true,
+        "harness": 0,
+        "ms": 12,
+        "counts": {
+          "FAIL": 3
+        },
+        "wallMs": 69,
+        "exitCode": 0,
+        "differFromNode": 3,
+        "notRunVsNode": 0,
+        "firstDiffs": [
+          {
+            "name": "AbortSignal.timeout() returns a non-aborted signal",
+            "status": 1,
+            "message": "AbortSignal.timeout is not a function"
+          },
+          {
+            "name": "Signal returned by AbortSignal.timeout() times out",
+            "status": 1,
+            "message": "AbortSignal.timeout is not a function"
+          },
+          {
+            "name": "AbortSignal timeouts fire in order",
+            "status": 1,
+            "message": "AbortSignal.timeout is not a function"
+          }
+        ]
+      }
+    },
+    "dom/abort/abort-signal-any.any.js": {
+      "bytes": 208777,
+      "node": {
+        "acHidden": false,
+        "harness": 0,
+        "ms": 7,
+        "counts": {
+          "PASS": 14
+        },
+        "wallMs": 34,
+        "exitCode": 0
+      },
+      "packages/isolate-host/dist": {
+        "acHidden": true,
+        "harness": 0,
+        "ms": 9,
+        "counts": {
+          "FAIL": 1
+        },
+        "wallMs": 65,
+        "exitCode": 0,
+        "differFromNode": 1,
+        "notRunVsNode": 13,
+        "firstDiffs": [
+          {
+            "name": "AbortSignal.any() works with an empty array of signals",
+            "status": 1,
+            "message": "signalInterface.any is not a function"
+          }
+        ]
+      },
+      "packages/isolate-host/node_modules/.web-api-probe/td-gb/dist": {
+        "acHidden": true,
+        "harness": 0,
+        "ms": 9,
+        "counts": {
+          "FAIL": 1
+        },
+        "wallMs": 69,
+        "exitCode": 0,
+        "differFromNode": 1,
+        "notRunVsNode": 13,
+        "firstDiffs": [
+          {
+            "name": "AbortSignal.any() works with an empty array of signals",
+            "status": 1,
+            "message": "signalInterface.any is not a function"
+          }
+        ]
+      }
+    },
+    "dom/events/AddEventListenerOptions-signal.any.js": {
+      "bytes": 204827,
+      "node": {
+        "acHidden": false,
+        "harness": 0,
+        "ms": 2,
+        "counts": {
+          "PASS": 11
+        },
+        "wallMs": 27,
+        "exitCode": 0
+      },
+      "packages/isolate-host/dist": {
+        "acHidden": true,
+        "harness": 0,
+        "ms": 11,
+        "counts": {
+          "FAIL": 11
+        },
+        "wallMs": 67,
+        "exitCode": 0,
+        "differFromNode": 11,
+        "notRunVsNode": 0,
+        "firstDiffs": [
+          {
+            "name": "Passing an AbortSignal to addEventListener options should allow removing a listener",
+            "status": 1,
+            "message": "Not implemented: isolate-host.EventTarget (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "Passing an AbortSignal to addEventListener does not prevent removeEventListener",
+            "status": 1,
+            "message": "Not implemented: isolate-host.EventTarget (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "Passing an AbortSignal to addEventListener works with the once flag",
+            "status": 1,
+            "message": "Not implemented: isolate-host.EventTarget (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "Removing a once listener works with a passed signal",
+            "status": 1,
+            "message": "Not implemented: isolate-host.EventTarget (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "Passing an AbortSignal to multiple listeners",
+            "status": 1,
+            "message": "Not implemented: isolate-host.EventTarget (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "Passing an AbortSignal to addEventListener works with the capture flag",
+            "status": 1,
+            "message": "Not implemented: isolate-host.EventTarget (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "Aborting from a listener does not call future listeners",
+            "status": 1,
+            "message": "Not implemented: isolate-host.EventTarget (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "Adding then aborting a listener in another listener does not call it",
+            "status": 1,
+            "message": "Not implemented: isolate-host.EventTarget (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "Aborting from a nested listener should remove it",
+            "status": 1,
+            "message": "Not implemented: isolate-host.EventTarget (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "Passing null as the signal should throw",
+            "status": 1,
+            "message": "Not implemented: isolate-host.EventTarget (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "Passing null as the signal should throw (listener is also null)",
+            "status": 1,
+            "message": "Not implemented: isolate-host.EventTarget (not available in the rifty isolate host, ADR-0557)"
+          }
+        ]
+      },
+      "packages/isolate-host/node_modules/.web-api-probe/td-gb/dist": {
+        "acHidden": true,
+        "harness": 0,
+        "ms": 11,
+        "counts": {
+          "FAIL": 11
+        },
+        "wallMs": 66,
+        "exitCode": 0,
+        "differFromNode": 11,
+        "notRunVsNode": 0,
+        "firstDiffs": [
+          {
+            "name": "Passing an AbortSignal to addEventListener options should allow removing a listener",
+            "status": 1,
+            "message": "Not implemented: isolate-host.EventTarget (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "Passing an AbortSignal to addEventListener does not prevent removeEventListener",
+            "status": 1,
+            "message": "Not implemented: isolate-host.EventTarget (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "Passing an AbortSignal to addEventListener works with the once flag",
+            "status": 1,
+            "message": "Not implemented: isolate-host.EventTarget (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "Removing a once listener works with a passed signal",
+            "status": 1,
+            "message": "Not implemented: isolate-host.EventTarget (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "Passing an AbortSignal to multiple listeners",
+            "status": 1,
+            "message": "Not implemented: isolate-host.EventTarget (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "Passing an AbortSignal to addEventListener works with the capture flag",
+            "status": 1,
+            "message": "Not implemented: isolate-host.EventTarget (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "Aborting from a listener does not call future listeners",
+            "status": 1,
+            "message": "Not implemented: isolate-host.EventTarget (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "Adding then aborting a listener in another listener does not call it",
+            "status": 1,
+            "message": "Not implemented: isolate-host.EventTarget (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "Aborting from a nested listener should remove it",
+            "status": 1,
+            "message": "Not implemented: isolate-host.EventTarget (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "Passing null as the signal should throw",
+            "status": 1,
+            "message": "Not implemented: isolate-host.EventTarget (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "Passing null as the signal should throw (listener is also null)",
+            "status": 1,
+            "message": "Not implemented: isolate-host.EventTarget (not available in the rifty isolate host, ADR-0557)"
+          }
+        ]
+      }
+    },
+    "dom/events/Event-constructors.any.js": {
+      "bytes": 203288,
+      "node": {
+        "acHidden": false,
+        "harness": 0,
+        "ms": 1,
+        "counts": {
+          "PASS": 14
+        },
+        "wallMs": 26,
+        "exitCode": 0
+      },
+      "packages/isolate-host/dist": {
+        "acHidden": true,
+        "harness": 0,
+        "ms": 11,
+        "counts": {
+          "FAIL": 14
+        },
+        "wallMs": 62,
+        "exitCode": 0,
+        "differFromNode": 14,
+        "notRunVsNode": 0,
+        "firstDiffs": [
+          {
+            "name": "Event constructors",
+            "status": 1,
+            "message": "assert_throws_js: Calling Event constructor without 'new' must throw function \"() => Event(\"\")\" threw object \"NotImplementedError: Not implemented: isolate-host.Event (not available in the rifty isolate host, ADR-0557)\" (\"NotImplementedError\") expected instance of function \"function TypeError() { [native code] }\" (\"TypeError\")"
+          },
+          {
+            "name": "Event constructors 1",
+            "status": 1,
+            "message": "assert_throws_js: function \"function() {\n    new Event()\n  }\" threw object \"NotImplementedError: Not implemented: isolate-host.Event (not available in the rifty isolate host, ADR-0557)\" (\"NotImplementedError\") expected instance of function \"function TypeError() { [native code] }\" (\"TypeError\")"
+          },
+          {
+            "name": "Event constructors 2",
+            "status": 1,
+            "message": "assert_throws_exactly: function \"function() {\n    new Event({ toString: function() { throw test_error; } })\n  }\" threw object \"NotImplementedError: Not implemented: isolate-host.Event (not available in the rifty isolate host, ADR-0557)\" but we expected it to throw object \"[object Object]\""
+          },
+          {
+            "name": "Event constructors 3",
+            "status": 1,
+            "message": "Not implemented: isolate-host.Event (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "Event constructors 4",
+            "status": 1,
+            "message": "Not implemented: isolate-host.Event (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "Event constructors 5",
+            "status": 1,
+            "message": "assert_throws_js: Calling Event constructor without \"new\" must throw function \"function() { Event(\"test\") }\" threw object \"NotImplementedError: Not implemented: isolate-host.Event (not available in the rifty isolate host, ADR-0557)\" (\"NotImplementedError\") expected instance of function \"function TypeError() { [native code] }\" (\"TypeError\")"
+          },
+          {
+            "name": "Event constructors 6",
+            "status": 1,
+            "message": "Not implemented: isolate-host.Event (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "Event constructors 7",
+            "status": 1,
+            "message": "Not implemented: isolate-host.Event (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "Event constructors 8",
+            "status": 1,
+            "message": "Not implemented: isolate-host.Event (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "Event constructors 9",
+            "status": 1,
+            "message": "Not implemented: isolate-host.Event (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "Event constructors 10",
+            "status": 1,
+            "message": "Not implemented: isolate-host.Event (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "Event constructors 11",
+            "status": 1,
+            "message": "Not implemented: isolate-host.Event (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "Event constructors 12",
+            "status": 1,
+            "message": "Not implemented: isolate-host.Event (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "Event constructors 13",
+            "status": 1,
+            "message": "Not implemented: isolate-host.CustomEvent (not available in the rifty isolate host, ADR-0557)"
+          }
+        ]
+      },
+      "packages/isolate-host/node_modules/.web-api-probe/td-gb/dist": {
+        "acHidden": true,
+        "harness": 0,
+        "ms": 12,
+        "counts": {
+          "FAIL": 14
+        },
+        "wallMs": 66,
+        "exitCode": 0,
+        "differFromNode": 14,
+        "notRunVsNode": 0,
+        "firstDiffs": [
+          {
+            "name": "Event constructors",
+            "status": 1,
+            "message": "assert_throws_js: Calling Event constructor without 'new' must throw function \"() => Event(\"\")\" threw object \"NotImplementedError: Not implemented: isolate-host.Event (not available in the rifty isolate host, ADR-0557)\" (\"NotImplementedError\") expected instance of function \"function TypeError() { [native code] }\" (\"TypeError\")"
+          },
+          {
+            "name": "Event constructors 1",
+            "status": 1,
+            "message": "assert_throws_js: function \"function() {\n    new Event()\n  }\" threw object \"NotImplementedError: Not implemented: isolate-host.Event (not available in the rifty isolate host, ADR-0557)\" (\"NotImplementedError\") expected instance of function \"function TypeError() { [native code] }\" (\"TypeError\")"
+          },
+          {
+            "name": "Event constructors 2",
+            "status": 1,
+            "message": "assert_throws_exactly: function \"function() {\n    new Event({ toString: function() { throw test_error; } })\n  }\" threw object \"NotImplementedError: Not implemented: isolate-host.Event (not available in the rifty isolate host, ADR-0557)\" but we expected it to throw object \"[object Object]\""
+          },
+          {
+            "name": "Event constructors 3",
+            "status": 1,
+            "message": "Not implemented: isolate-host.Event (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "Event constructors 4",
+            "status": 1,
+            "message": "Not implemented: isolate-host.Event (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "Event constructors 5",
+            "status": 1,
+            "message": "assert_throws_js: Calling Event constructor without \"new\" must throw function \"function() { Event(\"test\") }\" threw object \"NotImplementedError: Not implemented: isolate-host.Event (not available in the rifty isolate host, ADR-0557)\" (\"NotImplementedError\") expected instance of function \"function TypeError() { [native code] }\" (\"TypeError\")"
+          },
+          {
+            "name": "Event constructors 6",
+            "status": 1,
+            "message": "Not implemented: isolate-host.Event (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "Event constructors 7",
+            "status": 1,
+            "message": "Not implemented: isolate-host.Event (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "Event constructors 8",
+            "status": 1,
+            "message": "Not implemented: isolate-host.Event (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "Event constructors 9",
+            "status": 1,
+            "message": "Not implemented: isolate-host.Event (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "Event constructors 10",
+            "status": 1,
+            "message": "Not implemented: isolate-host.Event (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "Event constructors 11",
+            "status": 1,
+            "message": "Not implemented: isolate-host.Event (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "Event constructors 12",
+            "status": 1,
+            "message": "Not implemented: isolate-host.Event (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "Event constructors 13",
+            "status": 1,
+            "message": "Not implemented: isolate-host.CustomEvent (not available in the rifty isolate host, ADR-0557)"
+          }
+        ]
+      }
+    },
+    "dom/events/EventTarget-constructible.any.js": {
+      "bytes": 201759,
+      "node": {
+        "acHidden": false,
+        "harness": 0,
+        "ms": 2,
+        "counts": {
+          "PASS": 3
+        },
+        "wallMs": 28,
+        "exitCode": 0
+      },
+      "packages/isolate-host/dist": {
+        "acHidden": true,
+        "harness": 0,
+        "ms": 11,
+        "counts": {
+          "FAIL": 3
+        },
+        "wallMs": 60,
+        "exitCode": 0,
+        "differFromNode": 3,
+        "notRunVsNode": 0,
+        "firstDiffs": [
+          {
+            "name": "A constructed EventTarget can be used as expected",
+            "status": 1,
+            "message": "Not implemented: isolate-host.EventTarget (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "A constructed EventTarget implements dispatch correctly",
+            "status": 1,
+            "message": "Not implemented: isolate-host.EventTarget (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "EventTarget can be subclassed",
+            "status": 1,
+            "message": "Not implemented: isolate-host.EventTarget (not available in the rifty isolate host, ADR-0557)"
+          }
+        ]
+      },
+      "packages/isolate-host/node_modules/.web-api-probe/td-gb/dist": {
+        "acHidden": true,
+        "harness": 0,
+        "ms": 11,
+        "counts": {
+          "FAIL": 3
+        },
+        "wallMs": 65,
+        "exitCode": 0,
+        "differFromNode": 3,
+        "notRunVsNode": 0,
+        "firstDiffs": [
+          {
+            "name": "A constructed EventTarget can be used as expected",
+            "status": 1,
+            "message": "Not implemented: isolate-host.EventTarget (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "A constructed EventTarget implements dispatch correctly",
+            "status": 1,
+            "message": "Not implemented: isolate-host.EventTarget (not available in the rifty isolate host, ADR-0557)"
+          },
+          {
+            "name": "EventTarget can be subclassed",
+            "status": 1,
+            "message": "Not implemented: isolate-host.EventTarget (not available in the rifty isolate host, ADR-0557)"
+          }
+        ]
+      }
+    }
+  }
+}

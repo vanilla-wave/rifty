@@ -1,0 +1,13 @@
+{
+  "name": "isolate-web-api-probe-native-deps",
+  "private": true,
+  "dependencies": {
+    "whatwg-url": "17.3.0",
+    "core-js": "3.51.0",
+    "@ungap/structured-clone": "1.4.0",
+    "fetch-blob": "4.0.0",
+    "formdata-node": "6.0.3",
+    "blob-polyfill": "9.0.20240710",
+    "whatwg-url-15": "npm:whatwg-url@15.1.0"
+  }
+}

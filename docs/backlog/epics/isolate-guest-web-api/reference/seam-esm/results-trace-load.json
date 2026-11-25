@@ -1,0 +1,282 @@
+{
+  "eval": [
+    {
+      "name": "ReadableStream",
+      "phase": "load",
+      "at": "packages/io/src/streams/from-web-validation.ts:34 <top>",
+      "via": ["packages/isolate-guest/src/guest/entry.ts:470 <top>"]
+    },
+    {
+      "name": "WritableStream",
+      "phase": "load",
+      "at": "packages/io/src/streams/from-web-validation.ts:38 <top>",
+      "via": ["packages/isolate-guest/src/guest/entry.ts:470 <top>"]
+    },
+    {
+      "name": "Blob",
+      "phase": "load",
+      "at": "packages/runtime-js/src/builtins/buffer.ts:42 <top>",
+      "via": ["packages/isolate-guest/src/guest/entry.ts:470 <top>"]
+    },
+    {
+      "name": "File",
+      "phase": "load",
+      "at": "packages/runtime-js/src/builtins/buffer.ts:43 <top>",
+      "via": ["packages/isolate-guest/src/guest/entry.ts:470 <top>"]
+    },
+    {
+      "name": "structuredClone",
+      "phase": "load",
+      "at": "packages/runtime-js/src/internal/node-ipc-advanced.ts:23 <top>",
+      "via": ["packages/isolate-guest/src/guest/entry.ts:470 <top>"]
+    },
+    {
+      "name": "MessageChannel",
+      "phase": "load",
+      "at": "packages/runtime-js/src/builtins/timers.ts:267 <top>",
+      "via": ["packages/isolate-guest/src/guest/entry.ts:470 <top>"]
+    },
+    {
+      "name": "crypto.subtle",
+      "phase": "load",
+      "at": "packages/runtime-js/src/builtins/crypto.ts:504 <top>",
+      "via": ["packages/isolate-guest/src/guest/entry.ts:470 <top>"]
+    },
+    {
+      "name": "URL",
+      "phase": "load",
+      "at": "packages/runtime-js/src/internal/posix-file-url.ts:1 <top>",
+      "via": ["packages/isolate-guest/src/guest/entry.ts:470 <top>"]
+    },
+    {
+      "name": "ReadableStream",
+      "phase": "load",
+      "at": "packages/runtime-js/src/builtins/stream-web.ts:39 <top>",
+      "via": ["packages/isolate-guest/src/guest/entry.ts:470 <top>"]
+    },
+    {
+      "name": "WritableStream",
+      "phase": "load",
+      "at": "packages/runtime-js/src/builtins/stream-web.ts:39 <top>",
+      "via": ["packages/isolate-guest/src/guest/entry.ts:470 <top>"]
+    },
+    {
+      "name": "TransformStream",
+      "phase": "load",
+      "at": "packages/runtime-js/src/builtins/stream-web.ts:39 <top>",
+      "via": ["packages/isolate-guest/src/guest/entry.ts:470 <top>"]
+    },
+    {
+      "name": "ByteLengthQueuingStrategy",
+      "phase": "load",
+      "at": "packages/runtime-js/src/builtins/stream-web.ts:39 <top>",
+      "via": ["packages/isolate-guest/src/guest/entry.ts:470 <top>"]
+    },
+    {
+      "name": "CountQueuingStrategy",
+      "phase": "load",
+      "at": "packages/runtime-js/src/builtins/stream-web.ts:39 <top>",
+      "via": ["packages/isolate-guest/src/guest/entry.ts:470 <top>"]
+    },
+    {
+      "name": "ReadableStreamDefaultReader",
+      "phase": "load",
+      "at": "packages/runtime-js/src/builtins/stream-web.ts:39 <top>",
+      "via": ["packages/isolate-guest/src/guest/entry.ts:470 <top>"]
+    },
+    {
+      "name": "ReadableStreamBYOBReader",
+      "phase": "load",
+      "at": "packages/runtime-js/src/builtins/stream-web.ts:39 <top>",
+      "via": ["packages/isolate-guest/src/guest/entry.ts:470 <top>"]
+    },
+    {
+      "name": "ReadableStreamDefaultController",
+      "phase": "load",
+      "at": "packages/runtime-js/src/builtins/stream-web.ts:39 <top>",
+      "via": ["packages/isolate-guest/src/guest/entry.ts:470 <top>"]
+    },
+    {
+      "name": "ReadableByteStreamController",
+      "phase": "load",
+      "at": "packages/runtime-js/src/builtins/stream-web.ts:39 <top>",
+      "via": ["packages/isolate-guest/src/guest/entry.ts:470 <top>"]
+    },
+    {
+      "name": "WritableStreamDefaultWriter",
+      "phase": "load",
+      "at": "packages/runtime-js/src/builtins/stream-web.ts:39 <top>",
+      "via": ["packages/isolate-guest/src/guest/entry.ts:470 <top>"]
+    },
+    {
+      "name": "WritableStreamDefaultController",
+      "phase": "load",
+      "at": "packages/runtime-js/src/builtins/stream-web.ts:39 <top>",
+      "via": ["packages/isolate-guest/src/guest/entry.ts:470 <top>"]
+    },
+    {
+      "name": "TransformStreamDefaultController",
+      "phase": "load",
+      "at": "packages/runtime-js/src/builtins/stream-web.ts:39 <top>",
+      "via": ["packages/isolate-guest/src/guest/entry.ts:470 <top>"]
+    },
+    {
+      "name": "TextEncoderStream",
+      "phase": "load",
+      "at": "packages/runtime-js/src/builtins/stream-web.ts:39 <top>",
+      "via": ["packages/isolate-guest/src/guest/entry.ts:470 <top>"]
+    },
+    {
+      "name": "TextDecoderStream",
+      "phase": "load",
+      "at": "packages/runtime-js/src/builtins/stream-web.ts:39 <top>",
+      "via": ["packages/isolate-guest/src/guest/entry.ts:470 <top>"]
+    },
+    {
+      "name": "URLSearchParams",
+      "phase": "load",
+      "at": "packages/runtime-js/src/builtins/url.ts:15 <top>",
+      "via": ["packages/isolate-guest/src/guest/entry.ts:470 <top>"]
+    }
+  ],
+  "file": [
+    {
+      "name": "ReadableStream",
+      "phase": "load",
+      "at": "packages/io/src/streams/from-web-validation.ts:34 <top>",
+      "via": ["packages/isolate-guest/src/guest/entry.ts:470 <top>"]
+    },
+    {
+      "name": "WritableStream",
+      "phase": "load",
+      "at": "packages/io/src/streams/from-web-validation.ts:38 <top>",
+      "via": ["packages/isolate-guest/src/guest/entry.ts:470 <top>"]
+    },
+    {
+      "name": "Blob",
+      "phase": "load",
+      "at": "packages/runtime-js/src/builtins/buffer.ts:42 <top>",
+      "via": ["packages/isolate-guest/src/guest/entry.ts:470 <top>"]
+    },
+    {
+      "name": "File",
+      "phase": "load",
+      "at": "packages/runtime-js/src/builtins/buffer.ts:43 <top>",
+      "via": ["packages/isolate-guest/src/guest/entry.ts:470 <top>"]
+    },
+    {
+      "name": "structuredClone",
+      "phase": "load",
+      "at": "packages/runtime-js/src/internal/node-ipc-advanced.ts:23 <top>",
+      "via": ["packages/isolate-guest/src/guest/entry.ts:470 <top>"]
+    },
+    {
+      "name": "MessageChannel",
+      "phase": "load",
+      "at": "packages/runtime-js/src/builtins/timers.ts:267 <top>",
+      "via": ["packages/isolate-guest/src/guest/entry.ts:470 <top>"]
+    },
+    {
+      "name": "crypto.subtle",
+      "phase": "load",
+      "at": "packages/runtime-js/src/builtins/crypto.ts:504 <top>",
+      "via": ["packages/isolate-guest/src/guest/entry.ts:470 <top>"]
+    },
+    {
+      "name": "URL",
+      "phase": "load",
+      "at": "packages/runtime-js/src/internal/posix-file-url.ts:1 <top>",
+      "via": ["packages/isolate-guest/src/guest/entry.ts:470 <top>"]
+    },
+    {
+      "name": "ReadableStream",
+      "phase": "load",
+      "at": "packages/runtime-js/src/builtins/stream-web.ts:39 <top>",
+      "via": ["packages/isolate-guest/src/guest/entry.ts:470 <top>"]
+    },
+    {
+      "name": "WritableStream",
+      "phase": "load",
+      "at": "packages/runtime-js/src/builtins/stream-web.ts:39 <top>",
+      "via": ["packages/isolate-guest/src/guest/entry.ts:470 <top>"]
+    },
+    {
+      "name": "TransformStream",
+      "phase": "load",
+      "at": "packages/runtime-js/src/builtins/stream-web.ts:39 <top>",
+      "via": ["packages/isolate-guest/src/guest/entry.ts:470 <top>"]
+    },
+    {
+      "name": "ByteLengthQueuingStrategy",
+      "phase": "load",
+      "at": "packages/runtime-js/src/builtins/stream-web.ts:39 <top>",
+      "via": ["packages/isolate-guest/src/guest/entry.ts:470 <top>"]
+    },
+    {
+      "name": "CountQueuingStrategy",
+      "phase": "load",
+      "at": "packages/runtime-js/src/builtins/stream-web.ts:39 <top>",
+      "via": ["packages/isolate-guest/src/guest/entry.ts:470 <top>"]
+    },
+    {
+      "name": "ReadableStreamDefaultReader",
+      "phase": "load",
+      "at": "packages/runtime-js/src/builtins/stream-web.ts:39 <top>",
+      "via": ["packages/isolate-guest/src/guest/entry.ts:470 <top>"]
+    },
+    {
+      "name": "ReadableStreamBYOBReader",
+      "phase": "load",
+      "at": "packages/runtime-js/src/builtins/stream-web.ts:39 <top>",
+      "via": ["packages/isolate-guest/src/guest/entry.ts:470 <top>"]
+    },
+    {
+      "name": "ReadableStreamDefaultController",
+      "phase": "load",
+      "at": "packages/runtime-js/src/builtins/stream-web.ts:39 <top>",
+      "via": ["packages/isolate-guest/src/guest/entry.ts:470 <top>"]
+    },
+    {
+      "name": "ReadableByteStreamController",
+      "phase": "load",
+      "at": "packages/runtime-js/src/builtins/stream-web.ts:39 <top>",
+      "via": ["packages/isolate-guest/src/guest/entry.ts:470 <top>"]
+    },
+    {
+      "name": "WritableStreamDefaultWriter",
+      "phase": "load",
+      "at": "packages/runtime-js/src/builtins/stream-web.ts:39 <top>",
+      "via": ["packages/isolate-guest/src/guest/entry.ts:470 <top>"]
+    },
+    {
+      "name": "WritableStreamDefaultController",
+      "phase": "load",
+      "at": "packages/runtime-js/src/builtins/stream-web.ts:39 <top>",
+      "via": ["packages/isolate-guest/src/guest/entry.ts:470 <top>"]
+    },
+    {
+      "name": "TransformStreamDefaultController",
+      "phase": "load",
+      "at": "packages/runtime-js/src/builtins/stream-web.ts:39 <top>",
+      "via": ["packages/isolate-guest/src/guest/entry.ts:470 <top>"]
+    },
+    {
+      "name": "TextEncoderStream",
+      "phase": "load",
+      "at": "packages/runtime-js/src/builtins/stream-web.ts:39 <top>",
+      "via": ["packages/isolate-guest/src/guest/entry.ts:470 <top>"]
+    },
+    {
+      "name": "TextDecoderStream",
+      "phase": "load",
+      "at": "packages/runtime-js/src/builtins/stream-web.ts:39 <top>",
+      "via": ["packages/isolate-guest/src/guest/entry.ts:470 <top>"]
+    },
+    {
+      "name": "URLSearchParams",
+      "phase": "load",
+      "at": "packages/runtime-js/src/builtins/url.ts:15 <top>",
+      "via": ["packages/isolate-guest/src/guest/entry.ts:470 <top>"]
+    }
+  ]
+}

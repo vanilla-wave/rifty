@@ -1,0 +1,97 @@
+[
+  {
+    "at": "packages/runtime-js/src/builtins/fetch/platform.ts:65",
+    "uses": ["ReadableStream"],
+    "catch": "disturbed.add(value);"
+  },
+  {
+    "at": "packages/runtime-js/src/builtins/url.ts:59",
+    "uses": ["URL"],
+    "catch": "// Fall back to a partial parse for relative/path-only URLs. const match = /^([a-z][a-z0-9+.-]*:)?(\\/\\/[^/?#]*)?([^?#]*)(\\?[^#]*)?(#.*)?$/i.exec(input); if (!match) { return { href: input, pathname: input, search: null, "
+  },
+  {
+    "at": "packages/runtime-js/src/builtins/url.ts:158",
+    "uses": ["URL"],
+    "catch": "return to;"
+  },
+  {
+    "at": "packages/runtime-js/src/internal/create-require-path.ts:7",
+    "uses": ["fileURLToPathPosix"],
+    "catch": "// Node presents every invalid createRequire base through one public code."
+  },
+  {
+    "at": "packages/runtime-js/src/ipc/no-coi-child-process.ts:65",
+    "uses": ["MessageEvent"],
+    "catch": "closePorts(); throw error;"
+  },
+  {
+    "at": "packages/runtime-js/src/module-loader/import-meta-resolve-parent.ts:19",
+    "uses": ["URL"],
+    "catch": "return null;"
+  },
+  {
+    "at": "packages/runtime-js/src/module-loader/resolver.ts:251",
+    "uses": ["URLConstructor"],
+    "catch": "const msg = (err as Error).message ?? String(err); throw new ModuleLoadError( 'UNSUPPORTED_PROTOCOL', specifier, `Invalid file URL '${specifier}': ${msg}`, fromFile, );"
+  },
+  {
+    "at": "packages/kernel/src/spawn-worker.ts:364",
+    "uses": ["MessageChannel"],
+    "catch": "rollbackFailedSpawn(); throw error;"
+  },
+  {
+    "at": "packages/kernel/src/worker-entry.ts:357",
+    "uses": ["URL"],
+    "catch": "threw = true; if (isRiftyProcessExit(err)) { code = err.exitCode; } else { code = 1; const message = err instanceof Error ? `${err.stack ?? err.message}\\n` : `${String(err)}\\n`; try { deps.writeStderr(STDIO_ENCODER.encod"
+  },
+  {
+    "at": "packages/net/src/cross-realm/preview-port.ts:314",
+    "uses": ["Request"],
+    "catch": "// Report on the legacy (version-unvalidated) `error` frame so even a // pre-ADR-0048 page understands it. channel.postMessage({ type: 'error', requestId, message: err instanceof Error ? err.message : String(err), } sati"
+  },
+  {
+    "at": "packages/net/src/http/server.ts:230",
+    "uses": ["URL"],
+    "catch": "channel.postMessage({ type: 'close', cid: frame.cid, code: 1006, reason: 'invalid websocket url', from: 'server', } satisfies WebSocketBridgeFrame); return;"
+  },
+  {
+    "at": "packages/net/src/http/server.ts:374",
+    "uses": ["URL"],
+    "catch": "return { kind: 'fetch' };"
+  },
+  {
+    "at": "packages/net/src/http/server.ts:607",
+    "uses": ["Request"],
+    "catch": "emitter.emit('error', err);"
+  },
+  {
+    "at": "packages/net/src/http/server.ts:974",
+    "uses": ["URL"],
+    "catch": "return {};"
+  },
+  {
+    "at": "packages/net/src/https.ts:125",
+    "uses": ["URL"],
+    "catch": "return; // unparseable target — fetch will surface its own error, not ours"
+  },
+  {
+    "at": "packages/net/src/https.ts:145",
+    "uses": ["URL"],
+    "catch": "if ( typeof err === 'object' && err !== null && (err as { code?: unknown }).code === 'ERR_INVALID_PROTOCOL' ) { throw err; } if (url instanceof URL) throw invalidProtocolError(url.protocol); return url;"
+  },
+  {
+    "at": "packages/net/src/ws/browser-client-script.ts:121",
+    "uses": ["URL"],
+    "catch": "return url.href;"
+  },
+  {
+    "at": "packages/net/src/ws/browser-client-script.ts:134",
+    "uses": ["CloseEvent"],
+    "catch": "var ev = new Event('close'); ev.code = code; ev.reason = reason; ev.wasClean = wasClean; return ev;"
+  },
+  {
+    "at": "packages/net/src/ws/browser-client-script.ts:272",
+    "uses": ["CustomEvent"],
+    "catch": ""
+  }
+]

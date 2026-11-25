@@ -5,6 +5,43 @@
  */
 
 import { EventEmitter } from '@riftydev/io';
+import { invalidArgType } from '../internal/node-received.ts';
 
 export { EventEmitter, once } from '@riftydev/io';
 export default EventEmitter;
+
+// Node queues through its internal `queueMicrotask`: a guest replacing the global changes nothing.
+const enqueueMicrotask = queueMicrotask;
+
+/**
+ * Node v24.16.0 `lib/internal/events/abort_listener.js` over the realm's `AbortSignal`. Node also
+ * passes `kResistStopPropagation`, Node-internal, so on every host an earlier listener's
+ * `stopImmediatePropagation()` hides the abort
+ * (backlog runtime-js/stream-core-abort-listeners-host-event-target).
+ */
+export function addAbortListener(signal: AbortSignal, listener: () => void): Disposable {
+  if (signal == null || typeof signal !== 'object' || !('aborted' in signal)) {
+    throw invalidArgType('"signal" argument', 'an instance of AbortSignal', signal);
+  }
+  if (typeof listener !== 'function') {
+    throw invalidArgType('"listener" argument', 'of type function', listener);
+  }
+  let removeEventListener: (() => void) | undefined;
+  if (signal.aborted) {
+    enqueueMicrotask(() => listener());
+  } else {
+    signal.addEventListener('abort', listener, {
+      __proto__: null,
+      once: true,
+    } as AddEventListenerOptions);
+    removeEventListener = () => {
+      signal.removeEventListener('abort', listener);
+    };
+  }
+  return {
+    __proto__: null,
+    [Symbol.dispose]() {
+      removeEventListener?.();
+    },
+  } as Disposable;
+}

@@ -1,0 +1,61 @@
+
+// --- probe (td-lazy-fast): a whole-input utf-8 decode for Node's `decodeUTF8` binding — no per-call
+// decoder, closures or number[]; the same algorithm as `TextDecoder#decode` above (maximal subpart,
+// U+FFFD, leading-BOM rule), non-stream only (Node's class keeps the stream state itself). In the
+// unit, the class's decode would call this one function, so there is one utf-8 decoder. ---
+let wholeUnits = new Uint16Array(1024);
+export function decodeUtf8Whole(bytes: Uint8Array, fatal: boolean, ignoreBOM: boolean): string {
+  const n = bytes.length;
+  let u = wholeUnits;
+  if (n > u.length) u = n <= 65536 ? (wholeUnits = new Uint16Array(65536)) : new Uint16Array(n);
+  let w = 0;
+  let i = 0;
+  if (!ignoreBOM && n >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) i = 3;
+  while (i < n) {
+    const b0 = bytes[i] as number;
+    if (b0 < 0x80) {
+      u[w++] = b0;
+      i++;
+      continue;
+    }
+    const shape = lead(b0);
+    if (shape === null) {
+      if (fatal) throw wholeFatal();
+      u[w++] = REPLACEMENT;
+      i++;
+      continue;
+    }
+    const need = shape[0];
+    let cp = b0 & (need === 1 ? 0x1f : need === 2 ? 0x0f : 0x07);
+    let k = 1;
+    for (; k <= need; k++) {
+      if (i + k >= n) break;
+      const b = bytes[i + k] as number;
+      const lo = k === 1 ? shape[1] : 0x80;
+      const hi = k === 1 ? shape[2] : 0xbf;
+      if (b < lo || b > hi) break;
+      cp = (cp << 6) | (b & 0x3f);
+    }
+    if (k > need) {
+      if (cp >= 0x10000) {
+        const v = cp - 0x10000;
+        u[w++] = 0xd800 + (v >> 10);
+        u[w++] = 0xdc00 + (v & 0x3ff);
+      } else u[w++] = cp;
+      i += need + 1;
+    } else {
+      if (fatal) throw wholeFatal();
+      u[w++] = REPLACEMENT;
+      i += k;
+    }
+  }
+  let out = '';
+  for (let s = 0; s < w; s += 0x8000)
+    out += String.fromCharCode.apply(null, u.subarray(s, Math.min(w, s + 0x8000)) as unknown as number[]);
+  return out;
+}
+function wholeFatal(): TypeError {
+  return Object.assign(new TypeError('The encoded data was not valid for encoding utf-8'), {
+    code: 'ERR_ENCODING_INVALID_ENCODED_DATA',
+  });
+}
