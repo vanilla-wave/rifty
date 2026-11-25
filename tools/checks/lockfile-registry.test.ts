@@ -1,3 +1,4 @@
+import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -225,9 +226,31 @@ describe('declared exemptions cover exact bytes only', () => {
 });
 
 describe('the repository tree', () => {
-  it('passes with every declared exemption matching', () => {
+  it('passes with all 19 declared exemptions matching (14 corpus seeds, 5 evidence archives)', () => {
     const { violations, exempted } = checkLockfileRegistry(process.cwd(), repoPaths());
     expect(violations).toEqual([]);
-    expect(exempted).toBe(EXEMPT.length);
+    expect(EXEMPT).toHaveLength(19);
+    expect(exempted).toBe(19);
+  });
+
+  it('the CLI names the exemption count on green and carrier, count, host on red', () => {
+    const run = (cwd: string) =>
+      spawnSync(process.execPath, [join(process.cwd(), 'tools/checks/lockfile-registry.mjs')], {
+        cwd,
+        encoding: 'utf8',
+      });
+    const green = run(process.cwd());
+    expect(green.status).toBe(0);
+    expect(green.stdout).toMatch(/19\/19 declared exemption\(s\)/u);
+
+    // A docs-only change: an untracked, unignored lock under docs/ is scanned (git ls-files --others).
+    execFileSync('git', ['init', '-q'], { cwd: root });
+    put('docs/backlog/x/reference/probe/package-lock.json', packageLock(FOREIGN));
+    const red = run(root);
+    expect(red.status).toBe(1);
+    expect(red.stderr).toContain(
+      'docs/backlog/x/reference/probe/package-lock.json: 2 address line(s) on registry.example.invalid',
+    );
+    expect(red.stderr).toMatch(/0\/19 declared exemption\(s\)/u);
   });
 });

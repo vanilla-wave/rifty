@@ -48,7 +48,7 @@ address count and the foreign host; the fix line says rewrite host to
 
 ## Decisions
 
-- Allowed host: one constant `https://registry.npmjs.org` — policy value, not a fetch target; no consumer needs a second public host (D-004 config not needed, REV-7).
+- Allowed host: one constant `https://registry.npmjs.org` — policy value, not a fetch target; no consumer needs a second public host (D-004 config not needed, AGENTS.md §Simplicity).
 - File discovery: `git ls-files --cached --others --exclude-standard`, never a disk walk.
 - Embedded-lock rule by content form, not a path list: the next carrier kind needs no code change.
 - Exemption anchor: sha256 of file bytes (equals corpus `inputsSha256`), not git blob id — working-tree exact, cross-checkable with the manifests.
