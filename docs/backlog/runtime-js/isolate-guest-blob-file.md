@@ -17,8 +17,11 @@ Probe `sources-native` (2026-11-24, Node v24.16.0): Node's `lib/internal/blob.js
 `ReadableStream`, no `endings`/`bytes()`, type not lower-cased), `blob-polyfill` 13/19,
 `fetch-blob` 4.0.0 does not bundle as an IIFE. Node-only behaviour to keep: `endings: 'native'`
 leaves a lone `\r`. Direction: Node's files generated over a JS byte store (ADR-0541 pattern),
-installed before the runtime loads (absorbs the `buffer.ts:42-43` rows of
-`runtime-js/isolate-web-globals-captured-at-load`). Compat ❌ isolate-host.md ceiling row.
+loaded with the runtime (they need its inspect/timers/encoding) and installed as globals before guest
+code, `buffer`'s `Blob`/`File` exports bound to them then (absorbs the `buffer.ts:42-43` rows of
+`runtime-js/isolate-web-globals-captured-at-load`); `blob.js`'s blob-URL use stays a named gap. WPT
+exclusions (goal I1), listed when compiled: `Blob-stream`, `Blob-constructor`'s `MessageChannel`
+cases. Compat ❌ isolate-host.md ceiling row.
 
 `Blob.prototype.stream()`: web streams stay outside the guest (the user's narrowing, 2026-11-25),
 so it throws the `ReadableStream` named gap (`NotImplementedError('isolate-host.ReadableStream')`),

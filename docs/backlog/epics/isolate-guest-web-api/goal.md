@@ -57,24 +57,27 @@ scenario: `pptx.write()` → `blob is not supported by this platform`, `Packer.t
 
 - I1. `Blob`/`File` behave as Node v24.16.0's in the guest: Node's own WPT runs
   `test/wpt/test-blob.js`/`test-file.js` (WPT `FileAPI` as Node vendors it) give the guest the
-  results Node's `test/wpt/status/` records for Node, except the tests that need `stream()`,
-  `structuredClone`, `MessageChannel` or `URL.createObjectURL` (listed in the unit); plus the probe
+  results Node's `test/wpt/status/FileAPI/` records for Node, except `Blob-stream` (`stream()`, GC)
+  and `Blob-constructor`'s `MessageChannel` cases (listed in the unit); plus the probe
   cases (values, thrown `name`/`code`/`message`, prototype chains, descriptors) — 0 differences.
   `Blob.prototype.stream` is the `ReadableStream` named gap.
 - I2. `TextDecoder`/`TextEncoder` as Node's: for every WHATWG label of an encoding in the set (map
   question T), `new TextDecoder(label)` gives Node's `encoding`, and decoding equals Node on the
-  probe's exhaustive corpus (every single byte, every 2-byte sequence, random and `stream: true`
-  splits, `fatal`, `ignoreBOM`); Node's errors for unknown labels and `replacement`
+  probe's corpus (every single byte and 2-byte sequence; gb18030 4-byte and euc-jp 3-byte forms
+  sampled; random and `stream: true` splits; `fatal`, `ignoreBOM`); Node's errors for unknown labels and `replacement`
   (`RangeError [ERR_ENCODING_NOT_SUPPORTED]`) and for invalid data in `fatal` mode; a label of an
   encoding outside the set throws its named gap at construction. Node's WPT `test/wpt/test-encoding.js`
-  results for the set as Node's status records. `TextEncoder` (utf-8 only) equals Node, `encodeInto`
+  results for the set as Node's status records, except `encoding/streams/*` and the streams part of
+  `idlharness.any.js` (`TextDecoderStream`: map question M2). `TextEncoder` (utf-8 only) equals Node, `encodeInto`
   argument checks included.
 - I3. `AbortController`, `AbortSignal` (with `abort`/`timeout`/`any`/`throwIfAborted`),
   `EventTarget`, `Event` are the guest's globals from Node's sources and give Node's results on
   Node's WPT runs `test/wpt/test-abort.js`/`test-events.js` (`dom/abort`, `dom/events`) as Node's
-  status records, except tests needing `MessageChannel` or GC (listed in the unit); Node's APIs taking
-  a `signal` (`events.once`/`on`, `timers/promises`, `fs.readFile`, `fs.promises.readFile`) equal
-  Node in the guest.
+  status records, except tests needing `MessageChannel` or GC, and those constructing `CustomEvent`
+  while map question M1 is open (listed in the unit); `signal.reason` is an instance of the guest's
+  global `DOMException` (today's class, equal to Node's per `reference/today`; Node's code is bound to
+  it); Node's APIs taking a `signal` (`events.once`/`on`, `timers/promises`, `fs.readFile`,
+  `fs.promises.readFile`) equal Node in the guest.
 - I4. Same objects: `buffer.Blob`/`buffer.File` and `util.TextDecoder`/`util.TextEncoder` are `===`
   the guest's globals in a file run and in `runCode`; `({}) instanceof require('buffer').Blob` is
   `false`.
@@ -90,15 +93,16 @@ split-out epic and the probes. Verified; dispositions:
    `value`, I4 narrowed to the set's own exports.
 2. `CustomEvent` added beyond the four named — out of the invariants; manager question M1.
 3. I2's label clause vs the named gap — I2 now says where the gap fires (construction).
-4. unit 4 seeded on open question T — split: class + the 33 Node=WHATWG encodings seeded, the five
-   ICU-only after T.
+4. the TextDecoder unit seeded on open question T — split: class + the 33 Node=WHATWG encodings
+   seeded (map unit 3), the five ICU-only after T.
 5. I1 «every call of `test-blob*`/`test-file*`» pulled in `stream()`, `structuredClone`, `URL`, fs
    tests — I1 uses Node's WPT runners and status files with a listed exclusion set.
 6. I3 globs matched the wrong files — I3 uses `test/wpt/test-abort.js`/`test-events.js` + status.
 7. `TextEncoder` without an invariant — in I2.
 8. web streams have no owner after the split (the streams goal points here) — manager question M2.
-9. the I3 rows had no carrier if unit 7 lives in the streams goal — seeded unit 6 (globals + rows).
-10. cheaper-route: the seam unit is only `buffer.ts:42-43` here — folded into unit 3; the
+9. the I3 rows had no carrier if unit 7 lives in the streams goal — unit 7 already carries the
+   globals (its former 7g); I3's rows join its acceptance (map unit 4).
+10. cheaper-route: the seam unit is only `buffer.ts:42-43` here — folded into the Blob unit (map 2); the
     captured-at-load item moved to `isolate-guest-modern-code`.
 11. «every global before the runtime» forced a standalone event/abort copy — Decisions scope it to
     `Blob`/`File`.
@@ -108,7 +112,13 @@ split-out epic and the probes. Verified; dispositions:
     «rerun» — fixed.
 - Omitted choice: question T gains option (c), WHATWG decoders declared ⚠️.
 
-final-check: pending — fresh reviewer on the final drafts.
+final-check: 2026-11-25 — fresh reviewer NOT PASS (1 blocker, 6 concerns, 6 nits), fixed: I3 excludes
+`CustomEvent` tests while M1 is open; the duplicate globals unit removed (streams unit 7 already
+carries them); carrier text aligned (two cases + zlib case 4, isolate zlib gap); I2 exclusions
+(`encoding/streams`, idlharness streams); Blob's runtime dependencies → install with the runtime,
+`buffer` exports bound then; `DOMException` identity in I3; captured-at-load's `crypto.subtle` row
+owner; unit numbers; `owner:` values; «exhaustive» → sampled forms named; I1 exclusions match
+the files; modern-code wording.
 
 challenge: 2026-11-24 — 12 problems (4 value/cheaper-route, 8 advisory) + 1 omitted user choice —
 answered by the user's narrowing (value: the consumer's measured stops), the re-asked questions and
@@ -122,11 +132,13 @@ the split-out of `URL`/ESM.
 - 2026-11-25 — manager, reversible (questions 2–4 not taken up by the user): the scenario is the
   consumer's generators; cost is measured and recorded, no hard bound; tier `works`. Question 5
   (ESM in `-e`) dropped with ESM.
-- 2026-11-25 — agent: `Blob`/`File` are installed before the runtime loads (the set's only
-  load-time reads, `buffer.ts:42-43`, `reference/today/results-trace-load.txt`; `reference/seam-esm`:
-  no third state needed). The event/abort classes are read at use, so they load with the runtime
-  (they need its `util.inspect`/`process.nextTick` and share the stream core's `primordials`/
-  `errors`) and are defined as globals before guest code. Other ceilings stay as today.
+- 2026-11-25 — agent: all three groups' Node sources need the runtime (`blob.js` requires
+  `internal/util/inspect`, `timers`, `task_queues`, `internal/encoding`, `internal/url`; the
+  event/abort files `util.inspect`/`process.nextTick` and the stream core's `primordials`/`errors`),
+  so they load with the runtime and become globals before guest code; the one load-time read of the
+  set, `buffer.ts:42-43` (`Blob`/`File`, `reference/today/results-trace-load.txt`), is bound to the
+  real classes at that install, not captured `undefined`. `blob.js`'s `internal/url` use
+  (`URL.createObjectURL`/blob URLs) stays a named gap. Other ceilings stay as today.
 - 2026-11-25 — agent, sources: `AbortController`/`AbortSignal`/`EventTarget`/`Event`/`CustomEvent`
   from Node's `internal/abort_controller.js` + `event_target.js` + `webidl.js` verbatim (`CustomEvent`,
   in the same `event_target.js`, is the manager's question M1)

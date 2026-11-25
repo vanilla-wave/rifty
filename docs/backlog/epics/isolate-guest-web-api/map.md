@@ -25,11 +25,10 @@ Probes in `reference/` (each README holds its command, results and «not verifie
    `distribution/isolate-guest-textencoder-encodeinto-arg-checks` (I2, I4). The five ICU-only
    encodings are not seeded (question T).
 4. `distribution/isolate-stream-core-abort-controller` — draft, goal `node-streams-as-in-node` unit 7
-   (branch `t3/node-streams-goal`) — the classes from Node's `abort_controller.js` +
-   `event_target.js` + `webidl.js` in the isolate (first consumer: Node's `pipeline`).
-5. `distribution/isolate-guest-abort-event-globals` — draft — the same classes as guest globals
-   (`AbortController`, `AbortSignal`, `EventTarget`, `Event` leave `CEILING_GLOBALS`) and the I3 rows;
-   needs 4 (I3). Where 4 and 5 live is the manager's (report of 2026-11-25).
+   (branch `t3/node-streams-goal`, not on main yet) — Node's `abort_controller.js` +
+   `event_target.js` + `webidl.js` in the isolate, as guest globals (its former 7g; the user's
+   answer); first consumer Node's `pipeline`. This goal adds I3's rows to its acceptance; its home is
+   the manager's (report of 2026-11-25).
 
 Walls the carrier is expected to hit, owned elsewhere: zlib (`node-zlib-on-every-host`) after
 pdfkit's font load.
@@ -44,14 +43,17 @@ pdfkit's font load.
   (b) port ICU's converters for them (a Node-output dump is 36–55 KB gzip each,
   `results-icu-dump-size.txt`; the converter state machine too; not measured); (c) WHATWG decoders
   (@exodus/bytes, measured) for them, declared ⚠️ against Node (browser results) — recommended (a).
-  Asked 2026-11-25.
+  Asked 2026-11-25. Unit 3 does not depend on it: its set is the 34 either way.
 - M1. `CustomEvent` (the same `event_target.js`, a Node 24 global, ~0 bytes extra) as a guest
-  global with the four — owner: manager — asked 2026-11-25; recommended yes (Node has it; leaving it
-  a ceiling while its base class is real is a gap with no saving).
+  global with the four — owner: user (decided by the manager by delegation) — asked 2026-11-25;
+  recommended yes (Node has it; Node's WPT `dom/events` constructs it; a ceiling beside a real base
+  class saves nothing). Until answered, I3 excludes the tests that construct `CustomEvent`.
 - M2. Web streams in the isolate after the split: goal `node-streams-as-in-node` points them to this
-  goal, the user's narrowing left them out — owner: manager — asked 2026-11-25. Until settled,
+  goal, the user's narrowing left them out — owner: user (decided by the manager by delegation) —
+  asked 2026-11-25. Until settled,
   `Blob.prototype.stream` and `TextDecoderStream` are named gaps.
-- Units 4–5 home — owner: manager.
+- Unit 4's home (this goal or `node-streams-as-in-node`) — owner: user (decided by the manager by
+  delegation).
 
 ## Out of scope
 

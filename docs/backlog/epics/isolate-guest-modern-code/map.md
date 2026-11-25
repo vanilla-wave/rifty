@@ -2,7 +2,8 @@
 
 ## Items
 
-None seeded (draft split-out). Drafts that carry its facts: `runtime-js/isolate-guest-url`,
+None seeded (draft split-out). Drafts that carry its facts (`epic:` set so they travel with it, not
+seeded units): `runtime-js/isolate-guest-url`,
 `runtime-js/isolate-esm-files`, `runtime-js/esm-import-binding-asi` (every host),
 `runtime-js/isolate-web-globals-captured-at-load` (its `URL` rows, the seam; re-typed here 2026-11-25).
 

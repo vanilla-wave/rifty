@@ -91,10 +91,11 @@ Answered by probes 2026-11-24 (goal `isolate-guest-web-api`, `reference/seam-esm
 2026-11-25 — split by the user's narrowing: goal `isolate-guest-web-api` takes the
 `Blob`/`File` rows into `runtime-js/isolate-guest-blob-file` (`buffer.ts:42-43`, the narrowed set's only load-time reads; `AbortController`,
 `AbortSignal`, `EventTarget`, `Event`, `CustomEvent` are read at use, `reference/today`); the `URL`/
-`URLSearchParams` rows go to goal `isolate-guest-modern-code`; web streams, `structuredClone`,
-`MessageChannel`, `crypto.subtle` reads stay ceilings, each a named thrower (installed after the
-runtime; the two load-breaking sites `timers.ts:267`, `crypto.ts:504` matter only if a goal installs
-them before).
+`URLSearchParams` rows go to goal `isolate-guest-modern-code`; the web-streams, `structuredClone`,
+`MessageChannel` and `crypto.subtle` reads stay ceilings installed after the runtime — their leaks
+in the table (`require('crypto').subtle` `undefined`, `stream/web.*` throwing `stream/web.X`) belong
+to no goal yet and stay this item's (the two load-breaking sites `timers.ts:267`, `crypto.ts:504`
+matter only if a goal installs them before).
 
 Owner: runtime-js with isolate-guest, goal `isolate-guest-modern-code` (its `URL` rows, the seam). Compat ❌
 isolate-host.md rows "Web globals absent when the runtime loads", "`url.parse` / `url.resolve`".

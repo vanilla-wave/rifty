@@ -35,7 +35,7 @@ Dedup: no other backlog item on the isolate `TextDecoder` labels. Owner: goal
 node-zlib-on-every-host (`runtime-js/zlib-node-lib-port`) merging, which leaves case 4 red on the
 isolate at least for this reason (what fails after it is not measured).
 
-2026-11-25 — goal `isolate-guest-web-api` unit 4. Probe `reference/textdecoder` (Node v24.16.0):
+2026-11-25 — goal `isolate-guest-web-api` map unit 3. Probe `reference/textdecoder` (Node v24.16.0):
 Node accepts 222 of the 228 WHATWG labels (`replacement`'s 6 throw `ERR_ENCODING_NOT_SUPPORTED`);
 utf-8 in C++, the 28 single-byte encodings and `x-user-defined` in JS (`lib/internal/encoding/
 single-byte.js`, WHATWG tables), utf-16le/be, gbk, gb18030, big5, euc-jp, iso-2022-jp, shift_jis,
