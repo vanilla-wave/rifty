@@ -292,6 +292,8 @@ export class LayeredFs {
     this.#mutate([n]);
     this.upper.utimes(p, a, m);
   };
+  // Not an `FsSync` method (the codec's restore, a host write's rollback): marks directly, no
+  // read-only refusal — the one exception to `#mutate` (ADR-0572 §2).
   restoreStatSync = (p: string, t: Times): void => {
     const n = norm(p);
     this.#touch(n);

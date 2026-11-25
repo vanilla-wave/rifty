@@ -74,7 +74,8 @@ the user's words»).
    before the call reaches the upper: the read-only refusal (§3), then the change marks — the
    directories from `/` down to each written path (reads mark nothing). A call failing midway (a
    recursive copy) leaves marks over a superset of what it wrote; an extra mark only makes a
-   directory explicit. A node is **untouched
+   directory explicit. One exception: `restoreStatSync` (not an `FsSync` method — the codec's
+   `restoreFs` and a host write's rollback) marks its path directly, with no read-only refusal. A node is **untouched
    from** its origin O when it is a file holding O's bytes reference with O's times, or a directory
    with origin O not marked changed (only a marked mutation changes a directory's times or
    children; its row carries O's times). **The rule**, once — the state, from `/` down: a node untouched
@@ -109,7 +110,7 @@ the user's words»).
    The consumer validates it (§5) and rebuilds it on a fresh view, which becomes the sandbox. Read-only mode: the
    same class refuses every call whose write set (§2) reaches `/node_modules` as Node on a read-only
    mount (goal I3, its oracle in `map.md`), in both realms — first, before §2's marks, so a refused
-   call leaves the state as it was; the probe refuses the whole call, its part outside the mount
+   call leaves the sandbox's state under the mount as it was; the probe refuses the whole call, its part outside the mount
    too, while a real read-only mount may write that part first (a partial `cp`, an `rm -rf /`
    removing what it reaches) — the oracle's question, the carrier follows Linux (probe G: the
    read-only row incl. a copy onto `/` and `rm -rf /`, generated read-only sequences, mutants
