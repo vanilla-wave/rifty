@@ -87,6 +87,31 @@ const SCENARIOS = {
       for (const part of parts) s.write(part);
       s.end();
     }),
+  'deflate/inflate with a 32 KiB dictionary, 8 MiB': async () => {
+    const dictionary = randomBytes(32 * 1024);
+    const r = Buffer.concat([dictionary, randomBytes(8 << 20)]);
+    const c = z.deflateSync(r, { dictionary, level: 1 });
+    const back = z.inflateSync(c, { dictionary });
+    // in: the input + the dictionary once per stream; out: the output of both directions.
+    return [Buffer.concat([r, dictionary, c, dictionary]), Buffer.concat([c, back])];
+  },
+  'createDeflate: params() mid-stream, then a flush() per write': async () =>
+    new Promise((res) => {
+      const parts = Array.from({ length: 200 }, (_, i) => randomBytes(4096 + i));
+      const s = z.createDeflate();
+      const o = [];
+      s.on('data', (d) => o.push(d));
+      s.on('end', () => res([Buffer.concat(parts), Buffer.concat(o)]));
+      const go = async () => {
+        for (const [i, part] of parts.entries()) {
+          if (i === 100) await new Promise((k) => s.params(1, 1, k));
+          s.write(part);
+          await new Promise((k) => s.flush(k));
+        }
+        s.end();
+      };
+      go();
+    }),
   'deflateRawSync 16 MiB random': async () => {
     const r = randomBytes(16 << 20);
     return [r, z.deflateRawSync(r, { level: 1 })];

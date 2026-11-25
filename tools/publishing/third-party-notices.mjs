@@ -242,6 +242,17 @@ function sourceDirFiles(root, pkgDirs) {
   return out;
 }
 
+/** `sourcesKey`: a key of sources.json, or a dotted path through own keys of plain objects. */
+function pinAt(json, key) {
+  let at = json;
+  for (const k of key.split('.')) {
+    if (at === null || typeof at !== 'object' || Array.isArray(at) || !Object.hasOwn(at, k))
+      return undefined;
+    at = at[k];
+  }
+  return at;
+}
+
 /** Static manifest faults: records name real files, add non-empty texts, cover every vendor/generated file. */
 export function validateManifest(root, manifest, pkgDirs = []) {
   const out = [];
@@ -254,13 +265,14 @@ export function validateManifest(root, manifest, pkgDirs = []) {
       if (!existsSync(join(root, dir, f)))
         bad(`generated ${dir}`, `lists ${f}, which is not in the dir`);
     if (!r.package && !texts(r)) bad(`generated ${dir}`, 'adds no license text');
+    if (r.unshipped !== undefined && !existsSync(join(root, 'docs/backlog', `${r.unshipped}.md`)))
+      bad(`generated ${dir}`, `unshipped names no docs/backlog/${r.unshipped}.md`);
     const sources = join(root, dir, 'sources.json');
     if (!existsSync(sources)) continue;
-    // `sourcesKey`: a key of sources.json, or a dotted path to a nested pin (`node.version`).
-    const pinned = (r.sourcesKey ?? '')
-      .split('.')
-      .reduce((o, k) => o?.[k], JSON.parse(readFileSync(sources, 'utf8')));
+    const pinned = pinAt(JSON.parse(readFileSync(sources, 'utf8')), r.sourcesKey ?? '');
     if (!r.sourcesKey) bad(`generated ${dir}`, 'has sources.json but no sourcesKey');
+    else if (typeof pinned !== 'string')
+      bad(`generated ${dir}`, `sources.json "${r.sourcesKey}" is no string pin`);
     else if (pinned !== r.version)
       bad(
         `generated ${dir}`,

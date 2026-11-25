@@ -4,6 +4,10 @@
  * over the product handle and Node's `Transform` equals real `node:zlib` on every scenario; values
  * compared whole (bytes by hash, errors by class, code, errno, message; the gzip OS byte normalised).
  */
+// The child process loads these; imported here so `vitest --changed` relates this test to them.
+import '../../src/zlib-engine/engine';
+import '../../src/zlib-engine/handle';
+import '../../src/zlib-engine/wasm-bytes';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -36,7 +40,7 @@ describe("Node's own lib/zlib.js over the product handle (port/N) vs node:zlib",
         if (r.group !== 'declared' && JSON.stringify(r.node) !== JSON.stringify(r['port/N']))
           diffs.push(`${name}: ${JSON.stringify(r.node)} → ${JSON.stringify(r['port/N'])}`);
       }
-      expect(groups).toEqual({ state: 45, load: 1, declared: 2 });
+      expect(groups).toEqual({ state: 45, load: 1, declared: 2, memory: 2 });
       expect(diffs).toEqual([]);
       // Declared limit: input snapshotted for the whole write (Node reads it live). Both sides pinned.
       const declared = Object.fromEntries(

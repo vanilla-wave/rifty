@@ -7,7 +7,10 @@ asset references — none exist).
 
 - `engine.ts` — one wasm instance; checked `malloc` (0 → `RangeError`), fresh views after every call.
 - `handle.ts` — `node_zlib.cc` ZlibContext + CompressionStream as `binding.Zlib`, and `binding.crc32`.
-  Declared limit: a write's input is snapshotted when the write starts (Node reads it live).
+  Memory model (ADR-0573 §1): input snapshotted when a write is called, output copied into the
+  caller's `out` when it ends, nothing kept between calls but one operation's unconsumed input —
+  where Node uses the caller's memory live (one declared class, each manifestation pinned). A failed
+  allocation is `onerror('insufficient memory', Z_MEM_ERROR)`.
 - `wasm-bytes.ts` — the committed module's bytes.
 - `generated/` — output of `tools/publishing/generate-zlib-wasm.mjs`; never edit by hand.
 

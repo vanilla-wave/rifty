@@ -43,6 +43,14 @@ export class ZlibEngineError extends Error {
   }
 }
 
+/** The engine's 4 GiB wasm32 space is exhausted: `malloc` returned 0. */
+export class WasmMemoryError extends RangeError {
+  constructor(size: number) {
+    super(`zlib.wasm: malloc(${size}) failed: wasm memory exhausted`);
+    this.name = 'RangeError';
+  }
+}
+
 /** wasm32 z_stream: 14 × 4 bytes. */
 export const Z_STREAM_SIZE = 56;
 /** z_stream field offsets (zlib.h order). */
@@ -70,10 +78,10 @@ export class ZlibEngine {
     this.version = this.x.zlibVersion();
   }
 
-  /** Never 0: an exhausted wasm space is a loud RangeError, not a write at address 0. */
+  /** Never 0: an exhausted wasm space is a loud WasmMemoryError, not a write at address 0. */
   malloc(size: number): number {
     const ptr = this.x.malloc(size) >>> 0;
-    if (ptr === 0) throw new RangeError(`zlib.wasm: malloc(${size}) failed: wasm memory exhausted`);
+    if (ptr === 0) throw new WasmMemoryError(size);
     return ptr;
   }
 

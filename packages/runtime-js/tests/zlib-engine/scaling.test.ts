@@ -1,11 +1,15 @@
 /**
- * Copying is linear: each input byte enters the engine's memory once and each output byte leaves
- * it once, whatever the number of handle calls — under Node's own lib/zlib.js (copy-count.mjs, its
- * own Node process for `--expose-internals`), sync, callback and stream forms. A per-call copy of
- * the remaining input (round 1: 64 MiB raw inflate 3110 ms vs Node's 10 ms) or of the whole out
- * window (a 1 MiB `chunkSize` per write) shows as copied bytes over the input/output sizes. Bytes,
- * not milliseconds: under test:run's load the time ratios of linear and quadratic overlapped.
+ * Copying is linear: each input byte (and each dictionary, once per stream) enters the engine's
+ * memory once and each output byte leaves it once, whatever the number of handle calls — under Node's
+ * own lib/zlib.js (copy-count.mjs, its own Node process for `--expose-internals`): sync, callback,
+ * stream, 2-member gunzip, `chunkSize` 1 MiB × 4000 writes, a dictionary, `params()` mid-stream with
+ * a flush per write, deflate. The guard counts bytes, not milliseconds: under test:run's load the time
+ * ratios of a linear and a quadratic handle overlapped.
  */
+// The child process loads these; imported here so `vitest --changed` relates this test to them.
+import '../../src/zlib-engine/engine';
+import '../../src/zlib-engine/handle';
+import '../../src/zlib-engine/wasm-bytes';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -21,7 +25,7 @@ describe('zlib-engine copies input and output once, under lib/zlib.js', () => {
         stdio: ['ignore', 'pipe', 'ignore'],
       }),
     ) as { name: string; input: number; output: number; copiedIn: number; copiedOut: number }[];
-    expect(rows.length).toBe(6);
+    expect(rows.length).toBe(8);
     expect(rows.map((r) => [r.name, r.copiedIn - r.input, r.copiedOut - r.output])).toEqual(
       rows.map((r) => [r.name, 0, 0]),
     );

@@ -90,12 +90,18 @@ own `lib/zlib.js` also runs on each engine via a swapped `binding.Zlib`.
    wasm-opt.js runs on the pinned Node v24.16.0. CI: `zlib-wasm:rebuild` in `unit-and-conformance`/
    `run`. Licence: `generated/LICENSE` + the `third-party-manifest.json` record (PR #445), marked
    `unshipped` until unit 3 bundles the engine.
-   Declared limit (manager, unit 2 review round 2): the handle snapshots a write's input when the
-   write starts and reads that snapshot in lib/zlib.js's continuation writes; Node reads the caller's
-   memory live, so input changed between them (a `'data'` listener in the async path, a
-   `SharedArrayBuffer` written by another thread, a resized `ArrayBuffer`) reaches Node, not rifty.
-   Pinned both ways (unit 2 Decisions); route to close: bounded input windows read live, with byte
-   parity per level/strategy proven; compat ⚠️ from unit 3.
+   Memory model (manager, unit 2 review round 3) — one declared class: the handle copies where
+   Node's zlib reads and writes the caller's memory live. A write's input is snapshotted when
+   `write`/`writeSync` is called; its output is copied into the caller's `out` when the work ends;
+   between calls only the unconsumed rest of one operation's input is kept (lib/zlib.js's
+   continuation writes read it). Manifestations, each pinned with both sides' results (unit 2
+   Decisions): input changed between one operation's continuation writes (an async `'data'`
+   listener — reachable through lib/zlib.js); a `SharedArrayBuffer` input written by another thread
+   or a resizable `ArrayBuffer` resized mid-operation; `in` and `out` overlapping in one
+   `ArrayBuffer` and `params()` after the last `out` was transferred (both via `_handle` only).
+   Route to close: bounded input windows read live with byte parity per level/strategy proven, and
+   output written through before an error; compat ⚠️ from unit 3. A failed port allocation takes
+   Node's `Z_MEM_ERROR` path (`onerror('insufficient memory')`), like zlib's own.
 2. Placement: runtime-js, shared by every host (browser Workers and the isolate guest bundle). The engine
    and the handle enter the bundles in unit 3, with `lib/zlib.js` and `crc32` (manager 2026-11-24,
    round 3: shipping the engine earlier for `crc32` alone would put ≈ 24 KB gzip of deflate/inflate
@@ -169,7 +175,8 @@ own `lib/zlib.js` also runs on each engine via a swapped `binding.Zlib`.
 - (+) The rest of the goal is a port of Node's own JS/C++ logic, testable against Node's own suite.
 - (−) +39.7 KB gzip in the client generic bundle for engine + handle (4.3 KB left under its cap before
   the port, §8); a vendored binary whose toolchain unit 2 pins; manual free of zlib state; linear memory never
-  shrinks; async calls block the realm's loop.
+  shrinks; async calls block the realm's loop; the handle copies the caller's buffers where Node uses
+  them live (§1 memory model: one declared class, each manifestation pinned).
 - (−) Order: everything guest-visible in `node:zlib`, `crc32` included, waits for the streams goal's
   core (map); until then main's behaviour stays per host. Units 2 and 3 merge back to back.
 - Follow-ups: goal `node-zlib-on-every-host` (map); compat `zlib.md`, isolate-host rows; ADR-0159 and

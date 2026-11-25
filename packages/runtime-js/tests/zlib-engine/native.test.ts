@@ -5,6 +5,7 @@
  * `onerror` arguments. Direct cases first, then seeded sync and async sequences with `params` and
  * `reset` between writes. Only sequences Node's native CHECKs accept (they abort the process).
  */
+import { createHash } from 'node:crypto';
 import zlib from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { ZlibEngine } from '../../src/zlib-engine/engine';
@@ -193,6 +194,64 @@ describe('product handle = Node native handle, direct calls', () => {
       ].map((d) => b.crc32(d, 0x12345678)),
     );
     expect(r.port).toEqual(r.node);
+  });
+});
+
+/**
+ * The declared class (ADR-0573 §1, memory model): Node reads and writes the caller's memory live,
+ * the port copies — input when the write is called, output when the work ends. Each manifestation
+ * pinned with both sides' literal results (equal on macOS arm64, Linux x64/arm64 Node), so either
+ * side changing shows. Not reachable through lib/zlib.js (its own buffers); reachable via _handle.
+ */
+describe('declared: the port copies where Node uses the caller’s memory live', () => {
+  const sha16 = (b: Uint8Array) => createHash('sha256').update(b).digest('hex').slice(0, 16);
+
+  it('in and out overlapping in one ArrayBuffer, deflate', () => {
+    const r = both((b) => {
+      const ab = Buffer.alloc(70000);
+      for (let i = 0; i < 60000; i++) ab[i] = (i * 31) % 251;
+      const { h, state, events } = open(b, C.DEFLATE);
+      h.writeSync(C.Z_FINISH, ab, 0, 60000, ab, 0, 70000);
+      h.close();
+      return { out: `${70000 - state[0]!}:${sha16(ab.subarray(0, 70000 - state[0]!))}`, events };
+    });
+    expect(r).toEqual({
+      node: { out: '559:7bfc48c231687329', events: [] },
+      port: { out: '558:4d7399c41ffea3e7', events: [] },
+    });
+  });
+
+  it('in and out overlapping in one ArrayBuffer, inflate (out = in + 50)', () => {
+    const r = both((b) => {
+      const plain = Buffer.from('hello world, '.repeat(2000));
+      const comp = zlib.deflateSync(plain);
+      const ab = Buffer.alloc(comp.length + plain.length + 100);
+      comp.copy(ab, 0);
+      const { h, state, events } = open(b, C.INFLATE, -1, 0, 0);
+      h.writeSync(C.Z_FINISH, ab, 0, comp.length, ab, 50, ab.length - 50);
+      h.close();
+      return events.length ? { events } : { out: sha16(ab.subarray(50, ab.length - state[0]!)) };
+    });
+    expect(r).toEqual({
+      node: { events: [['unexpected end of file', -5, 'Z_BUF_ERROR']] },
+      port: { out: '23aa90589ba8c145' },
+    });
+  });
+
+  it('params() after the last out was transferred away', () => {
+    const r = both((b) => {
+      const { h, state, events } = open(b, C.DEFLATE);
+      const out = new Uint8Array(1024);
+      h.writeSync(C.Z_NO_FLUSH, TEXT, 0, TEXT.length, out, 0, 1024);
+      const moved = out.buffer.transfer();
+      h.params(1, 1); // Node deflates into the memory now owned by `moved`; the port has nowhere
+      h.close();
+      return { moved: sha16(new Uint8Array(moved)), events, state: [...state] };
+    });
+    expect(r).toEqual({
+      node: { moved: 'c7d95273b18f3f65', events: [], state: [1022, 0] },
+      port: { moved: '897cc061e2d5ca9a', events: [], state: [1022, 0] },
+    });
   });
 });
 

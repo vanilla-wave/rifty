@@ -407,6 +407,37 @@ const DECLARED = {
       d.end(input);
     }),
 };
+/** The memory model's guarantee: the input is taken when write() is called (it may move after). */
+const settle = (s, fn) =>
+  new Promise((res) => {
+    const chunks = [];
+    s.on('data', (c) => chunks.push(Buffer.from(c)));
+    s.on('error', (e) => res({ error: val(e) }));
+    s.on('end', () => res(fn(Buffer.concat(chunks))));
+  });
+const MEMORY = {
+  'memory: deflate input transferred after write()': ({ z }) => {
+    const d = z.createDeflate();
+    const r = settle(d, (o) => ({ out: val(o), inflated: realZlib.inflateSync(o).length }));
+    const buf = Buffer.alloc(100000, 0x61);
+    d.write(buf);
+    keep.push(buf.buffer.transfer());
+    d.end();
+    return r;
+  },
+  // (An inflate whose input is transferred before its continuation write aborts Node itself:
+  // CHECK(Buffer::IsWithinBounds) — not a scenario.)
+  'memory: deflate input moved by structuredClone transfer after write()': ({ z }) => {
+    const d = z.createDeflate();
+    const r = settle(d, (o) => ({ out: val(o), inflated: realZlib.inflateSync(o).length }));
+    const buf = Buffer.alloc(100000, 0x62);
+    d.write(buf);
+    keep.push(structuredClone(buf.buffer, { transfer: [buf.buffer] }));
+    d.end();
+    return r;
+  },
+};
+const keep = [];
 const LOAD = {
   // readableLength before reading is timing-dependent in Node itself: not observed.
   'load: 5 MB deflate with a paused consumer': async ({ z }) => {
@@ -430,6 +461,7 @@ for (const [group, set] of [
   ['state', STATE],
   ['load', LOAD],
   ['declared', DECLARED],
+  ['memory', MEMORY],
 ])
   for (const [name, run] of Object.entries(set)) {
     results[name] = { group };

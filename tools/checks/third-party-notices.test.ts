@@ -196,6 +196,20 @@ describe('closed by default (review S1, S2)', () => {
     ]);
   });
 
+  it('an unshipped mark names an existing backlog unit', () => {
+    put('docs/backlog/runtime-js/zlib-node-lib-port.md', '# unit\n');
+    const marked = (unshipped: string) => ({
+      ...manifest,
+      generated: {
+        'pkg/src/generated': { ...manifest.generated['pkg/src/generated'], unshipped },
+      },
+    });
+    expect(validateManifest(root, marked('runtime-js/zlib-node-lib-port'), [])).toEqual([]);
+    expect(validateManifest(root, marked('runtime-js/gone'), [])).toEqual([
+      'third-party-manifest generated pkg/src/generated: unshipped names no docs/backlog/runtime-js/gone.md',
+    ]);
+  });
+
   it('a generated record marked unshipped: unused is fine, used is red until the mark goes', () => {
     const marked = {
       ...manifest,
@@ -447,6 +461,29 @@ describe('manifest records (review 3)', () => {
     expect(validateManifest(root, at('v22.0.0'), [])).toEqual([
       'third-party-manifest generated pkg/src/generated: version v22.0.0 is not sources.json "node.version" (v24.16.0)',
     ]);
+  });
+
+  it('a dotted sourcesKey walks own keys of plain objects to a string only', () => {
+    put('pkg/src/generated/sources.json', JSON.stringify({ node: { version: 'v24.16.0' } }));
+    const at = (version: string, sourcesKey: string) => ({
+      ...manifest,
+      generated: {
+        'pkg/src/generated': {
+          ...manifest.generated['pkg/src/generated'],
+          files: ['up.js', 'sources.json'],
+          version,
+          sourcesKey,
+        },
+      },
+    });
+    for (const [version, key] of [
+      ['Object', 'constructor.name'],
+      ['v', 'node.version.0'],
+      ['[object Object]', 'node'],
+    ] as const)
+      expect(validateManifest(root, at(version, key), [])).toEqual([
+        `third-party-manifest generated pkg/src/generated: sources.json "${key}" is no string pin`,
+      ]);
   });
 });
 

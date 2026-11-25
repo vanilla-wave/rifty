@@ -1,8 +1,9 @@
 /**
  * Unit 2 Acceptance 5 + fault matrix (ADR-0573): the wasm32 space exhausted for real — the engine's
- * 4 GiB filled with blocks — and a module that does not compile. Outcomes are loud: the port's own
- * allocation is a RangeError (never a write at address 0), zlib's own is Node's `Z_MEM_ERROR`
- * through `onerror`, a bad module a `ZlibEngineError` on every operation that needs the engine.
+ * 4 GiB filled with blocks — and a module that does not compile. Outcomes are loud, through Node's
+ * own error channel: a failed allocation — the port's or zlib's — is `onerror('insufficient memory',
+ * Z_MEM_ERROR)` (never a write at address 0) and leaves the handle consistent; `crc32`, which has no
+ * channel, throws RangeError; a bad module is a `ZlibEngineError` on every operation needing it.
  */
 import zlib from 'node:zlib';
 import { describe, expect, it } from 'vitest';
@@ -14,6 +15,8 @@ const DEFLATE = 1;
 const Z_NO_FLUSH = 0;
 const Z_FINISH = 4;
 const GIB = 2 ** 30;
+/** Node's Z_MEM_ERROR through onerror: zlib's ERR_MSG(Z_MEM_ERROR). */
+const MEM = ['insufficient memory', zlib.constants.Z_MEM_ERROR, 'Z_MEM_ERROR'];
 
 /** Fill the wasm32 space: halving block sizes down to `floor` bytes; returns the blocks. */
 function exhaust(engine: ZlibEngine, floor: number): number[] {
@@ -38,7 +41,7 @@ function handle(binding: ReturnType<typeof createZlibBinding>, errors: unknown[]
 }
 
 describe('zlib-engine under wasm memory exhaustion', () => {
-  it('a failed port allocation is a loud RangeError, never a write at address 0', () => {
+  it('a failed port allocation is onerror Z_MEM_ERROR, never a write at address 0', () => {
     const engine = new ZlibEngine(zlibWasmBytes());
     const binding = createZlibBinding(() => engine, setImmediate);
     const errors: unknown[][] = [];
@@ -50,17 +53,34 @@ describe('zlib-engine under wasm memory exhaustion', () => {
     expect(engine.x.memory.buffer.byteLength).toBe(4 * GIB);
     const before = engine.heap().slice(0, 64);
     const input = Buffer.alloc(1 << 20, 'a');
-    expect(() => h.writeSync(Z_NO_FLUSH, input, 0, input.length, out, 0, out.length)).toThrow(
-      /^zlib\.wasm: malloc\(1048576\) failed: wasm memory exhausted$/,
-    );
-    expect(() => h.writeSync(Z_NO_FLUSH, input, 0, input.length, out, 0, out.length)).toThrow(
-      RangeError,
-    );
+    h.writeSync(Z_NO_FLUSH, input, 0, input.length, out, 0, out.length);
+    h.writeSync(Z_NO_FLUSH, input, 0, input.length, out, 0, out.length);
+    expect(errors).toEqual([MEM, MEM]);
     expect(engine.heap().slice(0, 64)).toEqual(before);
     expect([...state]).toEqual([0, 0]);
-    expect(errors).toEqual([]);
-    expect(() => binding.crc32(input, 0)).toThrow(RangeError);
+    expect(() => binding.crc32(input, 0)).toThrow(RangeError); // no error channel
     for (const b of blocks) engine.free(b);
+    h.writeSync(Z_FINISH, input, 0, input.length, out, 0, out.length); // consistent: it continues
+    expect(errors).toEqual([MEM, MEM]);
+    h.close();
+  });
+
+  it('async: the failure reaches onerror from the scheduled work, and a pending close runs', async () => {
+    const engine = new ZlibEngine(zlibWasmBytes());
+    const binding = createZlibBinding(() => engine, setImmediate);
+    const errors: unknown[][] = [];
+    const { h } = handle(binding, errors);
+    const out = Buffer.alloc(1 << 20);
+    h.writeSync(Z_NO_FLUSH, Buffer.from('a'), 0, 1, Buffer.alloc(64), 0, 64);
+    const blocks = exhaust(engine, 64);
+    h.write(Z_NO_FLUSH, Buffer.from('b'), 0, 1, out, 0, out.length); // its out copy cannot fit
+    h.close(); // pending: the write is in progress
+    await new Promise((r) => setImmediate(r));
+    for (const b of blocks) engine.free(b);
+    expect(errors).toEqual([MEM]);
+    expect(() => h.writeSync(Z_NO_FLUSH, Buffer.from('c'), 0, 1, out, 0, 64)).toThrow(
+      /already finalized/,
+    );
   });
 
   it("zlib's own allocation failing is Node's Z_MEM_ERROR through onerror; freed memory is reused", () => {
@@ -96,7 +116,7 @@ describe('zlib-engine under wasm memory exhaustion', () => {
 });
 
 describe('zlib-engine after a failed port allocation', () => {
-  it('a write whose out copy failed leaves no stale input address for the next write', () => {
+  it('a fresh input snapshot never inherits the last one’s continuation mark', () => {
     const engine = new ZlibEngine(zlibWasmBytes());
     const binding = createZlibBinding(() => engine, setImmediate);
     const errors: unknown[][] = [];
@@ -104,28 +124,49 @@ describe('zlib-engine after a failed port allocation', () => {
     const state = new Uint32Array(2);
     h.onerror = (...a) => errors.push(a);
     h.init(15, 0, 8, 0, state, () => {}, undefined); // stored: the output carries the input bytes
-    const P = Buffer.from(Array.from({ length: 200 }, (_, i) => 48 + (i % 10)));
-    const small = Buffer.alloc(64);
-    h.writeSync(Z_NO_FLUSH, P, 0, 100, small, 0, small.length);
-    const first = small.subarray(0, small.length - state[0]!);
-    expect(state[1]).toBe(0); // all of P[0,100) consumed: the copy's "next" is 100
+    const P = Buffer.from(Array.from({ length: 200000 }, (_, i) => 48 + (i % 10)));
+    const parts: Buffer[] = [];
+    const o1 = Buffer.alloc(1000);
+    h.writeSync(Z_NO_FLUSH, P, 0, P.length, o1, 0, o1.length);
+    parts.push(Buffer.from(o1.subarray(0, o1.length - state[0]!)));
+    const next = P.length - state[1]!; // the operation stops here: 65536
+    expect(next).toBe(65536);
+    // A different write: P[100000,200000) is snapshotted, its 1 MiB out copy does not fit.
+    const room = engine.malloc(512 * 1024);
     const blocks = exhaust(engine, 64);
-    const big = Buffer.alloc(1 << 20);
-    // P[150,170): fits the kept input copy, but the 1 MiB out copy does not.
-    expect(() => h.writeSync(Z_NO_FLUSH, P, 150, 20, big, 0, big.length)).toThrow(RangeError);
+    engine.free(room);
+    h.writeSync(Z_NO_FLUSH, P, 100000, 100000, Buffer.alloc(1 << 20), 0, 1 << 20);
     for (const b of blocks) engine.free(b);
-    // P[100,170): starts at the first write's "next" and ends where the failed write's copy ends —
-    // it must be copied afresh (a kept copy would be read 50 bytes before its start).
-    const out = Buffer.alloc(4096);
-    h.writeSync(Z_FINISH, P, 100, 70, out, 0, out.length);
+    expect(errors).toEqual([MEM]);
+    // The first operation continues from `next` to the same end: it must be copied afresh (a
+    // snapshot that kept the old mark would be read 34464 bytes before its start).
+    let [off, len] = [next, P.length - next];
+    for (let i = 0; i < 1000; i++) {
+      const o = Buffer.alloc(4096);
+      h.writeSync(len ? Z_NO_FLUSH : Z_FINISH, P, off, len, o, 0, o.length);
+      parts.push(Buffer.from(o.subarray(0, o.length - state[0]!)));
+      if (!len && state[0]) break;
+      off += len - state[1]!;
+      len = state[1]!;
+    }
     h.close();
-    expect(errors).toEqual([]);
-    const stream = Buffer.concat([first, out.subarray(0, out.length - state[0]!)]);
-    expect(zlib.inflateSync(stream).toString()).toBe(P.subarray(0, 170).toString());
+    expect(errors).toEqual([MEM]);
+    expect(zlib.inflateSync(Buffer.concat(parts)).equals(P)).toBe(true);
   });
 
-  it('a dictionary whose wasm copy fails is not lost: the retry writes Node’s FDICT stream', () => {
+  it('a dictionary whose wasm copy fails: zlib not yet initialised, the retry writes Node’s FDICT stream', () => {
     const engine = new ZlibEngine(zlibWasmBytes());
+    const inits = { n: 0 };
+    const x = engine.x;
+    Object.defineProperty(engine, 'x', {
+      value: {
+        ...x,
+        deflateInit2_: (...a: Parameters<typeof x.deflateInit2_>) => {
+          inits.n++;
+          return x.deflateInit2_(...a);
+        },
+      },
+    });
     const binding = createZlibBinding(() => engine, setImmediate);
     const dictionary = Buffer.alloc(1 << 20, 'dictionary ');
     const input = Buffer.from('dictionary dictionary hello '.repeat(10));
@@ -139,13 +180,14 @@ describe('zlib-engine after a failed port allocation', () => {
     const blocks = exhaust(engine, 64);
     engine.free(room);
     const out = Buffer.alloc(64 * 1024);
-    expect(() => h.writeSync(Z_FINISH, input, 0, input.length, out, 0, out.length)).toThrow(
-      /^zlib\.wasm: malloc\(1048576\) failed/,
-    );
+    h.writeSync(Z_FINISH, input, 0, input.length, out, 0, out.length);
+    expect(errors).toEqual([MEM]);
+    expect(inits.n).toBe(0); // the copy comes first: no deflateInit2_ to undo or repeat
     for (const b of blocks) engine.free(b);
     h.writeSync(Z_FINISH, input, 0, input.length, out, 0, out.length);
     h.close();
-    expect(errors).toEqual([]);
+    expect(errors).toEqual([MEM]);
+    expect(inits.n).toBe(1);
     expect(out.subarray(0, out.length - state[0]!).toString('hex')).toBe(
       zlib.deflateSync(input, { dictionary }).toString('hex'),
     );

@@ -75,11 +75,12 @@ Draft until its dependency lands; seeds the compile:
    inline `AGFzbQ` base64 in package outputs but exact pins, so the engine enters with an exact pin of
    its base64 (bytes + sha256 of `zlib-engine/generated/sources.json`) and a line in ADR-0391 → ADR-0573
    The engine's licence record (`third-party-manifest.json`, `zlib-engine/generated`) is marked
-   `unshipped: runtime-js/zlib-node-lib-port`: drop the mark when a bundle carries the engine (the
-   notices check is red until then).
-   Compat ⚠️ row (`zlib.md`): input changed by the caller during one operation's continuation writes
-   (async `'data'` listener, `SharedArrayBuffer`, resizable `ArrayBuffer`) — Node reads it live, rifty
-   the snapshot taken at the operation's first write (ADR-0573 §1, unit 2 Decisions, pinned both ways).
+   `unshipped: runtime-js/zlib-node-lib-port`: drop the mark in the PR whose bundle first carries the
+   engine — while both are there, `check:third-party-notices` is red.
+   Compat ⚠️ row (`zlib.md`), one class (ADR-0573 §1 memory model): rifty copies the caller's buffers
+   — input when a write is called, output when it ends — where Node uses them live: input changed
+   during one operation's continuation writes (async `'data'` listener), `SharedArrayBuffer`/resizable
+   `ArrayBuffer`, `in`/`out` overlap and `params()` after `out` moved (via `_handle`); pinned in unit 2.
 7. The `FinalizationRegistry` frees dropped objects' handles: a GC-lane test (`--expose-gc`) sees the
    allocator reuse their blocks → ADR-0573. Baseline without it (unit 2 review round 2): 2000 dropped
    handles hold 643 MiB of wasm memory; through lib/zlib.js RSS 738 → 3108 MiB, Node 314 → 336 MiB

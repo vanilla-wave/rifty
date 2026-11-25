@@ -5,6 +5,10 @@
  * lib/zlib.js and `stream.Transform`. Every file passes; the files that write through a handle are
  * counted, not assumed (36 write; `test-zlib-crc32.js` calls the product's crc32).
  */
+// The child process loads these; imported here so `vitest --changed` relates this test to them.
+import '../../src/zlib-engine/engine';
+import '../../src/zlib-engine/handle';
+import '../../src/zlib-engine/wasm-bytes';
 import { execFile } from 'node:child_process';
 import { cpSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
