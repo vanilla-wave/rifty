@@ -73,8 +73,12 @@ Draft until its dependency lands; seeds the compile:
    inline `AGFzbQ` base64 in package outputs but exact pins, so the engine enters with an exact pin of
    its base64 (bytes + sha256 of `zlib-engine/generated/sources.json`) and a line in ADR-0391 → ADR-0573
    (Unit 2, held to merge with this one, carries the PR #445 licence-manifest entry for `zlib-engine/generated/`.)
+   Compat ⚠️ row (`zlib.md`): input changed by the caller during one operation's continuation writes
+   (async `'data'` listener, `SharedArrayBuffer`, resizable `ArrayBuffer`) — Node reads it live, rifty
+   the snapshot taken at the operation's first write (ADR-0573 §1, unit 2 Decisions, pinned both ways).
 7. The `FinalizationRegistry` frees dropped objects' handles: a GC-lane test (`--expose-gc`) sees the
-   allocator reuse their blocks → ADR-0573
+   allocator reuse their blocks → ADR-0573. Baseline without it (unit 2 review round 2): 2000 dropped
+   handles hold 643 MiB of wasm memory; through lib/zlib.js RSS 738 → 3108 MiB, Node 314 → 336 MiB
 8. ADR-0159/0178 marked superseded; compat `zlib.md`/`isolate-host.md` rows rewritten → ADR-0573
 
 ## Challenge

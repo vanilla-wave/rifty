@@ -90,6 +90,12 @@ own `lib/zlib.js` also runs on each engine via a swapped `binding.Zlib`.
    wasm-opt.js runs on the pinned Node v24.16.0. CI: `zlib-wasm:rebuild` in `unit-and-conformance`/
    `run`. Licence: `generated/LICENSE`, and the PR #445 manifest entry when this PR, held, is brought
    up to `main` before its final ready.
+   Declared limit (manager, unit 2 review round 2): the handle snapshots a write's input when the
+   write starts and reads that snapshot in lib/zlib.js's continuation writes; Node reads the caller's
+   memory live, so input changed between them (a `'data'` listener in the async path, a
+   `SharedArrayBuffer` written by another thread, a resized `ArrayBuffer`) reaches Node, not rifty.
+   Pinned both ways (unit 2 Decisions); route to close: bounded input windows read live, with byte
+   parity per level/strategy proven; compat ⚠️ from unit 3.
 2. Placement: runtime-js, shared by every host (browser Workers and the isolate guest bundle). The engine
    and the handle enter the bundles in unit 3, with `lib/zlib.js` and `crc32` (manager 2026-11-24,
    round 3: shipping the engine earlier for `crc32` alone would put ≈ 24 KB gzip of deflate/inflate

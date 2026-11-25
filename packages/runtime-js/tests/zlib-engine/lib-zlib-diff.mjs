@@ -356,6 +356,57 @@ const STATE = {
         }),
     ),
 };
+/**
+ * Declared limit (ADR-0573, unit 2 Decisions): the port snapshots a write's input when the write
+ * starts and does not re-read it until the write ends; Node reads the caller's memory live. Both
+ * sides pinned, so convergence shows. lib/zlib.js's async path pushes output ('data') before its
+ * continuation write — the window where a listener can change the input.
+ */
+const PLAIN = Buffer.concat([
+  Buffer.from('abcdefghij'.repeat(20000)),
+  Buffer.from(Array.from({ length: 2000 }, (_, i) => (i * 7919) % 256)),
+]);
+const DECLARED = {
+  'declared: inflate input changed in the first data event': ({ z }) =>
+    new Promise((res) => {
+      const input = Buffer.from(realZlib.deflateSync(PLAIN));
+      const inf = z.createInflate();
+      const chunks = [];
+      let first = true;
+      inf.on('data', (d) => {
+        chunks.push(d);
+        if (first) {
+          first = false;
+          input.fill(0x55, 20);
+        }
+      });
+      inf.on('error', (e) => res({ error: val(e) }));
+      inf.on('end', () => {
+        const o = Buffer.concat(chunks);
+        res({ end: val(o), plain: o.equals(PLAIN) });
+      });
+      inf.end(input);
+    }),
+  'declared: level-0 deflate input changed in the first data event': ({ z }) =>
+    new Promise((res) => {
+      const input = Buffer.alloc(200000, 0x61);
+      const d = z.createDeflate({ level: 0 });
+      const chunks = [];
+      let first = true;
+      d.on('data', (c) => {
+        chunks.push(c);
+        if (first) {
+          first = false;
+          input.fill(0x41);
+        }
+      });
+      d.on('end', () => {
+        const o = realZlib.inflateSync(Buffer.concat(chunks));
+        res({ bytes: o.length, A: o.filter((b) => b === 0x41).length });
+      });
+      d.end(input);
+    }),
+};
 const LOAD = {
   // readableLength before reading is timing-dependent in Node itself: not observed.
   'load: 5 MB deflate with a paused consumer': async ({ z }) => {
@@ -378,6 +429,7 @@ const results = {};
 for (const [group, set] of [
   ['state', STATE],
   ['load', LOAD],
+  ['declared', DECLARED],
 ])
   for (const [name, run] of Object.entries(set)) {
     results[name] = { group };

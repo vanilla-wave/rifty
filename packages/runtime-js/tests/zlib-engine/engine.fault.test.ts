@@ -95,6 +95,63 @@ describe('zlib-engine under wasm memory exhaustion', () => {
   });
 });
 
+describe('zlib-engine after a failed port allocation', () => {
+  it('a write whose out copy failed leaves no stale input address for the next write', () => {
+    const engine = new ZlibEngine(zlibWasmBytes());
+    const binding = createZlibBinding(() => engine, setImmediate);
+    const errors: unknown[][] = [];
+    const h = new binding.Zlib(DEFLATE);
+    const state = new Uint32Array(2);
+    h.onerror = (...a) => errors.push(a);
+    h.init(15, 0, 8, 0, state, () => {}, undefined); // stored: the output carries the input bytes
+    const P = Buffer.from(Array.from({ length: 200 }, (_, i) => 48 + (i % 10)));
+    const small = Buffer.alloc(64);
+    h.writeSync(Z_NO_FLUSH, P, 0, 100, small, 0, small.length);
+    const first = small.subarray(0, small.length - state[0]!);
+    expect(state[1]).toBe(0); // all of P[0,100) consumed: the copy's "next" is 100
+    const blocks = exhaust(engine, 64);
+    const big = Buffer.alloc(1 << 20);
+    // P[150,170): fits the kept input copy, but the 1 MiB out copy does not.
+    expect(() => h.writeSync(Z_NO_FLUSH, P, 150, 20, big, 0, big.length)).toThrow(RangeError);
+    for (const b of blocks) engine.free(b);
+    // P[100,170): starts at the first write's "next" and ends where the failed write's copy ends —
+    // it must be copied afresh (a kept copy would be read 50 bytes before its start).
+    const out = Buffer.alloc(4096);
+    h.writeSync(Z_FINISH, P, 100, 70, out, 0, out.length);
+    h.close();
+    expect(errors).toEqual([]);
+    const stream = Buffer.concat([first, out.subarray(0, out.length - state[0]!)]);
+    expect(zlib.inflateSync(stream).toString()).toBe(P.subarray(0, 170).toString());
+  });
+
+  it('a dictionary whose wasm copy fails is not lost: the retry writes Node’s FDICT stream', () => {
+    const engine = new ZlibEngine(zlibWasmBytes());
+    const binding = createZlibBinding(() => engine, setImmediate);
+    const dictionary = Buffer.alloc(1 << 20, 'dictionary ');
+    const input = Buffer.from('dictionary dictionary hello '.repeat(10));
+    const h = new binding.Zlib(DEFLATE);
+    const state = new Uint32Array(2);
+    const errors: unknown[][] = [];
+    h.onerror = (...a) => errors.push(a);
+    h.init(15, -1, 8, 0, state, () => {}, dictionary);
+    // ≈ 600 KB free: z_stream, copies of in/out and deflateInit2_'s ≈ 270 KB fit, 1 MiB does not.
+    const room = engine.malloc(600 * 1024);
+    const blocks = exhaust(engine, 64);
+    engine.free(room);
+    const out = Buffer.alloc(64 * 1024);
+    expect(() => h.writeSync(Z_FINISH, input, 0, input.length, out, 0, out.length)).toThrow(
+      /^zlib\.wasm: malloc\(1048576\) failed/,
+    );
+    for (const b of blocks) engine.free(b);
+    h.writeSync(Z_FINISH, input, 0, input.length, out, 0, out.length);
+    h.close();
+    expect(errors).toEqual([]);
+    expect(out.subarray(0, out.length - state[0]!).toString('hex')).toBe(
+      zlib.deflateSync(input, { dictionary }).toString('hex'),
+    );
+  });
+});
+
 describe('zlib-engine with a module that does not load', () => {
   it('the first engine operation throws ZlibEngineError, every time; no fallback', () => {
     const bad = zlibWasmBytes().slice(0, 1000);

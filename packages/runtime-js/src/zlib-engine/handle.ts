@@ -86,11 +86,12 @@ class ZlibContext {
   private gzipIdBytesRead = 0;
   private dictionary: Uint8Array = new Uint8Array(0);
   /**
-   * Port-only wasm copies of the caller's buffers. They live between writes, as Node's z_stream
-   * keeps pointing into the caller's buffers: `params` may flush into the previous `out`, and the
-   * continuation write lib/zlib.js issues for the rest of an input (same buffer, starting where zlib
-   * stopped, same end) reuses the copy — one copy per input, not per call. Any other write copies
-   * afresh, so a buffer refilled after its write completed is read anew.
+   * Port-only wasm copies of the caller's buffers. The output copy lives between writes, as Node's
+   * z_stream keeps pointing into the caller's `out`: `params` may flush into it. The input is
+   * snapshotted when a write starts and kept until zlib has consumed it: lib/zlib.js's continuation
+   * writes (same buffer, starting where zlib stopped, same end) read the snapshot — one copy per
+   * input, not per call. Declared limit: Node reads the caller's memory live, so input bytes changed
+   * between those continuation writes reach Node and not the port. Any other write copies afresh.
    */
   private inCopy: {
     ptr: number;
@@ -104,6 +105,8 @@ class ZlibContext {
   private outCopy = { ptr: 0, cap: 0 };
   /** The caller's `out` of the last write: where zlib's next_out points, in JS. */
   private outView: Uint8Array | null = null;
+  /** The dictionary's wasm copy, made before zlib is initialised (no allocation after it). */
+  private dictPtr = 0;
 
   constructor(
     private readonly engineOf: () => ZlibEngine,
@@ -134,6 +137,22 @@ class ZlibContext {
     if (this.mode === UNZIP) this.windowBits += 32;
     if (this.mode === DEFLATERAW || this.mode === INFLATERAW) this.windowBits *= -1;
     this.dictionary = dictionary;
+    this.dropDictionaryCopy();
+  }
+
+  private dropDictionaryCopy(): void {
+    if (this.dictPtr !== 0) this.engine.free(this.dictPtr);
+    this.dictPtr = 0;
+  }
+
+  private dictionaryAddress(): number {
+    if (this.dictPtr === 0) this.dictPtr = this.engine.copyIn(this.dictionary);
+    return this.dictPtr;
+  }
+
+  private dropInputCopy(): void {
+    if (this.inCopy.ptr !== 0) this.engine.free(this.inCopy.ptr);
+    this.inCopy = { ptr: 0, cap: 0, buffer: null, start: 0, end: 0, next: -1 };
   }
 
   close(): void {
@@ -171,11 +190,13 @@ class ZlibContext {
   }
 
   private release(): void {
-    if (this.strm === 0 && this.inCopy.ptr === 0 && this.outCopy.ptr === 0) return;
+    if (this.strm === 0 && this.inCopy.ptr === 0 && this.outCopy.ptr === 0 && this.dictPtr === 0)
+      return;
     const e = this.engine;
-    for (const ptr of [this.strm, this.inCopy.ptr, this.outCopy.ptr]) if (ptr !== 0) e.free(ptr);
+    for (const ptr of [this.strm, this.outCopy.ptr]) if (ptr !== 0) e.free(ptr);
     this.strm = 0;
-    this.inCopy = { ptr: 0, cap: 0, buffer: null, start: 0, end: 0, next: -1 };
+    this.dropInputCopy();
+    this.dropDictionaryCopy();
     this.outCopy = { ptr: 0, cap: 0 };
     this.outView = null;
   }
@@ -194,7 +215,7 @@ class ZlibContext {
       this.inCopy = { ptr, cap: bytes.byteLength, buffer: null, start: 0, end: 0, next: -1 };
     }
     e.heap().set(bytes, this.inCopy.ptr);
-    Object.assign(this.inCopy, { buffer: bytes.buffer, start, end });
+    Object.assign(this.inCopy, { buffer: bytes.buffer, start, end, next: -1 });
     return this.inCopy.ptr;
   }
 
@@ -208,7 +229,10 @@ class ZlibContext {
     return this.outCopy.ptr;
   }
 
-  /** deflate's bytes since next_out was `from` → the caller's last `out` (C writes there directly). */
+  /**
+   * zlib's bytes since next_out was `from` → the caller's last `out` (C writes there directly).
+   * Non-SIMD deflate and inflate write only up to next_out: nothing else in the window changes.
+   */
   private copyOut(from: number): void {
     const to = this.engine.u32(this.strm + ZS.nextOut);
     if (this.outView === null || to <= from) return;
@@ -232,19 +256,20 @@ class ZlibContext {
         : this.inputAddress(input);
     const outPtr = out.buffer.byteLength === 0 ? 0 : this.outputAddress(out.byteLength);
     this.outView = outPtr === 0 ? null : out;
-    // zlib may write anywhere in the window it is given (inflate past next_out before an error):
-    // it starts as the caller's bytes and goes back whole.
-    if (outPtr !== 0) e.heap().set(out, outPtr);
     e.setU32(this.strm + ZS.nextIn, inPtr);
     e.setU32(this.strm + ZS.availIn, input === null ? 0 : input.byteLength);
     e.setU32(this.strm + ZS.nextOut, outPtr);
     e.setU32(this.strm + ZS.availOut, out.byteLength);
     this.flush = flush;
     this.doThreadPoolWork();
-    if (outPtr !== 0) out.set(e.heap().subarray(outPtr, outPtr + out.byteLength));
+    this.copyOut(outPtr);
     const availIn = e.u32(this.strm + ZS.availIn);
-    this.inCopy.next =
-      inPtr === 0 || input === null ? -1 : input.byteOffset + input.byteLength - availIn;
+    if (inPtr !== 0 && availIn === 0) {
+      e.setU32(this.strm + ZS.nextIn, 0); // consumed: nothing reads it again
+      this.dropInputCopy();
+    } else if (inPtr !== 0 && input !== null) {
+      this.inCopy.next = input.byteOffset + input.byteLength - availIn;
+    }
     return { availIn, availOut: e.u32(this.strm + ZS.availOut) };
   }
 
@@ -381,6 +406,7 @@ class ZlibContext {
   private initZlib(): boolean {
     if (this.zlibInitDone) return false;
     this.stream();
+    if (this.dictionary.byteLength > 0) this.dictionaryAddress(); // a RangeError here leaves zlib untouched
     const x = this.engine.x;
     switch (this.mode) {
       case DEFLATE:
@@ -411,8 +437,8 @@ class ZlibContext {
       this.mode = NONE;
       return true;
     }
-    this.zlibInitDone = true; // before the dictionary's wasm copy, whose RangeError must not undo it
     this.setDictionary(); // InitZlib ignores the result: err_ stays set, the write reports it
+    this.zlibInitDone = true;
     return true;
   }
 
@@ -433,17 +459,12 @@ class ZlibContext {
     return null;
   }
 
-  /** zlib copies the dictionary into its window: a temporary wasm copy suffices. */
   private setEngineDictionary(kind: 'deflate' | 'inflate'): number {
     const e = this.engine;
-    const ptr = e.copyIn(this.dictionary);
-    try {
-      return kind === 'deflate'
-        ? e.x.deflateSetDictionary(this.strm, ptr, this.dictionary.byteLength)
-        : e.x.inflateSetDictionary(this.strm, ptr, this.dictionary.byteLength);
-    } finally {
-      e.free(ptr);
-    }
+    const ptr = this.dictionaryAddress();
+    return kind === 'deflate'
+      ? e.x.deflateSetDictionary(this.strm, ptr, this.dictionary.byteLength)
+      : e.x.inflateSetDictionary(this.strm, ptr, this.dictionary.byteLength);
   }
 }
 
