@@ -33,7 +33,7 @@ the carrier hits it:
    `distribution/isolate-host-sandbox-capture-outside-guest-realm`; mechanism at its PICKUP,
    ADR-0572 §9) (I7).
 7. README cost table (T1, T95, the four-library artifact), the isolate rule's two cases, compat
-   rows; the F1 return condition re-measured on landed code (I5, I10).
+   rows (template snapshot ❌, the template-directory rename ceiling ⚠️ of I11); the F1 return condition re-measured on landed code (I5, I10).
 
 ## Open questions
 

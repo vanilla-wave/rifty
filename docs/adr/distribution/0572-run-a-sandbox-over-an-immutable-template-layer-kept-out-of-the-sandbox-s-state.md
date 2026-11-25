@@ -285,8 +285,8 @@ the user's words»).
   run to the next; reading template files changes nothing (the difference stays empty of them)
   (probe S's table is the seed). A rename of a template directory moves its whole subtree into the
   difference (rifty's FS has no cross-layer rename): over `maxFsBytes` it is the cap's named result
-  (`stateRefused: ERR_FS_SNAPSHOT_TOO_LARGE`), never a partial tree — declared compat ⚠️ (Node
-  renames in O(1)).
+  (`stateRefused: ERR_FS_SNAPSHOT_TOO_LARGE`) and every write of that run is rolled back, never a
+  partial tree — declared compat ⚠️ (Node renames in O(1)).
 
 ## Alternatives
 
@@ -320,7 +320,7 @@ the user's words»).
   user 2026-11-25). The wire, the consumer's per-run memory and host ops carry the difference only.
 - A rename of a template directory materializes its subtree into the difference (no cross-layer
   rename): its bytes count against `maxFsBytes` — a large one is the cap's named result where Node
-  renames in O(1) (compat ⚠️, goal I11).
+  renames in O(1), and the whole run's writes roll back with it (compat ⚠️, goal I11).
 - The prototype's per-call overhead: four concurrent pdf-lib runs on T95 took 653 ms wall against
   534 for `views` (each call re-walks its ancestors); item 5 of the map owns it, under the F1
   return condition.

@@ -25,7 +25,9 @@ reading of the user's «ок», Decisions); a host op costs O(the template entri
 touched since its last run + the difference) and an idle sandbox holds only its difference and
 those touched entries (references into the shared copy) — neither grows with the template. What
 the host sees is what the next run sees, after any sequence of host ops and runs, as live Node over
-a real directory shows it. `exec` reports the paths the run changed, with sizes, deletions included. A broken,
+a real directory shows it — except a rename of a template directory whose subtree puts the run's
+difference over `maxFsBytes`: that run's end state is refused by name and all of its writes are
+rolled back (compat ⚠️, I11). `exec` reports the paths the run changed, with sizes, deletions included. A broken,
 truncated or unsupported artifact is a named error before a sandbox exists. Persisting a template
 sandbox between turns is deferred (`snapshot()` / `createSandbox({ snapshot })` over a template:
 `NotImplementedError('isolate-host.sandbox-template-snapshot')`,
@@ -137,8 +139,8 @@ consumer encode/decode per exec, isolate floor 215 MiB, state 96 MB, every host 
   run to the next; reading template files changes nothing (the difference stays empty of them)
   (probe S's table is the seed). A rename of a template directory moves its whole subtree into the
   difference (rifty's FS has no cross-layer rename): over `maxFsBytes` it is the cap's named result
-  (`stateRefused: ERR_FS_SNAPSHOT_TOO_LARGE`), never a partial tree — declared compat ⚠️ (Node
-  renames in O(1)).
+  (`stateRefused: ERR_FS_SNAPSHOT_TOO_LARGE`) and every write of that run is rolled back, never a
+  partial tree — declared compat ⚠️ (Node renames in O(1)).
 
 ## Challenge
 
@@ -172,6 +174,7 @@ S9 probe gaps → README «Not probed» extended.
 Fresh final check after these fixes (2026-11-25, new reviewer): 9 findings, recheck 2 more (I5 had no checkable row for the consumer's peak per run — added; ADR §6 T95 arithmetic — corrected) — scenario 7 had narrowed «~95 MB» to the four-library template without the user (restored), I5 tolerances not checkable (restated: deterministic T1/T95, structural unit tests, published measurement), a silent `exec` between map items 2 and 4 (item 2 refuses it by name), stale section refs, #437's base, ADR §6 arithmetic, ADR-0567 §4 wording, a duplicate owner line, the prebuild list — all fixed.
 
 Second external review of PR #429 @ 9624b9c9d (the manager's reviewer): N1 (blocker) — the consumer's accumulated deleted set and the guest's capture-by-view-identity lost files (remove → write the same path; a renamed template entry), S-a — the consumer overlay was a second hand-written tree (ADR-0568 §2, «никакой второй независимой реализации»), S-b — packages not in the manifest, S-c — I5 checks ambiguous or at noise level, S-d — the F1 return condition undefined and above the figures shown; dispositions — one `LayeredFsSync` for both realms with a derived difference (ADR-0572 §2), probe S 23/23 vs live Node + mutation check, I11 added, I6 «changed» defined; packages from the lock (I1); I5 structural (lookups, frames, codec I/O counted); return condition defined with tolerances over the shown figures, measured in map items 5 and 7; minors fixed.
+Fresh final check after the redesign (2026-11-25, new reviewer @ ff003bbf8): 9 findings (cost bound of the derived difference, the rename ceiling undeclared, map item refs, «…» in quotes, A′ figures, concurrency note, `seq.mjs` gate + run → run + minimality, the memory method, an implementation name in the Outcome) — fixed; recheck @ 503d5bfa1: the Outcome's equality needed the rename ceiling's exception and its whole-run rollback, its compat row an owner — fixed.
 
 ## Decisions
 
