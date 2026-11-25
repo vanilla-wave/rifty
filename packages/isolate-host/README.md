@@ -379,7 +379,7 @@ warm worker runCode('console.log(1)'): p50 13.1 ms, max 16.1 ms (20 sequential)
 The same machine with a child process per call (ADR-0557, before this pool):
 p50 137 ms per call; 8 concurrent calls peaked at 1118 MiB. Concurrent calls
 sleep 500 ms. A guest's heap counts on top of this, up to `memoryLimitMb`.
-Legacy `node:url` (ADR-0574, 2026-11-24, same machine): the bundle grew 47 092 B (gzip 10 855)
-to 7 170 362 B; a warm `runCode` of 1 000 `url.parse(…, true)` + `url.resolve` p50 19.3 ms
+Legacy `node:url` (ADR-0574, 2026-11-24, same machine): the bundle grew 47 706 B (gzip 11 147)
+to 7 170 976 B (remeasured 2026-11-25, `836e9501a` + review-round-4 nits); a warm `runCode` of 1 000 `url.parse(…, true)` + `url.resolve` p50 19.3 ms
 (31.4 ms before; an empty run 13.9 / 13.5 ms, 40 runs each).
 These are measurements, not promises.

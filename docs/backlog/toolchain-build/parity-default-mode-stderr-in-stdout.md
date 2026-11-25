@@ -10,7 +10,9 @@ code: [tools/node-parity-runner/src/run-in-rifty.ts, tools/node-parity-runner/sr
 
 ## Context
 
-Found by the legacy `node:url` port (ADR-0574), 2026-11-24, before the cases' workaround.
+Found by the legacy `node:url` port (ADR-0574), 2026-11-24, before the cases' workaround (rifty then
+emitted DEP0169; it no longer does, ADR-0574 §Corrections — the same path carries DEP0170 from
+`url.parse('http://a.com:xx/')` and any other rifty warning).
 `run-in-rifty.ts:1833-1842`: without a seeded process (`isSeededProcessCase`, :406) both
 `writeStdout` and `writeStderr` push to one `captured` array; the Node side (`run-in-node.ts`
 ~:431) compares stdout only. Chain: `url.parse` from user code → `emitWarning` →

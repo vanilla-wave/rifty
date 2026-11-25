@@ -4775,6 +4775,244 @@
      "message": "Invalid URL"
     }
    }
+  },
+  {
+   "i": 6598,
+   "host": "xn---ida",
+   "node": {
+    "ok": "xn---ida"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6599,
+   "host": "xn---7a",
+   "node": {
+    "ok": "xn---7a"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6600,
+   "host": "ñ.xn---ida",
+   "node": {
+    "ok": "xn--ida.xn---ida"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6601,
+   "host": "᫁",
+   "node": {
+    "ok": "xn--brf"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6603,
+   "host": "᫤",
+   "node": {
+    "ok": "xn--bsf"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6605,
+   "host": "ೳ",
+   "node": {
+    "ok": "xn--cvc"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6607,
+   "host": "໎",
+   "node": {
+    "ok": "xn--w8c"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6609,
+   "host": "᜕",
+   "node": {
+    "ok": "xn--gze"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6611,
+   "host": "᷺",
+   "node": {
+    "ok": "xn--vfg"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6613,
+   "host": "఼",
+   "node": {
+    "ok": "xn--3pc"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6615,
+   "host": "xn--brf",
+   "node": {
+    "ok": "xn--brf"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6616,
+   "host": "xn--bsf",
+   "node": {
+    "ok": "xn--bsf"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6617,
+   "host": "xn--cvc",
+   "node": {
+    "ok": "xn--cvc"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6618,
+   "host": "xn--w8c",
+   "node": {
+    "ok": "xn--w8c"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6619,
+   "host": "xn--gze",
+   "node": {
+    "ok": "xn--gze"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6620,
+   "host": "xn--vfg",
+   "node": {
+    "ok": "xn--vfg"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
+  },
+  {
+   "i": 6621,
+   "host": "xn--3pc",
+   "node": {
+    "ok": "xn--3pc"
+   },
+   "rifty": {
+    "throw": {
+     "name": "TypeError",
+     "code": "ERR_INVALID_URL",
+     "message": "Invalid URL"
+    }
+   }
   }
  ]
 }

@@ -48,7 +48,7 @@ const outcome = (parse: (s: string) => { hostname: string | null }, host: string
 /**
  * Declared (contract Acceptance 4, compat modules.md): a Unicode label whose ASCII part starts with
  * `xn--` — ada encodes it unchecked, rifty checks every `xn--` label of the host parser's result
- * (it cannot tell an encoded Unicode label from an input one). Node's value, rifty's
+ * (it cannot tell an encoded Unicode label from an input one); an `xn---<p>` label. Node's value, rifty's
  * `ERR_INVALID_URL`; each must still differ.
  */
 const DECLARED: readonly (readonly [string, string])[] = [
@@ -56,6 +56,11 @@ const DECLARED: readonly (readonly [string, string])[] = [
   ['ñxn--a', 'xn--xn--a-nta'],
   ['ñxn--.com', 'xn--xn---fqa.com'],
   ['xn--ida.Σxn--', 'xn--ida.xn--xn---kod'],
+  // An input `xn---<p>` label (empty ASCII part): ada accepts it; the round trip re-encodes the
+  // decoded label as `xn--<p>`, so rifty rejects it.
+  ['xn---ida', 'xn---ida'],
+  ['xn---7a', 'xn---7a'],
+  ['ñ.xn---ida', 'xn--ida.xn---ida'],
 ];
 
 describe('legacy url toASCII step equals Node where its rules decide', () => {

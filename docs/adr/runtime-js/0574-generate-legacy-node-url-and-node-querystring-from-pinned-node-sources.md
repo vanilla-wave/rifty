@@ -67,14 +67,14 @@ points, 1 mapped `%`, 4 Unicode labels whose ASCII part starts with `xn--`), Chr
 
 - One `node:url` behaviour on every host for ASCII hosts; `Url` shape, errors, DEP0170 (DEP0169 not emitted, §Corrections).
 - Browser hosts: `toASCII` residual declared (compat ⚠️); isolate: non-ASCII hosts loud (❌).
-- Cost, 2026-11-24 at `313d64326` (Node v24.16.0, esbuild 0.28.0, Chromium 148; review round 1 adds a few hundred bytes, not remeasured): generated `legacy.js` 19 139 B;
-  isolate `guest.js` 7 123 270 → 7 170 362 B (+47 092; gzip +10 855); `client-bundle-budget`
+- Cost, 2026-11-24 at `313d64326`, `guest.js` remeasured 2026-11-25 on `836e9501a` + review-round-4 nits (Node v24.16.0, esbuild 0.28.0, Chromium 148; review round 1 adds a few hundred bytes, not remeasured): generated `legacy.js` 19 139 B;
+  isolate `guest.js` 7 123 270 → 7 170 976 B (+47 706; gzip 1 497 917 → 1 509 064, +11 147); `client-bundle-budget`
   generic 932 920 → 955 554 min (+22 634; gzip 279 754 → 287 956, +8 202 of 332 000), toolchain
   1 061 998 → 1 084 631 (+22 633; gzip +7 896 of 386 000), main/sw unchanged; ceilings untouched.
   Warm `runCode` median (40) of 1 000 `parse(…, true)` + `resolve`: 31.4 → 19.3 ms (empty run
   13.5 / 13.9 ms). Chromium, `toASCII` of a non-ASCII host warm: ~1.8 µs (two `URL` parses).
 - Publishing gate: no package with this code is published before the generated-sources license
-  unit (the Node notice is not in `dist`; review round 1).
+  unit (the Node notice is not in `dist`; review round 1): PR #445's `tools/publishing/third-party-manifest.json`, whichever of the two merges second adds this code's entry.
 - Re-pin of Node: rerun the generator, the corpus and IdnaTestV2 suites.
 
 ## Corrections
@@ -87,4 +87,6 @@ points, 1 mapped `%`, 4 Unicode labels whose ASCII part starts with `xn--`), Chr
   `Object.getOwnPropertyDescriptor` read by rifty's stack-hook owner — each time `url.parse` threw
   or the guest's hook stayed replaced (`.stack` of later errors an array). Declared: compat
   modules.md `node:url`; rows `dep0169-rows.cjs`, `error-state-rows.cjs`, `guest-rows.cjs`
-  (Node's output without its DEP0169).
+  (Node's output without its DEP0169). Consequences (review round 4): no `'warning'` event for it, and
+  `process.throwDeprecation` does not end the process (Node: exit 1 on the uncaught DEP0169; row
+  `dep0169-ceiling.cjs`).

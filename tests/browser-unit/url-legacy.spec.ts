@@ -45,6 +45,14 @@ const ERROR_ROWS = requireFixture('./error-state-rows.cjs') as Record<
 const withoutDep0169 = (stdout: string): string => stdout.replace(/^warning DEP0169\n/gm, '');
 const stderrWithoutDep0169 = (stderr: string): string =>
   stderr.replace(/^\(node:<pid>\) \[DEP0169\][^\n]*\n(?:\(Use `<argv0> --trace[^\n]*\n)?/m, '');
+const CEILING = requireFixture('./dep0169-ceiling.cjs') as Record<
+  string,
+  {
+    files: Record<string, string>;
+    node: { stdout: string; exitCode: number };
+    rifty: { stdout: string; exitCode: number };
+  }
+>;
 const GUEST_ROWS = requireFixture('./guest-rows.cjs') as Record<
   string,
   { hosts: string[]; files: Record<string, string> }
@@ -229,6 +237,22 @@ test('legacy node:url / querystring equal Node (COI Workbench)', async ({ page, 
         stdout: withoutDep0169(node.stdout),
         exitCode: node.exitCode,
       });
+    }
+
+    // DEP0169 ceiling rows: each still differs from Node, exactly as pinned.
+    for (const [name, row] of Object.entries(CEILING)) {
+      const node = inNode(row.files, ['main.js']);
+      rmSync(node.dir, { recursive: true, force: true });
+      const rifty = await inRifty(row.files, ['main.js']);
+      expect
+        .soft(
+          [
+            { stdout: node.stdout, exitCode: node.exitCode },
+            { stdout: rifty.stdout, exitCode: rifty.exitCode },
+          ],
+          name,
+        )
+        .toEqual([row.node, row.rifty]);
     }
 
     // A guest's Error state never breaks url.parse.

@@ -1,4 +1,5 @@
-// DEP0169/DEP0170 window rows (ADR-0574 §4): name → files; each runs as `node main.js` in a fresh process.
+// DEP0169/DEP0170 rows (ADR-0574 §Corrections: rifty emits no DEP0169, rows compare Node's output
+// without it): name → files; each runs as `node main.js` in a fresh process.
 'use strict';
 const ON =
   "process.on('warning', (w) => console.log('warning', w.code));\nconst url = require('url');\n";

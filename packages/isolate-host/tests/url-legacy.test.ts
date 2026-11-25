@@ -225,6 +225,27 @@ const withoutDep0169 = (stdout: string): string => stdout.replace(/^warning DEP0
 const stderrWithoutDep0169 = (stderr: string): string =>
   stderr.replace(/^\(node:<pid>\) \[DEP0169\][^\n]*\n(?:\(Use `<argv0> --trace[^\n]*\n)?/m, '');
 
+const CEILING = requireFixture('./dep0169-ceiling.cjs') as Record<
+  string,
+  {
+    files: Record<string, string>;
+    node: { stdout: string; exitCode: number };
+    rifty: { stdout: string; exitCode: number };
+  }
+>;
+describe('isolate guest: DEP0169 ceiling rows (each still differs from Node)', () => {
+  for (const [name, row] of Object.entries(CEILING)) {
+    it(name, async () => {
+      const node = inNode(row.files, ['main.js']);
+      const rifty = await inSandbox(row.files, ['main.js']);
+      expect([
+        { stdout: node.stdout, exitCode: node.exitCode },
+        { stdout: rifty.stdout, exitCode: rifty.exitCode },
+      ]).toEqual([row.node, row.rifty]);
+    }, 60_000);
+  }
+});
+
 /** The pid in `(node:<pid>)` and the program name in Node's `--trace-*` hint. */
 const mask = (stderr: string): string =>
   stderr
