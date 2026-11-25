@@ -3,7 +3,7 @@ area: runtime-js
 status: ready
 title: Buffer accepts every encoding spelling Node's normalizeEncoding maps, in every Buffer API
 created: 2026-11-25
-why: Buffer.isEncoding('UTF8') is true but Buffer.from/toString with 'UTF8', 'UCS2', 'LATIN1', 'BINARY', 'BASE64', 'HEX', 'ASCII' throw 'Unsupported encoding' in rifty, where Node maps them case-insensitively; and rifty decodes base64/base64url/hex input outside the alphabet differently from Node (Buffer.from('Aé', 'base64') is empty in Node, throws InvalidCharacterError in rifty)
+why: Buffer.isEncoding('UTF8') is true but Buffer.from/toString with 'UTF8', 'UCS2', 'LATIN1', 'BINARY', 'BASE64', 'HEX', 'ASCII' throw 'Unsupported encoding' in rifty, where Node maps them case-insensitively; and rifty decodes base64/base64url/hex input outside the alphabet differently from Node (Buffer.from('Aé', 'base64') is empty in Node, throws InvalidCharacterError in rifty; Buffer.from('a-b', 'base64') is 6be6 in Node, throws in rifty, which stops @exodus/bytes in the isolate guest)
 epic: node-streams-as-in-node
 sources: [docs/backlog/epics/node-streams-as-in-node/reference/results/b1-bindings.txt, docs/backlog/epics/node-streams-as-in-node/reference/results/route-b-parity-stream.txt]
 ---
@@ -26,6 +26,12 @@ because the acceptance row covers it and the code is the same codec.
 
 Node maps names through `normalizeEncoding` (`lib/internal/util.js`). On route B, parity
 `stream/writable-admission` fails on `'UTF8'`.
+
+Absorbs draft `runtime-js/buffer-base64-rejects-base64url-chars` (PR #443): Node's base64 decoder
+takes the base64url alphabet. `Buffer.from('a-b', 'base64')` → Node `6be6`,
+`Buffer.from('-_8', 'base64')` → Node `fbff`, `Buffer.byteLength('-_8', 'base64')` → Node `2`; rifty
+throws `InvalidCharacterError` on all three. `@exodus/bytes` stops on it in the isolate guest
+(the `isolate-guest-web-api` goal's textdecoder bundle probe, PR #443).
 
 ## Challenge
 

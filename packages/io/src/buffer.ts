@@ -10,7 +10,15 @@
  * avoiding a runtime circular dep that `pnpm check:arch` would flag.
  */
 
-import { type Encoding, compareSlices, encode } from './buffer-codec.ts';
+import {
+  type Encoding,
+  bufferEncoding,
+  byteLengthOf,
+  compareSlices,
+  encode,
+  normalizeEncoding,
+  resolveEncoding,
+} from './buffer-codec.ts';
 import { installCoreMethods, installExtraMethods, installIntMethods } from './buffer-prototype.ts';
 
 export type { Encoding };
@@ -144,21 +152,8 @@ class BufferImplementation extends Uint8Array {
 
   static alloc(size: number, fill?: number | string, encoding?: Encoding): Buffer {
     const buf = new Buffer(size);
-    if (fill !== undefined) {
-      if (typeof fill === 'number') {
-        Uint8Array.prototype.fill.call(buf, fill);
-      } else {
-        const bytes = encode(fill, encoding ?? 'utf8');
-        if (bytes.length > 0) {
-          let pos = 0;
-          while (pos < size) {
-            const take = Math.min(bytes.length, size - pos);
-            buf.set(bytes.subarray(0, take), pos);
-            pos += take;
-          }
-        }
-      }
-    }
+    // Node: `fill !== undefined && fill !== 0 && size > 0` → `_fill(buf, fill, 0, len, enc)`.
+    if (fill !== undefined && fill !== 0 && size > 0) buf.fill(fill, 0, size, encoding);
     return buf;
   }
 
@@ -190,7 +185,12 @@ class BufferImplementation extends Uint8Array {
     length?: number,
   ): Buffer {
     if (typeof value === 'string') {
-      const bytes = encode(value, (encodingOrOffset as Encoding) ?? 'utf8');
+      // Node `fromString`: a falsy or non-string encoding is utf8.
+      const enc =
+        !encodingOrOffset || typeof encodingOrOffset !== 'string'
+          ? 'utf8'
+          : resolveEncoding(encodingOrOffset);
+      const bytes = encode(value, enc);
       const buf = new Buffer(bytes.length);
       buf.set(bytes);
       return buf;
@@ -231,8 +231,10 @@ class BufferImplementation extends Uint8Array {
     return out;
   }
 
-  static byteLength(s: string, encoding: Encoding = 'utf8'): number {
-    return encode(s, encoding).length;
+  static byteLength(s: string, encoding?: Encoding): number {
+    if (s.length === 0) return 0;
+    // Node falls back to utf8 for a falsy or unknown encoding (no throw).
+    return byteLengthOf(s, (encoding ? bufferEncoding(encoding) : undefined) ?? 'utf8');
   }
 
   static isBuffer(v: unknown): boolean {
@@ -241,24 +243,13 @@ class BufferImplementation extends Uint8Array {
     );
   }
 
-  private static readonly ENCODINGS: ReadonlySet<string> = new Set([
-    'utf8',
-    'utf-8',
-    'utf16le',
-    'utf-16le',
-    'ucs2',
-    'ucs-2',
-    'hex',
-    'base64',
-    'base64url',
-    'ascii',
-    'latin1',
-    'binary',
-  ]);
-
-  /** Node's `Buffer.isEncoding` — case-insensitive check of a known encoding. */
+  /** Node's `Buffer.isEncoding`: a non-empty string `normalizeEncoding` maps. */
   static isEncoding(encoding: unknown): boolean {
-    return typeof encoding === 'string' && Buffer.ENCODINGS.has(encoding.toLowerCase());
+    return (
+      typeof encoding === 'string' &&
+      encoding.length !== 0 &&
+      normalizeEncoding(encoding) !== undefined
+    );
   }
 
   /**

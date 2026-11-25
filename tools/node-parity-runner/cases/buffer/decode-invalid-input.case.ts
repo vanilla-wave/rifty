@@ -26,7 +26,7 @@ const c: ParityCase = {
       'QUJDRA', 'QUJDRA==', 'QUJDRA=', 'QUJDRA=x', 'QUJDRA==x', 'QUJDR', 'QUJDRAB',
       'Q Q==', ' QUJD ', 'QU\\nJD', 'QU\\tJD\\r\\n', 'QU\\vJD', 'QU\\fJD', 'QQ= =',
       'QQ==QUI=', 'QQ=QUI', '=QUJD', 'Q=Q=', 'Zm9v=YmFy', 'Zm9v YmFy', 'Zm9v\\nYmFy\\n',
-      'a-b', 'a_b', 'a+b', 'a/b', 'ab-_+/', '-_-_', '+/+/',
+      'a-b', 'a_b', 'a+b', 'a/b', '-_8', 'ab-_+/', '-_-_', '+/+/',
       'A\\u00e9', '\\u00e9A', 'QUJD\\u00e9', 'QU*JD', 'QU.JD', 'QUJD!', '!!!!', 'QUJD\\u0000',
       'QUJD\\u00ff', 'QUJD\\u0100', 'QUJD\\ud83d\\ude00', '\\u0141UJD', 'QUJ\\u0144', 'QQ\\u013dQUI',
     ];
