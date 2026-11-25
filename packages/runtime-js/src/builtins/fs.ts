@@ -1094,7 +1094,8 @@ export async function openAsBlob(p: PathLike, options?: { type?: string }): Prom
   }
   // Copy into a fresh ArrayBuffer-backed view: the VFS bytes may be SharedArrayBuffer-
   // backed (OPFS mode), which `Blob` cannot hold (Blob copies the bytes regardless).
-  return new Blob([new Uint8Array(bytes)], { type: options?.type ?? '' });
+  // `globalThis.`: an unbound `Blob` makes esbuild rename the isolate guest's `class Blob` (ADR-0578).
+  return new globalThis.Blob([new Uint8Array(bytes)], { type: options?.type ?? '' });
 }
 
 export const promises = {

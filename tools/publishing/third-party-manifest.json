@@ -17,6 +17,15 @@
       "changes": "lib/url.js, lib/querystring.js, lib/internal/{querystring,constants}.js and the internal/url protocol sets bundled and minified by esbuild, tools/publishing/generate-url-legacy.mjs",
       "sourcesKey": "node"
     },
+    "packages/isolate-guest/src/guest/node-blob/generated": {
+      "files": ["node-blob.js", "node.LICENSE"],
+      "name": "node",
+      "version": "v24.16.0",
+      "license": "MIT",
+      "licenseFiles": ["packages/isolate-guest/src/guest/node-blob/generated/node.LICENSE"],
+      "changes": "lib/internal/{webidl,blob,file}.js wrapped as modules over rifty bindings and whitespace-minified by esbuild, tools/publishing/generate-node-blob.mjs",
+      "sourcesKey": "node"
+    },
     "packages/runtime-js/src/module-loader/generated": {
       "files": ["typescript-browser.js"],
       "package": "typescript",
@@ -40,6 +49,8 @@
     }
   },
   "firstParty": [
+    "packages/isolate-guest/src/guest/node-blob/generated/node-blob.d.ts",
+    "packages/isolate-guest/src/guest/node-blob/generated/sources.json",
     "packages/runtime-js/src/builtins/fetch/generated/classes.d.ts",
     "packages/runtime-js/src/builtins/fetch/generated/sources.json",
     "packages/runtime-js/src/builtins/url-legacy/generated/legacy.d.ts",

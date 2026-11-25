@@ -66,6 +66,9 @@ Today (`reference/today/results.txt`, main bc3412420 product code, Node v24.16.0
 - 2026-11-25 — pdfkit stays one case, the zlib carrier's case 4 (goal Challenge 12).
 - 2026-11-25 — manager (PR #443 review S1): whole-outcome literal pins with `pinOf`, plain `it`;
   `it.fails` on the first stderr line was the defect #453 found.
+- 2026-11-25 — agent (PR #458): both cases pinned in the first commit; with unit 2 both equal
+  live Node (pptx `write()` hit no further wall). The pins' stderr held rifty bundle frames, so
+  the pins masked their line:column; with equality the mask went too.
 
 ## Challenge
 

@@ -134,6 +134,19 @@ v24.16.0. A Node re-pin regenerates and reruns the suites.
 - 2026-11-25 — manager (PR #443 review S4): one WPT harness, owned here; compared with live Node per
   subtest (Node's status files lag, `reference/wpt`).
 - 2026-11-25 — a JS byte store, not a host bridge (goal: inside the isolate under its limits).
+- 2026-11-25 — agent (implementation, reversible): WPT files not run beyond Acceptance 1's list —
+  `FileAPI/file/send-file-formdata*.any.js` (4; `FormData` + `fetch` to the WPT server's echo
+  endpoint, Node's status file skips them); excluded subtest beyond the list — `Blob-newobject.any.js`
+  «Blob.stream() returns [NewObject]» (the `stream()` gap of Acceptance 5). Result: 296/298
+  subtests of 8 files equal live Node.
+- 2026-11-25 — agent: the byte store's read count is Node's, measured (`arrayBuffer()` settles
+  after `2p − 1` microtask turns for `p` parts; slice keeps an empty view of the part ending at its
+  start) and pinned in `blob-file.test.ts`; ADR-0578 §2.
+- 2026-11-25 — agent: `fs.openAsBlob` also lower-cases `type` (Node keeps it) — added to the ⚠️
+  row and `runtime-js/fs-open-as-blob-eager-read`.
+- 2026-11-25 — agent: the WPT harness lives at the repo root `tests/wpt/` (outside every
+  published package; a `vendor/` dir inside `packages/isolate-host` would fall under
+  `check:third-party-notices`), host runner `packages/isolate-host/tests/wpt-guest.ts`.
 - rejected route: npm `Blob` polyfills — 9/19 and 13/19 cases differ — violates I1.
 
 ## Challenge

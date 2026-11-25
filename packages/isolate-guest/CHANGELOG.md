@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `Blob` and `File` are Node v24.16.0's own classes (`lib/internal/blob.js`, `file.js`, `webidl.js`, generated from pinned sources over a JS byte store, ADR-0578), and `require('buffer').Blob`/`.File` are the same objects — were ceiling throwers (`isolate-host.Blob`/`File`) and `undefined`. `blob.stream()` throws `NotImplementedError('isolate-host.ReadableStream')`. `guest.js` 7 173 116 → 7 210 074 B (+36 958; `gzip -9` +9 182); warm `runCode('1')` +0.4–0.5 ms. Node errors these classes throw carry Node's `[CODE]` in `toString` and the stack header.
 - `dist/THIRD_PARTY_NOTICES.md` lists what `guest.js` bundles (acorn, cjs-module-lexer, quickjs-emscripten-core, @jitl/quickjs-ffi-types, the generated TypeScript compiler and Node v24.16.0 `url`/`querystring`); `guest.js` ends with a link line to it (+84 B).
 - `http.validateHeaderName`/`validateHeaderValue` messages print a non-string argument as Node's `%s` (its `toString`/`Symbol.toPrimitive`, `-0`); a throwing `Symbol.toPrimitive` rethrows as in Node instead of `ERR_INVALID_HTTP_TOKEN`.
 - The guest bundle carries runtime-js's generated legacy `node:url`/`querystring` (ADR-0574): `guest.js` 7 123 270 → 7 170 976 B (+47 706; gzip 1 497 917 → 1 509 064, +11 147).
