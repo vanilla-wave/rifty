@@ -1,6 +1,6 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { gzipSync } from 'node:zlib';
@@ -9,6 +9,11 @@ import { EXEMPT, checkLockfileRegistry, repoPaths } from './lockfile-registry.mj
 
 const FOREIGN = 'https://registry.example.invalid';
 const NPM = 'https://registry.npmjs.org';
+const ALLOWED = '(allowed: registry.npmjs.org, loopback, *.test)';
+const onHost = (carrier: string, n: number, host = 'registry.example.invalid') =>
+  `${carrier}: ${n} address line(s) on ${host} ${ALLOWED}`;
+const gitDep = (carrier: string, n: number, host: string) =>
+  `${carrier}: ${n} git dependency address(es) on ${host} (git/URL dependencies are not allowed in committed locks: the host may be internal)`;
 
 const packageLock = (origin: string, minified = false) => {
   const lock = {
@@ -102,7 +107,7 @@ describe('committed lockfiles pin only registry.npmjs.org', () => {
       put('apps/playground/public/snapshots/x-node-modules.json.gz', snapshot(NPM)),
       put('tsconfig.json', '{ // jsonc\n "compilerOptions": {} }'),
     ];
-    expect(check(paths)).toEqual({ violations: [], carriers: 5, exempted: 0 });
+    expect(check(paths)).toEqual({ violations: [], carriers: 5, exempted: 0, skipped: 0 });
   });
 
   it.each([
@@ -112,9 +117,7 @@ describe('committed lockfiles pin only registry.npmjs.org', () => {
     ['yarn.lock', yarnLock(FOREIGN), 1],
   ])('refuses %s on a foreign host with file, line count and host', (name, text, lines) => {
     const path = put(`fixture/${name}`, text);
-    expect(check([path]).violations).toEqual([
-      `${path}: ${lines} address line(s) on registry.example.invalid (allowed: ${NPM})`,
-    ]);
+    expect(check([path]).violations).toEqual([onHost(path, lines)]);
   });
 
   it.each([
@@ -125,9 +128,7 @@ describe('committed lockfiles pin only registry.npmjs.org', () => {
     ],
   ])('refuses a %s lock', (_, path) => {
     put(path, packageLock(FOREIGN));
-    expect(check([path]).violations).toEqual([
-      `${path}: 2 address line(s) on registry.example.invalid (allowed: ${NPM})`,
-    ]);
+    expect(check([path]).violations).toEqual([onHost(path, 2)]);
   });
 
   it('refuses a baked dependency snapshot whose embedded lockfile is foreign', () => {
@@ -135,17 +136,13 @@ describe('committed lockfiles pin only registry.npmjs.org', () => {
       'apps/playground/public/snapshots/next-node-modules.json.gz',
       snapshot(FOREIGN),
     );
-    expect(check([path]).violations).toEqual([
-      `${path}#/lockfile: 2 address line(s) on registry.example.invalid (allowed: ${NPM})`,
-    ]);
+    expect(check([path]).violations).toEqual([onHost(`${path}#/lockfile`, 2)]);
   });
 
   it('finds a lock by content form in a new .json.gz anywhere, whatever its key', () => {
     const doc = { runs: [{ diff: { before: packageLock(FOREIGN), after: 'plain text' } }] };
     const path = put('some/new/dir/evidence.json.gz', gzipSync(JSON.stringify(doc)));
-    expect(check([path]).violations).toEqual([
-      `${path}#/runs/0/diff/before: 2 address line(s) on registry.example.invalid (allowed: ${NPM})`,
-    ]);
+    expect(check([path]).violations).toEqual([onHost(`${path}#/runs/0/diff/before`, 2)]);
   });
 
   it('finds a text lock embedded under a lockfile-named key', () => {
@@ -153,9 +150,7 @@ describe('committed lockfiles pin only registry.npmjs.org', () => {
       'seed/project.json',
       JSON.stringify({ 'app/pnpm-lock.yaml': pnpmLock(FOREIGN) }),
     );
-    expect(check([path]).violations).toEqual([
-      `${path}#/app~1pnpm-lock.yaml: 2 address line(s) on registry.example.invalid (allowed: ${NPM})`,
-    ]);
+    expect(check([path]).violations).toEqual([onHost(`${path}#/app~1pnpm-lock.yaml`, 2)]);
   });
 
   it('a foreign host on a non-https scheme or a git dependency is refused too', () => {
@@ -165,9 +160,172 @@ describe('committed lockfiles pin only registry.npmjs.org', () => {
     );
     const path = put('x/package-lock.json', lock);
     expect(check([path]).violations).toEqual([
-      `${path}: 2 address line(s) on registry.npmjs.org (allowed: ${NPM})`,
-      `${path}: 1 address line(s) on github.com (allowed: ${NPM})`,
+      onHost(path, 2, 'http://registry.npmjs.org'),
+      gitDep(path, 1, 'github.com'),
     ]);
+  });
+});
+
+describe('a lock written as a JSON object is a carrier too (B1)', () => {
+  const lockObject = (origin: string) => JSON.parse(packageLock(origin)) as object;
+
+  it('an object with lockfileVersion at any depth', () => {
+    const doc = { cases: [{ name: 'empty', lock: lockObject(FOREIGN) }] };
+    const path = put('docs/backlog/x/reference/native-output.json', JSON.stringify(doc));
+    expect(check([path]).violations).toEqual([onHost(`${path}#/cases/0/lock`, 2)]);
+  });
+
+  it('a whole lock under a non-lock file name', () => {
+    const path = put('tests/fixtures/expected-lock.json', packageLock(FOREIGN));
+    expect(check([path]).violations).toEqual([onHost(path, 2)]);
+  });
+
+  it('a baked snapshot whose lockfile is an object', () => {
+    const bytes = gzipSync(JSON.stringify({ version: 3, lockfile: lockObject(FOREIGN) }));
+    const path = put('apps/playground/public/snapshots/obj-node-modules.json.gz', bytes);
+    expect(check([path]).violations).toEqual([onHost(`${path}#/lockfile`, 2)]);
+  });
+
+  it('an object under a lockfile-named key, even without lockfileVersion', () => {
+    const doc = {
+      files: {
+        'package-lock.json': { packages: { 'node_modules/ms': { resolved: `${FOREIGN}/ms.tgz` } } },
+      },
+    };
+    const path = put('seed/project.json', JSON.stringify(doc));
+    expect(check([path]).violations).toEqual([onHost(`${path}#/files/package-lock.json`, 1)]);
+  });
+
+  it('npm v1 nested dependencies are walked', () => {
+    const v1 = {
+      lockfileVersion: 1,
+      dependencies: {
+        a: { resolved: `${NPM}/a.tgz`, dependencies: { b: { resolved: `${FOREIGN}/b.tgz` } } },
+      },
+    };
+    const path = put('v1/package-lock.json', JSON.stringify(v1));
+    expect(check([path]).violations).toEqual([onHost(path, 1)]);
+  });
+});
+
+describe('allowed hosts: npmjs origin by parsed URL, loopback and .test (manager decision 2026-11-26)', () => {
+  const lockAt = (url: string) =>
+    JSON.stringify({ lockfileVersion: 3, packages: { 'node_modules/ms': { resolved: url } } });
+  const verdict = (url: string) => {
+    const path = put('x/package-lock.json', lockAt(url));
+    return check([path]).violations;
+  };
+
+  it.each([
+    'https://registry.npmjs.org/ms/-/ms-2.1.3.tgz',
+    'https://REGISTRY.npmjs.org/ms/-/ms-2.1.3.tgz',
+    'https://registry.npmjs.org:443/ms/-/ms-2.1.3.tgz',
+    'http://127.0.0.1:57562/ms/-/ms-2.1.3.tgz',
+    'http://127.8.9.10/ms.tgz',
+    'http://localhost:4873/ms.tgz',
+    'http://[::1]:4873/ms.tgz',
+    'https://registry.test/ms/-/ms-2.1.3.tgz',
+  ])('%s passes', (url) => {
+    expect(verdict(url)).toEqual([]);
+  });
+
+  it.each([
+    ['https://registry.npmjs.org.evil/ms.tgz', 'https://registry.npmjs.org.evil'],
+    ['https://registry.npmjs.org@evil.example/ms.tgz', 'https://<userinfo>@evil.example'],
+    ['https://user:pw@registry.npmjs.org/ms.tgz', 'https://<userinfo>@registry.npmjs.org'],
+    ['https://registry.npmjs.org:8443/ms.tgz', 'https://registry.npmjs.org:8443'],
+    ['https://registry.test.evil/ms.tgz', 'https://registry.test.evil'],
+    ['http://localhost.evil/ms.tgz', 'http://localhost.evil'],
+    ['http://127.0.0.1.evil/ms.tgz', 'http://127.0.0.1.evil'],
+    ['https://registry.internal/ms.tgz', 'https://registry.internal'],
+    ['https://registry.example.invalid/ms.tgz', 'https://registry.example.invalid'],
+  ])('%s is refused', (url, host) => {
+    const [violation] = verdict(url);
+    expect(violation).toBe(onHost('x/package-lock.json', 1, host));
+  });
+
+  it('git dependencies are refused with a reason; github: shorthand is not a URL', () => {
+    const lock = JSON.stringify({
+      lockfileVersion: 3,
+      packages: {
+        'node_modules/a': { resolved: 'git+ssh://git@github.com/o/a.git#abc' },
+        'node_modules/b': { resolved: 'git+https://git.corp.example/o/b.git#abc' },
+        'node_modules/c': { resolved: 'github:o/c#abc' },
+      },
+    });
+    const path = put('g/package-lock.json', lock);
+    expect(check([path]).violations).toEqual([
+      gitDep(path, 1, 'github.com'),
+      gitDep(path, 1, 'git.corp.example'),
+    ]);
+  });
+});
+
+describe('pnpm and yarn locks', () => {
+  it('pnpm YAML is parsed: quoted keys, aliases, folded scalars, git repo', () => {
+    const yaml = `lockfileVersion: '9.0'
+packages:
+  "ms@2.1.3":
+    resolution: &r {integrity: sha512-x, "tarball": ${FOREIGN}/ms.tgz}
+  ms2@2.1.3:
+    resolution: *r
+  debug@4.4.1:
+    resolution:
+      tarball: >-
+        ${FOREIGN}/debug.tgz
+  dep@1.0.0:
+    resolution: {type: git, repo: https://git.corp.example/o/dep, commit: abc}
+`;
+    const path = put('p/pnpm-lock.yaml', yaml);
+    expect(check([path]).violations).toEqual([
+      onHost(path, 3),
+      gitDep(path, 1, 'git.corp.example'),
+    ]);
+  });
+
+  it('yarn berry (YAML) resolution URLs are addresses', () => {
+    const berry = `__metadata:
+  version: 8
+"ms@https://registry.example.invalid/ms.tgz":
+  version: 2.1.3
+  resolution: "ms@${FOREIGN}/ms.tgz"
+`;
+    const path = put('y/yarn.lock', berry);
+    expect(check([path]).violations).toEqual([onHost(path, 1)]);
+  });
+});
+
+describe('robustness', () => {
+  it('strips a BOM before parsing', () => {
+    const path = put('bom/package-lock.json', `﻿${packageLock(FOREIGN)}`);
+    expect(check([path]).violations).toEqual([onHost(path, 2)]);
+  });
+
+  it('a lockfile by name that does not parse is red with the right advice', () => {
+    const path = put('broken/package-lock.json', '{ "lockfileVersion": 3, ');
+    const [violation] = check([path]).violations;
+    expect(violation).toMatch(/^broken\/package-lock\.json: unparseable lock .* regenerate/u);
+  });
+
+  it('an unparseable .json with lock markers is skipped and counted', () => {
+    const path = put('jsonc/data.json', '{ // note\n "lockfileVersion": 3 }');
+    expect(check([path])).toEqual({ violations: [], carriers: 0, exempted: 0, skipped: 1 });
+  });
+
+  it('a directory or symlink named like a carrier is ignored', () => {
+    mkdirSync(join(root, 'dir.json'));
+    const target = put('target.txt', packageLock(FOREIGN));
+    symlinkSync(join(root, target), join(root, 'package-lock.json'));
+    expect(check(['dir.json', 'package-lock.json']).violations).toEqual([]);
+  });
+
+  it('a path deleted in the working tree is skipped', () => {
+    expect(check(['gone/package-lock.json'])).toEqual({
+      violations: [],
+      carriers: 0,
+      exempted: 0,
+      skipped: 0,
+    });
   });
 });
 
@@ -179,9 +337,7 @@ describe('declared exemptions cover exact bytes only', () => {
     const added = put(`${CASES}/added/project.json`, corpusSeed(FOREIGN));
     const result = check([frozen, added], [{ path: frozen, sha256: sha256(frozen) }]);
     expect(result.exempted).toBe(1);
-    expect(result.violations).toEqual([
-      `${added}#/package-lock.json: 2 address line(s) on registry.example.invalid (allowed: ${NPM})`,
-    ]);
+    expect(result.violations).toEqual([onHost(`${added}#/package-lock.json`, 2)]);
   });
 
   it('a changed exempt seed fails its row even when its new lock is clean', () => {
@@ -206,6 +362,7 @@ describe('declared exemptions cover exact bytes only', () => {
       violations: [`${CASES}/gone/project.json: exemption row for a missing file — drop the row`],
       carriers: 0,
       exempted: 0,
+      skipped: 0,
     });
   });
 
@@ -243,14 +400,14 @@ describe('the repository tree', () => {
     expect(green.status).toBe(0);
     expect(green.stdout).toMatch(/19\/19 declared exemption\(s\)/u);
 
-    // A docs-only change: an untracked, unignored lock under docs/ is scanned (git ls-files --others).
+    // Tracked only (staged counts): an untracked lock is ignored, the same answer as CI.
     execFileSync('git', ['init', '-q'], { cwd: root });
     put('docs/backlog/x/reference/probe/package-lock.json', packageLock(FOREIGN));
+    expect(repoPaths(root)).toEqual([]);
+    execFileSync('git', ['add', '.'], { cwd: root });
     const red = run(root);
     expect(red.status).toBe(1);
-    expect(red.stderr).toContain(
-      'docs/backlog/x/reference/probe/package-lock.json: 2 address line(s) on registry.example.invalid',
-    );
+    expect(red.stderr).toContain(onHost('docs/backlog/x/reference/probe/package-lock.json', 2));
     expect(red.stderr).toMatch(/0\/19 declared exemption\(s\)/u);
   });
 });
