@@ -1,0 +1,13 @@
+{
+  "guest": {
+    "stdout": "../img/b.png\nundefined u:p@a.com:8 undefined undefined undefined {\"c\":\"d\"}\nHTTP://Ex.com/a b\nundefined\na.com:8 /x y=1\n",
+    "stderr": "",
+    "exitCode": 0
+  },
+  "node": {
+    "stdout": "https://example.com/img/b.png\nu:p a.com:8 a.com 8 /b?c=d {\"c\":\"d\"}\nhttp://ex.com/a%20b\nxn--ida.com\na.com:8 /x y=1\n",
+    "stderr": "(node:<pid>) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.\n(Use `node --trace-deprecation ...` to show where the warning was created)\n",
+    "exitCode": 0,
+    "version": "v24.16.0"
+  }
+}

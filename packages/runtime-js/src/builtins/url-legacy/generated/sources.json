@@ -1,0 +1,13 @@
+{
+  "node": "v24.16.0",
+  "esbuild": "0.28.0",
+  "sha256": "a27d7e6cf9277bf64182ddb99be372b9eb152e771e6df57d309fe89f13124ea2",
+  "sources": {
+    "lib/internal/url.js": "35896c160c4b0b8b8b47c4382c13d475350d26554e2f403c224e2b0e99e984a7",
+    "lib/internal/constants.js": "8c4c12bb17f4b106760be5fe77e8d7febc9b104d9dcd97402c332f64d6619440",
+    "lib/internal/querystring.js": "92d0cbd561d7cce93936b083d56d2a41063d177f3aa6772ae2c1871f160163d1",
+    "lib/querystring.js": "513ace4440c97fcaf3da958598be85f136eb044c6045b06dcac945395c4a7b56",
+    "lib/url.js": "0a53e0c4e8bfb5946380577bf9d5ae9c227ad54ae738f5bd5e4a5e8682921f38",
+    "LICENSE": "4573185d56580da2b890ba34a85a409257640f1c5632eade4300137266194d18"
+  }
+}

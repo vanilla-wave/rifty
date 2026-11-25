@@ -17,6 +17,7 @@ rifty's error shapes), `runCode` vs `node -e`, Node v24.16.0, 2026-11-24:
 |---|---|---|
 | `Buffer.alloc(-1)` | `RangeError [ERR_OUT_OF_RANGE]: The value of "size" is out of range. It must be >= 0 && <= 9007199254740991. Received -1`, `code` | `RangeError: Invalid typed array length: -1`, no `code` |
 | `require('events').once(1)` | rejected promise: `TypeError [ERR_INVALID_ARG_TYPE]: The "emitter" argument must be an instance of EventEmitter. Received type number (1)` | rejected promise: `TypeError: emitter.once is not a function`, no `code` |
+| `require('querystring').unescapeBuffer(1)` (also `true`, `{}`, `Symbol()`; `unescape(Symbol())`) | `TypeError [ERR_INVALID_ARG_TYPE]` (Node's `Buffer.allocUnsafe(s.length)` with `undefined`) | `Buffer(0) []` / `''`: rifty's `Buffer.allocUnsafe(undefined)` is an empty buffer (PR #444 review round 1; runtime-js lane, 2026-11-24) |
 
 Browser hosts share the code (not measured). Label gap aside
 (`runtime-js/node-error-code-label`), message and `code` differ (both

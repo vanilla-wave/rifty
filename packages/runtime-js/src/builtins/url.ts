@@ -1,166 +1,20 @@
 /**
- * Node-compatible `node:url` (subset). Modern Node code uses the global
- * `URL` (which we re-export) plus `URLSearchParams`. The legacy `parse`/`format`/
- * `resolve` functions are still used by older packages.
+ * `node:url`. Legacy API (`Url`, `parse`, `resolve`, `resolveObject`, `format`): Node v24.16.0's
+ * own `lib/url.js`, generated (ADR-0574, `url-legacy/`). WHATWG members: the realm's `URL` /
+ * `URLSearchParams` and rifty's POSIX file-URL conversions. ada-backed helpers are named gaps.
  */
 
+import { NotImplementedError } from '@riftydev/io';
 import {
   URLConstructor,
   fileURLFromResolvedPath,
   fileURLToPathPosix,
 } from '../internal/posix-file-url.ts';
 import { resolve as resolvePath } from './path.ts';
+import { legacy } from './url-legacy/bindings.ts';
 
 export const URL = URLConstructor;
 export const URLSearchParams = globalThis.URLSearchParams;
-
-/**
- * Legacy URL shape. `search`, `query`, and `hash` are `string | null` in
- * Node's deprecated parser — `null` when the input has no corresponding
- * component. `query` is the result of `querystring.parse` (an object) when
- * `parse(input, true)` is used, otherwise a string or `null`.
- */
-export interface UrlObject {
-  protocol?: string;
-  slashes?: boolean;
-  auth?: string;
-  host?: string;
-  hostname?: string;
-  port?: string | number;
-  pathname?: string;
-  search?: string | null;
-  query?: string | Record<string, unknown> | null;
-  hash?: string | null;
-  href?: string;
-}
-
-/**
- * Legacy `url.parse(urlString[, parseQueryString[, slashesDenoteHost]])`.
- *
- * Node semantics (deprecated but still widely used):
- *   - `parseQueryString=false` (default): `query` is the search string WITHOUT
- *     the leading `?` (e.g. `'a=1&b=2'`), or `null` when there is no query.
- *   - `parseQueryString=true`: `query` is the result of
- *     `querystring.parse(search.slice(1))` — an object — and is `{}` when
- *     there is no query.
- *
- * Previous implementation returned `undefined` for empty queries and a raw
- * string irrespective of the flag, which conflicts with Node's contract.
- *
- * `slashesDenoteHost` is accepted for parity but not yet honoured (no real
- * call site needs it). Add a NotImplementedError-throwing branch if a
- * concrete need shows up.
- */
-export function parse(
-  input: string,
-  parseQueryString = false,
-  _slashesDenoteHost = false,
-): UrlObject {
-  try {
-    const u = new URL(input);
-    const searchRaw = u.search ? u.search.slice(1) : '';
-    return {
-      protocol: u.protocol,
-      slashes: input.includes('//'),
-      auth: u.username ? `${u.username}${u.password ? `:${u.password}` : ''}` : undefined,
-      host: u.host,
-      hostname: u.hostname,
-      port: u.port || undefined,
-      pathname: u.pathname,
-      search: u.search || null,
-      query: parseQueryString ? parseQueryToObject(searchRaw) : u.search ? searchRaw : null,
-      hash: u.hash || null,
-      href: u.href,
-    };
-  } catch {
-    // Fall back to a partial parse for relative/path-only URLs.
-    const match = /^([a-z][a-z0-9+.-]*:)?(\/\/[^/?#]*)?([^?#]*)(\?[^#]*)?(#.*)?$/i.exec(input);
-    if (!match) {
-      return {
-        href: input,
-        pathname: input,
-        search: null,
-        query: parseQueryString ? {} : null,
-        hash: null,
-      };
-    }
-    const searchWithQ = match[4];
-    const searchRaw = searchWithQ ? searchWithQ.slice(1) : '';
-    return {
-      protocol: match[1] || undefined,
-      slashes: Boolean(match[2]),
-      host: match[2]?.slice(2),
-      pathname: match[3],
-      search: searchWithQ ?? null,
-      query: parseQueryString ? parseQueryToObject(searchRaw) : searchWithQ ? searchRaw : null,
-      hash: match[5] ?? null,
-      href: input,
-    };
-  }
-}
-
-/**
- * Minimal `querystring.parse` clone for `url.parse`'s `parseQueryString=true`
- * branch. Single values stay strings; repeated keys collect into arrays —
- * mirroring Node's `querystring` behaviour for the common cases.
- */
-function parseQueryToObject(qs: string): Record<string, string | string[]> {
-  const out: Record<string, string | string[]> = {};
-  if (!qs) return out;
-  for (const pair of qs.split('&')) {
-    if (!pair) continue;
-    const eq = pair.indexOf('=');
-    const rawKey = eq === -1 ? pair : pair.slice(0, eq);
-    const rawVal = eq === -1 ? '' : pair.slice(eq + 1);
-    const key = decodeQueryComponent(rawKey);
-    const val = decodeQueryComponent(rawVal);
-    const existing = out[key];
-    if (existing === undefined) {
-      out[key] = val;
-    } else if (Array.isArray(existing)) {
-      existing.push(val);
-    } else {
-      out[key] = [existing, val];
-    }
-  }
-  return out;
-}
-
-function decodeQueryComponent(s: string): string {
-  // Node's querystring.parse replaces '+' with ' ' before decoding.
-  const replaced = s.replace(/\+/g, ' ');
-  try {
-    return decodeURIComponent(replaced);
-  } catch {
-    return replaced;
-  }
-}
-
-export function format(o: UrlObject): string {
-  if (o.href) return o.href;
-  let out = '';
-  if (o.protocol) out += o.protocol.endsWith(':') ? o.protocol : `${o.protocol}:`;
-  if (o.slashes || o.host || o.hostname) out += '//';
-  if (o.auth) out += `${o.auth}@`;
-  if (o.host) out += o.host;
-  else if (o.hostname) {
-    out += o.hostname;
-    if (o.port) out += `:${o.port}`;
-  }
-  if (o.pathname) out += o.pathname;
-  if (o.search) out += o.search.startsWith('?') ? o.search : `?${o.search}`;
-  else if (typeof o.query === 'string' && o.query) out += `?${o.query}`;
-  if (o.hash) out += o.hash.startsWith('#') ? o.hash : `#${o.hash}`;
-  return out;
-}
-
-export function resolve(from: string, to: string): string {
-  try {
-    return new URL(to, from).href;
-  } catch {
-    return to;
-  }
-}
 
 export function pathToFileURL(p: string): URL {
   let resolved = resolvePath(p);
@@ -174,13 +28,32 @@ export function fileURLToPath(u: URL | string): string {
   return fileURLToPathPosix(u);
 }
 
+/** ada's WHATWG host parser and `urlToHttpOptions` (owner: backlog node-url-legacy-format-and-helpers). */
+function domainToASCII(..._args: unknown[]): never {
+  throw new NotImplementedError('url.domainToASCII');
+}
+function domainToUnicode(..._args: unknown[]): never {
+  throw new NotImplementedError('url.domainToUnicode');
+}
+function urlToHttpOptions(..._args: unknown[]): never {
+  throw new NotImplementedError('url.urlToHttpOptions');
+}
+
+const { url: node } = legacy;
+
+// Node's key order; `URLPattern` and `fileURLToPathBuffer` are not rifty members.
 const url = {
+  Url: node.Url,
+  parse: node.parse,
+  resolve: node.resolve,
+  resolveObject: node.resolveObject,
+  format: node.format,
   URL,
   URLSearchParams,
-  parse,
-  format,
-  resolve,
+  domainToASCII,
+  domainToUnicode,
   pathToFileURL,
   fileURLToPath,
+  urlToHttpOptions,
 };
 export default url;
