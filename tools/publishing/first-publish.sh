@@ -19,6 +19,7 @@
 #   NPM_TOKEN=<granular-token> bash tools/publishing/first-publish.sh
 #   NPM_TOKEN=<granular-token> bash tools/publishing/first-publish.sh --dry-run
 #   NPM_TOKEN=<granular-token> bash tools/publishing/first-publish.sh --only @riftydev/new-package
+#   ... --only @riftydev/new-package --tag next   # dist-tag (pnpm's default is latest, also for a prerelease)
 #
 # The token needs publish rights to the @riftydev scope. Since these names don't
 # exist yet, a granular token can't pre-select them — create it with
@@ -32,6 +33,7 @@ cd "$(dirname "$0")/../.."
 
 DRY=""
 ONLY=""
+TAG=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run)
@@ -41,8 +43,12 @@ while [ $# -gt 0 ]; do
       shift
       ONLY="${1:-}"
       [ -n "$ONLY" ] || { echo "✗ --only needs a package filter, e.g. --only @riftydev/new-package" >&2; exit 2; } ;;
+    --tag)
+      shift
+      [ -n "${1:-}" ] || { echo "✗ --tag needs a dist-tag, e.g. --tag next" >&2; exit 2; }
+      TAG=(--tag "$1") ;;
     *)
-      echo "✗ unknown argument: $1 (expected --dry-run and/or --only <filter>)" >&2; exit 2 ;;
+      echo "✗ unknown argument: $1 (expected --dry-run, --only <filter>, --tag <dist-tag>)" >&2; exit 2 ;;
   esac
   shift
 done
@@ -77,7 +83,7 @@ else
 fi
 NPM_CONFIG_USERCONFIG="$NPMRC" \
   pnpm -r "${FILTERS[@]}" \
-  publish --access public --no-git-checks $DRY
+  publish --access public --no-git-checks ${TAG[@]+"${TAG[@]}"} $DRY
 
 if [ -n "$DRY" ]; then
   echo "✓ dry run complete — packed cleanly."
