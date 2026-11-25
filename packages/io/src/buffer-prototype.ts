@@ -17,6 +17,7 @@ import {
   compareSlices,
   decode,
   encode,
+  invalidArgType,
   normalizeEncoding,
   resolveEncoding,
   unknownEncodingError,
@@ -425,23 +426,6 @@ export function installIntMethods(BufferClass: BufferLikeCtor): void {
   };
 }
 
-/** Node's `validateString(encoding, 'encoding')` failure in `_fill` (never a string or nullish). */
-function invalidEncodingType(enc: unknown): TypeError {
-  let received: string;
-  if (typeof enc === 'function') received = `function ${enc.name}`;
-  else if (typeof enc === 'object' && enc !== null) {
-    received = `an instance of ${(enc as { constructor?: { name?: string } }).constructor?.name}`;
-  } else {
-    const shown = typeof enc === 'bigint' ? `${enc}n` : Object.is(enc, -0) ? '-0' : String(enc);
-    received = `type ${typeof enc} (${shown.length > 28 ? `${shown.slice(0, 25)}...` : shown})`;
-  }
-  const error = new TypeError(
-    `The "encoding" argument must be of type string. Received ${received}`,
-  ) as TypeError & { code: string };
-  error.code = 'ERR_INVALID_ARG_TYPE';
-  return error;
-}
-
 /**
  * Normalise an `indexOf`/`lastIndexOf` value to a searchable byte sequence.
  * Node checks the encoding only for a string needle (`bidirectionalIndexOf`).
@@ -607,7 +591,7 @@ export function installExtraMethods(BufferClass: BufferLikeCtor): void {
     if (typeof value === 'string') {
       const c = normalizeEncoding(enc);
       if (c === undefined) {
-        if (typeof enc !== 'string') throw invalidEncodingType(enc);
+        if (typeof enc !== 'string') throw invalidArgType('encoding', 'of type string', enc);
         throw unknownEncodingError(enc);
       }
       canonical = c;
@@ -615,15 +599,18 @@ export function installExtraMethods(BufferClass: BufferLikeCtor): void {
     if (offset < 0 || end > this.length || offset > end) {
       throw new RangeError('Out of range index');
     }
-    // Node: a '' value fills zeros.
-    const fillValue = value === '' ? 0 : value;
-    if (typeof fillValue === 'number') {
+    // Node: '' fills zeros; a value that is no string or view is ToUint32'd (`true` → 1, `{}` → 0).
+    const fillValue: unknown = value === '' ? 0 : value;
+    if (typeof fillValue !== 'string' && !ArrayBuffer.isView(fillValue)) {
       // Call Uint8Array.prototype.fill directly to avoid recursing into this override.
-      Uint8Array.prototype.fill.call(this, fillValue & 0xff, offset, end);
+      Uint8Array.prototype.fill.call(this, +(fillValue as number) & 0xff, offset, end);
       return this;
     }
     if (offset === end) return this;
-    const bytes = typeof fillValue === 'string' ? encode(fillValue, canonical) : fillValue;
+    const bytes =
+      typeof fillValue === 'string'
+        ? encode(fillValue, canonical)
+        : new Uint8Array(fillValue.buffer, fillValue.byteOffset, fillValue.byteLength);
     if (bytes.length === 0) {
       // Node: a fill value that writes no bytes is invalid.
       const error = new TypeError(

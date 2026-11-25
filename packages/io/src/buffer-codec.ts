@@ -102,6 +102,25 @@ export function unknownEncodingError(enc: unknown): TypeError & { code: string }
   return error;
 }
 
+/** Node's `ERR_INVALID_ARG_TYPE` (`The "<name>" argument must be <expected>. Received …`). */
+export function invalidArgType(name: string, expected: string, value: unknown): TypeError {
+  let received: string;
+  if (value == null) received = String(value);
+  else if (typeof value === 'function') received = `function ${value.name}`;
+  else if (typeof value === 'object') {
+    received = `an instance of ${(value as { constructor?: { name?: string } }).constructor?.name}`;
+  } else {
+    const shown =
+      typeof value === 'bigint' ? `${value}n` : Object.is(value, -0) ? '-0' : String(value);
+    received = `type ${typeof value} (${shown.length > 28 ? `${shown.slice(0, 25)}...` : shown})`;
+  }
+  const error = new TypeError(
+    `The "${name}" argument must be ${expected}. Received ${received}`,
+  ) as TypeError & { code: string };
+  error.code = 'ERR_INVALID_ARG_TYPE';
+  return error;
+}
+
 /** {@link bufferEncoding} or throw `ERR_UNKNOWN_ENCODING`. */
 export function resolveEncoding(enc: unknown): CanonicalEncoding {
   const canonical = bufferEncoding(enc);

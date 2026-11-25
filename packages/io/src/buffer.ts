@@ -16,6 +16,7 @@ import {
   byteLengthOf,
   compareSlices,
   encode,
+  invalidArgType,
   normalizeEncoding,
   resolveEncoding,
 } from './buffer-codec.ts';
@@ -152,8 +153,9 @@ class BufferImplementation extends Uint8Array {
 
   static alloc(size: number, fill?: number | string, encoding?: Encoding): Buffer {
     const buf = new Buffer(size);
-    // Node: `fill !== undefined && fill !== 0 && size > 0` → `_fill(buf, fill, 0, len, enc)`.
-    if (fill !== undefined && fill !== 0 && size > 0) buf.fill(fill, 0, size, encoding);
+    // Node: `fill !== undefined && fill !== 0 && size > 0` → `_fill(buf, fill, 0, buf.length, enc)`;
+    // the length is the truncated size.
+    if (fill !== undefined && fill !== 0 && size > 0) buf.fill(fill, 0, buf.length, encoding);
     return buf;
   }
 
@@ -231,7 +233,12 @@ class BufferImplementation extends Uint8Array {
     return out;
   }
 
-  static byteLength(s: string, encoding?: Encoding): number {
+  static byteLength(s: string | ArrayBufferView | ArrayBufferLike, encoding?: Encoding): number {
+    if (typeof s !== 'string') {
+      // Node: a view or raw store is its byteLength, whatever the encoding.
+      if (ArrayBuffer.isView(s) || isAnyArrayBuffer(s)) return s.byteLength;
+      throw invalidArgType('string', 'of type string or an instance of Buffer or ArrayBuffer', s);
+    }
     if (s.length === 0) return 0;
     // Node falls back to utf8 for a falsy or unknown encoding (no throw).
     return byteLengthOf(s, (encoding ? bufferEncoding(encoding) : undefined) ?? 'utf8');
