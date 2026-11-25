@@ -323,6 +323,32 @@ async function main() {
     }
     return p;
   });
+  await pinAsync('SharedArrayBuffer part', () => new Blob([new SharedArrayBuffer(3)]).bytes());
+  await pinAsync('view on a SharedArrayBuffer part', () => {
+    const sab = new SharedArrayBuffer(4);
+    new Uint8Array(sab).set([1, 2, 3, 4]);
+    return new Blob([new Uint8Array(sab, 1, 2), new DataView(sab, 3)]).bytes();
+  });
+  await pinAsync('growable SharedArrayBuffer part', () => {
+    const sab = new SharedArrayBuffer(2, { maxByteLength: 8 });
+    new Uint8Array(sab).set([7, 8]);
+    return new Blob([sab]).bytes();
+  });
+  // Not read: reading ~3000 nested levels crashes Node v24.16.0 itself (SIGSEGV).
+  pin('5000 nested blobs, sliced', () => {
+    let b = new Blob(['abc']);
+    for (let i = 0; i < 5000; i++) b = new Blob([b]);
+    return `${b.slice(1).size} ${b.slice(1).slice(0, 1).size}`;
+  });
+  pin('File name under a replaced RegExp exec', () => {
+    const exec = RegExp.prototype.exec;
+    RegExp.prototype.exec = () => null;
+    try {
+      return Array.from(new File([], 'a\uD800b').name, (c) => c.charCodeAt(0)).join();
+    } finally {
+      RegExp.prototype.exec = exec;
+    }
+  });
   pin('ERR_INVALID_THIS own keys', () => {
     try {
       Blob.prototype.slice.call({});
