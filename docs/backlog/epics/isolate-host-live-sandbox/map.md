@@ -2,11 +2,9 @@
 
 ## Items
 
-1. `distribution/isolate-host-sandbox-capture-outside-guest-realm` — draft (PICKUP compiles it,
-   `RDY-1`): a run's end state captured where the guest's code cannot reach, so a guest that broke
-   its own snapshot gets `stateRefused` and the state of before (I1). The closing review of PR #424
-   (2026-11-23) did not accept the reading «the files its own code left» as compatible with I1's
-   letter; the goal closes when this unit lands or the user narrows I1.
+1. `distribution/isolate-host-sandbox-capture-outside-guest-realm` — owned by
+   `epics/isolate-host-sandbox-template` (its map item 6, I7) since 2026-11-25; this goal closes
+   there, when that unit lands (or the user narrows I1).
 
 ## Open questions
 

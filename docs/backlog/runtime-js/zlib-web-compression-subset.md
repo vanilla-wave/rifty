@@ -4,11 +4,14 @@ status: draft
 title: node:zlib web-compression subset
 created: 2026-06-12
 why: Consumer Ready roadmap calls out zlib as a high-frequency runtime wall; the web-backed async one-shot subset landed (ADR-0159), remaining surface is the deferred follow-ups below
+epic: node-zlib-on-every-host
 sources: [docs/ROADMAP.md, docs/research/open-webcontainers-alternative-2026-06.md]
 code: [packages/runtime-js/src/builtins/zlib.ts]
 ---
 
 ## Context
+
+Goal `node-zlib-on-every-host` (map, 2026-11-24): superseded — the engine is chosen (ADR-0573), the remaining surface is units 2–3 of that goal; today's subset stays until unit 3 replaces it in one step. This item closes when unit 3 lands.
 
 LANDED (ADR-0159 + ADR-0178, `docs/public/compat/zlib.md`): async one-shot
 `gzip`/`gunzip`/`deflate`/`inflate`/`deflateRaw`/`inflateRaw` over the host

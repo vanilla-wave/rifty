@@ -1,0 +1,52 @@
+chromium 148.0.7778.96; sync = wasm engine through driver.mjs (Node's bytes per the matrix)
+GZIP tiny L-1: sync 25 B, async 25 B same but OS byte 19
+GZIP tiny L1: sync 25 B, async 25 B differ
+GZIP tiny L9: sync 25 B, async 25 B differ
+GZIP text64k L-1: sync 12733 B, async 12733 B same but OS byte 19
+GZIP text64k L1: sync 16653 B, async 12733 B differ
+GZIP text64k L9: sync 12684 B, async 12733 B differ
+GZIP json100k L-1: sync 17051 B, async 17051 B same but OS byte 19
+GZIP json100k L1: sync 22486 B, async 17051 B differ
+GZIP json100k L9: sync 16069 B, async 17051 B differ
+GZIP random16k L-1: sync 16409 B, async 16409 B same but OS byte 19
+GZIP random16k L1: sync 16409 B, async 16409 B differ
+GZIP random16k L9: sync 16409 B, async 16409 B differ
+GZIP mixed300k L-1: sync 129166 B, async 129166 B same but OS byte 19
+GZIP mixed300k L1: sync 138654 B, async 129166 B differ
+GZIP mixed300k L9: sync 128265 B, async 129166 B differ
+DEFLATE tiny L-1: sync 13 B, async 13 B same
+DEFLATE tiny L1: sync 13 B, async 13 B differ
+DEFLATE tiny L9: sync 13 B, async 13 B differ
+DEFLATE text64k L-1: sync 12721 B, async 12721 B same
+DEFLATE text64k L1: sync 16641 B, async 12721 B differ
+DEFLATE text64k L9: sync 12672 B, async 12721 B differ
+DEFLATE json100k L-1: sync 17039 B, async 17039 B same
+DEFLATE json100k L1: sync 22474 B, async 17039 B differ
+DEFLATE json100k L9: sync 16057 B, async 17039 B differ
+DEFLATE random16k L-1: sync 16397 B, async 16397 B same
+DEFLATE random16k L1: sync 16397 B, async 16397 B differ
+DEFLATE random16k L9: sync 16397 B, async 16397 B differ
+DEFLATE mixed300k L-1: sync 129154 B, async 129154 B same
+DEFLATE mixed300k L1: sync 138642 B, async 129154 B differ
+DEFLATE mixed300k L9: sync 128253 B, async 129154 B differ
+DEFLATERAW tiny L-1: sync 7 B, async 7 B same
+DEFLATERAW tiny L1: sync 7 B, async 7 B same
+DEFLATERAW tiny L9: sync 7 B, async 7 B same
+DEFLATERAW text64k L-1: sync 12715 B, async 12715 B same
+DEFLATERAW text64k L1: sync 16635 B, async 12715 B differ
+DEFLATERAW text64k L9: sync 12666 B, async 12715 B differ
+DEFLATERAW json100k L-1: sync 17033 B, async 17033 B same
+DEFLATERAW json100k L1: sync 22468 B, async 17033 B differ
+DEFLATERAW json100k L9: sync 16051 B, async 17033 B differ
+DEFLATERAW random16k L-1: sync 16391 B, async 16391 B same
+DEFLATERAW random16k L1: sync 16391 B, async 16391 B same
+DEFLATERAW random16k L9: sync 16391 B, async 16391 B same
+DEFLATERAW mixed300k L-1: sync 129148 B, async 129148 B same
+DEFLATERAW mixed300k L1: sync 138636 B, async 129148 B differ
+DEFLATERAW mixed300k L9: sync 128247 B, async 129148 B differ
+compress: 14/45 byte-identical, 19/45 identical but the gzip OS byte; async output decodes on the engine 45/45
+gunzip 2 members: sync ok 65540 B | async TypeError: Junk found after end of compressed data. (after 65536 B)
+gunzip + 8×0x00: sync ok 65536 B | async TypeError: Junk found after end of compressed data. (after 65536 B)
+inflate + LF: sync ok 65536 B | async TypeError: Junk found after end of compressed data. (after 65536 B)
+inflate + JUNK!: sync ok 65536 B | async TypeError: Junk found after end of compressed data. (after 65536 B)
+inflate truncated: sync Z_BUF_ERROR: unexpected end of file | async TypeError: Compressed input was truncated. (after 65536 B)

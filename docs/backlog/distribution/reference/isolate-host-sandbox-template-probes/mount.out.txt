@@ -1,0 +1,139 @@
+
+## /node_modules
+rifty exit 0 
+rifty {
+ "lib": {
+  "resolve": "/node_modules/lib/main.js",
+  "value": "lib@/node_modules/lib dep=dep@/node_modules/dep"
+ },
+ "deep": {
+  "resolve": "/node_modules/deep/index.js",
+  "value": "nested-dep@/node_modules/deep/node_modules/dep"
+ },
+ "exp": {
+  "resolve": "/node_modules/exp/cjs.js",
+  "value": "exp-cjs"
+ },
+ "exp/sub": {
+  "resolve": "/node_modules/exp/sub.js",
+  "value": "exp-sub"
+ },
+ "missing": {
+  "code": "MODULE_NOT_FOUND",
+  "message": "Cannot find module 'missing'"
+ },
+ "paths": [
+  "/workspace/node_modules",
+  "/node_modules"
+ ],
+ "exists": [
+  true,
+  false
+ ],
+ "readdirRoot": [
+  "node_modules",
+  "tmp",
+  "workspace"
+ ]
+}
+node  {
+ "lib": {
+  "resolve": "/node_modules/lib/main.js",
+  "value": "lib@/node_modules/lib dep=dep@/node_modules/dep"
+ },
+ "deep": {
+  "resolve": "/node_modules/deep/index.js",
+  "value": "nested-dep@/node_modules/deep/node_modules/dep"
+ },
+ "exp": {
+  "resolve": "/node_modules/exp/cjs.js",
+  "value": "exp-cjs"
+ },
+ "exp/sub": {
+  "resolve": "/node_modules/exp/sub.js",
+  "value": "exp-sub"
+ },
+ "missing": {
+  "code": "MODULE_NOT_FOUND",
+  "message": "Cannot find module 'missing'"
+ },
+ "paths": [
+  "/workspace/node_modules",
+  "/node_modules"
+ ],
+ "exists": [
+  true,
+  false
+ ]
+}
+same (except module.paths, readdir /): true
+module.paths rifty: ["/workspace/node_modules","/node_modules"]  node (temp-root-relative): ["/workspace/node_modules","/node_modules"]
+
+## /workspace/node_modules
+rifty exit 0 
+rifty {
+ "lib": {
+  "resolve": "/workspace/node_modules/lib/main.js",
+  "value": "lib@/workspace/node_modules/lib dep=dep@/workspace/node_modules/dep"
+ },
+ "deep": {
+  "resolve": "/workspace/node_modules/deep/index.js",
+  "value": "nested-dep@/workspace/node_modules/deep/node_modules/dep"
+ },
+ "exp": {
+  "resolve": "/workspace/node_modules/exp/cjs.js",
+  "value": "exp-cjs"
+ },
+ "exp/sub": {
+  "resolve": "/workspace/node_modules/exp/sub.js",
+  "value": "exp-sub"
+ },
+ "missing": {
+  "code": "MODULE_NOT_FOUND",
+  "message": "Cannot find module 'missing'"
+ },
+ "paths": [
+  "/workspace/node_modules",
+  "/node_modules"
+ ],
+ "exists": [
+  false,
+  true
+ ],
+ "readdirRoot": [
+  "tmp",
+  "workspace"
+ ]
+}
+node  {
+ "lib": {
+  "resolve": "/workspace/node_modules/lib/main.js",
+  "value": "lib@/workspace/node_modules/lib dep=dep@/workspace/node_modules/dep"
+ },
+ "deep": {
+  "resolve": "/workspace/node_modules/deep/index.js",
+  "value": "nested-dep@/workspace/node_modules/deep/node_modules/dep"
+ },
+ "exp": {
+  "resolve": "/workspace/node_modules/exp/cjs.js",
+  "value": "exp-cjs"
+ },
+ "exp/sub": {
+  "resolve": "/workspace/node_modules/exp/sub.js",
+  "value": "exp-sub"
+ },
+ "missing": {
+  "code": "MODULE_NOT_FOUND",
+  "message": "Cannot find module 'missing'"
+ },
+ "paths": [
+  "/workspace/node_modules",
+  "/node_modules"
+ ],
+ "exists": [
+  false,
+  true
+ ]
+}
+same (except module.paths, readdir /): true
+module.paths rifty: ["/workspace/node_modules","/node_modules"]  node (temp-root-relative): ["/workspace/node_modules","/node_modules"]

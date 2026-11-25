@@ -4,6 +4,7 @@
 
 ## [Unreleased]
 
+- `dist/THIRD_PARTY_NOTICES.md` carries esbuild-wasm 0.28.0's MIT license and Go's BSD-3-Clause license (its embedded `wasm_exec.js`) for the generated esbuild runtime; was none.
 - No-COI esbuild declares the installed twin's unchanged TypeScript declarations; mirror upstream's no-exports resolution shape for Node10, Node16, Bundler and the VFS language service.
 
 - Load generated esbuild only on no-COI activation; reject legacy bindings in COI before import. COI Vite CLI has no version gate; stock Node differential and verified-version inventory own its claim.

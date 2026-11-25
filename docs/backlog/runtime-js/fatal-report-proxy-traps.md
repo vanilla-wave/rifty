@@ -46,7 +46,7 @@ thrown Proxy (table), and the browser hosts have no deadline — that sentence
 needs the corrected facts with the fix (row owner: this item).
 Fault: `sibling-drift` (rifty's inspect vs Node's proxy-aware inspect);
 on the browser hosts also `unbounded-read` (a report loop with no bound).
-Dedup: no backlog/traps/ADR-declined match for Proxy in the fatal report;
+Same root, linked: `runtime-js/format-inspect-proxy-traps` (`%s`/inspect; one recorder that stores the target closes both). Dedup: no backlog/traps/ADR-declined match for Proxy in the fatal report;
 neighbours, not duplicates: `fatal-report-node-shape` (report shape),
 `inspect-default-format-gaps` (inspect defaults),
 `node-eval-header-from-throw-statement` (the `-e` header the `prop` row

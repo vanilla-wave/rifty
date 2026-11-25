@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- `dist/THIRD_PARTY_NOTICES.md` carries TypeScript 5.9.3's `LICENSE.txt` and `ThirdPartyNoticeText.txt` for the vendored lib files; was the short per-file header only.
 - Browser lib.d.ts resources use host fetch, preserving configured relative asset URLs after Node Fetch installs (ADR-0541).
 
 ### Changed

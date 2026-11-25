@@ -1,0 +1,6 @@
+{"memoryLimitMb":64,"wasmMiB":128,"run":0,"stdout":"{\"memoryBytes\":134217728,\"moduleCompiled\":true}\n","stderr":"","exitCode":0}
+{"memoryLimitMb":64,"wasmMiB":128,"run":1,"stdout":"{\"memoryBytes\":134217728,\"moduleCompiled\":true}\n","stderr":"","exitCode":0}
+{"memoryLimitMb":64,"wasmMiB":128,"run":2,"stdout":"{\"memoryBytes\":134217728,\"moduleCompiled\":true}\n","stderr":"","exitCode":0}
+{"memoryLimitMb":64,"wasmMiB":512,"run":0,"stdout":"","stderr":"","exitCode":null,"termination":"memory"}
+{"memoryLimitMb":64,"wasmMiB":512,"run":1,"stdout":"","stderr":"","exitCode":null,"termination":"memory"}
+{"memoryLimitMb":64,"wasmMiB":512,"run":2,"stdout":"","stderr":"","exitCode":null,"termination":"memory"}
