@@ -38,6 +38,10 @@ prints `TypeError: Illegal constructor … { code: 'ERR_ILLEGAL_CONSTRUCTOR' }`
 (Node: the labelled header). Browser hosts share the runtime code (not
 measured there). No mechanism exists: each site builds its own error.
 Pinned: `packages/isolate-host/tests/navigator.test.ts` declared-gap row.
+Through `util.format('%s', e)` (PR #449 review, verified 2026-11-25): Node's error class has
+its own `toString`, so `%s` prints one line `TypeError [ERR_INVALID_ARG_TYPE]: The
+"inspectOptions" argument …` (`util.formatWithOptions(null, 'x')`); rifty's plain `TypeError`
+takes the inspect branch and prints `TypeError: The …` plus its stack.
 Compat isolate-host.md "Node errors rifty throws" ⚠️.
 
 ## Question
