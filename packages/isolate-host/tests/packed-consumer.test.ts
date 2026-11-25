@@ -32,9 +32,15 @@ it('packed tarball installs and runs under plain node', () => {
     cwd: app,
     stdio: 'pipe',
   });
-  // The README's own install line and usage snippet, not a test-local variant.
+  // The README's own install lines and usage snippet, not a test-local variant: the published
+  // prerelease, and the packed tarball this test installs (`pnpm pack` + `npm install <tgz>`).
   const readme = readFileSync(join(PACKAGE_DIR, 'README.md'), 'utf8');
-  expect(readme).toContain(`npm install /path/to/${tarball}`);
+  const install = readme.slice(
+    readme.indexOf('## Install'),
+    readme.indexOf('\n## ', readme.indexOf('## Install') + 1),
+  );
+  expect(install).toContain('npm install @riftydev/isolate-host@next');
+  expect(install).toContain('`pnpm pack` in `packages/isolate-host` and `npm install <tgz>`');
   const snippet = /```js\n([\s\S]*?)```/.exec(readme)?.[1];
   expect(snippet).toContain("import { runCode } from '@riftydev/isolate-host';");
   writeFileSync(

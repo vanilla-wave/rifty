@@ -227,6 +227,8 @@ If your result type has `exitCode: number`, map a killed run yourself from
 
 ## Sandbox template: libraries from a dependency artifact
 
+Not in the published `0.1.0-draft.1` (`@next`): the next release (CHANGELOG «Unreleased»).
+
 The libraries your agent's code `require`s come prebuilt: in CI, `produceDependencySnapshot`
 (`@riftydev/workbench`, runs in plain Node ≥ 24 from the published package) turns your
 `package.json` + lock into an artifact; the host registers it once and starts every sandbox over
