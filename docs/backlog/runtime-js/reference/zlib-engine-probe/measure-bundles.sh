@@ -28,7 +28,7 @@ EOF
 esac
 if [ "$VARIANT" != none ]; then
   printf "import * as probeEngine from './zlib-probe-engine.ts';\n" | cat - "$ZT" > "$ZT.tmp" && mv "$ZT.tmp" "$ZT"
-  sed -i '' 's|^  codes: ZLIB_CODES,$|  codes: ZLIB_CODES,\n  __probeEngine: probeEngine,|' "$ZT"
+  node -e 'const f=process.argv[1],fs=require("fs");fs.writeFileSync(f,fs.readFileSync(f,"utf8").replace(/^  codes: ZLIB_CODES,$/m,"  codes: ZLIB_CODES,\n  __probeEngine: probeEngine,"))' "$ZT"
   grep -q '__probeEngine' "$ZT"
 fi
 (cd "$REPO" && pnpm test:client-bundles 2>&1 | grep -E '^(main|sw|generic|toolchain): ')

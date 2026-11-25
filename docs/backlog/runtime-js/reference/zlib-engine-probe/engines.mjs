@@ -101,7 +101,12 @@ export function wasmEngine(bytes, name = 'wasm-node-zlib') {
   const x = inst.exports;
   x._initialize?.();
   const SZ = 56;
-  const malloc = (n) => x.malloc(n) >>> 0; // i32 export: pointers ≥ 2 GiB come back negative
+  // i32 export: pointers ≥ 2 GiB come back negative; 0 is an allocation failure, refused loudly.
+  const malloc = (n) => {
+    const p = x.malloc(n) >>> 0;
+    if (p === 0) throw new RangeError(`zlib.wasm: malloc(${n}) failed`);
+    return p;
+  };
   const ver = x.zlibVersion();
   const u8 = () => new Uint8Array(x.memory.buffer);
   const u32 = () => new Uint32Array(x.memory.buffer);
@@ -198,7 +203,7 @@ export function wasmEngine(bytes, name = 'wasm-node-zlib') {
   };
 }
 
-// zlib 1.3.1 deflateParams ported over pako's internal deflate state (not pako API: field names are
+// zlib 1.3.1 deflateParams (Copyright Jean-loup Gailly and Mark Adler, zlib license) ported over pako's internal deflate state (not pako API: field names are
 // pako internals). Measures whether pako's one missing primitive is closable outside pako.
 const CONFIG = [
   [0, 0, 0, 0, 0],

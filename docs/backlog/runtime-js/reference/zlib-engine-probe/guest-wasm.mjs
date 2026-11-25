@@ -9,7 +9,9 @@ const m = new WebAssembly.Memory({ initial: 1, maximum: 65536 });
 m.grow(${pages - 1});
 new Uint8Array(m.buffer).fill(1);
 const mod = new WebAssembly.Module(new Uint8Array([0,97,115,109,1,0,0,0]));
-console.log(JSON.stringify({ memoryBytes: m.buffer.byteLength, moduleCompiled: mod instanceof WebAssembly.Module }));`;
+// Held 500 ms: the pool samples worker RSS every 25 ms (packages/isolate-host child/main.ts); a shorter
+// run can end before a sample sees it.
+setTimeout(() => console.log(JSON.stringify({ memoryBytes: m.buffer.byteLength, moduleCompiled: mod instanceof WebAssembly.Module })), 500);`;
 for (const pages of [2048, 8192]) {
   for (let run = 0; run < 3; run++) {
     const r = await runCode(code(pages), { timeoutMs: 20000, memoryLimitMb: 64 });

@@ -1,6 +1,7 @@
 #!/bin/sh
 # Build Node v24.16.0's deps/zlib (Chromium fork) to wasm32, no SIMD (Node's own CPU_NO_SIMD branch
-# of zlib.gyp), no WASI imports. Toolchain: Homebrew llvm + lld + wasi-libc 34 + wasi-runtimes, binaryen.
+# of zlib.gyp), no WASI imports. Toolchain NOT pinned: whatever Homebrew llvm + lld + wasi-libc + wasi-runtimes
+# + binaryen are installed (probe run: llvm 23.1.6, wasi-libc 34, binaryen 133).
 # usage: build-wasm.sh DEPS OUT_DIR
 set -eu
 DEPS=${1:?usage: build-wasm.sh DEPS OUT}
@@ -19,5 +20,5 @@ for e in $EXPORTS; do EXP="$EXP -Wl,--export=$e"; done
   "$Z/trees.c" "$Z/zutil.c" "$Z/cpu_features.c" \
   -Wl,--no-entry $EXP -Wl,--strip-all -o "$OUT/zlib-raw.wasm"
 wasm-opt -O3 "$OUT/zlib-raw.wasm" -o "$OUT/zlib.wasm"
-ls -l "$OUT/zlib-raw.wasm" "$OUT/zlib.wasm"
-shasum -a 256 "$OUT/zlib.wasm"
+for f in zlib-raw.wasm zlib.wasm; do echo "$f $(wc -c < "$OUT/$f" | tr -d ' ') B"; done
+echo "zlib.wasm sha256 $(shasum -a 256 "$OUT/zlib.wasm" | cut -d' ' -f1)"

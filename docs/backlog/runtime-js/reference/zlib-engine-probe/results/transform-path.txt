@@ -1,0 +1,43 @@
+node v24.16.0; rifty Transform from packages/io/src (main)
+
+## deflate(cb) valid
+node   event:prefinish → event:finish → event:end → destroy() → _destroy → cb(452:54f50fc0d4) → destroy() → event:close || {"destroyed":true,"handleNull":true} || handle: (native)
+port/N event:prefinish → event:finish → event:end → destroy() → _destroy → cb(452:54f50fc0d4) → destroy() → event:close || {"destroyed":true,"handleNull":true} || handle: write(0) write(4) handle.close
+port/R event:prefinish → event:finish → event:end → destroy() → cb(452:54f50fc0d4) → event:close || {"destroyed":true,"handleNull":false} || handle: write(0) write(4)
+port/N = node: true; port/R = port/N: false
+
+## inflate(cb) corrupt
+node   destroy(err) → _destroy → event:error → cb(err Z_DATA_ERROR: incorrect data check) → event:close || {"destroyed":true,"handleNull":true} || handle: (native)
+port/N destroy(err) → _destroy → event:error → cb(err Z_DATA_ERROR: incorrect data check) → event:close || {"destroyed":true,"handleNull":true} || handle: write(0) write(0) write(0) write(0) write(0) write(0) write(0) write(0) write(0) handle.close
+port/R destroy(err) → event:error → cb(err Z_DATA_ERROR: incorrect data check) → event:close || {"destroyed":true,"handleNull":false} || handle: write(0) write(0) write(0) write(0) write(0) write(0) write(0) write(0) write(0)
+port/N = node: true; port/R = port/N: false
+
+## inflate(cb) maxOutputLength 1000
+node   destroy() → _destroy → cb(err ERR_BUFFER_TOO_LARGE: Cannot create a Buffer larger than 1000 bytes) → event:close || {"destroyed":true,"handleNull":true} || handle: (native)
+port/N destroy() → _destroy → cb(err ERR_BUFFER_TOO_LARGE: Cannot create a Buffer larger than 1000 bytes) → event:close || {"destroyed":true,"handleNull":true} || handle: write(0) handle.close
+port/R destroy() → cb(err ERR_BUFFER_TOO_LARGE: Cannot create a Buffer larger than 1000 bytes) → event:close || {"destroyed":true,"handleNull":false} || handle: write(0) write(0)
+port/N = node: true; port/R = port/N: false
+
+## deflate(cb) info:true
+node   event:prefinish → event:finish → event:end → destroy() → _destroy → cb({buffer 452:54f50fc0d4, engine instanceof true}) → destroy() → event:close || {"destroyed":true,"handleNull":true} || handle: (native)
+port/N event:prefinish → event:finish → event:end → destroy() → _destroy → cb({buffer 452:54f50fc0d4, engine instanceof true}) → destroy() → event:close || {"destroyed":true,"handleNull":true} || handle: write(0) write(4) handle.close
+port/R event:prefinish → event:finish → event:end → destroy() → cb({buffer 452:54f50fc0d4, engine instanceof true}) → event:close || {"destroyed":true,"handleNull":false} || handle: write(0) write(4)
+port/N = node: true; port/R = port/N: false
+
+## gunzip(cb) 2 members 264 KiB out
+node   event:prefinish → event:finish → event:end → destroy() → _destroy → cb(264000:001deb2b2b) → destroy() → event:close || {"destroyed":true,"handleNull":true} || handle: (native)
+port/N event:prefinish → event:finish → event:end → destroy() → _destroy → cb(264000:001deb2b2b) → destroy() → event:close || {"destroyed":true,"handleNull":true} || handle: write(0) write(0) write(0) write(0) write(0) write(0) write(0) write(0) write(0) write(0) write(0) write(0) write(0) write(0) write(0) write(0) write(0) write(4) handle.close
+port/R event:prefinish → event:finish → event:end → destroy() → cb(264000:001deb2b2b) → event:close || {"destroyed":true,"handleNull":false} || handle: write(0) write(0) write(0) write(0) write(0) write(0) write(0) write(0) write(0) write(0) write(0) write(0) write(0) write(0) write(0) write(0) write(0) write(4)
+port/N = node: true; port/R = port/N: false
+
+## deflateSync valid
+node   return 452:54f50fc0d4 → -- sync end || {"destroyed":false,"handleNull":true} || handle: (native)
+port/N return 452:54f50fc0d4 → -- sync end || {"destroyed":false,"handleNull":true} || handle: write(4) handle.close
+port/R return 452:54f50fc0d4 → -- sync end || {"destroyed":false,"handleNull":true} || handle: write(4) handle.close
+port/N = node: true; port/R = port/N: true
+
+## inflateSync corrupt
+node   destroy(err) → _destroy → throw Z_DATA_ERROR: incorrect data check → -- sync end → event:error → event:close || {"destroyed":true,"handleNull":true} || handle: (native)
+port/N destroy(err) → _destroy → throw Z_DATA_ERROR: incorrect data check → -- sync end → event:error → event:close || {"destroyed":true,"handleNull":true} || handle: write(4) write(4) write(4) write(4) write(4) write(4) write(4) write(4) write(4) handle.close
+port/R destroy(err) → throw Z_DATA_ERROR: incorrect data check → -- sync end → event:error → event:close || {"destroyed":true,"handleNull":false} || handle: write(4) write(4) write(4) write(4) write(4) write(4) write(4) write(4) write(4)
+port/N = node: true; port/R = port/N: false

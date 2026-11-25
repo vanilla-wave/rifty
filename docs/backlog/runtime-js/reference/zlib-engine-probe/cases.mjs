@@ -26,33 +26,25 @@ const sha = (b) => createHash('sha256').update(b).digest('hex').slice(0, 16);
 // every engine here writes 3. A byte that differs only there (each member header, `1f 8b 08` + 6) passes.
 async function outcome(fn) {
   try {
-    return { ok: Buffer.from(await fn()) };
+    const r = await fn();
+    return { ok: Buffer.from(r), starts: r.memberStarts ?? [0] };
   } catch (e) {
     if (e instanceof Unsupported) return { unsupported: e.message };
-    return { err: e.message, code: e.code, errno: e.errno };
+    return { err: e.message, name: e.name, code: e.code, errno: e.errno };
   }
 }
 const OS_CODES = new Set([3, 10, 19]);
-function sameBytes(n, m) {
+// Only at a gzip member header's OS byte (member starts as the engine side wrote them).
+function sameBytes(n, m, starts) {
   if (n.length !== m.length) return false;
+  const osAt = new Set(starts.filter((s) => m[s] === 0x1f && m[s + 1] === 0x8b).map((s) => s + 9));
   for (let i = 0; i < n.length; i++)
-    if (
-      n[i] !== m[i] &&
-      !(
-        i >= 9 &&
-        OS_CODES.has(n[i]) &&
-        m[i] === 3 &&
-        n[i - 9] === 0x1f &&
-        n[i - 8] === 0x8b &&
-        n[i - 7] === 8
-      )
-    )
-      return false;
+    if (n[i] !== m[i] && !(osAt.has(i) && OS_CODES.has(n[i]) && m[i] === 3)) return false;
   return true;
 }
 const show = (o) => (o.ok ? { ok: `${o.ok.length}:${sha(o.ok)}` } : o);
 const same = (a, b) =>
-  a.ok && b.ok ? sameBytes(b.ok, a.ok) : JSON.stringify(a) === JSON.stringify(b);
+  a.ok && b.ok ? sameBytes(b.ok, a.ok, a.starts) : JSON.stringify(a) === JSON.stringify(b);
 
 const NODE_CTOR = {
   DEFLATE: zlib.Deflate,
@@ -112,20 +104,23 @@ function engineSteps(engine, mode, opts, steps) {
   const def = opts.flush ?? C.Z_NO_FLUSH;
   const E = new Uint8Array(0);
   const out = [];
+  const starts = [0];
   try {
     for (const s of steps) {
       if (s.params) {
         out.push(ctx.processChunkSync(E, C.Z_SYNC_FLUSH));
         ctx.params(...s.params);
-      } else if (s.reset) ctx.reset();
-      else if (s.flush !== undefined) out.push(ctx.processChunkSync(E, s.flush));
+      } else if (s.reset) {
+        ctx.reset();
+        starts.push(out.reduce((a, b) => a + b.length, 0)); // a gzip reset starts a new member
+      } else if (s.flush !== undefined) out.push(ctx.processChunkSync(E, s.flush));
       else out.push(ctx.processChunkSync(s.write, def));
     }
     out.push(ctx.processChunkSync(E, ctx.finishFlush));
   } finally {
     ctx.close();
   }
-  return Buffer.concat(out);
+  return Object.assign(Buffer.concat(out), { memberStarts: starts });
 }
 const chunks = (b, n) => {
   const a = [];
@@ -170,6 +165,14 @@ for (const memLevel of [1, 4, 9])
         CORPUS[cn],
         { memLevel, windowBits },
       );
+// windowBits 8: zlib's deflateInit2 takes it as 9 for the zlib wrapper; lib/zlib.js maps raw 8 → 9 itself.
+oneShot('compress-mem-window', 'DEFLATE w8', 'DEFLATE', CORPUS.text64k, { windowBits: 8 });
+cases.push({
+  group: 'compress-mem-window',
+  name: 'DEFLATERAW w8 (lib maps → 9)',
+  node: () => zlib.deflateRawSync(Buffer.from(CORPUS.text64k), { windowBits: 8 }),
+  engine: (e) => oneShotSync(e, 'DEFLATERAW', CORPUS.text64k, { windowBits: 9 }),
+});
 for (const chunkSize of [64, 1024, 65536])
   for (const level of [0, 6])
     oneShot(

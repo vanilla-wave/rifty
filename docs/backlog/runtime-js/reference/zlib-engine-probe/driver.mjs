@@ -1,3 +1,5 @@
+// Ported from Node.js v24.16.0 src/node_zlib.cc and lib/zlib.js — Copyright Node.js contributors, MIT
+// (https://github.com/nodejs/node/blob/v24.16.0/LICENSE).
 // Node v24.16.0's zlib handle semantics over an engine: a port of node_zlib.cc ZlibContext
 // (Init/InitZlib/SetDictionary/DoThreadPoolWork/GetErrorInfo/ResetStream/SetParams) and
 // lib/zlib.js processChunkSync. Engine-independent: any difference vs Node is the engine's.
