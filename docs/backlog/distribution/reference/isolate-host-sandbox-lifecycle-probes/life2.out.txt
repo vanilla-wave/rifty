@@ -343,3 +343,11 @@
 {"sec":"cost","w":"xlsx","kind":"v1","load":"3.6","createMs":0.1,"firstMs":461.4,"repMs":477.4,"repRunMs":451.9,"repBootMs":10.3}
 {"sec":"cost","w":"xlsx","kind":"v2f","load":"3.7","createMs":220.6,"firstMs":440.3,"repMs":353.9,"repRunMs":347.3,"repBootMs":6.4}
 {"sec":"cost","w":"xlsx","kind":"v2bs","load":"3.5","createMs":11.5,"firstMs":497.6,"repMs":371,"repRunMs":364.5,"repBootMs":6.6}
+## round 4, earlier runs of the same L5/L5b code (first run: /tmp file; diagnostic runs: copied from the console, verbatim)
+{"sec":"life","case":"L5 killed inside FS work (v2)","trials":40,"ends":{"timeout":40},"inconsistent":0,"samples":[]}
+{"sec":"life","case":"L5b killed mid-rename (v2): 64 files must stay 64","trials":200,"ends":{"timeout":200},"bad":0,"samples":[]}
+{"sec":"life","case":"L5 killed inside FS work (v2bs)","trials":40,"ends":{"timeout":40},"inconsistent":0,"samples":[]}
+{"sec":"life","case":"L5b killed mid-rename (v2bs): 64 files must stay 64","trials":200,"ends":{"timeout":92,"exit 1":108},"bad":109,"samples":["trial 91: 63 files; ","trial 92: 63 files; ","trial 93: 63 files; ","trial 94: 63 files; ","trial 95: 63 files; "]}
+{"sec":"life","case":"L5b killed mid-rename (v2bs): 64 files must stay 64","trials":200,"ends":{"timeout":103,"exit 1":97},"bad":98,"samples":["trial 102 (end timeout): 63 files; missing 19 exists w/v=false/false; audit clean","trial 103 (end exit 1): 63 files; missing 19 exists w/v=false/false; audit clean","trial 104 (end exit 1): 63 files; missing 19 exists w/v=false/false; audit clean"]}
+{"sec":"life","case":"L5b killed mid-rename (v2s): 64 files must stay 64","trials":200,"ends":{"timeout":200},"bad":0,"samples":[]}
+{"sec":"life","case":"L5b killed mid-rename (v2b): 64 files must stay 64","trials":200,"ends":{"timeout":153,"exit 1":47},"bad":48,"samples":["trial 152 (end timeout): 63 files; missing 57 exists w/v=false/false; audit clean","trial 153 (end exit 1): 63 files; missing 57 exists w/v=false/false; audit clean","trial 154 (end exit 1): 63 files; missing 57 exists w/v=false/false; audit clean"]}
