@@ -1,85 +1,101 @@
-# m8-constructor-options.cjs — node v24.16.0, rifty 8ec679b04
-columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate
+# m8-constructor-options.cjs — node v24.16.0, rifty a83aea388
+columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate | rifty-inproc-B
 
-exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 0
+exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 0 | rifty-inproc-B 0
 
 ## options highWaterMark -1
 node: Readable:ERR_INVALID_ARG_VALUE Writable:ERR_INVALID_ARG_VALUE Duplex:ERR_INVALID_ARG_VALUE Transform:ERR_INVALID_ARG_VALUE
 rifty-inproc (DIFF): Readable:ok hwm=-1/- Writable:ok hwm=-/-1 Duplex:ok hwm=-1/-1 Transform:ok hwm=-1/-1
 rifty-inproc-sync (DIFF): Readable:ok hwm=-1/- Writable:ok hwm=-/-1 Duplex:ok hwm=-1/-1 Transform:ok hwm=-1/-1
 rifty-isolate (DIFF): Readable:ok hwm=-1/- Writable:ok hwm=-/-1 Duplex:ok hwm=-1/-1 Transform:ok hwm=-1/-1
+rifty-inproc-B (same): Readable:ERR_INVALID_ARG_VALUE Writable:ERR_INVALID_ARG_VALUE Duplex:ERR_INVALID_ARG_VALUE Transform:ERR_INVALID_ARG_VALUE
 ## options highWaterMark NaN
 node: Readable:ERR_INVALID_ARG_VALUE Writable:ERR_INVALID_ARG_VALUE Duplex:ERR_INVALID_ARG_VALUE Transform:ERR_INVALID_ARG_VALUE
 rifty-inproc (DIFF): Readable:ok hwm=NaN/- Writable:ok hwm=-/NaN Duplex:ok hwm=NaN/NaN Transform:ok hwm=NaN/NaN
 rifty-inproc-sync (DIFF): Readable:ok hwm=NaN/- Writable:ok hwm=-/NaN Duplex:ok hwm=NaN/NaN Transform:ok hwm=NaN/NaN
 rifty-isolate (DIFF): Readable:ok hwm=NaN/- Writable:ok hwm=-/NaN Duplex:ok hwm=NaN/NaN Transform:ok hwm=NaN/NaN
+rifty-inproc-B (same): Readable:ERR_INVALID_ARG_VALUE Writable:ERR_INVALID_ARG_VALUE Duplex:ERR_INVALID_ARG_VALUE Transform:ERR_INVALID_ARG_VALUE
 ## options highWaterMark "16"
 node: Readable:ERR_INVALID_ARG_VALUE Writable:ERR_INVALID_ARG_VALUE Duplex:ERR_INVALID_ARG_VALUE Transform:ERR_INVALID_ARG_VALUE
 rifty-inproc (DIFF): Readable:ok hwm=16/- Writable:ok hwm=-/16 Duplex:ok hwm=16/16 Transform:ok hwm=16/16
 rifty-inproc-sync (DIFF): Readable:ok hwm=16/- Writable:ok hwm=-/16 Duplex:ok hwm=16/16 Transform:ok hwm=16/16
 rifty-isolate (DIFF): Readable:ok hwm=16/- Writable:ok hwm=-/16 Duplex:ok hwm=16/16 Transform:ok hwm=16/16
+rifty-inproc-B (same): Readable:ERR_INVALID_ARG_VALUE Writable:ERR_INVALID_ARG_VALUE Duplex:ERR_INVALID_ARG_VALUE Transform:ERR_INVALID_ARG_VALUE
 ## options highWaterMark 1.5
 node: Readable:ERR_INVALID_ARG_VALUE Writable:ERR_INVALID_ARG_VALUE Duplex:ERR_INVALID_ARG_VALUE Transform:ERR_INVALID_ARG_VALUE
 rifty-inproc (DIFF): Readable:ok hwm=1.5/- Writable:ok hwm=-/1.5 Duplex:ok hwm=1.5/1.5 Transform:ok hwm=1.5/1.5
 rifty-inproc-sync (DIFF): Readable:ok hwm=1.5/- Writable:ok hwm=-/1.5 Duplex:ok hwm=1.5/1.5 Transform:ok hwm=1.5/1.5
 rifty-isolate (DIFF): Readable:ok hwm=1.5/- Writable:ok hwm=-/1.5 Duplex:ok hwm=1.5/1.5 Transform:ok hwm=1.5/1.5
+rifty-inproc-B (same): Readable:ERR_INVALID_ARG_VALUE Writable:ERR_INVALID_ARG_VALUE Duplex:ERR_INVALID_ARG_VALUE Transform:ERR_INVALID_ARG_VALUE
 ## options readableHighWaterMark -1
 node: Readable:ok hwm=65536/- Writable:ok hwm=-/65536 Duplex:ERR_INVALID_ARG_VALUE Transform:ERR_INVALID_ARG_VALUE
 rifty-inproc (DIFF): Readable:ok hwm=65536/- Writable:ok hwm=-/65536 Duplex:ok hwm=65536/65536 Transform:ok hwm=65536/65536
 rifty-inproc-sync (DIFF): Readable:ok hwm=65536/- Writable:ok hwm=-/65536 Duplex:ok hwm=65536/65536 Transform:ok hwm=65536/65536
 rifty-isolate (DIFF): Readable:ok hwm=65536/- Writable:ok hwm=-/65536 Duplex:ok hwm=65536/65536 Transform:ok hwm=65536/65536
+rifty-inproc-B (same): Readable:ok hwm=65536/- Writable:ok hwm=-/65536 Duplex:ERR_INVALID_ARG_VALUE Transform:ERR_INVALID_ARG_VALUE
 ## options writableHighWaterMark -1
 node: Readable:ok hwm=65536/- Writable:ok hwm=-/65536 Duplex:ERR_INVALID_ARG_VALUE Transform:ERR_INVALID_ARG_VALUE
 rifty-inproc (DIFF): Readable:ok hwm=65536/- Writable:ok hwm=-/65536 Duplex:ok hwm=65536/65536 Transform:ok hwm=65536/65536
 rifty-inproc-sync (DIFF): Readable:ok hwm=65536/- Writable:ok hwm=-/65536 Duplex:ok hwm=65536/65536 Transform:ok hwm=65536/65536
 rifty-isolate (DIFF): Readable:ok hwm=65536/- Writable:ok hwm=-/65536 Duplex:ok hwm=65536/65536 Transform:ok hwm=65536/65536
+rifty-inproc-B (same): Readable:ok hwm=65536/- Writable:ok hwm=-/65536 Duplex:ERR_INVALID_ARG_VALUE Transform:ERR_INVALID_ARG_VALUE
 ## options signal 1
 node: Readable:ERR_INVALID_ARG_TYPE Writable:ERR_INVALID_ARG_TYPE Duplex:ERR_INVALID_ARG_TYPE Transform:ERR_INVALID_ARG_TYPE
 rifty-inproc (DIFF): Readable:ok hwm=65536/- Writable:ok hwm=-/65536 Duplex:ok hwm=65536/65536 Transform:ok hwm=65536/65536
 rifty-inproc-sync (DIFF): Readable:ok hwm=65536/- Writable:ok hwm=-/65536 Duplex:ok hwm=65536/65536 Transform:ok hwm=65536/65536
 rifty-isolate (DIFF): Readable:ok hwm=65536/- Writable:ok hwm=-/65536 Duplex:ok hwm=65536/65536 Transform:ok hwm=65536/65536
+rifty-inproc-B (same): Readable:ERR_INVALID_ARG_TYPE Writable:ERR_INVALID_ARG_TYPE Duplex:ERR_INVALID_ARG_TYPE Transform:ERR_INVALID_ARG_TYPE
 ## options signal {}
 node: Readable:ERR_INVALID_ARG_TYPE Writable:ERR_INVALID_ARG_TYPE Duplex:ERR_INVALID_ARG_TYPE Transform:ERR_INVALID_ARG_TYPE
 rifty-inproc (DIFF): Readable:ok hwm=65536/- Writable:ok hwm=-/65536 Duplex:ok hwm=65536/65536 Transform:ok hwm=65536/65536
 rifty-inproc-sync (DIFF): Readable:ok hwm=65536/- Writable:ok hwm=-/65536 Duplex:ok hwm=65536/65536 Transform:ok hwm=65536/65536
 rifty-isolate (DIFF): Readable:ok hwm=65536/- Writable:ok hwm=-/65536 Duplex:ok hwm=65536/65536 Transform:ok hwm=65536/65536
+rifty-inproc-B (same): Readable:ERR_INVALID_ARG_TYPE Writable:ERR_INVALID_ARG_TYPE Duplex:ERR_INVALID_ARG_TYPE Transform:ERR_INVALID_ARG_TYPE
 ## options encoding "nope"
 node: Readable:ERR_UNKNOWN_ENCODING Writable:ok hwm=-/65536 Duplex:ERR_UNKNOWN_ENCODING Transform:ERR_UNKNOWN_ENCODING
 rifty-inproc (same): Readable:ERR_UNKNOWN_ENCODING Writable:ok hwm=-/65536 Duplex:ERR_UNKNOWN_ENCODING Transform:ERR_UNKNOWN_ENCODING
 rifty-inproc-sync (same): Readable:ERR_UNKNOWN_ENCODING Writable:ok hwm=-/65536 Duplex:ERR_UNKNOWN_ENCODING Transform:ERR_UNKNOWN_ENCODING
 rifty-isolate (same): Readable:ERR_UNKNOWN_ENCODING Writable:ok hwm=-/65536 Duplex:ERR_UNKNOWN_ENCODING Transform:ERR_UNKNOWN_ENCODING
+rifty-inproc-B (DIFF): Readable:Not implemented Writable:ok hwm=-/65536 Duplex:Not implemented Transform:Not implemented
 ## options defaultEncoding "nope"
 node: Readable:ERR_UNKNOWN_ENCODING Writable:ERR_UNKNOWN_ENCODING Duplex:ERR_UNKNOWN_ENCODING Transform:ERR_UNKNOWN_ENCODING
 rifty-inproc (DIFF): Readable:ok hwm=65536/- Writable:ok hwm=-/65536 Duplex:ok hwm=65536/65536 Transform:ok hwm=65536/65536
 rifty-inproc-sync (DIFF): Readable:ok hwm=65536/- Writable:ok hwm=-/65536 Duplex:ok hwm=65536/65536 Transform:ok hwm=65536/65536
 rifty-isolate (DIFF): Readable:ok hwm=65536/- Writable:ok hwm=-/65536 Duplex:ok hwm=65536/65536 Transform:ok hwm=65536/65536
+rifty-inproc-B (same): Readable:ERR_UNKNOWN_ENCODING Writable:ERR_UNKNOWN_ENCODING Duplex:ERR_UNKNOWN_ENCODING Transform:ERR_UNKNOWN_ENCODING
 ## options read 1
 node: Readable:ok hwm=65536/- Writable:ok hwm=-/65536 Duplex:ok hwm=65536/65536 Transform:ok hwm=65536/65536
 rifty-inproc (same): Readable:ok hwm=65536/- Writable:ok hwm=-/65536 Duplex:ok hwm=65536/65536 Transform:ok hwm=65536/65536
 rifty-inproc-sync (same): Readable:ok hwm=65536/- Writable:ok hwm=-/65536 Duplex:ok hwm=65536/65536 Transform:ok hwm=65536/65536
 rifty-isolate (same): Readable:ok hwm=65536/- Writable:ok hwm=-/65536 Duplex:ok hwm=65536/65536 Transform:ok hwm=65536/65536
+rifty-inproc-B (same): Readable:ok hwm=65536/- Writable:ok hwm=-/65536 Duplex:ok hwm=65536/65536 Transform:ok hwm=65536/65536
 ## options write 1
 node: Readable:ok hwm=65536/- Writable:ok hwm=-/65536 Duplex:ok hwm=65536/65536 Transform:ok hwm=65536/65536
 rifty-inproc (same): Readable:ok hwm=65536/- Writable:ok hwm=-/65536 Duplex:ok hwm=65536/65536 Transform:ok hwm=65536/65536
 rifty-inproc-sync (same): Readable:ok hwm=65536/- Writable:ok hwm=-/65536 Duplex:ok hwm=65536/65536 Transform:ok hwm=65536/65536
 rifty-isolate (same): Readable:ok hwm=65536/- Writable:ok hwm=-/65536 Duplex:ok hwm=65536/65536 Transform:ok hwm=65536/65536
+rifty-inproc-B (same): Readable:ok hwm=65536/- Writable:ok hwm=-/65536 Duplex:ok hwm=65536/65536 Transform:ok hwm=65536/65536
 ## options transform 1
 node: Readable:ok hwm=65536/- Writable:ok hwm=-/65536 Duplex:ok hwm=65536/65536 Transform:ok hwm=65536/65536
 rifty-inproc (same): Readable:ok hwm=65536/- Writable:ok hwm=-/65536 Duplex:ok hwm=65536/65536 Transform:ok hwm=65536/65536
 rifty-inproc-sync (same): Readable:ok hwm=65536/- Writable:ok hwm=-/65536 Duplex:ok hwm=65536/65536 Transform:ok hwm=65536/65536
 rifty-isolate (same): Readable:ok hwm=65536/- Writable:ok hwm=-/65536 Duplex:ok hwm=65536/65536 Transform:ok hwm=65536/65536
+rifty-inproc-B (same): Readable:ok hwm=65536/- Writable:ok hwm=-/65536 Duplex:ok hwm=65536/65536 Transform:ok hwm=65536/65536
 ## options destroy 1
 node: Readable:ok hwm=65536/- Writable:ok hwm=-/65536 Duplex:ok hwm=65536/65536 Transform:ok hwm=65536/65536
 rifty-inproc (same): Readable:ok hwm=65536/- Writable:ok hwm=-/65536 Duplex:ok hwm=65536/65536 Transform:ok hwm=65536/65536
 rifty-inproc-sync (same): Readable:ok hwm=65536/- Writable:ok hwm=-/65536 Duplex:ok hwm=65536/65536 Transform:ok hwm=65536/65536
 rifty-isolate (same): Readable:ok hwm=65536/- Writable:ok hwm=-/65536 Duplex:ok hwm=65536/65536 Transform:ok hwm=65536/65536
+rifty-inproc-B (same): Readable:ok hwm=65536/- Writable:ok hwm=-/65536 Duplex:ok hwm=65536/65536 Transform:ok hwm=65536/65536
 ## options construct 1
 node: Readable:ok hwm=65536/- Writable:ok hwm=-/65536 Duplex:ok hwm=65536/65536 Transform:ok hwm=65536/65536
 rifty-inproc (same): Readable:ok hwm=65536/- Writable:ok hwm=-/65536 Duplex:ok hwm=65536/65536 Transform:ok hwm=65536/65536
 rifty-inproc-sync (same): Readable:ok hwm=65536/- Writable:ok hwm=-/65536 Duplex:ok hwm=65536/65536 Transform:ok hwm=65536/65536
 rifty-isolate (same): Readable:ok hwm=65536/- Writable:ok hwm=-/65536 Duplex:ok hwm=65536/65536 Transform:ok hwm=65536/65536
+rifty-inproc-B (same): Readable:ok hwm=65536/- Writable:ok hwm=-/65536 Duplex:ok hwm=65536/65536 Transform:ok hwm=65536/65536
 ## write(chunk, '', cb): empty encoding (zlib's flush() passes '')
 node: _write object buffer,cb ok
 rifty-inproc (DIFF): threw ERR_UNKNOWN_ENCODING:Unknown encoding: 
 rifty-inproc-sync (DIFF): threw ERR_UNKNOWN_ENCODING:Unknown encoding: 
 rifty-isolate (DIFF): threw ERR_UNKNOWN_ENCODING:Unknown encoding: 
+rifty-inproc-B (same): _write object buffer,cb ok

@@ -1,7 +1,9 @@
 // One program per case, four runs: real Node, rifty's browser-host modules in this Node (memory VFS with
 // and without its async surface), rifty's isolate host sandbox `exec`. Exit status is kept apart
 // from stdout; a row is `same` only when the line and the exit status both match Node's.
-// usage: node --import tsx run.mjs REPO   (writes results/<program>.txt, results/summary.txt)
+// With NODE_SRC (an extracted node-v24.16.0 source tree) a fifth run, rifty-inproc-B: route B, Node's stream
+// core and fs stream classes verbatim over rifty's modules (route-b/verbatim.cjs).
+// usage: node --import tsx run.mjs REPO [NODE_SRC]   (writes results/<program>.txt, results/summary.txt)
 import { spawnSync } from 'node:child_process';
 import {
   mkdirSync,
@@ -16,7 +18,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const [repo] = process.argv.slice(2);
+const [repo, nodeSrc] = process.argv.slice(2);
 const here = dirname(fileURLToPath(import.meta.url));
 const { closureFiles, inSandbox } = await import(
   pathToFileURL(join(repo, 'packages/isolate-host/tests/package-closure.ts')).href
@@ -99,6 +101,27 @@ const runs = {
     };
   },
 };
+const routeBUsed = { rifty: new Set(), node: new Set() };
+if (nodeSrc) {
+  runs['rifty-inproc-B'] = (files, name) => {
+    const r = spawnIn(
+      files,
+      process.execPath,
+      (d, n) => ['--expose-internals', ...tsx(d, n)],
+      { ROUTE_B: '1', ROUTE_B_USED: '1', NODE_SRC: nodeSrc },
+      name,
+    );
+    const keep = [];
+    for (const l of r.stderr.split('\n')) {
+      if (l.startsWith('route-b used ')) {
+        const u = JSON.parse(l.slice('route-b used '.length));
+        for (const k of ['rifty', 'node']) for (const id of u[k]) routeBUsed[k].add(id);
+      } else if (!/^\(node:\d+\) internal\/test\/binding|^\(Use `node --trace-warnings/.test(l))
+        keep.push(l);
+    }
+    return { ...r, stderr: keep.join('\n') };
+  };
+}
 const COLS = Object.keys(runs);
 // The thrown error's line (`Name: message`), else the first non-frame line.
 const firstLine = (s) => {
@@ -149,7 +172,8 @@ for (const [name, path] of programs) {
         i > 0 && rows[0].has(k) && v === vals[0] && out[COLS[i]].status === out.node.status;
       if (ok) same[i - 1]++;
       if (i > 0 && !rows[0].has(k) && rows[i].has(k)) extra[i - 1]++;
-      lines.push(`${COLS[i]}${i === 0 ? '' : ok ? ' (same)' : ' (DIFF)'}: ${v}`);
+      const tag = i === 0 || (!rows[0].has(k) && !rows[i].has(k)) ? '' : ok ? ' (same)' : ' (DIFF)';
+      lines.push(`${COLS[i]}${tag}: ${v}`);
     });
   }
   writeFileSync(
@@ -164,4 +188,9 @@ for (const [name, path] of programs) {
   console.log(summary.at(-1));
 }
 if (!only) writeFileSync(join(here, 'results', 'summary.txt'), `${summary.join('\n')}\n`);
+if (nodeSrc && !only)
+  writeFileSync(
+    join(here, 'results', 'route-b-bindings.txt'),
+    `route B, ids the verbatim files required over all programs\nrifty: ${[...routeBUsed.rifty].sort().join(' ')}\nnode internals: ${[...routeBUsed.node].sort().join(' ')}\n`,
+  );
 process.exit(0);

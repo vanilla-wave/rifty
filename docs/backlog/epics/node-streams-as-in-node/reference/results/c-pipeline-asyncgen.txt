@@ -1,7 +1,7 @@
-# c-pipeline-asyncgen.cjs — node v24.16.0, rifty 8ec679b04
-columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate
+# c-pipeline-asyncgen.cjs — node v24.16.0, rifty a83aea388
+columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate | rifty-inproc-B
 
-exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 1
+exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 1 | rifty-inproc-B 0
 stderr rifty-isolate: NotImplementedError: Not implemented: isolate-host.ReadableStream (not available in the rifty isolate host, ADR-0557)
 
 ## line 1
@@ -9,3 +9,4 @@ node: pipeline 200000 true
 rifty-inproc (DIFF): pipeline threw TypeError: pipeline: argument must be a stream (index 1 received a non-stream value)
 rifty-inproc-sync (DIFF): pipeline threw TypeError: pipeline: argument must be a stream (index 1 received a non-stream value)
 rifty-isolate (DIFF): pipeline threw TypeError: pipeline: argument must be a stream (index 1 received a non-stream value)
+rifty-inproc-B (same): pipeline 200000 true

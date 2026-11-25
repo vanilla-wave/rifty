@@ -1,75 +1,89 @@
-# m1-lifecycle.cjs — node v24.16.0, rifty 8ec679b04
-columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate
+# m1-lifecycle.cjs — node v24.16.0, rifty a83aea388
+columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate | rifty-inproc-B
 
-exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 0
+exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 0 | rifty-inproc-B 0
 
 ## Writable _write cb twice
 node: error ERR_MULTIPLE_CALLBACK:Callback called multiple times,close
 rifty-inproc (DIFF): 
 rifty-inproc-sync (DIFF): 
 rifty-isolate (DIFF): 
+rifty-inproc-B (same): error ERR_MULTIPLE_CALLBACK:Callback called multiple times,close
 ## Writable _final cb twice
 node: prefinish,finish,error ERR_MULTIPLE_CALLBACK:Callback called multiple times,close
 rifty-inproc (DIFF): prefinish,prefinish,finish,close
 rifty-inproc-sync (DIFF): prefinish,prefinish,finish,close
 rifty-isolate (DIFF): prefinish,prefinish,finish,close
+rifty-inproc-B (same): prefinish,finish,error ERR_MULTIPLE_CALLBACK:Callback called multiple times,close
 ## Transform _transform cb twice
 node: data x,data y,error ERR_MULTIPLE_CALLBACK:Callback called multiple times,close
 rifty-inproc (DIFF): data x,data y
 rifty-inproc-sync (DIFF): data x,data y
 rifty-isolate (DIFF): data x,data y
+rifty-inproc-B (same): data x,data y,error ERR_MULTIPLE_CALLBACK:Callback called multiple times,close
 ## Writable _construct cb twice
 node: error ERR_MULTIPLE_CALLBACK:Callback called multiple times,close
 rifty-inproc (DIFF): 
 rifty-inproc-sync (DIFF): 
 rifty-isolate (DIFF): 
+rifty-inproc-B (same): error ERR_MULTIPLE_CALLBACK:Callback called multiple times,close
 ## Writable _destroy cb twice
 node: _destroy,close
 rifty-inproc (DIFF): close
 rifty-inproc-sync (DIFF): close
 rifty-isolate (DIFF): close
+rifty-inproc-B (same): _destroy,close
 ## Readable destroy(err): sync destroyed/errored
 node: sync destroyed=true errored=boom,error boom,close
 rifty-inproc (DIFF): sync destroyed=true errored=undefined,error boom,close
 rifty-inproc-sync (DIFF): sync destroyed=true errored=undefined,error boom,close
 rifty-isolate (DIFF): sync destroyed=true errored=undefined,error boom,close
+rifty-inproc-B (same): sync destroyed=true errored=boom,error boom,close
 ## Readable _destroy replaces error
 node: _destroy orig,error replaced,close
 rifty-inproc (DIFF): error orig,close
 rifty-inproc-sync (DIFF): error orig,close
 rifty-isolate (DIFF): error orig,close
+rifty-inproc-B (same): _destroy orig,error replaced,close
 ## Readable _construct before _read
 node: construct,construct cb,read,end,close
 rifty-inproc (DIFF): read,end
 rifty-inproc-sync (DIFF): read,end
 rifty-isolate (DIFF): read,end
+rifty-inproc-B (same): construct,construct cb,read,end,close
 ## zlibBuffer shape: end(buf) -> data/end -> close() -> _destroy
 node: data ab,prefinish,end,_destroy null,finish,close cb,close
 rifty-inproc (DIFF): prefinish,data ab,finish,end,close,close cb
 rifty-inproc-sync (DIFF): prefinish,data ab,finish,end,close,close cb
 rifty-isolate (DIFF): prefinish,data ab,finish,end,close,close cb
+rifty-inproc-B (same): data ab,prefinish,end,_destroy null,finish,close cb,close
 ## zlibOnError shape: destroy(err) inside _transform
 node: _destroy Z_DATA_ERROR:invalid,error Z_DATA_ERROR:invalid,close
 rifty-inproc (DIFF): error Z_DATA_ERROR:invalid,close
 rifty-inproc-sync (DIFF): error Z_DATA_ERROR:invalid,close
 rifty-isolate (DIFF): error Z_DATA_ERROR:invalid,close
+rifty-inproc-B (same): _destroy Z_DATA_ERROR:invalid,error Z_DATA_ERROR:invalid,close
 ## Readable to end + Writable ended: close after end/finish
 node: W finish,R end,W close,R close
 rifty-inproc (DIFF): W finish,W close,R end
 rifty-inproc-sync (DIFF): W finish,W close,R end
 rifty-isolate (DIFF): W finish,W close,R end
+rifty-inproc-B (same): W finish,R end,W close,R close
 ## closed/destroyed/errored after destroy(err), each class
 node: sync Readable:true/true/x Writable:true/true/x Duplex:true/true/x Transform:true/true/x,later Readable:true/true Writable:true/true Duplex:true/true Transform:true/true
 rifty-inproc (DIFF): sync Readable:undefined/true/undefined Writable:false/true/undefined Duplex:undefined/true/undefined Transform:undefined/true/undefined,later Readable:undefined/true Writable:true/true Duplex:undefined/true Transform:undefined/true
 rifty-inproc-sync (DIFF): sync Readable:undefined/true/undefined Writable:false/true/undefined Duplex:undefined/true/undefined Transform:undefined/true/undefined,later Readable:undefined/true Writable:true/true Duplex:undefined/true Transform:undefined/true
 rifty-isolate (DIFF): sync Readable:undefined/true/undefined Writable:false/true/undefined Duplex:undefined/true/undefined Transform:undefined/true/undefined,later Readable:undefined/true Writable:true/true Duplex:undefined/true Transform:undefined/true
+rifty-inproc-B (same): sync Readable:true/true/x Writable:true/true/x Duplex:true/true/x Transform:true/true/x,later Readable:true/true Writable:true/true Duplex:true/true Transform:true/true
 ## async Transform success: destroyed at end/finish/close
 node: end destroyed=false closed=false,finish destroyed=false closed=false,close destroyed=true closed=true
 rifty-inproc (DIFF): finish destroyed=false closed=undefined,end destroyed=false closed=undefined
 rifty-inproc-sync (DIFF): finish destroyed=false closed=undefined,end destroyed=false closed=undefined
 rifty-isolate (DIFF): finish destroyed=false closed=undefined,end destroyed=false closed=undefined
+rifty-inproc-B (same): end destroyed=false closed=false,finish destroyed=false closed=false,close destroyed=true closed=true
 ## prototype _destroy is a function
 node: function,function,function,function
 rifty-inproc (DIFF): undefined,undefined,undefined,undefined
 rifty-inproc-sync (DIFF): undefined,undefined,undefined,undefined
 rifty-isolate (DIFF): undefined,undefined,undefined,undefined
+rifty-inproc-B (same): function,function,function,function

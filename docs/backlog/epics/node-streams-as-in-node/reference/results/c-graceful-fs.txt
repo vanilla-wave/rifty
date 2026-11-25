@@ -1,10 +1,11 @@
-# c-graceful-fs.cjs — node v24.16.0, rifty 8ec679b04
-columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate
+# c-graceful-fs.cjs — node v24.16.0, rifty a83aea388
+columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate | rifty-inproc-B
 
-exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 0
+exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 0 | rifty-inproc-B 0
 
 ## line 1
 node: read "graceful\n"
 rifty-inproc (DIFF): createWriteStream threw TypeError: Class constructor FileWriteStream cannot be invoked without 'new'
 rifty-inproc-sync (DIFF): createWriteStream threw TypeError: Class constructor FileWriteStream cannot be invoked without 'new'
 rifty-isolate (DIFF): createWriteStream threw TypeError: Class constructor FileWriteStream cannot be invoked without 'new'
+rifty-inproc-B (same): read "graceful\n"

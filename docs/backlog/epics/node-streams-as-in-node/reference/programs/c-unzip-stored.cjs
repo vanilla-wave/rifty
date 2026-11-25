@@ -15,12 +15,18 @@ const list = (d, p = '') =>
     .flatMap((e) =>
       e.isDirectory()
         ? list(path.join(d, e.name), `${p}${e.name}/`)
-        : [`${p}${e.name}=${fs.readFileSync(path.join(d, e.name), 'utf8').length}`],
+        : [
+            `${p}${e.name}=${require('node:crypto')
+              .createHash('sha256')
+              .update(fs.readFileSync(path.join(d, e.name)))
+              .digest('hex')
+              .slice(0, 16)}`,
+          ],
     );
 (async () => {
   const zip = new JSZip();
-  zip.file('a.txt', 'alpha\n'.repeat(1000));
-  zip.file('dir/b.txt', 'beta\n'.repeat(3000));
+  zip.file('a.txt', Array.from({ length: 1000 }, (_, i) => `alpha ${i}\n`).join(''));
+  zip.file('dir/b.txt', Array.from({ length: 3000 }, (_, i) => `beta ${i * 7}\n`).join(''));
   const buf = await zip.generateAsync({ type: 'nodebuffer', compression: METHOD });
   fs.writeFileSync(zipPath, buf);
   try {

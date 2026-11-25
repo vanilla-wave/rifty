@@ -1,0 +1,54 @@
+node v24.16.0; lib/zlib.js verbatim from node-v24.16.0.tar.xz (= the binary's builtin source); port/R = route B: Node stream core verbatim over rifty bindings
+
+| group | scenario | port/N = node | port/R vs port/N (rifty differences) |
+|---|---|---|---|
+| state | surface: members and class shape | yes | 0 |
+| state | ctor {highWaterMark: -1} | yes | 0 |
+| state | ctor {signal: 1} | yes | 0 |
+| state | ctor {chunkSize: 10} | yes | 0 |
+| state | ctor {windowBits: 99} | yes | 0 |
+| state | ctor {level: 99} | yes | 0 |
+| state | ctor {dictionary: "x"} | yes | 0 |
+| state | ctor {objectMode, encoding} | yes | 0 |
+| state | guard: call without new | yes | 0 |
+| state | guard: Inflate.call(this) + _processChunk (pngjs) | yes | 0 |
+| state | guard: class extends DeflateRaw (crc32-stream) | yes | 0 |
+| state | sync: deflateSync level 1 / 9 | yes | 0 |
+| state | sync: success, then state | yes | 0 |
+| state | sync: error, state, reset(), again | yes | 0 |
+| state | sync: maxOutputLength 1000 | yes | 0 |
+| state | sync: info engine state | yes | 0 |
+| state | sync: close() then _processChunk next tick | yes | 0 |
+| state | close(cb) before writing | yes | 0 |
+| state | close(cb) after a write | yes | 0 |
+| state | close(cb) after an error | yes | 0 |
+| state | callback: deflate success, info | yes | 0 |
+| state | callback: inflate error | yes | 0 |
+| state | callback: maxOutputLength 1000 | yes | 0 |
+| state | callback: unzip of gzip and zlib | yes | 0 |
+| state | stream: end(T), trace | yes | 0 |
+| state | stream: write, params(1, 0), end | yes | out: "757:52f7c8fcb90e4d09" → "546:a5d1d57344aad248" |
+| state | stream: write, flush() default, end | yes | out: "516:65bf84c387b38c46" → "452:54f50fc0d4cd2159" |
+| state | stream: flush(Z_SYNC_FLUSH) | yes | out: "473:13547a79ed34ae3c" → "452:54f50fc0d4cd2159" |
+| state | stream: flush(Z_FULL_FLUSH) | yes | out: "516:65bf84c387b38c46" → "452:54f50fc0d4cd2159" |
+| state | stream: flush(Z_BLOCK) | yes | out: "467:2123ca5f5af27b54" → "452:54f50fc0d4cd2159" |
+| state | stream: flush(Z_PARTIAL_FLUSH) | yes | out: "469:eb189ca99b4dbf90" → "452:54f50fc0d4cd2159" |
+| state | stream: write, reset(), write, end | yes | 0 |
+| state | stream: reset() while a write is pending | yes | 0 |
+| state | stream: flush after end | yes | 0 |
+| state | stream: dictionary round trip | yes | 0 |
+| state | stream: missing dictionary | yes | 0 |
+| state | stream: finishFlush Z_SYNC_FLUSH on truncated input | yes | 0 |
+| state | stream: rejectGarbageAfterEnd | yes | 0 |
+| state | stream: bytesWritten with a trailing tail | yes | 0 |
+| state | stream: bytesWritten after reset | yes | 0 |
+| state | stream: destroy mid-write | yes | 0 |
+| state | guard: pipe gzip → gunzip | yes | 0 |
+| state | guard: async iteration | yes | 0 |
+| state | guard: pipeline | yes | 0 |
+| state | guard: finished(gzip) after end | yes | 0 |
+| load | load: 5 MB deflate with a paused consumer | yes | 0 |
+
+state: port/N = node 45/45; port/R ≠ port/N 6/45 scenarios, 6 fields
+
+load: port/N = node 1/1; port/R ≠ port/N 0/1 scenarios, 0 fields

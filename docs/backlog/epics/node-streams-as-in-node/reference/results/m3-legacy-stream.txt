@@ -1,25 +1,29 @@
-# m3-legacy-stream.cjs — node v24.16.0, rifty 8ec679b04
-columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate
+# m3-legacy-stream.cjs — node v24.16.0, rifty a83aea388
+columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate | rifty-inproc-B
 
-exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 0
+exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 0 | rifty-inproc-B 0
 
 ## prototype chain
 node: Readable:true Writable:true Duplex:false Transform:false PassThrough:false,Stream->EE:true
 rifty-inproc (DIFF): Readable:false Writable:false Duplex:false Transform:false PassThrough:false,Stream->EE:true
 rifty-inproc-sync (DIFF): Readable:false Writable:false Duplex:false Transform:false PassThrough:false,Stream->EE:true
 rifty-isolate (DIFF): Readable:false Writable:false Duplex:false Transform:false PassThrough:false,Stream->EE:true
+rifty-inproc-B (same): Readable:true Writable:true Duplex:false Transform:false PassThrough:false,Stream->EE:true
 ## instanceof Stream
 node: true,true,true,true
 rifty-inproc (DIFF): false,false,false,false
 rifty-inproc-sync (DIFF): false,false,false,false
 rifty-isolate (DIFF): false,false,false,false
+rifty-inproc-B (same): true,true,true,true
 ## fs streams instanceof Stream
 node: true,true
 rifty-inproc (DIFF): false,false
 rifty-inproc-sync (DIFF): false,false
 rifty-isolate (DIFF): false,false
+rifty-inproc-B (same): true,true
 ## Stream.prototype.pipe is the legacy pipe
 node: function,false
 rifty-inproc (DIFF): undefined,true
 rifty-inproc-sync (DIFF): undefined,true
 rifty-isolate (DIFF): undefined,true
+rifty-inproc-B (same): function,false

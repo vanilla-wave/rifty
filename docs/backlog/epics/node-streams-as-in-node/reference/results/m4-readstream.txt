@@ -1,155 +1,185 @@
-# m4-readstream.cjs — node v24.16.0, rifty 8ec679b04
-columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate
+# m4-readstream.cjs — node v24.16.0, rifty a83aea388
+columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate | rifty-inproc-B
 
-exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 0
+exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 0 | rifty-inproc-B 0
 
 ## instanceof Readable; prototype chain; isReadable
 node: true,true,true
 rifty-inproc (DIFF): false,false,
 rifty-inproc-sync (DIFF): false,false,
 rifty-isolate (DIFF): false,false,
+rifty-inproc-B (same): true,true,true
 ## member types
 node: pause:function resume:function read:function setEncoding:function unpipe:function unshift:function wrap:function push:function iterator:function map:function filter:function toArray:function close:function destroy:function pipe:function _read:function _destroy:function _construct:function open:function,asyncIterator:function
 rifty-inproc (DIFF): pause:undefined resume:undefined read:undefined setEncoding:undefined unpipe:undefined unshift:undefined wrap:undefined push:undefined iterator:undefined map:undefined filter:undefined toArray:undefined close:undefined destroy:function pipe:function _read:undefined _destroy:undefined _construct:undefined open:undefined,asyncIterator:undefined
 rifty-inproc-sync (DIFF): pause:undefined resume:undefined read:undefined setEncoding:undefined unpipe:undefined unshift:undefined wrap:undefined push:undefined iterator:undefined map:undefined filter:undefined toArray:undefined close:undefined destroy:function pipe:function _read:undefined _destroy:undefined _construct:undefined open:undefined,asyncIterator:undefined
 rifty-isolate (DIFF): pause:undefined resume:undefined read:undefined setEncoding:undefined unpipe:undefined unshift:undefined wrap:undefined push:undefined iterator:undefined map:undefined filter:undefined toArray:undefined close:undefined destroy:function pipe:function _read:undefined _destroy:undefined _construct:undefined open:undefined,asyncIterator:undefined
+rifty-inproc-B (same): pause:function resume:function read:function setEncoding:function unpipe:function unshift:function wrap:function push:function iterator:function map:function filter:function toArray:function close:function destroy:function pipe:function _read:function _destroy:function _construct:function open:function,asyncIterator:function
 ## property values at create
 node: readable=true readableLength=0 readableHighWaterMark=65536 readableEncoding=null readableEnded=false readableObjectMode=false destroyed=false closed=false errored=null pending=true bytesRead=0 fd=null flags='r' mode=438 start=undefined end=Infinity autoClose=true
 rifty-inproc (DIFF): readable=undefined readableLength=undefined readableHighWaterMark=undefined readableEncoding=undefined readableEnded=undefined readableObjectMode=undefined destroyed=false closed=undefined errored=undefined pending=undefined bytesRead=undefined fd=undefined flags=undefined mode=undefined start=[Function: start] end=undefined autoClose=undefined
 rifty-inproc-sync (DIFF): readable=undefined readableLength=undefined readableHighWaterMark=undefined readableEncoding=undefined readableEnded=undefined readableObjectMode=undefined destroyed=false closed=undefined errored=undefined pending=undefined bytesRead=undefined fd=undefined flags=undefined mode=undefined start=[Function: start] end=undefined autoClose=undefined
 rifty-isolate (DIFF): readable=undefined readableLength=undefined readableHighWaterMark=undefined readableEncoding=undefined readableEnded=undefined readableObjectMode=undefined destroyed=false closed=undefined errored=undefined pending=undefined bytesRead=undefined fd=undefined flags=undefined mode=undefined start=[Function: start] end=undefined autoClose=undefined
+rifty-inproc-B (same): readable=true readableLength=0 readableHighWaterMark=65536 readableEncoding=null readableEnded=false readableObjectMode=false destroyed=false closed=false errored=null pending=true bytesRead=0 fd=null flags='r' mode=438 start=undefined end=Infinity autoClose=true
 ## property values at end
 node: readable=false readableLength=0 readableHighWaterMark=65536 readableEncoding=null readableEnded=true readableObjectMode=false destroyed=true closed=true errored=null pending=true bytesRead=5 fd=null flags='r' mode=438 start=undefined end=Infinity autoClose=true
 rifty-inproc (DIFF): threw rs.resume is not a function
 rifty-inproc-sync (DIFF): threw rs.resume is not a function
 rifty-isolate (DIFF): threw rs.resume is not a function
+rifty-inproc-B (same): readable=false readableLength=0 readableHighWaterMark=65536 readableEncoding=null readableEnded=true readableObjectMode=false destroyed=true closed=true errored=null pending=true bytesRead=5 fd=null flags='r' mode=438 start=undefined end=Infinity autoClose=true
 ## ReadStream(path) without new
 node: true
 rifty-inproc (DIFF): threw Class constructor FileReadStream cannot be invoked without '
 rifty-inproc-sync (DIFF): threw Class constructor FileReadStream cannot be invoked without '
 rifty-isolate (DIFF): threw Class constructor FileReadStream cannot be invoked without '
+rifty-inproc-B (same): true
 ## graceful-fs shape: ReadStream.apply(this) + prototype open override
 node: "hello"
 rifty-inproc (DIFF): threw Class constructor FileReadStream cannot be invoked without '
 rifty-inproc-sync (DIFF): threw Class constructor FileReadStream cannot be invoked without '
 rifty-isolate (DIFF): threw Class constructor FileReadStream cannot be invoked without '
+rifty-inproc-B (same): "hello"
 ## class extends fs.ReadStream
 node: "hello"
 rifty-inproc (same): "hello"
 rifty-inproc-sync (same): "hello"
 rifty-isolate (DIFF): threw Not implemented: isolate-host.ReadableStream (not available 
+rifty-inproc-B (same): "hello"
 ## paused buffer: no listener 30ms, then readableLength and data
 node: readableLength=0,bytes=300000
 rifty-inproc (DIFF): readableLength=undefined,no settle in 3s
 rifty-inproc-sync (DIFF): readableLength=undefined,no settle in 3s
 rifty-isolate (DIFF): readableLength=undefined,no settle in 3s
+rifty-inproc-B (same): readableLength=0,bytes=300000
 ## pause in first data, resume after 20ms
 node: paused got=0,bytes=300000
 rifty-inproc (DIFF): no settle in 3s
 rifty-inproc-sync (DIFF): no settle in 3s
 rifty-isolate (DIFF): no settle in 3s
+rifty-inproc-B (same): paused got=0,bytes=300000
 ## setEncoding utf8, highWaterMark 5, split code points
 node: éé|ééé|éé|éé
 rifty-inproc (DIFF): threw rs.setEncoding is not a function
 rifty-inproc-sync (DIFF): threw rs.setEncoding is not a function
 rifty-isolate (DIFF): threw rs.setEncoding is not a function
+rifty-inproc-B (same): éé|ééé|éé|éé
 ## read(3) sized reads
 node: hel|lo
 rifty-inproc (DIFF): 
 rifty-inproc-sync (DIFF): 
 rifty-isolate (DIFF): no settle in 3s
+rifty-inproc-B (same): hel|lo
 ## for await break: destroy and close
 node: chunk 65536,destroyed=true,close
 rifty-inproc (DIFF): threw rs is not async iterable,close
 rifty-inproc-sync (DIFF): threw rs is not async iterable,close
 rifty-isolate (DIFF): threw rs is not async iterable
+rifty-inproc-B (same): chunk 65536,destroyed=true,close
 ## timers run while 16 MiB streams (for await)
 node: bytes=16777216,ticks>0=true
 rifty-inproc (DIFF): threw fs.createReadStream(...) is not a function or its return val
 rifty-inproc-sync (DIFF): threw fs.createReadStream(...) is not a function or its return val
 rifty-isolate (DIFF): threw fs.createReadStream(...) is not a function or its return val
+rifty-inproc-B (DIFF): bytes=16777216,ticks>0=false
 ## timers run during an fs.read(fd) loop over 16 MiB (the fd source alone)
 node: bytes=16777216,ticks>0=true
 rifty-inproc (DIFF): bytes=16777216,ticks>0=false
 rifty-inproc-sync (DIFF): bytes=16777216,ticks>0=false
 rifty-isolate (DIFF): bytes=16777216,ticks>0=false
+rifty-inproc-B (DIFF): bytes=16777216,ticks>0=false
 ## close(cb) mid-read
 node: close,cb ERR_STREAM_PREMATURE_CLOSE:Premature close
 rifty-inproc (DIFF): close
 rifty-inproc-sync (DIFF): 
 rifty-isolate (DIFF): 
+rifty-inproc-B (same): close,cb ERR_STREAM_PREMATURE_CLOSE:Premature close
 ## destroy(err): error then close, errored
 node: error stop,close errored=stop
 rifty-inproc (DIFF): close errored=undefined
 rifty-inproc-sync (DIFF): close errored=undefined
 rifty-isolate (DIFF): close errored=undefined
+rifty-inproc-B (same): error stop,close errored=stop
 ## pipe to slow Writable: max dest writableLength
 node: max<=128KiB=true,max=65536
 rifty-inproc (DIFF): max<=128KiB=false,max=300000
 rifty-inproc-sync (DIFF): max<=128KiB=false,max=300000
 rifty-isolate (DIFF): no settle in 3s
+rifty-inproc-B (same): max<=128KiB=true,max=65536
 ## missing file: error code and close
 node: error ENOENT,close
 rifty-inproc (same): error ENOENT,close
 rifty-inproc-sync (same): error ENOENT,close
 rifty-isolate (same): error ENOENT,close
+rifty-inproc-B (same): error ENOENT,close
 ## Node's ReadStream source: fs.open + fs.read(fd) + fs.close callbacks
 node: fd=number,read=5,"hello"
 rifty-inproc (same): fd=number,read=5,"hello"
 rifty-inproc-sync (same): fd=number,read=5,"hello"
 rifty-isolate (same): fd=number,read=5,"hello"
+rifty-inproc-B (same): fd=number,read=5,"hello"
 ## Readable.from(fs.ReadStream) / toArray
 node: hello
 rifty-inproc (DIFF): threw Readable.from: the "iterable" argument must implement Symbol
 rifty-inproc-sync (DIFF): threw Readable.from: the "iterable" argument must implement Symbol
 rifty-isolate (DIFF): threw Readable.from: the "iterable" argument must implement Symbol
+rifty-inproc-B (same): hello
 ## uncaught 1
 node: (no line)
-rifty-inproc (DIFF): (no line)
+rifty-inproc: (no line)
 rifty-inproc-sync (DIFF): rs.pause is not a function
 rifty-isolate (DIFF): Not implemented: isolate-host.ReadableStream (not available 
+rifty-inproc-B: (no line)
 ## uncaught 2
 node: (no line)
-rifty-inproc (DIFF): (no line)
+rifty-inproc: (no line)
 rifty-inproc-sync (DIFF): rs.close is not a function
 rifty-isolate (DIFF): Not implemented: isolate-host.ReadableStream (not available 
+rifty-inproc-B: (no line)
 ## uncaught 3
 node: (no line)
-rifty-inproc (DIFF): (no line)
-rifty-inproc-sync (DIFF): (no line)
+rifty-inproc: (no line)
+rifty-inproc-sync: (no line)
 rifty-isolate (DIFF): Not implemented: isolate-host.ReadableStream (not available 
+rifty-inproc-B: (no line)
 ## uncaught 4
 node: (no line)
-rifty-inproc (DIFF): (no line)
-rifty-inproc-sync (DIFF): (no line)
+rifty-inproc: (no line)
+rifty-inproc-sync: (no line)
 rifty-isolate (DIFF): Not implemented: isolate-host.ReadableStream (not available 
+rifty-inproc-B: (no line)
 ## uncaught 5
 node: (no line)
-rifty-inproc (DIFF): (no line)
-rifty-inproc-sync (DIFF): (no line)
+rifty-inproc: (no line)
+rifty-inproc-sync: (no line)
 rifty-isolate (DIFF): Not implemented: isolate-host.ReadableStream (not available 
+rifty-inproc-B: (no line)
 ## uncaught 6
 node: (no line)
-rifty-inproc (DIFF): (no line)
-rifty-inproc-sync (DIFF): (no line)
+rifty-inproc: (no line)
+rifty-inproc-sync: (no line)
 rifty-isolate (DIFF): Not implemented: isolate-host.ReadableStream (not available 
+rifty-inproc-B: (no line)
 ## uncaught 7
 node: (no line)
-rifty-inproc (DIFF): (no line)
-rifty-inproc-sync (DIFF): (no line)
+rifty-inproc: (no line)
+rifty-inproc-sync: (no line)
 rifty-isolate (DIFF): Not implemented: isolate-host.ReadableStream (not available 
+rifty-inproc-B: (no line)
 ## uncaught 8
 node: (no line)
-rifty-inproc (DIFF): (no line)
-rifty-inproc-sync (DIFF): (no line)
+rifty-inproc: (no line)
+rifty-inproc-sync: (no line)
 rifty-isolate (DIFF): Not implemented: isolate-host.ReadableStream (not available 
+rifty-inproc-B: (no line)
 ## uncaught 9
 node: (no line)
-rifty-inproc (DIFF): (no line)
-rifty-inproc-sync (DIFF): (no line)
+rifty-inproc: (no line)
+rifty-inproc-sync: (no line)
 rifty-isolate (DIFF): Not implemented: isolate-host.ReadableStream (not available 
+rifty-inproc-B: (no line)
 ## uncaught 10
 node: (no line)
-rifty-inproc (DIFF): (no line)
-rifty-inproc-sync (DIFF): (no line)
+rifty-inproc: (no line)
+rifty-inproc-sync: (no line)
 rifty-isolate (DIFF): Not implemented: isolate-host.ReadableStream (not available 
+rifty-inproc-B: (no line)
