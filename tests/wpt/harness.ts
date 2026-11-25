@@ -52,15 +52,14 @@ export function wptFile(test: string): string {
 globalThis.GLOBAL = { isWindow() { return false; }, isShadowRealm() { return false; } };
 globalThis.location = { href: ${JSON.stringify(href)}, toString() { return this.href; } };
 globalThis.META_TITLE = ${JSON.stringify(title)};
-let __acHidden = false;
-try { new AbortController(); } catch { delete globalThis.AbortController; __acHidden = true; }
+try { new AbortController(); } catch { delete globalThis.AbortController; }
 const __results = [];
 function __report(r) { require('fs').writeSync(1, ${JSON.stringify(REPORT)} + JSON.stringify(r) + '\\n'); process.exit(0); }
-const __keep = setTimeout(() => __report({ acHidden: __acHidden, harness: 2, results: __results }), 60000);
+const __keep = setTimeout(() => __report({ harness: 2, results: __results }), 60000);
 //=== resources/testharness.js
 ${fixture('resources/testharness.js')}
 add_result_callback((r) => __results.push({ name: r.name, status: r.status, message: r.message ?? null }));
-add_completion_callback((_, status) => { clearTimeout(__keep); __report({ acHidden: __acHidden, harness: status.status, results: __results }); });
+add_completion_callback((_, status) => { clearTimeout(__keep); __report({ harness: status.status, results: __results }); });
 ${deps.map((s) => `//=== ${s}\n${fixture(s)}`).join('\n')}
 //=== ${test}
 ${code}
@@ -75,7 +74,10 @@ export interface Subtest {
   readonly message: string | null;
 }
 export interface Report {
-  /** testharness's completion status, or `no report: …` when the file never completed. */
+  /**
+   * testharness's completion status (`OK`, …); `no report: …` when the file never completed;
+   * `unclean end: …` when the run ended other than exit 0 with an empty stderr, report or not.
+   */
   readonly harness: string;
   readonly subtests: readonly Subtest[];
 }
@@ -83,9 +85,17 @@ export interface Run {
   readonly stdout: string;
   readonly stderr: string;
   readonly exitCode: number | null;
+  /** A host's own end of the run (isolate host: `'timeout' | 'memory'`). */
+  readonly termination?: string;
 }
 
 export function parseReport(run: Run): Report {
+  // The report exits 0 at once: anything after it (a hang, another exit code, stderr) is a fault.
+  if (run.exitCode !== 0 || run.termination !== undefined || run.stderr !== '')
+    return {
+      harness: `unclean end: exit ${run.exitCode}${run.termination === undefined ? '' : `, ${run.termination}`}${run.stderr === '' ? '' : `, stderr ${JSON.stringify(run.stderr.slice(0, 300))}`}`,
+      subtests: [],
+    };
   const line = run.stdout.split('\n').find((l) => l.startsWith(REPORT));
   if (line === undefined)
     return {
@@ -107,7 +117,7 @@ export function parseReport(run: Run): Report {
 }
 
 /** The file run by live Node (the oracle); throws on another Node version. */
-export function inNode(file: string): Report {
+export function inNode(file: string, timeoutMs = 120_000): Report {
   if (process.version !== WPT_NODE)
     throw new Error(`wpt oracle is Node ${WPT_NODE}, this is ${process.version}`);
   const dir = mkdtempSync(join(tmpdir(), 'rifty-wpt-'));
@@ -117,17 +127,23 @@ export function inNode(file: string): Report {
       cwd: dir,
       env: {},
       encoding: 'utf8',
-      timeout: 120_000,
+      timeout: timeoutMs,
       maxBuffer: 64 * 2 ** 20,
     });
-    return parseReport({ stdout: r.stdout, stderr: r.stderr, exitCode: r.status });
+    return parseReport({
+      stdout: r.stdout,
+      stderr: r.stderr,
+      exitCode: r.status,
+      ...(r.signal === null ? {} : { termination: r.signal }),
+    });
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 }
 
 /**
- * Every way the guest's report differs from Node's: the harness status, a subtest Node has and
+ * Every way the guest's report differs from Node's, and an oracle that did not complete cleanly
+ * (`harness` not `OK`, no subtest): the harness status, a subtest Node has and
  * the guest lacks (`missing`) or the reverse (`extra`), a status or message. `excluded` subtest
  * names are skipped; one that is not in Node's report or no longer differs is reported `stale`.
  */
@@ -137,6 +153,8 @@ export function differences(
   excluded: readonly string[] = [],
 ): string[] {
   const out: string[] = [];
+  if (node.harness !== 'OK' || node.subtests.length === 0)
+    out.push(`oracle: Node ended ${node.harness} with ${node.subtests.length} subtests`);
   if (guest.harness !== node.harness)
     out.push(`harness: node ${node.harness}, guest ${guest.harness}`);
   const byName = (r: Report) => {

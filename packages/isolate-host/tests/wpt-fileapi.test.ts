@@ -5,6 +5,7 @@
  * `runtime-js/isolate-guest-blob-file` Acceptance 1). Not run, listed: below.
  */
 import { describe, expect, it } from 'vitest';
+import { runCode } from '../src/index.ts';
 import { differences, runWpt } from './wpt-guest.ts';
 
 /** Files run, with the subtests excluded from the comparison (each must still differ). */
@@ -22,12 +23,26 @@ const FILES: Readonly<Record<string, readonly string[]>> = {
   'FileAPI/blob/Blob-text.any.js': [],
   'FileAPI/file/File-constructor.any.js': [],
 };
-/*
- * Not run (`.any.js`), and why; nor any `.html`/`.window.js`/`.worker.js` file (Node skips them):
- * - FileAPI/blob/Blob-stream.any.js: `stream()` is the isolate-host.ReadableStream gap; `garbageCollect`.
- * - FileAPI/file/send-file-formdata{,-controls,-punctuation,-utf-8}.any.js: `FormData` + `fetch` to the
- *   WPT server's echo endpoint (Node's status file skips them).
+/**
+ * `.any.js` files not run, each with the guest code that prints `gap` while its reason holds: once
+ * it no longer does, the entry is stale and the file must join `FILES`. Not run either: every
+ * `.html`/`.window.js`/`.worker.js` file (Node skips them).
  */
+const NOT_RUN: Readonly<Record<string, { readonly why: string; readonly gap: string }>> = {
+  'FileAPI/blob/Blob-stream.any.js': {
+    why: '`stream()` is the isolate-host.ReadableStream gap; `garbageCollect`',
+    gap: "try { new Blob().stream(); } catch (e) { if (e.feature === 'isolate-host.ReadableStream') console.log('gap'); }",
+  },
+  ...Object.fromEntries(
+    ['', '-controls', '-punctuation', '-utf-8'].map((s) => [
+      `FileAPI/file/send-file-formdata${s}.any.js`,
+      {
+        why: '`FormData` + `fetch` to the WPT server echo endpoint (Node skips it)',
+        gap: "try { new FormData(); } catch (e) { if (e.feature === 'isolate-host.FormData') console.log('gap'); }",
+      },
+    ]),
+  ),
+};
 
 describe("WPT FileAPI: the guest gives every subtest live Node's result", () => {
   for (const [test, excluded] of Object.entries(FILES)) {
@@ -36,6 +51,14 @@ describe("WPT FileAPI: the guest gives every subtest live Node's result", () => 
       expect(node.harness, 'Node completes the file').toBe('OK');
       expect(node.subtests.length).toBeGreaterThan(0);
       expect(differences(node, guest, excluded)).toEqual([]);
+    });
+  }
+});
+
+describe('WPT FileAPI files not run still have their reason', () => {
+  for (const [test, { why, gap }] of Object.entries(NOT_RUN)) {
+    it(`${test}: ${why}`, async () => {
+      expect(await runCode(gap)).toEqual({ stdout: 'gap\n', stderr: '', exitCode: 0 });
     });
   }
 });
