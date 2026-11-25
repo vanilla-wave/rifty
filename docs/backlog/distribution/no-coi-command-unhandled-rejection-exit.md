@@ -50,6 +50,15 @@ all loud:
   import/fetch, tracked CLI promise): the command replaces the realm →
   `failed`, error `process.exit(n)`. Node: status n.
 
+Re-observed 2026-11-25 (main dfad6553e, `tests/no-coi/zlib-scenario.spec.ts`, the node:zlib
+goal's carrier, live Node v24.16.0 exits 1 with the error on stderr for each). These hit the
+declared-gap fork below. An exceljs archiver queue task throwing `NotImplementedError` (zlib.DeflateRaw)
+→ `failed`, exitCode null, stderr '', `Worker crashed: Uncaught NotImplementedError: …`
+[WORKER_CRASHED]. A `NotImplementedError` thrown at a file entry's top level (`zlib.createDeflate`,
+`deflateSync`, `gunzipSync`, `unzip`, `crc32`) or from a bluebird/ws callback → `failed`, exitCode
+null, the error line on stderr, error = the structured gap. A `TypeError` at the top level
+(`zlib.Inflate.call(this)`) → `exited` 1, as Node.
+
 Re-observed 2026-11-12 (proof @ 8a4a612ed in
 `/Users/vanilla-wave/ai/euphotic/proofs/2026-11-12-no-coi-office-docs`, file
 `sandbox-out/runtime-observed.json`):
