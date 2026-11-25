@@ -23,20 +23,17 @@ The sources: Node's `internal/abort_controller.js` + `event_target.js` + `webidl
 9 KB gzip (`results/route-b-size.txt`). They need stubs for `internalBinding('messaging')`, and the
 `MessageChannel` transfer path becomes a named gap.
 
-The fact, not a security property: without being globals, the classes stay reachable.
-- `signal.constructor` is `AbortSignal` with its statics (`signal.constructor.any([])` makes a signal);
-- `Object.getPrototypeOf(AbortSignal.prototype).constructor` is a working `EventTarget`;
-- an event's `constructor` is `Event`;
-- the globals stay ceiling throws, so `signal instanceof AbortSignal` throws.
+Globals: answered — recorded by the manager. `AbortController`, `AbortSignal`, `EventTarget` and
+`Event` become ordinary isolate globals from these sources; the «private to the core» option is
+dropped, and the former 7g (guest globals) is part of this unit. So `signal instanceof AbortSignal`
+works, and the isolate `m9`/`m10` rows are this unit's (`results/ownership.txt`). In the isolate the
+`EventTarget` is Node's own, so the browser-host abort-listener question
+(`runtime-js/stream-core-abort-listeners-host-event-target`) does not apply here.
 
 This unit comes before 8c: the isolate's pipeline rows need it, and `pipeline` works there today.
-The user's answer decides only the globals.
 
-Open fork — owner: user, carried with the isolate Web API goal's question 1:
-- (a) keep the classes unreachable as globals (as above);
-- (b) make `AbortController`/`AbortSignal`/`EventTarget`/`Event` isolate globals from the same sources.
-
-The bytes are the same either way.
+Shared with goal isolate-guest-web-api (its scope: `Blob`/`File`, `TextDecoder` encodings and these
+globals). One owner delivers it; which goal: to be settled by the manager.
 
 ## Open findings (review round 4)
 

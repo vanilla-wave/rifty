@@ -70,8 +70,9 @@ Draft until its dependency lands; seeds the compile:
    instance; a Chromium 108 floor-lane run recorded once in the PR body (manual: `browser-floor.yml` is
    dispatch-only) → ADR-0573
 6. Before wiring, measured: whether `zlib` can leave the client generic eager graph with
-   `require('zlib')` still synchronous; either way `pnpm test:client-bundles` stays under every cap,
-   cause and numbers in `client-bundle-budget.mjs`'s note → ADR-0573
+   `require('zlib')` still synchronous; either way, a cap that `pnpm test:client-bundles` crosses is
+   recomputed by `client-bundle-budget.mjs`'s rule (cleaned size × 1.5), with the new measurement and its
+   cause in that file and the growth breakdown in the PR; the cap is not a stop condition → ADR-0573
 7. The `FinalizationRegistry` frees dropped objects' handles: a GC-lane test (`--expose-gc`) sees the
    allocator reuse their blocks → ADR-0573
 8. ADR-0159/0178 marked superseded; compat `zlib.md`/`isolate-host.md` rows rewritten → ADR-0573

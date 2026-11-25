@@ -32,6 +32,11 @@ Acceptance:
   so 8c either keeps identifiers in the module there or declares the row; a guard row runs
   `from-web-options` on that bundle. AL's variant can change this.
 
+- the bundle caps: if `pnpm test:client-bundles` crosses a cap, the PR recomputes it by
+  `tools/checks/client-bundle-budget.mjs`'s rule (cleaned size × 1.5, rounded up to 1000 B), with the new
+  measurement and its cause in that file, and publishes the breakdown of the growth; the cap is not a
+  stop condition (map §Open questions, the caps).
+
 zlib unit 3 starts after this unit.
 
 ## Open findings (review round 4)

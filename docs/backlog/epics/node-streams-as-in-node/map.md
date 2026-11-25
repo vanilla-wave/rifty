@@ -56,10 +56,12 @@ against Node:
   Workbench a write costs about +0.18 ms per project file (#453). The unit starts by establishing
   the cause, and its body is a hypothesis until then. 9w stands on it, because Node's `WriteStream`
   writes once per chunk.
-- **7** `distribution/isolate-stream-core-abort-controller` — Node's `AbortController` sources
-  for the isolate core. Without them, Node's `pipeline` fails in the isolate (`m7` 5/11 on the
-  product build). Reachable classes are a fact; the globals fork is the user's (§Open questions). →
-  I7 (isolate).
+- **7** `distribution/isolate-stream-core-abort-controller` — Node's `AbortController`,
+  `AbortSignal`, `EventTarget` and `Event` from Node's sources as ordinary isolate globals (the
+  user's answer — recorded by the manager; the «private to the core» option is dropped and 7g is merged
+  in). Without them, Node's `pipeline` fails in the isolate (`m7` 5/11 on the product build). A unit
+  shared with goal isolate-guest-web-api; which goal delivers it: one owner, to be settled by the
+  manager. → I7 (isolate).
 - **AL** `runtime-js/stream-core-abort-listeners-host-event-target` — Node's core attaches abort
   listeners with `kResistStopPropagation`/`kWeakHandler`, which a host `EventTarget` ignores (browser
   hosts only; the isolate gets Node's own `EventTarget` from 7). Variants: (A) the direct listener as in
@@ -69,7 +71,7 @@ against Node:
   throws `TypeError`; strong listeners where Node's are weak), and a hang is not a declarable outcome
   (`docs/process/rules/fault-classes.md`). The probe runs (A) only as the measurement base. Rows `m9`,
   `m10` (`results/abort-variants/`). On browser hosts 8c stands on AL (edge 8c ← AL). The whole
-  variants table is the user's question (§Open questions). → I1, I3.
+  variants table is the user's question for browser hosts (§Open questions). → I1, I3.
 
 Core, three adjacent PRs (ADR-0575 §7):
 
@@ -169,7 +171,7 @@ written by hand. It is an auxiliary tool, not the full source:
 - it does not cover SDK rows, nor the Workbench carrier and matrix rows (`results/chromium*/` hold
   those as program summaries only);
 - known limit: the isolate rows go by name rules (Node makes an `AbortController` in `pipeline`,
-  `compose` and signal-taking operators → 7; a guest that makes one → 7g), because no row-level
+  `compose` and signal-taking operators → 7; a guest that makes one → 7 too), because no row-level
   isolate run on route B exists.
 
 Rules:
@@ -189,23 +191,21 @@ Summary of `results/ownership.txt` (rows by owner; `guard` = equal today and not
 | 3 | 1 |
 | 4 | 1 |
 | 4b | 12 |
+| 7 | 3 |
 | AL | 2 |
-| 8c | 132 |
+| 8c | 137 |
 | 9r | 34 |
 | 4c | 24 |
 | 5 | 1 |
 | 9w | 22 |
-| 7g | 8 |
 | guard | 98 |
 
 Edges, as owner ← unit, with the number of rows:
 
 - 1 ← 2: 1
-- 7g ← 8c: 5
-- 7g ← AL: 3
 - 8c ← 1: 3
 - 8c ← 2: 1
-- 8c ← 7: 6
+- 8c ← 7: 11
 - 8c ← AL: 1
 - 9r ← 1: 2
 - 9r ← 4: 2
@@ -225,8 +225,9 @@ So the graph is:
 - 8c ← 1, 2, 7, AL;
 - 9r ← 1, 4, 4b, 7, 8c;
 - 9w ← 4, 4c, 5, 7, 8c, P; «9w ← 9r» is the last-owner rule's artefact, kept as order only;
-- 7g (the isolate guest `AbortController` globals, the user's fork) ← 8c, AL;
-- 3 has no edge; 7 and P own no row (review S4, open in those units).
+- 7 now includes the isolate guest globals (the user's answer; 7g merged into 7): it owns the
+  isolate `m9`/`m10` rows a guest-made `AbortController` needs; AL does not apply in the isolate;
+- 3 has no edge; P owns no row (review S4, open there).
 
 8a and 8b are 8c's build steps, so 8c's rows are theirs to keep pinned.
 
@@ -279,8 +280,8 @@ Drafts that exist only on parked branches:
   - Staying isolate work: the swap test (`fs-sync-mirror-swap.test.ts`), the isolate-host README cost
     numbers, compat `isolate-host.md`, the exceljs library-probe row.
 - **Goal isolate-guest-web-api**: its scenario 3 (exceljs `xlsx.readFile`, then `writeFile`) stands on
-  9r for the read, and on today's write class until 9w. Unit 7's globals fork travels with its
-  question 1 (ADR-0575 §6).
+  9r for the read, and on today's write class until 9w. Unit 7 (isolate globals, the user's answer)
+  is shared with that goal; the manager settles which delivers it. ADR-0575 §6.
 
 ## Regression risk
 
@@ -423,20 +424,17 @@ Each outcome must still be honest, never a silent truncation. Durability after `
   runs read back 4194304 bytes with Node's sha256, with or without a flush and with an immediate
   reload. No gap: I11 is dropped and no unit is seeded; the sequence becomes a guard row of 9w.
   Side fact: rifty's `ws.bytesWritten` is `undefined` after finish (`m5`).
-- The bundle caps — owner: user — on main `692babe13` (`results/route-b-product-build-main.txt`):
+- The bundle caps — answered — recorded by the manager: a cap is recomputed by the rule of
+  `tools/checks/client-bundle-budget.mjs` (cleaned size × 1.5, rounded up to 1000 B), in the PR that
+  crosses it, with the new measurement and its cause in that file. The cap is not a stop condition.
+  So 8c (and zlib unit 3) carry an acceptance row for it. Measured on main `692babe13`
+  (`results/route-b-product-build-main.txt`):
   - route B: generic gzip 288 404 → 312 037 (+23 633) of 332 000; toolchain 331 931 → 355 626
     (+23 695) of 386 000;
   - with the zlib engine and its handle wired: 351 690 and 394 735 — review measurement of 25.11
-    (PR #450 reviewer, #452's engine; no script in `results/`), which is +19 690 and +8 735 over, before `lib/zlib.js`;
+    (PR #450 reviewer, #452's engine; no script in `results/`), +19 690 and +8 735 over, before
+    `lib/zlib.js`;
   - #452 as it stands adds 0 B, because nothing imports it.
-
-  A lazy stream chunk is doubtful: `require('stream')` is synchronous, and the core is used at boot.
-  Options for the user:
-  - raise the caps;
-  - a lazy zlib engine;
-  - order the two goals.
-
-  Until this is answered, the goal stays draft.
 - Product shape of route B — settled by the probe (`route-b/product/`, `results/route-b-product-*.txt`):
   - With rifty bindings only, the probe artefacts vanish: parity `cases/stream` 63/66 (3 binding
     rows → 1, 2); fs parity 6/6; `zlib-diff` 0 fields with `lib/zlib.js` on rifty's `Buffer`.
@@ -444,17 +442,16 @@ Each outcome must still be honest, never a silent truncation. Durability after `
     item above. `main`/`sw` −27/−43 B, io guard 950/1021 B, `guest.js` gzip +24 792.
   - In the isolate, the m-matrices equal the in-process route-B rows, except `m7` 5/11 and
     `c-pipeline-asyncgen`: the guest has no `AbortController` (unit 7). The budget with the zlib
-    engine is the user's question above.
+    engine: the cap rule above.
   - Not run through `check:es-floor`; Chromium 108 floor APIs are listed at unit 8.
-- Isolate `AbortController` globals — owner: user — carried with the Web API goal's question 1.
-  - Unit 7 brings Node's `abort_controller.js` + `event_target.js` + `webidl.js` (≈31 KB min / 9 KB
-    gzip, `results/route-b-size.txt`).
-  - Without globals the classes are still reachable: through `signal.constructor` (statics work), an
-    `EventTarget` through the prototype chain, and `Event` through an event. The globals stay
-    ceiling throws, and `instanceof AbortSignal` throws.
-  - The fork: (a) leave it like that, or (b) make `AbortController`/`AbortSignal`/`EventTarget`/`Event`
-    isolate globals from the same sources. The bytes are the same either way.
-  - Browser hosts, owner: user — the abort-listener variants table of
+- Isolate `AbortController` globals — answered — recorded by the manager: `AbortController`,
+  `AbortSignal`, `EventTarget`, `Event` become ordinary isolate globals from Node's sources (unit 7,
+  ≈31 KB min / 9 KB gzip for `abort_controller.js` + `event_target.js` + `webidl.js`,
+  `results/route-b-size.txt`). Shared with goal isolate-guest-web-api; the delivering goal is the
+  manager's to settle.
+- Abort listeners on browser hosts — owner: user (the goal's only open user question, so the goal
+  stays draft; the ready units do not depend on it):
+  - the abort-listener variants table of
     `runtime-js/stream-core-abort-listeners-host-event-target` (today / A / B / C / D, with what each
     row means for a program), D being Node's `AbortController`/`AbortSignal`/`EventTarget`/`Event` as
     guest globals on browser hosts too.

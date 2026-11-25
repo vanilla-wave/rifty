@@ -72,8 +72,9 @@ What each row means for a program:
 - `m10` listener counts: a long-lived signal shared by many `reduce` or `finished` calls (a server's
   shutdown signal) grows memory without bound where Node's stays flat.
 
-Open fork — owner: user, with the `AbortController` globals question (map §Open questions): the whole
-table above (today / A / B / C / D) and what each row means for a program, not only (D).
+Open fork — owner: user, for browser hosts only (map §Open questions): the whole table above (today /
+A / B / C / D) and what each row means for a program. The isolate globals question is answered (unit
+7: Node's classes as isolate globals); it does not decide (D) on browser hosts.
 
 ## Open findings (review round 4)
 

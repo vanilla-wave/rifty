@@ -341,6 +341,12 @@ column labels corrected.
     outcome, and changes against today are listed and declared;
   - abort listeners on a host `EventTarget`: the derived-signal fix is recalled; the probe runs
     variant A; variants A–D are the draft unit's to decide, D joins the user's globals question.
+- 2026-11-25 — the bundle caps and the isolate `AbortController` globals: answered — recorded by the
+  manager. Caps: recomputed by `client-bundle-budget.mjs`'s rule in the PR that crosses them (8c, zlib
+  unit 3), not a stop condition. Isolate: `AbortController`/`AbortSignal`/`EventTarget`/`Event` become
+  ordinary isolate globals from Node's sources (unit 7, 7g merged in; shared with goal
+  isolate-guest-web-api, delivering goal settled by the manager). The remaining `owner: user` question:
+  abort listeners on browser hosts (AL), so the goal stays draft.
 - 2026-11-25 — manager, round 5: last pass before merge. AL has no default candidate: (A) hangs where
   today throws, and a hang is not declarable; the variants table (today / A / B / C / D) is the
   user's question with the globals.

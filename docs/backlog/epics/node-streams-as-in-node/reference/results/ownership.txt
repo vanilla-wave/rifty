@@ -2,7 +2,7 @@ Row ownership (ownership.mjs over results/): host | program | row | units | owne
 Covers: in-process rows (all programs, parity cases), isolate rows by name rules (see ownership.mjs),
 Workbench fd and stream-timing rows. Not covered: SDK rows, Workbench carrier and matrix rows (results/chromium*/
 hold them as program summaries only).
-order: 0 → 2 → 1 → 3 → 4 → 4b → 7 → AL → 8a → 8b → 8c → 9r → 4c → 5 → P → 9w → 7g
+order: 0 → 2 → 1 → 3 → 4 → 4b → 7 → AL → 8a → 8b → 8c → 9r → 4c → 5 → P → 9w
 
 in-process | b1-bindings | Buffer.isEncoding per name | 2 | guard
 in-process | b1-bindings | buf.toString(name) per name | 2 | 2
@@ -117,11 +117,11 @@ in-process | m1-lifecycle | closed/destroyed/errored after destroy(err), each cl
 in-process | m1-lifecycle | async Transform success: destroyed at end/finish/close | 8c | 8c
 in-process | m1-lifecycle | prototype _destroy is a function | 8c | 8c
 in-process | m10-abort-order-leak | a guest abort listener added after pipeline sees the source destroyed | 8c | 8c
-isolate | m10-abort-order-leak | a guest abort listener added after pipeline sees the source destroyed | 8c,7g | 7g
+isolate | m10-abort-order-leak | a guest abort listener added after pipeline sees the source destroyed | 7,8c | 8c
 in-process | m10-abort-order-leak | listeners left on the signal after 10000 completed reduce({signal}) | 8c | 8c
-isolate | m10-abort-order-leak | listeners left on the signal after 10000 completed reduce({signal}) | 8c,7g | 7g
+isolate | m10-abort-order-leak | listeners left on the signal after 10000 completed reduce({signal}) | 7,8c | 8c
 in-process | m10-abort-order-leak | listeners left on the signal after 40000 completed finished(r, {signal}) | 8c | 8c
-isolate | m10-abort-order-leak | listeners left on the signal after 40000 completed finished(r, {signal}) | 8c,7g | 7g
+isolate | m10-abort-order-leak | listeners left on the signal after 40000 completed finished(r, {signal}) | 7,8c | 8c
 in-process | m2-core-members | Readable readableFlowing/isPaused: new, on(data), pause, resume | 8c | 8c
 in-process | m2-core-members | fs.ReadStream readableFlowing/isPaused: new, on(data), pause, resume | 8c,9r | 9r
 in-process | m2-core-members | Writable writableNeedDrain below/over hwm, after drain | 8c | 8c
@@ -213,15 +213,15 @@ in-process | m8-constructor-options | options destroy 1 | - | guard
 in-process | m8-constructor-options | options construct 1 | - | guard
 in-process | m8-constructor-options | write(chunk, '', cb): empty encoding (zlib's flush() passes '') | 8c | 8c
 in-process | m9-abort-stop-propagation | promises.pipeline(r, w, {signal}), abort after a stopping listener | AL,8c | 8c
-isolate | m9-abort-stop-propagation | promises.pipeline(r, w, {signal}), abort after a stopping listener | AL,8c,7g | 7g
+isolate | m9-abort-stop-propagation | promises.pipeline(r, w, {signal}), abort after a stopping listener | 7,8c | 8c
 in-process | m9-abort-stop-propagation | finished(r, {signal}) after a stopping listener | AL | AL
-isolate | m9-abort-stop-propagation | finished(r, {signal}) after a stopping listener | AL,7g | 7g
+isolate | m9-abort-stop-propagation | finished(r, {signal}) after a stopping listener | 7 | 7
 in-process | m9-abort-stop-propagation | addAbortSignal(signal, r) after a stopping listener | AL | AL
-isolate | m9-abort-stop-propagation | addAbortSignal(signal, r) after a stopping listener | AL,7g | 7g
+isolate | m9-abort-stop-propagation | addAbortSignal(signal, r) after a stopping listener | 7 | 7
 in-process | m9-abort-stop-propagation | readable.map(fn, {signal}) after a stopping listener | 8c | 8c
-isolate | m9-abort-stop-propagation | readable.map(fn, {signal}) after a stopping listener | 8c,7g | 7g
+isolate | m9-abort-stop-propagation | readable.map(fn, {signal}) after a stopping listener | 7,8c | 8c
 in-process | m9-abort-stop-propagation | readable.reduce(fn, init, {signal}) after a stopping listener | - | guard
-isolate | m9-abort-stop-propagation | readable.reduce(fn, init, {signal}) after a stopping listener | 7g | 7g
+isolate | m9-abort-stop-propagation | readable.reduce(fn, init, {signal}) after a stopping listener | 7 | 7
 in-process | w1-fs-windows | ws instanceof Writable / isWritable | 8c,9w | 9w
 in-process | w1-fs-windows | callback pipeline(rs, ws): cb, destroyed/closed, bytes | 8c,9w | 9w
 isolate | w1-fs-windows | callback pipeline(rs, ws): cb, destroyed/closed, bytes | 7,8c,9r,9w | 9w
@@ -364,22 +364,20 @@ workbench | chromium-d | write 16 MiB in a 1000-file project (B timeout 900 s, f
 3: 1
 4: 1
 4b: 12
+7: 3
 AL: 2
-8c: 132
+8c: 137
 9r: 34
 4c: 24
 5: 1
 9w: 22
-7g: 8
 guard: 98
 
 ## edges (owner ← unit it also needs, rows)
 1 ← 2: 1
-7g ← 8c: 5
-7g ← AL: 3
 8c ← 1: 3
 8c ← 2: 1
-8c ← 7: 6
+8c ← 7: 11
 8c ← AL: 1
 9r ← 1: 2
 9r ← 4: 2

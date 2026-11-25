@@ -72,6 +72,6 @@ in `lib/zlib.js`. The load group is 0/1 (`docs/backlog/epics/node-streams-as-in-
 
 - Brotli (`brotliCompress`/`…Sync`/`createBrotli*`/`BrotliCompress`/`BrotliDecompress`) and zstd
   (`zstdCompress`/`…Sync`/`createZstd*`/`ZstdCompress`/`ZstdDecompress`): `NotImplementedError` on
-  every host, compat ❌ — manager's scoping, user confirmation pending.
+  every host, compat ❌ — deferred by the manager's decision (the user delegated it), draft `runtime-js/zlib-brotli-zstd`.
 - The gzip header OS byte of a macOS or Windows Node (19 / 10): rifty writes 3 (goal Decisions).
 - The SDK page's own main-thread import on Chromium 108 (`runtime-js/chromium108-sdk-sync-wasm-import`).

@@ -1,6 +1,6 @@
 ---
 kind: epic
-status: draft
+status: ready
 title: node:zlib as in Node on every host — sync, streams, options, bytes and errors of the deflate family
 created: 2026-11-24
 value: A program that compresses or decompresses with node:zlib — exceljs, unzipper, pdfkit, pngjs, ws, or its own zlib calls — runs in any rifty host and writes the bytes real Node writes.
@@ -15,7 +15,7 @@ tier: works
 isolate host guest. Every form (callback, `util.promisify`, `*Sync`, `create*`, the classes with and
 without `new`), every option and stream member, the output bytes and the errors (message, `code`,
 `errno`) are Node's. Libraries that compress through it write Node's files. Brotli and zstd: see
-Decisions (outside this goal pending the user's confirmation).
+Decisions (outside this goal: deferred by the manager's decision (the user delegated it), draft `runtime-js/zlib-brotli-zstd`).
 
 ## User scenario
 
@@ -89,7 +89,7 @@ external review round 3 2026-11-24 (manager-run, PR #448 @ da3ae64cb; no blocker
 ## Decisions
 
 - 2026-11-24 — user, on the fork «Движок zlib — pako / wasm-сборка zlib из Node / мост к хосту»: «исследуй и запускай». Manager's reading, not the user's words: research, then run the implementation without a new question unless the facts show a trade-off in observable behaviour; the engine is the manager's choice on the probe's facts (ADR-0573), not the user's.
-- 2026-11-24 — brotli and zstd outside this goal, loud on every host: manager's scoping, user confirmation pending (the manager carries the question).
+- 2026-11-24 — brotli and zstd outside this goal, loud on every host: deferred by the manager's decision (the user delegated it), draft `runtime-js/zlib-brotli-zstd`; answered — recorded by the manager.
 - 2026-11-24 — gzip header OS byte is 3 (zlib's default outside its platform table). Node writes 19 on macOS, 10 on Windows, 3 on Linux (`deps/zlib/zutil.h`, fixed at Node's build), so no single Node byte exists there; the carrier compares against Linux's. Not the byte of the browser's or embedder's OS: rifty's `process.platform` is `'rifty'`, in no row of that table.
 - 2026-11-24 — against Node the probe saw no difference between pako 3.0.3 (+ a `deflateParams` port, + its own crc32) and the wasm build (1420-case matrix — the byte proof; Node's own test files, 36 of them through the engine — the API-shape proof; consumers 5/5): the engine choice trades cost, not Node-observable behaviour. Embedder-observable memory differs — wasm state sits outside the isolate `memoryLimit` and is kept after close (results/bench-isolate.txt, memory.txt) — and that class is already settled: ADR-0563 (memory outside the heap → the worker's RSS ceiling, neighbours exact once); Node's own zlib state is outside V8's heap too. No user question.
 - 2026-11-24 — engine: the wasm build of Node v24.16.0's `deps/zlib` (ADR-0573), the manager's decision under the user's delegation above, not the user's choice.

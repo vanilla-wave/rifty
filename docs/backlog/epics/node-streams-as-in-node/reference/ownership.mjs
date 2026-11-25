@@ -27,10 +27,9 @@ const ORDER = [
   '5',
   'P',
   '9w',
-  '7g',
 ];
 // AL: runtime-js/stream-core-abort-listeners-host-event-target (the variant choice A–D).
-// 7g: isolate guest globals AbortController/AbortSignal (the user's fork, with the Web API goal's question 1).
+// 7: Node's AbortController/AbortSignal/EventTarget/Event, isolate globals (the user's answer; 7g merged in).
 const last = (units) => [...units].sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b)).at(-1);
 
 /** One results/<program>.txt: row key → { col → { value, same } }. */
@@ -110,14 +109,15 @@ for (const f of readdirSync(res)
     // - Node itself creates an AbortController in pipeline.js:195, duplexify.js:213 and
     //   operators.js:62,252, and the guest has none, so any row that calls pipeline, compose or a
     //   signal-taking operator needs 7 there.
-    // - A guest that makes its own AbortController (m9, m10) needs the guest global: 7g, the user's
-    //   fork.
+    // - A guest that makes its own AbortController (m9, m10) needs the isolate globals: 7. There the
+    //   EventTarget is Node's own, so AL (a browser-host question) does not apply.
     // - An fs row that is equal in-process but not in the isolate hits the isolate ReadableStream wall,
     //   which 9r removes.
     const nodeMakesController =
       /pipeline|async gen|compose|\.map\(|\.reduce\(/.test(key) || prog === 'c-pipeline-asyncgen';
     const guestMakesController = /^m(9|10)-/.test(prog);
-    if (guestMakesController) add('isolate', prog, key, [...units, '7g'], false);
+    if (guestMakesController)
+      add('isolate', prog, key, [...units.filter((u) => u !== 'AL'), '7'], false);
     else if (!eq(r, 'rifty-isolate') && (nodeMakesController || (inprocToday && FS.test(prog)))) {
       const iso = new Set(units);
       if (nodeMakesController) iso.add('7');
