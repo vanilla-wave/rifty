@@ -32,7 +32,9 @@ attack rows (§escape) 0 foreign objects for v2s/v2bs, not a proof.
 Contract stability (template goal Decisions): this step cannot keep `exec`'s per-call
 `memoryLimitMb` as it is — today it bounds that run's own fresh isolate (ADR-0568 §6); a live
 isolate holds the sandbox's files and every run under one limit fixed at its creation
-(isolated-vm). A user fork for this step, before its contract.
+(isolated-vm); and «an idle sandbox holds no process or isolate» (live-sandbox I6, ADR-0568 §2)
+cannot hold — a live isolate is held between runs by definition. User forks for this step, before
+its contract.
 
 ## Question
 

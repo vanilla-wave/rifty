@@ -12,7 +12,8 @@ code: [packages/isolate-guest/src/guest/entry.ts, packages/isolate-host/src/chil
 
 User, 2026-11-25, «ок» to: «сейчас копировать шаблон в изолят … Ленивое чтение записать в backlog
 с поводом взяться: память на одновременный прогон становится узким местом или шаблон заметно
-растёт» (template goal Decisions).
+растёт» (ADR-0572 §Forks F1; since 2026-11-25 F1 applies to the deferred layer,
+`distribution/isolate-host-sandbox-template-layer`, which this item builds on).
 
 Measured (probe L, arms `views` = materialize vs `lazy`, T95 = 23 654 files / 88.8 MB): `exec`
 190 vs 80 ms (semver), 454 vs 406 ms (pdf-lib); isolate floor 123 vs 19–23 MiB; T1 (1 MB) equal.
@@ -30,4 +31,4 @@ consumer's bottleneck, or the template grows well past the four libraries.
 
 ## Challenge
 
-challenge: 2026-11-25 — none yet (user-deferred capture; premise critic of 2026-11-24, template goal `## Challenge`)
+challenge: 2026-11-25 — none yet (user-deferred capture; premise critic of 2026-11-24, ADR-0572 §Forks)

@@ -10,12 +10,16 @@ Children are seeded when the carrier runs (README §FIT 5); planned order:
 1. Acceptance carrier — `packages/isolate-host/tests/sandbox-template.test.ts`: a real
    `produceDependencySnapshot` artifact of the four libraries (repo workbench, a loopback registry
    serving npm-packed tarballs of the installed closure — `tests/integration/installed-registry.mjs`,
-   no network), the scenario through the public API only; committed RED (`it.fails`) (I1–I4, I6–I10).
+   no network), the scenario through the public API only; committed RED (`it.fails`) (I1–I4, I6,
+   I7 rollback rows, I8; I7's other rows: the live-sandbox suites unchanged).
 2. Intake, in the same PR: the envelope reader moved to `@riftydev/npm-client` internal (workbench
    unchanged in behavior, its tar tests green), `registerTemplate` + the process registry, the
    `/node_modules` mount into a new sandbox's state, the `maxFsBytes` budget refusal, the
-   `snapshot` refusals, README (route + cost table), compat rows (I1–I4, I6–I10).
-3. Read-only mode (I5) — fork to the manager with its cost (below); seeded after the answer.
+   `snapshot` refusals, README (route + cost table from `scripts/measure-template.mjs`, public API
+   only), compat rows (I1–I4, I6–I10).
+3. Read-only mode (I5) — fork to the manager with its cost (below); seeded after the answer. Until
+   it lands, a read-only option is what any unknown `createSandbox` option is today:
+   `ERR_INVALID_ARG_VALUE` (`knownOptions`), no option name published.
 
 ## Open questions
 
