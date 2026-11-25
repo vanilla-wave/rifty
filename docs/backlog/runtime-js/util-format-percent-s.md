@@ -68,15 +68,22 @@ buffer's text, as in Node.
 3. Isolate `egress-modules.test.ts`: the `validateHeaderName`/`validateHeaderValue` rows
    for `-0`, own `toString`, class `toString`, `Symbol.toPrimitive` and a new throwing
    `Symbol.toPrimitive` row are strict (no longer in `DECLARED_FORMAT_ROWS`) → scenario
+4. A prototype walk ending in null — a vm context's array (parity), a `getPrototypeOf` trap
+   returning null (parity and isolate corpus `util-format-percent-s-null-chain-end`, also
+   through `validateHeaderName`) — is inspected as Node; red on the branch before the fix
+   (PR #449 external review) → scenario
+5. Declared rows pinned, a fix turns them red: `tests/conformance/builtins/
+   util-format-percent-s-declared.test.ts` (Out of scope rows 2–3) and isolate corpus ceiling
+   `util-format-percent-s-throwing-trap` → scenario
 
 ## Reference contract
 
 - Oracle: Node v24.16.0, `lib/internal/util/inspect.js` — `formatWithOptionsInternal`
   (`case 115`), `hasBuiltInToString`, `builtInObjects`, `formatNumber`; checked against live
   `node -e`.
-- Mechanism: the same dispatch and prototype walk (primordials captured at load; a null end
-  of the walk throws as Node's `ObjectPrototypeHasOwnProperty(null)`); `builtInObjects` as
-  Node's measured name list.
+- Mechanism: the same dispatch and prototype walk (primordials captured at load);
+  `builtInObjects` as Node's measured name list. One deviation: a walk ending in null
+  returns built-in (Decisions).
 
 ## Parity cases
 
@@ -90,10 +97,13 @@ buffer's text, as in Node.
 4. Depth-0 inspect for a plain object, nested array, class without `toString`, `Date`,
    `RegExp`, `Map`, `Set`, `Error` (fixed stack); `String()` for `Uint8Array`, `Buffer`
    (their `toString` is not a built-in's) → scenario
-6. A guest that replaced `Set.prototype.has` and `Object.is` gets Node's text (Node's
-   primordials) → scenario
 5. `%s` without an argument stays literal (`'x %s y'`, `'%s:%s'` with one);
    `formatWithOptions({ depth: 5 }, '%s', …)` still depth 0 → scenario
+6. A guest that replaced `Set.prototype.has`, `Object.is` and `globalThis.Symbol` gets
+   Node's text (Node's primordials) → scenario
+7. vm context arrays (`runInContext('[1,2]')`, a context function's array,
+   `runInNewContext('[]')`, `'[1,[2]]'`) and `new Proxy([1], { getPrototypeOf() { return
+   null } })` → inspected (`[ 1, 2 ]` …) → scenario
 
 ## Out of scope
 
@@ -104,9 +114,18 @@ buffer's text, as in Node.
   `<items unknown>`, symbol keys, `[Arguments]`, subclass prefixes, `ArrayBuffer`/`DataView`
   contents, `Object.create(Date.prototype)` (rifty throws) — `runtime-js/inspect-default-format-gaps`.
 - A Proxy with traps: Node reads its target without running a trap, rifty runs
-  `get`/`getOwnPropertyDescriptor`/`getPrototypeOf`; a revoked Proxy throws `TypeError`
-  (Node `<Revoked Proxy>`) — `runtime-js/format-inspect-proxy-traps`, compat
-  isolate-host.md "`util.format` / `util.inspect` of a Proxy" ⚠️.
+  `get`/`getOwnPropertyDescriptor`/`getPrototypeOf`/`ownKeys`; a `{}`-handler Proxy of a
+  `Map` or a revoked Proxy throws `TypeError` (Node prints). A trap throwing on the
+  `toString`/`Symbol.toPrimitive` read or own check throws where Node and rifty before this
+  unit printed the target — a behaviour change, kept: a catch would also swallow a throwing
+  `toString` getter of a plain object, where Node throws; the honest fix is Node's Proxy
+  unwrap (class-kill route in the draft). `runtime-js/format-inspect-proxy-traps`, compat
+  isolate-host.md and modules.md "… of a Proxy" ⚠️.
+- The price of the null-end decision: where Node itself throws on a null end
+  (`Object.create(new Proxy(Object.create(null), { get: () => () => 1 }))`), rifty prints
+  `{}` (as main did); pinned.
+- vm context `Date`/`Error`: `String()`ed where Node inspects — the membrane's prototypes
+  have no own `constructor`; `runtime-js/vm-membrane-percent-s-branch`, compat modules.md ⚠️.
 - `formatWithOptions({ numericSeparator: true }, '%s', 1234567)` / `1234567n` (Node
   `1_234_567` / `1_234_567n`): inspect option `numericSeparator`,
   `runtime-js/util-surface-completions` (which also owns `%s` forcing `colors: false`,
@@ -120,6 +139,10 @@ buffer's text, as in Node.
   `Buffer`/`URL`; the parity loop pins it against live Node.
 - `colors: false`/`compact: 3` not passed: rifty's inspect has neither option (no colors,
   one layout); only the depth-0 contract is observable today.
-- Proxy detection not added: a pure-JS realm cannot see one (`util.types.isProxy` throws);
-  `internal/proxy-identity.ts` records identity, not target, and only where installed —
-  declared ceiling above.
+- Proxy detection not added: rifty cannot reach a Proxy's target —
+  `internal/proxy-identity.ts` records identity, not target, and only where installed
+  (same root as `runtime-js/fatal-report-proxy-traps`) — declared above.
+- A prototype walk ending in null counts as built-in (inspect), not Node's throw: Node meets
+  that end only through a Proxy, which it unwraps first (revoked target → built-in, "prevent
+  crashes"); rifty's vm membrane and `getPrototypeOf` traps reach it on ordinary values that
+  Node and main inspect (manager decision, PR #449 review B1).

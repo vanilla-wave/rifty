@@ -33,7 +33,8 @@ symbol → `NaN`, else `formatNumber(Number(v))`; `%i` `NumberParseInt`; `%f`
 `[Circular]`); `%o` `{ showHidden: true, showProxy: true, depth: 4 }`; a single string
 argument is returned unformatted. The isolate's `console.log('%%')` prints `%` (Node
 `%%`). `%O` depth and `%o` showHidden also hinge on inspect options
-(`runtime-js/util-surface-completions`).
+(`runtime-js/util-surface-completions`). `tests/conformance/builtins/util.test.ts` "%% escapes
+percent" asserts rifty's `util.format('100%%')` → `100%` (Node `100%%`): a fix rewrites that row.
 
 ## Challenge
 

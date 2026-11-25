@@ -43,6 +43,15 @@ rifty `{ 0: 1 }`; `class D extends Date`, `class M extends Map` → Node `D 1970
 `DataView`); `Math`, an array iterator → Node `Object [Math] {}`, `Object [Array Iterator] {}`,
 rifty `{}`.
 
+2026-11-25 (PR #449 external review, verified in-process vs `node -e` v24.16.0), reached
+through `%s`'s inspect branch: a vm context's `Map`/`Set` → Node `Map(1) { 1 => 2 }`, rifty
+`Map {}`; `new TextEncoder()` → Node `{ encoding: 'utf-8' }`, rifty `TextEncoder {}`;
+`new Headers({ a: '1' })` → Node `Headers { a: '1' }`, rifty `Headers {}`;
+`AbortController`/`Blob`/`Event` → Node `AbortController [Object]` …, rifty `AbortController {}` …;
+`new Intl.NumberFormat('en')` → Node `NumberFormat [Intl.NumberFormat] {}`, rifty
+`NumberFormat {}`; `Object.create({ constructor: Map, toString() {} })` → Node `{}`, rifty
+`Map {}`.
+
 ## Challenge
 
 challenge: 2026-11-18 — finding capture; no premise critic (README §Challenge)

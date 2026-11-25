@@ -139,8 +139,9 @@ const returnFalse: HasOwn = () => false;
 
 /**
  * Node's `hasBuiltInToString`: does the `toString`/`Symbol.toPrimitive` `%s` would call come
- * from a built-in prototype? Node first unwraps a Proxy without running its traps; a pure-JS
- * realm cannot see a Proxy (`util.types.isProxy`), so here its traps run.
+ * from a built-in prototype? Node first unwraps a Proxy without running its traps; rifty cannot
+ * reach a Proxy's target (`internal/proxy-identity.ts` keeps identity only), so here its traps
+ * run (`backlog/runtime-js/format-inspect-proxy-traps`).
  */
 function hasBuiltInToString(value: object): boolean {
   const v = value as { toString?: unknown; [toPrimitivePrimordial]?: unknown };
