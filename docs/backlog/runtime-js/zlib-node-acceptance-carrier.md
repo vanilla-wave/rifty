@@ -17,18 +17,22 @@ library closure laid out as `node_modules` (the `package-closure.ts` pattern of
 CI runner that is x64 Node; committed macOS digests would not observe x64) and by the isolate host
 sandbox; and in Chromium on both browser hosts (Workbench, SDK) against that live oracle's output.
 
-Expected pins on main (confirmed by the first run; isolate names follow `isolate-host.zlib.<member>`;
-only step 1's isolate pin is run today):
+Pins on main, measured for each case's first zlib call (`results/browser-pins.txt`: rifty's browser-host
+`zlib.ts` bundled into a dedicated Worker of Chromium 148, and the isolate host's `runCode`); the full
+library runs confirm them in this unit:
 
-| step | first zlib call | isolate today | browser host today |
+| case | first zlib call | isolate today | browser host today (Chromium 148 Worker) |
 |---|---|---|---|
-| 1 exceljs `WorkbookWriter` | `class extends zlib.DeflateRaw` | `isolate-host.zlib.DeflateRaw` | `zlib.DeflateRaw` |
-| 2 unzipper `Open`/`Parse` | `zlib.createInflateRaw` | `isolate-host.zlib.createInflateRaw` | `zlib.createInflateRaw` |
-| 3 pngjs `PNG.sync.write` / `.read` | `zlib.deflateSync` / `zlib.Inflate.call(this)` | `isolate-host.zlib.deflateSync` / `isolate-host.zlib.Inflate` | `zlib.deflateSync` / `TypeError: Class constructors cannot be invoked without 'new'` |
-| 4 pdfkit + `inflateSync` of its streams | `zlib.deflateSync` | `isolate-host.zlib.deflateSync` | `zlib.deflateSync` |
-| 5 `gunzipSync` of 2 members; `unzip` | `zlib.gunzipSync`; `zlib.unzip` | `isolate-host.zlib.gunzipSync`; `isolate-host.zlib.unzip` | `zlib.gunzipSync`; `zlib.unzip` |
-| 6 ws `PerMessageDeflate` | `zlib.createDeflateRaw` | `isolate-host.zlib.createDeflateRaw` | `zlib.createDeflateRaw` |
-| 7 `crc32`; callback `inflate` of a corrupt buffer | `zlib.crc32`; `zlib.inflate` | `isolate-host.zlib.crc32`; `isolate-host.zlib.inflate` | `zlib.crc32`; a `TypeError` with Node's `code` but not its message |
+| 1 exceljs `WorkbookWriter` | `class extends zlib.DeflateRaw` | `NotImplementedError` `isolate-host.zlib.DeflateRaw` | `NotImplementedError` `zlib.DeflateRaw` |
+| 2 unzipper `Open`/`Parse` | `zlib.createInflateRaw` | `… isolate-host.zlib.createInflateRaw` | `… zlib.createInflateRaw` |
+| 3w pngjs `PNG.sync.write` | `zlib.deflateSync` | `… isolate-host.zlib.deflateSync` | `… zlib.deflateSync` |
+| 3r pngjs `PNG.sync.read` | `zlib.Inflate.call(this)` | `… isolate-host.zlib.Inflate` | `TypeError: Class constructors cannot be invoked without 'new'` |
+| 4 pdfkit + `inflateSync` of its streams | `zlib.deflateSync` | `… isolate-host.zlib.deflateSync` | `… zlib.deflateSync` |
+| 5a `gunzipSync` of 2 members | `zlib.gunzipSync` | `… isolate-host.zlib.gunzipSync` | `… zlib.gunzipSync` |
+| 5b `unzip(cb)` | `zlib.unzip` | `… isolate-host.zlib.unzip` | `… zlib.unzip` |
+| 6 ws `PerMessageDeflate` | `zlib.createDeflateRaw` | `… isolate-host.zlib.createDeflateRaw` | `… zlib.createDeflateRaw` |
+| 7a `crc32` | `zlib.crc32` | `… isolate-host.zlib.crc32` | `… zlib.crc32` |
+| 7b callback `inflate` of a corrupt buffer | `zlib.inflate` | `… isolate-host.zlib.inflate` | `TypeError: The compressed data was not valid: invalid code -- missing end-of-block.` (no `code`; Node: `Error` `Z_DATA_ERROR` `invalid code -- missing end-of-block`) |
 
 Probe evidence that each step gives Node's bytes on the engine: `results/consumers.txt` (5/5 under
 Node's own `lib/zlib.js`).
@@ -39,8 +43,7 @@ challenge: 2026-11-24 — reuses the goal's FIT challenge (goal.md §Challenge) 
 
 ## Acceptance
 
-1. Isolate host: one case per step and sub-step (1, 2, 3 write, 3 read, 4, 5 `gunzipSync`, 5 `unzip`,
-   6, 7 `crc32`, 7 `inflate`), each running the step's program through the sandbox over the same files
+1. Isolate host: one case per row of the pin table (1, 2, 3w, 3r, 4, 5a, 5b, 6, 7a, 7b), each running the step's program through the sandbox over the same files
    as a live `node` oracle on the same runner, each asserting today's exact outcome (error class and
    message, exit code, stdout) — not a bare `it.fails` → scenario, I1, I5
 2. Browser hosts: the same cases in Chromium on the Workbench and on the SDK, through whichever
@@ -48,8 +51,9 @@ challenge: 2026-11-24 — reuses the goal's FIT challenge (goal.md §Challenge) 
    runner → scenario, I1
 3. Every output file and stdout of a step compares byte for byte with the oracle once green; the clock
    is frozen inside the step; a gzip OS byte is compared as goal Decisions say → I2, I5
-4. Each case names the unit that turns it green: unit 2 — 3 write, 3 read, 4, 5 `gunzipSync`, 7
-   `crc32`; unit 3 — 1, 2, 5 `unzip`, 6, 7 `inflate` → scenario
+4. Each case names the unit that turns it green: unit 2 (`runtime-js/zlib-engine`) — 7a; unit 3
+   (`runtime-js/zlib-node-lib-port`) — 3w, 3r, 4, 5a, 5b, 7b; unit 3 or 4 (`runtime-js/zlib-streams-under-load`)
+   — 1, 2, 6, as their first green run shows → scenario
 5. pdfkit 0.17.2 and pngjs 7.0.0 enter as exact test devDependencies; exceljs 4.4.0, unzipper 0.10.14
    and ws 8.23.0 from the lockfile → scenario
 
@@ -73,7 +77,7 @@ Oracle: Node v24.16.0, live on the runner, same files.
 
 - Brotli and zstd in any step (manager's scoping, user confirmation pending).
 - Windows and macOS Node as oracle on CI (no lane; goal Decisions); Firefox/WebKit (ADR-0469).
-- Making any step green: units 2 and 3.
+- Making any case green: units 2–4.
 
 ## Decisions
 

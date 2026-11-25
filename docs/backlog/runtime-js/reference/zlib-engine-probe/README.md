@@ -27,7 +27,8 @@ recipe: `playwright@1.28.1`, `install chromium` under Node 18.20.8); `run-all.sh
 | `swap-binding.cjs` | preload: Node's native `binding.Zlib` → `handle.cjs`, so Node's **own** `lib/zlib.js` runs on an engine |
 | `node-suite.mjs` | Node's own `test/parallel/test-zlib*.js` (62) natively and per engine through the swap |
 | `consumers.mjs` + `consumer-scenarios.cjs` | exceljs streaming writer, unzipper, ws permessage-deflate, pngjs sync, pdfkit — digest of their output, native vs engine; a run counts only with exit 0, no signal, one JSON line |
-| `transform-path.mjs` | Node's one-shot path (`lib/zlib.js` ported over a `Transform` parameter) on Node's vs rifty's `Transform` (main) |
+| `zlib-diff.mjs` | Node's own `lib/zlib.js` loaded verbatim from the pinned tarball (`--expose-internals`) over the probe handle, with Node's vs rifty's `Transform` (main): 16 scenarios of state and behaviour |
+| `browser-pins.mjs` | each carrier case's first zlib call on main: rifty's browser-host `zlib.ts` in a Chromium 148 Worker, and the isolate host |
 | `async-vs-sync.mjs` | unit 2's intermediate browser state: sync forms on the engine vs callback forms on Chromium's `CompressionStream` |
 | `highlevel.mjs` | controls without a z_stream API: fflate, wasm-flate |
 | `bench-*.mjs`, `bench-core.js`, `memory.mjs` | speed (Node, isolate, Chromium 148 worker), first use, memory, host bridge |
@@ -66,14 +67,16 @@ build's `OS_CODE` — 19 macOS, 10 Windows, 3 elsewhere (`deps/zlib/zutil.h`). N
 engine writes 3. All other bytes: no CPU dependence by source (deflate hash is Chromium's fixed
 "ANZAC++" multiply, SIMD paths are slide_hash/crc/chunk-copy — output-neutral); x64 Node not run.
 
-### Over rifty's `Transform` (`results/transform-path.txt`)
+### Node's `lib/zlib.js` over rifty's `Transform` (`results/zlib-diff.txt`)
 
-Node's one-shot path, 7 scenarios (callback valid / corrupt / `maxOutputLength` / `info`, gunzip of 2
-members, sync valid / corrupt): the port over Node's `Transform` equals real Node in all 7. Over rifty's
-`Transform`, bytes, error message and `code`, `info.engine` and callback/event order are Node's in all
-7; `_destroy` never runs, so the handle stays open after every async one-shot and every error, and
-`maxOutputLength` lets one more engine write through after `close()`. Only a successful sync call
-closes its handle (`processChunkSync` does it itself).
+Node v24.16.0's own `lib/zlib.js`, verbatim, over the probe handle: with Node's `Transform` it equals
+real `node:zlib` in 16/16 scenarios; with rifty's `Transform` (main) it differs in 10/16, 48 fields —
+constructor option validation (`highWaterMark: -1`, `signal: 1` compress instead of throwing),
+`_destroy` never running (the handle never closes: after a sync error `reset()` works and a second
+call computes, Node asserts and throws), no `autoDestroy` after `'end'`, no `errored`/`closed`/
+`readableFlowing`, `finished` on an unwritten stream calls back instead of `ERR_STREAM_PREMATURE_CLOSE`,
+`write(chunk, '', cb)` (Node's `flush()` marker) refused with `ERR_UNKNOWN_ENCODING`. The goal's
+`lib/zlib.js` unit waits for 0.
 
 ### Cost (`results/bench-*.txt`, `chromium108.txt`, `memory.txt`, `streams-cap.txt`, `guest-wasm.txt`, `bundles.txt`)
 
@@ -83,9 +86,9 @@ closes its handle (`processChunkSync` does it itself).
 | inflate 1 MiB / 50 MiB — Node, ms | 1.6 / 77 | 5.8 / 308 | 2.7 / 138 |
 | deflate / inflate 50 MiB — isolate, ms | — | 2379 / 304 | 1551 / 141 |
 | deflate / inflate 50 MiB — Chromium 148 worker, ms | — | 2521 / 326 | 1559 / 143 |
-| deflate / inflate 1 MiB — Chromium 108 worker, ms | — | 51.7 / 7.3 | 31.8 / 2.5 |
+| deflate / inflate 1 MiB — Chromium 108 worker, ms | — | 51.8 / 7.4 | 32.4 / 2.6 |
 | first use in a fresh isolate (load + 1 KiB round trip), ms | — | 1.6 load + 2.9 | 1.4 incl. sync compile 0.16 + instantiate 0.09 |
-| first use, Chromium worker (148 / 108), ms | — | 2.6 / — | 0.5 / 0.6 |
+| first use, Chromium worker (148 / 108), ms | — | 2.6 / — | 0.5 / 1.6 |
 | sync `new WebAssembly.Module` (64 KB) | — | n/a | ok: isolate, Chromium 148 and 108 Workers, Chromium 148 main thread. Chromium 108 main thread refuses sync compile **and** sync `new WebAssembly.Instance` > 4 KB |
 | client bundles generic / toolchain, Δ min / Δ gzip, B (engine only) | baseline 932920/279754, 1061998/323615 (caps 1124000/332000, 1284000/386000) | +44561/+14198, +44626/+13945 | +86372/+36950, +86456/+36855 (inline base64) |
 | isolate guest.js Δ raw / Δ gzip, B (unminified bundle) | baseline 7123270/1497917 | +110158/+20573 | +86545/+36857 |

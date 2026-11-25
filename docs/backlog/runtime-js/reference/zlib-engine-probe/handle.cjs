@@ -1,7 +1,7 @@
 // Shape of Node.js v24.16.0 src/node_zlib.cc ZlibStream — Copyright Node.js contributors, MIT.
 // Node's native zlib handle (node_zlib.cc ZlibStream) over a probe engine: init/write/writeSync/
 // params/reset/close, `_writeState` via writeResult, errors through `onerror`. Used by swap-binding.cjs
-// (Node's own lib/zlib.js) and transform-path.mjs. `trace` (optional) records handle calls.
+// (Node's own lib/zlib.js) and zlib-diff.mjs. `trace` (optional) records handle calls.
 'use strict';
 const { Context, ZlibError } = require('./driver.mjs');
 

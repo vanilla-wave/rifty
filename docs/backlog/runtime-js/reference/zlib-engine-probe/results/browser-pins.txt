@@ -1,0 +1,23 @@
+chromium 148.0.7778.96; rifty browser-host zlib.ts (main) in a dedicated Worker
+1 exceljs: class extends zlib.DeflateRaw, new | NotImplementedError: Not implemented: zlib.DeflateRaw (this stream not implemented yet; buffer the input, then call async zlib.defl
+2 unzipper: zlib.createInflateRaw() | NotImplementedError: Not implemented: zlib.createInflateRaw (this stream not implemented yet; buffer the input, then call async zli
+3w pngjs write: zlib.deflateSync | NotImplementedError: Not implemented: zlib.deflateSync (sync zlib not implemented yet; async zlib.deflate works: zlib.deflate(buf, 
+3r pngjs read: zlib.Inflate.call(this) | TypeError: Class constructors cannot be invoked without 'new'
+4 pdfkit: zlib.deflateSync | NotImplementedError: Not implemented: zlib.deflateSync (sync zlib not implemented yet; async zlib.deflate works: zlib.deflate(buf, 
+5a zlib.gunzipSync (2 members) | NotImplementedError: Not implemented: zlib.gunzipSync (sync zlib not implemented yet; async zlib.gunzip works: zlib.gunzip(buf, cb)
+5b zlib.unzip(cb) | NotImplementedError: Not implemented: zlib.unzip (gzip/zlib auto-detect not implemented yet; pick by header: gzip input (starts 1f 
+6 ws: zlib.createDeflateRaw() | NotImplementedError: Not implemented: zlib.createDeflateRaw (this stream not implemented yet; buffer the input, then call async zli
+7a zlib.crc32 | NotImplementedError: Not implemented: zlib.crc32 (crc32 not implemented yet; node:zlib has no working alternative)
+7b zlib.inflate(cb) corrupt | TypeError: The compressed data was not valid: invalid code -- missing end-of-block.
+
+isolate host (runCode, main) exit 0
+1 exceljs: class extends zlib.DeflateRaw, new | NotImplementedError: Not implemented: isolate-host.zlib.DeflateRaw (no compression engine in the rifty isolate host (rifty zlib run
+2 unzipper: zlib.createInflateRaw() | NotImplementedError: Not implemented: isolate-host.zlib.createInflateRaw (no compression engine in the rifty isolate host (rifty zl
+3w pngjs write: zlib.deflateSync | NotImplementedError: Not implemented: isolate-host.zlib.deflateSync (no compression engine in the rifty isolate host (rifty zlib ru
+3r pngjs read: zlib.Inflate.call(this) | NotImplementedError: Not implemented: isolate-host.zlib.Inflate (no compression engine in the rifty isolate host (rifty zlib runs o
+4 pdfkit: zlib.deflateSync | NotImplementedError: Not implemented: isolate-host.zlib.deflateSync (no compression engine in the rifty isolate host (rifty zlib ru
+5a zlib.gunzipSync (2 members) | NotImplementedError: Not implemented: isolate-host.zlib.gunzipSync (no compression engine in the rifty isolate host (rifty zlib run
+5b zlib.unzip(cb) | NotImplementedError: Not implemented: isolate-host.zlib.unzip (no compression engine in the rifty isolate host (rifty zlib runs on 
+6 ws: zlib.createDeflateRaw() | NotImplementedError: Not implemented: isolate-host.zlib.createDeflateRaw (no compression engine in the rifty isolate host (rifty zl
+7a zlib.crc32 | NotImplementedError: Not implemented: isolate-host.zlib.crc32 (not implemented in rifty yet, on any host: backlog runtime-js/zlib-c
+7b zlib.inflate(cb) corrupt | NotImplementedError: Not implemented: isolate-host.zlib.inflate (no compression engine in the rifty isolate host (rifty zlib runs o

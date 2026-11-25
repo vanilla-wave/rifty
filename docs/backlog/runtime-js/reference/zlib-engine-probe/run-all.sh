@@ -28,5 +28,6 @@ node streams-cap.mjs "$DEPS" "$BUILD" > "$R/streams-cap.txt"
 node --import tsx guest-wasm.mjs "$REPO" > "$R/guest-wasm.txt"
 for v in none pako wasm none; do echo "== $v"; sh measure-bundles.sh "$REPO" "$DEPS" "$BUILD" "$v"; done > "$R/bundles.txt" 2>&1
 node --import tsx main-red.mjs "$REPO" > "$R/main-red.txt"
-node --import tsx transform-path.mjs "$DEPS" "$BUILD" "$REPO" > "$R/transform-path.txt"
+node --expose-internals --import tsx zlib-diff.mjs "$DEPS" "$BUILD" "$REPO" 2>/dev/null > "$R/zlib-diff.txt"
+node --import tsx browser-pins.mjs "$BUILD" "$REPO" > "$R/browser-pins.txt"
 # chromium108.mjs: needs the floor lane runner (README §Run), not run here.

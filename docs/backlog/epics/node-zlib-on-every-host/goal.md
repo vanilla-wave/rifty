@@ -14,8 +14,8 @@ tier: works
 `crc32` — behaves as Node v24.16.0 on every rifty host: the browser hosts (Workbench, SDK) and the
 isolate host guest. Every form (callback, `util.promisify`, `*Sync`, `create*`, the classes with and
 without `new`), every option and stream member, the output bytes and the errors (message, `code`,
-`errno`) are Node's. Libraries that compress through it write Node's files. Brotli and zstd stay
-named loud gaps.
+`errno`) are Node's. Libraries that compress through it write Node's files. Brotli and zstd: see
+Decisions (outside this goal pending the user's confirmation).
 
 ## User scenario
 
@@ -80,7 +80,9 @@ challenge: 2026-11-24 — 13 problems (one fresh read-only critic over the reque
 7. ADR-0557 §6 says «engine choice is the user's»: ADR-0573 records the user's delegation.
 8–13. nits fixed: the manager's reading marked as such; Chromium 148's 2nd-member/LF rejection persisted (`results/bench-browser.txt`); pako guest +21 KB gzip; pako 2.2.0 date sourced (npm publish); the carrier's browser failure marked expected, not run; the OS-byte alternative recorded.
 
-external review 2026-11-24 (manager-run, PR #448 @ 605ae7783; engine choice upheld): 1 blocker — unit 2 was not independent of streams (Node's one-shots are `new ctor` + `zlibBuffer` over `Transform`); units re-cut by Node's structure after a measurement on main (`results/transform-path.txt`, map); should/nit findings fixed in the probe, ADR-0573 and this goal.
+external review 2026-11-24 (manager-run, PR #448 @ 605ae7783; engine choice upheld): 1 blocker — unit 2 was not independent of streams (Node's one-shots are `new ctor` + `zlibBuffer` over `Transform`); units re-cut by Node's structure; should/nit findings fixed in the probe, ADR-0573 and this goal.
+
+external review round 2 2026-11-24 (manager-run, PR #448 @ c56ba6dde; engine choice upheld): 2 blockers — sync forms and `info.engine` over rifty's `Transform` are not Node's (option validation, `errored`/`closed`/`_destroy` after a sync error), and the class/stream boundary of the old unit 2 was unwritten (`Gzip` both old and new). Manager's decision: one chokepoint by dependency order — unit 2 = engine + handle + `crc32`; `lib/zlib.js` whole only after the streams goal's core, entry criterion the verbatim differential `zlib-diff.mjs` (map); should/nit findings fixed.
 
 ## Decisions
 
@@ -93,7 +95,7 @@ external review 2026-11-24 (manager-run, PR #448 @ 605ae7783; engine choice uphe
   - Node's output on x64 — closed by unit 1: its oracle is a live `node` on the Linux x64 CI runner, compared on that runner (committed macOS digests would not observe x64).
   - Node's output on Windows — not closed: no Windows lane; CPU-independence of the bytes rests on the source (fixed deflate hash), the OS byte is declared above. Owner: runtime-js, on a Windows lane's arrival.
   - the wasm build on another machine — unit 2's Acceptance (pinned toolchain, rebuild on the CI runner, same sha256).
-  - Chromium 108, ADR-0469's supported floor (measured `results/chromium108.txt`): in a Worker the engine compiles synchronously and round-trips; on the page main thread sync compile and sync instantiation > 4 KB are refused. Guest code runs in Workers on every browser host, so the engine must compile on first use, never at module load (unit 2's Acceptance); the SDK page's own import failure stays `runtime-js/chromium108-sdk-sync-wasm-import`'s.
+  - Chromium 108, ADR-0469's supported floor (measured `results/chromium108.txt`): in a Worker the engine compiles synchronously and round-trips; on the page main thread sync compile and sync instantiation > 4 KB are refused. Guest code runs in Workers on every browser host, so the engine must compile on first use, never at module load (unit 2's Acceptance: a per-PR instrumentation test on current Chromium plus a manual floor-lane run); the SDK page's own import failure stays `runtime-js/chromium108-sdk-sync-wasm-import`'s.
   - Firefox (verified tier) and WebKit (capability-verified): not run; their dispatched lanes record them (ADR-0469).
   - pako tree-shaking — moot after the engine decision; reopened only by ADR-0573 §8's kill condition.
 - 2026-11-24 — declared residual under tier works, open streams (an open deflate stream holds 302776 B of linear memory, 450232 B at `memLevel: 9`; inflate 58327 B; `results/streams-cap.txt`), per host:

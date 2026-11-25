@@ -1,0 +1,22 @@
+node v24.16.0; lib/zlib.js verbatim from node-v24.16.0.tar.xz; rifty Transform from packages/io/src (main)
+
+| scenario | port/N = node | port/R vs port/N (rifty differences) |
+|---|---|---|
+| ctor deflateSync({highWaterMark: -1}) | yes | throw: "TypeError [ERR_INVALID_ARG_VALUE]: The property 'options.readableHighWaterMark' is invalid. Received -1" → undefined; ok: undefined → "Buffer(11)" |
+| ctor deflateSync({signal: 1}) | yes | throw: "TypeError [ERR_INVALID_ARG_TYPE]: The \"signal\" argument must be an instance of AbortSignal. Received typ" → undefined; ok: undefined → "Buffer(11)" |
+| ctor deflateSync({chunkSize: 10}) | yes | 0 |
+| ctor deflateSync({objectMode: true, encoding: "hex"}) | yes | 0 |
+| sync success: _processChunk then state | yes | sync.closed: false → undefined; sync.readableFlowing: null → undefined; later.closed: false → undefined; later.readableFlowing: null → undefined |
+| sync error: _processChunk(BAD), state, reset(), again | yes | sync.errored: "Error [Z_DATA_ERROR]: incorrect data check" → null; sync.closed: true → undefined; sync._closed: true → false; sync.handle: null → "object"; sync.readableFlowing: null → undefined; later.errored: "Error [Z_DATA_ERROR]: incorrect data check" → null; later.closed: true → undefined; later._closed: true → false; later.handle: null → "object"; later.readableFlowing: null → undefined; reset.throw: "Error [ERR_INTERNAL_ASSERTION]: zlib binding closed" → undefined; again.throw: "TypeError: Cannot read properties of null (reading 'writeSync')" → "Error [Z_DATA_ERROR]: incorrect data check"; trace: ["destroy(err)","_destroy","event:error","event:close"] → ["destroy(err)","event:error","event:close"] |
+| inflateSync({maxOutputLength: 1000}) | yes | 0 |
+| gzipSync({info: true}).engine state | yes | engine.closed: false → undefined; engine.readableFlowing: null → undefined |
+| close() then _processChunk next tick | yes | r.throw: "TypeError: Cannot read properties of null (reading 'writeSync')" → undefined; r.ok: undefined → "Buffer(452)"; state.closed: true → undefined; state.readableFlowing: null → undefined; state.bytesWritten: 0 → 132000 |
+| close(cb) | yes | r: "Error [ERR_STREAM_PREMATURE_CLOSE]: Premature close" → "cb()"; state.closed: true → undefined; state._closed: true → false; state.handle: null → "object"; state.readableFlowing: null → undefined |
+| callback deflate success, info: true | yes | 0 |
+| callback inflate error | yes | 0 |
+| callback inflate maxOutputLength 1000 | yes | 0 |
+| callback engine trace (deflate success) | yes | trace: ["event:finish","event:end","destroy()","_destroy","event:close"] → ["event:finish","event:end"]; state.destroyed: true → false; state.closed: true → undefined; state._closed: true → false; state.handle: null → "object"; state.readableFlowing: true → undefined |
+| stream: write, params, flush, reset, end | yes | bytes: 820 → undefined; reset: {} → undefined; state: {"destroyed":true,"errored":null,"closed":true,"_closed":true,"handle":null,"readableFlowing":true,"readableEnded":true,"writableEnded":true,"writableFinished":true,"bytesWritten":132000} → undefined; scenarioThrew: undefined → "TypeError [ERR_UNKNOWN_ENCODING]: Unknown encoding: " |
+| stream: destroy mid-write | yes | trace: ["destroy()","_destroy","event:close"] → ["destroy()","event:close"]; state.closed: true → undefined; state._closed: true → false; state.handle: null → "object"; state.readableFlowing: null → undefined |
+
+port/N = node: 16/16 scenarios; port/R ≠ port/N: 10/16 scenarios, 48 fields

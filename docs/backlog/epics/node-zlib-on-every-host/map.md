@@ -1,60 +1,60 @@
 # Map — node-zlib-on-every-host
 
-Units are cut by Node's own structure (manager 2026-11-24, after the external review of PR #448):
-every one-shot in Node is `new ctor(opts)`; sync forms run the handle directly, callback forms and
-streams ride `Transform`.
+One chokepoint, ordered by dependency (manager 2026-11-24, after round 2 of the external review of
+PR #448): Node's zlib classes are `Transform` subclasses and their observable state is `Transform`'s,
+so Node's `lib/zlib.js` comes to rifty only on a `Transform` equal to Node's on every zlib path.
 
 ## Items
 
-1. `runtime-js/zlib-node-acceptance-carrier` — **carrier** — the User scenario step by step as parity
+1. `runtime-js/zlib-node-acceptance-carrier` — **carrier** (ready) — the User scenario as 10 parity
    cases (isolate sandbox and both browser hosts vs a live `node` on the same runner), each pinning
-   today's named outcome; first, before engine code. Says which cases each later unit turns green.
-2. `runtime-js/zlib-engine-and-node-zlib-port` — **engine + handle + `lib/zlib.js`, sync half** —
-   ADR-0573's engine under a port of Node's handle and whole `lib/zlib.js` (classes included) on
-   every host. Accepted: `*Sync`, `info` on sync forms, `crc32`, class construction (`new`, no `new`,
-   `X.call(this)`), `_processChunk` (pngjs) — carrier steps 3, 4, 5 (`gunzipSync`), 7 (`crc32`).
-   Callback one-shots and `createGzip` stay as on main per host (they ride `_destroy`, measured wall
-   below); the sync error path ships, its handle freed by the `FinalizationRegistry` (GC-lane test
-   here). Residuals: free at GC, not at the error; sync vs callback forms differ on a browser host
-   (bytes 14/45 identical, decode edges 0/5 alike — `results/async-vs-sync.txt`). Absorbs `runtime-js/zlib-crc32`, `runtime-js/zlib-trailing-bytes-after-stream-end` (sync
-   half), `runtime-js/zlib-class-call-shape` (construction). → I1 (sync, `crc32`, construction), I2, I3
-   (sync), I4 (`_processChunk`/`_handle`/`_writeState`), scenario 3–5, 7.
-3. `runtime-js/zlib-node-stream-classes` — **classes as streams + callback one-shots** — after the
-   streams goal (the wall of parked PRs #434/#437, waiting on the user), not before and not with
-   stream gaps declared: `write`/`pipe`/`flush`/`params`/`close`, backpressure, destroy mid-write,
-   event order, the 7 callback one-shots and `util.promisify`; `CompressionStream` leaves `node:zlib`.
-   Absorbs the rest of `runtime-js/zlib-web-compression-subset` and of the trailing-bytes item.
-   → I1, I3, I4, I5, scenario 1, 2, 5 (`unzip`), 6, 7 (callback).
+   today's measured outcome and naming the unit that turns it green.
+2. `runtime-js/zlib-engine` — **engine + handle + `crc32`** (ready) — ADR-0573's wasm build, a port of
+   Node's handle proven against Node without rifty's `Transform` (binding-level matrix; Node's own
+   `lib/zlib.js` over it in a Node-hosted test), `zlib.crc32` on every host. Absorbs
+   `runtime-js/zlib-crc32`. Everything else in `node:zlib` stays as on main. → I1 (`crc32`), carrier 7a.
+3. `runtime-js/zlib-node-lib-port` — **Node's `lib/zlib.js` whole** (draft) — classes, `*Sync`,
+   callback one-shots, `create*`, `info`, `_processChunk`; today's browser `Gzip`/`CompressionStream`
+   leaves in the same step; `FinalizationRegistry` as Node's `MakeWeak`, with a GC-lane proof. Entry
+   criterion: `zlib-diff.mjs` shows 0 differences between Node's and rifty's `Transform` on every zlib
+   path (today 10/16 scenarios, 48 fields). Absorbs `runtime-js/zlib-trailing-bytes-after-stream-end`,
+   `runtime-js/zlib-class-call-shape`, the rest of `runtime-js/zlib-web-compression-subset`. → I1–I4,
+   carrier 3w, 3r, 4, 5a, 5b, 7b (and 1, 2, 6 if load does not bite).
+4. `runtime-js/zlib-streams-under-load` — **zlib as streams under load** (draft) — backpressure,
+   destroy mid-write, event order. → I5, carrier 1, 2, 6.
 
-Wall measured on main (`docs/backlog/runtime-js/reference/zlib-engine-probe/results/transform-path.txt`,
-Node's one-shot path ported over a `Transform` parameter): over rifty's `Transform` every
-Node-observable result of 7 one-shot scenarios is Node's — bytes, error message and `code`,
-`info.engine`, callback/event order — but `_destroy` never runs, so the handle is not closed after an
-async one-shot or any error (`runtime-js/stream-destroy-construct-hooks`). Not measured: backpressure
-and event order over these classes (`runtime-js/transform-readable-backpressure`,
-`runtime-js/duplex-end-finish-close-order`). Streams are not fixed inside zlib.
+## Dependencies on the streams goal (thread `t3/node-streams-goal`)
+
+What units 3–4 need from rifty's streams, measured by `zlib-diff.mjs` on main
+(`docs/backlog/runtime-js/reference/zlib-engine-probe/results/zlib-diff.txt`); the manager passes it to
+that goal, and the parts are named here by that goal's item slugs once they exist on its branch:
+
+- unit 3 ← `_destroy`/`_construct` hooks and `autoDestroy` (`runtime-js/stream-destroy-construct-hooks`);
+  `closed`, `errored`, `readableFlowing`; constructor option validation (`highWaterMark`, `signal`);
+  `finished` on a stream closed before writing (`ERR_STREAM_PREMATURE_CLOSE`); `write(chunk, '', cb)`
+  taking the default encoding (Node's `flush()` path).
+- unit 4 ← `Transform` backpressure (`runtime-js/transform-readable-backpressure`) and the
+  `'finish'`/`'end'`/`'close'` order (`runtime-js/duplex-end-finish-close-order`).
 
 ## Open questions
 
-- Whether Node's own `test/parallel/test-zlib*.js` can run inside rifty as an extra parity corpus
-  (in real Node 36 of its 47 deflate-family files write through the engine) — owner: agent — a trial
-  run of `test/common` in the isolate host during unit 2.
+- Whether Node's own `test/parallel/test-zlib*.js` can run inside rifty as an extra parity corpus for
+  unit 3 (in real Node 36 of its 47 deflate-family files write through the engine) — owner: agent — a
+  trial run of `test/common` in the isolate host during unit 3.
 
 ## Decisions
 
 - Engine: the wasm build of Node v24.16.0's `deps/zlib` on every host — ADR-0573 accepted by the
   manager 2026-11-24 under the user's delegation («исследуй и запускай»), not the user's choice.
-  Ground: the only candidate at 1420/1420 and Node's suite 62/62 with no zlib code written in rifty
-  (pako needs a rifty `deflateParams` port and a rifty `crc32`); no difference observable against Node.
-- Order: units 1–2 now, in a thread from `main` after this map merges; unit 3 after the streams goal.
-- Link with the streams goal (thread `t3/node-streams-goal`; the user's «ок» on it, relayed by the
-  manager): when its first part (`_destroy`/`_construct` hooks) merges, unit 2's free-at-GC residual is
-  lifted by a check, and the callback one-shots become a small add-on that need not wait for all of
-  unit 3. The final order is the manager's once both goals are ready.
-- Unit 2 ships the sync error path (manager 2026-11-24).
-- On main the callback one-shots work on browser hosts over `CompressionStream` (ADR-0159, ⚠️) and
-  `createGzip` too (ADR-0178): they keep that until unit 3 — a throw in place of working behaviour is a
-  fake (AGENTS.md §Fidelity). In the isolate they stay `NotImplementedError` until unit 3.
+  Ground: the only candidate at 1420/1420 and Node's suite 62/62 without zlib algorithm code written in
+  rifty (pako needs a rifty `deflateParams` port and a rifty `crc32`; the handle is a port of Node's
+  `node_zlib.cc` either way); no difference observable against Node.
+- Order: units 1–2 now, in a thread from `main` after this map merges; unit 3 after the streams goal's
+  parts listed above; unit 4 after its backpressure part. The final interleaving with the streams goal
+  is the manager's once both goals are ready.
+- Until unit 3, every `node:zlib` member but `crc32` keeps its behaviour on main per host (browser:
+  `CompressionStream` subset, ADR-0159/0178; isolate: `NotImplementedError`) — no intermediate state
+  with two engines, no throw in place of working behaviour (AGENTS.md §Fidelity).
 
 ## Out of scope
 

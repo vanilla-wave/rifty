@@ -38,7 +38,7 @@ own `lib/zlib.js` also runs on each engine via a swapped `binding.Zlib`.
 - Speed (deflate / inflate 50 MiB, ms): Node 1257 / 77; wasm 1543 / 138 (isolate 1551 / 141, Chromium
   148 worker 1559 / 143); pako 2440 / 308 (isolate 2379 / 304, worker 2521 / 326).
 - First use: isolate 1.4 ms incl. sync compile 0.16 ms (pako 1.6 ms load + 2.9 ms); Chromium 148 worker
-  0.5 ms (pako 2.6 ms); Chromium 108 worker 0.6 ms. A compiled module crosses isolates (`ExternalCopy`).
+  0.5 ms (pako 2.6 ms); Chromium 108 worker 1.6 ms. A compiled module crosses isolates (`ExternalCopy`).
 - Chromium 108 (ADR-0469's supported floor), `results/chromium108.txt`: in a Worker, sync
   `new WebAssembly.Module` of the 64 KB build, instantiation and a 1 MiB round trip work; on the page
   main thread both sync `new WebAssembly.Module` and sync `new WebAssembly.Instance` (even of an
@@ -64,12 +64,12 @@ own `lib/zlib.js` also runs on each engine via a swapped `binding.Zlib`.
     `memoryLimitMb: 64` (448 MiB ceiling), ≈ 3000 at 256; outcome `termination: 'memory'` (or a rerun of
     the neighbours, ADR-0563 §6). Computed, not run with the engine.
   - Chromium: not measured (its per-tab wasm memory limit is unknown here).
-- rifty's `Transform` under Node's one-shot path (`transform-path.mjs`, `lib/zlib.js` ported over a
-  `Transform` parameter, 7 scenarios): every Node-observable result is Node's — bytes, error message
-  and `code`, `info.engine`, the order of callback and events — but `_destroy` never runs, so the
-  handle is not closed after an async one-shot (success or error), a sync error, or
-  `maxOutputLength` (one extra engine write after `close()`); only a successful sync call closes it
-  itself. Wall: `runtime-js/stream-destroy-construct-hooks`.
+- Node's own `lib/zlib.js`, loaded verbatim from the pinned tarball over the probe handle
+  (`zlib-diff.mjs`, 16 scenarios): over Node's `Transform` it equals real `node:zlib` in 16/16; over
+  rifty's `Transform` (main) it differs in 10/16, 48 fields — constructor option validation
+  (`highWaterMark`, `signal`), `_destroy` never running (so the handle never closes), no
+  `autoDestroy` after `'end'`, no `errored`/`closed`/`readableFlowing`, `finished` on an unwritten
+  stream, `write(chunk, '', cb)` refused. All are rifty's streams, none the engine's.
 
 ## Decision
 
@@ -80,27 +80,28 @@ own `lib/zlib.js` also runs on each engine via a swapped `binding.Zlib`.
    not pinned (whatever Homebrew has); a pinned toolchain, a Linux CI rebuild that matches the
    committed sha256, and the licence record (Zlib + Chromium BSD-3, the ported Node code MIT, via the
    `vendor/`/`generated/` manifest of PR #445) are unit 2's acceptance.
-2. Placement: runtime-js, shared by every host (browser Workers and the isolate guest bundle). Inline
+2. Placement: runtime-js, shared by every host (browser Workers and the isolate guest bundle). The engine
+   ships with unit 2 for `zlib.crc32`; the handle is bundled only when unit 3 imports it. Inline
    bytes (base64), compiled synchronously on the first `node:zlib` call that needs the engine, never at
    module load (the SDK page imports the builtins on the main thread, where Chromium 108 refuses sync
    compile and sync instantiation > 4 KB); one instance per realm; no preload gate. Every pointer the
    engine returns is checked: a null `malloc` is a loud failure, not a write at address 0.
 3. Above it, Node's shape: a port of `node_zlib.cc` ZlibContext as a handle (`init`/`write`/
-   `writeSync`/`params`/`reset`/`close`, `_writeState`, `onerror`) and of `lib/zlib.js` (classes as
+   `writeSync`/`params`/`reset`/`close`, `_writeState`, `onerror`; unit 2, proven against Node without
+   rifty's `Transform`) and Node's `lib/zlib.js` (unit 3, only on a `Transform` that equals Node's on
+   every zlib path — entry criterion: `zlib-diff.mjs` with 0 differences) (classes as
    callable legacy constructors, one-shots, `create*`, `crc32`, all options incl. `info`,
    `maxOutputLength`, `rejectGarbageAfterEnd`). Consumers that read internals (pngjs: `_handle`,
    `_outBuffer`, `_processChunk`) get Node's.
 4. Async forms run the same engine on the caller's thread in a later turn — not a thread pool: a large
    async call blocks that realm's event loop for its duration (Node's does not). Declared, compat ⚠️.
-   `CompressionStream` stops backing `node:zlib` when the async forms move (unit 3 of the goal;
-   supersedes ADR-0159 §Decision 1 and ADR-0178 then).
+   `CompressionStream` stops backing `node:zlib` in unit 3, in one step with the rest of `lib/zlib.js`
+   (supersedes ADR-0159 §Decision 1 and ADR-0178 then); no state with two engines.
 5. Gzip OS byte 3 (zlib's default outside its platform table; rifty's `process.platform` is in none).
-6. Each handle frees its zlib state on `close`, and — as Node's weak handle does on GC — through a
-   `FinalizationRegistry` when a stream is dropped or `_destroy` does not run (rifty's `Transform`
-   today). Proof: a GC-lane test (`--expose-gc`) that drops open streams and sees the allocator reuse
-   their blocks — unit 2 (manager 2026-11-24: until `_destroy` runs it is the only release after a sync
-   error and after async one-shots; `lib/zlib.js` is not patched around it). Linear memory itself never
-   shrinks: a realm keeps its peak until it ends.
+6. Each handle frees its zlib state on `close` (`_destroy` → `_close`, Node's path), and — as Node's
+   `MakeWeak` does — through a `FinalizationRegistry` when an object is dropped without closing.
+   Proof: a GC-lane test (`--expose-gc`) that drops open streams and sees the allocator reuse their
+   blocks — unit 3. Linear memory itself never shrinks: a realm keeps its peak until it ends.
 7. Boundary: brotli and zstd stay `NotImplementedError` on every host (manager's scoping, user
    confirmation pending).
 8. Bundle budget: engine only, inline costs +36950 B gzip in the client generic bundle (279754 →
@@ -140,5 +141,7 @@ own `lib/zlib.js` also runs on each engine via a swapped `binding.Zlib`.
 - (−) +37 KB gzip in client bundles for the engine alone (15 KB left under the generic cap before the
   port); a vendored binary whose toolchain unit 2 pins; manual free of zlib state; linear memory never
   shrinks; async calls block the realm's loop.
+- (−) Order: everything in `node:zlib` but `crc32` waits for the streams goal's core (map); until then
+  main's behaviour stays per host.
 - Follow-ups: goal `node-zlib-on-every-host` (map); compat `zlib.md`, isolate-host rows; ADR-0159 and
   ADR-0178 marked superseded when unit 3 lands.
