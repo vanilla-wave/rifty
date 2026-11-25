@@ -75,7 +75,10 @@ const FLAGS = [
   '-Wno-deprecated-non-prototype',
   '-I.',
 ];
-const LINK = ['-Wl,--no-entry', '-Wl,--strip-all', ...EXPORTS.map((e) => `-Wl,--export=${e}`)];
+// --strip-debug, not --strip-all: wasm-opt reads the enabled features from target_features.
+const LINK = ['-Wl,--no-entry', '-Wl,--strip-debug', ...EXPORTS.map((e) => `-Wl,--export=${e}`)];
+/** binaryen (its JS/wasm build: one binary on every host), an explicit step after the link. */
+const WASM_OPT = ['-O3', '--strip-debug', '--strip-producers', '--strip-target-features'];
 /** Node test inputs the engine's tests read (Acceptance 1 corpus, 2 suite + lib/zlib.js). */
 const FIXTURE_FILES = (suite) => [
   'LICENSE',
@@ -192,6 +195,13 @@ async function toolchain() {
   };
 }
 
+async function binaryen() {
+  const dir = await unpackOnce(await fetchPinned(pins.binaryen), pins.binaryen.sha256, []);
+  const wasmOpt = join(dir, `binaryen-${pins.binaryen.release}`, 'wasm-opt.js');
+  const version = sh(process.execPath, [wasmOpt, '--version'], { env: {} }).toString().trim();
+  return { wasmOpt, version };
+}
+
 async function nodeSource() {
   const tarball = await fetchPinned(pins.node);
   const dir = await unpackOnce(
@@ -206,9 +216,10 @@ async function nodeSource() {
 
 /**
  * Compile in a fresh directory with relative paths and an empty environment: no host path, include
- * variable, or a `wasm-opt` on PATH (clang runs one when it finds it) can reach the output.
+ * variable, or a `wasm-opt` on PATH (clang runs one when it finds it) can reach the output; the
+ * pinned wasm-opt then runs as its own step.
  */
-async function build(node, tc) {
+async function build(node, tc, opt) {
   const work = await mkdtemp(join(tmpdir(), 'zlib-wasm-'));
   try {
     const z = join(node, 'deps/zlib');
@@ -218,9 +229,13 @@ async function build(node, tc) {
     for (const f of await readdir(join(z, 'contrib/optimizations')))
       if (f.endsWith('.h'))
         await copyFile(join(z, 'contrib/optimizations', f), join(work, 'contrib/optimizations', f));
-    sh(tc.clang, [`--sysroot=${tc.sysroot}`, ...FLAGS, ...SOURCES, ...LINK, '-o', 'zlib.wasm'], {
+    sh(tc.clang, [`--sysroot=${tc.sysroot}`, ...FLAGS, ...SOURCES, ...LINK, '-o', 'linked.wasm'], {
       cwd: work,
       env: { PATH: dirname(tc.clang) },
+    });
+    sh(process.execPath, [opt.wasmOpt, ...WASM_OPT, 'linked.wasm', '-o', 'zlib.wasm'], {
+      cwd: work,
+      env: {},
     });
     return await readFile(join(work, 'zlib.wasm'));
   } finally {
@@ -273,16 +288,23 @@ export declare const ZLIB_WASM_BASE64: string;
 
 /** Every output file, keyed by repo-relative path. */
 async function render() {
-  const [tc, node] = [await toolchain(), await nodeSource()];
-  const wasm = await build(node, tc);
+  const [tc, opt, node] = [await toolchain(), await binaryen(), await nodeSource()];
+  const wasm = await build(node, tc, opt);
+  const toolchainText = `${tc.version} + ${opt.version} (${process.release.name} ${process.version})`;
   const suite = await suiteFiles(node);
   const fixtures = {};
   for (const f of FIXTURE_FILES(suite)) fixtures[f] = await readFile(join(node, f));
   const licenceText = licence(fixtures.LICENSE.toString('utf8'));
-  const meta = { node: pins.node.version, toolchain: tc.version, sha256: sha256(wasm) };
+  const meta = { node: pins.node.version, toolchain: toolchainText, sha256: sha256(wasm) };
   const sources = {
     ...pins,
-    build: { sources: SOURCES, flags: FLAGS, link: LINK, toolchain: tc.version },
+    build: {
+      sources: SOURCES,
+      flags: FLAGS,
+      link: LINK,
+      wasmOpt: WASM_OPT,
+      toolchain: toolchainText,
+    },
     wasm: { bytes: wasm.length, sha256: meta.sha256 },
     licence: sha256(licenceText),
     fixtures: Object.fromEntries(Object.entries(fixtures).map(([f, b]) => [f, sha256(b)])),

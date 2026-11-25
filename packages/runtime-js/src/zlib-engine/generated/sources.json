@@ -21,6 +21,11 @@
       }
     }
   },
+  "binaryen": {
+    "release": "version_133",
+    "url": "https://github.com/WebAssembly/binaryen/releases/download/version_133/binaryen-version_133-node.tar.gz",
+    "sha256": "3507aedecef25c46f2889530a7da304677e97122869274125f782b586cb508ab"
+  },
   "build": {
     "sources": [
       "adler32.c",
@@ -45,7 +50,7 @@
     ],
     "link": [
       "-Wl,--no-entry",
-      "-Wl,--strip-all",
+      "-Wl,--strip-debug",
       "-Wl,--export=deflateInit2_",
       "-Wl,--export=inflateInit2_",
       "-Wl,--export=deflate",
@@ -62,11 +67,17 @@
       "-Wl,--export=malloc",
       "-Wl,--export=free"
     ],
-    "toolchain": "wasi-sdk 34.0 (llvm 23.1.0 895aa2c896ad, wasi-libc 2e6fb9d8ee0c)"
+    "wasmOpt": [
+      "-O3",
+      "--strip-debug",
+      "--strip-producers",
+      "--strip-target-features"
+    ],
+    "toolchain": "wasi-sdk 34.0 (llvm 23.1.0 895aa2c896ad, wasi-libc 2e6fb9d8ee0c) + wasm-opt version 133 (version_133) (node v24.16.0)"
   },
   "wasm": {
-    "bytes": 67043,
-    "sha256": "3c7a254209e2b34e1bcfbeda235622057a7479e04c0cad480aa04af8fea4687d"
+    "bytes": 63202,
+    "sha256": "f40cd936d18de6b3358cb4d6aef55988551eab4f27598281870b5a18d8f509a6"
   },
   "licence": "26d5f3886c611b3607d0d582eda5ee5798bcc0d5bfe65914fc878eac63ead075",
   "fixtures": {

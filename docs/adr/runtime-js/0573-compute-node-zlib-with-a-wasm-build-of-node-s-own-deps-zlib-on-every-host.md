@@ -82,6 +82,12 @@ own `lib/zlib.js` also runs on each engine via a swapped `binding.Zlib`.
    not pinned (whatever Homebrew has); a pinned toolchain, a Linux CI rebuild that matches the
    committed sha256, and the licence record (Zlib + Chromium BSD-3, the ported Node code MIT, via the
    `vendor/`/`generated/` manifest of PR #445) are unit 2's acceptance.
+   Unit 2 (2026-11-25): wasi-sdk-34 release tarball per host + binaryen version_133's JS/wasm
+   `wasm-opt -O3` as its own step, both sha256-pinned in `runtime-js/src/zlib-engine/generated/
+   sources.json`, run with an empty environment (clang's driver runs any `wasm-opt` on PATH — the
+   probe's «raw» build already had Homebrew's); 63202 B, sha256 `f40cd936…`, equal on darwin-arm64,
+   linux-arm64, linux-x64; CI: `zlib-wasm:rebuild` in `unit-and-conformance`/`run`. Licence:
+   `generated/LICENSE` until PR #445's manifest is on `main`.
 2. Placement: runtime-js, shared by every host (browser Workers and the isolate guest bundle). The engine
    and the handle enter the bundles in unit 3, with `lib/zlib.js` and `crc32` (manager 2026-11-24,
    round 3: shipping the engine earlier for `crc32` alone would put ≈ 24 KB gzip of deflate/inflate
@@ -119,6 +125,9 @@ own `lib/zlib.js` also runs on each engine via a swapped `binding.Zlib`.
    (ADR-0351/0352; in browser Workers both `installNodeRuntime` and `worker-entry.ts`'s boot would
    need it); pako (Alternatives). None of the three is measured; unit 3 measures the first before
    wiring the engine.
+   Correction 2026-11-25 (unit 2): wasm-opt stays — inline base64 gzips to 36541 B without it, 34954 B
+   with (≈ 1.6 KB per bundle, ≈ 10 % of the headroom). Main's generic baseline is now 288027 B gzip
+   (was 279754): ≈ 7 KB would be left after the engine at the probe's +36950 B, before the port.
 
 ## Alternatives
 

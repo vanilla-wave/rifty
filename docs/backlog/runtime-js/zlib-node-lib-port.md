@@ -69,7 +69,9 @@ Draft until its dependency lands; seeds the compile:
    dispatch-only) → ADR-0573
 6. Before wiring, measured: whether `zlib` can leave the client generic eager graph with
    `require('zlib')` still synchronous; either way `pnpm test:client-bundles` stays under every cap,
-   cause and numbers in `client-bundle-budget.mjs`'s note → ADR-0573
+   cause and numbers in `client-bundle-budget.mjs`'s note; `check:esbuild-legacy-retirement` refuses any
+   inline `AGFzbQ` base64 in package outputs but exact pins, so the engine enters with an exact pin of
+   its base64 (bytes + sha256 of `zlib-engine/generated/sources.json`) and a line in ADR-0391 → ADR-0573
 7. The `FinalizationRegistry` frees dropped objects' handles: a GC-lane test (`--expose-gc`) sees the
    allocator reuse their blocks → ADR-0573
 8. ADR-0159/0178 marked superseded; compat `zlib.md`/`isolate-host.md` rows rewritten → ADR-0573
