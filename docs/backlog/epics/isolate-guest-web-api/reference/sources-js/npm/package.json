@@ -1,0 +1,10 @@
+{
+  "name": "isolate-web-api-probe-npm-candidates",
+  "private": true,
+  "description": "npm candidates for the JS-backed Web APIs (probe only)",
+  "dependencies": {
+    "web-streams-polyfill": "4.5.1",
+    "event-target-shim": "6.0.2",
+    "abortcontroller-polyfill": "1.7.8"
+  }
+}

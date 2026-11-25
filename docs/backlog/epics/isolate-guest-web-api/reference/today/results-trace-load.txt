@@ -1,0 +1,50 @@
+
+## eval (23 reads)
+ReadableStream | load | packages/io/src/streams/from-web-validation.ts:34 <top>
+WritableStream | load | packages/io/src/streams/from-web-validation.ts:38 <top>
+Blob | load | packages/runtime-js/src/builtins/buffer.ts:42 <top>
+File | load | packages/runtime-js/src/builtins/buffer.ts:43 <top>
+structuredClone | load | packages/runtime-js/src/internal/node-ipc-advanced.ts:23 <top>
+MessageChannel | load | packages/runtime-js/src/builtins/timers.ts:267 <top>
+crypto.subtle | load | packages/runtime-js/src/builtins/crypto.ts:504 <top>
+URL | load | packages/runtime-js/src/internal/posix-file-url.ts:1 <top>
+ReadableStream | load | packages/runtime-js/src/builtins/stream-web.ts:39 <top>
+WritableStream | load | packages/runtime-js/src/builtins/stream-web.ts:39 <top>
+TransformStream | load | packages/runtime-js/src/builtins/stream-web.ts:39 <top>
+ByteLengthQueuingStrategy | load | packages/runtime-js/src/builtins/stream-web.ts:39 <top>
+CountQueuingStrategy | load | packages/runtime-js/src/builtins/stream-web.ts:39 <top>
+ReadableStreamDefaultReader | load | packages/runtime-js/src/builtins/stream-web.ts:39 <top>
+ReadableStreamBYOBReader | load | packages/runtime-js/src/builtins/stream-web.ts:39 <top>
+ReadableStreamDefaultController | load | packages/runtime-js/src/builtins/stream-web.ts:39 <top>
+ReadableByteStreamController | load | packages/runtime-js/src/builtins/stream-web.ts:39 <top>
+WritableStreamDefaultWriter | load | packages/runtime-js/src/builtins/stream-web.ts:39 <top>
+WritableStreamDefaultController | load | packages/runtime-js/src/builtins/stream-web.ts:39 <top>
+TransformStreamDefaultController | load | packages/runtime-js/src/builtins/stream-web.ts:39 <top>
+TextEncoderStream | load | packages/runtime-js/src/builtins/stream-web.ts:39 <top>
+TextDecoderStream | load | packages/runtime-js/src/builtins/stream-web.ts:39 <top>
+URLSearchParams | load | packages/runtime-js/src/builtins/url.ts:17 <top>
+
+## file (23 reads)
+ReadableStream | load | packages/io/src/streams/from-web-validation.ts:34 <top>
+WritableStream | load | packages/io/src/streams/from-web-validation.ts:38 <top>
+Blob | load | packages/runtime-js/src/builtins/buffer.ts:42 <top>
+File | load | packages/runtime-js/src/builtins/buffer.ts:43 <top>
+structuredClone | load | packages/runtime-js/src/internal/node-ipc-advanced.ts:23 <top>
+MessageChannel | load | packages/runtime-js/src/builtins/timers.ts:267 <top>
+crypto.subtle | load | packages/runtime-js/src/builtins/crypto.ts:504 <top>
+URL | load | packages/runtime-js/src/internal/posix-file-url.ts:1 <top>
+ReadableStream | load | packages/runtime-js/src/builtins/stream-web.ts:39 <top>
+WritableStream | load | packages/runtime-js/src/builtins/stream-web.ts:39 <top>
+TransformStream | load | packages/runtime-js/src/builtins/stream-web.ts:39 <top>
+ByteLengthQueuingStrategy | load | packages/runtime-js/src/builtins/stream-web.ts:39 <top>
+CountQueuingStrategy | load | packages/runtime-js/src/builtins/stream-web.ts:39 <top>
+ReadableStreamDefaultReader | load | packages/runtime-js/src/builtins/stream-web.ts:39 <top>
+ReadableStreamBYOBReader | load | packages/runtime-js/src/builtins/stream-web.ts:39 <top>
+ReadableStreamDefaultController | load | packages/runtime-js/src/builtins/stream-web.ts:39 <top>
+ReadableByteStreamController | load | packages/runtime-js/src/builtins/stream-web.ts:39 <top>
+WritableStreamDefaultWriter | load | packages/runtime-js/src/builtins/stream-web.ts:39 <top>
+WritableStreamDefaultController | load | packages/runtime-js/src/builtins/stream-web.ts:39 <top>
+TransformStreamDefaultController | load | packages/runtime-js/src/builtins/stream-web.ts:39 <top>
+TextEncoderStream | load | packages/runtime-js/src/builtins/stream-web.ts:39 <top>
+TextDecoderStream | load | packages/runtime-js/src/builtins/stream-web.ts:39 <top>
+URLSearchParams | load | packages/runtime-js/src/builtins/url.ts:17 <top>

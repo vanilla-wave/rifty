@@ -1,0 +1,5 @@
+big5 pairs 32768 three 0 raw 140344 gzip 52327
+euc-jp pairs 32768 three 8836 raw 192473 gzip 49129
+shift_jis pairs 32768 three 0 raw 170205 gzip 55099
+euc-kr pairs 32768 three 0 raw 157845 gzip 36353
+iso-2022-jp pairs 32768 three 0 raw 197375 gzip 1097

@@ -1,0 +1,7 @@
+{
+  "name": "textdecoder-probe-fonts",
+  "private": true,
+  "dependencies": {
+    "dejavu-fonts-ttf": "2.37.3"
+  }
+}

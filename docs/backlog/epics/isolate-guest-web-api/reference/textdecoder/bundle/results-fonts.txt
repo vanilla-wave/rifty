@@ -1,0 +1,12 @@
+helvetica.js node: exit 0 labels ["ascii"] bytes 1269  sha 57158f98bf53450a
+helvetica.js base: exit 1  NotImplementedError: Not implemented: isolate-host.TextDecoder(ascii) (only utf-8)
+helvetica.js td-lazy-fast: exit 0 labels ["ascii"] bytes 1269  sha 57158f98bf53450a
+ttf.js node: exit 0 labels ["ascii","utf-16be","x-mac-roman"] bytes 7509  sha 10fdaa4a0a54ca90
+ttf.js base: exit 1  NotImplementedError: Not implemented: isolate-host.TextDecoder(ascii) (only utf-8)
+ttf.js td-lazy-fast: exit 0 labels ["ascii","utf-16be","x-mac-roman"] bytes 7509  sha 10fdaa4a0a54ca90
+cjk-pdf.js node: exit 0 labels ["ascii","big5","euc-kr","gbk","shift-jis","utf-16be","x-mac-roman"] bytes 7509  sha 10fdaa4a0a54ca90
+cjk-pdf.js base: exit 1  NotImplementedError: Not implemented: isolate-host.TextDecoder(ascii) (only utf-8)
+cjk-pdf.js td-lazy-fast: exit 0 labels ["ascii","big5","euc-kr","gbk","shift-jis","utf-16be","x-mac-roman"] bytes 7509  sha 10fdaa4a0a54ca90
+cjk-names.js node: exit 0 {"en":"DejaVu Sans","ja":"テスト","ko":"가나","zh":"测试","zh-Hant":"測試"}
+cjk-names.js base: exit 1  NotImplementedError: Not implemented: isolate-host.TextDecoder(ascii) (only utf-8)
+cjk-names.js td-lazy-fast: exit 0 {"en":"DejaVu Sans","ja":"BYTES 6","ko":"BYTES 4","zh":"测试","zh-Hant":"BYTES 4"}
