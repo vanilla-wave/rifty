@@ -1,0 +1,10 @@
+# c-for-await.cjs
+node v24.16.0; rifty c2d03ce05; workbench: Chromium 148.0.7778.96 (rifty process.version v24.0.0); sdk: Chromium 148.0.7778.96 (rifty process.version v24.0.0)
+columns: node | workbench | sdk
+
+exit: node 0 | workbench 0 | sdk 0
+
+## line 1
+node: for-await 300000 5 d08928a16895
+workbench (DIFF): for-await threw TypeError: fs.createReadStream(...) is not a function or its return value is not async iterable
+sdk (DIFF): for-await threw TypeError: fs.createReadStream(...) is not a function or its return value is not async iterable

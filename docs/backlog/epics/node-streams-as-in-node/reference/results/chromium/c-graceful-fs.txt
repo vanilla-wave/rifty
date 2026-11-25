@@ -1,0 +1,10 @@
+# c-graceful-fs.cjs
+node v24.16.0; rifty c2d03ce05; workbench: Chromium 148.0.7778.96 (rifty process.version v24.0.0); sdk: Chromium 148.0.7778.96 (rifty process.version v24.0.0)
+columns: node | workbench | sdk
+
+exit: node 0 | workbench 0 | sdk 0
+
+## line 1
+node: read "graceful\n"
+workbench (DIFF): createWriteStream threw TypeError: Class constructor FileWriteStream cannot be invoked without 'new'
+sdk (DIFF): createWriteStream threw TypeError: Class constructor FileWriteStream cannot be invoked without 'new'

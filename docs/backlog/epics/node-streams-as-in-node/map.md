@@ -31,9 +31,8 @@ They run in any order; 1–3 and 7 come before 8, and 4–5 before 9:
    today (`b1`). Without `writev`, Node's `WriteStream` sets `_writev = null` (`m5` route B); without
    `fsync`, `flush: true` throws a misleading `ERR_INVALID_ARG_TYPE`
    (`streams.js:373-374`). → I10.
-6. (not seeded) durability of a `WriteStream` file after `'finish'` + exit + reload on Workbench/OPFS.
-   Its contract waits on the S7 fact (§Open questions), so there is no child yet; I11 is a candidate
-   there.
+6. (dropped) durability after `'finish'` + exit + reload: it holds today (S7, 18/18, §Open questions);
+   it is kept as a guard row of 9.
 7. `distribution/isolate-stream-core-abort-controller` — the isolate's core-private
    `AbortController`/`AbortSignal` for Node's `pipeline`/helpers. `pipeline` works in the isolate
    today and must keep working. Measured route and cost: §Open questions. → I7 (isolate).
@@ -64,10 +63,12 @@ Core and fs streams:
    and PRs #434/#437. → I4, I5. Acceptance:
    - `m4`/`m5` and the fs-stream rows of `m2`/`m3` = Node on every host;
    - the carrier = Node on every host (I8);
+   - guard: a `WriteStream` file is intact after `'finish'` + exit + reload on Workbench/OPFS
+     (`results/chromium/durability.jsonl`);
    - route-B fs parity 6/6;
    - PR #434's and #437's cases.
 
-Order: 0 first, then 1–5 and 7 in any order. 8 comes after 1–3 and 7, then 9 after 8, 4 and 5. Durability (6) follows the S7 fact.
+Order: 0 first, then 1–5 and 7 in any order. 8 comes after 1–3 and 7, then 9 after 8, 4 and 5.
 
 Probe totals on route B, in-process, with Node's own `internal/*` as bindings:
 
@@ -211,16 +212,26 @@ Reachable failures that are not plain Node behaviour; input to the tier (works):
   (`distribution/isolate-host-sandbox-killed-run-partial-writes`).
 - Memory ceilings reached sooner than Node's RSS, by a guest that ignores backpressure.
 
-Each outcome must still be honest, never a silent truncation. Durability after `'finish'` is not listed
-here: it is a candidate invariant (§Open questions, S7).
+Each outcome must still be honest, never a silent truncation. Durability after `'finish'` holds today
+(S7, §Open questions), so it is a guard, not a fault.
 
 ## Open questions
 
-- Chromium baseline of the carrier and the m-matrices on both browser hosts — owner: agent — unit 0.
-  A first run is in progress (separate agent); its numbers enter the carrier draft.
-- S7: is a `WriteStream` file complete after `'finish'` + exit + reload on Workbench/OPFS — owner:
-  agent — fact pending from the Chromium run. If it reproduces, it becomes a child item with goal
-  invariant I11 (a candidate, user confirmation pending, as for I9–I10).
+- Chromium baseline — measured on main `c2d03ce05`, Chromium 148.0.7778.96, Workbench (COI,
+  browser-unit) and SDK (no-COI toolchain sandbox). Data: `reference/chromium/`,
+  `results/chromium/summary.txt`. The program set is the one at copy time: `m4` 20 rows, and the
+  older `c-transform-big`/`c-unzip-stored` without content hashes.
+  - Both hosts give the in-process route-A outcomes row for row.
+  - Workbench `c-transform-big` does not finish in 180 s; the SDK takes 870 ms. Workbench `m4` adds
+    «no settle in 3s» on the fd-loop row.
+  - The SDK on a COI page has no `node <file>` entry; generic mode offers only `runtime.eval`.
+  - Not run yet: route B in Chromium, Chromium 108 — owner: agent — unit 0 (carrier) and unit 8's
+    floor lane.
+- S7, measured (`results/chromium/durability.jsonl`): Workbench, OPFS `persistence: 'required'`,
+  4 MiB through `fs.WriteStream`, then `'finish'` or `'close'` → `process.exit(0)` → reload. 18/18
+  runs read back 4194304 bytes with Node's sha256, with or without a flush and with an immediate
+  reload. No gap: I11 is dropped and unit 6 is not seeded; the sequence becomes a guard row of unit 9.
+  Side fact: rifty's `ws.bytesWritten` is `undefined` after finish (`m5`).
 - The generic bundle cap — owner: user — the measured sum does not fit:
   - route B: +23 686 B gzip (303 440);
   - the zlib engine: +36 950 (ADR-0573 §8);

@@ -82,3 +82,17 @@ Two more columns:
 `route-b/product/run.sh` holds the product-shape parts and the throwaway product build
 (`wiring.patch`; numbers in `results/route-b-product-build.txt`). `b1-bindings.cjs` measures the
 modules the core binds to.
+
+## Chromium (`chromium/`, `results/chromium/`)
+
+The programs ran in real Chromium 148 on main `c2d03ce05`, on two hosts:
+
+- **Workbench**: a COI browser-unit spec over the sealed Workbench fixture (`zz-nsg-workbench.spec.ts`).
+- **SDK**: a no-COI toolchain sandbox spec (`zz-nsg-sdk.spec.ts`).
+
+Each was compared against a Node oracle laid out the same way (`oracle.mjs`, `compare.mjs`).
+`zz-nsg-durability*.spec.ts` checks the S7 durability fact.
+
+To rerun, copy the specs into `tests/browser-unit/` and `tests/no-coi/`, run Playwright on dedicated
+ports, and delete them afterwards. They ran the program set as it was when copied (`m4` 20 rows).
+

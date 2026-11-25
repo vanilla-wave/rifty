@@ -1,0 +1,22 @@
+# c-xlsx-roundtrip.cjs
+node v24.16.0; rifty c2d03ce05; workbench: Chromium 148.0.7778.96 (rifty process.version v24.0.0); sdk: Chromium 148.0.7778.96 (rifty process.version v24.0.0)
+columns: node | workbench | sdk
+
+exit: node 0 | workbench 0 | sdk 0
+
+## line 1
+node: writeBuffer ok 
+workbench (same): writeBuffer ok 
+sdk (same): writeBuffer ok 
+## line 2
+node: readFile ok 120
+workbench (DIFF): readFile threw TypeError: stream.close is not a function
+sdk (DIFF): readFile threw TypeError: stream.close is not a function
+## line 3
+node: writeFile ok 
+workbench (DIFF): (no line)
+sdk (DIFF): (no line)
+## line 4
+node: reload ok [[null,"Region","Revenue"],[null,"North",999],[null,"South",95]]
+workbench (DIFF): (no line)
+sdk (DIFF): (no line)

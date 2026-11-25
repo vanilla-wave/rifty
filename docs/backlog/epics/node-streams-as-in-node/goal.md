@@ -75,7 +75,8 @@ without the async VFS surface, isolate sandbox exec):
   - b1 (bindings) 3/8.
 - I9–I10 false: b1 (StringDecoder utf8 only, 'UTF8' "Unsupported encoding", no addAbortListener, no
   writev/fsync); m4 fs.read loop ticks>0=false.
-- candidate I11: fact pending (map §Open questions). -->
+- Chromium 148 on main c2d03ce05 (results/chromium/summary.txt): Workbench and SDK give the same
+  route-A outcomes as in-process, row for row (e.g. m1 0/14, hook matrix 10/76, m6 0/8). -->
 
 - I1. Lifecycle is Node's on every stream class and every way of defining a hook (option, own,
   class, ES5, chain, late): `_construct` before the first `_read`/`_write`, `_destroy` with its error
@@ -115,8 +116,8 @@ without the async VFS surface, isolate sandbox exec):
   `fs.read`/`fs.write` callbacks. `fs.writev` and `fs.fsync` (and their `Sync` forms) exist as in
   Node.
 
-<!-- Candidate I11 (review S7: a WriteStream file complete after 'finish' + exit + reload on
-Workbench/OPFS) waits on its fact: map §Open questions. -->
+<!-- No I11: review S7 (a WriteStream file complete after 'finish' + exit + reload on
+Workbench/OPFS) holds today, 18/18 (reference/results/chromium/durability.jsonl); unit 9 guards it. -->
 
 ## Challenge
 
@@ -232,8 +233,8 @@ Added after it, from the zlib goal via the manager, not re-reviewed:
   - PR #434 needed three review rounds on the EventEmitter classes.
 - 2026-11-25 — manager: the binding gaps the probe found are fixed as their own units, before the unit
   that needs them. They are parity fixes that hold without the core. I9–I10 are new obligations
-  after the user's «ок» (the manager's extension; user informed, confirmation pending). I11 is a
-  candidate (review S7) until its fact.
+  after the user's «ок» (the manager's extension; user informed, confirmation pending). Review S7's
+  durability holds today (18/18), so it is a guard, not an invariant.
 - 2026-11-25 — the user, in the manager thread cf2ae711: «про потоки тут ок» to the manager's «Нужно от тебя: «ок» на состав и порядок и на уровень works, как у остальных целей». What that message put before the user: four parts in order — (1) `_destroy`/`_construct` hooks in the core, (2) `fs.ReadStream` as a `Readable` subclass, (3) `fs.WriteStream` as a `Writable` subclass in the shape graceful-fs expects, (4) `Transform` backpressure; outside the goal `http.ServerResponse`, `net.Socket`, `process.stdin` as the next goal's candidates; PRs #434 and #437 stay parked until the goal absorbs them; tier works. The later growth to the present units (the manager's extensions above) was reported to the user in the same thread on 2026-11-25 as «возрази, если не согласен»; no objection recorded.
 - tier: works — the user's choice (line above). Faults outside Node's own
   behaviour, so not covered by parity, are listed in map §Faults outside parity.

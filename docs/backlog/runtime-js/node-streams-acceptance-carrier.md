@@ -47,6 +47,12 @@ carrier and not yet in the zlib carrier (`runtime-js/zlib-node-acceptance-carrie
 `t3/zlib-engine-probe`, which holds unzipper `Open.buffer` and a piped `Parse`). They are proposed
 for the zlib carrier via the manager.
 
+Chromium 148.0.7778.96, main `c2d03ce05` (`reference/chromium/`, `results/chromium/summary.txt`).
+Workbench (COI, browser-unit sealed fixture) and SDK (no-COI toolchain sandbox) give the in-process
+outcomes above, row for row. The exception is Workbench `c-transform-big`, which does not finish in
+180 s (the SDK takes 870 ms). That run used the program set at copy time, without the content hashes.
+Chromium 108 has not been run.
+
 ## Challenge
 
 challenge: 2026-11-25 — none (carrier of the goal; the premise is checked in goal §Challenge)

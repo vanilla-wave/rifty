@@ -1,0 +1,10 @@
+# c-unzip-stored.cjs
+node v24.16.0; rifty c2d03ce05; workbench: Chromium 148.0.7778.96 (rifty process.version v24.0.0); sdk: Chromium 148.0.7778.96 (rifty process.version v24.0.0)
+columns: node | workbench | sdk
+
+exit: node 0 | workbench 0 | sdk 0
+
+## line 1
+node: extracted a.txt=6000 dir/b.txt=15000
+workbench (DIFF): close, then listing threw Error [ENOENT]: ENOENT: no such file or directory, scandir '<dir>/unz'
+sdk (DIFF): close, then listing threw Error [ENOENT]: ENOENT: no such file or directory, scandir '<dir>/unz'

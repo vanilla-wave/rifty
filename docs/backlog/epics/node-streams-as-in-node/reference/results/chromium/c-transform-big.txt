@@ -1,0 +1,12 @@
+# c-transform-big.cjs
+node v24.16.0; rifty c2d03ce05; workbench: Chromium 148.0.7778.96 (rifty process.version v24.0.0); sdk: Chromium 148.0.7778.96 (rifty process.version v24.0.0)
+columns: node | workbench | sdk
+
+exit: node 0 | workbench timeout (180 s) | sdk 0
+stderr node: maxInFlight 65536
+stderr sdk: maxInFlight 16777216
+
+## line 1
+node: size true maxInFlight<=1MiB true
+workbench (DIFF): (no line)
+sdk (DIFF): size true maxInFlight<=1MiB false
