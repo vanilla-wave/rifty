@@ -43,12 +43,14 @@ pdfkit's font load.
 
 ## Open questions
 
-- `Blob`/`File`'s own warm-call and bundle cost — owner: agent — measured in unit 2 (Acceptance 7).
 - The `TextDecoder` composition's remaining +0.5–0.6 ms warm Δ with no non-utf-8 decoder (the load
   of `encoding.js`/`util.js` and the shims) — owner: agent — within the base's noise; unit 3
   records it (Acceptance 9).
 
 ## Closed (manager, 2026-11-25; goal Decisions)
+
+- `Blob`/`File`'s own cost — measured in unit 2 (PR #458, ADR-0578 §Cost): `guest.js` +40 092 B
+  (`gzip -9` +9 979), warm `runCode('1')` +0.3–0.7 ms.
 
 - T — the five ICU-only encodings stay a named gap; draft
   `distribution/isolate-guest-textdecoder-icu-only-encodings` (a consumer exists, the gap is silent
