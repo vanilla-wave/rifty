@@ -1,6 +1,6 @@
 # ADR 0575: Stream core and fs streams are Node v24.16.0's own sources
 
-Status: Proposed
+Status: Accepted
 Date: 2026-11
 
 > TL;DR: `node:stream` is Node v24.16.0's own JS, unedited and generated from the pinned tarball:
@@ -10,7 +10,7 @@ Date: 2026-11
 > unit tests are retired in one step.
 >
 > The manager chose this route under the user's delegation (goal `node-streams-as-in-node`); the
-> user is informed, confirmation pending.
+> user confirmed it on 2026-11-25 («с решениями согласен», goal Decisions).
 
 ## Context
 

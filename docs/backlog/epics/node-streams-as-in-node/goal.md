@@ -296,8 +296,13 @@ column labels corrected.
 
 ## Decisions
 
-- 2026-11-25 — manager, under the user's delegation («проектируешь ты сам»); the user is informed,
-  confirmation pending. Route B: the stream core is Node v24.16.0's `lib/stream.js`,
+- 2026-11-25 — the user's answers, in the manager thread cf2ae711 (recorded by the manager):
+  - route B. The manager asked for «ок» on replacing the stream core with Node's sources; the user answered «мне казалось что мы уже приняли это. Напомни всю историю», and after the manager's account (the first «ок» was for repairing the hand-written core; the replacement came later from the probe; it overturns six recorded decisions and costs about +24 KB gzip) — «с решениями согласен».
+  - bundle caps: «ок» to the manager's «Рекомендую пересчитать лимит по твоему же правилу «размер × 1,5»» (asked with: generic 288 KB gzip now, +24 streams, +40 zlib engine, about 352 against the 332 cap; the second bundle about 395 against 386).
+  - isolate globals: «ок» to «AbortController, EventTarget, Event в isolate — сделать обычными глобальными, как в Node».
+  Still the user's: abort listeners on a browser host's `EventTarget` (unit AL, the whole option table).
+- 2026-11-25 — manager, under the user's delegation («проектируешь ты сам»); confirmed by the user
+  (line «the user's answers» below). Route B: the stream core is Node v24.16.0's `lib/stream.js`,
   `lib/stream/promises.js` and `lib/internal/streams/*.js`, and fs streams are
   `lib/internal/fs/streams.js`, all unedited (ADR-0575). Ground: the probe's route B equals Node on
   every row of the carrier and of `m1`–`m3`, `m6`, `m7` and the hook matrix, in-process; every other
@@ -311,7 +316,7 @@ column labels corrected.
   - PR #434 needed three review rounds on the EventEmitter classes.
 - 2026-11-25 — manager: the binding gaps the probe found are fixed as their own units, before the unit
   that needs them. They are parity fixes that hold without the core. I9–I10 are new obligations
-  after the user's «ок» (the manager's extension; user informed, confirmation pending). Review S7's
+  after the user's «ок» (the manager's extension; confirmed with route B, line «the user's answers» below). Review S7's
   durability holds today (18/18), so it is a guard, not an invariant.
 - 2026-11-25 — the user, in the manager thread cf2ae711: «про потоки тут ок» to the manager's «Нужно от тебя: «ок» на состав и порядок и на уровень works, как у остальных целей». What that message put before the user: four parts in order — (1) `_destroy`/`_construct` hooks in the core, (2) `fs.ReadStream` as a `Readable` subclass, (3) `fs.WriteStream` as a `Writable` subclass in the shape graceful-fs expects, (4) `Transform` backpressure; outside the goal `http.ServerResponse`, `net.Socket`, `process.stdin` as the next goal's candidates; PRs #434 and #437 stay parked until the goal absorbs them; tier works. The later growth to the present units (the manager's extensions above) was reported to the user in the same thread on 2026-11-25 as «возрази, если не согласен»; no objection recorded.
 - tier: works — the user's choice (line above). Faults outside Node's own
