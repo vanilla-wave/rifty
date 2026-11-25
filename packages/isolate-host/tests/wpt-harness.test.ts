@@ -4,7 +4,7 @@
  * stderr is no result (PR #458 review), and an unclean oracle is itself a difference.
  */
 import { describe, expect, it } from 'vitest';
-import { differences, inGuest, inNode, wptFile } from './wpt-guest.ts';
+import { coverageProblems, differences, inGuest, inNode, wptFile } from './wpt-guest.ts';
 
 const TEST = 'FileAPI/blob/Blob-text.any.js';
 const clean = wptFile(TEST);
@@ -37,4 +37,21 @@ describe('the WPT harness takes only a clean end as a result', () => {
       expect(differences(node, guest)[0]).toMatch(/^oracle: Node ended unclean end: /);
     });
   }
+});
+
+describe('the WPT harness checks a test list is complete', () => {
+  const run = ['FileAPI/blob/Blob-text.any.js', 'FileAPI/blob/Blob-bytes.any.js'];
+  it('a vendored file dropped from the run list is red', () => {
+    expect(coverageProblems('FileAPI/blob/Blob-', run.slice(1), [])).toContain(
+      'vendored, neither run nor listed: FileAPI/blob/Blob-text.any.js',
+    );
+  });
+  it('a run file that is not vendored, or also listed as not run, is red', () => {
+    expect(coverageProblems('FileAPI/', ['FileAPI/x.any.js'], [])).toContain(
+      'run, not vendored: FileAPI/x.any.js',
+    );
+    expect(coverageProblems('FileAPI/', run, [run[0] as string])).toContain(
+      'both run and not run: FileAPI/blob/Blob-text.any.js',
+    );
+  });
 });

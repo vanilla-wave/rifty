@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { runCode } from '../src/index.ts';
-import { differences, runWpt } from './wpt-guest.ts';
+import { coverageProblems, differences, runWpt } from './wpt-guest.ts';
 
 /** Files run, with the subtests excluded from the comparison (each must still differ). */
 const FILES: Readonly<Record<string, readonly string[]>> = {
@@ -53,6 +53,10 @@ describe("WPT FileAPI: the guest gives every subtest live Node's result", () => 
       expect(differences(node, guest, excluded)).toEqual([]);
     });
   }
+});
+
+it('every vendored FileAPI test file is run or listed as not run', () => {
+  expect(coverageProblems('FileAPI/', Object.keys(FILES), Object.keys(NOT_RUN))).toEqual([]);
 });
 
 describe('WPT FileAPI files not run still have their reason', () => {

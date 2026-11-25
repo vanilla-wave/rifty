@@ -30,6 +30,28 @@ function fixture(rel: string): string {
   return bytes.toString('utf8');
 }
 
+/**
+ * A consumer's test list against what is vendored under `dir` (e.g. `FileAPI/`): every vendored
+ * test file (`.any.js`) must be run or listed as not run, and every run file vendored — else a
+ * file dropped from a list leaves the comparison silently. Empty: complete.
+ */
+export function coverageProblems(
+  dir: string,
+  run: readonly string[],
+  notRun: readonly string[],
+): string[] {
+  const vendored = Object.keys(PINS.files).filter(
+    (f) => f.startsWith(dir) && f.endsWith('.any.js'),
+  );
+  const listed = new Set([...run, ...notRun]);
+  return [
+    ...vendored.filter((f) => !listed.has(f)).map((f) => `vendored, neither run nor listed: ${f}`),
+    ...run.filter((f) => !(f in PINS.files)).map((f) => `run, not vendored: ${f}`),
+    ...notRun.filter((f) => run.includes(f)).map((f) => `both run and not run: ${f}`),
+    ...[...run, ...notRun].filter((f) => !f.startsWith(dir)).map((f) => `outside ${dir}: ${f}`),
+  ];
+}
+
 const REPORT = '__WPT__';
 /**
  * The CommonJS file for one WPT test (a path under `fixtures/`). As Node's runner: `self`,

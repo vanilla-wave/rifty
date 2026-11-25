@@ -5,7 +5,13 @@
 import { type Report, inNode, parseReport, wptFile } from '../../../tests/wpt/harness.ts';
 import { createSandbox } from '../src/index.ts';
 
-export { differences, inNode, type Report, wptFile } from '../../../tests/wpt/harness.ts';
+export {
+  coverageProblems,
+  differences,
+  inNode,
+  type Report,
+  wptFile,
+} from '../../../tests/wpt/harness.ts';
 
 /** A harness file (`wptFile`) as a sandbox `exec`: exit code, stderr and termination included. */
 export async function inGuest(file: string, timeoutMs = 120_000): Promise<Report> {
