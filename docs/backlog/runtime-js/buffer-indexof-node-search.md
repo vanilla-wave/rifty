@@ -4,7 +4,7 @@ status: draft
 title: "`buf.indexOf`/`lastIndexOf`/`includes` search utf16le by bytes and coerce `byteOffset` unlike Node"
 created: 2026-11-25
 why: Node searches a utf16le needle by aligned 2-byte units and resolves `byteOffset` through `IndexOfOffset`; rifty scans bytes from a `??`-defaulted offset, so a match at an odd offset or a `null` offset gives a different index
-sources: [docs/backlog/runtime-js/buffer-encoding-names.md]
+sources: [tools/node-parity-runner/cases/buffer/encoding-names.case.ts]
 code: [packages/io/src/buffer-prototype.ts]
 ---
 
