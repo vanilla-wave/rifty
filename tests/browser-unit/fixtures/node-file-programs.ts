@@ -4,6 +4,10 @@ import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import addAbortListenerCase from '../../../tools/node-parity-runner/cases/events/add-abort-listener.case.ts';
+import asyncWriteBufferMomentCase from '../../../tools/node-parity-runner/cases/fs/async-write-buffer-moment.case.ts';
+import readStreamChunkOwnershipCase from '../../../tools/node-parity-runner/cases/fs/read-stream-chunk-ownership.case.ts';
+import writeArrayBufferViewKindsCase from '../../../tools/node-parity-runner/cases/fs/write-array-buffer-view-kinds.case.ts';
+import writeReadBufferOwnershipCase from '../../../tools/node-parity-runner/cases/fs/write-read-buffer-ownership.case.ts';
 
 // ADR-0571: `node <file>` programs run verbatim in live Node
 // (temp dir) and in rifty (`<root>` = the project root). Three surfaces: what
@@ -188,8 +192,31 @@ console.log(JSON.stringify({
   },
 ];
 
-/** Builtin rows on the browser hosts' own platform objects (`AbortSignal`, `EventTarget`). */
+/**
+ * Builtin rows on the browser hosts' own platform objects (`AbortSignal`, `EventTarget`) and
+ * their own file stores (buffer ownership: the store behind the guest differs per host).
+ */
 export const builtinPrograms: readonly NodeFileProgram[] = [
+  {
+    name: 'fs-write-read-buffer-ownership',
+    files: { 'main.js': writeReadBufferOwnershipCase.code },
+    argv: ['main.js'],
+  },
+  {
+    name: 'fs-write-array-buffer-view-kinds',
+    files: { 'main.js': writeArrayBufferViewKindsCase.code },
+    argv: ['main.js'],
+  },
+  {
+    name: 'fs-async-write-buffer-moment',
+    files: { 'main.js': asyncWriteBufferMomentCase.code },
+    argv: ['main.js'],
+  },
+  {
+    name: 'fs-read-stream-chunk-ownership',
+    files: { 'main.js': readStreamChunkOwnershipCase.code, 'o.bin': 'abc' },
+    argv: ['main.js'],
+  },
   {
     name: 'events-add-abort-listener',
     files: { 'main.js': addAbortListenerCase.code },
