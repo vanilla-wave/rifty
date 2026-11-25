@@ -12,9 +12,9 @@ Decisions 2026-11-25).
 
 ## Open questions
 
-- Blocked on the template goal (closed, PR #460) (`createSandbox({ template })`; the mount is
-  `/node_modules`, hidden by `list_files`) — owner: agent — settled when it lands. Not in that goal
-  since 2026-11-25 (its simple form): the template's package list (this goal reads it — from
+- The template has landed (PR #460: `createSandbox({ template })`, the mount `/node_modules`, hidden
+  by `list_files`) — no longer a blocker. Left to this goal (user 2026-11-25, ADR-0568 Corrections):
+  the template's package list (this goal reads it — from
   `/node_modules/*/package.json` or an API it adds) and `exec`'s changed paths
   (`distribution/isolate-host-exec-changed-paths`, this goal its trigger). `exec`'s `signal`
   for `execute(args, signal)`: landed, PR #431 (`AbortError` as Node; the state after an abort is

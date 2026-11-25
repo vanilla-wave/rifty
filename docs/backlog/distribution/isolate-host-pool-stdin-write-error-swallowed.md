@@ -10,8 +10,8 @@ code: [packages/isolate-host/src/pool.ts]
 
 ## Context
 
-Found by the external review of PR #460 (macOS, four-library template, 8 calls at once): `write
-ENOBUFS` on the worker's stdin while `Worker.place` writes four states of ~146 MB in pieces; the
+Found by the external review of PR #460 (macOS, four-library template, 4 sandboxes at once with
+states of ~146 MB): `write ENOBUFS` on the worker's stdin while `Worker.place` writes four states of ~146 MB in pieces; the
 error listener added for a worker that died meanwhile (`pool.ts`, «surfaces through 'exit', not an
 EPIPE») swallows it too, the worker reads end of stdin and kills itself, its calls rerun once
 (`rerun`). Nothing names the write failure: not the consumer, not the run's result.

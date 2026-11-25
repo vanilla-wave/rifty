@@ -94,7 +94,14 @@ async function startRegistry(): Promise<Registry> {
     writeFileSync(join(tarballs, 'index.json'), JSON.stringify(names));
     writeFileSync(join(tarballs, 'done'), '');
     mkdirSync(dirname(cache), { recursive: true });
-    renameSync(tarballs, cache);
+    try {
+      renameSync(tarballs, cache);
+    } catch (error) {
+      // Another test process packed the same closure first: its complete cache wins.
+      const code = (error as { code?: string }).code;
+      if ((code !== 'ENOTEMPTY' && code !== 'EEXIST') || !existsSync(join(cache, 'done')))
+        throw error;
+    }
   }
   const index = JSON.parse(readFileSync(join(cache, 'index.json'), 'utf8')) as Record<
     string,

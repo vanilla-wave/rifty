@@ -38,4 +38,4 @@ Owner: distribution (isolate host). Trigger: the consumer persisting sandbox fil
 
 ## Challenge
 
-challenge: 2026-11-25 — none yet (user-deferred capture; the premise critic of 2026-11-24 covered its design, template goal `## Challenge`)
+challenge: 2026-11-25 — none yet (user-deferred capture; the premise critic of 2026-11-24 covered its design, the layer draft's `## Challenge`, the backlog's `epics/isolate-host-sandbox-template/goal.md` at commit `3d16cb7b8`)

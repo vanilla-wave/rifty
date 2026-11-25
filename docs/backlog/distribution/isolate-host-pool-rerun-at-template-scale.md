@@ -3,7 +3,7 @@ area: distribution
 status: draft
 title: Concurrent sandbox runs over a template are rerun by the worker's RSS watchdog after a momentary idle
 created: 2026-11-25
-why: With the template goal's states (~146 MB per run) about 12 % of concurrent calls run twice — all succeed, but their latency doubles and a second loss is `ERR_ISOLATE_HOST_WORKER_LOST`.
+why: With template-scale states (88–120 MB per run: the generators and the own-files limit row) about 12 % of concurrent calls run twice — all succeed, but their latency doubles and a second loss is `ERR_ISOLATE_HOST_WORKER_LOST`.
 sources: [docs/backlog/epics/isolate-host-live-sandbox/goal.md, ADR-0563, PR-460-external-review]
 code: [packages/isolate-host/src/child/main.ts, packages/isolate-host/src/protocol.ts, packages/isolate-host/src/pool.ts]
 ---

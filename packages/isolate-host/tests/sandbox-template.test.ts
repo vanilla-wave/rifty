@@ -605,6 +605,21 @@ describe('a sandbox over the four-library template', () => {
     }
   });
 
+  it('without a template the default memoryLimitMb stays 256 at any cap (I7)', LONG, async () => {
+    const sb = await createSandbox({ maxFsBytes: 128 * MiB });
+    try {
+      const alloc = (mib: number) =>
+        `const a = []; for (let i = 0; i < ${mib}; i++) a.push(new Array(131072).fill(i + 0.5)); console.log(a.length)`;
+      await sb.writeFile('small.js', alloc(200));
+      expect(await sb.exec('small.js')).toMatchObject({ exitCode: 0, stdout: '200\n' });
+      await sb.writeFile('big.js', alloc(300));
+      const big = await sb.exec('big.js');
+      expect(big.exitCode === 0 && big.termination === undefined, JSON.stringify(big)).toBe(false);
+    } finally {
+      await sb.destroy();
+    }
+  });
+
   it('persisting a template sandbox is a loud gap (I8)', LONG, async () => {
     const sb = await sandbox();
     try {

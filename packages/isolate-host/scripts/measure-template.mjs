@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Cost of a sandbox over a template (README §Template), through the public API only. From the
+ * Cost of a sandbox over a template (README §Sandbox template), through the public API only. From the
  * package directory after `pnpm run build`:
  *
  *   node --expose-gc scripts/measure-template.mjs <artifact> [generators dir]

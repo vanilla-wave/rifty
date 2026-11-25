@@ -15,7 +15,7 @@ User, 2026-11-25, on the lifecycle fork: «Как будто можно нача
 файлы песочницы» while «слой шаблона и живой изолят уходят в backlog следующими ступенями»; the
 accepted description named what is deferred: «своё требование §3 „стоимость не зависит от размера
 шаблона"» (ADR-0568 Corrections 2026-11-25). The contract the template goal publishes stays; this step only
-lowers its numbers (goal Decisions «contract stability»).
+lowers its numbers (ADR-0568 Corrections 2026-11-25, «contract stability»).
 
 Price today (library probe, four-library state, 24.11, load 7–30): warm `exec` of an empty file
 601 ms, generators 0.83–0.99 s; `maxFsBytes` ≥ 94.9 MiB; smallest `memoryLimitMb` 209–222; state
