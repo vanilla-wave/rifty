@@ -1,6 +1,6 @@
 /**
  * A mask other than the FS's own: Node applies it, the VFS cannot — loud, never
- * accepted silently (backlog runtime-js/process-umask-missing). No parity oracle:
+ * accepted silently. No parity oracle:
  * real Node accepts every valid mask.
  */
 import { NotImplementedError } from '@riftydev/vfs';
