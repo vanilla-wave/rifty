@@ -9,6 +9,7 @@ import { type CallHandle, sharedPool } from './pool.ts';
  */
 import { REFUSED } from './protocol.ts';
 import { type RunCodeOptions, type RunCodeResult, limit, runLimits } from './run-code.ts';
+import type { TemplateIdentity } from './template.ts';
 
 /** `dist/codec.js`: rifty's MemoryFs and the snapshot codec, bundled (`src/codec.ts`). */
 interface Fs {
@@ -54,6 +55,11 @@ function loadCodec(): Promise<Codec> {
 export interface SandboxOptions {
   /** Bytes of `sandbox.snapshot()` (ADR-0567): the new sandbox starts with their files. */
   readonly snapshot?: Uint8Array;
+  /**
+   * A `produceDependencySnapshot` artifact, or the identity `registerTemplate` returned for one:
+   * its `payload/node_modules` becomes the sandbox's own files at `/node_modules`.
+   */
+  readonly template?: Uint8Array | TemplateIdentity;
   /** Largest file one `readFile`/`writeFile` moves. Default 32 MiB. */
   readonly maxFileBytes?: number;
   /**

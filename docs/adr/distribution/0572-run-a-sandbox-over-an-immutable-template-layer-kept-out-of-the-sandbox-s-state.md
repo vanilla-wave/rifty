@@ -3,6 +3,8 @@
 Status: Proposed
 Date: 2026-11
 
+2026-11-25 — deferred, not accepted, not withdrawn: the user, on the lifecycle revisit, «Как будто можно начать с самого простого и дальше оптимизировать. Что в данном случае будет самым простым?», then «ок» to «Начинаем с „библиотеки = файлы песочницы"? Да — оформляю это целью и запускаю реализацию; слой шаблона и живой изолят уходят в backlog следующими ступенями». The goal `isolate-host-sandbox-template` now starts with the template as the sandbox's own files (ADR-0568 as merged); this layer is the next step `distribution/isolate-host-sandbox-template-layer`, with its open user fork (the touched-entries bound) unanswered and probe G as its acceptance. F2–F4 stay the user's answers and hold in the simple start; F1 applies only to this layer. The «Goal … verbatim» sections below quote the layer draft of the goal, superseded there.
+
 > TL;DR: A sandbox's template (`produceDependencySnapshot` artifact) is decoded once per consumer process and once per worker and never enters the per-run state; one layered FS class (rifty's `MemoryFsSync` with template entries materialized lazily; its state by node identity — an untouched template node is one row, anything else explicit) runs a sandbox's host ops in the consumer and its `fs` in each run, over one shared template index (host ops and idle memory independent of the template's bytes, bounded by the template entries touched since the last run plus those of the template directories marked — the open user fork); each run's fresh isolate gets the template copied in (F1 (a), user 2026-11-25); writable or read-only per sandbox; persisting a template sandbox is deferred.
 
 ## Context
