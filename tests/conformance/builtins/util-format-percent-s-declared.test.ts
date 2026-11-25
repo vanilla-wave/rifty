@@ -1,7 +1,7 @@
 /**
- * `util.format('%s')` rows declared to differ from Node v24.16.0 (unit
- * `runtime-js/util-format-percent-s` §Out of scope; every host shares this code). Each
- * pins rifty's text; a fix turns it red, and the row joins parity `util/format-percent-s`.
+ * `util.format('%s')` rows declared to differ from Node v24.16.0 (PR #449; every host shares
+ * this code; owners in each `describe`). Each pins rifty's text; a fix turns it red, and the
+ * row joins parity `util/format-percent-s`.
  */
 import { beforeAll, describe, expect, it } from 'vitest';
 import '../../../packages/runtime-js/src/builtins/index.ts';

@@ -4,7 +4,7 @@ status: draft
 title: util.format('%s') and util.inspect run a Proxy's traps where Node reads its target, and a throwing trap throws
 created: 2026-11-24
 why: Node's `%s` and inspect see a Proxy's target without running a trap (`getProxyDetails`); rifty runs them — a side-effect trap runs, a Proxy over a Map throws, a revoked Proxy throws where Node prints `<Revoked Proxy>`, and since PR #449 a trap throwing on the `toString`/`Symbol.toPrimitive` read throws where Node and rifty before printed — on every host.
-sources: ["probe 2026-11-24, unit runtime-js/util-format-percent-s", docs/public/compat/isolate-host.md]
+sources: ["probe 2026-11-24, PR #449 (util.format %s dispatch)", docs/public/compat/isolate-host.md]
 code: [packages/runtime-js/src/builtins/util.ts, packages/runtime-js/src/repl/inspect.ts, packages/runtime-js/src/internal/proxy-identity.ts]
 ---
 
@@ -43,6 +43,19 @@ calls `proxyIdentity()` (vm, fetch platform). Same root as `runtime-js/fatal-rep
 Class-kill route (not taken): a recorder that also stores the target (and revoked state),
 installed on every host before guest code, read by one `getProxyDetails` in `%s` and inspect
 as Node's — closes this item and the fatal-report one together.
+
+## Decisions
+
+Carried from the `util.format('%s')` dispatch unit (PR #449; its backlog file deleted on merge):
+
+- `%s`'s prototype walk ending in null counts as built-in (inspect), not Node's throw: Node
+  unwraps a top-level Proxy value and meets null only through a Proxy inside the chain;
+  rifty meets it on values Node inspects (vm membrane arrays, a top-level Proxy's
+  `getPrototypeOf` trap). Price: a chain Proxy over a null-prototype object prints `{}` where
+  Node throws (pinned; manager decision, review B1).
+- A trap throwing on the `toString`/`Symbol.toPrimitive` read throws in `%s` — kept, not
+  caught: a catch would also swallow a throwing `toString` getter of a plain object, where
+  Node throws too; the honest fix is Node's unwrap (route above).
 
 ## Challenge
 

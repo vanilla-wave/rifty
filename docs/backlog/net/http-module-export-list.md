@@ -27,8 +27,9 @@ Missing: `ClientRequest`, `OutgoingMessage`, `globalAgent`, `validateHeaderName`
 `_connectionListener`, `WebSocket`, `CloseEvent`, `MessageEvent` — each a silent `undefined`
 (AGENTS §Fidelity: a gap is a named loud member), not a `NotImplementedError`. The isolate
 guest has Node's export list (`egress-http.ts`, real validators; compat isolate-host.md
-"Loading `node:http`…"). Not measured in a running Workbench page (reviewer's report; code
-read + module import here). Dedup: no backlog, trap or declined-concept match
+"Loading `node:http`…"). Live Workbench page (PR #449 review round 2, reviewer's
+measurement): `Object.keys(require('http'))` = the same 10 names (Node 21),
+`'validateHeaderName' in h` → `false`. Dedup: no backlog, trap or declined-concept match
 (`net/http-agent-call-shape` is `Agent` call shape; compat http.md lists no export-list row).
 
 ## Challenge

@@ -158,9 +158,12 @@ function hasBuiltInToString(value: object): boolean {
   } else if (hasOwn(value, toPrimitivePrimordial)) {
     return false;
   }
-  // The prototype owning that `toString`/`Symbol.toPrimitive`. A walk ending in null (rifty's
-  // vm membrane, a `getPrototypeOf` trap) counts as built-in: Node's null end is a Proxy,
-  // unwrapped first (its revoked target → `true`, "prevent crashes").
+  // The prototype owning that `toString`/`Symbol.toPrimitive`. Deviation: a walk ending in null
+  // counts as built-in (inspect), where Node throws. Node unwraps a top-level Proxy value and
+  // reaches null only through a Proxy inside the chain; rifty reaches it on ordinary values Node
+  // inspects (vm membrane arrays, a top-level Proxy's `getPrototypeOf` trap). Price: a chain
+  // Proxy over a null-prototype object prints where Node throws (both pinned:
+  // `backlog/runtime-js/format-inspect-proxy-traps`).
   let pointer: object | null = value;
   do {
     pointer = getPrototypeOfPrimordial(pointer) as object | null;

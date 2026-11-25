@@ -1,7 +1,7 @@
 ---
 area: runtime-js
 status: draft
-title: util.format('%s') of a node:vm value picks its branch by the membrane's shape, not the value's
+title: util.format('%s') of a node:vm value follows the membrane's shape, not the value's
 created: 2026-11-25
 why: "`%s` of a vm context's `Date`/`Error` prints `String()` (`Thu Jan 01 1970 …`, `Error: m`) where Node inspects (ISO date, the stack); the membrane's prototypes have no own `constructor`, so a built-in `toString` reads as a user one — silent, every host with vm"
 sources: ["PR #449 external review (manager-relayed, 2026-11-25)", docs/public/compat/modules.md]
@@ -18,6 +18,15 @@ Probe 2026-11-25, live `node -e` v24.16.0 vs rifty parity-runner (in-process, Qu
 | `new Date(0)` | `1970-01-01T00:00:00.000Z` | `String(date)` (`Thu Jan 01 1970 …`) | `{}` |
 | `new Error("m")` | its stack | `Error: m` | `{}` |
 | `[1, 2]`, `[]`, `[1,[2]]` | `[ 1, 2 ]` … | as Node (a walk ending in null is inspected) | as Node |
+
+More membrane shapes reached by `%s` (PR #449 review round 2, verified in-process):
+
+- The membrane does not carry a prototype's `Symbol.toPrimitive`:
+  `vm.runInNewContext('class P{[Symbol.toPrimitive](){return "P"}}; new P()')` → `String(v)`
+  Node `P`, rifty `[object Object]`; `%s` Node `P`, rifty `P {}`. An own
+  `[Symbol.toPrimitive]` works (`({[Symbol.toPrimitive](){return "own"}})` → `own` both).
+- A context function: `%s` of `vm.runInNewContext('(()=>1)')` → Node `()=>1`, rifty
+  `function () { [native code] }` (its `toString` is the host wrapper's).
 
 Node: `hasBuiltInToString` finds the prototype owning `toString` and checks its own
 `constructor` name (`Date`, `Error` → built-in → inspect). rifty's membrane prototypes carry
