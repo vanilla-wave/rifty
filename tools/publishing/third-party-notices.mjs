@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Package notices file (backlog toolchain-build/third-party-notices-in-published-files).
+ * Package notices file (docs/public/publishing.md §Third-party notices).
  *
  * Inputs = the bundler's own list per emitted file: tsup sourcemap `sources`,
  * or `.bundle-inputs.json` written by the esbuild-direct builds (metafile +
@@ -63,10 +63,16 @@ export function bundleInputs(root, pkgDir) {
   const out = {};
   const recorded = join(abs, BUNDLE_INPUTS);
   if (existsSync(recorded)) Object.assign(out, JSON.parse(readFileSync(recorded, 'utf8')));
-  const dist = join(abs, 'dist');
-  if (existsSync(dist)) {
-    for (const file of walk(dist)) {
-      if (!file.endsWith('.js.map')) continue;
+  // Maps anywhere in the packed dirs (package.json `files`).
+  const manifest = join(abs, 'package.json');
+  const { files = ['dist'] } = existsSync(manifest)
+    ? JSON.parse(readFileSync(manifest, 'utf8'))
+    : {};
+  for (const entry of files) {
+    const top = join(abs, entry);
+    if (!existsSync(top) || !statSync(top).isDirectory()) continue;
+    for (const file of walk(top)) {
+      if (!/\.[cm]?js\.map$/u.test(file)) continue;
       const js = relative(abs, file.slice(0, -'.map'.length));
       if (out[js]) continue;
       const { sources = [] } = JSON.parse(readFileSync(file, 'utf8'));
@@ -154,7 +160,7 @@ export function collect(
         continue;
       }
       const record = manifest.generated[dir];
-      if (!record?.files.includes(basename(input))) {
+      if (!record?.files.includes(relative(dir, input))) {
         violations.push(
           `${input}: in ${dir} without a third-party-manifest record (${pkgDir} ${packed})`,
         );
@@ -215,9 +221,8 @@ function sourceDirFiles(root, pkgDirs) {
       if (!e.isDirectory() || e.name === 'node_modules' || e.name === 'dist') continue;
       const child = `${rel}/${e.name}`;
       if (SOURCE_DIRS.has(e.name))
-        for (const f of readdirSync(join(root, child), { withFileTypes: true }))
-          if (f.isFile()) out.push(`${child}/${f.name}`);
-      visit(child);
+        out.push(...walk(join(root, child)).map((f) => relative(root, f)));
+      else visit(child);
     }
   };
   for (const d of pkgDirs) visit(d);

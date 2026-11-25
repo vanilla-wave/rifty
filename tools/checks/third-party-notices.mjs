@@ -41,12 +41,19 @@ const NOT_ACCOUNTED = 'not accounted — no bundler input list and not an own bu
 
 /**
  * Declarations tsup emitted for this package's own code: tsup must not resolve
- * dependency types (`resolve:` absent), and a declaration is own if it pairs a
+ * dependency types (no `resolve` in its config code, no `--dts-resolve`), and a declaration is own if it pairs a
  * packed JS output or an own declaration imports it.
  */
 function ownDeclarations(root, dir, packed, read) {
   const config = join(root, dir, 'tsup.config.ts');
-  if (!existsSync(config) || /\bresolve\s*:/u.test(readFileSync(config, 'utf8'))) return new Set();
+  if (!existsSync(config)) return new Set();
+  // Comments may say "resolve"; the config code and build scripts may not.
+  const code = readFileSync(config, 'utf8').replace(/\/\*[\s\S]*?\*\/|(^|\s)\/\/.*$/gmu, '$1');
+  const manifest = join(root, dir, 'package.json');
+  const scripts = existsSync(manifest)
+    ? Object.values(JSON.parse(readFileSync(manifest, 'utf8')).scripts ?? {}).join('\n')
+    : '';
+  if (/\bresolve\b/u.test(code) || scripts.includes('--dts-resolve')) return new Set();
   const set = new Set(packed);
   const js = (d) => d.replace(DTS_RE, (_, m) => `.${m}js`);
   const own = new Set(packed.filter((p) => DTS_RE.test(p) && set.has(js(p))));
@@ -66,7 +73,7 @@ function ownDeclarations(root, dir, packed, read) {
 
 /** (b) package metadata, by fixed name at the package root. */
 const META_RE =
-  /^(?:package\.json|README[^/]*|CHANGELOG[^/]*|LICEN[CS]E[^/]*|THIRD_PARTY_NOTICES\.md)$/iu;
+  /^(?:(?:README|CHANGELOG|LICEN[CS]E)(?:\.(?:md|txt))?|package\.json|THIRD_PARTY_NOTICES\.md)$/iu;
 
 /**
  * CATEGORIES — a packed file is (a) a build output with an input list, every
