@@ -27,7 +27,7 @@ challenge: 2026-11-25 — clear (class-kill repair of three observed incidents, 
 ## User scenario
 
 A contributor whose npm points at an internal mirror runs `npm install` in a
-probe under `docs/backlog/**/reference/**` and commits the lock. `pnpm pr:check`
+probe under a backlog `reference/` directory and commits the lock. `pnpm pr:check`
 (docs-only diff) and PR CI `lint-and-typecheck` fail naming the file, the
 address count and the foreign host; the fix line says rewrite host to
 `https://registry.npmjs.org`, keep `integrity`, re-verify with `npm ci`.
@@ -43,7 +43,7 @@ address count and the foreign host; the fix line says rewrite host to
 ## Out of scope
 
 - Rewriting the 19 exempt frozen files: `docs/backlog/distribution/agent-bench-corpus-mirror-lockfiles.md` (user-owned).
-- Registry hosts inside packed tarballs of published packages: separate mechanism, see Decisions.
+- Registry hosts inside packed tarballs of published packages: separate mechanism, `docs/backlog/toolchain-build/packed-tarball-registry-host-guard.md`.
 - Locks inside `.tgz` fixtures (upstream package bytes; none carries one today).
 
 ## Decisions
