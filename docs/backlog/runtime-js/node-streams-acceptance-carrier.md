@@ -22,24 +22,27 @@ scenario. Each one runs with exceljs 4.4.0's closure laid out as `node_modules`,
 Which e2e harness carries the browser hosts is this unit's to settle (map fog).
 
 Each program is its own case and pins today's exact outcome by name. A bare `it.fails` is not
-enough; follow `library-exceljs.test.ts:159`. The pins on main `b6d37fc01` come from
-`reference/results/c-*.txt`. "In-process" means rifty's modules in Node. Chromium has not been run.
+enough; follow `library-exceljs.test.ts:159`. A pin is the line, the exit status and the stderr.
+The pins below come from the run at `17c24ffbc` (main `b6d37fc01`'s code), in
+`reference/results/c-*.txt`. "In-process" means rifty's modules in Node, with rifty's `Buffer`.
+Chromium has not been run. Every case exits 0 unless noted.
 
 | case | Node | rifty in-process | rifty isolate |
 |---|---|---|---|
-| exceljs `xlsx.readFile` → edit → `writeFile` | `readFile ok 120`, reload `999` | exit 1 `Chunk must be one of type String, Buffer or StringBuf.` | `readFile threw TypeError: stream.close is not a function` |
+| exceljs `xlsx.readFile` → edit → `writeFile` | `readFile ok 120`, reload `999` | `readFile threw TypeError: stream.close is not a function` | same |
 | exceljs `csv.readFile` | 4 rows | `TypeError: stream.close is not a function` | `NotImplementedError … isolate-host.ReadableStream` |
 | graceful-fs write + read | `read "graceful\n"` | `TypeError: Class constructor FileWriteStream cannot be invoked without 'new'` | same |
-| unzipper `Extract`, STORE zip | `a.txt=6000 dir/b.txt=15000` | `'close'` with nothing extracted, then the listing hits `ENOENT` | `NotImplementedError … isolate-host.ReadableStream` |
-| `for await` over `createReadStream` | `300000 5 d08928a16895` | `TypeError … is not async iterable` | same |
-| late `'data'` listener | `200000` bytes, `end` | `0` bytes, no `end` | same, plus `isolate-host.ReadableStream` on stderr |
-| `on('readable')` + `read()` | `150000` bytes | `0` bytes, `end` | `0` bytes, no `end` |
-| 16 MiB → async Transform → WriteStream | in-flight `65536` | in-flight `16777216` | `ws error … isolate-host.ReadableStream` |
-| `promises.pipeline` with an async generator | `200000 true` | `TypeError: pipeline: argument must be a stream (index 1 …)` | same |
+| unzipper `Extract`, STORE zip | `a.txt=6000 dir/b.txt=15000` | `'close'` with nothing extracted, then the listing hits `ENOENT` | `extract error NotImplementedError … isolate-host.ReadableStream` |
+| `for await` over `createReadStream` | `300000 5 d08928a16895` | `TypeError … is not async iterable` | same line; exit 1, stderr `isolate-host.ReadableStream` |
+| late `'data'` listener | `200000` bytes, `end` | `0` bytes, no `end` | same line; exit 1, stderr as above |
+| `on('readable')` + `read()` | `150000` bytes, `end` | `0` bytes, `end` | `0` bytes, no `end`; exit 1, stderr as above |
+| 16 MiB → async Transform → WriteStream | `maxInFlight<=1MiB true`; stderr in-flight `65536` | `false`; stderr `16777216` | `ws error … isolate-host.ReadableStream` |
+| `promises.pipeline` with an async generator | `200000 true` | `TypeError: pipeline: argument must be a stream (index 1 …)` | same line; exit 1, stderr as above |
 
-The node:zlib joint cases (unzipper on DEFLATE, `createGzip` pipe) belong to the zlib goal's
-carrier (`runtime-js/zlib-node-acceptance-carrier`, branch `t3/zlib-engine-probe`). Not repeated
-here.
+The node:zlib joint cases (unzipper `Extract` on DEFLATE, the `createGzip` pipe) are not in this
+carrier and not yet in the zlib carrier (`runtime-js/zlib-node-acceptance-carrier`, branch
+`t3/zlib-engine-probe`, which holds unzipper `Open.buffer` and a piped `Parse`). They are proposed
+for the zlib carrier via the manager.
 
 ## Challenge
 

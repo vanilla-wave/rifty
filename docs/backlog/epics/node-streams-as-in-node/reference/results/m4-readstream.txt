@@ -1,4 +1,4 @@
-# m4-readstream.cjs — node v24.16.0, rifty b6d37fc01
+# m4-readstream.cjs — node v24.16.0, rifty 17c24ffbc
 columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate
 
 exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 0
@@ -63,6 +63,16 @@ node: chunk 65536,destroyed=true,close
 rifty-inproc (DIFF): threw rs is not async iterable,close
 rifty-inproc-sync (DIFF): threw rs is not async iterable,close
 rifty-isolate (DIFF): threw rs is not async iterable
+## timers run while 16 MiB streams (for await)
+node: bytes=16777216,ticks>0=true
+rifty-inproc (DIFF): threw fs.createReadStream(...) is not a function or its return val
+rifty-inproc-sync (DIFF): threw fs.createReadStream(...) is not a function or its return val
+rifty-isolate (DIFF): threw fs.createReadStream(...) is not a function or its return val
+## timers run during an fs.read(fd) loop over 16 MiB (the fd source alone)
+node: bytes=16777216,ticks>0=true
+rifty-inproc (DIFF): bytes=16777216,ticks>0=false
+rifty-inproc-sync (DIFF): bytes=16777216,ticks>0=false
+rifty-isolate (DIFF): bytes=16777216,ticks>0=false
 ## close(cb) mid-read
 node: close,cb ERR_STREAM_PREMATURE_CLOSE:Premature close
 rifty-inproc (DIFF): close
@@ -134,6 +144,11 @@ rifty-inproc (DIFF): (no line)
 rifty-inproc-sync (DIFF): (no line)
 rifty-isolate (DIFF): Not implemented: isolate-host.ReadableStream (not available 
 ## uncaught 9
+node: (no line)
+rifty-inproc (DIFF): (no line)
+rifty-inproc-sync (DIFF): (no line)
+rifty-isolate (DIFF): Not implemented: isolate-host.ReadableStream (not available 
+## uncaught 10
 node: (no line)
 rifty-inproc (DIFF): (no line)
 rifty-inproc-sync (DIFF): (no line)

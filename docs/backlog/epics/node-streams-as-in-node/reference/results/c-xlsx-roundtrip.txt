@@ -1,19 +1,17 @@
-# c-xlsx-roundtrip.cjs — node v24.16.0, rifty b6d37fc01
+# c-xlsx-roundtrip.cjs — node v24.16.0, rifty 17c24ffbc
 columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate
 
-exit: node 0 | rifty-inproc 1 | rifty-inproc-sync 1 | rifty-isolate 0
-stderr rifty-inproc: Error: Chunk must be one of type String, Buffer or StringBuf.
-stderr rifty-inproc-sync: Error: Chunk must be one of type String, Buffer or StringBuf.
+exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 0
 
 ## line 1
 node: writeBuffer ok 
-rifty-inproc (DIFF): writeBuffer ok 
-rifty-inproc-sync (DIFF): writeBuffer ok 
+rifty-inproc (same): writeBuffer ok 
+rifty-inproc-sync (same): writeBuffer ok 
 rifty-isolate (same): writeBuffer ok 
 ## line 2
 node: readFile ok 120
-rifty-inproc (DIFF): (no line)
-rifty-inproc-sync (DIFF): (no line)
+rifty-inproc (DIFF): readFile threw TypeError: stream.close is not a function
+rifty-inproc-sync (DIFF): readFile threw TypeError: stream.close is not a function
 rifty-isolate (DIFF): readFile threw TypeError: stream.close is not a function
 ## line 3
 node: writeFile ok 

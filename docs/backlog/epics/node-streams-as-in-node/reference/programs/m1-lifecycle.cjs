@@ -63,6 +63,7 @@ row('Writable _destroy cb twice', async (L) => {
       cb();
     },
     destroy(err, cb) {
+      L.push('_destroy');
       cb(err);
       cb(err);
     },
@@ -156,6 +157,51 @@ row('Readable to end + Writable ended: close after end/finish', async (L) => {
   w.on('finish', () => L.push('W finish')).on('close', () => L.push('W close'));
   r.resume();
   w.end('x');
+});
+row('closed/destroyed/errored after destroy(err), each class', async (L) => {
+  const mk = {
+    Readable: () => new Readable({ read() {} }),
+    Writable: () =>
+      new Writable({
+        write(_c, _e, cb) {
+          cb();
+        },
+      }),
+    Duplex: () =>
+      new Duplex({
+        read() {},
+        write(_c, _e, cb) {
+          cb();
+        },
+      }),
+    Transform: () =>
+      new Transform({
+        transform(c, _e, cb) {
+          cb(null, c);
+        },
+      }),
+  };
+  const ss = Object.entries(mk).map(([k, f]) => [k, f()]);
+  for (const [, s] of ss) {
+    s.on('error', () => {});
+    s.destroy(new Error('x'));
+  }
+  L.push(
+    `sync ${ss.map(([k, s]) => `${k}:${s.closed}/${s.destroyed}/${s.errored?.message}`).join(' ')}`,
+  );
+  await settle(10);
+  L.push(`later ${ss.map(([k, s]) => `${k}:${s.closed}/${s.destroyed}`).join(' ')}`);
+});
+row('async Transform success: destroyed at end/finish/close', async (L) => {
+  const t = new Transform({
+    transform(c, _e, cb) {
+      setImmediate(() => cb(null, c));
+    },
+  });
+  for (const ev of ['end', 'finish', 'close'])
+    t.on(ev, () => L.push(`${ev} destroyed=${t.destroyed} closed=${t.closed}`));
+  t.resume();
+  t.end('a');
 });
 row('prototype _destroy is a function', async (L) => {
   L.push([Readable, Writable, Duplex, Transform].map((C) => typeof C.prototype._destroy).join(','));

@@ -28,4 +28,8 @@ const walk = (abs: string, rel: string): void => {
 };
 vfs.mkdirSync('/workspace', { recursive: true });
 walk(dir, '/workspace');
-createModuleLoader(vfs, { cwd: '/workspace' }).require(`./${entry}`, '/workspace/[main].cjs');
+const loader = createModuleLoader(vfs, { cwd: '/workspace' });
+// A bare `Buffer` is rifty's, as every host installs it (installBundleLocalBuffer); `process`, timers and
+// console stay Node's (trap parity-runner-in-process): the programs print no `process` state.
+globalThis.Buffer = loader.require('buffer', '/workspace/[main].cjs').Buffer;
+loader.require(`./${entry}`, '/workspace/[main].cjs');

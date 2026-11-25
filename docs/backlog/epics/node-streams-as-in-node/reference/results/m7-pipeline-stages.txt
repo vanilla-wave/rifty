@@ -1,4 +1,4 @@
-# m7-pipeline-stages.cjs — node v24.16.0, rifty b6d37fc01
+# m7-pipeline-stages.cjs — node v24.16.0, rifty 17c24ffbc
 columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate
 
 exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 0
@@ -38,3 +38,13 @@ node: cb args=0
 rifty-inproc (DIFF): cb args=1
 rifty-inproc-sync (DIFF): cb args=1
 rifty-isolate (DIFF): cb args=1
+## finished on a Writable destroyed before any write
+node: cb args=1 ERR_STREAM_PREMATURE_CLOSE:Premature close
+rifty-inproc (DIFF): cb args=1 
+rifty-inproc-sync (DIFF): cb args=1 
+rifty-isolate (DIFF): cb args=1 
+## finished on a Readable destroyed before end
+node: cb args=1 ERR_STREAM_PREMATURE_CLOSE:Premature close
+rifty-inproc (DIFF): cb args=1 
+rifty-inproc-sync (DIFF): cb args=1 
+rifty-isolate (DIFF): cb args=1 

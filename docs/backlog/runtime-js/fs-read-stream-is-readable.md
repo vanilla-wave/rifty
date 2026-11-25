@@ -35,10 +35,12 @@ Main `b6d37fc01` (`m4`): 3 of 18 rows equal Node in-process and 2 of 18 in the i
 - In the isolate, every read gives `NotImplementedError isolate-host.ReadableStream`, because the
   async VFS's `openReadable` returns a web stream.
 
-The fd path Node reads through (`fs.open`/`fs.read`/`fs.close` callbacks) gives Node's result on all
-three columns today (`m4` row «Node's ReadStream source»). So the expected outcome on the isolate
-host is that the read wall goes away with this unit and PR #437's sync-only wiring is not needed
-(map §Links).
+The fd path Node reads through (`fs.open`/`fs.read`/`fs.close` callbacks) gives Node's bytes
+in-process and in the isolate today (`m4` row «Node's ReadStream source»); Chromium/OPFS is
+unmeasured. With fd reads the isolate read wall is expected to go away, and PR #437's sync-only wiring
+is then not needed (map §Links, conditional). rifty's `fs.read` calls back in microtasks, so an fd
+loop starves timers (`m4` «fs.read(fd) loop»: Node `ticks>0=true`, rifty `false`). The read source
+per host is this unit's ADR (map §Open questions).
 
 Absorbs:
 

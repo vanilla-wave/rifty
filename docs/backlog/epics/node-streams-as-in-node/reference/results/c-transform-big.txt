@@ -1,10 +1,13 @@
-# c-transform-big.cjs — node v24.16.0, rifty b6d37fc01
+# c-transform-big.cjs — node v24.16.0, rifty 17c24ffbc
 columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate
 
 exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 0
+stderr node: maxInFlight 65536
+stderr rifty-inproc: maxInFlight 16777216
+stderr rifty-inproc-sync: maxInFlight 16777216
 
 ## line 1
-node: size true maxInFlight<=1MiB true maxInFlight 65536
-rifty-inproc (DIFF): size true maxInFlight<=1MiB false maxInFlight 16777216
-rifty-inproc-sync (DIFF): size true maxInFlight<=1MiB false maxInFlight 16777216
+node: size true maxInFlight<=1MiB true
+rifty-inproc (DIFF): size true maxInFlight<=1MiB false
+rifty-inproc-sync (DIFF): size true maxInFlight<=1MiB false
 rifty-isolate (DIFF): ws error NotImplementedError: Not implemented: isolate-host.ReadableStream (not available in the rifty isolate host, ADR-0557)

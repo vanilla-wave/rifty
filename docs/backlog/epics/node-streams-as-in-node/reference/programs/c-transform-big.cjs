@@ -28,14 +28,8 @@ const t = new Transform({
 const ws = fs.createWriteStream(dst);
 ws.on('close', () => {
   const st = fs.statSync(dst);
-  console.log(
-    'size',
-    st.size === SIZE,
-    'maxInFlight<=1MiB',
-    max <= 1024 * 1024,
-    'maxInFlight',
-    max,
-  );
+  console.log('size', st.size === SIZE, 'maxInFlight<=1MiB', max <= 1024 * 1024);
+  process.stderr.write(`maxInFlight ${max}\n`);
 });
 ws.on('error', (e) => console.log('ws error', e2s(e)));
 try {

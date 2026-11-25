@@ -1,7 +1,7 @@
 ---
 area: runtime-js
 status: draft
-title: pipeline and stream/promises.pipeline accept function and async-generator stages, and their success callbacks get Node's arguments
+title: pipeline and stream/promises.pipeline accept function and async-generator stages, and pipeline/finished complete as in Node
 created: 2026-11-25
 why: rifty's pipeline rejects every non-stream stage with a TypeError, so `pipeline(src, async function* …, dst)` and generator sources and sinks fail. Its and finished's success callbacks get `null` where Node passes `undefined` or no argument.
 epic: node-streams-as-in-node
@@ -20,6 +20,8 @@ value is the promise's value. Main `b6d37fc01` (`m7`) gives 0 of 7 rows equal on
 - An async function sink does not settle.
 - A success callback gets `cb(null)` (Node `cb(undefined, undefined)`), and `finished` gets 1
   argument (Node 0).
+- `finished` on a stream destroyed before it ended calls `cb()`; Node passes
+  `ERR_STREAM_PREMATURE_CLOSE` (also the zlib goal's `zlib-diff`).
 
 It does not depend on the fs units. The carrier case puts `fs` streams around it.
 

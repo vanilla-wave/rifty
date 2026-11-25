@@ -15,12 +15,13 @@ and the isolate host guest. Covered:
 
 - The stream lifecycle: `_construct`, `_destroy`, a hook's callback called once, the destroy moment,
   `errored`, `autoDestroy`.
-- The Readable/Writable state every subclass shows: `readableFlowing`, `isPaused()`, `writableNeedDrain`.
+- The Readable/Writable state every subclass shows: constructor option and `write` encoding validation,
+  `readableFlowing`, `isPaused()`, `writableNeedDrain`.
 - The legacy `Stream` in the class chain.
 - `fs.ReadStream` and `fs.WriteStream` as Node's `Readable`/`Writable` subclasses, in every class
   shape packages use (`new`, without `new`, `X.apply(this)`, `extends`, overridden `open`).
 - `Transform` backpressure, `Duplex` members and event order.
-- `pipeline` with function and async-generator stages.
+- `pipeline` with function and async-generator stages; `pipeline`/`finished` completion.
 
 Libraries reading and writing through them get Node's bytes and values. Gaps outside stay named loud
 throws (compat ❌/⚠️).
@@ -40,38 +41,39 @@ the `c-*` carrier programs of `reference/programs/`.
 4. `for await (const chunk of fs.createReadStream(f))`. A `'data'` listener attached after several
    `await`s. An `on('readable')` + `read()` loop.
 5. A 16 MiB file through an async `Transform` into an `fs.WriteStream`: Node's bytes, with the
-   source held back by backpressure (in-flight ≤ 1 MiB; Node 65536).
+   source held back by backpressure (stdout `maxInFlight<=1MiB true`; Node's in-flight 65536).
 6. `stream/promises.pipeline(fs.createReadStream(src), async function* (s) {…}, fs.createWriteStream(dst))`.
 
 The stdout and every file written are what real Node produces from the same files.
 
 ## Invariants
 
-<!-- False on main b6d37fc01 (reference/results/, real Node v24.16.0 vs rifty modules in-process
+<!-- False on main b6d37fc01 (probe run at 17c24ffbc = main's code + this docs-only branch; reference/results/, real Node v24.16.0 vs rifty modules in-process
 with and without the async VFS surface vs isolate sandbox exec; summary.txt):
 - carrier, 9 programs, every one differs on every rifty column:
-  - xlsx.readFile: isolate "TypeError: stream.close is not a function"; in-process crashes with
-    exit 1 "Chunk must be one of type String, Buffer or StringBuf".
+  - xlsx.readFile: "TypeError: stream.close is not a function" (in-process and isolate).
   - csv.readFile: "stream.close is not a function" in-process; isolate "isolate-host.ReadableStream".
   - graceful-fs: "Class constructor FileWriteStream cannot be invoked without 'new'".
   - unzipper STORE: in-process 'close' with nothing extracted (listing → ENOENT); isolate
     "isolate-host.ReadableStream".
-  - for await: "is not async iterable".
-  - late listener: 0 of 200000 bytes, no 'end'.
-  - readable/read: 0 of 150000 bytes.
-  - 16 MiB Transform: in-flight 16777216 (Node 65536); isolate "isolate-host.ReadableStream".
-  - pipeline with async generator: "pipeline: argument must be a stream (index 1 …)".
-- m1: 1 of 12 rows equal; the hook matrix 10 of 76.
-- m2: 0 of 5; m3: 0 of 4.
-- m4: 3 of 18 in-process, 2 of 18 isolate; m5: 4 of 14.
-- m6: 0 of 8; m7: 0 of 7. -->
+  - for await: "is not async iterable"; isolate also exit 1 (uncaught isolate-host.ReadableStream).
+  - late listener: 0 of 200000 bytes, no 'end'; isolate exit 1.
+  - readable/read: 0 of 150000 bytes; isolate exit 1, no 'end'.
+  - 16 MiB Transform: maxInFlight<=1MiB false, in-flight 16777216 (Node 65536); isolate
+    "isolate-host.ReadableStream".
+  - pipeline with async generator: "pipeline: argument must be a stream (index 1 …)"; isolate exit 1.
+- rows equal to Node, in-process / isolate: m1 0/14, 0/14; hook matrix 10/76, 10/76;
+  m2 0/5; m3 0/4; m4 3/20, 2/20 (+2/+10 lines of uncaught errors); m5 4/14; m6 0/8; m7 0/9;
+  m8 6/16 (the 6 are options both accept or both reject). -->
 
 - I1. Lifecycle is Node's on every stream class and every way of defining a hook (option, own,
   class, ES5, chain, late): `_construct` before the first `_read`/`_write`, `_destroy` with its error
   replacement, a hook's callback once (`ERR_MULTIPLE_CALLBACK`), the synchronous destroy moment,
-  `errored`, and `'close'` after `'end'`/`'finish'` (`autoDestroy`).
-- I2. `readableFlowing`, `isPaused()` and `writableNeedDrain` report Node's values on every
-  Readable/Writable/Duplex and every subclass.
+  `errored`, `closed`, and `'close'` after `'end'`/`'finish'` (`autoDestroy`).
+- I2. Every Readable/Writable/Duplex/Transform and every subclass validates its constructor options
+  as Node does (`highWaterMark`, `readableHighWaterMark`/`writableHighWaterMark`, `signal`,
+  `encoding`, `defaultEncoding`) and the `write` encoding argument (`''` = default) as Node does. It
+  reports Node's `readableFlowing`, `isPaused()` and `writableNeedDrain`.
 - I3. `Readable` and `Writable` inherit the legacy `Stream` (`instanceof Stream`, `Stream.prototype.pipe`)
   as in Node.
 - I4. `fs.ReadStream` is Node's `Readable` subclass on every host:
@@ -80,7 +82,8 @@ with and without the async VFS surface vs isolate sandbox exec; summary.txt):
     overridden `open`);
   - paused-mode buffering, so no data is lost to a late listener;
   - `for await`, `read()`, `setEncoding`, `pause`/`resume`, `close(cb)`, `destroy(err)`, `pipe`
-    backpressure.
+    backpressure;
+  - timers and other callbacks keep running while a file streams, as Node interleaves them.
 - I5. `fs.WriteStream` is Node's `Writable` subclass on every host, with the same class shapes
   (graceful-fs `WriteStream.apply(this)` + overridden `open`), members, `drain`, `cork`,
   `close(cb)`, `destroy(err)` and event order.
@@ -88,13 +91,43 @@ with and without the async VFS surface vs isolate sandbox exec; summary.txt):
   waits for the reader). `Duplex` has Node's writable members and per-side options, and emits
   `'data'`/`'finish'`/`'end'`/`'close'` in Node's order.
 - I7. `pipeline`/`stream/promises.pipeline` accept function and async-generator stages as Node does
-  (source, transform, sink, returned value, errors). Their and `finished`'s success callbacks get
-  Node's arguments.
+  (source, transform, sink, returned value, errors). `finished` reports `ERR_STREAM_PREMATURE_CLOSE`
+  for a stream closed before it ended. The success callbacks of both get Node's arguments.
 - I8. The scenario programs print Node's stdout and write Node's files on every host.
 
 ## Challenge
 
-challenge: <pending — fresh critic over the request, goal, map and probe>
+challenge: 2026-11-25 — 14 problems. One fresh read-only critic ran a premise and final-result check
+in one pass over the request, the user's relayed answer, the manager's extensions, goal, map, probe
+and seeded drafts. Its verdict: «the premise holds; not ready until 1–8 are fixed». Each finding was
+verified and fixed in this draft:
+
+1. major — the in-process xlsx crash («Chunk must be one of type String, Buffer or StringBuf») was a
+   harness artefact: the guest's bare `Buffer` was Node's. `inproc.mts` now installs rifty's `Buffer`.
+   On the re-run xlsx gives `stream.close is not a function` on every column, and that fog line is
+   gone.
+2. major — unit 6 is not independent of 1: its three `'close'` rows need `autoDestroy`. Map now says
+   so.
+3. major — the fs rows of `m2`/`m3` need 4/5 too. They are joint rows now; units 2 and 3 close on the
+   plain-stream rows.
+4. major — the unlock claims left out units. Scenarios 3, 5 and 6 now name 4 and 5.
+5. major — timer starvation is Node-observable, and the fd route reproduces it. It moved from the
+   faults list into I4, with `m4` rows: Node `ticks>0=true`, rifty fd loop `false`.
+6. major — «fd source works on every host» was wider than the measurement. Now: in-process and
+   isolate measured, Chromium unmeasured (owner unit 0/4). The #437 absorption is conditional.
+7. major — the fd route reverses ADR-0020's read mechanism without an ADR. The rejected route was
+   removed; the read source per host is unit 4's ADR (map fog).
+8. major — the zlib links were wrong against `f4f9c7ded`. Fixed: items 2–3; the line proposed for both
+   maps; the DEFLATE `Extract`/`createGzip` joint cases are in no carrier and are proposed to the
+   zlib carrier.
+9. minor — stale pending labels. The manager records the user's words; kept until then.
+10. minor — the one `m1` «same» row was vacuous. `_destroy` now marks itself: `m1` 0/14.
+11. minor — parity counts are now `*.case.ts` counts.
+12. minor — carrier pins now carry exit status and stderr. Scenario 5 prints the bound, and the
+    number goes to stderr.
+13. minor — shared `_construct`/`_destroy`/callable shape: unit 4 builds it, 5 reuses it, order 4 → 5.
+14. nit — `epic:` added to the reused drafts; the two drafts on an unpushed local commit are marked
+    so; io-internal constructions added to the regression risk.
 
 ## Decisions
 
@@ -110,9 +143,15 @@ challenge: <pending — fresh critic over the request, goal, map and probe>
   nothing), on the probe's facts:
   - `pipeline` function/async-generator stages, I7 (`m7`: rifty rejects every non-stream stage);
   - the Readable/Writable state members, I2;
+  - constructor option validation, I2 (from the zlib goal's review 2026-11-25: Node's `lib/zlib.js` over
+    rifty's `Transform` accepts `{highWaterMark: -1}` and `{signal: 1}` silently; `m8`);
   - the legacy `Stream` chain, I3;
   - `'close'` after `'end'` (`autoDestroy`) moved into the lifecycle, I1;
   - `Duplex` surface and order with `Transform` backpressure, I6.
+- 2026-11-25 — the zlib goal's `zlib-diff` (Node's `lib/zlib.js` over Node's vs rifty's `Transform`)
+  adds two gaps, placed by mechanism, manager informed:
+  - `finished` premature close → I7 (end-of-stream, same completion path);
+  - `write(chunk, '', cb)` → I2 (`write` argument normalization).
 - 2026-11-25 — agent, by mechanism, reported to the manager:
   - `finished`/`pipeline` callback arguments go with the pipeline stages (same `pipeline.ts`
     completion path), not with the state members;
@@ -123,8 +162,4 @@ challenge: <pending — fresh critic over the request, goal, map and probe>
 - rejected route: complete the EventEmitter classes (PR #434's route) — violates I4/I5. They stay
   outside `instanceof Readable`/`Writable`, `stream.isReadable`, `Readable.from` and every
   `Readable.prototype` member, and would be a second hand copy of `Readable` (PR #434, three review
-  rounds).
-- rejected route: an `fs.ReadStream` that reads through `Vfs.openReadable` (a web `ReadableStream`) —
-  violates Outcome «every rifty host». The isolate guest has no `ReadableStream` (`m4`, isolate:
-  `NotImplementedError isolate-host.ReadableStream`). Node's own source is `fs.open`/`fs.read(fd)`,
-  which works on every host today (`m4` row «Node's ReadStream source»).
+  rounds). The read source per host (fd reads vs `openReadable`) is unit 4's ADR, map §Open questions.

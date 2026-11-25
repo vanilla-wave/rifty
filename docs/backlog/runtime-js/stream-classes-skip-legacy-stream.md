@@ -3,6 +3,7 @@ area: runtime-js
 status: draft
 title: rifty's Readable and Writable chain to EventEmitter without Node's legacy Stream, so a stream is not `instanceof Stream`
 created: 2026-11-24
+epic: node-streams-as-in-node
 why: In Node `Readable.prototype` → `Stream.prototype` → `EventEmitter.prototype`; rifty's `Readable`/`Writable` extend `EventEmitter` directly (`packages/io/src/streams/legacy-stream.ts` "we collapse"), so `new Readable() instanceof require('stream')` is `false` where Node says `true`
 sources: ["PR #438 (isolate ceiling modules)"]
 code: [packages/io/src/streams/legacy-stream.ts, packages/io/src/streams/readable.ts, packages/io/src/streams/writable.ts]

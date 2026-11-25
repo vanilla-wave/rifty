@@ -1,4 +1,4 @@
-# c-graceful-fs.cjs — node v24.16.0, rifty b6d37fc01
+# c-graceful-fs.cjs — node v24.16.0, rifty 17c24ffbc
 columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate
 
 exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 0

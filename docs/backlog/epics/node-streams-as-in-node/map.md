@@ -1,37 +1,52 @@
 # Map — node-streams-as-in-node
 
-Probe: `reference/` (README, programs, `results/summary.txt`). Rows equal to Node on main
-`b6d37fc01` are given per unit as in-process / isolate.
+Probe: `reference/` (README, programs, `results/summary.txt`). Rows equal to Node, run at `17c24ffbc`
+(main `b6d37fc01`'s code; this branch is docs-only), are given per unit; one number = every rifty
+column.
 
 ## Items
 
 0. `runtime-js/node-streams-acceptance-carrier` — **carrier** — the `c-*` programs as cases on the
-   isolate host and on Chromium (both browser hosts) against live Node, each pinning today's outcome.
-   First, before any stream code. → I8.
+   isolate host and on Chromium (both browser hosts) against live Node. Each case pins today's outcome:
+   line, exit status and stderr. First, before any stream code. → I8.
 1. `runtime-js/stream-destroy-construct-hooks` — **lifecycle** — `_construct`/`_destroy`, callback
-   once, destroy moment, `errored`, `autoDestroy` `'close'` after `'end'`. Stands on nothing. Unlocks
-   4, 5 and zlib's one-shots. `m1` 1/12, hook matrix 10/76. Absorbs 2, plus the readable half of a
-   third. → I1.
-2. `runtime-js/readable-flowing-property` — **state members** — `readableFlowing`, `isPaused()`,
-   `writableNeedDrain`. Independent. `m2` 0/5. Absorbs 2. → I2.
-3. `runtime-js/stream-classes-skip-legacy-stream` — **legacy `Stream` in the chain** — Independent.
-   Its own unit because it changes the prototype chain of every class and falls under the io bundle
-   budget (trap `io-treeshake-side-effect`). `m3` 0/4. Absorbs 1. → I3.
-4. `runtime-js/fs-read-stream-is-readable` — **`fs.ReadStream` = `Readable` subclass, fd source** —
-   Stands on 1. Unlocks scenario 1, 2 (with 5) and 4, the isolate read, and the Web API goal's
-   scenario 3. `m4` 3/18 / 2/18. Absorbs 5 (2 shared with 5). → I4.
+   once, destroy moment, `errored`/`closed`, `autoDestroy` `'close'` after `'end'`/`'finish'`.
+   Stands on nothing. Unlocks 4, 5, the `'close'` rows of 6 and zlib unit 3. `m1` 0/14, hook matrix
+   10/76. Absorbs 2, plus the readable half of a third. → I1.
+2. `runtime-js/readable-flowing-property` — **stream state: constructor options and members** —
+   option validation as Node's `ReadableState`/`WritableState` (`getHighWaterMark`, `signal`,
+   `defaultEncoding`) and `write(chunk, '', cb)` (`m8` 6/16), `readableFlowing`, `isPaused()`, `writableNeedDrain` (`m2` 0/5).
+   Closes on the plain-stream rows. Absorbs 2. → I2.
+3. `runtime-js/stream-classes-skip-legacy-stream` — **legacy `Stream` in the chain** — Closes on the
+   plain-stream rows. Its own unit because it changes the prototype chain of every class and falls under
+   the io bundle budget (trap `io-treeshake-side-effect`). `m3` 0/4. Absorbs 1. → I3.
+4. `runtime-js/fs-read-stream-is-readable` — **`fs.ReadStream` = `Readable` subclass** — Stands on 1.
+   Builds the part shared with 5: Node's one `_construct` (`lib/internal/fs/streams.js:50-84`, with the
+   monkey-patched `open` path), `_destroy` closing the fd, and the callable constructor shape.
+   Unlocks the read side of scenario 1–6, the isolate read and the Web API goal's scenario 3.
+   `m4` 3/20 in-process, 2/20 isolate. Absorbs 5, 2 of them shared with 5. → I4.
 5. `runtime-js/fs-write-stream-is-writable` — **`fs.WriteStream` = `Writable` subclass, graceful-fs
-   shape** — Stands on 1. Unlocks scenario 3 and the write side of 1, 5 and 6. `m5` 4/14. Absorbs 2,
-   both shared with 4. → I5.
+   shape** — Stands on 1 and reuses 4's shared part. Unlocks scenario 3 (with 4) and the write side of
+   1, 5 and 6. `m5` 4/14. Absorbs 2, both shared with 4. → I5.
 6. `runtime-js/transform-readable-backpressure` — **`Transform` backpressure, `Duplex` surface and
-   order** — Independent of 1–5. Unlocks scenario 5 and zlib's streams. `m6` 0/8. Absorbs 3, one of them shared with 1. → I6.
-7. `runtime-js/stream-pipeline-function-stages` — **pipeline function/async-generator stages, callback
-   arguments** — Independent. Unlocks scenario 6. `m7` 0/7. Absorbs 1 (+1 branch-only). → I7.
+   order** — Backpressure and members are independent. The three `'close'` rows of `m6` (Transform
+   order, Duplex order, `allowHalfOpen: false`) close after 1. Unlocks scenario 5 (with 4, 5) and,
+   with 1 and 2, zlib unit 3. `m6` 0/8. Absorbs 3, one of them shared with 1. → I6.
+7. `runtime-js/stream-pipeline-function-stages` — **pipeline function/async-generator stages,
+   `pipeline`/`finished` completion (callback arguments, premature close)** — Independent. Unlocks scenario 6 (with 4, 5). `m7` 0/9. Absorbs 1, plus 1
+   branch-only. → I7.
 
-Order: 0, then 1, 2, 3, 6, 7 in any order (1 first unblocks most), then 4 and 5 after 1. The
-`readableFlowing`/`isPaused`/`writableNeedDrain` and `instanceof Stream` behaviour of fs streams is
-unit 2's and 3's matrix (`m2`, `m3` carry fs-stream rows). Units 4 and 5 do not wait for them, and
-their matrices leave these members out.
+Order: 0 first. Then 1, 2, 3, 6 and 7 in any order; 1 first unblocks the most. Then 4, then 5.
+
+Three groups of rows wait on two units, and whichever unit lands second turns them green:
+
+- the fs-stream rows of `m2`: `readableFlowing`/`isPaused` on `fs.ReadStream`, `writableNeedDrain`
+  on `fs.WriteStream`;
+- the fs-stream rows of `m3` (`instanceof Stream`);
+- the `'close'` rows of `m6`.
+
+Until then each pins today's value under the name of the unit still missing. Units 4 and 5 keep these
+members out of their own matrices.
 
 Rows of `m4`/`m5` that come from inherited core gaps outside the goal (§Out of scope, core residuals)
 pin today's value under that draft's name. `setEncoding` on base64/utf16le is
@@ -61,9 +76,9 @@ Drafts that exist only on parked branches go to their unit when they reach main:
 - `fs-stream-autoclose-false` → 4/5.
 - `fs-readstream-preaborted-signal-sync-destroy` → 4.
 - `fs-read-stream-flows-without-consumer` → 4.
-- `fs-read-stream-utf16le-surrogate-split` (branch `t3/isolate-fs-read-stream`, local commit
-  `397555c3d`) → 4.
-- `stream-pipeline-callback-generator-stage` → 7.
+- `fs-read-stream-utf16le-surrogate-split` → 4 and `stream-pipeline-callback-generator-stage` → 7.
+  Both exist only in commit `397555c3d` of the local branch `t3/isolate-fs-read-stream`, which is
+  not pushed to origin. Their facts are rows of `m4`/`m7` here.
 - `fs-read-stream-reads-snapshot-not-open-file` → fog below.
 - `events-listener-argument-validation` → outside (events).
 
@@ -72,9 +87,12 @@ The node:zlib drafts (`zlib-class-call-shape`, `zlib-crc32`, `zlib-trailing-byte
 
 ## Links
 
-- **Goal node-zlib-on-every-host** (branch `t3/zlib-engine-probe`, `map.md` item 3–4). The same line
-  goes into both maps: «zlib's one-shots need streams unit 1 (`_destroy`); zlib's streams need streams
-  unit 6 (`Transform` backpressure).» Evidence:
+- **Goal node-zlib-on-every-host** (branch `t3/zlib-engine-probe` at `f4f9c7ded`, `map.md` items 2–3).
+  The same line goes into both maps: «zlib unit 2 (sync half) needs no streams unit. zlib unit 3
+  (classes as streams + callback one-shots) needs streams unit 1 (`_destroy`, `closed`, `'close'`),
+  unit 2 (constructor options, `readableFlowing`) and unit 6 (`Transform` backpressure, order).»
+  The zlib map still says unit 3 comes «after the streams goal» as a whole; the manager settles the
+  line in both maps. Evidence:
   - Node's `zlibBuffer` runs on a `Transform`: `on('data'/'error'/'end')`, `end(buf)`, then `close()`,
     which is `finished` + `destroy()` → `_destroy` → `_close(handle)` (`lib/zlib.js:113-160,367-375`).
   - The error path is `zlibOnError` → `destroy(err)` → `_destroy` → `'error'` (`:185-194`).
@@ -82,18 +100,36 @@ The node:zlib drafts (`zlib-class-call-shape`, `zlib-crc32`, `zlib-trailing-byte
     (`:529-560`).
   - `m1` rows «zlibBuffer shape» and «zlibOnError shape» show `_destroy` never runs today (Node
     `data ab,prefinish,end,_destroy null,finish,close cb,close`; rifty
-    `prefinish,data ab,finish,end,close,close cb`).
-  - To be checked against the zlib thread's own measurement when it lands; until then this is derived
-    from Node's source.
-  - The joint consumer cases (unzipper DEFLATE, `createGzip` pipe) live in the zlib carrier.
+    `prefinish,data ab,finish,end,close,close cb`). This matches zlib's `results/transform-path.txt`
+    («`_destroy` never runs»).
+  - Joint consumer cases. The zlib carrier holds unzipper `Open.buffer` and a piped `Parse`.
+    unzipper `Extract` on a DEFLATE zip (fstream → graceful-fs → `fs.WriteStream`) and
+    `fs.ReadStream → createGzip → fs.WriteStream` are in no carrier today. They are proposed for the
+    zlib carrier, via the manager; this goal's STORE `Extract` case covers the streams half.
+  - **`zlib-diff` = 0 is the consumer check of units 1, 2 and 7**
+    (`docs/backlog/runtime-js/reference/zlib-engine-probe/zlib-diff.mjs` → `results/zlib-diff.txt` on
+    branch `t3/zlib-engine-probe`; linked, not copied). It runs Node's verbatim `lib/zlib.js` over
+    Node's `Transform` and over rifty's, 16 scenarios; 10 differ, in 48 fields. The zlib unit that
+    ports `lib/zlib.js` starts when it reaches 0. Its gaps, placed by unit and measured here too:
+    - constructor options → 2 (`m8`);
+    - `_destroy` not called → 1 (`m1`, hook matrix);
+    - `autoDestroy` `'close'`/`destroyed` after `'end'` → 1 (`m1` «async Transform success», «close
+      after end»);
+    - `errored`/`closed` → 1 (`m1` «closed/destroyed/errored»);
+    - `readableFlowing` → 2 (`m2`);
+    - `finished` premature close → 7 (`m7`);
+    - `write(chunk, '', cb)` → 2 (`m8`).
+    Unit 6 (backpressure) is not in that measurement; zlib unit 3's stream paths check it.
 - **PR #434** (`t3/fs-stream-close`, parked). Its parity cases `cases/fs/read-stream-close.case.ts`
   (rows 1–10a) and `cases/fs/write-stream-close.case.ts` (rows 11–20), its conformance
   `fs-stream-close-async-vfs.test.ts` and its corpus rows `fs-read-stream-close`/`fs-write-stream-close`
   move into units 4/5 as Node-oracle cases. The three review rounds' findings are rows of `m4`/`m5` or
   of those cases. Its EventEmitter `close()` code does not move (rejected route).
-- **PR #437** (`t3/isolate-fs-read-stream`, parked) is absorbed by unit 4. Its sync-only guest wiring
-  is not needed: the fd source works in the isolate today (`m4` «Node's ReadStream source»). Moving
-  into unit 4:
+- **PR #437** (`t3/isolate-fs-read-stream`, parked) is absorbed by unit 4, on a condition: unit 4's
+  run shows the isolate `ReadableStream` wall gone (carrier and `m4` isolate column). Its sync-only
+  guest wiring is then not needed. The fd source already reads in the isolate and in-process today
+  (`m4` «Node's ReadStream source»); Chromium/OPFS is unmeasured, owner unit 0/4. If the wall stays,
+  #437's wiring comes back as unit 4's isolate part. Moving into unit 4:
   - `cases/fs/read-stream.case.ts`;
   - corpus rows `fs-read-stream`, `-changed`, `-late-consumer` and `-close` (each `ceiling:` row
     becomes green);
@@ -123,11 +159,13 @@ Unit 1 changes the lifecycle of every stream rifty builds itself: 13 constructio
   - `zlib.ts:243` (`Gzip extends Transform`).
 - net: `http/request.ts:229,272` (`IncomingMessage`, `IncomingMessageFromFetch`).
 - isolate guest: `ceiling-zlib.ts:46`, `egress-net.ts:95`.
+- Inside `@riftydev/io`, the internal streams of `compose`, `Readable.from`, `Duplex.from` and the web
+  adapters (`fromWeb`/`toWeb`). Their parity cases are under `cases/stream/`.
 
 Lanes that catch it:
 
-- `test:parity` (stream 71, fs 41, child_process 35, process 36, worker_threads 20, http 14, zlib 7
-  cases);
+- `test:parity` (`*.case.ts`: stream 69, fs 41, process 35, child_process 31, worker_threads 20,
+  http 14, zlib 7);
 - `test:run` conformance (`builtins/stream*.test.ts`, `child_process*.test.ts`,
   `http-incoming-body.test.ts`, `zlib.test.ts`, `fs-streams.test.ts`);
 - the isolate-host corpus and library tests;
@@ -158,8 +196,6 @@ They are input to the tier question.
   terminated mid-stream: partial files (`distribution/isolate-host-sandbox-killed-run-partial-writes`).
 - **Memory ceilings.** A guest that ignores backpressure (Node's memory only grows) meets the isolate
   `memoryLimit` or the browser worker's ceiling sooner than Node's RSS.
-- **Starvation.** A huge synchronous source starving timers. #437 measured 0 `setInterval` ticks while
-  16 MiB streamed in microtasks. Node interleaves I/O callbacks.
 
 Under `works` these may throw loudly; each must still be honest, never a silent truncation.
 
@@ -171,9 +207,14 @@ Under `works` these may throw loudly; each must still be honest, never a silent 
   `FsSync`/`Vfs` have no open-file handle (`fs-read-stream-reads-snapshot-not-open-file`, branch
   only) — owner: agent — probed in unit 4 against `fs.open`/`fs.read` on each VFS. Until then it is a
   ⚠️ row, not part of I4's matrix.
-- Whether exceljs's in-process crash «Chunk must be one of type String, Buffer or StringBuf» comes from
-  the fs stream (a string chunk out of the hand-written `pipe`) or from a core gap — owner: agent —
-  re-run of the carrier after unit 4.
+- The read source of `fs.ReadStream` per host — owner: agent — settled by unit 4 in an ADR that
+  supersedes ADR-0020's read mechanism («`createReadStream` consumes `openReadable`»). The choice is
+  between Node's fd reads on every host and `openReadable` where a web `ReadableStream` exists, with fd
+  reads in the isolate. Constraints:
+  - I4, including timers running during a read: rifty's `fs.read` calls back in microtasks, so an fd
+    loop starves `setInterval` (`m4` row «fs.read(fd) loop»);
+  - the isolate has no `ReadableStream`;
+  - OPFS read cost and the memory ceiling.
 
 ## Out of scope
 

@@ -2,7 +2,7 @@
 
 What a Node program gets from rifty's streams today, per unit of the goal
 (`docs/backlog/epics/node-streams-as-in-node/`). Oracle: live Node v24.16.0, macOS arm64.
-rifty: main `b6d37fc01`.
+rifty: `17c24ffbc`, which is main `b6d37fc01`'s code (this branch is docs-only).
 
 ## Run
 
@@ -15,7 +15,9 @@ Each program runs four times:
 
 - `node`: real Node, in a temp dir.
 - `rifty-inproc`: rifty's browser-host modules in a Node child (`inproc.mts`). The memory VFS is
-  installed with its async surface, as the hosts install it.
+  installed with its async surface, as the hosts install it. A bare `Buffer` is rifty's, as every host installs
+  it. `process`, timers and console stay Node's (trap `parity-runner-in-process`), so no program
+  prints `process` state.
 - `rifty-inproc-sync`: the same, sync mirror only. This is the parity runner's wiring and PR #437's
   guest wiring.
 - `rifty-isolate`: isolate host `createSandbox().exec`, the main guest bundle.
@@ -39,17 +41,18 @@ Owner of the Chromium column: the goal's carrier unit (map item 0).
 | `c-readable-read.cjs` | carrier | `on('readable')` + `read()` loop |
 | `c-transform-big.cjs` | carrier | 16 MiB → async `Transform` → `fs.WriteStream`; in-flight = bytes emitted − bytes handed on |
 | `c-pipeline-asyncgen.cjs` | carrier | `stream/promises.pipeline(fs.ReadStream, async function*, fs.WriteStream)` |
-| `m1-lifecycle.cjs`, `m1-hooks-matrix` | 1 | hook called once (`ERR_MULTIPLE_CALLBACK`), destroy moment, `errored`, `'close'` after `'end'`, the zlib `zlibBuffer`/`zlibOnError` shapes. The second runs `runtime-js/reference/stream-destroy-construct-hooks/matrix.cjs`. |
+| `m1-lifecycle.cjs`, `m1-hooks-matrix` | 1 | hook called once (`ERR_MULTIPLE_CALLBACK`), destroy moment, `errored`/`closed`, `'close'` after `'end'`, the zlib `zlibBuffer`/`zlibOnError` shapes. The second runs `runtime-js/reference/stream-destroy-construct-hooks/matrix.cjs`. |
 | `m2-core-members.cjs` | 2 | `readableFlowing`, `isPaused()`, `writableNeedDrain`, on plain and fs streams |
 | `m3-legacy-stream.cjs` | 3 | `Readable/Writable → Stream → EventEmitter`, `instanceof Stream` |
 | `m4-readstream.cjs` | 4 | `fs.ReadStream`: chain, members, class shapes (graceful-fs), paused buffer, modes, close, fd source |
 | `m5-writestream.cjs` | 5 | `fs.WriteStream`: chain, members, class shapes (graceful-fs), drain, cork, close, order |
 | `m6-transform-duplex.cjs` | 6 | `Transform` backpressure, `Duplex` members, per-side options, event order |
-| `m7-pipeline-stages.cjs` | 7 | `pipeline` function and async-generator stages, `pipeline`/`finished` callback arguments |
+| `m8-constructor-options.cjs` | 2 | constructor option validation (`highWaterMark`, `signal`, `encoding`, `defaultEncoding`, hook options) per class; `write(chunk, '', cb)` |
+| `m7-pipeline-stages.cjs` | 7 | `pipeline` function and async-generator stages, `pipeline`/`finished` callback arguments, premature close |
 
 Results: `results/summary.txt` (rows equal to Node per column) and one `results/<program>.txt` per
 program (every row, every column, exit status, the first error line of stderr).
 
-The cases that join with node:zlib (unzipper on DEFLATE, `createGzip` pipe) live in the zlib goal's
-carrier (`docs/backlog/epics/node-zlib-on-every-host/`, branch `t3/zlib-engine-probe`). They are not
-repeated here.
+The cases that join with node:zlib (unzipper `Extract` on DEFLATE, the `createGzip` pipe) are proposed
+for the zlib goal's carrier (`docs/backlog/epics/node-zlib-on-every-host/`, branch
+`t3/zlib-engine-probe`). They are not repeated here.

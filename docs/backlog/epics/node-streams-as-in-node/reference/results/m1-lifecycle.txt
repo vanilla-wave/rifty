@@ -1,4 +1,4 @@
-# m1-lifecycle.cjs — node v24.16.0, rifty b6d37fc01
+# m1-lifecycle.cjs — node v24.16.0, rifty 17c24ffbc
 columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate
 
 exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 0
@@ -24,10 +24,10 @@ rifty-inproc (DIFF):
 rifty-inproc-sync (DIFF): 
 rifty-isolate (DIFF): 
 ## Writable _destroy cb twice
-node: close
-rifty-inproc (same): close
-rifty-inproc-sync (same): close
-rifty-isolate (same): close
+node: _destroy,close
+rifty-inproc (DIFF): close
+rifty-inproc-sync (DIFF): close
+rifty-isolate (DIFF): close
 ## Readable destroy(err): sync destroyed/errored
 node: sync destroyed=true errored=boom,error boom,close
 rifty-inproc (DIFF): sync destroyed=true errored=undefined,error boom,close
@@ -58,6 +58,16 @@ node: W finish,R end,W close,R close
 rifty-inproc (DIFF): W finish,W close,R end
 rifty-inproc-sync (DIFF): W finish,W close,R end
 rifty-isolate (DIFF): W finish,W close,R end
+## closed/destroyed/errored after destroy(err), each class
+node: sync Readable:true/true/x Writable:true/true/x Duplex:true/true/x Transform:true/true/x,later Readable:true/true Writable:true/true Duplex:true/true Transform:true/true
+rifty-inproc (DIFF): sync Readable:undefined/true/undefined Writable:false/true/undefined Duplex:undefined/true/undefined Transform:undefined/true/undefined,later Readable:undefined/true Writable:true/true Duplex:undefined/true Transform:undefined/true
+rifty-inproc-sync (DIFF): sync Readable:undefined/true/undefined Writable:false/true/undefined Duplex:undefined/true/undefined Transform:undefined/true/undefined,later Readable:undefined/true Writable:true/true Duplex:undefined/true Transform:undefined/true
+rifty-isolate (DIFF): sync Readable:undefined/true/undefined Writable:false/true/undefined Duplex:undefined/true/undefined Transform:undefined/true/undefined,later Readable:undefined/true Writable:true/true Duplex:undefined/true Transform:undefined/true
+## async Transform success: destroyed at end/finish/close
+node: end destroyed=false closed=false,finish destroyed=false closed=false,close destroyed=true closed=true
+rifty-inproc (DIFF): finish destroyed=false closed=undefined,end destroyed=false closed=undefined
+rifty-inproc-sync (DIFF): finish destroyed=false closed=undefined,end destroyed=false closed=undefined
+rifty-isolate (DIFF): finish destroyed=false closed=undefined,end destroyed=false closed=undefined
 ## prototype _destroy is a function
 node: function,function,function,function
 rifty-inproc (DIFF): undefined,undefined,undefined,undefined

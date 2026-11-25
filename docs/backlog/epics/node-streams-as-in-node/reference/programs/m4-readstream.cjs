@@ -177,6 +177,42 @@ row('for await break: destroy and close', async (L) => {
   }
   L.push(`destroyed=${rs.destroyed}`);
 });
+row('timers run while 16 MiB streams (for await)', async (L) => {
+  const f = path.join(__dirname, 'r-16m.bin');
+  fs.writeFileSync(f, Buffer.alloc(16 * 1024 * 1024, 1));
+  let ticks = 0;
+  const t = setInterval(() => {
+    ticks++;
+  }, 1);
+  let n = 0;
+  try {
+    for await (const c of fs.createReadStream(f)) n += c.length;
+  } finally {
+    clearInterval(t);
+  }
+  L.push(`bytes=${n}`, `ticks>0=${ticks > 0}`);
+});
+row('timers run during an fs.read(fd) loop over 16 MiB (the fd source alone)', async (L) => {
+  const f = path.join(__dirname, 'r-16m.bin');
+  fs.writeFileSync(f, Buffer.alloc(16 * 1024 * 1024, 1));
+  let ticks = 0;
+  const t = setInterval(() => {
+    ticks++;
+  }, 1);
+  const fd = await new Promise((r, j) => fs.open(f, 'r', (e, d) => (e ? j(e) : r(d))));
+  const buf = Buffer.alloc(65536);
+  let n = 0;
+  for (;;) {
+    const k = await new Promise((r, j) =>
+      fs.read(fd, buf, 0, buf.length, null, (e, b) => (e ? j(e) : r(b))),
+    );
+    if (k === 0) break;
+    n += k;
+  }
+  await new Promise((r) => fs.close(fd, r));
+  clearInterval(t);
+  L.push(`bytes=${n}`, `ticks>0=${ticks > 0}`);
+});
 row('close(cb) mid-read', async (L) => {
   const rs = fs.createReadStream(BIG);
   rs.on('close', () => L.push('close'));

@@ -81,6 +81,20 @@ row('finished(readable) success cb args', async (L) => {
     r.resume();
   });
 });
+row('finished on a Writable destroyed before any write', async (L) => {
+  const w = new Writable({
+    write(_c, _e, cb) {
+      cb();
+    },
+  });
+  finished(w, (...a) => L.push(`cb args=${a.length} ${a[0] ? e2s(a[0]) : ''}`));
+  w.destroy();
+});
+row('finished on a Readable destroyed before end', async (L) => {
+  const r = new Readable({ read() {} });
+  finished(r, (...a) => L.push(`cb args=${a.length} ${a[0] ? e2s(a[0]) : ''}`));
+  r.destroy();
+});
 (async () => {
   for (const [name, fn] of rows) {
     const L = [];
