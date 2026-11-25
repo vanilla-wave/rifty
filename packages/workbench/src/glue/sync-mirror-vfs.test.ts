@@ -69,12 +69,11 @@ describe('SyncMirrorVfs.openReadable by range (ADR-0576)', () => {
     expect(Buffer.concat(await drain(stream))).toEqual(Buffer.from(pattern(1000)));
   });
 
-  it('only its window leaves the mirror, one chunk at a time', async () => {
+  it('only its window leaves the mirror, once, and is streamed without a copy of its own', async () => {
     resetSyncMirror();
     const inner = syncMirror();
     inner.writeFileSync('/big.bin', pattern(1 << 20));
-    let moved = 0;
-    let largest = 0;
+    const returned: Uint8Array[] = [];
     setSyncMirror(
       new Proxy(inner, {
         get(target, key) {
@@ -82,10 +81,7 @@ describe('SyncMirrorVfs.openReadable by range (ADR-0576)', () => {
           if (typeof value !== 'function') return value;
           return (...args: unknown[]) => {
             const result = value.apply(target, args);
-            if (result instanceof Uint8Array) {
-              moved += result.byteLength;
-              largest = Math.max(largest, result.byteLength);
-            }
+            if (result instanceof Uint8Array) returned.push(result);
             return result;
           };
         },
@@ -100,8 +96,50 @@ describe('SyncMirrorVfs.openReadable by range (ADR-0576)', () => {
     });
     const chunks = await drain(stream);
     expect(Buffer.concat(chunks)).toEqual(Buffer.from(pattern(1 << 20).subarray(start, end)));
-    expect(moved).toBe(end - start);
-    expect(largest).toBeLessThanOrEqual(64 * 1024);
+    expect(returned.map((bytes) => bytes.byteLength)).toEqual([end - start]);
+    for (const chunk of chunks) expect(chunk.buffer).toBe(returned[0]?.buffer);
+  });
+
+  // A stream reads the snapshot taken at open, as on main (live reads: unit 9r,
+  // `fs-read-stream-reads-snapshot-not-open-file`).
+  it.each([
+    ['unlink', () => syncMirror().rmSync('/s.bin', {})],
+    [
+      'rename over',
+      () => {
+        syncMirror().writeFileSync('/other.bin', new Uint8Array(200 * 1024).fill(9));
+        syncMirror().renameSync('/other.bin', '/s.bin');
+      },
+    ],
+    [
+      'same-size rewrite',
+      () => syncMirror().writeFileSync('/s.bin', new Uint8Array(200 * 1024).fill(7)),
+    ],
+  ])('%s mid-stream: the whole old file, as on main', async (_name, mutate) => {
+    resetSyncMirror();
+    const original = pattern(200 * 1024);
+    syncMirror().writeFileSync('/s.bin', original);
+    const stream = await new SyncMirrorVfs().openReadable('/s.bin', { chunkSize: 64 * 1024 });
+    const reader = stream.getReader();
+    const first = await reader.read();
+    mutate();
+    const chunks = [first.value as Uint8Array];
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+    }
+    expect(Buffer.concat(chunks)).toEqual(Buffer.from(original));
+  });
+
+  it('validates its window as MemoryVfs/OpfsVfs do', async () => {
+    resetSyncMirror();
+    syncMirror().writeFileSync('/w.bin', pattern(10));
+    const vfs = new SyncMirrorVfs();
+    await expect(vfs.openReadable('/w.bin', { chunkSize: 0 })).rejects.toThrow(RangeError);
+    await expect(vfs.openReadable('/w.bin', { start: 5, end: 2 })).rejects.toThrow(RangeError);
+    await expect(vfs.openReadable('/w.bin', { start: -1 })).rejects.toThrow(RangeError);
+    await expect(vfs.openReadable('/w.bin', { start: 1.5 })).rejects.toThrow(RangeError);
   });
 
   it('a missing file fails at open', async () => {

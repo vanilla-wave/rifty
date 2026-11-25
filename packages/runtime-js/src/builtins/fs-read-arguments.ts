@@ -37,6 +37,7 @@ export function assertNonNegativeInteger(value: number, name: string): void {
   }
 }
 
+// TODO(backlog: runtime-js/fs-read-argument-errors-not-node) — codes, messages, order differ from Node
 export function checkedSliceBounds(buffer: Uint8Array, offset: number, length: number): void {
   assertNonNegativeInteger(offset, 'offset');
   assertNonNegativeInteger(length, 'length');

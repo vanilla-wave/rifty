@@ -57,11 +57,18 @@ every implementation decide.
    - `position > size`: the gap is zero-filled (`pwrite`); size becomes
      `max(size, position + data.length)`; never truncates (truncate stays `writeFileSync`).
    - mtime/ctime as `writeFileSync` (strictly monotonic mtime). The store copies `data`.
-   - One call is one store call, as a Linux `write(2)` to a regular file is atomic against other
-     writers. Over sync-RPC a write longer than one exchange (an append included) is staged on the
-     owner per caller ring and applied as one `writeFileRangeSync` at its last piece; caller death
-     mid-staging drops it (nothing written). Wire (a binary range write) and the OPFS write-through
-     shape are 4c's.
+   - Decided here: the interface and one call within one exchange (≤ `FS_RPC_CHUNK`) = one store
+     call. Wire (a binary range write) and the OPFS write-through shape are 4c's.
+   - **Open (unit 4c):** a write longer than one exchange, an append included. A Linux `write(2)` to a
+     regular file is atomic against other writers; pieces over sync-RPC are not. Any owner-side
+     staging meets five obstacles: no-COI children use sync XHR (no ring to key it by); a relay
+     sends its grandchildren to the owner over one ring (two grandchildren's pieces would share a
+     staging); the owner does not see caller death on the SAB ring (wedge, no timeout), so nothing
+     can drop a half-staged write; staging needs a memory cap; it is a new ledger, so a mechanism
+     sweep (`fault-classes.md` §Class-kill) comes first. The `writeFileRangeSync` signature does
+     not depend on the answer.
+   - A store that 4c mutates in place must keep a held range intact (`SyncMirrorVfs` streams one
+     without a copy), or that holder copies.
    - Not added in 4b: no caller, and every implementation would carry a throwing stub.
 3. **RPC** — the ADR-0366 `fs.readChunk` (binary offset + length ≤ `FS_RPC_CHUNK` + path) is the range
    RPC: the owner answers it with `getVfs().readFileRangeSync`. Wire and
@@ -87,7 +94,7 @@ every implementation decide.
 | `MemoryVfs` | `openReadable` windows a view of the store, unchanged |
 | `OpfsVfs` | `openReadable` reads `File.slice` windows from disk, its `readFile` authority, unchanged |
 | `ReplicaVfs` | `openReadable` windows its `readFile`: the digest covers the whole record, a range cannot be verified alone; unchanged, not on the fd path |
-| `SyncMirrorVfs` | `openReadable` reads each pull's chunk by `readFileRangeSync` of the mirror, as Node's fd stream (was one whole-file snapshot at open); `ENOENT`/`EISDIR` at open; each chunk copied, peak one chunk |
+| `SyncMirrorVfs` | `openReadable` reads only its window, one snapshot at open (`main`'s semantics; live stream reads are unit 9r's), held as the layer below returns it — no copy of its own; window validated as `MemoryVfs`/`OpfsVfs` |
 
 ## Consequences
 

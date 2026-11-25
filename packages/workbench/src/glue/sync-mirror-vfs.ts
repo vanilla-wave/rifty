@@ -9,6 +9,7 @@
  */
 import type { Vfs, VfsDirent, VfsStat } from '@riftydev/vfs';
 import { normalizePath, syncMirror } from '@riftydev/vfs';
+import { assertReadWindow } from '@riftydev/vfs/internal';
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -55,27 +56,27 @@ export class SyncMirrorVfs implements Vfs {
     path: string,
     opts?: { chunkSize?: number; start?: number; end?: number },
   ): Promise<ReadableStream<Uint8Array>> {
-    const np = normalizePath(path);
-    const mirror = syncMirror();
-    const chunkSize = opts?.chunkSize ?? 64 * 1024;
+    assertReadWindow(opts);
+    const start = opts?.start ?? 0;
     const end = Math.min(opts?.end ?? Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER);
-    let offset = opts?.start ?? 0;
-    // A missing file or a directory fails at open.
-    mirror.readFileRangeSync(np, offset, 0);
-    // ADR-0576: each pull reads its chunk, as Node's fd stream does; copied, as a
-    // range is valid only until the store's next mutation. Peak: one chunk.
+    // ADR-0576: the window only, one snapshot at open (main's semantics), held as
+    // the layer below returns it — no copy of our own.
+    const data = syncMirror().readFileRangeSync(
+      normalizePath(path),
+      start,
+      Math.max(0, end - start),
+    );
+    const chunkSize = opts?.chunkSize ?? 64 * 1024;
+    let offset = 0;
     return new ReadableStream<Uint8Array>({
       pull(controller) {
-        const chunk =
-          offset >= end
-            ? new Uint8Array(0)
-            : mirror.readFileRangeSync(np, offset, Math.min(chunkSize, end - offset));
-        if (chunk.byteLength === 0) {
+        if (offset >= data.byteLength) {
           controller.close();
           return;
         }
-        offset += chunk.byteLength;
-        controller.enqueue(chunk.slice());
+        const next = Math.min(offset + chunkSize, data.byteLength);
+        controller.enqueue(data.subarray(offset, next));
+        offset = next;
       },
     });
   }

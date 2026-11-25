@@ -197,6 +197,44 @@ describe('readSync(fd) over sync-RPC: a concurrent writer', () => {
     closeSync(fd);
   });
 
+  it('a truncate between the exchanges of one long range ends the read at the new size, no error', () => {
+    const size = 3 * FS_RPC_CHUNK;
+    const original = pattern(size);
+    const owner = ownerWith(original);
+    const cut = FS_RPC_CHUNK + 100;
+    setSyncMirror(
+      rpcWithHook(owner, (count) => {
+        if (count === 1) owner.writeFileSync('/data/f.bin', original.slice(0, cut));
+      }),
+    );
+    const fd = openSync('/data/f.bin', 'r');
+    const buffer = new Uint8Array(size);
+    expect(readSync(fd, buffer, 0, size, 0)).toBe(cut);
+    expect(
+      Buffer.compare(Buffer.from(buffer.subarray(0, cut)), Buffer.from(original.subarray(0, cut))),
+    ).toBe(0);
+    closeSync(fd);
+  });
+
+  it('a rename over between the exchanges of one long range: later pieces read the new file, no error', () => {
+    const size = 3 * FS_RPC_CHUNK;
+    const owner = ownerWith(new Uint8Array(size).fill(1));
+    setSyncMirror(
+      rpcWithHook(owner, (count) => {
+        if (count === 1) {
+          owner.writeFileSync('/data/g.bin', new Uint8Array(size).fill(3));
+          owner.renameSync('/data/g.bin', '/data/f.bin');
+        }
+      }),
+    );
+    const fd = openSync('/data/f.bin', 'r');
+    const buffer = new Uint8Array(size);
+    expect(readSync(fd, buffer, 0, size, 0)).toBe(size);
+    expect(buffer.subarray(0, FS_RPC_CHUNK).every((byte) => byte === 1)).toBe(true);
+    expect(buffer.subarray(FS_RPC_CHUNK).every((byte) => byte === 3)).toBe(true);
+    closeSync(fd);
+  });
+
   it("a rewrite between the exchanges of one long range: each piece is its exchange's snapshot, no error", () => {
     const size = 3 * FS_RPC_CHUNK;
     const owner = ownerWith(new Uint8Array(size).fill(1));
