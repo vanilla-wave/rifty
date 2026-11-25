@@ -82,6 +82,7 @@ jobs:
       - run: pnpm check:source-grep # blocking: no new source-grep tests in playground unit + browser-unit (allowlist exact-match)
       - run: pnpm check:runtime-adapter-boundary # ADR-0308: generic admission/launch never branches on esbuild/Vite
       - run: pnpm check:esbuild-legacy-retirement # cutover: vendored ADR-0047 path cannot return
+      - run: pnpm check:lockfile-registry # every committed lock addresses only registry.npmjs.org; docs-only PRs too
       - run: pnpm check:dir-owner # blocking: source dir > 30 direct prod modules carries an owner README
       - run: pnpm check:file-size # blocking: prod source file ≤ 800 lines, oversized files only shrink
       - run: pnpm check:esbuild-runtime-drift # generated esbuild runtime artifacts match their inventory
