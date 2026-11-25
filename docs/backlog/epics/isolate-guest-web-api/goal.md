@@ -76,10 +76,10 @@ scenario: `pptx.write()` → `blob is not supported by this platform`, `Packer.t
 - I3. `AbortController`, `AbortSignal` (with `abort`/`timeout`/`any`/`throwIfAborted`),
   `EventTarget`, `Event`, `CustomEvent` are the guest's globals from Node's sources and give Node's results on
   WPT `dom/abort`/`dom/events` through the shared harness, per subtest equal to live Node, except
-  `timeout-shadowrealm.any.js` (ShadowRealm), `EventTarget-removeEventListener.any.js` (a window
-  global; Node fails it too) and the `.html`/`.window.js`/`.worker.js` files (`reference/wpt`: none
-  of the 13 `.any.js` files needs `MessageChannel`, GC or `fetch`; `Event-isTrusted`, which Node
-  fails, is compared, not excluded); `signal.reason` is an instance of the guest's
+  `timeout-shadowrealm.any.js` (ShadowRealm) and the `.html`/`.window.js`/`.worker.js` files
+  (`reference/wpt`: none of the 13 `.any.js` files needs `MessageChannel`, GC or `fetch`;
+  `Event-isTrusted` and `EventTarget-removeEventListener`, which Node fails, are compared — an equal
+  failure is a valid comparison); `signal.reason` is an instance of the guest's
   global `DOMException` (today's class; its descriptor and `.code` equal Node's per
   `reference/today`; Node's code is bound to it); Node's APIs taking a `signal` (`events.once`/`on`, `timers/promises`, `fs.readFile`,
   `fs.promises.readFile`) equal Node in the guest. Carried by `node-streams-as-in-node` unit 7
@@ -180,13 +180,14 @@ the split-out of `URL`/ESM.
   standalone); `TextDecoder` class from Node's `lib/internal/encoding.js`, single-byte and
   `x-user-defined` from Node's `encoding/single-byte.js` verbatim, utf-16/gbk/gb18030 decoders from
   @exodus/bytes 1.16.0 (equal to Node, which decodes them through ICU, on the corpus;
-  `reference/textdecoder`; the whole composition in the guest bundle: +50.3 KB gzip, +3.1 ms warm,
+  `reference/textdecoder`; the whole composition in the guest bundle: +50.7 KB gzip, +0.5–0.6 ms warm with `single-byte.js` lazy (+3.3 eager),
   0 differences, `reference/textdecoder/bundle`); `Blob`/`File` from Node's `lib/internal/blob.js`/`file.js` over a JS byte
   store (`reference/sources-native`). Each source gets an ADR (semantic copy) before its unit.
 - 2026-11-25 — manager: I3's rows and `CustomEvent` are handed to `node-streams-as-in-node` unit 7
-  («Цели потоков это передам я»); that unit now names `CustomEvent` and I3 as its acceptance
-  (`origin/t3/node-streams-goal` 1aa7d0d76); its I3 wording predates `reference/wpt` («without
-  `MessageChannel`/GC») and follows this goal's I3; this goal's closure checks its merged contract.
+  («Цели потоков это передам я»); that unit names `CustomEvent` and I3 as its acceptance
+  (`docs/backlog/distribution/isolate-stream-core-abort-controller.md`, on main since PR #450); its
+  I3 wording predates `reference/wpt` («without `MessageChannel`/GC») and follows this goal's I3;
+  this goal's closure checks its contract.
 - 2026-11-25 — manager (PR #443 review S3): T stands, its basis corrected — a consumer exists:
   pdfkit with a CJK TrueType font makes fontkit create `shift_jis`, `euc-kr`, `gbk` (and `big5`)
   decoders for the `name` table, and restructure's `readString` catches the gap's throw, so at the

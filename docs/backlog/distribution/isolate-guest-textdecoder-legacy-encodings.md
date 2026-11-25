@@ -47,11 +47,11 @@ Measured composition inside the real guest bundle (`reference/textdecoder/bundle
 0 differences from Node over the 33 encodings on the corpus, 200/228 labels equal (the other 28 are
 the five's labels, the named gap), 23/23 error and identity cases equal, pdfkit `compress: false`
 byte-identical to Node; `dist/guest.js` 7 173 116 → 7 360 337 B, gzip -9 1 512 671 → 1 563 006
-(+50.3 KB; parts min/gzip: `single-byte.js` 9.3/3.5 KB, `encoding.js` + `util.js` + shims
+(+50.3 KB eager `td-gb`; parts min/gzip: `single-byte.js` 9.3/3.5 KB, `encoding.js` + `util.js` + shims
 18.1/6.0 KB, @exodus/bytes trimmed to gb18030 74.5/33.6 KB); warm `runCode('1')` 13.9 → 17.0 ms
 (+3.1; Node's class, not the engines — 0.8 ms is the module init, ~2.2 ms unexplained); first use
 windows-1252 0.20 ms, utf-16le 1.11 ms, gb18030 2.87 ms. Since the review (`td-lazy`, `td-lazy-fast`):
-lazy `single-byte.js` → warm Δ +0.5–0.6 ms; the utf-8 binding fixed (Acceptance 11); first use
+lazy `single-byte.js` → warm Δ +0.5–0.6 ms; `guest.js` 7 362 480 B / 1 563 337 gzip (+50.7 KB); the utf-8 binding fixed (Acceptance 11); first use
 windows-1252 0.63 ms (now evaluates `single-byte.js`), utf-16le 1.57, gb18030 3.51; gb18030's whole
 4-byte space (1 587 600) equal to Node (review delegate).
 
@@ -66,7 +66,8 @@ Goal §User scenario step 3: pdfkit with its built-in font loads in the isolate 
    7d2e3e08e1): `new TextDecoder(label)` gives Node's `encoding`, or Node's `RangeError
    [ERR_ENCODING_NOT_SUPPORTED]` (`replacement`), in `exec` and `runCode`; the 28 labels of big5,
    euc-jp, shift_jis, euc-kr, iso-2022-jp throw `NotImplementedError('isolate-host.TextDecoder(<enc>)')`
-   at construction → I2
+   at construction; for those five every corpus case is checked as refused with that gap (a decoder
+   that slipped into the bundle, e.g. a WHATWG big5, fails the row) → I2
 2. Decoding: the probe's corpus (`reference/textdecoder/cases.cjs`: every single byte, every 2-byte
    sequence, gb18030 4-byte and euc-jp 3-byte forms sampled, random and `stream: true` splits,
    non-fatal and `fatal`, `ignoreBOM`) equals live Node for utf-8 and the 33 encodings — 0
@@ -96,7 +97,8 @@ Goal §User scenario step 3: pdfkit with its built-in font loads in the isolate 
     `td-lazy-fast`, `bundle/utf8-whole.ts.txt`: 6.22 / 3.64 / 5.56 / 98 / 97 ms vs base 7.72 /
     3.73 / 6.14 / 199 / 198; the first binding, a decoder per call, was +25–38 % slower) → I2
 12. fontkit as pdfkit drives it, in the sandbox against live `node`: Helvetica (AFM) asks only
-    `ascii`; a TTF (DejaVu Sans 2.37.3, OFL) asks `ascii`, `utf-16be`, `x-mac-roman` — pdfkit
+    `ascii`; a TTF (DejaVu Sans 2.37.3: Bitstream Vera / Arev licence + public domain; the committed
+    TTF fixture carries its LICENSE beside it, as `apps/playground/public/fonts/LICENSE.md`) asks `ascii`, `utf-16be`, `x-mac-roman` — pdfkit
     0.17.2 + that TTF, `compress: false`, gives Node's `out.pdf` bytes → I2
 13. The five's gap at the consumer, pinned (declared ⚠️, compat row of Acceptance 10): the probe's
     font (`bundle/fonts.mjs`: DejaVu Sans with Mac `name` records in shift_jis, big5, euc-kr, gbk)
@@ -122,8 +124,8 @@ Goal §User scenario step 3: pdfkit with its built-in font loads in the isolate 
    → I2
 9. Cost: `dist/guest.js` bytes and gzip and the warm `runCode('1')` median (≥40, alternating)
    before and after, recorded in the ADR and the isolate-host README; with no non-utf-8 decoder
-   created, the warm-call Δ is within the base's noise (probe `td-lazy`: +0.5–0.6 ms, base p10–p90
-   13.69–15.45 ms, vs +3.3 ms eager; +50.4 KB gzip) → ADR-0563
+   created, the warm `runCode('1')` median grows by ≤ 1 ms (probe `td-lazy`: +0.5–0.6 ms, vs +3.3 ms
+   eager; `td-lazy-fast` `guest.js` 7 362 480 B / 1 563 337 gzip, +50.7 KB) → ADR-0563
 10. Compat `docs/public/compat/isolate-host.md`: a `TextDecoder`/`TextEncoder` row ✅ for utf-8 and
     the 33 encodings, ❌ for the five (named gap, `distribution/isolate-guest-textdecoder-icu-only-encodings`),
     ⚠️ for its silent form at fontkit (row 13: names `BYTES n`, PDF bytes Node's) → I2

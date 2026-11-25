@@ -86,7 +86,10 @@ are written as the document (carrier `distribution/isolate-guest-web-api-accepta
     `META: script=` dependencies), concatenated into one CommonJS file run as `sandbox.exec` and as
     `node`; per-subtest results (name, status, message) of the guest compared with live Node's
     (probe `epics/isolate-guest-web-api/reference/wpt`: 14 files, a 26-line shim, 60–200 ms a file
-    in the guest) → I1
+    in the guest). The vendored WPT directory (`testharness.js` + the tests) carries WPT's
+    `LICENSE.md` (3-Clause BSD; precedent `tools/publishing/node-url-legacy/vendor/LICENSE`); it is a
+    test fixture outside every published package, so `check:third-party-notices` does not require
+    it → I1
 11. `stream/consumers.blob(readable)` gives Node's `Blob` (size, type `''`, bytes) in the guest;
     `fs.openAsBlob` becomes reachable in the guest with rifty's eager read — declared ⚠️ in the compat
     row (after an overwrite Node's `text()` rejects `NotReadableError`, a clone throws

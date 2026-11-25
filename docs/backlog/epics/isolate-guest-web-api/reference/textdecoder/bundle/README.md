@@ -199,8 +199,9 @@ gb18030 3.51 ms. A second decoder takes ≤ 0.07 ms.
   - The named gap of the five is thrown and caught inside fontkit/restructure, so the consumer
     sees raw bytes silently (exit 0). gbk (in the set) decodes.
 
-**Sizes** (`sizes.json`): td-lazy and td-lazy-fast are 7 360 920 / 1 563 115 gzip, base
-7 173 116 / 1 512 671, so +50.4 KB gzip. Minified: 4 496 806 / 1 317 829.
+**Sizes** (`sizes.json`): td-lazy 7 360 739 / 1 563 081 gzip (+50.4 KB), td-lazy-fast
+7 362 480 / 1 563 337 (+50.7 KB), base 7 173 116 / 1 512 671. Minified: td-lazy 4 496 737 /
+1 317 947, td-lazy-fast 4 497 633 / 1 318 068.
 
 ## Not verified (round 2)
 
