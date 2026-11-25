@@ -72,7 +72,7 @@ const files = () => ({
 
 describe('check:third-party-notices', () => {
   it('green: notices file derived from the bundler inputs, link line in the bundling file', () => {
-    expect(built(inputs, files())()).toEqual({ entries: 2, violations: [] });
+    expect(built(inputs, files())()).toMatchObject({ entries: 2, violations: [] });
     expect(notices()).toContain('## dep@3.1.0');
     expect(notices()).toContain('MIT © Dep Authors');
     expect(notices()).toContain('## upstream@1.0.0');

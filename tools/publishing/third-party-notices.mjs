@@ -118,6 +118,8 @@ export function collect(
   const counted = new Set();
   const violations = [];
   const firstParty = new Set(manifest.firstParty);
+  /** Manifest keys this package used, as `<section> <key>` (see unusedRecords). */
+  const used = new Set();
   const add = (id, license, from, texts) => {
     const entry = entries.get(id) ?? { id, license, from: new Set(), texts };
     entry.from.add(from);
@@ -127,6 +129,7 @@ export function collect(
     const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
     const id = `${pkg.name}@${pkg.version}`;
     const record = manifest.npm[id];
+    if (record) used.add(`npm ${id}`);
     const texts = [
       ...ownLicenseFiles(dir).map((f) => ({ name: f, text: readFileSync(join(dir, f), 'utf8') })),
       ...(record?.licenseFiles ?? []).map((f) => ({ name: basename(f), text: readText(root, f) })),
@@ -145,7 +148,11 @@ export function collect(
         continue;
       }
       const dir = sourceDir(input);
-      if (!dir || firstParty.has(input)) continue;
+      if (!dir) continue;
+      if (firstParty.has(input)) {
+        used.add(`firstParty ${input}`);
+        continue;
+      }
       const record = manifest.generated[dir];
       if (!record?.files.includes(basename(input))) {
         violations.push(
@@ -154,6 +161,7 @@ export function collect(
         continue;
       }
       counted.add(packed);
+      used.add(`generated ${dir}`);
       const how = `generated into ${dir}${record.changes ? ` (changed: ${record.changes})` : ''}`;
       if (!record.package) {
         // Upstream that is no npm package (e.g. Node's own lib/): texts from the record.
@@ -177,8 +185,19 @@ export function collect(
   return {
     entries: [...entries.values()].sort((a, b) => a.id.localeCompare(b.id)),
     counted,
+    used,
     violations: [...new Set(violations)],
   };
+}
+
+/** Manifest records no package used: a renamed or stale record is red, never silently dropped. */
+export function unusedRecords(manifest, usedSets) {
+  const used = new Set(usedSets.flatMap((s) => [...s]));
+  return [
+    ...Object.keys(manifest.npm).map((k) => `npm ${k}`),
+    ...Object.keys(manifest.generated).map((k) => `generated ${k}`),
+    ...manifest.firstParty.map((k) => `firstParty ${k}`),
+  ].filter((k) => !used.has(k));
 }
 
 /** Packed files of a package under `generated/`/`vendor/` count as their own input. */

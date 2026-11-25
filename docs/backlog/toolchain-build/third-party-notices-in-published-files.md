@@ -30,7 +30,7 @@ Measured 2026-11-24 on main `841fa5300` (esbuild 0.28.0 metafile, tsup sourcemap
   isolate-host copies it byte for byte.
 - No own license file: `diff3@0.0.3` (MIT in source headers, two notices),
   `clean-git-ref@2.0.1` (Apache-2.0 declared, no text in npm or upstream repo
-  at v2.0.1), `isarray@1.0.0` (MIT in README). pako's Zlib part lives only in
+  at v2.0.1); the bundled `isarray` is 2.0.5, which ships its LICENSE. pako's Zlib part lives only in
   `lib/zlib/*.js` headers. typescript ships `ThirdPartyNoticeText.txt`; no
   Apache `NOTICE` file in any of the three Apache packages.
 - Published without notices (npm, 2026-11-24): runtime-js 0.6.0–0.11.0,
@@ -44,7 +44,7 @@ challenge: 2026-11-24 — clear — existing-baseline repair (README §Challenge
 ## User scenario
 
 Maintainer runs `pnpm build:libs` then `pnpm check:third-party-notices`;
-`npm pack` of workbench, isolate-guest, isolate-host (and runtime-js,
+`pnpm pack` of workbench, isolate-guest, isolate-host (and runtime-js,
 ts-language-service, shadow-registry) contains `dist/THIRD_PARTY_NOTICES.md`
 listing every package and copied file the bundler put into that tarball.
 
@@ -62,7 +62,7 @@ listing every package and copied file the bundler put into that tarball.
    guest `legalComments` stays `'none'`; `guest.js` bytes before/after named → scenario
 4. One check before publish (`pr:check` after `build:libs`, CI, `release.yml`,
    `first-publish.sh`): for every publishable package the packed notices file
-   (`npm pack --dry-run`) equals the one derived from the bundler inputs, and
+   (`pnpm pack --dry-run`) equals the one derived from the bundler inputs, and
    every packed JS file with counted inputs carries the link line; red on
    mutants: package removed from the file, new inlined package without license
    and record, file in `vendor/` without manifest record; no content
@@ -84,4 +84,6 @@ listing every package and copied file the bundler put into that tarball.
 - Manager, 2026-11-24: emscripten wasm counted per upstream package; contents not analysed.
 - Manager, 2026-11-24: a record covers exactly its own package/file; no "any NOTICE in the tarball" fallback.
 - File in `dist/` (already in `files`): npm packs it with no `files` change.
+- Manager, 2026-11-25: footer stays on every file of a `noticesLink` package (no per-chunk plugin); cost ~0.5–0.7 KB gzip in client bundles.
+- Review 2026-11-25: gate closed by default — every packed dist file needs an input list; an unused manifest record is red; footer ⇒ packed file; no dist ⇒ red; packs with `pnpm pack`.
 - No ADR: recorded in ADR-0541 §Notices + publishing.md.

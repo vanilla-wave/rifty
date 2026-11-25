@@ -32,8 +32,7 @@
   "firstParty": [
     "packages/runtime-js/src/internal/generated/proxy-identity.js",
     "packages/workbench/src/generated/install-artifact-identity.json",
-    "tools/shadow-registry/generated/shadow-substitution-catalog.json",
-    "tools/shadow-registry/generated/esbuild-runtime-manifest.json"
+    "tools/shadow-registry/generated/shadow-substitution-catalog.json"
   ],
   "npm": {
     "clean-git-ref@2.0.1": {
@@ -41,9 +40,6 @@
     },
     "diff3@0.0.3": {
       "licenseFiles": ["tools/publishing/third-party-licenses/diff3@0.0.3.LICENSE"]
-    },
-    "isarray@1.0.0": {
-      "licenseFiles": ["tools/publishing/third-party-licenses/isarray@1.0.0.LICENSE"]
     },
     "pako@1.0.11": {
       "licenseFiles": ["tools/publishing/third-party-licenses/pako@1.0.11.Zlib.LICENSE"]
