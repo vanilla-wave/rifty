@@ -126,3 +126,8 @@ is_heap_oom = 1
 ## retain with References into each run realm left unreleased (LEAK_REFS=1)  14:29  up 6 days,  4:33, 4 users, load averages: 3.69 3.24 4.24
 {"sec":"retain","kind":"v2","w":"pdf","limitMiB":160,"execsOk":13,"of":60,"end":{"termination":"memory","why":"Isolate was disposed during execution due to memory limit"},"usedMiB":null,"usedAfterGcMiB":null,"gcInIsolate":"function"}
 {"sec":"retain","kind":"v2","w":"xlsx","limitMiB":192,"execsOk":11,"of":60,"end":{"termination":"memory","why":"Isolate was disposed during execution due to memory limit","ms":817.0496669999993,"boot":58.59758399999919,"runMs":758.4512080000004,"rp":0,"out":""},"usedMiB":null,"usedAfterGcMiB":null,"gcInIsolate":"function"}
+## burst: 4 sandboxes x 5 rounds of xlsx at once, RSS (one process per arm)  14:39  up 6 days,  4:42, 4 users, load averages: 1.49 2.21 3.18
+{"sec":"burst","kind":"v1","load":"2.2","startMiB":362.9,"peakMiB":1079.1,"restWithSandboxesMiB":1079.2,"restAfterDropMiB":1079.3}
+{"sec":"burst","kind":"v2b","load":"2.1","startMiB":363.5,"peakMiB":1122,"restWithSandboxesMiB":1122.1,"restAfterDropMiB":1030.8}
+{"sec":"burst","kind":"v2","load":"3.1","startMiB":363.6,"peakMiB":1414.8,"restWithSandboxesMiB":1414.8,"restAfterDropMiB":1334.2}
+{"sec":"burst","kind":"v3","load":"3.5","startMiB":363.1,"peakMiB":715.5,"restWithSandboxesMiB":715.3,"restAfterDropMiB":715.3}

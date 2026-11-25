@@ -638,6 +638,27 @@ if (SECTIONS.has('retain')) {
   }
 }
 
+// ---- burst: the worker's RSS at rest after bursts of 4 at once (what the idle-retire line sees)
+if (SECTIONS.has('burst')) {
+  const kind = ARMS[0];
+  globalThis.gc();
+  const r0 = process.memoryUsage.rss();
+  const sbs = await Promise.all([0, 1, 2, 3].map(() => make(kind, W.xlsx)));
+  let peak = 0;
+  for (let k = 0; k < 5; k++) {
+    await Promise.all(sbs.map((s) => s.exec()));
+    peak = Math.max(peak, process.memoryUsage.rss());
+  }
+  await new Promise((r) => setTimeout(r, 1000));
+  globalThis.gc();
+  const live = process.memoryUsage.rss();
+  for (const s of sbs) s.dispose();
+  await new Promise((r) => setTimeout(r, 1000));
+  globalThis.gc();
+  const after = process.memoryUsage.rss();
+  log({ sec: 'burst', kind, load: load(), startMiB: MiB(r0), peakMiB: MiB(peak), restWithSandboxesMiB: MiB(live), restAfterDropMiB: MiB(after) });
+}
+
 // ---- host: one host op, worker side (v2: a call into context A; v3: the worker's LayeredFs;
 //      v1: the consumer's LayeredFs = probe H/W) --------------------------------------------------
 if (SECTIONS.has('host')) {

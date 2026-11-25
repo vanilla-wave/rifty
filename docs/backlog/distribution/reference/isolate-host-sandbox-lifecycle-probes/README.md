@@ -30,7 +30,11 @@ node ipc.mjs
 | v2b | same as v2 | same | lazy from the worker, cached in A for the sandbox's life |
 | v3 | fresh per `exec` | the worker's realm (a `LayeredFs` per sandbox over the worker's one template); every guest `FsSync` call is one sync host call | in the worker only |
 
-Not built: host disk (ADR-0568 B, rejected by the user).
+Not built: host disk (ADR-0568 B, rejected by the user). Named, built from measured parts, not run
+end to end: **v2b+rp** — v2b plus a restore point (the state of A, 0.4 ms / 3 KB, L7) handed to
+the consumer after every mutating `exec` / host write, and a rebuild from it (27 ms, = v1's `exec`
+path) on a kill, an OOM or a lost worker; optionally **+eviction**: after X s idle capture and
+dispose, rebuild on the next op (v1's idle memory, v2b's speed in tight fix loops, both paths).
 
 ## Cost (four-library template; ms, median of 7 warm repeats in one sandbox; `life.out.txt` §cost)
 
@@ -45,10 +49,18 @@ Not built: host disk (ADR-0568 B, rejected by the user).
 | 4 sandboxes at once, wall, pdf / xlsx (§conc) | 270 / 516 | 264 / 591 | 245 / 480 | 231 / 475 | 356 / 826 |
 | boot of the run's realm | 9–16 (isolate + context + bundle) | 9–14 | 5–9 (context + bundle) | 5–6 | 9–15 |
 
-- v2's warm `exec` is 22–97 ms faster than v1: the template copy + index (~22 ms) and the isolate
-  boot (~4 ms) go, and the run phase itself is 20–25 % shorter (pdf 140 vs 179, xlsx 327 vs 405)
-  from the second `exec` on — the same library sources compiled again in the same isolate. The
-  first `exec` of a sandbox costs what v1's does.
+- v2/v2b's warm `exec` is 22–97 ms (16–29 %) faster than v1: v1's restore + capture (template
+  copy + index, ~14 ms on the empty file) and ~4 ms of isolate boot go, and the run phase is 9–22 %
+  shorter from the second `exec` on (pdf 140 vs 179, docx 120 vs 146, pptx 271 vs 298, xlsx 327
+  vs 405) — the cause (code compiled again in the same isolate) is assumed, not isolated. The
+  first `exec` of a sandbox, create included, is 0–13 % slower than v1's (v2b xlsx 490 vs 432).
+- Not in these rows: v1 also moves the sandbox's own files both ways per `exec` (here 3 KB). An
+  input of S MB (a user's PDF, images for pptx) adds per `exec` the codec both ways (ADR-0568
+  Consequences: ~1.6 ms consumer + ~3.3 ms isolate per ~1 MB) and base64 IPC (6.4 ms / MiB,
+  `ipc.mjs`); v2/v3 move unchanged files never.
+- v1's `ms` stops before its isolate's dispose (slightly favours v1); every arm ran at
+  `memoryLimit` 1024, so a live isolate rarely collected — `exec` time at a production limit not
+  measured.
 - v3 pays a host call per FS call on the worker's one thread (xlsx +175 ms, four at once +310);
   the template probes' L measured chunked I/O quadratic across that bridge (8 MiB: 259 vs 64 ms).
 - v1b: lazy template reads cost more per `exec` than the copy saves on real generators.
@@ -59,7 +71,7 @@ Idle sandbox (after one pdf `exec`; 8 per process):
 
 | | v1 | v1b | v2 | v2b | v3 |
 |---|---|---|---|---|---|
-| held per idle sandbox | 3.1 KB of state (+ the consumer's FS, ~3 KiB, template probe W) | same | isolate: heap 13.6 used / 37–60 committed + 97.3 MiB external (the template copy); RSS +148–157 MiB | heap 10.4 used / 31.5 committed + 17.2 MiB external (touched template bytes); RSS +57 MiB | 0.5 MiB worker heap |
+| held per idle sandbox | 3.1 KB of state (+ the consumer's FS, ~3 KiB, template probe W) | same | isolate: heap 13.6 used / 59.7 committed + 97.3 MiB external (the template copy); RSS +157 MiB | heap 10.4 used / 31.5 committed + 17.2 MiB external (touched template bytes, grows with the libraries touched); RSS +57 MiB | 0.5 MiB worker heap |
 | where | consumer | consumer | a worker, pinned | a worker, pinned | a worker, pinned |
 
 RSS deltas include ~13–21 MiB per sandbox of allocator retention from running K isolates in a row
@@ -73,28 +85,31 @@ v1/v2 and ~220 in v1b/v2b/v3.
 
 Heap of one live sandbox over 60 `exec`s (§retain, limit 160 pdf / 192 xlsx): 60 / 60 pass, used
 heap after a GC in the isolate 14.3 / 25 MiB — the same as after the first. Without a GC the used
-heap climbs to 170–190 MiB (pdf, limit 1024) and falls back: garbage, not retention. **But** with
+heap climbs to 166–180 MiB (pdf, limit 1024) and falls back: garbage, not retention. **But** with
 the probe's first version, which left the isolated-vm `Reference`s into each run's context
 unreleased, the same sandbox died out of memory after 11–13 `exec`s (`LEAK_REFS=1`): in v2 every
 handle into a run realm must be released, or each `exec` leaks its whole realm into the sandbox's
 heap.
 
-As a function of the consumer's numbers — T live sandboxes (turns), R runs in flight, R ≈ T × E /
-(E + P) for an `exec` of E and a pause P between `exec`s:
+As a function of the consumer's numbers — T live sandboxes (turns) on a worker, R runs in flight,
+R ≈ T × E / (E + P) on average for an `exec` of E and a pause P between `exec`s, R = T at the peak
+(every turn runs at once):
 
-| | worker memory (beyond one template per worker) |
-|---|---|
-| v1 | R × 107–115 MiB (each run's isolate holds the template) |
-| v1b | R × 27–39 MiB |
-| v2 | T × ~150 MiB + R × the run's garbage |
-| v2b | T × ~50 MiB + R × the run's garbage |
-| v3 | T × 0.5 MiB + R × 23–31 MiB |
+| | worker memory beyond its one template | peak (R = T) | average, E 0.3 s, P 10 s | average, P 1 s |
+|---|---|---|---|---|
+| v1 | R × 107–115 MiB (each run's isolate holds the template; floor) | T × ~110 | T × ~3.3 | T × ~25 |
+| v1b | R × 27–39 | T × ~35 | T × ~1 | T × ~8 |
+| v2 | T × ~150 (RSS) + R × the run's garbage | T × ~150+ | T × ~150 | T × ~150 |
+| v2b | T × ~45–57 (RSS) + R × the run's garbage | T × ~50–90 | T × ~50 | T × ~50 |
+| v3 | T × 0.5 + R × 23–31 | T × ~30 | T × ~1.3 | T × ~7 |
 
-E = 0.3 s, P = 10 s (the model thinking): R ≈ 0.03 T, so per turn v1 ≈ 3.3 MiB, v2 ≈ 150, v2b ≈
-50, v3 ≈ 1.3. P = 1 s: v1 ≈ 25 MiB, v2b ≈ 50. 20 turns, P = 10 s: v1 ≈ 66 MiB, v2 ≈ 3 GiB, v2b ≈
-1 GiB, v3 ≈ 26 MiB. A worker retires when idle above 256 MiB RSS (`protocol.ts`
-`RECYCLE_RSS_BYTES`): with v2 one idle worker holds at most ~1 sandbox under that line, with v2b
-~4 (the line would have to count live sandboxes).
+Floors and RSS are different units; measured RSS of 4 sandboxes running xlsx at once, 5 rounds
+(§burst, one process per arm, start 363 MiB): peak +716 MiB v1, +759 v2b, +1 052 v2, +352 v3.
+So **at the peak v2b ≈ v1**; v2b costs more only on average, while turns sit idle — ~50 MiB per
+idle turn against ~0. On macOS a worker's RSS stays at its peak after the burst in every arm (v1
++716 MiB with all isolates disposed), so the 256 MiB idle-retire line (`protocol.ts`
+`RECYCLE_RSS_BYTES`) is crossed by v1 after any burst too — but a v1 worker holds no state and can
+be retired; a v2 worker cannot without moving its sandboxes. Linux not measured.
 
 ## Host op (`life.out.txt` §host, §ipc; worker side, median of 201)
 
@@ -146,6 +161,11 @@ crashes this way is a lost worker for every arm (v1 reruns, v2/v3 lose their liv
   refusal instead of `stateRefused`). To keep ADR-0568 I1 («no ending of a run loses the sandbox»)
   it needs a restore point outside the worker after every mutation — which brings back the
   state-out half of today's wire (blob + rows + validation, for a rebuild) and a rebuild path.
+- **v2b+rp**: v2's list, minus the state-in half per `exec` (it is the rebuild path, run only on a
+  kill / OOM / lost worker / eviction); the killed run is rolled back by the rebuild, as today, so
+  a timeout never depends on A's FS surviving a cut mid-operation. The capture-unit candidate «a
+  fresh realm over the guest's FS records» (`isolate-host-sandbox-capture-outside-guest-realm`) is
+  this design's two-realm split, without the per-`exec` copy.
 - **v3** removes what v2 removes and the template in any isolate; adds: ~12 synchronous host
   functions taking guest-chosen paths and bytes (the FS becomes part of the exposed seam the user
   wants hardened), per-call copies (ranged FS operations needed against chunked I/O), the same
