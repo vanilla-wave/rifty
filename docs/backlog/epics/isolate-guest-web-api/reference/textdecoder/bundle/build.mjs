@@ -7,6 +7,9 @@
 //   td-full  @exodus/bytes as published (all multi-byte tables in its JSON)
 //   td-gb    the same, its multi-byte JSON trimmed to gb18030 (+ ranges, shared chunks)
 //   td-none  Node's class + single-byte only, no utf-16/gb18030 engine (timing attribution)
+//   td-lazy       td-gb + one declared edit at an anchor of Node's encoding.js (line 37): the
+//                 `single-byte.js` require is lazy, evaluated on the first single-byte decoder
+//   td-lazy-fast  td-lazy + the shim's utf-8 binding without a per-call guest decoder (see README)
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -73,6 +76,25 @@ const work = join(out, 'td-work');
 mkdirSync(work, { recursive: true });
 const genFile = join(work, 'node-encoding.gen.cjs');
 writeFileSync(genFile, gen(Object.keys(PINS)));
+// The one declared edit (td-lazy*): an exact anchor on the sha256-pinned encoding.js; a drift in
+// the source fails the build here, not silently.
+const LAZY_ANCHOR =
+  "const { isSinglebyteEncoding, createSinglebyteDecoder } = require('internal/encoding/single-byte');";
+const LAZY_EDIT =
+  "let lazySingleByte; const singleByte = () => (lazySingleByte ??= require('internal/encoding/single-byte')); const isSinglebyteEncoding = (enc) => singleByte().isSinglebyteEncoding(enc); const createSinglebyteDecoder = (enc, fatal) => singleByte().createSinglebyteDecoder(enc, fatal);";
+if (src['internal/encoding'].split(LAZY_ANCHOR).length !== 2)
+  throw new Error('anchor missing or not unique: encoding.js single-byte require');
+const lazySrc = {
+  ...src,
+  'internal/encoding': src['internal/encoding'].replace(LAZY_ANCHOR, LAZY_EDIT),
+};
+const genLazyFile = join(work, 'node-encoding-lazy.gen.cjs');
+{
+  const saved = src['internal/encoding'];
+  src['internal/encoding'] = lazySrc['internal/encoding'];
+  writeFileSync(genLazyFile, gen(Object.keys(PINS)));
+  src['internal/encoding'] = saved;
+}
 
 // 2. @exodus/bytes' TextDecoder, pure-JS path (no host Buffer; neutral platform).
 const exodusPlugin = (trim) => ({
@@ -146,8 +168,10 @@ for (const [name, trim] of [
 
 // 3. Guest variants.
 const SHIM = /src\/guest\/web-shim\.ts$/;
+const CODEC = /src\/guest\/text-codec\.ts$/;
+const UTF8_WHOLE = readFileSync(join(here, 'utf8-whole.ts.txt'), 'utf8');
 const ANCHOR = "define('TextEncoder', TextEncoder);\ndefine('TextDecoder', TextDecoder);";
-const guestBuild = (outfile, exodus, minify) =>
+const guestBuild = (outfile, exodus, minify, { lazy = false, fastUtf8 = false } = {}) =>
   build({
     absWorkingDir: guestPkg,
     entryPoints: ['src/guest/entry.ts'],
@@ -166,18 +190,24 @@ const guestBuild = (outfile, exodus, minify) =>
           {
             name: 'node-encoding',
             setup(b) {
+              if (fastUtf8)
+                b.onLoad({ filter: CODEC }, (args) => ({
+                  contents: readFileSync(args.path, 'utf8') + UTF8_WHOLE,
+                  loader: 'ts',
+                }));
               b.onLoad({ filter: SHIM }, (args) => {
                 const s = readFileSync(args.path, 'utf8');
                 if (!s.includes(ANCHOR))
                   throw new Error('anchor missing: web-shim TextEncoder/TextDecoder');
-                const repl = `import __makeNodeEncoding from ${JSON.stringify(join(here, 'shim.cjs'))};
-import __loadNode from ${JSON.stringify(genFile)};
+                const repl = `${fastUtf8 ? "import { decodeUtf8Whole as __decodeUtf8Whole } from './text-codec.ts';\n" : ''}import __makeNodeEncoding from ${JSON.stringify(join(here, 'shim.cjs'))};
+import __loadNode from ${JSON.stringify(lazy ? genLazyFile : genFile)};
 const __nodeEncoding = __makeNodeEncoding({
   GuestTextDecoder: TextDecoder,
   GuestTextEncoder: TextEncoder,
   encodeUtf8,
   notImplemented,
   loadNode: __loadNode,
+  decodeUtf8Whole: ${fastUtf8 ? '__decodeUtf8Whole' : 'undefined'},
   loadExodus: ${exodus === 'none' ? "() => { throw new Error('probe: no engine in td-none'); }" : `() => require(${JSON.stringify(exodus)})`},
 });
 define('TextEncoder', __nodeEncoding.TextEncoder);
@@ -202,12 +232,17 @@ sizes.base = {
   guest: measure(join(hostPkg, 'dist/guest.js')),
   minified: measure(join(minDir, 'base.min.js')),
 };
-for (const [name, exodus] of [...Object.entries(exodusFiles), ['none', 'none']]) {
+for (const [name, exodus, opts] of [
+  ...Object.entries(exodusFiles),
+  ['none', 'none'],
+  ['lazy', exodusFiles.gb, { lazy: true }],
+  ['lazy-fast', exodusFiles.gb, { lazy: true, fastUtf8: true }],
+]) {
   const dir = join(out, `td-${name}`, 'dist');
   rmSync(dir, { recursive: true, force: true });
   cpSync(join(hostPkg, 'dist'), dir, { recursive: true });
-  await guestBuild(join(dir, 'guest.js'), exodus, false);
-  await guestBuild(join(minDir, `td-${name}.min.js`), exodus, true);
+  await guestBuild(join(dir, 'guest.js'), exodus, false, opts);
+  await guestBuild(join(minDir, `td-${name}.min.js`), exodus, true, opts);
   sizes[`td-${name}`] = {
     guest: measure(join(dir, 'guest.js')),
     minified: measure(join(minDir, `td-${name}.min.js`)),

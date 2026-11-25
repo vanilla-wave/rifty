@@ -15,7 +15,9 @@ code: [packages/isolate-guest/src/guest/text-codec.ts, packages/isolate-guest/sr
 Host: the isolate guest only (`runCode`, sandbox `exec`); browser hosts keep their native classes.
 Found by the node:zlib goal's case 4 (pdfkit 0.17.2, `zlib-scenario.test.ts`): it fails in the
 isolate at `fontkit/dist/main.cjs:5424` (loaded by `pdfkit/js/pdfkit.js:7`); both browser hosts get
-past it and stop at `zlib.deflateSync`. Goal `isolate-guest-web-api` map unit 3.
+past it and stop at `zlib.deflateSync`. Goal `isolate-guest-web-api` map unit 3. What fontkit asks
+(`bundle/results-fonts.txt`): Helvetica (AFM) only `ascii`; a TTF `ascii`, `utf-16be`,
+`x-mac-roman`; CJK `name` records shift_jis, big5, euc-kr, gbk.
 
 How Node v24.16.0 decodes (`reference/textdecoder`): `lib/internal/encoding.js` maps all 228 WHATWG
 labels (`replacement`'s 6 throw `ERR_ENCODING_NOT_SUPPORTED`; `ascii`/`latin1`/`iso-8859-1` →
@@ -48,7 +50,10 @@ byte-identical to Node; `dist/guest.js` 7 173 116 → 7 360 337 B, gzip -9 1 512
 (+50.3 KB; parts min/gzip: `single-byte.js` 9.3/3.5 KB, `encoding.js` + `util.js` + shims
 18.1/6.0 KB, @exodus/bytes trimmed to gb18030 74.5/33.6 KB); warm `runCode('1')` 13.9 → 17.0 ms
 (+3.1; Node's class, not the engines — 0.8 ms is the module init, ~2.2 ms unexplained); first use
-windows-1252 0.20 ms, utf-16le 1.11 ms, gb18030 2.87 ms.
+windows-1252 0.20 ms, utf-16le 1.11 ms, gb18030 2.87 ms. Since the review (`td-lazy`, `td-lazy-fast`):
+lazy `single-byte.js` → warm Δ +0.5–0.6 ms; the utf-8 binding fixed (Acceptance 11); first use
+windows-1252 0.63 ms (now evaluates `single-byte.js`), utf-16le 1.57, gb18030 3.51; gb18030's whole
+4-byte space (1 587 600) equal to Node (review delegate).
 
 ## User scenario
 
@@ -70,37 +75,63 @@ Goal §User scenario step 3: pdfkit with its built-in font loads in the isolate 
    (`ERR_ENCODING_NOT_SUPPORTED`), invalid data under `fatal` (`ERR_ENCODING_INVALID_ENCODED_DATA`)
    for utf-8, utf-16le, gb18030, a single-byte encoding; `decode('x')`/`decode(1)`
    (`ERR_INVALID_ARG_TYPE`), a foreign `this` (`ERR_INVALID_THIS`), invalid `options` → I2
-4. Node's WPT run `test/wpt/test-encoding.js` (WPT `encoding` as Node vendors it), ported to an
-   isolate-host test, gives every test the result Node's `test/wpt/status/encoding.json` records
-   for Node, except `encoding/streams/*`, the streams part of `idlharness.any.js`
-   (`TextDecoderStream`/`TextEncoderStream`) and tests of the five named-gap encodings, listed in
-   the test → I2
+4. WPT `encoding` (Node v24.16.0's vendored copy, sha256-pinned) through the shared WPT harness of
+   `runtime-js/isolate-guest-blob-file` (Acceptance 10 there): every subtest gives the guest the
+   result live Node gives it (not Node's `status/encoding.json`, which still skips files Node now
+   passes, `reference/wpt`), except, listed in the test: the `encodeInto` «detached output buffer»
+   subtest (`MessageChannel`), `idlharness.any.js` and `encoding/streams/*`
+   (`TextDecoderStream`/`TextEncoderStream`), `iso-2022-jp-decoder.any.js` and the subtests of the
+   five named-gap encodings, the `SharedArrayBuffer` half of `textdecoder-copy` when the guest
+   disables it → I2
 5. `TextEncoder` is Node's class from the same `encoding.js`: `encode`, `encodeInto` with Node's
    argument checks (closes `distribution/isolate-guest-textencoder-encodeinto-arg-checks`),
    `encoding`, lone surrogates → I2
 6. `util.TextDecoder === TextDecoder` and `util.TextEncoder === TextEncoder` in a file run and in
    `runCode`; `Buffer#toString` paths that go through the global keep their results → I4
+11. utf-8 is not slower than today beyond noise, measured before and after in the guest (medians,
+    base and change alternating): 20 000 × `new TextDecoder().decode(small)`, 20 000 × a reused
+    decoder, 20 000 × small `Buffer#toString()`, 20 × 1 MiB `decode` and `toString`. One utf-8
+    decoder: Node's `encoding_binding.decodeUTF8` and `io/src/buffer-codec.ts`'s path call the
+    guest codec's whole-input decode function (no per-call decoder, closures or arrays; probe
+    `td-lazy-fast`, `bundle/utf8-whole.ts.txt`: 6.22 / 3.64 / 5.56 / 98 / 97 ms vs base 7.72 /
+    3.73 / 6.14 / 199 / 198; the first binding, a decoder per call, was +25–38 % slower) → I2
+12. fontkit as pdfkit drives it, in the sandbox against live `node`: Helvetica (AFM) asks only
+    `ascii`; a TTF (DejaVu Sans 2.37.3, OFL) asks `ascii`, `utf-16be`, `x-mac-roman` — pdfkit
+    0.17.2 + that TTF, `compress: false`, gives Node's `out.pdf` bytes → I2
+13. The five's gap at the consumer, pinned (declared ⚠️, compat row of Acceptance 10): the probe's
+    font (`bundle/fonts.mjs`: DejaVu Sans with Mac `name` records in shift_jis, big5, euc-kr, gbk)
+    through fontkit gives Node's PDF bytes, family names `{ja: 'テスト', ko: '가나', zh: '测试',
+    'zh-Hant': '測試'}` in Node and `{ja: 'BYTES 6', ko: 'BYTES 4', zh: '测试', 'zh-Hant': 'BYTES 4'}`
+    in the guest, exit 0 — restructure's `readString` catches the throw, so the gap is silent there
+    → I2
 7. pdfkit 0.17.2 with `Helvetica`, `compress: false`, sandbox `exec` over its closure: exit 0 and
    `out.pdf` byte-identical to live `node` (fixed `CreationDate`) → I2; the scenario's
    `compress: true` run (`zlib-scenario.test.ts` case 4): its isolate pin moves past fontkit's load
    (the zlib gap while the zlib goal's unit 3 is open) → I5
 8. Mechanism: Node v24.16.0's `lib/internal/encoding.js`, `encoding/single-byte.js`,
-   `encoding/util.js` vendored verbatim (sha256-pinned, MIT notice) with checked edit anchors and a
-   drift check (ADR-0541 pattern); `encoding_binding` utf-8 → the guest's codec (`text-codec.ts`);
-   `icu` → @exodus/bytes 1.16.0 exact pin, pure-JS path, its tables trimmed to utf-16 and gb18030,
-   loaded on first use; the five ICU-only encodings throw from Node's own `#prepareConverter`; the
-   engine reads no guest `Buffer` (`runtime-js/buffer-base64-rejects-base64url-chars`); an ADR
-   (semantic copy, the @exodus/bytes pin) comes first → I2
-9. Cost: `dist/guest.js` bytes and gzip and the warm `runCode('1')` median (40, alternating) before
-   and after, recorded in the ADR and the isolate-host README (probe: +50.3 KB gzip, +3.1 ms); no
-   bound (goal Decisions) → ADR-0563
+   `encoding/util.js` vendored (sha256-pinned, MIT notice) through the generated-source pipeline of
+   ADR-0574 (edit anchors, sha, drift check). Verbatim except one declared anchored edit, the only
+   departure: `encoding.js:37`'s `require('internal/encoding/single-byte')` becomes lazy (on the
+   first single-byte decoder; the build fails if the anchor line drifts). `encoding_binding` utf-8 →
+   the guest codec (row 11); `icu` → @exodus/bytes 1.16.0 exact pin, pure-JS path, its tables
+   trimmed to utf-16 and gb18030, loaded on first use; the five throw from Node's own
+   `#prepareConverter`; the engine reads no guest `Buffer` (base64url: `node-streams-as-in-node`
+   unit 2, `runtime-js/buffer-encoding-names`). A new dependency: an ADR (semantic copy, the
+   @exodus/bytes pin, the anchored edit) comes first, and @exodus/bytes gets its entry in
+   `tools/publishing/third-party-manifest.json` (PR #445's notices gate, `check:third-party-notices`)
+   → I2
+9. Cost: `dist/guest.js` bytes and gzip and the warm `runCode('1')` median (≥40, alternating)
+   before and after, recorded in the ADR and the isolate-host README; with no non-utf-8 decoder
+   created, the warm-call Δ is within the base's noise (probe `td-lazy`: +0.5–0.6 ms, base p10–p90
+   13.69–15.45 ms, vs +3.3 ms eager; +50.4 KB gzip) → ADR-0563
 10. Compat `docs/public/compat/isolate-host.md`: a `TextDecoder`/`TextEncoder` row ✅ for utf-8 and
-    the 33 encodings, ❌ for the five (named gap, `distribution/isolate-guest-textdecoder-icu-only-encodings`)
-    → I2
+    the 33 encodings, ❌ for the five (named gap, `distribution/isolate-guest-textdecoder-icu-only-encodings`),
+    ⚠️ for its silent form at fontkit (row 13: names `BYTES n`, PDF bytes Node's) → I2
 
 ## Parity cases
 
-- the pin table's rows (labels 3→222 accepted, the `utf-8` aliases, `replacement`, `nope`, the four
+- the pin table's rows (labels: 3 accepted today → 194 accepted + 6 `RangeError` = 200 equal to Node,
+  28 the named gap; the `utf-8` aliases, `replacement`, `nope`, the four
   decodes, `encodeInto` checks, pdfkit) — RED except the two rows equal today (utf-8
   `fatal`/`ignoreBOM`/`stream`; the `util` identities), which are guards → I2, I4, I5
 - corpus per encoding (`cases.cjs` hashes) for the 33 — RED → I2
@@ -128,11 +159,16 @@ WHATWG `encoding` @ 7d2e3e08e1 (`encodings.json`, `indexes.json`) for the corpus
 
 - 2026-11-25 — manager: the set is utf-8 + the 33 Node=WHATWG encodings; the five are a named gap
   (goal Decisions, question T).
+- 2026-11-25 — WPT through the one shared harness owned by `runtime-js/isolate-guest-blob-file`.
 - 2026-11-25 — @exodus/bytes only for utf-16/gb18030 (Node uses ICU there but its results equal
   WHATWG on the corpus); Node's own JS for the rest.
 - rejected route: `text-encoding` 0.7.0 (differs on `iso-8859-8-i` and gbk/gb18030, tables at load
   +4.1 ms), iconv-lite 0.7.3 (no `fatal`, three encodings missing) — violates I2.
-- 2026-11-25 — cost measured and recorded, the +2.2 ms beyond module init is agent fog (goal map).
+- 2026-11-25 — manager (PR #443 review): gbk/gb18030 stay (equal to Node on the full 4-byte space,
+  1 587 600 sequences, review delegate); lazy `single-byte.js` is required; utf-8 throughput is an
+  acceptance row.
+- 2026-11-25 — the +2.2 ms was `single-byte.js` evaluated at load (review delegates; probe
+  `td-lazy`) — closed by Acceptance 8's anchored edit.
 
 ## Challenge
 

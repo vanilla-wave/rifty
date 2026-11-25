@@ -11,32 +11,52 @@
   },
   "td-full": {
     "guest": {
-      "bytes": 7769505,
-      "gzip9": 1625168
+      "bytes": 7769648,
+      "gzip9": 1625205
     },
     "minified": {
-      "bytes": 4611470,
-      "gzip9": 1376571
+      "bytes": 4611543,
+      "gzip9": 1376674
     }
   },
   "td-gb": {
     "guest": {
-      "bytes": 7360337,
-      "gzip9": 1563006
+      "bytes": 7360480,
+      "gzip9": 1563043
     },
     "minified": {
-      "bytes": 4496617,
-      "gzip9": 1317751
+      "bytes": 4496690,
+      "gzip9": 1317867
     }
   },
   "td-none": {
     "guest": {
-      "bytes": 7227086,
-      "gzip9": 1524090
+      "bytes": 7227229,
+      "gzip9": 1524133
     },
     "minified": {
-      "bytes": 4420522,
-      "gzip9": 1283988
+      "bytes": 4420595,
+      "gzip9": 1284018
+    }
+  },
+  "td-lazy": {
+    "guest": {
+      "bytes": 7360739,
+      "gzip9": 1563081
+    },
+    "minified": {
+      "bytes": 4496737,
+      "gzip9": 1317947
+    }
+  },
+  "td-lazy-fast": {
+    "guest": {
+      "bytes": 7362480,
+      "gzip9": 1563337
+    },
+    "minified": {
+      "bytes": 4497633,
+      "gzip9": 1318068
     }
   },
   "part:node single-byte.js": {
@@ -44,8 +64,8 @@
     "gzip9": 3501
   },
   "part:node encoding.js + util.js + shim.cjs": {
-    "bytes": 18128,
-    "gzip9": 5966
+    "bytes": 18175,
+    "gzip9": 5983
   },
   "part:@exodus/bytes 1.16.0 (full)": {
     "bytes": 189358,

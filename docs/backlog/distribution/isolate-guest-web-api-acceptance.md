@@ -13,8 +13,8 @@ code: [packages/isolate-host/tests, packages/isolate-host/tests/closure-files.ts
 
 Goal `isolate-guest-web-api` §User scenario as executable cases on the one host this goal
 changes, the isolate (`createSandbox` + `exec`), oracle live `node` v24.16.0 over the same files in
-a temp dir. Committed before any wall is fixed; each case pins today's outcome so a RED run fails
-for the known reason, not another.
+a temp dir. Committed before any wall is fixed; each case pins today's whole outcome, so a change
+for any reason is seen.
 
 Today (`reference/today/results.txt`, main bc3412420 product code, Node v24.16.0):
 
@@ -36,10 +36,13 @@ Today (`reference/today/results.txt`, main bc3412420 product code, Node v24.16.0
    this goal for the `TextDecoder(ascii)` stop; once map unit 3 lands its isolate pin is the stop
    after fontkit's load (the zlib gap while the zlib goal's unit 3 is open), and with both landed
    case 4 equals Node → I5
-4. RED, committed: cases 1–2 are `it.fails` whose failure is today's pinned outcome above (exit 1
-   and the stderr's first line); a different failure fails the run → I5
-5. Each case flips to a plain `it` in the PR of the unit that makes it pass (map units 2, 3), never
-   by editing the expectation → I5
+4. RED, committed as plain `it` (not `it.fails`), the zlib carrier's way (`tests/zlib-scenario.ts`
+   `Pin`/`pinOf`, PR #453): each case asserts its whole outcome as a literal pin — exit code,
+   stdout, stderr, output file — `expect(pinOf(rifty)).toEqual(PIN)` and
+   `expect(pinOf(rifty)).not.toEqual(pinOf(node))`; any other outcome, better or worse, fails → I5
+5. A case leaves its pin in the PR of the unit that makes it pass (map units 2, 3): the pin is
+   deleted and the case asserts equality with live Node, never an edited pin that still differs
+   → I5
 
 ## Parity cases
 
@@ -61,6 +64,8 @@ Today (`reference/today/results.txt`, main bc3412420 product code, Node v24.16.0
 - 2026-11-25 — closures through the existing `tests/closure-files.ts` (owner: the library tests,
   ADR-0568), no new installer.
 - 2026-11-25 — pdfkit stays one case, the zlib carrier's case 4 (goal Challenge 12).
+- 2026-11-25 — manager (PR #443 review S1): whole-outcome literal pins with `pinOf`, plain `it`;
+  `it.fails` on the first stderr line was the defect #453 found.
 
 ## Challenge
 

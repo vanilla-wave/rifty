@@ -270,6 +270,10 @@ module.exports = function makeNodeEncoding(host) {
     decodeUTF8: (input, ignoreBOM, fatal) => {
       const u8 = bytesOf(input, 'list');
       try {
+        // td-lazy-fast: the guest codec's whole-input decode (`utf8-whole.ts.txt`) — Node calls this
+        // binding with whole inputs only (it keeps the stream state itself).
+        if (host.decodeUtf8Whole)
+          return host.decodeUtf8Whole(u8, Boolean(fatal), Boolean(ignoreBOM));
         return new host.GuestTextDecoder('utf-8', { fatal, ignoreBOM }).decode(u8);
       } catch (e) {
         if (e && e.code === 'ERR_ENCODING_INVALID_ENCODED_DATA')

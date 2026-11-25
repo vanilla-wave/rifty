@@ -122,8 +122,10 @@ WHATWG implementation would be "similar but different" (AGENTS.md §Fidelity). T
 - a named gap per encoding, `NotImplementedError('isolate-host.TextDecoder(<enc>)')`, as today;
 - a port of ICU's converters (its MBCS data and the `ucnvmbcs` state machine). Not measured.
 
-Choosing between them is the goal's call. pdfkit/fontkit needs `ascii`, `latin1`, `utf-16le` and
-`utf-16be`, all in the Node-equal set.
+Choosing between them is the goal's call. What fontkit 2.0.4 asks under pdfkit 0.17.2 (measured
+later, `bundle/results-fonts.txt`): Helvetica (AFM) only `ascii`; a TrueType font `ascii`,
+`utf-16be`, `x-mac-roman`; a CJK font's Mac `name` records `shift-jis`, `big5`, `euc-kr`, `gbk`
+(the earlier «ascii, latin1, utf-16le, utf-16be» was not measured — corrected by the PR #443 review).
 
 Not part of this probe, noted for their owners: `util.TextDecoder` is `globalThis.TextDecoder`,
 captured by runtime-js at load (`builtins/util.ts:671`). The guest installs its `TextDecoder` before
@@ -149,3 +151,10 @@ form), NUL-joined, gzip -9 (`results-icu-dump-size.txt`): big5 52 KB, euc-jp 49 
 55 KB, euc-kr 36 KB. An upper-bound-style dump, not a table format; iso-2022-jp is stateful
 (escapes) and not measured by it; ICU's converter state machine (lead-byte drops, `fatal`
 without a throw) would have to be ported too. Not a recommendation.
+
+## Round 2 note (2026-11-25)
+
+`cases.cjs` gained a utf-8 corpus (`utf8Cases`, 78 998 cases), used by `bundle/run.mjs` only (this
+probe's own runs cover the 38 non-utf-8 encodings, unchanged). The composition's round-2 results —
+lazy `single-byte.js`, the utf-8 binding fix, fontkit's labels and the CJK name-table case — are in
+`bundle/README.md` §Round 2.

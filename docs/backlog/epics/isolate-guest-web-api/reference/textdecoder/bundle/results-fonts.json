@@ -1,0 +1,78 @@
+{
+  "variant": "td-lazy-fast",
+  "node": "v24.16.0",
+  "fonts": {
+    "dejavu": "7da195a74c55bef988d0d48f9508bd5d849425c1770dba5d7bfc6ce9ed848954",
+    "cjk": "e28190b160f4459b0f8b17b6a9e1e02e8d6a5f0933be6ba8117b09402f6c68a5"
+  },
+  "helvetica.js": {
+    "node": {
+      "stdout": "labels [\"ascii\"] bytes 1269",
+      "exitCode": 0,
+      "sha": "57158f98bf53450a5d0b26d11692ab21d5fdcd2f489728f4ffadcad4f018d1ee"
+    },
+    "base": {
+      "stdout": "",
+      "stderr": "NotImplementedError: Not implemented: isolate-host.TextDecoder(ascii) (only utf-8)",
+      "exitCode": 1
+    },
+    "td-lazy-fast": {
+      "stdout": "labels [\"ascii\"] bytes 1269",
+      "stderr": "",
+      "exitCode": 0,
+      "sha": "57158f98bf53450a5d0b26d11692ab21d5fdcd2f489728f4ffadcad4f018d1ee"
+    }
+  },
+  "ttf.js": {
+    "node": {
+      "stdout": "labels [\"ascii\",\"utf-16be\",\"x-mac-roman\"] bytes 7509",
+      "exitCode": 0,
+      "sha": "10fdaa4a0a54ca90e17d7457c6819b31cd4d7e79815409912d52efee0a5a1733"
+    },
+    "base": {
+      "stdout": "",
+      "stderr": "NotImplementedError: Not implemented: isolate-host.TextDecoder(ascii) (only utf-8)",
+      "exitCode": 1
+    },
+    "td-lazy-fast": {
+      "stdout": "labels [\"ascii\",\"utf-16be\",\"x-mac-roman\"] bytes 7509",
+      "stderr": "",
+      "exitCode": 0,
+      "sha": "10fdaa4a0a54ca90e17d7457c6819b31cd4d7e79815409912d52efee0a5a1733"
+    }
+  },
+  "cjk-pdf.js": {
+    "node": {
+      "stdout": "labels [\"ascii\",\"big5\",\"euc-kr\",\"gbk\",\"shift-jis\",\"utf-16be\",\"x-mac-roman\"] bytes 7509",
+      "exitCode": 0,
+      "sha": "10fdaa4a0a54ca90e17d7457c6819b31cd4d7e79815409912d52efee0a5a1733"
+    },
+    "base": {
+      "stdout": "",
+      "stderr": "NotImplementedError: Not implemented: isolate-host.TextDecoder(ascii) (only utf-8)",
+      "exitCode": 1
+    },
+    "td-lazy-fast": {
+      "stdout": "labels [\"ascii\",\"big5\",\"euc-kr\",\"gbk\",\"shift-jis\",\"utf-16be\",\"x-mac-roman\"] bytes 7509",
+      "stderr": "",
+      "exitCode": 0,
+      "sha": "10fdaa4a0a54ca90e17d7457c6819b31cd4d7e79815409912d52efee0a5a1733"
+    }
+  },
+  "cjk-names.js": {
+    "node": {
+      "stdout": "{\"en\":\"DejaVu Sans\",\"ja\":\"テスト\",\"ko\":\"가나\",\"zh\":\"测试\",\"zh-Hant\":\"測試\"}",
+      "exitCode": 0
+    },
+    "base": {
+      "stdout": "",
+      "stderr": "NotImplementedError: Not implemented: isolate-host.TextDecoder(ascii) (only utf-8)",
+      "exitCode": 1
+    },
+    "td-lazy-fast": {
+      "stdout": "{\"en\":\"DejaVu Sans\",\"ja\":\"BYTES 6\",\"ko\":\"BYTES 4\",\"zh\":\"测试\",\"zh-Hant\":\"BYTES 4\"}",
+      "stderr": "",
+      "exitCode": 0
+    }
+  }
+}

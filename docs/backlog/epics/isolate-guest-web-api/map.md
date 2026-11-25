@@ -28,13 +28,10 @@ Probes in `reference/` (each README holds its command, results and «not verifie
 Delivered elsewhere: `distribution/isolate-stream-core-abort-controller` — goal
 `node-streams-as-in-node` unit 7 (branch `t3/node-streams-goal`, not on main yet; manager decision
 2026-11-25): Node's `abort_controller.js` + `event_target.js` + `webidl.js` in the isolate as guest
-globals (`AbortController`, `AbortSignal`, `EventTarget`, `Event`, `CustomEvent`). Its acceptance is
-this goal's I3 (WPT `dom/abort`/`dom/events` under Node's status, minus `MessageChannel`/GC tests;
-the statics; `signal.reason` an instance of the guest's `DOMException`; Node's `signal` APIs
-`events.once`/`on`, `timers/promises`, `fs.readFile`, `fs.promises.readFile`). On 2026-11-25 that
-unit lists four globals and has no Acceptance; the manager hands it I3's rows and `CustomEvent`.
-**This goal closes when units 1–3 and that unit have landed, its merged contract carrying I3's rows
-and `CustomEvent`, green.**
+globals (`AbortController`, `AbortSignal`, `EventTarget`, `Event`, `CustomEvent`); its acceptance
+includes this goal's I3 (`origin/t3/node-streams-goal` 1aa7d0d76) through the shared WPT harness of
+unit 2. **This goal closes when units 1–3 and that unit have landed, its merged contract carrying
+I3's rows and `CustomEvent`, green.**
 
 Order: 1 first (RED); 2 and 3 independent of each other; the carrier's docx case turns green with 2,
 pptx with 2 (if nothing else stops it), pdfkit's isolate stop moves with 3.
@@ -44,15 +41,18 @@ pdfkit's font load.
 
 ## Open questions
 
-- Where the ~2.2 ms of the `TextDecoder` composition's +3.1 ms warm-call cost beyond Node's module
-  init goes, and whether a lazily evaluated `single-byte.js` (an edit anchor in Node's
-  `encoding.js`) removes it — owner: agent — a bisect inside unit 3 (`reference/textdecoder/bundle`).
 - `Blob`/`File`'s own warm-call and bundle cost — owner: agent — measured in unit 2 (Acceptance 7).
+- The `TextDecoder` composition's remaining +0.5–0.6 ms warm Δ with no non-utf-8 decoder (the load
+  of `encoding.js`/`util.js` and the shims) — owner: agent — within the base's noise; unit 3
+  records it (Acceptance 9).
 
 ## Closed (manager, 2026-11-25; goal Decisions)
 
 - T — the five ICU-only encodings stay a named gap; draft
-  `distribution/isolate-guest-textdecoder-icu-only-encodings`.
+  `distribution/isolate-guest-textdecoder-icu-only-encodings` (a consumer exists, the gap is silent
+  there — PR #443 review S3).
+- The +2.2 ms of the eager composition — `single-byte.js` at load; lazy by unit 3's anchored edit.
+- WPT harness — one, owned by unit 2 (`reference/wpt`).
 - M1 — `CustomEvent` is a global with the four.
 - M2 — web streams in the isolate stay outside both goals; draft
   `distribution/isolate-guest-web-streams`.

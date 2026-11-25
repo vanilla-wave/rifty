@@ -14,6 +14,9 @@ seeded units): `runtime-js/isolate-guest-url`,
   with a measured `ada::idna` port.
 - ES modules in `-e` (`runCode` with `import()` or ESM syntax) — owner: user — at FIT.
 
+- `reference/seam-esm/run.mjs:154` compares only stdout and exit code with Node (PR #443 review N1)
+  — owner: agent — compare stderr too when this goal's FIT reruns the probe.
+
 ## Out of scope
 
 - `data:` URL imports (`runtime-js/process-module-loader-surface`), ESM diagnostics text (direction F).

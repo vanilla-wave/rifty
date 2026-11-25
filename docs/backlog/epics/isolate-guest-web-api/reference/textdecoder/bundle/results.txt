@@ -1,3 +1,4 @@
+corpus utf-8: 0/78998 differ
 corpus ibm866: 0/256 differ
 corpus iso-8859-2: 0/256 differ
 corpus iso-8859-3: 0/256 differ
@@ -36,7 +37,7 @@ corpus euc-kr: 69792/69792 differ (ICU-only: guest refuses at construction)
 corpus utf-16be: 0/69798 differ
 corpus utf-16le: 0/69798 differ
 corpus x-user-defined: 0/256 differ
-corpus total over the 33 in-set encodings: 0 differ
+corpus total over the 33 in-set encodings: 0 differ, 0 unfinished runs
 labels: 200/228 equal Node; differ: big5 (node S:big5 | guest E:NotImplementedError|undefined|Not implemented: isolate-host.TextDecoder(big5) (decoded by ICU in Node, not in the rifty isolate host)); big5-hkscs (node S:big5 | guest E:NotImplementedError|undefined|Not implemented: isolate-host.TextDecoder(big5) (decoded by ICU in Node, not in the rifty isolate host)); cn-big5 (node S:big5 | guest E:NotImplementedError|undefined|Not implemented: isolate-host.TextDecoder(big5) (decoded by ICU in Node, not in the rifty isolate host)); csbig5 (node S:big5 | guest E:NotImplementedError|undefined|Not implemented: isolate-host.TextDecoder(big5) (decoded by ICU in Node, not in the rifty isolate host)); x-x-big5 (node S:big5 | guest E:NotImplementedError|undefined|Not implemented: isolate-host.TextDecoder(big5) (decoded by ICU in Node, not in the rifty isolate host)); cseucpkdfmtjapanese (node S:euc-jp | guest E:NotImplementedError|undefined|Not implemented: isolate-host.TextDecoder(euc-jp) (decoded by ICU in Node, not in the rifty isolate host)); euc-jp (node S:euc-jp | guest E:NotImplementedError|undefined|Not implemented: isolate-host.TextDecoder(euc-jp) (decoded by ICU in Node, not in the rifty isolate host)); x-euc-jp (node S:euc-jp | guest E:NotImplementedError|undefined|Not implemented: isolate-host.TextDecoder(euc-jp) (decoded by ICU in Node, not in the rifty isolate host)); csiso2022jp (node S:iso-2022-jp | guest E:NotImplementedError|undefined|Not implemented: isolate-host.TextDecoder(iso-2022-jp) (decoded by I
 = new TextDecoder('nope'): node E:RangeError|ERR_ENCODING_NOT_SUPPORTED|The "nope" encoding is not supported
 = new TextDecoder(' UTF-8 ').encoding: node S:utf-8
@@ -63,4 +64,4 @@ labels: 200/228 equal Node; differ: big5 (node S:big5 | guest E:NotImplementedEr
 = stream utf-8 split €: node S:€
 pdfkit node: exit 0 bytes 1269  sha 57158f98bf53450a
 pdfkit base: exit 1  NotImplementedError: Not implemented: isolate-host.TextDecoder(ascii) (only utf-8) sha undefined
-pdfkit td-gb: exit 0 bytes 1269  sha 57158f98bf53450a
+pdfkit td-lazy-fast: exit 0 bytes 1269  sha 57158f98bf53450a

@@ -5,7 +5,7 @@ title: The isolate guest's `Blob` and `File` are Node v24.16.0's own classes, an
 created: 2026-11-24
 why: both are ceiling throwers in the isolate guest and `require('buffer').Blob` is `undefined` (captured at load), so `pptx.write()` and `docx Packer.toBlob` fail where Node returns a `Blob`
 epic: isolate-guest-web-api
-sources: [docs/backlog/epics/isolate-guest-web-api/reference/today/README.md, docs/backlog/epics/isolate-guest-web-api/reference/sources-native/README.md, docs/backlog/distribution/reference/isolate-library-probe/README.md]
+sources: [docs/backlog/epics/isolate-guest-web-api/reference/today/README.md, docs/backlog/epics/isolate-guest-web-api/reference/sources-native/README.md, docs/backlog/epics/isolate-guest-web-api/reference/wpt/README.md, docs/backlog/distribution/reference/isolate-library-probe/README.md]
 code: [packages/isolate-guest/src/guest/web-shim.ts, packages/isolate-guest/src/guest/entry.ts, packages/runtime-js/src/builtins/buffer.ts]
 ---
 
@@ -48,11 +48,11 @@ are written as the document (carrier `distribution/isolate-guest-web-api-accepta
 
 ## Acceptance
 
-1. Node v24.16.0's WPT runs `test/wpt/test-blob.js` and `test/wpt/test-file.js` (WPT `FileAPI/blob`,
-   `FileAPI/file` as Node vendors them), ported to an isolate-host test, give every test the result
-   Node's `test/wpt/status/FileAPI/blob.cjs` and `file.json` record for Node, except
-   `Blob-stream.any.js` (needs `stream()`, GC) and the `MessageChannel` subtests of
-   `Blob-constructor.any.js`, both listed in the test → I1
+1. WPT `FileAPI/blob` and `FileAPI/file` (Node v24.16.0's vendored copy, sha256-pinned) through the
+   shared harness of row 10: every subtest gives the guest the result live Node gives it, except,
+   listed in the test: `Blob-stream.any.js` (`ReadableStream`, `garbageCollect`), the
+   `MessageChannel` subtests of `Blob-constructor.any.js` (lines 389–396), and every
+   `.html`/`.window.js`/`.worker.js` file (Node skips them too) → I1
 2. Every row of §Context's pin table equals Node in `exec` and `runCode`, except the `stream()` row,
    which is Acceptance 5 → I1, I4
 3. Node behaviours beyond WPT, against live Node: `endings: 'native'` with a lone `\r`, type
@@ -80,10 +80,24 @@ are written as the document (carrier `distribution/isolate-guest-web-api-accepta
 9. The carrier's `docx-toblob.cjs` case passes (plain `it`); `pptx-write.cjs` passes or its new
    first stop is recorded in the carrier as a wall (a backlog item), never left as `blob is not
    supported by this platform` → I5
+10. One shared WPT harness, owned here (first consumer; `distribution/isolate-guest-textdecoder-legacy-encodings`
+    and `node-streams-as-in-node` unit 7 reuse it): WPT's own `resources/testharness.js` plus a shim
+    as Node's `test/common/wpt/worker.js` sets up (`self`, `GLOBAL`, `location`, `META_TITLE`,
+    `META: script=` dependencies), concatenated into one CommonJS file run as `sandbox.exec` and as
+    `node`; per-subtest results (name, status, message) of the guest compared with live Node's
+    (probe `epics/isolate-guest-web-api/reference/wpt`: 14 files, a 26-line shim, 60–200 ms a file
+    in the guest) → I1
+11. `stream/consumers.blob(readable)` gives Node's `Blob` (size, type `''`, bytes) in the guest;
+    `fs.openAsBlob` becomes reachable in the guest with rifty's eager read — declared ⚠️ in the compat
+    row (after an overwrite Node's `text()` rejects `NotReadableError`, a clone throws
+    `TypeError`; `runtime-js/fs-open-as-blob-eager-read`) → I1
 
 ## Parity cases
 
-- WPT `FileAPI/blob`, `FileAPI/file` under Node's status files, exclusions listed — RED → I1
+- WPT `FileAPI/blob`, `FileAPI/file` per subtest against live Node, exclusions listed — RED (probe:
+  `Blob-slice` Node 144 pass / 6 fail, guest 28 fail at the ceiling) → I1
+- `await require('stream/consumers').blob(Readable.from(['ab', 'c']))` → `Blob` size 3, `text()`
+  `abc` — RED → I1
 - the pin table's 13 rows — RED except the three equal today (descriptor, `({}) instanceof Blob`,
   `typeof buffer.resolveObjectURL`), which are guards → I1, I4
 - `new Blob(['a\rb'], {endings: 'native'}).text()`, `new Blob([], {type: 'TEXT/Plain'}).type`,
@@ -104,6 +118,7 @@ v24.16.0. A Node re-pin regenerates and reruns the suites.
 
 - `Blob.prototype.stream()`: `NotImplementedError('isolate-host.ReadableStream')`, compat ❌
   (web streams: `distribution/isolate-guest-web-streams`).
+- `fs.openAsBlob`'s lazy-read semantics: ⚠️ (Acceptance 11, `runtime-js/fs-open-as-blob-eager-read`).
 - Blob URLs (`URL.createObjectURL`, a live `resolveObjectURL`): the `URL` ceiling, compat ❌ (goal
   `isolate-guest-modern-code`).
 - `structuredClone`/`postMessage` of a `Blob`: those ceilings, compat ❌.
@@ -113,6 +128,8 @@ v24.16.0. A Node re-pin regenerates and reruns the suites.
 
 - 2026-11-25 — the classes load with the runtime (their `internal/*` needs), and become globals before
   guest code; `buffer`'s exports bound then (goal Decisions).
+- 2026-11-25 — manager (PR #443 review S4): one WPT harness, owned here; compared with live Node per
+  subtest (Node's status files lag, `reference/wpt`).
 - 2026-11-25 — a JS byte store, not a host bridge (goal: inside the isolate under its limits).
 - rejected route: npm `Blob` polyfills — 9/19 and 13/19 cases differ — violates I1.
 

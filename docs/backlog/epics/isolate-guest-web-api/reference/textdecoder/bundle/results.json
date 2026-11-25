@@ -1,5 +1,10 @@
 {
   "corpus": {
+    "utf-8": {
+      "cases": 78998,
+      "differ": 0,
+      "examples": []
+    },
     "ibm866": {
       "cases": 256,
       "differ": 0,
@@ -500,7 +505,7 @@
       "stderr": "NotImplementedError: Not implemented: isolate-host.TextDecoder(ascii) (only utf-8)\n    at Object.<anonymous> (/workspace/node_modules/fontkit/dist/main.cjs:5424:51)\n    at Object.<anonymous> (/workspace/node_modules/pdfkit/js/pdfkit.js:7:15) {",
       "exitCode": 1
     },
-    "td-gb": {
+    "td-lazy-fast": {
       "stdout": "bytes 1269\n",
       "stderr": "",
       "exitCode": 0,
@@ -508,8 +513,9 @@
     }
   },
   "meta": {
+    "variant": "td-lazy-fast",
     "date": "2026-11-25",
     "node": "v24.16.0",
-    "head": "7772f9c2e"
+    "head": "230c3272a"
   }
 }

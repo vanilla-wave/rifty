@@ -1,7 +1,8 @@
 import { execFileSync } from 'node:child_process';
 // Measures the TextDecoder variant guest (build.mjs) against the base guest and live Node.
-//   node docs/backlog/epics/isolate-guest-web-api/reference/textdecoder/bundle/run.mjs [--timing] [--n 40]
-// Writes results.json / results.txt beside this file (--timing: results-timing.json only).
+//   node docs/backlog/epics/isolate-guest-web-api/reference/textdecoder/bundle/run.mjs [--variant td-lazy-fast] [--timing] [--utf8] [--n 40]
+// Writes results.json / results.txt beside this file (--timing: results-timing.json only; --utf8:
+// results-utf8.json only). Exit 1 when any in-set encoding differs or its guest run did not finish.
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { loadavg, tmpdir } from 'node:os';
@@ -19,27 +20,75 @@ const timing = argv.includes('--timing');
 const N = argv.includes('--n') ? Number(argv[argv.indexOf('--n') + 1]) : 40;
 
 const base = await load(join(host, 'dist'));
-const td = await load(variantDir('td-gb'));
+const VARIANT = argv.includes('--variant') ? argv[argv.indexOf('--variant') + 1] : 'td-lazy-fast';
+const td = await load(variantDir(VARIANT));
 const tdNone = await load(variantDir('td-none'));
 const median = (a) => {
   const s = [...a].sort((x, y) => x - y);
   return s[s.length >> 1];
 };
 
+const UTF8_CODE = `const small = Buffer.from('hello world, привет'); const big = Buffer.alloc(1 << 20, 97);
+const d = new TextDecoder(); const r = {};
+let t = performance.now(); let n = 0;
+for (let i = 0; i < 20000; i++) n += new TextDecoder().decode(small).length; r.freshDecoderSmall = performance.now() - t;
+t = performance.now(); for (let i = 0; i < 20000; i++) n += d.decode(small).length; r.reusedDecoderSmall = performance.now() - t;
+t = performance.now(); for (let i = 0; i < 20000; i++) n += small.toString().length; r.bufferToStringSmall = performance.now() - t;
+t = performance.now(); for (let i = 0; i < 20; i++) n += d.decode(big).length; r.decode1MiBx20 = performance.now() - t;
+t = performance.now(); for (let i = 0; i < 20; i++) n += big.toString().length; r.bufferToString1MiBx20 = performance.now() - t;
+console.log(JSON.stringify(r));`;
+if (argv.includes('--utf8')) {
+  const vs = {
+    base,
+    'td-gb': await load(variantDir('td-gb')),
+    'td-lazy': await load(variantDir('td-lazy')),
+    'td-lazy-fast': await load(variantDir('td-lazy-fast')),
+  };
+  const runs = Object.fromEntries(Object.keys(vs).map((k) => [k, []]));
+  for (const m of Object.values(vs)) await m.runCode(UTF8_CODE);
+  const la0 = loadavg();
+  for (let i = 0; i < 9; i++)
+    for (const [k, m] of Object.entries(vs))
+      runs[k].push(JSON.parse((await m.runCode(UTF8_CODE, { timeoutMs: 120_000 })).stdout));
+  const keys = Object.keys(runs.base[0]);
+  const med = {};
+  for (const [k, rs] of Object.entries(runs))
+    med[k] = Object.fromEntries(
+      keys.map((x) => [x, Number(median(rs.map((r) => r[x])).toFixed(2))]),
+    );
+  const spread = {};
+  for (const [k, rs] of Object.entries(runs))
+    spread[k] = Object.fromEntries(
+      keys.map((x) => {
+        const a = rs.map((r) => r[x]).sort((p, q) => p - q);
+        return [x, [Number(a[1].toFixed(2)), Number(a[a.length - 2].toFixed(2))]];
+      }),
+    );
+  const res = {
+    runs: 9,
+    loadavgBefore: la0,
+    loadavgAfter: loadavg(),
+    medianMs: med,
+    p10p90Ms: spread,
+  };
+  writeFileSync(join(here, 'results-utf8.json'), `${JSON.stringify(res, null, 2)}\n`);
+  console.log(JSON.stringify(res, null, 2));
+  process.exit(0);
+}
+
 if (timing) {
-  const t = { base: [], 'td-gb': [], 'td-none': [] };
-  for (let i = 0; i < 5; i++) {
-    await base.runCode('1');
-    await td.runCode('1');
-    await tdNone.runCode('1');
-  }
+  const vs = {
+    base,
+    'td-gb': await load(variantDir('td-gb')),
+    'td-lazy': await load(variantDir('td-lazy')),
+    'td-lazy-fast': await load(variantDir('td-lazy-fast')),
+    'td-none': tdNone,
+  };
+  const t = Object.fromEntries(Object.keys(vs).map((k) => [k, []]));
+  for (let i = 0; i < 5; i++) for (const m of Object.values(vs)) await m.runCode('1');
   const la0 = loadavg();
   for (let i = 0; i < N; i++) {
-    for (const [k, m] of [
-      ['base', base],
-      ['td-gb', td],
-      ['td-none', tdNone],
-    ]) {
+    for (const [k, m] of Object.entries(vs)) {
       const s = performance.now();
       await m.runCode('1');
       t[k].push(performance.now() - s);
@@ -67,11 +116,22 @@ if (timing) {
     n: N,
     loadavgBefore: la0,
     loadavgAfter: loadavg(),
-    medianMs: {
-      base: median(t.base),
-      'td-gb': median(t['td-gb']),
-      'td-none': median(t['td-none']),
-    },
+    medianMs: Object.fromEntries(
+      Object.entries(t).map(([k, a]) => [k, Number(median(a).toFixed(2))]),
+    ),
+    p10p90Ms: Object.fromEntries(
+      Object.entries(t).map(([k, a]) => {
+        const s = [...a].sort((x, y) => x - y);
+        return [
+          k,
+          [
+            Number(s[Math.floor(s.length * 0.1)].toFixed(2)),
+            Number(s[Math.floor(s.length * 0.9)].toFixed(2)),
+          ],
+        ];
+      }),
+    ),
+    firstUseVariant: VARIANT,
     firstUseInGuest: firstUse,
   };
   writeFileSync(join(here, 'results-timing.json'), `${JSON.stringify(res, null, 2)}\n`);
@@ -92,6 +152,7 @@ vm.runInThisContext(casesSrc);
 const fnv = `const __fnv=(s)=>{let h=0x811c9dc5;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,0x01000193)>>>0}return h.toString(16).padStart(8,'0')};`;
 vm.runInThisContext(fnv.replace('const __fnv', 'globalThis.__fnv'));
 const NAMES = [
+  'utf-8',
   'ibm866',
   'iso-8859-2',
   'iso-8859-3',
@@ -134,6 +195,7 @@ const NAMES = [
 const ICU_ONLY = new Set(['big5', 'euc-jp', 'iso-2022-jp', 'shift_jis', 'euc-kr']);
 results.corpus = {};
 let totalDiff = 0;
+let unfinished = 0;
 for (const name of NAMES) {
   const nodeH = globalThis.__runCases(TextDecoder, name).map(globalThis.__fnv);
   const r = await td.runCode(
@@ -141,13 +203,22 @@ for (const name of NAMES) {
     { timeoutMs: 300_000, maxOutputBytes: 16 << 20, memoryLimitMb: 512 },
   );
   if (r.exitCode !== 0) {
+    // In the set, a run that did not finish counts as every case differing; an ICU-only encoding
+    // must refuse with its named gap, anything else is a failure too.
+    const named = r.stderr.includes(`isolate-host.TextDecoder(${name})`);
+    const ok = ICU_ONLY.has(name) && named;
+    if (!ok) {
+      unfinished++;
+      if (!ICU_ONLY.has(name)) totalDiff += nodeH.length;
+    }
     results.corpus[name] = {
       error: r.stderr.slice(0, 400),
       exitCode: r.exitCode,
       termination: r.termination,
+      ...(ok ? { refused: 'named gap' } : { unfinished: true, differ: nodeH.length }),
     };
     log(
-      `corpus ${name}: guest exit ${r.exitCode} ${r.termination ?? ''} ${r.stderr.slice(0, 200)}`,
+      `corpus ${name}: guest exit ${r.exitCode} ${r.termination ?? ''} ${ok ? '(ICU-only: the named gap, as designed)' : 'UNFINISHED, counted as differing'} ${r.stderr.split('\n')[0].slice(0, 160)}`,
     );
     continue;
   }
@@ -165,7 +236,9 @@ for (const name of NAMES) {
     `corpus ${name}: ${diff}/${nodeH.length} differ${ICU_ONLY.has(name) ? ' (ICU-only: guest refuses at construction)' : ''}`,
   );
 }
-log(`corpus total over the 33 in-set encodings: ${totalDiff} differ`);
+log(
+  `corpus total over the 33 in-set encodings: ${totalDiff} differ, ${unfinished} unfinished runs`,
+);
 
 // 2. Labels (WHATWG encodings.json, pinned in ../probe.mjs's cache) and error/identity cases.
 const encJson = join(tmpdir(), 'rifty-textdecoder-probe/encodings.json');
@@ -255,7 +328,7 @@ doc.end();
 `;
 files.set('gen.js', new TextEncoder().encode(gen));
 const node = inNode(files, 'gen.js', 'out.pdf');
-const codec = await import(pathToFileURL(join(variantDir('td-gb'), 'codec.js')).href);
+const codec = await import(pathToFileURL(join(variantDir(VARIANT), 'codec.js')).href);
 const pdfIn = async (m) => {
   const fs = new codec.MemoryFsSync();
   for (const dir of codec.GUEST_DIRS) fs.mkdirSync(dir, { recursive: true });
@@ -289,7 +362,7 @@ const nodeSha = node.file && createHash('sha256').update(node.file).digest('hex'
 results.pdfkit = {
   node: { stdout: node.stdout, exitCode: node.exitCode, sha: nodeSha },
   base: await pdfIn(base),
-  'td-gb': await pdfIn(td),
+  [VARIANT]: await pdfIn(td),
 };
 for (const [k, v] of Object.entries(results.pdfkit))
   log(
@@ -297,6 +370,7 @@ for (const [k, v] of Object.entries(results.pdfkit))
   );
 
 results.meta = {
+  variant: VARIANT,
   date: '2026-11-25',
   node: process.version,
   head: execFileSync('git', ['rev-parse', '--short', 'HEAD'], {
@@ -306,3 +380,14 @@ results.meta = {
 };
 writeFileSync(join(here, 'results.json'), `${JSON.stringify(results, null, 2)}\n`);
 writeFileSync(join(here, 'results.txt'), `${lines.join('\n')}\n`);
+const labelsOk = lab.differ.every((d) =>
+  /isolate-host\.TextDecoder\((big5|euc-jp|iso-2022-jp|shift_jis|euc-kr)\)/.test(d.guest ?? ''),
+);
+const casesOk = Object.values(errs).every((v) => v.same);
+const pdfOk = results.pdfkit[VARIANT].sha === nodeSha && results.pdfkit[VARIANT].exitCode === 0;
+if (totalDiff || unfinished || !labelsOk || !casesOk || !pdfOk) {
+  console.error(
+    `FAIL: corpus ${totalDiff} differ, ${unfinished} unfinished, labels ${labelsOk}, cases ${casesOk}, pdfkit ${pdfOk}`,
+  );
+  process.exit(1);
+}

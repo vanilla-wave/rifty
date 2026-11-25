@@ -55,10 +55,10 @@ named gaps, `AbortSignal.timeout` → `TypeError: … is not a function`, `event
 scenario: `pptx.write()` → `blob is not supported by this platform`, `Packer.toBlob` →
 `isolate-host.Blob`, pdfkit → `isolate-host.TextDecoder(ascii) (only utf-8)`. -->
 
-- I1. `Blob`/`File` behave as Node v24.16.0's in the guest: Node's own WPT runs
-  `test/wpt/test-blob.js`/`test-file.js` (WPT `FileAPI` as Node vendors it) give the guest the
-  results Node's `test/wpt/status/FileAPI/` records for Node, except `Blob-stream` (`stream()`, GC)
-  and `Blob-constructor`'s `MessageChannel` cases (listed in the unit); plus the probe
+- I1. `Blob`/`File` behave as Node v24.16.0's in the guest: WPT `FileAPI/blob`/`FileAPI/file`
+  (Node's vendored copy) through one shared WPT harness give every subtest the result live Node
+  gives it, except `Blob-stream` (`stream()`, GC), `Blob-constructor`'s `MessageChannel` subtests
+  and the `.html`/`.window.js`/`.worker.js` files (listed in the unit); plus the probe
   cases (values, thrown `name`/`code`/`message`, prototype chains, descriptors) — 0 differences.
   `Blob.prototype.stream` is the `ReadableStream` named gap.
 - I2. `TextDecoder`/`TextEncoder` as Node's: for every WHATWG label of utf-8 and the 33 encodings
@@ -68,14 +68,18 @@ scenario: `pptx.write()` → `blob is not supported by this platform`, `Packer.t
   sampled; random and `stream: true` splits; `fatal`, `ignoreBOM`); Node's errors for unknown labels and `replacement`
   (`RangeError [ERR_ENCODING_NOT_SUPPORTED]`) and for invalid data in `fatal` mode; a label of an
   encoding outside the set (big5, euc-jp, shift_jis, euc-kr, iso-2022-jp) throws its named gap at
-  construction. Node's WPT `test/wpt/test-encoding.js`
-  results for the set as Node's status records, except `encoding/streams/*` and the streams part of
-  `idlharness.any.js` (`TextDecoderStream`) and the five's tests. `TextEncoder` (utf-8 only) equals Node, `encodeInto`
+  construction. WPT `encoding` through the shared harness
+  equals live Node per subtest, except the unit's listed exclusions (`encoding/streams/*`,
+  `idlharness.any.js`, the `MessageChannel` `encodeInto` subtest, the five's tests). utf-8 is not
+  slower than today beyond noise. `TextEncoder` (utf-8 only) equals Node, `encodeInto`
   argument checks included.
 - I3. `AbortController`, `AbortSignal` (with `abort`/`timeout`/`any`/`throwIfAborted`),
   `EventTarget`, `Event`, `CustomEvent` are the guest's globals from Node's sources and give Node's results on
-  Node's WPT runs `test/wpt/test-abort.js`/`test-events.js` (`dom/abort`, `dom/events`) as Node's
-  status records, except tests needing `MessageChannel` or GC (listed in the unit); `signal.reason` is an instance of the guest's
+  WPT `dom/abort`/`dom/events` through the shared harness, per subtest equal to live Node, except
+  `timeout-shadowrealm.any.js` (ShadowRealm), `EventTarget-removeEventListener.any.js` (a window
+  global; Node fails it too) and the `.html`/`.window.js`/`.worker.js` files (`reference/wpt`: none
+  of the 13 `.any.js` files needs `MessageChannel`, GC or `fetch`; `Event-isTrusted`, which Node
+  fails, is compared, not excluded); `signal.reason` is an instance of the guest's
   global `DOMException` (today's class; its descriptor and `.code` equal Node's per
   `reference/today`; Node's code is bound to it); Node's APIs taking a `signal` (`events.once`/`on`, `timers/promises`, `fs.readFile`,
   `fs.promises.readFile`) equal Node in the guest. Carried by `node-streams-as-in-node` unit 7
@@ -139,6 +143,17 @@ I2, case 4 → I5); docx devDependency to add. Raised for the report, not fixabl
 on the manager's delegation; the streams goal's map still names exceljs as this goal's scenario 3 and
 the isolate `ReadableStream` as this goal's.
 
+review: 2026-11-25 — external review of PR #443 at 230c3272a (manager): no blockers, 5 should,
+nits; verified `reference/today`, Node source hashes, labels and ICU numbers, gb18030's full 4-byte
+space (1 587 600, 0 differences), bundle and warm cost, the user's quotes. Done: S1 whole-outcome
+pins in the carrier; S2 lazy `single-byte.js` (unit 3 Acceptance 8–9); utf-8 throughput row and
+the binding fix (Acceptance 11); S3 T's basis (Decisions, ICU draft, unit 3 Acceptance 13); S4 one
+WPT harness owned by unit 2 (`reference/wpt`), live-Node comparison, I1–I3 exclusions; S5 the
+probe counts an unfinished encoding as a difference (rerun: 0); N2 label counts; N3 base64url →
+`node-streams-as-in-node` unit 2, own draft deleted; N4 `stream/consumers.blob` row,
+`fs.openAsBlob` ⚠️ + `runtime-js/fs-open-as-blob-eager-read`; N6 not taken (manager); N7 fontkit's
+labels + a TTF row; N8 unit 7 wording; N1 → `isolate-guest-modern-code` map.
+
 challenge: 2026-11-24 — 12 problems (4 value/cheaper-route, 8 advisory) + 1 omitted user choice —
 answered by the user's narrowing (value: the consumer's measured stops), the re-asked questions and
 the split-out of `URL`/ESM.
@@ -169,8 +184,19 @@ the split-out of `URL`/ESM.
   0 differences, `reference/textdecoder/bundle`); `Blob`/`File` from Node's `lib/internal/blob.js`/`file.js` over a JS byte
   store (`reference/sources-native`). Each source gets an ADR (semantic copy) before its unit.
 - 2026-11-25 — manager: I3's rows and `CustomEvent` are handed to `node-streams-as-in-node` unit 7
-  by the manager («Цели потоков это передам я»); on 2026-11-25 that unit lists four globals and has
-  no `## Acceptance` yet, so this goal's closure checks that its merged contract carries I3.
+  («Цели потоков это передам я»); that unit now names `CustomEvent` and I3 as its acceptance
+  (`origin/t3/node-streams-goal` 1aa7d0d76); its I3 wording predates `reference/wpt` («without
+  `MessageChannel`/GC») and follows this goal's I3; this goal's closure checks its merged contract.
+- 2026-11-25 — manager (PR #443 review S3): T stands, its basis corrected — a consumer exists:
+  pdfkit with a CJK TrueType font makes fontkit create `shift_jis`, `euc-kr`, `gbk` (and `big5`)
+  decoders for the `name` table, and restructure's `readString` catches the gap's throw, so at the
+  consumer the gap is silent: PDF bytes equal Node's, the font's family names differ (`BYTES n`);
+  pinned in unit 3 (Acceptance 13), declared ⚠️.
+- 2026-11-25 — manager (PR #443 review S4): one shared WPT harness, owned by the `Blob` unit,
+  reused by the `TextDecoder` unit and `node-streams-as-in-node` unit 7; the guest is compared with
+  live Node per subtest (`reference/wpt`: real `testharness.js` + a 26-line shim runs in the guest).
+- 2026-11-25 — manager (PR #443 review S2, should): `single-byte.js` is required lazily (one
+  declared anchored edit); utf-8 throughput is an acceptance row.
 - rejected route: npm polyfills (`event-target-shim` 6.0.2 + `abortcontroller-polyfill` 1.7.8:
   22/31 differ; `formdata-node` Blob 9/19, `blob-polyfill` 13/19; `text-encoding` 0.7.0 differs on
   `iso-8859-8-i` and gbk/gb18030; iconv-lite has no `fatal`) — violates I1–I3.
