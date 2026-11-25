@@ -1,210 +1,288 @@
 # Lifecycle revisit probes — fresh isolate per `exec` vs live isolate per sandbox vs FS in the worker
 
 Input for the user's revisit (2026-11-25) of ADR-0568's «a fresh isolate per `exec`, the state =
-bytes in the consumer». Disposable probes; `packages/*/src`, ADRs and goals untouched. Machine: Apple
-M3 Pro (12 cores), macOS, Node v24.16.0, isolated-vm 7.0.2, main @ `bc3412420`, load 2–4 (each
-row carries its load). Raw output: `life.out.txt`.
+bytes in the consumer». Disposable probes; `packages/*/src`, ADRs and goals untouched.
+
+Raw output: `life2.out.txt` (round 2, current: macOS, `memoryLimit` 256 unless a row says
+otherwise), `life-linux.out.txt` (round 2 on Linux), `life.out.txt` (round 1, limit 1024, kept for
+history — its v2 used an unsafe boundary, see «Boundary»). macOS: Apple M3 Pro, 12 cores, load 2–6
+(per row). Linux: colima VM aarch64, 4 CPUs, 7.7 GiB, container `node:24.16.0-bookworm` `--cpus 4
+-m 6g`, on the same Mac (host load ~2–4). Node v24.16.0, isolated-vm 7.0.2, main @ `bc3412420`.
 
 ```sh
 mkdir -p /tmp/life-probe/deps && cp ../isolate-library-probe/deps/package*.json /tmp/life-probe/deps/
 (cd /tmp/life-probe/deps && npm ci --ignore-scripts)        # 8 000 files, 86.6 MB, 8 792 entries
 pnpm --filter @riftydev/isolate-guest build
-node --no-node-snapshot --expose-gc life.mjs /tmp/life-probe/deps/node_modules cost conc floor heap retain host life
-ARMS=v2 K=8 node --no-node-snapshot --expose-gc life.mjs /tmp/life-probe/deps/node_modules mem   # one process per arm
-node --no-node-snapshot --expose-gc life.mjs /tmp/life-probe/deps/node_modules cata              # aborts the process
+P="node --no-node-snapshot --expose-gc life.mjs /tmp/life-probe/deps/node_modules"
+LIMIT=256 N=7 $P cost conc ; $P floor ; LIMIT=256 $P heap retain rebuild turn ; $P escape life host
+ARMS=v2bs MEMW=mix K=6 LIMIT=256 $P mem ; ARMS=v1 LIMIT=256 $P burst     # one process per arm
+$P cata                                   # aborts the process (expected)
 node ipc.mjs
+# Linux: LIFE_PREBUILT_OUT=<dir> $P prebuild ; ./linux.sh <node_modules> <dir> cost conc ...
 ```
 
 `life.mjs` drives isolated-vm and the guest bundle (real entry + the template probes'
 `probe-guest.ts` + `life-guest.ts`) worker side; the template FS is the template probes'
-`layered.ts` (ADR-0572 §2's construction). No consumer process, no pool: consumer ↔ worker IPC is
-`ipc.mjs` apart.
+`layered.ts` (ADR-0572 §2). No pool, no consumer process: consumer ↔ worker IPC is `ipc.mjs`
+apart; «consumer» steps (validation, base64) run in the same process.
 
 ## Arms
 
-| arm | isolate | where the files live between `exec`s | template |
+| arm | isolate | the files between `exec`s | template |
 |---|---|---|---|
-| v1 | fresh per `exec` | bytes in the consumer (ADR-0568) | copied into each run's isolate (ADR-0572 F1 (a), today's plan) |
-| v1b | fresh per `exec` | same | read lazily through 2 host functions (F1 (b), deferred) |
-| v2 | one per sandbox, kept for its life | context A of that isolate; each `exec` = a new context B (fresh realm, bundle re-run from the isolate's compiled script), its `FsSync` a copying membrane onto A | copied into A once per sandbox |
-| v2b | same as v2 | same | lazy from the worker, cached in A for the sandbox's life |
-| v3 | fresh per `exec` | the worker's realm (a `LayeredFs` per sandbox over the worker's one template); every guest `FsSync` call is one sync host call | in the worker only |
+| v1 | fresh per `exec` | bytes in the consumer (ADR-0568) | copied into each run's isolate (ADR-0572 F1 (a)) |
+| v1w | v1 from a pre-warmed spare: bundle booted + template copied + indexed off the `exec`'s path | same | same, ahead |
+| v1b | fresh per `exec` | same | lazy, 2 host functions (F1 (b), deferred) |
+| v2s | one per sandbox for its life: context A holds the FS, each `exec` a new context B | A | copied into A once |
+| v2bs | same | A | lazy from the worker, cached in A |
+| v3 | fresh per `exec` | the worker's realm (a `LayeredFs` per sandbox over the worker's one template); every guest `FsSync` call one sync host call | worker only |
+| v2bs+rp (`turn`) | v2bs + a restore point (A's state: blob + rows) validated and kept by the «consumer» after every mutating `exec` / host write; a killed, OOM'd or aborted run is rolled back by rebuilding from it | A, + the point | lazy |
 
-Not built: host disk (ADR-0568 B, rejected by the user). Named, built from measured parts, not run
-end to end: **v2b+rp** — v2b plus a restore point (the state of A, 0.4 ms / 3 KB, L7) handed to
-the consumer after every mutating `exec` / host write, and a rebuild from it (27 ms, = v1's `exec`
-path) on a kill, an OOM or a lost worker; optionally **+eviction**: after X s idle capture and
-dispose, rebuild on the next op (v1's idle memory, v2b's speed in tight fix loops, both paths).
+`v2` / `v2b` (round 1) are v2s / v2bs with the unsafe boundary; they stay in the code to show it red.
+Host disk (ADR-0568 B) is not built: rejected by the user.
 
-## Cost (four-library template; ms, median of 7 warm repeats in one sandbox; `life.out.txt` §cost)
+## Boundary (v2): what crosses between the FS realm A and a run realm B (§escape)
 
-| `exec` | v1 | v1b | v2 | v2b | v3 |
-|---|---|---|---|---|---|
-| empty file | 30.4 | 17.1 | 8.1 | 8.0 | 16.0 |
-| pdf (pdf-lib) | 203 | 205 | 145 | 146 | 250 |
-| docx | 171 | 166 | 125 | 126 | 159 |
-| pptx | 332 | 324 | 280 | 285 | 330 |
-| xlsx (exceljs) | 430 | 464 | 333 | 336 | 604 |
-| first `exec` of a sandbox, pdf / xlsx | 205 / 432 | 202 / 461 | 191 / 432 (+ create 23) | 213 / 479 (+ create 10) | 252 / 607 |
-| 4 sandboxes at once, wall, pdf / xlsx (§conc) | 270 / 516 | 264 / 591 | 245 / 480 | 231 / 475 | 356 / 826 |
-| boot of the run's realm | 9–16 (isolate + context + bundle) | 9–14 | 5–9 (context + bundle) | 5–6 | 9–15 |
+Round 1's membrane handed B objects of A and deep-copied them with B's intrinsics: a guest that
+replaces `Object.keys` gets A's objects, writes A's prototypes, and the next `exec` breaks (external
+review's program, E0: `run2: mkdir -p FAILED ENOENT`).
 
-- v2/v2b's warm `exec` is 22–97 ms (16–29 %) faster than v1: v1's restore + capture (template
-  copy + index, ~14 ms on the empty file) and ~4 ms of isolate boot go, and the run phase is 9–22 %
-  shorter from the second `exec` on (pdf 140 vs 179, docx 120 vs 146, pptx 271 vs 298, xlsx 327
-  vs 405) — the cause (code compiled again in the same isolate) is assumed, not isolated. The
-  first `exec` of a sandbox, create included, is 0–13 % slower than v1's (v2b xlsx 490 vs 432).
-- Not in these rows: v1 also moves the sandbox's own files both ways per `exec` (here 3 KB). An
-  input of S MB (a user's PDF, images for pptx) adds per `exec` the codec both ways (ADR-0568
-  Consequences: ~1.6 ms consumer + ~3.3 ms isolate per ~1 MB) and base64 IPC (6.4 ms / MiB,
-  `ipc.mjs`); v2/v3 move unchanged files never.
-- v1's `ms` stops before its isolate's dispose (slightly favours v1); every arm ran at
-  `memoryLimit` 1024, so a live isolate rarely collected — `exec` time at a production limit not
-  measured.
-- v3 pays a host call per FS call on the worker's one thread (xlsx +175 ms, four at once +310);
-  the template probes' L measured chunked I/O quadratic across that bridge (8 MiB: 259 vs 64 ms).
-- v1b: lazy template reads cost more per `exec` than the copy saves on real generators.
+v2s/v2bs's boundary (`life-guest.ts` «safe boundary»): **only primitives and fresh typed arrays
+cross, read through internal slots.** B → A: a method name, a JSON string of the arguments, at most
+one `Uint8Array` that B allocated and filled itself, and its length as a number. A reads that array
+only with `ArrayBuffer.isView` + `%TypedArray%.prototype.set` (internal slots, no property lookup on
+a B object). A → B: a JSON string; result bytes are copied by A into a `Uint8Array` B allocated
+(`set` with B's array as `this`). Errors cross as JSON; an A exception escaping `serveSafe` (its
+stack ran out) is caught in B and dropped unread. Every intrinsic either side uses is captured at
+bundle evaluation, before any guest code in that realm (A never runs guest code). Chosen over
+freezing A's intrinsics (breaks the runtime's own code by the override mistake — `VfsError` assigns
+`this.name`) and over host-mediated copies (every FS call through the Node thread: v3's per-call
+cost).
 
-## Memory (`life.out.txt` §mem, §floor, §heap, §retain)
+| §escape | v2 (round-1 membrane) | v2s | v2bs |
+|---|---|---|---|
+| E0 `Object.keys` hook → A's prototype → next `exec`'s `mkdir -p` | **planted, run 2 ENOENT** | no A object reached, run 2 ok | same |
+| E1 hooks on 31 intrinsics (`Object.*`, `Array.*`, `JSON.*`, `Reflect.*`, typed-array / Map / Set / Promise methods), accessors on `Object.prototype` for 19 keys, `Symbol.species` on 4 constructors, Proxy data / options, getter with `.caller`, thenable options, every fs op incl. fd, stack exhaustion (3 956 frames macOS, 65 248 Linux) calling fs while unwinding, callback / promise / stream reads: foreign objects reached | **6** (`map`, `isView`, `isArray`, `keys` args; `readdir` result; the stack-overflow error of A) | **0** | **0** |
+| A's intrinsic prototypes after E1 (host-side fingerprint of 15 roots) | **changed** | unchanged | unchanged |
 
-Idle sandbox (after one pdf `exec`; 8 per process):
+Linux: the same. Not a proof: V8 bugs and paths not enumerated remain; a third realm-separation
+mechanism (a separate isolate for A) would be by construction and costs v3's per-call price.
 
-| | v1 | v1b | v2 | v2b | v3 |
-|---|---|---|---|---|---|
-| held per idle sandbox | 3.1 KB of state (+ the consumer's FS, ~3 KiB, template probe W) | same | isolate: heap 13.6 used / 59.7 committed + 97.3 MiB external (the template copy); RSS +157 MiB | heap 10.4 used / 31.5 committed + 17.2 MiB external (touched template bytes, grows with the libraries touched); RSS +57 MiB | 0.5 MiB worker heap |
-| where | consumer | consumer | a worker, pinned | a worker, pinned | a worker, pinned |
+## Cost (§cost, ms, median of 7 warm repeats in one sandbox, `memoryLimit` 256)
 
-RSS deltas include ~13–21 MiB per sandbox of allocator retention from running K isolates in a row
-(v1 shows 21 holding nothing); the isolate's own heap statistics are the cleaner figure.
-Per worker, independent of sandboxes: one template copy (82.6 MiB + index) in every arm.
+macOS (`life2.out.txt`):
 
-Smallest passing `memoryLimit` (create + 3 `exec`s, 4 MiB steps; v2's limit is the sandbox's
-whole life): empty 103 / 19 / 107 / 19 / 19 MiB (v1 / v1b / v2 / v2b / v3), pdf 107 / 27 / 111 /
-31 / 23, xlsx 115 / 39 / 115 / 39 / 31. Under the default 256 MiB the guest code keeps ~140 MiB in
-v1/v2 and ~220 in v1b/v2b/v3.
+| `exec` | v1 | v1w | v1b | v2s | v2bs | v3 |
+|---|---|---|---|---|---|---|
+| empty file | 29.6 | 8.7 | 16.5 | 7.8 | 8.0 | 15.3 |
+| pdf | 210 | 190 | 209 | 161 | 159 | 255 |
+| docx | 180 | 159 | 179 | 140 | 135 | 172 |
+| pptx | 315 | 294 | 308 | 281 | 282 | 323 |
+| xlsx | 459 | 430 | 490 | 362 | 355 | 619 |
+| first `exec` of a sandbox, pdf / xlsx (+ create) | 214 / 468 | 195 / 433 | 204 / 511 | 211 + 23 / 475 + 25 | 211 + 10 / 489 + 11 | 268 / 638 |
+| 4 sandboxes at once, wall, pdf / xlsx (§conc) | 303 / 566 | 304 / 579 | 280 / 659 | 266 / 579 | 274 / 582 | 366 / 893 |
 
-Heap of one live sandbox over 60 `exec`s (§retain, limit 160 pdf / 192 xlsx): 60 / 60 pass, used
-heap after a GC in the isolate 14.3 / 25 MiB — the same as after the first. Without a GC the used
-heap climbs to 166–180 MiB (pdf, limit 1024) and falls back: garbage, not retention. **But** with
-the probe's first version, which left the isolated-vm `Reference`s into each run's context
-unreleased, the same sandbox died out of memory after 11–13 `exec`s (`LEAK_REFS=1`): in v2 every
-handle into a run realm must be released, or each `exec` leaks its whole realm into the sandbox's
-heap.
+Linux (`life-linux.out.txt`):
 
-As a function of the consumer's numbers — T live sandboxes (turns) on a worker, R runs in flight,
-R ≈ T × E / (E + P) on average for an `exec` of E and a pause P between `exec`s, R = T at the peak
-(every turn runs at once):
+| `exec` | v1 | v1w | v1b | v2s | v2bs | v3 |
+|---|---|---|---|---|---|---|
+| empty file | 41 | 9.8 | 19.8 | 10.3 | 10.3 | 17.8 |
+| pdf | 273 | 245 | 278 | 206 | 202 | 497 |
+| docx | 219 | 189 | 221 | 167 | 170 | 204 |
+| pptx | 382 | 359 | 386 | 348 | 362 | 431 |
+| xlsx | 573 | 577 | 723 | 429 | 464 | 1 417 |
+| first `exec`, pdf / xlsx (+ create) | 262 / 583 | 245 / 505 | 288 / 673 | 254 + 35 / 547 + 38 | 304 + 12 / 1 071 + 39 | 510 / 1 470 |
+| 4 at once, pdf / xlsx | 540 / 1 019 | 569 / 1 006 | 492 / 1 149 | 474 / 948 | 464 / 987 | 770 / 2 325 |
 
-| | worker memory beyond its one template | peak (R = T) | average, E 0.3 s, P 10 s | average, P 1 s |
+- **The strongest v1 (v1w, a pre-warmed spare) removes v1's fixed cost**: empty file 8.7 vs 29.6
+  ms, the same as v2s. What v2s keeps over v1w is only the run phase of a repeated `exec`, 5–26 %
+  shorter (macOS pdf 155 vs 188, xlsx 356 vs 427) — the cause (V8 reusing code compiled from the
+  same sources in the same isolate; `new Function` in `runtime-js/src/module-loader/cjs-factory.ts:52`
+  has no cached-data path, so a fresh isolate cannot get it) is assumed, not isolated. v2s over v1w,
+  repeated `exec` (empty / pdf / docx / pptx / xlsx): −1 / −30 / −19 / −13 / −68 ms (macOS),
+  +0.5 / −39 / −22 / −11 / −148 (Linux).
+  First `exec` of a sandbox: v2s/v2bs equal to or slower than v1w (v2bs Linux xlsx 1 071 + 39 vs 505:
+  the lazy template's first reads).
+- The safe boundary costs ≤ 5 % against round 1's membrane (v2, same run: pdf 161 vs 159, xlsx 362
+  vs 350, pptx 281 vs 269).
+- Four at once (the worker's 4 slots) the arms converge (macOS xlsx 566–582 for v1, v1w, v2s, v2bs).
+- v3 pays a host call per FS call on the worker's one thread: 1.2–2.5× slower on pdf/xlsx, worst on
+  Linux (xlsx 1 417 vs 573); chunked I/O across it is quadratic (template probe L: 8 MiB 259 vs 64 ms).
+- v1 also moves the sandbox's own files both ways per `exec` (3 KB here): an input of S MiB costs the
+  codec + base64 each way per `exec` (§rebuild's steps for 8 MiB: capture 8, wire out 1.4, validate
+  8.8, wire in 1.3–3.2 ms ≈ 2.5 ms / MiB each way); v2bs+rp pays the out-half after each mutation.
+- Heap of one live sandbox at limit 256 over 40 `exec`s (§heap): used 16–204 MiB, collected inside
+  the limit, `exec` time mostly flat (pdf 157–182 ms; xlsx 347–415, one 500); 60 / 60 pass at 160 / 192 (round 1
+  §retain). With the isolated-vm `Reference`s into each run realm left unreleased (`LEAK_REFS=1`)
+  the sandbox dies out of memory after 11–13 `exec`s (round 1): every handle into a run realm must be
+  released.
+
+## Memory
+
+Smallest passing `memoryLimit` (create + 3 `exec`s, 4 MiB steps; v2's is the sandbox's whole life),
+macOS = Linux ±4: empty 103 / 107 / 19 / 107 / 19 / 19 (v1 / v1w / v1b / v2s / v2bs / v3), pdf 107 /
+107 / 27 / 111 / 27–31 / 23, xlsx 115 / 115 / 39 / 115–119 / 39 / 31. At the default 256 the guest
+code keeps ~140 MiB where the template is copied (v1, v1w, v2s), ~220 elsewhere.
+
+Idle sandbox, isolate statistics (used heap / committed heap / external) and RSS delta per sandbox
+(K = 6, one process per arm and workload; RSS includes allocator retention — v1 shows +21 MiB
+holding nothing):
+
+| idle after | v2s | v2bs | v3 (worker heap) | v1 / v1b |
 |---|---|---|---|---|
-| v1 | R × 107–115 MiB (each run's isolate holds the template; floor) | T × ~110 | T × ~3.3 | T × ~25 |
-| v1b | R × 27–39 | T × ~35 | T × ~1 | T × ~8 |
-| v2 | T × ~150 (RSS) + R × the run's garbage | T × ~150+ | T × ~150 | T × ~150 |
-| v2b | T × ~45–57 (RSS) + R × the run's garbage | T × ~50–90 | T × ~50 | T × ~50 |
-| v3 | T × 0.5 + R × 23–31 | T × ~30 | T × ~1.3 | T × ~7 |
+| pdf | 17 / 36 / 99 MiB, RSS +139 | 15 / 22 / 19, RSS +48 | 0.4 MiB | state 3.1 KB in the consumer |
+| xlsx | 22 / 36 / 101, RSS +146 | 18 / 29 / 22, RSS +62 | 1.3 | 10 KB |
+| pptx | 21 / 28 / 97, RSS +132 | 11 / 21 / 18, RSS +47 | 0.3 | 84 KB |
+| the 4 generators in a row | 27 / 39 / 101, RSS +154 (Linux +155) | 34 / 44 / 47, RSS +105 (Linux +112) | 1.6 | 96 KB |
 
-Floors and RSS are different units; measured RSS of 4 sandboxes running xlsx at once, 5 rounds
-(§burst, one process per arm, start 363 MiB): peak +716 MiB v1, +759 v2b, +1 052 v2, +352 v3.
-So **at the peak v2b ≈ v1**; v2b costs more only on average, while turns sit idle — ~50 MiB per
-idle turn against ~0. On macOS a worker's RSS stays at its peak after the burst in every arm (v1
-+716 MiB with all isolates disposed), so the 256 MiB idle-retire line (`protocol.ts`
-`RECYCLE_RSS_BYTES`) is crossed by v1 after any burst too — but a v1 worker holds no state and can
-be retired; a v2 worker cannot without moving its sandboxes. Linux not measured.
+**An idle v2bs sandbox grows with the libraries its turn touched: ~50 MiB after one generator,
+~92 MiB of isolate (RSS +105–112) after all four.** v1w's spare (bundle + template, ~107 MiB floor,
+RSS +133–141 in this probe, one spare per sandbox here; in a pool, one per slot) is the price of v1's
+fixed-cost cut.
 
-## Host op (`life.out.txt` §host, §ipc; worker side, median of 201)
+Peak RSS of a worker, 4 sandboxes running xlsx at once, 5 rounds (§burst, start ~345–363 MiB):
 
-| | `writeFile` 10 KiB | `readFile` (pdf, 1.4 KB) | `list('/workspace')` |
-|---|---|---|---|
-| v1 (in the consumer, synchronous) | 0.002 ms | 0.001 | 0.001 |
-| v2 (a call into context A) | 0.009 + IPC | 0.005 + IPC | 0.068 + IPC |
-| v3 (the worker's FS) | 0.001 + IPC | 0.001 + IPC | 0.000 + IPC |
+| | v1 | v2bs | v2s | v3 |
+|---|---|---|---|---|
+| macOS peak / at rest after dropping the sandboxes | +716 / +716 | +759 / +668 | +1 052 / +971 | +352 / +352 |
+| Linux | +395 / +395 | +662 / +543 | +978 / +508 | +311 / +311 |
 
-IPC round trip, a JSON line each way (today's transport shape, bytes base64): 0.015 ms empty,
-0.025 ms with 10 KiB, 6.4 ms for 1 MiB (`ipc.mjs`; the pool's real frames and a loaded event loop
-not measured).
+RSS stays near the peak after the burst on both systems in every arm (allocator retention): a worker
+that has run 4 template runs at once sits above the 256 MiB idle-retire line
+(`protocol.ts` `RECYCLE_RSS_BYTES`) in v1 too — but a v1 worker holds no state and can be retired; a
+v2 worker holds live sandboxes.
 
-## Contract (`life.out.txt` §life)
+### As a function of the consumer's numbers
 
-| | v1 | v2 | v3 |
-|---|---|---|---|
-| L1 between `exec`s: globals, prototypes, `require` cache, `process.exitCode`, `exit` listeners, `env`, cwd, `Error.stackTraceLimit` | fresh | fresh (new context) | fresh |
-| L2 guest reaches the FS realm through what `fs` hands back | — | no: stats, bytes, errors are the run realm's own objects (copying membrane) | — (host functions) |
-| L3 a V8-internal task queued before `process.exit()` (`WebAssembly.compile(...).then(write)`) | its write lands in the captured state (the declared class «work queued at `process.exit()` runs») | lands in A (same class) | does not run (isolate disposed at the end) |
-| L3, the same 30 compiles deep | does not run | does not run, even with no guard, after 300 ms–1.5 s gaps | does not run |
-| L4 timeout: sync loop, microtask loop, loop in a timer, pending wait | rollback: `before.txt` absent | isolate alive, next `exec` runs; files kept as Node keeps them (`before.txt` kept) | files kept |
-| L5 killed inside FS work (writes + renames + `rm` + `cpSync`), 40 trials; L5b 64 files renamed back and forth, killed at 20–117 ms, 200 trials | — | 0 inconsistent trees, 0 lost files | — (a host call is not interruptible) |
-| L6 out of isolate memory (limit 256) | rollback, sandbox alive | **isolate disposed: the sandbox and all its files gone** | files kept (`before.txt`), next run gets a fresh isolate |
-| catastrophic OOM (`new Array(2 ** 28).fill(0)`) in one sandbox's run, 3 live sandboxes in the process | (step 0: the worker dies; runs in flight rerun from consumer bytes) | **process aborts (exit 134): every live sandbox on the worker gone** | same as v2 for the files the worker holds |
-| L7 a restore point for v2 (capture of A's state after an `exec`) | — | 0.4 ms, 2 976 B (pdf sandbox); rebuilding the sandbox from it: 27 ms | (LayeredFs `toWire` in the worker, not timed) |
+T open turns (live sandboxes) and R_max concurrent `exec`s the consumer allows, per worker set,
+beyond one template per worker. Per-unit figures: isolate floor for a run (v1 107–115, v1b 27–39, v3
+23–31), idle sandbox after the 4 generators (v2s ~140, v2bs ~95, v3 ~1.6), a run's own garbage in a
+live isolate ≤ ~40 (floor xlsx − empty, v2bs).
 
-A one-off: the long run (§cost → §retain, ~1 000 isolates including floor bisection's OOM
-disposals) ended in a segmentation fault of the probe process at §retain v2 xlsx; three isolated
-reruns of §retain and one after did not reproduce it. Not attributed to an arm; a worker that
-crashes this way is a lost worker for every arm (v1 reruns, v2/v3 lose their live sandboxes).
+| | formula | T 4, R 4 | T 20, R 4 | T 20, R 8 | T 100, R 8 |
+|---|---|---|---|---|---|
+| v1 | R × 115 | 0.45 GiB | 0.45 | 0.9 | 0.9 |
+| v1w | (R runs + R spares) × 115 | 0.9 | 0.9 | 1.8 | 1.8 |
+| v1b | R × 39 | 0.15 | 0.15 | 0.3 | 0.3 |
+| v2s | T × 140 + R × 40 | 0.7 | 2.9 | 3.0 | 14 |
+| v2bs | T × 95 + R × 40 | 0.5 | 2.0 | 2.2 | 9.6 |
+| v3 | T × 1.6 + R × 31 | 0.13 | 0.15 | 0.27 | 0.4 |
 
-## What each variant removes and adds (machinery)
+v1 does not depend on T at all; v2 grows with every open turn whatever the pause between `exec`s.
+v2bs ≤ v1 only while T ≈ R (every open turn runs at once). Idle eviction (capture + dispose after X s
+without an op, rebuild on the next one, 12–43 ms) caps v2's T-term at the turns active within X s.
 
-- **v1** (ADR-0568 + ADR-0572 as proposed, mostly not built yet): per `exec` the state crosses both
-  ways (blob + `lazy`/`ref` rows, row validation ADR-0572 §5, cap = codec count), `LayeredFsSync` in
-  the consumer and in the guest, the touched-entries bound of the consumer's FS (open user fork),
-  capture in the guest's realm (open unit `capture-outside-guest-realm`), template copy per run,
-  the binary template frame and per-worker template cache.
-- **v2** removes: the per-`exec` state wire and its validation, the consumer's FS and its
-  touched-entries fork, the template copy per run, the capture in the guest realm (the files never
-  are in a guest realm: the capture unit closes by construction, as long as the membrane holds).
-  Keeps: the template intake, binary frame and worker cache, one `LayeredFsSync` (in A), `EROFS`
-  (LayeredFs's refusal). Adds: sandbox → worker affinity and a host-op protocol (every
-  `writeFile`/`readFile`/`list`/`remove` an IPC call to that worker), a per-sandbox isolate
-  lifecycle in the worker, a deadline without dispose (per-call isolated-vm timeouts + context
-  release), reference hygiene per run realm (else the leak above), a sandbox-life `memoryLimit`, the
-  worker's RSS accounting of live sandboxes, the cap checked inside A at the write (an `ENOSPC`-like
-  refusal instead of `stateRefused`). To keep ADR-0568 I1 («no ending of a run loses the sandbox»)
-  it needs a restore point outside the worker after every mutation — which brings back the
-  state-out half of today's wire (blob + rows + validation, for a rebuild) and a rebuild path.
-- **v2b+rp**: v2's list, minus the state-in half per `exec` (it is the rebuild path, run only on a
-  kill / OOM / lost worker / eviction); the killed run is rolled back by the rebuild, as today, so
-  a timeout never depends on A's FS surviving a cut mid-operation. The capture-unit candidate «a
-  fresh realm over the guest's FS records» (`isolate-host-sandbox-capture-outside-guest-realm`) is
-  this design's two-realm split, without the per-`exec` copy.
-- **v3** removes what v2 removes and the template in any isolate; adds: ~12 synchronous host
-  functions taking guest-chosen paths and bytes (the FS becomes part of the exposed seam the user
-  wants hardened), per-call copies (ranged FS operations needed against chunked I/O), the same
-  affinity / host-op protocol, and, for I1 under worker loss, the same restore point.
+## Host op (§host, §ipc; worker side, median of 201)
+
+v1: synchronous in the consumer, 0.001–0.002 ms (`writeFile` 10 KiB, `readFile` pdf, `list`). v2: a
+call into context A, 0.005–0.07 ms + IPC; v3: 0.001 ms + IPC. IPC round trip, a JSON line each way
+(today's transport shape, bytes base64): 0.015 ms empty, 0.025 ms with 10 KiB, 6.4 ms for 1 MiB
+(`ipc.mjs`, a bare pipe). v2bs+rp adds the restore point to every mutating host op: 0.2–4 ms in §turn
+(1 MiB in the state), ~2.5 ms / MiB of state.
+
+## Contract
+
+| | v1 | v2s / v2bs (no restore point) | v2bs+rp (§turn) | v3 |
+|---|---|---|---|---|
+| between `exec`s: globals, prototypes, `require` cache, `process.exitCode`, `exit` listeners, `env`, cwd, `Error.stackTraceLimit` (L1) | fresh | fresh (new context); the FS realm unreachable (§escape) | same | fresh |
+| a V8 task queued before `process.exit()` (one `WebAssembly.compile(...).then(write)`, L3) | its write lands in the captured state (declared class «work queued at `process.exit()` runs») | lands in A | same | does not run |
+| timeout (sync loop, microtasks, timer loop, pending wait, L4) | rollback | isolate alive, partial writes kept (Node) | rollback by rebuild: 13–15 ms, `partial.txt` gone, earlier `out.pdf` kept | partial writes kept |
+| killed inside an FS operation of A (L5/L5b, 240 kills) | — | 0 inconsistent trees; not excluded by construction | n/a: rebuilt from the point | a host call is not interruptible |
+| out of isolate memory (L6) | rollback | **the sandbox and all its files lost** | rollback by rebuild: 23–29 ms | files kept |
+| `AbortSignal` mid-run | rollback (#431) | — | rollback by rebuild: 14–15 ms | — |
+| catastrophic OOM in one sandbox's run (§cata) | worker aborts (exit 134 macOS, 133 Linux); ≤ 4 runs in flight rerun from consumer bytes | **every live sandbox on the worker lost** | every sandbox of the worker rebuilt from its point elsewhere | same as v2 for the worker's FSs |
+| ordering, host ops + `exec` issued without awaiting | one chain per sandbox | — | one chain; `readBack: seq` | — |
+| `destroy` mid-run | `DESTROYED` for the run and later ops | — | same: both `ERR_ISOLATE_HOST_SANDBOX_DESTROYED`, isolate disposed | — |
+
+`turn` runs in one process: no pool, no IPC, no lost-worker path; the restore point is validated by
+decoding it (`restoreFs`) and rebuilding its rows over the template index.
+
+Rebuild from a restore point (§rebuild, v2bs, macOS / Linux): state 3 KB → 11.6 / 13.6 ms to ready
+(capture 0.5, validate 0.1, new isolate + A + restore 11–13); 1 MiB → 16 / 19; 8 MiB → 37 / 43
+(capture 7–8, validate 9, base64 both ways 2.7–4.6, rebuild 18–21). v2s (template copied): +13 ms.
+
+Two probe processes died in long multi-arm runs, neither reproduced on rerun: a segmentation fault
+(round 1, §retain v2 xlsx after ~1 000 isolates) and a silent death (round 2, §cost after docx v1b,
+the first stage of a pipe, no stderr kept). Not attributed to an arm; a crashed worker is a lost
+worker for every arm.
+
+## Blast radius in the pool (ADR-0563: `SHARD` = 4 calls per worker, idle retire at 256 MiB RSS)
+
+- v1: a crashed worker loses ≤ 4 runs in flight; each reruns alone from consumer bytes (ADR-0563
+  §6); idle sandboxes are not on any worker. Retiring a worker needs nothing.
+- v2 without a restore point: every sandbox pinned to that worker, idle ones included, is lost. With
+  v2bs at ~95 MiB idle, a worker holding T_w sandboxes loses T_w turns' files.
+- v2bs+rp: the same crash costs T_w rebuilds elsewhere (12–43 ms each + IPC of the point) and reruns
+  of the runs in flight from their points (the point is the state before the run, so a rerun is
+  idempotent). Retiring a worker (RSS line, recycle) = moving its T_w sandboxes the same way; the
+  idle-retire line has to count live sandboxes (a worker with the template ~130–150 MiB + one idle
+  v2bs sandbox ~95 already crosses 256).
+
+## What moving to v2bs+rp redoes and reuses (merged code)
+
+Redone: `isolate-host/src/sandbox.ts` (726 lines: the consumer-side FS decoded from bytes, host ops
+synchronous on it, the cap by encoding, a run = a pool call with state in and out) → host ops become
+RPCs to the sandbox's worker, the consumer keeps only the point; `pool.ts` placement (any free slot
+→ affinity sandbox → worker, a lost worker → rebuild elsewhere instead of a plain rerun, retire with
+migration); `child/main.ts` (per call fresh isolate → per-sandbox isolates + per-`exec` contexts,
+deadline without dispose, rebuild, handle hygiene); `protocol.ts` (frames: sandbox open/close, host
+op request/result, point); the guest contract (ADR-0558: two realms, the boundary, `installSafe`);
+the tables `sandbox-destroy-table` (every end × destroy moment: the `gone` event changes),
+`sandbox-abort-table` (#431: abort → rebuild), `sandbox-faults` (worker loss → rebuild), much of
+`protocol.test`. Kept: the public API and its shapes (`createSandbox` … `destroy`, `AbortSignal`,
+`stateRefused`), `sandbox-acceptance` at the API level, ADR-0567's codec (the point's format),
+`runCode` unchanged. Template layer (ADR-0572, mostly unbuilt): kept — intake and identity (§1, §4),
+binary frame and per-worker cache, `LayeredFsSync` (one side: A; the consumer only validates rows),
+the rows and their validation (§5, now for the point), read-only `EROFS`, changed paths (§7, in A),
+probe G/S oracles; dropped — the consumer-side FS and its touched-entries fork, the per-`exec` state
+in, the template copy per run, the capture in the guest's realm (the unit
+`capture-outside-guest-realm` closes if the boundary holds).
+
+## Browser hosts, for the comparison (by code)
+
+- COI (workbench): one persistent owner Worker holds the FS (OPFS); every `node` is a fresh kernel
+  Worker, a fresh realm, reaching the FS synchronously over a SharedArrayBuffer RPC. A killed
+  process's writes stay. Closest to v3 (FS outside the process, fresh process).
+- no-COI (toolchain Worker): the FS in the long-lived toolchain Worker; `node` runs in place in that
+  reused realm. Per invocation only these are put back: the `require`/`module`/`exports`/
+  `__filename`/`__dirname` bindings (`runtime-js/src/module-loader/loader.ts` `captureNodeProcessGlobals`),
+  `env`/`argv`/`execArgv`/`exitCode`/cwd and stdout/stderr `write`
+  (`workbench/src/workers/no-coi-project-command.ts:185-195`); its timers, process/stdio listeners and
+  children are retired (`no-coi-invocation-scope.ts`). Arbitrary globals and prototype edits carry
+  to the next `node`; the realm is replaced only when a binding cannot be restored or a handle
+  outlives the drain (ADR-0445). Isolation between runs is weaker than v2s's (a fresh context per
+  `exec`). A killed process's writes stay.
 
 ## Invariants (ADR-0568 I1–I9 and the goals) — who said what
 
 User's words: «в пределах одного прогона агента один экземпляр живёт через write → exec → ошибка →
 fix → exec» (2026-11-17); «не нужно давать настоящую fs» (2026-11-22); «харденинг нужен только на
-внешнем шве: выставленные хостовые функции…» and «Владелец ФС живёт в том же realm, что и гость
-(внутри isolate)» (requirements 2026-11-17); F4 rollback of a killed run «оставим как есть»
-(2026-11-25, chosen as the cheap option over keeping); persistence between turns deferred
-(2026-11-25); «Изолейты — быстрые короткоживущие (один ход агента) рантаймы» (2026-11-25).
-Manager/agent decisions: fresh isolate per run with restore + capture and rollback (ADR-0568 §Not
-the user's words), the I-list's wording, one op at a time.
+внешнем шве…» and «Владелец ФС живёт в том же realm, что и гость (внутри isolate)» (requirements
+2026-11-17); F4 rollback «оставим как есть» (2026-11-25, chosen as the cheap option); persistence
+between turns deferred (2026-11-25); «Изолейты — быстрые короткоживущие (один ход агента)
+рантаймы» (2026-11-25). Manager/agent decisions: fresh isolate per run with restore + capture and
+rollback (ADR-0568 §Not the user's words), the I-list's wording, one op at a time.
 
-| | v2 | v3 |
+| | v2bs+rp | v3 |
 |---|---|---|
-| live-sandbox Outcome «between operations the sandbox is bytes held by the consumer» | changes (bytes only as a restore point, if kept) | changes |
-| I1 no ending loses the sandbox; killed run rolled back | OOM / worker loss lose it unless a restore point; timeout keeps partial writes (Node) unless rebuilt from the point (F4 asked again) | worker loss loses it unless a restore point; OOM and timeout keep partial writes (Node) — F4 asked again |
-| I2 fresh process per run | holds (context per run; L1) | holds |
-| I5 destroy | simpler: dispose the isolate | drop the worker FS + dispose the run |
-| I6 «an idle sandbox holds no process and no isolate» | breaks by definition | holds no isolate; holds worker memory |
-| I7 trust | unchanged seam; the FS realm shares the guest's isolate | the FS becomes exposed host functions |
-| «Владелец ФС … в том же realm (внутри isolate)» | same isolate, another realm | breaks (FS in the worker) |
-| template I4/I5 cost independence | `exec` latency independent of the template from the 2nd `exec` on; v2: idle memory includes the template; v2b: only what was touched | independent; slower per FS call |
-| template open fork (touched-entries bound in the consumer) | gone from the consumer, moves into the live isolate's memory | gone from the consumer, into the worker's |
+| live-sandbox Outcome «between operations the sandbox is bytes held by the consumer» | the consumer holds the point (bytes); the live state is in the worker — wording to change | changes |
+| I1 no ending loses the sandbox; killed run rolled back | holds by rebuild (measured in one process) | holds only with a point; kills keep partial writes unless rebuilt — F4 asked again |
+| I2 fresh process per run | holds (context per run, §escape) | holds |
+| I5 destroy | dispose the isolate | drop the worker FS + dispose the run |
+| I6 «an idle sandbox holds no process and no isolate» | breaks (~50–110 MiB per idle turn) | holds no isolate; ~1.6 MiB of worker memory |
+| I7 trust | the seam unchanged; A shares the guest's isolate (a V8 bug reaches it) | the FS becomes exposed host functions |
+| «Владелец ФС … в том же realm (внутри isolate)» | same isolate, another realm | breaks |
+| template open fork (touched-entries bound in the consumer) | gone from the consumer; the idle isolate grows with the libraries touched instead | gone from the consumer, into the worker |
 
 ## Not verified
 
-- Termination inside an FS operation of A (v2): 240 kills, no inconsistency — not excluded by
-  construction (V8 can terminate between two statements of A's code). Carrier: a mutant-style
-  probe that kills at every interrupt point of a `renameSync`/`cpSync`.
-- v2 on the real pool (worker frames, affinity, IPC under load); ipc.mjs is a bare pipe.
-- v2 idle memory after V8's memory reducer runs (committed heap 31–60 MiB may shrink; used is
-  10–14).
-- Template bytes / entries sweep (T1 vs T95) for v2/v3; only the four-library template here.
-- The segfault's cause.
-- Linux (the deployment target) — every number here is macOS.
-- v3's chunked I/O on the agent's files (template probe L measured it on T1).
-- The epoch guard of v2 (a released context's late FS call): no probe made a released context run
-  later, so the guard was never exercised (`staleCalls` 0).
+- v2bs+rp on the real pool: affinity, IPC under load, lost worker → rebuild elsewhere, retire with
+  migration; `turn` is one process.
+- Termination inside an FS operation of A (v2 without a point): 240 kills, no inconsistency — not
+  excluded by construction; v2bs+rp sidesteps it by rebuilding after every kill.
+- The boundary beyond the enumerated attacks (§escape) and V8 bugs.
+- The cause of the repeated-`exec` run-phase gain in a live isolate.
+- The two crashed probe processes.
+- Template sweep (T1 / T95) for v2/v3; only the four-library template.
+- Linux on bare metal (the VM shares the Mac's CPUs; v3's host-call cost is worst there).
+- v1w in a pool (spare count per worker, refill under bursts).

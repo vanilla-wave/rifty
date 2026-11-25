@@ -16,19 +16,21 @@
  *
  *   node --no-node-snapshot --expose-gc life.mjs <node_modules> [cost|conc|mem|heap|life|host|floor]...
  */
-import { lstatSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { copyFileSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { loadavg, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { build } from 'esbuild';
 
+// LIFE_PREBUILT=<dir>: run from the artifacts of the `prebuild` section (a Linux container with
+// isolated-vm only, `linux.sh`); otherwise build from the repo's sources.
+const PRE = process.env.LIFE_PREBUILT;
 const repo = fileURLToPath(new URL('../../../../..', import.meta.url));
 const here = fileURLToPath(new URL('.', import.meta.url));
 const tpl = join(here, '../isolate-host-sandbox-template-probes');
 const guestPkg = join(repo, 'packages/isolate-guest');
-const ivm = createRequire(join(repo, 'packages/isolate-host/package.json'))('isolated-vm');
-const { createHostBridge } = await import(join(guestPkg, 'dist/index.js'));
+const ivm = createRequire(PRE ? join(here, 'package.json') : join(repo, 'packages/isolate-host/package.json'))('isolated-vm');
+const { createHostBridge } = await import(PRE ? join(PRE, 'bridge.mjs') : join(guestPkg, 'dist/index.js'));
 const NM = process.argv[2];
 if (!NM) throw new Error('usage: life.mjs <four-library node_modules> [sections]');
 const SECTIONS = new Set(process.argv.slice(3).length ? process.argv.slice(3) : ['cost']);
@@ -38,49 +40,65 @@ const log = (o) => console.log(JSON.stringify(o));
 const load = () => loadavg()[0].toFixed(1);
 
 // ---- bundles -----------------------------------------------------------------------------------
-const bundleFile = join(tmpdir(), `life-guest-${process.pid}.js`);
-await build({
-  absWorkingDir: guestPkg,
-  stdin: {
-    contents: `${readFileSync(join(tpl, 'probe-guest.ts'), 'utf8')}\n${readFileSync(join(here, 'life-guest.ts'), 'utf8')}`.replaceAll(
-      '__LAYERED__',
-      LAYERED,
-    ),
-    resolveDir: join(guestPkg, 'src/guest'),
-    loader: 'ts',
-  },
-  nodePaths,
-  inject: ['src/guest/web-shim.ts'],
-  ignoreAnnotations: true,
-  outfile: bundleFile,
-  bundle: true,
-  target: 'es2022',
-  logLevel: 'warning',
-  legalComments: 'none',
-  platform: 'browser',
-  format: 'iife',
-  external: ['node:module'],
-});
-const bundle = readFileSync(bundleFile, 'utf8');
-rmSync(bundleFile);
-const realmFile = join(tmpdir(), `life-realm-${process.pid}.mjs`);
-await build({
-  stdin: {
-    contents: `export { createMemoryFs } from '@riftydev/vfs/internal'; export { snapshotFs, restoreFs } from './src/snapshot.ts'; export { LayeredFs, templateLayer } from '${LAYERED}';`,
-    resolveDir: guestPkg,
-    loader: 'ts',
-  },
-  nodePaths,
-  bundle: true,
-  format: 'esm',
-  platform: 'node',
-  outfile: realmFile,
-  logLevel: 'warning',
-});
+let bundle;
+let realmFile;
+if (PRE) {
+  bundle = readFileSync(join(PRE, 'guest.js'), 'utf8');
+  realmFile = join(PRE, 'realm.mjs');
+} else {
+  const { build } = await import('esbuild');
+  const bundleFile = join(tmpdir(), `life-guest-${process.pid}.js`);
+  await build({
+    absWorkingDir: guestPkg,
+    stdin: {
+      contents: `${readFileSync(join(tpl, 'probe-guest.ts'), 'utf8')}\n${readFileSync(join(here, 'life-guest.ts'), 'utf8')}`.replaceAll(
+        '__LAYERED__',
+        LAYERED,
+      ),
+      resolveDir: join(guestPkg, 'src/guest'),
+      loader: 'ts',
+    },
+    nodePaths,
+    inject: ['src/guest/web-shim.ts'],
+    ignoreAnnotations: true,
+    outfile: bundleFile,
+    bundle: true,
+    target: 'es2022',
+    logLevel: 'warning',
+    legalComments: 'none',
+    platform: 'browser',
+    format: 'iife',
+    external: ['node:module'],
+  });
+  bundle = readFileSync(bundleFile, 'utf8');
+  rmSync(bundleFile);
+  realmFile = join(tmpdir(), `life-realm-${process.pid}.mjs`);
+  await build({
+    stdin: {
+      contents: `export { createMemoryFs } from '@riftydev/vfs/internal'; export { snapshotFs, restoreFs } from './src/snapshot.ts'; export { LayeredFs, templateLayer } from '${LAYERED}';`,
+      resolveDir: guestPkg,
+      loader: 'ts',
+    },
+    nodePaths,
+    bundle: true,
+    format: 'esm',
+    platform: 'node',
+    outfile: realmFile,
+    logLevel: 'warning',
+  });
+}
 const { createMemoryFs, snapshotFs, restoreFs, LayeredFs, templateLayer } = await import(
   pathToFileURL(realmFile).href
 );
-rmSync(realmFile);
+const OUT = process.env.LIFE_PREBUILT_OUT;
+if (SECTIONS.has('prebuild')) {
+  if (!OUT) throw new Error('prebuild needs LIFE_PREBUILT_OUT');
+  mkdirSync(OUT, { recursive: true });
+  writeFileSync(join(OUT, 'guest.js'), bundle);
+  copyFileSync(realmFile, join(OUT, 'realm.mjs'));
+  copyFileSync(join(guestPkg, 'dist/index.js'), join(OUT, 'bridge.mjs'));
+}
+if (!PRE) rmSync(realmFile);
 
 // ---- the template ------------------------------------------------------------------------------
 const files = [];
@@ -130,13 +148,22 @@ function blobOf(list) {
   return snapshotFs(fsSync, OPTS);
 }
 const GEN = join(here, '../isolate-library-probe/gen');
-const W = {
-  empty: '',
-  pdf: readFileSync(join(GEN, 'pdf.cjs'), 'utf8'),
-  docx: readFileSync(join(GEN, 'docx.cjs'), 'utf8'),
-  pptx: readFileSync(join(GEN, 'pptx.cjs'), 'utf8'),
-  xlsx: readFileSync(join(GEN, 'xlsx.cjs'), 'utf8'),
-};
+const W = PRE
+  ? JSON.parse(readFileSync(join(PRE, 'w.json'), 'utf8'))
+  : {
+      empty: '',
+      pdf: readFileSync(join(GEN, 'pdf.cjs'), 'utf8'),
+      docx: readFileSync(join(GEN, 'docx.cjs'), 'utf8'),
+      pptx: readFileSync(join(GEN, 'pptx.cjs'), 'utf8'),
+      xlsx: readFileSync(join(GEN, 'xlsx.cjs'), 'utf8'),
+    };
+if (SECTIONS.has('prebuild')) {
+  writeFileSync(join(OUT, 'w.json'), JSON.stringify(W));
+  console.log(`prebuilt into ${OUT}`);
+  process.exit(0);
+}
+const MIXMAIN = "const w = process.argv[3]; process.argv.length = 3; require('./g/' + w + '.cjs');";
+const MIXFILES = ['pdf', 'docx', 'pptx', 'xlsx'].map((w) => [`/workspace/g/${w}.cjs`, Buffer.from(W[w])]);
 const ownOf = (src, extra = []) =>
   blobOf([
     ['/workspace/main.js', Buffer.from(src)],
@@ -258,7 +285,7 @@ const classify = (e) => {
 // ---- arms --------------------------------------------------------------------------------------
 class Fresh {
   // v1 / v1b / v3: a fresh isolate per exec.
-  constructor(kind, src, { limit = 1024, extra = [] } = {}) {
+  constructor(kind, src, { limit = Number(process.env.LIMIT ?? 1024), extra = [] } = {}) {
     this.kind = kind;
     this.limit = limit;
     this.blob = ownOf(src, extra);
@@ -269,14 +296,39 @@ class Fresh {
       this.fs = LayeredFs.fromWire(nodeLower, up, JSON.parse(REFS));
     }
   }
-  async exec({ args = ['/workspace/out.bin'], timeoutMs = 30_000 } = {}) {
-    const t = { start: performance.now() };
-    const sink = sinkOf(timeoutMs);
+  /** v1w: an isolate with the bundle booted and the template copied + indexed, made off the path. */
+  async prepare() {
+    const sink = sinkOf(1e9);
     const iso = new ivm.Isolate({ memoryLimit: this.limit });
+    const script = await compile(iso);
+    const r = await realm(iso, script, sink);
+    await (await r.fn(r.life, 'prepTemplate')).apply(undefined, [packCopy.copyInto(), index], {
+      arguments: { copy: true },
+    });
+    return { iso, r, sink };
+  }
+  async exec({ args = ['/workspace/out.bin'], timeoutMs = 30_000 } = {}) {
+    if (this.kind === 'v1w') this.ready = await (this.next ?? this.prepare());
+    const t = { start: performance.now() };
+    let sink = sinkOf(timeoutMs);
+    let iso;
     let r;
     try {
-      const script = await compile(iso);
-      r = await realm(iso, script, sink);
+      if (this.kind === 'v1w') {
+        ({ iso, r } = this.ready);
+        // the realm's sink was made at prepare time: point it at this run
+        const rs = this.ready.sink;
+        rs.out = [];
+        rs.failed = null;
+        rs.onFail = undefined;
+        rs.remaining = sink.remaining;
+        sink = rs;
+        this.next = this.prepare(); // the next spare, off this exec's path
+      } else {
+        iso = new ivm.Isolate({ memoryLimit: this.limit });
+        const script = await compile(iso);
+        r = await realm(iso, script, sink);
+      }
       t.boot = performance.now();
       if (this.kind === 'v3') {
         await r.ctx.global.set(
@@ -288,7 +340,8 @@ class Fresh {
         await (await r.fn(r.entry, 'restore')).apply(undefined, [this.blob, OPTS], {
           arguments: { copy: true },
         });
-        if (this.kind === 'v1')
+        if (this.kind === 'v1w') await (await r.fn(r.life, 'layeredPrepared')).apply(undefined, [this.refs]);
+        else if (this.kind === 'v1')
           await (await r.fn(r.probe, 'layered')).apply(
             undefined,
             [packCopy.copyInto(), index, this.refs],
@@ -326,7 +379,7 @@ class Fresh {
       return { termination: classify(e), why: String(e?.message ?? e).slice(0, 120) };
     } finally {
       r?.close();
-      if (!iso.isDisposed) iso.dispose();
+      if (iso && !iso.isDisposed) iso.dispose();
     }
   }
   /** Host read of a file of the sandbox: v1 = consumer's own copy of the state, v3 = worker FS. */
@@ -336,28 +389,32 @@ class Fresh {
     restoreFs(up, this.blob, OPTS);
     return LayeredFs.fromWire(nodeLower, up, JSON.parse(this.refs)).readFileBytesSync(p);
   }
-  dispose() {}
+  dispose() {
+    void this.next?.then(({ iso }) => iso.isDisposed || iso.dispose());
+  }
 }
 
 class Live {
   // v2 / v2b: one isolate per sandbox, FS in context A, a fresh context B per exec.
-  constructor(kind, src, { limit = 1024, extra = [], restorePoint = false } = {}) {
+  constructor(kind, src, { limit = Number(process.env.LIMIT ?? 1024), extra = [], restorePoint = false } = {}) {
     this.kind = kind;
     this.src = src;
     this.limit = limit;
     this.extra = extra;
     this.restorePoint = restorePoint;
   }
-  async create() {
+  async create(from) {
     const t = performance.now();
     this.iso = new ivm.Isolate({ memoryLimit: this.limit });
     this.script = await compile(this.iso);
     this.A = await realm(this.iso, this.script, sinkOf(1e9));
-    await (await this.A.fn(this.A.entry, 'restore')).apply(undefined, [ownOf(this.src, this.extra), OPTS], {
+    const refs = from?.refs ?? REFS;
+    await (await this.A.fn(this.A.entry, 'restore')).apply(undefined, [from?.blob ?? ownOf(this.src, this.extra), OPTS], {
       arguments: { copy: true },
     });
-    if (this.kind === 'v2')
-      await (await this.A.fn(this.A.probe, 'layered')).apply(undefined, [packCopy.copyInto(), index, REFS], {
+    this.safe = this.kind.endsWith('s');
+    if (this.kind === 'v2' || this.kind === 'v2s')
+      await (await this.A.fn(this.A.probe, 'layered')).apply(undefined, [packCopy.copyInto(), index, refs], {
         arguments: { copy: true },
       });
     else {
@@ -365,9 +422,11 @@ class Live {
         new ivm.Callback(tplFns.get),
         new ivm.Callback(tplFns.children),
       ]);
-      await (await this.A.fn(this.A.life, 'layeredRemote')).apply(undefined, [REFS]);
+      await (await this.A.fn(this.A.life, 'layeredRemote')).apply(undefined, [refs]);
     }
     this.serve = await this.A.fn(this.A.life, 'serve');
+    this.serveSafe = await this.A.fn(this.A.life, 'serveSafe');
+    this.take = await this.A.fn(this.A.life, 'takeBytes');
     this.revoke = await this.A.fn(this.A.life, 'revoke');
     this.epoch = await this.A.fn(this.A.life, 'epoch');
     this.check = await this.A.fn(this.A.life, 'check');
@@ -384,8 +443,14 @@ class Live {
     try {
       const epoch = this.epoch.applySync(undefined, []);
       B = await realm(this.iso, this.script, sink);
-      await B.ctx.global.set('__lifeDispatch', this.serve.derefInto());
-      await (await B.fn(B.life, 'install')).apply(undefined, [false, epoch]);
+      if (this.safe) {
+        await B.ctx.global.set('__lifeDispatch', this.serveSafe.derefInto());
+        await B.ctx.global.set('__lifeTake', this.take.derefInto());
+        await (await B.fn(B.life, 'installSafe')).apply(undefined, [epoch]);
+      } else {
+        await B.ctx.global.set('__lifeDispatch', this.serve.derefInto());
+        await (await B.fn(B.life, 'install')).apply(undefined, [false, epoch]);
+      }
       t.boot = performance.now();
       const res = await runFile(B, sink, '/workspace/main.js', args, timeoutMs);
       t.run = performance.now();
@@ -440,7 +505,7 @@ const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
 const r1 = (x) => Math.round(x * 10) / 10;
 const MiB = (b) => Math.round((b / 2 ** 20) * 10) / 10;
 async function make(kind, src, o) {
-  if (kind === 'v2' || kind === 'v2b') {
+  if (kind.startsWith('v2')) {
     const s = new Live(kind, src, o);
     s.createMs = await s.create();
     return s;
@@ -450,7 +515,7 @@ async function make(kind, src, o) {
   s.createMs = performance.now() - t;
   return s;
 }
-const ARMS = (process.env.ARMS ?? 'v1,v1b,v2,v2b,v3').split(',');
+const ARMS = (process.env.ARMS ?? 'v1,v1b,v2,v2b,v2s,v2bs,v3').split(',');
 log({
   node: process.version,
   ivm: '7.0.2',
@@ -462,7 +527,7 @@ log({
 // ---- cost: first + repeated exec per workload, per arm ------------------------------------------
 if (SECTIONS.has('cost')) {
   const N = Number(process.env.N ?? 7);
-  for (const w of Object.keys(W)) {
+  for (const w of (process.env.WL ?? Object.keys(W).join(',')).split(',')) {
     for (const kind of ARMS) {
       // warm the worker (code cache) outside the measure
       const warm = await make(kind, W[w]);
@@ -526,10 +591,13 @@ if (SECTIONS.has('mem')) {
     globalThis.gc();
     const m0 = process.memoryUsage();
     const sbs = [];
+    const MEMW = process.env.MEMW ?? 'pdf';
     for (let i = 0; i < K; i++) {
-      const s = await make(kind, W.pdf);
-      const r = await s.exec();
-      if (r.code !== 0) log({ kind, bad: r });
+      const s = MEMW === 'mix' ? await make(kind, MIXMAIN, { extra: MIXFILES }) : await make(kind, W[MEMW]);
+      for (const w of MEMW === 'mix' ? ['pdf', 'docx', 'pptx', 'xlsx'] : [MEMW]) {
+        const r = await s.exec(MEMW === 'mix' ? { args: ['/workspace/out.bin', w] } : {});
+        if (r.code !== 0) log({ kind, w, bad: r });
+      }
       sbs.push(s);
     }
     await new Promise((r) => setTimeout(r, 300));
@@ -540,6 +608,7 @@ if (SECTIONS.has('mem')) {
     log({
       sec: 'mem',
       kind,
+      w: process.env.MEMW ?? 'pdf',
       K,
       load: load(),
       perSandboxRssMiB: per('rss'),
@@ -657,6 +726,230 @@ if (SECTIONS.has('burst')) {
   globalThis.gc();
   const after = process.memoryUsage.rss();
   log({ sec: 'burst', kind, load: load(), startMiB: MiB(r0), peakMiB: MiB(peak), restWithSandboxesMiB: MiB(live), restAfterDropMiB: MiB(after) });
+}
+
+// ---- escape: can run N reach the FS realm (A) and change what run N+1 sees? ---------------------
+if (SECTIONS.has('escape')) {
+  const ATT = join(here, 'attacks');
+  const manager = `const fs = require('fs');
+const marker = '/workspace/run1.done';
+if (!fs.existsSync(marker)) {
+  const savedKeys = Object.keys; let aObj = null;
+  Object.keys = function (x) { if (!aObj && x && typeof x === 'object' && !(x instanceof Object)) aObj = x; return savedKeys(x); };
+  fs.statSync('/workspace/main.js');
+  Object.keys = savedKeys;
+  if (aObj) { const AProto = Object.getPrototypeOf(aObj);
+    Object.defineProperty(AProto, 'recursive', { configurable: true, set(v) { Object.defineProperty(this, 'recursive', { value: false, writable: true, enumerable: true, configurable: true }); } }); }
+  fs.writeFileSync(marker, '1');
+  console.log('run1: planted=' + (aObj ? 'yes' : 'no A object reached'));
+} else {
+  try { fs.mkdirSync('/workspace/a/b/c', { recursive: true }); console.log('run2: mkdir -p ok'); }
+  catch (e) { console.log('run2: mkdir -p FAILED ' + e.code); }
+}`;
+  const hooks = readFileSync(join(ATT, 'hooks.js'), 'utf8');
+  const canary = readFileSync(join(ATT, 'canary.js'), 'utf8');
+  for (const kind of ARMS.filter((k) => k.startsWith('v2'))) {
+    {
+      const s = await make(kind, manager);
+      const a = await s.exec();
+      const b = await s.exec();
+      log({ sec: 'escape', case: 'E0 Object.keys (external review)', kind, exec1: a.out.trim(), exec2: b.out.trim(), codes: [a.code, b.code] });
+      s.dispose();
+    }
+    {
+      const s = await make(kind, hooks);
+      const fp = await (await s.A.fn(s.A.life, 'fingerprint'));
+      const before = fp.applySync(undefined, []);
+      const a = await s.exec();
+      const after = fp.applySync(undefined, []);
+      s.hostCall('writeFileSync', ['/workspace/main.js', new TextEncoder().encode(canary)]);
+      const b = await s.exec();
+      log({ sec: 'escape', case: 'E1 hooks + accessors + species + proxies + getters + stack exhaustion + callbacks', kind, exec1: a.out.trim().slice(0, 400), exec1End: a.termination ?? a.code, fsRealmIntrinsicsChanged: before !== after, exec2: b.out.trim() || b.termination, codes: [a.code, b.code] });
+      s.dispose();
+    }
+  }
+}
+
+// ---- rebuild: a v2 sandbox lost (kill / OOM / worker) rebuilt from its restore point, every step --
+if (SECTIONS.has('rebuild')) {
+  for (const kind of ARMS.filter((k) => k.startsWith('v2'))) {
+    for (const inMiB of [0, 1, 8]) {
+      const xs = [];
+      for (let rep = 0; rep < 5; rep++) {
+        const s = await make(kind, W.pdf);
+        if (inMiB) s.hostCall('writeFileSync', ['/workspace/in.bin', new Uint8Array(inMiB << 20).fill(5)]);
+        await s.exec();
+        const t0 = performance.now();
+        const [blob, refs] = await s.capture.apply(undefined, [MAXB], { result: { copy: true } });
+        const t1 = performance.now();
+        const outB64 = Buffer.from(blob.buffer, blob.byteOffset, blob.byteLength).toString('base64');
+        const atConsumer = new Uint8Array(Buffer.from(outB64, 'base64'));
+        const t2 = performance.now();
+        // the consumer validates before keeping it: decode + rows rebuilt over its template index
+        const up = createMemoryFs().fsSync;
+        restoreFs(up, atConsumer, OPTS);
+        LayeredFs.fromWire(nodeLower, up, JSON.parse(refs));
+        const t3 = performance.now();
+        const inB64 = Buffer.from(atConsumer.buffer, atConsumer.byteOffset, atConsumer.byteLength).toString('base64');
+        const atWorker = new Uint8Array(Buffer.from(inB64, 'base64'));
+        const t4 = performance.now();
+        s.dispose();
+        const n = new Live(kind, W.pdf);
+        await n.create({ blob: atWorker, refs });
+        const t5 = performance.now();
+        const r = await n.exec();
+        const t6 = performance.now();
+        if (r.code !== 0) log({ kind, inMiB, bad: r });
+        n.dispose();
+        xs.push({ capture: t1 - t0, wireOut: t2 - t1, validate: t3 - t2, wireIn: t4 - t3, rebuild: t5 - t4, firstExec: t6 - t5, bytes: blob.byteLength });
+      }
+      const m = (k) => r1(median(xs.map((x) => x[k])));
+      log({ sec: 'rebuild', kind, inMiB, load: load(), stateBytes: xs[0].bytes, captureMs: m('capture'), wireOutMs: m('wireOut'), validateMs: m('validate'), wireInMs: m('wireIn'), rebuildMs: m('rebuild'), firstExecAfterMs: m('firstExec'), totalToReadyMs: r1(median(xs.map((x) => x.capture + x.wireOut + x.validate + x.wireIn + x.rebuild))) });
+    }
+  }
+}
+
+// ---- turn: one agent turn end to end on v2bs + a restore point in the "consumer" (in-process) ---
+class Turn {
+  constructor(limit) {
+    this.limit = limit;
+    this.chain = Promise.resolve();
+    this.destroyed = false;
+    this.log = [];
+  }
+  /** One operation at a time, in call order (ADR-0568 §4); DESTROYED once destroy() was called. */
+  op(name, f) {
+    const p = this.chain.then(async () => {
+      if (this.destroyed) throw Object.assign(new Error('destroyed'), { code: 'ERR_ISOLATE_HOST_SANDBOX_DESTROYED' });
+      const t = performance.now();
+      const r = await f();
+      this.log.push([name, r1(performance.now() - t)]);
+      if (this.destroyed) throw Object.assign(new Error('destroyed'), { code: 'ERR_ISOLATE_HOST_SANDBOX_DESTROYED' });
+      return r;
+    });
+    this.chain = p.catch(() => {});
+    return p;
+  }
+  async #point() {
+    const [blob, refs] = await this.live.capture.apply(undefined, [MAXB], { result: { copy: true } });
+    const up = createMemoryFs().fsSync;
+    restoreFs(up, blob, OPTS); // consumer-side validation
+    LayeredFs.fromWire(nodeLower, up, JSON.parse(refs));
+    this.rp = { blob, refs };
+  }
+  async #rebuild() {
+    this.live?.dispose();
+    this.live = new Live('v2bs', '', { limit: this.limit });
+    await this.live.create(this.rp);
+    this.rebuilds = (this.rebuilds ?? 0) + 1;
+  }
+  create() {
+    return this.op('create', async () => {
+      this.live = new Live('v2bs', '', { limit: this.limit });
+      await this.live.create();
+      await this.#point();
+    });
+  }
+  writeFile(path, bytes) {
+    return this.op('writeFile', async () => {
+      this.live.hostCall('writeFileSync', [path, bytes]);
+      await this.#point();
+    });
+  }
+  readFile(path) {
+    return this.op('readFile', async () => this.live.hostCall('readFileBytesSync', [path]));
+  }
+  exec(args, { timeoutMs = 5000, signal } = {}) {
+    return this.op('exec', async () => {
+      let abort;
+      const aborted = new Promise((res) => {
+        abort = () => res({ termination: 'abort' });
+        signal?.addEventListener('abort', abort, { once: true });
+      });
+      this.running = this.live;
+      const r = await Promise.race([this.live.exec({ args, timeoutMs }), aborted]);
+      signal?.removeEventListener('abort', abort);
+      this.running = undefined;
+      if (this.destroyed) return r;
+      if ('code' in r && this.live.alive) await this.#point();
+      else {
+        // killed (timeout / memory / abort): the run is rolled back by rebuilding from the point
+        const t = performance.now();
+        await this.#rebuild();
+        r.rollbackMs = r1(performance.now() - t);
+      }
+      return r;
+    });
+  }
+  destroy() {
+    this.destroyed = true;
+    this.running?.dispose();
+    this.live?.dispose();
+    return this.chain;
+  }
+}
+if (SECTIONS.has('turn')) {
+  const limit = Number(process.env.LIMIT ?? 256);
+  const enc = (t) => new TextEncoder().encode(t);
+  const rows = [];
+  const step = async (name, f) => {
+    const t = performance.now();
+    try {
+      const r = await f();
+      rows.push({ step: name, ms: r1(performance.now() - t), ...(r && typeof r === 'object' ? r : { r }) });
+    } catch (e) {
+      rows.push({ step: name, ms: r1(performance.now() - t), rejected: e.code ?? String(e.message) });
+    }
+  };
+  const T = new Turn(limit);
+  const has = async (p) => {
+    try {
+      await T.readFile(p);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  await step('createSandbox (template, v2bs)', () => T.create());
+  await step('writeFile main.js (buggy)', () => T.writeFile('/workspace/main.js', enc("require('pdf-lib'); undefinedFn();")));
+  await step('exec → exit 1', async () => { const r = await T.exec([]); return { code: r.code, stderr: r.out.slice(0, 60) }; });
+  await step('writeFile main.js (pdf)', () => T.writeFile('/workspace/main.js', enc(W.pdf)));
+  await step('writeFile input 1 MiB', () => T.writeFile('/workspace/in.bin', new Uint8Array(1 << 20).fill(3)));
+  await step('exec pdf → out.pdf', async () => ({ code: (await T.exec(['/workspace/out.pdf'])).code }));
+  await step('exec pdf again', async () => ({ code: (await T.exec(['/workspace/out.pdf'])).code }));
+  await step('readFile out.pdf', async () => { const b = await T.readFile('/workspace/out.pdf'); return { bytes: b.byteLength, pdf: Buffer.from(b.slice(0, 5)).toString() }; });
+  await step('writeFile main.js (write, then endless loop)', () => T.writeFile('/workspace/main.js', enc("require('fs').writeFileSync('/workspace/partial.txt', 'x'); for (;;) {}")));
+  await step('exec → timeout, rolled back', async () => { const r = await T.exec([], { timeoutMs: 500 }); return { termination: r.termination, rollbackMs: r.rollbackMs, partialKept: await has('/workspace/partial.txt'), outPdfKept: await has('/workspace/out.pdf') }; });
+  await step('writeFile main.js (write, then OOM)', () => T.writeFile('/workspace/main.js', enc("require('fs').writeFileSync('/workspace/partial.txt', 'x'); const a = []; for (;;) a.push('x'.repeat(1e6) + Math.random());")));
+  await step('exec → memory, rolled back', async () => { const r = await T.exec([], { timeoutMs: 20000 }); return { termination: r.termination, rollbackMs: r.rollbackMs, partialKept: await has('/workspace/partial.txt'), outPdfKept: await has('/workspace/out.pdf') }; });
+  await step('writeFile main.js (pdf)', () => T.writeFile('/workspace/main.js', enc(W.pdf)));
+  await step('exec pdf after two rebuilds', async () => ({ code: (await T.exec(['/workspace/out2.pdf'])).code }));
+  await step('exec aborted mid-run (AbortSignal at 50 ms), rolled back', async () => {
+    const ac = new AbortController();
+    setTimeout(() => ac.abort(), 50);
+    const r = await T.exec(['/workspace/out3.pdf'], { signal: ac.signal });
+    return { termination: r.termination, rollbackMs: r.rollbackMs, out3Kept: await has('/workspace/out3.pdf') };
+  });
+  await step('ordering: writeFile + exec + readFile issued without awaiting', async () => {
+    const w = T.writeFile('/workspace/main.js', enc("require('fs').writeFileSync('/workspace/o.txt', require('fs').readFileSync('/workspace/i.txt'))"));
+    const w2 = T.writeFile('/workspace/i.txt', enc('seq'));
+    const e = T.exec([]);
+    const r = T.readFile('/workspace/o.txt');
+    await Promise.all([w, w2, e]);
+    return { readBack: Buffer.from(await r).toString() };
+  });
+  await step('destroy mid-run, then an op', async () => {
+    await T.writeFile('/workspace/main.js', enc(W.xlsx));
+    const e = T.exec(['/workspace/x.xlsx']);
+    await new Promise((res) => setTimeout(res, 60));
+    const d = T.destroy();
+    const after = T.readFile('/workspace/out.pdf');
+    const [er, ar] = await Promise.allSettled([e, after]);
+    await d;
+    return { exec: er.status === 'rejected' ? er.reason.code : 'resolved', after: ar.status === 'rejected' ? ar.reason.code : 'resolved', isolateAlive: T.live.alive };
+  });
+  for (const r of rows) log({ sec: 'turn', limitMiB: limit, load: load(), ...r });
+  log({ sec: 'turn', rebuilds: T.rebuilds, opTimes: T.log });
 }
 
 // ---- host: one host op, worker side (v2: a call into context A; v3: the worker's LayeredFs;
