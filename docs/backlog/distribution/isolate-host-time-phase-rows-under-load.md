@@ -52,6 +52,12 @@ Not reproduced by the manager on a clean `11b9397ee` copy: 30/30 five runs, load
 and 45–88 under 24 `yes` processes; main CI green. Cause unknown (memory or
 process-creation pressure, not CPU load alone).
 
+
+2026-11-25 — CI (ubuntu-24.04), PR #452 run 45604985387 attempt 1 at `073f7c9ff` (a diff that no
+isolate-host module imports): `pool-faults.test.ts` «a guest that never ends and churns host timers
+(ADR-0563 §7, §6) > intervals created and cleared in a loop: its own end (memory alone), neighbours
+exact» red after 35966 ms — `expected [ { stdout: 'a0\nb0\n', …(2) }, …(2) ] to deeply equal […]`
+(a neighbour's record differed); 1 failed of 12630 tests. Attempt 2 (failed jobs only, no change): green.
 ## Challenge
 
 challenge: 2026-11-22 — finding capture; no premise critic (README §Challenge)
