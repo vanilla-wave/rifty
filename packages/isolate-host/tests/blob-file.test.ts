@@ -1,5 +1,5 @@
 /**
- * Unit `runtime-js/isolate-guest-blob-file` (Acceptance 2–5, 11): `fixtures/web-api/blob-cases.cjs`
+ * Isolate guest `Blob`/`File` (ADR-0578; goal `isolate-guest-web-api` unit 2): `fixtures/web-api/blob-cases.cjs`
  * — the unit's pin table, Node behaviours beyond WPT, the byte store's read count, module
  * consumers — run unchanged by live `node`, a sandbox `exec` and `runCode`. Every line equals
  * Node's except the declared ones (`DECLARED`: the guest's literal, still different from Node).

@@ -1,9 +1,9 @@
 /**
- * Goal isolate-guest-web-api carrier (`docs/backlog/distribution/isolate-guest-web-api-acceptance.md`):
+ * Goal isolate-guest-web-api carrier (`docs/backlog/epics/isolate-guest-web-api/`, map item 1):
  * scenario steps 1–2 in the sandbox (`exec`) over the library's installed closure, oracle live
  * `node <step>` over the same files. The output package is compared by part (`ooxml-parts.ts`).
  * Step 3 (pdfkit) is `zlib-scenario.test.ts` case 4. Both steps were pinned at their whole outcome
- * (`Pin`/`pinOf`, PR #453) until unit 2 (`runtime-js/isolate-guest-blob-file`) made them Node's.
+ * (`Pin`/`pinOf`, PR #453) until unit 2 (ADR-0578, PR #458) made them Node's.
  */
 import { readFileSync, realpathSync } from 'node:fs';
 import { dirname, join } from 'node:path';

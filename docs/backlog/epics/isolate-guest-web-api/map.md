@@ -13,12 +13,12 @@ Probes in `reference/` (each README holds its command, results and «not verifie
 
 ## Items
 
-1. `distribution/isolate-guest-web-api-acceptance` — **ready** — the carrier: pptx `write()` and docx
-   `Packer.toBlob` as `it.fails` isolate-host cases against live `node`, plus the zlib carrier's
-   case 4 (pdfkit) reused (I5).
-2. `runtime-js/isolate-guest-blob-file` — **ready** — `Blob`/`File` from Node's `blob.js`/`file.js`
-   over a JS byte store, loaded with the runtime and installed as globals before guest code,
-   `buffer`'s `Blob`/`File` exports (`buffer.ts:42-43`) bound to them then (I1, I4, I5).
+1. `distribution/isolate-guest-web-api-acceptance` — **done** (PR #458, file deleted) — the carrier:
+   `packages/isolate-host/tests/web-api-scenario.test.ts`, pptx `write()` and docx `Packer.toBlob`
+   equal to live `node`; pdfkit is the zlib carrier's case 4 (I5).
+2. `runtime-js/isolate-guest-blob-file` — **done** (PR #458, ADR-0578, file deleted) — `Blob`/`File`
+   from Node's `blob.js`/`file.js` over a JS byte store; `buffer.Blob`/`File` the same objects;
+   the shared WPT harness `tests/wpt/` (I1, I4, I5).
 3. `distribution/isolate-guest-textdecoder-legacy-encodings` — **ready** — `TextDecoder`/`TextEncoder`
    from Node's `encoding.js` + `single-byte.js`, utf-16le/be, gbk, gb18030 from @exodus/bytes 1.16.0:
    utf-8 + the 33 Node=WHATWG encodings; the five ICU-only a named gap

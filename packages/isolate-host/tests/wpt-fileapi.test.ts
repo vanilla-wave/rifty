@@ -1,8 +1,8 @@
 /**
  * WPT `FileAPI/blob` and `FileAPI/file` (Node v24.16.0's vendored copy, `tests/wpt/fixtures`)
  * through the shared harness: every subtest of every `.any.js` file Node's `test/wpt/test-blob.js`
- * and `test-file.js` run gives the guest live Node's result (unit
- * `runtime-js/isolate-guest-blob-file` Acceptance 1). Not run, listed: below.
+ * and `test-file.js` run gives the guest live Node's result (ADR-0578, goal `isolate-guest-web-api`
+ * I1). Not run, listed: below.
  */
 import { describe, expect, it } from 'vitest';
 import { runCode } from '../src/index.ts';

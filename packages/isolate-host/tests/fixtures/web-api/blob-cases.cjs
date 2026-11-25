@@ -1,4 +1,4 @@
-// Unit runtime-js/isolate-guest-blob-file: one line per observation (`id<TAB>outcome`), run
+// Isolate guest Blob/File (ADR-0578): one line per observation (`id<TAB>outcome`), run
 // unchanged by `node`, a sandbox `exec` and `runCode`. Outcome: a value's description or the
 // throw's `name [code]: message`.
 'use strict';
