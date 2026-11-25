@@ -238,6 +238,35 @@ describe('product handle = Node native handle, direct calls', () => {
     expect(r.node.crc32).toBe(5);
   });
 
+  it('an out of length 0: a null pointer only on a fixed-length empty buffer, as Node', () => {
+    const outs: [string, () => Uint8Array][] = [
+      ['ArrayBuffer(0)', () => new Uint8Array(0)],
+      ['SharedArrayBuffer(0)', () => new Uint8Array(new SharedArrayBuffer(0))],
+      [
+        'resizable, resized to 0',
+        () => {
+          const rab = new ArrayBuffer(16, { maxByteLength: 64 });
+          const view = new Uint8Array(rab);
+          rab.resize(0);
+          return view;
+        },
+      ],
+      ['resizable of 0', () => new Uint8Array(new ArrayBuffer(0, { maxByteLength: 16 }))],
+      ['growable of 0', () => new Uint8Array(new SharedArrayBuffer(0, { maxByteLength: 16 }))],
+    ];
+    const r = both((b) =>
+      Object.fromEntries(
+        outs.map(([name, make]) => {
+          const { h, state, events } = open(b, C.DEFLATE);
+          h.writeSync(C.Z_NO_FLUSH, Buffer.from('abc'), 0, 3, make(), 0, 0);
+          h.close();
+          return [name, { events, state: [...state] }];
+        }),
+      ),
+    );
+    expect(r.port).toEqual(r.node);
+  });
+
   it('where Node aborts on a transferred-away buffer, the port: writeResult a check, in/out onerror', () => {
     const det = () => {
       const u = new Uint8Array(64);

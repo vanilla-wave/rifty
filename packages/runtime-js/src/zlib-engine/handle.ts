@@ -99,6 +99,12 @@ function nodeBytes(view: ArrayBufferView): { bytes: Uint8Array; detached: boolea
   }
 }
 
+/** Buffer::Data is NULL for an empty fixed-length (or detached) buffer, not a resizable/growable one. */
+function isNullData(buffer: ArrayBufferLike): boolean {
+  const b = buffer as ArrayBufferLike & { resizable?: boolean; growable?: boolean };
+  return b.byteLength === 0 && !b.resizable && !b.growable;
+}
+
 /**
  * [off, off + len) of a caller's buffer under Node's bounds CHECK; null where that CHECK fails on a
  * detached buffer (Node aborts; the port reports DETACHED_ERROR). A live buffer out of bounds
@@ -694,7 +700,7 @@ export function createZlibBinding(
       const outAt = {
         view: outView,
         length: outView.byteLength,
-        isNull: outView.buffer.byteLength === 0,
+        isNull: isNullData(outView.buffer),
       };
       this.writeInProgress = true;
       const work = () =>
