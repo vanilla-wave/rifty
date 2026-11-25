@@ -25,9 +25,12 @@ so Node's `lib/zlib.js` comes to rifty only on a `Transform` equal to Node's on 
 4. `runtime-js/zlib-streams-under-load` — **hypothesis** (draft) — exists only if the carrier after
    unit 3 measures a wall under load; otherwise deleted.
 
-Merge order: units 2 and 3 are adjacent merges — unit 2's PR reaches ready and a clean review, then
-waits until unit 3 can follow it (manager 2026-11-24), so `main` never holds the engine without a
-caller for an open-ended time; the build work runs in parallel with the streams goal.
+Merge order: units 2 and 3 are adjacent merges (manager 2026-11-24), so `main` never holds the engine
+without a caller for an open-ended time; the build work runs in parallel with the streams goal. Unit
+2's PR, titled `[hold: merges with zlib-node-lib-port]`, is GitHub-ready only for a full CI run and the
+external review, back to draft after a clean review, draft until `zlib-diff.mjs`'s state group is 0 on
+`main`; the manager merges it after marking it ready again and a fresh full CI run on the current
+`main`, then unit 3 follows.
 
 ## Dependencies on the streams goal (thread `t3/node-streams-goal`)
 

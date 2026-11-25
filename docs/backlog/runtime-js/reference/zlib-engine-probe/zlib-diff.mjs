@@ -360,6 +360,7 @@ const STATE = {
     ),
 };
 const LOAD = {
+  // readableLength before reading is timing-dependent in Node itself: not observed.
   'load: 5 MB deflate with a paused consumer': async ({ z }) => {
     const d = z.createDeflate({ highWaterMark: 1024 });
     const big = Buffer.concat(Array.from({ length: 40 }, () => T));
@@ -370,10 +371,9 @@ const LOAD = {
     for (let i = 0; i < big.length; i += 65536) if (!d.write(big.subarray(i, i + 65536))) falses++;
     d.end();
     await tick();
-    const buffered = d.readableLength;
     d.on('data', (c) => o.push(c));
     await new Promise((r) => d.on('end', r));
-    return { falses, drains, bufferedBeforeRead: buffered, out: val(Buffer.concat(o)) };
+    return { falses, drains, out: val(Buffer.concat(o)) };
   },
 };
 

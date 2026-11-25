@@ -28,7 +28,7 @@ tarball, identical to the binary's builtin source, over the probe handle; `strea
 stream helpers = Node's vs rifty's; everything else Node's) shows 0 differences between `port/N` and
 `port/R`, or only rows already declared in compat `streams.md` with their number. The scenarios are
 the paths I1–I4 promise, including guards that are equal today; the load group belongs to unit 4.
-Today on main (`results/zlib-diff.txt`): `port/N` = real Node 46/46; state group `port/R` ≠ `port/N`
+Today on main (`results/zlib-diff.txt`): `port/N` = real Node in the state group 45/45 and the load group 1/1 (stable field: the `'drain'` count); state group `port/R` ≠ `port/N`
 in 26/45 scenarios, 154 fields; load group 1/1 (one `'drain'` more):
 
 | rifty `Transform` gap | scenarios hit | Node | rifty |

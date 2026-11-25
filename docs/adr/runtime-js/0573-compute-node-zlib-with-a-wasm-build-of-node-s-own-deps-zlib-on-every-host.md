@@ -66,7 +66,7 @@ own `lib/zlib.js` also runs on each engine via a swapped `binding.Zlib`.
   - Chromium: not measured (its per-tab wasm memory limit is unknown here).
 - Node's own `lib/zlib.js`, loaded verbatim from the pinned tarball over the probe handle
   (`zlib-diff.mjs`; that file equals the binary's builtin source): over Node's `Transform` it equals
-  real `node:zlib` in 46/46 scenarios; over rifty's `Transform` (main) the state group (45 paths I1–I4
+  real `node:zlib` in the state group 45/45 and the load group 1/1 (its one stable field, the `'drain'` count); over rifty's `Transform` (main) the state group (45 paths I1–I4
   promise) differs in 26, 154 fields, the load group in 1/1 — `Symbol.asyncDispose`, constructor option
   validation (`highWaterMark`, `signal`), `_destroy` never running (so the handle never closes), no
   `autoDestroy` after `'end'`, no `errored`/`closed`/`readableFlowing`, `finished` on a closed stream,

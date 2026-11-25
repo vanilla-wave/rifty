@@ -24,7 +24,7 @@ Proof levels the probe established (`docs/backlog/runtime-js/reference/zlib-engi
 - binding semantics over the engine — `cases.mjs`, 1420 cases through `driver.mjs` `Context`
   (`results/cases.txt`);
 - the handle wrapper (`handle.cjs`) under Node's own `lib/zlib.js` — Node's `test-zlib*.js` 62/62
-  (`results/node-suite.txt`) and `zlib-diff.mjs` column `port/N` = real Node 46/46
+  (`results/node-suite.txt`) and `zlib-diff.mjs` column `port/N` = real Node, state group 45/45, load group 1/1
   (`results/zlib-diff.txt`).
 
 ## Challenge
@@ -48,9 +48,12 @@ challenge: 2026-11-24 — reuses the goal's FIT challenge (goal.md §Challenge) 
    (`vendor/`/`generated/` manifest of PR #445) → ADR-0573
 5. Every engine pointer is checked: a failed allocation is a loud error, with a test that exhausts the
    wasm memory → ADR-0573
-6. No guest-visible change and no bundle growth: the builtin `zlib` module does not import the engine
-   or the handle; `pnpm test:client-bundles` and the isolate guest bundle size are unchanged; every
-   existing zlib conformance, parity and isolate row stays green unmodified → ADR-0573
+6. No guest-visible change and no bundle growth, checked mechanically: a `check:arch` rule
+   (dependency-cruiser, `tools/checks/arch-rules.cjs`) forbids any import of the engine or the handle
+   module from rifty's builtin modules and from the isolate guest's `ceiling-zlib.ts` — unit 3 removes
+   the rule; the PR body records `pnpm test:client-bundles` (main/sw/generic/toolchain min and gzip)
+   and the isolate `guest.js` size, before and after, byte-equal to `main`; every existing zlib
+   conformance, parity and isolate row stays green unmodified → ADR-0573
 
 ## Parity cases
 
@@ -88,5 +91,5 @@ Oracle: Node v24.16.0 (`node:zlib`, live), at the handle's level.
 
 - 2026-11-24 — manager: one chokepoint, dependency order — `lib/zlib.js` only on a `Transform` equal to Node's; this unit carries the engine build and the handle, nothing guest-visible.
 - 2026-11-24 — manager (round 3, revoking «engine in the bundle for `crc32`»): no guest surface and no bundle here (§Simplicity: a full engine without a caller until unit 3 — ≈ 24 KB gzip of deflate/inflate in every bundle against ≈ 15 KB generic headroom); `crc32` and the engine's entry into the bundles move to unit 3.
-- 2026-11-24 — manager: this unit's merge is held until unit 3 can follow (`zlib-diff.mjs` state group = 0 on `main`); its PR reaches ready + a clean review and waits.
+- 2026-11-24 — manager: this unit's merge is held until unit 3 can follow (`zlib-diff.mjs` state group = 0 on `main`). Mechanics: the PR is titled with `[hold: merges with zlib-node-lib-port]`; it is GitHub-ready only for a full CI run and the external review, and goes back to draft after a clean review; it stays draft until the condition holds; the manager merges it — before that, ready again and a fresh full CI run on the current `main`.
 - Engine and placement per ADR-0573.

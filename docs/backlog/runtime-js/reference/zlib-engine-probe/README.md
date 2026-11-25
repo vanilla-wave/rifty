@@ -75,7 +75,7 @@ over the probe handle; only `stream.Transform`/`finished` and the stream helpers
 the goal's `lib/zlib.js` unit, not its exit). Values compared whole: bytes by hash (gzip OS byte
 normalised), errors by class, `code`, `errno` and full message.
 
-- With Node's `Transform` it equals real `node:zlib` in 46/46 scenarios.
+- With Node's `Transform` it equals real `node:zlib`: state group 45/45, load group 1/1. The load group observes only stable fields (`write()` returning false, `'drain'` count, bytes); `readableLength` before reading is timing-dependent in Node itself and is not observed. Three runs give byte-identical output.
 - With rifty's `Transform` (main): state group (45 paths I1–I4 promise, incl. guards equal today)
   differs in 26, 154 fields; load group 1/1 (one `'drain'` more). Gaps: `Symbol.asyncDispose`
   missing; constructor option validation (`highWaterMark: -1`, `signal: 1` compress instead of
@@ -138,3 +138,55 @@ x64 / Windows Node output; the wasm build on another machine or with a pinned to
 Firefox/WebKit; open-stream limits in Chromium and (with the engine) in the isolate; pako with
 tree-shaken imports; the three bundle fallbacks of ADR-0573 §8; backpressure and event order of rifty's
 `Transform` under these classes.
+
+## Notes for implementers (traps met by this probe)
+
+Inputs:
+- Node source: `https://nodejs.org/dist/v24.16.0/node-v24.16.0.tar.xz`, sha256 in `fetch.sh`. `fetch.sh`
+  extracts only `deps/zlib`, `src/node_zlib.cc`, `lib/zlib.js`; `run-all.sh` adds `test/parallel/test-zlib*`,
+  `test/common`, `test/fixtures` with bsdtar's `--include` (GNU tar needs `--wildcards`). The tarball's
+  `lib/zlib.js` equals the binary's builtin source:
+  `require('internal/test/binding').internalBinding('builtins').natives.zlib` (`--expose-internals`).
+- Chromium 108: the floor lane's runner (`playwright@1.28.1`; `install chromium` must run under
+  `npm exec --package=node@18.20.8` — Node 24's extractor truncates on macOS), `PLAYWRIGHT_BROWSERS_PATH`
+  pointing at its own directory.
+
+Building `zlib.wasm`:
+- `-DCPU_NO_SIMD` (Node's own non-SIMD branch) and the nine sources of `build-wasm.sh`; no SIMD sources,
+  no `contrib/optimizations/inflate.c`. Do not define `CHROMIUM_ZLIB_NO_CASTAGNOLI`: Chromium's fork
+  then falls back to vanilla zlib's Rabin-Karp hash and the bytes stop matching Node.
+- `wasm32-wasip1` reactor with `--no-entry`: call `_initialize()` once before anything; the module
+  imports nothing (no WASI), so instantiate with `{}`.
+- z_stream on wasm32 is 14 × 4 = 56 bytes (`next_in`, `avail_in`, `total_in`, `next_out`, `avail_out`,
+  `total_out`, `msg`, `state`, `zalloc`, `zfree`, `opaque`, `data_type`, `adler`, `reserved`); pass
+  `zlibVersion()` and 56 to `deflateInit2_`/`inflateInit2_`.
+- Exports are `i32`: a pointer ≥ 2 GiB comes back negative (`>>> 0`, `>>> 2` for word indexes);
+  `malloc` returns 0 when the 4 GiB space is exhausted. Any call may grow memory and detach every
+  `memory.buffer` view: re-create views after each call.
+- The gzip header's OS byte is `OS_CODE` (`zutil.h`): 19 on macOS Node, 3 from this build.
+
+Node's handle semantics (`driver.mjs` ports them; easy to miss):
+- the output buffer persists across chunks (`_outOffset`): the next write continues in the remaining
+  room, and level-0 (stored) output depends on it;
+- GUNZIP: after `Z_STREAM_END` with input left, reset and continue only if the next byte is not
+  `0x00`; UNZIP sniffs `1f 8b` across chunk boundaries (`gzip_id_bytes_read_`);
+- `InitZlib` ignores `SetDictionary`'s error (it surfaces at the next write as `Zlib error`);
+  `ResetStream` is a no-op for UNZIP before the sniff; the dictionary is the view's bytes
+  (`buffer`/`byteOffset`/`byteLength`), never `new Uint8Array(view)` (that converts elements);
+- `Z_BUF_ERROR`/`Z_OK` with output room left under `Z_FINISH` is `unexpected end of file`.
+
+Harnesses:
+- `swap-binding.cjs`: `process.binding('zlib')` is the same object as `internalBinding('zlib')`, and
+  `lib/zlib.js` reads `binding.Zlib` at construction, so patching it in a `-r` preload swaps the engine
+  under Node's own module. The preload must not import `node:zlib` (Node's tests patch
+  `buffer.kMaxLength` before requiring it). Parallel Node tests need their own `TEST_SERIAL_ID`
+  (shared `test/.tmp.N` otherwise).
+- `zlib-diff.mjs`: `vm.compileFunction(source, ['exports','require','module','process','internalBinding','primordials'])`
+  with the real `primordials`/`internalBinding` from `internal/test/binding`; the binding is
+  `Object.create(realBinding)` with only `Zlib` replaced (brotli, zstd, `crc32` stay native). Compare
+  whole values and never timing-dependent fields (`readableLength` before reading varies in Node).
+- isolated-vm: no `performance` in the isolate (`Date.now` granularity — time from the host); live
+  isolates keep the process alive (`process.exit`). `runCode`'s RSS sampler ticks every 25 ms: hold an
+  allocation ≥ 500 ms to observe the pool's verdict.
+- `measure-bundles.sh` edits source and rebuilds `dist/` of every packed package: run it on a clean
+  tree and finish with the `none` variant (as `run-all.sh` does) so `dist/` is main's again.
