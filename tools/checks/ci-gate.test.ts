@@ -12,6 +12,7 @@ function gate(overrides: Record<string, string>): string[] {
     e2e: 'success',
     browserUnit: 'success',
     noCoi: 'success',
+    draft: 'false',
     ...overrides,
   });
 }
@@ -80,5 +81,48 @@ describe('CI gate reducer', () => {
   it('rejects garbage classifier output from a successful job', () => {
     const errors = gate({ code: 'maybe' });
     expect(errors.some((e: string) => e.includes("invalid code='maybe'"))).toBe(true);
+  });
+
+  // Draft PR: heavy lanes are withheld, so the gate must not read as a merge
+  // verdict (a skipped or green gate would count as passed for protection).
+  const heavySkipped = {
+    unit: 'skipped',
+    e2e: 'skipped',
+    browserUnit: 'skipped',
+    noCoi: 'skipped',
+  };
+
+  it('fails a code-affecting draft PR whose heavy lanes were withheld', () => {
+    const errors = gate({ draft: 'true', ...heavySkipped });
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain('draft');
+    expect(errors[0]).toContain('ready for review');
+  });
+
+  it('fails a draft PR whose heavy lanes unexpectedly ran', () => {
+    expect(
+      gate({ draft: 'true' }).filter((e: string) => e.includes("expected 'skipped'")),
+    ).toHaveLength(4);
+  });
+
+  it('passes a docs-only draft PR: nothing applicable was withheld', () => {
+    expect(gate({ draft: 'true', code: 'false', ...heavySkipped })).toEqual([]);
+  });
+
+  it('names the dead classifier and the withheld lanes on a draft PR', () => {
+    const errors = gate({ draft: 'true', code: '', changeScope: 'failure', ...heavySkipped });
+    expect(errors).toHaveLength(2);
+    const classifier = errors.find((e: string) => e.includes('change-scope'));
+    expect(classifier).toBeDefined();
+    // heavy lanes are withheld on draft: "fails open — rerun" would mislead.
+    expect(classifier).not.toContain('fails open');
+    expect(classifier).not.toContain('rerun');
+    expect(classifier).toContain('ready for review');
+    expect(errors.some((e: string) => e.startsWith('draft PR'))).toBe(true);
+  });
+
+  it('treats push and merge_group (no PR payload) as non-draft', () => {
+    expect(gate({ draft: '' })).toEqual([]);
+    expect(gate({ draft: '', ...heavySkipped }).length).toBeGreaterThan(0);
   });
 });

@@ -119,6 +119,7 @@ ADRs are immutable while active, except dated lines under `## Decisions` / `§Co
 | 0541 | Run Node Fetch classes over the browser I/O boundary |
 | 0544 | Initialize redirected stdout lazily through Node filesystem writes |
 | 0571 | Prove node file entry and fatal report parity against live Node, Node's report in the isolate guest only |
+| 0574 | Generate legacy node:url and node:querystring from pinned Node sources |
 
 ### runtime-wasi
 
@@ -499,6 +500,10 @@ superseded.
 
 | ADR | corrected by | note |
 |---|---|---|
+| 0574 §4 DEP0169 caller detection (`isInsideNodeModules` walk) | note 2026-11-24 | removed, the user's choice: `url.parse` never emits DEP0169 (declared); DEP0170 unchanged |
+| 0391 TypeScript worker exact-bytes pin, "pin update stays explicit" | note 2026-11-24 | worker pin excludes its leading built sibling-chunk imports (esbuild form, ≤2048 bytes), sibling hashes zeroed; linkage no longer pinned; runtime edits no longer re-pin, no per-re-pin ADR line; `chunk-EMDIREKY.js` whole-file |
+| 0323 §3 heavy lanes on every code-affecting PR push | note 2026-11-24 | draft PR → only change-scope/lint/gate; code-affecting draft gate red by design; `ready_for_review` runs the full gate |
+| 0323 §4 `CI gate` `always()` clause | note 2026-11-24 | `!cancelled()`: cancelled run → gate `cancelled` without a runner; failed/timed-out dependency in a live run still reds it |
 | 0069 D3 TextDecoder set and "matches `StringDecoder`" clause | note 2026-11-17 | utf8/utf16le decoder keeps a leading BOM (`ignoreBOM: true`); `latin1`/`binary` decode via Buffer, not windows-1252 TextDecoder |
 | 0226 / 0384 / 0417 no-COI generated-client activation | 0539 / note 2026-10-20 | upstream Node client through SW children; shared COI client retained |
 | 0163 decision 1 production base, decision 4 Netlify-not-owning `/npm-registry` + smoke target, TL;DR "Netlify static only" | 0528 / note 2026-10-14 | Yandex VMs unreachable; production registry route is a same-origin Netlify proxy rewrite to `registry.npmjs.org`, eddy OFF in the production build; decisions 2, 3, 5 + Yandex config stand as runbook |

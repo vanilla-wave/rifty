@@ -7,23 +7,12 @@
  * `process.release` change. Output: every part of the package equal to Node's once
  * the ISO timestamps of `docProps/core.xml` are masked, nested packages (chart data) by part.
  */
-import { spawnSync } from 'node:child_process';
-import {
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  readdirSync,
-  realpathSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { tmpdir } from 'node:os';
-import { dirname, join, relative } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { createSandbox } from '../src/index.ts';
+import { closureFiles, inNode, inSandbox } from './package-closure.ts';
 
 interface ZipEntry {
   readonly dir: boolean;
@@ -46,74 +35,6 @@ const DOT_PNG = Buffer.from(
   'base64',
 );
 
-/** Where `name` resolves from package dir `from` (Node's walk up `node_modules`), real path. */
-function resolvePackage(name: string, from: string): string {
-  for (let dir = from; ; dir = dirname(dir)) {
-    try {
-      return realpathSync(join(dir, 'node_modules', name));
-    } catch {}
-    if (dirname(dir) === dir) throw new Error(`${name} not installed for ${from}`);
-  }
-}
-
-/**
- * The installed closure of `root` as an npm-style tree: `node_modules/<path>` → package dir.
- * A dependency goes to the nearest slot up its dependent's chain, or to the root when free,
- * nested under its dependent when the nearest slot holds another copy.
- */
-function closureTree(root: string): Map<string, string> {
-  const slots = new Map<string, string>();
-  const place = (pkgDir: string, at: string): void => {
-    const manifest = JSON.parse(readFileSync(join(pkgDir, 'package.json'), 'utf8')) as {
-      name: string;
-      dependencies?: Record<string, string>;
-      optionalDependencies?: Record<string, string>;
-    };
-    for (const dep of Object.keys({
-      ...manifest.dependencies,
-      ...manifest.optionalDependencies,
-    })) {
-      const depDir = resolvePackage(dep, pkgDir);
-      let found: string | undefined;
-      for (let scope = at; ; scope = scope.slice(0, scope.lastIndexOf('/node_modules/'))) {
-        const slot = `${scope}/node_modules/${dep}`;
-        if (slots.has(slot)) {
-          found = slot;
-          break;
-        }
-        if (!scope.includes('/node_modules/')) break;
-      }
-      if (found !== undefined && slots.get(found) === depDir) continue;
-      const slot =
-        found === undefined && !slots.has(`/node_modules/${dep}`)
-          ? `/node_modules/${dep}`
-          : `${at}/node_modules/${dep}`;
-      slots.set(slot, depDir);
-      place(depDir, slot);
-    }
-  };
-  slots.set('/node_modules/pptxgenjs', root);
-  place(root, '/node_modules/pptxgenjs');
-  return slots;
-}
-
-/** Every file of the closure: workspace-relative path → bytes (a package's own `node_modules` excluded). */
-function closureFiles(): Map<string, Uint8Array> {
-  const files = new Map<string, Uint8Array>();
-  for (const [slot, dir] of closureTree(PPTXGENJS)) {
-    const walk = (abs: string): void => {
-      for (const name of readdirSync(abs).sort()) {
-        const path = join(abs, name);
-        if (statSync(path).isDirectory()) {
-          if (!(abs === dir && name === 'node_modules')) walk(path);
-        } else files.set(`${slot.slice(1)}/${relative(dir, path)}`, readFileSync(path));
-      }
-    };
-    walk(dir);
-  }
-  return files;
-}
-
 const mask = (text: string): string =>
   text.replace(/\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?Z/g, '<time>');
 
@@ -133,56 +54,7 @@ async function parts(bytes: Uint8Array, prefix = ''): Promise<Record<string, str
   return out;
 }
 
-interface Outcome {
-  readonly stdout: string;
-  readonly stderr: string;
-  readonly exitCode: number | null;
-  readonly file?: Uint8Array;
-}
-
-function inNode(files: Map<string, Uint8Array>, gen: string, out: string): Outcome {
-  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'isolate-host-pptx-oracle-')));
-  try {
-    for (const [rel, data] of files) {
-      mkdirSync(dirname(join(dir, rel)), { recursive: true });
-      writeFileSync(join(dir, rel), data);
-    }
-    const r = spawnSync(process.execPath, [gen, out], {
-      cwd: dir,
-      env: {},
-      encoding: 'utf8',
-      timeout: 60_000,
-    });
-    let file: Uint8Array | undefined;
-    try {
-      file = readFileSync(join(dir, out));
-    } catch {}
-    return { stdout: r.stdout, stderr: r.stderr, exitCode: r.status, file };
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-}
-
-async function inSandbox(
-  files: Map<string, Uint8Array>,
-  gen: string,
-  out: string,
-): Promise<Outcome> {
-  const sb = await createSandbox({ maxFsBytes: 256 * 2 ** 20 });
-  try {
-    for (const [rel, data] of files) await sb.writeFile(rel, data);
-    const r = await sb.exec(gen, { args: [out], timeoutMs: 60_000, memoryLimitMb: 512 });
-    let file: Uint8Array | undefined;
-    try {
-      file = await sb.readFile(out);
-    } catch {}
-    return { stdout: r.stdout, stderr: r.stderr, exitCode: r.exitCode, file };
-  } finally {
-    await sb.destroy();
-  }
-}
-
-const closure = closureFiles();
+const closure = closureFiles('pptxgenjs', PPTXGENJS);
 
 describe('pptxgenjs 4.0.1 writes the same pptx as Node (Acceptance 4)', () => {
   for (const [gen, extra, expectedParts] of [

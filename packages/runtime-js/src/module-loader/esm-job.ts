@@ -1,3 +1,4 @@
+import { noEsmLoaderGap } from '../internal/esm-loader.ts';
 import { ModuleLoadError } from './errors.ts';
 import {
   evaluateAsyncJob,
@@ -276,6 +277,9 @@ export function executeEsm(
   resolved: ResolvedModule,
   deps: EsmLoaderDeps,
 ): Promise<Record<string, unknown>> {
+  // A host without an ES module loader: its named gap, before any job.
+  const gap = noEsmLoaderGap();
+  if (gap !== null) return Promise.reject(gap());
   const existing = deps.registry.get(resolved.id);
   if (existing) {
     const job = currentJob(existing, deps);

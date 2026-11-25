@@ -23,6 +23,7 @@ import { ModuleLoadError } from './errors.ts';
 import { type TransformResult, transformEsm } from './esm-ast.ts';
 import { type TransformSourceHook, executeEsm, requireEsm } from './esm-job.ts';
 import { type CjsModule, ModuleRegistry, createModuleRecord } from './registry.ts';
+import { refuseRequireEsm } from './require-esm-refusal.ts';
 import type { PathAliases, ResolvedModule } from './resolver.ts';
 import { type Resolver, createResolver } from './resolver.ts';
 import { SourceMapRegistry, extractInlineSourceMap } from './source-maps.ts';
@@ -481,7 +482,8 @@ function createModuleLoaderCore(
     loadBuiltin: loadBuiltinForLoader,
   });
   const cjsExtensions = Object.create(null) as CjsExtensions;
-  const loadDefaultEsm = (resolved: ResolvedModule): unknown => {
+  const loadDefaultEsm = (resolved: ResolvedModule, parent?: CjsModule): unknown => {
+    refuseRequireEsm(resolved, parent);
     const value = requireEsm(resolved, { ...deps });
     if (stringEndsWith(resolved.id, '.js')) defaultRequiredEsm.add(resolved.id);
     return value;
@@ -489,6 +491,7 @@ function createModuleLoaderCore(
   const defaultJsExtension: CjsExtensionHook = (module, filename) => {
     const resolved = readResolvedById(filename);
     if (resolved.kind === 'esm') {
+      refuseRequireEsm(resolved, module.parent);
       // A replaced `.js` hook may delegate to the captured Node default. The
       // hook's CJS projection stays cached independently while the default
       // translator enters the primary ESM job.
@@ -590,7 +593,7 @@ function createModuleLoaderCore(
         );
       }
       if (resolved.kind === 'esm') {
-        return loadDefaultEsm(resolved);
+        return loadDefaultEsm(resolved, parent);
       }
       return executeCjs(
         resolved,
@@ -615,7 +618,8 @@ function createModuleLoaderCore(
       // Drop the SECOND resolve+read+scope-walk: carry the already-resolved
       // module (perf #14). The id-only path stays for direct id callers
       // (cjs/interop), which never hold a ResolvedModule.
-      return deps.loadAsyncResolved(readResolvedById(id));
+      // As `import` resolves: ESM syntax detection on with or without `require(esm)`.
+      return deps.loadAsyncResolved(readResolvedById(id, true));
     },
     // Async load of an ALREADY-RESOLVED module — skips re-resolving (perf #14).
     // ESM job ownership below supplies deduplication and cycle handling.
@@ -633,13 +637,13 @@ function createModuleLoaderCore(
     },
   };
 
-  function readResolvedById(id: string): ResolvedModule {
+  function readResolvedById(id: string, esm = false): ResolvedModule {
     if (id.startsWith('node:')) {
       return { id, kind: 'builtin', source: '', packageRoot: null };
     }
     // Re-resolve via the id itself as both specifier and fromFile so the
     // absolute path matches.
-    return resolver.resolve(id, { fromFile: id, esm: false });
+    return resolver.resolve(id, { fromFile: id, esm });
   }
 
   function makeRequire(from: string, parent?: CjsModule): CjsRequire {

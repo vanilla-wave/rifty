@@ -7,7 +7,10 @@ export { installNoCoiChildWorker } from '../ipc/no-coi-child-worker.ts';
 export { installConsole } from '../repl/console.ts';
 // Node's error text pieces, for host-side Node-shaped modules (isolate guest, ADR-0557 §6).
 export { describeReceived } from './node-received.ts';
+// A host without an ES module loader declares its gap (isolate guest).
+export { declareNoEsmLoader } from './esm-loader.ts';
 export { inspect } from '../repl/inspect.ts';
+export { ZLIB_CODES, ZLIB_CONSTANTS } from '../builtins/zlib-constants.ts';
 export { format } from '../builtins/util.ts';
 export { setDefaultProcessOutputSink } from '../builtins/process-stdio-writer.ts';
 // The runtime's own first terminal signal: identity, so a host cannot be fooled

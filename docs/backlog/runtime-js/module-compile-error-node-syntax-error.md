@@ -35,6 +35,13 @@ Neighbour: `sync-uncaught-header-throw-site-source` owns the printed header. Fau
 `provenance-lie` at the module compile boundary. Compat ⚠️ `process.md`
 "Fatal error stderr bytes".
 
+2026-11-24 (PR #440 review round 1, isolate guest, `require` of a typeless `.js` compiled as CJS):
+a static `import` or `import.meta` is refused by rifty's own CJS parse before V8 —
+`ModuleLoadError: Failed to parse CJS source for <file>: 'import' and 'export' may appear only
+with 'sourceType: module' (1:0)` / `… Cannot use 'import.meta' outside a module (1:12)`; Node
+`SyntaxError: Cannot use import statement outside a module` / `Cannot use 'import.meta' outside a
+module` (pinned, `packages/isolate-host/tests/require-esm.test.ts`).
+
 ## Question
 
 Can rifty throw V8's own `SyntaxError` (V8's message, e.g. `Unexpected token ';'`)

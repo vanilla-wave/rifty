@@ -13,3 +13,10 @@ The loader does not handle the import-attributes syntax `import x from './x.json
 Next (when a consumer needs it): parse the `with`/`assert` attribute clause in the acorn ESM rewriter and honor `type: 'json'` (validate against the resolved kind, reject mismatches per Node). Add a parity case once a real package imports JSON via attributes. Until then, plain JSON import works without the clause.
 ## Reversibility
 Reversible — additive parse + validation in the ESM rewriter, no cross-package API, no dep. Gate: a package that uses the attribute syntax. ADR-0068's `with { type: 'file' }` path is precedent for attribute handling.
+
+## Probe 2026-11-24 (PR #440 review round 2)
+
+`import('./d.json')` with no attribute (`d.json` = `{"a":1}`): Node v24.16.0 rejects
+`ERR_IMPORT_ATTRIBUTE_MISSING` `Module "file:///…/d.json" needs an import attribute of "type: json"`;
+rifty (`createModuleLoader().import`, node env) resolves `{ default: { a: 1 }, a: 1 }` — loads, and
+with a named export Node's JSON module never has.

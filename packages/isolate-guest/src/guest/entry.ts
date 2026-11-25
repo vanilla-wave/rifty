@@ -16,6 +16,7 @@ import {
 } from '@riftydev/runtime-js/builtins/process';
 import { installTimerGlobals } from '@riftydev/runtime-js/builtins/timers';
 import {
+  declareNoEsmLoader,
   fatalReportText,
   handleRealmUncaughtError,
   handleRealmUnhandledRejection,
@@ -28,6 +29,8 @@ import { syncMirror } from '@riftydev/vfs';
 import { type MemoryFsSync, installMemoryFs } from '@riftydev/vfs/internal';
 import { GUEST_DIRS, UNCOPYABLE_REJECTION } from '../contract.ts';
 import { FsSnapshotError, type SnapshotOptions, restoreFs, snapshotFs } from '../snapshot.ts';
+import { type PortGlobals, createChildProcess, createWorkerThreads } from './ceiling-threads.ts';
+import { createZlib } from './ceiling-zlib.ts';
 import type { Base } from './egress-gaps.ts';
 import { createHttp } from './egress-http.ts';
 import { createNet } from './egress-net.ts';
@@ -43,6 +46,14 @@ import {
 } from './web-shim.ts';
 
 bindNotImplemented(NotImplementedError);
+// No ES module loader here (it needs `URL`, a ceiling): every ES module load throws this
+// gap, and `require` is Node's with `--no-require-module` until one exists.
+const esmGap = (): NotImplementedError =>
+  new NotImplementedError(
+    'isolate-host.esm',
+    'ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568',
+  );
+declareNoEsmLoader(esmGap);
 
 const CWD = '/workspace';
 // The realm's FS exists from load, so a restore before `run` is the tree `run` sees (ADR-0567 §6).
@@ -176,12 +187,18 @@ function egressModule(name: (typeof EGRESS_MODULES)[number]): Record<string, unk
   }
   return egress[name];
 }
-/** rifty builds these on browser primitives this host lacks (CompressionStream, Workers + SAB). */
-const HOST_CEILING_MODULES = {
-  zlib: 'needs web CompressionStream, absent in the rifty isolate host',
-  child_process: 'no child processes in the rifty isolate host',
-  worker_threads: 'no Workers in the rifty isolate host',
+/**
+ * Node-shaped, the host's missing compression engine, processes and workers a
+ * named gap at use (ADR-0557 §6, 2026-11-24). Built on first `require`, once per realm.
+ */
+const HOST_GAP_MODULES = {
+  zlib: createZlib,
+  child_process: createChildProcess,
+  worker_threads: () => createWorkerThreads(portGlobals),
 } as const;
+const hostGap: Partial<Record<keyof typeof HOST_GAP_MODULES, Record<string, unknown>>> = {};
+/** The guest's own `MessagePort`/`MessageChannel`/`BroadcastChannel`, taken before guest code. */
+let portGlobals: PortGlobals;
 
 /**
  * The run's status, as this realm's runtime reports it (ADR-0557 §6).
@@ -329,32 +346,14 @@ function run(source: string): Promise<number> {
 
 /**
  * `node <path> [args]` (ADR-0568): rifty's program entry over this realm's
- * FS. An ES module entry is a declared gap: rifty's ESM loader needs `URL`,
- * a ceiling global here.
+ * FS. An ES module entry throws the declared gap (`declareNoEsmLoader`).
  */
 function runFile(path: string, args: readonly string[]): Promise<number> {
   return runToExit(() => {
     const entryPath = resolvePosix(CWD, path);
     riftyProcess.argv = [riftyProcess.execPath, entryPath, ...args];
-    if (isEsmEntry(entryPath)) throw esmGap();
     return runNodeEntry({ vfs: syncMirror(), entryPath, cwd: CWD });
   });
-}
-
-const esmGap = (): NotImplementedError =>
-  new NotImplementedError(
-    'isolate-host.esm',
-    'ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568',
-  );
-
-/** The entry resolves as an ES module (`.mjs`, `"type": "module"`). A miss is the loader's own error. */
-function isEsmEntry(entryPath: string): boolean {
-  try {
-    const loader = createModuleLoader(syncMirror(), { cwd: CWD });
-    return loader.resolver.resolve(entryPath, { fromFile: entryPath, esm: true }).kind === 'esm';
-  } catch {
-    return false;
-  }
 }
 
 /** POSIX `path.resolve(base, p)` for an absolute `base`. */
@@ -392,12 +391,18 @@ function setUp(): void {
     else if (!handleRealmUncaughtError(error)) fatal(error);
   });
   for (const name of EGRESS_MODULES) registerBuiltin(name, () => egressModule(name));
-  for (const [name, hint] of Object.entries(HOST_CEILING_MODULES)) {
+  for (const name of Object.keys(HOST_GAP_MODULES) as (keyof typeof HOST_GAP_MODULES)[])
     registerBuiltin(name, () => {
-      throw new NotImplementedError(`isolate-host.${name}`, `${hint}, ADR-0557`);
+      hostGap[name] ??= HOST_GAP_MODULES[name]();
+      return hostGap[name];
     });
-  }
   installCeilingGlobals();
+  const g = globalThis as unknown as PortGlobals;
+  portGlobals = {
+    MessagePort: g.MessagePort,
+    MessageChannel: g.MessageChannel,
+    BroadcastChannel: g.BroadcastChannel,
+  };
   setProcessCwd(CWD);
   nativeExit = riftyProcess.exit.bind(riftyProcess) as () => void;
 }

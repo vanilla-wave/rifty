@@ -17,6 +17,7 @@ import {
   createGlobalWriteKeyCheck,
   globalWriteKeyMayBeFunction,
   isComputedMember,
+  isEvalIdentifierCall,
   literalString,
   staticPropertyKeyName,
   staticPropertyName,
@@ -154,6 +155,8 @@ interface FunctionRewriteCtx {
   hasDerivedHostFunctionConstructor: boolean;
   hasRoutedFunctionReference: boolean;
   hasFunctionEvalText: boolean;
+  hasCalledGlobalRead: boolean;
+  hasEvalCall: boolean;
 }
 
 // TODO(backlog: runtime-js/function-constructor-exhaustive-metaprogramming-ceiling):
@@ -261,6 +264,8 @@ function rewriteCjsFunctionConstructorReferences(
     hasDerivedHostFunctionConstructor: false,
     hasRoutedFunctionReference: false,
     hasFunctionEvalText: false,
+    hasCalledGlobalRead: false,
+    hasEvalCall: false,
   };
   walkFunctionReferences(program as unknown as AnyNodeShape, ctx);
   if (ctx.hasDerivedHostFunctionConstructor) {
@@ -271,11 +276,12 @@ function rewriteCjsFunctionConstructorReferences(
   }
   if (
     ctx.hasFunctionEvalText ||
-    (ctx.hasWithDynamicFunctionScope && ctx.hasRoutedFunctionReference)
+    (ctx.hasWithDynamicFunctionScope && ctx.hasRoutedFunctionReference) ||
+    (ctx.hasCalledGlobalRead && (ctx.hasWithDynamicFunctionScope || ctx.hasEvalCall))
   ) {
     throw new NotImplementedError(
       'module-loader.cjs-dynamic-function-scope',
-      `CJS module ${id} contains literal eval Function/import text or combines routed Function with with dynamic scope; rifty cannot statically preserve Node's dynamic binding semantics, so this module is an explicit ceiling`,
+      `CJS module ${id} contains literal eval Function/import text or combines routed Function or a called computed global read with with/eval dynamic scope; rifty cannot statically preserve Node's dynamic binding semantics, so this module is an explicit ceiling`,
     );
   }
   if (ctx.hasGlobalFunctionWrite) {
@@ -713,6 +719,7 @@ function walkFunctionReferences(node: unknown, ctx: FunctionRewriteCtx): void {
         isShadowed(ctx, 'eval'),
       );
       if (directEvalImportEdit !== null) ctx.edits.push(directEvalImportEdit);
+      if (isEvalIdentifierCall(n)) ctx.hasEvalCall = true;
       if (expressionMayBeGlobalEval(callee, ctx)) {
         ctx.hasDynamicFunctionScope = true;
         ctx.hasFunctionEvalText =
@@ -1572,12 +1579,29 @@ function isReflectDerivedFunctionConstructorCall(
 function calleeMayBeHostFunction(node: unknown, ctx: FunctionRewriteCtx): boolean {
   if (!node || typeof node !== 'object') return false;
   const n = node as AnyNodeShape;
+  if (isCalledGlobalRead(n, ctx)) return calledGlobalReadKeyCheck(n, ctx);
   if (expressionMayBeHostFunction(n, ctx)) return true;
   if (n.type !== 'MemberExpression') return false;
-  const member = n as unknown as { object?: unknown; property?: AnyNodeShape };
-  if (!member.object || !expressionMayBeHostFunction(member.object, ctx)) return false;
   const propertyName = staticPropertyName(n);
-  return propertyName === 'call' || propertyName === 'apply' || propertyName === 'bind';
+  if (propertyName !== 'call' && propertyName !== 'apply' && propertyName !== 'bind') return false;
+  const object = (n as unknown as { object?: AnyNodeShape }).object;
+  if (object && isCalledGlobalRead(object, ctx)) return calledGlobalReadKeyCheck(object, ctx);
+  return Boolean(object) && expressionMayBeHostFunction(object, ctx);
+}
+
+// Called/constructed `G[k]` (also via call/apply/bind): the key is checked at the read
+// (ADR-0444 helper), so a runtime 'Function' throws there. `G?.[k]` keeps the load ceiling.
+function isCalledGlobalRead(node: AnyNodeShape, ctx: FunctionRewriteCtx): boolean {
+  return (
+    node.type === 'MemberExpression' &&
+    !(node as unknown as { optional?: boolean }).optional &&
+    isGlobalFunctionUnknownReadMember(node, ctx)
+  );
+}
+
+function calledGlobalReadKeyCheck(node: AnyNodeShape, ctx: FunctionRewriteCtx): boolean {
+  ctx.hasCalledGlobalRead = true;
+  return globalWriteKeyMayBeFunction(node.property, ctx.globalKeyHelperName, ctx.edits);
 }
 
 function calleeMayBeDerivedHostFunction(node: unknown, ctx: FunctionRewriteCtx): boolean {
@@ -1781,7 +1805,7 @@ function compileCjsSource(
       routedConstructors.Function,
       createGlobalWriteKeyCheck(
         'module-loader.cjs-global-function-assignment',
-        `CJS module ${filename} writes the global Function property through a runtime key; rifty cannot emulate that without mutating the host constructor`,
+        `CJS module ${filename} writes, calls or constructs the global Function property through a runtime key; rifty cannot emulate that without mutating or handing out the host constructor`,
       ),
     ) as CjsFactory;
   } catch (error) {
