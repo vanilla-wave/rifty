@@ -16,7 +16,7 @@ export interface FdReadOptions {
 export function readPositionOf(raw: ReadPosition | undefined, length: number): number | null {
   if (raw === null || raw === undefined) return null;
   if (typeof raw === 'bigint') {
-    const max = 2n ** 63n - 1n - BigInt(length);
+    const max = 2n ** 63n - 1n - BigInt(length | 0);
     if (!(raw >= -1n && raw <= max)) throw outOfRange('position', `>= -1 && <= ${max}`, raw);
     if (raw === -1n) return null;
     return raw > BigInt(Number.MAX_SAFE_INTEGER) ? Number.MAX_SAFE_INTEGER : Number(raw);

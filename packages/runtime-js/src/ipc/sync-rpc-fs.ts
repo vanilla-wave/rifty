@@ -148,13 +148,12 @@ export class SyncRpcFsSync implements FsSync, ReadFileHeadSource {
   }
 
   /**
-   * ADR-0576. ≤ `FS_RPC_CHUNK`: one exchange. Longer: pieces bracketed by a
-   * stat; a changed mtime/size is a loud EIO, never a torn range.
+   * ADR-0576. ≤ `FS_RPC_CHUNK`: one exchange. Longer: one exchange per piece,
+   * each the file at its exchange (a concurrent write may land between them).
    */
   readFileRangeSync(path: string, position: number, length: number): Uint8Array {
     assertReadRange(position, length);
     if (length <= FS_RPC_CHUNK) return this.readPiece(path, position, length);
-    const before = this.statSync(path);
     const pieces: Uint8Array[] = [];
     let got = 0;
     while (got < length) {
@@ -163,14 +162,6 @@ export class SyncRpcFsSync implements FsSync, ReadFileHeadSource {
       pieces.push(piece);
       got += piece.length;
       if (piece.length < want) break;
-    }
-    const after = this.statSync(path);
-    if (after.mtime !== before.mtime || after.size !== before.size) {
-      throw new VfsError(
-        'EIO',
-        path,
-        `EIO: ${path} changed during a ${length}-byte range read over ${pieces.length} exchanges`,
-      );
     }
     const out = new Uint8Array(got);
     let at = 0;

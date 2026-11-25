@@ -1,6 +1,6 @@
 import { NotImplementedError } from '@riftydev/io';
 import { fsError } from './fs-errors.ts';
-import { checkedSliceBounds } from './fs-read-arguments.ts';
+import { checkedSliceBounds, readPositionOf } from './fs-read-arguments.ts';
 import { type StatOptions, Stats } from './fs-stats.ts';
 import { runNodeCallback } from './process-lifecycle-events.ts';
 import { publicNodeProcess } from './process-public.ts';
@@ -46,8 +46,7 @@ export function readStdin(
   const length = options.length ?? buffer.length - offset;
   checkedSliceBounds(buffer, offset, length);
   const source = assertInput('read');
-  if (options.position != null && options.position !== -1 && options.position !== -1n)
-    throw fsError('ESPIPE', undefined, 'read');
+  if (readPositionOf(options.position, length) !== null) throw fsError('ESPIPE', undefined, 'read');
   source.read(length, (error, bytes) => {
     if (error) {
       runNodeCallback(callback, error);

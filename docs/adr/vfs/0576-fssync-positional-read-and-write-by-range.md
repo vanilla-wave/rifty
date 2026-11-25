@@ -29,17 +29,18 @@ every implementation decide.
    - Path and errors as `readFileBytesSync`: `ENOENT`, `ENOTDIR`, `EISDIR`, `EIO`.
    - `position`, `length`: non-negative safe integers, else `TypeError`. fs.ts validates Node's
      argument shapes first: a bigint position past `MAX_SAFE_INTEGER` is past any EOF and goes as
-     `MAX_SAFE_INTEGER`; a zero length returns 0 without a store call, as Node does.
+     `MAX_SAFE_INTEGER`; after the position is validated, a zero length returns 0 without touching
+     the fd or the store, as Node does.
    - Returns exactly bytes `[position, min(size, position + length))` of the current content. Short
      only at EOF; empty at or past EOF. No mid-file short read.
    - The result is read-only and valid until the next mutation of the store through any surface (a
      view of the store is allowed). A caller keeping it copies. A wrapper guarding its store against
      aliasing copies the range only.
-   - A range sees one state of the file: whole writes only, never a torn range. One store call is
-     one state. Over sync-RPC one exchange (≤ `FS_RPC_CHUNK`) is one store call; a longer range is
-     several exchanges, bracketed by a `statSync` before and after: a changed `mtime` or `size`
-     (both stores bump `mtime` strictly on every write) is a loud `EIO`, never mixed bytes. Residual:
-     a `utimes` restoring the old `mtime` between the brackets; declared.
+   - One store call sees one state of the file (whole writes only). Over sync-RPC one exchange
+     (≤ `FS_RPC_CHUNK`) is one store call; a longer range is one exchange per piece, each the file at
+     its exchange: a write landing between them shows in the later pieces, as a read racing a writer
+     may in Node. No error, no consistency check (`main` behaved the same; an `mtime` bracket was
+     both a false `EIO` on an append outside the range and blind to a same-size rename-over).
    - Required. An implementation that cannot serve a range throws `NotImplementedError` naming
      itself; none does today.
 2. **Write** (4c adds it, with this signature; no other `FsSync`/`Vfs` change) —
@@ -56,7 +57,11 @@ every implementation decide.
    - `position > size`: the gap is zero-filled (`pwrite`); size becomes
      `max(size, position + data.length)`; never truncates (truncate stays `writeFileSync`).
    - mtime/ctime as `writeFileSync` (strictly monotonic mtime). The store copies `data`.
-   - Wire (a binary range write, sliced at `FS_RPC_CHUNK`) and the OPFS write-through shape are 4c's.
+   - One call is one store call, as a Linux `write(2)` to a regular file is atomic against other
+     writers. Over sync-RPC a write longer than one exchange (an append included) is staged on the
+     owner per caller ring and applied as one `writeFileRangeSync` at its last piece; caller death
+     mid-staging drops it (nothing written). Wire (a binary range write) and the OPFS write-through
+     shape are 4c's.
    - Not added in 4b: no caller, and every implementation would carry a throwing stub.
 3. **RPC** — the ADR-0366 `fs.readChunk` (binary offset + length ≤ `FS_RPC_CHUNK` + path) is the range
    RPC: the owner answers it with `getVfs().readFileRangeSync`. Wire and
@@ -73,7 +78,7 @@ every implementation decide.
 |---|---|
 | `MemoryFsSync` | `subarray` of the store's bytes |
 | `OpfsFsSync` | `subarray` of the authoritative content cache, not a disk read: the disk lags the cache until the write-through drains |
-| `SyncRpcFsSync` | `fs.readChunk` per ≤ `FS_RPC_CHUNK` piece; a short piece is EOF; an oversized piece is loud; several pieces bracketed by `statSync` (§1) |
+| `SyncRpcFsSync` | `fs.readChunk` per ≤ `FS_RPC_CHUNK` piece; a short piece is EOF; an oversized piece is loud |
 | `ProjectTerminalFsSync` | guest → owner path, forwarded to its inner `FsSync` |
 | `OwnerVfsAuthorityImpl` | inner range, `.slice()` of the range only |
 | `createNoCoiProjectFs` | forwarded, `.slice()` of the range only |
@@ -82,7 +87,7 @@ every implementation decide.
 | `MemoryVfs` | `openReadable` windows a view of the store, unchanged |
 | `OpfsVfs` | `openReadable` reads `File.slice` windows from disk, its `readFile` authority, unchanged |
 | `ReplicaVfs` | `openReadable` windows its `readFile`: the digest covers the whole record, a range cannot be verified alone; unchanged, not on the fd path |
-| `SyncMirrorVfs` | `openReadable` reads only its window, by one `readFileRangeSync` of the mirror at open (the snapshot it has today) |
+| `SyncMirrorVfs` | `openReadable` reads each pull's chunk by `readFileRangeSync` of the mirror, as Node's fd stream (was one whole-file snapshot at open); `ENOENT`/`EISDIR` at open; each chunk copied, peak one chunk |
 
 ## Consequences
 
@@ -93,6 +98,8 @@ every implementation decide.
   (35 s timeout, loud throw); the SDK's in-realm `node` has no transport. No partial bytes reach the
   caller's buffer: fs.ts copies after the whole range returned.
 - `readFileBytesSync` over sync-RPC keeps only its size check across pieces (ADR-0365); not changed here.
-- Unlink while open stays ⚠️: rifty has no open-file handle; the next read is `ENOENT`.
-- Every `FsSync` fake in tests gains the method.
+- Unlink, rename-away or rename-over while open stays ⚠️: rifty has no open-file handle; the next
+  read is `ENOENT` or sees the new file.
+- A breaking change of the public `FsSync` interface: every implementation, in tests and outside
+  rifty, gains the method.
 - 4c adds `writeFileRangeSync` as above; base64 write inflation stays `perf/fs-rpc-chunk-perf`.

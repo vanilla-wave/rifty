@@ -87,7 +87,7 @@ challenge: 2026-11-25 — clear (premise in goal §Challenge)
 | SAB sync-RPC oversize reply × range read | the ring's in-band error reply reaches the caller as an error; no partial bytes are copied into its buffer | fault test with a range over the ring's reply size | → I10 |
 | SAB sync-RPC responder death mid-exchange × range read | as the ring's model gives it (`docs/process/rules/fault-classes.md`, SAB sync-RPC row): a loud permanent wedge, the caller blocked until owner teardown; production has no timeout (`packages/kernel/src/ipc/sync-client.ts:21`). This unit must not change it; no partial bytes reach the buffer | fault test killing the responder in `HANDLING`, asserting the wedge diagnostic | → I10 |
 | second caller × one ring | the second claim fails loudly, as today; a range read takes one exchange | fault test with two callers on one ring | → I10 |
-| concurrent write (second fd, second tab) × positional read | a range read sees whole writes only, as through the cache today; never a torn range | fault test with an interleaved writer | → I10 |
+| concurrent write (second fd, second tab) × positional read | a range of one exchange (≤ 256 KiB) or one store call sees whole writes only; a longer range over sync-RPC is one snapshot per exchange, a write between them shows in later pieces, no error — as a read racing a writer in Node (`main` tore the same way; reviewed 2026-11-25) | fault test with an interleaved writer | → I10 |
 | file truncated or unlinked between calls × positional read | truncate gives a short or 0 read, as in Node; unlink while open is a declared ⚠️ (`fs-read-stream-reads-snapshot-not-open-file`: rifty has no open-file handle) | parity case rows + compat row | → I10 |
 
 ## Out of scope

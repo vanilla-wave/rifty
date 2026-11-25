@@ -177,7 +177,27 @@ describe('readSync(fd) over sync-RPC: a concurrent writer', () => {
     closeSync(fd);
   });
 
-  it('a write between the exchanges of one long range is a loud EIO; no bytes reach the buffer', () => {
+  it('an append between the exchanges of one long range returns the range unchanged (as main and Node)', () => {
+    const size = 3 * FS_RPC_CHUNK;
+    const original = pattern(size);
+    const owner = ownerWith(original);
+    setSyncMirror(
+      rpcWithHook(owner, (count) => {
+        if (count === 1) {
+          const longer = new Uint8Array(size + 10);
+          longer.set(original);
+          owner.writeFileSync('/data/f.bin', longer);
+        }
+      }),
+    );
+    const fd = openSync('/data/f.bin', 'r');
+    const buffer = new Uint8Array(size);
+    expect(readSync(fd, buffer, 0, size, 0)).toBe(size);
+    expect(Buffer.compare(Buffer.from(buffer), Buffer.from(original))).toBe(0);
+    closeSync(fd);
+  });
+
+  it("a rewrite between the exchanges of one long range: each piece is its exchange's snapshot, no error", () => {
     const size = 3 * FS_RPC_CHUNK;
     const owner = ownerWith(new Uint8Array(size).fill(1));
     setSyncMirror(
@@ -186,11 +206,10 @@ describe('readSync(fd) over sync-RPC: a concurrent writer', () => {
       }),
     );
     const fd = openSync('/data/f.bin', 'r');
-    const buffer = new Uint8Array(size).fill(0x2e);
-    expect(() => readSync(fd, buffer, 0, size, 0)).toThrow(
-      expect.objectContaining({ code: 'EIO', syscall: 'read' }),
-    );
-    expect(buffer.every((byte) => byte === 0x2e)).toBe(true);
+    const buffer = new Uint8Array(size);
+    expect(readSync(fd, buffer, 0, size, 0)).toBe(size);
+    expect(buffer.subarray(0, FS_RPC_CHUNK).every((byte) => byte === 1)).toBe(true);
+    expect(buffer.subarray(FS_RPC_CHUNK).every((byte) => byte === 2)).toBe(true);
     closeSync(fd);
   });
 });

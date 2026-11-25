@@ -66,9 +66,9 @@ export const fsMatrix = {
       '`open`/`close`/`read`/`write`/`fstat`/`ftruncate`; sequential and positional IO; `read`/`readSync` move only their range on every host, `bigint` positions (ADR-0576, `fs/read-positional`)',
     ],
     [
-      'fd reads after `unlink` / rename-over; a long read racing a writer',
+      'fd reads after `unlink` / rename',
       '⚠️',
-      'No open-file handle: a read through an fd after its file is unlinked or renamed over is `ENOENT` or sees the new file (Node keeps the inode). Over sync-RPC one read longer than 256 KiB racing a write to the same file throws `EIO` instead of mixing bytes (ADR-0576).',
+      'No open-file handle: a read through an fd after its file is unlinked or renamed away is `ENOENT`, after a rename-over it sees the new file (Node keeps reading the inode; ADR-0576).',
     ],
     [
       '`fs` on stdio descriptors 0–2',

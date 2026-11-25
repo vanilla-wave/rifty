@@ -923,10 +923,7 @@ export function readSync(
   length?: number,
   position?: ReadPosition,
 ): number {
-  const record = fd === 0 ? null : getFd(fd, 'read');
-  if (record && !record.readable) throw fsError('EBADF', undefined, 'read');
   if (!(buffer instanceof Uint8Array)) throw new TypeError('buffer must be a Uint8Array');
-
   const offset =
     typeof offsetOrOptions === 'number' ? offsetOrOptions : (offsetOrOptions.offset ?? 0);
   const count =
@@ -935,10 +932,15 @@ export function readSync(
       : (offsetOrOptions.length ?? buffer.byteLength - offset);
   const rawPos =
     typeof offsetOrOptions === 'number' ? (position ?? null) : (offsetOrOptions.position ?? null);
-  checkedSliceBounds(buffer, offset, count);
-  // Node returns 0 for a zero length before the read syscall (a directory fd included).
-  if (count === 0) return 0;
+  // Node's order: offset, position, then a zero length returns 0 before the fd
+  // is touched (a write-only, closed or directory fd included), then bounds.
+  assertNonNegativeInteger(offset, 'offset');
+  assertNonNegativeInteger(count, 'length');
   const pos = readPositionOf(rawPos, count);
+  if (count === 0) return 0;
+  const record = fd === 0 ? null : getFd(fd, 'read');
+  if (record && !record.readable) throw fsError('EBADF', undefined, 'read');
+  checkedSliceBounds(buffer, offset, count);
 
   if (record === null) return readStdinSync(buffer, offset, count, pos);
   const start = pos ?? record.position;
@@ -1279,6 +1281,8 @@ export function read(
           ? positionOrCb
           : cb
   ) as ReadCallback;
+  // Node validates the position synchronously, before any callback (stdin too).
+  readPositionOf(options.position, options.length ?? buffer.byteLength - (options.offset ?? 0));
   if (fd === 0) {
     try {
       readStdin(buffer, options, cbFinal);

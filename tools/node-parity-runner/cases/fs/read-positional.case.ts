@@ -43,6 +43,12 @@ const c: ParityCase = {
     show('number -2', (b) => fs.readSync(fd, b, 0, 4, -2));
     show('number 1.5', (b) => fs.readSync(fd, b, 0, 4, 1.5));
     show('string position', (b) => fs.readSync(fd, b, 0, 4, '1'));
+    // A zero length returns 0 only after the position is validated.
+    show('zero length -5', (b) => fs.readSync(fd, b, 0, 0, -5));
+    show('zero length string', (b) => fs.readSync(fd, b, 0, 0, 'x'));
+    show('zero length 1.5', (b) => fs.readSync(fd, b, 0, 0, 1.5));
+    show('zero length options string', (b) => fs.readSync(fd, b, { length: 0, position: 'x' }));
+    show('zero length offset past buffer', (b) => fs.readSync(fd, b, 9, 0, 0));
     fs.closeSync(fd);
 
     // bigint -1n reads from the fd position and advances it.
@@ -85,6 +91,31 @@ const c: ParityCase = {
     show('dir zero', (b) => fs.readSync(dfd, b, 0, 0, null));
     show('dir read', (b) => fs.readSync(dfd, b, 0, 4, null));
     fs.closeSync(dfd);
+
+    // A zero length reaches no fd: a write-only or a closed fd reads 0.
+    const wo = fs.openSync('wo.txt', 'w');
+    show('write-only zero', (b) => fs.readSync(wo, b, 0, 0, 0));
+    show('write-only read', (b) => fs.readSync(wo, b, 0, 2, 0));
+    fs.closeSync(wo);
+    show('closed fd zero', (b) => fs.readSync(wo, b, 0, 0, 0));
+
+    // fs.read validates the position synchronously, stdin included.
+    for (const [label, target, position] of [['read -5', 'p.txt', -5], ['read string', 'p.txt', 'x'], ['read -2n', 'p.txt', -2n]]) {
+      const tfd = fs.openSync(target, 'r');
+      try {
+        fs.read(tfd, Buffer.alloc(2), 0, 2, position, () => console.log(label, 'callback'));
+        console.log(label, 'no sync throw');
+      } catch (e) {
+        console.log(label, 'sync throw', e.code);
+      }
+      fs.closeSync(tfd);
+    }
+    try {
+      fs.read(0, Buffer.alloc(2), 0, 2, -2n, () => console.log('stdin -2n callback'));
+      console.log('stdin -2n no sync throw');
+    } catch (e) {
+      console.log('stdin -2n sync throw', e.code);
+    }
 
     // fs.read callbacks, explicit / null / bigint positions.
     const afd = fs.openSync('p.txt', 'r');

@@ -60,23 +60,16 @@ describe.each(backends)('%s readFileRangeSync (ADR-0576)', (_name, make) => {
     expect(fs.readFileRangeSync('/f.bin', 3, 0).byteLength).toBe(0);
   });
 
-  it('moves only the range: doubling the file leaves the per-call bytes unchanged', () => {
+  it('serves the range as a view of its authority: no whole-file copy', () => {
     const fs = make();
-    const perCall: number[] = [];
-    for (const size of [1 << 20, 2 << 20]) {
-      fs.writeFileSync('/big.bin', pattern(size));
-      let moved = 0;
-      let calls = 0;
-      for (let position = 0; ; position += 65536) {
-        const got = fs.readFileRangeSync('/big.bin', position, 65536);
-        moved += got.byteLength;
-        calls++;
-        if (got.byteLength === 0) break;
-      }
-      expect(moved).toBe(size);
-      perCall.push(moved / calls);
+    fs.writeFileSync('/big.bin', pattern(2 << 20));
+    const whole = fs.readFileBytesSync('/big.bin');
+    for (const position of [0, 65536, (2 << 20) - 10]) {
+      const got = fs.readFileRangeSync('/big.bin', position, 65536);
+      expect(got.buffer).toBe(whole.buffer);
+      expect(got.byteOffset).toBe(whole.byteOffset + position);
+      expect(got.byteLength).toBe(Math.min(65536, (2 << 20) - position));
     }
-    expect((perCall[1] ?? 0) / (perCall[0] ?? 1)).toBeLessThanOrEqual(1.1);
   });
 
   it('sees whole writes only: a later write replaces, an earlier result keeps its bytes', () => {
