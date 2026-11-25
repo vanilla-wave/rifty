@@ -1,0 +1,7 @@
+node v24.16.0
+{"bytes":0,"deflateMsPerCall":0.022,"inflateMsPerCall":0.0155}
+{"bytes":16384,"deflateMsPerCall":0.054,"inflateMsPerCall":0.021}
+{"bytes":1048576,"deflateMsPerCall":1.6666666666666667,"inflateMsPerCall":1}
+{"bytes":52428800,"error":"Array buffer allocation failed"}
+{"hostNativeDeflate16KiBMsPerCall":0.0274}
+{"bomb":{"compressedBytes":521832,"guestMemoryLimitMb":64,"outcome":"guest error: Array buffer allocation failed","hostRssGrowthMb":967}}

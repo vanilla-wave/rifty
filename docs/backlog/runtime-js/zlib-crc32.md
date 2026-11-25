@@ -3,12 +3,15 @@ area: runtime-js
 status: draft
 title: zlib.crc32 computes Node's CRC-32 on every host
 created: 2026-11-24
-why: `zlib.crc32(data[, value])` is pure computation with no engine; rifty throws `NotImplementedError('zlib.crc32')` on browser hosts and `isolate-host.zlib.crc32` in the isolate guest
+why: `zlib.crc32(data[, value])` needs only the engine's CRC, no stream; rifty throws `NotImplementedError('zlib.crc32')` on browser hosts and `isolate-host.zlib.crc32` in the isolate guest
+epic: node-zlib-on-every-host
 sources: [docs/backlog/runtime-js/zlib-web-compression-subset.md, "PR #438 (isolate ceiling modules)"]
 code: [packages/runtime-js/src/builtins/zlib.ts, packages/isolate-guest/src/guest/ceiling-zlib.ts]
 ---
 
 ## Context
+
+Goal `node-zlib-on-every-host` (map, 2026-11-24): absorbed by unit 3 (`runtime-js/zlib-node-lib-port`) — `crc32` is Node's `lib/zlib.js` `crc32` over the engine's `binding.crc32` (ADR-0573), not a separate pure-JS function; this item closes when unit 3 lands.
 
 Candidate split from `runtime-js/zlib-web-compression-subset` ("`crc32`: pure-sync, honestly
 implementable (~15 lines) — parked until a consumer reads it") by the manager's decision for
