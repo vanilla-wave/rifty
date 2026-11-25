@@ -87,7 +87,8 @@ the user's words»).
    ~400 B per entry); a template that does not fit the run's isolate is the named result of a state
    the run cannot restore — `stateRefused: ERR_ISOLATE_HOST_SANDBOX_RESTORE`, `exitCode: null`,
    before any guest code (ADR-0568 §3). By this rule the defaults hold for the four-library
-   artifact and for T95 even at a full difference (2 × 64 + 16 + ~90–95 ≈ 234–239 of 256 MiB); the
+   artifact and for T95 even at a full difference (2 × 64 + 16 + ~86–100 — four-library ~83 MiB of
+   bytes + 8 001 × 400 B, T95 ~91 MiB + 23 654 × 400 B — ≈ 230–244 of 256 MiB); the
    README states the rule and the carrier measures the floor.
 7. **Changed paths.** `exec`'s result adds `changes: { path, type, size }[]` (created, changed,
    deleted), from the difference before and after the run — O(the difference).
@@ -222,7 +223,10 @@ the user's words»).
   one per path component it names, plus, for `list(dir)`, the template children of `dir` only —
   and never a walk of the template; an idle sandbox holds no per-template structure (a unit test:
   its own entries are exactly its difference, its deleted set exactly its deletions, the index the
-  process's one). Measured on landed code and published in the README for T1, T95 and the
+  process's one); a run holds, in the consumer, only the encoded difference going out and the one
+  coming back with its decode — never a copy of the template's buffer or index (a unit test over the
+  run's consumer-side allocations, and the README's peak per run over T1 and T95 differing by under
+  1 MiB). Measured on landed code and published in the README for T1, T95 and the
   four-library artifact (`scripts/measure.mjs`, the cost table's method): host-op medians, idle
   memory per sandbox, the consumer's peak memory per run, a warm `exec`'s latency and isolate
   memory. An empty sandbox over T95 and over the four-library artifact runs with the default

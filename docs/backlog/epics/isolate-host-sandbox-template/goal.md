@@ -96,7 +96,10 @@ consumer encode/decode per exec, isolate floor 215 MiB, state 96 MB, every host 
   one per path component it names, plus, for `list(dir)`, the template children of `dir` only —
   and never a walk of the template; an idle sandbox holds no per-template structure (a unit test:
   its own entries are exactly its difference, its deleted set exactly its deletions, the index the
-  process's one). Measured on landed code and published in the README for T1, T95 and the
+  process's one); a run holds, in the consumer, only the encoded difference going out and the one
+  coming back with its decode — never a copy of the template's buffer or index (a unit test over the
+  run's consumer-side allocations, and the README's peak per run over T1 and T95 differing by under
+  1 MiB). Measured on landed code and published in the README for T1, T95 and the
   four-library artifact (`scripts/measure.mjs`, the cost table's method): host-op medians, idle
   memory per sandbox, the consumer's peak memory per run, a warm `exec`'s latency and isolate
   memory. An empty sandbox over T95 and over the four-library artifact runs with the default
@@ -146,7 +149,7 @@ S6 amendments of ADR-0567/0568 unnamed → ADR-0572 §Amends, the isolate rule a
 S7 I3/I5 uncheckable → oracle named (map fog), T1/T95/four-library and tolerances;
 S8 map order → I8's loud gap with intake (item 2), cache with the frame (item 3);
 S9 probe gaps → README «Not probed» extended.
-Fresh final check after these fixes (2026-11-25, new reviewer): 9 findings — scenario 7 had narrowed «~95 MB» to the four-library template without the user (restored), I5 tolerances not checkable (restated: deterministic T1/T95, structural unit tests, published measurement), a silent `exec` between map items 2 and 4 (item 2 refuses it by name), stale section refs, #437's base, ADR §6 arithmetic, ADR-0567 §4 wording, a duplicate owner line, the prebuild list — all fixed.
+Fresh final check after these fixes (2026-11-25, new reviewer): 9 findings, recheck 2 more (I5 had no checkable row for the consumer's peak per run — added; ADR §6 T95 arithmetic — corrected) — scenario 7 had narrowed «~95 MB» to the four-library template without the user (restored), I5 tolerances not checkable (restated: deterministic T1/T95, structural unit tests, published measurement), a silent `exec` between map items 2 and 4 (item 2 refuses it by name), stale section refs, #437's base, ADR §6 arithmetic, ADR-0567 §4 wording, a duplicate owner line, the prebuild list — all fixed.
 
 ## Decisions
 
