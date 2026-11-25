@@ -9,6 +9,7 @@
  */
 import type { Vfs, VfsDirent, VfsStat } from '@riftydev/vfs';
 import { normalizePath, syncMirror } from '@riftydev/vfs';
+import { assertReadWindow } from '@riftydev/vfs/internal';
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -55,18 +56,25 @@ export class SyncMirrorVfs implements Vfs {
     path: string,
     opts?: { chunkSize?: number; start?: number; end?: number },
   ): Promise<ReadableStream<Uint8Array>> {
-    const data = syncMirror().readFileBytesSync(normalizePath(path));
+    assertReadWindow(opts);
     const start = opts?.start ?? 0;
-    const end = Math.min(opts?.end ?? data.byteLength, data.byteLength);
+    const end = Math.min(opts?.end ?? Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER);
+    // ADR-0576: the window only, one snapshot at open (main's semantics), held as
+    // the layer below returns it — no copy of our own.
+    const data = syncMirror().readFileRangeSync(
+      normalizePath(path),
+      start,
+      Math.max(0, end - start),
+    );
     const chunkSize = opts?.chunkSize ?? 64 * 1024;
-    let offset = start;
+    let offset = 0;
     return new ReadableStream<Uint8Array>({
       pull(controller) {
-        if (offset >= end) {
+        if (offset >= data.byteLength) {
           controller.close();
           return;
         }
-        const next = Math.min(offset + chunkSize, end);
+        const next = Math.min(offset + chunkSize, data.byteLength);
         controller.enqueue(data.subarray(offset, next));
         offset = next;
       },

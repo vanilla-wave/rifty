@@ -202,6 +202,10 @@ class OwnerVfsAuthorityImpl implements OwnerVfsAuthority {
     return this.#fs.readFileBytesSync(path).slice();
   }
 
+  readFileRangeSync(path: string, position: number, length: number): Uint8Array {
+    return this.#fs.readFileRangeSync(path, position, length).slice();
+  }
+
   readdirSync(path: string): ReturnType<FsSync['readdirSync']> {
     return this.#fs.readdirSync(path).map((entry) => ({ ...entry }));
   }

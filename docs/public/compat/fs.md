@@ -23,7 +23,8 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat / exact-vers
 | Callback `readFile` / `writeFile` | ✅ | Node-style error-first callbacks |
 | Callback `fs.appendFile` / `fs.rm` | ❌ | `undefined`: a call is `TypeError: fs.appendFile is not a function` (measured 2026-11-23 in the isolate host); the sync and `fs.promises` forms exist. `backlog/runtime-js/fs-callback-append-file-rm-missing` |
 | `fs.promises` file ops | ✅ | `readFile`, `writeFile`, `appendFile`, `readdir`, `copyFile`, `rename`, `rm`, `access` |
-| fd table | ✅ | `open`/`close`/`read`/`write`/`fstat`/`ftruncate`; sequential and positional IO |
+| fd table | ✅ | `open`/`close`/`read`/`write`/`fstat`/`ftruncate`; sequential and positional IO; `read`/`readSync` move only their range on every host, `bigint` positions (ADR-0576, `fs/read-positional`) |
+| fd reads after `unlink` / rename | ⚠️ | No open-file handle: a read through an fd after its file is unlinked or renamed away is `ENOENT`, after a rename-over it sees the new file (Node keeps reading the inode; ADR-0576). |
 | `fs` on stdio descriptors 0–2 | ⚠️ | COI: `read`/`readSync`/`readFileSync(0)`, `fstatSync(0)` (FIFO/character mode), `closeSync(0)` and `write`/`writeSync(1\|2)` use raw descriptors; writes bypass replaced `process.stdout.write`. Pipe positions throw `ESPIPE`. Kernel pull stdin (ADR-0542); `tests/browser-unit/fs-stdio-fds.spec.ts`, `tests/browser-unit/file-stdout.spec.ts`. |
 | No-COI synchronous stdin | ❌ | `readSync`/`readFileSync(0)` throw `NotImplementedError('fs.readSync.stdin')`: no-COI children receive push-MessagePort stdin, without a pull pipe. Async `fs.read(0)` and `process.stdin` work. |
 | `truncate` / zero fill | ✅ | Sync and promises paths |

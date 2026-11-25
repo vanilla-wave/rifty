@@ -1,6 +1,6 @@
 import { NotImplementedError } from '@riftydev/io';
 import { fsError } from './fs-errors.ts';
-import { checkedSliceBounds } from './fs-read-arguments.ts';
+import { checkedSliceBounds, readPositionOf } from './fs-read-arguments.ts';
 import { type StatOptions, Stats } from './fs-stats.ts';
 import { runNodeCallback } from './process-lifecycle-events.ts';
 import { publicNodeProcess } from './process-public.ts';
@@ -39,15 +39,14 @@ export function readStdinSync(
 }
 export function readStdin(
   buffer: Uint8Array,
-  options: { offset?: number; length?: number; position?: number | null },
+  options: { offset?: number; length?: number; position?: number | bigint | null },
   callback: (error: NodeJS.ErrnoException | null, count?: number, buffer?: Uint8Array) => void,
 ): void {
   const offset = options.offset ?? 0;
   const length = options.length ?? buffer.length - offset;
   checkedSliceBounds(buffer, offset, length);
   const source = assertInput('read');
-  if (options.position != null && options.position !== -1)
-    throw fsError('ESPIPE', undefined, 'read');
+  if (readPositionOf(options.position, length) !== null) throw fsError('ESPIPE', undefined, 'read');
   source.read(length, (error, bytes) => {
     if (error) {
       runNodeCallback(callback, error);

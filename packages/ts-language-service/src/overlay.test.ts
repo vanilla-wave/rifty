@@ -111,6 +111,7 @@ describe('open-document overlay drives diagnostics without touching the VFS', ()
     const frozen: FsSync = {
       existsSync: (p) => real.existsSync(p),
       readFileBytesSync: (p) => real.readFileBytesSync(p),
+      readFileRangeSync: (p, position, length) => real.readFileRangeSync(p, position, length),
       writeFileSync: (p, d) => real.writeFileSync(p, d),
       readdirSync: (p) => real.readdirSync(p),
       mkdirSync: (p, o) => real.mkdirSync(p, o),

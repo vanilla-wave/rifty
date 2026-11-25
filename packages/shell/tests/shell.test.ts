@@ -474,6 +474,9 @@ describe('Shell — redirect write failure surfaces loudly', () => {
       readFileBytesSync: () => {
         throw new Error('no read');
       },
+      readFileRangeSync: () => {
+        throw new Error('no read');
+      },
       writeFileSync: () => {
         throw new Error('boom: backend refused write');
       },
@@ -590,6 +593,9 @@ describe('Shell — onChunk streaming writer', () => {
     const failing: FsSync = {
       existsSync: () => false,
       readFileBytesSync: () => {
+        throw new Error('no read');
+      },
+      readFileRangeSync: () => {
         throw new Error('no read');
       },
       writeFileSync: () => {
