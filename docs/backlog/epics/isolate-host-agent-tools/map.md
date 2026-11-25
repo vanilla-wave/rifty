@@ -13,10 +13,6 @@ killed-run decision.
   `list_files`, the changed-paths field) — owner: agent — settled when it lands. `exec`'s `signal`
   for `execute(args, signal)`: landed, PR #431 (`AbortError` as Node; the state after an abort is
   the killed-run rule).
-- «Ложный успех по коду выхода» (exit 0 where Node exits 1: GC-collected rejection, a rejection in an
-  `'exit'` listener, the guest's replaced intrinsics): fix the cases, or the `run_node` description
-  and the examples recommend `.catch(e => { console.error(e); process.exitCode = 1 })` and the host
-  checks the expected output file — owner: user — asked 2026-11-24 with the template forks.
 - The shared core package's name and layer (`tools/checks/arch-rules.cjs`; `@riftydev/agent` and the isolate-host adapter both import it) — owner: agent — `pnpm check:arch` at FIT.
 
 ## Out of scope

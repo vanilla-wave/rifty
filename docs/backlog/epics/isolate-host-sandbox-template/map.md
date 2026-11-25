@@ -13,26 +13,24 @@ hypothesis until the carrier hits it:
    goes to a worker once, as bytes; base64 inside a JSON line is +33 % and a 127 MB string.
 3. Template intake in the consumer: artifact → decoded template (gzip/br, ustar + PAX), named
    refusals, identity, one copy per process.
-4. Snapshot format v2 (ADR-0567 §3/§4): a layer over a bound template; v1 still read.
-5. The run's FS over the template (ADR-0572 §2) and the changed-paths list.
+4. The sandbox's difference on the consumer ↔ worker wire, deletions of template paths included
+   (writable mode); internal, never handed out (`snapshot()` over a template is the deferred
+   `distribution/isolate-host-sandbox-template-snapshot`).
+5. The run's FS over the template (ADR-0572 §2), writable and read-only (`EROFS`) modes, the
+   changed-paths list.
 6′. The end state taken where the guest's code cannot reach (absorbs
    `distribution/isolate-host-sandbox-capture-outside-guest-realm`): by construction under F1 (c);
    under (b) its own mechanism at PICKUP (ADR-0572 §8, option (b′) among the unit's candidates).
 6. Host ops and the cap over the difference only (absorbs
    `distribution/isolate-host-sandbox-write-cost-per-state`).
 7. Worker template cache: by identity, in the RSS ceiling, evicted with the worker.
-8. README cost table (~1 MB vs ~95 MB template), compat rows, compressed-budget note.
+8. README cost table (~1 MB vs ~95 MB template), compat rows (the deferred template snapshot ❌).
 
 ## Open questions
 
 - Mechanism: the guest's FS during a run (ADR-0572 §Alternatives: materialize / lazy template /
   worker-owned FS) — owner: user — it changes the recorded decisions «rifty целиком внутри
   isolate…», «Владелец ФС живёт в том же realm…» (ADR-0572 §Trust).
-- Template files: writable (copy-on-write, deletions in the format) or read-only (`EROFS`) — owner:
-  user — requirements §2 acceptance names deletions/changes, §Открытые вопросы leaves it open.
-- Mount point: `/node_modules` or `/workspace/node_modules`; the artifact's `payload/package.json`
-  and lock visible or not — owner: user — both resolve as Node (probe M); what the agent sees in its
-  cwd differs.
 - Guest-side cache of template stats/bytes during a run (pdf-lib's `require`: ~6 200 stats, 915
   reads → +100 ms in probe L without one; `fs.readSync` reads the whole file per call) — owner:
   agent — settled by the carrier's timing against the cost invariant.
@@ -63,3 +61,6 @@ hypothesis until the carrier hits it:
 - `exec`'s `signal`: `distribution/isolate-host-sandbox-exec-abort-signal` — landed, PR #431.
 - npm publication: `epics/isolate-host-npm-delivery`.
 - Templates shared across consumer processes or machines (one copy per process, one per worker).
+- Persisting a template sandbox (`snapshot()` / `createSandbox({ snapshot })` over a template, a
+  diff-only format, restore by template identity): `distribution/isolate-host-sandbox-template-snapshot`
+  (user 2026-11-25).
