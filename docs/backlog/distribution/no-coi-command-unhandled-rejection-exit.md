@@ -51,13 +51,14 @@ all loud:
   `failed`, error `process.exit(n)`. Node: status n.
 
 Re-observed 2026-11-25 (main dfad6553e, `tests/no-coi/zlib-scenario.spec.ts`, the node:zlib
-goal's carrier, live Node v24.16.0 exits 1 with the error on stderr for each). These hit the
+goal's carrier; in each step Node v24.16.0 runs green, and an uncaught throw in Node — sync or
+from a timer — prints it on stderr and exits 1, measured with `node -e` the same day). These hit the
 declared-gap fork below. An exceljs archiver queue task throwing `NotImplementedError` (zlib.DeflateRaw)
-→ `failed`, exitCode null, stderr '', `Worker crashed: Uncaught NotImplementedError: …`
+→ `failed`, exitCode null, no error line on stderr, `Worker crashed: Uncaught NotImplementedError: …`
 [WORKER_CRASHED]. A `NotImplementedError` thrown at a file entry's top level (`zlib.createDeflate`,
 `deflateSync`, `gunzipSync`, `unzip`, `crc32`) or from a bluebird/ws callback → `failed`, exitCode
 null, the error line on stderr, error = the structured gap. A `TypeError` at the top level
-(`zlib.Inflate.call(this)`) → `exited` 1, as Node.
+(`zlib.Inflate.call(this)`) → `exited` 1, Node's status for such a throw.
 
 Re-observed 2026-11-12 (proof @ 8a4a612ed in
 `/Users/vanilla-wave/ai/euphotic/proofs/2026-11-12-no-coi-office-docs`, file

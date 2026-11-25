@@ -27,8 +27,8 @@ import {
 
 // node:zlib goal carrier (backlog runtime-js/zlib-node-acceptance-carrier), COI Workbench host
 // (kernel child `node`, Chromium): each step's workspace unpacked by a guest `node` to `/tmp/z<id>`
-// (out of the project tree: each guest write costs O(project files) today, backlog
-// perf/workbench-guest-write-cost-grows-with-project), run by a rifty `node` runner that spawns
+// (out of the project tree, keeping it small: a guest write's cost grows with the project's file
+// count today, backlog perf/workbench-guest-write-cost-grows-with-project), run by a rifty `node` runner that spawns
 // `node <step> <out>` with piped stdio (the shell has no `2>`), against live `node <step>` over the
 // same files. Today's outcome pinned whole per step; the unit delivering it compares with Node.
 

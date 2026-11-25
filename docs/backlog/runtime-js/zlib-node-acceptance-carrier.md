@@ -36,9 +36,9 @@ library runs confirm them in this unit:
 
 The full library runs (this unit, `zlib-scenario` tests) corrected rows 3w and 4 above. Host
 specifics on top of the error, pinned per host: the Workbench prints step 1's error as
-`Uncaught … (<source>)`; the SDK fails every async-task or declared-gap throw (`status: 'failed'`,
-exit code null, Worker replaced; step 1 with an empty stderr, only `Worker crashed: Uncaught …`;
-`distribution/no-coi-command-unhandled-rejection-exit`). Node exits 1 for each of them.
+`Uncaught … (<source>)`; on the SDK every step but 3r and 7b ends `status: 'failed'`, exit code
+null (step 1 with no error line on stderr, only `Worker crashed: Uncaught …`;
+`distribution/no-coi-command-unhandled-rejection-exit`), where an uncaught throw in Node exits 1.
 
 Probe evidence that each step gives Node's bytes on the engine: `results/consumers.txt` (5/5 under
 Node's own `lib/zlib.js`).
@@ -58,8 +58,8 @@ challenge: 2026-11-24 — reuses the goal's FIT challenge (goal.md §Challenge) 
 3. Every output file and stdout of a step compares byte for byte with the oracle once green; the clock
    is frozen inside the step; a gzip OS byte is compared as goal Decisions say → I2, I5
 4. Each case names the unit that turns it green: all ten are expected green after unit 3
-   (`runtime-js/zlib-node-lib-port`), except case 4 on the isolate host: it stays red there because
-   of `TextDecoder('ascii')`, not zlib (`distribution/isolate-guest-textdecoder-legacy-encodings`).
+   (`runtime-js/zlib-node-lib-port`), except case 4 on the isolate host: it stays red there at least
+   because of `TextDecoder('ascii')`, not zlib (what fails after it is not measured) (`distribution/isolate-guest-textdecoder-legacy-encodings`).
    Unit 2 turns none green (no guest surface). Any other case still red after unit 3 is the measured
    wall that keeps unit 4 (`runtime-js/zlib-streams-under-load`) → scenario
 5. pdfkit 0.17.2 and pngjs 7.0.0 enter as exact test devDependencies; exceljs 4.4.0, unzipper 0.10.14
@@ -102,7 +102,7 @@ Oracle: Node v24.16.0, live on the runner, same files; error texts compared whol
   4) and 5a, 5b, 7b's inputs (`inputs.js`) on the runner. Every host runs a step over the oracle's files.
 - 2026-11-25 — browser hosts: a step's workspace (full closure) reaches the guest as one routed
   body, unpacked by a guest `node`. On the Workbench it is unpacked to `/tmp/z<id>`, out of the
-  project tree (each write there costs O(project files),
-  `perf/workbench-guest-write-cost-grows-with-project`), accepted by the manager.
+  project tree, so the project stays small (a guest write's cost grows with the project's file
+  count, `perf/workbench-guest-write-cost-grows-with-project`), accepted by the manager.
 - 2026-11-25 — no gzip output in any step (zip raw deflate, zlib png/pdf, ws raw), so the gzip
   OS-byte rule has nothing to compare; Node's `.gz` inputs are inputs only.

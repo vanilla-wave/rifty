@@ -1,4 +1,4 @@
-// Step 3w: pngjs PNG.sync.write (deflateSync).
+// Step 3w: pngjs PNG.sync.write (`new PNG()` creates a deflate stream, then deflateSync).
 const { writeOut } = require('./lib.js');
 const { PNG } = require('pngjs');
 const paint = require('./image.js');

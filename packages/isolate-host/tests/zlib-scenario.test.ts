@@ -47,7 +47,7 @@ const PINS: Readonly<Record<StepId, Pin>> = {
 };
 /** Per step, when it stops being a pin. */
 const GREEN: Partial<Record<StepId, string>> = {
-  '4': 'red after unit 3 too: isolate-host TextDecoder(ascii), outside this goal',
+  '4': 'red after unit 3 too: at least isolate-host TextDecoder(ascii), outside this goal',
 };
 
 let oracle: ReadonlyMap<StepId, OracleStep>;
