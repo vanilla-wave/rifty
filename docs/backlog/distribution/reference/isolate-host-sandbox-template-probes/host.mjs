@@ -150,7 +150,8 @@ function templateOf(files) {
 function layeredSandbox(tpl) {
   const fs = new LayeredFs(tpl.layer);
   for (const d of ['/workspace', '/tmp']) fs.mkdirSync(d, { recursive: true });
-  const capCheck = () => snapshotFs(fs.difference().entries, BUDGET).length;
+  // The cap check reads the budget the class keeps per operation (ADR-0572 §2): no walk.
+  const capCheck = () => fs.budget();
   return {
     writeFile(p, data) {
       fs.mkdirSync(parentOf(p), { recursive: true });
@@ -286,6 +287,11 @@ for (const [label, files] of [
       createMs: create,
       writeFile10KiBMs: time((i) => sb.writeFile(`/workspace/out/f${i}.bin`, chunk)),
       writeTemplateFileMs: time(() => sb.writeFile(tplFile, chunk)),
+      // After the host touched the template (a listing of /node_modules and of every package):
+      writeAfterTouchMs: (() => {
+        for (const n of sb.list('/node_modules')) sb.list(`/node_modules/${n}`);
+        return time((i) => sb.writeFile(`/workspace/late/f${i}.bin`, chunk));
+      })(),
       readTemplateFileMs: time(() => sb.readFile(tplFile)),
       listNodeModulesMs: time(() => sb.list('/node_modules')),
       removeMs: time((i) => sb.remove(`/workspace/out/f${i}.bin`)),

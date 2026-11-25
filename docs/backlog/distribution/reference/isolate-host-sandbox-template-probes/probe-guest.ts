@@ -233,15 +233,14 @@ function captureDiff(maxBytes: number): Uint8Array {
 
 /** Arm `layered`: the run's FS is a LayeredFs over the copied template; the restored state becomes its difference. */
 let layeredFs: LayeredFs | undefined;
-function layered(pack: Uint8Array, index: string): void {
-  const L = new LayeredFs(templateLayer(pack, JSON.parse(index)));
-  L.apply(upper, []);
+function layered(pack: Uint8Array, index: string, refs: string): void {
+  const L = LayeredFs.fromWire(templateLayer(pack, JSON.parse(index)), upper, JSON.parse(refs));
   layeredFs = L;
   setSyncMirror(L as never);
 }
 function layeredCapture(maxBytes: number): Uint8Array {
-  const d = (layeredFs as LayeredFs).difference();
-  return snapshotFs(d.entries as never, { template: null, maxBytes });
+  const w = (layeredFs as LayeredFs).toWire();
+  return snapshotFs(w.entries as never, { template: null, maxBytes });
 }
 
 Object.defineProperty(globalThis, '__probe', {

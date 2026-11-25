@@ -3,7 +3,8 @@
 Disposable probes for the template goal's forks. `packages/*/src` untouched; the probe guest
 bundle is the real guest entry + `probe-guest.ts`, built by `layer.mjs` into a temp file.
 Machine: Apple M3 Pro, macOS, Node v24.16.0, isolated-vm 7.0.2, main @ `b3731e9c0`, load ~4–5.
-Raw output: `mount.out.txt`, `layer.out.txt`, `layer-layered.out.txt`, `host.out.txt`, `seq.out.txt`. `layer.mjs` drives isolated-vm and rifty's codec from source, not the public API: worker-side costs of each arm, not a consumer's `exec`.
+Raw output: `mount.out.txt`, `layer.out.txt`, `layer-layered.out.txt`, `host.out.txt`, `seq.out.txt`,
+`gen.out.txt`, `gens.out.txt`. `layer.mjs` drives isolated-vm and rifty's codec from source, not the public API: worker-side costs of each arm, not a consumer's `exec`.
 
 ## M — mount point (`mount.mjs`)
 
@@ -66,60 +67,94 @@ differed by ≤ 10 % per row.
   lazy 41, worker 78. The probe's main thread does nothing else (no frame parsing, no template
   decode on arrival).
 
-## H — the consumer's side: host ops and an idle sandbox (`host.mjs`)
+## H — the consumer's side: host ops and an idle sandbox (`host.mjs`, `host.out.txt`)
 
 Same T1/T95 builders over the pnpm store at main @ 57152054d (T95's filler bytes moved with the
-store: 23 654 files, 72.5 MB here vs 88.8 MB in L). rifty's MemoryFsSync + codec from source;
-the sandbox logic is the probe's. Medians of 21 (ms); idle = heap + ArrayBuffers per sandbox over 20
-held sandboxes, one 10 KiB own file each. Load average ~12 on 12 cores.
+store: 23 654 files, 72.5 MB here vs 88.8 MB in L). rifty's MemoryFsSync + codec from source.
+Medians of 21 (ms); «after touch» = a write after `list` of `/node_modules` and of every package;
+idle = heap + ArrayBuffers per sandbox over 20 held sandboxes, one 10 KiB own file each. Load ~7–13.
 
-| arm | create T1 / T95 | `writeFile` 10 KiB + cap check | write a template file | idle per sandbox T1 / T95 |
-|---|---|---|---|---|
-| views (a `MemoryFsSync` of views per sandbox, cap check walks it) | 1.9 / 97 ms | T1 1.1, T95 30.3 | T1 1.3, T95 31.1 | 112 KiB / 9.4 MiB |
-| overlay (one shared index; a sandbox = its difference + deleted paths) | 0.15 / 0.01 ms | T1 0.20, T95 0.16 | T1 0.34, T95 0.30 | ≈ 0 / ≈ 0 (noise, ±0.5 MiB) |
-
-`readFile`, `list('/node_modules')`, `remove` < 0.01 ms in both. The overlay meets requirements
-§3's «Хостовая запись стоит O(размер записи + дифф), а не O(всего состояния)» and «Память
-простаивающей песочницы у потребителя не включает шаблон: N песочниц на одном шаблоне держат одну
-его копию»; the
-per-sandbox views tree does not (ADR-0572 §2).
-
-## S — the chosen construction through operation sequences (`layered.ts`, `seq.mjs`)
-
-`layered.ts` (probe prototype of ADR-0572 §2): rifty's `MemoryFsSync` with template entries
-materialized lazily on touch, every call then on the `MemoryFsSync` unchanged, the difference
-derived (non-pristine entries + materialized template paths now gone). `seq.mjs` runs each sequence
-three ways against live `node` v24.16.0 over a real temp directory holding the same template (times
-set) and the same program: in a fresh isolate (rifty `fs` → the layered class, difference captured
-there, applied by the consumer over a fresh view), as host ops in the consumer, and host ops → a
-run → the host. Compared: each call's error code, the final tree (kind, size, sha1, file mtime), the
-changed-paths list (derived from the two differences vs a walk of Node's before/after), the
-consumer's difference → apply round trip.
-
-Result (`seq.out.txt`): **23/23**, exit 0 (non-zero on any FAIL) — remove → write the same path; remove a directory → write a
-child (`ENOENT`) and with `mkdir`; `rmdir` + `mkdir` (template children stay gone); `rename` of a
-template directory (then `require` from the new path); a template file moved out, a file moved in;
-a rename onto a non-empty directory (`ENOTEMPTY`); `utimes`; an overwrite with the same bytes; a
-write on a directory path (`EISDIR`); `mkdir` of an existing directory (`EEXIST`); a non-recursive
-`rm` of a non-empty directory (`ERR_FS_EISDIR`); a copy out; four host sequences; three host → run
-→ host sequences; two runs in a row (the second reads what the first left); reading template files
-leaves no template path in the difference. Mutation check: dropping the derived deletions fails 9
-of 23 (the probe discriminates). Directory times are not compared.
-
-Cost of the same class (`layer-layered.out.txt`, arms `views` vs `layered`, T95 = 23 654 files /
-72.5 MB at main @ 57152054d's store, load 7–13; medians of 7, ms; floor MiB):
-
-| | T1 semver | T95 semver | T95 pdf-lib | T95 1 000 writes | floor T95 |
+| arm | create T1 / T95 | `writeFile` 10 KiB + cap check T1 / T95 | write a template file T1 / T95 | write after touch T1 / T95 | idle T1 / T95 |
 |---|---|---|---|---|---|
-| views | 51 | 184 (restore 99 + capture 37) | 341 | 195 | 107 |
-| layered | 50 | 92 (restore 41 + capture 0.8) | 318 (run 254 vs 204) | 106 | 99–103 |
+| views (a `MemoryFsSync` of views per sandbox, cap check walks it) | 1.88 / 98.8 | 0.63 / 31.1 | 0.65 / 30.5 | 0.88 / 31.1 | 111 KiB / 9.3 MiB |
+| overlay (hand-written: difference + deleted set; rejected, ADR-0572 §2) | 0.06 / 0.01 | 0.17 / 0.15 | 0.30 / 0.29 | 0.42 / 0.42 | noise (−3 KiB / −480 KiB) |
+| layered (`layered.ts`, budget kept per operation) | 0.31 / 0.05 | 0.07 / 0.05 | 0.02 / 0.02 | 0.05 / 0.05 | 4 KiB / 3 KiB |
 
-Four concurrent T95 runs (wall): pdf-lib 534 vs 653 ms, 1 000 writes 260 vs 150 ms. `layered`'s
-pdf-lib run is slower per call (each call re-walks its ancestors in the prototype). Host ops on the
-same class (`host.out.txt`, arm `layered`): T95 `writeFile` 10 KiB 0.19 ms (T1 0.24), idle 4 KiB
-per sandbox (T1 5). The `stream` workload: `full`/`views` keep rifty's async `Vfs` beside the sync
-mirror and their read stream comes back empty (the gap PR #437 closes; their end states lack
-`app.bin`), the sync-only arms (`lazy`, `worker`, `layered`) write both files as Node.
+`readFile`, `list('/node_modules')`, `remove` ≤ 0.04 ms in every arm. Requirements §3: «Хостовая
+запись стоит O(размер записи + дифф), а не O(всего состояния)», «Память простаивающей песочницы у
+потребителя не включает шаблон: N песочниц на одном шаблоне держат одну его копию» — `layered`
+meets both, also after the host touched the whole template; `views` does not.
+
+## S — named sequences against live Node (`layered.ts`, `seq.mjs`, `seq.out.txt`)
+
+`layered.ts` (probe prototype of ADR-0572 §2, second construction): rifty's `MemoryFsSync`, template
+entries entering it lazily by node — a directory as a node with a marker, a file as a node holding
+the template's bytes reference with an origin — every call then on the `MemoryFsSync` unchanged;
+the state is every node held, described by identity (`lazy` / `ref` / explicit), rebuilt node for
+node. (`layered-v1.ts`, the first construction, derived a difference from path existence and
+times; review N2 and probe G show where it breaks.) `seq.mjs` runs each sequence against live
+`node` v24.16.0 over a real temp directory holding the same template (times set) and program: in
+a fresh isolate (rifty `fs` → the layered class, state captured there, rebuilt by the consumer),
+as host ops in the consumer, host ops → a run → the host, two runs in a row. Compared: each call's
+error code, the final tree (kind, size, sha1, file mtime as «template era» or «now»), the
+changed-paths list vs a walk of Node's before/after, the consumer's wire round trip. Directory times
+are compared by probe G, not here.
+
+Result: **29/29**, exit 0 (1 on any FAIL): the 23 rows of the first table (remove → write the same
+path; remove a directory → write a child, with and without `mkdir`; `rmdir` + `mkdir`; `rename` of
+a template directory then `require` from it; a template file moved out, a file moved in; a rename
+onto a non-empty directory; `utimes`; a same-bytes overwrite; `EISDIR`; `EEXIST`; a non-recursive
+`rm` of a non-empty directory; a copy out; host and host → run → host rows; two runs in a row;
+reading template files puts no template bytes in the state) and review N2's: a template directory
+renamed then recreated, a template file turned into a directory with a child, a template directory
+turned into a file, B → A after A → C, a rename onto an existing template file, a recursive copy
+merging into a template directory.
+
+## G — generated sequences (`gen.mjs`, `gen.out.txt`)
+
+A seeded generator (`mulberry32`, seeds 1..3 000) builds 4–13-call sequences of `mkdir`
+(recursive or not), write, `rm` (recursive, forced or not), `rename`, `cpSync` (recursive),
+`copyFileSync`, `utimes`, read and `readdir` over a 6-file template plus new paths. Each runs on
+rifty's flat `MemoryFsSync` holding the same files (no layer), on each construction (its state then
+carried over the wire and rebuilt on a fresh view), and on `node:fs` over a real directory. A
+failure prints its seed and a greedily minimized sequence. Directory and file times compared
+(«template era» or «now»).
+
+| | layer ≠ rifty without a layer (calls or rebuilt tree) | rebuilt ≠ Node where rifty without a layer = Node |
+|---|---|---|
+| `layered-v1.ts` (existence-derived) | **302 / 3 000** — first: seed 4, minimized to one `rename('/node_modules/a', '/node_modules/c')` (the renamed directory's time) | 0 / 3 000 |
+| `layered.ts` (node identity) | **0 / 3 000** | 0 / 3 000 |
+
+Guest sample (seeds 10 001..10 060, rifty `fs` in a fresh isolate over `layered.ts`, vs the same
+files without a template in a fresh isolate, vs `node` running the same program): layer = no layer
+60 / 60; equal to Node 28 / 60; the 32 others differ from Node without a template too (rifty `fs`
+itself: `copyFileSync` of a directory `EISDIR` vs `ENOTSUP`, `cpSync` codes, `renameSync` codes and
+two silent successes, times — recorded: `backlog/runtime-js/fs-generated-sequence-divergences-from-node`).
+The shared template bytes hash the same after all runs. Exit 0 only if `layered.ts` is clean on
+all three counts and the bytes are intact.
+
+## F — the F1 return condition's metric on real programs (`gens.mjs`, `gens.out.txt`)
+
+The four libraries' canonical generators (`../isolate-library-probe/gen/{pdf,docx,pptx,xlsx}.cjs`)
+over the four-library `node_modules` (npm ci of `../isolate-library-probe/deps`: 8 000 files,
+86.6 MB) in a fresh isolate: `layered` (template copy + index + run + capture) vs `state` (the same
+files in the sandbox's state, its run phase only), medians of 7, ms. Machine load 9–18 on 12
+cores — two runs:
+
+| | empty | pdf | docx | pptx | xlsx | 4 at once pdf / xlsx |
+|---|---|---|---|---|---|---|
+| run 1 (`gens.out.txt`) | +18 | +29 | +17 | −65 (noise) | +32 | 370 vs 311 / 622 vs 613 |
+| run 2 (`gens-2.out.txt`) | +18 | +16 | +9 | +33 | +240 | 466 vs 653 / 773 vs 917 |
+
+Smallest passing `memoryLimit`, empty file: 103 MiB over the template vs 190 with the files in the
+state (an empty sandbox without a template: 19 MiB). Too noisy at this load to settle the return
+condition; the carrier measures it on an idle machine.
+
+`layer-layered.out.txt` (T95, `views` vs `layered`, the second construction, load 30–40): semver 349
+vs 142 ms, pdf-lib 455 vs 377, 1 000 writes 328 vs 182, floor 107 vs 99–103 MiB; four pdf-lib runs
+at once 1 039 vs 798 ms wall. The `stream` workload: `full`/`views` keep rifty's async `Vfs` beside
+the sync mirror and their read stream comes back empty (the gap PR #437 closes; their end states lack
+`app.bin`); the sync-only arms (`lazy`, `worker`, `layered`) write both files as Node.
 
 Not probed:
 - a guest-side cache of template stats/bytes (`lazy`); a worker's RSS while it holds templates (the
@@ -130,5 +165,5 @@ Not probed:
   difference shadowing template paths was not exercised; its `captureDiff` recognises template
   files by view identity only and emits no deletions;
 - the read-only (`EROFS`) mode; decoding the artifact (gzip/br, tar) and sending it to a worker;
-- `layered.ts` on the T95 sequence table (S runs a 5-file template) and directory times;
+- the generator over a large template (G runs a 6-file one); the read-only mode's refusal table;
 - the real four-library template (the library probe ran it in the state, not as a template).

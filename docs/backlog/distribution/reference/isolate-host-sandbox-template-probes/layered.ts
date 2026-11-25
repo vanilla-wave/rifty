@@ -1,11 +1,22 @@
 /**
- * Probe prototype (NOT a design to copy): one layered FS for both the consumer's host ops and
- * the guest's run. The upper is rifty's own `MemoryFsSync`; template entries are materialized
- * into it lazily — a directory's children on first touch, files as references into the
- * template's one buffer, the template's times — and every operation then runs on the upper
- * unchanged, so semantics and errors are MemoryFsSync's by construction. The difference is
- * derived, never accumulated: entries that are not pristine materializations, plus template
- * paths that were materialized and are gone.
+ * Probe prototype (NOT a design to copy) of ADR-0572 §2, second construction (review N2): one
+ * layered FS for the consumer's host ops and the guest's run, whose state is described by node
+ * identity — never derived from path existence or times.
+ *
+ * The upper is rifty's own `MemoryFsSync`. A template directory enters it lazily: an empty
+ * directory node + a marker "these children are template directory L" (its children are
+ * materialized on first touch of a path through it). A template file enters it as a node whose
+ * bytes ARE the template's bytes (the same reference) + an origin record. Every call then runs on
+ * the `MemoryFsSync` unchanged. Origins and markers follow their node on `rename` and go with it
+ * on `rm`.
+ *
+ * The state on the wire is the upper itself, every node it holds, pre-order:
+ *   - a directory with a marker → `lazy(L)` (its whole template subtree, untouched);
+ *   - any other directory → explicit (its children are exactly the ones listed);
+ *   - a file whose bytes are still its origin's reference → `ref(L)`; any other file → its bytes;
+ *   all with their times.
+ * There is no deletion list and no merge with the template: an explicit directory is opaque, so
+ * whatever is not listed under it does not exist. Applying = rebuilding the same upper.
  */
 import { MemoryFsSync } from '@riftydev/vfs/internal';
 
@@ -19,13 +30,14 @@ export interface LowerEntry extends Times {
   readonly dir: boolean;
   readonly bytes?: Uint8Array;
 }
-/** The template: an immutable index over one buffer. */
 export interface Lower {
   get(path: string): LowerEntry | undefined;
   children(path: string): readonly string[];
 }
 /** Rows: [kind 1 dir | 2 file, path, offset, size, mtime, atime, ctime, birthtime], parents first. */
 export type Row = readonly [number, string, number, number, number, number, number, number];
+/** A wire row for what the blob does not carry: [path, 'lazy' | 'ref', template path, times]. */
+export type RefRow = readonly [string, 'lazy' | 'ref', string, Times];
 
 export function templateLayer(pack: Uint8Array, rows: readonly Row[]): Lower {
   const entries = new Map<string, LowerEntry>();
@@ -70,26 +82,59 @@ const norm = (p: string): string => {
   }
   return `/${parts.join('/')}`;
 };
+const depth = (p: string): number => (p === '/' ? 0 : p.split('/').length - 1);
 
-export const counters = { lookups: 0, materialized: 0 };
+export const counters = { lookups: 0, materialized: 0, accounted: 0 };
 
 export class LayeredFs {
   readonly upper = new MemoryFsSync();
-  /** Upper directory → its template directory, children not yet materialized. */
-  readonly #lazy = new Map<string, string>([['/', '/']]);
-  /** Upper path → the template entry it was materialized from. */
-  readonly #pristine = new Map<string, { lower: string; bytes?: Uint8Array; times: Times }>();
+  /** Directory node → the template directory its children come from, not yet materialized. */
+  readonly #lazy = new Map<string, string>();
+  /** File node → the template file whose bytes it still holds (identity, not equality). */
+  readonly #origin = new Map<string, { lower: string; bytes: Uint8Array }>();
+  /** ADR-0567 §7's budget over the state on the wire, kept per operation (never a walk). */
+  #budget = 0;
   readonly lower: Lower;
 
-  constructor(lower: Lower) {
+  constructor(lower: Lower, root = true) {
     this.lower = lower;
+    if (root) {
+      this.#lazy.set('/', '/');
+      const r = lower.get('/');
+      if (r) this.upper.restoreStatSync('/', timesOf(r));
+    }
+  }
+
+  /** Budget of one node as the wire carries it. */
+  #cost(p: string): number {
+    counters.accounted++;
+    const st = this.upper.statSync(p);
+    const own = st.isFile && this.#origin.get(p)?.bytes === this.upper.readFileBytesSync(p);
+    return 384 + 8 * p.length + 80 * depth(p) + (st.isFile && !own ? (st.size ?? 0) : 0);
+  }
+  /** Budget of the materialized subtree at `p` (the op's own footprint, never the template). */
+  #costTree(p: string): number {
+    if (!this.upper.existsSync(p)) return 0;
+    let n = this.#cost(p);
+    if (this.upper.statSync(p).isDirectory)
+      for (const d of this.upper.readdirSync(p)) n += this.#costTree(join(p, d.name));
+    return n;
+  }
+  budget(): number {
+    return this.#budget;
   }
 
   #materialize(dir: string): void {
     const low = this.#lazy.get(dir);
     if (low === undefined) return;
     this.#lazy.delete(dir);
-    const own = this.#pristine.get(dir);
+    const st = this.upper.statSync(dir);
+    const own = {
+      mtimeMs: st.mtime as number,
+      atimeMs: st.atime as number,
+      ctimeMs: st.metadata?.ctime as number,
+      birthtimeMs: st.metadata?.birthtime as number,
+    };
     for (const name of this.lower.children(low)) {
       counters.lookups++;
       const up = join(dir, name);
@@ -98,29 +143,28 @@ export class LayeredFs {
       if (e.dir) {
         this.upper.mkdirSync(up, {});
         this.#lazy.set(up, lp);
-      } else this.upper.writeFileSync(up, e.bytes as Uint8Array);
+      } else {
+        this.upper.writeFileSync(up, e.bytes as Uint8Array);
+        this.#origin.set(up, { lower: lp, bytes: e.bytes as Uint8Array });
+      }
       this.upper.restoreStatSync(up, timesOf(e));
-      this.#pristine.set(up, {
-        lower: lp,
-        ...(e.bytes ? { bytes: e.bytes } : {}),
-        times: timesOf(e),
-      });
+      this.#budget += this.#cost(up);
       counters.materialized++;
     }
-    // Creating its children moved the directory's times: put back the template's.
-    if (own !== undefined) this.upper.restoreStatSync(dir, own.times);
-    else if (dir === '/' && this.lower.get('/'))
-      this.upper.restoreStatSync('/', timesOf(this.lower.get('/') as LowerEntry));
+    // Materializing is not a change: the directory keeps its own times, whatever they are.
+    this.upper.restoreStatSync(dir, own);
   }
-  /** Every existing ancestor of `p` materialized (its own children decided by the upper). */
+  /** Every existing ancestor of `p` materialized. */
   #touch(p: string): void {
+    // Nothing left lazy: nothing to materialize (the common case once a run has touched its paths).
+    if (this.#lazy.size === 0) return;
     this.#materialize('/');
-    let cur = '/';
-    const parts = p.split('/').filter(Boolean);
-    for (let i = 0; i < parts.length - 1; i++) {
-      cur = join(cur, parts[i] as string);
+    // A marker exists only on an existing directory, so a lookup per ancestor is enough.
+    let at = p.indexOf('/', 1);
+    while (at !== -1) {
+      const cur = p.slice(0, at);
       if (this.#lazy.has(cur)) this.#materialize(cur);
-      else if (!this.upper.existsSync(cur)) return;
+      at = p.indexOf('/', at + 1);
     }
   }
   #touchSelf(p: string): void {
@@ -132,40 +176,60 @@ export class LayeredFs {
     if (!this.upper.existsSync(p) || !this.upper.statSync(p).isDirectory) return;
     for (const d of this.upper.readdirSync(p)) if (d.isDirectory) this.#touchTree(join(p, d.name));
   }
-  /** Lazy markers under `from` follow a rename to `to`; under a removed path they go. */
+  /** Markers and origins under `from` follow a rename to `to`, or go (`to` null). */
   #rekey(from: string, to: string | null): void {
-    for (const [k, v] of [...this.#lazy]) {
-      if (!under(k, from)) continue;
-      this.#lazy.delete(k);
-      if (to !== null) this.#lazy.set(to + k.slice(from.length), v);
+    for (const m of [this.#lazy, this.#origin] as Map<string, unknown>[]) {
+      for (const [k, v] of [...m]) {
+        if (!under(k, from)) continue;
+        m.delete(k);
+        if (to !== null) m.set(to + k.slice(from.length), v);
+      }
     }
   }
-
-  // ---- FsSync, each call on the upper after the touch it needs ----
-  /** `fn` on the upper once the path's ancestors are materialized. */
+  /** A mutation at `p` (its subtree): budget out before, run, budget in after. */
+  #mutate(paths: readonly string[], fn: () => void): void {
+    const before = paths.reduce((n, p) => n + this.#costTree(p), 0);
+    fn();
+    const after = paths.reduce((n, p) => n + this.#costTree(p), 0);
+    this.#budget += after - before;
+  }
   #at<T>(p: string, fn: () => T): T {
     this.#touch(norm(p));
     return fn();
   }
+
+  // ---- FsSync ----
   existsSync = (p: string): boolean => this.#at(p, () => this.upper.existsSync(p));
   statSync = (p: string) => this.#at(p, () => this.upper.statSync(p));
   statSyncOrNull = (p: string) => this.#at(p, () => this.upper.statSyncOrNull(p));
   readFileBytesSync = (p: string): Uint8Array => this.#at(p, () => this.upper.readFileBytesSync(p));
-  writeFileSync = (p: string, d: Uint8Array): void =>
-    this.#at(p, () => this.upper.writeFileSync(p, d));
   readdirSync = (p: string) => {
     this.#touchSelf(norm(p));
     return this.upper.readdirSync(p);
   };
+  writeFileSync = (p: string, d: Uint8Array): void => {
+    const n = norm(p);
+    this.#touch(n);
+    this.#mutate([n], () => this.upper.writeFileSync(p, d));
+  };
   mkdirSync = (p: string, o: { recursive?: boolean }): void => {
-    this.#touch(norm(p));
-    this.upper.mkdirSync(p, o);
+    const n = norm(p);
+    this.#touch(n);
+    // The highest directory a recursive mkdir creates is the subtree this call adds.
+    let top = n;
+    while (o.recursive && top !== '/' && !this.upper.existsSync(parentOf(top))) top = parentOf(top);
+    this.#mutate([top], () => this.upper.mkdirSync(p, o));
   };
   rmSync = (p: string, o: { recursive?: boolean; force?: boolean }): void => {
     const n = norm(p);
-    this.#touchSelf(n);
-    this.upper.rmSync(p, o);
-    if (!this.upper.existsSync(n)) this.#rekey(n, null);
+    this.#touch(n);
+    // A non-recursive rm of a template directory must see its children (ENOTEMPTY); a recursive one
+    // removes the node and its marker, materializing nothing.
+    if (!o.recursive) this.#materialize(n);
+    this.#mutate([n], () => {
+      this.upper.rmSync(p, o);
+      if (!this.upper.existsSync(n)) this.#rekey(n, null);
+    });
   };
   utimes = (p: string, a: number, m: number): void => this.#at(p, () => this.upper.utimes(p, a, m));
   restoreStatSync = (p: string, t: Times): void =>
@@ -173,122 +237,134 @@ export class LayeredFs {
   copyFileSync = (s: string, d: string): void => {
     this.#touch(norm(s));
     this.#touch(norm(d));
-    this.upper.copyFileSync(s, d);
+    this.#mutate([norm(d)], () => this.upper.copyFileSync(s, d));
   };
   cpSync = (s: string, d: string, o?: { recursive?: boolean }): void => {
+    // A recursive copy merges into an existing destination tree: it must hold its real children.
     this.#touchTree(norm(s));
-    this.#touch(norm(d));
-    this.upper.cpSync(s, d, o);
+    this.#touchTree(norm(d));
+    this.#mutate([norm(d)], () => this.upper.cpSync(s, d, o));
   };
   renameSync = (s: string, d: string): void => {
     const sn = norm(s);
     const dn = norm(d);
     this.#touch(sn);
     this.#touch(dn);
-    if (this.upper.existsSync(dn)) this.#materialize(dn);
-    this.upper.renameSync(s, d);
-    if (sn !== dn && !under(dn, sn)) {
-      this.#rekey(dn, null);
-      this.#rekey(sn, dn);
-    }
+    // Replacing a directory needs its real children (ENOTEMPTY); a file needs nothing more.
+    if (this.upper.existsSync(dn) && this.upper.statSync(dn).isDirectory) this.#materialize(dn);
+    // Markers and origins move with the node inside the measured step, so the budget after sees
+    // the moved subtree as the same template-backed nodes at new paths.
+    this.#mutate([sn, dn], () => {
+      this.upper.renameSync(s, d);
+      if (sn !== dn && !under(dn, sn) && !this.upper.existsSync(sn)) {
+        this.#rekey(dn, null);
+        this.#rekey(sn, dn);
+      }
+    });
   };
 
-  /**
-   * The difference, derived: entries that are not pristine materializations (with their parent
-   * directories), and template paths that were materialized and are gone (topmost only).
-   */
-  difference(): { entries: MemoryFsSync; deleted: string[] } {
-    // A moved lazy directory carries template entries under a new path: materialize it to emit them.
-    for (const [k, v] of [...this.#lazy]) if (k !== v) this.#touchTree(k);
-    const out = new MemoryFsSync();
-    const ensure = (dir: string): void => {
-      if (out.existsSync(dir)) return;
-      ensure(parentOf(dir));
-      out.mkdirSync(dir, {});
-    };
-    const fixTimes: string[] = [];
-    const walk = (dir: string): void => {
-      for (const d of this.upper.readdirSync(dir)) {
-        const p = join(dir, d.name);
-        const st = this.upper.statSync(p);
-        const pr = this.#pristine.get(p);
-        const times = {
-          mtimeMs: st.mtime as number,
-          atimeMs: st.atime as number,
-          ctimeMs: st.metadata?.ctime as number,
-          birthtimeMs: st.metadata?.birthtime as number,
-        };
-        const sameTimes =
-          pr !== undefined &&
-          pr.times.mtimeMs === times.mtimeMs &&
-          pr.times.atimeMs === times.atimeMs &&
-          pr.times.ctimeMs === times.ctimeMs &&
-          pr.times.birthtimeMs === times.birthtimeMs;
-        const pristine =
-          pr !== undefined &&
-          pr.lower === p &&
-          sameTimes &&
-          (d.isDirectory ? pr.bytes === undefined : this.upper.readFileBytesSync(p) === pr.bytes);
-        if (d.isDirectory) {
-          if (!pristine) {
-            ensure(p);
-            fixTimes.push(p);
-          }
-          if (!this.#lazy.has(p)) walk(p);
-        } else if (!pristine) {
-          ensure(dir);
-          out.writeFileSync(p, this.upper.readFileBytesSync(p));
-          out.restoreStatSync(p, times);
-        }
-      }
-    };
-    walk('/');
-    for (const p of [...fixTimes, ...[...listDirs(out)].filter((q) => q !== '/')]) {
+  /** The state on the wire: explicit nodes (blob) + lazy/ref rows. O(the nodes held). */
+  toWire(): { entries: MemoryFsSync; refs: RefRow[] } {
+    const entries = new MemoryFsSync();
+    const refs: RefRow[] = [];
+    const tOf = (p: string): Times => {
       const st = this.upper.statSync(p);
-      out.restoreStatSync(p, {
+      return {
         mtimeMs: st.mtime as number,
         atimeMs: st.atime as number,
         ctimeMs: st.metadata?.ctime as number,
         birthtimeMs: st.metadata?.birthtime as number,
-      });
-    }
-    const gone: string[] = [];
-    for (const [p, pr] of this.#pristine)
-      if (pr.lower === p && !this.upper.existsSync(p)) gone.push(p);
-    gone.sort();
-    const deleted: string[] = [];
-    for (const p of gone) if (!deleted.some((q) => under(p, q))) deleted.push(p);
-    return { entries: out, deleted };
-  }
-
-  /** Apply a difference over a fresh template view: deletions, then entries (pre-order). */
-  apply(entries: MemoryFsSync, deleted: readonly string[]): void {
-    for (const p of deleted) this.rmSync(p, { recursive: true, force: true });
+      };
+    };
     const walk = (dir: string): void => {
-      for (const d of entries.readdirSync(dir)) {
+      for (const d of this.upper.readdirSync(dir)) {
         const p = join(dir, d.name);
-        const st = entries.statSync(p);
-        const t = {
-          mtimeMs: st.mtime as number,
-          atimeMs: st.atime as number,
-          ctimeMs: st.metadata?.ctime as number,
-          birthtimeMs: st.metadata?.birthtime as number,
-        };
+        const t = tOf(p);
         if (d.isDirectory) {
-          if (!this.existsSync(p)) this.mkdirSync(p, {});
-          walk(p);
-          this.restoreStatSync(p, t);
+          const lz = this.#lazy.get(p);
+          if (lz !== undefined) refs.push([p, 'lazy', lz, t]);
+          else {
+            entries.mkdirSync(p, {});
+            walk(p);
+            entries.restoreStatSync(p, t);
+          }
         } else {
-          this.writeFileSync(p, entries.readFileBytesSync(p));
-          this.restoreStatSync(p, t);
+          const o = this.#origin.get(p);
+          const bytes = this.upper.readFileBytesSync(p);
+          if (o !== undefined && o.bytes === bytes) refs.push([p, 'ref', o.lower, t]);
+          else {
+            entries.writeFileSync(p, bytes);
+            entries.restoreStatSync(p, t);
+          }
         }
       }
     };
-    walk('/');
+    const rootLazy = this.#lazy.get('/');
+    if (rootLazy !== undefined) refs.push(['/', 'lazy', rootLazy, tOf('/')]);
+    else walk('/');
+    entries.restoreStatSync('/', tOf('/'));
+    return { entries, refs };
   }
-}
 
-function* listDirs(fs: MemoryFsSync, dir = '/'): Generator<string> {
-  yield dir;
-  for (const d of fs.readdirSync(dir)) if (d.isDirectory) yield* listDirs(fs, join(dir, d.name));
+  /** Rebuild the same upper from the wire (the consumer validates the rows first). */
+  static fromWire(lower: Lower, entries: MemoryFsSync, refs: readonly RefRow[]): LayeredFs {
+    const L = new LayeredFs(lower, false);
+    const byPath = new Map(refs.map((r) => [r[0], r] as const));
+    const root = byPath.get('/');
+    if (root !== undefined) {
+      L.#lazy.set('/', root[2]);
+      L.upper.restoreStatSync('/', root[3]);
+      return L;
+    }
+    // Pre-order over the blob's explicit nodes and the rows, by path.
+    const kids = new Map<string, string[]>();
+    for (const r of refs) {
+      const par = parentOf(r[0]);
+      const list = kids.get(par) ?? [];
+      list.push(r[0]);
+      kids.set(par, list);
+    }
+    const build = (dir: string): void => {
+      const names = new Set<string>();
+      for (const d of entries.readdirSync(dir)) names.add(join(dir, d.name));
+      for (const q of kids.get(dir) ?? []) names.add(q);
+      for (const p of [...names].sort()) {
+        const row = byPath.get(p);
+        if (row !== undefined) {
+          const e = lower.get(row[2]);
+          if (row[1] === 'lazy') {
+            L.upper.mkdirSync(p, {});
+            L.#lazy.set(p, row[2]);
+          } else {
+            L.upper.writeFileSync(p, e?.bytes as Uint8Array);
+            L.#origin.set(p, { lower: row[2], bytes: e?.bytes as Uint8Array });
+          }
+          L.upper.restoreStatSync(p, row[3]);
+        } else {
+          const st = entries.statSync(p);
+          const t = {
+            mtimeMs: st.mtime as number,
+            atimeMs: st.atime as number,
+            ctimeMs: st.metadata?.ctime as number,
+            birthtimeMs: st.metadata?.birthtime as number,
+          };
+          if (st.isDirectory) {
+            L.upper.mkdirSync(p, {});
+            build(p);
+          } else L.upper.writeFileSync(p, entries.readFileBytesSync(p));
+          L.upper.restoreStatSync(p, t);
+        }
+      }
+    };
+    build('/');
+    const st = entries.statSync('/');
+    L.upper.restoreStatSync('/', {
+      mtimeMs: st.mtime as number,
+      atimeMs: st.atime as number,
+      ctimeMs: st.metadata?.ctime as number,
+      birthtimeMs: st.metadata?.birthtime as number,
+    });
+    L.#budget = L.#costTree('/');
+    return L;
+  }
 }

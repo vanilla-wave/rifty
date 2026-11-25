@@ -15,8 +15,14 @@ PASS  write on a directory path
 PASS  mkdir an existing template dir
 PASS  rm a non-empty template dir, not recursive
 PASS  copy a template file out
+PASS  N2a: rename a template dir, then mkdir it again
+PASS  N2b: a template file becomes a dir with a child
+PASS  N2b: a template dir becomes a file
+PASS  N2: B → A after A → C
+PASS  N2: rename onto an existing template file
+PASS  cp merging into an existing template dir
 
-## host sequences (consumer LayeredFs) vs node, then a round trip through difference/apply
+## host sequences (consumer LayeredFs) vs node, then a round trip through the wire
 PASS  host: remove → write same path
 PASS  host: remove dir → write child
 PASS  host: write on a directory path
@@ -33,4 +39,4 @@ PASS  two runs in a row
 ## minimal difference: reading the template changes nothing
 PASS  require / read of template files
 
-23/23 pass
+29/29 pass

@@ -21,13 +21,12 @@ shared by every sandbox over it, never part of a sandbox's state; the state cap 
 sandbox's difference from it, and only the difference crosses to the worker and back per run. A
 fresh isolate per run holds the template in its heap (copied in per run, user 2026-11-25), so a
 run's latency and isolate memory grow with the template — measured and published (the agent's
-reading of the user's «ок», Decisions); a host op costs O(the template entries the sandbox has
-touched since its last run + the difference) and an idle sandbox holds only its difference and
-those touched entries (references into the shared copy) — neither grows with the template. What
-the host sees is what the next run sees, after any sequence of host ops and runs, as live Node over
-a real directory shows it — except a rename of a template directory whose subtree puts the run's
-difference over `maxFsBytes`: that run's end state is refused by name and all of its writes are
-rolled back (compat ⚠️, I11). `exec` reports the paths the run changed, with sizes, deletions included. A broken,
+reading of the user's «ок», Decisions); a host op costs O(the entries it writes or touches) —
+the state cap is kept per operation, never by a walk — and an idle sandbox holds only its own
+entries and references into the shared template for those it touched — neither grows with the
+template. What the host sees is what the next run sees, after any sequence of host ops and runs,
+as rifty's FS without a template would show it, and as live Node over a real directory where
+rifty's FS itself agrees with Node (I11). `exec` reports the paths the run changed, with sizes, deletions included. A broken,
 truncated or unsupported artifact is a named error before a sandbox exists. Persisting a template
 sandbox between turns is deferred (`snapshot()` / `createSandbox({ snapshot })` over a template:
 `NotImplementedError('isolate-host.sandbox-template-snapshot')`,
@@ -93,17 +92,21 @@ consumer encode/decode per exec, isolate floor 215 MiB, state 96 MB, every host 
 - I4. Layer: a template is held once per consumer process and once per worker per identity; N
   sandboxes over it share that one copy and its index — an idle sandbox holds its difference and
   the entries it touched as references into that copy, never a copy of the template's bytes or a
-  per-sandbox index of it; per run only the difference crosses to the worker and back; `maxFsBytes`, `ERR_ISOLATE_HOST_SANDBOX_FULL` and
-  `stateRefused: ERR_FS_SNAPSHOT_TOO_LARGE` count the difference only.
+  per-sandbox index of it, and nothing ever writes the shared bytes (their hash after the I11
+  sequences over N sandboxes equals before); per run only the sandbox's state crosses to the worker
+  and back — its own entries' bytes plus a reference row per template entry it holds; `maxFsBytes`,
+  `ERR_ISOLATE_HOST_SANDBOX_FULL` and `stateRefused: ERR_FS_SNAPSHOT_TOO_LARGE` count that state,
+  never the template's bytes.
 - I5. Cost. Templates: T1 (~1 MB, ~300 files) and T95 (23 654 files, 95 MB), generated
   deterministically by the carrier (fixed names, sizes and bytes — not the pnpm store), plus the
   four-library artifact. Structural, by unit tests: a host op (`writeFile`, `readFile`, `remove`,
-  `list`, the cap check included) reads the template index only to materialize the not yet
-  materialized directories on its path (and, for `list(dir)`, `dir`) — exactly their children,
-  counted — never a walk of the template; the cap check derives the difference by visiting only the
-  entries materialized since the sandbox's last run (counted) and encodes only that difference; a
-  warm `exec`'s request frame carries the encoded difference and the deleted list and nothing of
-  the template (frame bytes counted), the template travels to a worker once per identity (frames
+  `list`, the cap check included) reads the template index only to materialize the directories it
+  must see — the not yet materialized ancestors of its path, `dir` for `list(dir)`, the removed
+  directory for a non-recursive `remove`, both trees of a recursive copy — exactly their children,
+  counted, never a walk of the template; the cap check reads a budget the class updates per
+  operation (counted: no walk), so a write costs the same after the host listed the whole template;
+  a warm `exec`'s request frame carries the encoded state (own entries + reference rows) and
+  nothing of the template's bytes (frame bytes counted), the template travels to a worker once per identity (frames
   counted, cold and warm); the consumer's buffers for a run are those encodings and their decode,
   never a copy of the template's buffer or index (the codec's inputs and outputs counted). Measured
   on landed code and published in the README for T1, T95 and the four-library artifact
@@ -128,19 +131,19 @@ consumer encode/decode per exec, isolate floor 215 MiB, state 96 MB, every host 
   `produceDependencySnapshot` run in plain Node (the published `@riftydev/workbench`), passes it to
   `createSandbox`, and requires each of the four libraries from a sandbox run — each `require`
   succeeding, proven by the carrier on that artifact.
-- I11. Sequences: for each row of the sequence table — remove → write the same path, remove a
-  directory → write a child (with and without `mkdir`), `rmdir` + `mkdir`, `rename` of a template
-  directory, a template file moved out and a file moved in, a rename onto a non-empty directory,
-  `utimes`, an overwrite with the same bytes, a write on a directory path, `mkdir` of an existing
-  directory, a non-recursive `rm` of a non-empty directory, a copy out — done by the guest, by host
-  ops, or host ops then a run, the files the host then sees (`list`, `readFile`, `stat` kind, size
-  and file mtime) equal what the next run sees and what live `node` v24.16.0 leaves over a real
-  directory holding the same template and files, each call's error code included, also from one
-  run to the next; reading template files changes nothing (the difference stays empty of them)
-  (probe S's table is the seed). A rename of a template directory moves its whole subtree into the
-  difference (rifty's FS has no cross-layer rename): over `maxFsBytes` it is the cap's named result
-  (`stateRefused: ERR_FS_SNAPSHOT_TOO_LARGE`) and every write of that run is rolled back, never a
-  partial tree — declared compat ⚠️ (Node renames in O(1)).
+- I11. Sequences, generated: a seeded generator of `mkdir`, write, `rm` (recursive or not, forced
+  or not), `rename`, `cpSync`, `copyFileSync`, `utimes`, read and `readdir` sequences over a small
+  template and new paths runs each sequence on the layered FS and on rifty's FS without a template
+  holding the same files: every call's result and the tree after the state is carried over the wire
+  and rebuilt on a fresh view are equal, by the guest (rifty `fs` in a fresh isolate) and by host
+  ops, from one run to the next; and where rifty's FS without a template agrees with live `node`
+  v24.16.0 over a real directory, so does the layered one. A failure prints its seed and a
+  minimized sequence. Named rows stay as regressions: remove → write the same path, remove a
+  directory → write a child, `rmdir` + `mkdir`, a template directory renamed then recreated, a
+  template file turned into a directory and back, B → A after A → C, a rename onto an existing
+  template file, a recursive copy merging into a template directory, `utimes`, a same-bytes
+  overwrite, `EISDIR`/`EEXIST`/`ENOTEMPTY`, host → run → host; reading template files adds no bytes
+  to the state.
 
 ## Challenge
 
@@ -176,6 +179,8 @@ Fresh final check after these fixes (2026-11-25, new reviewer): 9 findings, rech
 Second external review of PR #429 @ 9624b9c9d (the manager's reviewer): N1 (blocker) — the consumer's accumulated deleted set and the guest's capture-by-view-identity lost files (remove → write the same path; a renamed template entry), S-a — the consumer overlay was a second hand-written tree (ADR-0568 §2, «никакой второй независимой реализации»), S-b — packages not in the manifest, S-c — I5 checks ambiguous or at noise level, S-d — the F1 return condition undefined and above the figures shown; dispositions — one `LayeredFsSync` for both realms with a derived difference (ADR-0572 §2), probe S 23/23 vs live Node + mutation check, I11 added, I6 «changed» defined; packages from the lock (I1); I5 structural (lookups, frames, codec I/O counted); return condition defined with tolerances over the shown figures, measured in map items 5 and 7; minors fixed.
 Fresh final check after the redesign (2026-11-25, new reviewer @ ff003bbf8): 9 findings (cost bound of the derived difference, the rename ceiling undeclared, map item refs, «…» in quotes, A′ figures, concurrency note, `seq.mjs` gate + run → run + minimality, the memory method, an implementation name in the Outcome) — fixed; recheck @ 503d5bfa1: the Outcome's equality needed the rename ceiling's exception and its whole-run rollback, its compat row an owner — fixed.
 
+Third external review of PR #429 @ ee8614363 (the manager's reviewer): N2 (blocker, the class's third round) — the existence-derived difference kept template children under a renamed-then-recreated directory and broke file ↔ directory replacements; S1 — host-op cost O(touched), not §3's «O(размер записи + дифф)»; S2 — the F1 metric (an empty file) blind to the per-call cost; S3 — the rename ceiling without owner; S4–S6 — probe table, oracle coarseness and an unreproducible mutation count, item refs; minors (shared bytes unguarded, a moved directory's mtime on first readdir, I5 counts for `remove`/`cpSync`, the #437 overlap); dispositions — the state by node identity, once (ADR-0572 §2), I11 generated (probe G: 0 / 3 000 vs 302 / 3 000 for the old rule, guest sample 60 / 60, shared bytes hashed), N2's rows named (probe S 29/29); the budget kept per operation (H: 0.05 ms after touching the whole template); the metric on the four libraries' generators (probe F, recorded noisy); the ceiling removed (a rename moves a marker); probe README rebuilt from its outputs; refs fixed; minors folded into I4/I5 and ADR Consequences; rifty-fs divergences the generator exposed recorded as `runtime-js/fs-generated-sequence-divergences-from-node`.
+
 ## Decisions
 
 - 2026-11-24 — agent: requirements 1–3, the live-sandbox unit `distribution/isolate-host-sandbox-capture-outside-guest-realm` and the changed-paths list are one goal (the manager's brief: the capture is rewritten for the diff anyway).
@@ -186,10 +191,11 @@ Fresh final check after the redesign (2026-11-25, new reviewer @ ff003bbf8): 9 f
 - 2026-11-25 — user: «И сохранение снапшота песочницы не нужно. Решили, что сохранять все это не будем. Агент может [поработать] с песочницей и забрать из живой песочницы файл. После этого песочницу уничтожаем. Так что все задачи про сохранение и изменение снапшота мы кладем в бэк-лог, и пока не делаем.» (bracket: the voice input's «подъем кто-то», the agent's reading) — requirements §2 (diff-only snapshot, restore by template identity, format v2, compressed budget) leave this goal for `distribution/isolate-host-sandbox-template-snapshot`; over a template, `snapshot()` and `createSandbox({ snapshot })` are `NotImplementedError('isolate-host.sandbox-template-snapshot')` + compat ❌. Kept: the template, cost independence of host ops and consumer memory (§3, narrowed for runs by F1 below), changed paths, the capture unit (a run's end state still becomes the state for the sandbox's next run).
 - 2026-11-25 — user: «Я бы на самом деле поддержал оба варианта, чтобы можно было выбирать, как ты хочешь написать, сделать [read-only] или [не read-only].» (F2; brackets: the voice input's «редогли или нередонгли», the agent's reading) — a template is writable or read-only, chosen per sandbox (the agent's reading of «выбирать»). Agent: writable by default (an `npm ci`'d `node_modules` is writable), read-only an option of `createSandbox`.
 - 2026-11-25 — user: «ок» (F3, «`/node_modules`, без `package.json` и lock — рекомендую») — the mount is `/node_modules`, only the artifact's `payload/node_modules`.
-- 2026-11-25 — user, F1 (who holds the run's FS), in three replies: «правильно понимаю, что проще пока оставить как есть? Если так давай оставим + обсужденную версию в бэклог запишем»; then «давай Не с формальной точки зрения про соответствие требования, а с точки зрения того, какую пользу это нам даст.»; then «ок» to the agent's message, whose figures and recommendation were: «Память. Копирование добавляет ~90–100 МиБ памяти изолята на каждый одновременный прогон. При лимите по умолчанию 256 МиБ коду агента остаётся ~130 МиБ вместо ~235, и тяжёлые генераторы (exceljs) раньше упадут по памяти. 8 одновременных прогонов — это ещё ~0,8 ГБ RAM на машине. Это главный выигрыш ленивого варианта.», «Задержка. Примерно +50 мс на `exec` (на шаблоне в 23 тыс. файлов было +120 мс)», «Рекомендация: сейчас копировать шаблон в изолят — это ближе всего к «оставить как есть», как вы и предлагали. Ленивое чтение записать в backlog с поводом взяться: память на одновременный прогон становится узким местом или шаблон заметно растёт. Цена: требование потребителя «стоимость не зависит от размера шаблона» по памяти и задержке выполнится не полностью. Снапшот по-прежнему будет только диффом, а стоимость хостовых записей от шаблона не зависит.» The four-library figures were extrapolated from probe L's T95 arm `views` by entries and bytes, not measured. «Снапшот по-прежнему будет только диффом» there meant the run's state on the consumer ↔ worker wire (the user had just deferred `snapshot()` persistence); `snapshot()` over a template refuses (I8). — A fresh isolate gets the template per run (ADR-0572 §3); the agent's reading: requirements §3's constant `exec` latency and isolate memory become «measured and published» (I5), host-op cost stays independent (as the message promised). Return condition (the agent's tolerances over the figures the user saw): on the four-library artifact, a warm `exec` of an empty file (median of 7) slower than the same without a template by more than 50 ms + 20 ms, or a smallest passing `memoryLimitMb` (bisection, 4 MiB steps) larger by more than 100 MiB + 8 MiB → the run stops and the numbers go back to the user (goal conflict, `AGENTS.md` §Fidelity); measured in map items 5 and 7. Lazy template reads: `distribution/isolate-host-sandbox-template-lazy-read`.
+- 2026-11-25 — user, F1 (who holds the run's FS), in three replies: «правильно понимаю, что проще пока оставить как есть? Если так давай оставим + обсужденную версию в бэклог запишем»; then «давай Не с формальной точки зрения про соответствие требования, а с точки зрения того, какую пользу это нам даст.»; then «ок» to the agent's message, whose figures and recommendation were: «Память. Копирование добавляет ~90–100 МиБ памяти изолята на каждый одновременный прогон. При лимите по умолчанию 256 МиБ коду агента остаётся ~130 МиБ вместо ~235, и тяжёлые генераторы (exceljs) раньше упадут по памяти. 8 одновременных прогонов — это ещё ~0,8 ГБ RAM на машине. Это главный выигрыш ленивого варианта.», «Задержка. Примерно +50 мс на `exec` (на шаблоне в 23 тыс. файлов было +120 мс)», «Рекомендация: сейчас копировать шаблон в изолят — это ближе всего к «оставить как есть», как вы и предлагали. Ленивое чтение записать в backlog с поводом взяться: память на одновременный прогон становится узким местом или шаблон заметно растёт. Цена: требование потребителя «стоимость не зависит от размера шаблона» по памяти и задержке выполнится не полностью. Снапшот по-прежнему будет только диффом, а стоимость хостовых записей от шаблона не зависит.» The four-library figures were extrapolated from probe L's T95 arm `views` by entries and bytes, not measured. «Снапшот по-прежнему будет только диффом» there meant the run's state on the consumer ↔ worker wire (the user had just deferred `snapshot()` persistence); `snapshot()` over a template refuses (I8). — A fresh isolate gets the template per run (ADR-0572 §3); the agent's reading: requirements §3's constant `exec` latency and isolate memory become «measured and published» (I5), host-op cost stays independent (as the message promised). Return condition (the agent's tolerances over the figures the user saw — ~+50 ms per `exec`, ~90–100 MiB): on the four-library artifact, on an idle machine (load < 2), median of 7 warm runs — each canonical generator of the four libraries (the carrier's) over the template slower than the same program with the same files in the sandbox's state by more than 50 ms + 20 ms (its run phase only: what the template mechanism adds to a real program), or four such runs at once by more than that, or an empty file's smallest passing `memoryLimitMb` (bisection, 4 MiB steps) above an empty sandbox's without a template by more than 100 MiB + 8 MiB → the run stops and the numbers go back to the user (goal conflict, `AGENTS.md` §Fidelity); measured in map items 5 and 7. Probe F (`gens.mjs`, load 9–18, two runs): empty +18 ms, floor 103 vs 19 MiB; generators pdf +16…+39, docx +8…+17, pptx +29…+33, xlsx +32…+240 ms — too noisy at that load to settle, the carrier measures it idle. Lazy template reads: `distribution/isolate-host-sandbox-template-lazy-read`.
 - rejected route: the template inside the sandbox's state (a hand-laid `node_modules` in the snapshot, today's only path) — violates I4.
 - rejected route: a per-sandbox `MemoryFsSync` of views into the template in the consumer, the cap check walking it (ADR-0572 draft before 2026-11-25 review) — violates I4/I5: probe H, T95 — `writeFile` 10 KiB 29 ms vs 0.19 ms (layered), idle 9.4 MiB per sandbox vs 4 KiB.
 - rejected route: a hand-written consumer overlay (difference + deleted set) beside a guest-side materialization with its own apply/capture rules (ADR-0572 draft after B1) — violates I11 (remove → write the same path lost the file; a renamed template entry was not emitted) and ADR-0568 §2 «no second implementation».
+- rejected route: a layered FS whose difference is derived from path existence and times (deletions = materialized template paths now gone; `layered-v1.ts`, ADR-0572 draft after N1) — violates I11: probe G, 302 of 3 000 generated sequences differ from rifty's FS without a template (first: a lone `rename` of a template directory), review N2's renamed-then-recreated directory and file ↔ directory among them.
 - rejected route: the worker owns the run's whole FS (ADR-0572 §Forks F1 (c)) — violates the live-sandbox Outcome clause «The files stay rifty's in-memory filesystem in the guest's own realm», which this goal's Outcome keeps; recorded with its costs in `distribution/isolate-host-sandbox-killed-run-partial-writes`.
 - 2026-11-25 — agent: the template comes as artifact bytes or a registered id because requirements §1 name both («либо идентификатор шаблона, заранее зарегистрированного в процессе»): bytes for one-off use, the id to hand many `createSandbox` calls one decoded copy.
-- 2026-11-25 — agent (external reviews of PR #429, B1 then N1/S-a): what the host sees equals what the next run sees by construction — one `LayeredFsSync` (ADR-0572 §2) runs both the consumer's host ops and the guest's `fs` — rifty's `MemoryFsSync` with template entries materialized lazily, its difference derived — so host-op cost and an idle sandbox hold requirements §3's «O(размер записи + дифф)» and «Память простаивающей песочницы у потребителя не включает шаблон», and the consumer's and the guest's trees cannot follow two rules; probe S (23/23 sequences vs live Node), H (T95 `writeFile` 0.19 ms, idle 4 KiB), L (`layered`).
+- 2026-11-25 — agent (external reviews of PR #429, B1 → N1/S-a → N2): one `LayeredFsSync` (ADR-0572 §2) runs both the consumer's host ops and the guest's `fs`; its state is described by node identity — every node it holds, a template directory not yet opened as a lazy reference, a file still holding its template bytes as a reference, everything else explicit, an explicit directory opaque — never derived from path existence or times; the state cap is a budget kept per operation. Probe G: 0 of 3 000 generated sequences differ from rifty's FS without a template (the existence-derived construction: 302), guest sample 60/60, shared template bytes unchanged; probe S 29/29 named rows; H: T95 `writeFile` 0.05 ms, also after listing the whole template, idle 3 KiB.

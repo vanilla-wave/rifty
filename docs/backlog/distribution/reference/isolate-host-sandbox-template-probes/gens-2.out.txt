@@ -1,0 +1,10 @@
+node v24.16.0, isolated-vm 7.0.2, darwin/arm64; template: 8000 files, 86.6 MB
+{"w":"empty","state":8,"layered":26,"added":18,"floorStateMiB":190,"floorLayeredMiB":103}
+{"w":"pdf","state":196,"layered":212,"added":16}
+{"w":"docx","state":164,"layered":173,"added":9}
+{"w":"pptx","state":288,"layered":321,"added":33}
+{"w":"xlsx","state":442,"layered":682,"added":240}
+
+## four runs at once (wall, ms; state = its run phases only, the longest)
+{"w":"pdf","state":653,"layered":466}
+{"w":"xlsx","state":917,"layered":773}

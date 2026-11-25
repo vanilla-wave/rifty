@@ -3,7 +3,7 @@
 ## Items
 
 1. `distribution/isolate-host-sandbox-capture-outside-guest-realm` — owned by
-   `epics/isolate-host-sandbox-template` (its map item 5, I7) since 2026-11-25; this goal closes
+   `epics/isolate-host-sandbox-template` (its map item 6, I7) since 2026-11-25; this goal closes
    there, when that unit lands (or the user narrows I1).
 
 ## Open questions

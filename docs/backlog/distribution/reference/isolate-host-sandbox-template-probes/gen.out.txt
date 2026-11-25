@@ -1,0 +1,33 @@
+node v24.16.0, darwin/arm64; 3000 sequences, seeds 1..3000
+
+## v1: layer ≠ flat rifty FS in 302/3000; rebuilt ≠ node where flat = node in 0/3000
+   first failing seed 4, minimized: [["rename","/node_modules/a","/node_modules/c"]]
+   flat: ["ok"] {"/node_modules":"dir now","/node_modules/b":"dir 1600000000000","/node_modules/b/index.js":"file b 1600000000000","/node_modules/b/sub":"dir 1600000000000","/node_modules/b/sub/s.js":"file s 1600000000000","/node_modules/c":"dir 1600000000000","/node_modules/c/index.js":"file module.exports = 'a'; 1600000000000","/node_modules/c/lib":"dir 1600000000000","/node_modules/c/lib/x.js":"file x 1600000000000","/node_modules/c/lib/y.js":"file y 1600000000000","/node_modules/c/package.json":"file {\"main\":\"index.js\"} 1600000000000","/workspace":"dir now"}
+   layer: ["ok"] rebuilt {"/node_modules":"dir now","/node_modules/b":"dir 1600000000000","/node_modules/b/index.js":"file b 1600000000000","/node_modules/b/sub":"dir 1600000000000","/node_modules/b/sub/s.js":"file s 1600000000000","/node_modules/c":"dir now","/node_modules/c/index.js":"file module.exports = 'a'; 1600000000000","/node_modules/c/lib":"dir 1600000000000","/node_modules/c/lib/x.js":"file x 1600000000000","/node_modules/c/lib/y.js":"file y 1600000000000","/node_modules/c/package.json":"file {\"main\":\"index.js\"} 1600000000000","/workspace":"dir now"}
+## v2: layer ≠ flat rifty FS in 0/3000; rebuilt ≠ node where flat = node in 0/3000
+   rifty FsSync vs node:fs where they differ (rifty FS semantics, not the layer), by first differing call:
+     447 × tree (times/order)
+     149 × copy: rifty EISDIR / node ENOTSUP
+     112 × rm: rifty ENOTEMPTY / node ERR_FS_EISDIR
+     67 × cp: rifty ENOENT / node ok
+     43 × cp: rifty EISDIR / node ERR_FS_CP_NON_DIR_TO_DIR
+     35 × rename: rifty EINVAL / node ENOTDIR
+     25 × copy: rifty EISDIR / node ENOENT
+     23 × cp: rifty ok / node ERR_FS_CP_EINVAL
+     23 × cp: rifty EINVAL / node ERR_FS_CP_EINVAL
+     19 × cp: rifty EEXIST / node ERR_FS_CP_DIR_TO_NON_DIR
+     18 × rename: rifty ok / node ENOENT
+     16 × cp: rifty EINVAL / node ERR_FS_CP_DIR_TO_NON_DIR
+
+## guest sample (fresh isolate, rifty fs): layer = flat in 60/60; equal to node in 28/60; layer ≠ node where flat = node in 0/60
+   13 × rifty fs vs node (flat too), first difference tree (times)
+   5 × rifty fs vs node (flat too), first difference copy: rifty EISDIR / node ENOTSUP
+   4 × rifty fs vs node (flat too), first difference cp: rifty EINVAL / node ERR_FS_CP_EINVAL
+   3 × rifty fs vs node (flat too), first difference cp: rifty EISDIR / node ERR_FS_CP_NON_DIR_TO_DIR
+   2 × rifty fs vs node (flat too), first difference rename: rifty EINVAL / node ENOTDIR
+   2 × rifty fs vs node (flat too), first difference copy: rifty EISDIR / node ENOENT
+   1 × rifty fs vs node (flat too), first difference rename: rifty EINVAL / node ENOENT
+   1 × rifty fs vs node (flat too), first difference rename: rifty ok / node ENOENT
+   1 × rifty fs vs node (flat too), first difference cp: rifty ok / node ERR_FS_CP_EINVAL
+
+shared template bytes unchanged after all runs: true

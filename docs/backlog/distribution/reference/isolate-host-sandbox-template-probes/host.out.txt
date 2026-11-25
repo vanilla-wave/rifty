@@ -1,11 +1,11 @@
 node v24.16.0, darwin/arm64
 
 ## T1: 296 files, 1.0 MB
-{"tpl":"T1","arm":"views","createMs":1.87,"writeFile10KiBMs":0.55,"writeTemplateFileMs":0.55,"readTemplateFileMs":0,"listNodeModulesMs":0,"removeMs":0,"idleKiBPerSandbox":112}
-{"tpl":"T1","arm":"overlay","createMs":0.1,"writeFile10KiBMs":0.17,"writeTemplateFileMs":0.29,"readTemplateFileMs":0,"listNodeModulesMs":0,"removeMs":0,"idleKiBPerSandbox":-3}
-{"tpl":"T1","arm":"layered","createMs":0.2,"writeFile10KiBMs":0.24,"writeTemplateFileMs":0.4,"readTemplateFileMs":0,"listNodeModulesMs":0,"removeMs":0,"idleKiBPerSandbox":5}
+{"tpl":"T1","arm":"views","createMs":1.88,"writeFile10KiBMs":0.63,"writeTemplateFileMs":0.65,"writeAfterTouchMs":0.88,"readTemplateFileMs":0,"listNodeModulesMs":0,"removeMs":0,"idleKiBPerSandbox":111}
+{"tpl":"T1","arm":"overlay","createMs":0.06,"writeFile10KiBMs":0.17,"writeTemplateFileMs":0.3,"writeAfterTouchMs":0.42,"readTemplateFileMs":0,"listNodeModulesMs":0,"removeMs":0,"idleKiBPerSandbox":-3}
+{"tpl":"T1","arm":"layered","createMs":0.31,"writeFile10KiBMs":0.07,"writeTemplateFileMs":0.02,"writeAfterTouchMs":0.05,"readTemplateFileMs":0,"listNodeModulesMs":0,"removeMs":0.01,"idleKiBPerSandbox":4}
 
 ## T95: 23654 files, 72.5 MB
-{"tpl":"T95","arm":"views","createMs":97.29,"writeFile10KiBMs":28.99,"writeTemplateFileMs":30.11,"readTemplateFileMs":0,"listNodeModulesMs":0,"removeMs":0,"idleKiBPerSandbox":9590}
-{"tpl":"T95","arm":"overlay","createMs":0.01,"writeFile10KiBMs":0.15,"writeTemplateFileMs":0.29,"readTemplateFileMs":0,"listNodeModulesMs":0,"removeMs":0,"idleKiBPerSandbox":-480}
-{"tpl":"T95","arm":"layered","createMs":0.04,"writeFile10KiBMs":0.19,"writeTemplateFileMs":0.43,"readTemplateFileMs":0,"listNodeModulesMs":0,"removeMs":0,"idleKiBPerSandbox":4}
+{"tpl":"T95","arm":"views","createMs":98.77,"writeFile10KiBMs":31.08,"writeTemplateFileMs":30.52,"writeAfterTouchMs":31.09,"readTemplateFileMs":0,"listNodeModulesMs":0,"removeMs":0,"idleKiBPerSandbox":9540}
+{"tpl":"T95","arm":"overlay","createMs":0.01,"writeFile10KiBMs":0.15,"writeTemplateFileMs":0.29,"writeAfterTouchMs":0.42,"readTemplateFileMs":0,"listNodeModulesMs":0,"removeMs":0,"idleKiBPerSandbox":-480}
+{"tpl":"T95","arm":"layered","createMs":0.05,"writeFile10KiBMs":0.05,"writeTemplateFileMs":0.02,"writeAfterTouchMs":0.05,"readTemplateFileMs":0,"listNodeModulesMs":0,"removeMs":0.04,"idleKiBPerSandbox":3}

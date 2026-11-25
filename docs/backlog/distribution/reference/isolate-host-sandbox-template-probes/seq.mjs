@@ -9,8 +9,8 @@
  *   host    — host-op sequences (sandbox.ts semantics: writeFile creates parents) run on the
  *             consumer's LayeredFs, compared with Node doing the same calls;
  *   mixed   — host ops, then a run, then the host's view.
- * Also: every consumer state round-trips through difference() → apply() unchanged, and the
- * changed-paths list derived from the two differences equals a walk of Node's before/after.
+ * Also: every consumer state round-trips through toWire() → fromWire() unchanged, and the
+ * changed-paths list between the two views equals a walk of Node's before/after.
  *
  *   node --no-node-snapshot docs/backlog/distribution/reference/isolate-host-sandbox-template-probes/seq.mjs
  */
@@ -71,16 +71,15 @@ import { restoreFs, snapshotFs } from '../snapshot.ts';
 let L;
 const opts = { template: null, maxBytes: 1 << 30 };
 Object.defineProperty(globalThis, '__seq', { value: Object.freeze({
-  install(pack, rows, blob, deleted) {
-    L = new LayeredFs(templateLayer(pack, JSON.parse(rows)));
+  install(pack, rows, blob, refs) {
     const e = new MemoryFsSync();
     restoreFs(e, blob, opts);
-    L.apply(e, JSON.parse(deleted));
+    L = LayeredFs.fromWire(templateLayer(pack, JSON.parse(rows)), e, JSON.parse(refs));
     setSyncMirror(L);
   },
   capture() {
-    const d = L.difference();
-    return { blob: snapshotFs(d.entries, opts), deleted: JSON.stringify(d.deleted) };
+    const w = L.toWire();
+    return { blob: snapshotFs(w.entries, opts), refs: JSON.stringify(w.refs) };
   },
 }), configurable: true });`,
     resolveDir: join(guestPkg, 'src/guest'),
@@ -195,34 +194,11 @@ function nodeRoot() {
   touch(join(root, 'node_modules'));
   return root;
 }
-/** Changed paths from two differences (O(difference)); deleted subtrees reported at the top. */
-function changesOf(before, beforeDiff, after, afterDiff) {
-  const cand = new Set([...beforeDiff.deleted, ...afterDiff.deleted]);
-  for (const d of [beforeDiff, afterDiff])
-    for (const p of Object.keys(viewOf(d.entries))) cand.add(p);
-  const key = (fs, p) => {
-    const st = fs.statSyncOrNull(p);
-    if (st === null) return null;
-    if (st.isDirectory) return 'dir';
-    return `file:${createHash('sha1').update(fs.readFileBytesSync(p)).digest('hex')}`;
-  };
-  const out = [];
-  for (const p of [...cand].sort()) {
-    const a = key(before, p);
-    const b = key(after, p);
-    if (a === b) continue;
-    if (out.some((q) => q.type === 'deleted' && p.startsWith(`${q.path}/`))) continue;
-    if (
-      out.some(
-        (q) => q.type === 'created' && p.startsWith(`${q.path}/`) && b !== null && a === null,
-      )
-    ) {
-      out.push({ path: p, type: 'created' });
-      continue;
-    }
-    out.push({ path: p, type: a === null ? 'created' : b === null ? 'deleted' : 'changed' });
-  }
-  return out;
+/** Changed paths between two views (the design derives them over the nodes held; here, a walk). */
+function changesOf(before, after) {
+  const a = viewOf(before);
+  const b = viewOf(after);
+  return nodeChanges(a, b);
 }
 function nodeChanges(a, b) {
   const out = [];
@@ -266,14 +242,14 @@ async function run(state, program) {
     g.fire = await entry.get('fire', { reference: true });
     // The state: the consumer's difference plus the program.
     state.writeFileSync('/workspace/main.js', enc.encode(program));
-    const d = state.difference();
+    const d = state.toWire();
     await (await seq.get('install', { reference: true })).apply(
       undefined,
       [
         new Uint8Array(pack),
         JSON.stringify(rows),
         R.snapshotFs(d.entries, OPTS),
-        JSON.stringify(d.deleted),
+        JSON.stringify(d.refs),
       ],
       { arguments: { copy: true } },
     );
@@ -291,8 +267,7 @@ async function run(state, program) {
     // The consumer: validate (codec) and apply over a fresh template view.
     const entries = new R.MemoryFsSync();
     R.restoreFs(entries, cap.blob, OPTS);
-    const next = new R.LayeredFs(lower());
-    next.apply(entries, JSON.parse(cap.deleted));
+    const next = R.LayeredFs.fromWire(lower(), entries, JSON.parse(cap.refs));
     return { code, stdout: out.join(''), next };
   } finally {
     close();
@@ -313,6 +288,7 @@ for (const [op, a, b, c] of ops) {
     else if (op === 'rename') fs.renameSync(P + a, P + b);
     else if (op === 'utimes') fs.utimesSync(P + a, b / 1000, b / 1000);
     else if (op === 'copy') fs.copyFileSync(P + a, P + b);
+    else if (op === 'cp') fs.cpSync(P + a, P + b, { recursive: true });
     else if (op === 'read') log.push([op, a, fs.readFileSync(P + a, 'utf8')]);
     else if (op === 'require') log.push([op, a, require(P + a)]);
     if (op !== 'read' && op !== 'require') log.push([op, a, 'ok']);
@@ -355,6 +331,28 @@ const GUEST = {
   'mkdir an existing template dir': [['mkdir', '/node_modules/a']],
   'rm a non-empty template dir, not recursive': [['rm', '/node_modules/a']],
   'copy a template file out': [['copy', '/node_modules/a/index.js', '/workspace/i.js']],
+  // N2 (review of 9624b9c9d → ee8614363): regressions the generator (gen.mjs) also finds.
+  'N2a: rename a template dir, then mkdir it again': [
+    ['rename', '/node_modules/a', '/node_modules/c'],
+    ['mkdir', '/node_modules/a'],
+  ],
+  'N2b: a template file becomes a dir with a child': [
+    ['rm', '/node_modules/a/index.js'],
+    ['mkdir', '/node_modules/a/index.js'],
+    ['write', '/node_modules/a/index.js/k.js', 'k'],
+  ],
+  'N2b: a template dir becomes a file': [
+    ['rm', '/node_modules/a/lib', { recursive: true }],
+    ['write', '/node_modules/a/lib', 'f'],
+  ],
+  'N2: B → A after A → C': [
+    ['rename', '/node_modules/a', '/node_modules/c'],
+    ['rename', '/node_modules/b', '/node_modules/a'],
+  ],
+  'N2: rename onto an existing template file': [
+    ['rename', '/node_modules/b/index.js', '/node_modules/a/index.js'],
+  ],
+  'cp merging into an existing template dir': [['cp', '/node_modules/b', '/node_modules/a']],
 };
 
 const results = [];
@@ -382,12 +380,11 @@ for (const [name, ops] of Object.entries(GUEST)) {
     const state = fresh();
     const pre = fresh();
     pre.writeFileSync('/workspace/main.js', enc.encode(prog(ops)));
-    const preDiff = pre.difference();
     const r = await run(state, prog(ops));
     const riftyAfter = viewOf(r.next);
     const logSame = r.stdout.trim() === nodeLog.trim();
     const treeSame = eq(riftyAfter, nodeAfter);
-    const changes = changesOf(pre, preDiff, r.next, r.next.difference());
+    const changes = changesOf(pre, r.next);
     const changesSame = eq(changes, nodeChanges(before, nodeAfter));
     report(name, logSame && treeSame && changesSame && r.code === 0, {
       code: r.code,
@@ -439,9 +436,7 @@ const HOST = {
     ['remove', '/node_modules/a/lib'],
   ],
 };
-console.log(
-  '\n## host sequences (consumer LayeredFs) vs node, then a round trip through difference/apply',
-);
+console.log('\n## host sequences (consumer LayeredFs) vs node, then a round trip through the wire');
 for (const [name, ops] of Object.entries(HOST)) {
   const root = nodeRoot();
   try {
@@ -450,9 +445,10 @@ for (const [name, ops] of Object.entries(HOST)) {
     const nodeCodes = ops.map((o) => nodeHostOp(root, o));
     const view = viewOf(fs);
     const nv = nodeView(root);
-    const d = fs.difference();
-    const again = new R.LayeredFs(lower());
-    again.apply(d.entries, d.deleted);
+    const d = fs.toWire();
+    const blob = new R.MemoryFsSync();
+    R.restoreFs(blob, R.snapshotFs(d.entries, OPTS), OPTS);
+    const again = R.LayeredFs.fromWire(lower(), blob, JSON.parse(JSON.stringify(d.refs)));
     report(name, eq(codes, nodeCodes) && eq(view, nv) && eq(viewOf(again), view), {
       codes,
       nodeCodes,
@@ -561,10 +557,16 @@ console.log('\n## minimal difference: reading the template changes nothing');
       ['read', '/node_modules/a/lib/y.js'],
     ]),
   );
-  const d = r.next.difference();
+  const d = r.next.toWire();
   const paths = Object.keys(viewOf(d.entries));
-  const ok = d.deleted.length === 0 && !paths.some((p) => p.startsWith('/node_modules'));
-  report('require / read of template files', ok, { paths, deleted: d.deleted });
+  const bytesUnder = paths.filter(
+    (p) => p.startsWith('/node_modules') && !viewOf(d.entries)[p].startsWith('dir'),
+  );
+  const ok = bytesUnder.length === 0 && d.refs.every((x) => x[1] === 'lazy' || x[1] === 'ref');
+  report('require / read of template files', ok, {
+    bytesUnder,
+    refs: d.refs.map((x) => x.slice(0, 3)),
+  });
 }
 
 const failed = results.filter((r) => !r.ok).length;

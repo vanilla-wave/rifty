@@ -1,25 +1,25 @@
 node v24.16.0, isolated-vm 7.0.2, darwin/arm64
 
-## T1: 296 files, 1.0 MB; consumer full-state encode/decode ms {"semver":{"encodeFull":3.4,"decodeFull":3},"many":{"encodeFull":2.1,"decodeFull":6},"stream":{"encodeFull":5.4,"decodeFull":2.5},"bigdiff":{"encodeFull":20.4,"decodeFull":19.6}}
-{"tpl":"T1","w":"semver","arm":"views","msMedian":{"boot":10.7,"restore":3.2,"run":35.6,"capture":1.1,"total":51},"heapMiB":{"usedAfterRun":5.8,"external":15.2,"totalAfterCapture":15},"minMemoryLimitMiB":19,"endStateBytes":527}
-{"tpl":"T1","w":"semver","arm":"layered","msMedian":{"boot":9.9,"restore":1.8,"run":37.7,"capture":0.8,"total":49.9},"heapMiB":{"usedAfterRun":5.9,"external":15.2,"totalAfterCapture":15.2},"minMemoryLimitMiB":19,"endStateBytes":527}
-{"tpl":"T1","w":"many","arm":"views","msMedian":{"boot":9.9,"restore":3,"run":18.9,"capture":7.5,"total":39.4},"heapMiB":{"usedAfterRun":4.7,"external":16.3,"totalAfterCapture":14.2},"minMemoryLimitMiB":19,"endStateBytes":1117459}
-{"tpl":"T1","w":"many","arm":"layered","msMedian":{"boot":10,"restore":1.8,"run":24,"capture":9,"total":48},"heapMiB":{"usedAfterRun":5.1,"external":16.3,"totalAfterCapture":14.2},"minMemoryLimitMiB":19,"endStateBytes":1117459}
-{"tpl":"T1","w":"stream","arm":"views","msMedian":{"boot":10,"restore":3,"run":31.4,"capture":8.1,"total":54.1},"heapMiB":{"usedAfterRun":4.5,"external":31.2,"totalAfterCapture":9.8},"minMemoryLimitMiB":35,"endStateBytes":8389402}
-{"tpl":"T1","w":"stream","arm":"layered","msMedian":{"boot":10,"restore":1.7,"run":48,"capture":14.2,"total":76.2},"heapMiB":{"usedAfterRun":3.7,"external":47.1,"totalAfterCapture":8.7},"minMemoryLimitMiB":51,"endStateBytes":16778091}
-{"tpl":"T1","w":"bigdiff","arm":"views","msMedian":{"boot":9.8,"restore":15.2,"run":8.9,"capture":16,"total":50.1},"heapMiB":{"usedAfterRun":3.8,"external":47.1,"totalAfterCapture":8.5},"minMemoryLimitMiB":51,"endStateBytes":16777666}
-{"tpl":"T1","w":"bigdiff","arm":"layered","msMedian":{"boot":10.9,"restore":14.9,"run":9.6,"capture":16.1,"total":51.9},"heapMiB":{"usedAfterRun":3.7,"external":47.1,"totalAfterCapture":8.7},"minMemoryLimitMiB":51,"endStateBytes":16777666}
+## T1: 296 files, 1.0 MB; consumer full-state encode/decode ms {"semver":{"encodeFull":3.9,"decodeFull":3.1},"many":{"encodeFull":2,"decodeFull":2.8},"stream":{"encodeFull":2,"decodeFull":2.1},"bigdiff":{"encodeFull":17.7,"decodeFull":13.9}}
+{"tpl":"T1","w":"semver","arm":"views","msMedian":{"boot":10.2,"restore":3.3,"run":37.7,"capture":1.1,"total":51.8},"heapMiB":{"usedAfterRun":6.4,"external":15.2,"totalAfterCapture":15.2},"minMemoryLimitMiB":19,"endStateBytes":527}
+{"tpl":"T1","w":"semver","arm":"layered","msMedian":{"boot":10.1,"restore":2,"run":35.4,"capture":0.6,"total":48.2},"heapMiB":{"usedAfterRun":7.7,"external":15.2,"totalAfterCapture":15.2},"minMemoryLimitMiB":19,"endStateBytes":1043}
+{"tpl":"T1","w":"many","arm":"views","msMedian":{"boot":10.8,"restore":4.4,"run":21.5,"capture":10.8,"total":51},"heapMiB":{"usedAfterRun":4.6,"external":16.3,"totalAfterCapture":14},"minMemoryLimitMiB":19,"endStateBytes":1117459}
+{"tpl":"T1","w":"many","arm":"layered","msMedian":{"boot":21.4,"restore":4.6,"run":39.8,"capture":15.2,"total":82.1},"heapMiB":{"usedAfterRun":5.8,"external":16.3,"totalAfterCapture":14.2},"minMemoryLimitMiB":19,"endStateBytes":1117459}
+{"tpl":"T1","w":"stream","arm":"views","msMedian":{"boot":17,"restore":5.6,"run":43.9,"capture":9.6,"total":75.9},"heapMiB":{"usedAfterRun":4.6,"external":31.2,"totalAfterCapture":9.8},"minMemoryLimitMiB":35,"endStateBytes":8389402}
+{"tpl":"T1","w":"stream","arm":"layered","msMedian":{"boot":20.3,"restore":5,"run":79.9,"capture":22.5,"total":132.3},"heapMiB":{"usedAfterRun":3.7,"external":47.2,"totalAfterCapture":8.2},"minMemoryLimitMiB":51,"endStateBytes":16778091}
+{"tpl":"T1","w":"bigdiff","arm":"views","msMedian":{"boot":19,"restore":31.1,"run":13.9,"capture":23.3,"total":98.4},"heapMiB":{"usedAfterRun":3.8,"external":47.2,"totalAfterCapture":8.7},"minMemoryLimitMiB":51,"endStateBytes":16777666}
+{"tpl":"T1","w":"bigdiff","arm":"layered","msMedian":{"boot":18.8,"restore":23.9,"run":17.6,"capture":31.6,"total":96.3},"heapMiB":{"usedAfterRun":3.8,"external":47.2,"totalAfterCapture":8.7},"minMemoryLimitMiB":51,"endStateBytes":16777666}
 
-## T95: 23654 files, 72.5 MB; consumer full-state encode/decode ms {"semver":{"encodeFull":186.1,"decodeFull":221.2},"pdf":{"encodeFull":405.3,"decodeFull":455.7},"many":{"encodeFull":292.7,"decodeFull":206.9}}
-{"tpl":"T95","w":"semver","arm":"views","msMedian":{"boot":10.4,"restore":98.8,"run":37,"capture":37.2,"total":184},"heapMiB":{"usedAfterRun":32.2,"external":87.5,"totalAfterCapture":55.5},"minMemoryLimitMiB":107,"endStateBytes":527}
-{"tpl":"T95","w":"semver","arm":"layered","msMedian":{"boot":10.2,"restore":40.9,"run":40.7,"capture":0.8,"total":92.5},"heapMiB":{"usedAfterRun":33.3,"external":87.5,"totalAfterCapture":56.1},"minMemoryLimitMiB":99,"endStateBytes":527}
-{"tpl":"T95","w":"pdf","arm":"views","msMedian":{"boot":9.8,"restore":93.2,"run":203.7,"capture":35.9,"total":341.2},"heapMiB":{"usedAfterRun":50.3,"external":88,"totalAfterCapture":66.9},"minMemoryLimitMiB":107,"endStateBytes":1600}
-{"tpl":"T95","w":"pdf","arm":"layered","msMedian":{"boot":11.3,"restore":47.9,"run":254.3,"capture":3.6,"total":318.2},"heapMiB":{"usedAfterRun":60.2,"external":88,"totalAfterCapture":70.1},"minMemoryLimitMiB":103,"endStateBytes":1600}
-{"tpl":"T95","w":"many","arm":"views","msMedian":{"boot":12.4,"restore":109,"run":23.8,"capture":53.1,"total":195.1},"heapMiB":{"usedAfterRun":15.8,"external":88.6,"totalAfterCapture":38.5},"minMemoryLimitMiB":107,"endStateBytes":1117459}
-{"tpl":"T95","w":"many","arm":"layered","msMedian":{"boot":11.8,"restore":47.9,"run":32.4,"capture":10.3,"total":105.9},"heapMiB":{"usedAfterRun":21.6,"external":89.6,"totalAfterCapture":39.9},"minMemoryLimitMiB":99,"endStateBytes":1117459}
+## T95: 23654 files, 72.5 MB; consumer full-state encode/decode ms {"semver":{"encodeFull":144.2,"decodeFull":163.5},"pdf":{"encodeFull":140.2,"decodeFull":182.2},"many":{"encodeFull":140.2,"decodeFull":178.9}}
+{"tpl":"T95","w":"semver","arm":"views","msMedian":{"boot":20.9,"restore":160,"run":81.9,"capture":67.1,"total":349.4},"heapMiB":{"usedAfterRun":18.3,"external":87.5,"totalAfterCapture":39.8},"minMemoryLimitMiB":107,"endStateBytes":527}
+{"tpl":"T95","w":"semver","arm":"layered","msMedian":{"boot":21.5,"restore":67.7,"run":61.1,"capture":1.3,"total":142.2},"heapMiB":{"usedAfterRun":32.3,"external":87.5,"totalAfterCapture":54.9},"minMemoryLimitMiB":99,"endStateBytes":1043}
+{"tpl":"T95","w":"pdf","arm":"views","msMedian":{"boot":15.5,"restore":125.6,"run":263.6,"capture":52.8,"total":454.7},"heapMiB":{"usedAfterRun":48.8,"external":88,"totalAfterCapture":66.9},"minMemoryLimitMiB":107,"endStateBytes":1600}
+{"tpl":"T95","w":"pdf","arm":"layered","msMedian":{"boot":16.2,"restore":65.9,"run":282.9,"capture":4.4,"total":377.1},"heapMiB":{"usedAfterRun":52.3,"external":88,"totalAfterCapture":66.3},"minMemoryLimitMiB":103,"endStateBytes":4834}
+{"tpl":"T95","w":"many","arm":"views","msMedian":{"boot":20.4,"restore":176.3,"run":39.7,"capture":93.8,"total":327.5},"heapMiB":{"usedAfterRun":19.4,"external":89.6,"totalAfterCapture":40.5},"minMemoryLimitMiB":107,"endStateBytes":1117459}
+{"tpl":"T95","w":"many","arm":"layered","msMedian":{"boot":21.5,"restore":80.7,"run":55.6,"capture":15.7,"total":182.4},"heapMiB":{"usedAfterRun":22.4,"external":89.6,"totalAfterCapture":40.6},"minMemoryLimitMiB":99,"endStateBytes":1117459}
 
 ## concurrency: 4 runs at once, T95
-{"w":"pdf","arm":"views","wallMedianMs":534,"perRunMedianMs":522}
-{"w":"pdf","arm":"layered","wallMedianMs":653,"perRunMedianMs":644}
-{"w":"many","arm":"views","wallMedianMs":260,"perRunMedianMs":255}
-{"w":"many","arm":"layered","wallMedianMs":150,"perRunMedianMs":140}
+{"w":"pdf","arm":"views","wallMedianMs":1039,"perRunMedianMs":994}
+{"w":"pdf","arm":"layered","wallMedianMs":798,"perRunMedianMs":768}
+{"w":"many","arm":"views","wallMedianMs":425,"perRunMedianMs":381}
+{"w":"many","arm":"layered","wallMedianMs":222,"perRunMedianMs":200}

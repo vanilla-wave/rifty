@@ -360,7 +360,19 @@ async function run(arm, tpl, w, memoryLimit) {
     if (arm === 'layered')
       await (await probe.get('layered', { reference: true })).apply(
         undefined,
-        [new ivm.ExternalCopy(tpl.packed.pack).copyInto({ release: true }), tpl.packed.index],
+        [
+          new ivm.ExternalCopy(tpl.packed.pack).copyInto({ release: true }),
+          tpl.packed.index,
+          // The sandbox's state: its own entries (the restored blob) + the template mount, lazy.
+          JSON.stringify([
+            [
+              '/node_modules',
+              'lazy',
+              '/node_modules',
+              { mtimeMs: T0, atimeMs: T0, ctimeMs: T0, birthtimeMs: T0 },
+            ],
+          ]),
+        ],
         { arguments: { copy: true } },
       );
     if (arm === 'views') {

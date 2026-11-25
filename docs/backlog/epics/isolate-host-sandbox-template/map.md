@@ -9,16 +9,19 @@ the carrier hits it:
 
 1. Acceptance carrier — the User scenario as an e2e over a real `produceDependencySnapshot`
    artifact of the four libraries (published `@riftydev/workbench`, as the library probe), committed
-   RED (`it.fails`), I1–I11; its sequence table seeded from probe S (`seq.mjs`).
-2. `LayeredFsSync` in `@riftydev/vfs` (ADR-0572 §2): the layered class, its derived difference and
-   apply, writable and read-only modes; unit-tested against live Node on the I11 table, both as an
-   `FsSync` and through runtime-js `fs` (I3, I6, I11).
+   RED (`it.fails`), I1–I11; I11's generator and named rows seeded from probes G (`gen.mjs`) and S
+   (`seq.mjs`).
+2. `LayeredFsSync` in `@riftydev/vfs` (ADR-0572 §2): the layered class, its node-identity state
+   (lazy / reference / explicit nodes) and its rebuild, the per-operation budget, writable and
+   read-only modes; I11's generator in CI (fixed seed range, a failure prints seed + minimized
+   sequence) and its named rows, as an `FsSync` and through runtime-js `fs` (I3, I4 shared bytes,
+   I6, I11).
 3. Template intake and host ops in the consumer, with every loud gap of the not-yet-run template in
    the same unit — `snapshot()` / `createSandbox({ snapshot })` over a template (I8) and `exec` over
    a template (`NotImplementedError('isolate-host.sandbox-template-exec')`, lifted by item 5), so no
    state between items runs silently without its template: artifact → decoded template (gzip/br,
    ustar + PAX), named refusals, identity and packages, a process registry by id, one shared buffer
-   and index per process; host ops on item 2's class, the cap over the derived difference (absorbs
+   and index per process; host ops on item 2's class, the cap as its per-operation budget (absorbs
    `distribution/isolate-host-sandbox-write-cost-per-state`) (I1, I3 host side, I4, I5 host rows,
    I8).
 4. Worker template cache + binary request frame (absorbs
@@ -26,14 +29,14 @@ the carrier hits it:
    (base64 inside a JSON line is +33 % and a ~90 MB string), keeps it by identity in its RSS ceiling
    and idle watermark, evicted with the worker (I4, I5 frame rows).
 5. The run over the template (ADR-0572 §3), lifting item 3's `exec` refusal: index built in the
-   isolate, item 2's class as the realm's only FS surface, the difference applied, derived after
-   the run and validated by the consumer; the changed-paths list; the F1 return condition measured
+   isolate, item 2's class as the realm's only FS surface, the sandbox's state rebuilt before and
+   handed back after the run, validated by the consumer (ADR-0572 §5); the changed-paths list; the F1 return condition measured
    here (goal Decisions) (I2, I3, I6, I11).
 6. The end state taken where the guest's code cannot reach (absorbs
    `distribution/isolate-host-sandbox-capture-outside-guest-realm`; mechanism at its PICKUP,
    ADR-0572 §9) (I7).
 7. README cost table (T1, T95, the four-library artifact), the isolate rule's two cases, compat
-   rows (template snapshot ❌, the template-directory rename ceiling ⚠️ of I11); the F1 return condition re-measured on landed code (I5, I10).
+   rows (template snapshot ❌); the F1 return condition re-measured on landed code (I5, I10).
 
 ## Open questions
 
@@ -44,9 +47,10 @@ the carrier hits it:
   calls `installMemoryFs()` on main) — owner: agent — a template run installs item 2's class as
   the realm's only FS surface itself (ADR-0572 §3), so neither the read-only mode nor streams wait
   for #437; whichever lands second rebases onto the other.
-- Per-call overhead of the layered class in the guest (probe L: pdf-lib run 254 vs 204 ms for
-  `views`; each call re-walks its path's ancestors) — owner: agent — item 5, against the F1 return
-  condition.
+- Per-call overhead of the layered class in a run (probe F, four-library artifact, run phase vs
+  the same files in the state, load 9–18: pdf +16…+39, docx +8…+17, pptx +29…+33, xlsx +32…+240 ms,
+  empty +18) — owner: agent — item 5 measures it idle against the F1 return condition; above the
+  tolerance the run stops and the numbers go to the user.
 - The read-only oracle (I3): Node v24.16.0 on a Linux read-only mount (a read-only tmpfs or bind
   mount in a CI container) for every mutating call's code/syscall/path — owner: agent — settled at
   item 2's PICKUP: the carrier records the table from live Node; without a runnable read-only mount
