@@ -198,11 +198,24 @@ export class LayeredFs {
     this.#touch(norm(p));
     return fn();
   }
+  #atSelf<T>(p: string, fn: () => T): T {
+    const n = norm(p);
+    this.#touch(n);
+    this.#materialize(n);
+    return fn();
+  }
+  /** A copy writes every path of its destination tree: each is a mutation. */
+  #dirtyTree(p: string): void {
+    this.#dirty(p);
+    if (!this.upper.existsSync(p) || !this.upper.statSync(p).isDirectory) return;
+    for (const d of this.upper.readdirSync(p)) this.#dirtyTree(join(p, d.name));
+  }
 
   // ---- FsSync: reads change nothing; each mutation marks its path ----
   existsSync = (p: string): boolean => this.#at(p, () => this.upper.existsSync(p));
-  statSync = (p: string) => this.#at(p, () => this.upper.statSync(p));
-  statSyncOrNull = (p: string) => this.#at(p, () => this.upper.statSyncOrNull(p));
+  // A directory's own stat depends on its children (`nlink`): a lazy one is materialized first.
+  statSync = (p: string) => this.#atSelf(p, () => this.upper.statSync(p));
+  statSyncOrNull = (p: string) => this.#atSelf(p, () => this.upper.statSyncOrNull(p));
   readFileBytesSync = (p: string): Uint8Array => this.#at(p, () => this.upper.readFileBytesSync(p));
   readdirSync = (p: string) => {
     const n = norm(p);
@@ -257,7 +270,7 @@ export class LayeredFs {
     this.#touchTree(norm(s));
     this.#touchTree(norm(d));
     this.upper.cpSync(s, d, o);
-    this.#dirty(norm(d));
+    this.#dirtyTree(norm(d));
   };
   renameSync = (s: string, d: string): void => {
     const sn = norm(s);
@@ -274,6 +287,50 @@ export class LayeredFs {
       this.#dirty(parentOf(dn));
     }
   };
+
+  /**
+   * Times-independent audit of the change marks (probe G). A directory with an origin and no
+   * change mark is emitted as one `lazy` row by its times alone, so: above every node whose
+   * content is not its origin's (a file without its origin's bytes reference, a directory without
+   * an origin) and at every directory whose child names / kinds differ from its origin's, no
+   * directory may have an origin without a change mark. Holds whatever the backend does to times.
+   */
+  audit(): string[] {
+    const bad: string[] = [];
+    const covered = (p: string): boolean => {
+      for (let q = parentOf(p); ; q = parentOf(q)) {
+        if (this.#dirOrigin.has(q) && !this.#changed.has(q)) return false;
+        if (q === '/') return true;
+      }
+    };
+    const walk = (dir: string): void => {
+      if (this.#lazy.has(dir)) return;
+      const o = this.#dirOrigin.get(dir);
+      const kids = this.upper.readdirSync(dir);
+      if (o !== undefined) {
+        const names = kids.map((d) => `${d.name}:${d.isDirectory ? 'd' : 'f'}`).join('|');
+        const tpl = this.lower
+          .children(o)
+          .map((n) => `${n}:${this.lower.get(join(o, n))?.dir ? 'd' : 'f'}`)
+          .join('|');
+        if (names !== tpl && (!this.#changed.has(dir) || !covered(dir)))
+          bad.push(`${dir} (children)`);
+      }
+      for (const d of kids) {
+        const p = join(dir, d.name);
+        if (d.isDirectory) {
+          if (!this.#dirOrigin.has(p) && !covered(p)) bad.push(p);
+          walk(p);
+        } else {
+          const og = this.#origin.get(p);
+          if ((og === undefined || og.bytes !== this.upper.readFileBytesSync(p)) && !covered(p))
+            bad.push(p);
+        }
+      }
+    };
+    walk('/');
+    return bad;
+  }
 
   // ---- the rule ----
   #untouchedDir(p: string): string | undefined {

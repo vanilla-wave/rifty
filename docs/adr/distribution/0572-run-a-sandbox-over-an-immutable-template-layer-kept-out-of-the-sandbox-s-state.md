@@ -23,10 +23,14 @@ hoisted/nested, missing). L — per-run cost of four ways a fresh isolate sees a
 
 | arm | T1 semver | T95 semver | T95 pdf-lib | T95 1 000 writes | T1 8 MiB chunked I/O | isolate floor T1 / T95 |
 |---|---|---|---|---|---|---|
-| full (today: template in the state) | 70 ms | 392 ms | 647 ms | 359 ms | 55 ms | 19 / 215–219 MiB |
-| views (materialized, one buffer, no per-file copy) | 66 | 190 | 454 | 157 | 48 | 19 / 123 |
+| full (today: template in the state) | 70 ms | 392 ms | 647 ms | 359 ms | invalid¹ | 19 / 215–219 MiB |
+| views (materialized, one buffer, no per-file copy) | 66 | 190 | 454 | 157 | invalid¹ | 19 / 123 |
 | lazy (template read through 3 host functions) | 78 | 80 | 406 | 34 | 64 | 19 / 19–23 |
 | worker (whole FS in the worker, every call crosses) | 75 | 77 | 393 | 51 | 259 (541 MB copied) | 19 / 19–23 |
+
+¹ `full`/`views` keep rifty's async `Vfs` beside the sync mirror: their read stream came back
+empty and the run skipped half the workload (end state 8 389 402 B, no `app.bin`, vs 16 778 091 B),
+while `ok` was judged by the exit code alone — not a measurement of the same work.
 
 `full` adds the consumer's encode + decode of the whole state per `exec` (T95 ~150 + ~170 ms).
 Four concurrent runs on one process, T95 pdf-lib wall: 801 / 570 / 528 / 507 ms. The chosen
@@ -78,11 +82,13 @@ the user's words»).
    sequences — `mkdir`, write, `rm`, `rename`, `cpSync`, `copyFileSync`, `utimes`, read, `readdir` —
    equal rifty's FS without a template in every call, in the tree rebuilt from the wire, with a
    rebuild at a seeded run boundary, and in the cap's count; reads alone leave the state a fresh
-   sandbox's (0 / 3 000 on every count; the existence-derived construction: 302 / 3 000 differ; the
+   sandbox's (0 / 3 000 on every count; the existence-derived construction: 233 / 3 000 with today's grammar, 302 with the first differ; the
    every-node construction: reading grew the state in 3 000 / 3 000); a guest sample in fresh
-   isolates against rifty's plain `MemoryFsSync` 60 / 60; the shared template bytes unchanged;
-   probe S (`seq.mjs`): 29 named rows vs live `node` over a real directory. A sandbox without a
-   template is the same class over an empty index (one lifecycle, ADR-0568 §8).
+   isolates against rifty's plain `MemoryFsSync` 300 / 300; the shared template bytes unchanged;
+   probe S (`seq.mjs`): 30 named rows vs live `node` over a real directory. A sandbox without a
+   template is the same class over an empty index (one lifecycle, ADR-0568 §8). `statSync` of a lazy
+   directory materializes it first (its `nlink` counts its children), and `cpSync` marks every
+   path it writes — both caught red by probe G's mutants before the fix.
 3. **A run** (F1 (a), user 2026-11-25): the worker copies the template's buffer and index into the
    fresh isolate (one ivm copy); the guest builds the index, installs a `LayeredFsSync` over it as
    the realm's only FS surface (sync; promise and stream forms go through it, as PR #437 does for
@@ -273,7 +279,10 @@ the user's words»).
   counted, cold and warm); the consumer's buffers for a run are those encodings and their decode,
   never a copy of the template's buffer or index (the codec's inputs and outputs counted). Measured
   on landed code and published in the README for T1, T95 and the four-library artifact
-  (`scripts/measure.mjs`): host-op medians, idle memory per sandbox, the consumer's peak memory per
+  (`scripts/measure.mjs`) as a sweep — template bytes × entries × directory width × depth, host
+  `writeFile` / `readFile` / `list` / `remove` and the next `exec`'s wire, at `/workspace` and at
+  template directories of depth 0–2 — each claim «does not grow» a row with a slope ≈ 1, each other
+  slope named in the README (probe W's shape): host-op medians, idle memory per sandbox, the consumer's peak memory per
   run, a warm `exec`'s latency and isolate memory (the smallest passing `memoryLimitMb`, bisection
   in 4 MiB steps). An empty sandbox over T95 and over the
   four-library artifact runs with the default `maxFsBytes` and `memoryLimitMb`.
@@ -295,9 +304,10 @@ the user's words»).
   `createSandbox`, and requires each of the four libraries from a sandbox run — each `require`
   succeeding, proven by the carrier on that artifact.
 - I11. Sequences, generated: a seeded generator of `mkdir`, write, `rm` (recursive or not, forced
-  or not), `rename`, `cpSync`, `copyFileSync`, `utimes`, read and `readdir` sequences over a small
-  template and new paths runs each sequence on the layered FS and on rifty's FS without a template
-  holding the same files: every call's result and the tree after the state is carried over the wire
+  or not), `rename`, `cpSync`, `copyFileSync`, `utimes`, read, `readdir` and `stat` sequences over
+  a small template and new paths runs each sequence on the layered FS and on rifty's FS without a
+  template holding the same files: every `FsSync` call's whole returned value (all of `stat` but
+  `ino`) and the tree after the state is carried over the wire
   and rebuilt on a fresh view are equal, by the guest (rifty `fs` in a fresh isolate) and by host
   ops, from one run to the next; and where rifty's FS without a template agrees with live `node`
   v24.16.0 over a real directory, so does the layered one. A failure prints its seed and a
@@ -343,10 +353,14 @@ the user's words»).
   nodes and reference rows only.
 - A rename of a template directory moves its marker: no subtree copy, no bytes, no cap pressure
   (the ceiling of the existence-derived draft is gone).
-- A changed template directory is opaque: it lists all its children, rows for the untouched ones —
-  a write under `/node_modules/a` puts one row per package of `/node_modules` and per entry of `a`
-  on the wire (~400 budget units each; 209 packages ≈ 80 KiB of the cap), bounded by the template's
-  fan-out on the written path, not by its size.
+- **Open dependency (user fork, goal map):** a changed template directory is opaque, it lists all
+  its children (rows for the untouched ones). So a write or removal inside a template directory
+  costs, carries and counts a row per child of every template directory on its path: linear in
+  their width (probe W, 10 → 5 000 packages, write in `/node_modules/pkg/new.js`: 0.03 → 11.8 ms,
+  10 → 5 000 rows, 1.9 → 815 KB on the wire; ~730 cap units per row — 209 packages ≈ 170 KiB of the
+  cap). Requirements §3 ask O(the write + the difference) and a constant between ~1 MB and ~95 MB
+  templates: this is a narrowing until the user accepts it, or a directory delta replaces it. Every
+  other operation × place × template axis is flat (probe W).
 - Per-call overhead of the layered class in a run (probe F, load ~5): +18…+25 ms on the four
   libraries' generators, four at once +7…+41 ms — inside the F1 return condition; map item 5
   re-measures it on landed code.

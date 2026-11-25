@@ -21,6 +21,7 @@ PASS  N2b: a template dir becomes a file
 PASS  N2: B → A after A → C
 PASS  N2: rename onto an existing template file
 PASS  cp merging into an existing template dir
+PASS  cp overwriting a nested template file
 
 ## host sequences (consumer LayeredFs) vs node, then a round trip through the wire
 PASS  host: remove → write same path
@@ -39,4 +40,4 @@ PASS  two runs in a row
 ## minimal difference: reading the template changes nothing
 PASS  require / read of template files
 
-29/29 pass
+30/30 pass

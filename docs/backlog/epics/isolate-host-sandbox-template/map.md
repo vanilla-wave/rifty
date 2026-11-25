@@ -41,6 +41,12 @@ the carrier hits it:
 
 ## Open questions
 
+- A write or removal inside a template directory costs, and carries on the wire, a row per child
+  of every template directory on its path (probe W: linear in their width; ~730 cap units per
+  row) — owner: user — asked 2026-11-25 by the manager: (1) accept as a declared narrowing of
+  requirements §3 + a backlog item with owner, trigger and lifting condition; (2) a directory
+  delta (`lazy(O)` + its changed children + its removed names; only a recreated directory
+  opaque). The goal is draft until the answer; (2) is its own round after it.
 - The process registry's lifetime: unregistering or evicting a template (a long-lived consumer
   that rebuilds its template keeps every old version, ~90 MB each) — owner: agent — settled at item
   3's PICKUP (an explicit release or one held while a sandbox references it), I4 documented.

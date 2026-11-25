@@ -1,6 +1,6 @@
 ---
 kind: epic
-status: ready
+status: draft
 title: Isolate host sandbox template — libraries from a dependency artifact, mounted at /node_modules, outside the sandbox's state
 created: 2026-11-24
 value: A Node service starts every agent sandbox over one prebuilt `node_modules` (pptxgenjs, pdf-lib, docx, exceljs) from `produceDependencySnapshot`, held once per process and per worker, with only the sandbox's own changes moving per run and per host write.
@@ -21,11 +21,16 @@ shared by every sandbox over it, never part of a sandbox's state; the state cap 
 sandbox's difference from it, and only the difference crosses to the worker and back per run. A
 fresh isolate per run holds the template in its heap (copied in per run, user 2026-11-25), so a
 run's latency and isolate memory grow with the template — measured and published (the agent's
-reading of the user's «ок», Decisions); a host op costs O(the write + the sandbox's state) and
-an idle sandbox holds only its own entries and references into the shared template for those it
-touched; reading the template never changes the state — neither grows with the template's bytes. A
-write into a template directory lists that directory's children as rows, so its cost follows the
-fan-out of the template directories on its path (I4). What the host sees is what the next run sees, after any sequence of host ops and runs,
+reading of the user's «ок», Decisions). Host ops, an idle sandbox and the per-run wire do not
+grow with the template's bytes, entries or depth, and reading never changes the state (probe W).
+One dependency is open: a write or removal **inside a template directory** makes every template
+directory on its path list its children as rows, so its cost, the state on the wire and the cap's
+count grow with the width of those directories — a write in `/workspace` does not (probe W: 10 →
+5 000 packages, write in `/node_modules/pkg/new.js` 0.03 → 11.8 ms, 10 → 5 000 rows, 1.9 → 815 KB
+on the wire, ~730 cap units per row; in `/workspace` 0.004 ms, 1 row, flat). That is a narrowing of
+requirements §3 («Хостовая запись стоит O(размер записи + дифф)»; costs on ~1 MB and ~95 MB
+«отличаются не больше чем на константу») — the user's word is pending (map.md), the goal stays
+draft until it. What the host sees is what the next run sees, after any sequence of host ops and runs,
 as rifty's FS without a template would show it, and as live Node over a real directory where
 rifty's FS itself agrees with Node (I11). `exec` reports the paths the run changed, with sizes, deletions included. A broken,
 truncated or unsupported artifact is a named error before a sandbox exists. Persisting a template
@@ -113,7 +118,10 @@ consumer encode/decode per exec, isolate floor 215 MiB, state 96 MB, every host 
   counted, cold and warm); the consumer's buffers for a run are those encodings and their decode,
   never a copy of the template's buffer or index (the codec's inputs and outputs counted). Measured
   on landed code and published in the README for T1, T95 and the four-library artifact
-  (`scripts/measure.mjs`): host-op medians, idle memory per sandbox, the consumer's peak memory per
+  (`scripts/measure.mjs`) as a sweep — template bytes × entries × directory width × depth, host
+  `writeFile` / `readFile` / `list` / `remove` and the next `exec`'s wire, at `/workspace` and at
+  template directories of depth 0–2 — each claim «does not grow» a row with a slope ≈ 1, each other
+  slope named in the README (probe W's shape): host-op medians, idle memory per sandbox, the consumer's peak memory per
   run, a warm `exec`'s latency and isolate memory (the smallest passing `memoryLimitMb`, bisection
   in 4 MiB steps). An empty sandbox over T95 and over the
   four-library artifact runs with the default `maxFsBytes` and `memoryLimitMb`.
@@ -135,9 +143,10 @@ consumer encode/decode per exec, isolate floor 215 MiB, state 96 MB, every host 
   `createSandbox`, and requires each of the four libraries from a sandbox run — each `require`
   succeeding, proven by the carrier on that artifact.
 - I11. Sequences, generated: a seeded generator of `mkdir`, write, `rm` (recursive or not, forced
-  or not), `rename`, `cpSync`, `copyFileSync`, `utimes`, read and `readdir` sequences over a small
-  template and new paths runs each sequence on the layered FS and on rifty's FS without a template
-  holding the same files: every call's result and the tree after the state is carried over the wire
+  or not), `rename`, `cpSync`, `copyFileSync`, `utimes`, read, `readdir` and `stat` sequences over
+  a small template and new paths runs each sequence on the layered FS and on rifty's FS without a
+  template holding the same files: every `FsSync` call's whole returned value (all of `stat` but
+  `ino`) and the tree after the state is carried over the wire
   and rebuilt on a fresh view are equal, by the guest (rifty `fs` in a fresh isolate) and by host
   ops, from one run to the next; and where rifty's FS without a template agrees with live `node`
   v24.16.0 over a real directory, so does the layered one. A failure prints its seed and a
@@ -189,6 +198,8 @@ Third external review of PR #429 @ ee8614363 (the manager's reviewer): N2 (block
 Fresh final check after the N2 fixes (2026-11-25, new reviewer @ 3c3971679): blocker — half of the rule was missing: every materialized node went on the wire, so `require` of the four libraries put 3 317 rows on it and the state grew with reading (against the Outcome, scenario 7, requirements §3); should — the per-operation budget missed parents a copy creates and drifted by `/` on rebuild, unchecked by G; minors — stale figures, the guest «flat» arm was the same class over an empty index, no generated run boundary, coarse times. Dispositions — the rule's second half (an untouched node is one row, `lazy` collapses an untouched subtree; ADR-0572 §2), the cap counted over the state by the same walk; G gains a run boundary, a budget check against an independent wire count, a reads-only minimality check and a plain `MemoryFsSync` guest arm (v3 0 / 3 000 on every count; v2 grows on reads 3 000 / 3 000); a dropped change mark caught 118 / 1 000; F re-measured at load ~5 (inside the return condition); figures refreshed from committed outputs.
 Recheck @ 7cda4de03 (same reviewer, five mutants of the new rule all caught: 93–2 171 / 3 000): the Outcome's «neither grows with the template» needed the fan-out of a changed template directory named, and H's after-listing write was not isolated from the row's own files — both fixed (H re-measured: 0.02 ms fresh and after listing).
 
+Fourth external review of PR #429 @ 1594114f5 (the manager's reviewer; N2 closed on content, kind and times, 30 000 new seeds and 20 000 sequences of its own generator clean): Б1 (blocker) — a write inside a template directory costs and carries rows by that directory's width, a narrowing of §3 presented as meeting it («neither grows with the template's bytes», «not by its size», «meets both»), the third round of «a bound weaker than §3, claimed met» (B1 → S1 → Б1), each time found by a reviewer; S-a — `stat` of a lazy template directory gave another `nlink` (2 vs 3), `stat` absent from G; S-b — `cpSync` marked only its destination root, a nested overwrite held by a backend mtime side effect; S-c — the rifty-fs finding misdescribed its two silent successes; minors. Dispositions — Б1: claims removed, the dependency named with probe W's sweep (bytes × width × files × depth × operation × place; only width at template places has a non-zero slope), the fork to the user (map.md), goal back to draft; S-a: `stat` materializes a lazy directory, G gains `stat` with the whole returned value, a `stat-lazy` mutant red (18 / 1 000, minimized to one `stat('/node_modules')`); S-b: `cpSync` marks every destination path, G gains a times-independent mark audit, a `cp-dest-only` mutant red (named row + 1 / 1 000); six mutants reproducible by `--mutant`; S-c: the finding rewritten (minimal calls, `rifty-fix`, the coupling with S-b); minors fixed.
+
 ## Decisions
 
 - 2026-11-24 — agent: requirements 1–3, the live-sandbox unit `distribution/isolate-host-sandbox-capture-outside-guest-realm` and the changed-paths list are one goal (the manager's brief: the capture is rewritten for the diff anyway).
@@ -207,4 +218,4 @@ Recheck @ 7cda4de03 (same reviewer, five mutants of the new rule all caught: 93�
 - rejected route: every node the layered FS holds on the wire (`layered-v2.ts`, ADR-0572 draft after N2) — violates I4 (reads change nothing) and the Outcome's «reading the template never changes the state»: probe G, reading grew the state in 3 000 / 3 000 sequences; a `require` of the four libraries' 815 loaded files put 3 317 rows on the wire (the fresh reviewer's measure, /tmp, not committed; probe G's count is the committed evidence).
 - rejected route: the worker owns the run's whole FS (ADR-0572 §Forks F1 (c)) — violates the live-sandbox Outcome clause «The files stay rifty's in-memory filesystem in the guest's own realm», which this goal's Outcome keeps; recorded with its costs in `distribution/isolate-host-sandbox-killed-run-partial-writes`.
 - 2026-11-25 — agent: the template comes as artifact bytes or a registered id because requirements §1 name both («либо идентификатор шаблона, заранее зарегистрированного в процессе»): bytes for one-off use, the id to hand many `createSandbox` calls one decoded copy.
-- 2026-11-25 — agent (external reviews of PR #429, B1 → N1/S-a → N2, and the fresh check after N2): one `LayeredFsSync` (ADR-0572 §2) runs both the consumer's host ops and the guest's `fs`; its state is described by node identity — a node untouched from its template origin is one row (`lazy` / `ref`), anything else explicit, an explicit directory opaque — never derived from path existence; the state cap is the count of that description. Probe G: 0 / 3 000 generated sequences differ from rifty's FS without a template, with a run boundary or in the cap's count, and reads never grow the state (existence-derived: 302 / 3 000 differ; every-node: reading grew the state in 3 000 / 3 000); guest sample 60 / 60; shared template bytes unchanged; a dropped change mark is caught (118 / 1 000); probe S 29/29 named rows; H: T95 `writeFile` 0.02 ms, the same after listing the whole template, idle 4 KiB.
+- 2026-11-25 — agent (external reviews of PR #429, B1 → N1/S-a → N2 → the fresh check → Б1/S-a/S-b): one `LayeredFsSync` (ADR-0572 §2) runs both the consumer's host ops and the guest's `fs`; its state is described by node identity — a node untouched from its template origin is one row (`lazy` / `ref`), anything else explicit, an explicit directory opaque — never derived from path existence; the state cap is the count of that description; `stat` of a lazy directory materializes it, `cpSync` marks every path it writes. Probe G (`gen.mjs`, `stat` in the grammar, whole return values, a mark audit): 0 / 3 000 generated sequences and 0 / 7 named regressions differ from rifty's FS without a template, with a run boundary or in the cap's count, reads never grow the state (existence-derived: 233 / 3 000 differ; every-node: reading grew the state in 3 000 / 3 000); guest sample 300 / 300; shared template bytes unchanged; six mutants of the rule red (`--mutant`); probe S 30/30 named rows; probe W: flat on bytes, entries and depth, linear in a template directory's width for writes inside it (the open fork).

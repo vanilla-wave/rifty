@@ -289,9 +289,10 @@ for (const [op, a, b, c] of ops) {
     else if (op === 'utimes') fs.utimesSync(P + a, b / 1000, b / 1000);
     else if (op === 'copy') fs.copyFileSync(P + a, P + b);
     else if (op === 'cp') fs.cpSync(P + a, P + b, { recursive: true });
+    else if (op === 'statnl') log.push([op, a, fs.statSync(P + a).nlink]);
     else if (op === 'read') log.push([op, a, fs.readFileSync(P + a, 'utf8')]);
     else if (op === 'require') log.push([op, a, require(P + a)]);
-    if (op !== 'read' && op !== 'require') log.push([op, a, 'ok']);
+    if (op !== 'read' && op !== 'require' && op !== 'statnl') log.push([op, a, 'ok']);
   } catch (e) { log.push([op, a, e.code]); }
 }
 console.log(JSON.stringify(log));`;
@@ -353,6 +354,16 @@ const GUEST = {
     ['rename', '/node_modules/b/index.js', '/node_modules/a/index.js'],
   ],
   'cp merging into an existing template dir': [['cp', '/node_modules/b', '/node_modules/a']],
+  // Fourth review, S-b: a copy overwriting a file in a nested template directory.
+  'cp overwriting a nested template file': [
+    ['mkdir', '/workspace/w/lib', { recursive: true }],
+    ['write', '/workspace/w/lib/x.js', 'NEW'],
+    ['cp', '/workspace/w', '/node_modules/a'],
+    ['read', '/node_modules/a/lib/x.js'],
+  ],
+  // S-a (stat of a not-yet-listed template directory, nlink) lives in gen.mjs: it compares with
+  // rifty's FS without a layer — nlink on macOS APFS counts every entry, Linux and rifty only
+  // subdirectories, so Node here is not the oracle for it.
 };
 
 const results = [];

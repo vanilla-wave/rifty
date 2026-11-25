@@ -15,7 +15,10 @@
  * isolate (rifty `fs` in the guest) against `node` running the same program. A failure prints its
  * seed and a minimized sequence. The shared template bytes are hashed before and after.
  *
- *   node --no-node-snapshot docs/backlog/distribution/reference/isolate-host-sandbox-template-probes/gen.mjs [N=3000] [GUEST=60]
+ *   node --no-node-snapshot docs/backlog/distribution/reference/isolate-host-sandbox-template-probes/gen.mjs [N=3000] [GUEST=300] [SEED_BASE=0] [--mutant=NAME]
+ *
+ * `--mutant=NAME` builds `layered.ts` with one known defect (MUTANTS below) to show the generator
+ * catches it (exit 1).
  */
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -30,13 +33,48 @@ const repo = fileURLToPath(new URL('../../../../..', import.meta.url));
 const here = fileURLToPath(new URL('.', import.meta.url));
 const guestPkg = join(repo, 'packages/isolate-guest');
 const nodePaths = [join(guestPkg, 'node_modules')];
-const N = Number(process.argv[2] ?? 3000);
-const GUEST = Number(process.argv[3] ?? 60);
+const args = process.argv.slice(2).filter((a) => !a.startsWith('--'));
+const N = Number(args[0] ?? 3000);
+const GUEST = Number(args[1] ?? 300);
+const SEED_BASE = Number(args[2] ?? 0);
+const MUTANT = process.argv.find((a) => a.startsWith('--mutant='))?.slice(9);
+/** Known defects of the rule, as source patches of layered.ts: [find, replace]. */
+const MUTANTS = {
+  'stat-lazy': [
+    'statSync = (p: string) => this.#atSelf(p, () => this.upper.statSync(p));',
+    'statSync = (p: string) => this.#at(p, () => this.upper.statSync(p));',
+  ],
+  'cp-dest-only': ['this.#dirtyTree(norm(d));', 'this.#dirty(norm(d));'],
+  'rm-no-dirty': [
+    '      this.#rekey(n, null);\n      this.#dirty(parentOf(n));',
+    '      this.#rekey(n, null);',
+  ],
+  'write-no-dirty': [
+    '    this.upper.writeFileSync(p, d);\n    this.#dirty(n);',
+    '    this.upper.writeFileSync(p, d);',
+  ],
+  'changed-ignored': [
+    'if (o === undefined || this.#changed.has(p)) return undefined;',
+    'if (o === undefined) return undefined;',
+  ],
+  'rename-no-dirty': ['      this.#dirty(parentOf(sn));\n', ''],
+};
+let layeredSrc = join(here, 'layered.ts');
+if (MUTANT !== undefined) {
+  const m = MUTANTS[MUTANT];
+  if (!m) throw new Error(`unknown mutant ${MUTANT}: ${Object.keys(MUTANTS).join(', ')}`);
+  const find = m[0].replaceAll('\\n', '\n');
+  const text = nfs.readFileSync(layeredSrc, 'utf8');
+  if (!text.includes(find)) throw new Error(`mutant ${MUTANT} does not apply`);
+  layeredSrc = join(here, `.mutant-${process.pid}.ts`);
+  nfs.writeFileSync(layeredSrc, text.replace(find, m[1].replaceAll('\\n', '\n')));
+  process.on('exit', () => nfs.rmSync(layeredSrc, { force: true }));
+}
 
 const realmFile = join(tmpdir(), `gen-realm-${process.pid}.mjs`);
 await build({
   stdin: {
-    contents: `export * as V3 from ${JSON.stringify(join(here, 'layered.ts'))};
+    contents: `export * as V3 from ${JSON.stringify(layeredSrc)};
 export * as V2 from ${JSON.stringify(join(here, 'layered-v2.ts'))};
 export * as V1 from ${JSON.stringify(join(here, 'layered-v1.ts'))};
 export { MemoryFsSync } from '@riftydev/vfs/internal';
@@ -109,6 +147,11 @@ const POOL = [
   '/node_modules/b/sub/t.js',
   '/workspace/w',
   '/workspace/w/f.js',
+  // Same names as template entries, so copies and renames merge into template directories.
+  '/workspace/w/lib',
+  '/workspace/w/lib/x.js',
+  '/node_modules/b/lib',
+  '/node_modules/b/lib/x.js',
   '/workspace/g.js',
 ];
 const TIMES = [1_610_000_000_000, 1_620_000_000_000];
@@ -123,6 +166,8 @@ function sequence(seed) {
       'mkdir',
       'write',
       'write',
+      'hostwrite',
+      'hostwrite',
       'rm',
       'rm',
       'rename',
@@ -132,10 +177,11 @@ function sequence(seed) {
       'utimes',
       'read',
       'readdir',
+      'stat',
     ]);
     const p = pick(POOL);
     if (k === 'mkdir') ops.push([k, p, { recursive: r() < 0.5 }]);
-    else if (k === 'write') ops.push([k, p, pick(BODIES)]);
+    else if (k === 'write' || k === 'hostwrite') ops.push([k, p, pick(BODIES)]);
     else if (k === 'rm') ops.push([k, p, { recursive: r() < 0.6, force: r() < 0.3 }]);
     else if (k === 'rename' || k === 'cp' || k === 'copy') ops.push([k, p, pick(POOL)]);
     else if (k === 'utimes') ops.push([k, p, pick(TIMES)]);
@@ -151,7 +197,11 @@ function onFsSync(fs, [k, p, a]) {
   try {
     if (k === 'mkdir') fs.mkdirSync(p, a);
     else if (k === 'write') fs.writeFileSync(p, enc.encode(a));
-    else if (k === 'rm') fs.rmSync(p, a);
+    else if (k === 'hostwrite') {
+      // A host writeFile: parents created (sandbox.ts).
+      fs.mkdirSync(p.slice(0, p.lastIndexOf('/')) || '/', { recursive: true });
+      fs.writeFileSync(p, enc.encode(a));
+    } else if (k === 'rm') fs.rmSync(p, a);
     else if (k === 'rename') fs.renameSync(p, a);
     else if (k === 'cp') fs.cpSync(p, a, { recursive: true });
     else if (k === 'copy') fs.copyFileSync(p, a);
@@ -160,8 +210,22 @@ function onFsSync(fs, [k, p, a]) {
     else if (k === 'readdir')
       return `=${fs
         .readdirSync(p)
-        .map((d) => d.name)
+        .map((d) => `${d.name}:${d.isDirectory ? 'd' : 'f'}`)
         .join(',')}`;
+    else if (k === 'stat') {
+      // The whole returned value but `ino` (renewed per realm by design), times stamped.
+      const st = fs.statSync(p);
+      return `=${JSON.stringify({
+        f: st.isFile,
+        d: st.isDirectory,
+        size: st.size,
+        nlink: st.nlink,
+        m: stamp(st.mtime),
+        a: stamp(st.atime),
+        c: stamp(st.metadata?.ctime),
+        b: stamp(st.metadata?.birthtime),
+      })}`;
+    }
     return 'ok';
   } catch (e) {
     return code(e);
@@ -172,13 +236,34 @@ function onNode(root, [k, p, a]) {
   try {
     if (k === 'mkdir') nfs.mkdirSync(at(p), a);
     else if (k === 'write') nfs.writeFileSync(at(p), a);
-    else if (k === 'rm') nfs.rmSync(at(p), a);
+    else if (k === 'hostwrite') {
+      nfs.mkdirSync(join(at(p), '..'), { recursive: true });
+      nfs.writeFileSync(at(p), a);
+    } else if (k === 'rm') nfs.rmSync(at(p), a);
     else if (k === 'rename') nfs.renameSync(at(p), at(a));
     else if (k === 'cp') nfs.cpSync(at(p), at(a), { recursive: true });
     else if (k === 'copy') nfs.copyFileSync(at(p), at(a));
     else if (k === 'utimes') nfs.utimesSync(at(p), a / 1000, a / 1000);
     else if (k === 'read') return `=${nfs.readFileSync(at(p), 'utf8')}`;
-    else if (k === 'readdir') return `=${nfs.readdirSync(at(p)).sort().join(',')}`;
+    else if (k === 'readdir')
+      return `=${nfs
+        .readdirSync(at(p), { withFileTypes: true })
+        .map((d) => `${d.name}:${d.isDirectory() ? 'd' : 'f'}`)
+        .sort()
+        .join(',')}`;
+    else if (k === 'stat') {
+      const st = nfs.statSync(at(p));
+      return `=${JSON.stringify({
+        f: st.isFile(),
+        d: st.isDirectory(),
+        size: st.isDirectory() ? 0 : st.size,
+        nlink: st.nlink,
+        m: stamp(st.mtimeMs),
+        a: stamp(st.atimeMs),
+        c: stamp(st.ctimeMs),
+        b: stamp(st.birthtimeMs),
+      })}`;
+    }
     return 'ok';
   } catch (e) {
     return code(e);
@@ -333,7 +418,12 @@ function check(impl, ops, cut = Math.floor(ops.length / 2)) {
       mr.push(onFsSync(M, o));
     });
     boundaryOk = eq(mr, fr) && eq(treeOfFs(M), flatTree);
-    if (impl === 'v3') budgetOk = L.budget() === wireBudget(L) && M.budget() === wireBudget(M);
+    if (impl === 'v3')
+      budgetOk =
+        L.budget() === wireBudget(L) &&
+        M.budget() === wireBudget(M) &&
+        L.audit().length === 0 &&
+        M.audit().length === 0;
   }
   return {
     classOk:
@@ -372,16 +462,49 @@ function minimize(impl, ops) {
 }
 
 console.log(
-  `node ${process.version}, ${process.platform}/${process.arch}; ${N} sequences, seeds 1..${N}\n`,
+  `node ${process.version}, ${process.platform}/${process.arch}; ${N} sequences, seeds ${SEED_BASE + 1}..${SEED_BASE + N}${MUTANT ? `; MUTANT ${MUTANT}` : ''}\n`,
 );
+/** Named regressions (reviews N2, S-b), checked before the random ones. */
+const NAMED = [
+  [
+    ['rename', '/node_modules/a', '/node_modules/c'],
+    ['mkdir', '/node_modules/a', {}],
+  ],
+  [
+    ['rm', '/node_modules/a/index.js', {}],
+    ['mkdir', '/node_modules/a/index.js', {}],
+    ['write', '/node_modules/a/index.js/k.js', 'k'],
+  ],
+  [
+    ['rm', '/node_modules/a/lib', { recursive: true }],
+    ['write', '/node_modules/a/lib', 'f'],
+  ],
+  [
+    ['rename', '/node_modules/a', '/node_modules/c'],
+    ['rename', '/node_modules/b', '/node_modules/a'],
+  ],
+  [['rename', '/node_modules/b/index.js', '/node_modules/a/index.js']],
+  [
+    ['hostwrite', '/workspace/w/lib/x.js', 'NEW'],
+    ['cp', '/workspace/w', '/node_modules/a'],
+    ['read', '/node_modules/a/lib/x.js'],
+  ],
+  [
+    ['stat', '/node_modules/a'],
+    ['stat', '/node_modules'],
+  ],
+];
 const summary = {};
 for (const impl of ['v1', 'v2', 'v3']) {
   let classFail = 0;
   let oracleFail = 0;
   let notMinimal = 0;
+  let compared = 0;
   let firstFail;
   const outsideClass = new Map();
-  for (let seed = 1; seed <= N; seed++) {
+  let namedFail = 0;
+  for (const ops of NAMED) if (!check(impl, ops).classOk) namedFail++;
+  for (let seed = SEED_BASE + 1; seed <= SEED_BASE + N; seed++) {
     const ops = sequence(seed);
     if (impl !== 'v1' && !minimal(impl, ops)) notMinimal++;
     const c = check(impl, ops, Math.floor(rng(seed + 7)() * ops.length));
@@ -395,7 +518,8 @@ for (const impl of ['v1', 'v2', 'v3']) {
     try {
       const nr = ops.map((o) => onNode(root, o));
       const nt = treeOfNode(root);
-      if (!eq(c.rebuilt, nt)) {
+      if (eq(c.flatTree, nt) && eq(c.fr, nr)) compared++;
+      if (!eq(c.rebuilt, nt) || !eq(c.lr, nr)) {
         // Rifty's own FS (flat) already differs from node:fs here: outside the layer's class.
         if (!eq(c.flatTree, nt) || !eq(c.fr, nr)) {
           const key =
@@ -411,9 +535,10 @@ for (const impl of ['v1', 'v2', 'v3']) {
       nfs.rmSync(root, { recursive: true, force: true });
     }
   }
-  summary[impl] = { classFail, oracleFail, notMinimal };
+  summary[impl] = { classFail: classFail + namedFail, oracleFail, notMinimal };
+  console.log(`## ${impl}: named regressions failing: ${namedFail}/${NAMED.length}`);
   console.log(
-    `## ${impl}: layer ≠ flat rifty FS in ${classFail}/${N}; rebuilt ≠ node where flat = node in ${oracleFail}/${N}${impl === 'v1' ? '' : `; reading the template grows the state in ${notMinimal}/${N}`}`,
+    `## ${impl}: layer ≠ flat rifty FS (calls, trees, rebuild, run boundary${impl === 'v3' ? ', cap count, mark audit' : ''}) in ${classFail}/${N}${impl === 'v1' ? '' : `; reading the template grows the state in ${notMinimal}/${N}`}; of the ${N - classFail} that pass, flat rifty = node:fs (calls and tree) in ${compared} — layer ≠ node among those: ${oracleFail}; the other ${N - classFail - compared} are rifty FS vs node:fs differences outside the layer`,
   );
   if (firstFail) {
     const c = check(impl, firstFail.minimized);
@@ -441,7 +566,7 @@ await build({
   stdin: {
     contents: `import './entry.ts';
 import { MemoryFsSync, setSyncMirror } from '@riftydev/vfs/internal';
-import { LayeredFs, templateLayer } from ${JSON.stringify(join(here, 'layered.ts'))};
+import { LayeredFs, templateLayer } from ${JSON.stringify(layeredSrc)};
 import { restoreFs, snapshotFs } from '../snapshot.ts';
 let L;
 const opts = { template: null, maxBytes: 1 << 30 };
@@ -490,13 +615,15 @@ for (const [k, p, a] of ${JSON.stringify(ops)}) {
   try {
     if (k === 'mkdir') fs.mkdirSync(P + p, a);
     else if (k === 'write') fs.writeFileSync(P + p, a);
+    else if (k === 'hostwrite') { fs.mkdirSync(require('path').dirname(P + p), { recursive: true }); fs.writeFileSync(P + p, a); }
     else if (k === 'rm') fs.rmSync(P + p, a);
     else if (k === 'rename') fs.renameSync(P + p, P + a);
     else if (k === 'cp') fs.cpSync(P + p, P + a, { recursive: true });
     else if (k === 'copy') fs.copyFileSync(P + p, P + a);
     else if (k === 'utimes') fs.utimesSync(P + p, a / 1000, a / 1000);
     else if (k === 'read') { out.push('=' + fs.readFileSync(P + p, 'utf8')); continue; }
-    else if (k === 'readdir') { out.push('=' + fs.readdirSync(P + p).sort().join(',')); continue; }
+    else if (k === 'readdir') { out.push('=' + fs.readdirSync(P + p, { withFileTypes: true }).map((d) => d.name + ':' + (d.isDirectory() ? 'd' : 'f')).sort().join(',')); continue; }
+    else if (k === 'stat') { const st = fs.statSync(P + p); out.push('=' + JSON.stringify({ d: st.isDirectory(), size: st.isDirectory() ? 0 : st.size, nlink: st.nlink, m: st.mtimeMs < 1.7e12 ? Math.round(st.mtimeMs) : 'now' })); continue; }
     out.push('ok');
   } catch (e) { out.push(e.code); }
 }
@@ -579,7 +706,7 @@ let guestSame = 0;
 let guestOracleFail = 0;
 const guestDiff = new Map();
 for (let seed = 1; seed <= GUEST; seed++) {
-  const ops = sequence(10_000 + seed);
+  const ops = sequence(SEED_BASE + 1_000_000 + seed);
   const root = nodeRoot();
   try {
     nfs.writeFileSync(join(root, 'workspace/main.js'), prog(ops));

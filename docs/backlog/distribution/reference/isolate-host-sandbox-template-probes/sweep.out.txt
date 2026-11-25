@@ -1,0 +1,71 @@
+node v24.16.0, darwin/arm64; base {"width":100,"files":5,"size":4096,"depth":2}
+
+## axis bytes
+{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"place":"workspace","writeMs":0.016,"readMs":0.002,"listMs":0.001,"removeMs":0.01,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"place":"tpl depth 0","writeMs":0.314,"readMs":0.001,"listMs":0.001,"removeMs":0.123,"rows":100,"wireBytes":16618,"budget":75122}
+{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"place":"tpl depth 1","writeMs":0.234,"readMs":0.001,"listMs":0.001,"removeMs":0.113,"rows":100,"wireBytes":16729,"budget":76122}
+{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"place":"tpl depth 2","writeMs":0.265,"readMs":0.001,"listMs":0.001,"removeMs":0.124,"rows":104,"wireBytes":17567,"budget":81074}
+{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"place":"workspace","writeMs":0.005,"readMs":0.001,"listMs":0.001,"removeMs":0.005,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"place":"tpl depth 0","writeMs":0.225,"readMs":0.001,"listMs":0.001,"removeMs":0.115,"rows":100,"wireBytes":16618,"budget":75122}
+{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"place":"tpl depth 1","writeMs":0.225,"readMs":0.001,"listMs":0.001,"removeMs":0.119,"rows":100,"wireBytes":16729,"budget":76122}
+{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"place":"tpl depth 2","writeMs":0.252,"readMs":0.001,"listMs":0.001,"removeMs":0.127,"rows":104,"wireBytes":17567,"budget":81074}
+
+## axis width
+{"axis":"width","width":10,"entries":71,"templateMB":0.2,"place":"workspace","writeMs":0.004,"readMs":0.001,"listMs":0.001,"removeMs":0.004,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"width","width":10,"entries":71,"templateMB":0.2,"place":"tpl depth 0","writeMs":0.025,"readMs":0.001,"listMs":0.001,"removeMs":0.015,"rows":10,"wireBytes":1948,"budget":9602}
+{"axis":"width","width":10,"entries":71,"templateMB":0.2,"place":"tpl depth 1","writeMs":0.03,"readMs":0.001,"listMs":0.001,"removeMs":0.016,"rows":10,"wireBytes":2059,"budget":10602}
+{"axis":"width","width":10,"entries":71,"templateMB":0.2,"place":"tpl depth 2","writeMs":0.051,"readMs":0.001,"listMs":0.001,"removeMs":0.028,"rows":14,"wireBytes":2897,"budget":15554}
+{"axis":"width","width":100,"entries":701,"templateMB":2,"place":"workspace","writeMs":0.004,"readMs":0.001,"listMs":0.001,"removeMs":0.004,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"width","width":100,"entries":701,"templateMB":2,"place":"tpl depth 0","writeMs":0.214,"readMs":0.001,"listMs":0.001,"removeMs":0.115,"rows":100,"wireBytes":16618,"budget":75122}
+{"axis":"width","width":100,"entries":701,"templateMB":2,"place":"tpl depth 1","writeMs":0.222,"readMs":0.001,"listMs":0.001,"removeMs":0.113,"rows":100,"wireBytes":16729,"budget":76122}
+{"axis":"width","width":100,"entries":701,"templateMB":2,"place":"tpl depth 2","writeMs":0.246,"readMs":0.001,"listMs":0.001,"removeMs":0.127,"rows":104,"wireBytes":17567,"budget":81074}
+{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"place":"workspace","writeMs":0.004,"readMs":0.001,"listMs":0.001,"removeMs":0.004,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"place":"tpl depth 0","writeMs":2.211,"readMs":0.001,"listMs":0.001,"removeMs":1.24,"rows":1000,"wireBytes":163318,"budget":730322}
+{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"place":"tpl depth 1","writeMs":2.192,"readMs":0.001,"listMs":0.001,"removeMs":1.112,"rows":1000,"wireBytes":163429,"budget":731322}
+{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"place":"tpl depth 2","writeMs":2.199,"readMs":0.001,"listMs":0.001,"removeMs":1.115,"rows":1004,"wireBytes":164267,"budget":736274}
+{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"place":"workspace","writeMs":0.005,"readMs":0.001,"listMs":0.001,"removeMs":0.004,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"place":"tpl depth 0","writeMs":11.758,"readMs":0.003,"listMs":0.003,"removeMs":6.819,"rows":5000,"wireBytes":815318,"budget":3642322}
+{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"place":"tpl depth 1","writeMs":11.723,"readMs":0.003,"listMs":0.003,"removeMs":5.759,"rows":5000,"wireBytes":815429,"budget":3643322}
+{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"place":"tpl depth 2","writeMs":11.821,"readMs":0.004,"listMs":0.004,"removeMs":5.823,"rows":5004,"wireBytes":816267,"budget":3648274}
+
+## axis files
+{"axis":"files","files":5,"entries":701,"templateMB":2,"place":"workspace","writeMs":0.004,"readMs":0.001,"listMs":0.001,"removeMs":0.004,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"files","files":5,"entries":701,"templateMB":2,"place":"tpl depth 0","writeMs":0.216,"readMs":0.001,"listMs":0.001,"removeMs":0.124,"rows":100,"wireBytes":16618,"budget":75122}
+{"axis":"files","files":5,"entries":701,"templateMB":2,"place":"tpl depth 1","writeMs":0.22,"readMs":0.001,"listMs":0.001,"removeMs":0.111,"rows":100,"wireBytes":16729,"budget":76122}
+{"axis":"files","files":5,"entries":701,"templateMB":2,"place":"tpl depth 2","writeMs":0.245,"readMs":0.001,"listMs":0.001,"removeMs":0.121,"rows":104,"wireBytes":17567,"budget":81074}
+{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"place":"workspace","writeMs":0.005,"readMs":0.001,"listMs":0.001,"removeMs":0.004,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"place":"tpl depth 0","writeMs":0.222,"readMs":0.001,"listMs":0.001,"removeMs":0.122,"rows":100,"wireBytes":16618,"budget":75122}
+{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"place":"tpl depth 1","writeMs":0.217,"readMs":0.001,"listMs":0.001,"removeMs":0.111,"rows":100,"wireBytes":16729,"budget":76122}
+{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"place":"tpl depth 2","writeMs":0.419,"readMs":0.001,"listMs":0.001,"removeMs":0.221,"rows":149,"wireBytes":25837,"budget":124954}
+
+## axis depth
+{"axis":"depth","depth":2,"entries":701,"templateMB":2,"place":"workspace","writeMs":0.004,"readMs":0.001,"listMs":0.001,"removeMs":0.004,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"depth","depth":2,"entries":701,"templateMB":2,"place":"tpl depth 0","writeMs":0.216,"readMs":0.001,"listMs":0.001,"removeMs":0.123,"rows":100,"wireBytes":16618,"budget":75122}
+{"axis":"depth","depth":2,"entries":701,"templateMB":2,"place":"tpl depth 1","writeMs":0.225,"readMs":0.001,"listMs":0.001,"removeMs":0.111,"rows":100,"wireBytes":16729,"budget":76122}
+{"axis":"depth","depth":2,"entries":701,"templateMB":2,"place":"tpl depth 2","writeMs":0.244,"readMs":0.001,"listMs":0.001,"removeMs":0.126,"rows":104,"wireBytes":17567,"budget":81074}
+{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"place":"workspace","writeMs":0.004,"readMs":0.001,"listMs":0.001,"removeMs":0.004,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"place":"tpl depth 0","writeMs":0.221,"readMs":0.001,"listMs":0.001,"removeMs":0.126,"rows":100,"wireBytes":16618,"budget":75122}
+{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"place":"tpl depth 1","writeMs":0.217,"readMs":0.001,"listMs":0.001,"removeMs":0.112,"rows":100,"wireBytes":16729,"budget":76122}
+{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"place":"tpl depth 2","writeMs":0.227,"readMs":0.001,"listMs":0.001,"removeMs":0.115,"rows":100,"wireBytes":16834,"budget":77178}
+{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"place":"workspace","writeMs":0.004,"readMs":0.001,"listMs":0.001,"removeMs":0.004,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"place":"tpl depth 0","writeMs":0.218,"readMs":0.001,"listMs":0.001,"removeMs":0.129,"rows":100,"wireBytes":16618,"budget":75122}
+{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"place":"tpl depth 1","writeMs":0.228,"readMs":0.001,"listMs":0.001,"removeMs":0.111,"rows":100,"wireBytes":16729,"budget":76122}
+{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"place":"tpl depth 2","writeMs":0.233,"readMs":0.001,"listMs":0.001,"removeMs":0.119,"rows":100,"wireBytes":16834,"budget":77178}
+
+## ratio last / first value along each axis (≈ 1: does not grow)
+{"axis":"bytes","place":"workspace","writeMs":0.31,"readMs":0.5,"listMs":1,"removeMs":0.5,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"bytes","place":"tpl depth 0","writeMs":0.72,"readMs":1,"listMs":1,"removeMs":0.93,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"bytes","place":"tpl depth 1","writeMs":0.96,"readMs":1,"listMs":1,"removeMs":1.05,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"bytes","place":"tpl depth 2","writeMs":0.95,"readMs":1,"listMs":1,"removeMs":1.02,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"width","place":"workspace","writeMs":1.25,"readMs":1,"listMs":1,"removeMs":1,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"width","place":"tpl depth 0","writeMs":470.32,"readMs":3,"listMs":3,"removeMs":454.6,"rows":500,"wireBytes":418.54,"budget":379.33}
+{"axis":"width","place":"tpl depth 1","writeMs":390.77,"readMs":3,"listMs":3,"removeMs":359.94,"rows":500,"wireBytes":396.03,"budget":343.64}
+{"axis":"width","place":"tpl depth 2","writeMs":231.78,"readMs":4,"listMs":4,"removeMs":207.96,"rows":357.43,"wireBytes":281.76,"budget":234.56}
+{"axis":"files","place":"workspace","writeMs":1.25,"readMs":1,"listMs":1,"removeMs":1,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"files","place":"tpl depth 0","writeMs":1.03,"readMs":1,"listMs":1,"removeMs":0.98,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"files","place":"tpl depth 1","writeMs":0.99,"readMs":1,"listMs":1,"removeMs":1,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"files","place":"tpl depth 2","writeMs":1.71,"readMs":1,"listMs":1,"removeMs":1.83,"rows":1.43,"wireBytes":1.47,"budget":1.54}
+{"axis":"depth","place":"workspace","writeMs":1,"readMs":1,"listMs":1,"removeMs":1,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"depth","place":"tpl depth 0","writeMs":1.01,"readMs":1,"listMs":1,"removeMs":1.05,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"depth","place":"tpl depth 1","writeMs":1.01,"readMs":1,"listMs":1,"removeMs":1,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"depth","place":"tpl depth 2","writeMs":0.95,"readMs":1,"listMs":1,"removeMs":0.94,"rows":0.96,"wireBytes":0.96,"budget":0.95}
