@@ -179,7 +179,8 @@ Added after it, from the zlib goal via the manager, not re-reviewed:
     completion path), not with the state members;
   - the legacy `Stream` chain is its own unit: it changes the prototype chain of every stream class,
     and the `@riftydev/io` bundle budget (trap `io-treeshake-side-effect`) applies to it.
-- tier: works — manager's provisional default, user confirmation pending. Faults outside Node's own
+- 2026-11-25 — the user, in the manager thread cf2ae711: «про потоки тут ок» to the manager's «Нужно от тебя: «ок» на состав и порядок и на уровень works, как у остальных целей». What that message put before the user: four parts in order — (1) `_destroy`/`_construct` hooks in the core, (2) `fs.ReadStream` as a `Readable` subclass, (3) `fs.WriteStream` as a `Writable` subclass in the shape graceful-fs expects, (4) `Transform` backpressure; outside the goal `http.ServerResponse`, `net.Socket`, `process.stdin` as the next goal's candidates; PRs #434 and #437 stay parked until the goal absorbs them; tier works. The later growth to the present units (the manager's extensions above) was reported to the user in the same thread on 2026-11-25 as «возрази, если не согласен»; no objection recorded.
+- tier: works — the user's choice (line above). Faults outside Node's own
   behaviour, so not covered by parity, are listed in map §Faults outside parity.
 - rejected route: complete the EventEmitter classes (PR #434's route) — violates I4/I5. They stay
   outside `instanceof Readable`/`Writable`, `stream.isReadable`, `Readable.from` and every

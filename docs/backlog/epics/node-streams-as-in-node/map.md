@@ -235,8 +235,8 @@ Under `works` these may throw loudly; each must still be honest, never a silent 
   - `net.Socket`/`PortRegistrySocket` (`net/src/http/request.ts:90`), and the isolate's loud
     `net.Socket`;
   - `process.stdin` (`runtime-js/src/builtins/process-stdin-reader.ts:28`).
-  Related drafts: `process-stdio-writable-end-surface`, `child-process-stdio-stream-slot`. Manager's
-  scoping, user confirmation pending.
+  Related drafts: `process-stdio-writable-end-surface`, `child-process-stdio-stream-slot`. Outside
+  the goal by the user's «ок» 2026-11-25 (goal.md Decisions); `ClientRequest` is the manager's addition to that list.
 - **Web streams**: `web-stream-adapter-terminal-lifecycle`, the isolate `ReadableStream` (goal
   isolate-guest-web-api), `vfs/memory-vfs-openreadable-true-backpressure` (no longer on the fs path
   after unit 4).
