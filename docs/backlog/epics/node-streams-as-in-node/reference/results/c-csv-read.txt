@@ -1,0 +1,10 @@
+# c-csv-read.cjs — node v24.16.0, rifty b6d37fc01
+columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate
+
+exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 0
+
+## line 1
+node: csv [[null,"Region","Revenue"],[null,"North",120],[null,"South, East",95.5],[null,"Zürich ✓",-3]]
+rifty-inproc (DIFF): csv threw TypeError: stream.close is not a function
+rifty-inproc-sync (DIFF): csv threw TypeError: stream.close is not a function
+rifty-isolate (DIFF): csv threw NotImplementedError: Not implemented: isolate-host.ReadableStream (not available in the rifty isolate host, ADR-0557)

@@ -1,0 +1,45 @@
+# m6-transform-duplex.cjs — node v24.16.0, rifty b6d37fc01
+columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate
+
+exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 0
+
+## Transform objectMode hwm 2, 8 writes, nobody reads
+node: true true false false false false false false,transformCalls=2,readableLength=2,writableLength=7
+rifty-inproc (DIFF): true true true true true true true true,transformCalls=8,readableLength=8,writableLength=0
+rifty-inproc-sync (DIFF): true true true true true true true true,transformCalls=8,readableLength=8,writableLength=0
+rifty-isolate (DIFF): true true true true true true true true,transformCalls=8,readableLength=8,writableLength=0
+## Transform bytes: writes of 1 KiB until write() is false (cap 1000)
+node: acceptedBeforeFalse=126,transformCalls=64,readableLength=65536
+rifty-inproc (DIFF): acceptedBeforeFalse=1000,transformCalls=1000,readableLength=1024000
+rifty-inproc-sync (DIFF): acceptedBeforeFalse=1000,transformCalls=1000,readableLength=1024000
+rifty-isolate (DIFF): acceptedBeforeFalse=1000,transformCalls=1000,readableLength=1024000
+## PassThrough -> slow Writable, producer honors write(): max PassThrough buffer
+node: max<=256KiB=true,max=131072
+rifty-inproc (DIFF): max<=256KiB=false,max=1048576
+rifty-inproc-sync (DIFF): max<=256KiB=false,max=1048576
+rifty-isolate (DIFF): max<=256KiB=false,max=1048576
+## Transform event order end("x")
+node: T,data,F,prefinish,end,finish,close
+rifty-inproc (DIFF): T,F,prefinish,data,finish,end
+rifty-inproc-sync (DIFF): T,F,prefinish,data,finish,end
+rifty-isolate (DIFF): T,F,prefinish,data,finish,end
+## Duplex event order end("x") with readable ended
+node: data,finish,end,close
+rifty-inproc (DIFF): finish,data,end
+rifty-inproc-sync (DIFF): finish,data,end
+rifty-isolate (DIFF): finish,data,end
+## Duplex writable members
+node: function function function,corked=0
+rifty-inproc (DIFF): undefined undefined undefined,corked=undefined
+rifty-inproc-sync (DIFF): undefined undefined undefined,corked=undefined
+rifty-isolate (DIFF): undefined undefined undefined,corked=undefined
+## per-side objectMode options
+node: T.writableObjectMode=true,T.writableHighWaterMark=16,PT.readableObjectMode=true
+rifty-inproc (DIFF): T.writableObjectMode=false,T.writableHighWaterMark=65536,PT.readableObjectMode=false
+rifty-inproc-sync (DIFF): T.writableObjectMode=false,T.writableHighWaterMark=65536,PT.readableObjectMode=false
+rifty-isolate (DIFF): T.writableObjectMode=false,T.writableHighWaterMark=65536,PT.readableObjectMode=false
+## allowHalfOpen false: readable end ends writable
+node: end,finish,close
+rifty-inproc (DIFF): end,finish
+rifty-inproc-sync (DIFF): end,finish
+rifty-isolate (DIFF): end,finish

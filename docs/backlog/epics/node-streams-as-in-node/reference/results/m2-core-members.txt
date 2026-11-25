@@ -1,0 +1,30 @@
+# m2-core-members.cjs — node v24.16.0, rifty b6d37fc01
+columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate
+
+exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 0
+
+## Readable readableFlowing/isPaused: new, on(data), pause, resume
+node: new null/false,on(data) true/false,pause false/true,resume true/false
+rifty-inproc (DIFF): new undefined/no isPaused,on(data) undefined/no isPaused,pause undefined/no isPaused,resume undefined/no isPaused
+rifty-inproc-sync (DIFF): new undefined/no isPaused,on(data) undefined/no isPaused,pause undefined/no isPaused,resume undefined/no isPaused
+rifty-isolate (DIFF): new undefined/no isPaused,on(data) undefined/no isPaused,pause undefined/no isPaused,resume undefined/no isPaused
+## fs.ReadStream readableFlowing/isPaused: new, on(data), pause, resume
+node: new null/false,on(data) true/false,pause false/true,resume true/false
+rifty-inproc (DIFF): new undefined/no isPaused,on(data) undefined/no isPaused,threw r.pause is not a function
+rifty-inproc-sync (DIFF): new undefined/no isPaused,on(data) undefined/no isPaused,threw r.pause is not a function
+rifty-isolate (DIFF): new undefined/no isPaused,on(data) undefined/no isPaused,threw r.pause is not a function
+## Writable writableNeedDrain below/over hwm, after drain
+node: start false,below false,over true,drain false
+rifty-inproc (DIFF): start undefined,below undefined,over undefined,drain undefined
+rifty-inproc-sync (DIFF): start undefined,below undefined,over undefined,drain undefined
+rifty-isolate (DIFF): start undefined,below undefined,over undefined,drain undefined
+## Duplex writableNeedDrain
+node: start false,below false,over true,drain false
+rifty-inproc (DIFF): start undefined,below undefined,over undefined,drain undefined
+rifty-inproc-sync (DIFF): start undefined,below undefined,over undefined,drain undefined
+rifty-isolate (DIFF): start undefined,below undefined,over undefined,drain undefined
+## fs.WriteStream writableNeedDrain
+node: start false,below false,over true,drain false
+rifty-inproc (DIFF): start undefined,below undefined,over undefined,drain undefined
+rifty-inproc-sync (DIFF): start undefined,below undefined,over undefined,drain undefined
+rifty-isolate (DIFF): start undefined,below undefined,over undefined,drain undefined

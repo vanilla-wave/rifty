@@ -1,0 +1,11 @@
+# c-readable-read.cjs — node v24.16.0, rifty b6d37fc01
+columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate
+
+exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 1
+stderr rifty-isolate: NotImplementedError: Not implemented: isolate-host.ReadableStream (not available in the rifty isolate host, ADR-0557)
+
+## line 1
+node: exit bytes 150000 end true
+rifty-inproc (DIFF): exit bytes 0 end true
+rifty-inproc-sync (DIFF): exit bytes 0 end true
+rifty-isolate (DIFF): exit bytes 0 end false

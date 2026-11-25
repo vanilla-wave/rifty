@@ -1,0 +1,10 @@
+# c-unzip-stored.cjs — node v24.16.0, rifty b6d37fc01
+columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate
+
+exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 0
+
+## line 1
+node: extracted a.txt=6000 dir/b.txt=15000
+rifty-inproc (DIFF): close, then listing threw Error [ENOENT]: ENOENT: no such file or directory, scandir '<dir>/unz'
+rifty-inproc-sync (DIFF): close, then listing threw Error [ENOENT]: ENOENT: no such file or directory, scandir '<dir>/unz'
+rifty-isolate (DIFF): extract error NotImplementedError: Not implemented: isolate-host.ReadableStream (not available in the rifty isolate host, ADR-0557)
