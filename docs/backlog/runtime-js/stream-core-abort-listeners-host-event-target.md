@@ -25,8 +25,9 @@ Variants:
 - (D) Node's `AbortController`/`AbortSignal`/`EventTarget`/`Event` as guest globals on the browser
   hosts too.
 
-Default candidate: (A), if it is not worse than today on any row; differences are declared pinned
-rows. The probe (route B product bindings) runs (A) since round 4.
+**No default candidate; the choice is open.** The probe (route B product bindings) runs (A) only as
+the measurement base, so that route B's numbers do not rest on a recalled decision. On browser hosts
+8c stands on this unit (edge 8c ← AL in `results/ownership.txt`).
 
 Measured in-process (`reference/results/abort-variants/`, `run.mjs` with `ONLY=m9`/`m10`,
 `ROUTE_B_GEN_DERIVED`). Columns:
@@ -49,18 +50,30 @@ Measured in-process (`reference/results/abort-variants/`, `run.mjs` with `ONLY=m
 | `m10` listeners left after 10000 `reduce({signal})` | 10000 (weak) | 0 | 10000 (strong) | 10000 (strong) | = Node |
 | `m10` listeners left after 40000 `finished(r, {signal})` | 0 | `TypeError: cb is not a function` | = Node | = Node | = Node |
 
-Reading against today:
-- (A) is not worse on 6 rows. Two rows differ:
-  - `promises.pipeline` with a signal: today throws `TypeError` on every call (`m10` row 1, no
-    stopping listener). (A) works on that path and hangs only after a guest listener that stops
-    propagation. A loud error on every call becomes a silent hang on a rare path: a declared row.
-  - `reduce` listeners: today registers none; (A) keeps 10000 strong listeners where Node's are weak
-    (the count cannot show weak vs strong; memory not measured here).
-- (B) equals Node on `m9` but reorders `m10` row 1 (B3), and the review measured its leak (S5).
-- (D) on browser hosts joins the user's globals question (owner: user, below).
+Reading against today. Every variant measured so far is worse than today, or untested, on some row:
+- (A) is worse on two rows, and neither can be declared away:
+  - `promises.pipeline` with a signal: today throws `TypeError` on every call (`m10` row 1, no stopping
+    listener). (A) works on that path but hangs after a guest listener that stops propagation. A hang
+    is not an honest outcome (`docs/process/rules/fault-classes.md`: never a hang), so this row stays
+    open, not declared.
+  - `reduce` listeners: today registers none; (A) keeps 10000 strong listeners where Node's are weak.
+    The count cannot show weak vs strong; memory is not measured here.
+- (B) equals Node on `m9` but reorders `m10` row 1 (B3), and the review measured its leak (S5); it has
+  no path on Chromium 108–115 (S6).
+- (C) is not prototyped.
+- (D) equals Node on every row on the Node host; on browser hosts it is the user's question.
 
-Open fork — owner: user, with the isolate `AbortController` globals question (map §Open questions):
-whether (D) — Node's classes as guest globals on browser hosts too — is acceptable.
+What each row means for a program:
+- `m9` pipeline/finished/addAbortSignal after a stopping listener: a program whose own abort listener
+  calls `stopImmediatePropagation` (rare) never sees its stream end: it hangs or leaks the stream.
+- `m9` map/reduce: a cancelled `for await` over an operator ends, or hangs.
+- `m10` order: a guest abort listener added after `pipeline` reads `r.destroyed`; under (B) it reads
+  `false` where Node gives `true`, so cleanup code that checks it runs twice or not at all.
+- `m10` listener counts: a long-lived signal shared by many `reduce` or `finished` calls (a server's
+  shutdown signal) grows memory without bound where Node's stays flat.
+
+Open fork — owner: user, with the `AbortController` globals question (map §Open questions): the whole
+table above (today / A / B / C / D) and what each row means for a program, not only (D).
 
 ## Open findings (review round 4)
 

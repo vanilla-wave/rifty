@@ -52,7 +52,7 @@ The stdout and every file written are what real Node produces from the same file
 
 ## Invariants
 
-<!-- False on main (probe run at 725576a88, main b6d37fc01's code + this docs-only branch;
+<!-- False on main (probe run at e96e93a0d, main 4f6fa7d98's product code + this docs-only branch;
 reference/results/summary.txt; columns: real Node v24.16.0, rifty modules in-process with and
 without the async VFS surface, isolate sandbox exec):
 - carrier, 10 programs; 9 differ on every rifty column, `c-csv-write-file` (exceljs csv.writeFile)
@@ -71,7 +71,7 @@ without the async VFS surface, isolate sandbox exec):
 - rows equal to Node, in-process / isolate:
   - m1 0/14; hook matrix 10/76; m2 0/7; m3 0/4;
   - m4 3/22 / 2/22 (plus uncaught-error lines: 2 in the sync-only column, 14 in the isolate);
-  - m5 4/14; m6 0/8; m7 0/11; m8 6/16 (the 6 are options both accept or both reject);
+  - m5 5/15; m6 0/8; m7 0/11; m8 6/16 (the 6 are options both accept or both reject);
   - b1 (bindings) 3/8.
 - I9–I10 false: b1 (StringDecoder utf8 only, 'UTF8' "Unsupported encoding", no addAbortListener, no
   writev/fsync); m4 fs.read loop ticks>0=false; Workbench fd read/write 16 MiB in 64 KiB calls
@@ -285,6 +285,15 @@ and carry the findings verbatim in «Open findings (review round 4)». Fixed in 
 - Nits: closure programs 5/5; `chromium-d` 1-of-3 medians labelled; minify skips named; `opfs-sync.ts`
   lines; 9w after 9r is order, not a code dependency.
 
+External review of PR #450, round 5 (limited, at `ec9033a62`, relayed by the manager): false
+statements and ready-unit contracts. Fixed: unit 1 drops two `m4` rows that are 9r's and shares unit
+2's normalisation point (edge 1 ← 2); unit 2 takes Node's parsing of base64/hex input outside the
+alphabet; unit 0 pins whole outcomes with PR #453's masks, takes its own Chromium baseline, skips
+`c-transform-big` on Workbench until 4b/4c, names lanes, a time limit and case independence; units 4
+and 4b fault rows follow the SAB sync-RPC model; 4b counts bytes leaving `FsSync` and lists every
+implementation; AL has no default candidate, the whole variants table goes to the user; commit and
+column labels corrected.
+
 ## Decisions
 
 - 2026-11-25 — manager, under the user's delegation («проектируешь ты сам»); the user is informed,
@@ -332,6 +341,9 @@ and carry the findings verbatim in «Open findings (review round 4)». Fixed in 
     outcome, and changes against today are listed and declared;
   - abort listeners on a host `EventTarget`: the derived-signal fix is recalled; the probe runs
     variant A; variants A–D are the draft unit's to decide, D joins the user's globals question.
+- 2026-11-25 — manager, round 5: last pass before merge. AL has no default candidate: (A) hangs where
+  today throws, and a hang is not declarable; the variants table (today / A / B / C / D) is the
+  user's question with the globals.
 - rejected route: route A, rifty's hand-written streams fixed per member in 8 units. It could meet the
   invariants in principle; it is rejected on delivery risk and §Simplicity, not on an invariant. Its
   unit graph had three hidden dependencies after one review, the same class that broke the zlib goal

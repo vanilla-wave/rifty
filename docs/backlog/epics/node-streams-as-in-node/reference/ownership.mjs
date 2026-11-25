@@ -12,8 +12,8 @@ const res = join(here, 'results');
 /** Implementation order (map §Items); the owner of a row is the last of its units in this order. */
 const ORDER = [
   '0',
-  '1',
   '2',
+  '1',
   '3',
   '4',
   '4b',
@@ -86,7 +86,8 @@ for (const f of readdirSync(res)
     if (!r.node || r.node.value === '(no line)') continue;
     const inprocToday = eq(r, 'rifty-inproc');
     const units = [];
-    if (prog.startsWith('b1-')) units.push(b1Unit(key));
+    // string_decoder shares Buffer's normalisation point (unit 2), so its row needs 2 too.
+    if (prog.startsWith('b1-')) units.push(...(b1Unit(key) === '1' ? ['2', '1'] : [b1Unit(key)]));
     else {
       // m9/m10 rows that route B misses wait for the abort-listener variant, not a binding.
       if (!eq(r, 'rifty-inproc-Bp'))

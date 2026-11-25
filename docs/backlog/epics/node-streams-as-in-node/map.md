@@ -2,7 +2,8 @@
 
 Route B (ADR-0575): the stream core and fs streams are Node v24.16.0's own sources, and rifty owns the
 bindings. Probe: `reference/` (README, programs, `route-b/`, `results/summary.txt`, `results/route-b-*.txt`).
-Rows equal to Node, run at `725576a88` (main `b6d37fc01`'s code; this branch is docs-only).
+In-process rows (`results/*.txt`, `summary.txt`) run at `e96e93a0d`: main `4f6fa7d98`'s product code (this
+branch changes only docs and a compat inventory generator). Chromium results name their own main commit.
 
 ## Items
 
@@ -64,8 +65,11 @@ against Node:
   hosts only; the isolate gets Node's own `EventTarget` from 7). Variants: (A) the direct listener as in
   the source, (B) a derived signal, (C) one patch point in the guest realm's
   `EventTarget.prototype.addEventListener`, (D) Node's classes as guest globals on browser hosts too.
-  Default candidate (A); the probe runs (A). Rows `m9`, `m10` (`results/abort-variants/`). (D) is the
-  user's, with the globals question. → I1, I3.
+  **No default candidate; the choice is open.** (A) is worse than today on two rows (a hang where today
+  throws `TypeError`; strong listeners where Node's are weak), and a hang is not a declarable outcome
+  (`docs/process/rules/fault-classes.md`). The probe runs (A) only as the measurement base. Rows `m9`,
+  `m10` (`results/abort-variants/`). On browser hosts 8c stands on AL (edge 8c ← AL). The whole
+  variants table is the user's question (§Open questions). → I1, I3.
 
 Core, three adjacent PRs (ADR-0575 §7):
 
@@ -116,7 +120,7 @@ The graph is derived from `results/ownership.txt` (`ownership.mjs`), not from th
 two or more units is an edge. Its summary is under §Row ownership.
 
 Implementation order once the goal is ready:
-- 1, 2, 3 (independent) → 4, 4b → 7 → AL → 8a → 8b → 8c → 9r;
+- 2 → 1 (one normalisation point), 3 independent → 4, 4b → 7 → AL → 8a → 8b → 8c → 9r;
 - in parallel and after: 4c, 5 and P (publication cost), then 9w after 9r;
 - 7 comes before 8c: the isolate's pipeline rows need it, and `pipeline` works there today. The
   user's answer decides only its globals.
@@ -148,6 +152,7 @@ Chromium 148, on main `692babe13` + route B (`results/chromium-b/summary.txt`):
 Remainder by binding:
 
 - `m4` timers → 4;
+- `m5` timers while a `WriteStream` writes 16 MiB → 4;
 - `m4` `encoding` option → 1 (B2): every non-utf8 encoding throws `NotImplementedError`, while today
   base64/latin1/hex through `'data'` equal Node in-process;
 - `m5` `_writev` → 5;
@@ -179,8 +184,8 @@ Summary of `results/ownership.txt` (rows by owner; `guard` = equal today and not
 
 | owner | rows |
 |---|---|
-| 1 | 1 |
 | 2 | 2 |
+| 1 | 1 |
 | 3 | 1 |
 | 4 | 1 |
 | 4b | 12 |
@@ -195,6 +200,7 @@ Summary of `results/ownership.txt` (rows by owner; `guard` = equal today and not
 
 Edges, as owner ← unit, with the number of rows:
 
+- 1 ← 2: 1
 - 7g ← 8c: 5
 - 7g ← AL: 3
 - 8c ← 1: 3
@@ -215,6 +221,7 @@ Edges, as owner ← unit, with the number of rows:
 - 9w ← P: 1
 
 So the graph is:
+- 1 ← 2 (shared normalisation point);
 - 8c ← 1, 2, 7, AL;
 - 9r ← 1, 4, 4b, 7, 8c;
 - 9w ← 4, 4c, 5, 7, 8c, P; «9w ← 9r» is the last-owner rule's artefact, kept as order only;
@@ -373,7 +380,11 @@ that holds after the earlier units land:
 
 The table lists further window rows whose change goes away once an earlier unit lands, so they are
 not declared here: `m4` encoding through `'data'` and with `highWaterMark` 4 (unit 1), `m4` timers in
-a 16 MiB stream (unit 4), `m8` encoding `"nope"` (unit 1), `m9` `promises.pipeline` with a signal (AL).
+a 16 MiB stream (unit 4), `m8` encoding `"nope"` (unit 1).
+
+Open, not declared: `m9` `promises.pipeline` with a signal after a stopping listener. Today it throws
+`TypeError`; in both windows (variant A) it hangs. It is AL's to resolve before 8c lands on browser
+hosts; no window may ship the hang.
 
 Unit 4 changes the timing of every `fs` callback API. Its own row: the fs callback parity cases
 (`cases/fs`, 41) plus an ordering case of `fs.readFile`/`stat`/`write` callbacks against timers and
@@ -443,8 +454,10 @@ Each outcome must still be honest, never a silent truncation. Durability after `
     ceiling throws, and `instanceof AbortSignal` throws.
   - The fork: (a) leave it like that, or (b) make `AbortController`/`AbortSignal`/`EventTarget`/`Event`
     isolate globals from the same sources. The bytes are the same either way.
-  - Browser hosts, owner: user — AL's variant (D): Node's `AbortController`/`AbortSignal`/
-    `EventTarget`/`Event` as guest globals on browser hosts too (`runtime-js/stream-core-abort-listeners-host-event-target`).
+  - Browser hosts, owner: user — the abort-listener variants table of
+    `runtime-js/stream-core-abort-listeners-host-event-target` (today / A / B / C / D, with what each
+    row means for a program), D being Node's `AbortController`/`AbortSignal`/`EventTarget`/`Event` as
+    guest globals on browser hosts too.
   - Browser hosts bind the host globals today. On the SDK, route B equals Node; on Workbench, the 7 programs run equal Node. None calls
     `AbortSignal`/`EventTarget` directly.
 - Web adapters — settled: Node's `internal/webstreams/adapters` verbatim over the host globals

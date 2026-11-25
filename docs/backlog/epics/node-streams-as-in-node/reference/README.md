@@ -2,7 +2,8 @@
 
 What a Node program gets from rifty's streams today, per unit of the goal
 (`docs/backlog/epics/node-streams-as-in-node/`). Oracle: live Node v24.16.0, macOS arm64.
-rifty: `725576a88`, which is main `b6d37fc01`'s stream code merged with later main (this branch is docs-only).
+rifty: in-process rows at `e96e93a0d` (the `results/*.txt` headers), which is main `4f6fa7d98`'s product code
+(this branch changes only docs and a compat inventory generator). Chromium results name their own main commit.
 
 ## Run
 
@@ -11,7 +12,7 @@ pnpm --filter @riftydev/isolate-host run build    # the sandbox runs the built g
 node --import tsx run.mjs "$(git rev-parse --show-toplevel)"   # writes results/*.txt
 ```
 
-Each program runs four times, plus the two route-B runs (§Route B), six columns in all:
+Each program runs four times, plus the route-B runs (§Route B) and the three window runs, nine columns in all:
 
 - `node`: real Node, in a temp dir.
 - `rifty-inproc`: rifty's browser-host modules in a Node child (`inproc.mts`). The memory VFS is

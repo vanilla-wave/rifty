@@ -2,12 +2,12 @@ Row ownership (ownership.mjs over results/): host | program | row | units | owne
 Covers: in-process rows (all programs, parity cases), isolate rows by name rules (see ownership.mjs),
 Workbench fd and stream-timing rows. Not covered: SDK rows, Workbench carrier and matrix rows (results/chromium*/
 hold them as program summaries only).
-order: 0 → 1 → 2 → 3 → 4 → 4b → 7 → AL → 8a → 8b → 8c → 9r → 4c → 5 → P → 9w → 7g
+order: 0 → 2 → 1 → 3 → 4 → 4b → 7 → AL → 8a → 8b → 8c → 9r → 4c → 5 → P → 9w → 7g
 
 in-process | b1-bindings | Buffer.isEncoding per name | 2 | guard
 in-process | b1-bindings | buf.toString(name) per name | 2 | 2
 in-process | b1-bindings | Buffer.from(str, name) per name | 2 | 2
-in-process | b1-bindings | new StringDecoder(name).write+end per name | 1 | 1
+in-process | b1-bindings | new StringDecoder(name).write+end per name | 2,1 | 1
 in-process | b1-bindings | events.addAbortListener | 3 | 3
 in-process | b1-bindings | fs.writev / fs.fsync / fs.writevSync / fs.fsyncSync types | 5 | 5
 in-process | b1-bindings | fs.read callback vs a timer due now | 4 | guard
@@ -359,8 +359,8 @@ workbench | chromium-d | write 16 MiB in a 1000-file project (B timeout 900 s, f
 8c window | w1-fs-windows | promises.pipeline(rs, async gen, ws) | threw TypeError | threw ERR_STREAM_PREMATURE_CLOSE
 
 ## rows per owner
-1: 1
 2: 2
+1: 1
 3: 1
 4: 1
 4b: 12
@@ -374,6 +374,7 @@ AL: 2
 guard: 98
 
 ## edges (owner ← unit it also needs, rows)
+1 ← 2: 1
 7g ← 8c: 5
 7g ← AL: 3
 8c ← 1: 3

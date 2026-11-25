@@ -25,7 +25,7 @@ challenge: 2026-11-25 — clear (premise in goal §Challenge)
 ## Acceptance
 
 1. `b1` row «events.addAbortListener» = Node on in-process, Workbench and SDK. The isolate follows once a guest can make a signal, which is the Web API goal's. → I9
-2. The compat matrix's `events` row lists `addAbortListener` as ⚠️ and names the difference on a host `EventTarget`: an earlier guest listener that calls `stopImmediatePropagation` hides the abort from it, where Node's still runs. → I9
+2. The compat matrix's `events` row lists `addAbortListener` as ⚠️ and names the difference on a host `EventTarget`: an earlier guest listener that calls `stopImmediatePropagation` hides the abort from it, where Node's still runs, and points to the abort-listeners unit as its owner. → I9
 
 ## Parity cases
 
@@ -35,8 +35,9 @@ challenge: 2026-11-25 — clear (premise in goal §Challenge)
 
 - `kResistStopPropagation` on a host `EventTarget`. Node's `addAbortListener` listener still runs
   after an earlier listener calls `stopImmediatePropagation`; on a host `EventTarget` it does not.
-  This unit does not promise that row: it is a declared difference (compat ⚠️), owned by
-  `runtime-js/stream-core-abort-listeners-host-event-target`.
+  This unit does not promise that row. It stays open in
+  `runtime-js/stream-core-abort-listeners-host-event-target`, whose choice is open (variants A–D);
+  the compat ⚠️ only names it meanwhile, it does not close it.
 - A guest `AbortController` in the isolate: the isolate Web API goal.
 
 ## Decisions
