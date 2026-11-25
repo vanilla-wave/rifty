@@ -4,7 +4,7 @@ status: draft
 title: ES module files load in the isolate guest as in `node <path>`, and its `require` returns to Node 24's default
 created: 2026-11-24
 why: the guest declares no ES module loader (`declareNoEsmLoader`, PR #440) because the loader needs `URL`; every `.mjs`, `"type": "module"` or typeless ESM `.js` is `NotImplementedError('isolate-host.esm')`, and `require` is Node's `--no-require-module`
-epic: isolate-guest-web-api
+epic: isolate-guest-modern-code
 sources: [docs/backlog/epics/isolate-guest-web-api/reference/seam-esm/README.md, docs/adr/distribution/0557-run-guest-code-in-a-disposable-child-process-holding-a-rifty-v8-isolate-isolated-vm.md]
 code: [packages/isolate-guest/src/guest/entry.ts, packages/runtime-js/src/internal/esm-loader.ts]
 ---
@@ -21,4 +21,4 @@ file URL, no source header — direction F); `data:` imports are rifty's gap on 
 Warm call unchanged by removing the declaration (≈0 ms).
 
 Needs `runtime-js/isolate-guest-url`. Leaves ADR-0557's 2026-11-24 `--no-require-module` entry.
-`-e` ES modules are goal open question 5. Compat ❌ isolate-host.md row "ES modules".
+`-e` ES modules: goal `isolate-guest-modern-code` open questions. Compat ❌ isolate-host.md row "ES modules".

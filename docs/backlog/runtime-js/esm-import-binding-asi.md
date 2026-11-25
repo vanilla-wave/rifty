@@ -4,7 +4,6 @@ status: draft
 title: rifty's ESM transform turns an imported binding that starts a line after a statement without `;` into a call of the previous expression
 created: 2026-11-24
 why: `renderImportBinding` rewrites an imported name as `(ns().name)`; after a line with no `;` the `(` continues the previous expression, so semicolon-free ESM breaks (nanoid 5: `Buffer.allocUnsafe(...) is not a function`)
-epic: isolate-guest-web-api
 sources: [docs/backlog/epics/isolate-guest-web-api/reference/seam-esm/README.md]
 code: [packages/runtime-js/src/module-loader/esm-declaration-plan.ts]
 ---

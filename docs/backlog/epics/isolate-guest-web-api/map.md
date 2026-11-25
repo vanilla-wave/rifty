@@ -1,85 +1,69 @@
 # Map — isolate-guest-web-api
 
-Probes (2026-11-24, `origin/main` 1c00c6292, Node v24.16.0): `reference/` — `sources-native`
-(URL, Blob, structuredClone sources), `sources-js` (streams, EventTarget, Abort sources), `seam-esm`
-(load-order seam, ESM), `enumerate` (builtin-export identity sweep, `catch` pass); the legacy `node:url` probe moved to
-branch `t3/node-url-legacy-port` (under `runtime-js/reference/` there). Each README holds its command, results and «not verified».
+Probes in `reference/` (each README holds its command, results and «not verified»):
+- `today` (2026-11-25, main bc3412420): pins of today's outcomes for the three groups and the
+  scenario, load-time reads;
+- `textdecoder`: Node's decoders vs WHATWG, candidates;
+- `sources-native`: `Blob`/`File` (and the `URL`/`structuredClone` facts now owned by
+  `isolate-guest-modern-code` or out of scope);
+- `sources-js`: `EventTarget`/`AbortController` (and web streams, out of scope);
+- `seam-esm`: the load-order seam (its `URL`/ESM half: `isolate-guest-modern-code`);
+- `enumerate`: the builtin-export identity sweep, the `catch` pass.
 
 ## Items
 
-1. `distribution/isolate-guest-web-api-acceptance` — draft — the acceptance carrier: goal §User
-   scenario as one `it.fails` sandbox case against live `node main.mjs` (I6); its contract waits
-   for questions 1–2.
-2. `runtime-js/node-url-legacy-api-port` — **in progress, branch `t3/node-url-legacy-port`**
-   (contract and its probe live there, probe under `runtime-js/reference/` there) —
-   Node's legacy `url`/`querystring` generated from pinned Node sources on every host (I5). Its ADR
-   is the first owner of the shared Node-source mechanism (vendored pinned files, generator with edit
-   anchors, drift check, the `primordials`/`ERR_*`/validators binding); later units (4, 7) extend
-   it or supersede it by ADR. PR #444. IDNA: user 2026-11-24 (via the manager, «ок» on (c′)) — the
-   host's `URL` on browser hosts, the named gap `url.toASCII` in the isolate until it has a `URL`;
-   +47 KB guest bundle seen by the user. `epic:` returns when both branches meet main.
-3. `runtime-js/isolate-web-globals-captured-at-load` — draft — the seam: real globals and the
-   remaining ceiling throwers both installed before the runtime loads; `crypto.subtle` and
-   `MessageChannel` read lazily in runtime-js; the identity sweep as a test (I2, I3).
-4. `runtime-js/isolate-guest-url` — draft — `URL`/`URLSearchParams` (whatwg-url 15.1.0 parser,
-   Node's wrapper, host IDNA from an `ada::idna` port) (I1, I3); also closes PR #444's isolate gap
-   `url.toASCII`: the legacy API's `toASCII` binding switches to the guest `URL` (one function).
-5. `runtime-js/isolate-esm-files` — draft — the guest's ES module loader once `URL` exists
-   (`declareNoEsmLoader` leaves, `require(esm)` Node's default); needs 4 and
-   `runtime-js/esm-import-binding-asi` (I4).
-6. `runtime-js/esm-import-binding-asi` — draft — the ESM transform's `(ns().x)` binding continues
-   a previous line without `;` (nanoid's stop; every host by source) (I4).
-7. `runtime-js/isolate-guest-blob-file` — draft — `Blob`/`File` from Node's `blob.js`/`file.js`
-   over a JS byte store; `Blob.stream()` is Node's under question 1 (b), the `ReadableStream`
-   named gap under (a) (I1, I2).
-8. `distribution/isolate-host-fs-read-stream-needs-web-readablestream` — draft — `fs.createReadStream`
-   reads; under question 1 (a) a read path without the web global (Node's `ReadStream` uses none),
-   under (b) the web-streams unit (I3).
-9. `runtime-js/fs-stream-close-method-missing` — draft — exceljs `xlsx.readFile` (scenario step 3)
-   after 8; a wall the carrier is expected to hit.
+1. `distribution/isolate-guest-web-api-acceptance` — draft — the carrier: §User scenario's pptx and
+   docx generators as `it.fails` sandbox cases against live `node`, plus the zlib carrier's case 4
+   (pdfkit) reused (I5).
+2. `runtime-js/isolate-guest-blob-file` — draft — `Blob`/`File` from Node's `blob.js`/`file.js` over
+   a JS byte store, installed before the runtime loads so `buffer.ts:42-43` captures them
+   (`buffer.Blob`/`buffer.File`, the set's only load-time reads) (I1, I4).
+3. `distribution/isolate-guest-textdecoder-legacy-encodings` — draft — `TextDecoder`/`TextEncoder`
+   from Node's `encoding.js`, the 28 single-byte encodings and `x-user-defined` from Node's
+   `single-byte.js`, utf-16le/be, gbk, gb18030 from @exodus/bytes 1.16.0 — utf-8 plus the 33 of 38
+   other encodings where Node equals WHATWG; carries
+   `distribution/isolate-guest-textencoder-encodeinto-arg-checks` (I2, I4). The five ICU-only
+   encodings are not seeded (question T).
+4. `distribution/isolate-stream-core-abort-controller` — draft, goal `node-streams-as-in-node` unit 7
+   (branch `t3/node-streams-goal`) — the classes from Node's `abort_controller.js` +
+   `event_target.js` + `webidl.js` in the isolate (first consumer: Node's `pipeline`).
+5. `distribution/isolate-guest-abort-event-globals` — draft — the same classes as guest globals
+   (`AbortController`, `AbortSignal`, `EventTarget`, `Event` leave `CEILING_GLOBALS`) and the I3 rows;
+   needs 4 (I3). Where 4 and 5 live is the manager's (report of 2026-11-25).
 
-Not seeded until question 1 is answered (seeded only under (b)): `structuredClone` (no measured
-Node-faithful route yet), web streams (+ `TextEncoderStream`/`TextDecoderStream`),
-`EventTarget`/`Event`/`CustomEvent`, `AbortController`/`AbortSignal`, `DOMException` from Node
-(sources and costs: `reference/sources-native`, `reference/sources-js`).
+Walls the carrier is expected to hit, owned elsewhere: zlib (`node-zlib-on-every-host`) after
+pdfkit's font load.
 
 ## Open questions
 
-- 1. API set: (a) URL/URLSearchParams + Blob/File + ES modules + internal uses (the user's
-  words); (b) (a) + structuredClone, web streams, AbortController/AbortSignal,
-  Event/EventTarget/CustomEvent; (c) (b) + everything without a host capability — owner: user —
-  asked 2026-11-24, re-asked after the critic, recommended (a).
-- 2. Whose scenario closes the goal: the consumer's own generators + the user's ESM entry (goal
-  §User scenario) or a generic per-API corpus — owner: user — re-asked 2026-11-24, recommended the
-  consumer's generators.
-- 3. Cost (warm call, guest bundle bytes, per-isolate heap): measured growth with no new limit, or
-  a hard bound — owner: user — re-asked 2026-11-24 with (a) ≈ +1–3 ms, (b) ≥ +9 ms on a 13 ms
-  empty `runCode` (601 ms warm `exec` at template scale), bundle +0.3 / +0.9 MB on 7.1 MB, heap
-  not measured; recommended measured growth.
-- IDNA table in the guest bundle: the guest `URL` needs Node's IDNA (tr46 differs on 308/6 357
-  IdnaTestV2 hosts, `reference/sources-native` §IDNA); a port of `ada::idna` (82–97 KB gzip, 53 KB
-  with ICU NFC, implementation thread's estimate) is this goal's candidate, with `URL` (item 4);
-  the legacy API reaches it through the guest `URL` (PR #444, (c′)); its cost is question 3 —
-  owner: agent for the source (only it matches Node), user for the cost.
-- 4. Tier: `works` (recommended: computation inside the isolate, no new boundary) or `robust` —
-  owner: user — asked 2026-11-24.
-- 5. ES modules in `-e` (`runCode` with `import()` or ESM syntax: today `isolate-host.dynamic-import`/
-  `node-eval-esm`; needs the file loader's `import()` rewrite and `-e` module detection,
-  `runtime-js/node-cli-esm-eval-context`) — in this goal or the next — owner: user — asked
-  2026-11-24, recommended the next.
-- `structuredClone` own JS: size, warm cost, agreement on the 33 cases — owner: agent — prototype
-  before its unit is seeded, only under question 1 (b).
+- T. The five ICU-only `TextDecoder` encodings — owner: user (via the manager). Node decodes big5,
+  euc-jp, shift_jis, euc-kr, iso-2022-jp through ICU `ucnv`, which differs from WHATWG on 8 401,
+  16 681, 3 121, 19 530 and 26 sequences (silent lead-byte drops; `reference/textdecoder`):
+  (a) they stay the named gap `isolate-host.TextDecoder(<enc>)` — the set is the 34 encodings where
+  Node equals WHATWG (fontkit/pdfkit need only `ascii`/`latin1`/`utf-16le`/`utf-16be`);
+  (b) port ICU's converters for them (a Node-output dump is 36–55 KB gzip each,
+  `results-icu-dump-size.txt`; the converter state machine too; not measured); (c) WHATWG decoders
+  (@exodus/bytes, measured) for them, declared ⚠️ against Node (browser results) — recommended (a).
+  Asked 2026-11-25.
+- M1. `CustomEvent` (the same `event_target.js`, a Node 24 global, ~0 bytes extra) as a guest
+  global with the four — owner: manager — asked 2026-11-25; recommended yes (Node has it; leaving it
+  a ceiling while its base class is real is a gap with no saving).
+- M2. Web streams in the isolate after the split: goal `node-streams-as-in-node` points them to this
+  goal, the user's narrowing left them out — owner: manager — asked 2026-11-25. Until settled,
+  `Blob.prototype.stream` and `TextDecoderStream` are named gaps.
+- Units 4–5 home — owner: manager.
 
 ## Out of scope
 
-- `fetch`, `WebSocket`: network egress stays a named gap (ADR-0557 §6).
-- `crypto.subtle`/`SubtleCrypto`/`CryptoKey`, `CompressionStream`/`DecompressionStream`: need a crypto
-  or compression engine in the guest — their own goals.
-- `data:` URL imports: rifty's gap on every host (`runtime-js/process-module-loader-surface`).
-- `fs.*` with an invalid path: Node's `ERR_INVALID_ARG_TYPE` is `runtime-js/fs-path-invalid-arg-type`'s
-  (every host); with a real `URL` the guest gives the every-host error.
-- Text of ESM diagnostics (stack line, file URL in frames, source header): direction F, pinned ⚠️.
-- Browser hosts' Web globals (native there); browser-host `navigator` and browser-only globals
-  (`runtime-js/browser-host-guest-navigator`, `runtime-js/guest-browser-only-globals`).
-- `url.domainToASCII`/`domainToUnicode`/`urlToHttpOptions`, output-changing `url.format(URL, options)`:
-  `runtime-js/node-url-legacy-format-and-helpers`.
+- `URL`/`URLSearchParams`, ES modules, `url.toASCII` in the isolate, the runtime's other
+  load-time captures (`runtime-js/isolate-web-globals-captured-at-load`): `isolate-guest-modern-code`.
+- Web streams (`Blob.prototype.stream` stays the `ReadableStream` named gap), `structuredClone`,
+  `MessageChannel` (unit 5 stubs `internalBinding('messaging')`; transferring a signal is a named
+  gap), `fetch`, `crypto.subtle`, `CompressionStream`, `URLPattern`, `Performance*`.
+- `fs.createReadStream` reads: `node-streams-as-in-node` unit 9r
+  (`distribution/isolate-host-fs-read-stream-needs-web-readablestream`).
+- Every-host gaps found by `reference/today`: `events.addAbortListener` (`node-streams-as-in-node`
+  unit 3), `util.aborted` (`runtime-js/util-aborted-missing`), `stream.addAbortSignal` argument
+  check (`io/src/streams/readable.ts:1399`) and `stream/promises.pipeline` with a generator stage —
+  the stream core goal's (Node's own `lib/internal/streams`).
+- Browser hosts' Web globals (native there); browser-host `navigator`/browser-only globals.

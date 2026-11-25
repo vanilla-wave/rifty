@@ -16,8 +16,12 @@ Probe `sources-native` (2026-11-24, Node v24.16.0): Node's `lib/internal/blob.js
 `getReader`). No npm candidate passes: `formdata-node` 6.0.3 differs on 9/19 cases (`text()` needs
 `ReadableStream`, no `endings`/`bytes()`, type not lower-cased), `blob-polyfill` 13/19,
 `fetch-blob` 4.0.0 does not bundle as an IIFE. Node-only behaviour to keep: `endings: 'native'`
-leaves a lone `\r`. Direction: Node's files generated over a JS byte store (ADR-0541 pattern);
-`stream()` needs the web-streams unit. Compat ❌ isolate-host.md ceiling row.
+leaves a lone `\r`. Direction: Node's files generated over a JS byte store (ADR-0541 pattern),
+installed before the runtime loads (absorbs the `buffer.ts:42-43` rows of
+`runtime-js/isolate-web-globals-captured-at-load`). Compat ❌ isolate-host.md ceiling row.
 
-`Blob.stream()`: Node's under goal question 1 (b) (web streams in scope); under (a) it throws the
-`ReadableStream` named gap (`NotImplementedError('isolate-host.ReadableStream')`), compat ❌.
+`Blob.prototype.stream()`: web streams stay outside the guest (the user's narrowing, 2026-11-25),
+so it throws the `ReadableStream` named gap (`NotImplementedError('isolate-host.ReadableStream')`),
+compat ❌. Today (`reference/today`, main bc3412420): `new Blob`/`new File` → named gaps,
+`buffer.Blob`/`buffer.File` `undefined` (captured at load, `buffer.ts:42-43`),
+`({}) instanceof buffer.Blob` → `Right-hand side of 'instanceof' is not an object` (Node `false`).

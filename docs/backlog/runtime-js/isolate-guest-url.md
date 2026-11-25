@@ -4,7 +4,7 @@ status: draft
 title: The isolate guest's `URL` and `URLSearchParams` are Node 24's, installed before the runtime loads
 created: 2026-11-24
 why: both are ceiling throwers in the guest, and runtime-js captured them as `undefined` at load — `pathToFileURL`, `import()` by `file:` URL, `createRequire('file:…')` leak `URLConstructor is not a constructor`
-epic: isolate-guest-web-api
+epic: isolate-guest-modern-code
 sources: [docs/backlog/epics/isolate-guest-web-api/reference/sources-native/README.md, docs/backlog/epics/isolate-guest-web-api/reference/seam-esm/README.md, docs/backlog/runtime-js/isolate-web-globals-captured-at-load.md]
 code: [packages/isolate-guest/src/guest/web-shim.ts, packages/runtime-js/src/internal/posix-file-url.ts, packages/runtime-js/src/builtins/url.ts]
 ---

@@ -5,6 +5,7 @@ title: The isolate guest's TextDecoder throws for every label but utf-8, so pdfk
 created: 2026-11-25
 why: Measured by the node:zlib goal's carrier — pdfkit 0.17.2 dies at load in the isolate host on `new TextDecoder('ascii')`, before any zlib call, so the zlib goal's unit 3 alone cannot turn its case 4 green on the isolate
 user_story: As an agent running model-written code in the isolate host, I want `require('pdfkit')` to load as in Node, but today fontkit's module top level throws `NotImplementedError: Not implemented: isolate-host.TextDecoder(ascii) (only utf-8)`
+epic: isolate-guest-web-api
 sources: [packages/isolate-host/tests/zlib-scenario.test.ts, docs/backlog/epics/node-zlib-on-every-host/map.md]
 code: [packages/isolate-guest/src/guest/text-codec.ts]
 ---
@@ -29,12 +30,22 @@ One `runCode` measurement (2026-11-25, Node v24.16.0; input bytes `68 69 e9 80`)
 
 Labels outside these were not measured (Node's full WHATWG table, `fatal` per encoding).
 
-Dedup: no backlog item on the isolate `TextDecoder` labels. The draft goal
-`epics/isolate-guest-web-api` (PR #443, not on main) covers URL, Blob, ES module files,
-web streams and `TextDecoderStream`, but not `TextDecoder` labels; it is this item's likely owner
-once it lands. Owner until then: distribution (isolate host). Trigger: unit 3 of
+Dedup: no other backlog item on the isolate `TextDecoder` labels. Owner: goal
+`isolate-guest-web-api` (2026-11-25). Trigger: unit 3 of
 node-zlib-on-every-host (`runtime-js/zlib-node-lib-port`) merging, which leaves case 4 red on the
 isolate at least for this reason (what fails after it is not measured).
+
+2026-11-25 — goal `isolate-guest-web-api` unit 4. Probe `reference/textdecoder` (Node v24.16.0):
+Node accepts 222 of the 228 WHATWG labels (`replacement`'s 6 throw `ERR_ENCODING_NOT_SUPPORTED`);
+utf-8 in C++, the 28 single-byte encodings and `x-user-defined` in JS (`lib/internal/encoding/
+single-byte.js`, WHATWG tables), utf-16le/be, gbk, gb18030, big5, euc-jp, iso-2022-jp, shift_jis,
+euc-kr through ICU `ucnv`. Node equals WHATWG on all but big5/euc-jp/shift_jis/euc-kr/iso-2022-jp
+(exhaustive 1- and 2-byte corpus). Direction: Node's `encoding.js` class and `single-byte.js`
+verbatim, utf-16/gbk/gb18030 from @exodus/bytes 1.16.0 (pure-JS path; 0 differences from Node
+there), plus Node's `TextEncoder` from the same `encoding.js`; the five ICU-only encodings are not
+in this unit (the goal's question T). Today (`reference/today`): the
+guest accepts 3 labels (even `unicode11utf8` is refused), `new TextDecoder('nope')` throws
+`NotImplementedError` where Node throws `RangeError [ERR_ENCODING_NOT_SUPPORTED]`.
 
 ## Challenge
 

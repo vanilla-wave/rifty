@@ -1,0 +1,116 @@
+# 2026-11-25 HEAD 70923a630 node v24.16.0
+
+id | node | guest exec | guest runCode
+global Blob descriptor | "data function w1e0c1" | = | =
+global File descriptor | "data function w1e0c1" | = | =
+global TextDecoder descriptor | "data function w1e0c1" | = | =
+global TextEncoder descriptor | "data function w1e0c1" | = | =
+global AbortController descriptor | "data function w1e0c1" | = | =
+global AbortSignal descriptor | "data function w1e0c1" | = | =
+global EventTarget descriptor | "data function w1e0c1" | = | =
+global Event descriptor | "data function w1e0c1" | = | =
+global CustomEvent descriptor | "data function w1e0c1" | = | =
+global DOMException descriptor | "data function w1e0c1" | = | =
+new Blob(["a"]) | object Blob | throw NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557) | = exec
+blob.size/type | "3 text/plain" | throw NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557) | = exec
+blob.text() | "hé" | throw NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557) | = exec
+blob.arrayBuffer() | ArrayBuffer(3) | throw NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557) | = exec
+blob.bytes() | Uint8Array[97,98,99] | throw NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557) | = exec
+blob.slice(1,2).text() | "b" | throw NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557) | = exec
+blob.stream() | object ReadableStream | throw NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557) | = exec
+new File(["x"],"n",{lastModified:5}) | "n 5 1" | throw NotImplementedError: Not implemented: isolate-host.File (not available in the rifty isolate host, ADR-0557) | = exec
+typeof buffer.Blob | "function" | "undefined" | = exec
+typeof buffer.File | "function" | "undefined" | = exec
+buffer.Blob === Blob | true | false | = exec
+buffer.File === File | true | false | = exec
+new buffer.Blob(["a"]).size | 1 | throw TypeError: buffer.Blob is not a constructor | = exec
+({}) instanceof Blob | false | = | =
+({}) instanceof buffer.Blob | false | throw TypeError: Right-hand side of 'instanceof' is not an object | = exec
+buffer.resolveObjectURL | "function" | = | =
+util.TextDecoder === TextDecoder | true | = | =
+util.TextEncoder === TextEncoder | true | = | =
+TextDecoder labels accepted | 222/228 | 3/228 | = exec
+TextDecoder("unicode-1-1-utf-8").encoding | "utf-8" | = | =
+TextDecoder("unicode11utf8").encoding | "utf-8" | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(unicode11utf8) (only utf-8) | = exec
+TextDecoder("unicode20utf8").encoding | "utf-8" | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(unicode20utf8) (only utf-8) | = exec
+TextDecoder("utf-8").encoding | "utf-8" | = | =
+TextDecoder("utf8").encoding | "utf-8" | = | =
+TextDecoder("x-unicode20utf8").encoding | "utf-8" | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(x-unicode20utf8) (only utf-8) | = exec
+TextDecoder(UTF-8) | ok as utf-8 | = | =
+TextDecoder(IBM866) | ok as ibm866 | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(866) (only utf-8) | = exec
+TextDecoder(ISO-8859-2) | ok as iso-8859-2 | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(csisolatin2) (only utf-8) | = exec
+TextDecoder(ISO-8859-3) | ok as iso-8859-3 | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(csisolatin3) (only utf-8) | = exec
+TextDecoder(ISO-8859-4) | ok as iso-8859-4 | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(csisolatin4) (only utf-8) | = exec
+TextDecoder(ISO-8859-5) | ok as iso-8859-5 | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(csisolatincyrillic) (only utf-8) | = exec
+TextDecoder(ISO-8859-6) | ok as iso-8859-6 | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(arabic) (only utf-8) | = exec
+TextDecoder(ISO-8859-7) | ok as iso-8859-7 | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(csisolatingreek) (only utf-8) | = exec
+TextDecoder(ISO-8859-8) | ok as iso-8859-8 | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(csiso88598e) (only utf-8) | = exec
+TextDecoder(ISO-8859-8-I) | ok as iso-8859-8-i | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(csiso88598i) (only utf-8) | = exec
+TextDecoder(ISO-8859-10) | ok as iso-8859-10 | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(csisolatin6) (only utf-8) | = exec
+TextDecoder(ISO-8859-13) | ok as iso-8859-13 | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(iso-8859-13) (only utf-8) | = exec
+TextDecoder(ISO-8859-14) | ok as iso-8859-14 | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(iso-8859-14) (only utf-8) | = exec
+TextDecoder(ISO-8859-15) | ok as iso-8859-15 | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(csisolatin9) (only utf-8) | = exec
+TextDecoder(ISO-8859-16) | ok as iso-8859-16 | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(iso-8859-16) (only utf-8) | = exec
+TextDecoder(KOI8-R) | ok as koi8-r | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(cskoi8r) (only utf-8) | = exec
+TextDecoder(KOI8-U) | ok as koi8-u | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(koi8-ru) (only utf-8) | = exec
+TextDecoder(macintosh) | ok as macintosh | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(csmacintosh) (only utf-8) | = exec
+TextDecoder(windows-874) | ok as windows-874 | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(dos-874) (only utf-8) | = exec
+TextDecoder(windows-1250) | ok as windows-1250 | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(cp1250) (only utf-8) | = exec
+TextDecoder(windows-1251) | ok as windows-1251 | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(cp1251) (only utf-8) | = exec
+TextDecoder(windows-1252) | ok as windows-1252 | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(ansi_x3.4-1968) (only utf-8) | = exec
+TextDecoder(windows-1253) | ok as windows-1253 | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(cp1253) (only utf-8) | = exec
+TextDecoder(windows-1254) | ok as windows-1254 | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(cp1254) (only utf-8) | = exec
+TextDecoder(windows-1255) | ok as windows-1255 | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(cp1255) (only utf-8) | = exec
+TextDecoder(windows-1256) | ok as windows-1256 | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(cp1256) (only utf-8) | = exec
+TextDecoder(windows-1257) | ok as windows-1257 | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(cp1257) (only utf-8) | = exec
+TextDecoder(windows-1258) | ok as windows-1258 | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(cp1258) (only utf-8) | = exec
+TextDecoder(x-mac-cyrillic) | ok as x-mac-cyrillic | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(x-mac-cyrillic) (only utf-8) | = exec
+TextDecoder(GBK) | ok as gbk | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(chinese) (only utf-8) | = exec
+TextDecoder(gb18030) | ok as gb18030 | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(gb18030) (only utf-8) | = exec
+TextDecoder(Big5) | ok as big5 | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(big5) (only utf-8) | = exec
+TextDecoder(EUC-JP) | ok as euc-jp | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(cseucpkdfmtjapanese) (only utf-8) | = exec
+TextDecoder(ISO-2022-JP) | ok as iso-2022-jp | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(csiso2022jp) (only utf-8) | = exec
+TextDecoder(Shift_JIS) | ok as shift_jis | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(csshiftjis) (only utf-8) | = exec
+TextDecoder(EUC-KR) | ok as euc-kr | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(cseuckr) (only utf-8) | = exec
+TextDecoder(replacement) | throw RangeError [ERR_ENCODING_NOT_SUPPORTED]: The "replacement" encoding is not supported | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(csiso2022kr) (only utf-8) | = exec
+TextDecoder(UTF-16BE) | ok as utf-16be | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(unicodefffe) (only utf-8) | = exec
+TextDecoder(UTF-16LE) | ok as utf-16le | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(csunicode) (only utf-8) | = exec
+TextDecoder(x-user-defined) | ok as x-user-defined | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(x-user-defined) (only utf-8) | = exec
+decode latin1 68 69 e9 80 ff | "hié€ÿ" | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(latin1) (only utf-8) | = exec
+decode utf-16le 68 69 e9 80 ff | "楨胩�" | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(utf-16le) (only utf-8) | = exec
+decode utf-16be 68 69 e9 80 ff | "桩�" | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(utf-16be) (only utf-8) | = exec
+decode shift_jis 68 69 e9 80 ff | "hi騾�" | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(shift_jis) (only utf-8) | = exec
+decode gbk 68 69 e9 80 ff | "hi閫�" | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(gbk) (only utf-8) | = exec
+decode big5 68 69 e9 80 ff | "hi�" | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(big5) (only utf-8) | = exec
+decode euc-kr 68 69 e9 80 ff | "hi��" | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(euc-kr) (only utf-8) | = exec
+utf-8 fatal on ff | throw TypeError [ERR_ENCODING_INVALID_ENCODED_DATA]: The encoded data was not valid for encoding utf-8 | = | =
+utf-8 ignoreBOM | "﻿A" | = | =
+utf-8 stream split é | "é" | = | =
+new TextDecoder("nope") | throw RangeError [ERR_ENCODING_NOT_SUPPORTED]: The "nope" encoding is not supported | throw NotImplementedError: Not implemented: isolate-host.TextDecoder(nope) (only utf-8) | = exec
+new AbortController() | object AbortController | throw NotImplementedError: Not implemented: isolate-host.AbortController (not available in the rifty isolate host, ADR-0557) | = exec
+AbortSignal.abort().reason | object DOMException | throw TypeError: AbortSignal.abort is not a function | = exec
+AbortSignal.timeout(1) | object AbortSignal | throw TypeError: AbortSignal.timeout is not a function | = exec
+AbortSignal.any([]) | object AbortSignal | throw TypeError: AbortSignal.any is not a function | = exec
+throwIfAborted | throw r | throw TypeError: AbortSignal.abort is not a function | = exec
+new EventTarget() | object EventTarget | throw NotImplementedError: Not implemented: isolate-host.EventTarget (not available in the rifty isolate host, ADR-0557) | = exec
+new Event("x").type | "x" | throw NotImplementedError: Not implemented: isolate-host.Event (not available in the rifty isolate host, ADR-0557) | = exec
+new CustomEvent("x",{detail:1}).detail | 1 | throw NotImplementedError: Not implemented: isolate-host.CustomEvent (not available in the rifty isolate host, ADR-0557) | = exec
+new DOMException("m","AbortError").code | 20 | = | =
+typeof events.addAbortListener | "function" | "undefined" | = exec
+typeof util.aborted | "function" | "undefined" | = exec
+events.once(ee,"x",{signal}) aborted | throw AbortError [ABORT_ERR]: The operation was aborted | throw NotImplementedError: Not implemented: isolate-host.AbortController (not available in the rifty isolate host, ADR-0557) | = exec
+events.on(ee,"x",{signal}) aborted | throw AbortError [ABORT_ERR]: The operation was aborted | throw NotImplementedError: Not implemented: isolate-host.AbortController (not available in the rifty isolate host, ADR-0557) | = exec
+timers/promises.setTimeout(5,v,{signal}) aborted | throw AbortError [ABORT_ERR]: The operation was aborted | throw NotImplementedError: Not implemented: isolate-host.AbortController (not available in the rifty isolate host, ADR-0557) | = exec
+fs.promises.readFile(f,{signal}) aborted | throw AbortError [ABORT_ERR]: The operation was aborted | throw NotImplementedError: Not implemented: isolate-host.AbortController (not available in the rifty isolate host, ADR-0557) | = exec
+fs.readFile(f,{signal}) aborted | throw AbortError [ABORT_ERR]: The operation was aborted | throw NotImplementedError: Not implemented: isolate-host.AbortController (not available in the rifty isolate host, ADR-0557) | = exec
+fs.promises.readFile(f) no signal | "abc" | = | =
+stream.addAbortSignal(undefined, readable) | throw TypeError [ERR_INVALID_ARG_TYPE]: The "signal" argument must be an instance of AbortSignal. Received undefined | throw TypeError: Cannot read properties of undefined (reading 'aborted') | = exec
+stream.addAbortSignal(sig, readable) | object Readable | throw TypeError: Cannot read properties of undefined (reading 'aborted') | = exec
+stream.pipeline with function stage | undefined | throw TypeError: pipeline: argument must be a stream (index 1 received a non-stream value) | = exec
+
+exit node 0 exec 0 runCode 0
+
+scenario | node | guest
+pptx-write.cjs | exit 0 "[object Blob] Blob\nbytes true" | exit 1: Error: blob is not supported by this platform ""
+docx-toblob.cjs | exit 0 "[object Blob]\nbytes true" | exit 1: NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557) ""
+pdfkit-font.cjs | exit 0 "pdf ok" | exit 1: NotImplementedError: Not implemented: isolate-host.TextDecoder(ascii) (only utf-8) ""

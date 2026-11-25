@@ -4,7 +4,7 @@ status: draft
 title: "In the isolate guest a runtime-internal use of a web global installed after the runtime loads gives the global's named gap or Node's result, never a leaked internal name or a wrong value"
 created: 2026-11-24
 why: runtime-js captures `URL`, `URLSearchParams`, `Blob`, `File`, `crypto.subtle` at module load, where the isolate guest has none yet (ceilings installed after); its internal uses then throw `URLConstructor is not a constructor`-style errors, and `url.parse`/`url.resolve` return wrong values silently
-epic: isolate-guest-web-api
+epic: isolate-guest-modern-code
 sources: [PR-440, PR-440-review-rounds-2-3, docs/backlog/epics/isolate-guest-web-api/reference/seam-esm/README.md, docs/backlog/epics/isolate-guest-web-api/reference/enumerate/README.md]
 code: [packages/runtime-js/src/internal/posix-file-url.ts, packages/runtime-js/src/builtins/url.ts, packages/runtime-js/src/builtins/buffer.ts, packages/runtime-js/src/builtins/crypto.ts, packages/runtime-js/src/builtins/fs-path.ts, packages/runtime-js/src/module-loader/resolver.ts, packages/runtime-js/src/internal/create-require-path.ts, packages/isolate-guest/src/guest/web-shim.ts]
 ---
@@ -34,7 +34,7 @@ Measured 2026-11-24, `sandbox.exec` of one CommonJS file over the same files, PR
 | `crypto.ts:504` `subtle: webcrypto?.subtle` (read before the ceiling getter), `require('crypto').subtle.digest` | `TypeError: Cannot read properties of undefined (reading 'digest')` | a function |
 | `url.ts:76` `parse`, `:161` `resolve` (an empty `catch {}` around the `URL` use) — **wrong value, no error** | `url.resolve('https://example.com/a', 'b')` → `'b'`; `url.resolve('http://a.com/b/c', '../d')` → `'../d'`; `url.parse('http://u:p@a.com:8/b?c=d#e')` → `host` `'u:p@a.com:8'`, no `auth`/`hostname`/`port`/`path` keys (keys `protocol,slashes,host,pathname,search,query,hash,href`) | `'https://example.com/b'`; `'http://a.com/d'`; ``auth` `'u:p'`, `host` `'a.com:8'`, `hostname` `'a.com'`, `port` `'8'`, plus `path` |
 
-The `url.ts:76`/`:161` row (`parse`, `resolve`) is owned by `runtime-js/node-url-legacy-api-port`
+The `url.ts:76`/`:161` row (`parse`, `resolve`) is owned by PR #444 (ADR-0574; the isolate's `url.toASCII` gap closes with a guest `URL`)
 (2026-11-24): Node's legacy API needs no `URL`, so the port drops the `URL` use there on every host.
 
 Review round 3 also named, not measured here: `io/src/streams/from-web-validation.ts:33-40`,
@@ -85,8 +85,16 @@ Answered by probes 2026-11-24 (goal `isolate-guest-web-api`, `reference/seam-esm
   globals finds 0 (a thrower is a function). It cannot see internal uses (`pathToFileURL`,
   `createRequire('file:')`, `import('file:')`, `fs.readFileSync({})`, `url.parse` values): those
   are closed by the seam and each stays a parity row. The `catch` pass: 7 sites in the guest bundle,
-  2 silent wrong values (`url.ts` parse/resolve, now `runtime-js/node-url-legacy-api-port`), 2
+  2 silent wrong values (`url.ts` parse/resolve, now PR #444 (ADR-0574; the isolate's `url.toASCII` gap closes with a guest `URL`)), 2
   error substitutions (`create-require-path.ts:7`, `resolver.ts:251`) — a review checklist.
 
-Owner: runtime-js with isolate-guest, goal `isolate-guest-web-api` (seam unit). Compat ❌
+2026-11-25 — split by the user's narrowing: goal `isolate-guest-web-api` takes the
+`Blob`/`File` rows into `runtime-js/isolate-guest-blob-file` (`buffer.ts:42-43`, the narrowed set's only load-time reads; `AbortController`,
+`AbortSignal`, `EventTarget`, `Event`, `CustomEvent` are read at use, `reference/today`); the `URL`/
+`URLSearchParams` rows go to goal `isolate-guest-modern-code`; web streams, `structuredClone`,
+`MessageChannel`, `crypto.subtle` reads stay ceilings, each a named thrower (installed after the
+runtime; the two load-breaking sites `timers.ts:267`, `crypto.ts:504` matter only if a goal installs
+them before).
+
+Owner: runtime-js with isolate-guest, goal `isolate-guest-modern-code` (its `URL` rows, the seam). Compat ❌
 isolate-host.md rows "Web globals absent when the runtime loads", "`url.parse` / `url.resolve`".
