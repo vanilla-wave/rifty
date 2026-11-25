@@ -23,7 +23,7 @@
       "version": "v24.16.0",
       "license": "MIT",
       "licenseFiles": ["packages/isolate-guest/src/guest/node-blob/generated/node.LICENSE"],
-      "changes": "lib/internal/{webidl,blob,file}.js wrapped as modules over rifty bindings and whitespace-minified by esbuild, tools/publishing/generate-node-blob.mjs",
+      "changes": "lib/internal/{webidl,blob,file}.js wrapped as modules over rifty bindings and minified by esbuild (whitespace and syntax, identifiers kept; the guest bundle may rename local bindings, e.g. require → require2), tools/publishing/generate-node-blob.mjs",
       "sourcesKey": "node"
     },
     "packages/runtime-js/src/module-loader/generated": {

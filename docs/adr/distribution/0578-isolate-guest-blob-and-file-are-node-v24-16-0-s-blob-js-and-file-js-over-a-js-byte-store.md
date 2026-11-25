@@ -35,9 +35,10 @@ They also require `internal/util/inspect`, `timers`, `task_queues`, `internal/en
    upstream line is edited: every input is a binding.
 2. Byte store (`byte-store.ts`), the one own mechanism, Node's `DataQueue` shape measured against
    live Node: a handle is a list of entries — a part (`blob.js`'s own copy, whose buffer the store
-   takes over: detached, as Node's C++ does, copied if not detachable) or a source blob's handle,
+   takes over: detached, as Node's C++ does; a `SharedArrayBuffer`-backed one, growable or not,
+   copied) or a source blob's handle,
    kept nested (no flattening: 150 000 parts or 24 doublings `new Blob([b, b])` cost what they cost
-   in Node); `slice` keeps views and nested slices, no copy, starting at the first entry ending at
+   in Node); `slice` (iterative: as deep as the nesting) keeps views and nested slices, no copy, starting at the first entry ending at
    or after its start. A reader pulls synchronously: a part gives a copy of its bytes, the end of an
    entry a read without bytes unless it ends its queue (`arrayBuffer()` of `p` parts settles after
    `2p − 1` reads; an empty nested blob is one read). Intrinsics captured at bundle load; the parts
@@ -99,9 +100,13 @@ base = origin/main `3d16cb7b8`, change = this ADR's code; no bound (goal Decisio
 
 | | base | change | Δ |
 |---|---|---|---|
-| `dist/guest.js` | 7 173 116 B | 7 213 208 B | +40 092 B (generated part 16 829 B) |
-| `gzip -9` | 1 509 645 B | 1 519 624 B | +9 979 B |
-| warm `runCode('1')`, median of 40, base and change alternating, 4 runs (load ~7.8) | 15.39–16.03 ms | 15.94–16.69 ms | +0.29 to +0.66 ms |
+| `dist/guest.js` | 7 173 116 B | 7 214 767 B | +41 651 B (generated part 16 829 B) |
+| `gzip -9` | 1 509 645 B | 1 520 077 B | +10 432 B |
+| warm `runCode('1')`, median of 40, base and change alternating, 4 runs (load ~13) | 15.01–17.31 ms | 15.30–17.63 ms | +0.27 to +0.72 ms |
+
+Throughput, declared, not tuned: 200 000 parts `'ab'` → `new Blob` + `text()` 3.2 s in `runCode`
+(Node 0.3 s) — per part `blob.js`'s conversion and copy, the guest's JS UTF-8 encoder, a taken-over
+buffer, two reads.
 
 The warm Δ is the three files' and the bindings' evaluation in each fresh isolate (they load with
 the runtime, Decision 4); no lazy install (an accessor global is observable, goal Decisions).

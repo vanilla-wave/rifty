@@ -49,8 +49,8 @@ pdfkit's font load.
 
 ## Closed (manager, 2026-11-25; goal Decisions)
 
-- `Blob`/`File`'s own cost — measured in unit 2 (PR #458, ADR-0578 §Cost): `guest.js` +40 092 B
-  (`gzip -9` +9 979), warm `runCode('1')` +0.3–0.7 ms.
+- `Blob`/`File`'s own cost — measured in unit 2 (PR #458, ADR-0578 §Cost): `guest.js` +41 651 B
+  (`gzip -9` +10 432), warm `runCode('1')` +0.3–0.7 ms.
 
 - T — the five ICU-only encodings stay a named gap; draft
   `distribution/isolate-guest-textdecoder-icu-only-encodings` (a consumer exists, the gap is silent

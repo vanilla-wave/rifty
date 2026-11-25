@@ -147,6 +147,10 @@ v24.16.0. A Node re-pin regenerates and reruns the suites.
 - 2026-11-25 — agent: the WPT harness lives at the repo root `tests/wpt/` (outside every
   published package; a `vendor/` dir inside `packages/isolate-host` would fall under
   `check:third-party-notices`), host runner `packages/isolate-host/tests/wpt-guest.ts`.
+- 2026-11-25 — external review of PR #458 (manager): `SharedArrayBuffer` parts copied (threw),
+  `slice` iterative, `File.name` normalisation without RegExp; the harness takes a result only from
+  a clean end (exit 0, no termination, empty stderr) on both sides; not-run files guarded by a
+  guest probe. Declared: many small parts ~10× slower than Node.
 - rejected route: npm `Blob` polyfills — 9/19 and 13/19 cases differ — violates I1.
 
 ## Challenge
