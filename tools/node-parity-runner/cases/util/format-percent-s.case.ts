@@ -66,6 +66,15 @@ const c: ParityCase = {
       globalThis.Symbol = sym;
     }
     row('patched Set.prototype.has, Object.is, Symbol', () => patched.join(' | '));
+    // A prototype walk that ends in null (rifty's vm membrane, a getPrototypeOf trap) is
+    // inspected: Node's own end case is a Proxy, which it unwraps.
+    const vm = require('node:vm');
+    const ctx = vm.createContext({});
+    row('vm array', s(vm.runInContext('[1,2]', ctx)));
+    row('vm array of a context function', s(vm.runInContext('(function () { return [3]; })', ctx)()));
+    row('vm new context empty array', s(vm.runInNewContext('[]')));
+    row('vm new context nested array', s(vm.runInNewContext('[1,[2]]')));
+    row('getPrototypeOf trap null', s(new Proxy([1], { getPrototypeOf() { return null; } })));
     row('formatWithOptions depth', () => util.formatWithOptions({ depth: 5 }, '%s', { a: { b: 1 } }));
     // Built-in = a constructor name Node's inspect.js saw on globalThis at load (V8's
     // globals, not Buffer/URL): a user class so named and with its own toString is inspected.

@@ -186,6 +186,11 @@ export const CORPUS: readonly Row[] = [
     label: 'util-format-percent-s',
     code: "const f = (v) => { try { return util.format('%s', v) } catch (e) { return 'throw ' + e.message } }, c = (n) => new ({ [n]: class { toString() { return 'S' } } })[n](); console.log([{ toString() { return 'o' } }, new (class { toString() { return 'A' } })(), { [Symbol.toPrimitive]: () => 'p' }, { [Symbol.toPrimitive]() { throw new Error('PRIM') } }, -0, 1n, Buffer.from('ab'), new Uint8Array([1, 2]), new Date(0), { a: { b: 1 } }, [1, [2, [3]]], new Map([[1, 2]]), c('Buffer'), c('URL'), c('TextEncoder'), c('SharedArrayBuffer'), c('Document'), c('Error'), c('Map'), c('Iterator')].map(f).join(' | '))",
   },
+  {
+    // A prototype walk ending in null (a getPrototypeOf trap) is inspected, as Node (the guest has no vm).
+    label: 'util-format-percent-s-null-chain-end',
+    code: "const p = (v) => new Proxy(v, { getPrototypeOf() { return null } }); console.log([p([1]), p([1, [2]]), p({ a: 1 })].map((v) => { try { return util.format('%s', v) } catch (e) { return 'throw ' + e.message } }).join(' | ')); try { http.validateHeaderName(p([])) } catch (e) { console.log(e.code, e.message) }",
+  },
   { label: 'throw-sync', code: "console.log('before'); throw new Error('boom')", evalError: true },
   { label: 'reject-unhandled', code: "Promise.reject(new Error('rej'))", evalError: true },
   // Each promise origin, rejected unhandled, then a GC forced by allocation in the
