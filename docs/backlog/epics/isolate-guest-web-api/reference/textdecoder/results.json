@@ -1,0 +1,1754 @@
+{
+  "date": "2026-11-25T13:10:53.933Z",
+  "node": "v24.16.0",
+  "icu": "78.3",
+  "unicode": "17.0",
+  "esbuild": "0.28.0",
+  "labels": {
+    "total": 228,
+    "sameName": 228,
+    "differ": []
+  },
+  "specVsNode": {
+    "ibm866": {
+      "cases": 256,
+      "differ": 0,
+      "nonFatal": 0,
+      "mapping": 0,
+      "refused": 0,
+      "examples": []
+    },
+    "iso-8859-2": {
+      "cases": 256,
+      "differ": 0,
+      "nonFatal": 0,
+      "mapping": 0,
+      "refused": 0,
+      "examples": []
+    },
+    "iso-8859-3": {
+      "cases": 256,
+      "differ": 0,
+      "nonFatal": 0,
+      "mapping": 0,
+      "refused": 0,
+      "examples": []
+    },
+    "iso-8859-4": {
+      "cases": 256,
+      "differ": 0,
+      "nonFatal": 0,
+      "mapping": 0,
+      "refused": 0,
+      "examples": []
+    },
+    "iso-8859-5": {
+      "cases": 256,
+      "differ": 0,
+      "nonFatal": 0,
+      "mapping": 0,
+      "refused": 0,
+      "examples": []
+    },
+    "iso-8859-6": {
+      "cases": 256,
+      "differ": 0,
+      "nonFatal": 0,
+      "mapping": 0,
+      "refused": 0,
+      "examples": []
+    },
+    "iso-8859-7": {
+      "cases": 256,
+      "differ": 0,
+      "nonFatal": 0,
+      "mapping": 0,
+      "refused": 0,
+      "examples": []
+    },
+    "iso-8859-8": {
+      "cases": 256,
+      "differ": 0,
+      "nonFatal": 0,
+      "mapping": 0,
+      "refused": 0,
+      "examples": []
+    },
+    "iso-8859-8-i": {
+      "cases": 256,
+      "differ": 0,
+      "nonFatal": 0,
+      "mapping": 0,
+      "refused": 0,
+      "examples": []
+    },
+    "iso-8859-10": {
+      "cases": 256,
+      "differ": 0,
+      "nonFatal": 0,
+      "mapping": 0,
+      "refused": 0,
+      "examples": []
+    },
+    "iso-8859-13": {
+      "cases": 256,
+      "differ": 0,
+      "nonFatal": 0,
+      "mapping": 0,
+      "refused": 0,
+      "examples": []
+    },
+    "iso-8859-14": {
+      "cases": 256,
+      "differ": 0,
+      "nonFatal": 0,
+      "mapping": 0,
+      "refused": 0,
+      "examples": []
+    },
+    "iso-8859-15": {
+      "cases": 256,
+      "differ": 0,
+      "nonFatal": 0,
+      "mapping": 0,
+      "refused": 0,
+      "examples": []
+    },
+    "iso-8859-16": {
+      "cases": 256,
+      "differ": 0,
+      "nonFatal": 0,
+      "mapping": 0,
+      "refused": 0,
+      "examples": []
+    },
+    "koi8-r": {
+      "cases": 256,
+      "differ": 0,
+      "nonFatal": 0,
+      "mapping": 0,
+      "refused": 0,
+      "examples": []
+    },
+    "koi8-u": {
+      "cases": 256,
+      "differ": 0,
+      "nonFatal": 0,
+      "mapping": 0,
+      "refused": 0,
+      "examples": []
+    },
+    "macintosh": {
+      "cases": 256,
+      "differ": 0,
+      "nonFatal": 0,
+      "mapping": 0,
+      "refused": 0,
+      "examples": []
+    },
+    "windows-874": {
+      "cases": 256,
+      "differ": 0,
+      "nonFatal": 0,
+      "mapping": 0,
+      "refused": 0,
+      "examples": []
+    },
+    "windows-1250": {
+      "cases": 256,
+      "differ": 0,
+      "nonFatal": 0,
+      "mapping": 0,
+      "refused": 0,
+      "examples": []
+    },
+    "windows-1251": {
+      "cases": 256,
+      "differ": 0,
+      "nonFatal": 0,
+      "mapping": 0,
+      "refused": 0,
+      "examples": []
+    },
+    "windows-1252": {
+      "cases": 256,
+      "differ": 0,
+      "nonFatal": 0,
+      "mapping": 0,
+      "refused": 0,
+      "examples": []
+    },
+    "windows-1253": {
+      "cases": 256,
+      "differ": 0,
+      "nonFatal": 0,
+      "mapping": 0,
+      "refused": 0,
+      "examples": []
+    },
+    "windows-1254": {
+      "cases": 256,
+      "differ": 0,
+      "nonFatal": 0,
+      "mapping": 0,
+      "refused": 0,
+      "examples": []
+    },
+    "windows-1255": {
+      "cases": 256,
+      "differ": 0,
+      "nonFatal": 0,
+      "mapping": 0,
+      "refused": 0,
+      "examples": []
+    },
+    "windows-1256": {
+      "cases": 256,
+      "differ": 0,
+      "nonFatal": 0,
+      "mapping": 0,
+      "refused": 0,
+      "examples": []
+    },
+    "windows-1257": {
+      "cases": 256,
+      "differ": 0,
+      "nonFatal": 0,
+      "mapping": 0,
+      "refused": 0,
+      "examples": []
+    },
+    "windows-1258": {
+      "cases": 256,
+      "differ": 0,
+      "nonFatal": 0,
+      "mapping": 0,
+      "refused": 0,
+      "examples": []
+    },
+    "x-mac-cyrillic": {
+      "cases": 256,
+      "differ": 0,
+      "nonFatal": 0,
+      "mapping": 0,
+      "refused": 0,
+      "examples": []
+    },
+    "gbk": {
+      "cases": 91792,
+      "differ": 0,
+      "nonFatal": 0,
+      "mapping": 0,
+      "refused": 0,
+      "examples": []
+    },
+    "gb18030": {
+      "cases": 91792,
+      "differ": 0,
+      "nonFatal": 0,
+      "mapping": 0,
+      "refused": 0,
+      "examples": []
+    },
+    "big5": {
+      "cases": 69792,
+      "differ": 8401,
+      "nonFatal": 8385,
+      "mapping": 5363,
+      "refused": 7,
+      "examples": [
+        "80: node \" | fatal: O\" / \"� | fatal: T\"",
+        "ff: node \" | fatal: O\" / \"� | fatal: T\"",
+        "00 80: node \"\\u0000 | fatal: O\\u0000\" / \"\\u0000� | fatal: T\"",
+        "00 ff: node \"\\u0000 | fatal: O\\u0000\" / \"\\u0000� | fatal: T\""
+      ]
+    },
+    "euc-jp": {
+      "cases": 78628,
+      "differ": 16681,
+      "nonFatal": 16633,
+      "mapping": 41,
+      "refused": 33,
+      "examples": [
+        "80: node \" | fatal: O\" / \"� | fatal: T\"",
+        "81: node \" | fatal: O\" / \"� | fatal: T\"",
+        "82: node \" | fatal: O\" / \"� | fatal: T\"",
+        "83: node \" | fatal: O\" / \"� | fatal: T\""
+      ]
+    },
+    "iso-2022-jp": {
+      "cases": 69792,
+      "differ": 26,
+      "nonFatal": 26,
+      "mapping": 0,
+      "refused": 0,
+      "examples": [
+        "1b 24: node \"� | fatal: T\" / \"�$ | fatal: T\"",
+        "1b 25: node \"� | fatal: T\" / \"�% | fatal: T\"",
+        "1b 26: node \"� | fatal: T\" / \"�& | fatal: T\"",
+        "1b 28: node \"� | fatal: T\" / \"�( | fatal: T\""
+      ]
+    },
+    "shift_jis": {
+      "cases": 69792,
+      "differ": 3121,
+      "nonFatal": 3115,
+      "mapping": 1242,
+      "refused": 4,
+      "examples": [
+        "1a: node \"\\u001c | fatal: O\\u001c\" / \"\\u001a | fatal: O\\u001a\"",
+        "1c: node \" | fatal: O\" / \"\\u001c | fatal: O\\u001c\"",
+        "7f: node \"\\u001a | fatal: O\\u001a\" / \" | fatal: O\"",
+        "80: node \"� | fatal: T\" / \" | fatal: O\""
+      ]
+    },
+    "euc-kr": {
+      "cases": 69792,
+      "differ": 19530,
+      "nonFatal": 19481,
+      "mapping": 2492,
+      "refused": 34,
+      "examples": [
+        "80: node \" | fatal: O\" / \"� | fatal: T\"",
+        "81: node \" | fatal: O\" / \"� | fatal: T\"",
+        "82: node \" | fatal: O\" / \"� | fatal: T\"",
+        "83: node \" | fatal: O\" / \"� | fatal: T\""
+      ]
+    },
+    "utf-16be": {
+      "cases": 69798,
+      "differ": 0,
+      "nonFatal": 0,
+      "mapping": 0,
+      "refused": 0,
+      "examples": []
+    },
+    "utf-16le": {
+      "cases": 69798,
+      "differ": 0,
+      "nonFatal": 0,
+      "mapping": 0,
+      "refused": 0,
+      "examples": []
+    },
+    "x-user-defined": {
+      "cases": 256,
+      "differ": 0,
+      "nonFatal": 0,
+      "mapping": 0,
+      "refused": 0,
+      "examples": []
+    }
+  },
+  "candidates": {
+    "@exodus/bytes": {
+      "version": "1.16.0",
+      "bytes": 456478,
+      "minBytes": 189029,
+      "gzipBytes": 91408,
+      "per": {
+        "ibm866": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "iso-8859-2": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "iso-8859-3": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "iso-8859-4": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "iso-8859-5": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "iso-8859-6": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "iso-8859-7": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "iso-8859-8": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "iso-8859-8-i": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "iso-8859-10": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "iso-8859-13": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "iso-8859-14": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "iso-8859-15": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "iso-8859-16": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "koi8-r": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "koi8-u": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "macintosh": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "windows-874": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "windows-1250": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "windows-1251": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "windows-1252": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "windows-1253": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "windows-1254": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "windows-1255": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "windows-1256": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "windows-1257": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "windows-1258": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "x-mac-cyrillic": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "gbk": {
+          "cases": 91792,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "gb18030": {
+          "cases": 91792,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "big5": {
+          "cases": 69792,
+          "differ": 8401,
+          "nonFatal": 8385,
+          "mapping": 5363,
+          "refused": 7,
+          "examples": [
+            "80: node \" | fatal: O\" / \"� | fatal: T\"",
+            "ff: node \" | fatal: O\" / \"� | fatal: T\"",
+            "00 80: node \"\\u0000 | fatal: O\\u0000\" / \"\\u0000� | fatal: T\"",
+            "00 ff: node \"\\u0000 | fatal: O\\u0000\" / \"\\u0000� | fatal: T\""
+          ]
+        },
+        "euc-jp": {
+          "cases": 78628,
+          "differ": 16681,
+          "nonFatal": 16633,
+          "mapping": 41,
+          "refused": 33,
+          "examples": [
+            "80: node \" | fatal: O\" / \"� | fatal: T\"",
+            "81: node \" | fatal: O\" / \"� | fatal: T\"",
+            "82: node \" | fatal: O\" / \"� | fatal: T\"",
+            "83: node \" | fatal: O\" / \"� | fatal: T\""
+          ]
+        },
+        "iso-2022-jp": {
+          "cases": 69792,
+          "differ": 26,
+          "nonFatal": 26,
+          "mapping": 0,
+          "refused": 0,
+          "examples": [
+            "1b 24: node \"� | fatal: T\" / \"�$ | fatal: T\"",
+            "1b 25: node \"� | fatal: T\" / \"�% | fatal: T\"",
+            "1b 26: node \"� | fatal: T\" / \"�& | fatal: T\"",
+            "1b 28: node \"� | fatal: T\" / \"�( | fatal: T\""
+          ]
+        },
+        "shift_jis": {
+          "cases": 69792,
+          "differ": 3121,
+          "nonFatal": 3115,
+          "mapping": 1242,
+          "refused": 4,
+          "examples": [
+            "1a: node \"\\u001c | fatal: O\\u001c\" / \"\\u001a | fatal: O\\u001a\"",
+            "1c: node \" | fatal: O\" / \"\\u001c | fatal: O\\u001c\"",
+            "7f: node \"\\u001a | fatal: O\\u001a\" / \" | fatal: O\"",
+            "80: node \"� | fatal: T\" / \" | fatal: O\""
+          ]
+        },
+        "euc-kr": {
+          "cases": 69792,
+          "differ": 19530,
+          "nonFatal": 19481,
+          "mapping": 2492,
+          "refused": 34,
+          "examples": [
+            "80: node \" | fatal: O\" / \"� | fatal: T\"",
+            "81: node \" | fatal: O\" / \"� | fatal: T\"",
+            "82: node \" | fatal: O\" / \"� | fatal: T\"",
+            "83: node \" | fatal: O\" / \"� | fatal: T\""
+          ]
+        },
+        "utf-16be": {
+          "cases": 69798,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "utf-16le": {
+          "cases": 69798,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "x-user-defined": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        }
+      }
+    },
+    "text-encoding": {
+      "version": "0.7.0",
+      "bytes": 684932,
+      "minBytes": 549003,
+      "gzipBytes": 194046,
+      "per": {
+        "ibm866": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "iso-8859-2": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "iso-8859-3": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "iso-8859-4": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "iso-8859-5": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "iso-8859-6": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "iso-8859-7": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "iso-8859-8": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "iso-8859-8-i": {
+          "cases": 256,
+          "differ": 128,
+          "nonFatal": 128,
+          "mapping": 92,
+          "refused": 0,
+          "examples": [
+            "80: node \" | fatal: O\" / \"T | fatal: T\"",
+            "81: node \" | fatal: O\" / \"T | fatal: T\"",
+            "82: node \" | fatal: O\" / \"T | fatal: T\"",
+            "83: node \" | fatal: O\" / \"T | fatal: T\""
+          ]
+        },
+        "iso-8859-10": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "iso-8859-13": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "iso-8859-14": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "iso-8859-15": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "iso-8859-16": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "koi8-r": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "koi8-u": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "macintosh": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "windows-874": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "windows-1250": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "windows-1251": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "windows-1252": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "windows-1253": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "windows-1254": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "windows-1255": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "windows-1256": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "windows-1257": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "windows-1258": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "x-mac-cyrillic": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "gbk": {
+          "cases": 91792,
+          "differ": 6336,
+          "nonFatal": 6336,
+          "mapping": 20,
+          "refused": 0,
+          "examples": [
+            "a6 d9: node \"︐ | fatal: O︐\" / \" | fatal: O\"",
+            "a6 da: node \"︒ | fatal: O︒\" / \" | fatal: O\"",
+            "a6 db: node \"︑ | fatal: O︑\" / \" | fatal: O\"",
+            "a6 dc: node \"︓ | fatal: O︓\" / \" | fatal: O\""
+          ]
+        },
+        "gb18030": {
+          "cases": 91792,
+          "differ": 6347,
+          "nonFatal": 6347,
+          "mapping": 19,
+          "refused": 0,
+          "examples": [
+            "a6 d9: node \"︐ | fatal: O︐\" / \" | fatal: O\"",
+            "a6 da: node \"︒ | fatal: O︒\" / \" | fatal: O\"",
+            "a6 db: node \"︑ | fatal: O︑\" / \" | fatal: O\"",
+            "a6 dc: node \"︓ | fatal: O︓\" / \" | fatal: O\""
+          ]
+        },
+        "big5": {
+          "cases": 69792,
+          "differ": 8401,
+          "nonFatal": 8385,
+          "mapping": 5363,
+          "refused": 7,
+          "examples": [
+            "80: node \" | fatal: O\" / \"� | fatal: T\"",
+            "ff: node \" | fatal: O\" / \"� | fatal: T\"",
+            "00 80: node \"\\u0000 | fatal: O\\u0000\" / \"\\u0000� | fatal: T\"",
+            "00 ff: node \"\\u0000 | fatal: O\\u0000\" / \"\\u0000� | fatal: T\""
+          ]
+        },
+        "euc-jp": {
+          "cases": 78628,
+          "differ": 16685,
+          "nonFatal": 16638,
+          "mapping": 40,
+          "refused": 33,
+          "examples": [
+            "80: node \" | fatal: O\" / \"� | fatal: T\"",
+            "81: node \" | fatal: O\" / \"� | fatal: T\"",
+            "82: node \" | fatal: O\" / \"� | fatal: T\"",
+            "83: node \" | fatal: O\" / \"� | fatal: T\""
+          ]
+        },
+        "iso-2022-jp": {
+          "cases": 69792,
+          "differ": 26,
+          "nonFatal": 26,
+          "mapping": 0,
+          "refused": 0,
+          "examples": [
+            "1b 24: node \"� | fatal: T\" / \"�$ | fatal: T\"",
+            "1b 25: node \"� | fatal: T\" / \"�% | fatal: T\"",
+            "1b 26: node \"� | fatal: T\" / \"�& | fatal: T\"",
+            "1b 28: node \"� | fatal: T\" / \"�( | fatal: T\""
+          ]
+        },
+        "shift_jis": {
+          "cases": 69792,
+          "differ": 3121,
+          "nonFatal": 3115,
+          "mapping": 1242,
+          "refused": 4,
+          "examples": [
+            "1a: node \"\\u001c | fatal: O\\u001c\" / \"\\u001a | fatal: O\\u001a\"",
+            "1c: node \" | fatal: O\" / \"\\u001c | fatal: O\\u001c\"",
+            "7f: node \"\\u001a | fatal: O\\u001a\" / \" | fatal: O\"",
+            "80: node \"� | fatal: T\" / \" | fatal: O\""
+          ]
+        },
+        "euc-kr": {
+          "cases": 69792,
+          "differ": 23891,
+          "nonFatal": 23842,
+          "mapping": 2492,
+          "refused": 35,
+          "examples": [
+            "80: node \" | fatal: O\" / \"� | fatal: T\"",
+            "81: node \" | fatal: O\" / \"� | fatal: T\"",
+            "82: node \" | fatal: O\" / \"� | fatal: T\"",
+            "83: node \" | fatal: O\" / \"� | fatal: T\""
+          ]
+        },
+        "utf-16be": {
+          "cases": 69798,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "utf-16le": {
+          "cases": 69798,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        },
+        "x-user-defined": {
+          "cases": 256,
+          "differ": 0,
+          "nonFatal": 0,
+          "mapping": 0,
+          "refused": 0,
+          "examples": []
+        }
+      }
+    },
+    "iconv-lite": {
+      "version": "0.7.3",
+      "bytes": 647761,
+      "minBytes": 527481,
+      "gzipBytes": 201502,
+      "per": {
+        "ibm866": {
+          "cases": 256,
+          "differ": 256,
+          "nonFatal": 0,
+          "mapping": 255,
+          "refused": 1,
+          "examples": [
+            "00: node \"\\u0000 | fatal: O\\u0000\" / \"\\u0000 | fatal: U\"",
+            "01: node \" | fatal: \\u0001O\\u0001\" / \" | fatal: \\u0001U\"",
+            "02: node \"\\u0002 | fatal: O\\u0002\" / \"\\u0002 | fatal: U\"",
+            "03: node \"\\u0003 | fatal: O\\u0003\" / \"\\u0003 | fatal: U\""
+          ]
+        },
+        "iso-8859-2": {
+          "cases": 256,
+          "differ": 256,
+          "nonFatal": 0,
+          "mapping": 255,
+          "refused": 1,
+          "examples": [
+            "00: node \"\\u0000 | fatal: O\\u0000\" / \"\\u0000 | fatal: U\"",
+            "01: node \" | fatal: \\u0001O\\u0001\" / \" | fatal: \\u0001U\"",
+            "02: node \"\\u0002 | fatal: O\\u0002\" / \"\\u0002 | fatal: U\"",
+            "03: node \"\\u0003 | fatal: O\\u0003\" / \"\\u0003 | fatal: U\""
+          ]
+        },
+        "iso-8859-3": {
+          "cases": 256,
+          "differ": 256,
+          "nonFatal": 0,
+          "mapping": 248,
+          "refused": 1,
+          "examples": [
+            "00: node \"\\u0000 | fatal: O\\u0000\" / \"\\u0000 | fatal: U\"",
+            "01: node \" | fatal: \\u0001O\\u0001\" / \" | fatal: \\u0001U\"",
+            "02: node \"\\u0002 | fatal: O\\u0002\" / \"\\u0002 | fatal: U\"",
+            "03: node \"\\u0003 | fatal: O\\u0003\" / \"\\u0003 | fatal: U\""
+          ]
+        },
+        "iso-8859-4": {
+          "cases": 256,
+          "differ": 256,
+          "nonFatal": 0,
+          "mapping": 255,
+          "refused": 1,
+          "examples": [
+            "00: node \"\\u0000 | fatal: O\\u0000\" / \"\\u0000 | fatal: U\"",
+            "01: node \" | fatal: \\u0001O\\u0001\" / \" | fatal: \\u0001U\"",
+            "02: node \"\\u0002 | fatal: O\\u0002\" / \"\\u0002 | fatal: U\"",
+            "03: node \"\\u0003 | fatal: O\\u0003\" / \"\\u0003 | fatal: U\""
+          ]
+        },
+        "iso-8859-5": {
+          "cases": 256,
+          "differ": 256,
+          "nonFatal": 0,
+          "mapping": 255,
+          "refused": 1,
+          "examples": [
+            "00: node \"\\u0000 | fatal: O\\u0000\" / \"\\u0000 | fatal: U\"",
+            "01: node \" | fatal: \\u0001O\\u0001\" / \" | fatal: \\u0001U\"",
+            "02: node \"\\u0002 | fatal: O\\u0002\" / \"\\u0002 | fatal: U\"",
+            "03: node \"\\u0003 | fatal: O\\u0003\" / \"\\u0003 | fatal: U\""
+          ]
+        },
+        "iso-8859-6": {
+          "cases": 256,
+          "differ": 256,
+          "nonFatal": 0,
+          "mapping": 210,
+          "refused": 1,
+          "examples": [
+            "00: node \"\\u0000 | fatal: O\\u0000\" / \"\\u0000 | fatal: U\"",
+            "01: node \" | fatal: \\u0001O\\u0001\" / \" | fatal: \\u0001U\"",
+            "02: node \"\\u0002 | fatal: O\\u0002\" / \"\\u0002 | fatal: U\"",
+            "03: node \"\\u0003 | fatal: O\\u0003\" / \"\\u0003 | fatal: U\""
+          ]
+        },
+        "iso-8859-7": {
+          "cases": 256,
+          "differ": 256,
+          "nonFatal": 0,
+          "mapping": 252,
+          "refused": 1,
+          "examples": [
+            "00: node \"\\u0000 | fatal: O\\u0000\" / \"\\u0000 | fatal: U\"",
+            "01: node \" | fatal: \\u0001O\\u0001\" / \" | fatal: \\u0001U\"",
+            "02: node \"\\u0002 | fatal: O\\u0002\" / \"\\u0002 | fatal: U\"",
+            "03: node \"\\u0003 | fatal: O\\u0003\" / \"\\u0003 | fatal: U\""
+          ]
+        },
+        "iso-8859-8": {
+          "cases": 256,
+          "differ": 256,
+          "nonFatal": 0,
+          "mapping": 219,
+          "refused": 1,
+          "examples": [
+            "00: node \"\\u0000 | fatal: O\\u0000\" / \"\\u0000 | fatal: U\"",
+            "01: node \" | fatal: \\u0001O\\u0001\" / \" | fatal: \\u0001U\"",
+            "02: node \"\\u0002 | fatal: O\\u0002\" / \"\\u0002 | fatal: U\"",
+            "03: node \"\\u0003 | fatal: O\\u0003\" / \"\\u0003 | fatal: U\""
+          ]
+        },
+        "iso-8859-8-i": {
+          "cases": 256,
+          "differ": 256,
+          "nonFatal": 0,
+          "mapping": 219,
+          "refused": 1,
+          "examples": [
+            "00: node \"\\u0000 | fatal: O\\u0000\" / \"\\u0000 | fatal: U\"",
+            "01: node \" | fatal: \\u0001O\\u0001\" / \" | fatal: \\u0001U\"",
+            "02: node \"\\u0002 | fatal: O\\u0002\" / \"\\u0002 | fatal: U\"",
+            "03: node \"\\u0003 | fatal: O\\u0003\" / \"\\u0003 | fatal: U\""
+          ]
+        },
+        "iso-8859-10": {
+          "cases": 256,
+          "differ": 256,
+          "nonFatal": 0,
+          "mapping": 255,
+          "refused": 1,
+          "examples": [
+            "00: node \"\\u0000 | fatal: O\\u0000\" / \"\\u0000 | fatal: U\"",
+            "01: node \" | fatal: \\u0001O\\u0001\" / \" | fatal: \\u0001U\"",
+            "02: node \"\\u0002 | fatal: O\\u0002\" / \"\\u0002 | fatal: U\"",
+            "03: node \"\\u0003 | fatal: O\\u0003\" / \"\\u0003 | fatal: U\""
+          ]
+        },
+        "iso-8859-13": {
+          "cases": 256,
+          "differ": 256,
+          "nonFatal": 0,
+          "mapping": 255,
+          "refused": 1,
+          "examples": [
+            "00: node \"\\u0000 | fatal: O\\u0000\" / \"\\u0000 | fatal: U\"",
+            "01: node \" | fatal: \\u0001O\\u0001\" / \" | fatal: \\u0001U\"",
+            "02: node \"\\u0002 | fatal: O\\u0002\" / \"\\u0002 | fatal: U\"",
+            "03: node \"\\u0003 | fatal: O\\u0003\" / \"\\u0003 | fatal: U\""
+          ]
+        },
+        "iso-8859-14": {
+          "cases": 256,
+          "differ": 256,
+          "nonFatal": 0,
+          "mapping": 255,
+          "refused": 1,
+          "examples": [
+            "00: node \"\\u0000 | fatal: O\\u0000\" / \"\\u0000 | fatal: U\"",
+            "01: node \" | fatal: \\u0001O\\u0001\" / \" | fatal: \\u0001U\"",
+            "02: node \"\\u0002 | fatal: O\\u0002\" / \"\\u0002 | fatal: U\"",
+            "03: node \"\\u0003 | fatal: O\\u0003\" / \"\\u0003 | fatal: U\""
+          ]
+        },
+        "iso-8859-15": {
+          "cases": 256,
+          "differ": 256,
+          "nonFatal": 0,
+          "mapping": 255,
+          "refused": 1,
+          "examples": [
+            "00: node \"\\u0000 | fatal: O\\u0000\" / \"\\u0000 | fatal: U\"",
+            "01: node \" | fatal: \\u0001O\\u0001\" / \" | fatal: \\u0001U\"",
+            "02: node \"\\u0002 | fatal: O\\u0002\" / \"\\u0002 | fatal: U\"",
+            "03: node \"\\u0003 | fatal: O\\u0003\" / \"\\u0003 | fatal: U\""
+          ]
+        },
+        "iso-8859-16": {
+          "cases": 256,
+          "differ": 256,
+          "nonFatal": 0,
+          "mapping": 255,
+          "refused": 1,
+          "examples": [
+            "00: node \"\\u0000 | fatal: O\\u0000\" / \"\\u0000 | fatal: U\"",
+            "01: node \" | fatal: \\u0001O\\u0001\" / \" | fatal: \\u0001U\"",
+            "02: node \"\\u0002 | fatal: O\\u0002\" / \"\\u0002 | fatal: U\"",
+            "03: node \"\\u0003 | fatal: O\\u0003\" / \"\\u0003 | fatal: U\""
+          ]
+        },
+        "koi8-r": {
+          "cases": 256,
+          "differ": 256,
+          "nonFatal": 0,
+          "mapping": 255,
+          "refused": 1,
+          "examples": [
+            "00: node \"\\u0000 | fatal: O\\u0000\" / \"\\u0000 | fatal: U\"",
+            "01: node \" | fatal: \\u0001O\\u0001\" / \" | fatal: \\u0001U\"",
+            "02: node \"\\u0002 | fatal: O\\u0002\" / \"\\u0002 | fatal: U\"",
+            "03: node \"\\u0003 | fatal: O\\u0003\" / \"\\u0003 | fatal: U\""
+          ]
+        },
+        "koi8-u": {
+          "cases": 256,
+          "differ": 256,
+          "nonFatal": 2,
+          "mapping": 255,
+          "refused": 1,
+          "examples": [
+            "00: node \"\\u0000 | fatal: O\\u0000\" / \"\\u0000 | fatal: U\"",
+            "01: node \" | fatal: \\u0001O\\u0001\" / \" | fatal: \\u0001U\"",
+            "02: node \"\\u0002 | fatal: O\\u0002\" / \"\\u0002 | fatal: U\"",
+            "03: node \"\\u0003 | fatal: O\\u0003\" / \"\\u0003 | fatal: U\""
+          ]
+        },
+        "macintosh": {
+          "cases": 256,
+          "differ": 256,
+          "nonFatal": 3,
+          "mapping": 254,
+          "refused": 1,
+          "examples": [
+            "00: node \"\\u0000 | fatal: O\\u0000\" / \"\\u0000 | fatal: U\"",
+            "01: node \" | fatal: \\u0001O\\u0001\" / \" | fatal: \\u0001U\"",
+            "02: node \"\\u0002 | fatal: O\\u0002\" / \"\\u0002 | fatal: U\"",
+            "03: node \"\\u0003 | fatal: O\\u0003\" / \"\\u0003 | fatal: U\""
+          ]
+        },
+        "windows-874": {
+          "cases": 256,
+          "differ": 256,
+          "nonFatal": 23,
+          "mapping": 224,
+          "refused": 1,
+          "examples": [
+            "00: node \"\\u0000 | fatal: O\\u0000\" / \"\\u0000 | fatal: U\"",
+            "01: node \" | fatal: \\u0001O\\u0001\" / \" | fatal: \\u0001U\"",
+            "02: node \"\\u0002 | fatal: O\\u0002\" / \"\\u0002 | fatal: U\"",
+            "03: node \"\\u0003 | fatal: O\\u0003\" / \"\\u0003 | fatal: U\""
+          ]
+        },
+        "windows-1250": {
+          "cases": 256,
+          "differ": 256,
+          "nonFatal": 5,
+          "mapping": 250,
+          "refused": 1,
+          "examples": [
+            "00: node \"\\u0000 | fatal: O\\u0000\" / \"\\u0000 | fatal: U\"",
+            "01: node \" | fatal: \\u0001O\\u0001\" / \" | fatal: \\u0001U\"",
+            "02: node \"\\u0002 | fatal: O\\u0002\" / \"\\u0002 | fatal: U\"",
+            "03: node \"\\u0003 | fatal: O\\u0003\" / \"\\u0003 | fatal: U\""
+          ]
+        },
+        "windows-1251": {
+          "cases": 256,
+          "differ": 256,
+          "nonFatal": 1,
+          "mapping": 254,
+          "refused": 1,
+          "examples": [
+            "00: node \"\\u0000 | fatal: O\\u0000\" / \"\\u0000 | fatal: U\"",
+            "01: node \" | fatal: \\u0001O\\u0001\" / \" | fatal: \\u0001U\"",
+            "02: node \"\\u0002 | fatal: O\\u0002\" / \"\\u0002 | fatal: U\"",
+            "03: node \"\\u0003 | fatal: O\\u0003\" / \"\\u0003 | fatal: U\""
+          ]
+        },
+        "windows-1252": {
+          "cases": 256,
+          "differ": 256,
+          "nonFatal": 5,
+          "mapping": 250,
+          "refused": 1,
+          "examples": [
+            "00: node \"\\u0000 | fatal: O\\u0000\" / \"\\u0000 | fatal: U\"",
+            "01: node \" | fatal: \\u0001O\\u0001\" / \" | fatal: \\u0001U\"",
+            "02: node \"\\u0002 | fatal: O\\u0002\" / \"\\u0002 | fatal: U\"",
+            "03: node \"\\u0003 | fatal: O\\u0003\" / \"\\u0003 | fatal: U\""
+          ]
+        },
+        "windows-1253": {
+          "cases": 256,
+          "differ": 256,
+          "nonFatal": 14,
+          "mapping": 238,
+          "refused": 1,
+          "examples": [
+            "00: node \"\\u0000 | fatal: O\\u0000\" / \"\\u0000 | fatal: U\"",
+            "01: node \" | fatal: \\u0001O\\u0001\" / \" | fatal: \\u0001U\"",
+            "02: node \"\\u0002 | fatal: O\\u0002\" / \"\\u0002 | fatal: U\"",
+            "03: node \"\\u0003 | fatal: O\\u0003\" / \"\\u0003 | fatal: U\""
+          ]
+        },
+        "windows-1254": {
+          "cases": 256,
+          "differ": 256,
+          "nonFatal": 7,
+          "mapping": 248,
+          "refused": 1,
+          "examples": [
+            "00: node \"\\u0000 | fatal: O\\u0000\" / \"\\u0000 | fatal: U\"",
+            "01: node \" | fatal: \\u0001O\\u0001\" / \" | fatal: \\u0001U\"",
+            "02: node \"\\u0002 | fatal: O\\u0002\" / \"\\u0002 | fatal: U\"",
+            "03: node \"\\u0003 | fatal: O\\u0003\" / \"\\u0003 | fatal: U\""
+          ]
+        },
+        "windows-1255": {
+          "cases": 256,
+          "differ": 256,
+          "nonFatal": 12,
+          "mapping": 233,
+          "refused": 1,
+          "examples": [
+            "00: node \"\\u0000 | fatal: O\\u0000\" / \"\\u0000 | fatal: U\"",
+            "01: node \" | fatal: \\u0001O\\u0001\" / \" | fatal: \\u0001U\"",
+            "02: node \"\\u0002 | fatal: O\\u0002\" / \"\\u0002 | fatal: U\"",
+            "03: node \"\\u0003 | fatal: O\\u0003\" / \"\\u0003 | fatal: U\""
+          ]
+        },
+        "windows-1256": {
+          "cases": 256,
+          "differ": 256,
+          "nonFatal": 0,
+          "mapping": 255,
+          "refused": 1,
+          "examples": [
+            "00: node \"\\u0000 | fatal: O\\u0000\" / \"\\u0000 | fatal: U\"",
+            "01: node \" | fatal: \\u0001O\\u0001\" / \" | fatal: \\u0001U\"",
+            "02: node \"\\u0002 | fatal: O\\u0002\" / \"\\u0002 | fatal: U\"",
+            "03: node \"\\u0003 | fatal: O\\u0003\" / \"\\u0003 | fatal: U\""
+          ]
+        },
+        "windows-1257": {
+          "cases": 256,
+          "differ": 256,
+          "nonFatal": 10,
+          "mapping": 243,
+          "refused": 1,
+          "examples": [
+            "00: node \"\\u0000 | fatal: O\\u0000\" / \"\\u0000 | fatal: U\"",
+            "01: node \" | fatal: \\u0001O\\u0001\" / \" | fatal: \\u0001U\"",
+            "02: node \"\\u0002 | fatal: O\\u0002\" / \"\\u0002 | fatal: U\"",
+            "03: node \"\\u0003 | fatal: O\\u0003\" / \"\\u0003 | fatal: U\""
+          ]
+        },
+        "windows-1258": {
+          "cases": 256,
+          "differ": 256,
+          "nonFatal": 9,
+          "mapping": 246,
+          "refused": 1,
+          "examples": [
+            "00: node \"\\u0000 | fatal: O\\u0000\" / \"\\u0000 | fatal: U\"",
+            "01: node \" | fatal: \\u0001O\\u0001\" / \" | fatal: \\u0001U\"",
+            "02: node \"\\u0002 | fatal: O\\u0002\" / \"\\u0002 | fatal: U\"",
+            "03: node \"\\u0003 | fatal: O\\u0003\" / \"\\u0003 | fatal: U\""
+          ]
+        },
+        "x-mac-cyrillic": {
+          "cases": 256,
+          "differ": 256,
+          "nonFatal": 255,
+          "mapping": 0,
+          "refused": 256,
+          "examples": [
+            "00: node \"\\u0000 | fatal: O\\u0000\" / \"U | fatal: U\"",
+            "01: node \" | fatal: \\u0001O\\u0001\" / \"U | fatal: U\"",
+            "02: node \"\\u0002 | fatal: O\\u0002\" / \"U | fatal: U\"",
+            "03: node \"\\u0003 | fatal: O\\u0003\" / \"U | fatal: U\""
+          ]
+        },
+        "gbk": {
+          "cases": 91792,
+          "differ": 91792,
+          "nonFatal": 21578,
+          "mapping": 43276,
+          "refused": 282,
+          "examples": [
+            "00: node \"\\u0000 | fatal: O\\u0000\" / \"\\u0000 | fatal: U\"",
+            "01: node \" | fatal: \\u0001O\\u0001\" / \" | fatal: \\u0001U\"",
+            "02: node \"\\u0002 | fatal: O\\u0002\" / \"\\u0002 | fatal: U\"",
+            "03: node \"\\u0003 | fatal: O\\u0003\" / \"\\u0003 | fatal: U\""
+          ]
+        },
+        "gb18030": {
+          "cases": 91792,
+          "differ": 91792,
+          "nonFatal": 7908,
+          "mapping": 57053,
+          "refused": 278,
+          "examples": [
+            "00: node \"\\u0000 | fatal: O\\u0000\" / \"\\u0000 | fatal: U\"",
+            "01: node \" | fatal: \\u0001O\\u0001\" / \" | fatal: \\u0001U\"",
+            "02: node \"\\u0002 | fatal: O\\u0002\" / \"\\u0002 | fatal: U\"",
+            "03: node \"\\u0003 | fatal: O\\u0003\" / \"\\u0003 | fatal: U\""
+          ]
+        },
+        "big5": {
+          "cases": 69792,
+          "differ": 69792,
+          "nonFatal": 13183,
+          "mapping": 36197,
+          "refused": 266,
+          "examples": [
+            "00: node \"\\u0000 | fatal: O\\u0000\" / \"\\u0000 | fatal: U\"",
+            "01: node \" | fatal: \\u0001O\\u0001\" / \" | fatal: \\u0001U\"",
+            "02: node \"\\u0002 | fatal: O\\u0002\" / \"\\u0002 | fatal: U\"",
+            "03: node \"\\u0003 | fatal: O\\u0003\" / \"\\u0003 | fatal: U\""
+          ]
+        },
+        "euc-jp": {
+          "cases": 78628,
+          "differ": 78628,
+          "nonFatal": 21191,
+          "mapping": 30551,
+          "refused": 269,
+          "examples": [
+            "00: node \"\\u0000 | fatal: O\\u0000\" / \"\\u0000 | fatal: U\"",
+            "01: node \" | fatal: \\u0001O\\u0001\" / \" | fatal: \\u0001U\"",
+            "02: node \"\\u0002 | fatal: O\\u0002\" / \"\\u0002 | fatal: U\"",
+            "03: node \"\\u0003 | fatal: O\\u0003\" / \"\\u0003 | fatal: U\""
+          ]
+        },
+        "iso-2022-jp": {
+          "cases": 69792,
+          "differ": 69792,
+          "nonFatal": 69789,
+          "mapping": 0,
+          "refused": 69792,
+          "examples": [
+            "00: node \"\\u0000 | fatal: O\\u0000\" / \"U | fatal: U\"",
+            "01: node \" | fatal: \\u0001O\\u0001\" / \"U | fatal: U\"",
+            "02: node \"\\u0002 | fatal: O\\u0002\" / \"U | fatal: U\"",
+            "03: node \"\\u0003 | fatal: O\\u0003\" / \"U | fatal: U\""
+          ]
+        },
+        "shift_jis": {
+          "cases": 69792,
+          "differ": 69792,
+          "nonFatal": 4588,
+          "mapping": 47972,
+          "refused": 272,
+          "examples": [
+            "00: node \"\\u0000 | fatal: O\\u0000\" / \"\\u0000 | fatal: U\"",
+            "01: node \" | fatal: \\u0001O\\u0001\" / \" | fatal: \\u0001U\"",
+            "02: node \"\\u0002 | fatal: O\\u0002\" / \"\\u0002 | fatal: U\"",
+            "03: node \"\\u0003 | fatal: O\\u0003\" / \"\\u0003 | fatal: U\""
+          ]
+        },
+        "euc-kr": {
+          "cases": 69792,
+          "differ": 69792,
+          "nonFatal": 20042,
+          "mapping": 27793,
+          "refused": 269,
+          "examples": [
+            "00: node \"\\u0000 | fatal: O\\u0000\" / \"\\u0000 | fatal: U\"",
+            "01: node \" | fatal: \\u0001O\\u0001\" / \" | fatal: \\u0001U\"",
+            "02: node \"\\u0002 | fatal: O\\u0002\" / \"\\u0002 | fatal: U\"",
+            "03: node \"\\u0003 | fatal: O\\u0003\" / \"\\u0003 | fatal: U\""
+          ]
+        },
+        "utf-16be": {
+          "cases": 69798,
+          "differ": 69798,
+          "nonFatal": 5227,
+          "mapping": 64569,
+          "refused": 1,
+          "examples": [
+            "00: node \"� | fatal: T\" / \" | fatal: U\"",
+            "01: node \"� | fatal: T\" / \" | fatal: U\"",
+            "02: node \"� | fatal: T\" / \" | fatal: U\"",
+            "03: node \"� | fatal: T\" / \" | fatal: U\""
+          ]
+        },
+        "utf-16le": {
+          "cases": 69798,
+          "differ": 69798,
+          "nonFatal": 5246,
+          "mapping": 64550,
+          "refused": 1,
+          "examples": [
+            "00: node \"� | fatal: T\" / \" | fatal: U\"",
+            "01: node \"� | fatal: T\" / \" | fatal: U\"",
+            "02: node \"� | fatal: T\" / \" | fatal: U\"",
+            "03: node \"� | fatal: T\" / \" | fatal: U\""
+          ]
+        },
+        "x-user-defined": {
+          "cases": 256,
+          "differ": 256,
+          "nonFatal": 255,
+          "mapping": 0,
+          "refused": 256,
+          "examples": [
+            "00: node \"\\u0000 | fatal: O\\u0000\" / \"U | fatal: U\"",
+            "01: node \" | fatal: \\u0001O\\u0001\" / \"U | fatal: U\"",
+            "02: node \"\\u0002 | fatal: O\\u0002\" / \"U | fatal: U\"",
+            "03: node \"\\u0003 | fatal: O\\u0003\" / \"U | fatal: U\""
+          ]
+        }
+      }
+    }
+  },
+  "exodusTableSizes": {
+    "$C": {
+      "bytes": 20,
+      "gzip": 40
+    },
+    "$c": {
+      "bytes": 20,
+      "gzip": 40
+    },
+    "$1": {
+      "bytes": 12,
+      "gzip": 32
+    },
+    "$2": {
+      "bytes": 12,
+      "gzip": 32
+    },
+    "$3": {
+      "bytes": 90,
+      "gzip": 71
+    },
+    "$4": {
+      "bytes": 83,
+      "gzip": 58
+    },
+    "$5": {
+      "bytes": 34,
+      "gzip": 45
+    },
+    "$6": {
+      "bytes": 18,
+      "gzip": 38
+    },
+    "$7": {
+      "bytes": 43,
+      "gzip": 58
+    },
+    "$8": {
+      "bytes": 60,
+      "gzip": 67
+    },
+    "$9": {
+      "bytes": 29,
+      "gzip": 41
+    },
+    "$j": {
+      "bytes": 968,
+      "gzip": 620
+    },
+    "jis0208": {
+      "bytes": 17852,
+      "gzip": 10309
+    },
+    "jis0212": {
+      "bytes": 15492,
+      "gzip": 4317
+    },
+    "euc-kr": {
+      "bytes": 27841,
+      "gzip": 13303
+    },
+    "iso-2022-jp-katakana": {
+      "bytes": 147,
+      "gzip": 83
+    },
+    "gb18030-ranges": {
+      "bytes": 1132,
+      "gzip": 473
+    },
+    "gb18030": {
+      "bytes": 33143,
+      "gzip": 16994
+    },
+    "big5": {
+      "bytes": 53463,
+      "gzip": 29795
+    }
+  },
+  "nodeSingleByte": {
+    "bytes": 13576,
+    "tablesMinBytes": 9047,
+    "tablesGzip": 3197
+  },
+  "textEncoder": [
+    {
+      "case": "encoding",
+      "node": "\"utf-8\"",
+      "guest": "\"utf-8\"",
+      "equal": true
+    },
+    {
+      "case": "ascii",
+      "node": "[97,98,99]",
+      "guest": "[97,98,99]",
+      "equal": true
+    },
+    {
+      "case": "lone surrogates",
+      "node": "[97,239,191,189,98,239,191,189]",
+      "guest": "[97,239,191,189,98,239,191,189]",
+      "equal": true
+    },
+    {
+      "case": "astral",
+      "node": "[240,159,152,128]",
+      "guest": "[240,159,152,128]",
+      "equal": true
+    },
+    {
+      "case": "undefined",
+      "node": "[]",
+      "guest": "[]",
+      "equal": true
+    },
+    {
+      "case": "number",
+      "node": "[49,50]",
+      "guest": "[49,50]",
+      "equal": true
+    },
+    {
+      "case": "encodeInto fits",
+      "node": "[{\"read\":2,\"written\":3},[104,195,169,0,0,0,0,0]]",
+      "guest": "[{\"read\":2,\"written\":3},[104,195,169,0,0,0,0,0]]",
+      "equal": true
+    },
+    {
+      "case": "encodeInto short",
+      "node": "[{\"read\":1,\"written\":1},[97,0]]",
+      "guest": "[{\"read\":1,\"written\":1},[97,0]]",
+      "equal": true
+    },
+    {
+      "case": "encodeInto astral split",
+      "node": "[{\"read\":0,\"written\":0},[0,0,0]]",
+      "guest": "[{\"read\":0,\"written\":0},[0,0,0]]",
+      "equal": true
+    },
+    {
+      "case": "encodeInto non-u8",
+      "node": "throws TypeError ERR_INVALID_ARG_TYPE",
+      "guest": "{\"read\":1,\"written\":1}",
+      "equal": false
+    },
+    {
+      "case": "encodeInto non-string",
+      "node": "throws TypeError ERR_INVALID_ARG_TYPE",
+      "guest": "{\"read\":1,\"written\":1}",
+      "equal": false
+    }
+  ],
+  "timings": {
+    "loadavg": ["4.28", "4.79", "7.75"],
+    "prelude": 0.083958,
+    "@exodus/bytes": {
+      "evalDeltaMs": 0.378501,
+      "firstUse": {
+        "windows-1252": {
+          "first": 0.350375,
+          "second": 0.016417
+        },
+        "utf-16le": {
+          "first": 0.288958,
+          "second": 0.046125
+        },
+        "shift_jis": {
+          "first": 2.899,
+          "second": 0.049875
+        },
+        "gb18030": {
+          "first": 3.214167,
+          "second": 0.049291
+        }
+      }
+    },
+    "text-encoding": {
+      "evalDeltaMs": 4.061626,
+      "firstUse": {
+        "windows-1252": {
+          "first": 0.194875,
+          "second": 0.015542
+        },
+        "utf-16le": {
+          "first": 0.195167,
+          "second": 0.013375
+        },
+        "shift_jis": {
+          "first": 0.145292,
+          "second": 0.010792
+        },
+        "gb18030": {
+          "first": 0.154292,
+          "second": 0.010041
+        }
+      }
+    },
+    "iconv-lite": {
+      "evalDeltaMs": 0.400709,
+      "firstUse": {
+        "windows-1252": {
+          "first": 1.705292,
+          "second": 0.016375
+        },
+        "utf-16le": {
+          "first": 1.169791,
+          "second": 0.016792
+        },
+        "shift_jis": {
+          "first": 2.890333,
+          "second": 0.022417
+        },
+        "gb18030": {
+          "first": 6.715083,
+          "second": 0.031375
+        }
+      }
+    }
+  }
+}

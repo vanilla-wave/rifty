@@ -1,0 +1,68 @@
+node v24.16.0 icu 78.3 unicode 17.0
+labels: 228/228 as the spec; differ: []
+encoding                      spec vs node              @exodus/bytes              text-encoding                 iconv-lite
+ibm866                      0/256 nf 0 m 0             0/256 nf 0 m 0             0/256 nf 0 m 0         256/256 nf 0 m 255
+iso-8859-2                  0/256 nf 0 m 0             0/256 nf 0 m 0             0/256 nf 0 m 0         256/256 nf 0 m 255
+iso-8859-3                  0/256 nf 0 m 0             0/256 nf 0 m 0             0/256 nf 0 m 0         256/256 nf 0 m 248
+iso-8859-4                  0/256 nf 0 m 0             0/256 nf 0 m 0             0/256 nf 0 m 0         256/256 nf 0 m 255
+iso-8859-5                  0/256 nf 0 m 0             0/256 nf 0 m 0             0/256 nf 0 m 0         256/256 nf 0 m 255
+iso-8859-6                  0/256 nf 0 m 0             0/256 nf 0 m 0             0/256 nf 0 m 0         256/256 nf 0 m 210
+iso-8859-7                  0/256 nf 0 m 0             0/256 nf 0 m 0             0/256 nf 0 m 0         256/256 nf 0 m 252
+iso-8859-8                  0/256 nf 0 m 0             0/256 nf 0 m 0             0/256 nf 0 m 0         256/256 nf 0 m 219
+iso-8859-8-i                0/256 nf 0 m 0             0/256 nf 0 m 0        128/256 nf 128 m 92         256/256 nf 0 m 219
+iso-8859-10                 0/256 nf 0 m 0             0/256 nf 0 m 0             0/256 nf 0 m 0         256/256 nf 0 m 255
+iso-8859-13                 0/256 nf 0 m 0             0/256 nf 0 m 0             0/256 nf 0 m 0         256/256 nf 0 m 255
+iso-8859-14                 0/256 nf 0 m 0             0/256 nf 0 m 0             0/256 nf 0 m 0         256/256 nf 0 m 255
+iso-8859-15                 0/256 nf 0 m 0             0/256 nf 0 m 0             0/256 nf 0 m 0         256/256 nf 0 m 255
+iso-8859-16                 0/256 nf 0 m 0             0/256 nf 0 m 0             0/256 nf 0 m 0         256/256 nf 0 m 255
+koi8-r                      0/256 nf 0 m 0             0/256 nf 0 m 0             0/256 nf 0 m 0         256/256 nf 0 m 255
+koi8-u                      0/256 nf 0 m 0             0/256 nf 0 m 0             0/256 nf 0 m 0         256/256 nf 2 m 255
+macintosh                   0/256 nf 0 m 0             0/256 nf 0 m 0             0/256 nf 0 m 0         256/256 nf 3 m 254
+windows-874                 0/256 nf 0 m 0             0/256 nf 0 m 0             0/256 nf 0 m 0        256/256 nf 23 m 224
+windows-1250                0/256 nf 0 m 0             0/256 nf 0 m 0             0/256 nf 0 m 0         256/256 nf 5 m 250
+windows-1251                0/256 nf 0 m 0             0/256 nf 0 m 0             0/256 nf 0 m 0         256/256 nf 1 m 254
+windows-1252                0/256 nf 0 m 0             0/256 nf 0 m 0             0/256 nf 0 m 0         256/256 nf 5 m 250
+windows-1253                0/256 nf 0 m 0             0/256 nf 0 m 0             0/256 nf 0 m 0        256/256 nf 14 m 238
+windows-1254                0/256 nf 0 m 0             0/256 nf 0 m 0             0/256 nf 0 m 0         256/256 nf 7 m 248
+windows-1255                0/256 nf 0 m 0             0/256 nf 0 m 0             0/256 nf 0 m 0        256/256 nf 12 m 233
+windows-1256                0/256 nf 0 m 0             0/256 nf 0 m 0             0/256 nf 0 m 0         256/256 nf 0 m 255
+windows-1257                0/256 nf 0 m 0             0/256 nf 0 m 0             0/256 nf 0 m 0        256/256 nf 10 m 243
+windows-1258                0/256 nf 0 m 0             0/256 nf 0 m 0             0/256 nf 0 m 0         256/256 nf 9 m 246
+x-mac-cyrillic              0/256 nf 0 m 0             0/256 nf 0 m 0             0/256 nf 0 m 0                    refused
+gbk                       0/91792 nf 0 m 0           0/91792 nf 0 m 0    6336/91792 nf 6336 m 20 91792/91792 nf 21578 m 43276
+gb18030                   0/91792 nf 0 m 0           0/91792 nf 0 m 0    6347/91792 nf 6347 m 19 91792/91792 nf 7908 m 57053
+big5             8401/69792 nf 8385 m 5363  8401/69792 nf 8385 m 5363  8401/69792 nf 8385 m 5363 69792/69792 nf 13183 m 36197
+euc-jp           16681/78628 nf 16633 m 41  16681/78628 nf 16633 m 41  16685/78628 nf 16638 m 40 78628/78628 nf 21191 m 30551
+iso-2022-jp             26/69792 nf 26 m 0         26/69792 nf 26 m 0         26/69792 nf 26 m 0                    refused
+shift_jis        3121/69792 nf 3115 m 1242  3121/69792 nf 3115 m 1242  3121/69792 nf 3115 m 1242 69792/69792 nf 4588 m 47972
+euc-kr          19530/69792 nf 19481 m 2492 19530/69792 nf 19481 m 2492 23891/69792 nf 23842 m 2492 69792/69792 nf 20042 m 27793
+utf-16be                  0/69798 nf 0 m 0           0/69798 nf 0 m 0           0/69798 nf 0 m 0 69798/69798 nf 5227 m 64569
+utf-16le                  0/69798 nf 0 m 0           0/69798 nf 0 m 0           0/69798 nf 0 m 0 69798/69798 nf 5246 m 64550
+x-user-defined              0/256 nf 0 m 0             0/256 nf 0 m 0             0/256 nf 0 m 0                    refused
+  spec big5 80: node " | fatal: O" / "� | fatal: T"
+  spec big5 ff: node " | fatal: O" / "� | fatal: T"
+  spec big5 00 80: node "\u0000 | fatal: O\u0000" / "\u0000� | fatal: T"
+  spec big5 00 ff: node "\u0000 | fatal: O\u0000" / "\u0000� | fatal: T"
+  spec euc-jp 80: node " | fatal: O" / "� | fatal: T"
+  spec euc-jp 81: node " | fatal: O" / "� | fatal: T"
+  spec euc-jp 82: node " | fatal: O" / "� | fatal: T"
+  spec euc-jp 83: node " | fatal: O" / "� | fatal: T"
+  spec iso-2022-jp 1b 24: node "� | fatal: T" / "�$ | fatal: T"
+  spec iso-2022-jp 1b 25: node "� | fatal: T" / "�% | fatal: T"
+  spec iso-2022-jp 1b 26: node "� | fatal: T" / "�& | fatal: T"
+  spec iso-2022-jp 1b 28: node "� | fatal: T" / "�( | fatal: T"
+  spec shift_jis 1a: node "\u001c | fatal: O\u001c" / "\u001a | fatal: O\u001a"
+  spec shift_jis 1c: node " | fatal: O" / "\u001c | fatal: O\u001c"
+  spec shift_jis 7f: node "\u001a | fatal: O\u001a" / " | fatal: O"
+  spec shift_jis 80: node "� | fatal: T" / " | fatal: O"
+  spec euc-kr 80: node " | fatal: O" / "� | fatal: T"
+  spec euc-kr 81: node " | fatal: O" / "� | fatal: T"
+  spec euc-kr 82: node " | fatal: O" / "� | fatal: T"
+  spec euc-kr 83: node " | fatal: O" / "� | fatal: T"
+@exodus/bytes 1.16.0: 456478 B, min 189029 B, gzip 91408 B
+text-encoding 0.7.0: 684932 B, min 549003 B, gzip 194046 B
+iconv-lite 0.7.3: 647761 B, min 527481 B, gzip 201502 B
+Node single-byte.js 13576 B (tables min 9047, gzip 3197)
+exodus multi-byte tables: {"$C":{"bytes":20,"gzip":40},"$c":{"bytes":20,"gzip":40},"$1":{"bytes":12,"gzip":32},"$2":{"bytes":12,"gzip":32},"$3":{"bytes":90,"gzip":71},"$4":{"bytes":83,"gzip":58},"$5":{"bytes":34,"gzip":45},"$6":{"bytes":18,"gzip":38},"$7":{"bytes":43,"gzip":58},"$8":{"bytes":60,"gzip":67},"$9":{"bytes":29,"gzip":41},"$j":{"bytes":968,"gzip":620},"jis0208":{"bytes":17852,"gzip":10309},"jis0212":{"bytes":15492,"gzip":4317},"euc-kr":{"bytes":27841,"gzip":13303},"iso-2022-jp-katakana":{"bytes":147,"gzip":83},"gb18030-ranges":{"bytes":1132,"gzip":473},"gb18030":{"bytes":33143,"gzip":16994},"big5":{"bytes":53463,"gzip":29795}}
+TextEncoder guest vs node: encodeInto non-u8: node throws TypeError ERR_INVALID_ARG_TYPE guest {"read":1,"written":1}; encodeInto non-string: node throws TypeError ERR_INVALID_ARG_TYPE guest {"read":1,"written":1}
+timing: {"loadavg":["4.28","4.79","7.75"],"prelude":0.083958,"@exodus/bytes":{"evalDeltaMs":0.378501,"firstUse":{"windows-1252":{"first":0.350375,"second":0.016417},"utf-16le":{"first":0.288958,"second":0.046125},"shift_jis":{"first":2.899,"second":0.049875},"gb18030":{"first":3.214167,"second":0.049291}}},"text-encoding":{"evalDeltaMs":4.061626,"firstUse":{"windows-1252":{"first":0.194875,"second":0.015542},"utf-16le":{"first":0.195167,"second":0.013375},"shift_jis":{"first":0.145292,"second":0.010792},"gb18030":{"first":0.154292,"second":0.010041}}},"iconv-lite":{"evalDeltaMs":0.400709,"firstUse":{"windows-1252":{"first":1.705292,"second":0.016375},"utf-16le":{"first":1.169791,"second":0.016792},"shift_jis":{"first":2.890333,"second":0.022417},"gb18030":{"first":6.715083,"second":0.031375}}}}

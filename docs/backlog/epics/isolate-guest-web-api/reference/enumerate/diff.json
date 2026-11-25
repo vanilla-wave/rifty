@@ -1,0 +1,7583 @@
+{
+  "date": "2026-11-24",
+  "node": "v24.16.0",
+  "modules": 72,
+  "globals": 181,
+  "exportsSwept": 1541,
+  "ms": {
+    "nodeFile": 48,
+    "nodeEval": 46,
+    "guestFile": 152,
+    "guestEval": 24
+  },
+  "file": [
+    {
+      "path": "require(_http_agent)",
+      "node": "object",
+      "guest": "throws Error MODULE_NOT_FOUND: Cannot find module '_http_agent'",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "require(_http_client)",
+      "node": "object",
+      "guest": "throws Error MODULE_NOT_FOUND: Cannot find module '_http_client'",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "require(_http_common)",
+      "node": "object",
+      "guest": "throws Error MODULE_NOT_FOUND: Cannot find module '_http_common'",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "require(_http_incoming)",
+      "node": "object",
+      "guest": "throws Error MODULE_NOT_FOUND: Cannot find module '_http_incoming'",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "require(_http_outgoing)",
+      "node": "object",
+      "guest": "throws Error MODULE_NOT_FOUND: Cannot find module '_http_outgoing'",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "require(_http_server)",
+      "node": "object",
+      "guest": "throws Error MODULE_NOT_FOUND: Cannot find module '_http_server'",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "require(_stream_duplex)",
+      "node": "function/object",
+      "guest": "throws Error MODULE_NOT_FOUND: Cannot find module '_stream_duplex'",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "require(_stream_passthrough)",
+      "node": "function/object",
+      "guest": "throws Error MODULE_NOT_FOUND: Cannot find module '_stream_passthrough'",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "require(_stream_readable)",
+      "node": "function/object",
+      "guest": "throws Error MODULE_NOT_FOUND: Cannot find module '_stream_readable'",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "require(_stream_transform)",
+      "node": "function/object",
+      "guest": "throws Error MODULE_NOT_FOUND: Cannot find module '_stream_transform'",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "require(_stream_wrap)",
+      "node": "function/object",
+      "guest": "throws Error MODULE_NOT_FOUND: Cannot find module '_stream_wrap'",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "require(_stream_writable)",
+      "node": "function/object",
+      "guest": "throws Error MODULE_NOT_FOUND: Cannot find module '_stream_writable'",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "require(_tls_common)",
+      "node": "object",
+      "guest": "throws Error MODULE_NOT_FOUND: Cannot find module '_tls_common'",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "require(_tls_wrap)",
+      "node": "object",
+      "guest": "throws Error MODULE_NOT_FOUND: Cannot find module '_tls_wrap'",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "assert CallTracker",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "assert strict",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "assert Assert",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "require(assert/strict)",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "assert/strict prototype",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "assert/strict CallTracker",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "assert/strict Assert",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "assert/strict strict",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "async_hooks createHook",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "async_hooks executionAsyncId",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "async_hooks triggerAsyncId",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "async_hooks executionAsyncResource",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "async_hooks asyncWrapProviders",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "buffer SlowBuffer",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "buffer transcode",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "buffer kMaxLength",
+      "node": "number",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "buffer kStringMaxLength",
+      "node": "number",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "buffer constants",
+      "node": "object !=global",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "buffer Blob",
+      "node": "function/object =global",
+      "guest": "undefined !=global",
+      "class": "a1-undefined-at-load"
+    },
+    {
+      "path": "buffer File",
+      "node": "function/object =global",
+      "guest": "undefined !=global",
+      "class": "a1-undefined-at-load"
+    },
+    {
+      "path": "cluster _events",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "cluster _eventsCount",
+      "node": "number",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "cluster _maxListeners",
+      "node": "undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "cluster isWorker",
+      "node": "boolean",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "cluster isMaster",
+      "node": "boolean",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "cluster isPrimary",
+      "node": "boolean",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "cluster Worker",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "cluster workers",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "cluster settings",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "cluster SCHED_NONE",
+      "node": "number",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "cluster SCHED_RR",
+      "node": "number",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "cluster schedulingPolicy",
+      "node": "number",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "cluster setupPrimary",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "cluster setupMaster",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "cluster fork",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "cluster disconnect",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "console _stdoutErrorHandler",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "console _stderrErrorHandler",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "console _ignoreErrors",
+      "node": "boolean",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "console _times",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "console profile",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "console profileEnd",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "console timeStamp",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "console context",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "console createTask",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "console _stdout",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "console _stderr",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "constants EBADMSG",
+      "node": "number",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "constants ENOSTR",
+      "node": "number",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "constants SIGIOT",
+      "node": "number",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "constants SIGINFO",
+      "node": "number",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "constants O_SYMLINK",
+      "node": "number",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "constants O_DIRECT",
+      "node": "missing",
+      "guest": "number",
+      "class": "c3-extra"
+    },
+    {
+      "path": "constants O_NOATIME",
+      "node": "missing",
+      "guest": "number",
+      "class": "c3-extra"
+    },
+    {
+      "path": "constants SIGPWR",
+      "node": "missing",
+      "guest": "number",
+      "class": "c3-extra"
+    },
+    {
+      "path": "constants RTLD_DEEPBIND",
+      "node": "missing",
+      "guest": "number",
+      "class": "c3-extra"
+    },
+    {
+      "path": "constants UV_UDP_REUSEADDR",
+      "node": "missing",
+      "guest": "number",
+      "class": "c3-extra"
+    },
+    {
+      "path": "crypto argon2",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto argon2Sync",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto checkPrime",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto checkPrimeSync",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto createCipheriv",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto createDecipheriv",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto createDiffieHellman",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto createDiffieHellmanGroup",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto createECDH",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto createPrivateKey",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto createPublicKey",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto createSecretKey",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto createSign",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto createVerify",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto diffieHellman",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto generatePrime",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto generatePrimeSync",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto getCiphers",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "crypto getCipherInfo",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto getCurves",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto getDiffieHellman",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto getHashes",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "crypto hkdf",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto hkdfSync",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto pbkdf2",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto pbkdf2Sync",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto generateKeyPair",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto generateKeyPairSync",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto generateKey",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto generateKeySync",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto privateDecrypt",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto privateEncrypt",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto publicDecrypt",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto publicEncrypt",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto randomUUIDv7",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto scrypt",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto scryptSync",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto sign",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto setEngine",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto timingSafeEqual",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "crypto getFips",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto setFips",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto verify",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto encapsulate",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto decapsulate",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto Certificate",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto Cipheriv",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto Decipheriv",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto DiffieHellman",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto DiffieHellmanGroup",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto ECDH",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto KeyObject",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto Sign",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto Verify",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto X509Certificate",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto secureHeapUsed",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto fips",
+      "node": "number",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto subtle",
+      "node": "object",
+      "guest": "undefined",
+      "class": "a1-undefined-at-load"
+    },
+    {
+      "path": "crypto prng",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto pseudoRandomBytes",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto rng",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dgram _createSocketHandle",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "dgram createSocket",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "diagnostics_channel TracingChannel",
+      "node": "missing",
+      "guest": "function/object",
+      "class": "c3-extra"
+    },
+    {
+      "path": "dns lookup",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "dns lookupService",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns Resolver",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns getDefaultResultOrder",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns setDefaultResultOrder",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns setServers",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns ADDRCONFIG",
+      "node": "number",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns ALL",
+      "node": "number",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns V4MAPPED",
+      "node": "number",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns NODATA",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns FORMERR",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns SERVFAIL",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns NOTFOUND",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns NOTIMP",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns REFUSED",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns BADQUERY",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns BADNAME",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns BADFAMILY",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns BADRESP",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns CONNREFUSED",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns TIMEOUT",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns EOF",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns FILE",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns NOMEM",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns DESTRUCTION",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns BADSTR",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns BADFLAGS",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns NONAME",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns BADHINTS",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns NOTINITIALIZED",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns LOADIPHLPAPI",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns ADDRGETNETWORKPARAMS",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns CANCELLED",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns getServers",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns resolveAny",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns resolveCaa",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns resolveCname",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns resolveMx",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns resolveNaptr",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns resolveNs",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns resolvePtr",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns resolveSoa",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns resolveSrv",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns resolveTlsa",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns resolveTxt",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns reverse",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises lookup",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "dns/promises lookupService",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises Resolver",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises getDefaultResultOrder",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises setDefaultResultOrder",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises setServers",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises NODATA",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises FORMERR",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises SERVFAIL",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises NOTFOUND",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises NOTIMP",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises REFUSED",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises BADQUERY",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises BADNAME",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises BADFAMILY",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises BADRESP",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises CONNREFUSED",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises TIMEOUT",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises EOF",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises FILE",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises NOMEM",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises DESTRUCTION",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises BADSTR",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises BADFLAGS",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises NONAME",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises BADHINTS",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises NOTINITIALIZED",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises LOADIPHLPAPI",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises ADDRGETNETWORKPARAMS",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises CANCELLED",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises getServers",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises resolveAny",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises resolveCaa",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises resolveCname",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises resolveMx",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises resolveNaptr",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises resolveNs",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises resolvePtr",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises resolveSoa",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises resolveSrv",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises resolveTlsa",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises resolveTxt",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises reverse",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "require(domain)",
+      "node": "object",
+      "guest": "throws Error MODULE_NOT_FOUND: Cannot find module 'domain'",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "events addAbortListener",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "events once",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "events on",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "events getEventListeners",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "events getMaxListeners",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "events listenerCount",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "events usingDomains",
+      "node": "boolean",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "events captureRejections",
+      "node": "boolean",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "events EventEmitterAsyncResource",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "events errorMonitor",
+      "node": "symbol",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "events kMaxEventTargetListeners",
+      "node": "symbol",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "events kMaxEventTargetListenersWarned",
+      "node": "symbol",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "events setMaxListeners",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "events init",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs appendFile",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs accessSync",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs chown",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs chownSync",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs chmod",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs chmodSync",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs cp",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs exists",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs fchown",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs fchownSync",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs fchmod",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs fchmodSync",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs fdatasync",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs fdatasyncSync",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs fsync",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs fsyncSync",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs glob",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs globSync",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs lchown",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs lchownSync",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs lchmod",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs lchmodSync",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs lutimes",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs mkdtempDisposableSync",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs openAsBlob",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "fs readv",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs readvSync",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs realpath",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "fs rm",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs rmdir",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs statfs",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs utimes",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs writev",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs writevSync",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs FileReadStream",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs FileWriteStream",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs Utf8Stream",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs _toUnixTimestamp",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs F_OK",
+      "node": "number",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs R_OK",
+      "node": "number",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs W_OK",
+      "node": "number",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs X_OK",
+      "node": "number",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs FSWatcher",
+      "node": "missing",
+      "guest": "function/object",
+      "class": "c3-extra"
+    },
+    {
+      "path": "fs/promises glob",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs/promises open",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs/promises opendir",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "fs/promises statfs",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs/promises chmod",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs/promises lchmod",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs/promises lchown",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs/promises chown",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs/promises mkdtempDisposable",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs/promises watch",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "http2 connect",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "http2 createServer",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "http2 createSecureServer",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "http2 getDefaultSettings",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "http2 getPackedSettings",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "http2 getUnpackedSettings",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "http2 performServerHandshake",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "inspector open",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "inspector close",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "inspector url",
+      "node": "function/undefined !=global",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "inspector waitForDebugger",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "inspector console",
+      "node": "object !=global",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "inspector Session",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "inspector Network",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "inspector NetworkResources",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "inspector DOMStorage",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "require(inspector/promises)",
+      "node": "object",
+      "guest": "throws Error MODULE_NOT_FOUND: Cannot find module 'inspector/promises'",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "require(module)",
+      "node": "function/object",
+      "guest": "object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "module length",
+      "node": "number",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module name",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module prototype",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module _stat",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module _cache",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module _pathCache",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module _extensions",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module globalPaths",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module wrap",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module wrapper",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module _debug",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module isBuiltin",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "module _readPackage",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module _findPath",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module _nodeModulePaths",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module _resolveLookupPaths",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module _load",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module _resolveFilename",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module _initPaths",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module _preloadModules",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module syncBuiltinESMExports",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "module Module",
+      "node": "function/object",
+      "guest": "object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "module registerHooks",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module runMain",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module register",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module findPackageJSON",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module flushCompileCache",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "module stripTypeScriptTypes",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module findSourceMap",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module SourceMap",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module getSourceMapsSupport",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module setSourceMapsSupport",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module default",
+      "node": "missing",
+      "guest": "object",
+      "class": "c3-extra"
+    },
+    {
+      "path": "require(node:sea)",
+      "node": "object",
+      "guest": "throws ModuleLoadError MODULE_NOT_FOUND: Built-in 'node:sea' is not implemented",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "require(node:sqlite)",
+      "node": "object",
+      "guest": "throws ModuleLoadError MODULE_NOT_FOUND: Built-in 'node:sqlite' is not implemented",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "require(node:test)",
+      "node": "function/undefined",
+      "guest": "throws ModuleLoadError MODULE_NOT_FOUND: Built-in 'node:test' is not implemented",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "require(node:test/reporters)",
+      "node": "object",
+      "guest": "throws ModuleLoadError MODULE_NOT_FOUND: Built-in 'node:test/reporters' is not implemented",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "os availableParallelism",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "os freemem",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "os release",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "os totalmem",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "os type",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "os version",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "os machine",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "path resolve",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "path normalize",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "path join",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "path relative",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "path toNamespacedPath",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "path format",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "path parse",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "path matchesGlob",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "path _makeLong",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "path/posix resolve",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "path/posix normalize",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "path/posix join",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "path/posix relative",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "path/posix toNamespacedPath",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "path/posix format",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "path/posix parse",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "path/posix matchesGlob",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "path/posix win32",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "path/posix posix",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "path/posix _makeLong",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "require(path/win32)",
+      "node": "object",
+      "guest": "throws Error MODULE_NOT_FOUND: Cannot find module 'path/win32'",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "perf_hooks Performance",
+      "node": "function/object =global",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "perf_hooks PerformanceEntry",
+      "node": "function/object =global",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "perf_hooks PerformanceMark",
+      "node": "function/object =global",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "perf_hooks PerformanceMeasure",
+      "node": "function/object =global",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "perf_hooks PerformanceObserver",
+      "node": "function/object =global",
+      "guest": "function/object !=global",
+      "class": "a3-identity"
+    },
+    {
+      "path": "perf_hooks PerformanceObserverEntryList",
+      "node": "function/object =global",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "perf_hooks PerformanceResourceTiming",
+      "node": "function/object =global",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "perf_hooks monitorEventLoopDelay",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "perf_hooks eventLoopUtilization",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "perf_hooks timerify",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "perf_hooks createHistogram",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process _rawDebug",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process moduleLoadList",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process binding",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process _linkedBinding",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process _events",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process _eventsCount",
+      "node": "number",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process _maxListeners",
+      "node": "undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process domain",
+      "node": "null !=global",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process _exiting",
+      "node": "boolean",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process config",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process dlopen",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process uptime",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "process _getActiveRequests",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process _getActiveHandles",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process getActiveResourcesInfo",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process reallyExit",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process _kill",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process loadEnvFile",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process cpuUsage",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process threadCpuUsage",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process resourceUsage",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process constrainedMemory",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process availableMemory",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process kill",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "process exit",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "process execve",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process ref",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process unref",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process finalization",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process openStdin",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process getuid",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process geteuid",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process getgid",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process getegid",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process getgroups",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process allowedNodeEnvironmentFlags",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process _fatalException",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process setUncaughtExceptionCaptureCallback",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process hasUncaughtExceptionCaptureCallback",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process _tickCallback",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process sourceMapsEnabled",
+      "node": "boolean",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process setSourceMapsEnabled",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process getBuiltinModule",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process _debugProcess",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process _debugEnd",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process _startProfilerIdleNotifier",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process _stopProfilerIdleNotifier",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process abort",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process initgroups",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process setgroups",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process setegid",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process seteuid",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process setgid",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process setuid",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process debugPort",
+      "node": "number",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process _preload_modules",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process report",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process _listenersMap",
+      "node": "missing",
+      "guest": "object",
+      "class": "c3-extra"
+    },
+    {
+      "path": "process _warned",
+      "node": "missing",
+      "guest": "object",
+      "class": "c3-extra"
+    },
+    {
+      "path": "process send",
+      "node": "missing",
+      "guest": "undefined",
+      "class": "c3-extra"
+    },
+    {
+      "path": "process disconnect",
+      "node": "missing",
+      "guest": "undefined",
+      "class": "c3-extra"
+    },
+    {
+      "path": "process connected",
+      "node": "missing",
+      "guest": "undefined",
+      "class": "c3-extra"
+    },
+    {
+      "path": "process channel",
+      "node": "missing",
+      "guest": "undefined",
+      "class": "c3-extra"
+    },
+    {
+      "path": "punycode version",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "punycode ucs2",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "punycode decode",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "punycode encode",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "punycode toASCII",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "punycode toUnicode",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "querystring unescapeBuffer",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "readline emitKeypressEvents",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "readline promises",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "require(readline/promises)",
+      "node": "object",
+      "guest": "throws Error MODULE_NOT_FOUND: Cannot find module 'readline/promises'",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "repl start",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "repl writer",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "repl REPLServer",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "repl REPL_MODE_SLOPPY",
+      "node": "symbol",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "repl REPL_MODE_STRICT",
+      "node": "symbol",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "repl Recoverable",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "repl isValidSyntax",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "repl builtinModules",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "repl _builtinLibs",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "stream isDestroyed",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "stream duplexPair",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "stream destroy",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "stream promises",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "stream _isArrayBufferView",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "stream _isUint8Array",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "stream _uint8ArrayToBuffer",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "stream/consumers bytes",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "stream/web ReadableStream",
+      "node": "function/object =global",
+      "guest": "throws NotImplementedError: Not implemented: stream/web.ReadableStream",
+      "class": "a2-loud-not-the-global"
+    },
+    {
+      "path": "stream/web ReadableStreamDefaultReader",
+      "node": "function/object =global",
+      "guest": "throws NotImplementedError: Not implemented: stream/web.ReadableStreamDefaultReader",
+      "class": "a2-loud-not-the-global"
+    },
+    {
+      "path": "stream/web ReadableStreamBYOBReader",
+      "node": "function/object =global",
+      "guest": "throws NotImplementedError: Not implemented: stream/web.ReadableStreamBYOBReader",
+      "class": "a2-loud-not-the-global"
+    },
+    {
+      "path": "stream/web ReadableStreamBYOBRequest",
+      "node": "function/object =global",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "stream/web ReadableByteStreamController",
+      "node": "function/object =global",
+      "guest": "throws NotImplementedError: Not implemented: stream/web.ReadableByteStreamController",
+      "class": "a2-loud-not-the-global"
+    },
+    {
+      "path": "stream/web ReadableStreamDefaultController",
+      "node": "function/object =global",
+      "guest": "throws NotImplementedError: Not implemented: stream/web.ReadableStreamDefaultController",
+      "class": "a2-loud-not-the-global"
+    },
+    {
+      "path": "stream/web TransformStream",
+      "node": "function/object =global",
+      "guest": "throws NotImplementedError: Not implemented: stream/web.TransformStream",
+      "class": "a2-loud-not-the-global"
+    },
+    {
+      "path": "stream/web TransformStreamDefaultController",
+      "node": "function/object =global",
+      "guest": "throws NotImplementedError: Not implemented: stream/web.TransformStreamDefaultController",
+      "class": "a2-loud-not-the-global"
+    },
+    {
+      "path": "stream/web WritableStream",
+      "node": "function/object =global",
+      "guest": "throws NotImplementedError: Not implemented: stream/web.WritableStream",
+      "class": "a2-loud-not-the-global"
+    },
+    {
+      "path": "stream/web WritableStreamDefaultWriter",
+      "node": "function/object =global",
+      "guest": "throws NotImplementedError: Not implemented: stream/web.WritableStreamDefaultWriter",
+      "class": "a2-loud-not-the-global"
+    },
+    {
+      "path": "stream/web WritableStreamDefaultController",
+      "node": "function/object =global",
+      "guest": "throws NotImplementedError: Not implemented: stream/web.WritableStreamDefaultController",
+      "class": "a2-loud-not-the-global"
+    },
+    {
+      "path": "stream/web ByteLengthQueuingStrategy",
+      "node": "function/object =global",
+      "guest": "throws NotImplementedError: Not implemented: stream/web.ByteLengthQueuingStrategy",
+      "class": "a2-loud-not-the-global"
+    },
+    {
+      "path": "stream/web CountQueuingStrategy",
+      "node": "function/object =global",
+      "guest": "throws NotImplementedError: Not implemented: stream/web.CountQueuingStrategy",
+      "class": "a2-loud-not-the-global"
+    },
+    {
+      "path": "stream/web TextEncoderStream",
+      "node": "function/object =global",
+      "guest": "throws NotImplementedError: Not implemented: stream/web.TextEncoderStream",
+      "class": "a2-loud-not-the-global"
+    },
+    {
+      "path": "stream/web TextDecoderStream",
+      "node": "function/object =global",
+      "guest": "throws NotImplementedError: Not implemented: stream/web.TextDecoderStream",
+      "class": "a2-loud-not-the-global"
+    },
+    {
+      "path": "stream/web CompressionStream",
+      "node": "function/object =global",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "stream/web DecompressionStream",
+      "node": "function/object =global",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys _errnoException",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys _exceptionWithHostPort",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys _extend",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys callbackify",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys convertProcessSignalToExitCode",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys debug",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys debuglog",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys deprecate",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys format",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys styleText",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys formatWithOptions",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys getCallSites",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys getSystemErrorMap",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys getSystemErrorName",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys getSystemErrorMessage",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys inherits",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys inspect",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys isArray",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys isDeepStrictEqual",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys promisify",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys stripVTControlCharacters",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys toUSVString",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys transferableAbortSignal",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys transferableAbortController",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys aborted",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys types",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys parseEnv",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys parseArgs",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys TextDecoder",
+      "node": "function/object =global",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys TextEncoder",
+      "node": "function/object =global",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys MIMEType",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys MIMEParams",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys diff",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys setTraceSigInt",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "timers promises",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "timers queueMicrotask",
+      "node": "missing",
+      "guest": "function/object =global",
+      "class": "c3-extra"
+    },
+    {
+      "path": "tls CLIENT_RENEG_LIMIT",
+      "node": "number",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "tls CLIENT_RENEG_WINDOW",
+      "node": "number",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "tls DEFAULT_CIPHERS",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "tls DEFAULT_ECDH_CURVE",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "tls DEFAULT_MIN_VERSION",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "tls DEFAULT_MAX_VERSION",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "tls getCiphers",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "tls rootCertificates",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "tls getCACertificates",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "tls setDefaultCACertificates",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "tls convertALPNProtocols",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "tls checkServerIdentity",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "tls createSecureContext",
+      "node": "undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "tls SecureContext",
+      "node": "undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "tls createServer",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "tls connect",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "require(trace_events)",
+      "node": "object",
+      "guest": "throws Error MODULE_NOT_FOUND: Cannot find module 'trace_events'",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "url Url",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "url resolveObject",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "url URL",
+      "node": "function/object =global",
+      "guest": "undefined !=global",
+      "class": "a1-undefined-at-load"
+    },
+    {
+      "path": "url URLPattern",
+      "node": "function/object =global",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "url URLSearchParams",
+      "node": "function/object =global",
+      "guest": "undefined !=global",
+      "class": "a1-undefined-at-load"
+    },
+    {
+      "path": "url domainToASCII",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "url domainToUnicode",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "url fileURLToPathBuffer",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "url urlToHttpOptions",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "util _errnoException",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "util _exceptionWithHostPort",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "util _extend",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "util convertProcessSignalToExitCode",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "util getCallSites",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "util getSystemErrorMap",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "util getSystemErrorName",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "util getSystemErrorMessage",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "util isArray",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "util isDeepStrictEqual",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "util toUSVString",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "util transferableAbortSignal",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "util transferableAbortController",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "util aborted",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "util parseArgs",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "util MIMEType",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "util MIMEParams",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "util diff",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "util setTraceSigInt",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "util/types isArgumentsObject",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "util/types isArrayBuffer",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "util/types isAsyncFunction",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "util/types isExternal",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "util/types isGeneratorFunction",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "util/types isGeneratorObject",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "util/types isModuleNamespaceObject",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "util/types isNativeError",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "util/types isProxy",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "util/types isSharedArrayBuffer",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "util/types isAnyArrayBuffer",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "util/types isBoxedPrimitive",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "util/types isArrayBufferView",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "util/types isUint8Array",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "util/types isUint8ClampedArray",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "util/types isUint16Array",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "util/types isUint32Array",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "util/types isInt8Array",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "util/types isInt16Array",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "util/types isInt32Array",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "util/types isFloat16Array",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "util/types isFloat32Array",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "util/types isFloat64Array",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "util/types isBigInt64Array",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "util/types isBigUint64Array",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "util/types isKeyObject",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "util/types isCryptoKey",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "util/types isWeakRef",
+      "node": "missing",
+      "guest": "function/undefined",
+      "class": "c3-extra"
+    },
+    {
+      "path": "v8 cachedDataVersionTag",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "v8 getHeapSnapshot",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "v8 getHeapStatistics",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "v8 getHeapSpaceStatistics",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "v8 getHeapCodeStatistics",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "v8 getCppHeapStatistics",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "v8 setFlagsFromString",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "v8 Serializer",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "v8 Deserializer",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "v8 DefaultSerializer",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "v8 DefaultDeserializer",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "v8 deserialize",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "v8 takeCoverage",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "v8 stopCoverage",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "v8 serialize",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "v8 writeHeapSnapshot",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "v8 promiseHooks",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "v8 queryObjects",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "v8 startupSnapshot",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "v8 setHeapSnapshotNearHeapLimit",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "v8 GCProfiler",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "v8 isStringOneByteRepresentation",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "v8 startCpuProfile",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "vm createScript",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "vm measureMemory",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    }
+  ],
+  "eval": [
+    {
+      "path": "require(_http_agent)",
+      "node": "object",
+      "guest": "throws Error MODULE_NOT_FOUND: Cannot find module '_http_agent'",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "require(_http_client)",
+      "node": "object",
+      "guest": "throws Error MODULE_NOT_FOUND: Cannot find module '_http_client'",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "require(_http_common)",
+      "node": "object",
+      "guest": "throws Error MODULE_NOT_FOUND: Cannot find module '_http_common'",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "require(_http_incoming)",
+      "node": "object",
+      "guest": "throws Error MODULE_NOT_FOUND: Cannot find module '_http_incoming'",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "require(_http_outgoing)",
+      "node": "object",
+      "guest": "throws Error MODULE_NOT_FOUND: Cannot find module '_http_outgoing'",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "require(_http_server)",
+      "node": "object",
+      "guest": "throws Error MODULE_NOT_FOUND: Cannot find module '_http_server'",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "require(_stream_duplex)",
+      "node": "function/object",
+      "guest": "throws Error MODULE_NOT_FOUND: Cannot find module '_stream_duplex'",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "require(_stream_passthrough)",
+      "node": "function/object",
+      "guest": "throws Error MODULE_NOT_FOUND: Cannot find module '_stream_passthrough'",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "require(_stream_readable)",
+      "node": "function/object",
+      "guest": "throws Error MODULE_NOT_FOUND: Cannot find module '_stream_readable'",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "require(_stream_transform)",
+      "node": "function/object",
+      "guest": "throws Error MODULE_NOT_FOUND: Cannot find module '_stream_transform'",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "require(_stream_wrap)",
+      "node": "function/object",
+      "guest": "throws Error MODULE_NOT_FOUND: Cannot find module '_stream_wrap'",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "require(_stream_writable)",
+      "node": "function/object",
+      "guest": "throws Error MODULE_NOT_FOUND: Cannot find module '_stream_writable'",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "require(_tls_common)",
+      "node": "object",
+      "guest": "throws Error MODULE_NOT_FOUND: Cannot find module '_tls_common'",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "require(_tls_wrap)",
+      "node": "object",
+      "guest": "throws Error MODULE_NOT_FOUND: Cannot find module '_tls_wrap'",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "assert CallTracker",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "assert strict",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "assert Assert",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "require(assert/strict)",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "assert/strict prototype",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "assert/strict CallTracker",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "assert/strict Assert",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "assert/strict strict",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "async_hooks createHook",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "async_hooks executionAsyncId",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "async_hooks triggerAsyncId",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "async_hooks executionAsyncResource",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "async_hooks asyncWrapProviders",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "buffer SlowBuffer",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "buffer transcode",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "buffer kMaxLength",
+      "node": "number",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "buffer kStringMaxLength",
+      "node": "number",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "buffer constants",
+      "node": "object !=global",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "buffer Blob",
+      "node": "function/object =global",
+      "guest": "undefined !=global",
+      "class": "a1-undefined-at-load"
+    },
+    {
+      "path": "buffer File",
+      "node": "function/object =global",
+      "guest": "undefined !=global",
+      "class": "a1-undefined-at-load"
+    },
+    {
+      "path": "cluster _events",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "cluster _eventsCount",
+      "node": "number",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "cluster _maxListeners",
+      "node": "undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "cluster isWorker",
+      "node": "boolean",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "cluster isMaster",
+      "node": "boolean",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "cluster isPrimary",
+      "node": "boolean",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "cluster Worker",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "cluster workers",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "cluster settings",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "cluster SCHED_NONE",
+      "node": "number",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "cluster SCHED_RR",
+      "node": "number",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "cluster schedulingPolicy",
+      "node": "number",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "cluster setupPrimary",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "cluster setupMaster",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "cluster fork",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "cluster disconnect",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "console _stdoutErrorHandler",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "console _stderrErrorHandler",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "console _ignoreErrors",
+      "node": "boolean",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "console _times",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "console profile",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "console profileEnd",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "console timeStamp",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "console context",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "console createTask",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "console _stdout",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "console _stderr",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "constants EBADMSG",
+      "node": "number",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "constants ENOSTR",
+      "node": "number",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "constants SIGIOT",
+      "node": "number",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "constants SIGINFO",
+      "node": "number",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "constants O_SYMLINK",
+      "node": "number",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "constants O_DIRECT",
+      "node": "missing",
+      "guest": "number",
+      "class": "c3-extra"
+    },
+    {
+      "path": "constants O_NOATIME",
+      "node": "missing",
+      "guest": "number",
+      "class": "c3-extra"
+    },
+    {
+      "path": "constants SIGPWR",
+      "node": "missing",
+      "guest": "number",
+      "class": "c3-extra"
+    },
+    {
+      "path": "constants RTLD_DEEPBIND",
+      "node": "missing",
+      "guest": "number",
+      "class": "c3-extra"
+    },
+    {
+      "path": "constants UV_UDP_REUSEADDR",
+      "node": "missing",
+      "guest": "number",
+      "class": "c3-extra"
+    },
+    {
+      "path": "crypto argon2",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto argon2Sync",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto checkPrime",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto checkPrimeSync",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto createCipheriv",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto createDecipheriv",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto createDiffieHellman",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto createDiffieHellmanGroup",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto createECDH",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto createPrivateKey",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto createPublicKey",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto createSecretKey",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto createSign",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto createVerify",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto diffieHellman",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto generatePrime",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto generatePrimeSync",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto getCiphers",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "crypto getCipherInfo",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto getCurves",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto getDiffieHellman",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto getHashes",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "crypto hkdf",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto hkdfSync",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto pbkdf2",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto pbkdf2Sync",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto generateKeyPair",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto generateKeyPairSync",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto generateKey",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto generateKeySync",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto privateDecrypt",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto privateEncrypt",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto publicDecrypt",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto publicEncrypt",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto randomUUIDv7",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto scrypt",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto scryptSync",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto sign",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto setEngine",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto timingSafeEqual",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "crypto getFips",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto setFips",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto verify",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto encapsulate",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto decapsulate",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto Certificate",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto Cipheriv",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto Decipheriv",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto DiffieHellman",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto DiffieHellmanGroup",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto ECDH",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto KeyObject",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto Sign",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto Verify",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto X509Certificate",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto secureHeapUsed",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto fips",
+      "node": "number",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto subtle",
+      "node": "object",
+      "guest": "throws NotImplementedError: Not implemented: isolate-host.crypto.subtle (not available in the rifty isolate host, ADR-0557)",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "crypto prng",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto pseudoRandomBytes",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "crypto rng",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dgram _createSocketHandle",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "dgram createSocket",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "diagnostics_channel TracingChannel",
+      "node": "missing",
+      "guest": "function/object",
+      "class": "c3-extra"
+    },
+    {
+      "path": "dns lookup",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "dns lookupService",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns Resolver",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns getDefaultResultOrder",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns setDefaultResultOrder",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns setServers",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns ADDRCONFIG",
+      "node": "number",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns ALL",
+      "node": "number",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns V4MAPPED",
+      "node": "number",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns NODATA",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns FORMERR",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns SERVFAIL",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns NOTFOUND",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns NOTIMP",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns REFUSED",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns BADQUERY",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns BADNAME",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns BADFAMILY",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns BADRESP",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns CONNREFUSED",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns TIMEOUT",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns EOF",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns FILE",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns NOMEM",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns DESTRUCTION",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns BADSTR",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns BADFLAGS",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns NONAME",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns BADHINTS",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns NOTINITIALIZED",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns LOADIPHLPAPI",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns ADDRGETNETWORKPARAMS",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns CANCELLED",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns getServers",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns resolveAny",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns resolveCaa",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns resolveCname",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns resolveMx",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns resolveNaptr",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns resolveNs",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns resolvePtr",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns resolveSoa",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns resolveSrv",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns resolveTlsa",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns resolveTxt",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns reverse",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises lookup",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "dns/promises lookupService",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises Resolver",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises getDefaultResultOrder",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises setDefaultResultOrder",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises setServers",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises NODATA",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises FORMERR",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises SERVFAIL",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises NOTFOUND",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises NOTIMP",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises REFUSED",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises BADQUERY",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises BADNAME",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises BADFAMILY",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises BADRESP",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises CONNREFUSED",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises TIMEOUT",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises EOF",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises FILE",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises NOMEM",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises DESTRUCTION",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises BADSTR",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises BADFLAGS",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises NONAME",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises BADHINTS",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises NOTINITIALIZED",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises LOADIPHLPAPI",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises ADDRGETNETWORKPARAMS",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises CANCELLED",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises getServers",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises resolveAny",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises resolveCaa",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises resolveCname",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises resolveMx",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises resolveNaptr",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises resolveNs",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises resolvePtr",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises resolveSoa",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises resolveSrv",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises resolveTlsa",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises resolveTxt",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "dns/promises reverse",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "require(domain)",
+      "node": "object",
+      "guest": "throws Error MODULE_NOT_FOUND: Cannot find module 'domain'",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "events addAbortListener",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "events once",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "events on",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "events getEventListeners",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "events getMaxListeners",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "events listenerCount",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "events usingDomains",
+      "node": "boolean",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "events captureRejections",
+      "node": "boolean",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "events EventEmitterAsyncResource",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "events errorMonitor",
+      "node": "symbol",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "events kMaxEventTargetListeners",
+      "node": "symbol",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "events kMaxEventTargetListenersWarned",
+      "node": "symbol",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "events setMaxListeners",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "events init",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs appendFile",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs accessSync",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs chown",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs chownSync",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs chmod",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs chmodSync",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs cp",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs exists",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs fchown",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs fchownSync",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs fchmod",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs fchmodSync",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs fdatasync",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs fdatasyncSync",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs fsync",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs fsyncSync",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs glob",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs globSync",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs lchown",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs lchownSync",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs lchmod",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs lchmodSync",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs lutimes",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs mkdtempDisposableSync",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs openAsBlob",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "fs readv",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs readvSync",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs realpath",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "fs rm",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs rmdir",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs statfs",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs utimes",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs writev",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs writevSync",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs FileReadStream",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs FileWriteStream",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs Utf8Stream",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs _toUnixTimestamp",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs F_OK",
+      "node": "number",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs R_OK",
+      "node": "number",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs W_OK",
+      "node": "number",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs X_OK",
+      "node": "number",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs FSWatcher",
+      "node": "missing",
+      "guest": "function/object",
+      "class": "c3-extra"
+    },
+    {
+      "path": "fs/promises glob",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs/promises open",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs/promises opendir",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "fs/promises statfs",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs/promises chmod",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs/promises lchmod",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs/promises lchown",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs/promises chown",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs/promises mkdtempDisposable",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "fs/promises watch",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "http2 connect",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "http2 createServer",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "http2 createSecureServer",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "http2 getDefaultSettings",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "http2 getPackedSettings",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "http2 getUnpackedSettings",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "http2 performServerHandshake",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "inspector open",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "inspector close",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "inspector url",
+      "node": "function/undefined !=global",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "inspector waitForDebugger",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "inspector console",
+      "node": "object !=global",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "inspector Session",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "inspector Network",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "inspector NetworkResources",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "inspector DOMStorage",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "require(inspector/promises)",
+      "node": "object",
+      "guest": "throws Error MODULE_NOT_FOUND: Cannot find module 'inspector/promises'",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "require(module)",
+      "node": "function/object",
+      "guest": "object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "module length",
+      "node": "number",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module name",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module prototype",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module _stat",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module _cache",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module _pathCache",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module _extensions",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module globalPaths",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module wrap",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module wrapper",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module _debug",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module isBuiltin",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "module _readPackage",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module _findPath",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module _nodeModulePaths",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module _resolveLookupPaths",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module _load",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module _resolveFilename",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module _initPaths",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module _preloadModules",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module syncBuiltinESMExports",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "module Module",
+      "node": "function/object",
+      "guest": "object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "module registerHooks",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module runMain",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module register",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module findPackageJSON",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module flushCompileCache",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "module stripTypeScriptTypes",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module findSourceMap",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module SourceMap",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module getSourceMapsSupport",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module setSourceMapsSupport",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "module default",
+      "node": "missing",
+      "guest": "object",
+      "class": "c3-extra"
+    },
+    {
+      "path": "require(node:sea)",
+      "node": "object",
+      "guest": "throws ModuleLoadError MODULE_NOT_FOUND: Built-in 'node:sea' is not implemented",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "require(node:sqlite)",
+      "node": "object",
+      "guest": "throws ModuleLoadError MODULE_NOT_FOUND: Built-in 'node:sqlite' is not implemented",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "require(node:test)",
+      "node": "function/undefined",
+      "guest": "throws ModuleLoadError MODULE_NOT_FOUND: Built-in 'node:test' is not implemented",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "require(node:test/reporters)",
+      "node": "object",
+      "guest": "throws ModuleLoadError MODULE_NOT_FOUND: Built-in 'node:test/reporters' is not implemented",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "os availableParallelism",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "os freemem",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "os release",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "os totalmem",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "os type",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "os version",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "os machine",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "path resolve",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "path normalize",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "path join",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "path relative",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "path toNamespacedPath",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "path format",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "path parse",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "path matchesGlob",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "path _makeLong",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "path/posix resolve",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "path/posix normalize",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "path/posix join",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "path/posix relative",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "path/posix toNamespacedPath",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "path/posix format",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "path/posix parse",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "path/posix matchesGlob",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "path/posix win32",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "path/posix posix",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "path/posix _makeLong",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "require(path/win32)",
+      "node": "object",
+      "guest": "throws Error MODULE_NOT_FOUND: Cannot find module 'path/win32'",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "perf_hooks Performance",
+      "node": "function/object =global",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "perf_hooks PerformanceEntry",
+      "node": "function/object =global",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "perf_hooks PerformanceMark",
+      "node": "function/object =global",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "perf_hooks PerformanceMeasure",
+      "node": "function/object =global",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "perf_hooks PerformanceObserver",
+      "node": "function/object =global",
+      "guest": "function/object !=global",
+      "class": "a3-identity"
+    },
+    {
+      "path": "perf_hooks PerformanceObserverEntryList",
+      "node": "function/object =global",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "perf_hooks PerformanceResourceTiming",
+      "node": "function/object =global",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "perf_hooks monitorEventLoopDelay",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "perf_hooks eventLoopUtilization",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "perf_hooks timerify",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "perf_hooks createHistogram",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process _rawDebug",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process moduleLoadList",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process binding",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process _linkedBinding",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process _events",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process _eventsCount",
+      "node": "number",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process _maxListeners",
+      "node": "undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process domain",
+      "node": "null !=global",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process _exiting",
+      "node": "boolean",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process config",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process dlopen",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process uptime",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "process _getActiveRequests",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process _getActiveHandles",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process getActiveResourcesInfo",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process reallyExit",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process _kill",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process loadEnvFile",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process cpuUsage",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process threadCpuUsage",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process resourceUsage",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process constrainedMemory",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process availableMemory",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process kill",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "process exit",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "process execve",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process ref",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process unref",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process finalization",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process openStdin",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process getuid",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process geteuid",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process getgid",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process getegid",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process getgroups",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process allowedNodeEnvironmentFlags",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process _fatalException",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process setUncaughtExceptionCaptureCallback",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process hasUncaughtExceptionCaptureCallback",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process _tickCallback",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process sourceMapsEnabled",
+      "node": "boolean",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process setSourceMapsEnabled",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process getBuiltinModule",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process _debugProcess",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process _debugEnd",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process _startProfilerIdleNotifier",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process _stopProfilerIdleNotifier",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process abort",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process initgroups",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process setgroups",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process setegid",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process seteuid",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process setgid",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process setuid",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process debugPort",
+      "node": "number",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process _eval",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process _preload_modules",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process report",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "process _listenersMap",
+      "node": "missing",
+      "guest": "object",
+      "class": "c3-extra"
+    },
+    {
+      "path": "process _warned",
+      "node": "missing",
+      "guest": "object",
+      "class": "c3-extra"
+    },
+    {
+      "path": "process send",
+      "node": "missing",
+      "guest": "undefined",
+      "class": "c3-extra"
+    },
+    {
+      "path": "process disconnect",
+      "node": "missing",
+      "guest": "undefined",
+      "class": "c3-extra"
+    },
+    {
+      "path": "process connected",
+      "node": "missing",
+      "guest": "undefined",
+      "class": "c3-extra"
+    },
+    {
+      "path": "process channel",
+      "node": "missing",
+      "guest": "undefined",
+      "class": "c3-extra"
+    },
+    {
+      "path": "punycode version",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "punycode ucs2",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "punycode decode",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "punycode encode",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "punycode toASCII",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "punycode toUnicode",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "querystring unescapeBuffer",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "readline emitKeypressEvents",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "readline promises",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "require(readline/promises)",
+      "node": "object",
+      "guest": "throws Error MODULE_NOT_FOUND: Cannot find module 'readline/promises'",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "repl start",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "repl writer",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "repl REPLServer",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "repl REPL_MODE_SLOPPY",
+      "node": "symbol",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "repl REPL_MODE_STRICT",
+      "node": "symbol",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "repl Recoverable",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "repl isValidSyntax",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "repl builtinModules",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "repl _builtinLibs",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "stream isDestroyed",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "stream duplexPair",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "stream destroy",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "stream promises",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "stream _isArrayBufferView",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "stream _isUint8Array",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "stream _uint8ArrayToBuffer",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "stream/consumers bytes",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "stream/web ReadableStream",
+      "node": "function/object =global",
+      "guest": "throws NotImplementedError: Not implemented: stream/web.ReadableStream",
+      "class": "a2-loud-not-the-global"
+    },
+    {
+      "path": "stream/web ReadableStreamDefaultReader",
+      "node": "function/object =global",
+      "guest": "throws NotImplementedError: Not implemented: stream/web.ReadableStreamDefaultReader",
+      "class": "a2-loud-not-the-global"
+    },
+    {
+      "path": "stream/web ReadableStreamBYOBReader",
+      "node": "function/object =global",
+      "guest": "throws NotImplementedError: Not implemented: stream/web.ReadableStreamBYOBReader",
+      "class": "a2-loud-not-the-global"
+    },
+    {
+      "path": "stream/web ReadableStreamBYOBRequest",
+      "node": "function/object =global",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "stream/web ReadableByteStreamController",
+      "node": "function/object =global",
+      "guest": "throws NotImplementedError: Not implemented: stream/web.ReadableByteStreamController",
+      "class": "a2-loud-not-the-global"
+    },
+    {
+      "path": "stream/web ReadableStreamDefaultController",
+      "node": "function/object =global",
+      "guest": "throws NotImplementedError: Not implemented: stream/web.ReadableStreamDefaultController",
+      "class": "a2-loud-not-the-global"
+    },
+    {
+      "path": "stream/web TransformStream",
+      "node": "function/object =global",
+      "guest": "throws NotImplementedError: Not implemented: stream/web.TransformStream",
+      "class": "a2-loud-not-the-global"
+    },
+    {
+      "path": "stream/web TransformStreamDefaultController",
+      "node": "function/object =global",
+      "guest": "throws NotImplementedError: Not implemented: stream/web.TransformStreamDefaultController",
+      "class": "a2-loud-not-the-global"
+    },
+    {
+      "path": "stream/web WritableStream",
+      "node": "function/object =global",
+      "guest": "throws NotImplementedError: Not implemented: stream/web.WritableStream",
+      "class": "a2-loud-not-the-global"
+    },
+    {
+      "path": "stream/web WritableStreamDefaultWriter",
+      "node": "function/object =global",
+      "guest": "throws NotImplementedError: Not implemented: stream/web.WritableStreamDefaultWriter",
+      "class": "a2-loud-not-the-global"
+    },
+    {
+      "path": "stream/web WritableStreamDefaultController",
+      "node": "function/object =global",
+      "guest": "throws NotImplementedError: Not implemented: stream/web.WritableStreamDefaultController",
+      "class": "a2-loud-not-the-global"
+    },
+    {
+      "path": "stream/web ByteLengthQueuingStrategy",
+      "node": "function/object =global",
+      "guest": "throws NotImplementedError: Not implemented: stream/web.ByteLengthQueuingStrategy",
+      "class": "a2-loud-not-the-global"
+    },
+    {
+      "path": "stream/web CountQueuingStrategy",
+      "node": "function/object =global",
+      "guest": "throws NotImplementedError: Not implemented: stream/web.CountQueuingStrategy",
+      "class": "a2-loud-not-the-global"
+    },
+    {
+      "path": "stream/web TextEncoderStream",
+      "node": "function/object =global",
+      "guest": "throws NotImplementedError: Not implemented: stream/web.TextEncoderStream",
+      "class": "a2-loud-not-the-global"
+    },
+    {
+      "path": "stream/web TextDecoderStream",
+      "node": "function/object =global",
+      "guest": "throws NotImplementedError: Not implemented: stream/web.TextDecoderStream",
+      "class": "a2-loud-not-the-global"
+    },
+    {
+      "path": "stream/web CompressionStream",
+      "node": "function/object =global",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "stream/web DecompressionStream",
+      "node": "function/object =global",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys _errnoException",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys _exceptionWithHostPort",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys _extend",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys callbackify",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys convertProcessSignalToExitCode",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys debug",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys debuglog",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys deprecate",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys format",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys styleText",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys formatWithOptions",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys getCallSites",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys getSystemErrorMap",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys getSystemErrorName",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys getSystemErrorMessage",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys inherits",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys inspect",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys isArray",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys isDeepStrictEqual",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys promisify",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys stripVTControlCharacters",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys toUSVString",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys transferableAbortSignal",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys transferableAbortController",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys aborted",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys types",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys parseEnv",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys parseArgs",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys TextDecoder",
+      "node": "function/object =global",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys TextEncoder",
+      "node": "function/object =global",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys MIMEType",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys MIMEParams",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys diff",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "sys setTraceSigInt",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "timers promises",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "timers queueMicrotask",
+      "node": "missing",
+      "guest": "function/object =global",
+      "class": "c3-extra"
+    },
+    {
+      "path": "tls CLIENT_RENEG_LIMIT",
+      "node": "number",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "tls CLIENT_RENEG_WINDOW",
+      "node": "number",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "tls DEFAULT_CIPHERS",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "tls DEFAULT_ECDH_CURVE",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "tls DEFAULT_MIN_VERSION",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "tls DEFAULT_MAX_VERSION",
+      "node": "string",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "tls getCiphers",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "tls rootCertificates",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "tls getCACertificates",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "tls setDefaultCACertificates",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "tls convertALPNProtocols",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "tls checkServerIdentity",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "tls createSecureContext",
+      "node": "undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "tls SecureContext",
+      "node": "undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "tls createServer",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "tls connect",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "require(trace_events)",
+      "node": "object",
+      "guest": "throws Error MODULE_NOT_FOUND: Cannot find module 'trace_events'",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "url Url",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "url resolveObject",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "url URL",
+      "node": "function/object =global",
+      "guest": "undefined !=global",
+      "class": "a1-undefined-at-load"
+    },
+    {
+      "path": "url URLPattern",
+      "node": "function/object =global",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "url URLSearchParams",
+      "node": "function/object =global",
+      "guest": "undefined !=global",
+      "class": "a1-undefined-at-load"
+    },
+    {
+      "path": "url domainToASCII",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "url domainToUnicode",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "url fileURLToPathBuffer",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "url urlToHttpOptions",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "util _errnoException",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "util _exceptionWithHostPort",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "util _extend",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "util convertProcessSignalToExitCode",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "util getCallSites",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "util getSystemErrorMap",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "util getSystemErrorName",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "util getSystemErrorMessage",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "util isArray",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "util isDeepStrictEqual",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "util toUSVString",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "util transferableAbortSignal",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "util transferableAbortController",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "util aborted",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "util parseArgs",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "util MIMEType",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "util MIMEParams",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "util diff",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "util setTraceSigInt",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "util/types isArgumentsObject",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "util/types isArrayBuffer",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "util/types isAsyncFunction",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "util/types isExternal",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "util/types isGeneratorFunction",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "util/types isGeneratorObject",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "util/types isModuleNamespaceObject",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "util/types isNativeError",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "util/types isProxy",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "util/types isSharedArrayBuffer",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "util/types isAnyArrayBuffer",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "util/types isBoxedPrimitive",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "util/types isArrayBufferView",
+      "node": "function/undefined",
+      "guest": "function/object",
+      "class": "c2-kind"
+    },
+    {
+      "path": "util/types isUint8Array",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "util/types isUint8ClampedArray",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "util/types isUint16Array",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "util/types isUint32Array",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "util/types isInt8Array",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "util/types isInt16Array",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "util/types isInt32Array",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "util/types isFloat16Array",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "util/types isFloat32Array",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "util/types isFloat64Array",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "util/types isBigInt64Array",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "util/types isBigUint64Array",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "util/types isKeyObject",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "util/types isCryptoKey",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "util/types isWeakRef",
+      "node": "missing",
+      "guest": "function/undefined",
+      "class": "c3-extra"
+    },
+    {
+      "path": "v8 cachedDataVersionTag",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "v8 getHeapSnapshot",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "v8 getHeapStatistics",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "v8 getHeapSpaceStatistics",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "v8 getHeapCodeStatistics",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "v8 getCppHeapStatistics",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "v8 setFlagsFromString",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "v8 Serializer",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "v8 Deserializer",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "v8 DefaultSerializer",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "v8 DefaultDeserializer",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "v8 deserialize",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "v8 takeCoverage",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "v8 stopCoverage",
+      "node": "function/undefined",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "v8 serialize",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "v8 writeHeapSnapshot",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "v8 promiseHooks",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "v8 queryObjects",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "v8 startupSnapshot",
+      "node": "object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "v8 setHeapSnapshotNearHeapLimit",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "v8 GCProfiler",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "v8 isStringOneByteRepresentation",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "v8 startCpuProfile",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "vm createScript",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "vm measureMemory",
+      "node": "function/object",
+      "guest": "missing",
+      "class": "c1-missing"
+    },
+    {
+      "path": "globalThis domain",
+      "node": "object",
+      "guest": "throws Error MODULE_NOT_FOUND: Cannot find module 'domain'",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "globalThis node:sea",
+      "node": "object",
+      "guest": "throws ModuleLoadError MODULE_NOT_FOUND: Built-in 'node:sea' is not implemented",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "globalThis node:sqlite",
+      "node": "object",
+      "guest": "throws ModuleLoadError MODULE_NOT_FOUND: Built-in 'node:sqlite' is not implemented",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "globalThis node:test",
+      "node": "function/undefined",
+      "guest": "throws ModuleLoadError MODULE_NOT_FOUND: Built-in 'node:test' is not implemented",
+      "class": "b-declared-loud"
+    },
+    {
+      "path": "globalThis require",
+      "node": "function/object",
+      "guest": "function/undefined",
+      "class": "c2-kind"
+    },
+    {
+      "path": "globalThis trace_events",
+      "node": "object",
+      "guest": "throws Error MODULE_NOT_FOUND: Cannot find module 'trace_events'",
+      "class": "b-declared-loud"
+    }
+  ]
+}

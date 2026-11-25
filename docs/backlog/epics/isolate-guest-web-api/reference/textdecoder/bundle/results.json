@@ -1,0 +1,521 @@
+{
+  "corpus": {
+    "utf-8": {
+      "cases": 78998,
+      "differ": 0,
+      "examples": []
+    },
+    "ibm866": {
+      "cases": 256,
+      "differ": 0,
+      "examples": []
+    },
+    "iso-8859-2": {
+      "cases": 256,
+      "differ": 0,
+      "examples": []
+    },
+    "iso-8859-3": {
+      "cases": 256,
+      "differ": 0,
+      "examples": []
+    },
+    "iso-8859-4": {
+      "cases": 256,
+      "differ": 0,
+      "examples": []
+    },
+    "iso-8859-5": {
+      "cases": 256,
+      "differ": 0,
+      "examples": []
+    },
+    "iso-8859-6": {
+      "cases": 256,
+      "differ": 0,
+      "examples": []
+    },
+    "iso-8859-7": {
+      "cases": 256,
+      "differ": 0,
+      "examples": []
+    },
+    "iso-8859-8": {
+      "cases": 256,
+      "differ": 0,
+      "examples": []
+    },
+    "iso-8859-8-i": {
+      "cases": 256,
+      "differ": 0,
+      "examples": []
+    },
+    "iso-8859-10": {
+      "cases": 256,
+      "differ": 0,
+      "examples": []
+    },
+    "iso-8859-13": {
+      "cases": 256,
+      "differ": 0,
+      "examples": []
+    },
+    "iso-8859-14": {
+      "cases": 256,
+      "differ": 0,
+      "examples": []
+    },
+    "iso-8859-15": {
+      "cases": 256,
+      "differ": 0,
+      "examples": []
+    },
+    "iso-8859-16": {
+      "cases": 256,
+      "differ": 0,
+      "examples": []
+    },
+    "koi8-r": {
+      "cases": 256,
+      "differ": 0,
+      "examples": []
+    },
+    "koi8-u": {
+      "cases": 256,
+      "differ": 0,
+      "examples": []
+    },
+    "macintosh": {
+      "cases": 256,
+      "differ": 0,
+      "examples": []
+    },
+    "windows-874": {
+      "cases": 256,
+      "differ": 0,
+      "examples": []
+    },
+    "windows-1250": {
+      "cases": 256,
+      "differ": 0,
+      "examples": []
+    },
+    "windows-1251": {
+      "cases": 256,
+      "differ": 0,
+      "examples": []
+    },
+    "windows-1252": {
+      "cases": 256,
+      "differ": 0,
+      "examples": []
+    },
+    "windows-1253": {
+      "cases": 256,
+      "differ": 0,
+      "examples": []
+    },
+    "windows-1254": {
+      "cases": 256,
+      "differ": 0,
+      "examples": []
+    },
+    "windows-1255": {
+      "cases": 256,
+      "differ": 0,
+      "examples": []
+    },
+    "windows-1256": {
+      "cases": 256,
+      "differ": 0,
+      "examples": []
+    },
+    "windows-1257": {
+      "cases": 256,
+      "differ": 0,
+      "examples": []
+    },
+    "windows-1258": {
+      "cases": 256,
+      "differ": 0,
+      "examples": []
+    },
+    "x-mac-cyrillic": {
+      "cases": 256,
+      "differ": 0,
+      "examples": []
+    },
+    "gbk": {
+      "cases": 91792,
+      "differ": 0,
+      "examples": []
+    },
+    "gb18030": {
+      "cases": 91792,
+      "differ": 0,
+      "examples": []
+    },
+    "big5": {
+      "cases": 69792,
+      "differ": 69792,
+      "examples": [
+        {
+          "bytes": [0]
+        },
+        {
+          "bytes": [1]
+        }
+      ]
+    },
+    "euc-jp": {
+      "cases": 78628,
+      "differ": 78628,
+      "examples": [
+        {
+          "bytes": [0]
+        },
+        {
+          "bytes": [1]
+        }
+      ]
+    },
+    "iso-2022-jp": {
+      "cases": 69792,
+      "differ": 69792,
+      "examples": [
+        {
+          "bytes": [0]
+        },
+        {
+          "bytes": [1]
+        }
+      ]
+    },
+    "shift_jis": {
+      "cases": 69792,
+      "differ": 69792,
+      "examples": [
+        {
+          "bytes": [0]
+        },
+        {
+          "bytes": [1]
+        }
+      ]
+    },
+    "euc-kr": {
+      "cases": 69792,
+      "differ": 69792,
+      "examples": [
+        {
+          "bytes": [0]
+        },
+        {
+          "bytes": [1]
+        }
+      ]
+    },
+    "utf-16be": {
+      "cases": 69798,
+      "differ": 0,
+      "examples": []
+    },
+    "utf-16le": {
+      "cases": 69798,
+      "differ": 0,
+      "examples": []
+    },
+    "x-user-defined": {
+      "cases": 256,
+      "differ": 0,
+      "examples": []
+    }
+  },
+  "labels": {
+    "total": 228,
+    "same": 200,
+    "differ": [
+      {
+        "label": "big5",
+        "node": "S:big5",
+        "guest": "E:NotImplementedError|undefined|Not implemented: isolate-host.TextDecoder(big5) (decoded by ICU in Node, not in the rifty isolate host)"
+      },
+      {
+        "label": "big5-hkscs",
+        "node": "S:big5",
+        "guest": "E:NotImplementedError|undefined|Not implemented: isolate-host.TextDecoder(big5) (decoded by ICU in Node, not in the rifty isolate host)"
+      },
+      {
+        "label": "cn-big5",
+        "node": "S:big5",
+        "guest": "E:NotImplementedError|undefined|Not implemented: isolate-host.TextDecoder(big5) (decoded by ICU in Node, not in the rifty isolate host)"
+      },
+      {
+        "label": "csbig5",
+        "node": "S:big5",
+        "guest": "E:NotImplementedError|undefined|Not implemented: isolate-host.TextDecoder(big5) (decoded by ICU in Node, not in the rifty isolate host)"
+      },
+      {
+        "label": "x-x-big5",
+        "node": "S:big5",
+        "guest": "E:NotImplementedError|undefined|Not implemented: isolate-host.TextDecoder(big5) (decoded by ICU in Node, not in the rifty isolate host)"
+      },
+      {
+        "label": "cseucpkdfmtjapanese",
+        "node": "S:euc-jp",
+        "guest": "E:NotImplementedError|undefined|Not implemented: isolate-host.TextDecoder(euc-jp) (decoded by ICU in Node, not in the rifty isolate host)"
+      },
+      {
+        "label": "euc-jp",
+        "node": "S:euc-jp",
+        "guest": "E:NotImplementedError|undefined|Not implemented: isolate-host.TextDecoder(euc-jp) (decoded by ICU in Node, not in the rifty isolate host)"
+      },
+      {
+        "label": "x-euc-jp",
+        "node": "S:euc-jp",
+        "guest": "E:NotImplementedError|undefined|Not implemented: isolate-host.TextDecoder(euc-jp) (decoded by ICU in Node, not in the rifty isolate host)"
+      },
+      {
+        "label": "csiso2022jp",
+        "node": "S:iso-2022-jp",
+        "guest": "E:NotImplementedError|undefined|Not implemented: isolate-host.TextDecoder(iso-2022-jp) (decoded by ICU in Node, not in the rifty isolate host)"
+      },
+      {
+        "label": "iso-2022-jp",
+        "node": "S:iso-2022-jp",
+        "guest": "E:NotImplementedError|undefined|Not implemented: isolate-host.TextDecoder(iso-2022-jp) (decoded by ICU in Node, not in the rifty isolate host)"
+      },
+      {
+        "label": "csshiftjis",
+        "node": "S:shift_jis",
+        "guest": "E:NotImplementedError|undefined|Not implemented: isolate-host.TextDecoder(shift_jis) (decoded by ICU in Node, not in the rifty isolate host)"
+      },
+      {
+        "label": "ms932",
+        "node": "S:shift_jis",
+        "guest": "E:NotImplementedError|undefined|Not implemented: isolate-host.TextDecoder(shift_jis) (decoded by ICU in Node, not in the rifty isolate host)"
+      },
+      {
+        "label": "ms_kanji",
+        "node": "S:shift_jis",
+        "guest": "E:NotImplementedError|undefined|Not implemented: isolate-host.TextDecoder(shift_jis) (decoded by ICU in Node, not in the rifty isolate host)"
+      },
+      {
+        "label": "shift-jis",
+        "node": "S:shift_jis",
+        "guest": "E:NotImplementedError|undefined|Not implemented: isolate-host.TextDecoder(shift_jis) (decoded by ICU in Node, not in the rifty isolate host)"
+      },
+      {
+        "label": "shift_jis",
+        "node": "S:shift_jis",
+        "guest": "E:NotImplementedError|undefined|Not implemented: isolate-host.TextDecoder(shift_jis) (decoded by ICU in Node, not in the rifty isolate host)"
+      },
+      {
+        "label": "sjis",
+        "node": "S:shift_jis",
+        "guest": "E:NotImplementedError|undefined|Not implemented: isolate-host.TextDecoder(shift_jis) (decoded by ICU in Node, not in the rifty isolate host)"
+      },
+      {
+        "label": "windows-31j",
+        "node": "S:shift_jis",
+        "guest": "E:NotImplementedError|undefined|Not implemented: isolate-host.TextDecoder(shift_jis) (decoded by ICU in Node, not in the rifty isolate host)"
+      },
+      {
+        "label": "x-sjis",
+        "node": "S:shift_jis",
+        "guest": "E:NotImplementedError|undefined|Not implemented: isolate-host.TextDecoder(shift_jis) (decoded by ICU in Node, not in the rifty isolate host)"
+      },
+      {
+        "label": "cseuckr",
+        "node": "S:euc-kr",
+        "guest": "E:NotImplementedError|undefined|Not implemented: isolate-host.TextDecoder(euc-kr) (decoded by ICU in Node, not in the rifty isolate host)"
+      },
+      {
+        "label": "csksc56011987",
+        "node": "S:euc-kr",
+        "guest": "E:NotImplementedError|undefined|Not implemented: isolate-host.TextDecoder(euc-kr) (decoded by ICU in Node, not in the rifty isolate host)"
+      },
+      {
+        "label": "euc-kr",
+        "node": "S:euc-kr",
+        "guest": "E:NotImplementedError|undefined|Not implemented: isolate-host.TextDecoder(euc-kr) (decoded by ICU in Node, not in the rifty isolate host)"
+      },
+      {
+        "label": "iso-ir-149",
+        "node": "S:euc-kr",
+        "guest": "E:NotImplementedError|undefined|Not implemented: isolate-host.TextDecoder(euc-kr) (decoded by ICU in Node, not in the rifty isolate host)"
+      },
+      {
+        "label": "korean",
+        "node": "S:euc-kr",
+        "guest": "E:NotImplementedError|undefined|Not implemented: isolate-host.TextDecoder(euc-kr) (decoded by ICU in Node, not in the rifty isolate host)"
+      },
+      {
+        "label": "ks_c_5601-1987",
+        "node": "S:euc-kr",
+        "guest": "E:NotImplementedError|undefined|Not implemented: isolate-host.TextDecoder(euc-kr) (decoded by ICU in Node, not in the rifty isolate host)"
+      },
+      {
+        "label": "ks_c_5601-1989",
+        "node": "S:euc-kr",
+        "guest": "E:NotImplementedError|undefined|Not implemented: isolate-host.TextDecoder(euc-kr) (decoded by ICU in Node, not in the rifty isolate host)"
+      },
+      {
+        "label": "ksc5601",
+        "node": "S:euc-kr",
+        "guest": "E:NotImplementedError|undefined|Not implemented: isolate-host.TextDecoder(euc-kr) (decoded by ICU in Node, not in the rifty isolate host)"
+      },
+      {
+        "label": "ksc_5601",
+        "node": "S:euc-kr",
+        "guest": "E:NotImplementedError|undefined|Not implemented: isolate-host.TextDecoder(euc-kr) (decoded by ICU in Node, not in the rifty isolate host)"
+      },
+      {
+        "label": "windows-949",
+        "node": "S:euc-kr",
+        "guest": "E:NotImplementedError|undefined|Not implemented: isolate-host.TextDecoder(euc-kr) (decoded by ICU in Node, not in the rifty isolate host)"
+      }
+    ]
+  },
+  "cases": {
+    "new TextDecoder('nope')": {
+      "node": "E:RangeError|ERR_ENCODING_NOT_SUPPORTED|The \"nope\" encoding is not supported",
+      "guest": "E:RangeError|ERR_ENCODING_NOT_SUPPORTED|The \"nope\" encoding is not supported",
+      "same": true
+    },
+    "new TextDecoder(' UTF-8 ').encoding": {
+      "node": "S:utf-8",
+      "guest": "S:utf-8",
+      "same": true
+    },
+    "new TextDecoder('utf-8', 1)": {
+      "node": "E:TypeError|ERR_INVALID_ARG_TYPE|The \"options\" argument must be of type object. Received type number (1)",
+      "guest": "E:TypeError|ERR_INVALID_ARG_TYPE|The \"options\" argument must be of type object. Received type number (1)",
+      "same": true
+    },
+    "utf-8 fatal [ff]": {
+      "node": "E:TypeError|ERR_ENCODING_INVALID_ENCODED_DATA|The encoded data was not valid for encoding utf-8",
+      "guest": "E:TypeError|ERR_ENCODING_INVALID_ENCODED_DATA|The encoded data was not valid for encoding utf-8",
+      "same": true
+    },
+    "utf-16le fatal [00 d8]": {
+      "node": "E:TypeError|ERR_ENCODING_INVALID_ENCODED_DATA|The encoded data was not valid for encoding utf-16le",
+      "guest": "E:TypeError|ERR_ENCODING_INVALID_ENCODED_DATA|The encoded data was not valid for encoding utf-16le",
+      "same": true
+    },
+    "gb18030 fatal [81]": {
+      "node": "E:TypeError|ERR_ENCODING_INVALID_ENCODED_DATA|The encoded data was not valid for encoding gb18030",
+      "guest": "E:TypeError|ERR_ENCODING_INVALID_ENCODED_DATA|The encoded data was not valid for encoding gb18030",
+      "same": true
+    },
+    "windows-1253 fatal [aa]": {
+      "node": "E:TypeError|ERR_ENCODING_INVALID_ENCODED_DATA|The encoded data was not valid for encoding windows-1253",
+      "guest": "E:TypeError|ERR_ENCODING_INVALID_ENCODED_DATA|The encoded data was not valid for encoding windows-1253",
+      "same": true
+    },
+    "decode('x')": {
+      "node": "E:TypeError|ERR_INVALID_ARG_TYPE|The \"list\" argument must be an instance of SharedArrayBuffer, ArrayBuffer or ArrayBufferView.",
+      "guest": "E:TypeError|ERR_INVALID_ARG_TYPE|The \"list\" argument must be an instance of SharedArrayBuffer, ArrayBuffer or ArrayBufferView.",
+      "same": true
+    },
+    "decode(1)": {
+      "node": "E:TypeError|ERR_INVALID_ARG_TYPE|The \"list\" argument must be an instance of SharedArrayBuffer, ArrayBuffer or ArrayBufferView.",
+      "guest": "E:TypeError|ERR_INVALID_ARG_TYPE|The \"list\" argument must be an instance of SharedArrayBuffer, ArrayBuffer or ArrayBufferView.",
+      "same": true
+    },
+    "utf-16le decode('x')": {
+      "node": "E:TypeError|ERR_INVALID_ARG_TYPE|The \"input\" argument must be an instance of SharedArrayBuffer, ArrayBuffer or ArrayBufferView.",
+      "guest": "E:TypeError|ERR_INVALID_ARG_TYPE|The \"input\" argument must be an instance of SharedArrayBuffer, ArrayBuffer or ArrayBufferView.",
+      "same": true
+    },
+    "decode.call({})": {
+      "node": "E:TypeError|ERR_INVALID_THIS|Value of \"this\" must be of type TextDecoder",
+      "guest": "E:TypeError|ERR_INVALID_THIS|Value of \"this\" must be of type TextDecoder",
+      "same": true
+    },
+    "encoding getter on {}": {
+      "node": "E:TypeError|ERR_INVALID_THIS|Value of \"this\" must be of type TextDecoder",
+      "guest": "E:TypeError|ERR_INVALID_THIS|Value of \"this\" must be of type TextDecoder",
+      "same": true
+    },
+    "fatal/ignoreBOM getters": {
+      "node": "V:[\"utf-16be\",true,true]",
+      "guest": "V:[\"utf-16be\",true,true]",
+      "same": true
+    },
+    "toString tag": {
+      "node": "S:[object TextDecoder][object TextEncoder]",
+      "guest": "S:[object TextDecoder][object TextEncoder]",
+      "same": true
+    },
+    "util.TextDecoder === TextDecoder": {
+      "node": "V:true",
+      "guest": "V:true",
+      "same": true
+    },
+    "util.TextEncoder === TextEncoder": {
+      "node": "V:true",
+      "guest": "V:true",
+      "same": true
+    },
+    "encodeInto non-u8 dest": {
+      "node": "E:TypeError|ERR_INVALID_ARG_TYPE|The \"dest\" argument must be an instance of Uint8Array. Received an instance of Object",
+      "guest": "E:TypeError|ERR_INVALID_ARG_TYPE|The \"dest\" argument must be an instance of Uint8Array. Received an instance of Object",
+      "same": true
+    },
+    "encodeInto non-string src": {
+      "node": "E:TypeError|ERR_INVALID_ARG_TYPE|The \"src\" argument must be of type string. Received type number (1)",
+      "guest": "E:TypeError|ERR_INVALID_ARG_TYPE|The \"src\" argument must be of type string. Received type number (1)",
+      "same": true
+    },
+    "encodeInto ok": {
+      "node": "V:[{\"read\":2,\"written\":3},[97,195,169]]",
+      "guest": "V:[{\"read\":2,\"written\":3},[97,195,169]]",
+      "same": true
+    },
+    "encode()": {
+      "node": "V:[]",
+      "guest": "V:[]",
+      "same": true
+    },
+    "encode lone surrogate": {
+      "node": "V:[239,191,189]",
+      "guest": "V:[239,191,189]",
+      "same": true
+    },
+    "Buffer.toString utf8 (runtime through the global)": {
+      "node": "S:€�",
+      "guest": "S:€�",
+      "same": true
+    },
+    "stream utf-8 split €": {
+      "node": "S:€",
+      "guest": "S:€",
+      "same": true
+    }
+  },
+  "pdfkit": {
+    "node": {
+      "stdout": "bytes 1269\n",
+      "exitCode": 0,
+      "sha": "57158f98bf53450a5d0b26d11692ab21d5fdcd2f489728f4ffadcad4f018d1ee"
+    },
+    "base": {
+      "stdout": "",
+      "stderr": "NotImplementedError: Not implemented: isolate-host.TextDecoder(ascii) (only utf-8)\n    at Object.<anonymous> (/workspace/node_modules/fontkit/dist/main.cjs:5424:51)\n    at Object.<anonymous> (/workspace/node_modules/pdfkit/js/pdfkit.js:7:15) {",
+      "exitCode": 1
+    },
+    "td-lazy-fast": {
+      "stdout": "bytes 1269\n",
+      "stderr": "",
+      "exitCode": 0,
+      "sha": "57158f98bf53450a5d0b26d11692ab21d5fdcd2f489728f4ffadcad4f018d1ee"
+    }
+  },
+  "meta": {
+    "variant": "td-lazy-fast",
+    "date": "2026-11-25",
+    "node": "v24.16.0",
+    "head": "230c3272a"
+  }
+}

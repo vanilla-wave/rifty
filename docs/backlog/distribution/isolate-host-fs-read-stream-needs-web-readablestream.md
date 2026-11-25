@@ -37,3 +37,7 @@ the guest gets it.
 ## Challenge
 
 challenge: 2026-11-24 — none (factual capture, library probe)
+
+2026-11-25 — owner: goal `node-streams-as-in-node` (on main since PR #450, its unit 9r:
+`fs.ReadStream` from Node's own `lib/internal/fs/streams.js`); left goal `isolate-guest-web-api`
+when the user narrowed it (web streams out).

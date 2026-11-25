@@ -1,0 +1,676 @@
+{
+  "date": "2026-11-25",
+  "head": "70923a630",
+  "node": "v24.16.0",
+  "pins": [
+    {
+      "id": "global Blob descriptor",
+      "node": "\"data function w1e0c1\"",
+      "guest": "\"data function w1e0c1\"",
+      "eval": "\"data function w1e0c1\""
+    },
+    {
+      "id": "global File descriptor",
+      "node": "\"data function w1e0c1\"",
+      "guest": "\"data function w1e0c1\"",
+      "eval": "\"data function w1e0c1\""
+    },
+    {
+      "id": "global TextDecoder descriptor",
+      "node": "\"data function w1e0c1\"",
+      "guest": "\"data function w1e0c1\"",
+      "eval": "\"data function w1e0c1\""
+    },
+    {
+      "id": "global TextEncoder descriptor",
+      "node": "\"data function w1e0c1\"",
+      "guest": "\"data function w1e0c1\"",
+      "eval": "\"data function w1e0c1\""
+    },
+    {
+      "id": "global AbortController descriptor",
+      "node": "\"data function w1e0c1\"",
+      "guest": "\"data function w1e0c1\"",
+      "eval": "\"data function w1e0c1\""
+    },
+    {
+      "id": "global AbortSignal descriptor",
+      "node": "\"data function w1e0c1\"",
+      "guest": "\"data function w1e0c1\"",
+      "eval": "\"data function w1e0c1\""
+    },
+    {
+      "id": "global EventTarget descriptor",
+      "node": "\"data function w1e0c1\"",
+      "guest": "\"data function w1e0c1\"",
+      "eval": "\"data function w1e0c1\""
+    },
+    {
+      "id": "global Event descriptor",
+      "node": "\"data function w1e0c1\"",
+      "guest": "\"data function w1e0c1\"",
+      "eval": "\"data function w1e0c1\""
+    },
+    {
+      "id": "global CustomEvent descriptor",
+      "node": "\"data function w1e0c1\"",
+      "guest": "\"data function w1e0c1\"",
+      "eval": "\"data function w1e0c1\""
+    },
+    {
+      "id": "global DOMException descriptor",
+      "node": "\"data function w1e0c1\"",
+      "guest": "\"data function w1e0c1\"",
+      "eval": "\"data function w1e0c1\""
+    },
+    {
+      "id": "new Blob([\"a\"])",
+      "node": "object Blob",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)"
+    },
+    {
+      "id": "blob.size/type",
+      "node": "\"3 text/plain\"",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)"
+    },
+    {
+      "id": "blob.text()",
+      "node": "\"hé\"",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)"
+    },
+    {
+      "id": "blob.arrayBuffer()",
+      "node": "ArrayBuffer(3)",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)"
+    },
+    {
+      "id": "blob.bytes()",
+      "node": "Uint8Array[97,98,99]",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)"
+    },
+    {
+      "id": "blob.slice(1,2).text()",
+      "node": "\"b\"",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)"
+    },
+    {
+      "id": "blob.stream()",
+      "node": "object ReadableStream",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)"
+    },
+    {
+      "id": "new File([\"x\"],\"n\",{lastModified:5})",
+      "node": "\"n 5 1\"",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.File (not available in the rifty isolate host, ADR-0557)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.File (not available in the rifty isolate host, ADR-0557)"
+    },
+    {
+      "id": "typeof buffer.Blob",
+      "node": "\"function\"",
+      "guest": "\"undefined\"",
+      "eval": "\"undefined\""
+    },
+    {
+      "id": "typeof buffer.File",
+      "node": "\"function\"",
+      "guest": "\"undefined\"",
+      "eval": "\"undefined\""
+    },
+    {
+      "id": "buffer.Blob === Blob",
+      "node": "true",
+      "guest": "false",
+      "eval": "false"
+    },
+    {
+      "id": "buffer.File === File",
+      "node": "true",
+      "guest": "false",
+      "eval": "false"
+    },
+    {
+      "id": "new buffer.Blob([\"a\"]).size",
+      "node": "1",
+      "guest": "throw TypeError: buffer.Blob is not a constructor",
+      "eval": "throw TypeError: buffer.Blob is not a constructor"
+    },
+    {
+      "id": "({}) instanceof Blob",
+      "node": "false",
+      "guest": "false",
+      "eval": "false"
+    },
+    {
+      "id": "({}) instanceof buffer.Blob",
+      "node": "false",
+      "guest": "throw TypeError: Right-hand side of 'instanceof' is not an object",
+      "eval": "throw TypeError: Right-hand side of 'instanceof' is not an object"
+    },
+    {
+      "id": "buffer.resolveObjectURL",
+      "node": "\"function\"",
+      "guest": "\"function\"",
+      "eval": "\"function\""
+    },
+    {
+      "id": "util.TextDecoder === TextDecoder",
+      "node": "true",
+      "guest": "true",
+      "eval": "true"
+    },
+    {
+      "id": "util.TextEncoder === TextEncoder",
+      "node": "true",
+      "guest": "true",
+      "eval": "true"
+    },
+    {
+      "id": "TextDecoder labels accepted",
+      "node": "222/228",
+      "guest": "3/228",
+      "eval": "3/228"
+    },
+    {
+      "id": "TextDecoder(\"unicode-1-1-utf-8\").encoding",
+      "node": "\"utf-8\"",
+      "guest": "\"utf-8\"",
+      "eval": "\"utf-8\""
+    },
+    {
+      "id": "TextDecoder(\"unicode11utf8\").encoding",
+      "node": "\"utf-8\"",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(unicode11utf8) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(unicode11utf8) (only utf-8)"
+    },
+    {
+      "id": "TextDecoder(\"unicode20utf8\").encoding",
+      "node": "\"utf-8\"",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(unicode20utf8) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(unicode20utf8) (only utf-8)"
+    },
+    {
+      "id": "TextDecoder(\"utf-8\").encoding",
+      "node": "\"utf-8\"",
+      "guest": "\"utf-8\"",
+      "eval": "\"utf-8\""
+    },
+    {
+      "id": "TextDecoder(\"utf8\").encoding",
+      "node": "\"utf-8\"",
+      "guest": "\"utf-8\"",
+      "eval": "\"utf-8\""
+    },
+    {
+      "id": "TextDecoder(\"x-unicode20utf8\").encoding",
+      "node": "\"utf-8\"",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(x-unicode20utf8) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(x-unicode20utf8) (only utf-8)"
+    },
+    {
+      "id": "TextDecoder(UTF-8)",
+      "node": "ok as utf-8",
+      "guest": "ok as utf-8",
+      "eval": "ok as utf-8"
+    },
+    {
+      "id": "TextDecoder(IBM866)",
+      "node": "ok as ibm866",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(866) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(866) (only utf-8)"
+    },
+    {
+      "id": "TextDecoder(ISO-8859-2)",
+      "node": "ok as iso-8859-2",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(csisolatin2) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(csisolatin2) (only utf-8)"
+    },
+    {
+      "id": "TextDecoder(ISO-8859-3)",
+      "node": "ok as iso-8859-3",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(csisolatin3) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(csisolatin3) (only utf-8)"
+    },
+    {
+      "id": "TextDecoder(ISO-8859-4)",
+      "node": "ok as iso-8859-4",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(csisolatin4) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(csisolatin4) (only utf-8)"
+    },
+    {
+      "id": "TextDecoder(ISO-8859-5)",
+      "node": "ok as iso-8859-5",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(csisolatincyrillic) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(csisolatincyrillic) (only utf-8)"
+    },
+    {
+      "id": "TextDecoder(ISO-8859-6)",
+      "node": "ok as iso-8859-6",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(arabic) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(arabic) (only utf-8)"
+    },
+    {
+      "id": "TextDecoder(ISO-8859-7)",
+      "node": "ok as iso-8859-7",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(csisolatingreek) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(csisolatingreek) (only utf-8)"
+    },
+    {
+      "id": "TextDecoder(ISO-8859-8)",
+      "node": "ok as iso-8859-8",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(csiso88598e) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(csiso88598e) (only utf-8)"
+    },
+    {
+      "id": "TextDecoder(ISO-8859-8-I)",
+      "node": "ok as iso-8859-8-i",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(csiso88598i) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(csiso88598i) (only utf-8)"
+    },
+    {
+      "id": "TextDecoder(ISO-8859-10)",
+      "node": "ok as iso-8859-10",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(csisolatin6) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(csisolatin6) (only utf-8)"
+    },
+    {
+      "id": "TextDecoder(ISO-8859-13)",
+      "node": "ok as iso-8859-13",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(iso-8859-13) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(iso-8859-13) (only utf-8)"
+    },
+    {
+      "id": "TextDecoder(ISO-8859-14)",
+      "node": "ok as iso-8859-14",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(iso-8859-14) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(iso-8859-14) (only utf-8)"
+    },
+    {
+      "id": "TextDecoder(ISO-8859-15)",
+      "node": "ok as iso-8859-15",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(csisolatin9) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(csisolatin9) (only utf-8)"
+    },
+    {
+      "id": "TextDecoder(ISO-8859-16)",
+      "node": "ok as iso-8859-16",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(iso-8859-16) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(iso-8859-16) (only utf-8)"
+    },
+    {
+      "id": "TextDecoder(KOI8-R)",
+      "node": "ok as koi8-r",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(cskoi8r) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(cskoi8r) (only utf-8)"
+    },
+    {
+      "id": "TextDecoder(KOI8-U)",
+      "node": "ok as koi8-u",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(koi8-ru) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(koi8-ru) (only utf-8)"
+    },
+    {
+      "id": "TextDecoder(macintosh)",
+      "node": "ok as macintosh",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(csmacintosh) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(csmacintosh) (only utf-8)"
+    },
+    {
+      "id": "TextDecoder(windows-874)",
+      "node": "ok as windows-874",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(dos-874) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(dos-874) (only utf-8)"
+    },
+    {
+      "id": "TextDecoder(windows-1250)",
+      "node": "ok as windows-1250",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(cp1250) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(cp1250) (only utf-8)"
+    },
+    {
+      "id": "TextDecoder(windows-1251)",
+      "node": "ok as windows-1251",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(cp1251) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(cp1251) (only utf-8)"
+    },
+    {
+      "id": "TextDecoder(windows-1252)",
+      "node": "ok as windows-1252",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(ansi_x3.4-1968) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(ansi_x3.4-1968) (only utf-8)"
+    },
+    {
+      "id": "TextDecoder(windows-1253)",
+      "node": "ok as windows-1253",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(cp1253) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(cp1253) (only utf-8)"
+    },
+    {
+      "id": "TextDecoder(windows-1254)",
+      "node": "ok as windows-1254",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(cp1254) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(cp1254) (only utf-8)"
+    },
+    {
+      "id": "TextDecoder(windows-1255)",
+      "node": "ok as windows-1255",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(cp1255) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(cp1255) (only utf-8)"
+    },
+    {
+      "id": "TextDecoder(windows-1256)",
+      "node": "ok as windows-1256",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(cp1256) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(cp1256) (only utf-8)"
+    },
+    {
+      "id": "TextDecoder(windows-1257)",
+      "node": "ok as windows-1257",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(cp1257) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(cp1257) (only utf-8)"
+    },
+    {
+      "id": "TextDecoder(windows-1258)",
+      "node": "ok as windows-1258",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(cp1258) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(cp1258) (only utf-8)"
+    },
+    {
+      "id": "TextDecoder(x-mac-cyrillic)",
+      "node": "ok as x-mac-cyrillic",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(x-mac-cyrillic) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(x-mac-cyrillic) (only utf-8)"
+    },
+    {
+      "id": "TextDecoder(GBK)",
+      "node": "ok as gbk",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(chinese) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(chinese) (only utf-8)"
+    },
+    {
+      "id": "TextDecoder(gb18030)",
+      "node": "ok as gb18030",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(gb18030) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(gb18030) (only utf-8)"
+    },
+    {
+      "id": "TextDecoder(Big5)",
+      "node": "ok as big5",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(big5) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(big5) (only utf-8)"
+    },
+    {
+      "id": "TextDecoder(EUC-JP)",
+      "node": "ok as euc-jp",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(cseucpkdfmtjapanese) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(cseucpkdfmtjapanese) (only utf-8)"
+    },
+    {
+      "id": "TextDecoder(ISO-2022-JP)",
+      "node": "ok as iso-2022-jp",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(csiso2022jp) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(csiso2022jp) (only utf-8)"
+    },
+    {
+      "id": "TextDecoder(Shift_JIS)",
+      "node": "ok as shift_jis",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(csshiftjis) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(csshiftjis) (only utf-8)"
+    },
+    {
+      "id": "TextDecoder(EUC-KR)",
+      "node": "ok as euc-kr",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(cseuckr) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(cseuckr) (only utf-8)"
+    },
+    {
+      "id": "TextDecoder(replacement)",
+      "node": "throw RangeError [ERR_ENCODING_NOT_SUPPORTED]: The \"replacement\" encoding is not supported",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(csiso2022kr) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(csiso2022kr) (only utf-8)"
+    },
+    {
+      "id": "TextDecoder(UTF-16BE)",
+      "node": "ok as utf-16be",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(unicodefffe) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(unicodefffe) (only utf-8)"
+    },
+    {
+      "id": "TextDecoder(UTF-16LE)",
+      "node": "ok as utf-16le",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(csunicode) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(csunicode) (only utf-8)"
+    },
+    {
+      "id": "TextDecoder(x-user-defined)",
+      "node": "ok as x-user-defined",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(x-user-defined) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(x-user-defined) (only utf-8)"
+    },
+    {
+      "id": "decode latin1 68 69 e9 80 ff",
+      "node": "\"hié€ÿ\"",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(latin1) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(latin1) (only utf-8)"
+    },
+    {
+      "id": "decode utf-16le 68 69 e9 80 ff",
+      "node": "\"楨胩�\"",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(utf-16le) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(utf-16le) (only utf-8)"
+    },
+    {
+      "id": "decode utf-16be 68 69 e9 80 ff",
+      "node": "\"桩�\"",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(utf-16be) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(utf-16be) (only utf-8)"
+    },
+    {
+      "id": "decode shift_jis 68 69 e9 80 ff",
+      "node": "\"hi騾�\"",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(shift_jis) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(shift_jis) (only utf-8)"
+    },
+    {
+      "id": "decode gbk 68 69 e9 80 ff",
+      "node": "\"hi閫�\"",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(gbk) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(gbk) (only utf-8)"
+    },
+    {
+      "id": "decode big5 68 69 e9 80 ff",
+      "node": "\"hi�\"",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(big5) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(big5) (only utf-8)"
+    },
+    {
+      "id": "decode euc-kr 68 69 e9 80 ff",
+      "node": "\"hi��\"",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(euc-kr) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(euc-kr) (only utf-8)"
+    },
+    {
+      "id": "utf-8 fatal on ff",
+      "node": "throw TypeError [ERR_ENCODING_INVALID_ENCODED_DATA]: The encoded data was not valid for encoding utf-8",
+      "guest": "throw TypeError [ERR_ENCODING_INVALID_ENCODED_DATA]: The encoded data was not valid for encoding utf-8",
+      "eval": "throw TypeError [ERR_ENCODING_INVALID_ENCODED_DATA]: The encoded data was not valid for encoding utf-8"
+    },
+    {
+      "id": "utf-8 ignoreBOM",
+      "node": "\"﻿A\"",
+      "guest": "\"﻿A\"",
+      "eval": "\"﻿A\""
+    },
+    {
+      "id": "utf-8 stream split é",
+      "node": "\"é\"",
+      "guest": "\"é\"",
+      "eval": "\"é\""
+    },
+    {
+      "id": "new TextDecoder(\"nope\")",
+      "node": "throw RangeError [ERR_ENCODING_NOT_SUPPORTED]: The \"nope\" encoding is not supported",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(nope) (only utf-8)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.TextDecoder(nope) (only utf-8)"
+    },
+    {
+      "id": "new AbortController()",
+      "node": "object AbortController",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.AbortController (not available in the rifty isolate host, ADR-0557)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.AbortController (not available in the rifty isolate host, ADR-0557)"
+    },
+    {
+      "id": "AbortSignal.abort().reason",
+      "node": "object DOMException",
+      "guest": "throw TypeError: AbortSignal.abort is not a function",
+      "eval": "throw TypeError: AbortSignal.abort is not a function"
+    },
+    {
+      "id": "AbortSignal.timeout(1)",
+      "node": "object AbortSignal",
+      "guest": "throw TypeError: AbortSignal.timeout is not a function",
+      "eval": "throw TypeError: AbortSignal.timeout is not a function"
+    },
+    {
+      "id": "AbortSignal.any([])",
+      "node": "object AbortSignal",
+      "guest": "throw TypeError: AbortSignal.any is not a function",
+      "eval": "throw TypeError: AbortSignal.any is not a function"
+    },
+    {
+      "id": "throwIfAborted",
+      "node": "throw r",
+      "guest": "throw TypeError: AbortSignal.abort is not a function",
+      "eval": "throw TypeError: AbortSignal.abort is not a function"
+    },
+    {
+      "id": "new EventTarget()",
+      "node": "object EventTarget",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.EventTarget (not available in the rifty isolate host, ADR-0557)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.EventTarget (not available in the rifty isolate host, ADR-0557)"
+    },
+    {
+      "id": "new Event(\"x\").type",
+      "node": "\"x\"",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.Event (not available in the rifty isolate host, ADR-0557)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.Event (not available in the rifty isolate host, ADR-0557)"
+    },
+    {
+      "id": "new CustomEvent(\"x\",{detail:1}).detail",
+      "node": "1",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.CustomEvent (not available in the rifty isolate host, ADR-0557)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.CustomEvent (not available in the rifty isolate host, ADR-0557)"
+    },
+    {
+      "id": "new DOMException(\"m\",\"AbortError\").code",
+      "node": "20",
+      "guest": "20",
+      "eval": "20"
+    },
+    {
+      "id": "typeof events.addAbortListener",
+      "node": "\"function\"",
+      "guest": "\"undefined\"",
+      "eval": "\"undefined\""
+    },
+    {
+      "id": "typeof util.aborted",
+      "node": "\"function\"",
+      "guest": "\"undefined\"",
+      "eval": "\"undefined\""
+    },
+    {
+      "id": "events.once(ee,\"x\",{signal}) aborted",
+      "node": "throw AbortError [ABORT_ERR]: The operation was aborted",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.AbortController (not available in the rifty isolate host, ADR-0557)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.AbortController (not available in the rifty isolate host, ADR-0557)"
+    },
+    {
+      "id": "events.on(ee,\"x\",{signal}) aborted",
+      "node": "throw AbortError [ABORT_ERR]: The operation was aborted",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.AbortController (not available in the rifty isolate host, ADR-0557)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.AbortController (not available in the rifty isolate host, ADR-0557)"
+    },
+    {
+      "id": "timers/promises.setTimeout(5,v,{signal}) aborted",
+      "node": "throw AbortError [ABORT_ERR]: The operation was aborted",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.AbortController (not available in the rifty isolate host, ADR-0557)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.AbortController (not available in the rifty isolate host, ADR-0557)"
+    },
+    {
+      "id": "fs.promises.readFile(f,{signal}) aborted",
+      "node": "throw AbortError [ABORT_ERR]: The operation was aborted",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.AbortController (not available in the rifty isolate host, ADR-0557)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.AbortController (not available in the rifty isolate host, ADR-0557)"
+    },
+    {
+      "id": "fs.readFile(f,{signal}) aborted",
+      "node": "throw AbortError [ABORT_ERR]: The operation was aborted",
+      "guest": "throw NotImplementedError: Not implemented: isolate-host.AbortController (not available in the rifty isolate host, ADR-0557)",
+      "eval": "throw NotImplementedError: Not implemented: isolate-host.AbortController (not available in the rifty isolate host, ADR-0557)"
+    },
+    {
+      "id": "fs.promises.readFile(f) no signal",
+      "node": "\"abc\"",
+      "guest": "\"abc\"",
+      "eval": "\"abc\""
+    },
+    {
+      "id": "stream.addAbortSignal(undefined, readable)",
+      "node": "throw TypeError [ERR_INVALID_ARG_TYPE]: The \"signal\" argument must be an instance of AbortSignal. Received undefined",
+      "guest": "throw TypeError: Cannot read properties of undefined (reading 'aborted')",
+      "eval": "throw TypeError: Cannot read properties of undefined (reading 'aborted')"
+    },
+    {
+      "id": "stream.addAbortSignal(sig, readable)",
+      "node": "object Readable",
+      "guest": "throw TypeError: Cannot read properties of undefined (reading 'aborted')",
+      "eval": "throw TypeError: Cannot read properties of undefined (reading 'aborted')"
+    },
+    {
+      "id": "stream.pipeline with function stage",
+      "node": "undefined",
+      "guest": "throw TypeError: pipeline: argument must be a stream (index 1 received a non-stream value)",
+      "eval": "throw TypeError: pipeline: argument must be a stream (index 1 received a non-stream value)"
+    }
+  ],
+  "pinExit": {
+    "node": 0,
+    "guest": 0,
+    "eval": 0,
+    "guestStderr": "",
+    "evalStderr": ""
+  },
+  "scenario": [
+    {
+      "gen": "pptx-write.cjs",
+      "node": "exit 0",
+      "nodeStdout": "[object Blob] Blob\nbytes true\n",
+      "guest": "exit 1: Error: blob is not supported by this platform",
+      "guestStdout": "",
+      "guestStderr": "Error: blob is not supported by this platform\n    at exports.checkSupport (/workspace/node_modules/jszip/lib/utils.js:378:15)\n    at JSZip.generateInternalStream (/workspace/node_modules/jszip/lib/object.js:342:19)\n    at JSZip.generateAsync (/workspace/node_modules/jszip/lib/object.js:370:21)\n    at PptxGenJS.eval (/workspace/node_modules/pptxgenjs/dist/pptxgen.cjs.js:7082:42)\n    at Generator.next (<anonymous>)\n    at eval (/workspace/node_modules/pptxgenjs/dist/pptxgen.cjs.js:29:71)\n    at new Promise (<anonymous>)\n    at __awaiter (/workspace/node_modules/pptxgenjs/dist/pptxgen.cjs.js:25:12)\n    at eval (/workspace/node_modules/pptxgenjs/dist/pptxgen.cjs.js:7071:71)\n    at wrapF (rifty-isolate-guest.js:111290:16)\n"
+    },
+    {
+      "gen": "docx-toblob.cjs",
+      "node": "exit 0",
+      "nodeStdout": "[object Blob]\nbytes true\n",
+      "guest": "exit 1: NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)",
+      "guestStdout": "",
+      "guestStderr": "NotImplementedError: Not implemented: isolate-host.Blob (not available in the rifty isolate host, ADR-0557)\n    at notImplemented (rifty-isolate-guest.js:20:12)\n    at new Blob (rifty-isolate-guest.js:611:15)\n    at blob (/workspace/node_modules/docx/dist/index.cjs:23940:10)\n    at zipOutput (/workspace/node_modules/docx/dist/index.cjs:23959:9)\n    at Packer.eval (/workspace/node_modules/docx/dist/index.cjs:26926:11)\n    at Generator.next (<anonymous>)\n    at asyncGeneratorStep (/workspace/node_modules/docx/dist/index.cjs:26849:15)\n    at _next (/workspace/node_modules/docx/dist/index.cjs:26862:5)\n    at eval (/workspace/node_modules/docx/dist/index.cjs:26867:4)\n    at new Promise (<anonymous>)\n"
+    },
+    {
+      "gen": "pdfkit-font.cjs",
+      "node": "exit 0",
+      "nodeStdout": "pdf ok\n",
+      "guest": "exit 1: NotImplementedError: Not implemented: isolate-host.TextDecoder(ascii) (only utf-8)",
+      "guestStdout": "",
+      "guestStderr": "NotImplementedError: Not implemented: isolate-host.TextDecoder(ascii) (only utf-8)\n    at Object.<anonymous> (/workspace/node_modules/fontkit/dist/main.cjs:5424:51)\n    at Object.<anonymous> (/workspace/node_modules/pdfkit/js/pdfkit.js:7:15) {\n  feature: 'isolate-host.TextDecoder(ascii)'\n}\n\nNode.js v24.0.0\n"
+    }
+  ]
+}
