@@ -8,20 +8,26 @@ so Node's `lib/zlib.js` comes to rifty only on a `Transform` equal to Node's on 
 
 1. `runtime-js/zlib-node-acceptance-carrier` — **carrier** (ready) — the User scenario as 10 parity
    cases (isolate sandbox and both browser hosts vs a live `node` on the same runner), each pinning
-   today's measured outcome and naming the unit that turns it green.
-2. `runtime-js/zlib-engine` — **engine + handle + `crc32`** (ready) — ADR-0573's wasm build, a port of
+   today's measured outcome; all ten expected green after unit 3.
+2. `runtime-js/zlib-engine` — **engine build + handle, no guest surface** (ready) — ADR-0573's wasm
+   build from a pinned toolchain, rebuilt on Linux CI to the committed sha256, licence record; a port of
    Node's handle proven against Node without rifty's `Transform` (binding-level matrix; Node's own
-   `lib/zlib.js` over it in a Node-hosted test), `zlib.crc32` on every host. Absorbs
-   `runtime-js/zlib-crc32`. Everything else in `node:zlib` stays as on main. → I1 (`crc32`), carrier 7a.
-3. `runtime-js/zlib-node-lib-port` — **Node's `lib/zlib.js` whole** (draft) — classes, `*Sync`,
-   callback one-shots, `create*`, `info`, `_processChunk`; today's browser `Gzip`/`CompressionStream`
-   leaves in the same step; `FinalizationRegistry` as Node's `MakeWeak`, with a GC-lane proof. Entry
-   criterion: `zlib-diff.mjs` shows 0 differences between Node's and rifty's `Transform` on every zlib
-   path (today 10/16 scenarios, 48 fields). Absorbs `runtime-js/zlib-trailing-bytes-after-stream-end`,
-   `runtime-js/zlib-class-call-shape`, the rest of `runtime-js/zlib-web-compression-subset`. → I1–I4,
-   carrier 3w, 3r, 4, 5a, 5b, 7b (and 1, 2, 6 if load does not bite).
-4. `runtime-js/zlib-streams-under-load` — **zlib as streams under load** (draft) — backpressure,
-   destroy mid-write, event order. → I5, carrier 1, 2, 6.
+   `lib/zlib.js` over it in a Node-hosted test); no bundle carries either.
+3. `runtime-js/zlib-node-lib-port` — **Node's `lib/zlib.js` whole + `crc32` + the engine entering the
+   bundles** (draft) — classes, `*Sync`, callback one-shots, `create*`, `info`, `_processChunk`,
+   `crc32`; lazy compile with the import instrumentation test, the Chromium 108 floor run, the
+   chunk/budget measurement; today's browser `Gzip`/`CompressionStream` leaves in the same step;
+   `FinalizationRegistry` as Node's `MakeWeak`. Entry: `zlib-diff.mjs` state group = 0 (today 26/45
+   scenarios, 154 fields). Exit: the same scenarios against product `node:zlib` in the isolate and in
+   Chromium. Absorbs `runtime-js/zlib-crc32`, `runtime-js/zlib-trailing-bytes-after-stream-end`,
+   `runtime-js/zlib-class-call-shape`, `runtime-js/zlib-web-compression-subset`. → I1–I5, all carrier
+   cases.
+4. `runtime-js/zlib-streams-under-load` — **hypothesis** (draft) — exists only if the carrier after
+   unit 3 measures a wall under load; otherwise deleted.
+
+Merge order: units 2 and 3 are adjacent merges — unit 2's PR reaches ready and a clean review, then
+waits until unit 3 can follow it (manager 2026-11-24), so `main` never holds the engine without a
+caller for an open-ended time; the build work runs in parallel with the streams goal.
 
 ## Dependencies on the streams goal (thread `t3/node-streams-goal`)
 
@@ -30,11 +36,11 @@ What units 3–4 need from rifty's streams, measured by `zlib-diff.mjs` on main
 that goal, and the parts are named here by that goal's item slugs once they exist on its branch:
 
 - unit 3 ← `_destroy`/`_construct` hooks and `autoDestroy` (`runtime-js/stream-destroy-construct-hooks`);
-  `closed`, `errored`, `readableFlowing`; constructor option validation (`highWaterMark`, `signal`);
-  `finished` on a stream closed before writing (`ERR_STREAM_PREMATURE_CLOSE`); `write(chunk, '', cb)`
-  taking the default encoding (Node's `flush()` path).
-- unit 4 ← `Transform` backpressure (`runtime-js/transform-readable-backpressure`) and the
-  `'finish'`/`'end'`/`'close'` order (`runtime-js/duplex-end-finish-close-order`).
+  `closed`, `errored`, `readableFlowing`; `Symbol.asyncDispose`; constructor option validation
+  (`highWaterMark`, `signal`); `finished` on a closed stream (`ERR_STREAM_PREMATURE_CLOSE`);
+  `write(chunk, '', cb)` taking the default encoding (Node's `flush()`/`params()` path); `'end'` before
+  `'finish'` where Node orders them so (`runtime-js/duplex-end-finish-close-order`).
+- unit 4 (if kept) ← `Transform` backpressure (`runtime-js/transform-readable-backpressure`).
 
 ## Open questions
 
@@ -49,10 +55,10 @@ that goal, and the parts are named here by that goal's item slugs once they exis
   Ground: the only candidate at 1420/1420 and Node's suite 62/62 without zlib algorithm code written in
   rifty (pako needs a rifty `deflateParams` port and a rifty `crc32`; the handle is a port of Node's
   `node_zlib.cc` either way); no difference observable against Node.
-- Order: units 1–2 now, in a thread from `main` after this map merges; unit 3 after the streams goal's
-  parts listed above; unit 4 after its backpressure part. The final interleaving with the streams goal
+- Order: units 1–2 now, in threads from `main` after this map merges (unit 2's merge held, above); unit
+  3 after the streams goal's parts listed above; unit 4 only if measured. The final interleaving with the streams goal
   is the manager's once both goals are ready.
-- Until unit 3, every `node:zlib` member but `crc32` keeps its behaviour on main per host (browser:
+- Until unit 3, every `node:zlib` member keeps its behaviour on main per host (browser:
   `CompressionStream` subset, ADR-0159/0178; isolate: `NotImplementedError`) — no intermediate state
   with two engines, no throw in place of working behaviour (AGENTS.md §Fidelity).
 

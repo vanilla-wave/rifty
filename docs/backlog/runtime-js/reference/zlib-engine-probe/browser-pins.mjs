@@ -51,7 +51,7 @@ const cases = [
 const out = [];
 for (const [name, f] of cases) {
   try { const r = await f(); out.push([name, 'ok ' + (r && r.length !== undefined ? r.length + ' B' : typeof r)]); }
-  catch (e) { out.push([name, (e && e.name) + ': ' + String(e && e.message).slice(0, 110) + (e && e.code ? ' [' + e.code + ']' : '')]); }
+  catch (e) { out.push([name, (e && e.name) + ': ' + String(e && e.message) + (e && e.code ? ' [' + e.code + ']' : '')]); }
 }
 postMessage(out);`;
 const { chromium } = req('@playwright/test');

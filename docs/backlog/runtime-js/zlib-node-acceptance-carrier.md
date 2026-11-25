@@ -51,33 +51,37 @@ challenge: 2026-11-24 — reuses the goal's FIT challenge (goal.md §Challenge) 
    runner → scenario, I1
 3. Every output file and stdout of a step compares byte for byte with the oracle once green; the clock
    is frozen inside the step; a gzip OS byte is compared as goal Decisions say → I2, I5
-4. Each case names the unit that turns it green: unit 2 (`runtime-js/zlib-engine`) — 7a; unit 3
-   (`runtime-js/zlib-node-lib-port`) — 3w, 3r, 4, 5a, 5b, 7b; unit 3 or 4 (`runtime-js/zlib-streams-under-load`)
-   — 1, 2, 6, as their first green run shows → scenario
+4. Each case names the unit that turns it green: all ten are expected green after unit 3
+   (`runtime-js/zlib-node-lib-port`); unit 2 turns none green (no guest surface); a case still red
+   after unit 3 is the measured wall that keeps unit 4 (`runtime-js/zlib-streams-under-load`) → scenario
 5. pdfkit 0.17.2 and pngjs 7.0.0 enter as exact test devDependencies; exceljs 4.4.0, unzipper 0.10.14
    and ws 8.23.0 from the lockfile → scenario
 
 ## Parity cases
 
-Oracle: Node v24.16.0, live on the runner, same files.
+Oracle: Node v24.16.0, live on the runner, same files; error texts compared whole.
 
-1. exceljs 4.4.0 streaming `WorkbookWriter` (5000 rows, shared strings, frozen clock) → the xlsx
-   bytes (`results/consumers.txt`: 111420 B) → I5
-2. unzipper 0.10.14 `Open.buffer` and piped `Parse` of that xlsx → each entry's path and bytes → I5
-3. pngjs 7 `PNG.sync.write` of a 300×200 image, then `PNG.sync.read` → file bytes, round trip → I4, I5
-4. pdfkit 0.17.2 compressed document (40 text lines, frozen `CreationDate`) → bytes; each FlateDecode
-   stream cut up to `endstream` (EOL kept) → `inflateSync` output → I2, I5
-5. `gunzipSync` of two members → their concatenation; `unzip` of gzip and of zlib input → I2
-6. ws 8.23.0 `PerMessageDeflate` server/client (`serverMaxWindowBits: 10`, `clientMaxWindowBits: 11`):
-   4 messages with and without `fin` → compressed and decompressed bytes → I5
-7. `crc32` of every file written; callback `inflate` of a corrupt buffer → Node's error message,
-   `code`, `errno` → I1, I3
+1. Case 1 — exceljs 4.4.0 streaming `WorkbookWriter` (5000 rows, shared strings, frozen clock) → the
+   xlsx bytes (`results/consumers.txt`: 111420 B) → I5
+2. Case 2 — unzipper 0.10.14 `Open.buffer` and piped `Parse` of that xlsx → each entry's path and
+   bytes → I5
+3. Case 3w — pngjs 7 `PNG.sync.write` of a 300×200 image → file bytes → I2, I5
+4. Case 3r — `PNG.sync.read` of that file → pixel bytes (round trip) → I4, I5
+5. Case 4 — pdfkit 0.17.2 compressed document (40 text lines, frozen `CreationDate`) → bytes; each
+   FlateDecode stream cut up to `endstream` (EOL kept) → `inflateSync` output → I2, I5
+6. Case 5a — `gunzipSync` of two members → their concatenation → I2
+7. Case 5b — `unzip(cb)` of gzip and of zlib input → the inflated bytes → I2
+8. Case 6 — ws 8.23.0 `PerMessageDeflate` server/client (`serverMaxWindowBits: 10`,
+   `clientMaxWindowBits: 11`): 4 messages with and without `fin` → compressed and decompressed bytes → I5
+9. Case 7a — `crc32` of every file written → Node's values → I1
+10. Case 7b — callback `inflate` of a corrupt buffer → Node's `Error`, `code` `Z_DATA_ERROR`, `errno`
+    −3, message `invalid code -- missing end-of-block` → I3
 
 ## Out of scope
 
 - Brotli and zstd in any step (manager's scoping, user confirmation pending).
 - Windows and macOS Node as oracle on CI (no lane; goal Decisions); Firefox/WebKit (ADR-0469).
-- Making any case green: units 2–4.
+- Making any case green: unit 3 (and unit 4 if a wall remains).
 
 ## Decisions
 

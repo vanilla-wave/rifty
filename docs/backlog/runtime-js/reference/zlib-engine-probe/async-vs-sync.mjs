@@ -1,4 +1,4 @@
-// Unit 2's intermediate state on a browser host: `gzipSync` etc. on the wasm engine (= Node's bytes,
+// An intermediate state the goal measured and dropped (no state with two engines): `gzipSync` etc. on the wasm engine (= Node's bytes,
 // matrix) next to `gzip(x, cb)` etc. still on Chromium's CompressionStream/DecompressionStream
 // (ADR-0159). Bytes and decode outcomes compared per case. usage: node async-vs-sync.mjs DEPS BUILD REPO
 import { createRequire } from 'node:module';

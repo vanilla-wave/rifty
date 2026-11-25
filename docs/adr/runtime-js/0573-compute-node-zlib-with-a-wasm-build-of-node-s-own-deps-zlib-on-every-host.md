@@ -65,11 +65,13 @@ own `lib/zlib.js` also runs on each engine via a swapped `binding.Zlib`.
     the neighbours, ADR-0563 §6). Computed, not run with the engine.
   - Chromium: not measured (its per-tab wasm memory limit is unknown here).
 - Node's own `lib/zlib.js`, loaded verbatim from the pinned tarball over the probe handle
-  (`zlib-diff.mjs`, 16 scenarios): over Node's `Transform` it equals real `node:zlib` in 16/16; over
-  rifty's `Transform` (main) it differs in 10/16, 48 fields — constructor option validation
-  (`highWaterMark`, `signal`), `_destroy` never running (so the handle never closes), no
-  `autoDestroy` after `'end'`, no `errored`/`closed`/`readableFlowing`, `finished` on an unwritten
-  stream, `write(chunk, '', cb)` refused. All are rifty's streams, none the engine's.
+  (`zlib-diff.mjs`; that file equals the binary's builtin source): over Node's `Transform` it equals
+  real `node:zlib` in 46/46 scenarios; over rifty's `Transform` (main) the state group (45 paths I1–I4
+  promise) differs in 26, 154 fields, the load group in 1/1 — `Symbol.asyncDispose`, constructor option
+  validation (`highWaterMark`, `signal`), `_destroy` never running (so the handle never closes), no
+  `autoDestroy` after `'end'`, no `errored`/`closed`/`readableFlowing`, `finished` on a closed stream,
+  `write(chunk, '', cb)` refused (every `flush()` kind and `params()`), `'end'`/`'finish'` order, one
+  extra `'drain'` under load. All are rifty's streams, none the engine's.
 
 ## Decision
 
@@ -81,7 +83,10 @@ own `lib/zlib.js` also runs on each engine via a swapped `binding.Zlib`.
    committed sha256, and the licence record (Zlib + Chromium BSD-3, the ported Node code MIT, via the
    `vendor/`/`generated/` manifest of PR #445) are unit 2's acceptance.
 2. Placement: runtime-js, shared by every host (browser Workers and the isolate guest bundle). The engine
-   ships with unit 2 for `zlib.crc32`; the handle is bundled only when unit 3 imports it. Inline
+   and the handle enter the bundles in unit 3, with `lib/zlib.js` and `crc32` (manager 2026-11-24,
+   round 3: shipping the engine earlier for `crc32` alone would put ≈ 24 KB gzip of deflate/inflate
+   without a caller into every bundle against ≈ 15 KB of generic headroom — §Simplicity); unit 2 builds
+   and proves them unbundled, and its merge is held until unit 3 can follow. Inline
    bytes (base64), compiled synchronously on the first `node:zlib` call that needs the engine, never at
    module load (the SDK page imports the builtins on the main thread, where Chromium 108 refuses sync
    compile and sync instantiation > 4 KB); one instance per realm; no preload gate. Every pointer the
@@ -89,7 +94,8 @@ own `lib/zlib.js` also runs on each engine via a swapped `binding.Zlib`.
 3. Above it, Node's shape: a port of `node_zlib.cc` ZlibContext as a handle (`init`/`write`/
    `writeSync`/`params`/`reset`/`close`, `_writeState`, `onerror`; unit 2, proven against Node without
    rifty's `Transform`) and Node's `lib/zlib.js` (unit 3, only on a `Transform` that equals Node's on
-   every zlib path — entry criterion: `zlib-diff.mjs` with 0 differences) (classes as
+   every zlib path — entry criterion: `zlib-diff.mjs`'s state group with 0 differences; exit: the
+   same scenarios against product `node:zlib` in the isolate and in Chromium) (classes as
    callable legacy constructors, one-shots, `create*`, `crc32`, all options incl. `info`,
    `maxOutputLength`, `rejectGarbageAfterEnd`). Consumers that read internals (pngjs: `_handle`,
    `_outBuffer`, `_processChunk`) get Node's.
@@ -111,7 +117,7 @@ own `lib/zlib.js` also runs on each engine via a swapped `binding.Zlib`.
    included) as a lazily loaded chunk, if one can exist without changing `require('zlib')`'s
    synchronous semantics (it may not); the wasm as a host-published asset with a pre-entry preload
    (ADR-0351/0352; in browser Workers both `installNodeRuntime` and `worker-entry.ts`'s boot would
-   need it); pako (Alternatives). None of the three is measured; unit 2 measures the first before
+   need it); pako (Alternatives). None of the three is measured; unit 3 measures the first before
    wiring the engine.
 
 ## Alternatives
@@ -141,7 +147,7 @@ own `lib/zlib.js` also runs on each engine via a swapped `binding.Zlib`.
 - (−) +37 KB gzip in client bundles for the engine alone (15 KB left under the generic cap before the
   port); a vendored binary whose toolchain unit 2 pins; manual free of zlib state; linear memory never
   shrinks; async calls block the realm's loop.
-- (−) Order: everything in `node:zlib` but `crc32` waits for the streams goal's core (map); until then
-  main's behaviour stays per host.
+- (−) Order: everything guest-visible in `node:zlib`, `crc32` included, waits for the streams goal's
+  core (map); until then main's behaviour stays per host. Units 2 and 3 merge back to back.
 - Follow-ups: goal `node-zlib-on-every-host` (map); compat `zlib.md`, isolate-host rows; ADR-0159 and
   ADR-0178 marked superseded when unit 3 lands.

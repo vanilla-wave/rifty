@@ -29,7 +29,7 @@ recipe: `playwright@1.28.1`, `install chromium` under Node 18.20.8); `run-all.sh
 | `consumers.mjs` + `consumer-scenarios.cjs` | exceljs streaming writer, unzipper, ws permessage-deflate, pngjs sync, pdfkit — digest of their output, native vs engine; a run counts only with exit 0, no signal, one JSON line |
 | `zlib-diff.mjs` | Node's own `lib/zlib.js` loaded verbatim from the pinned tarball (`--expose-internals`) over the probe handle, with Node's vs rifty's `Transform` (main): 16 scenarios of state and behaviour |
 | `browser-pins.mjs` | each carrier case's first zlib call on main: rifty's browser-host `zlib.ts` in a Chromium 148 Worker, and the isolate host |
-| `async-vs-sync.mjs` | unit 2's intermediate browser state: sync forms on the engine vs callback forms on Chromium's `CompressionStream` |
+| `async-vs-sync.mjs` | engine bytes vs Chromium's `CompressionStream` (today's browser backend) on the same inputs — measured for an intermediate state the goal then dropped (map: no state with two engines) |
 | `highlevel.mjs` | controls without a z_stream API: fflate, wasm-flate |
 | `bench-*.mjs`, `bench-core.js`, `memory.mjs` | speed (Node, isolate, Chromium 148 worker), first use, memory, host bridge |
 | `chromium108.mjs` | Chromium 108: sync compile/instantiate on the main thread and in a Worker, round trip |
@@ -53,7 +53,7 @@ recipe: `playwright@1.28.1`, `install chromium` under Node 18.20.8); `run-all.sh
 | exceljs / unzipper / ws / pngjs / pdfkit = native bytes | — | — | 5/5 | 5/5 | 5/5 | — | — |
 
 The matrix compares bytes, or error message + class + `code` + `errno`; the gzip OS byte is masked only
-at member headers. Node's own suite proves API shape, not bytes: only 36 of its 47 deflate-family files
+at member headers. Node's own suite proves API shape, not bytes: only 36 of its 47 deflate-family files (all `test-zlib*.js` but the 15 with `brotli`/`zstd` in the name, incl. `test-zlib.js`, `test-zlib-crc32.js` — the latter on Node's native `binding.crc32`, proving nothing about rifty's `crc32`)
 write through the engine (8 open a handle and never write, 3 open none; brotli, zstd and
 `binding.crc32` stay native), and its tests are mostly round trips — pako 1.0.11 passes 59/62 with
 221 matrix differences.
@@ -69,14 +69,22 @@ engine writes 3. All other bytes: no CPU dependence by source (deflate hash is C
 
 ### Node's `lib/zlib.js` over rifty's `Transform` (`results/zlib-diff.txt`)
 
-Node v24.16.0's own `lib/zlib.js`, verbatim, over the probe handle: with Node's `Transform` it equals
-real `node:zlib` in 16/16 scenarios; with rifty's `Transform` (main) it differs in 10/16, 48 fields —
-constructor option validation (`highWaterMark: -1`, `signal: 1` compress instead of throwing),
-`_destroy` never running (the handle never closes: after a sync error `reset()` works and a second
-call computes, Node asserts and throws), no `autoDestroy` after `'end'`, no `errored`/`closed`/
-`readableFlowing`, `finished` on an unwritten stream calls back instead of `ERR_STREAM_PREMATURE_CLOSE`,
-`write(chunk, '', cb)` (Node's `flush()` marker) refused with `ERR_UNKNOWN_ENCODING`. The goal's
-`lib/zlib.js` unit waits for 0.
+Node v24.16.0's own `lib/zlib.js`, verbatim (the tarball's file equals the binary's builtin source),
+over the probe handle; only `stream.Transform`/`finished` and the stream helpers differ between columns
+(errors, validators, `Buffer`, timers, `binding.crc32` stay Node's — so this is the entry criterion of
+the goal's `lib/zlib.js` unit, not its exit). Values compared whole: bytes by hash (gzip OS byte
+normalised), errors by class, `code`, `errno` and full message.
+
+- With Node's `Transform` it equals real `node:zlib` in 46/46 scenarios.
+- With rifty's `Transform` (main): state group (45 paths I1–I4 promise, incl. guards equal today)
+  differs in 26, 154 fields; load group 1/1 (one `'drain'` more). Gaps: `Symbol.asyncDispose`
+  missing; constructor option validation (`highWaterMark: -1`, `signal: 1` compress instead of
+  throwing); `_destroy` never runs (the handle never closes: after a sync error `reset()` passes and
+  the next `_processChunk` throws the previous `Z_DATA_ERROR` again, where Node asserts and throws
+  `TypeError …writeSync`); no `autoDestroy` after `'end'`; no `errored`/`closed`/`readableFlowing`;
+  `finished` on a closed stream calls back instead of `ERR_STREAM_PREMATURE_CLOSE`; `write(chunk, '',
+  cb)` (Node's `flush()`/`params()` marker) refused with `ERR_UNKNOWN_ENCODING`, so every flush kind
+  and `params()` lose their effect; `'finish'` before `'end'` where Node orders `'end'` first.
 
 ### Cost (`results/bench-*.txt`, `chromium108.txt`, `memory.txt`, `streams-cap.txt`, `guest-wasm.txt`, `bundles.txt`)
 
