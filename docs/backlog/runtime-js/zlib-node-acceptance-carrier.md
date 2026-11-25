@@ -104,5 +104,7 @@ Oracle: Node v24.16.0, live on the runner, same files; error texts compared whol
   body, unpacked by a guest `node`. On the Workbench it is unpacked to `/tmp/z<id>`, out of the
   project tree, so the project stays small (a guest write's cost grows with the project's file
   count, `perf/workbench-guest-write-cost-grows-with-project`), accepted by the manager.
+- 2026-11-25 — manager: CI cost +67 s browser-unit, +17 s no-coi, +8 s unit accepted; no closure cut by
+  fs trace (simplicity over ~35 s). The write cost drops with `perf/workbench-guest-write-cost-grows-with-project`.
 - 2026-11-25 — no gzip output in any step (zip raw deflate, zlib png/pdf, ws raw), so the gzip
   OS-byte rule has nothing to compare; Node's `.gz` inputs are inputs only.
