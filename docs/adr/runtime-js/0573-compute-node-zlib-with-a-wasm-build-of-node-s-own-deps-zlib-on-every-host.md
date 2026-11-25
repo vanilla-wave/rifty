@@ -98,7 +98,9 @@ own `lib/zlib.js` also runs on each engine via a swapped `binding.Zlib`.
 6. Each handle frees its zlib state on `close`, and — as Node's weak handle does on GC — through a
    `FinalizationRegistry` when a stream is dropped or `_destroy` does not run (rifty's `Transform`
    today). Proof: a GC-lane test (`--expose-gc`) that drops open streams and sees the allocator reuse
-   their blocks — unit 3. Linear memory itself never shrinks: a realm keeps its peak until it ends.
+   their blocks — unit 2 (manager 2026-11-24: until `_destroy` runs it is the only release after a sync
+   error and after async one-shots; `lib/zlib.js` is not patched around it). Linear memory itself never
+   shrinks: a realm keeps its peak until it ends.
 7. Boundary: brotli and zstd stay `NotImplementedError` on every host (manager's scoping, user
    confirmation pending).
 8. Bundle budget: engine only, inline costs +36950 B gzip in the client generic bundle (279754 →

@@ -24,8 +24,7 @@ over these classes (compat `streams.md`: `runtime-js/transform-readable-backpres
 `runtime-js/duplex-end-finish-close-order`). Streams are fixed in their own goal, not inside zlib; this
 unit does not close I4/I5 with stream gaps declared.
 
-Acceptance seeds: the GC-lane test of ADR-0573 §6 (`--expose-gc`: drop open streams, the allocator
-reuses their blocks); exceljs streaming writer, unzipper `Open` + `Parse`, ws permessage-deflate give
+Acceptance seeds: handles close in `_destroy` (lifting unit 2's free-at-GC residual); exceljs streaming writer, unzipper `Open` + `Parse`, ws permessage-deflate give
 the oracle's bytes on every host.
 
 Probe facts: those consumers are byte-identical under Node's own `lib/zlib.js` on the engine

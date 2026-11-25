@@ -30,20 +30,41 @@ Measured on main (`results/transform-path.txt`, `lib/zlib.js` ported over a `Tra
 | `close()` after `maxOutputLength` stops the engine | 1 write | 2 writes (no `_destroy`) | same |
 | sync success path closes the handle itself (`processChunkSync` → `_close`) | yes | as Node | no |
 
-So the callback one-shots (and `createGzip`, which works on browser hosts today over
-`CompressionStream`, ADR-0178) ride the wall; they move in unit 3. Until then they keep today's
-behaviour per host — browser: the `CompressionStream` subset (compat ⚠️, ADR-0159); isolate: the named
-`NotImplementedError` — because replacing a working call with a throw is a fake (AGENTS.md
-§Fidelity). Open for the manager: whether the sync error path, whose handle is freed only by the
-`FinalizationRegistry` while `_destroy` does not run, ships here or waits too.
+Decisions (manager 2026-11-24):
+- The callback one-shots and `createGzip` stay as on main per host — browser: the `CompressionStream`
+  subset (ADR-0159/0178, ⚠️); isolate: the named `NotImplementedError` — because replacing a working
+  call with a throw is a fake (AGENTS.md §Fidelity). They move in unit 3, or as a small add-on once the
+  streams goal's first part (`_destroy`/`_construct` hooks) lands (map).
+- The sync error path ships here. Its handle — and every async one-shot's once they move — is freed by
+  the `FinalizationRegistry` of ADR-0573 §6 while `_destroy` does not run; `lib/zlib.js` is not
+  patched for it (no own `_close` in a `catch`).
+
+Declared residuals of this unit (compat `zlib.md` rows land with it):
+- a handle after a sync error is freed at garbage collection, not at the error — until the streams
+  goal's first part (thread `t3/node-streams-goal`); lifted then by a check that the handle closes in
+  `_destroy`;
+- on a browser host, sync forms (engine, Node's bytes) and callback forms (`CompressionStream`) of the
+  same call differ (`results/async-vs-sync.txt`, Chromium 148, 45 compress + 5 decode cases):
+  compressed bytes identical in 14/45, identical but the gzip OS byte in 5 more (Chromium on macOS
+  writes 19; the engine 3), different in 26/45 (`level` 1 and 9 are ignored by `CompressionStream`); the
+  callback form's output always decodes on the engine (45/45). Decoding a 2-member gzip, gzip + 8 zero
+  bytes, zlib + LF, zlib + `JUNK!`: the sync form gives Node's result, the callback form rejects
+  `TypeError: Junk found after end of compressed data.` after the first member's bytes (4/4); a
+  truncated stream: sync `Z_BUF_ERROR` `unexpected end of file`, callback `TypeError: Compressed input
+  was truncated.`
 
 Acceptance seeds (each traced at compile time):
 - carrier cases green after this unit: every `*Sync` (7, incl. `unzipSync`), `info: true` on a sync
   form (`{ buffer, engine }`, `engine instanceof zlib.Deflate`), `crc32`, construction of the 7 classes
   with `new`, without `new` (DEP0184 once) and `util.inherits` + `X.call(this, opts)`, pngjs
   `PNG.sync.read` (`_processChunk` over `_handle`), pdfkit and pngjs `PNG.sync.write` (`deflateSync`);
-- the engine is compiled on first use, never at module load (Chromium 108 page main thread refuses
-  sync compile > 4 KB, `results/chromium108.txt`); a Chromium 108 Worker case runs a sync form;
+- the engine is compiled on first use, never when the builtins load: a floor-lane case on Chromium 108
+  imports the builtins on the page main thread and fails if `zlib` compiles or instantiates wasm there
+  (the page refuses both > 4 KB, `results/chromium108.txt` — how the lexer's `initSync` broke 108), and
+  a Chromium 108 Worker case runs a sync form;
+- the `FinalizationRegistry` (ADR-0573 §6) with a GC-lane test (`--expose-gc`): a handle left open
+  after a sync error, and streams dropped without `close`, are freed and the allocator reuses their
+  blocks;
 - every engine pointer checked: a failed `malloc` is a loud error, with a test that exhausts memory;
 - `zlib.wasm` rebuilt from the pinned Node tarball on the Linux CI runner by a pinned toolchain
   (release + digest) gives the committed sha256; the binary and the ported Node code are in the

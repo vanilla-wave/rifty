@@ -14,7 +14,9 @@ streams ride `Transform`.
    every host. Accepted: `*Sync`, `info` on sync forms, `crc32`, class construction (`new`, no `new`,
    `X.call(this)`), `_processChunk` (pngjs) — carrier steps 3, 4, 5 (`gunzipSync`), 7 (`crc32`).
    Callback one-shots and `createGzip` stay as on main per host (they ride `_destroy`, measured wall
-   below). Absorbs `runtime-js/zlib-crc32`, `runtime-js/zlib-trailing-bytes-after-stream-end` (sync
+   below); the sync error path ships, its handle freed by the `FinalizationRegistry` (GC-lane test
+   here). Residuals: free at GC, not at the error; sync vs callback forms differ on a browser host
+   (bytes 14/45 identical, decode edges 0/5 alike — `results/async-vs-sync.txt`). Absorbs `runtime-js/zlib-crc32`, `runtime-js/zlib-trailing-bytes-after-stream-end` (sync
    half), `runtime-js/zlib-class-call-shape` (construction). → I1 (sync, `crc32`, construction), I2, I3
    (sync), I4 (`_processChunk`/`_handle`/`_writeState`), scenario 3–5, 7.
 3. `runtime-js/zlib-node-stream-classes` — **classes as streams + callback one-shots** — after the
@@ -34,9 +36,6 @@ and event order over these classes (`runtime-js/transform-readable-backpressure`
 
 ## Open questions
 
-- Whether unit 2 ships the sync error path, whose handle only the `FinalizationRegistry` frees while
-  `_destroy` does not run (Node-observable results equal, `transform-path.txt`), or keeps it for unit 3
-  — owner: agent — the manager's call before unit 2 is compiled.
 - Whether Node's own `test/parallel/test-zlib*.js` can run inside rifty as an extra parity corpus
   (in real Node 36 of its 47 deflate-family files write through the engine) — owner: agent — a trial
   run of `test/common` in the isolate host during unit 2.
@@ -48,6 +47,11 @@ and event order over these classes (`runtime-js/transform-readable-backpressure`
   Ground: the only candidate at 1420/1420 and Node's suite 62/62 with no zlib code written in rifty
   (pako needs a rifty `deflateParams` port and a rifty `crc32`); no difference observable against Node.
 - Order: units 1–2 now, in a thread from `main` after this map merges; unit 3 after the streams goal.
+- Link with the streams goal (thread `t3/node-streams-goal`; the user's «ок» on it, relayed by the
+  manager): when its first part (`_destroy`/`_construct` hooks) merges, unit 2's free-at-GC residual is
+  lifted by a check, and the callback one-shots become a small add-on that need not wait for all of
+  unit 3. The final order is the manager's once both goals are ready.
+- Unit 2 ships the sync error path (manager 2026-11-24).
 - On main the callback one-shots work on browser hosts over `CompressionStream` (ADR-0159, ⚠️) and
   `createGzip` too (ADR-0178): they keep that until unit 3 — a throw in place of working behaviour is a
   fake (AGENTS.md §Fidelity). In the isolate they stay `NotImplementedError` until unit 3.

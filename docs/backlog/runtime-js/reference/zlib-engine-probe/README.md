@@ -28,6 +28,7 @@ recipe: `playwright@1.28.1`, `install chromium` under Node 18.20.8); `run-all.sh
 | `node-suite.mjs` | Node's own `test/parallel/test-zlib*.js` (62) natively and per engine through the swap |
 | `consumers.mjs` + `consumer-scenarios.cjs` | exceljs streaming writer, unzipper, ws permessage-deflate, pngjs sync, pdfkit — digest of their output, native vs engine; a run counts only with exit 0, no signal, one JSON line |
 | `transform-path.mjs` | Node's one-shot path (`lib/zlib.js` ported over a `Transform` parameter) on Node's vs rifty's `Transform` (main) |
+| `async-vs-sync.mjs` | unit 2's intermediate browser state: sync forms on the engine vs callback forms on Chromium's `CompressionStream` |
 | `highlevel.mjs` | controls without a z_stream API: fflate, wasm-flate |
 | `bench-*.mjs`, `bench-core.js`, `memory.mjs` | speed (Node, isolate, Chromium 148 worker), first use, memory, host bridge |
 | `chromium108.mjs` | Chromium 108: sync compile/instantiate on the main thread and in a Worker, round trip |
@@ -103,6 +104,14 @@ Sync `ivm.Callback` to the embedder's `node:zlib`: ~0.02 ms per crossing (0 B), 
 vs 0.027 ms native. A 0.5 MB gzip bomb inflates to 512 MiB in the **host** (RSS +967 MiB) before the
 copy into a 64 MiB guest fails: host memory is outside every guest limit. Browser hosts still need an
 engine; bytes would follow the embedder's Node, not v24.16.0.
+
+### Sync engine vs today's async `CompressionStream` on a browser host (`results/async-vs-sync.txt`, Chromium 148)
+
+Compress, 45 cases (3 formats × 5 inputs × level default/1/9): byte-identical 14, identical but the gzip
+OS byte 5 more (Chromium on macOS writes 19), different 26 (`CompressionStream` ignores `level`); all 45
+async outputs decode on the engine. Decode: 2-member gzip, gzip + 8×0x00, zlib + LF, zlib + `JUNK!` —
+sync gives Node's result, async rejects `TypeError: Junk found after end of compressed data.` (4/4);
+truncated — sync `Z_BUF_ERROR` `unexpected end of file`, async `TypeError: Compressed input was truncated.`
 
 ## Main today (`results/main-red.txt`, `bench-browser.txt`)
 
