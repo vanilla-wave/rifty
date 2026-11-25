@@ -178,8 +178,12 @@ hypervisor and deploy stay outside rifty; the consumer supplies the outer bounda
   missing (compat ⚠️, the lifecycle class). Open as backlog: a byte request frame (`distribution/isolate-host-binary-request-frame`),
   host-write cost O(state) (`distribution/isolate-host-sandbox-write-cost-per-state`), keeping a
   killed run's writes (`distribution/isolate-host-sandbox-killed-run-partial-writes`).
-- Directions (not fitted): C — library template (`createSandbox({ template })`, a loud gap
-  today); D — agent tool set over the host (sandbox `env`/`cwd`/`stdin`, shell syntax); E — guest
+- C — library template: goal `isolate-host-sandbox-template` (ADR-0572 Proposed; a
+  `produceDependencySnapshot` artifact at `/node_modules`, outside the sandbox's state; its
+  snapshot and lazy reads deferred). D — agent tool set over the host: goal
+  `isolate-host-agent-tools` (draft). npm publication of the host: goal `isolate-host-npm-delivery`
+  (draft, user-deferred).
+- Directions (not fitted): D's sandbox `env`/`cwd`/`stdin` and shell syntax; E — guest
   Web API shim (URL, structuredClone, web streams, AbortController, EventTarget — requirements'
   shim list, ceilings in A; ESM entries need `URL` too); F — Node-faithful `node file.js`
   diagnostics (runtime-js, its own goal). Also: an `AbortSignal` option of `runCode` (a sandbox

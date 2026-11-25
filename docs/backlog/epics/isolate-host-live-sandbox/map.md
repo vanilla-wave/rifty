@@ -7,6 +7,8 @@
    its own snapshot gets `stateRefused` and the state of before (I1). The closing review of PR #424
    (2026-11-23) did not accept the reading «the files its own code left» as compatible with I1's
    letter; the goal closes when this unit lands or the user narrows I1.
+   Carried by `epics/isolate-host-sandbox-template` (map item 7, I7): the capture is rewritten
+   for the template's difference there (2026-11-25); this goal closes when it lands.
 
 ## Open questions
 

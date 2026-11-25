@@ -4,40 +4,35 @@ Design: ADR-0572 (Proposed). Probes: `docs/backlog/distribution/reference/isolat
 
 ## Items
 
-Seeded after FIT (the `owner: user` questions below shape every child). Planned order, each a
-hypothesis until the carrier hits it:
+Children are seeded when the carrier runs (README §FIT 5); planned order, each a hypothesis until
+the carrier hits it:
 
 1. Acceptance carrier — the User scenario as an e2e over a real `produceDependencySnapshot`
-   artifact of the four libraries, committed RED (`it.fails`).
-2. Binary request frame (`distribution/isolate-host-binary-request-frame`, absorbed): the template
-   goes to a worker once, as bytes; base64 inside a JSON line is +33 % and a 127 MB string.
+   artifact of the four libraries (published `@riftydev/workbench`, as the library probe), committed
+   RED (`it.fails`), I1–I9.
+2. Binary request frame (absorbs `distribution/isolate-host-binary-request-frame`): the template
+   goes to a worker once, as bytes; base64 inside a JSON line is +33 % and a ~90 MB string.
 3. Template intake in the consumer: artifact → decoded template (gzip/br, ustar + PAX), named
-   refusals, identity, one copy per process.
-4. The sandbox's difference on the consumer ↔ worker wire, deletions of template paths included
-   (writable mode); internal, never handed out (`snapshot()` over a template is the deferred
-   `distribution/isolate-host-sandbox-template-snapshot`).
-5. The run's FS over the template (ADR-0572 §2), writable and read-only (`EROFS`) modes, the
-   changed-paths list.
-6′. The end state taken where the guest's code cannot reach (absorbs
-   `distribution/isolate-host-sandbox-capture-outside-guest-realm`): by construction under F1 (c);
-   under (b) its own mechanism at PICKUP (ADR-0572 §8, option (b′) among the unit's candidates).
-6. Host ops and the cap over the difference only (absorbs
-   `distribution/isolate-host-sandbox-write-cost-per-state`).
-7. Worker template cache: by identity, in the RSS ceiling, evicted with the worker.
-8. README cost table (~1 MB vs ~95 MB template), compat rows (the deferred template snapshot ❌).
+   refusals, identity, a process registry by id, one shared buffer per process (I1, I4).
+4. Materialization (ADR-0572 §2): the template as views of one buffer, the difference over it,
+   the capture walk emitting the difference and deleted template paths; in the guest and for host
+   ops; writable and read-only (`EROFS`) modes; the changed-paths list (I2, I3, I6).
+5. Host ops and the cap over the difference only (absorbs
+   `distribution/isolate-host-sandbox-write-cost-per-state`) (I4, I5).
+6. Worker template cache: by identity, in the RSS ceiling and idle watermark, evicted with the
+   worker (I4).
+7. The end state taken where the guest's code cannot reach (absorbs
+   `distribution/isolate-host-sandbox-capture-outside-guest-realm`; mechanism at its PICKUP,
+   ADR-0572 §8) (I7).
+8. `snapshot()` / `createSandbox({ snapshot })` over a template → named gap; README cost table
+   (~1 MB vs ~95 MB template), compat rows (I5, I8).
 
 ## Open questions
 
-- Mechanism: the guest's FS during a run (ADR-0572 §Alternatives: materialize / lazy template /
-  worker-owned FS) — owner: user — it changes the recorded decisions «rifty целиком внутри
-  isolate…», «Владелец ФС живёт в том же realm…» (ADR-0572 §Trust).
-- Guest-side cache of template stats/bytes during a run (pdf-lib's `require`: ~6 200 stats, 915
-  reads → +100 ms in probe L without one; `fs.readSync` reads the whole file per call) — owner:
-  agent — settled by the carrier's timing against the cost invariant.
 - Template mtimes: the artifact's tar records 0 for every entry (`dep-snapshot-tar.ts` `headerFor`);
   what `fs.statSync` of a template file reports vs `npm ci` (1985-10-26 from npm's tarballs) —
   owner: agent — probe against `npm ci`, then a compat row or the oracle's value.
-- The four libraries' `require` in the guest (scenario steps 3, 10) — owner: agent — library probe
+- The four libraries' `require` in the guest (scenario steps 3, 9) — owner: agent — library probe
   (PR #430, `reference/isolate-library-probe/README.md`, @ b3731e9c0): `pdf-lib`, `docx` load and
   write as Node; `pptxgenjs` stopped on `node:https` at load (loading fixed: PR #435, merged); `require('exceljs')`
   stops on `node:zlib` at require (`isolate-host.zlib`, declared ❌) — owned by the user's thread «Расширить платформу для офисных библиотек» (engine choice pako / wasm zlib / host bridge; isolate load of zlib in its queue), no item here: the
@@ -64,3 +59,7 @@ hypothesis until the carrier hits it:
 - Persisting a template sandbox (`snapshot()` / `createSandbox({ snapshot })` over a template, a
   diff-only format, restore by template identity): `distribution/isolate-host-sandbox-template-snapshot`
   (user 2026-11-25).
+- Lazy template reads (memory and latency independent of the template): deferred,
+  `distribution/isolate-host-sandbox-template-lazy-read` (user 2026-11-25).
+- The worker owning the run's whole FS; keeping a killed run's writes:
+  `distribution/isolate-host-sandbox-killed-run-partial-writes` (user 2026-11-25).
