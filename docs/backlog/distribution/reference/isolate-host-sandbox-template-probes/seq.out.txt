@@ -1,0 +1,43 @@
+node v24.16.0, isolated-vm 7.0.2, darwin/arm64
+
+## guest sequences (run in the isolate, captured, applied by the consumer) vs node
+PASS  remove → write same path
+PASS  remove dir → write child (no dir)
+PASS  remove dir → mkdir → write child
+PASS  rmdir + mkdir (lower children gone)
+PASS  rename a template dir
+PASS  move a template file out
+PASS  move a file in
+PASS  rename a dir onto a non-empty template dir
+PASS  utimes a template file
+PASS  overwrite with the same bytes
+PASS  write on a directory path
+PASS  mkdir an existing template dir
+PASS  rm a non-empty template dir, not recursive
+PASS  copy a template file out
+PASS  N2a: rename a template dir, then mkdir it again
+PASS  N2b: a template file becomes a dir with a child
+PASS  N2b: a template dir becomes a file
+PASS  N2: B → A after A → C
+PASS  N2: rename onto an existing template file
+PASS  cp merging into an existing template dir
+PASS  cp overwriting a nested template file
+
+## host sequences (consumer LayeredFs) vs node, then a round trip through the wire
+PASS  host: remove → write same path
+PASS  host: remove dir → write child
+PASS  host: write on a directory path
+PASS  host: remove a template file, then its dir
+
+## mixed: host ops → a run → the host
+PASS  host remove, run writes the same path, host reads
+PASS  host overwrites a template file, run requires it
+PASS  host removes a dir, run recreates and writes a child
+
+## run → run: the next run sees what the previous one left
+PASS  two runs in a row
+
+## minimal difference: reading the template changes nothing
+PASS  require / read of template files
+
+30/30 pass

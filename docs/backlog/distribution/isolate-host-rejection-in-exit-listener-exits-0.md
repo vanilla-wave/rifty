@@ -4,13 +4,14 @@ status: draft
 title: Isolate host — a promise rejected inside an `'exit'` listener exits 0 with no diagnostic
 created: 2026-11-19
 why: Silent false success: Node exits 1 with the rejection's `[eval]` diagnostic; runCode exits 0, stderr empty.
+epic: isolate-host-agent-tools
 sources: [docs/public/compat/isolate-host.md, docs/backlog/runtime-js/process-exit-listener-effects.md]
 code: [packages/isolate-host/src/child/main.ts, packages/isolate-guest/src/guest/entry.ts]
 ---
 
 ## Context
 
-Sandbox (ADR-0568): a member of the lifecycle class, compat ⚠️ (row "A run's lifecycle and exit status", measured in `reference/isolate-host-sandbox-lifecycle-class.md`). Owner: distribution (isolate host). Trigger: the next change to how the isolate host reports a run's end, or a sandbox consumer reading exit 0 for it.
+Sandbox (ADR-0568): a member of the lifecycle class, compat ⚠️ (row "A run's lifecycle and exit status", measured in `reference/isolate-host-sandbox-lifecycle-class.md`). Owner and trigger: below (`epics/isolate-host-agent-tools`).
 
 Found 2026-11-19 while checking `isolate-host-unhandled-rejection-lost-to-gc` (macOS arm64, Node v24.16.0,
 isolated-vm 7.0.2 @ f405533a7):
@@ -23,7 +24,7 @@ the run's terminal was already reported. Cause beyond that unverified (where Nod
 rejections from `'exit'` listeners vs rifty's eval lifecycle ending at `exit()`). Neighbour, different surface:
 `runtime-js/process-exit-listener-effects` (throw / `exitCode` in `'exit'`). Deterministic: exit 0 in 160/160 runs, 16 concurrent
 under CPU load — the run's status is fixed before the report arrives; ceiling row `reject-in-exit-listener`
-(`packages/isolate-host/tests/corpus.ts`, both lanes). Owner: next isolate-host runtime-fidelity pickup; trigger: any change to the eval lifecycle's exit path.
+(`packages/isolate-host/tests/corpus.ts`, both lanes). Owner: `epics/isolate-host-agent-tools` (map item 1; the user agreed 2026-11-25 to fix it, F5). Trigger: now — independent of that goal's FIT; the manager may launch it on its own.
 
 ## Challenge
 

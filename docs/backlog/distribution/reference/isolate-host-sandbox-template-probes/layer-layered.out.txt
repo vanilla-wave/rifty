@@ -1,0 +1,25 @@
+node v24.16.0, isolated-vm 7.0.2, darwin/arm64
+
+## T1: 296 files, 1.0 MB; consumer full-state encode/decode ms {"semver":{"encodeFull":3.5,"decodeFull":3.1},"many":{"encodeFull":1.8,"decodeFull":2.6},"stream":{"encodeFull":1.9,"decodeFull":2},"bigdiff":{"encodeFull":15.7,"decodeFull":13.8}}
+{"tpl":"T1","w":"semver","arm":"views","msMedian":{"boot":9.7,"restore":3,"run":32.9,"capture":1,"total":46.8},"heapMiB":{"usedAfterRun":5.8,"external":15.2,"totalAfterCapture":15},"minMemoryLimitMiB":19,"endStateBytes":527}
+{"tpl":"T1","w":"semver","arm":"layered","msMedian":{"boot":9.4,"restore":1.6,"run":34.4,"capture":0.5,"total":46},"heapMiB":{"usedAfterRun":7.4,"external":15.2,"totalAfterCapture":15},"minMemoryLimitMiB":19,"endStateBytes":527}
+{"tpl":"T1","w":"many","arm":"views","msMedian":{"boot":9.3,"restore":2.9,"run":17.8,"capture":7.4,"total":37.3},"heapMiB":{"usedAfterRun":4.7,"external":16.3,"totalAfterCapture":14},"minMemoryLimitMiB":19,"endStateBytes":1117459}
+{"tpl":"T1","w":"many","arm":"layered","msMedian":{"boot":9.5,"restore":1.6,"run":20.8,"capture":7.8,"total":39.7},"heapMiB":{"usedAfterRun":5.6,"external":16.3,"totalAfterCapture":14.2},"minMemoryLimitMiB":19,"endStateBytes":1117459}
+{"tpl":"T1","w":"stream","arm":"views","msMedian":{"boot":9.3,"restore":3,"run":29.9,"capture":7.6,"total":49.8},"heapMiB":{"usedAfterRun":4.5,"external":39.2,"totalAfterCapture":9.8},"minMemoryLimitMiB":35,"endStateBytes":8389402}
+{"tpl":"T1","w":"stream","arm":"layered","msMedian":{"boot":9.4,"restore":1.6,"run":42.2,"capture":13.9,"total":67.8},"heapMiB":{"usedAfterRun":3.5,"external":47.2,"totalAfterCapture":8.7},"minMemoryLimitMiB":51,"endStateBytes":16778091}
+{"tpl":"T1","w":"bigdiff","arm":"views","msMedian":{"boot":9.9,"restore":14.5,"run":8.9,"capture":15.7,"total":49},"heapMiB":{"usedAfterRun":3.7,"external":47.2,"totalAfterCapture":8.7},"minMemoryLimitMiB":51,"endStateBytes":16777666}
+{"tpl":"T1","w":"bigdiff","arm":"layered","msMedian":{"boot":9.5,"restore":13.6,"run":8.8,"capture":14.4,"total":46.6},"heapMiB":{"usedAfterRun":3.7,"external":47.2,"totalAfterCapture":8.7},"minMemoryLimitMiB":51,"endStateBytes":16777666}
+
+## T95: 23654 files, 72.5 MB; consumer full-state encode/decode ms {"semver":{"encodeFull":138,"decodeFull":156.4},"pdf":{"encodeFull":130.8,"decodeFull":160.3},"many":{"encodeFull":130,"decodeFull":159.4}}
+{"tpl":"T95","w":"semver","arm":"views","msMedian":{"boot":9.6,"restore":87.7,"run":35.2,"capture":35.1,"total":167.1},"heapMiB":{"usedAfterRun":18.4,"external":87.5,"totalAfterCapture":39.5},"minMemoryLimitMiB":107,"endStateBytes":527}
+{"tpl":"T95","w":"semver","arm":"layered","msMedian":{"boot":9.4,"restore":38.9,"run":37.7,"capture":0.5,"total":86.3},"heapMiB":{"usedAfterRun":32.2,"external":87.5,"totalAfterCapture":55.1},"minMemoryLimitMiB":99,"endStateBytes":527}
+{"tpl":"T95","w":"pdf","arm":"views","msMedian":{"boot":9.7,"restore":88,"run":183.4,"capture":35.4,"total":318.7},"heapMiB":{"usedAfterRun":20.1,"external":88,"totalAfterCapture":41.3},"minMemoryLimitMiB":107,"endStateBytes":1600}
+{"tpl":"T95","w":"pdf","arm":"layered","msMedian":{"boot":9.4,"restore":38.7,"run":196.3,"capture":0.5,"total":244.3},"heapMiB":{"usedAfterRun":59.8,"external":89,"totalAfterCapture":74},"minMemoryLimitMiB":103,"endStateBytes":1600}
+{"tpl":"T95","w":"many","arm":"views","msMedian":{"boot":9.6,"restore":88.5,"run":20.3,"capture":39.3,"total":157.4},"heapMiB":{"usedAfterRun":15.8,"external":88.6,"totalAfterCapture":39},"minMemoryLimitMiB":107,"endStateBytes":1117459}
+{"tpl":"T95","w":"many","arm":"layered","msMedian":{"boot":9.5,"restore":40.3,"run":22.7,"capture":8.1,"total":80.4},"heapMiB":{"usedAfterRun":19.9,"external":89.6,"totalAfterCapture":38.4},"minMemoryLimitMiB":99,"endStateBytes":1117459}
+
+## concurrency: 4 runs at once, T95
+{"w":"pdf","arm":"views","wallMedianMs":410,"perRunMedianMs":395}
+{"w":"pdf","arm":"layered","wallMedianMs":338,"perRunMedianMs":327}
+{"w":"many","arm":"views","wallMedianMs":186,"perRunMedianMs":183}
+{"w":"many","arm":"layered","wallMedianMs":110,"perRunMedianMs":103}
