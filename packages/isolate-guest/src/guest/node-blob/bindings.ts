@@ -316,11 +316,6 @@ const readableStreamGap = (): never => {
     'not available in the rifty isolate host, ADR-0557',
   );
 };
-// `blob.js` reads `URL` only in `resolveObjectURL`, which the guest does not export: the ceiling.
-const urlGap = function URL(): never {
-  throw notImplemented('isolate-host.URL', 'not available in the rifty isolate host, ADR-0557');
-};
-
 /** Node's `hideStackFrames` validator: its error's frames start at the caller. */
 function validateDictionary(value: unknown, name: string): void {
   if (value != null && typeof value !== 'object' && typeof value !== 'function') {
@@ -339,7 +334,13 @@ const BOUND: Readonly<Record<string, unknown>> = {
   'internal/encoding': { TextDecoder, TextEncoder },
   'internal/errors': { codes },
   'internal/process/task_queues': { queueMicrotask },
-  'internal/url': { URL: urlGap },
+  // `blob.js` reads `URL` only in `resolveObjectURL`, which the guest does not export: the ceiling.
+  // Named by its key: a `function URL` declaration is renamed by the bundler (ADR-0571).
+  'internal/url': {
+    URL: (): never => {
+      throw notImplemented('isolate-host.URL', 'not available in the rifty isolate host, ADR-0557');
+    },
+  },
   'internal/util': {
     customInspectSymbol: Symbol.for('nodejs.util.inspect.custom'),
     kEmptyObject,
