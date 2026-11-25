@@ -233,7 +233,8 @@ export const browserMasks = (root: string): readonly Mask[] => [
   },
   {
     why: "the make-up and number of rifty's own stack frames (`    at [fn (]<rifty file>:L:C[)]`, not an `eval at` frame, which is the guest's): each run of them is one line; the message, guest frames, exit, stdout and output are compared",
-    pattern: /(?:\n {4}at (?![^\n]*eval at)(?:[^\n(]* \()?<dev-server>\/[^\s()]+:\d+:\d+\)?(?=\n|$))+/g,
+    pattern:
+      /(?:\n {4}at (?![^\n]*eval at)(?:[^\n(]* \()?<dev-server>\/[^\s()]+:\d+:\d+\)?(?=\n|$))+/g,
     to: '\n    at <rifty frames>',
   },
   {
