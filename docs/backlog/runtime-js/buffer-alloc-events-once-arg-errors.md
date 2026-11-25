@@ -28,8 +28,10 @@ Buffer `write`/`fill`/`toString`/`byteLength`, in-process `@riftydev/io` vs Node
 | `Buffer.alloc(4).write('a', 9)` | `RangeError` `ERR_OUT_OF_RANGE` | same message, no `code` |
 | `Buffer.alloc(4).fill(1, 3, 2)` | returns the buffer | `RangeError: Out of range index` |
 | `Buffer.from('abcdef').toString('utf8', -2)` | `'abcdef'` (start clamps to 0) | `'ef'` |
-| `Buffer.byteLength(new ArrayBuffer(5))` | `5` | `20` |
-| `Buffer.byteLength(1)` | `ERR_INVALID_ARG_TYPE` | `1` |
+| `Buffer.from('abc').toString('hex', 1, -1)` / `toString('nope', 0, -1)` | `''` / `''` (negative end → empty range) | `'62'` / `ERR_UNKNOWN_ENCODING` |
+| `Buffer.alloc(4).fill('ab', undefined, undefined, 'hex')` | `61626162` (an `undefined` offset takes the encoding slot) | `abababab` |
+| `Buffer.alloc(4).fill('ab', 0, 4, new String('hex'))` | `61626162` (C++ `ParseEncoding` of a non-string: utf8) | `abababab` |
+| `Buffer.from('a').toString({})` / `toString(10n)` | `Unknown encoding: {}` / `10n` (`%s` format) | `[object Object]` / `10` |
 | `Buffer.alloc(4).fill("it's", 'hex')` | `ERR_INVALID_ARG_VALUE` … ``Received "it's"`` (`util.inspect`) | ``Received 'it's'`` (`'${String(v)}'`) |
 
 Browser hosts share the code (not measured). Label gap aside

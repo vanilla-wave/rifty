@@ -3,6 +3,10 @@
  * keep that file under the ADR-0024 line budget.
  */
 
+/**
+ * An encoding argument: `@types/node`'s `BufferEncoding` names, plus any other string — the
+ * runtime takes every spelling `normalizeEncoding` maps (`'UTF8'`) and throws on the rest.
+ */
 export type Encoding =
   | 'utf8'
   | 'utf-8'
@@ -15,7 +19,8 @@ export type Encoding =
   | 'base64url'
   | 'ascii'
   | 'latin1'
-  | 'binary';
+  | 'binary'
+  | (string & Record<never, never>);
 
 /** The names Node's `normalizeEncoding` returns; every codec branch keys on one. */
 export type CanonicalEncoding =
