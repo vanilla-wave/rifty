@@ -135,7 +135,11 @@ function prepTemplate(pack: Uint8Array, index: string): void {
   lifePrepLower = templateLayer(pack, JSON.parse(index));
 }
 function layeredPrepared(refs: string): void {
-  const L = LifeLayeredFs.fromWire(lifePrepLower as never, lifeSyncMirror() as never, JSON.parse(refs));
+  const L = LifeLayeredFs.fromWire(
+    lifePrepLower as never,
+    lifeSyncMirror() as never,
+    JSON.parse(refs),
+  );
   (globalThis as unknown as Record<string, unknown>).__lifeLayered = L;
   lifeSetSyncMirror(L as never);
 }
@@ -191,7 +195,12 @@ const lifeSafeCounters = { calls: 0, stale: 0, refused: 0 };
 /** A: one call. `json` is B's JSON of the arguments, `bytes` (or null) replaces the argument `{"__b":1}`. */
 function serveSafe(epoch: unknown, op: unknown, json: unknown, n: unknown, bytes: unknown): string {
   try {
-    if (typeof epoch !== 'number' || typeof op !== 'string' || typeof json !== 'string' || typeof n !== 'number')
+    if (
+      typeof epoch !== 'number' ||
+      typeof op !== 'string' ||
+      typeof json !== 'string' ||
+      typeof n !== 'number'
+    )
       return '{"e":"EINVAL","p":""}';
     if (epoch !== lifeEpoch) {
       lifeSafeCounters.stale++;
@@ -249,7 +258,13 @@ function takeBytes(dst: unknown): number {
 /** B: the realm's FsSync over A's `serveSafe` / `takeBytes`, using only intrinsics captured above. */
 function installSafe(epoch: number): void {
   const g = globalThis as unknown as Record<string, unknown>;
-  const serveA = g.__lifeDispatch as (e: number, op: string, j: string, n: number, b: unknown) => string;
+  const serveA = g.__lifeDispatch as (
+    e: number,
+    op: string,
+    j: string,
+    n: number,
+    b: unknown,
+  ) => string;
   const takeA = g.__lifeTake as (dst: Uint8Array) => number;
   // biome-ignore lint/performance/noDelete: probe
   delete g.__lifeDispatch;
@@ -281,7 +296,8 @@ function installSafe(epoch: number): void {
       }
       if (typeof j !== 'string') throw new LifeVfsError('EIO' as never, '', 'fs realm call failed');
       const w = P.parse(j) as { r?: unknown; b?: number; e?: string; p?: string; m?: string };
-      if (typeof w.e === 'string') throw new LifeVfsError(w.e as never, String(w.p ?? ''), w.m || undefined);
+      if (typeof w.e === 'string')
+        throw new LifeVfsError(w.e as never, String(w.p ?? ''), w.m || undefined);
       if (typeof w.b === 'number') {
         const out = new P.U8(w.b);
         if (takeA(out) !== 1) throw new LifeVfsError('EIO' as never, '', 'fs realm bytes lost');
@@ -294,10 +310,21 @@ function installSafe(epoch: number): void {
 /** Host-side oracle: a fingerprint of this realm's intrinsic prototypes (names + descriptor kinds). */
 function fingerprint(): string {
   const roots: Record<string, unknown> = {
-    Object: Object.prototype, Array: Array.prototype, Function: Function.prototype,
-    TypedArray: Object.getPrototypeOf(Uint8Array.prototype), Uint8Array: Uint8Array.prototype,
-    ArrayBuffer: ArrayBuffer.prototype, Map: Map.prototype, Set: Set.prototype, Error: Error.prototype,
-    String: String.prototype, Promise: Promise.prototype, JSON, Reflect, ObjectCtor: Object, ArrayCtor: Array,
+    Object: Object.prototype,
+    Array: Array.prototype,
+    Function: Function.prototype,
+    TypedArray: Object.getPrototypeOf(Uint8Array.prototype),
+    Uint8Array: Uint8Array.prototype,
+    ArrayBuffer: ArrayBuffer.prototype,
+    Map: Map.prototype,
+    Set: Set.prototype,
+    Error: Error.prototype,
+    String: String.prototype,
+    Promise: Promise.prototype,
+    JSON,
+    Reflect,
+    ObjectCtor: Object,
+    ArrayCtor: Array,
   };
   const out: string[] = [];
   for (const k of Object.keys(roots)) {

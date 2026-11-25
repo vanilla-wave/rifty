@@ -18,7 +18,9 @@ if (process.argv[2] === 'child') {
       buf = buf.slice(nl + 1);
       const req = JSON.parse(line);
       const bytes = Buffer.from(req.data ?? '', 'base64');
-      process.stdout.write(`${JSON.stringify({ id: req.id, n: bytes.length, data: req.echo ? req.data : '' })}\n`);
+      process.stdout.write(
+        `${JSON.stringify({ id: req.id, n: bytes.length, data: req.echo ? req.data : '' })}\n`,
+      );
     }
   });
 } else {

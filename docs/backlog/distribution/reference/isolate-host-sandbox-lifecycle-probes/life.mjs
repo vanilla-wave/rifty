@@ -16,7 +16,15 @@
  *
  *   node --no-node-snapshot --expose-gc life.mjs <node_modules> [cost|conc|mem|heap|life|host|floor]...
  */
-import { copyFileSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  copyFileSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { createRequire } from 'node:module';
 import { loadavg, tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -29,8 +37,12 @@ const repo = fileURLToPath(new URL('../../../../..', import.meta.url));
 const here = fileURLToPath(new URL('.', import.meta.url));
 const tpl = join(here, '../isolate-host-sandbox-template-probes');
 const guestPkg = join(repo, 'packages/isolate-guest');
-const ivm = createRequire(PRE ? join(here, 'package.json') : join(repo, 'packages/isolate-host/package.json'))('isolated-vm');
-const { createHostBridge } = await import(PRE ? join(PRE, 'bridge.mjs') : join(guestPkg, 'dist/index.js'));
+const ivm = createRequire(
+  PRE ? join(here, 'package.json') : join(repo, 'packages/isolate-host/package.json'),
+)('isolated-vm');
+const { createHostBridge } = await import(
+  PRE ? join(PRE, 'bridge.mjs') : join(guestPkg, 'dist/index.js')
+);
 const NM = process.argv[2];
 if (!NM) throw new Error('usage: life.mjs <four-library node_modules> [sections]');
 const SECTIONS = new Set(process.argv.slice(3).length ? process.argv.slice(3) : ['cost']);
@@ -51,10 +63,11 @@ if (PRE) {
   await build({
     absWorkingDir: guestPkg,
     stdin: {
-      contents: `${readFileSync(join(tpl, 'probe-guest.ts'), 'utf8')}\n${readFileSync(join(here, 'life-guest.ts'), 'utf8')}`.replaceAll(
-        '__LAYERED__',
-        LAYERED,
-      ),
+      contents:
+        `${readFileSync(join(tpl, 'probe-guest.ts'), 'utf8')}\n${readFileSync(join(here, 'life-guest.ts'), 'utf8')}`.replaceAll(
+          '__LAYERED__',
+          LAYERED,
+        ),
       resolveDir: join(guestPkg, 'src/guest'),
       loader: 'ts',
     },
@@ -163,13 +176,12 @@ if (SECTIONS.has('prebuild')) {
   process.exit(0);
 }
 const MIXMAIN = "const w = process.argv[3]; process.argv.length = 3; require('./g/' + w + '.cjs');";
-const MIXFILES = ['pdf', 'docx', 'pptx', 'xlsx'].map((w) => [`/workspace/g/${w}.cjs`, Buffer.from(W[w])]);
+const MIXFILES = ['pdf', 'docx', 'pptx', 'xlsx'].map((w) => [
+  `/workspace/g/${w}.cjs`,
+  Buffer.from(W[w]),
+]);
 const ownOf = (src, extra = []) =>
-  blobOf([
-    ['/workspace/main.js', Buffer.from(src)],
-    ['/tmp/.keep', Buffer.alloc(0)],
-    ...extra,
-  ]);
+  blobOf([['/workspace/main.js', Buffer.from(src)], ['/tmp/.keep', Buffer.alloc(0)], ...extra]);
 
 // ---- host side of the template (v1b / v2b) and of the worker FS (v3) -------------------------
 const tplFns = {
@@ -177,7 +189,14 @@ const tplFns = {
     const e = nodeLower.get(p);
     if (!e) return null;
     // Exact bytes: ivm copies a view's whole backing buffer (step 0).
-    return [e.dir ? 1 : 0, e.dir ? null : e.bytes.slice(), e.mtimeMs, e.atimeMs, e.ctimeMs, e.birthtimeMs];
+    return [
+      e.dir ? 1 : 0,
+      e.dir ? null : e.bytes.slice(),
+      e.mtimeMs,
+      e.atimeMs,
+      e.ctimeMs,
+      e.birthtimeMs,
+    ];
   },
   children: (p) => [...nodeLower.children(p)],
 };
@@ -186,7 +205,11 @@ function serveNode(fs, op, args) {
     const r = fs[op](...args);
     return { r: ArrayBuffer.isView(r) ? r.slice() : r };
   } catch (e) {
-    return { e: typeof e?.code === 'string' ? e.code : 'EIO', path: e?.path ?? '', message: e?.message ?? '' };
+    return {
+      e: typeof e?.code === 'string' ? e.code : 'EIO',
+      path: e?.path ?? '',
+      message: e?.message ?? '',
+    };
   }
 }
 
@@ -261,7 +284,8 @@ async function runFile(r, sink, path, args, timeoutMs) {
   let timer;
   const deadline = new Promise((res) => {
     timer = setTimeout(() => res({ termination: 'timeout', why: 'deadline' }), timeoutMs);
-    sink.onFail = (e) => res({ termination: classify(e), why: String(e?.message ?? e).slice(0, 80) });
+    sink.onFail = (e) =>
+      res({ termination: classify(e), why: String(e?.message ?? e).slice(0, 80) });
   });
   try {
     return await Promise.race([
@@ -279,7 +303,7 @@ const classify = (e) => {
   const m = String(e?.message ?? e);
   if (/timed out/i.test(m)) return 'timeout';
   if (/disposed|memory/i.test(m)) return 'memory';
-  return `error`;
+  return 'error';
 };
 
 // ---- arms --------------------------------------------------------------------------------------
@@ -340,7 +364,8 @@ class Fresh {
         await (await r.fn(r.entry, 'restore')).apply(undefined, [this.blob, OPTS], {
           arguments: { copy: true },
         });
-        if (this.kind === 'v1w') await (await r.fn(r.life, 'layeredPrepared')).apply(undefined, [this.refs]);
+        if (this.kind === 'v1w')
+          await (await r.fn(r.life, 'layeredPrepared')).apply(undefined, [this.refs]);
         else if (this.kind === 'v1')
           await (await r.fn(r.probe, 'layered')).apply(
             undefined,
@@ -396,7 +421,11 @@ class Fresh {
 
 class Live {
   // v2 / v2b: one isolate per sandbox, FS in context A, a fresh context B per exec.
-  constructor(kind, src, { limit = Number(process.env.LIMIT ?? 1024), extra = [], restorePoint = false } = {}) {
+  constructor(
+    kind,
+    src,
+    { limit = Number(process.env.LIMIT ?? 1024), extra = [], restorePoint = false } = {},
+  ) {
     this.kind = kind;
     this.src = src;
     this.limit = limit;
@@ -409,14 +438,22 @@ class Live {
     this.script = await compile(this.iso);
     this.A = await realm(this.iso, this.script, sinkOf(1e9));
     const refs = from?.refs ?? REFS;
-    await (await this.A.fn(this.A.entry, 'restore')).apply(undefined, [from?.blob ?? ownOf(this.src, this.extra), OPTS], {
-      arguments: { copy: true },
-    });
+    await (await this.A.fn(this.A.entry, 'restore')).apply(
+      undefined,
+      [from?.blob ?? ownOf(this.src, this.extra), OPTS],
+      {
+        arguments: { copy: true },
+      },
+    );
     this.safe = this.kind.endsWith('s');
     if (this.kind === 'v2' || this.kind === 'v2s')
-      await (await this.A.fn(this.A.probe, 'layered')).apply(undefined, [packCopy.copyInto(), index, refs], {
-        arguments: { copy: true },
-      });
+      await (await this.A.fn(this.A.probe, 'layered')).apply(
+        undefined,
+        [packCopy.copyInto(), index, refs],
+        {
+          arguments: { copy: true },
+        },
+      );
     else {
       await this.A.ctx.evalClosure('globalThis.__lifeTpl = { get: $0, children: $1 };', [
         new ivm.Callback(tplFns.get),
@@ -593,7 +630,8 @@ if (SECTIONS.has('mem')) {
     const sbs = [];
     const MEMW = process.env.MEMW ?? 'pdf';
     for (let i = 0; i < K; i++) {
-      const s = MEMW === 'mix' ? await make(kind, MIXMAIN, { extra: MIXFILES }) : await make(kind, W[MEMW]);
+      const s =
+        MEMW === 'mix' ? await make(kind, MIXMAIN, { extra: MIXFILES }) : await make(kind, W[MEMW]);
       for (const w of MEMW === 'mix' ? ['pdf', 'docx', 'pptx', 'xlsx'] : [MEMW]) {
         const r = await s.exec(MEMW === 'mix' ? { args: ['/workspace/out.bin', w] } : {});
         if (r.code !== 0) log({ kind, w, bad: r });
@@ -606,7 +644,11 @@ if (SECTIONS.has('mem')) {
     const per = (k) => MiB((m1[k] - m0[k]) / K);
     const heaps = sbs.map((s) => (s.heap ? s.heap() : null)).filter(Boolean);
     const gcd = [];
-    for (const s of sbs) if (s.heap && s.alive) { await s.A.ctx.eval('gc()'); gcd.push(s.heap()); }
+    for (const s of sbs)
+      if (s.heap && s.alive) {
+        await s.A.ctx.eval('gc()');
+        gcd.push(s.heap());
+      }
     log({
       sec: 'mem',
       kind,
@@ -645,7 +687,7 @@ if (SECTIONS.has('floor')) {
     for (const kind of ARMS) {
       const ok = async (limit) => {
         const s = await make(kind, W[w], { limit }).catch(() => null);
-        if (!s || (s.alive === false)) return false;
+        if (!s || s.alive === false) return false;
         let pass = true;
         for (let i = 0; i < 3 && pass; i++) pass = (await s.exec()).code === 0;
         s.dispose();
@@ -693,7 +735,10 @@ if (SECTIONS.has('heap')) {
 if (SECTIONS.has('retain')) {
   const N = Number(process.env.RN ?? 60);
   for (const kind of ARMS.filter((k) => k.startsWith('v2'))) {
-    for (const [w, limit] of [['pdf', Number(process.env.RL_PDF ?? 160)], ['xlsx', Number(process.env.RL_XLSX ?? 192)]]) {
+    for (const [w, limit] of [
+      ['pdf', Number(process.env.RL_PDF ?? 160)],
+      ['xlsx', Number(process.env.RL_XLSX ?? 192)],
+    ]) {
       const s = await make(kind, W[w], { limit });
       const gcType = await s.A.ctx.eval('typeof gc');
       let done = 0;
@@ -706,7 +751,18 @@ if (SECTIONS.has('retain')) {
       const h = s.alive ? s.heap() : null;
       if (s.alive && gcType === 'function') await s.A.ctx.eval('gc()');
       const h2 = s.alive ? s.heap() : null;
-      log({ sec: 'retain', kind, w, limitMiB: limit, execsOk: done, of: N, end: done < N ? last : 'all ok', usedMiB: h && MiB(h.used), usedAfterGcMiB: h2 && MiB(h2.used), gcInIsolate: gcType });
+      log({
+        sec: 'retain',
+        kind,
+        w,
+        limitMiB: limit,
+        execsOk: done,
+        of: N,
+        end: done < N ? last : 'all ok',
+        usedMiB: h && MiB(h.used),
+        usedAfterGcMiB: h2 && MiB(h2.used),
+        gcInIsolate: gcType,
+      });
       s.dispose();
     }
   }
@@ -730,7 +786,15 @@ if (SECTIONS.has('burst')) {
   await new Promise((r) => setTimeout(r, 1000));
   globalThis.gc();
   const after = process.memoryUsage.rss();
-  log({ sec: 'burst', kind, load: load(), startMiB: MiB(r0), peakMiB: MiB(peak), restWithSandboxesMiB: MiB(live), restAfterDropMiB: MiB(after) });
+  log({
+    sec: 'burst',
+    kind,
+    load: load(),
+    startMiB: MiB(r0),
+    peakMiB: MiB(peak),
+    restWithSandboxesMiB: MiB(live),
+    restAfterDropMiB: MiB(after),
+  });
 }
 
 // ---- escape: can run N reach the FS realm (A) and change what run N+1 sees? ---------------------
@@ -758,18 +822,34 @@ if (!fs.existsSync(marker)) {
       const s = await make(kind, manager);
       const a = await s.exec();
       const b = await s.exec();
-      log({ sec: 'escape', case: 'E0 Object.keys (external review)', kind, exec1: a.out.trim(), exec2: b.out.trim(), codes: [a.code, b.code] });
+      log({
+        sec: 'escape',
+        case: 'E0 Object.keys (external review)',
+        kind,
+        exec1: a.out.trim(),
+        exec2: b.out.trim(),
+        codes: [a.code, b.code],
+      });
       s.dispose();
     }
     {
       const s = await make(kind, hooks);
-      const fp = await (await s.A.fn(s.A.life, 'fingerprint'));
+      const fp = await await s.A.fn(s.A.life, 'fingerprint');
       const before = fp.applySync(undefined, []);
       const a = await s.exec();
       const after = fp.applySync(undefined, []);
       s.hostCall('writeFileSync', ['/workspace/main.js', new TextEncoder().encode(canary)]);
       const b = await s.exec();
-      log({ sec: 'escape', case: 'E1 hooks + accessors + species + proxies + getters + stack exhaustion + callbacks', kind, exec1: a.out.trim().slice(0, 400), exec1End: a.termination ?? a.code, fsRealmIntrinsicsChanged: before !== after, exec2: b.out.trim() || b.termination, codes: [a.code, b.code] });
+      log({
+        sec: 'escape',
+        case: 'E1 hooks + accessors + species + proxies + getters + stack exhaustion + callbacks',
+        kind,
+        exec1: a.out.trim().slice(0, 400),
+        exec1End: a.termination ?? a.code,
+        fsRealmIntrinsicsChanged: before !== after,
+        exec2: b.out.trim() || b.termination,
+        codes: [a.code, b.code],
+      });
       s.dispose();
     }
   }
@@ -782,12 +862,15 @@ if (SECTIONS.has('rebuild')) {
       const xs = [];
       for (let rep = 0; rep < 5; rep++) {
         const s = await make(kind, W.pdf);
-        if (inMiB) s.hostCall('writeFileSync', ['/workspace/in.bin', new Uint8Array(inMiB << 20).fill(5)]);
+        if (inMiB)
+          s.hostCall('writeFileSync', ['/workspace/in.bin', new Uint8Array(inMiB << 20).fill(5)]);
         await s.exec();
         const t0 = performance.now();
         const [blob, refs] = await s.capture.apply(undefined, [MAXB], { result: { copy: true } });
         const t1 = performance.now();
-        const outB64 = Buffer.from(blob.buffer, blob.byteOffset, blob.byteLength).toString('base64');
+        const outB64 = Buffer.from(blob.buffer, blob.byteOffset, blob.byteLength).toString(
+          'base64',
+        );
         const atConsumer = new Uint8Array(Buffer.from(outB64, 'base64'));
         const t2 = performance.now();
         // the consumer validates before keeping it: decode + rows rebuilt over its template index
@@ -795,7 +878,11 @@ if (SECTIONS.has('rebuild')) {
         restoreFs(up, atConsumer, OPTS);
         LayeredFs.fromWire(nodeLower, up, JSON.parse(refs));
         const t3 = performance.now();
-        const inB64 = Buffer.from(atConsumer.buffer, atConsumer.byteOffset, atConsumer.byteLength).toString('base64');
+        const inB64 = Buffer.from(
+          atConsumer.buffer,
+          atConsumer.byteOffset,
+          atConsumer.byteLength,
+        ).toString('base64');
         const atWorker = new Uint8Array(Buffer.from(inB64, 'base64'));
         const t4 = performance.now();
         s.dispose();
@@ -806,10 +893,33 @@ if (SECTIONS.has('rebuild')) {
         const t6 = performance.now();
         if (r.code !== 0) log({ kind, inMiB, bad: r });
         n.dispose();
-        xs.push({ capture: t1 - t0, wireOut: t2 - t1, validate: t3 - t2, wireIn: t4 - t3, rebuild: t5 - t4, firstExec: t6 - t5, bytes: blob.byteLength });
+        xs.push({
+          capture: t1 - t0,
+          wireOut: t2 - t1,
+          validate: t3 - t2,
+          wireIn: t4 - t3,
+          rebuild: t5 - t4,
+          firstExec: t6 - t5,
+          bytes: blob.byteLength,
+        });
       }
       const m = (k) => r1(median(xs.map((x) => x[k])));
-      log({ sec: 'rebuild', kind, inMiB, load: load(), stateBytes: xs[0].bytes, captureMs: m('capture'), wireOutMs: m('wireOut'), validateMs: m('validate'), wireInMs: m('wireIn'), rebuildMs: m('rebuild'), firstExecAfterMs: m('firstExec'), totalToReadyMs: r1(median(xs.map((x) => x.capture + x.wireOut + x.validate + x.wireIn + x.rebuild))) });
+      log({
+        sec: 'rebuild',
+        kind,
+        inMiB,
+        load: load(),
+        stateBytes: xs[0].bytes,
+        captureMs: m('capture'),
+        wireOutMs: m('wireOut'),
+        validateMs: m('validate'),
+        wireInMs: m('wireIn'),
+        rebuildMs: m('rebuild'),
+        firstExecAfterMs: m('firstExec'),
+        totalToReadyMs: r1(
+          median(xs.map((x) => x.capture + x.wireOut + x.validate + x.wireIn + x.rebuild)),
+        ),
+      });
     }
   }
 }
@@ -825,18 +935,22 @@ class Turn {
   /** One operation at a time, in call order (ADR-0568 §4); DESTROYED once destroy() was called. */
   op(name, f) {
     const p = this.chain.then(async () => {
-      if (this.destroyed) throw Object.assign(new Error('destroyed'), { code: 'ERR_ISOLATE_HOST_SANDBOX_DESTROYED' });
+      if (this.destroyed)
+        throw Object.assign(new Error('destroyed'), { code: 'ERR_ISOLATE_HOST_SANDBOX_DESTROYED' });
       const t = performance.now();
       const r = await f();
       this.log.push([name, r1(performance.now() - t)]);
-      if (this.destroyed) throw Object.assign(new Error('destroyed'), { code: 'ERR_ISOLATE_HOST_SANDBOX_DESTROYED' });
+      if (this.destroyed)
+        throw Object.assign(new Error('destroyed'), { code: 'ERR_ISOLATE_HOST_SANDBOX_DESTROYED' });
       return r;
     });
     this.chain = p.catch(() => {});
     return p;
   }
   async #point() {
-    const [blob, refs] = await this.live.capture.apply(undefined, [MAXB], { result: { copy: true } });
+    const [blob, refs] = await this.live.capture.apply(undefined, [MAXB], {
+      result: { copy: true },
+    });
     const up = createMemoryFs().fsSync;
     restoreFs(up, blob, OPTS); // consumer-side validation
     LayeredFs.fromWire(nodeLower, up, JSON.parse(refs));
@@ -901,9 +1015,17 @@ if (SECTIONS.has('turn')) {
     const t = performance.now();
     try {
       const r = await f();
-      rows.push({ step: name, ms: r1(performance.now() - t), ...(r && typeof r === 'object' ? r : { r }) });
+      rows.push({
+        step: name,
+        ms: r1(performance.now() - t),
+        ...(r && typeof r === 'object' ? r : { r }),
+      });
     } catch (e) {
-      rows.push({ step: name, ms: r1(performance.now() - t), rejected: e.code ?? String(e.message) });
+      rows.push({
+        step: name,
+        ms: r1(performance.now() - t),
+        rejected: e.code ?? String(e.message),
+      });
     }
   };
   const T = new Turn(limit);
@@ -916,27 +1038,78 @@ if (SECTIONS.has('turn')) {
     }
   };
   await step('createSandbox (template, v2bs)', () => T.create());
-  await step('writeFile main.js (buggy)', () => T.writeFile('/workspace/main.js', enc("require('pdf-lib'); undefinedFn();")));
-  await step('exec → exit 1', async () => { const r = await T.exec([]); return { code: r.code, stderr: r.out.slice(0, 60) }; });
+  await step('writeFile main.js (buggy)', () =>
+    T.writeFile('/workspace/main.js', enc("require('pdf-lib'); undefinedFn();")),
+  );
+  await step('exec → exit 1', async () => {
+    const r = await T.exec([]);
+    return { code: r.code, stderr: r.out.slice(0, 60) };
+  });
   await step('writeFile main.js (pdf)', () => T.writeFile('/workspace/main.js', enc(W.pdf)));
-  await step('writeFile input 1 MiB', () => T.writeFile('/workspace/in.bin', new Uint8Array(1 << 20).fill(3)));
-  await step('exec pdf → out.pdf', async () => ({ code: (await T.exec(['/workspace/out.pdf'])).code }));
+  await step('writeFile input 1 MiB', () =>
+    T.writeFile('/workspace/in.bin', new Uint8Array(1 << 20).fill(3)),
+  );
+  await step('exec pdf → out.pdf', async () => ({
+    code: (await T.exec(['/workspace/out.pdf'])).code,
+  }));
   await step('exec pdf again', async () => ({ code: (await T.exec(['/workspace/out.pdf'])).code }));
-  await step('readFile out.pdf', async () => { const b = await T.readFile('/workspace/out.pdf'); return { bytes: b.byteLength, pdf: Buffer.from(b.slice(0, 5)).toString() }; });
-  await step('writeFile main.js (write, then endless loop)', () => T.writeFile('/workspace/main.js', enc("require('fs').writeFileSync('/workspace/partial.txt', 'x'); for (;;) {}")));
-  await step('exec → timeout, rolled back', async () => { const r = await T.exec([], { timeoutMs: 500 }); return { termination: r.termination, rollbackMs: r.rollbackMs, partialKept: await has('/workspace/partial.txt'), outPdfKept: await has('/workspace/out.pdf') }; });
-  await step('writeFile main.js (write, then OOM)', () => T.writeFile('/workspace/main.js', enc("require('fs').writeFileSync('/workspace/partial.txt', 'x'); const a = []; for (;;) a.push('x'.repeat(1e6) + Math.random());")));
-  await step('exec → memory, rolled back', async () => { const r = await T.exec([], { timeoutMs: 20000 }); return { termination: r.termination, rollbackMs: r.rollbackMs, partialKept: await has('/workspace/partial.txt'), outPdfKept: await has('/workspace/out.pdf') }; });
+  await step('readFile out.pdf', async () => {
+    const b = await T.readFile('/workspace/out.pdf');
+    return { bytes: b.byteLength, pdf: Buffer.from(b.slice(0, 5)).toString() };
+  });
+  await step('writeFile main.js (write, then endless loop)', () =>
+    T.writeFile(
+      '/workspace/main.js',
+      enc("require('fs').writeFileSync('/workspace/partial.txt', 'x'); for (;;) {}"),
+    ),
+  );
+  await step('exec → timeout, rolled back', async () => {
+    const r = await T.exec([], { timeoutMs: 500 });
+    return {
+      termination: r.termination,
+      rollbackMs: r.rollbackMs,
+      partialKept: await has('/workspace/partial.txt'),
+      outPdfKept: await has('/workspace/out.pdf'),
+    };
+  });
+  await step('writeFile main.js (write, then OOM)', () =>
+    T.writeFile(
+      '/workspace/main.js',
+      enc(
+        "require('fs').writeFileSync('/workspace/partial.txt', 'x'); const a = []; for (;;) a.push('x'.repeat(1e6) + Math.random());",
+      ),
+    ),
+  );
+  await step('exec → memory, rolled back', async () => {
+    const r = await T.exec([], { timeoutMs: 20000 });
+    return {
+      termination: r.termination,
+      rollbackMs: r.rollbackMs,
+      partialKept: await has('/workspace/partial.txt'),
+      outPdfKept: await has('/workspace/out.pdf'),
+    };
+  });
   await step('writeFile main.js (pdf)', () => T.writeFile('/workspace/main.js', enc(W.pdf)));
-  await step('exec pdf after two rebuilds', async () => ({ code: (await T.exec(['/workspace/out2.pdf'])).code }));
+  await step('exec pdf after two rebuilds', async () => ({
+    code: (await T.exec(['/workspace/out2.pdf'])).code,
+  }));
   await step('exec aborted mid-run (AbortSignal at 50 ms), rolled back', async () => {
     const ac = new AbortController();
     setTimeout(() => ac.abort(), 50);
     const r = await T.exec(['/workspace/out3.pdf'], { signal: ac.signal });
-    return { termination: r.termination, rollbackMs: r.rollbackMs, out3Kept: await has('/workspace/out3.pdf') };
+    return {
+      termination: r.termination,
+      rollbackMs: r.rollbackMs,
+      out3Kept: await has('/workspace/out3.pdf'),
+    };
   });
   await step('ordering: writeFile + exec + readFile issued without awaiting', async () => {
-    const w = T.writeFile('/workspace/main.js', enc("require('fs').writeFileSync('/workspace/o.txt', require('fs').readFileSync('/workspace/i.txt'))"));
+    const w = T.writeFile(
+      '/workspace/main.js',
+      enc(
+        "require('fs').writeFileSync('/workspace/o.txt', require('fs').readFileSync('/workspace/i.txt'))",
+      ),
+    );
     const w2 = T.writeFile('/workspace/i.txt', enc('seq'));
     const e = T.exec([]);
     const r = T.readFile('/workspace/o.txt');
@@ -951,7 +1124,11 @@ if (SECTIONS.has('turn')) {
     const after = T.readFile('/workspace/out.pdf');
     const [er, ar] = await Promise.allSettled([e, after]);
     await d;
-    return { exec: er.status === 'rejected' ? er.reason.code : 'resolved', after: ar.status === 'rejected' ? ar.reason.code : 'resolved', isolateAlive: T.live.alive };
+    return {
+      exec: er.status === 'rejected' ? er.reason.code : 'resolved',
+      after: ar.status === 'rejected' ? ar.reason.code : 'resolved',
+      isolateAlive: T.live.alive,
+    };
   });
   for (const r of rows) log({ sec: 'turn', limitMiB: limit, load: load(), ...r });
   log({ sec: 'turn', rebuilds: T.rebuilds, opTimes: T.log });
@@ -986,7 +1163,14 @@ if (SECTIONS.has('tworealm')) {
         globalThis.gc?.();
         xs.push(await once());
       }
-      log({ sec: 'tworealm', w, kind: kind === 'v1' ? 'v1 (same run)' : kind === 'v2s' ? 'v1s (copy)' : 'v1bs (lazy)', load: load(), repMs: r1(median(xs.map((x) => x.ms))), bad: xs.filter((x) => x.code !== 0).length });
+      log({
+        sec: 'tworealm',
+        w,
+        kind: kind === 'v1' ? 'v1 (same run)' : kind === 'v2s' ? 'v1s (copy)' : 'v1bs (lazy)',
+        load: load(),
+        repMs: r1(median(xs.map((x) => x.ms))),
+        bad: xs.filter((x) => x.code !== 0).length,
+      });
     }
   }
 }
@@ -1004,8 +1188,10 @@ const wasm=new Uint8Array([0,97,115,109,1,0,0,0,...sec(1,[1,0x60,0,0]),...sec(3,
   const holds = {
     control: '',
     wasmChain: `${wasmPart} let p = Promise.resolve(); for (let i = 0; i < 30; i++) p = p.then(() => WebAssembly.compile(wasm)); p.then(() => big.length);`,
-    pendingPromise: 'globalThis.keep = new Promise(() => {}); globalThis.keep.then(() => big.length);',
-    finReg: 'const fr = new FinalizationRegistry(() => { big.length; }); fr.register({}, 1); globalThis.fr = fr;',
+    pendingPromise:
+      'globalThis.keep = new Promise(() => {}); globalThis.keep.then(() => big.length);',
+    finReg:
+      'const fr = new FinalizationRegistry(() => { big.length; }); fr.register({}, 1); globalThis.fr = fr;',
   };
   for (const [name, hold] of Object.entries(holds)) {
     const main = `const fs = require('fs');
@@ -1015,7 +1201,10 @@ if (!fs.existsSync('/workspace/m')) { fs.writeFileSync('/workspace/m', '1');
   process.exit(0);
 } else require('./g.cjs');`;
     for (const kind of (process.env.HK ?? 'v2bs,v1').split(',')) {
-      const s = await make(kind, main, { limit: 256, extra: [['/workspace/g.cjs', Buffer.from(W.pdf)]] });
+      const s = await make(kind, main, {
+        limit: 256,
+        extra: [['/workspace/g.cjs', Buffer.from(W.pdf)]],
+      });
       const a = await s.exec();
       const res = [];
       for (let i = 0; i < 4; i++) {
@@ -1028,7 +1217,15 @@ if (!fs.existsSync('/workspace/m')) { fs.writeFileSync('/workspace/m', '1');
         res.push([r.code ?? r.termination, r1(r.ms ?? 0), used]);
         if (s.alive === false) break;
       }
-      log({ sec: 'haunt', hold: name, kind, run1: a.code ?? a.termination, next: '[code|termination, ms, used heap after gc MiB]', res, alive: s.alive ?? 'n/a' });
+      log({
+        sec: 'haunt',
+        hold: name,
+        kind,
+        run1: a.code ?? a.termination,
+        next: '[code|termination, ms, used heap after gc MiB]',
+        res,
+        alive: s.alive ?? 'n/a',
+      });
       s.dispose();
     }
   }
@@ -1044,7 +1241,9 @@ if (SECTIONS.has('think')) {
   const arms = (process.env.ARMS ?? 'v1,v1w,v2s,v2bs').split(',');
   const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
   for (const w of (process.env.WL ?? 'pdf,xlsx').split(',')) {
-    const acc = Object.fromEntries(arms.map((a) => [a, { create: [], first: [], rep: [], turn: [] }]));
+    const acc = Object.fromEntries(
+      arms.map((a) => [a, { create: [], first: [], rep: [], turn: [] }]),
+    );
     for (let k = 0; k < K; k++) {
       const order = arms.map((_, i) => arms[(i + k) % arms.length]);
       const sbs = {};
@@ -1072,12 +1271,27 @@ if (SECTIONS.has('think')) {
         }
       for (const a of arms) {
         acc[a].rep.push(...reps[a]);
-        acc[a].turn.push(acc[a].create.at(-1) + acc[a].first.at(-1) + reps[a].reduce((x, y) => x + y, 0));
+        acc[a].turn.push(
+          acc[a].create.at(-1) + acc[a].first.at(-1) + reps[a].reduce((x, y) => x + y, 0),
+        );
         sbs[a].dispose();
       }
     }
     for (const a of arms)
-      log({ sec: 'think', w, kind: a, pauseMs: PAUSE, turns: K, repeatsPerTurn: R, load: load(), createMs: r1(median(acc[a].create)), firstMs: r1(median(acc[a].first)), firstAll: acc[a].first.map(r1), repMs: r1(median(acc[a].rep)), turnMs: r1(median(acc[a].turn)) });
+      log({
+        sec: 'think',
+        w,
+        kind: a,
+        pauseMs: PAUSE,
+        turns: K,
+        repeatsPerTurn: R,
+        load: load(),
+        createMs: r1(median(acc[a].create)),
+        firstMs: r1(median(acc[a].first)),
+        firstAll: acc[a].first.map(r1),
+        repMs: r1(median(acc[a].rep)),
+        turnMs: r1(median(acc[a].turn)),
+      });
   }
 }
 
@@ -1095,9 +1309,7 @@ if (SECTIONS.has('host')) {
       fs = LayeredFs.fromWire(nodeLower, up, JSON.parse(s.refs));
     }
     const op =
-      kind === 'v2'
-        ? (o, a) => s.hostCall(o, a)
-        : (o, a) => (kind === 'v3' ? s.fs : fs)[o](...a);
+      kind === 'v2' ? (o, a) => s.hostCall(o, a) : (o, a) => (kind === 'v3' ? s.fs : fs)[o](...a);
     const time = (f) => {
       const xs = [];
       for (let i = 0; i < 201; i++) {
@@ -1140,7 +1352,14 @@ Error.stackTraceLimit = 3; JSON.leak = 1; process.chdir('/tmp');
     const s = await make(kind, leak, { extra: [mod] });
     const a = await s.exec();
     const b = await s.exec();
-    log({ sec: 'life', case: 'L1 carry-over', kind, run1: a.out.trim(), run2: b.out.trim(), codes: [a.code, b.code] });
+    log({
+      sec: 'life',
+      case: 'L1 carry-over',
+      kind,
+      run1: a.out.trim(),
+      run2: b.out.trim(),
+      codes: [a.code, b.code],
+    });
     s.dispose();
   }
   // L2: can guest code of run N reach the FS realm (v2) through what fs hands back?
@@ -1174,31 +1393,41 @@ console.log(fs.existsSync('/workspace/late-wasm.txt') ? 'late-wasm.txt' : 'none'
 process.exit(0);
 `;
   for (const chain of [1, 30])
-  for (const kind of ['v2', 'v1', 'v3']) {
-    for (const guard of kind === 'v2' ? [true, false] : [true]) {
-      const s = await make(kind, `const CHAIN = ${chain};${late}`);
-      const a = await s.exec({ guard });
-      let b;
-      for (let i = 0; i < 3; i++) {
-        await new Promise((r) => setTimeout(r, Number(process.env.LATE_GAP ?? 0)));
-        b = await s.exec({ guard });
-      }
-      const has = (f) => {
-        try {
-          s.read(`/workspace/${f}`);
-          return true;
-        } catch {
-          return false;
+    for (const kind of ['v2', 'v1', 'v3']) {
+      for (const guard of kind === 'v2' ? [true, false] : [true]) {
+        const s = await make(kind, `const CHAIN = ${chain};${late}`);
+        const a = await s.exec({ guard });
+        let b;
+        for (let i = 0; i < 3; i++) {
+          await new Promise((r) => setTimeout(r, Number(process.env.LATE_GAP ?? 0)));
+          b = await s.exec({ guard });
         }
-      };
-      const c =
-        kind === 'v2'
-          ? JSON.parse(await (await s.A.fn(s.A.life, 'counters')).apply(undefined, []))
-          : {};
-      log({ sec: 'life', case: 'L3 work after the run ended', chain, kind, guard, run1: a.out.trim(), run4: b.out.trim(), lateWasm: has('late-wasm.txt'), staleCalls: c.stale });
-      s.dispose();
+        const has = (f) => {
+          try {
+            s.read(`/workspace/${f}`);
+            return true;
+          } catch {
+            return false;
+          }
+        };
+        const c =
+          kind === 'v2'
+            ? JSON.parse(await (await s.A.fn(s.A.life, 'counters')).apply(undefined, []))
+            : {};
+        log({
+          sec: 'life',
+          case: 'L3 work after the run ended',
+          chain,
+          kind,
+          guard,
+          run1: a.out.trim(),
+          run4: b.out.trim(),
+          lateWasm: has('late-wasm.txt'),
+          staleCalls: c.stale,
+        });
+        s.dispose();
+      }
     }
-  }
   // L4: kills. Sync loop, microtask loop, loop in a timer callback, a pending wait (deadline).
   const KILLS = {
     syncLoop: `require('fs').writeFileSync('/workspace/before.txt', '1'); for (;;) {}`,
@@ -1214,8 +1443,10 @@ process.exit(0);
       const k = await s.exec({ timeoutMs: 400 });
       const killMs = performance.now() - t;
       // the next exec runs a different main.js: written by a host op (v2/v3) or into the state (v1)
-      if (kind.startsWith('v2')) s.hostCall('writeFileSync', ['/workspace/main.js', new TextEncoder().encode(after)]);
-      else if (kind === 'v3') s.fs.writeFileSync('/workspace/main.js', new TextEncoder().encode(after));
+      if (kind.startsWith('v2'))
+        s.hostCall('writeFileSync', ['/workspace/main.js', new TextEncoder().encode(after)]);
+      else if (kind === 'v3')
+        s.fs.writeFileSync('/workspace/main.js', new TextEncoder().encode(after));
       else {
         const up = createMemoryFs().fsSync;
         restoreFs(up, s.blob, OPTS);
@@ -1226,7 +1457,17 @@ process.exit(0);
         s.refs = JSON.stringify(wv.refs);
       }
       const n = s.alive === false ? { termination: 'sandbox gone' } : await s.exec();
-      log({ sec: 'life', case: `L4 kill ${name}`, kind, killed: k.termination ?? k.code, why: k.why, killMs: Math.round(killMs), isolateAlive: s.alive ?? 'n/a', next: n.out?.trim() ?? n.termination, nextCode: n.code });
+      log({
+        sec: 'life',
+        case: `L4 kill ${name}`,
+        kind,
+        killed: k.termination ?? k.code,
+        why: k.why,
+        killMs: Math.round(killMs),
+        isolateAlive: s.alive ?? 'n/a',
+        next: n.out?.trim() ?? n.termination,
+        nextCode: n.code,
+      });
       s.dispose();
     }
   }
@@ -1253,7 +1494,13 @@ for (let i = 0; ; i++) { const k = i % 64; fs.writeFileSync('/workspace/w/' + k,
         if (samples.length < 5) samples.push(`trial ${i}: ${issues.slice(0, 3).join(' | ')}`);
       }
     }
-    log({ sec: 'life', case: 'L5 killed inside FS work (v2)', trials: TRIALS, inconsistent: bad, samples });
+    log({
+      sec: 'life',
+      case: 'L5 killed inside FS work (v2)',
+      trials: TRIALS,
+      inconsistent: bad,
+      samples,
+    });
     s.dispose();
   }
   // L5b: 64 files only ever renamed between two directories: a kill must leave exactly 64.
@@ -1275,16 +1522,24 @@ for (let i = 0; ; i++) { const k = i % 64; const a = (i >> 6) % 2 ? 'v' : 'w', b
       for (const d of ['w', 'v']) {
         try {
           for (const e of s.hostCall('readdirSync', [`/workspace/${d}`]))
-            if (s.hostCall('readFileBytesSync', [`/workspace/${d}/${e.name}`]).byteLength === 4096) n++;
+            if (s.hostCall('readFileBytesSync', [`/workspace/${d}/${e.name}`]).byteLength === 4096)
+              n++;
         } catch {}
       }
       const issues = JSON.parse(s.check.applySync(undefined, []));
       if (n !== 64 || issues.length) {
         bad++;
-        if (samples.length < 5) samples.push(`trial ${i}: ${n} files; ${issues.slice(0, 2).join(' | ')}`);
+        if (samples.length < 5)
+          samples.push(`trial ${i}: ${n} files; ${issues.slice(0, 2).join(' | ')}`);
       }
     }
-    log({ sec: 'life', case: 'L5b killed mid-rename (v2): 64 files must stay 64', trials: TRIALS, bad, samples });
+    log({
+      sec: 'life',
+      case: 'L5b killed mid-rename (v2): 64 files must stay 64',
+      trials: TRIALS,
+      bad,
+      samples,
+    });
     s.dispose();
   }
   // L6: out of isolate memory.
@@ -1292,7 +1547,21 @@ for (let i = 0; ; i++) { const k = i % 64; const a = (i >> 6) % 2 ? 'v' : 'w', b
   for (const kind of ['v1', 'v2', 'v2bs', 'v3']) {
     const s = await make(kind, oom, { limit: 256 });
     const k = await s.exec({ timeoutMs: 20_000 });
-    log({ sec: 'life', case: 'L6 out of memory (limit 256)', kind, killed: k.termination ?? k.code, why: k.why, isolateAlive: s.alive ?? 'n/a', filesAfter: kind.startsWith('v2') ? (s.alive ? 'in A' : 'lost with the isolate') : kind === 'v3' ? `before.txt ${s.fs.existsSync('/workspace/before.txt') ? 'kept' : 'absent'}` : 'state of before (rollback)' });
+    log({
+      sec: 'life',
+      case: 'L6 out of memory (limit 256)',
+      kind,
+      killed: k.termination ?? k.code,
+      why: k.why,
+      isolateAlive: s.alive ?? 'n/a',
+      filesAfter: kind.startsWith('v2')
+        ? s.alive
+          ? 'in A'
+          : 'lost with the isolate'
+        : kind === 'v3'
+          ? `before.txt ${s.fs.existsSync('/workspace/before.txt') ? 'kept' : 'absent'}`
+          : 'state of before (rollback)',
+    });
     s.dispose();
   }
   // L7: rebuild cost after a lost live isolate: a fresh isolate + template + the restore point.
@@ -1302,7 +1571,14 @@ for (let i = 0; ; i++) { const k = i % 64; const a = (i >> 6) % 2 ? 'v' : 'w', b
     const t = performance.now();
     const s2 = await make('v2', W.pdf);
     const rebuild = performance.now() - t;
-    log({ sec: 'life', case: 'L7 restore point', kind: 'v2', rpCaptureMs: r1(r.rp), rpBytes: s.rpBytes, rebuildMs: r1(rebuild) });
+    log({
+      sec: 'life',
+      case: 'L7 restore point',
+      kind: 'v2',
+      rpCaptureMs: r1(r.rp),
+      rpBytes: s.rpBytes,
+      rebuildMs: r1(rebuild),
+    });
     s.dispose();
     s2.dispose();
   }
