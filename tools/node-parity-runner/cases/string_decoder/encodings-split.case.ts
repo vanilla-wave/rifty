@@ -141,6 +141,52 @@ const c: ParityCase = {
       const leg = new Legacy('base64');
       return [leg.encoding, leg.write(Buffer.from([0x61])), leg.end(), leg instanceof StringDecoder].join(' ');
     }));
+
+    // the view's own bytes are read, never its overridable members (Node: ArrayBufferViewContents)
+    const view = (label, enc, make) => console.log('view', label, tryit(() => {
+      const d = new StringDecoder(enc);
+      return units(d.write(make())) + ' ' + units(d.end(make())) + '@' + st(d);
+    }));
+    view('own subarray/slice', 'utf8', () => { const b = Buffer.from([0x41, 0xe2, 0x82]); b.subarray = () => Buffer.from('Z'); b.slice = () => Buffer.from('Y'); return b; });
+    view('own length', 'base64', () => { const b = Buffer.from('ABCDE'); Object.defineProperty(b, 'length', { value: 1 }); return b; });
+    view('own buffer/byteOffset', 'hex', () => { const u = new Uint8Array([0x41, 0x42]); Object.defineProperty(u, 'buffer', { value: new Uint8Array([0x5a]).buffer }); Object.defineProperty(u, 'byteOffset', { value: 1 }); return u; });
+    view('dataview own byteLength/buffer', 'utf16le', () => { const dv = new DataView(new Uint8Array([0x41, 0x00, 0x3d]).buffer); Object.defineProperty(dv, 'byteLength', { value: 1 }); Object.defineProperty(dv, 'buffer', { value: new ArrayBuffer(0) }); return dv; });
+    class Sub extends Uint8Array {
+      get length() { return 1; }
+      subarray() { return new Uint8Array([0x5a]); }
+      slice() { return new Uint8Array([0x59]); }
+      at() { return 0x58; }
+    }
+    view('subclass', 'utf8', () => new Sub([0x41, 0xc3, 0xa9, 0xe2]));
+    const proto = Object.create(Buffer.prototype, { length: { get() { return 2; } }, subarray: { value() { return Buffer.from('Z'); } } });
+    view('buffer proto override', 'latin1', () => Object.setPrototypeOf(Buffer.from([0x41, 0xe9, 0xff]), proto));
+    console.log('view patched TypedArray.prototype', tryit(() => {
+      const TA = Object.getPrototypeOf(Uint8Array.prototype);
+      const saved = ['subarray', 'set', 'slice'].map((k) => [k, TA[k]]);
+      TA.subarray = function () { return new Uint8Array([0x5a]); };
+      TA.set = function () {};
+      TA.slice = function () { return new Uint8Array([0x59]); };
+      try {
+        const d = new StringDecoder('utf8');
+        const a = d.write(Buffer.from([0x41, 0xf0, 0x9f])) + '|' + d.write(Buffer.from([0x98, 0x80, 0x42]));
+        return units(a) + ' ' + units(d.end(Buffer.from([0xe2]))) + '@' + d.lastNeed + '/' + d.lastTotal;
+      } finally {
+        for (const [k, v] of saved) TA[k] = v;
+      }
+    }));
+    console.log('patched Buffer.isEncoding', tryit(() => {
+      const saved = Buffer.isEncoding;
+      Buffer.isEncoding = () => true;
+      try { return new StringDecoder('foo').encoding; } finally { Buffer.isEncoding = saved; }
+    }));
+    for (const [label, f] of [['returns', () => 'P'], ['throws', () => { throw new Error('format'); }]]) {
+      console.log('patched util.format', label, tryit(() => {
+        const util = require('node:util');
+        const saved = util.format;
+        util.format = f;
+        try { return new StringDecoder({}).encoding; } finally { util.format = saved; }
+      }));
+    }
   `,
 };
 

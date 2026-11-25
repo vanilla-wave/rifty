@@ -3,6 +3,9 @@
  * `src/string_decoder.cc` `DecodeData`/`FlushData` (the native state is the same 7-byte buffer:
  * 4 incomplete-character bytes, missing, buffered, encoding). Strings come from the Buffer codec.
  *
+ * Names: `normalizeEncoding` only — v24.16.0's wrapper has no `Buffer.isEncoding` fallback (older
+ * Node had one); a patched `isEncoding` still gives ERR_UNKNOWN_ENCODING (parity row).
+ *
  * A callable constructor, not a class: iconv-lite's `InternalDecoder` runs
  * `StringDecoder.call(this, enc)` (body-parser's body decode).
  */
@@ -44,22 +47,49 @@ interface DecoderThis extends StringDecoder {
   [kNativeDecoder]: Uint8Array;
 }
 
+// Load-time intrinsics: a view's bytes are read through these (Node: `ArrayBufferViewContents`),
+// never through members the view or a patched prototype overrides.
+const U8 = Uint8Array;
+const TypedArrayProto = Object.getPrototypeOf(Uint8Array.prototype) as object;
+const getter = (proto: object, key: PropertyKey) =>
+  Object.getOwnPropertyDescriptor(proto, key)?.get as (this: unknown) => unknown;
+const taBuffer = getter(TypedArrayProto, 'buffer');
+const taByteOffset = getter(TypedArrayProto, 'byteOffset');
+const taByteLength = getter(TypedArrayProto, 'byteLength');
+const taTag = getter(TypedArrayProto, Symbol.toStringTag);
+const dvBuffer = getter(DataView.prototype, 'buffer');
+const dvByteOffset = getter(DataView.prototype, 'byteOffset');
+const dvByteLength = getter(DataView.prototype, 'byteLength');
+const isView = ArrayBuffer.isView;
+const taSubarray = (TypedArrayProto as { subarray: (s: number, e: number) => Uint8Array }).subarray;
+
+/** A fresh `Uint8Array` over `view`'s bytes from `start`, `length` long (default: to the end). */
+function bytesOf(view: ArrayBufferView, start = 0, length?: number): Uint8Array {
+  const typed = taTag.call(view) !== undefined;
+  const buffer = (typed ? taBuffer : dvBuffer).call(view) as ArrayBuffer;
+  const offset = (typed ? taByteOffset : dvByteOffset).call(view) as number;
+  const size = (typed ? taByteLength : dvByteLength).call(view) as number;
+  return new U8(buffer, offset + start, length ?? size - start);
+}
+
 const makeString = (bytes: Uint8Array, enc: number): string =>
   bytesToString(bytes, ENCODINGS[enc] as string);
 
+/** Copy `n` bytes of `from` at `start` into `state` at `at` (at most 4). */
+function copyInto(state: Uint8Array, at: number, from: Uint8Array, start: number, n: number): void {
+  for (let i = 0; i < n; i++) state[at + i] = from[start + i] as number;
+}
+
 /** `StringDecoder::DecodeData`. */
 function decode(state: Uint8Array, view: ArrayBufferView): string {
-  const data =
-    view instanceof Uint8Array
-      ? view
-      : new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
+  const data = bytesOf(view);
   const enc = state[kEncodingField] as number;
   if (enc !== UTF8 && enc !== UCS2 && enc !== BASE64 && enc !== BASE64URL)
     return makeString(data, enc);
   let missing = state[kMissingBytes] as number;
   let buffered = state[kBufferedBytes] as number;
   let off = 0;
-  let nread = data.length;
+  let nread = taByteLength.call(data) as number;
   let prepend: string | undefined;
   if (missing > 0) {
     if (enc === UTF8) {
@@ -67,7 +97,7 @@ function decode(state: Uint8Array, view: ArrayBufferView): string {
       for (let i = 0; i < nread && i < missing; ++i) {
         if (((data[i] as number) & 0xc0) !== 0x80) {
           missing = 0;
-          state.set(data.subarray(0, i), buffered);
+          copyInto(state, buffered, data, 0, i);
           buffered += i;
           off = i;
           nread -= i;
@@ -76,13 +106,13 @@ function decode(state: Uint8Array, view: ArrayBufferView): string {
       }
     }
     const found = Math.min(nread, missing);
-    state.set(data.subarray(off, off + found), buffered);
+    copyInto(state, buffered, data, off, found);
     off += found;
     nread -= found;
     missing -= found;
     buffered += found;
     if (missing === 0) {
-      prepend = makeString(state.subarray(0, buffered), enc);
+      prepend = makeString(bytesOf(state, 0, buffered), enc);
       buffered = 0;
     }
   }
@@ -132,9 +162,9 @@ function decode(state: Uint8Array, view: ArrayBufferView): string {
     }
     if (buffered > 0) {
       nread -= buffered;
-      state.set(data.subarray(off + nread, off + nread + buffered), 0);
+      copyInto(state, 0, data, off + nread, buffered);
     }
-    if (nread > 0) body = makeString(data.subarray(off, off + nread), enc);
+    if (nread > 0) body = makeString(bytesOf(data, off, nread), enc);
   }
   state[kMissingBytes] = missing;
   state[kBufferedBytes] = buffered;
@@ -149,7 +179,10 @@ function flush(state: Uint8Array): string {
     state[kBufferedBytes] = (state[kBufferedBytes] as number) - 1;
   }
   if (state[kBufferedBytes] === 0) return '';
-  const ret = makeString(state.subarray(0, state[kBufferedBytes]), state[kEncodingField] as number);
+  const ret = makeString(
+    bytesOf(state, 0, state[kBufferedBytes] as number),
+    state[kEncodingField] as number,
+  );
   state[kMissingBytes] = 0;
   state[kBufferedBytes] = 0;
   return ret;
@@ -170,7 +203,7 @@ export function StringDecoder(this: DecoderThis, encoding?: unknown): void {
 
 StringDecoder.prototype.write = function write(this: DecoderThis, buf: unknown): string {
   if (typeof buf === 'string') return buf;
-  if (!ArrayBuffer.isView(buf)) {
+  if (!isView(buf)) {
     throw invalidArgType('"buf" argument', 'an instance of Buffer, TypedArray, or DataView', buf);
   }
   if (!this[kNativeDecoder]) throw invalidThis();
@@ -199,7 +232,7 @@ Object.defineProperties(StringDecoder.prototype, {
     configurable: true,
     enumerable: true,
     get(this: DecoderThis) {
-      return Uint8Array.prototype.subarray.call(
+      return taSubarray.call(
         this[kNativeDecoder],
         kIncompleteCharactersStart,
         kIncompleteCharactersEnd,

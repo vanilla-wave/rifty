@@ -32,7 +32,7 @@ export type { Buffer as BufferType, BufferLike, Encoding } from './buffer.ts';
 // reads (e.g. runtime-js fs) skip the throwaway full-buffer Buffer.from copy.
 export { decode as bytesToString } from './buffer-codec.ts';
 // Node's `normalizeEncoding` name table + its ERR_UNKNOWN_ENCODING, for `string_decoder`.
-export { normalizeEncoding, unknownEncodingError } from './buffer-codec.ts';
+export { normalizeEncoding, setEncodingNameFormat, unknownEncodingError } from './buffer-codec.ts';
 export type { CanonicalEncoding } from './buffer-codec.ts';
 export {
   Readable,

@@ -21,6 +21,9 @@ over 16 MiB on route B takes 21 s, against Node's 11 ms (`results/chromium-d/`):
 - `c-transform-big` through today's WriteStream keeps Node's backpressure (in-flight 65536).
 
 The window rows are in map §Regression risk.
+Goes with the replacement: `ChunkDecoder` (`packages/runtime-js/src/builtins/fs-streams.ts`) — its own
+name table and remainder carry for the `encoding` option (output = Node today); Node's `ReadStream` decodes
+through `StringDecoder` (unit 1, PR #462 review N3).
 Acceptance: `m4` and the read rows of `m2`/`m3` = Node on every host; carrier read programs = Node;
 PR #437's cases; the isolate `ReadableStream` wall gone (absorbs #437, conditional).
 

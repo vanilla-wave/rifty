@@ -2,7 +2,6 @@
  * Encode/decode helpers for the Buffer polyfill. Split out of `buffer.ts` to
  * keep that file under the ADR-0024 line budget.
  */
-import { loadBuiltin } from './builtin-registry.ts';
 
 /**
  * An encoding argument: `@types/node`'s `BufferEncoding` names, plus any other string — the
@@ -101,13 +100,16 @@ export function bufferEncoding(enc: unknown): CanonicalEncoding | undefined {
   return s === '' ? undefined : normalizeEncoding(s);
 }
 
-/**
- * Node's `ERR_UNKNOWN_ENCODING` (`'Unknown encoding: %s'`). A non-string name (`string_decoder`,
- * `setEncoding`) is `%s`-formatted by the registered `node:util` (`{}` → `{}`, `-0`, `5n`).
- */
+let formatName: ((enc: unknown) => string) | undefined;
+
+/** Node's `%s` for a non-string name; runtime-js sets it once at builtin registration, before guest code. */
+export function setEncodingNameFormat(format: (enc: unknown) => string): void {
+  formatName ??= format;
+}
+
+/** Node's `ERR_UNKNOWN_ENCODING` (`'Unknown encoding: %s'`; `{}` → `{}`, `-0`, `5n`). */
 export function unknownEncodingError(enc: unknown): TypeError & { code: string } {
-  const format = typeof enc === 'string' ? undefined : loadBuiltin('util')?.format;
-  const shown = typeof format === 'function' ? String(format('%s', enc)) : String(enc);
+  const shown = typeof enc === 'string' || !formatName ? String(enc) : formatName(enc);
   const error = new TypeError(`Unknown encoding: ${shown}`) as TypeError & { code: string };
   error.code = 'ERR_UNKNOWN_ENCODING';
   return error;
