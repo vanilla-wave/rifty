@@ -12,7 +12,7 @@ Decisions 2026-11-25).
 
 ## Open questions
 
-- Blocked on `epics/isolate-host-sandbox-template` (`createSandbox({ template })`; the mount is
+- Blocked on the template goal (closed, PR #460) (`createSandbox({ template })`; the mount is
   `/node_modules`, hidden by `list_files`) — owner: agent — settled when it lands. Not in that goal
   since 2026-11-25 (its simple form): the template's package list (this goal reads it — from
   `/node_modules/*/package.json` or an API it adds) and `exec`'s changed paths

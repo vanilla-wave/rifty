@@ -13,7 +13,7 @@ code: [packages/isolate-host/src/sandbox.ts, packages/isolate-host/src/pool.ts, 
 User, earlier: «Изолейты - быстрые короткоживущие(один ход агента) рантаймы. Но давай на цифры
 посмотрим, мб передумаем»; 2026-11-25: «Как будто можно начать с самого простого и дальше
 оптимизировать…» and «ок» to «слой шаблона и живой изолят уходят в backlog следующими ступенями»
-(template goal Decisions). Today's lifecycle stays ADR-0568's: a fresh isolate per `exec`, the state
+(ADR-0568 Corrections 2026-11-25). Today's lifecycle stays ADR-0568's: a fresh isolate per `exec`, the state
 = bytes held by the consumer.
 
 Ready material: `docs/backlog/distribution/reference/isolate-host-sandbox-lifecycle-probes/`
@@ -35,12 +35,13 @@ template of ADR-0572: macOS warm `exec` v1 → v2bs — empty 29.6 → 8.0 ms, p
 needs a restore point, a rebuild path and a guard against dead realms (§haunt); the boundary's
 attack rows (§escape) 0 foreign objects for v2s/v2bs, not a proof.
 
-Contract stability (template goal Decisions): this step cannot keep `exec`'s per-call
-`memoryLimitMb` as it is — today it bounds that run's own fresh isolate (ADR-0568 §6); a live
-isolate holds the sandbox's files and every run under one limit fixed at its creation
-(isolated-vm); and «an idle sandbox holds no process or isolate» (live-sandbox I6, ADR-0568 §2)
-cannot hold — a live isolate is held between runs by definition. User forks for this step, before
-its contract.
+Contract stability (ADR-0568 Corrections 2026-11-25; the user was told 2026-11-25, no objection):
+this step cannot keep four properties of today's contract — `exec`'s per-call `memoryLimitMb`
+bounds that run's own fresh isolate (ADR-0568 §6), while a live isolate holds the sandbox's files
+and every run under one limit fixed at its creation (isolated-vm); «an idle sandbox holds no process
+or isolate» (live-sandbox I6, ADR-0568 §2); a killed run's rollback and surviving a lost worker
+come only from a restore point; host ops become calls into the isolate. User forks for this step,
+before its contract.
 
 ## Question
 
@@ -48,7 +49,7 @@ Strategy — owner: user — open, deferred «until real load» (the manager's w
 (a live isolate per sandbox) or for one `node` run (a fresh isolate per `exec`, today)? Trigger:
 whichever hurts the consumer first — `exec` latency (this item, or the template layer
 `distribution/isolate-host-sandbox-template-layer`, which also cuts it) or memory held by open
-turns (stays with fresh isolates). The template goal's README cost table is the baseline to compare
+turns (stays with fresh isolates). The isolate-host README §Sandbox template cost table is the baseline to compare
 against.
 
 Owner: distribution (isolate host).

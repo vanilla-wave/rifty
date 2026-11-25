@@ -13,8 +13,9 @@ code: [packages/isolate-host/src/sandbox.ts]
 Requirements «Найдено дополнительно»: «`exec` (или `sandbox.changes()`) возвращает пути и размеры,
 изменённые прогоном, включая удаления». Carried by the template layer draft (its I6, probe S: the
 list compared with a walk of live Node's tree before and after the same run); left out of the
-template goal's simple form (goal Decisions 2026-11-25: not in requirements §1, independent of the
-template). Consumer: `epics/isolate-host-agent-tools` (`run_node`'s text names the changed files).
+template goal's simple form (template goal, closed by PR #460, 2026-11-25: not in requirements §1, independent of the
+template). User, 2026-11-25: «в бэклог» to «список изменённых путей `exec` — в этой цели или в
+backlog?». Consumer: `epics/isolate-host-agent-tools` (`run_node`'s text names the changed files).
 
 Today a run's end state replaces the consumer's FS whole (ADR-0568 §3), so the list is a diff of the
 old and new FS in the consumer — a change is kind or bytes differing (times alone are not), a

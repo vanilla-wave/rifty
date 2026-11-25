@@ -1,5 +1,5 @@
 // node resolve.cjs (in <root>/workspace): how `require` resolves the four libraries and what of the
-// artifact is visible, with <root> cut from every path (template goal I2).
+// artifact is visible, with <root> cut from every path (sandbox template, I2).
 const fs = require('node:fs');
 const path = require('node:path');
 const root = path.dirname(__dirname);

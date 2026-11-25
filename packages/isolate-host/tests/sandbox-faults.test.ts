@@ -54,7 +54,7 @@ describe('surface (I8)', () => {
     } finally {
       await sb.destroy();
     }
-    // A template never registered in this process (goal isolate-host-sandbox-template I1).
+    // A template never registered in this process (README §Sandbox template).
     await expect(createSandbox({ template: { id: 't', version: '1' } })).rejects.toMatchObject({
       code: 'ERR_ISOLATE_HOST_TEMPLATE_UNKNOWN',
     });

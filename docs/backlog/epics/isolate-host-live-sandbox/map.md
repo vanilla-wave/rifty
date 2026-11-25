@@ -20,7 +20,7 @@ None: the `owner: user` question on behavior divergences was answered 2026-11-23
 
 ## Out of scope
 
-- The library template: `epics/isolate-host-sandbox-template`.
+- The library template: the template goal (closed, PR #460).
 - Web API shims (`URL`, `structuredClone`, web streams, `AbortController`, `EventTarget`): loud ceilings as in `runCode`; their own ROADMAP direction.
 - ESM: an ESM entry or module (`.mjs`, `"type": "module"`, ESM syntax in a typeless `.js`) → `NotImplementedError('isolate-host.esm')` + compat ❌.
 - `exec` options `env`, `cwd`, `stdin` → `NotImplementedError('isolate-host.sandbox-exec-<option>')`; shell syntax (the path is one file path, never parsed).

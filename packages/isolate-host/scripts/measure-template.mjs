@@ -21,6 +21,8 @@ const flag = (name) => {
 // `--repeat N --limits a,b,…`: instead of the table, N runs of each file at each `memoryLimitMb`,
 // counting the runs that did not keep their files (the reliable limit, not one bisection).
 const repeat = Number(flag('--repeat') ?? 0);
+// `--concurrent N`: N sandboxes run pdf.cjs at once, 10 rounds: latency and the workers' RSS.
+const concurrent = Number(flag('--concurrent') ?? 0);
 // `default` (0): no `memoryLimitMb`, the sandbox's own default.
 const limits = (flag('--limits') ?? '')
   .split(',')
@@ -72,8 +74,14 @@ for (let i = 0; i < 5; i++) {
 }
 row('`createSandbox({ template })`', ms(median(creates)));
 
-// Idle memory per sandbox: heap + ArrayBuffers over the idle level, 4 sandboxes.
-gc();
+// Idle memory per sandbox: heap + ArrayBuffers over a settled idle level, 4 sandboxes.
+const settle = async () => {
+  for (let i = 0; i < 4; i++) {
+    gc();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+};
+await settle();
 const mem = () => {
   const m = process.memoryUsage();
   return m.heapUsed + m.arrayBuffers;
@@ -81,9 +89,43 @@ const mem = () => {
 const base = mem();
 const idle = [];
 for (let i = 0; i < 4; i++) idle.push(await open());
-gc();
+await settle();
 row('idle sandbox, your process', `${((mem() - base) / 4 / MiB).toFixed(1)} MiB`);
 await Promise.all(idle.map((s) => s.destroy()));
+
+if (concurrent > 0) {
+  const { execFileSync } = await import('node:child_process');
+  const workersRss = () =>
+    execFileSync('ps', ['-A', '-o', 'ppid=,rss='], { encoding: 'utf8' })
+      .split('\n')
+      .map((l) => l.trim().split(/\s+/).map(Number))
+      .filter(([parent]) => parent === process.pid)
+      .reduce((n, [, rss]) => n + rss, 0) / 1024;
+  const boxes = await Promise.all(Array.from({ length: concurrent }, () => open()));
+  const pdf = readFileSync(join(gens, 'pdf.cjs'));
+  for (const b of boxes) await b.writeFile('/workspace/pdf.cjs', pdf);
+  let peakRss = 0;
+  const sampler = setInterval(() => {
+    peakRss = Math.max(peakRss, workersRss());
+  }, 50);
+  const lat = [];
+  let lost = 0;
+  for (let round = 0; round < 10; round++)
+    await Promise.all(
+      boxes.map(async (b) => {
+        const t = performance.now();
+        const r = await b.exec('pdf.cjs', { args: ['out.pdf'] });
+        lat.push(performance.now() - t);
+        if (r.exitCode !== 0 || r.stateRefused !== undefined || r.termination !== undefined) lost++;
+      }),
+    );
+  clearInterval(sampler);
+  console.log(
+    `${concurrent} at once, 10 rounds: exec median ${ms(median(lat))}, max ${ms(Math.max(...lat))}, lost ${lost}/${lat.length}, workers' RSS peak ${peakRss.toFixed(0)} MiB`,
+  );
+  await Promise.all(boxes.map((b) => b.destroy()));
+  process.exit(0);
+}
 
 const sb = await open();
 if (repeat > 0) {

@@ -22,8 +22,8 @@ Owner: distribution (isolate host). Trigger: the template goal putting a large l
 
 2026-11-25 — the first trigger fires: the template goal's simple form puts the template's
 `node_modules` (~88 MB) into the state, so every host write encodes it; the user accepted that price
-for the start («начать с самого простого», template goal Decisions), measured in that goal's README
-table. Kept deferred with `distribution/isolate-host-sandbox-template-layer`, which absorbs it.
+for the start («начать с самого простого», ADR-0568 Corrections 2026-11-25), measured in the isolate-host README
+§Sandbox template table. Kept deferred with `distribution/isolate-host-sandbox-template-layer`, which absorbs it.
 
 ## Challenge
 

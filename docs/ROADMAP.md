@@ -178,7 +178,7 @@ hypervisor and deploy stay outside rifty; the consumer supplies the outer bounda
   missing (compat ⚠️, the lifecycle class). Open as backlog: a byte request frame (`distribution/isolate-host-binary-request-frame`),
   host-write cost O(state) (`distribution/isolate-host-sandbox-write-cost-per-state`), keeping a
   killed run's writes (`distribution/isolate-host-sandbox-killed-run-partial-writes`).
-- C — library template: goal `isolate-host-sandbox-template` (a `produceDependencySnapshot`
+- C — library template: delivered (PR #460; a `produceDependencySnapshot`
   artifact's `node_modules` as the sandbox's own files at `/node_modules`, user 2026-11-25 «начать с
   самого простого»; the layer outside the state, ADR-0572 Proposed, deferred:
   `distribution/isolate-host-sandbox-template-layer`; snapshot and lazy reads deferred). D — agent tool set over the host: goal

@@ -1,8 +1,9 @@
 /**
- * Acceptance carrier of goal `isolate-host-sandbox-template` (simple form): a real
+ * Sandbox template (README §Sandbox template, ADR-0568 Corrections 2026-11-25): a real
  * `produceDependencySnapshot` artifact of the four document libraries, through the public API
- * only, against live Node over the same tree (`tar -x` of the artifact). I5 (read-only) is not
- * here: map item 3.
+ * only, against live Node over the same tree (`tar -x` of the artifact). `(I#)`: the invariants of
+ * the closed goal `isolate-host-sandbox-template` (PR #460); read-only is
+ * `backlog/distribution/isolate-host-sandbox-template-read-only`.
  */
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';

@@ -515,9 +515,10 @@ class LiveSandbox implements Sandbox {
         );
       args = [...given];
       limits = runLimits(options);
-      // A run restores, runs and captures a state up to the cap: its default isolate covers that.
-      if (options.memoryLimitMb === undefined)
-        limits.memoryLimitMb = runMemoryFor(this.#options.maxBytes);
+      // Over a template a run restores, runs and captures the template too: its default isolate
+      // covers the cap. Without one the default stays `runCode`'s (ADR-0568 §6).
+      if (options.memoryLimitMb === undefined && this.#template)
+        limits.memoryLimitMb = templateRunMemory(this.#options.maxBytes);
       signal = options.signal;
     } catch (error) {
       return this.#refused(error);
@@ -594,11 +595,11 @@ class LiveSandbox implements Sandbox {
 }
 
 /**
- * The default `memoryLimitMb` of a run in a sandbox whose codec cap is `cap`: 256, or ~3 × the cap
- * (a capture holds the restored state, the run's garbage and the blob: ADR-0567 §7) + 32 MiB
- * when that is more — the cap of a sandbox over a template (goal isolate-host-sandbox-template I6).
+ * The default `memoryLimitMb` of a run over a template whose codec cap is `cap`: 256, or ~3 × the
+ * cap (a capture holds the restored state, the run's garbage and the blob: ADR-0567 §7) + 32 MiB
+ * when that is more.
  */
-export function runMemoryFor(cap: number): number {
+function templateRunMemory(cap: number): number {
   return Math.max(256, Math.ceil((3 * cap) / 2 ** 20) + 32);
 }
 
@@ -722,7 +723,7 @@ async function open(
       'ERR_OUT_OF_RANGE',
     );
   // `maxFsBytes` bounds the sandbox's own files: a template's budget comes on top of it, so a
-  // sandbox over one holds what an empty one may (goal isolate-host-sandbox-template I6).
+  // sandbox over one holds what an empty one may (ADR-0568 Corrections 2026-11-25).
   const cap = base === undefined ? maxFsBytes : maxFsBytes + base.budget - least;
   const fs = new c.MemoryFsSync();
   // A template is its empty sandbox's state: restored as a snapshot (ADR-0567), its files the sandbox's own.

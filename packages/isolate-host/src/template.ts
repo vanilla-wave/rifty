@@ -1,5 +1,5 @@
 /**
- * A sandbox template (goal `isolate-host-sandbox-template`): a `produceDependencySnapshot`
+ * A sandbox template (ADR-0568 Corrections 2026-11-25): a `produceDependencySnapshot`
  * artifact whose `payload/node_modules` becomes a new sandbox's own files at `/node_modules`.
  * Decoded once per process into the encoded state of an empty sandbox over it (ADR-0567 bytes),
  * which every sandbox over it restores; nothing of it is shared after that (ADR-0568 §2).

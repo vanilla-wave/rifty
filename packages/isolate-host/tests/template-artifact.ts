@@ -1,6 +1,6 @@
 /**
- * A real `produceDependencySnapshot` artifact of the four document libraries (template goal,
- * carrier): the libraries' installed closure npm-packed and served by a loopback registry (the
+ * A real `produceDependencySnapshot` artifact of the four document libraries (the sandbox
+ * template's acceptance): the libraries' installed closure npm-packed and served by a loopback registry (the
  * packed-consumer gate's helpers — no network), a lock from `npm install --package-lock-only`
  * against it, then workbench's producer, as a service's CI runs it.
  */
