@@ -6,9 +6,11 @@ so Node's `lib/zlib.js` comes to rifty only on a `Transform` equal to Node's on 
 
 ## Items
 
-1. `runtime-js/zlib-node-acceptance-carrier` — **carrier** (ready) — the User scenario as 10 parity
+1. `runtime-js/zlib-node-acceptance-carrier` — **carrier** (delivered, PR #453; decisions in `packages/isolate-host/tests/zlib-scenario.ts`) — the User scenario as 10 parity
    cases (isolate sandbox and both browser hosts vs a live `node` on the same runner), each pinning
-   today's measured outcome; all ten expected green after unit 3.
+   today's measured outcome; all ten expected green after unit 3, except case 4 (pdfkit) on the
+   isolate host: it fails at fontkit's `TextDecoder('ascii')` before zlib (at least that)
+   (`distribution/isolate-guest-textdecoder-legacy-encodings`, outside this goal).
 2. `runtime-js/zlib-engine` — **engine build + handle, no guest surface** (ready) — ADR-0573's wasm
    build from a pinned toolchain, rebuilt on Linux CI to the committed sha256, licence record; a port of
    Node's handle proven against Node without rifty's `Transform` (binding-level matrix; Node's own

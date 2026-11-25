@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `dist/THIRD_PARTY_NOTICES.md` lists what the byte-copied `dist/guest.js` bundles (same as `@riftydev/isolate-guest`).
+- Tests only: the node:zlib goal's scenario as 10 cases vs live Node v24.16.0 (`tests/zlib-scenario.test.ts`, browser twins in `tests/browser-unit`/`tests/no-coi`), each pinning today's outcome; pdfkit 0.17.2 and pngjs 7.0.0 as exact devDependencies; the closure/oracle helpers move to `tests/closure-files.ts`.
 - Guest `url.parse`/`resolve`/`resolveObject`/`format` and `querystring` give Node v24.16.0's results (ADR-0574; they returned wrong values with no error, e.g. `url.resolve('https://example.com/a', 'b')` → `'b'`), DEP0170 as Node, no DEP0169 (declared); a non-ASCII or `xn--` hostname label throws `NotImplementedError('url.toASCII')` (no `URL` in the guest). `tests/url-legacy.test.ts`, parseurl 1.3.3 scenario.
 - exceljs 4.4.0's main entry writes in a sandbox the xlsx Node writes (`require('exceljs')`, `workbook.xlsx.writeFile`; `tests/library-exceljs.test.ts`).
 - Guest `require` behaves as Node 24 launched with `--no-require-module` (no ES module loader in the guest): `process.features.require_module` is `false`, `module-sync` is not taken (`is-generator-function`/`is-async-function` load their CommonJS entry, as on exceljs's main entry), `require` of an ES module throws Node's `ERR_REQUIRE_ESM`, a typeless `.js` with ESM syntax compiles as CommonJS — was `TypeError: URLConstructor is not a constructor`. `import()` of an ES module from a file rejects with `isolate-host.esm` (was a false compile error or the same `TypeError`). Parity `tests/require-esm.test.ts`.

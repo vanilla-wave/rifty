@@ -61,7 +61,6 @@ const validateHeaderNameImpl = (name: unknown, label?: unknown): void => {
     throw nodeError(
       TypeError,
       'ERR_INVALID_HTTP_TOKEN',
-      // TODO(backlog: runtime-js/util-format-percent-s): rifty's %s differs from Node's for some objects.
       format('%s must be a valid HTTP token ["%s"]', label || 'Header name', name),
     );
 };
@@ -70,7 +69,6 @@ const validateHeaderValueImpl = (name: unknown, value: unknown): void => {
     throw nodeError(
       TypeError,
       'ERR_HTTP_INVALID_HEADER_VALUE',
-      // TODO(backlog: runtime-js/util-format-percent-s)
       format('Invalid value "%s" for header "%s"', value, name),
     );
   if (headerCharRegex.test(value as string))

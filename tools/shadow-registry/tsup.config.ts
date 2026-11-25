@@ -17,4 +17,7 @@ export default defineConfig({
   treeshake: true,
   target: 'es2022',
   external: [/^@riftydev\//],
+  footer: {
+    js: '/*! For third-party licenses see dist/THIRD_PARTY_NOTICES.md of this npm package */',
+  },
 });

@@ -1,0 +1,69 @@
+{
+  "generated": {
+    "packages/runtime-js/src/builtins/fetch/generated": {
+      "files": ["classes.js", "undici.LICENSE"],
+      "package": "undici",
+      "version": "7.25.0",
+      "resolveFrom": ".",
+      "changes": "Request/Response/Headers/FormData graph patched at exact anchors and minified by esbuild, tools/publishing/generate-fetch-classes.mjs",
+      "sourcesKey": "version"
+    },
+    "packages/runtime-js/src/builtins/url-legacy/generated": {
+      "files": ["legacy.js", "node.LICENSE"],
+      "name": "node",
+      "version": "v24.16.0",
+      "license": "MIT",
+      "licenseFiles": ["packages/runtime-js/src/builtins/url-legacy/generated/node.LICENSE"],
+      "changes": "lib/url.js, lib/querystring.js, lib/internal/{querystring,constants}.js and the internal/url protocol sets bundled and minified by esbuild, tools/publishing/generate-url-legacy.mjs",
+      "sourcesKey": "node"
+    },
+    "packages/runtime-js/src/module-loader/generated": {
+      "files": ["typescript-browser.js"],
+      "package": "typescript",
+      "version": "5.9.3",
+      "resolveFrom": ".",
+      "changes": "lib/typescript.js wrapped in a browser-scoped module (process, require undefined) and minified by esbuild, tools/publishing/generate-eval-compiler.mjs"
+    },
+    "packages/ts-language-service/vendor": {
+      "files": ["lib-bundle.json"],
+      "package": "typescript",
+      "version": "5.9.3",
+      "resolveFrom": "packages/ts-language-service",
+      "changes": "lib*.d.ts files collected unchanged into one JSON map, packages/ts-language-service/scripts/vendor-ts-lib.mjs"
+    },
+    "tools/shadow-registry/src/runtime/generated": {
+      "files": ["esbuild-runtime.js"],
+      "package": "esbuild-wasm",
+      "version": "0.28.0",
+      "resolveFrom": "tools/shadow-registry",
+      "changes": "lib/browser.js patched at exact anchors, tools/shadow-registry/tools/generate-esbuild-runtime.ts"
+    }
+  },
+  "firstParty": [
+    "packages/runtime-js/src/builtins/fetch/generated/classes.d.ts",
+    "packages/runtime-js/src/builtins/fetch/generated/sources.json",
+    "packages/runtime-js/src/builtins/url-legacy/generated/legacy.d.ts",
+    "packages/runtime-js/src/builtins/url-legacy/generated/sources.json",
+    "packages/runtime-js/src/internal/generated/proxy-identity.d.ts",
+    "packages/runtime-js/src/internal/generated/proxy-identity.js",
+    "packages/runtime-js/src/module-loader/generated/README.md",
+    "packages/runtime-js/src/module-loader/generated/typescript-browser.d.ts",
+    "packages/workbench/src/generated/install-artifact-identity.json",
+    "tools/shadow-registry/generated/esbuild-runtime-manifest.json",
+    "tools/shadow-registry/generated/shadow-substitution-catalog.json"
+  ],
+  "npm": {
+    "clean-git-ref@2.0.1": {
+      "licenseFiles": ["tools/publishing/third-party-licenses/clean-git-ref@2.0.1.LICENSE"]
+    },
+    "diff3@0.0.3": {
+      "licenseFiles": ["tools/publishing/third-party-licenses/diff3@0.0.3.LICENSE"]
+    },
+    "pako@1.0.11": {
+      "licenseFiles": ["tools/publishing/third-party-licenses/pako@1.0.11.Zlib.LICENSE"]
+    },
+    "esbuild-wasm@0.28.0": {
+      "licenseFiles": ["tools/publishing/third-party-licenses/go@1.26.1.LICENSE"]
+    }
+  }
+}

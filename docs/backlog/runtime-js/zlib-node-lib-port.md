@@ -59,7 +59,9 @@ Draft until its dependency lands; seeds the compile:
    `streams.md` rows with their number) → I1, I3, I4
 2. Exit: the same scenarios against the product `node:zlib` inside the isolate host and in a Chromium
    Worker of both browser hosts give real Node's results → I1–I4
-3. All ten carrier cases green on every host → scenario, I5
+3. All ten carrier cases green on every host → scenario, I5. Known carrier risk: on the Workbench
+   the runner returns a step's output as one base64 line on terminal stdout (≈273 KB for
+   `out.png`), unexercised while no step writes
 4. `crc32` via Node's `lib/zlib.js` over the engine's `binding.crc32` (closes `runtime-js/zlib-crc32`) → I1
 5. The engine compiles on the first call that needs it, never when the builtins load: a per-PR test on
    current Chromium instruments `WebAssembly.Module`, `Instance`, `compile`, `instantiate`,
