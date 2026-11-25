@@ -12,6 +12,7 @@ import {
   mkdtempSync,
   readFileSync,
   renameSync,
+  rmSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -54,6 +55,14 @@ interface Registry {
 
 let registry: Promise<Registry> | undefined;
 
+/** Temporary dirs of this test process, removed by `closeRegistry` (the pack cache stays). */
+const temps: string[] = [];
+export function tempDir(prefix: string): string {
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+  temps.push(dir);
+  return dir;
+}
+
 async function startRegistry(): Promise<Registry> {
   const seeds = await Promise.all(
     Object.keys(LIBRARIES).map((name) => findInstalledPackage(name, packageRoot)),
@@ -66,7 +75,7 @@ async function startRegistry(): Promise<Registry> {
     .slice(0, 16);
   const cache = join(packageRoot, 'node_modules/.cache/template-artifact', key);
   if (!existsSync(join(cache, 'done'))) {
-    const staging = mkdtempSync(join(tmpdir(), 'template-artifact-pack-'));
+    const staging = tempDir('template-artifact-pack-');
     const tarballs = join(staging, 'tarballs');
     mkdirSync(tarballs);
     const packed = await packInstalledPackages(
@@ -101,7 +110,7 @@ async function project(
   origin: string,
   dependencies: Readonly<Record<string, string>>,
 ): Promise<{ packageJsonText: string; packageLockText: string }> {
-  const dir = mkdtempSync(join(tmpdir(), 'template-artifact-project-'));
+  const dir = tempDir('template-artifact-project-');
   const packageJsonText = `${JSON.stringify(
     { name: 'document-service', private: true, version: '1.0.0', dependencies },
     null,
@@ -161,9 +170,10 @@ export function libraryArtifact(
   return artifact;
 }
 
-/** The loopback registry stops (an `afterAll`). */
+/** The loopback registry stops and the temporary dirs go (an `afterAll`). */
 export async function closeRegistry(): Promise<void> {
   const r = registry;
   registry = undefined;
   if (r !== undefined) await (await r).close();
+  for (const dir of temps.splice(0)) rmSync(dir, { recursive: true, force: true });
 }

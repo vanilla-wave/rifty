@@ -12,7 +12,7 @@ export interface DepSnapshotTarEntry {
   readonly path: string;
   readonly directory: boolean;
   readonly bytes: Uint8Array;
-  /** The entry's mtime in ms: PAX `mtime` when present, else the header's (seconds). */
+  /** The entry's mtime in ms: PAX `mtime` when present (NaN if not a number), else the header's. */
   readonly mtimeMs: number;
 }
 type TarEntry = DepSnapshotTarEntry;
@@ -185,9 +185,9 @@ export function readDepSnapshotTar(bytes: Uint8Array): readonly TarEntry[] {
       pax = paxFields(content);
     } else {
       if (directory && size !== 0) failDepSnapshotTar('directory carries file bytes');
+      // Read, not validated: Workbench ignores times and admits any PAX mtime (a signed one
+      // for a file before 1970); a consumer that keeps times checks `mtimeMs` itself.
       const paxMtime = pax?.get('mtime');
-      if (paxMtime !== undefined && !/^(0|[1-9][0-9]*)(\.[0-9]+)?$/.test(paxMtime))
-        failDepSnapshotTar('invalid PAX mtime');
       entries.push({
         path: safePath(pax?.get('path') ?? headerPath, directory),
         directory,

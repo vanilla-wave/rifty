@@ -1,6 +1,6 @@
 ---
 kind: epic
-status: draft
+status: ready
 title: Isolate host sandbox template — the libraries of a dependency artifact as the sandbox's own files at /node_modules
 created: 2026-11-24
 value: A Node service starts an agent sandbox over prebuilt `node_modules` (pptxgenjs, pdf-lib, docx, exceljs) from its own `produceDependencySnapshot` artifact, decoded once per process, with no conversion on its side; the price of a template held as the sandbox's files is measured and published.
@@ -18,9 +18,10 @@ exists. The template's `payload/node_modules` becomes the sandbox's own files at
 (no `package.json`, no lock, no `rifty/*`): from then on they are files of the live sandbox
 exactly like the agent's (ADR-0568: a fresh isolate per `exec`, the state = bytes held by the
 consumer). `require('<lib>')` from `/workspace/main.js` resolves into them as Node's resolution
-does, and the four libraries write the files Node writes. Per sandbox the template is writable (a
-change or deletion seen by that sandbox's later runs and host ops) or read-only (a write under the
-mount fails as on a read-only mount). `maxFsBytes` bounds the sandbox's own files as it does without
+does, and the four libraries write the files Node writes. The template is writable per sandbox (a
+change or deletion seen by that sandbox's later runs and host ops); a read-only mode is deferred to
+`distribution/isolate-host-sandbox-template-read-only` (amend 2026-11-25), its option refused as
+unknown until then. `maxFsBytes` bounds the sandbox's own files as it does without
 a template — the template's budget comes on top, so the defaults hold; a run's default isolate
 memory is derived from that cap, and a value below what the state needs is a named outcome. The
 README has a cost table measured through the public API on the four-library artifact. Everything
@@ -50,8 +51,8 @@ template layer keeps the service's contract, the live isolate cannot keep two of
    `rifty/*` is not visible to the guest; the generator writes a valid document and the host reads
    its bytes from the live sandbox.
 4. Over a writable template a file the agent changed or deleted under `/node_modules` is seen
-   changed or absent by that sandbox's later runs and host ops, by no other sandbox; over a
-   read-only one that write fails `EROFS` and the template stays as it was.
+   changed or absent by that sandbox's later runs and host ops, by no other sandbox (read-only:
+   deferred, amend 2026-11-25).
 5. A run that is killed (`timeout`, memory, abort) leaves the sandbox as before it, template files
    included.
 6. At the end of the turn the host has taken the files it needs and destroys the sandbox; nothing
@@ -95,9 +96,9 @@ rifty's FS (no `EROFS` producer in `packages/vfs/src`, `runtime-js`, `isolate-gu
 - I4. Writable (default): a change, creation or deletion under `/node_modules` — by the guest or by
   a host op — is seen by that sandbox's later runs and host ops, by no other sandbox over the same
   template, and by no sandbox created later.
-- I5. Read-only, per sandbox (user: both modes): every call whose writes reach `/node_modules`, from
-  the guest (sync, callback, promise and stream forms) and from host ops, fails as Node v24.16.0
-  fails it on a read-only mount (code, syscall, path) and leaves the template as it was.
+- I5. Read-only — moved to `distribution/isolate-host-sandbox-template-read-only` (amend
+  2026-11-25); here a read-only option is an unknown `createSandbox` option
+  (`ERR_INVALID_ARG_VALUE`) + compat ❌.
 - I6. Limits, honest: `maxFsBytes` bounds the sandbox's own files exactly as without a template
   (the codec's cap = `maxFsBytes` + the template's budget − an empty sandbox's), so the defaults
   hold and the same refusals carry the consumer's number: below an empty sandbox's budget
@@ -133,9 +134,13 @@ challenge: 2026-11-25 — 2 problems (one fresh read-only critic with the final 
 1. The Outcome claimed every next step keeps the contract; the live isolate cannot keep `exec`'s per-call `memoryLimitMb` nor «an idle sandbox holds no process or isolate» (live-sandbox I6) — Outcome and Decisions «contract stability» now name both; reported to the manager.
 2. Dropping `exec`'s changed paths and the package list (requirements «Найдено дополнительно», the layer draft's I6 / I1) is the user's, not the agent's — kept as the agent's reversible default, raised with the manager as a fork.
 
-Final-check findings resolved: I7 no longer promises live-sandbox I1's open capture clause; I10's producer evidence (published 0.11.0 in plain Node) restored; map traces corrected (I9 by `scripts/measure-template.mjs`); stale refs fixed (ROADMAP C, `template-lazy-read`, `fs-generated-sequence-divergences-from-node`, agent-tools goal); the read-only interim behavior named (map item 3). Route: the user's explicit choice of the simplest start — no cheaper route found. Stays `draft` until the forks (changed paths / package list, read-only scheduling, the partial contract promise) are answered (recheck 2026-11-25).
+Final-check findings resolved: I7 no longer promises live-sandbox I1's open capture clause; I10's producer evidence (published 0.11.0 in plain Node) restored; map traces corrected (I9 by `scripts/measure-template.mjs`); stale refs fixed (ROADMAP C, `template-lazy-read`, `fs-generated-sequence-divergences-from-node`, agent-tools goal); the read-only interim behavior named (map item 3). Route: the user's explicit choice of the simplest start — no cheaper route found. Forks answered 2026-11-25 (Decisions, amend): no `owner: user` question left.
 
 ## Decisions
+
+- amend: 2026-11-25 — user: «ок» to the manager's «Б — в backlog, пока не понадобится потребителю. До тех пор опция отклоняется как неизвестная. Рекомендую Б.» — I5 (read-only) and scenario 4's read-only half leave this goal for `distribution/isolate-host-sandbox-template-read-only` (with the user's earlier «Я бы на самом деле поддержал оба варианта, чтобы можно было выбирать» and the cost estimate); until then the option is unknown (`ERR_INVALID_ARG_VALUE`), compat ❌.
+- 2026-11-25 — user: «в бэклог» to «список изменённых путей `exec` — в этой цели или в backlog?» — `distribution/isolate-host-exec-changed-paths`, outside this goal. The template's package list (not named by the user): the agent's default stands — outside, recorded with its consumer `epics/isolate-host-agent-tools` (requirements §4; map Open questions there).
+- 2026-11-25 — user informed via the manager that «контракт потом не меняется» is partial for a live isolate per turn (`memoryLimitMb` moves to sandbox creation, an idle sandbox holds an isolate); no objection; `maxFsBytes` = the sandbox's own files closes it for the layer.
 
 - 2026-11-25 — user, on the isolate-lifecycle fork: «Как будто можно начать с самого простого и дальше оптимизировать. Что в данном случае будет самым простым?»; then «ок» to the manager's «Начинаем с „библиотеки = файлы песочницы"? Да — оформляю это целью и запускаю реализацию; слой шаблона и живой изолят уходят в backlog следующими ступенями». What the user accepted (the manager's description, quoted): «Самое простое — библиотеки как обычные файлы песочницы, на том, что уже влито. Без слоя шаблона и без смены жизненного цикла… `createSandbox({ template })` означает „распаковать артефакт в файлы песочницы"… Цена: 0,6–1 с на `exec` и 88 МБ на песочницу; `maxFsBytes` поднять до 95+ МиБ; лимит памяти изолята на запуск от ~215 МиБ… Контракт для сервиса потом не меняется, оба следующих шага остаются открытыми… Что ты этим откладываешь: своё требование §3 „стоимость не зависит от размера шаблона"». → this goal (re-fitted from the ADR-0572 layer draft); requirements §3 declared deferred (Outcome); ADR-0572 stays Proposed (`distribution/isolate-host-sandbox-template-layer`); the lifecycle question stays the user's (`distribution/isolate-host-sandbox-live-isolate-per-turn`).
 - 2026-11-25 — user, carried from the layer draft (unchanged by the route): «Я бы на самом деле поддержал оба варианта, чтобы можно было выбирать…» (writable and read-only; per sandbox — the agent's reading of «выбирать»; writable the default, the agent's); «ок» to «`/node_modules`, без `package.json` и lock — рекомендую»; a killed run's writes: «…оставим как есть» (rolled back, `distribution/isolate-host-sandbox-killed-run-partial-writes`); persistence: «сохранять все это не будем… песочницу уничтожаем» (`distribution/isolate-host-sandbox-template-snapshot`).
@@ -148,7 +153,7 @@ Final-check findings resolved: I7 no longer promises live-sandbox I1's open capt
 - 2026-11-25 — agent (manager's review S4): `maxFsBytes` means the sandbox's own files, the template's budget on top — the meaning a layer keeps (its cap over the difference), so the contract does not change with it; named difference: deleting template files frees cap room here, a layer may count their removal instead.
 - 2026-11-25 — agent (manager's review S3; repeats through the public API): `memoryLimitMb` 256 on the four-library template (cap 108.9 MiB) lost pdf's files in 5 / 100 runs (`stateRefused: ERR_ISOLATE_HOST_SANDBOX_CAPTURE`), 0 / 100 in a second series; 224, 320 and 384 0 / 100 (288: 0 / 20; empty file and xlsx 0 at every value) — rare and not monotonic, so one bisection is no limit; at the derived default 0 / 100 for each of the five files; the run's default is derived from the cap (I6) instead of 256; ADR-0568 §6's «2 × `maxFsBytes` + 16 MiB» understates at this scale (ADR-0568 dated line).
 - 2026-11-25 — agent: `snapshot()` over a template is a loud refusal (I8), not today's v1 blob of the whole state: the user dropped persistence, and a later layer's diff format would change what such a blob means (contract stability); lifting the refusal only adds.
-- 2026-11-25 — agent (reversible default; raised with the manager as a fork, the user owns dropping a row): out of this goal, each with a record — the template's package list (`epics/isolate-host-agent-tools` reads it; requirements §1 ask only identity), `exec`'s changed-paths report (`distribution/isolate-host-exec-changed-paths`, requirements «Найдено дополнительно»), the end state taken outside the guest's realm (`distribution/isolate-host-sandbox-capture-outside-guest-realm`, back to `isolate-host-live-sandbox`: nothing here rewrites the capture).
+- 2026-11-25 — agent (the user confirmed the changed paths' part, line above): out of this goal, each with a record — the template's package list (`epics/isolate-host-agent-tools` reads it; requirements §1 ask only identity), `exec`'s changed-paths report (`distribution/isolate-host-exec-changed-paths`, requirements «Найдено дополнительно»), the end state taken outside the guest's realm (`distribution/isolate-host-sandbox-capture-outside-guest-realm`, back to `isolate-host-live-sandbox`: nothing here rewrites the capture).
 - 2026-11-25 — agent, contract stability (the manager's promise «контракт для сервиса потом не меняется»), per observable property — a next step may only lower a number or lift a refusal: `createSandbox({ template })` / `registerTemplate` forms and errors — same; identity — same derivation; `/node_modules` content, writable and read-only semantics — same (the layer's modes are these, ADR-0572 §1); `maxFsBytes` — the sandbox's own files, the template on top (I6), the meaning a layer's cap over the difference keeps (named difference: deleted template files free room here); `memoryLimitMb` — a run's default derived from the cap, only falls with a layer or lazy reads; limit errors — same codes and numbers; host ops over `/node_modules` — same results, cheaper; `snapshot()` — a refusal, liftable; a killed run — rolled back (F4); `exec`'s result — `RunCodeResult` + `stateRefused`. Costs that move, not the API: a layer's workers each hold a template copy (worker RSS, ADR-0572 Consequences). Not stable, named: the timing and memory figures (the deferred §3, meant to fall); and the live-isolate step — `exec`'s per-call `memoryLimitMb` bounds that run's own fresh isolate (ADR-0568 §6), while a live isolate holds the sandbox's files and every run under one limit fixed at its creation (isolated-vm); «an idle sandbox holds no process or isolate» (live-sandbox I6, ADR-0568 §2); rollback and surviving a lost worker only through a restore point; host ops become calls into the isolate — forks for that step, recorded in its item, not this goal's.
 - rejected route: the consumer lays `node_modules` out with the internal codec and passes `createSandbox({ snapshot })` (library probe, PR #430) — violates I3 (public API only) and I1 (no conversion on the consumer's side).
 - rejected route: a second artifact reader inside isolate-host beside workbench's — violates I1 (two readers drift on what «corrupted or unsupported» is); one reader, Decisions above.

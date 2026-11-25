@@ -9,7 +9,6 @@ import { createHash } from 'node:crypto';
 import {
   cpSync,
   mkdirSync,
-  mkdtempSync,
   readFileSync,
   readdirSync,
   realpathSync,
@@ -18,7 +17,6 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { createRequire } from 'node:module';
-import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { brotliDecompressSync, gunzipSync, gzipSync, inflateSync } from 'node:zlib';
@@ -26,7 +24,13 @@ import { PDFDocument } from 'pdf-lib';
 import { afterAll, describe, expect, it } from 'vitest';
 import { type Sandbox, createSandbox, registerTemplate } from '../src/index.ts';
 import { decodeCount } from '../src/template.ts';
-import { type Artifact, TEMPLATE_ID, closeRegistry, libraryArtifact } from './template-artifact.ts';
+import {
+  type Artifact,
+  TEMPLATE_ID,
+  closeRegistry,
+  libraryArtifact,
+  tempDir,
+} from './template-artifact.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixtures = join(here, 'fixtures/template');
@@ -58,10 +62,10 @@ function tarOf(a: Artifact): Buffer {
 
 /** The oracle's root: the artifact's `payload/node_modules` at `<root>/node_modules`, by `tar -x`. */
 function oracleRoot(a: Artifact): string {
-  const dir = mkdtempSync(join(tmpdir(), 'template-oracle-'));
+  const dir = tempDir('template-oracle-');
   const out = spawnSync('tar', ['-xf', '-', '-C', dir], { input: tarOf(a) });
   if (out.status !== 0) throw new Error(`tar -x: ${out.stderr}`);
-  const root = realpathSync(mkdtempSync(join(tmpdir(), 'template-root-')));
+  const root = realpathSync(tempDir('template-root-'));
   renameSync(join(dir, 'payload/node_modules'), join(root, 'node_modules'));
   for (const d of ['workspace', 'tmp']) mkdirSync(join(root, d));
   return root;

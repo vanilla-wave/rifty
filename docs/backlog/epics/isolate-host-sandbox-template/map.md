@@ -17,22 +17,11 @@ Children are seeded when the carrier runs (README §FIT 5); planned order:
    `/node_modules` mount into a new sandbox's state, the `maxFsBytes` budget refusal, the
    `snapshot` refusals, README (route + cost table from `scripts/measure-template.mjs`, public API
    only), compat rows (I1–I4, I6–I10).
-3. Read-only mode (I5) — fork to the manager with its cost (below); seeded after the answer. Until
-   it lands, a read-only option is what any unknown `createSandbox` option is today:
-   `ERR_INVALID_ARG_VALUE` (`knownOptions`), no option name published.
+3. Read-only mode (I5) — moved to `distribution/isolate-host-sandbox-template-read-only` (user
+   2026-11-25); the option is unknown until then.
 
 ## Open questions
 
-- Read-only (I5): this goal's next unit, or backlog — owner: user — asked 2026-11-25 via the
-  manager with the cost (variants: full parity with a Linux read-only mount; `EROFS` by a pinned
-  table of written paths, the rest a declared ⚠️; backlog). Until answered the option is refused as
-  unknown (`ERR_INVALID_ARG_VALUE`) + compat ❌.
-- `exec`'s changed paths and the template's package list: in this goal or backlog — owner: user —
-  asked 2026-11-25 via the manager (the agent's reversible default: out, records
-  `distribution/isolate-host-exec-changed-paths`, `epics/isolate-host-agent-tools`).
-- «Контракт для сервиса потом не меняется» holds for the layer, not for a live isolate per turn
-  (`memoryLimitMb` per run, an idle sandbox without an isolate) — owner: user — told 2026-11-25 via
-  the manager; the answer may change what the live-isolate item promises, not this goal's scope.
 - Template file times vs `npm ci` — owner: agent — settled: the tar's times, a declared difference
   (Decisions; compat row).
 - The four libraries over the template — owner: agent — main @ 3d16cb7b8: pdf-lib, docx, pptxgenjs
@@ -42,6 +31,8 @@ Children are seeded when the carrier runs (README §FIT 5); planned order:
   (`epics/node-zlib-on-every-host`, `distribution/isolate-host-fs-read-stream-needs-web-readablestream`).
 
 ## Out of scope
+
+- A read-only template: `distribution/isolate-host-sandbox-template-read-only`.
 
 - The template layer outside the state, per-worker template cache, binary request frame, O(write)
   host writes: `distribution/isolate-host-sandbox-template-layer` (requirements §3, deferred by the

@@ -251,6 +251,7 @@ writeFileSync('template.tar.gz', archive);
 
 ```js
 // The service, once at start:
+import { readFileSync } from 'node:fs';
 import { createSandbox, registerTemplate } from '@riftydev/isolate-host';
 const template = await registerTemplate(readFileSync('template.tar.gz')); // { id, version }
 
@@ -277,7 +278,8 @@ await sandbox.destroy();
 - **They are the sandbox's own files.** Writable: a change or deletion under `/node_modules`, by
   the run or by a host op, is that sandbox's alone, seen by its later runs; no other sandbox and no
   later sandbox sees it. A killed run's writes there roll back like any other. A read-only mode is
-  not there yet: an option for it is refused like any unknown option (`ERR_INVALID_ARG_VALUE`).
+  not there (backlog `distribution/isolate-host-sandbox-template-read-only`): an option for it is
+  refused like any unknown option (`ERR_INVALID_ARG_VALUE`).
 - **Identity.** `{ id, version }` = the manifest's `templateId` and the producer's `snapshotId`
   (`sha256:` of the decoded tar — the same for the gzip and the br of one tar). Rebuilding the
   artifact with another lock gives another `version`.
