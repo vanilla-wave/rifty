@@ -9,6 +9,12 @@
     "require-cache-reload": "node",
     "first-line-html-close": "node",
     "esm-entry-facts": "node",
+    "events-add-abort-listener": "node",
+    "events-add-abort-listener-stop-propagation": {
+      "stdout": "first listener: stopImmediatePropagation\ndone\n",
+      "stderr": "",
+      "exitCode": 0
+    },
     "throw-top-level": {
       "stdout": "",
       "stderr": "Error: boom\n    at Object.<anonymous> (<root>/main.js:1:126)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at executeCjs (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n    at loadedNamespace (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.importCjs (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.loadAsyncResolved (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n",
@@ -316,6 +322,12 @@
     "require-cache-reload": "node",
     "first-line-html-close": "node",
     "esm-entry-facts": "node",
+    "events-add-abort-listener": "node",
+    "events-add-abort-listener-stop-propagation": {
+      "stdout": "first listener: stopImmediatePropagation\ndone\n",
+      "stderr": "",
+      "exitCode": 0
+    },
     "throw-top-level": {
       "stdout": "",
       "stderr": "Error: boom\n    at Object.<anonymous> (<root>/main.js:1:126)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at executeCjs (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n    at loadedNamespace (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.importCjs (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.loadAsyncResolved (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n",

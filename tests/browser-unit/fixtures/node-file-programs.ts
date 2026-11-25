@@ -3,11 +3,13 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import addAbortListenerCase from '../../../tools/node-parity-runner/cases/events/add-abort-listener.case.ts';
 
 // ADR-0571: `node <file>` programs run verbatim in live Node
-// (temp dir) and in rifty (`<root>` = the project root). Two surfaces: what the
-// entry and its dependencies see (entry semantics), and what a fatal error
-// writes to stderr with which status (fatal diagnostics).
+// (temp dir) and in rifty (`<root>` = the project root). Three surfaces: what
+// the entry and its dependencies see (entry semantics), what a fatal error
+// writes to stderr with which status (fatal diagnostics), and builtin rows the
+// in-process parity runner cannot see on a browser host (`builtinPrograms`).
 
 export interface NodeFileProgram {
   readonly name: string;
@@ -183,6 +185,34 @@ console.log(JSON.stringify({
         'module.exports = { main: String(require.main), parent: String(module.parent) };\n',
     },
     argv: ['main.mjs'],
+  },
+];
+
+/** Builtin rows on the browser hosts' own platform objects (`AbortSignal`, `EventTarget`). */
+export const builtinPrograms: readonly NodeFileProgram[] = [
+  {
+    name: 'events-add-abort-listener',
+    files: { 'main.js': addAbortListenerCase.code },
+    argv: ['main.js'],
+  },
+  {
+    // Node's listener resists an earlier `stopImmediatePropagation()` (`kResistStopPropagation`);
+    // a host `EventTarget` does not: pinned, owner runtime-js/stream-core-abort-listeners-host-event-target.
+    name: 'events-add-abort-listener-stop-propagation',
+    files: {
+      'main.js': `const { addAbortListener } = require('node:events');
+const ac = new AbortController();
+ac.signal.addEventListener('abort', (event) => {
+  console.log('first listener: stopImmediatePropagation');
+  event.stopImmediatePropagation();
+});
+addAbortListener(ac.signal, () => console.log('addAbortListener: ran'));
+ac.signal.addEventListener('abort', () => console.log('later addEventListener: ran'));
+ac.abort();
+console.log('done');
+`,
+    },
+    argv: ['main.js'],
   },
 ];
 
