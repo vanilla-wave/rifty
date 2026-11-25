@@ -3,7 +3,7 @@
 Question (manager, goal `isolate-guest-web-api` question 5): in the isolate `url.parse` and
 `url.resolve` return wrong values with no error. Is the fix a real port of Node's legacy API on
 every host, or a loud named gap? Measured 2026-11-24 at `origin/main` 1c00c6292, Node v24.16.0,
-darwin-arm64. Contract: `docs/backlog/runtime-js/node-url-legacy-api-port.md`.
+darwin-arm64. Unit: PR #444, ADR-0574.
 
 ## Run
 

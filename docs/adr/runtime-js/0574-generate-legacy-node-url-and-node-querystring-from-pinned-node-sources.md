@@ -7,7 +7,7 @@ Date: 2026-11
 
 ## Context
 
-Contract `docs/backlog/runtime-js/node-url-legacy-api-port.md`; probe
+Contract: the unit doc of PR #444 (deleted on done; its decisions are here, in compat and CHANGELOG); probe
 `docs/backlog/runtime-js/reference/url-legacy/`. rifty's `url.ts` approximated the legacy API
 with `new URL` plus a regex fallback: 905/1 314 of Node's own url-test calls differ with a global
 `URL`, 1 038 in the isolate guest (no `URL` at load). Node's legacy API is JS; native code is only

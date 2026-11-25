@@ -18,10 +18,8 @@ guest the same in `sandbox.exec`): `TypeError: o.search.startsWith is not a func
 are `undefined`. Owner: runtime-js `node:url`. Trigger: a package calling one. No compat row yet.
 
 2026-11-24 — `url.format(string)` (and the rest of the legacy parser) moved to
-`runtime-js/node-url-legacy-api-port`. Left here: the WHATWG-side members (Node: ada's host
+ADR-0574 (PR #444). Left here: the WHATWG-side members (Node: ada's host
 parser, `bindingUrl.format`): `domainToASCII`, `domainToUnicode`, `urlToHttpOptions`, and
-`format(URL, { fragment, unicode, search, auth })`, which rifty answers with `href` and ignores
-the options.
-Until this item lands, `runtime-js/node-url-legacy-api-port` (Acceptance 9) makes each of them a
-`NotImplementedError('url.<member>')`; `format(URL, options)` only where an option changes Node's
-output (its Acceptance 9).
+`format(URL, { fragment, unicode, search, auth })`.
+Since PR #444 (ADR-0574 §5) each of them is a `NotImplementedError('url.<member>')`;
+`format(URL, options)` only where an option changes Node's output (`url.format.options`).
