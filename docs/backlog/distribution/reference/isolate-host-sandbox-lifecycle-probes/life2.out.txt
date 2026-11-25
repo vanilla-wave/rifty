@@ -252,3 +252,94 @@
 {"sec":"think","w":"pdf","kind":"v2s","pauseMs":0,"turns":5,"repeatsPerTurn":2,"load":"5.9","createMs":29,"firstMs":275.8,"firstAll":[243.2,275.3,281.8,294.2,275.8],"repMs":249.3,"turnMs":807.6}
 {"sec":"think","w":"pdf","kind":"v2bs","pauseMs":0,"turns":5,"repeatsPerTurn":2,"load":"5.9","createMs":12.2,"firstMs":287,"firstAll":[255.9,298.1,312.3,287,260.4],"repMs":252.4,"turnMs":821}
 # end 16:07  up 6 days,  6:10, 4 users, load averages: 5.94 5.73 5.14
+## round 4 (greptile on PR #454): L5/L5b with each run's end counted; §escape with a full-descriptor oracle  16:41  up 6 days,  6:44, 4 users, load averages: 8.01 17.91 16.66
+### L5b with the round-1..3 mover (restarts at i = 0): what the «200 kills» were
+{"sec":"life","case":"L5b killed mid-rename (v2, round-1 mover): 64 files must stay 64","trials":200,"ends":{"timeout":1,"exit 1":199},"bad":0,"samples":[]}
+### L5 / L5b, resuming mover, v2
+### (the escape block of the first round-4 run is superseded below: its oracle compared NaN with ===)
+### L5 / L5b, resuming mover, v2 (L5: 40 trials, L5b: 200)  16:47  up 6 days,  6:51, 4 users, load averages: 2.07 7.73 12.20
+{"sec":"life","case":"L5 killed inside FS work (v2)","trials":40,"ends":{"timeout":40},"inconsistent":0,"samples":[]}
+{"sec":"life","case":"L5b killed mid-rename (v2): 64 files must stay 64","trials":200,"ends":{"timeout":167,"exit 1":33},"bad":34,"samples":["trial 166 (end timeout): 63 files; missing 48 exists w/v=false/false; audit clean","trial 167 (end exit 1): 63 files; missing 48 exists w/v=false/false; audit clean","trial 168 (end exit 1): 63 files; missing 48 exists w/v=false/false; audit clean"]}
+### L5 / L5b, resuming mover, v2s (L5: 40 trials, L5b: 200)  16:48  up 6 days,  6:51, 4 users, load averages: 3.70 7.51 11.94
+{"sec":"life","case":"L5 killed inside FS work (v2s)","trials":40,"ends":{"timeout":40},"inconsistent":0,"samples":[]}
+{"sec":"life","case":"L5b killed mid-rename (v2s): 64 files must stay 64","trials":200,"ends":{"timeout":200},"bad":0,"samples":[]}
+### L5 / L5b, resuming mover, v2b (L5: 40 trials, L5b: 200)  16:49  up 6 days,  6:52, 4 users, load averages: 5.31 7.47 11.74
+{"sec":"life","case":"L5 killed inside FS work (v2b)","trials":40,"ends":{"timeout":40},"inconsistent":0,"samples":[]}
+{"sec":"life","case":"L5b killed mid-rename (v2b): 64 files must stay 64","trials":200,"ends":{"timeout":200},"bad":0,"samples":[]}
+### L5 / L5b, resuming mover, v2bs (L5: 40 trials, L5b: 200)  16:49  up 6 days,  6:52, 4 users, load averages: 4.64 7.08 11.41
+{"sec":"life","case":"L5 killed inside FS work (v2bs)","trials":40,"ends":{"timeout":40},"inconsistent":0,"samples":[]}
+{"sec":"life","case":"L5b killed mid-rename (v2bs): 64 files must stay 64","trials":200,"ends":{"timeout":84,"exit 1":116},"bad":117,"samples":["trial 83 (end timeout): 63 files; missing 63 exists w/v=false/false; audit clean","trial 84 (end exit 1): 63 files; missing 63 exists w/v=false/false; audit clean","trial 85 (end exit 1): 63 files; missing 63 exists w/v=false/false; audit clean"]}
+### L5b containment, v1  16:50  up 6 days,  6:53, 4 users, load averages: 3.60 6.64 11.12
+{"sec":"life","case":"L5b killed mid-rename (v1): 64 files must stay 64","trials":200,"ends":{"timeout":200},"bad":0,"samples":[]}
+### L5b containment, v2bs+rp  16:50  up 6 days,  6:53, 4 users, load averages: 3.08 6.16 10.76
+### escape, full-descriptor oracle (Object.is)  16:51  up 6 days,  6:54, 4 users, load averages: 3.66 6.19 10.72
+{"sec":"escape","case":"E0 Object.keys (external review)","kind":"v2","exec1":"run1: planted=yes","exec2":"run2: mkdir -p FAILED ENOENT","codes":[0,0],"fsRealmDiffsBefore":0,"fsRealmDiffsAfter":1,"fsRealmDiffs":["Object.prototype.recursive: added"]}
+{"sec":"escape","case":"control: an ordinary program twice","kind":"v2","exec1":"{\"mkdirP\":\"ok\",\"rw\":\"ok\",\"stat\":\"ok\",\"readdir\":\"b,x.bin\",\"require\":\"ok\",\"pwnedSeen\":\"undefined\"}","codes":[0,0],"fsRealmDiffsAfter":0,"fsRealmDiffs":[]}
+{"sec":"escape","case":"E1 hooks + accessors + species + proxies + getters + stack exhaustion + callbacks","kind":"v2","exec1":"{\"sync\":true,\"depth\":3956,\"foreign\":6,\"where\":[\"map:arg0\",\"isView:arg0\",\"isArray:arg0\",\"keys:arg0\",\"readdir:ret\",\"so:fs\"]}\n{\"async\":true,\"foreign\":6,\"where\":[\"map:arg0\",\"isView:arg0\",\"isArray:arg0\",\"k","exec1End":0,"fsRealmDiffsBefore":0,"fsRealmDiffsAfter":4,"fsRealmDiffs":["Object.prototype.__pwned: added","Array.prototype.__pwned: added","Function.prototype.__pwned: added","RangeError.prototype.__pwned: added"],"exec2":"{\"mkdirP\":\"ok\",\"rw\":\"ok\",\"stat\":\"ok\",\"readdir\":\"b,x.bin\",\"require\":\"ok\",\"pwnedSeen\":\"undefined\"}","codes":[0,0]}
+{"sec":"escape","case":"E0 Object.keys (external review)","kind":"v2s","exec1":"run1: planted=no A object reached","exec2":"run2: mkdir -p ok","codes":[0,0],"fsRealmDiffsBefore":0,"fsRealmDiffsAfter":0,"fsRealmDiffs":[]}
+{"sec":"escape","case":"control: an ordinary program twice","kind":"v2s","exec1":"{\"mkdirP\":\"ok\",\"rw\":\"ok\",\"stat\":\"ok\",\"readdir\":\"b,x.bin\",\"require\":\"ok\",\"pwnedSeen\":\"undefined\"}","codes":[0,0],"fsRealmDiffsAfter":0,"fsRealmDiffs":[]}
+{"sec":"escape","case":"E1 hooks + accessors + species + proxies + getters + stack exhaustion + callbacks","kind":"v2s","exec1":"{\"sync\":true,\"depth\":3956,\"foreign\":0,\"where\":[]}\n{\"async\":true,\"foreign\":0,\"where\":[]}","exec1End":0,"fsRealmDiffsBefore":0,"fsRealmDiffsAfter":0,"fsRealmDiffs":[],"exec2":"{\"mkdirP\":\"ok\",\"rw\":\"ok\",\"stat\":\"ok\",\"readdir\":\"b,x.bin\",\"require\":\"ok\",\"pwnedSeen\":\"undefined\"}","codes":[0,0]}
+{"sec":"escape","case":"E0 Object.keys (external review)","kind":"v2bs","exec1":"run1: planted=no A object reached","exec2":"run2: mkdir -p ok","codes":[0,0],"fsRealmDiffsBefore":0,"fsRealmDiffsAfter":0,"fsRealmDiffs":[]}
+{"sec":"escape","case":"control: an ordinary program twice","kind":"v2bs","exec1":"{\"mkdirP\":\"ok\",\"rw\":\"ok\",\"stat\":\"ok\",\"readdir\":\"b,x.bin\",\"require\":\"ok\",\"pwnedSeen\":\"undefined\"}","codes":[0,0],"fsRealmDiffsAfter":0,"fsRealmDiffs":[]}
+{"sec":"escape","case":"E1 hooks + accessors + species + proxies + getters + stack exhaustion + callbacks","kind":"v2bs","exec1":"{\"sync\":true,\"depth\":3956,\"foreign\":0,\"where\":[]}\n{\"async\":true,\"foreign\":0,\"where\":[]}","exec1End":0,"fsRealmDiffsBefore":0,"fsRealmDiffsAfter":0,"fsRealmDiffs":[],"exec2":"{\"mkdirP\":\"ok\",\"rw\":\"ok\",\"stat\":\"ok\",\"readdir\":\"b,x.bin\",\"require\":\"ok\",\"pwnedSeen\":\"undefined\"}","codes":[0,0]}
+### burst at LIMIT=256 with each run's end counted  16:51  up 6 days,  6:54, 4 users, load averages: 3.53 6.12 10.67
+{"sec":"burst","kind":"v1","ends":{"exit 0":20},"load":"3.6","startMiB":363.5,"peakMiB":1058.4,"restWithSandboxesMiB":1051.3,"restAfterDropMiB":1051.3}
+{"sec":"burst","kind":"v2s","ends":{"exit 0":20},"load":"3.9","startMiB":363.3,"peakMiB":1338.5,"restWithSandboxesMiB":1338.7,"restAfterDropMiB":1256.1}
+{"sec":"burst","kind":"v2bs","ends":{"exit 0":20},"load":"3.9","startMiB":363.6,"peakMiB":1022.6,"restWithSandboxesMiB":1022.6,"restAfterDropMiB":938.8}
+{"sec":"burst","kind":"v3","ends":{"exit 0":20},"load":"3.9","startMiB":363.3,"peakMiB":676.7,"restWithSandboxesMiB":676.3,"restAfterDropMiB":676.3}
+# end 16:51  up 6 days,  6:54, 4 users, load averages: 3.85 6.03 10.53
+### (the v2bs+rp containment run above crashed in the probe: seed files written before their parent directory; rerun below)
+### L5b containment, v2bs+rp (Turn: rebuild from the point on every kill)  16:53  up 6 days,  6:56, 4 users, load averages: 3.69 5.43 9.82
+{"sec":"life","case":"L5b killed mid-rename (v2bs+rp): 64 files must stay 64","trials":200,"ends":{"timeout":200},"bad":0,"samples":[]}
+## round 5 (2 × 2 matrix): v1f = fresh isolate + libraries as files in the state (today's main), v2f = live isolate + libraries as files in A; v1 / v2bs beside, same run
+### cost, LIMIT=256  16:53  up 6 days,  6:56, 4 users, load averages: 3.14 5.10 9.52
+{"sec":"cost","w":"empty","kind":"v1f","load":"3.1","createMs":118.6,"firstMs":212.5,"repMs":197.6,"repRunMs":6.9,"repBootMs":9.9}
+{"sec":"cost","w":"empty","kind":"v1","load":"3.1","createMs":0.1,"firstMs":31.5,"repMs":33.2,"repRunMs":7.2,"repBootMs":10.2}
+{"sec":"cost","w":"empty","kind":"v2f","load":"3.1","createMs":219.7,"firstMs":24.8,"repMs":8.8,"repRunMs":3,"repBootMs":5.7}
+{"sec":"cost","w":"empty","kind":"v2bs","load":"3.1","createMs":10.8,"firstMs":12.5,"repMs":8.7,"repRunMs":3.1,"repBootMs":5.6}
+{"sec":"cost","w":"pdf","kind":"v1f","load":"3.1","createMs":116.8,"firstMs":362.1,"repMs":371.1,"repRunMs":189.1,"repBootMs":9.9,"bad":{"termination":"memory","why":"ERR_FS_SNAPSHOT_TOO_LARGE: out of memory building the snapshot (size the memory limit for 2 × maxBytes + 16 MiB)"}}
+{"sec":"cost","w":"pdf","kind":"v1","load":"3.1","createMs":0.1,"firstMs":219.4,"repMs":218,"repRunMs":192.5,"repBootMs":9.9}
+{"sec":"cost","w":"pdf","kind":"v2f","load":"3.1","createMs":213.9,"firstMs":204.9,"repMs":157.2,"repRunMs":151.5,"repBootMs":5.9}
+{"sec":"cost","w":"pdf","kind":"v2bs","load":"3.1","createMs":10.7,"firstMs":215.7,"repMs":167.8,"repRunMs":160.4,"repBootMs":6}
+{"sec":"cost","w":"docx","kind":"v1f","load":"3.1","createMs":115.9,"firstMs":343.9,"repMs":351.5,"repRunMs":162.8,"repBootMs":9.9}
+{"sec":"cost","w":"docx","kind":"v1","load":"3.2","createMs":0.1,"firstMs":179.5,"repMs":185.6,"repRunMs":160.2,"repBootMs":9.8}
+{"sec":"cost","w":"docx","kind":"v2f","load":"3.2","createMs":216.6,"firstMs":162.5,"repMs":133.7,"repRunMs":127.3,"repBootMs":6.2}
+### think, LIMIT=256  16:53  up 6 days,  6:57, 4 users, load averages: 3.19 4.98 9.38
+{"sec":"think","w":"empty","kind":"v1f","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"2.8","createMs":140.1,"firstMs":214.1,"firstAll":[214.3,205.7,214.1,221.1,201.4],"repMs":227,"turnMs":796.8}
+{"sec":"think","w":"empty","kind":"v1","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"2.8","createMs":0.4,"firstMs":54.9,"firstAll":[65.8,32.8,60.7,54.9,49.3],"repMs":59.3,"turnMs":161.6}
+{"sec":"think","w":"empty","kind":"v2f","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"2.8","createMs":239.7,"firstMs":27.8,"firstAll":[30.9,18.7,33.9,27.8,22.1],"repMs":23.8,"turnMs":308.5}
+{"sec":"think","w":"empty","kind":"v2bs","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"2.8","createMs":23.8,"firstMs":16.8,"firstAll":[14.8,16.8,31.1,32.8,16.1],"repMs":19.2,"turnMs":91.6}
+{"sec":"think","w":"pdf","kind":"v1f","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"3.6","createMs":129.2,"firstMs":424.7,"firstAll":[516.4,379.3,424.7,431.9,383.1],"repMs":419,"turnMs":1456.4}
+{"sec":"think","w":"pdf","kind":"v1","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"3.6","createMs":0.3,"firstMs":255.9,"firstAll":[252.9,252.1,284.4,274,255.9],"repMs":241,"turnMs":738.8}
+{"sec":"think","w":"pdf","kind":"v2f","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"3.6","createMs":236.1,"firstMs":206.3,"firstAll":[206.3,205.9,204.2,229.9,206.6],"repMs":197.8,"turnMs":813.7}
+{"sec":"think","w":"pdf","kind":"v2bs","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"3.6","createMs":17.4,"firstMs":234.6,"firstAll":[224.5,234.6,253.6,254.7,227],"repMs":212.5,"turnMs":651.6}
+{"sec":"think","w":"xlsx","kind":"v1f","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"2.4","createMs":135.5,"firstMs":642.5,"firstAll":[664.7,644.3,623.7,636.5,642.5],"repMs":632.9,"turnMs":2047.4}
+{"sec":"think","w":"xlsx","kind":"v1","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"2.4","createMs":0.4,"firstMs":509.3,"firstAll":[517.8,500.6,491.5,544.4,509.3],"repMs":507.3,"turnMs":1516.1}
+{"sec":"think","w":"xlsx","kind":"v2f","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"2.4","createMs":236.5,"firstMs":447.4,"firstAll":[447.4,422.3,433.4,451.1,450.1],"repMs":420.4,"turnMs":1490.1}
+{"sec":"think","w":"xlsx","kind":"v2bs","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"2.4","createMs":27.6,"firstMs":529.2,"firstAll":[515.5,529.2,511.3,561,552.5],"repMs":432.4,"turnMs":1424.1}
+### mem (idle after pdf / after the 4 generators), one process per arm  16:58  up 6 days,  7:02, 4 users, load averages: 2.42 3.67 7.48
+{"sec":"mem","kind":"v1f","w":"pdf","K":4,"load":"2.4","perSandboxRssMiB":218.3,"perSandboxNodeHeapMiB":-0.1,"perSandboxArrayBuffersMiB":83.8,"stateBytes":87841098}
+{"sec":"mem","kind":"v2f","w":"pdf","K":4,"load":"2.4","perSandboxRssMiB":247.1,"perSandboxNodeHeapMiB":-0.1,"perSandboxArrayBuffersMiB":41,"isolateUsedMiB":18.5,"isolateTotalMiB":27,"isolateExtMiB":98.8,"afterGcUsedMiB":8,"afterGcTotalMiB":20.2,"afterGcExtMiB":98.3}
+{"sec":"mem","kind":"v1f","w":"mix","K":4,"load":"2.6","perSandboxRssMiB":375.6,"perSandboxNodeHeapMiB":-0.1,"perSandboxArrayBuffersMiB":83.9,"stateBytes":87934442}
+{"sec":"mem","kind":"v2f","w":"mix","K":4,"load":"2.5","perSandboxRssMiB":268.4,"perSandboxNodeHeapMiB":-0.1,"perSandboxArrayBuffersMiB":40.8,"isolateUsedMiB":26.8,"isolateTotalMiB":48.5,"isolateExtMiB":99.2,"afterGcUsedMiB":11.4,"afterGcTotalMiB":29.8,"afterGcExtMiB":97}
+### floor  16:59  up 6 days,  7:02, 4 users, load averages: 2.49 3.58 7.34
+{"sec":"floor","w":"empty","kind":"v1f","load":"2.4","floorMiB":190}
+{"sec":"floor","w":"empty","kind":"v2f","load":"2.4","floorMiB":190}
+{"sec":"floor","w":"pdf","kind":"v1f","load":"2.3","floorMiB":194}
+{"sec":"floor","w":"pdf","kind":"v2f","load":"2.3","floorMiB":190}
+{"sec":"floor","w":"xlsx","kind":"v1f","load":"4.2","floorMiB":202}
+{"sec":"floor","w":"xlsx","kind":"v2f","load":"4.0","floorMiB":190}
+# end 16:59  up 6 days,  7:03, 4 users, load averages: 4.04 3.80 7.26
+### cost docx/pptx/xlsx rerun: the cost process above died silently after docx v2f (a pipe stage, no stderr); rerun with stderr kept: clean, exit 0  17:01  up 6 days,  7:04, 4 users, load averages: 3.08 3.60 6.84
+{"sec":"cost","w":"docx","kind":"v1f","load":"3.7","createMs":122.5,"firstMs":360.8,"repMs":353.2,"repRunMs":164.8,"repBootMs":9.9}
+{"sec":"cost","w":"docx","kind":"v1","load":"3.7","createMs":0.1,"firstMs":190.2,"repMs":191.9,"repRunMs":165.6,"repBootMs":10.5}
+{"sec":"cost","w":"docx","kind":"v2f","load":"3.7","createMs":217.6,"firstMs":171.8,"repMs":138.2,"repRunMs":132,"repBootMs":6.2}
+{"sec":"cost","w":"docx","kind":"v2bs","load":"4.0","createMs":12.2,"firstMs":180.8,"repMs":146.2,"repRunMs":139.7,"repBootMs":6.4}
+{"sec":"cost","w":"pptx","kind":"v1f","load":"4.0","createMs":119.8,"firstMs":507.1,"repMs":481,"repRunMs":288.6,"repBootMs":10.6}
+{"sec":"cost","w":"pptx","kind":"v1","load":"4.0","createMs":0.1,"firstMs":317.4,"repMs":312.1,"repRunMs":283.3,"repBootMs":10.2}
+{"sec":"cost","w":"pptx","kind":"v2f","load":"3.7","createMs":229.7,"firstMs":293,"repMs":275.5,"repRunMs":264.2,"repBootMs":8.4}
+{"sec":"cost","w":"pptx","kind":"v2bs","load":"3.7","createMs":14.4,"firstMs":302.5,"repMs":275.6,"repRunMs":269.4,"repBootMs":8.2}
+{"sec":"cost","w":"xlsx","kind":"v1f","load":"3.6","createMs":116.3,"firstMs":606.3,"repMs":642.1,"repRunMs":450.5,"repBootMs":10.8}
+{"sec":"cost","w":"xlsx","kind":"v1","load":"3.6","createMs":0.1,"firstMs":461.4,"repMs":477.4,"repRunMs":451.9,"repBootMs":10.3}
+{"sec":"cost","w":"xlsx","kind":"v2f","load":"3.7","createMs":220.6,"firstMs":440.3,"repMs":353.9,"repRunMs":347.3,"repBootMs":6.4}
+{"sec":"cost","w":"xlsx","kind":"v2bs","load":"3.5","createMs":11.5,"firstMs":497.6,"repMs":371,"repRunMs":364.5,"repBootMs":6.6}

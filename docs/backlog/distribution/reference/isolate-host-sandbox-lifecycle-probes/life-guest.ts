@@ -307,34 +307,54 @@ function installSafe(epoch: number): void {
     };
   lifeSetSyncMirror(fs as never);
 }
-/** Host-side oracle: a fingerprint of this realm's intrinsic prototypes (names + descriptor kinds). */
-function fingerprint(): string {
-  const roots: Record<string, unknown> = {
-    Object: Object.prototype,
-    Array: Array.prototype,
-    Function: Function.prototype,
-    TypedArray: Object.getPrototypeOf(Uint8Array.prototype),
-    Uint8Array: Uint8Array.prototype,
-    ArrayBuffer: ArrayBuffer.prototype,
-    Map: Map.prototype,
-    Set: Set.prototype,
-    Error: Error.prototype,
-    String: String.prototype,
-    Promise: Promise.prototype,
-    JSON,
-    Reflect,
-    ObjectCtor: Object,
-    ArrayCtor: Array,
-  };
-  const out: string[] = [];
-  for (const k of Object.keys(roots)) {
-    const o = roots[k] as object;
-    for (const name of Reflect.ownKeys(o)) {
-      const d = Object.getOwnPropertyDescriptor(o, name) as PropertyDescriptor;
-      out.push(`${k}.${String(name)}:${d.get ? 'g' : ''}${d.set ? 's' : ''}${typeof d.value}`);
-    }
+/**
+ * Host-side oracle (review of PR #454): every own property of this realm's intrinsics — string and
+ * symbol keys, the full descriptor (value by identity, get / set by identity, writable, enumerable,
+ * configurable) — plus each root's prototype and extensibility, captured at bundle evaluation
+ * (before anything else runs in this realm). `fingerprint()` returns what differs now.
+ */
+const lifeRoots = (() => {
+  const TA = Object.getPrototypeOf(Uint8Array);
+  const ctors = [Object, Array, Function, TA, Uint8Array, ArrayBuffer, DataView, Map, Set, WeakMap,
+    WeakSet, Error, TypeError, RangeError, String, Number, Boolean, Symbol, Promise, RegExp, Date, BigInt];
+  const roots: [string, object][] = [
+    ['globalThis', globalThis],
+    ['JSON', JSON],
+    ['Reflect', Reflect],
+    ['Math', Math],
+  ];
+  for (const C of ctors) {
+    roots.push([C.name || 'TypedArray', C]);
+    roots.push([`${C.name || 'TypedArray'}.prototype`, C.prototype as object]);
   }
-  return `${out.length}:${out.sort().join('|').length}:${Object.isExtensible(Object.prototype)}`;
+  return roots;
+})();
+type LifeSnap = Map<PropertyKey, PropertyDescriptor>;
+const lifeSnap = (o: object): { proto: object | null; ext: boolean; props: LifeSnap } => {
+  const props: LifeSnap = new Map();
+  for (const k of Reflect.ownKeys(o)) props.set(k, Reflect.getOwnPropertyDescriptor(o, k) as PropertyDescriptor);
+  return { proto: Reflect.getPrototypeOf(o), ext: Reflect.isExtensible(o), props };
+};
+const lifeBaseline = lifeRoots.map(([n, o]) => [n, o, lifeSnap(o)] as const);
+function fingerprint(): string {
+  const diffs: string[] = [];
+  const same = (a: PropertyDescriptor, b: PropertyDescriptor): boolean =>
+    Object.is(a.value, b.value) && a.get === b.get && a.set === b.set && a.writable === b.writable &&
+    a.enumerable === b.enumerable && a.configurable === b.configurable;
+  for (const [name, o, before] of lifeBaseline) {
+    const now = lifeSnap(o);
+    if (now.proto !== before.proto) diffs.push(`${name}: prototype`);
+    if (now.ext !== before.ext) diffs.push(`${name}: extensible`);
+    for (const [k, d] of now.props) {
+      const was = before.props.get(k);
+      // globalThis: the probe's own late globals (__life, __probe, __lifeLayered…) are not intrinsics
+      if (name === 'globalThis' && was === undefined && typeof k === 'string' && k.startsWith('__')) continue;
+      if (was === undefined) diffs.push(`${name}.${String(k)}: added`);
+      else if (!same(was, d)) diffs.push(`${name}.${String(k)}: changed`);
+    }
+    for (const k of before.props.keys()) if (!now.props.has(k)) diffs.push(`${name}.${String(k)}: removed`);
+  }
+  return JSON.stringify(diffs);
 }
 
 Object.defineProperty(globalThis, '__life', {

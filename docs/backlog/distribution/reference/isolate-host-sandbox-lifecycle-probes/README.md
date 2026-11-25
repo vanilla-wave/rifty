@@ -51,7 +51,26 @@ v1w removes only v1's fixed cost, at 2× v1's memory and only when its spare is 
 remaining gain over v1w goes with `--no-compilation-cache` (leading candidate: V8's in-isolate
 compile cache, not proven); whether a fresh isolate can get it is open. Which
 side matters depends on the strategy (an isolate per turn or per run) and on the load (open turns vs
-concurrent runs) — the user's.
+concurrent runs) — the user's. Keeping a killed run's writes from an FS inside the isolate can lose a
+file (L5b, Contract); the whole-run rollback (v1, v2bs+rp) contained every kill.
+
+## The 2 × 2: isolate lifetime × how the libraries are present (macOS, worker side, `memoryLimit` 256)
+
+v1f and v2f (round 5) hold the four libraries as ordinary files in the FS — v1f in the sandbox's
+state, restored into and captured out of every run's fresh isolate (what `main` ships today); v2f
+in context A of the live isolate. v1 / v2bs hold them as the template layer (ADR-0572 §2). The
+«fresh + files» cell is also measured end to end through `createSandbox` / `exec` by the library
+probe (PR #430, `../isolate-library-probe/README.md`); every other cell is worker side only.
+
+| | fresh isolate per `exec` | live isolate per sandbox |
+|---|---|---|
+| **files** | **v1f** (main). Warm `exec` empty / pdf / docx / pptx / xlsx: 198 / 371 / 353 / 481 / 642 ms (the run phase is v1's; the rest is restoring and capturing 87.8 MB per `exec`); §think repeat pdf 419, xlsx 633. Floor 190–202 MiB; at 256 one pdf repeat's capture was refused (`ERR_FS_SNAPSHOT_TOO_LARGE`, out of isolate memory). Idle: the state, 87.8 MB, in the consumer. End to end (#430): warm `exec` of an empty file 601 ms, generators 0.83–0.99 s, floor 209–222 MiB | **v2f**. Create 214–240 ms (87.8 MB into A once); warm `exec` 8.8 / 157 / 138 / 276 / 354; §think repeat pdf 198, xlsx 420; first `exec` pdf 205, xlsx 440. Floor 190 MiB (the files are in the isolate for its life). Idle, after GC: used 8–11 / committed 20–30 / external 97–98 MiB, RSS +247–268 |
+| **template layer** | **v1** (ADR-0572 as proposed). 33 / 218 / 192 / 312 / 477; §think pdf 241, xlsx 507. Floor 103–115. Idle 3–96 KB in the consumer | **v2bs**. Create 11 ms; 8.7 / 168 / 146 / 276 / 371; §think pdf 213, xlsx 432. Floor 19–39. Idle after GC 22–34 MiB (one generator), 55–74 (four) |
+
+The four cells side by side in one process (`life2.out.txt` «round 5»; cost docx–xlsx from its rerun; cost
+load 3.1–4.0, §think load 2.4–3.6). v1f's create (116–140 ms) is the probe building the state
+in-process, not a product cost.
+
 
 ## Boundary (v2): what crosses between the FS realm A and a run realm B (§escape)
 
@@ -75,9 +94,10 @@ cost).
 |---|---|---|---|
 | E0 `Object.keys` hook → A's prototype → next `exec`'s `mkdir -p` | **planted, run 2 ENOENT** | no A object reached, run 2 ok | same |
 | E1 hooks on 31 intrinsics (`Object.*`, `Array.*`, `JSON.*`, `Reflect.*`, typed-array / Map / Set / Promise methods), accessors on `Object.prototype` for 19 keys, `Symbol.species` on 4 constructors, Proxy data / options, getter with `.caller`, thenable options, every fs op incl. fd, stack exhaustion (3 956 frames macOS, 65 248 Linux) calling fs while unwinding, callback / promise / stream reads: foreign objects reached | **6** (`map`, `isView`, `isArray`, `keys` args; `readdir` result; the stack-overflow error of A) | **0** | **0** |
-| A's intrinsic prototypes after E1 (host-side fingerprint of 15 roots) | **changed** | unchanged | unchanged |
+| A's intrinsics after the attack — every own property (string and symbol keys) of 48 roots (globalThis, JSON, Reflect, Math, 22 constructors and their prototypes) by full descriptor, value / getter / setter by identity (`Object.is`), each root's prototype and extensibility, against a baseline taken at bundle evaluation (round 4; round 1–3's oracle compared names and value types only — greptile on PR #454) | **E0: 1 change (`Object.prototype.recursive` added); E1: 4 (`__pwned` on `Object`/`Array`/`Function`/`RangeError` prototypes)** | E0 0, E1 0 | E0 0, E1 0 |
+| control: an ordinary program twice | 0 | 0 | 0 |
 
-Linux: the same. Not a proof: V8 bugs and paths not enumerated remain; a third realm-separation
+Linux (round 2, the old oracle): the same foreign-object counts. Not a proof: V8 bugs and paths not enumerated remain; a third realm-separation
 mechanism (a separate isolate for A) would be by construction and costs v3's per-call price.
 
 ## Cost (§cost, ms, median of 7 warm repeats in one sandbox, `memoryLimit` 256)
@@ -180,8 +200,11 @@ despite a cheaper boot, so part of the cost is in the run phase. Pre-warming it 
 measured. The
 two-realm timing includes the isolate's `dispose()`, the v1 reference does not (a small bias against
 two realms). The same split would let v1 keep a killed run's partial writes as Node does (capture A
-after a deadline instead of rolling back) — not measured; F4 was answered «rollback» as the cheap
-option.
+after a deadline instead of rolling back) — but a kill can cut an FS operation in A and lose a file
+(L5b, Contract), so keeping a killed run's writes from an in-isolate FS needs FS operations that a
+termination cannot cut (or a check / journal); only the FS outside the isolate (v3: a host call is
+not interruptible) or the rollback gives that by construction. Not measured; F4 was answered
+«rollback» as the cheap option.
 
 ## Memory
 
@@ -216,7 +239,7 @@ Peak RSS of a worker, 4 sandboxes running xlsx at once, 5 rounds (§burst, start
 
 | | v1 | v2bs | v2s | v3 |
 |---|---|---|---|---|
-| macOS peak / at rest after dropping the sandboxes (v1, v3: round 1, limit 1024; v2bs, v2s: round 2b, 256 — different limits: not comparable; Linux is one limit, 256) | +716 / +716 | +611 / +537 | +1 024 / +933 | +352 / +352 |
+| macOS peak / at rest after dropping the sandboxes (round 4, limit 256, 20 / 20 runs `exit 0` per arm) | +695 / +688 | +659 / +575 | +975 / +893 | +313 / +313 |
 | Linux | +395 / +395 | +662 / +543 | +978 / +508 | +311 / +311 |
 
 RSS stays near the peak after the burst on both systems in v1 and v3, mostly in v2bs, and falls
@@ -262,8 +285,8 @@ call into context A, 0.005–0.07 ms + IPC; v3: 0.001 ms + IPC. IPC round trip, 
 |---|---|---|---|---|
 | between `exec`s: globals, prototypes, `require` cache, `process.exitCode`, `exit` listeners, `env`, cwd, `Error.stackTraceLimit` (L1) | fresh | fresh (new context); the FS realm unreachable (§escape) | same | fresh |
 | a V8 task queued before `process.exit()` (one `WebAssembly.compile(...).then(write)`, L3) | its write lands in the captured state (declared class «work queued at `process.exit()` runs») | lands in A | same | does not run |
-| timeout (sync loop, microtasks, timer loop, pending wait, L4) | rollback | isolate alive, partial writes kept (Node) | rollback by rebuild: 13–15 ms, `partial.txt` gone, earlier `out.pdf` kept | partial writes kept |
-| killed inside an FS operation of A (L5/L5b, 240 kills) | — | 0 inconsistent trees; not excluded by construction | n/a: rebuilt from the point | a host call is not interruptible |
+| timeout (sync loop, microtasks, timer loop, pending wait, L4) | rollback | isolate alive, partial writes kept (Node) — and possibly a lost file, next row | rollback by rebuild: 13–15 ms, `partial.txt` gone, earlier `out.pdf` kept | partial writes kept |
+| killed inside an FS operation of A (round 4: every run's end counted; L5 = writes + renames + `rm` + `cpSync`, 40 runs; L5b = 64 files only ever renamed between two directories, resuming where the last run left each file, 200 runs) | 200 / 200 runs killed by timeout, 64 files every time (whole-run rollback) | L5: 40 / 40 killed, 0 inconsistent trees on v2, v2s, v2b, v2bs. **L5b: a file lost** — v2 after 166 kills, v2b after 152 (a second run: 0 in 200), v2bs after 91 / 102 / 83 in three runs, v2s 0 in 2 × 200; once lost, no directory names it and every later run ends `exit 1` (ENOENT). Not the boundary (v2, v2b have round 1's membrane) and not the template (v2 copies it, v2b reads it lazily): the kill cuts A's `renameSync` — rifty's memory backend deletes the source entry before setting the destination one (`packages/vfs/src/memory-backend.ts:357-359`); where V8 cut it was not instrumented. Round 1–3's «200 kills, 0 lost» was 1 kill and 199 runs ending `exit 1` (its mover restarted at i = 0 and threw ENOENT; greptile on PR #454) | 200 / 200 killed by timeout, 64 files every time: each kill rebuilt from the point (the run rolled back) | a host call is not interruptible (not run) |
 | out of isolate memory (L6) | rollback | **the sandbox and all its files lost** (v2, v2bs) | rollback by rebuild: 23–29 ms | files kept |
 | a run ends (`process.exit`) with 30 chained `WebAssembly.compile` pending and 50 MiB live (§haunt, round-2 critic's probe) | gone with the isolate | **its realm stays alive: +51 MiB used heap after GC in the next 4 `exec`s** (62.7 vs 11.5); with 170 MiB the first run itself ended `memory` in both arms (inconclusive; the round-2 critic's
 run saw run 3 die) | same retention; a spurious `memory` → rollback. Needs a heap watermark → rebuild, not built | gone with the isolate |
@@ -279,9 +302,17 @@ Rebuild from a restore point (§rebuild, v2bs, macOS / Linux): state 3 KB → 11
 (capture 0.5, validate 0.1, new isolate + A + restore 11–13); 1 MiB → 16 / 19; 8 MiB → 37 / 43
 (capture 7–8, validate 9, base64 both ways 2.6–4.6, rebuild 17.5–21). v2s (template copied): +13 ms.
 
-Two probe processes died in long multi-arm runs, neither reproduced on rerun: a segmentation fault
-(round 1, §retain v2 xlsx after ~1 000 isolates) and a silent death (round 2, §cost after docx v1b,
-the first stage of a pipe, no stderr kept). Not attributed to an arm; a crashed worker is a lost
+Three probe processes died in long multi-arm runs, none reproduced on rerun: a segmentation fault
+(round 1, §retain v2 xlsx after ~1 000 isolates) and two silent deaths (round 2, §cost after docx v1b;
+round 5, §cost after docx v2f — each the first stage of a pipe, no stderr kept; the reruns with stderr
+kept exited 0).
+
+Counters re-checked for runs that ended otherwise than the row claims (round 4): §cost, §conc,
+§think, §mem, §heap, §retain, §rebuild, §tworealm log any run not ending 0 (none logged except one
+v1f capture refused at 256, Cost); §turn, §haunt, L4, L6 print each run's end; §burst now counts
+them (20 / 20 `exit 0` per arm, round 4); §floor counts a limit as failing on any end other than
+`exit 0`, so a failure for another reason would raise a floor (not seen: every bisection step's
+failures were `memory`/refusals, not inspected one by one). Not attributed to an arm; a crashed worker is a lost
 worker for every arm.
 
 ## Blast radius in the pool (ADR-0563: `SHARD` = 4 calls per worker, idle retire at 256 MiB RSS)
@@ -350,7 +381,7 @@ rollback (ADR-0568 §Not the user's words), the I-list's wording, one op at a ti
 | | v2bs+rp | v3 |
 |---|---|---|
 | live-sandbox Outcome «between operations the sandbox is bytes held by the consumer» | the consumer holds the point (bytes); the live state is in the worker — wording to change | changes |
-| I1 no ending loses the sandbox; killed run rolled back | holds by rebuild (measured in one process) | holds only with a point; kills keep partial writes unless rebuilt — F4 asked again |
+| I1 no ending loses the sandbox; killed run rolled back | holds by rebuild (measured in one process; L5b 200 / 200 contained) | holds only with a point; kills keep partial writes unless rebuilt — F4 asked again |
 | I2 fresh process per run | holds (context per run, §escape) | holds |
 | I5 destroy | dispose the isolate | drop the worker FS + dispose the run |
 | I6 «an idle sandbox holds no process and no isolate» | breaks (after GC 22–34 MiB per idle turn after one generator, 55–74 after four; RSS +105–112) | holds no isolate; ~1.6 MiB of worker memory |
@@ -375,8 +406,9 @@ rollback (ADR-0568 §Not the user's words), the I-list's wording, one op at a ti
 
 - v2bs+rp on the real pool: affinity, IPC under load, lost worker → rebuild elsewhere, retire with
   migration; `turn` is one process.
-- Termination inside an FS operation of A (v2 without a point): 240 kills, no inconsistency — not
-  excluded by construction; v2bs+rp sidesteps it by rebuilding after every kill.
+- Where exactly V8 terminates inside A's `renameSync` (L5b shows the loss, the cut point is read from
+  the code, not instrumented); other operations (`cpSync`, `rmSync`, fd writes) under the same
+  targeted kill loop.
 - The boundary beyond the enumerated attacks (§escape) and V8 bugs.
 - The cause of the repeated-`exec` run-phase gain in a live isolate.
 - The two crashed probe processes.

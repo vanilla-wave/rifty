@@ -312,7 +312,8 @@ class Fresh {
   constructor(kind, src, { limit = Number(process.env.LIMIT ?? 1024), extra = [] } = {}) {
     this.kind = kind;
     this.limit = limit;
-    this.blob = ownOf(src, extra);
+    // v1f: today's main — the libraries as ordinary files inside the sandbox's state (no layer)
+    this.blob = ownOf(src, kind === 'v1f' ? [...extra, ...files] : extra);
     this.refs = REFS;
     if (kind === 'v3') {
       const up = createMemoryFs().fsSync;
@@ -364,7 +365,9 @@ class Fresh {
         await (await r.fn(r.entry, 'restore')).apply(undefined, [this.blob, OPTS], {
           arguments: { copy: true },
         });
-        if (this.kind === 'v1w')
+        if (this.kind === 'v1f') {
+          // the state is the whole FS: nothing to layer
+        } else if (this.kind === 'v1w')
           await (await r.fn(r.life, 'layeredPrepared')).apply(undefined, [this.refs]);
         else if (this.kind === 'v1')
           await (await r.fn(r.probe, 'layered')).apply(
@@ -383,7 +386,12 @@ class Fresh {
       t.restore = performance.now();
       const res = await runFile(r, sink, '/workspace/main.js', args, timeoutMs);
       t.run = performance.now();
-      if (this.kind !== 'v3' && 'code' in res) {
+      if (this.kind === 'v1f' && 'code' in res) {
+        this.blob = await (await r.fn(r.entry, 'snapshot')).apply(undefined, [OPTS], {
+          arguments: { copy: true },
+          result: { copy: true },
+        });
+      } else if (this.kind !== 'v3' && 'code' in res) {
         const [blob, refs] = await (await r.fn(r.life, 'captureFull')).apply(undefined, [MAXB], {
           result: { copy: true },
         });
@@ -440,13 +448,16 @@ class Live {
     const refs = from?.refs ?? REFS;
     await (await this.A.fn(this.A.entry, 'restore')).apply(
       undefined,
-      [from?.blob ?? ownOf(this.src, this.extra), OPTS],
+      // v2f: the libraries as ordinary files in A's FS (no layer)
+      [from?.blob ?? ownOf(this.src, this.kind === 'v2f' ? [...this.extra, ...files] : this.extra), OPTS],
       {
         arguments: { copy: true },
       },
     );
-    this.safe = this.kind.endsWith('s');
-    if (this.kind === 'v2' || this.kind === 'v2s')
+    this.safe = this.kind.endsWith('s') || this.kind === 'v2f';
+    if (this.kind === 'v2f') {
+      // nothing to layer: A's FS is rifty's plain MemoryFsSync holding every file
+    } else if (this.kind === 'v2' || this.kind === 'v2s')
       await (await this.A.fn(this.A.probe, 'layered')).apply(
         undefined,
         [packCopy.copyInto(), index, refs],
@@ -468,6 +479,16 @@ class Live {
     this.epoch = await this.A.fn(this.A.life, 'epoch');
     this.check = await this.A.fn(this.A.life, 'check');
     this.capture = await this.A.fn(this.A.life, 'captureFull');
+    if (this.kind === 'v2f') {
+      const snap = await this.A.fn(this.A.entry, 'snapshot');
+      // the restore point of a plain FS is the whole FS (ADR-0567 blob)
+      this.capture = {
+        apply: async () => [
+          await snap.apply(undefined, [OPTS], { arguments: { copy: true }, result: { copy: true } }),
+          '[]',
+        ],
+      };
+    }
     return performance.now() - t;
   }
   get alive() {
@@ -775,8 +796,12 @@ if (SECTIONS.has('burst')) {
   const r0 = process.memoryUsage.rss();
   const sbs = await Promise.all([0, 1, 2, 3].map(() => make(kind, W.xlsx)));
   let peak = 0;
+  const ends = {};
   for (let k = 0; k < 5; k++) {
-    await Promise.all(sbs.map((s) => s.exec()));
+    for (const r of await Promise.all(sbs.map((s) => s.exec()))) {
+      const end = r.termination ?? `exit ${r.code}`;
+      ends[end] = (ends[end] ?? 0) + 1;
+    }
     peak = Math.max(peak, process.memoryUsage.rss());
   }
   await new Promise((r) => setTimeout(r, 1000));
@@ -789,6 +814,7 @@ if (SECTIONS.has('burst')) {
   log({
     sec: 'burst',
     kind,
+    ends,
     load: load(),
     startMiB: MiB(r0),
     peakMiB: MiB(peak),
@@ -820,7 +846,10 @@ if (!fs.existsSync(marker)) {
   for (const kind of ARMS.filter((k) => k.startsWith('v2'))) {
     {
       const s = await make(kind, manager);
+      const fp = await s.A.fn(s.A.life, 'fingerprint');
+      const before = JSON.parse(fp.applySync(undefined, []));
       const a = await s.exec();
+      const after = JSON.parse(fp.applySync(undefined, []));
       const b = await s.exec();
       log({
         sec: 'escape',
@@ -829,15 +858,28 @@ if (!fs.existsSync(marker)) {
         exec1: a.out.trim(),
         exec2: b.out.trim(),
         codes: [a.code, b.code],
+        fsRealmDiffsBefore: before.length,
+        fsRealmDiffsAfter: after.length,
+        fsRealmDiffs: after.slice(0, 6),
       });
       s.dispose();
     }
     {
-      const s = await make(kind, hooks);
-      const fp = await await s.A.fn(s.A.life, 'fingerprint');
-      const before = fp.applySync(undefined, []);
+      // control: an ordinary program twice — the oracle must stay at 0 without an attack
+      const s = await make(kind, canary);
+      const fp = await s.A.fn(s.A.life, 'fingerprint');
       const a = await s.exec();
-      const after = fp.applySync(undefined, []);
+      const b = await s.exec();
+      const after = JSON.parse(fp.applySync(undefined, []));
+      log({ sec: 'escape', case: 'control: an ordinary program twice', kind, exec1: a.out.trim(), codes: [a.code, b.code], fsRealmDiffsAfter: after.length, fsRealmDiffs: after.slice(0, 6) });
+      s.dispose();
+    }
+    {
+      const s = await make(kind, hooks);
+      const fp = await s.A.fn(s.A.life, 'fingerprint');
+      const before = JSON.parse(fp.applySync(undefined, []));
+      const a = await s.exec();
+      const after = JSON.parse(fp.applySync(undefined, []));
       s.hostCall('writeFileSync', ['/workspace/main.js', new TextEncoder().encode(canary)]);
       const b = await s.exec();
       log({
@@ -846,7 +888,9 @@ if (!fs.existsSync(marker)) {
         kind,
         exec1: a.out.trim().slice(0, 400),
         exec1End: a.termination ?? a.code,
-        fsRealmIntrinsicsChanged: before !== after,
+        fsRealmDiffsBefore: before.length,
+        fsRealmDiffsAfter: after.length,
+        fsRealmDiffs: after.slice(0, 6),
         exec2: b.out.trim() || b.termination,
         codes: [a.code, b.code],
       });
@@ -1481,9 +1525,12 @@ for (let i = 0; ; i++) { const k = i % 64; fs.writeFileSync('/workspace/w/' + k,
     const TRIALS = Number(process.env.TRIALS ?? 40);
     let bad = 0;
     const samples = [];
-    const s = await make('v2', churn);
+    const s = await make(process.env.L5KIND ?? 'v2', churn);
+    const ends = {};
     for (let i = 0; i < TRIALS; i++) {
       const k = await s.exec({ timeoutMs: 30 + ((i * 37) % 200) });
+      const end = k.termination ?? `exit ${k.code}`;
+      ends[end] = (ends[end] ?? 0) + 1;
       if (!s.alive) {
         samples.push(`trial ${i}: isolate gone (${k.termination})`);
         break;
@@ -1496,8 +1543,9 @@ for (let i = 0; ; i++) { const k = i % 64; fs.writeFileSync('/workspace/w/' + k,
     }
     log({
       sec: 'life',
-      case: 'L5 killed inside FS work (v2)',
+      case: `L5 killed inside FS work (${process.env.L5KIND ?? 'v2'})`,
       trials: TRIALS,
+      ends,
       inconsistent: bad,
       samples,
     });
@@ -1508,16 +1556,77 @@ for (let i = 0; ; i++) { const k = i % 64; fs.writeFileSync('/workspace/w/' + k,
     const seed = Array.from({ length: 64 }, (_, k) => [`/workspace/w/${k}`, Buffer.alloc(4096, k)]);
     const mover = `
 const fs = require('fs');
+fs.mkdirSync('/workspace/w', { recursive: true }); fs.mkdirSync('/workspace/v', { recursive: true });
+// resumes from wherever the previous (killed) run left each file: never throws on a consistent tree
+for (let i = 0; ; i++) { const k = i % 64; const a = fs.existsSync('/workspace/w/' + k) ? 'w' : 'v', b = a === 'w' ? 'v' : 'w';
+  fs.renameSync('/workspace/' + a + '/' + k, '/workspace/' + b + '/' + k); }
+`;
+    // round 1-3's mover (greptile, PR #454): restarts at i = 0 and throws ENOENT once a kill left files split
+    const moverOld = `
+const fs = require('fs');
 for (let i = 0; ; i++) { const k = i % 64; const a = (i >> 6) % 2 ? 'v' : 'w', b = a === 'w' ? 'v' : 'w';
   if (k === 0) fs.mkdirSync('/workspace/' + b, { recursive: true });
   fs.renameSync('/workspace/' + a + '/' + k, '/workspace/' + b + '/' + k); }
 `;
-    const TRIALS = Number(process.env.TRIALS ?? 200);
+    const TRIALS = Number(process.env.L5B_TRIALS ?? process.env.TRIALS ?? 200);
+    if (process.env.L5KIND === 'v1' || process.env.L5KIND === 'v2bs+rp') {
+      // containment: the same kills under v1 (whole-run rollback) and v2bs + restore point (rebuild)
+      const ends = {};
+      let bad = 0;
+      const samples = [];
+      let count;
+      let killOnce;
+      if (process.env.L5KIND === 'v1') {
+        const f = await make('v1', mover, { extra: seed });
+        killOnce = (ms) => f.exec({ timeoutMs: ms });
+        count = () => {
+          const up = createMemoryFs().fsSync;
+          restoreFs(up, f.blob, OPTS);
+          const L = LayeredFs.fromWire(nodeLower, up, JSON.parse(f.refs));
+          let n = 0;
+          for (const d of ['w', 'v'])
+            if (L.existsSync(`/workspace/${d}`))
+              for (const e of L.readdirSync(`/workspace/${d}`))
+                if (L.readFileBytesSync(`/workspace/${d}/${e.name}`).byteLength === 4096) n++;
+          return n;
+        };
+      } else {
+        const T = new Turn(256);
+        await T.create();
+        await T.op('mkdir', async () => T.live.hostCall('mkdirSync', ['/workspace/w', { recursive: true }]));
+        for (const [p, d] of seed) await T.writeFile(p, new Uint8Array(d));
+        await T.writeFile('/workspace/main.js', new TextEncoder().encode(mover));
+        killOnce = (ms) => T.exec([], { timeoutMs: ms });
+        count = () => {
+          let n = 0;
+          for (const d of ['w', 'v'])
+            try {
+              for (const e of T.live.hostCall('readdirSync', [`/workspace/${d}`]))
+                if (T.live.hostCall('readFileBytesSync', [`/workspace/${d}/${e.name}`]).byteLength === 4096) n++;
+            } catch {}
+          return n;
+        };
+      }
+      for (let i = 0; i < TRIALS; i++) {
+        const r = await killOnce(20 + ((i * 13) % 97));
+        const end = r.termination ?? `exit ${r.code}`;
+        ends[end] = (ends[end] ?? 0) + 1;
+        const n = count();
+        if (n !== 64) {
+          bad++;
+          if (samples.length < 3) samples.push(`trial ${i} (end ${end}): ${n} files`);
+        }
+      }
+      log({ sec: 'life', case: `L5b killed mid-rename (${process.env.L5KIND}): 64 files must stay 64`, trials: TRIALS, ends, bad, samples });
+    } else {
     let bad = 0;
     const samples = [];
-    const s = await make('v2', mover, { extra: seed });
+    const s = await make(process.env.L5KIND ?? 'v2', process.env.L5B_OLD === '1' ? moverOld : mover, { extra: seed });
+    const ends = {};
     for (let i = 0; i < TRIALS; i++) {
-      await s.exec({ timeoutMs: 20 + ((i * 13) % 97) });
+      const r = await s.exec({ timeoutMs: 20 + ((i * 13) % 97) });
+      const end = r.termination ?? `exit ${r.code}`;
+      ends[end] = (ends[end] ?? 0) + 1;
       let n = 0;
       for (const d of ['w', 'v']) {
         try {
@@ -1529,18 +1638,33 @@ for (let i = 0; ; i++) { const k = i % 64; const a = (i >> 6) % 2 ? 'v' : 'w', b
       const issues = JSON.parse(s.check.applySync(undefined, []));
       if (n !== 64 || issues.length) {
         bad++;
-        if (samples.length < 5)
-          samples.push(`trial ${i}: ${n} files; ${issues.slice(0, 2).join(' | ')}`);
+        if (samples.length < 3) {
+          // which file is gone, and does anything still name it
+          const present = new Set();
+          for (const d of ['w', 'v'])
+            try {
+              for (const e of s.hostCall('readdirSync', [`/workspace/${d}`])) present.add(`${d}/${e.name}`);
+            } catch {}
+          const missing = [];
+          for (let k = 0; k < 64; k++)
+            if (!present.has(`w/${k}`) && !present.has(`v/${k}`)) {
+              const ex = ['w', 'v'].map((d) => s.hostCall('existsSync', [`/workspace/${d}/${k}`]));
+              missing.push(`${k} exists w/v=${ex.join('/')}`);
+            }
+          samples.push(`trial ${i} (end ${end}): ${n} files; missing ${missing.join(', ')}; audit ${issues.slice(0, 2).join(' | ') || 'clean'}`);
+        }
       }
     }
     log({
       sec: 'life',
-      case: 'L5b killed mid-rename (v2): 64 files must stay 64',
+      case: `L5b killed mid-rename (${process.env.L5KIND ?? 'v2'}${process.env.L5B_OLD === '1' ? ', round-1 mover' : ''}): 64 files must stay 64`,
       trials: TRIALS,
+      ends,
       bad,
       samples,
     });
     s.dispose();
+    }
   }
   // L6: out of isolate memory.
   const oom = `require('fs').writeFileSync('/workspace/before.txt', '1'); const a = []; for (;;) a.push('x'.repeat(1e6) + Math.random());`;
