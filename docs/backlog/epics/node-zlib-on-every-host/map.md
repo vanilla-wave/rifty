@@ -6,7 +6,7 @@ so Node's `lib/zlib.js` comes to rifty only on a `Transform` equal to Node's on 
 
 ## Items
 
-1. `runtime-js/zlib-node-acceptance-carrier` — **carrier** (ready) — the User scenario as 10 parity
+1. `runtime-js/zlib-node-acceptance-carrier` — **carrier** (delivered, PR #453; decisions in `packages/isolate-host/tests/zlib-scenario.ts`) — the User scenario as 10 parity
    cases (isolate sandbox and both browser hosts vs a live `node` on the same runner), each pinning
    today's measured outcome; all ten expected green after unit 3, except case 4 (pdfkit) on the
    isolate host: it fails at fontkit's `TextDecoder('ascii')` before zlib (at least that)

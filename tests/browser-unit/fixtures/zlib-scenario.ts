@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import type { OracleStep, StepId } from '../../../packages/isolate-host/tests/zlib-scenario.ts';
+import type { Mask, OracleStep } from '../../../packages/isolate-host/tests/zlib-scenario.ts';
 
 // node:zlib goal carrier on the browser hosts (Workbench: ../zlib-scenario.spec.ts, SDK:
 // tests/no-coi/zlib-scenario.spec.ts): a step's workspace (thousands of closure files) reaches the
@@ -28,10 +28,11 @@ export async function serveSteps(
   });
 }
 
-/** `node zunpack.cjs <body> <dir>`: the step's files under `<dir>`. */
+/** `node zunpack.cjs <body> <dir>`: the step's files under a fresh `<dir>` (no earlier run's output). */
 export const UNPACK = `const fs = require('node:fs');
 const path = require('node:path');
 const [body, dir] = process.argv.slice(2);
+fs.rmSync(dir, { recursive: true, force: true });
 const b = fs.readFileSync(body);
 const size = b.readUInt32LE(0);
 let at = 4 + size;
@@ -46,27 +47,16 @@ for (const [rel, length] of JSON.parse(b.subarray(4, at).toString('utf8'))) {
 fs.rmSync(body);
 `;
 
-const stream = (name: string, oneShot: string): string =>
-  `NotImplementedError: Not implemented: zlib.${name} (this stream not implemented yet; buffer the input, then call async zlib.${oneShot}: zlib.${oneShot}(buf, cb) or await util.promisify(zlib.${oneShot})(buf))`;
-const sync = (name: string, async: string): string =>
-  `NotImplementedError: Not implemented: zlib.${name} (sync zlib not implemented yet; async zlib.${async} works: zlib.${async}(buf, cb) or await util.promisify(zlib.${async})(buf))`;
-
-/** The browser-host `node:zlib`'s (runtime-js `builtins/zlib.ts`) error per step today, main dfad6553e. */
-export const BROWSER_ERRORS: Readonly<Record<StepId, string | null>> = {
-  '1': stream('DeflateRaw', 'deflateRaw'),
-  '2': stream('createInflateRaw', 'inflateRaw'),
-  '3w': stream('createDeflate', 'deflate'),
-  '3r': "TypeError: Class constructors cannot be invoked without 'new'",
-  '4': sync('deflateSync', 'deflate'),
-  '5a': sync('gunzipSync', 'gunzip'),
-  '5b': 'NotImplementedError: Not implemented: zlib.unzip (gzip/zlib auto-detect not implemented yet; pick by header: gzip input (starts 1f 8b) → async zlib.gunzip, else → async zlib.inflate; both take (buf, cb) and work with util.promisify)',
-  '6': stream('createDeflateRaw', 'deflateRaw'),
-  '7a': 'NotImplementedError: Not implemented: zlib.crc32 (crc32 not implemented yet; node:zlib has no working alternative)',
-  // Reported, not thrown: the program prints it (Node: Error, Z_DATA_ERROR, errno -3, no trailing dot).
-  '7b': null,
-};
-/** Stdout a step prints before its error, today, on both browser hosts. */
-export const BROWSER_STDOUT: Readonly<Partial<Record<StepId, string>>> = {
-  '6': 'params {"client_max_window_bits":11,"server_max_window_bits":10}\n',
-  '7b': '{"error":true,"name":"TypeError","message":"The compressed data was not valid: invalid code -- missing end-of-block."}\n',
-};
+/** The masks of a browser host's stderr; nothing else of it is rewritten. */
+export const BROWSER_MASKS: readonly Mask[] = [
+  {
+    why: "the dev server's origin (port) and this checkout's path in rifty's own source URLs",
+    pattern: /https?:\/\/(?:localhost|127\.0\.0\.1):\d+\/@fs\/\S*?\/packages\//g,
+    to: '<dev-server>/packages/',
+  },
+  {
+    why: "a run of rifty's own stack frames (their line:col move with any runtime edit); guest frames stay",
+    pattern: /(?:^ {4}at (?:.*\()?<dev-server>\/packages\/.*\n)+/gm,
+    to: '    at <rifty frames>\n',
+  },
+];

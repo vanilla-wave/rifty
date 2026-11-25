@@ -5,7 +5,7 @@ title: The isolate guest's TextDecoder throws for every label but utf-8, so pdfk
 created: 2026-11-25
 why: Measured by the node:zlib goal's carrier — pdfkit 0.17.2 dies at load in the isolate host on `new TextDecoder('ascii')`, before any zlib call, so the zlib goal's unit 3 alone cannot turn its case 4 green on the isolate
 user_story: As an agent running model-written code in the isolate host, I want `require('pdfkit')` to load as in Node, but today fontkit's module top level throws `NotImplementedError: Not implemented: isolate-host.TextDecoder(ascii) (only utf-8)`
-sources: [packages/isolate-host/tests/zlib-scenario.test.ts, docs/backlog/runtime-js/zlib-node-acceptance-carrier.md]
+sources: [packages/isolate-host/tests/zlib-scenario.test.ts, docs/backlog/epics/node-zlib-on-every-host/map.md]
 code: [packages/isolate-guest/src/guest/text-codec.ts]
 ---
 

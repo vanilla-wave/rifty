@@ -3,6 +3,18 @@
  * each one program over its library closure laid out as `node_modules`, and the live oracle: real
  * `node <step>` on this runner over the same files. Shared by the isolate-host test and the
  * browser-host specs (tests/browser-unit, tests/no-coi); no sandbox import.
+ *
+ * Carrier decisions (PR #453):
+ * - Hosts: isolate `exec`; Workbench = tests/browser-unit (sealed fixture, COI), SDK = tests/no-coi
+ *   (`createSandbox`), ADR-0571's `node-file-parity` pair.
+ * - Inputs: steps 2, 3r, 7a read the oracle's outputs of 1, 3w, 4; 5a, 5b, 7b read `inputs.js`'s,
+ *   all made by Node on this runner. Clock frozen in each step (`lib.js`). No step writes gzip, so
+ *   the goal's OS-byte rule compares nothing.
+ * - Browser: a step's full closure reaches the guest as one routed body, unpacked by a guest
+ *   `node`; on the Workbench to `/tmp/z<id>`, keeping the project small (a guest write's cost
+ *   grows with its file count: perf/workbench-guest-write-cost-grows-with-project). No closure cut
+ *   by fs trace (manager: simplicity over ~35 s of CI).
+ * - A pin is the whole outcome; a host's stderr masks are enumerated (`Mask`), nothing else.
  */
 import { createHash } from 'node:crypto';
 import { readFileSync, realpathSync } from 'node:fs';
@@ -197,24 +209,26 @@ export const observed = (run: Outcome): Observed => ({
   output: run.file === undefined ? null : sha256(run.file),
 });
 
+/** A narrow rewrite of one known variable part of a host's stderr; `why` names what it hides. */
+export interface Mask {
+  readonly why: string;
+  readonly pattern: RegExp;
+  readonly to: string;
+}
+
 /**
- * Today's rifty outcome of a step, pinned whole: exit code, stdout, the uncaught error's
- * `Name: message` line (stderr's first line that starts with an error name, a host's `Uncaught `
- * prefix kept), output written.
+ * Today's rifty outcome of a step, pinned whole: exit code, stdout, the whole stderr (only the
+ * host's enumerated masks applied), the output written.
  */
 export interface Pin {
   readonly exitCode: number | null;
   readonly stdout: string;
-  readonly error: string | null;
+  readonly stderr: string;
   readonly output: string | null;
 }
-export const pinOf = (o: Observed): Pin => ({
+export const pinOf = (o: Observed, masks: readonly Mask[] = []): Pin => ({
   exitCode: o.exitCode,
   stdout: o.stdout,
-  error:
-    /^(?:Uncaught )?[A-Z]?\w*Error(?: \[\w+\])?: .*$/m
-      .exec(o.stderr)?.[0]
-      // The Workbench's uncaught-error line ends with the dev server's source URL (port, checkout).
-      .replace(/ \(https?:\/\/\S+:\d+\)$/, ' (<source>)') ?? null,
+  stderr: masks.reduce((text, m) => text.replace(m.pattern, m.to), o.stderr),
   output: o.output,
 });
