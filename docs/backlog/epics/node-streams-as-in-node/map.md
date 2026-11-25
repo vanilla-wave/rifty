@@ -109,8 +109,8 @@ The node:zlib drafts (`zlib-class-call-shape`, `zlib-crc32`, `zlib-trailing-byte
     `fs.ReadStream → createGzip → fs.WriteStream` are in no carrier today. They are proposed for the
     zlib carrier, via the manager; this goal's STORE `Extract` case covers the streams half.
   - **`zlib-diff` = 0 is the consumer check of units 1, 2 and 7**
-    (`docs/backlog/runtime-js/reference/zlib-engine-probe/zlib-diff.mjs` → `results/zlib-diff.txt` on
-    branch `t3/zlib-engine-probe` at `da3ae64cb`; linked, not copied). It runs Node's verbatim `lib/zlib.js` over
+    (on branch `t3/zlib-engine-probe` at `da3ae64cb`: `runtime-js/reference/zlib-engine-probe/zlib-diff.mjs` →
+    `results/zlib-diff.txt`; linked, not copied, not on main yet). It runs Node's verbatim `lib/zlib.js` over
     Node's `Transform` and over rifty's, 16 scenarios; 10 differ, in 48 fields. zlib unit 3, which
     ports `lib/zlib.js`, starts when it reaches 0. Its gaps, placed by unit and measured here too:
     - constructor options → 2 (`m8`);
