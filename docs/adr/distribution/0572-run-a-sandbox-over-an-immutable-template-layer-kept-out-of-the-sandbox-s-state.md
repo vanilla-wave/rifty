@@ -225,7 +225,8 @@ the user's words»).
    and its isolate memory over a ~1 MB and a ~95 MB template; a host `writeFile`/`list`/`remove` and
    the consumer's peak memory per run do not grow with the template; an empty sandbox over the
    ~95 MB template runs with the default `maxFsBytes` and `memoryLimitMb`; N sandboxes over one
-   template hold one copy of it in the consumer, each idle one only its own changes.
+   template hold one copy of it in the consumer, each idle one only its own changes (a changed
+   template directory listed with a row per untouched child).
 8. A guest that breaks its own runtime (replaced intrinsics) cannot leave a tree its file
    operations did not produce while its run reads as success (live-sandbox I1).
 9. The README shows building the template from `package.json` + lock and requiring each of the
@@ -350,7 +351,8 @@ the user's words»).
   libraries' generators, four at once +7…+41 ms — inside the F1 return condition; map item 5
   re-measures it on landed code.
 - The state cap is counted over the state: a host write costs O(the write + the state) — T95
-  0.02 ms, 0.31 ms after the host listed the whole template with 21 files of its own (probe H).
+  0.02 ms, the same after the host listed the whole template (probe H, equal own files); N writes
+  in a row cost O(N × the state).
 - `runCode` unchanged.
 - Overlap with PR #437 (open, the user's track: every guest's FS sync-only): a template run installs
   `LayeredFsSync` as the realm's only FS surface (§3), the same move for template runs; whichever

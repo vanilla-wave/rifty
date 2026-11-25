@@ -71,21 +71,21 @@ differed by ≤ 10 % per row.
 
 Same T1/T95 builders over the pnpm store at main @ 57152054d (T95's filler bytes moved with the
 store: 23 654 files, 72.5 MB here vs 88.8 MB in L). rifty's MemoryFsSync + codec from source.
-Medians of 21 (ms); writes accumulate during a row (21 files), so later rows carry a larger state;
-«after touch» = a write after `list` of `/node_modules` and of every package; idle = heap +
-ArrayBuffers per sandbox over 20 held sandboxes, one 10 KiB own file each.
+Medians of 21 (ms); writes accumulate during a row (21 files); «fresh» / «after listing» = the same
+21 own writes on two fresh sandboxes, the second after `list` of `/node_modules` and of every
+package; idle = heap + ArrayBuffers per sandbox over 20 held sandboxes, one 10 KiB own file each.
 
-| arm | create T1 / T95 | `writeFile` 10 KiB + cap check T1 / T95 | write a template file T1 / T95 | write after touch T1 / T95 | idle T1 / T95 |
+| arm | create T1 / T95 | `writeFile` 10 KiB + cap check T1 / T95 | write a template file T1 / T95 | 21 writes fresh / after listing, T95 | idle T1 / T95 |
 |---|---|---|---|---|---|
-| views (a `MemoryFsSync` of views per sandbox, cap check walks it) | 10.6 / 157 | 0.61 / 30.0 | 0.56 / 43.2 | 0.70 / 38.5 | 110 KiB / 9.3 MiB |
-| overlay (hand-written: difference + deleted set; rejected, ADR-0572 §2) | 0.16 / 0.02 | 0.25 / 0.35 | 0.31 / 0.63 | 0.45 / 0.72 | noise (−3 KiB / −480 KiB) |
-| layered (`layered.ts`; cap check = the count over the state on the wire) | 0.53 / 0.06 | 0.07 / 0.02 | 0.13 / 0.14 | 0.16 / 0.31 | 5 KiB / 4 KiB |
+| views (a `MemoryFsSync` of views per sandbox, cap check walks it) | 4.66 / 283 | 0.55 / 30.6 | 0.68 / 30.1 | 30.2 / 30.1 | 112 KiB / 9.4 MiB |
+| overlay (hand-written: difference + deleted set; rejected, ADR-0572 §2) | 0.11 / 0.02 | 0.16 / 0.15 | 0.29 / 0.30 | 0.16 / 0.14 | noise (−3 KiB / −480 KiB) |
+| layered (`layered.ts`; cap check = the count over the state on the wire) | 0.27 / 0.06 | 0.03 / 0.02 | 0.05 / 0.06 | 0.02 / 0.02 | 5 KiB / 4 KiB |
 
 `readFile`, `list('/node_modules')`, `remove` ≤ 0.06 ms in every arm. Requirements §3: «Хостовая
 запись стоит O(размер записи + дифф), а не O(всего состояния)», «Память простаивающей песочницы у
 потребителя не включает шаблон: N песочниц на одном шаблоне держат одну его копию» — `layered`
-meets both, also after the host touched the whole template (its cap check enters only changed
-directories; listing the template changes nothing); `views` does not.
+meets both: a write costs the same after the host listed the whole template (its cap check enters
+only changed directories; listing changes nothing); `views` does not.
 
 ## S — named sequences against live Node (`layered.ts`, `seq.mjs`, `seq.out.txt`)
 

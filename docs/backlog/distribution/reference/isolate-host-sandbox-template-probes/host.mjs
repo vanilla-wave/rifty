@@ -277,6 +277,8 @@ for (const [label, files] of [
   ]) {
     const t = performance.now();
     const sb = make(tpl);
+    const fresh = make(tpl);
+    const touched = make(tpl);
     const create = r1(performance.now() - t);
     const tplFile = files.find(
       ([p]) => p.startsWith('/node_modules/semver/') && p.endsWith('.js'),
@@ -288,9 +290,11 @@ for (const [label, files] of [
       writeFile10KiBMs: time((i) => sb.writeFile(`/workspace/out/f${i}.bin`, chunk)),
       writeTemplateFileMs: time(() => sb.writeFile(tplFile, chunk)),
       // After the host touched the template (a listing of /node_modules and of every package):
+      // The same 21 own writes on two fresh sandboxes, one after a listing of the whole template.
+      writeFreshMs: time((i) => fresh.writeFile(`/workspace/late/f${i}.bin`, chunk)),
       writeAfterTouchMs: (() => {
-        for (const n of sb.list('/node_modules')) sb.list(`/node_modules/${n}`);
-        return time((i) => sb.writeFile(`/workspace/late/f${i}.bin`, chunk));
+        for (const n of touched.list('/node_modules')) touched.list(`/node_modules/${n}`);
+        return time((i) => touched.writeFile(`/workspace/late/f${i}.bin`, chunk));
       })(),
       readTemplateFileMs: time(() => sb.readFile(tplFile)),
       listNodeModulesMs: time(() => sb.list('/node_modules')),
