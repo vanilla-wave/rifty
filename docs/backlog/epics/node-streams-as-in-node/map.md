@@ -6,6 +6,10 @@ Rows equal to Node, run at `725576a88` (main `b6d37fc01`'s code; this branch is 
 
 ## Items
 
+Status (the manager, round 4): **ready** — 0, 1, 2, 3, 4, 4b (none depends on route B or the budget).
+**Draft** — 4c, 5, P, 7, AL, 8a, 8b, 8c, 9r, 9w; each carries «Open findings (review round 4)»
+verbatim, closed when the unit is taken into work.
+
 - **0** `runtime-js/node-streams-acceptance-carrier` — **carrier**. In Workbench it lays the exceljs
   closure out in the guest's `/tmp` through `packages/isolate-host/tests/closure-files.ts` and the zlib
   carrier's `serveSteps`/`UNPACK`/`RUNNER` (PR #453). That takes 11–12 s per program, so there is no
@@ -55,17 +59,23 @@ against Node:
   for the isolate core. Without them, Node's `pipeline` fails in the isolate (`m7` 5/11 on the
   product build). Reachable classes are a fact; the globals fork is the user's (§Open questions). →
   I7 (isolate).
+- **AL** `runtime-js/stream-core-abort-listeners-host-event-target` — Node's core attaches abort
+  listeners with `kResistStopPropagation`/`kWeakHandler`, which a host `EventTarget` ignores (browser
+  hosts only; the isolate gets Node's own `EventTarget` from 7). Variants: (A) the direct listener as in
+  the source, (B) a derived signal, (C) one patch point in the guest realm's
+  `EventTarget.prototype.addEventListener`, (D) Node's classes as guest globals on browser hosts too.
+  Default candidate (A); the probe runs (A). Rows `m9`, `m10` (`results/abort-variants/`). (D) is the
+  user's, with the globals question. → I1, I3.
 
 Core, three adjacent PRs (ADR-0575 §7):
 
 - **8a** `runtime-js/stream-core-node-sources-unwired`:
   - vendored sources, license manifest entry, generator, bindings, zlib constants without the zlib
     module;
-  - the abort-listener binding: a dependent signal, measured in `m9` and
-    `results/route-b-abort-semantics.txt`;
+  - `internal/events/abort_listener` whole (variant A); AL decides the variant;
   - not wired: `check:arch` «no product importer» and 0 B on every bundle artifact;
   - a CI differential «Node's bindings = rifty's» over the rows `results/ownership.txt` gives to the
-    core. The rows of units 1, 2, 4 and 5 stay pinned as expected RED with their owner. `zlib-diff`
+    core. Rows of later owners stay pinned on their window's outcome (S7 open, see the unit). `zlib-diff`
     is not part of 8a: it is zlib unit 3's entry criterion, measured there after 8c.
 - **8b** `runtime-js/stream-core-consumer-guard-rows`: regression rows for internal consumers
   and non-stream objects, green on today's core (§Regression risk).
@@ -73,11 +83,13 @@ Core, three adjacent PRs (ADR-0575 §7):
   - wiring and consumer moves (`ServerResponse.write` → `false`; a stream shape `finished`
     accepts for `PortRegistrySocket`), and removal of `packages/io/src/streams`;
   - the es-floor extension;
-  - identifier renaming changes 0 of 105 parity cases (`results/route-b-minify.txt`). The one case
-    it changed before, `from-web-options`, named Node's `signal` inside `abort_listener`, and that
-    code is now the binding. So no ⚠️; one guard row runs on the Workbench consumer bundle.
+  - identifier renaming changes 1 of 105 parity cases run (5 more skipped on both builds:
+    stdin/eval/esm kinds; `results/route-b-minify.txt`): `stream/from-web-options`, whose V8 `TypeError`
+    text names Node's `signal` inside `abort_listener` (variant A). The Workbench consumer bundle renames,
+    so 8c either keeps identifiers in the module there or declares the row; a guard row runs
+    `from-web-options` on that bundle. AL's variant can change this.
 
-  Stands on 8a, 8b, 1, 2 and, in the isolate, 7. Absorbs 21 drafts. → I1–I3, I6, I7.
+  Stands on 8a, 8b, 1, 2, AL and, in the isolate, 7. Absorbs 21 drafts. → I1–I3, I6, I7.
 
   Merge order: 8a and 8b merge only once 8c's PR is open and its CI differential is green, so the
   arrow 8a → 8b → 8c is the build order and the three merges are adjacent.
@@ -96,14 +108,15 @@ fs streams, split by side:
 
   The window rows are pinned (§Regression risk, windows). → I4, I8 (read programs).
 - **9w** `runtime-js/fs-write-stream-node-source` — `fs.WriteStream` from the same file. Stands on
-  8c, 9r, 4c, 5 and the publication cost unit P (§Row ownership). Today's 16 MiB write stream on Workbench takes 518 ms,
+  8c, 4, 4c, 5 and the publication cost unit P (§Row ownership). It comes after 9r by order: the table's
+  «9w ← 9r» rows are an artefact of the last-owner rule, not a code dependency. Today's 16 MiB write stream on Workbench takes 518 ms,
   and it stays so until 9w. → I5, I8 (write programs).
 
 The graph is derived from `results/ownership.txt` (`ownership.mjs`), not from this prose: a row with
 two or more units is an edge. Its summary is under §Row ownership.
 
 Implementation order once the goal is ready:
-- 1, 2, 3 (independent) → 4, 4b → 7 → 8a → 8b → 8c → 9r;
+- 1, 2, 3 (independent) → 4, 4b → 7 → AL → 8a → 8b → 8c → 9r;
 - in parallel and after: 4c, 5 and P (publication cost), then 9w after 9r;
 - 7 comes before 8c: the isolate's pipeline rows need it, and `pipeline` works there today. The
   user's answer decides only its globals.
@@ -118,16 +131,19 @@ Probe totals on route B, in-process (`summary.txt`):
 | `m2` | 7/7 |
 | `m3` | 4/4 |
 | `m4` | 18/22 |
-| `m5` | 13/14 |
+| `m5` | 13/15 |
 | `m6` | 8/8 |
 | `m7` | 11/11 |
 | `m8` | 15/16 |
+| `m9` | 2/5 (variant A; AL) |
+| `m10` | 3/3 |
+| `w1` | 6/6 |
 
 Chromium 148, on main `692babe13` + route B (`results/chromium-b/summary.txt`):
 - SDK: 12/12 programs = Node.
-- Workbench: the 7 that need no closure = Node (5 `c-*`, `m1`, hook matrix). The 5 closure programs
-  did not run, because seeding the 5941-file closure did not complete. `c-transform-big` takes
-  73.5 s there, on the quadratic fd paths (4b/4c).
+- Workbench: the 7 that need no closure = Node (5 `c-*`, `m1`, hook matrix), and the 5 closure
+  programs 5/5 with the closure in the guest's `/tmp` (`results/chromium-c/route-b/`).
+  `c-transform-big` takes 73.5 s there, on the quadratic fd paths (4b/4c).
 
 Remainder by binding:
 
@@ -141,13 +157,23 @@ Remainder by binding:
 ## Row ownership
 
 `results/ownership.txt` is generated by `reference/ownership.mjs` from `results/`; nothing in it is
-written by hand.
+written by hand. It is an auxiliary tool, not the full source:
 
-- Each row of each matrix and carrier program, on each host, gets the units it needs before it equals
-  Node, read from the window columns (`-Bp8c`, `-Bp9w`, `-Bp9r`), the binding cause and the host.
-- Its owner is the last of those units in the implementation order.
-- Two or more units on a row make an edge.
-- A unit's acceptance: its own rows go green, and later owners' rows stay pinned on today's outcome.
+- it covers in-process rows (every matrix and carrier program, the parity cases), isolate rows, and
+  Workbench fd and stream-timing rows;
+- it does not cover SDK rows, nor the Workbench carrier and matrix rows (`results/chromium*/` hold
+  those as program summaries only);
+- known limit: the isolate rows go by name rules (Node makes an `AbortController` in `pipeline`,
+  `compose` and signal-taking operators → 7; a guest that makes one → 7g), because no row-level
+  isolate run on route B exists.
+
+Rules:
+- each row, on each host, gets the units it needs before it equals Node, read from the window
+  columns (`-Bp8c`, `-Bp9w`, `-Bp9r`), the binding cause, timer ticks and the host;
+- its owner is the last of those units in the implementation order; two or more units make an edge;
+- a unit's acceptance: its own rows go green; later owners' rows stay pinned on their window's outcome
+  (the window column), and the changes against today are listed and declared (§Regression risk,
+  windows).
 
 Summary of `results/ownership.txt` (rows by owner; `guard` = equal today and not broken by route B):
 
@@ -158,37 +184,42 @@ Summary of `results/ownership.txt` (rows by owner; `guard` = equal today and not
 | 3 | 1 |
 | 4 | 1 |
 | 4b | 12 |
-| 8c | 129 |
-| 9r | 33 |
+| AL | 2 |
+| 8c | 132 |
+| 9r | 34 |
 | 4c | 24 |
 | 5 | 1 |
-| 9w | 20 |
-| 7g | 5 |
-| guard | 95 |
+| 9w | 22 |
+| 7g | 8 |
+| guard | 98 |
 
 Edges, as owner ← unit, with the number of rows:
 
-- 7g ← 8c: 3
+- 7g ← 8c: 5
+- 7g ← AL: 3
 - 8c ← 1: 3
 - 8c ← 2: 1
-- 8c ← 7: 5
+- 8c ← 7: 6
+- 8c ← AL: 1
 - 9r ← 1: 2
-- 9r ← 4: 1
+- 9r ← 4: 2
 - 9r ← 4b: 1
-- 9r ← 7: 1
-- 9r ← 8c: 31
+- 9r ← 7: 3
+- 9r ← 8c: 34
+- 9w ← 4: 2
 - 9w ← 4c: 2
 - 9w ← 5: 1
-- 9w ← 8c: 20
-- 9w ← 9r: 2
+- 9w ← 7: 1
+- 9w ← 8c: 22
+- 9w ← 9r: 3
 - 9w ← P: 1
 
 So the graph is:
-- 8c ← 1, 2, 7;
+- 8c ← 1, 2, 7, AL;
 - 9r ← 1, 4, 4b, 7, 8c;
-- 9w ← 4c, 5, 8c, 9r, P;
-- 7g (the isolate guest `AbortController` globals, the user's fork) ← 8c;
-- 3 has no edge.
+- 9w ← 4, 4c, 5, 7, 8c, P; «9w ← 9r» is the last-owner rule's artefact, kept as order only;
+- 7g (the isolate guest `AbortController` globals, the user's fork) ← 8c, AL;
+- 3 has no edge; 7 and P own no row (review S4, open in those units).
 
 8a and 8b are 8c's build steps, so 8c's rows are theirs to keep pinned.
 
@@ -326,6 +357,24 @@ Node, today, after 8c before 9r (`rifty-inproc-Bp8c`: Node's core with today's f
 
 All of these close at 9w.
 
+Rows in a window are pinned on that window's outcome (the window column), not on today's; the changes
+against today are listed and declared (`results/ownership.txt` §window changes). Six change in a way
+that holds after the earlier units land:
+
+- 8c window:
+  - `c-unzip-stored`: today exits 0 and the extraction directory is missing (listing `ENOENT`); the
+    window exits 1 with `TypeError: Class constructor FileWriteStream cannot be invoked without 'new'`;
+  - `c-pipeline-asyncgen`: `TypeError: pipeline: argument must be a stream` → `ERR_STREAM_PREMATURE_CLOSE`;
+  - `m4` `Readable.from(fs.ReadStream)`: rifty's `TypeError` text → Node's `ERR_INVALID_ARG_TYPE`;
+  - `w1` `promises.pipeline(rs, async gen, ws)`: `TypeError` → `ERR_STREAM_PREMATURE_CLOSE`.
+- 9r window:
+  - `c-unzip-stored`: as in the 8c window;
+  - `m3` fs streams `instanceof Stream`: `false,false` → `true,false`.
+
+The table lists further window rows whose change goes away once an earlier unit lands, so they are
+not declared here: `m4` encoding through `'data'` and with `highWaterMark` 4 (unit 1), `m4` timers in
+a 16 MiB stream (unit 4), `m8` encoding `"nope"` (unit 1), `m9` `promises.pipeline` with a signal (AL).
+
 Unit 4 changes the timing of every `fs` callback API. Its own row: the fs callback parity cases
 (`cases/fs`, 41) plus an ordering case of `fs.readFile`/`stat`/`write` callbacks against timers and
 `setImmediate`.
@@ -350,7 +399,8 @@ Each outcome must still be honest, never a silent truncation. Durability after `
     outcomes row for row. Workbench `c-transform-big` does not finish in 180 s; the SDK takes 870 ms.
     Data: `reference/chromium/`, `results/chromium/`, with the program set at copy time.
   - Route B on main `692babe13`: the SDK gives 12/12 programs = Node (10 `c-*`, `m1`, hook matrix).
-    Workbench: the 7 programs without the closure = Node; 5 not run (closure seeding);
+    Workbench: the 7 programs without the closure = Node, and the 5 closure programs 5/5 via `/tmp`
+    (`results/chromium-c/route-b/`);
     `c-transform-big` 73.5 s (`results/chromium-b/`).
   - Chromium 108 not run.
 - fd I/O in Workbench (Chromium 148, main `692babe13`; `results/chromium-fd/`, probes `chromium/fd*`):
@@ -365,8 +415,8 @@ Each outcome must still be honest, never a silent truncation. Durability after `
 - The bundle caps — owner: user — on main `692babe13` (`results/route-b-product-build-main.txt`):
   - route B: generic gzip 288 404 → 312 037 (+23 633) of 332 000; toolchain 331 931 → 355 626
     (+23 695) of 386 000;
-  - with the zlib engine and its handle wired (#452, measured by the PR #450 reviewer): 351 690 and
-    394 735, which is +19 690 and +8 735 over, before `lib/zlib.js`;
+  - with the zlib engine and its handle wired: 351 690 and 394 735 — review measurement of 25.11
+    (PR #450 reviewer, #452's engine; no script in `results/`), which is +19 690 and +8 735 over, before `lib/zlib.js`;
   - #452 as it stands adds 0 B, because nothing imports it.
 
   A lazy stream chunk is doubtful: `require('stream')` is synchronous, and the core is used at boot.
@@ -393,7 +443,9 @@ Each outcome must still be honest, never a silent truncation. Durability after `
     ceiling throws, and `instanceof AbortSignal` throws.
   - The fork: (a) leave it like that, or (b) make `AbortController`/`AbortSignal`/`EventTarget`/`Event`
     isolate globals from the same sources. The bytes are the same either way.
-  - Browser hosts bind the host globals. On the SDK, route B equals Node; on Workbench, the 7 programs run equal Node. None calls
+  - Browser hosts, owner: user — AL's variant (D): Node's `AbortController`/`AbortSignal`/
+    `EventTarget`/`Event` as guest globals on browser hosts too (`runtime-js/stream-core-abort-listeners-host-event-target`).
+  - Browser hosts bind the host globals today. On the SDK, route B equals Node; on Workbench, the 7 programs run equal Node. None calls
     `AbortSignal`/`EventTarget` directly.
 - Web adapters — settled: Node's `internal/webstreams/adapters` verbatim over the host globals
   (ADR-0575 §5). 13 of the 14 parity cases using them equal Node in product shape; the 14th

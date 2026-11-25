@@ -254,8 +254,9 @@ nits. All are verified and fixed:
   - B4: the Workbench carrier puts the closure in `/tmp` (PR #453 helpers, 11–12 s). Route B: 5/5
     closure programs equal Node; no edge 0 ← P.
 - **Should items.**
-  - S1: the abort hidden by a guest `stopImmediatePropagation` is fixed in 8a's binding, through a
-    dependent `AbortSignal.any`. `m9` equals Node; it stays a declared gap on Chromium 108–115.
+  - S1: a dependent `AbortSignal.any` binding was proposed for the abort hidden by a guest
+    `stopImmediatePropagation`. **Corrected in round 4:** «`m9` equals Node» was false (a probe bug
+    printed one value for every column), and the fix is recalled (below).
   - S2: Storage fault rows were added to 4c.
   - S3/S4: a per-host fd table (`results/fd-hosts.txt`); `perf/fs-rpc-chunk-perf` absorbed in halves.
   - S5: window rows measured and pinned (`w1-fs-windows`).
@@ -263,6 +264,26 @@ nits. All are verified and fixed:
 - **Mechanism.** The graph is derived from the row-ownership table (`ownership.mjs`), not from prose.
 
 Not re-reviewed after these fixes.
+
+External review of PR #450, round 4 (at `e96e93a0d`, relayed by the manager): 6 blocker, 10 should,
+nits. The manager changed the mode (Decisions): only units 0–4b are made ready; the rest stay draft
+and carry the findings verbatim in «Open findings (review round 4)». Fixed in the tree:
+
+- B1: `m9` had a probe bug (the `map` row printed `5` on every column and never consumed the
+  promise). Rewritten, plus `m10` (order and leftover listeners); regenerated on variant A.
+- B6: gitignored `*.log` files renamed to `.log.txt`; 351 690 / 394 735 are labelled «review
+  measurement of 25.11».
+- Ownership table: labelled auxiliary (in-process + isolate; not SDK, not Workbench carrier/matrices);
+  isolate rules by name recorded as a known limit; the `out.splice` bug removed; the timer rule added
+  (`m5` 16 MiB timers row, Workbench `chromium-d` ticks), so 9w ← 4 and Workbench read ← 4 return.
+- B5: windows are «pinned on their window's outcome (the window column); changes against today are
+  listed and declared» — the six rows are in map §Regression risk.
+- 4b: fault rows, one ADR for positional read+write in 4b, SDK fd read in `results/chromium-fd/sdk.jsonl`.
+- Units 1–4: acceptance as concrete rows plus parity cases; unit 3 promises guest API only.
+- The abort binding: reverted to variant A (Node's `abort_listener.js` whole, 28 modules = 23 + 5);
+  variants A–D go to `runtime-js/stream-core-abort-listeners-host-event-target` (draft).
+- Nits: closure programs 5/5; `chromium-d` 1-of-3 medians labelled; minify skips named; `opfs-sync.ts`
+  lines; 9w after 9r is order, not a code dependency.
 
 ## Decisions
 
@@ -299,7 +320,18 @@ Not re-reviewed after these fixes.
   (exceljs `readFile`, `for await`, late listener, isolate read) needs none of the write work.
 - 2026-11-25 — manager, round 3: the unit graph is derived from a generated row-ownership table, so a
   unit's acceptance is «my rows green, later owners' rows pinned on today's outcome». The carrier's
-  Workbench closure goes to the guest's `/tmp`. The S1 abort fix is the core binding's (8a).
+  Workbench closure goes to the guest's `/tmp`. The S1 abort fix is the core binding's (8a) —
+  recalled in round 4.
+- 2026-11-25 — manager, round 4:
+  - the goal merges with `status: draft`, waiting for the user's answers (budget, «ок» on route B,
+    `AbortController` globals);
+  - ready now: 0 (carrier), 1, 2, 3, 4, 4b — none depends on route B or the budget;
+  - draft: 4c, 5, P, 7, 8a, 8b, 8c, 9r, 9w and the new abort-listeners unit, each carrying its
+    round-4 findings verbatim;
+  - acceptance formula: a unit's rows go green; later owners' rows stay pinned on their window's
+    outcome, and changes against today are listed and declared;
+  - abort listeners on a host `EventTarget`: the derived-signal fix is recalled; the probe runs
+    variant A; variants A–D are the draft unit's to decide, D joins the user's globals question.
 - rejected route: route A, rifty's hand-written streams fixed per member in 8 units. It could meet the
   invariants in principle; it is rejected on delivery risk and §Simplicity, not on an invariant. Its
   unit graph had three hidden dependencies after one review, the same class that broke the zlib goal

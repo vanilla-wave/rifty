@@ -1,4 +1,4 @@
-# m5-writestream.cjs — node v24.16.0, rifty 4e0b2b4ba
+# m5-writestream.cjs — node v24.16.0, rifty e96e93a0d
 columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate | rifty-inproc-B | rifty-inproc-Bp | rifty-inproc-Bp8c | rifty-inproc-Bp9w | rifty-inproc-Bp9r
 
 exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 0 | rifty-inproc-B 0 | rifty-inproc-Bp 0 | rifty-inproc-Bp8c 0 | rifty-inproc-Bp9w 0 | rifty-inproc-Bp9r 0
@@ -133,6 +133,16 @@ rifty-inproc-Bp (same): error stop,close errored=stop
 rifty-inproc-Bp8c (DIFF): close errored=undefined
 rifty-inproc-Bp9w (same): error stop,close errored=stop
 rifty-inproc-Bp9r (DIFF): close errored=undefined
+## timers run while a WriteStream writes 16 MiB in 64 KiB chunks
+node: bytes=16777216,ticks>0=true
+rifty-inproc (same): bytes=16777216,ticks>0=true
+rifty-inproc-sync (same): bytes=16777216,ticks>0=true
+rifty-isolate (same): bytes=16777216,ticks>0=true
+rifty-inproc-B (DIFF): bytes=16777216,ticks>0=false
+rifty-inproc-Bp (DIFF): bytes=16777216,ticks>0=false
+rifty-inproc-Bp8c (same): bytes=16777216,ticks>0=true
+rifty-inproc-Bp9w (DIFF): bytes=16777216,ticks>0=false
+rifty-inproc-Bp9r (same): bytes=16777216,ticks>0=true
 ## Readable.pipe(ws) with slow source: bytes and finish
 node: finish,close,"123"
 rifty-inproc (same): finish,close,"123"

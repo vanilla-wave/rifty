@@ -110,10 +110,35 @@ ports, and delete them afterwards. They ran the program set as it was when copie
 | `ownership.txt` | `node ownership.mjs` over the directories above |
 | `chromium/` | route A Chromium baseline: `chromium/zz-nsg-workbench.spec.ts`, `zz-nsg-sdk.spec.ts`, `zz-nsg-durability*.spec.ts` |
 | `chromium-b/` | the same specs on a route-B product build (main `692babe13`); the 5 closure programs on Workbench are in `chromium-c/` |
-| `chromium-c/` | `chromium/closure-tmp/zz-nsg-closure-tmp.spec.ts`: closure in the guest's `/tmp` (PR #453 helpers), routes A and B, main `5763d8fa1`; `b-c-transform-big-route-b-workbench.log` holds the 73.5 s row |
+| `chromium-c/` | `chromium/closure-tmp/zz-nsg-closure-tmp.spec.ts`: closure in the guest's `/tmp` (PR #453 helpers), routes A and B, main `5763d8fa1`; `b-c-transform-big-route-b-workbench.log.txt` holds the 73.5 s row |
 | `chromium-d/` | `chromium/zz-nsg-streamprobe.spec.ts` with `streamprobe.cjs`/`streamplan.mjs`/`streamoracle.mjs`: 4/16 MiB stream read/write and a write in a 1000-file project, routes A/B, main `5763d8fa1`; `summary.txt` by `chromium/streamsummary.mjs` |
-| `chromium-fd/` | `chromium/zz-nsg-fdread.spec.ts`, `zz-nsg-fdwrite.spec.ts` with `fdread.cjs`/`fdwrite.cjs` |
+| `chromium-fd/` | `chromium/zz-nsg-fdread.spec.ts`, `zz-nsg-fdwrite.spec.ts` with `fdread.cjs`/`fdwrite.cjs`; SDK fd read: `chromium/zz-nsg-fdread-sdk.spec.ts` → `sdk.jsonl` (lane output `sdk-lane.txt`) |
+| `abort-variants/` | `run.mjs` with `ONLY=m9` and `ONLY=m10`, `RESULTS=` that dir, `ROUTE_B_GEN` = variant A, `ROUTE_B_GEN_DERIVED` = `ABORT=derived product/generate.mjs` (variant B) |
 
 Each Chromium spec is copied into `tests/browser-unit/` or `tests/no-coi/` of a throwaway worktree, run
 on dedicated ports, and deleted.
 
+
+## For executors (units 0, 1, 2, 3, 4, 4b)
+
+Harness traps met while measuring:
+
+- Workbench closure (exceljs, 5941 files): lay it out in the guest's `/tmp` with
+  `packages/isolate-host/tests/closure-files.ts` and `tests/browser-unit/fixtures/zlib-scenario.ts`
+  (`serveSteps`, `UNPACK`, `RUNNER`; PR #453), 11–12 s per program
+  (`chromium/closure-tmp/zz-nsg-closure-tmp.spec.ts`).
+  - A plain `cd /tmp/x && node x.cjs` is refused («package tree readiness is not published»): run
+    the program by a child `node` from a project-root runner.
+  - Seeding the closure into the project root takes about 35 min (unit P's cost); seeding through the
+    boot plan's `files` never completed.
+- SDK: `createSandbox({ requireCrossOriginIsolation: false, toolchain })`, then
+  `project({ root }).run('node <file>')`. A COI page has no `node <file>` entry.
+- Chromium specs are throwaway: copy into `tests/browser-unit/` (Workbench, COI) or `tests/no-coi/`
+  (SDK) of a throwaway worktree, run Playwright on dedicated ports (check them free with `lsof -i`),
+  delete the copies afterwards. `results/chromium*/` hold what each run printed.
+- Route B product probe: `route-b/product/run.sh`. The throwaway product build applies
+  `route-b/product/wiring.patch`; delete `packages/runtime-js/src/builtins/fs-streams.ts` first.
+  `pnpm build:libs` then fails at `third-party-notices` until the Node sources have a
+  `tools/publishing/third-party-manifest.json` entry (`results/chromium-c/route-b/build-libs.log.txt`).
+- `run.mjs` with `ONLY=<prefix>` reruns some programs and merges them into the existing `summary.txt`.
+  `ROUTE_B_GEN_DERIVED` adds the abort variant B column (`ABORT=derived product/generate.mjs`).

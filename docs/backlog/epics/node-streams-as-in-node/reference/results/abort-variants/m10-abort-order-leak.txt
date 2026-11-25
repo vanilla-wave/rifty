@@ -1,0 +1,40 @@
+# m10-abort-order-leak.cjs — node v24.16.0, rifty e96e93a0d
+columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate | rifty-inproc-B | rifty-inproc-Bp | rifty-inproc-Bp-derived | rifty-inproc-Bp8c | rifty-inproc-Bp9w | rifty-inproc-Bp9r
+
+exit: node 0 | rifty-inproc 1 | rifty-inproc-sync 1 | rifty-isolate 0 | rifty-inproc-B 0 | rifty-inproc-Bp 0 | rifty-inproc-Bp-derived 0 | rifty-inproc-Bp8c 0 | rifty-inproc-Bp9w 0 | rifty-inproc-Bp9r 0
+stderr rifty-inproc: TypeError: cb is not a function
+stderr rifty-inproc-sync: TypeError: cb is not a function
+
+## a guest abort listener added after pipeline sees the source destroyed
+node: guest sees destroyed=true
+rifty-inproc (DIFF): threw TypeError
+rifty-inproc-sync (DIFF): threw TypeError
+rifty-isolate (DIFF): threw NotImplementedError
+rifty-inproc-B (same): guest sees destroyed=true
+rifty-inproc-Bp (same): guest sees destroyed=true
+rifty-inproc-Bp-derived (DIFF): guest sees destroyed=false
+rifty-inproc-Bp8c (same): guest sees destroyed=true
+rifty-inproc-Bp9w (same): guest sees destroyed=true
+rifty-inproc-Bp9r (same): guest sees destroyed=true
+## listeners left on the signal after 10000 completed reduce({signal})
+node: listeners=10000
+rifty-inproc (DIFF): listeners=0
+rifty-inproc-sync (DIFF): listeners=0
+rifty-isolate (DIFF): threw NotImplementedError
+rifty-inproc-B (same): listeners=10000
+rifty-inproc-Bp (same): listeners=10000
+rifty-inproc-Bp-derived (same): listeners=10000
+rifty-inproc-Bp8c (same): listeners=10000
+rifty-inproc-Bp9w (same): listeners=10000
+rifty-inproc-Bp9r (same): listeners=10000
+## listeners left on the signal after 40000 completed finished(r, {signal})
+node: listeners=0
+rifty-inproc (DIFF): (no line)
+rifty-inproc-sync (DIFF): (no line)
+rifty-isolate (DIFF): threw NotImplementedError
+rifty-inproc-B (same): listeners=0
+rifty-inproc-Bp (same): listeners=0
+rifty-inproc-Bp-derived (same): listeners=0
+rifty-inproc-Bp8c (same): listeners=0
+rifty-inproc-Bp9w (same): listeners=0
+rifty-inproc-Bp9r (same): listeners=0

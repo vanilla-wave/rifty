@@ -24,6 +24,13 @@ The window rows are in map §Regression risk.
 Acceptance: `m4` and the read rows of `m2`/`m3` = Node on every host; carrier read programs = Node;
 PR #437's cases; the isolate `ReadableStream` wall gone (absorbs #437, conditional).
 
+## Open findings (review round 4)
+
+Carried verbatim from the manager's review of PR #450, round 4 (2026-11-25); owner = this unit. They close when the unit is taken into work, by its own contract and review.
+
+- B5 (owner 9r): «… окно 9r: `c-unzip-stored`, m3 `instanceof Stream`. Формула: «закреплены на исходе своего окна (колонка окна), изменения относительно сегодняшнего перечислены и объявлены»».
+- B4 (owner 9w, 9r): «правило не учитывает тики таймера (B4: `createWriteStream`/fd 256×64 KiB с `setInterval(0)` — Node `true`, сегодня in-process `true`, B `false` → **ребро 9w ← 4 реально, верни**; Workbench read stream тоже нуждается в 4)».
+
 ## Challenge
 
 challenge: 2026-11-25 — none (child of a goal; premise in goal §Challenge)

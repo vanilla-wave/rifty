@@ -16,6 +16,12 @@ types»: `_writev:object` (null) where Node has `function`. Scope: callback and 
 `position` argument of `writev`, `fsync` on each VFS backend (OPFS: the durable-or-throw flush, trap
 `write-ack-not-durable`).
 
+## Open findings (review round 4)
+
+Carried verbatim from the manager's review of PR #450, round 4 (2026-11-25); owner = this unit. They close when the unit is taken into work, by its own contract and review.
+
+- None assigned to this unit in round 4. The review's general rule applies: the unit's contract and review close what is open here.
+
 ## Challenge
 
 challenge: 2026-11-25 — none (child of a goal; premise in goal §Challenge)

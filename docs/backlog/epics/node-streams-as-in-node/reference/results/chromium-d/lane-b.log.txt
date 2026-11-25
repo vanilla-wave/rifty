@@ -1,0 +1,29 @@
+[browser-unit setup] timings: {"serverColdStartMs":2125,"coldPageLoadMs":80,"coldImportPlusWorkbenchBootMs":755,"optimizeReloadObserved":false}
+
+Running 1 test using 1 worker
+
+{"route":"B","host":"workbench Chromium 148.0.7778.96 rifty v24.0.0","case":"read","mib":4,"run":1,"ms":650.2,"ticks":0,"sha256":"02bbb8d9578f2ea2842f6b4b792df4ca2bdadfe45643d1ef36b39c0e798573eb","bytes":4194304,"exit":0}
+{"route":"B","host":"workbench Chromium 148.0.7778.96 rifty v24.0.0","case":"read","mib":4,"run":2,"ms":625.8,"ticks":0,"sha256":"02bbb8d9578f2ea2842f6b4b792df4ca2bdadfe45643d1ef36b39c0e798573eb","bytes":4194304,"exit":0}
+{"route":"B","host":"workbench Chromium 148.0.7778.96 rifty v24.0.0","case":"read","mib":4,"run":3,"ms":610.1,"ticks":0,"sha256":"02bbb8d9578f2ea2842f6b4b792df4ca2bdadfe45643d1ef36b39c0e798573eb","bytes":4194304,"exit":0}
+{"route":"B","host":"workbench Chromium 148.0.7778.96 rifty v24.0.0","case":"read","mib":16,"run":1,"ms":21005,"ticks":0,"sha256":"8608506627e984cc61ef4196b3e0477a99d7f0c2f979540cecee98282909a62e","bytes":16777216,"exit":0}
+{"route":"B","host":"workbench Chromium 148.0.7778.96 rifty v24.0.0","case":"read","mib":16,"run":2,"ms":20934.3,"ticks":0,"sha256":"8608506627e984cc61ef4196b3e0477a99d7f0c2f979540cecee98282909a62e","bytes":16777216,"exit":0}
+{"route":"B","host":"workbench Chromium 148.0.7778.96 rifty v24.0.0","case":"read","mib":16,"run":3,"ms":22505.8,"ticks":0,"sha256":"8608506627e984cc61ef4196b3e0477a99d7f0c2f979540cecee98282909a62e","bytes":16777216,"exit":0}
+{"route":"B","host":"workbench Chromium 148.0.7778.96 rifty v24.0.0","case":"write","mib":4,"run":1,"ms":2275.8,"ticks":0,"sha256":"393b4ea7260a27d9493c0a1c226ba3ac6d896019d036df709bab8b20d5d1b512","bytes":4194304,"exit":0}
+{"route":"B","host":"workbench Chromium 148.0.7778.96 rifty v24.0.0","case":"write","mib":4,"run":2,"ms":2481,"ticks":0,"sha256":"393b4ea7260a27d9493c0a1c226ba3ac6d896019d036df709bab8b20d5d1b512","bytes":4194304,"exit":0}
+{"route":"B","host":"workbench Chromium 148.0.7778.96 rifty v24.0.0","case":"write","mib":4,"run":3,"ms":2264.2,"ticks":0,"sha256":"393b4ea7260a27d9493c0a1c226ba3ac6d896019d036df709bab8b20d5d1b512","bytes":4194304,"exit":0}
+{"route":"B","host":"workbench Chromium 148.0.7778.96 rifty v24.0.0","case":"write","mib":16,"run":1,"ms":45692.1,"ticks":0,"sha256":"49e62b2a6671c5cb48e3154881ffd0a046efc08201f74b06cce4ce1c5f5fb830","bytes":16777216,"exit":0}
+{"route":"B","host":"workbench Chromium 148.0.7778.96 rifty v24.0.0","case":"write","mib":16,"run":2,"ms":46506.3,"ticks":0,"sha256":"49e62b2a6671c5cb48e3154881ffd0a046efc08201f74b06cce4ce1c5f5fb830","bytes":16777216,"exit":0}
+{"route":"B","host":"workbench Chromium 148.0.7778.96 rifty v24.0.0","case":"write","mib":16,"run":3,"ms":48641.2,"ticks":0,"sha256":"49e62b2a6671c5cb48e3154881ffd0a046efc08201f74b06cce4ce1c5f5fb830","bytes":16777216,"exit":0}
+{"route":"B","host":"workbench Chromium 148.0.7778.96 rifty v24.0.0","case":"setup-1000-files","mib":0,"run":1,"ms":85792.2,"ticks":0,"sha256":null,"bytes":null,"exit":0}
+{"route":"B","host":"workbench Chromium 148.0.7778.96 rifty v24.0.0","case":"write-bigproject-root","mib":16,"run":1,"ms":null,"ticks":null,"sha256":null,"bytes":null,"exit":"timeout (900 s)","out":""}
+{"route":"B","host":"workbench Chromium 148.0.7778.96 rifty v24.0.0","case":"write-bigproject-root","mib":16,"run":2,"ms":null,"ticks":null,"sha256":null,"bytes":null,"exit":"timeout (900 s)","out":""}
+{"route":"B","host":"workbench Chromium 148.0.7778.96 rifty v24.0.0","case":"write-bigproject-root","mib":16,"run":3,"ms":null,"ticks":null,"sha256":null,"bytes":null,"exit":"timeout (900 s)","out":""}
+{"route":"B","host":"workbench Chromium 148.0.7778.96 rifty v24.0.0","case":"write-bigproject-tmp","mib":16,"run":1,"ms":null,"ticks":null,"sha256":null,"bytes":null,"exit":"timeout (900 s)","out":""}
+{"route":"B","host":"workbench Chromium 148.0.7778.96 rifty v24.0.0","case":"write-bigproject-tmp","mib":16,"run":2,"ms":null,"ticks":null,"sha256":null,"bytes":null,"exit":"timeout (900 s)","out":""}
+{"route":"B","host":"workbench Chromium 148.0.7778.96 rifty v24.0.0","case":"write-bigproject-tmp","mib":16,"run":3,"ms":893952.3,"ticks":0,"sha256":"49e62b2a6671c5cb48e3154881ffd0a046efc08201f74b06cce4ce1c5f5fb830","bytes":16777216,"exit":0}
+  ✓  1 tests/browser-unit/zz-nsg-streamprobe.spec.ts:41:1 › stream probe rows (1.6h)
+
+  Slow test file: tests/browser-unit/zz-nsg-streamprobe.spec.ts (1.6h)
+  Consider running tests from slow files in parallel. See: https://playwright.dev/docs/test-parallel
+  1 passed (1.6h)
+pw exit B=0

@@ -1,0 +1,18 @@
+[browser-unit setup] timings: {"serverColdStartMs":1311,"coldPageLoadMs":68,"coldImportPlusWorkbenchBootMs":557,"optimizeReloadObserved":false}
+
+Running 1 test using 1 worker
+
+boot with plan seed 2 files 376 ms
+c-for-await {"code":0,"signal":null}  212 ms
+c-late-listener {"code":0,"signal":null}  229 ms
+c-pipeline-asyncgen {"code":0,"signal":null}  227 ms
+c-readable-read {"code":0,"signal":null}  200 ms
+c-transform-big {"code":0,"signal":null}  73477 ms
+m1-hooks-matrix {"code":0,"signal":null}  311 ms
+m1-lifecycle {"code":0,"signal":null}  3662 ms
+  ✓  1 tests/browser-unit/zz-nsg-workbench.spec.ts:27:1 › nsg programs in Chromium Workbench (1.3m)
+
+  1 passed (1.4m)
+pw exit=0
+
+# from /tmp/nsg-chromium/out-b/chromium-workbench.json (route B worktree at origin/main 692babe13, Workbench, ephemeral VFS, 900 s cap): c-transform-big ms=73477 exit={"code":0,"signal":null} timeout=false stdout="size true bytes true 6027b5bbeb770447 maxInFlight<=1MiB true\n"

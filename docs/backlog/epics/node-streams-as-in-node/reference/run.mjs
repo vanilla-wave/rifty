@@ -6,6 +6,7 @@
 // usage: [ROUTE_B_GEN=…/node-streams.js] node --import tsx run.mjs REPO [NODE_SRC]   (writes results/<program>.txt, results/summary.txt)
 import { spawnSync } from 'node:child_process';
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -134,6 +135,17 @@ if (process.env.ROUTE_B_GEN)
       { ROUTE_B: 'product', ROUTE_B_GEN: process.env.ROUTE_B_GEN },
       name,
     );
+// ROUTE_B_GEN_DERIVED (generate.mjs with ABORT=derived): rifty-inproc-Bp-derived, the abort-listener
+// unit's variant B (a dependent signal); the plain Bp column is variant A (Node's abort_listener).
+if (process.env.ROUTE_B_GEN_DERIVED)
+  runs['rifty-inproc-Bp-derived'] = (files, name) =>
+    spawnIn(
+      files,
+      process.execPath,
+      tsx,
+      { ROUTE_B: 'product', ROUTE_B_GEN: process.env.ROUTE_B_GEN_DERIVED },
+      name,
+    );
 // With ROUTE_B_GEN also rifty-inproc-Bp8c: product bindings, today's fs classes (after 8c, before 9r).
 if (process.env.ROUTE_B_GEN)
   runs['rifty-inproc-Bp8c'] = (files, name) =>
@@ -227,6 +239,15 @@ for (const [name, path] of programs) {
   console.log(summary.at(-1));
 }
 if (!only) writeFileSync(join(results, 'summary.txt'), `${summary.join('\n')}\n`);
+// ONLY: replace (or append) just the programs run in an existing summary.txt.
+else if (existsSync(join(results, 'summary.txt'))) {
+  const old = readFileSync(join(results, 'summary.txt'), 'utf8').trimEnd().split('\n');
+  const fresh = summary.slice(2);
+  const name = (l) => l.split(' | ')[0];
+  const merged = old.map((l) => fresh.find((f) => name(f) === name(l)) ?? l);
+  for (const f of fresh) if (!old.some((l) => name(l) === name(f))) merged.push(f);
+  writeFileSync(join(results, 'summary.txt'), `${merged.join('\n')}\n`);
+}
 if (nodeSrc && !only)
   writeFileSync(
     join(results, 'route-b-bindings.txt'),

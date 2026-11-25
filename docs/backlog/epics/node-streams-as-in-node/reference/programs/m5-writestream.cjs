@@ -157,6 +157,23 @@ row('destroy(err): error, close, errored', async (L) => {
   );
   ws.destroy(new Error('stop'));
 });
+row('timers run while a WriteStream writes 16 MiB in 64 KiB chunks', async (L) => {
+  const f = out();
+  let ticks = 0;
+  const t = setInterval(() => {
+    ticks++;
+  }, 0);
+  const chunk = Buffer.alloc(65536, 0x62);
+  const ws = fs.createWriteStream(f);
+  try {
+    for (let i = 0; i < 256; i++)
+      if (!ws.write(chunk)) await new Promise((r) => ws.once('drain', r));
+    await new Promise((r) => ws.end(r));
+  } finally {
+    clearInterval(t);
+  }
+  L.push(`bytes=${fs.statSync(f).size}`, `ticks>0=${ticks > 0}`);
+});
 row('Readable.pipe(ws) with slow source: bytes and finish', async (L) => {
   const f = out();
   const src = new stream.Readable({ read() {} });

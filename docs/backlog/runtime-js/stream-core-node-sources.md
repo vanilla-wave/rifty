@@ -11,7 +11,7 @@ sources: [docs/adr/runtime-js/0575-stream-core-and-fs-streams-are-node-v24-16-0-
 ## Context
 
 Unit 8c «Core wiring» of goal node-streams-as-in-node (map item 8c, ADR-0575 §7). Stands on 8a, 8b, the
-bindings 1–2 and 7 (the isolate's pipeline rows; `results/ownership.txt`).
+bindings 1–2, AL (`runtime-js/stream-core-abort-listeners-host-event-target`) and 7 (the isolate's pipeline rows; `results/ownership.txt`).
 
 Scope:
 - wire the generated core into `@riftydev/io` and `node:stream`;
@@ -26,11 +26,21 @@ Acceptance:
 - parity `cases/stream` 66/66 and each absorbed draft's repro (map §Absorption, 21 drafts);
 - `check:es-floor` lists extended with `AbortSignal.any`, `Symbol.dispose`/`asyncDispose` and
   `Promise.withResolvers`, and/or the Chromium 108 lane on those rows;
-- identifier renaming changes 0 of 105 parity cases (`results/route-b-minify.txt`). The earlier
-  1/105 (`stream/from-web-options`) named Node's `signal` in `abort_listener`, which is now 8a's
-  binding. A guard row runs `from-web-options` on the Workbench consumer bundle.
+- identifier renaming changes 1 of 105 parity cases run (5 more skipped on both builds:
+  stdin/eval/esm kinds; `results/route-b-minify.txt`): `stream/from-web-options`, whose V8 `TypeError`
+  text names Node's `signal` inside `abort_listener` (variant A). The Workbench consumer bundle renames,
+  so 8c either keeps identifiers in the module there or declares the row; a guard row runs
+  `from-web-options` on that bundle. AL's variant can change this.
 
 zlib unit 3 starts after this unit.
+
+## Open findings (review round 4)
+
+Carried verbatim from the manager's review of PR #450, round 4 (2026-11-25); owner = this unit. They close when the unit is taken into work, by its own contract and review.
+
+- S1 (owner 7/8c): «isolate-строки: Node сам создаёт `AbortController` в `pipeline.js:195`, `duplexify.js:213`, `operators.js:252`, `:62`»; «правила isolate заданы по именам, а не из данных (S1: регулярка `/pipeline/` теряет m7 «async gen stage throws»; `w1` pipeline в isolate → `['9r']` вместо 7, 8c, 9r) — либо добавь колонку isolate маршрута B из продуктового прогона, либо запиши как известный предел». Round 4 recorded it as a known limit (`reference/ownership.mjs`).
+- S7 (owner 8c): «isolate-строки 8c in-process дифференциалом не прогнать; 8c не упоминает свои m9-строки».
+- B5 (owner 8c): «в окнах исход меняется на 6 строках (окно 8c: `c-unzip-stored`, `c-pipeline-asyncgen`, m4 `Readable.from(fs.ReadStream)`, `w1` `promises.pipeline`; …). Формула: «закреплены на исходе своего окна (колонка окна), изменения относительно сегодняшнего перечислены и объявлены»».
 
 ## Challenge
 

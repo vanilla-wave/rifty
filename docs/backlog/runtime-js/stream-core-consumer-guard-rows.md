@@ -20,6 +20,12 @@ accept; a source piped into an unread `ServerResponse` reads 2001 chunks (Node 5
 closes both without converting `net.Socket`/`ServerResponse` into real streams. Not yet measured on
 route B: `ClientRequest`, `process.stdout` (parity `stream/pipe-process-stdio*`), the upgrade socket.
 
+## Open findings (review round 4)
+
+Carried verbatim from the manager's review of PR #450, round 4 (2026-11-25); owner = this unit. They close when the unit is taken into work, by its own contract and review.
+
+- None assigned to this unit in round 4. The review's general rule applies: the unit's contract and review close what is open here.
+
 ## Challenge
 
 challenge: 2026-11-25 — none (child of a goal; premise in goal §Challenge)

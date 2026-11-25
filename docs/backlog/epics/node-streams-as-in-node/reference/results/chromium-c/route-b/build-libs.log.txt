@@ -1,0 +1,735 @@
+$ pnpm -r --filter "./packages/*" --filter "@riftydev/shadow-registry" --filter "@riftydev/eddy" build && node tools/publishing/third-party-notices.mjs --write
+Scope: 19 of 28 workspace projects
+packages/io build$ tsup
+packages/terminal build$ tsup
+packages/vfs build$ tsup
+packages/vfs build: CLI Building entry: {"index":"src/index.ts","internal":"src/internal/index.ts"}
+packages/vfs build: CLI Using tsconfig: tsconfig.json
+packages/vfs build: CLI tsup v8.5.1
+packages/vfs build: CLI Using tsup config: <wt>/packages/vfs/tsup.config.ts
+packages/io build: CLI Building entry: {"index":"src/index.ts"}
+packages/io build: CLI Using tsconfig: tsconfig.json
+packages/io build: CLI tsup v8.5.1
+packages/io build: CLI Using tsup config: <wt>/packages/io/tsup.config.ts
+packages/terminal build: CLI Building entry: {"index":"src/index.ts","autocomplete":"src/autocomplete.ts","command-blocks":"src/command-blocks.ts","export":"src/export.ts","history":"src/history.ts","state":"src/state.ts"}
+packages/terminal build: CLI Using tsconfig: tsconfig.json
+packages/terminal build: CLI tsup v8.5.1
+packages/terminal build: CLI Using tsup config: <wt>/packages/terminal/tsup.config.ts
+packages/io build: CLI Target: es2022
+packages/vfs build: CLI Target: es2022
+packages/terminal build: CLI Target: es2022
+packages/io build: CLI Cleaning output folder
+packages/terminal build: CLI Cleaning output folder
+packages/io build: ESM Build start
+packages/terminal build: ESM Build start
+packages/vfs build: CLI Cleaning output folder
+packages/vfs build: ESM Build start
+packages/terminal build: ESM dist/autocomplete.js       190.00 B
+packages/terminal build: ESM dist/chunk-N7MXUZRQ.js     988.00 B
+packages/terminal build: ESM dist/chunk-CEUGI5LZ.js     957.00 B
+packages/terminal build: ESM dist/command-blocks.js     190.00 B
+packages/terminal build: ESM dist/export.js             131.00 B
+packages/terminal build: ESM dist/chunk-RXBA7HCW.js     650.00 B
+packages/terminal build: ESM dist/history.js            299.00 B
+packages/terminal build: ESM dist/chunk-NSQPAFYO.js     3.57 KB
+packages/terminal build: ESM dist/state.js              212.00 B
+packages/terminal build: ESM dist/chunk-SD5MAOW5.js     2.93 KB
+packages/terminal build: ESM dist/index.js              57.45 KB
+packages/terminal build: ESM dist/autocomplete.js.map   76.00 B
+packages/terminal build: ESM dist/chunk-CEUGI5LZ.js.map 2.54 KB
+packages/terminal build: ESM dist/chunk-N7MXUZRQ.js.map 2.45 KB
+packages/terminal build: ESM dist/export.js.map         70.00 B
+packages/terminal build: ESM dist/chunk-RXBA7HCW.js.map 1.24 KB
+packages/terminal build: ESM dist/state.js.map          69.00 B
+packages/terminal build: ESM dist/history.js.map        71.00 B
+packages/terminal build: ESM dist/chunk-SD5MAOW5.js.map 7.75 KB
+packages/terminal build: ESM dist/chunk-NSQPAFYO.js.map 9.04 KB
+packages/terminal build: ESM dist/command-blocks.js.map 78.00 B
+packages/terminal build: ESM dist/index.js.map          144.98 KB
+packages/terminal build: ESM ⚡️ Build success in 170ms
+packages/vfs build: DTS Build start
+packages/terminal build: DTS Build start
+packages/vfs build: ESM dist/internal.js           252.00 B
+packages/vfs build: ESM dist/index.js              2.13 KB
+packages/vfs build: ESM dist/chunk-XOBVTU2G.js     102.24 KB
+packages/vfs build: ESM dist/internal.js.map       72.00 B
+packages/vfs build: ESM dist/index.js.map          5.07 KB
+packages/vfs build: ESM dist/chunk-XOBVTU2G.js.map 269.42 KB
+packages/vfs build: ESM ⚡️ Build success in 188ms
+packages/io build: DTS Build start
+packages/io build: ESM dist/index.js     262.66 KB
+packages/io build: ESM dist/index.js.map 531.21 KB
+packages/io build: ESM ⚡️ Build success in 353ms
+packages/io build: DTS ⚡️ Build success in 742ms
+packages/io build: DTS dist/index.d.ts 55.82 KB
+packages/io build: Done
+packages/terminal build: DTS ⚡️ Build success in 809ms
+packages/terminal build: DTS dist/index.d.ts             1.68 KB
+packages/terminal build: DTS dist/autocomplete.d.ts      893.00 B
+packages/terminal build: DTS dist/command-blocks.d.ts    922.00 B
+packages/terminal build: DTS dist/export.d.ts            301.00 B
+packages/terminal build: DTS dist/history.d.ts           2.06 KB
+packages/terminal build: DTS dist/state.d.ts             1.52 KB
+packages/terminal build: DTS dist/terminal-xxQ7NsRd.d.ts 14.92 KB
+packages/terminal build: Done
+packages/vfs build: DTS ⚡️ Build success in 1070ms
+packages/vfs build: DTS dist/index.d.ts          3.26 KB
+packages/vfs build: DTS dist/internal.d.ts       246.00 B
+packages/vfs build: DTS dist/index-CZ8Jfni7.d.ts 32.09 KB
+packages/vfs build: Done
+packages/net build$ tsup
+tools/shadow-registry build$ tsup
+packages/service-worker build$ tsup
+packages/kernel build$ tsup
+packages/net build: CLI Building entry: {"index":"src/index.ts","registry":"src/registry.ts","register-builtins":"src/register-builtins.ts","https":"src/https.ts","sqlite/engine":"src/sqlite/engine.ts","sqlite/database-sync":"src/sqlite/database-sync.ts","sqlite/register-builtins":"src/sqlite/register-builtins.ts","node-data":"src/node-data.ts"}
+packages/net build: CLI Using tsconfig: tsconfig.json
+packages/service-worker build: CLI Building entry: {"index":"src/index.ts","sw":"src/sw.ts"}
+packages/kernel build: CLI Building entry: {"index":"src/index.ts","worker-entry":"src/worker-entry.ts"}
+packages/net build: CLI tsup v8.5.1
+packages/net build: CLI Using tsup config: <wt>/packages/net/tsup.config.ts
+packages/service-worker build: CLI Using tsconfig: tsconfig.json
+packages/service-worker build: CLI tsup v8.5.1
+packages/service-worker build: CLI Using tsup config: <wt>/packages/service-worker/tsup.config.ts
+packages/kernel build: CLI Using tsconfig: tsconfig.json
+packages/kernel build: CLI tsup v8.5.1
+packages/kernel build: CLI Using tsup config: <wt>/packages/kernel/tsup.config.ts
+tools/shadow-registry build: CLI Building entry: {"index":"src/index.ts","internal":"src/internal/index.ts","runtime":"src/runtime/index.ts","runtime/common":"src/runtime/common.ts"}
+tools/shadow-registry build: CLI Using tsconfig: tsconfig.json
+tools/shadow-registry build: CLI tsup v8.5.1
+tools/shadow-registry build: CLI Using tsup config: <wt>/tools/shadow-registry/tsup.config.ts
+packages/service-worker build: CLI Target: es2022
+packages/kernel build: CLI Target: es2022
+tools/shadow-registry build: CLI Target: es2022
+packages/net build: CLI Target: es2022
+packages/service-worker build: CLI Cleaning output folder
+packages/kernel build: CLI Cleaning output folder
+packages/kernel build: ESM Build start
+packages/service-worker build: ESM Build start
+tools/shadow-registry build: CLI Cleaning output folder
+packages/net build: CLI Cleaning output folder
+tools/shadow-registry build: ESM Build start
+packages/net build: ESM Build start
+packages/service-worker build: ESM dist/chunk-5JNLH6VX.js     40.31 KB
+packages/service-worker build: ESM dist/index.js              3.04 KB
+packages/service-worker build: ESM dist/sw.js                 2.23 KB
+packages/service-worker build: ESM dist/sw.js.map             5.26 KB
+packages/service-worker build: ESM dist/index.js.map          6.32 KB
+packages/service-worker build: ESM dist/chunk-5JNLH6VX.js.map 126.99 KB
+packages/service-worker build: ESM ⚡️ Build success in 161ms
+packages/service-worker build: DTS Build start
+packages/kernel build: DTS Build start
+tools/shadow-registry build: DTS Build start
+packages/kernel build: ESM dist/worker-entry.js       351.00 B
+packages/kernel build: ESM dist/chunk-KKQGMUKW.js     51.54 KB
+packages/kernel build: ESM dist/index.js              84.57 KB
+packages/kernel build: ESM dist/worker-entry.js.map   76.00 B
+packages/kernel build: ESM dist/chunk-KKQGMUKW.js.map 145.29 KB
+packages/kernel build: ESM dist/index.js.map          211.83 KB
+packages/kernel build: ESM ⚡️ Build success in 298ms
+packages/net build: DTS Build start
+tools/shadow-registry build: ESM dist/chunk-36OCQVAR.js               3.71 KB
+tools/shadow-registry build: ESM dist/runtime.js                      6.92 KB
+tools/shadow-registry build: ESM dist/runtime/common.js               497.00 B
+tools/shadow-registry build: ESM dist/internal.js                     2.66 KB
+tools/shadow-registry build: ESM dist/index.js                        2.20 KB
+tools/shadow-registry build: ESM dist/chunk-WQ2QFMSY.js               14.19 KB
+tools/shadow-registry build: ESM dist/chunk-QFUIYVCO.js               39.93 KB
+tools/shadow-registry build: ESM dist/esbuild-runtime-NPT6AQRU.js     125.61 KB
+tools/shadow-registry build: ESM dist/chunk-36OCQVAR.js.map           8.68 KB
+tools/shadow-registry build: ESM dist/runtime/common.js.map           70.00 B
+tools/shadow-registry build: ESM dist/runtime.js.map                  15.88 KB
+tools/shadow-registry build: ESM dist/index.js.map                    6.63 KB
+tools/shadow-registry build: ESM dist/chunk-WQ2QFMSY.js.map           33.25 KB
+tools/shadow-registry build: ESM dist/internal.js.map                 5.21 KB
+tools/shadow-registry build: ESM dist/chunk-QFUIYVCO.js.map           73.58 KB
+tools/shadow-registry build: ESM dist/esbuild-runtime-NPT6AQRU.js.map 286.03 KB
+tools/shadow-registry build: ESM ⚡️ Build success in 350ms
+packages/net build: ESM dist/registry.js                     320.00 B
+packages/net build: ESM dist/chunk-SIC37SSB.js               4.12 KB
+packages/net build: ESM dist/sqlite/engine.js                247.00 B
+packages/net build: ESM dist/https.js                        239.00 B
+packages/net build: ESM dist/index.js                        1.01 KB
+packages/net build: ESM dist/register-builtins.js            2.00 KB
+packages/net build: ESM dist/chunk-OZ7JUZ47.js               2.61 KB
+packages/net build: ESM dist/sqlite/database-sync.js         167.00 B
+packages/net build: ESM dist/sqlite/register-builtins.js     580.00 B
+packages/net build: ESM dist/chunk-FIRAF2E2.js               7.06 KB
+packages/net build: ESM dist/node-data.js                    173.00 B
+packages/net build: ESM dist/chunk-XZXEPTXL.js               2.83 KB
+packages/net build: ESM dist/chunk-3KCDS3PS.js               3.43 KB
+packages/net build: ESM dist/chunk-IQFBOPFS.js               11.79 KB
+packages/net build: ESM dist/chunk-3WVKB2L7.js               133.49 KB
+packages/net build: ESM dist/chunk-SIC37SSB.js.map           11.66 KB
+packages/net build: ESM dist/https.js.map                    69.00 B
+packages/net build: ESM dist/sqlite/engine.js.map            70.00 B
+packages/net build: ESM dist/registry.js.map                 72.00 B
+packages/net build: ESM dist/register-builtins.js.map        4.65 KB
+packages/net build: ESM dist/index.js.map                    69.00 B
+packages/net build: ESM dist/sqlite/database-sync.js.map     77.00 B
+packages/net build: ESM dist/node-data.js.map                73.00 B
+packages/net build: ESM dist/chunk-OZ7JUZ47.js.map           8.61 KB
+packages/net build: ESM dist/sqlite/register-builtins.js.map 2.53 KB
+packages/net build: ESM dist/chunk-XZXEPTXL.js.map           12.06 KB
+packages/net build: ESM dist/chunk-3KCDS3PS.js.map           8.42 KB
+packages/net build: ESM dist/chunk-FIRAF2E2.js.map           18.56 KB
+packages/net build: ESM dist/chunk-IQFBOPFS.js.map           26.06 KB
+packages/net build: ESM dist/chunk-3WVKB2L7.js.map           325.19 KB
+packages/net build: ESM ⚡️ Build success in 359ms
+packages/kernel build: DTS ⚡️ Build success in 1381ms
+packages/kernel build: DTS dist/index.d.ts                 46.14 KB
+packages/kernel build: DTS dist/worker-entry.d.ts          593.00 B
+packages/kernel build: DTS dist/worker-entry-DQTsSIK-.d.ts 15.51 KB
+packages/kernel build: Done
+packages/service-worker build: DTS ⚡️ Build success in 1552ms
+packages/service-worker build: DTS dist/sw.d.ts    13.00 B
+packages/service-worker build: DTS dist/index.d.ts 36.22 KB
+packages/service-worker build: Done
+tools/shadow-registry build: DTS ⚡️ Build success in 1778ms
+tools/shadow-registry build: DTS dist/index.d.ts                     1.67 KB
+tools/shadow-registry build: DTS dist/runtime.d.ts                   2.19 KB
+tools/shadow-registry build: DTS dist/internal.d.ts                  966.00 B
+tools/shadow-registry build: DTS dist/runtime/common.d.ts            2.47 KB
+tools/shadow-registry build: DTS dist/recipe-selection-DeQGWPaZ.d.ts 2.84 KB
+tools/shadow-registry build: Done
+packages/net build: DTS ⚡️ Build success in 2318ms
+packages/net build: DTS dist/register-builtins.d.ts        361.00 B
+packages/net build: DTS dist/registry.d.ts                 3.66 KB
+packages/net build: DTS dist/https.d.ts                    2.07 KB
+packages/net build: DTS dist/sqlite/engine.d.ts            4.30 KB
+packages/net build: DTS dist/sqlite/register-builtins.d.ts 83.00 B
+packages/net build: DTS dist/sqlite/database-sync.d.ts     9.46 KB
+packages/net build: DTS dist/index.d.ts                    21.16 KB
+packages/net build: DTS dist/node-data.d.ts                1.49 KB
+packages/net build: DTS dist/server-CDtofvlk.d.ts          11.55 KB
+packages/net build: Done
+packages/git build$ tsup
+packages/npm-client build$ tsup
+packages/runtime-wasi build$ tsup
+packages/npm-client build: CLI Building entry: {"index":"src/index.ts","internal":"src/internal/index.ts"}
+packages/git build: CLI Building entry: {"index":"src/index.ts"}
+packages/git build: CLI Using tsconfig: tsconfig.json
+packages/npm-client build: CLI Using tsconfig: tsconfig.json
+packages/npm-client build: CLI tsup v8.5.1
+packages/git build: CLI tsup v8.5.1
+packages/git build: CLI Using tsup config: <wt>/packages/git/tsup.config.ts
+packages/npm-client build: CLI Using tsup config: <wt>/packages/npm-client/tsup.config.ts
+packages/runtime-wasi build: CLI Building entry: {"index":"src/index.ts","worker-entry":"src/worker-entry.ts","wasi":"src/wasi.ts"}
+packages/runtime-wasi build: CLI Using tsconfig: tsconfig.json
+packages/runtime-wasi build: CLI tsup v8.5.1
+packages/runtime-wasi build: CLI Using tsup config: <wt>/packages/runtime-wasi/tsup.config.ts
+packages/npm-client build: CLI Target: es2022
+packages/git build: CLI Target: es2022
+packages/npm-client build: CLI Cleaning output folder
+packages/git build: CLI Cleaning output folder
+packages/runtime-wasi build: CLI Target: es2022
+packages/npm-client build: ESM Build start
+packages/git build: ESM Build start
+packages/runtime-wasi build: CLI Cleaning output folder
+packages/runtime-wasi build: ESM Build start
+packages/runtime-wasi build: ESM dist/index.js              1.83 KB
+packages/runtime-wasi build: ESM dist/wasi.js               128.00 B
+packages/runtime-wasi build: ESM dist/worker-entry.js       3.71 KB
+packages/runtime-wasi build: ESM dist/chunk-NBSCF4OA.js     260.00 B
+packages/runtime-wasi build: ESM dist/chunk-YR2QBUBV.js     30.20 KB
+packages/runtime-wasi build: ESM dist/worker-entry.js.map   13.18 KB
+packages/runtime-wasi build: ESM dist/chunk-NBSCF4OA.js.map 1.29 KB
+packages/runtime-wasi build: ESM dist/wasi.js.map           68.00 B
+packages/runtime-wasi build: ESM dist/index.js.map          8.12 KB
+packages/runtime-wasi build: ESM dist/chunk-YR2QBUBV.js.map 84.71 KB
+packages/runtime-wasi build: ESM ⚡️ Build success in 119ms
+packages/git build: ESM dist/index.js     47.51 KB
+packages/git build: ESM dist/index.js.map 131.98 KB
+packages/git build: ESM ⚡️ Build success in 136ms
+packages/runtime-wasi build: DTS Build start
+packages/git build: DTS Build start
+packages/npm-client build: DTS Build start
+packages/npm-client build: ESM dist/internal.js           2.69 KB
+packages/npm-client build: ESM dist/index.js              98.07 KB
+packages/npm-client build: ESM dist/chunk-FWO5UFZ2.js     94.74 KB
+packages/npm-client build: ESM dist/internal.js.map       4.45 KB
+packages/npm-client build: ESM dist/index.js.map          283.51 KB
+packages/npm-client build: ESM dist/chunk-FWO5UFZ2.js.map 240.92 KB
+packages/npm-client build: ESM ⚡️ Build success in 253ms
+packages/git build: DTS ⚡️ Build success in 1256ms
+packages/git build: DTS dist/index.d.ts 19.06 KB
+packages/git build: Done
+packages/runtime-wasi build: DTS ⚡️ Build success in 2729ms
+packages/runtime-wasi build: DTS dist/index.d.ts                     3.08 KB
+packages/runtime-wasi build: DTS dist/worker-entry.d.ts              2.18 KB
+packages/runtime-wasi build: DTS dist/wasi.d.ts                      2.32 KB
+packages/runtime-wasi build: DTS dist/wasi-channel-env-CBlXHtqI.d.ts 1.14 KB
+packages/runtime-wasi build: Done
+packages/npm-client build: DTS ⚡️ Build success in 3424ms
+packages/npm-client build: DTS dist/index.d.ts              8.98 KB
+packages/npm-client build: DTS dist/internal.d.ts           1.45 KB
+packages/npm-client build: DTS dist/installer-lGJOn4Vv.d.ts 30.89 KB
+packages/npm-client build: Done
+packages/runtime-js build$ tsup
+services/eddy build$ tsup
+packages/shell build$ tsup
+packages/runtime-js build: CLI Building entry: {"index":"src/index.ts","internal":"src/internal/index.ts","worker":"src/worker-entry.ts","install-process":"src/ipc/install-process.ts","ipc/exec-sync-handler":"src/ipc/exec-sync-handler.ts","loader":"src/module-loader/index.ts","env/capabilities":"src/env/capabilities.ts","builtins":"src/builtins/public.ts","builtins/fs-watch":"src/builtins/fs-watch.ts","builtins/process":"src/builtins/process.ts","builtins/timers":"src/builtins/timers.ts","builtins/buffer":"src/builtins/buffer.ts","builtins/console":"src/builtins/console.ts","builtins/module":"src/builtins/module.ts","builtins/child_process":"src/builtins/child_process.ts","builtins/node-entry":"src/builtins/node-entry.ts","builtins/node-entry-url":"src/builtins/node-entry-url.ts","builtins/process-identity":"src/builtins/process-identity.ts","builtins/os":"src/builtins/os.ts","builtins/path":"src/builtins/path.ts","builtins/perf_hooks":"src/builtins/perf_hooks.ts","builtins/fs":"src/builtins/fs.ts"}
+packages/runtime-js build: CLI Using tsconfig: tsconfig.json
+packages/runtime-js build: CLI tsup v8.5.1
+packages/runtime-js build: CLI Using tsup config: <wt>/packages/runtime-js/tsup.config.ts
+packages/runtime-js build: CLI Target: es2022
+packages/runtime-js build: CLI Cleaning output folder
+packages/runtime-js build: ESM Build start
+packages/shell build: CLI Building entry: {"index":"src/index.ts"}
+packages/shell build: CLI Using tsconfig: tsconfig.json
+packages/shell build: CLI tsup v8.5.1
+packages/shell build: CLI Using tsup config: <wt>/packages/shell/tsup.config.ts
+packages/shell build: CLI Target: es2022
+packages/shell build: CLI Cleaning output folder
+packages/shell build: ESM Build start
+services/eddy build: CLI Building entry: {"index":"src/index.ts","bin":"src/bin.ts"}
+services/eddy build: CLI Using tsconfig: tsconfig.json
+services/eddy build: CLI tsup v8.5.1
+services/eddy build: CLI Using tsup config: <wt>/services/eddy/tsup.config.ts
+services/eddy build: CLI Target: es2022
+services/eddy build: CLI Cleaning output folder
+services/eddy build: ESM Build start
+services/eddy build: DTS Build start
+packages/runtime-js build: DTS Build start
+packages/shell build: DTS Build start
+packages/shell build: ESM dist/index.js     215.80 KB
+packages/shell build: ESM dist/index.js.map 593.29 KB
+packages/shell build: ESM ⚡️ Build success in 545ms
+services/eddy build: ESM dist/bin.js                5.17 KB
+services/eddy build: ESM dist/index.js              559.00 B
+services/eddy build: ESM dist/chunk-T2IDPSHE.js     293.30 KB
+services/eddy build: ESM dist/bin.js.map            14.34 KB
+services/eddy build: ESM dist/index.js.map          1.07 KB
+services/eddy build: ESM dist/chunk-T2IDPSHE.js.map 786.21 KB
+services/eddy build: ESM ⚡️ Build success in 611ms
+packages/runtime-js build: Generated an empty chunk: "chunk-VNEIPTN7".
+services/eddy build: DTS ⚡️ Build success in 1512ms
+services/eddy build: DTS dist/index.d.ts 15.33 KB
+services/eddy build: Done
+packages/shell build: DTS ⚡️ Build success in 1643ms
+packages/shell build: DTS dist/index.d.ts 15.27 KB
+packages/shell build: Done
+packages/runtime-js build: ESM dist/ipc/exec-sync-handler.js             225.00 B
+packages/runtime-js build: ESM dist/env/capabilities.js                  1.49 KB
+packages/runtime-js build: ESM dist/tsconfig-paths-I6FFC6SC.js           4.19 KB
+packages/runtime-js build: ESM dist/internal.js                          5.83 KB
+packages/runtime-js build: ESM dist/node-eval-typescript-W5ICBRYZ.js     3.72 KB
+packages/runtime-js build: ESM dist/chunk-XNW2RVCA.js                    7.34 KB
+packages/runtime-js build: ESM dist/chunk-ZLBKYV4M.js                    3.08 KB
+packages/runtime-js build: ESM dist/chunk-QUG2P6RC.js                    2.39 KB
+packages/runtime-js build: ESM dist/install-process.js                   979.00 B
+packages/runtime-js build: ESM dist/chunk-LYSDNYVK.js                    862.00 B
+packages/runtime-js build: ESM dist/index.js                             1.24 KB
+packages/runtime-js build: ESM dist/loader.js                            924.00 B
+packages/runtime-js build: ESM dist/chunk-DFMLBCYP.js                    43.07 KB
+packages/runtime-js build: ESM dist/worker.js                            8.84 KB
+packages/runtime-js build: ESM dist/chunk-O75EKCKB.js                    1.71 KB
+packages/runtime-js build: ESM dist/chunk-DNSVSOFA.js                    5.22 KB
+packages/runtime-js build: ESM dist/chunk-3GIGHUVR.js                    795.00 B
+packages/runtime-js build: ESM dist/chunk-VNEIPTN7.js                    86.00 B
+packages/runtime-js build: ESM dist/chunk-VSDS3DOV.js                    153.33 KB
+packages/runtime-js build: ESM dist/chunk-ONJ53QA7.js                    326.03 KB
+packages/runtime-js build: ESM dist/chunk-IHYUU4YO.js                    3.05 KB
+packages/runtime-js build: ESM dist/chunk-3I5DHSE7.js                    3.03 KB
+packages/runtime-js build: ESM dist/chunk-FSUPZOKZ.js                    37.45 KB
+packages/runtime-js build: ESM dist/chunk-EDMK4U7P.js                    3.52 KB
+packages/runtime-js build: ESM dist/chunk-NOI6ZZQB.js                    1.35 KB
+packages/runtime-js build: ESM dist/chunk-75ZEIUFQ.js                    1.20 KB
+packages/runtime-js build: ESM dist/chunk-UO6ZOBPW.js                    8.90 KB
+packages/runtime-js build: ESM dist/chunk-AQTGZOCD.js                    165.80 KB
+packages/runtime-js build: ESM dist/chunk-LH7VFS3K.js                    598.00 B
+packages/runtime-js build: ESM dist/chunk-CBJEHU4V.js                    2.91 KB
+packages/runtime-js build: ESM dist/chunk-B7KSRLNM.js                    1.17 KB
+packages/runtime-js build: ESM dist/chunk-TVTA56IF.js                    13.08 KB
+packages/runtime-js build: ESM dist/chunk-VLSLQ55A.js                    41.76 KB
+packages/runtime-js build: ESM dist/chunk-QXP42Y34.js                    65.18 KB
+packages/runtime-js build: ESM dist/builtins.js                          267.00 B
+packages/runtime-js build: ESM dist/chunk-SKZDPHUG.js                    813.00 B
+packages/runtime-js build: ESM dist/chunk-LCHEH2MM.js                    2.69 KB
+packages/runtime-js build: ESM dist/chunk-ES63SSTY.js                    5.36 KB
+packages/runtime-js build: ESM dist/chunk-PR6QNS5H.js                    52.48 KB
+packages/runtime-js build: ESM dist/chunk-2XRHUI5Y.js                    136.00 B
+packages/runtime-js build: ESM dist/chunk-X7NXDSHG.js                    1.07 KB
+packages/runtime-js build: ESM dist/chunk-GT6OSCNS.js                    20.22 KB
+packages/runtime-js build: ESM dist/chunk-SZEDEEPH.js                    187.65 KB
+packages/runtime-js build: ESM dist/builtins/fs-watch.js                 433.00 B
+packages/runtime-js build: ESM dist/builtins/process.js                  664.00 B
+packages/runtime-js build: ESM dist/builtins/process-identity.js         177.00 B
+packages/runtime-js build: ESM dist/builtins/fs.js                       1.11 KB
+packages/runtime-js build: ESM dist/builtins/console.js                  395.00 B
+packages/runtime-js build: ESM dist/builtins/buffer.js                   143.00 B
+packages/runtime-js build: ESM dist/builtins/os.js                       386.00 B
+packages/runtime-js build: ESM dist/builtins/module.js                   333.00 B
+packages/runtime-js build: ESM dist/builtins/node-entry-url.js           376.00 B
+packages/runtime-js build: ESM dist/builtins/node-entry.js               929.00 B
+packages/runtime-js build: ESM dist/builtins/timers.js                   418.00 B
+packages/runtime-js build: ESM dist/builtins/child_process.js            698.00 B
+packages/runtime-js build: ESM dist/builtins/perf_hooks.js               147.00 B
+packages/runtime-js build: ESM dist/builtins/path.js                     485.00 B
+packages/runtime-js build: ESM dist/ipc/exec-sync-handler.js.map         81.00 B
+packages/runtime-js build: ESM dist/env/capabilities.js.map              3.82 KB
+packages/runtime-js build: ESM dist/tsconfig-paths-I6FFC6SC.js.map       8.94 KB
+packages/runtime-js build: ESM dist/internal.js.map                      8.23 KB
+packages/runtime-js build: ESM dist/chunk-ZLBKYV4M.js.map                6.81 KB
+packages/runtime-js build: ESM dist/node-eval-typescript-W5ICBRYZ.js.map 7.88 KB
+packages/runtime-js build: ESM dist/chunk-XNW2RVCA.js.map                21.05 KB
+packages/runtime-js build: ESM dist/chunk-QUG2P6RC.js.map                8.67 KB
+packages/runtime-js build: ESM dist/install-process.js.map               79.00 B
+packages/runtime-js build: ESM dist/loader.js.map                        70.00 B
+packages/runtime-js build: ESM dist/chunk-O75EKCKB.js.map                4.50 KB
+packages/runtime-js build: ESM dist/index.js.map                         69.00 B
+packages/runtime-js build: ESM dist/worker.js.map                        21.85 KB
+packages/runtime-js build: ESM dist/chunk-LYSDNYVK.js.map                1.25 KB
+packages/runtime-js build: ESM dist/chunk-VNEIPTN7.js.map                78.00 B
+packages/runtime-js build: ESM dist/chunk-DFMLBCYP.js.map                114.95 KB
+packages/runtime-js build: ESM dist/chunk-3GIGHUVR.js.map                2.36 KB
+packages/runtime-js build: ESM dist/chunk-IHYUU4YO.js.map                6.42 KB
+packages/runtime-js build: ESM dist/chunk-DNSVSOFA.js.map                13.04 KB
+packages/runtime-js build: ESM dist/chunk-3I5DHSE7.js.map                7.83 KB
+packages/runtime-js build: ESM dist/chunk-FSUPZOKZ.js.map                106.73 KB
+packages/runtime-js build: ESM dist/chunk-EDMK4U7P.js.map                8.34 KB
+packages/runtime-js build: ESM dist/chunk-NOI6ZZQB.js.map                2.89 KB
+packages/runtime-js build: ESM dist/chunk-75ZEIUFQ.js.map                1.67 KB
+packages/runtime-js build: ESM dist/chunk-VSDS3DOV.js.map                317.94 KB
+packages/runtime-js build: ESM dist/chunk-UO6ZOBPW.js.map                25.18 KB
+packages/runtime-js build: ESM dist/chunk-LH7VFS3K.js.map                860.00 B
+packages/runtime-js build: ESM dist/chunk-CBJEHU4V.js.map                12.67 KB
+packages/runtime-js build: ESM dist/chunk-B7KSRLNM.js.map                2.24 KB
+packages/runtime-js build: ESM dist/chunk-TVTA56IF.js.map                36.81 KB
+packages/runtime-js build: ESM dist/chunk-VLSLQ55A.js.map                111.31 KB
+packages/runtime-js build: ESM dist/builtins.js.map                      72.00 B
+packages/runtime-js build: ESM dist/chunk-LCHEH2MM.js.map                7.98 KB
+packages/runtime-js build: ESM dist/chunk-SKZDPHUG.js.map                2.14 KB
+packages/runtime-js build: ESM dist/chunk-ES63SSTY.js.map                20.22 KB
+packages/runtime-js build: ESM dist/chunk-AQTGZOCD.js.map                419.99 KB
+packages/runtime-js build: ESM dist/chunk-QXP42Y34.js.map                164.47 KB
+packages/runtime-js build: ESM dist/chunk-X7NXDSHG.js.map                2.59 KB
+packages/runtime-js build: ESM dist/chunk-2XRHUI5Y.js.map                98.00 B
+packages/runtime-js build: ESM dist/chunk-PR6QNS5H.js.map                140.70 KB
+packages/runtime-js build: ESM dist/chunk-GT6OSCNS.js.map                45.75 KB
+packages/runtime-js build: ESM dist/chunk-SZEDEEPH.js.map                460.25 KB
+packages/runtime-js build: ESM dist/builtins/fs-watch.js.map             72.00 B
+packages/runtime-js build: ESM dist/builtins/process.js.map              71.00 B
+packages/runtime-js build: ESM dist/builtins/process-identity.js.map     80.00 B
+packages/runtime-js build: ESM dist/builtins/fs.js.map                   66.00 B
+packages/runtime-js build: ESM dist/builtins/buffer.js.map               70.00 B
+packages/runtime-js build: ESM dist/builtins/console.js.map              71.00 B
+packages/runtime-js build: ESM dist/builtins/module.js.map               70.00 B
+packages/runtime-js build: ESM dist/builtins/node-entry-url.js.map       78.00 B
+packages/runtime-js build: ESM dist/builtins/os.js.map                   66.00 B
+packages/runtime-js build: ESM dist/builtins/node-entry.js.map           74.00 B
+packages/runtime-js build: ESM dist/builtins/timers.js.map               70.00 B
+packages/runtime-js build: ESM dist/builtins/child_process.js.map        77.00 B
+packages/runtime-js build: ESM dist/builtins/perf_hooks.js.map           74.00 B
+packages/runtime-js build: ESM dist/builtins/path.js.map                 68.00 B
+packages/runtime-js build: ESM dist/chunk-ONJ53QA7.js.map                774.23 KB
+packages/runtime-js build: ESM dist/chunk-OJVD7D27.js                    4.65 MB
+packages/runtime-js build: ESM dist/chunk-OJVD7D27.js.map                9.21 MB
+packages/runtime-js build: ESM ⚡️ Build success in 4262ms
+packages/runtime-js build: DTS ⚡️ Build success in 7973ms
+packages/runtime-js build: DTS dist/builtins.d.ts                           111.00 B
+packages/runtime-js build: DTS dist/worker.d.ts                             988.00 B
+packages/runtime-js build: DTS dist/env/capabilities.d.ts                   739.00 B
+packages/runtime-js build: DTS dist/builtins/timers.d.ts                    3.83 KB
+packages/runtime-js build: DTS dist/builtins/buffer.d.ts                    457.00 B
+packages/runtime-js build: DTS dist/builtins/console.d.ts                   1.49 KB
+packages/runtime-js build: DTS dist/builtins/module.d.ts                    2.54 KB
+packages/runtime-js build: DTS dist/builtins/node-entry.d.ts                2.38 KB
+packages/runtime-js build: DTS dist/builtins/node-entry-url.d.ts            1.49 KB
+packages/runtime-js build: DTS dist/builtins/process-identity.d.ts          1.64 KB
+packages/runtime-js build: DTS dist/builtins/os.d.ts                        10.19 KB
+packages/runtime-js build: DTS dist/builtins/path.d.ts                      3.16 KB
+packages/runtime-js build: DTS dist/builtins/perf_hooks.d.ts                555.00 B
+packages/runtime-js build: DTS dist/install-process.d.ts                    3.69 KB
+packages/runtime-js build: DTS dist/ipc/exec-sync-handler.d.ts              6.45 KB
+packages/runtime-js build: DTS dist/loader.d.ts                             1.53 KB
+packages/runtime-js build: DTS dist/builtins/process.d.ts                   6.64 KB
+packages/runtime-js build: DTS dist/builtins/fs.d.ts                        22.78 KB
+packages/runtime-js build: DTS dist/index.d.ts                              6.82 KB
+packages/runtime-js build: DTS dist/builtins/child_process.d.ts             6.71 KB
+packages/runtime-js build: DTS dist/internal.d.ts                           12.58 KB
+packages/runtime-js build: DTS dist/builtins/fs-watch.d.ts                  193.00 B
+packages/runtime-js build: DTS dist/node-ipc-channel-ConrwHAk.d.ts          263.00 B
+packages/runtime-js build: DTS dist/node-entry-runtime-config-CM_3Gh6l.d.ts 3.65 KB
+packages/runtime-js build: DTS dist/loud-members-BZnH-HCY.d.ts              875.00 B
+packages/runtime-js build: DTS dist/process-lifecycle-events-OwxVnvkR.d.ts  2.92 KB
+packages/runtime-js build: DTS dist/fs-watch-DHG_G50Y.d.ts                  4.25 KB
+packages/runtime-js build: DTS dist/loader-uKCOhKEI.d.ts                    8.79 KB
+packages/runtime-js build: DTS dist/event-loop-keepalive-BF1UI1r_.d.ts      19.27 KB
+packages/runtime-js build: Done
+packages/isolate-guest build$ tsup && node scripts/build-guest.mjs
+packages/ts-language-service prebuild$ pnpm vendor:ts-lib
+packages/isolate-guest build: CLI Building entry: {"index":"src/index.ts"}
+packages/isolate-guest build: CLI Using tsconfig: tsconfig.json
+packages/isolate-guest build: CLI tsup v8.5.1
+packages/isolate-guest build: CLI Using tsup config: <wt>/packages/isolate-guest/tsup.config.ts
+packages/isolate-guest build: CLI Target: es2022
+packages/isolate-guest build: CLI Cleaning output folder
+packages/isolate-guest build: ESM Build start
+packages/ts-language-service prebuild: $ node scripts/vendor-ts-lib.mjs
+packages/isolate-guest build: ESM dist/index.js     15.11 KB
+packages/isolate-guest build: ESM dist/index.js.map 46.86 KB
+packages/isolate-guest build: ESM ⚡️ Build success in 49ms
+packages/ts-language-service prebuild: Wrote <wt>/packages/ts-language-service/vendor/lib-bundle.json: 100 lib files, 3.07 MB
+packages/ts-language-service prebuild: Done
+packages/ts-language-service build$ tsup
+packages/isolate-guest build: DTS Build start
+packages/ts-language-service build: CLI Building entry: {"index":"src/index.ts","protocol":"src/worker/protocol.ts","lsp-types":"src/lsp-types.ts","worker/entry":"src/worker/entry.ts","vendor/lib-bundle.json":"vendor/lib-bundle.json"}
+packages/ts-language-service build: CLI Using tsconfig: tsconfig.json
+packages/ts-language-service build: CLI tsup v8.5.1
+packages/ts-language-service build: CLI Using tsup config: <wt>/packages/ts-language-service/tsup.config.ts
+packages/ts-language-service build: CLI Target: es2022
+packages/ts-language-service build: CLI Cleaning output folder
+packages/ts-language-service build: ESM Build start
+packages/ts-language-service build: "fetchHost" is imported from external module "@riftydev/io" but never used in "dist/chunk-73HH2BPE.js".
+packages/ts-language-service build: DTS Build start
+packages/ts-language-service build: ESM dist/protocol.js                   165.00 B
+packages/ts-language-service build: ESM dist/index.js                      375.00 B
+packages/ts-language-service build: ESM dist/lsp-types.js                  188.00 B
+packages/ts-language-service build: ESM dist/chunk-H6R23UK5.js             4.38 KB
+packages/ts-language-service build: ESM dist/chunk-73HH2BPE.js             78.48 KB
+packages/ts-language-service build: ESM dist/chunk-SECEGO5M.js             533.00 B
+packages/ts-language-service build: ESM dist/worker/entry.js               2.00 KB
+packages/ts-language-service build: ESM dist/index.js.map                  69.00 B
+packages/ts-language-service build: ESM dist/protocol.js.map               72.00 B
+packages/ts-language-service build: ESM dist/chunk-H6R23UK5.js.map         21.72 KB
+packages/ts-language-service build: ESM dist/chunk-SECEGO5M.js.map         28.67 KB
+packages/ts-language-service build: ESM dist/lsp-types.js.map              73.00 B
+packages/ts-language-service build: ESM dist/chunk-73HH2BPE.js.map         210.09 KB
+packages/ts-language-service build: ESM dist/worker/entry.js.map           6.90 KB
+packages/ts-language-service build: ESM dist/vendor/lib-bundle.json.js     3.07 MB
+packages/ts-language-service build: ESM dist/vendor/lib-bundle.json.js.map 3.15 MB
+packages/ts-language-service build: ESM ⚡️ Build success in 259ms
+packages/isolate-guest build: DTS ⚡️ Build success in 417ms
+packages/isolate-guest build: DTS dist/index.d.ts 7.48 KB
+packages/isolate-guest build: Done
+packages/ts-language-service build: DTS ⚡️ Build success in 3557ms
+packages/ts-language-service build: DTS dist/index.d.ts                  19.70 KB
+packages/ts-language-service build: DTS dist/protocol.d.ts               29.06 KB
+packages/ts-language-service build: DTS dist/lsp-types.d.ts              18.93 KB
+packages/ts-language-service build: DTS dist/worker/entry.d.ts           524.00 B
+packages/ts-language-service build: DTS dist/vendor/lib-bundle.json.d.ts 3.07 MB
+packages/ts-language-service build: Done
+packages/isolate-host build$ pnpm --dir ../isolate-guest run build && tsup && node scripts/build-runtime.mjs
+packages/rifty build$ tsup
+packages/workbench build$ tsup && node ../../tools/publishing/build-workbench-assets.mjs
+packages/workbench build: CLI Building entry: {"index":"src/index.ts","playground":"src/workbench/playground.ts","owner-worker":"src/workers/workbench-owner-bootstrap.ts","kernel-worker":"src/workers/kernel-worker-entry.ts","node-worker":"src/workers/node-entry-bootstrap.ts","dev-server-worker":"src/workers/dev-server-child-bootstrap.ts","typescript-worker":"src/workers/ts-lsp-worker-entry.ts","no-coi-toolchain-worker":"src/workers/no-coi-toolchain-worker.ts"}
+packages/workbench build: CLI Using tsconfig: tsconfig.json
+packages/workbench build: CLI tsup v8.5.1
+packages/workbench build: CLI Using tsup config: <wt>/packages/workbench/tsup.config.ts
+packages/workbench build: CLI Target: es2022
+packages/rifty build: CLI Building entry: {"index":"src/index.ts","vfs":"src/vfs.ts","io":"src/io.ts","kernel":"src/kernel.ts","runtime":"src/runtime.ts","wasi":"src/wasi.ts","net":"src/net.ts","git":"src/git.ts","npm-client":"src/npm-client.ts","shell":"src/shell.ts","terminal":"src/terminal.ts","service-worker":"src/service-worker.ts","ts-language-service":"src/ts-language-service.ts"}
+packages/rifty build: CLI Using tsconfig: tsconfig.json
+packages/rifty build: CLI tsup v8.5.1
+packages/rifty build: CLI Using tsup config: <wt>/packages/rifty/tsup.config.ts
+packages/workbench build: CLI Cleaning output folder
+packages/workbench build: ESM Build start
+packages/rifty build: CLI Target: es2022
+packages/rifty build: CLI Cleaning output folder
+packages/rifty build: ESM Build start
+packages/isolate-host build: $ tsup && node scripts/build-guest.mjs
+packages/rifty build: ESM dist/terminal.js                 109.00 B
+packages/rifty build: ESM dist/service-worker.js           127.00 B
+packages/rifty build: ESM dist/ts-language-service.js      142.00 B
+packages/rifty build: ESM dist/shell.js                    100.00 B
+packages/rifty build: ESM dist/vfs.js                      94.00 B
+packages/rifty build: ESM dist/io.js                       91.00 B
+packages/rifty build: ESM dist/default-vfs-EQLDS5O5.js     142.00 B
+packages/rifty build: ESM dist/kernel.js                   103.00 B
+packages/rifty build: ESM dist/runtime.js                  109.00 B
+packages/rifty build: ESM dist/wasi.js                     105.00 B
+packages/rifty build: ESM dist/net.js                      94.00 B
+packages/rifty build: ESM dist/git.js                      94.00 B
+packages/rifty build: ESM dist/npm-client.js               115.00 B
+packages/rifty build: ESM dist/index.js                    22.74 KB
+packages/rifty build: ESM dist/vfs.js.map                  87.00 B
+packages/rifty build: ESM dist/terminal.js.map             92.00 B
+packages/rifty build: ESM dist/service-worker.js.map       98.00 B
+packages/rifty build: ESM dist/shell.js.map                89.00 B
+packages/rifty build: ESM dist/default-vfs-EQLDS5O5.js.map 104.00 B
+packages/rifty build: ESM dist/runtime.js.map              91.00 B
+packages/rifty build: ESM dist/kernel.js.map               90.00 B
+packages/rifty build: ESM dist/wasi.js.map                 88.00 B
+packages/rifty build: ESM dist/ts-language-service.js.map  103.00 B
+packages/rifty build: ESM dist/io.js.map                   86.00 B
+packages/rifty build: ESM dist/net.js.map                  87.00 B
+packages/rifty build: ESM dist/git.js.map                  87.00 B
+packages/rifty build: ESM dist/npm-client.js.map           94.00 B
+packages/rifty build: ESM dist/index.js.map                60.38 KB
+packages/rifty build: ESM ⚡️ Build success in 94ms
+packages/rifty build: DTS Build start
+packages/isolate-host build: CLI Building entry: {"index":"src/index.ts"}
+packages/isolate-host build: CLI Using tsconfig: tsconfig.json
+packages/isolate-host build: CLI tsup v8.5.1
+packages/isolate-host build: CLI Using tsup config: <wt>/packages/isolate-guest/tsup.config.ts
+packages/isolate-host build: CLI Target: es2022
+packages/isolate-host build: CLI Cleaning output folder
+packages/isolate-host build: ESM Build start
+packages/workbench build: "openHostBroadcastChannel" is imported from external module "@riftydev/io" but never used in "dist/chunk-JWSIS23N.js".
+packages/workbench build: "channelNameFor" is imported from external module "@riftydev/net" but never used in "dist/chunk-JWSIS23N.js".
+packages/isolate-host build: ESM dist/index.js     15.11 KB
+packages/isolate-host build: ESM dist/index.js.map 46.86 KB
+packages/isolate-host build: ESM ⚡️ Build success in 92ms
+packages/isolate-host build: DTS Build start
+packages/workbench build: DTS Build start
+packages/workbench build: ESM dist/chunk-VRA4BSYR.js                           1.52 KB
+packages/workbench build: ESM dist/no-coi-toolchain-owner-PGNCIXUQ.js          27.05 KB
+packages/workbench build: ESM dist/port-watch-FLZD2OAQ.js                      151.00 B
+packages/workbench build: ESM dist/npm-shell-command-CTSUUGVR.js               334.00 B
+packages/workbench build: ESM dist/chunk-MC2YARB4.js                           4.70 KB
+packages/workbench build: ESM dist/index.js                                    26.03 KB
+packages/workbench build: ESM dist/no-coi-project-command-H6DWQRAE.js          10.77 KB
+packages/workbench build: ESM dist/chunk-T3KG7ZIF.js                           1.93 KB
+packages/workbench build: ESM dist/chunk-F426DG6P.js                           6.39 KB
+packages/workbench build: ESM dist/no-coi-snapshot-application-HHVFBBAN.js     2.14 KB
+packages/workbench build: ESM dist/playground.js                               14.19 KB
+packages/workbench build: ESM dist/chunk-U3JE5HYD.js                           1.00 KB
+packages/workbench build: ESM dist/no-coi-toolchain-install-U4OOM6ZW.js        2.20 KB
+packages/workbench build: ESM dist/chunk-WDLFDZRK.js                           68.53 KB
+packages/workbench build: ESM dist/chunk-BDCFPQIW.js                           724.00 B
+packages/workbench build: ESM dist/chunk-24T5ML4H.js                           28.97 KB
+packages/workbench build: ESM dist/chunk-JWSIS23N.js                           36.42 KB
+packages/workbench build: ESM dist/chunk-H5H32ZEM.js                           7.56 KB
+packages/workbench build: ESM dist/kernel-worker.js                            651.00 B
+packages/workbench build: ESM dist/chunk-YPCK2M7T.js                           236.91 KB
+packages/workbench build: ESM dist/chunk-LQZAT6Z5.js                           2.42 KB
+packages/workbench build: ESM dist/chunk-XG626O4N.js                           11.98 KB
+packages/workbench build: ESM dist/chunk-BHWSLKOJ.js                           696.00 B
+packages/workbench build: ESM dist/chunk-BHBUQWSA.js                           9.61 KB
+packages/workbench build: ESM dist/typescript-worker.js                        489.00 B
+packages/workbench build: ESM dist/chunk-JH3QJMPK.js                           376.00 B
+packages/workbench build: ESM dist/dev-server-worker.js                        7.04 KB
+packages/workbench build: ESM dist/no-coi-toolchain-worker.js                  454.00 B
+packages/workbench build: ESM dist/chunk-DPAWNQ2G.js                           3.95 KB
+packages/workbench build: ESM dist/node-worker.js                              7.42 KB
+packages/workbench build: ESM dist/chunk-AAA5LT3T.js                           3.81 KB
+packages/workbench build: ESM dist/chunk-Q2THUEZU.js                           17.59 KB
+packages/workbench build: ESM dist/chunk-RQZZO2EK.js                           229.87 KB
+packages/workbench build: ESM dist/owner-worker.js                             384.07 KB
+packages/workbench build: ESM dist/no-coi-toolchain-owner-PGNCIXUQ.js.map      62.59 KB
+packages/workbench build: ESM dist/npm-shell-command-CTSUUGVR.js.map           90.00 B
+packages/workbench build: ESM dist/chunk-VRA4BSYR.js.map                       3.22 KB
+packages/workbench build: ESM dist/chunk-F426DG6P.js.map                       14.95 KB
+packages/workbench build: ESM dist/chunk-T3KG7ZIF.js.map                       5.46 KB
+packages/workbench build: ESM dist/index.js.map                                57.65 KB
+packages/workbench build: ESM dist/no-coi-project-command-H6DWQRAE.js.map      23.64 KB
+packages/workbench build: ESM dist/no-coi-snapshot-application-HHVFBBAN.js.map 4.46 KB
+packages/workbench build: ESM dist/port-watch-FLZD2OAQ.js.map                  83.00 B
+packages/workbench build: ESM dist/chunk-MC2YARB4.js.map                       12.58 KB
+packages/workbench build: ESM dist/chunk-U3JE5HYD.js.map                       2.58 KB
+packages/workbench build: ESM dist/no-coi-toolchain-install-U4OOM6ZW.js.map    4.78 KB
+packages/workbench build: ESM dist/chunk-BDCFPQIW.js.map                       1.72 KB
+packages/workbench build: ESM dist/playground.js.map                           44.62 KB
+packages/workbench build: ESM dist/kernel-worker.js.map                        2.61 KB
+packages/workbench build: ESM dist/chunk-WDLFDZRK.js.map                       180.25 KB
+packages/workbench build: ESM dist/chunk-H5H32ZEM.js.map                       16.75 KB
+packages/workbench build: ESM dist/chunk-LQZAT6Z5.js.map                       5.30 KB
+packages/workbench build: ESM dist/chunk-JWSIS23N.js.map                       99.13 KB
+packages/workbench build: ESM dist/chunk-XG626O4N.js.map                       36.46 KB
+packages/workbench build: ESM dist/chunk-BHWSLKOJ.js.map                       2.73 KB
+packages/workbench build: ESM dist/chunk-JH3QJMPK.js.map                       535.00 B
+packages/workbench build: ESM dist/no-coi-toolchain-worker.js.map              652.00 B
+packages/workbench build: ESM dist/typescript-worker.js.map                    2.76 KB
+packages/workbench build: ESM dist/chunk-BHBUQWSA.js.map                       20.89 KB
+packages/workbench build: ESM dist/chunk-DPAWNQ2G.js.map                       10.25 KB
+packages/workbench build: ESM dist/chunk-Q2THUEZU.js.map                       42.78 KB
+packages/workbench build: ESM dist/dev-server-worker.js.map                    17.24 KB
+packages/workbench build: ESM dist/chunk-AAA5LT3T.js.map                       11.41 KB
+packages/workbench build: ESM dist/chunk-24T5ML4H.js.map                       70.59 KB
+packages/workbench build: ESM dist/node-worker.js.map                          22.37 KB
+packages/workbench build: ESM dist/owner-worker.js.map                         926.05 KB
+packages/workbench build: ESM dist/chunk-YPCK2M7T.js.map                       571.02 KB
+packages/workbench build: ESM dist/chunk-RQZZO2EK.js.map                       553.54 KB
+packages/workbench build: ESM ⚡️ Build success in 687ms
+packages/isolate-host build: DTS ⚡️ Build success in 450ms
+packages/isolate-host build: DTS dist/index.d.ts 7.48 KB
+packages/isolate-host build: CLI Building entry: {"index":"src/index.ts"}
+packages/isolate-host build: CLI Using tsconfig: tsconfig.json
+packages/isolate-host build: CLI tsup v8.5.1
+packages/isolate-host build: CLI Using tsup config: <wt>/packages/isolate-host/tsup.config.ts
+packages/isolate-host build: CLI Target: es2022
+packages/isolate-host build: CLI Cleaning output folder
+packages/isolate-host build: ESM Build start
+packages/isolate-host build: ESM dist/index.js     35.93 KB
+packages/isolate-host build: ESM dist/index.js.map 97.76 KB
+packages/isolate-host build: ESM ⚡️ Build success in 197ms
+packages/isolate-host build: DTS Build start
+packages/isolate-host build: DTS ⚡️ Build success in 528ms
+packages/isolate-host build: DTS dist/index.d.ts 3.88 KB
+packages/isolate-host build: Done
+packages/rifty build: DTS ⚡️ Build success in 4035ms
+packages/rifty build: DTS dist/vfs.d.ts                 354.00 B
+packages/rifty build: DTS dist/index.d.ts               11.42 KB
+packages/rifty build: DTS dist/io.d.ts                  30.00 B
+packages/rifty build: DTS dist/kernel.d.ts              34.00 B
+packages/rifty build: DTS dist/runtime.d.ts             38.00 B
+packages/rifty build: DTS dist/wasi.d.ts                40.00 B
+packages/rifty build: DTS dist/net.d.ts                 31.00 B
+packages/rifty build: DTS dist/git.d.ts                 31.00 B
+packages/rifty build: DTS dist/npm-client.d.ts          38.00 B
+packages/rifty build: DTS dist/shell.d.ts               33.00 B
+packages/rifty build: DTS dist/terminal.d.ts            36.00 B
+packages/rifty build: DTS dist/service-worker.d.ts      42.00 B
+packages/rifty build: DTS dist/ts-language-service.d.ts 47.00 B
+packages/rifty build: Done
+packages/workbench build: DTS ⚡️ Build success in 5572ms
+packages/workbench build: DTS dist/owner-worker.d.ts            13.00 B
+packages/workbench build: DTS dist/playground.d.ts              12.19 KB
+packages/workbench build: DTS dist/index.d.ts                   5.28 KB
+packages/workbench build: DTS dist/kernel-worker.d.ts           13.00 B
+packages/workbench build: DTS dist/node-worker.d.ts             13.00 B
+packages/workbench build: DTS dist/dev-server-worker.d.ts       13.00 B
+packages/workbench build: DTS dist/typescript-worker.d.ts       13.00 B
+packages/workbench build: DTS dist/no-coi-toolchain-worker.d.ts 13.00 B
+packages/workbench build: DTS dist/open-workbench-DA3CcauU.d.ts 13.41 KB
+packages/workbench build: Done
+packages/agent build$ tsup
+packages/agent build: CLI Building entry: {"index":"src/index.ts"}
+packages/agent build: CLI Using tsconfig: tsconfig.json
+packages/agent build: CLI tsup v8.5.1
+packages/agent build: CLI Using tsup config: <wt>/packages/agent/tsup.config.ts
+packages/agent build: CLI Target: es2022
+packages/agent build: CLI Cleaning output folder
+packages/agent build: ESM Build start
+packages/agent build: ESM dist/index.js     138.04 KB
+packages/agent build: ESM dist/index.js.map 318.90 KB
+packages/agent build: ESM ⚡️ Build success in 136ms
+packages/agent build: DTS Build start
+packages/agent build: DTS ⚡️ Build success in 4363ms
+packages/agent build: DTS dist/index.d.ts 13.77 KB
+packages/agent build: Done
+third-party-notices: @riftydev/agent: 0 entries
+third-party-notices: @riftydev/git: 0 entries
+third-party-notices: @riftydev/io: 0 entries
+third-party-notices: @riftydev/isolate-guest: 6 entries
+third-party-notices: @riftydev/isolate-host: 6 entries
+third-party-notices: @riftydev/kernel: 0 entries
+third-party-notices: @riftydev/net: 0 entries
+third-party-notices: @riftydev/npm-client: 0 entries
+third-party-notices: @riftydev/sdk: 0 entries
+third-party-notices: @riftydev/runtime-js: 3 entries
+third-party-notices: @riftydev/runtime-wasi: 0 entries
+third-party-notices: @riftydev/service-worker: 0 entries
+third-party-notices: @riftydev/shell: 0 entries
+third-party-notices: @riftydev/terminal: 0 entries
+third-party-notices: @riftydev/ts-language-service: 1 entries
+third-party-notices: @riftydev/vfs: 0 entries
+third-party-notices: @riftydev/workbench: 52 entries
+third-party-notices: @riftydev/shadow-registry: 1 entries
+third-party-notices: @riftydev/eddy: 0 entries
+file://<wt>/tools/publishing/third-party-notices.mjs:325
+  if (failures.length) throw new Error(`third-party-notices:\n  ${failures.join('\n  ')}`);
+                             ^
+
+Error: third-party-notices:
+  packages/io/src/streams/node/generated/node-streams.js: in packages/io/src/streams/node/generated without a third-party-manifest record (packages/io dist/index.js)
+  packages/io/src/streams/node/generated/node-streams.js: in packages/io/src/streams/node/generated without a third-party-manifest record (packages/isolate-guest dist/guest.js)
+  packages/io/src/streams/node/generated/node-streams.js: in packages/io/src/streams/node/generated without a third-party-manifest record (packages/isolate-host dist/guest.js)
+  packages/io/src/streams/node/generated/node-streams.js: in packages/io/src/streams/node/generated without a third-party-manifest record (packages/workbench dist/assets/chunk-XNNWAMOH.js)
+    at main (file://<wt>/tools/publishing/third-party-notices.mjs:325:30)
+    at file://<wt>/tools/publishing/third-party-notices.mjs:328:57
+    at ModuleJob.run (node:internal/modules/esm/module_job:439:25)
+    at async node:internal/modules/esm/loader:633:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+
+Node.js v24.16.0
+[ELIFECYCLE] Command failed with exit code 1.

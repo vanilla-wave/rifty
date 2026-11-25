@@ -21,8 +21,8 @@ Mechanism: a positional write on `FsSync`/`Vfs`, with an explicit decision per i
 - memory: in place, growing the store; today it is quadratic through memcpy, 4 → 16 MiB going 7 →
   101 ms in-process and 4 → 126 ms in the isolate (`results/fd-hosts.txt`);
 - OPFS (`OpfsFsSync`): a range write into its authoritative content cache, then a range-aware
-  write-through. It must not write the disk directly: the cache is the truth (`opfs-sync.ts:547`,
-  `content.set` before `enqueueWriteThrough` at `:569`);
+  write-through. It must not write the disk directly: the cache is the truth (`opfs-sync.ts:554`,
+  `content.set` before `enqueueWriteThrough` at `:572`);
 - relay / owner: a new range-write RPC, replacing `writeChunk`'s append re-read. This absorbs the
   write half of `perf/fs-rpc-chunk-perf`; its base64 inflation stays there. Publication per call is
   `perf/workbench-guest-write-cost-grows-with-project`'s;
@@ -42,6 +42,12 @@ shared by the implementations:
 
 The `vfs` contract change records an ADR together with 4b. Acceptance as 4b by byte/RPC counters, append and positional rows
 included, with the durability guard (`results/chromium/durability.jsonl`) kept green.
+
+## Open findings (review round 4)
+
+Carried verbatim from the manager's review of PR #450, round 4 (2026-11-25); owner = this unit. They close when the unit is taken into work, by its own contract and review.
+
+- S10 (owner 4c): «один ADR на контракт `FsSync`/`Vfs` для позиционного чтения и записи вместе, пишется в 4b (чтобы интерфейс нижнего слоя не менялся дважды; 4c реализует вторую половину по тому же ADR)».
 
 ## Challenge
 

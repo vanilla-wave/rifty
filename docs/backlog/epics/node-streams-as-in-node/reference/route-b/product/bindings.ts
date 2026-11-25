@@ -278,6 +278,7 @@ export function createRouteB(createNodeStreams: CreateNodeStreams, host: RouteBH
     // Node's FastBuffer is a Uint8Array subclass sharing Buffer.prototype; rifty's Buffer is that class.
     'internal/buffer': () => ({ FastBuffer: rifty('buffer').Buffer }),
     'internal/encoding': () => ({ TextEncoder: g.TextEncoder }),
+    // Variant B only (generate.mjs ABORT=derived; the default, variant A, generates Node's file):
     // Node's addAbortListener attaches with kResistStopPropagation, which a host EventTarget ignores:
     // a guest listener that stops immediate propagation would hide the abort (S1). A dependent signal
     // is aborted by the abort algorithm, not by a listener, so it cannot be stopped. Without

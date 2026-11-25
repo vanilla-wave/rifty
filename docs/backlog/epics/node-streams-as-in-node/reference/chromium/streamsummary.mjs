@@ -27,7 +27,10 @@ for (const k of keys) {
       ? 'yes'
       : rs.map((r) => (r.sha256 === nodeSha ? 'y' : 'NO')).join('/');
     const exits = [...new Set(rs.map((r) => r.exit))].join(',');
-    return `${median(rs.map((r) => r.ms))} (${median(rs.map((r) => r.ticks))}) [${rs.length}, ${shaOk}, ${exits}]`;
+    // A median over fewer completed runs than were started is labelled.
+    const done = rs.filter((r) => typeof r.ms === 'number').length;
+    const of = done && done < rs.length ? ` median of ${done} of ${rs.length} completed` : '';
+    return `${median(rs.map((r) => r.ms))} (${median(rs.map((r) => r.ticks))}) [${rs.length}, ${shaOk}, ${exits}${of}]`;
   });
   lines.push(`${c} | ${mib} | ${cells.join(' | ')}`);
 }

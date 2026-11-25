@@ -1,5 +1,8 @@
 Row ownership (ownership.mjs over results/): host | program | row | units | owner (last in order; guard = equal today)
-order: 0 → 1 → 2 → 3 → 4 → 4b → 7 → 8a → 8b → 8c → 9r → 4c → 5 → P → 9w → 7g
+Covers: in-process rows (all programs, parity cases), isolate rows by name rules (see ownership.mjs),
+Workbench fd and stream-timing rows. Not covered: SDK rows, Workbench carrier and matrix rows (results/chromium*/
+hold them as program summaries only).
+order: 0 → 1 → 2 → 3 → 4 → 4b → 7 → AL → 8a → 8b → 8c → 9r → 4c → 5 → P → 9w → 7g
 
 in-process | b1-bindings | Buffer.isEncoding per name | 2 | guard
 in-process | b1-bindings | buf.toString(name) per name | 2 | 2
@@ -113,6 +116,12 @@ in-process | m1-lifecycle | Readable to end + Writable ended: close after end/fi
 in-process | m1-lifecycle | closed/destroyed/errored after destroy(err), each class | 8c | 8c
 in-process | m1-lifecycle | async Transform success: destroyed at end/finish/close | 8c | 8c
 in-process | m1-lifecycle | prototype _destroy is a function | 8c | 8c
+in-process | m10-abort-order-leak | a guest abort listener added after pipeline sees the source destroyed | 8c | 8c
+isolate | m10-abort-order-leak | a guest abort listener added after pipeline sees the source destroyed | 8c,7g | 7g
+in-process | m10-abort-order-leak | listeners left on the signal after 10000 completed reduce({signal}) | 8c | 8c
+isolate | m10-abort-order-leak | listeners left on the signal after 10000 completed reduce({signal}) | 8c,7g | 7g
+in-process | m10-abort-order-leak | listeners left on the signal after 40000 completed finished(r, {signal}) | 8c | 8c
+isolate | m10-abort-order-leak | listeners left on the signal after 40000 completed finished(r, {signal}) | 8c,7g | 7g
 in-process | m2-core-members | Readable readableFlowing/isPaused: new, on(data), pause, resume | 8c | 8c
 in-process | m2-core-members | fs.ReadStream readableFlowing/isPaused: new, on(data), pause, resume | 8c,9r | 9r
 in-process | m2-core-members | Writable writableNeedDrain below/over hwm, after drain | 8c | 8c
@@ -130,7 +139,8 @@ in-process | m4-readstream | property values at create | 8c,9r | 9r
 in-process | m4-readstream | property values at end | 8c,9r | 9r
 in-process | m4-readstream | ReadStream(path) without new | 8c,9r | 9r
 in-process | m4-readstream | graceful-fs shape: ReadStream.apply(this) + prototype open override | 8c,9r | 9r
-isolate | m4-readstream | class extends fs.ReadStream | 9r | 9r
+in-process | m4-readstream | class extends fs.ReadStream | - | guard
+isolate | m4-readstream | class extends fs.ReadStream | 8c,9r | 9r
 in-process | m4-readstream | paused buffer: no listener 30ms, then readableLength and data | 8c,9r | 9r
 in-process | m4-readstream | pause in first data, resume after 20ms | 8c,9r | 9r
 in-process | m4-readstream | setEncoding utf8, highWaterMark 5, split code points | 8c,9r | 9r
@@ -159,6 +169,7 @@ in-process | m5-writestream | event order end(cb): finish/close/cb | 8c,9w | 9w
 in-process | m5-writestream | close(cb) before end: pending writes land | 8c,9w | 9w
 in-process | m5-writestream | write after end: callback and error | - | guard
 in-process | m5-writestream | destroy(err): error, close, errored | 8c,9w | 9w
+in-process | m5-writestream | timers run while a WriteStream writes 16 MiB in 64 KiB chunks | 4,8c,9w | 9w
 in-process | m5-writestream | Readable.pipe(ws) with slow source: bytes and finish | - | guard
 in-process | m6-transform-duplex | Transform objectMode hwm 2, 8 writes, nobody reads | 8c | 8c
 in-process | m6-transform-duplex | Transform bytes: writes of 1 KiB until write() is false (cap 1000) | 8c | 8c
@@ -177,6 +188,7 @@ isolate | m7-pipeline-stages | promises.pipeline(Readable, async fn sink) return
 in-process | m7-pipeline-stages | callback pipeline(Readable, async gen, Writable) | 8c | 8c
 isolate | m7-pipeline-stages | callback pipeline(Readable, async gen, Writable) | 7,8c | 8c
 in-process | m7-pipeline-stages | async gen stage throws: error reaches callback | 8c | 8c
+isolate | m7-pipeline-stages | async gen stage throws: error reaches callback | 7,8c | 8c
 in-process | m7-pipeline-stages | pipeline(Readable, PassThrough, Writable) success cb args | 8c | 8c
 isolate | m7-pipeline-stages | pipeline(Readable, PassThrough, Writable) success cb args | 7,8c | 8c
 in-process | m7-pipeline-stages | finished(readable) success cb args | 8c | 8c
@@ -200,18 +212,23 @@ in-process | m8-constructor-options | options transform 1 | - | guard
 in-process | m8-constructor-options | options destroy 1 | - | guard
 in-process | m8-constructor-options | options construct 1 | - | guard
 in-process | m8-constructor-options | write(chunk, '', cb): empty encoding (zlib's flush() passes '') | 8c | 8c
-in-process | m9-abort-stop-propagation | promises.pipeline(r, w, {signal}), abort after a stopping listener | 8c | 8c
-isolate | m9-abort-stop-propagation | promises.pipeline(r, w, {signal}), abort after a stopping listener | 8c,7g | 7g
-in-process | m9-abort-stop-propagation | finished(r, {signal}) after a stopping listener | 8c | 8c
-isolate | m9-abort-stop-propagation | finished(r, {signal}) after a stopping listener | 8c,7g | 7g
-in-process | m9-abort-stop-propagation | addAbortSignal(signal, r) after a stopping listener | 8c | 8c
-isolate | m9-abort-stop-propagation | addAbortSignal(signal, r) after a stopping listener | 8c,7g | 7g
-isolate | m9-abort-stop-propagation | Readable.from(gen).map(fn, {signal}) after a stopping listener | 7g | 7g
-isolate | m9-abort-stop-propagation | Readable.reduce(fn, init, {signal}) after a stopping listener (operators.js direct listener) | 7g | 7g
+in-process | m9-abort-stop-propagation | promises.pipeline(r, w, {signal}), abort after a stopping listener | AL,8c | 8c
+isolate | m9-abort-stop-propagation | promises.pipeline(r, w, {signal}), abort after a stopping listener | AL,8c,7g | 7g
+in-process | m9-abort-stop-propagation | finished(r, {signal}) after a stopping listener | AL | AL
+isolate | m9-abort-stop-propagation | finished(r, {signal}) after a stopping listener | AL,7g | 7g
+in-process | m9-abort-stop-propagation | addAbortSignal(signal, r) after a stopping listener | AL | AL
+isolate | m9-abort-stop-propagation | addAbortSignal(signal, r) after a stopping listener | AL,7g | 7g
+in-process | m9-abort-stop-propagation | readable.map(fn, {signal}) after a stopping listener | 8c | 8c
+isolate | m9-abort-stop-propagation | readable.map(fn, {signal}) after a stopping listener | 8c,7g | 7g
+in-process | m9-abort-stop-propagation | readable.reduce(fn, init, {signal}) after a stopping listener | - | guard
+isolate | m9-abort-stop-propagation | readable.reduce(fn, init, {signal}) after a stopping listener | 7g | 7g
 in-process | w1-fs-windows | ws instanceof Writable / isWritable | 8c,9w | 9w
 in-process | w1-fs-windows | callback pipeline(rs, ws): cb, destroyed/closed, bytes | 8c,9w | 9w
-isolate | w1-fs-windows | callback pipeline(rs, PassThrough, ws): cb, bytes | 9r | 9r
+isolate | w1-fs-windows | callback pipeline(rs, ws): cb, destroyed/closed, bytes | 7,8c,9r,9w | 9w
+in-process | w1-fs-windows | callback pipeline(rs, PassThrough, ws): cb, bytes | - | guard
+isolate | w1-fs-windows | callback pipeline(rs, PassThrough, ws): cb, bytes | 7,8c,9r | 9r
 in-process | w1-fs-windows | promises.pipeline(rs, async gen, ws) | 8c,9r | 9r
+isolate | w1-fs-windows | promises.pipeline(rs, async gen, ws) | 7,8c,9r | 9r
 in-process | w1-fs-windows | ws.destroy(err) mid-pipe: error event on ws | 8c,9w | 9w
 in-process | w1-fs-windows | late finished(ws) after close | 8c,9w | 9w
 in-process (parity) | route-b-parity-stream.txt | stream/add-abort-signal.case.ts | 8c | guard
@@ -322,9 +339,24 @@ workbench | chromium-fd/workbench-write.jsonl | required fswrite 16 MiB | 4c | 4
 workbench | chromium-fd/workbench-write.jsonl | required writesync 16 MiB | 4c | 4c
 workbench | chromium-fd/workbench-write.jsonl | required append 16 MiB | 4c | 4c
 workbench | chromium-fd/workbench-write.jsonl | required poswrite 16 MiB | 4c | 4c
-workbench | chromium-d | read 16 MiB stream (B 21005 ms, Node 10.7 ms) | 4b,8c,9r | 9r
-workbench | chromium-d | write 16 MiB stream (B 46506 ms, Node 4.7 ms) | 8c,4c,9w | 9w
+workbench | chromium-d | read 16 MiB stream (B 21005 ms, Node 10.7 ms) | 4,4b,8c,9r | 9r
+workbench | chromium-d | write 16 MiB stream (B 46506 ms, Node 4.7 ms) | 4,8c,4c,9w | 9w
 workbench | chromium-d | write 16 MiB in a 1000-file project (B timeout 900 s, fresh 46506 ms) | 8c,4c,P,9w | 9w
+
+## window changes (window | program | row | today | window value)
+8c window | c-pipeline-asyncgen | line 1 | pipeline threw TypeError: pipeline: argument must be a stream (index 1 received a non-stream value) | pipeline threw Error [ERR_STREAM_PREMATURE_CLOSE]: Premature close
+8c window | c-unzip-stored | line 1 | close, then listing threw Error [ENOENT]: ENOENT: no such file or directory, scandir '<dir>/unz' | (no line)
+9r window | c-unzip-stored | line 1 | close, then listing threw Error [ENOENT]: ENOENT: no such file or directory, scandir '<dir>/unz' | (no line)
+9r window | m3-legacy-stream | fs streams instanceof Stream | false,false | true,false
+9r window | m4-readstream | encoding option base64 / utf16le / latin1 with highWaterMark 4 (decoder across chunks) | base64:threw fs.createReadStream(...) is not a function or its return val,utf16le:threw fs.createReadStream(...) is not a function or its return val,latin1:threw fs.createReadStream(...) is not a function or its return val,hex:threw fs.createReadStream(...) is not a function or its return val | base64:threw Not implemented: string_decoder encoding 'base64',utf16le:threw Not implemented: string_decoder encoding 'utf16le',latin1:threw Not implemented: string_decoder encoding 'latin1',hex:threw Not implemented: string_decoder encoding 'hex'
+9r window | m4-readstream | encoding option through 'data' (no for await): base64 / utf16le / latin1 / hex, highWaterMark 4 | base64:YQBi|AGMA|ZABlAGYA|ZwBo|AGkA|agDpAP8A|AAE9|2ADe|IQA=,utf16le:ab|cd|ef|gh|ij|éÿ|Ā�|�!,latin1:a b |c d |e f |g h |i j |é ÿ | =Ø| Þ! ,hex:61006200|63006400|65006600|67006800|69006a00|e900ff00|00013dd8|00de2100 | base64:threw Not implemented: string_decoder encoding 'base64',utf16le:threw Not implemented: string_decoder encoding 'utf16le',latin1:threw Not implemented: string_decoder encoding 'latin1',hex:threw Not implemented: string_decoder encoding 'hex'
+9r window | m4-readstream | timers run while 16 MiB streams (for await) | threw fs.createReadStream(...) is not a function or its return val | bytes=16777216,ticks>0=false
+8c window | m4-readstream | Readable.from(fs.ReadStream) / toArray | threw Readable.from: the "iterable" argument must implement Symbol | threw ERR_INVALID_ARG_TYPE:The "iterable" argument must be an instance of Iterable. Rec
+8c window | m8-constructor-options | options encoding "nope" | Readable:ERR_UNKNOWN_ENCODING Writable:ok hwm=-/65536 Duplex:ERR_UNKNOWN_ENCODING Transform:ERR_UNKNOWN_ENCODING | Readable:Not implemented Writable:ok hwm=-/65536 Duplex:Not implemented Transform:Not implemented
+9r window | m8-constructor-options | options encoding "nope" | Readable:ERR_UNKNOWN_ENCODING Writable:ok hwm=-/65536 Duplex:ERR_UNKNOWN_ENCODING Transform:ERR_UNKNOWN_ENCODING | Readable:Not implemented Writable:ok hwm=-/65536 Duplex:Not implemented Transform:Not implemented
+8c window | m9-abort-stop-propagation | promises.pipeline(r, w, {signal}), abort after a stopping listener | threw TypeError | pending,destroyed=false/false
+9r window | m9-abort-stop-propagation | promises.pipeline(r, w, {signal}), abort after a stopping listener | threw TypeError | pending,destroyed=false/false
+8c window | w1-fs-windows | promises.pipeline(rs, async gen, ws) | threw TypeError | threw ERR_STREAM_PREMATURE_CLOSE
 
 ## rows per owner
 1: 1
@@ -332,26 +364,31 @@ workbench | chromium-d | write 16 MiB in a 1000-file project (B timeout 900 s, f
 3: 1
 4: 1
 4b: 12
-8c: 129
-9r: 33
+AL: 2
+8c: 132
+9r: 34
 4c: 24
 5: 1
-9w: 20
-7g: 5
-guard: 95
+9w: 22
+7g: 8
+guard: 98
 
 ## edges (owner ← unit it also needs, rows)
-7g ← 8c: 3
+7g ← 8c: 5
+7g ← AL: 3
 8c ← 1: 3
 8c ← 2: 1
-8c ← 7: 5
+8c ← 7: 6
+8c ← AL: 1
 9r ← 1: 2
-9r ← 4: 1
+9r ← 4: 2
 9r ← 4b: 1
-9r ← 7: 1
-9r ← 8c: 31
+9r ← 7: 3
+9r ← 8c: 34
+9w ← 4: 2
 9w ← 4c: 2
 9w ← 5: 1
-9w ← 8c: 20
-9w ← 9r: 2
+9w ← 7: 1
+9w ← 8c: 22
+9w ← 9r: 3
 9w ← P: 1

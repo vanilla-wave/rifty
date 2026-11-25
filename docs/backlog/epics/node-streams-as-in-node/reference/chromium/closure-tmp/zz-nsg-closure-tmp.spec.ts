@@ -1,7 +1,7 @@
 // THROWAWAY (node-streams closure carriers, Workbench): the 5 exceljs-closure programs in /tmp/nsg-<name>
 // of the guest, seeded the zlib carrier's way (closure-files.ts closureFiles; fixtures/zlib-scenario.ts
 // serveSteps body + UNPACK by a guest `node`). Run: `cd /tmp/nsg-<name> && node <name>.cjs > <project>/nsgout/<name>.stdout`.
-// env NSG_OUT: output dir (raw.json, seed-timing.log).
+// env NSG_OUT: output dir (raw.json, seed-timing.log.txt).
 import {
   appendFileSync,
   mkdirSync,
@@ -78,7 +78,7 @@ test('nsg closure programs in Workbench /tmp', async ({ page, browser }) => {
   test.setTimeout(3 * 3_600_000);
   mkdirSync(OUT, { recursive: true });
   const log = (line: string) => {
-    appendFileSync(`${OUT}/seed-timing.log`, `${line}\n`);
+    appendFileSync(`${OUT}/seed-timing.log.txt`, `${line}\n`);
     console.log(line);
   };
   const closure = closureFiles(

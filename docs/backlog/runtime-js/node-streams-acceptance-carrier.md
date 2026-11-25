@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: draft
+status: ready
 title: The node-streams goal's User scenario runs as cases against real Node in the isolate host and in Chromium, each pinning today's outcome
 created: 2026-11-25
 why: Acceptance carrier of goal node-streams-as-in-node; the scenario must exist as executable cases with named current outcomes before any stream code changes
@@ -11,61 +11,54 @@ code: [packages/isolate-host/tests/library-exceljs.test.ts, packages/isolate-hos
 
 ## Context
 
-Unit 0 of the goal (FIT 5). The 10 `c-*` programs (files compared by sha256) of the goal's `reference/programs/` are the
-scenario. Each one runs with exceljs 4.4.0's closure laid out as `node_modules`, using the
-`package-closure.ts` pattern. The runs are:
+Unit 0 of goal `node-streams-as-in-node` (map). It turns the goal's scenario into executable cases,
+pinned on today's outcome, before any stream code changes. The programs are the 10 `c-*` files of the
+goal's `reference/programs/`. Each compares the files it writes by content: by sha256, or by the values
+a reload reads.
 
-- real `node <program>`, live on the same runner;
-- the isolate host sandbox `exec`;
-- Chromium on both browser hosts (Workbench, SDK), compared with that live oracle's output.
+Today's pins:
 
-This unit owns the Chromium line on both browser hosts (Chromium 108 as the tier floor, ADR-0469). It
-runs the m-matrices there too. Which harness carries it is this unit's to settle (map §Open
-questions).
+- In-process and isolate (`docs/backlog/epics/node-streams-as-in-node/reference/results/c-*.txt`, `summary.txt`): route A equals Node on 1/10 programs
+  (`c-csv-write-file`). The rest are pinned by their line, exit status and stderr.
+- Chromium, Workbench and SDK: the same outcomes (`docs/backlog/epics/node-streams-as-in-node/reference/results/chromium/`).
+- The 5 closure programs on Workbench with the closure in the guest's `/tmp`: 2/8 rows
+  (`docs/backlog/epics/node-streams-as-in-node/reference/results/chromium-c/route-a/`).
 
-Each program is its own case and pins today's exact outcome by name. A bare `it.fails` is not
-enough; follow `library-exceljs.test.ts:159`. A pin is the line, the exit status and the stderr.
-The pins below come from the run at `725576a88` (main `b6d37fc01`'s code), in
-`reference/results/c-*.txt`. "In-process" means rifty's modules in Node, with rifty's `Buffer`.
-Chromium has not been run. Every case exits 0 unless noted.
+Harness facts (also in `reference/README.md` §For executors):
 
-| case | Node | rifty in-process | rifty isolate |
-|---|---|---|---|
-| exceljs `xlsx.readFile` → edit → `writeFile` | `readFile ok 120`, reload `999` | `readFile threw TypeError: stream.close is not a function` | same |
-| exceljs `csv.readFile` | 4 rows | `TypeError: stream.close is not a function` | `NotImplementedError … isolate-host.ReadableStream` |
-| graceful-fs write + read | `read "graceful\n"` | `TypeError: Class constructor FileWriteStream cannot be invoked without 'new'` | same |
-| unzipper `Extract`, STORE zip | `a.txt=eb06cb57b0a7944a dir/b.txt=0f882365d720e9c4` (sha256 prefixes) | `'close'` with nothing extracted, then the listing hits `ENOENT` | `extract error NotImplementedError … isolate-host.ReadableStream` |
-| `for await` over `createReadStream` | `300000 5 d08928a16895` | `TypeError … is not async iterable` | same line; exit 1, stderr `isolate-host.ReadableStream` |
-| late `'data'` listener | `200000` bytes, `end` | `0` bytes, no `end` | same line; exit 1, stderr as above |
-| `on('readable')` + `read()` | `150000` bytes, `end` | `0` bytes, `end` | `0` bytes, no `end`; exit 1, stderr as above |
-| 16 MiB distinct bytes → async Transform → WriteStream | `bytes true 6027b5bbeb770447 maxInFlight<=1MiB true`; stderr in-flight `65536` | bytes equal, `maxInFlight<=1MiB false`; stderr `16777216` | `ws error … isolate-host.ReadableStream` |
-| `promises.pipeline` with an async generator | `200000 true` | `TypeError: pipeline: argument must be a stream (index 1 …)` | same line; exit 1, stderr as above |
-| exceljs `csv.writeFile` (object-mode Transform → `fs.WriteStream`) | `98 7bc0e9c9ffd573c1` | same | same |
-
-The node:zlib joint cases (unzipper `Extract` on DEFLATE, the `createGzip` pipe) are not in this
-carrier and not yet in the zlib carrier (`runtime-js/zlib-node-acceptance-carrier`, branch
-`t3/zlib-engine-probe`, which holds unzipper `Open.buffer` and a piped `Parse`). They are proposed
-for the zlib carrier via the manager.
-
-Chromium 148.0.7778.96, main `c2d03ce05` (`reference/chromium/`, `results/chromium/summary.txt`).
-Workbench (COI, browser-unit sealed fixture) and SDK (no-COI toolchain sandbox) give the in-process
-outcomes above, row for row. The exception is Workbench `c-transform-big`, which does not finish in
-180 s (the SDK takes 870 ms). That run used the program set at copy time, without the content hashes.
-Chromium 108 has not been run.
-
-Route B (main `692babe13` + the product wiring, `results/chromium-b/`):
-- SDK: all 12 programs = Node;
-- Workbench: the 7 without the closure = Node, and the 5 closure programs did not run (seeding).
-
-The Workbench closure harness, decided: the closure goes into the guest's `/tmp` through
-`packages/isolate-host/tests/closure-files.ts` and the zlib carrier's `serveSteps`/`UNPACK`/`RUNNER`
-(PR #453). That takes 11–12 s per program (`results/chromium-c/route-*/seed-timing.log`), so there is
-no edge to the publication-cost unit.
-
-Workbench, 5 closure programs (main `5763d8fa1`):
-- route A: 2/8 rows = Node;
-- route B: 8/8 = Node.
+- The closure comes from `packages/isolate-host/tests/closure-files.ts` `closureFiles('exceljs')`,
+  5941 files.
+- On Workbench, `tests/browser-unit/fixtures/zlib-scenario.ts` serves it (`serveSteps`) and unpacks it
+  into `/tmp/<dir>` (`UNPACK`). A child `node` started from a project-root runner (`RUNNER`) runs the
+  program. This takes 11–12 s per program.
+- A plain `cd /tmp/x && node x.cjs` is refused with «package tree readiness is not published».
+- Seeding the closure into the project root takes about 35 min (unit P's cost).
+- The SDK runs through `createSandbox({ requireCrossOriginIsolation: false, toolchain })` and
+  `project({ root }).run('node <file>')`. A COI page has no `node <file>` entry.
 
 ## Challenge
 
-challenge: 2026-11-25 — none (carrier of the goal; the premise is checked in goal §Challenge)
+challenge: 2026-11-25 — clear (premise in goal §Challenge; this unit changes no behaviour)
+
+## Acceptance
+
+1. The 10 `c-*` programs run as CI cases in the isolate host (sandbox `exec`), against live Node on the same runner. Each case asserts today's outcome from `docs/backlog/epics/node-streams-as-in-node/reference/results/c-*.txt` (line, exit status, stderr) and names its owning unit from `docs/backlog/epics/node-streams-as-in-node/reference/results/ownership.txt`. A changed outcome turns the case red. → I8
+2. The same 10 programs run in Chromium, each pinned on today's outcome: on Workbench, with the closure in `/tmp` as above (`docs/backlog/epics/node-streams-as-in-node/reference/results/chromium-c/route-a/summary.txt`); on the SDK, with the no-COI toolchain (`docs/backlog/epics/node-streams-as-in-node/reference/results/chromium/summary.txt`). → I8
+3. `m1`–`m10`, `w1` and `b1` run in Chromium on both hosts as pinned rows, so later units have their Chromium baseline. → I8
+4. The carrier runs once on the Chromium 108 floor (ADR-0469). The outcome is recorded in the PR, and a loading failure is pinned by name. → I8
+
+## Parity cases
+
+1. Each `c-*` program runs against live Node v24.16.0 on the same runner. Compared: stdout lines, exit status, and the written files' sha256 or reloaded values. Command: `node <file>` in a directory holding the closure. → I8
+
+## Out of scope
+
+- Turning a case green: that is each owning unit's job.
+- The DEFLATE `Extract` / `createGzip` joint cases, which belong to the zlib carrier.
+
+## Decisions
+
+- Closure on Workbench: the guest's `/tmp`, through PR #453's helpers. There is no edge to the
+  publication-cost unit P.
+- Hosts: isolate, Workbench (COI) and SDK (no-COI toolchain). The SDK on a COI page has no
+  `node <file>` entry.

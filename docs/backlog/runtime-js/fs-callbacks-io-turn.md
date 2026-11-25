@@ -1,6 +1,6 @@
 ---
 area: runtime-js
-status: draft
+status: ready
 title: fs callback APIs complete in an I/O turn, so timers interleave with them as in Node
 created: 2026-11-25
 why: rifty's fs.read/fs.write call back through a Promise microtask chain, so a read loop starves timers (0 ticks over 16 MiB, Node > 0)
@@ -10,14 +10,49 @@ sources: [docs/backlog/epics/node-streams-as-in-node/reference/results/m4-readst
 
 ## Context
 
-Unit 4 of goal node-streams-as-in-node (map), a binding of verbatim fs streams (ADR-0575).
-`m4` row «timers run during an fs.read(fd) loop over 16 MiB»: Node `ticks>0=true`, rifty `false` on
-every column (`fs.ts` callbacks are `Promise.resolve().then(...)`). A write issued before close lands
-on main already (`b1`, fs-stream parity A 6/6); the route-B fs rows that lost it were a probe
-artefact (product bindings 6/6), so they are a guard row here.
-It changes every callback API of `fs` (read, write, open, close, stat, readFile, …), so it carries a
-regression row of its own: `cases/fs` parity plus an ordering case against timers and `setImmediate`.
+Unit 4 of goal `node-streams-as-in-node` (map). rifty's fs callback APIs complete through a
+`Promise.resolve().then(...)` chain (`packages/runtime-js/src/builtins/fs.ts`), so a chain of callbacks
+never yields to timers.
+
+Measured today:
+- `docs/backlog/epics/node-streams-as-in-node/reference/results/m4-readstream.txt` «timers run during an fs.read(fd) loop over 16 MiB»: Node gives
+  `ticks>0=true`, rifty gives `false` in-process and in the isolate.
+- Workbench and SDK: 0 ticks on every fd path (`docs/backlog/epics/node-streams-as-in-node/reference/results/chromium-fd/`).
+- Node's own `fs.WriteStream` over this fs (route B): `docs/backlog/epics/node-streams-as-in-node/reference/results/m5-writestream.txt` «timers run while a
+  WriteStream writes» gives `ticks>0=false`, where today's class gives `true`. Route B's write side
+  therefore stands on this unit (`docs/backlog/epics/node-streams-as-in-node/reference/results/ownership.txt`).
 
 ## Challenge
 
-challenge: 2026-11-25 — none (child of a goal; premise in goal §Challenge)
+challenge: 2026-11-25 — clear (premise in goal §Challenge)
+
+## Acceptance
+
+1. `m4` «timers run during an fs.read(fd) loop over 16 MiB» = Node (`ticks>0=true`) on in-process, isolate, Workbench and SDK. → I10
+2. These guard rows stay = Node: `b1` «fs.read callback vs a timer due now» and «fs.write then fs.close in the same tick: bytes land»; `m5` «timers run while a WriteStream writes 16 MiB». → I10
+3. Every case of `tools/node-parity-runner/cases/fs` (41) stays green. This is the regression row for a change in the timing of every fs callback API. → I10
+
+## Parity cases
+
+1. A new `tools/node-parity-runner/cases/fs/callback-turn-order.case.ts`. It records the order of `fs.readFile`/`stat`/`open`/`read`/`write`/`close` callbacks against: `setTimeout(0)`; `setImmediate`; `process.nextTick`; a promise queued before and after each call. → I10
+
+   It also runs a loop of 256 callback reads and prints whether `setInterval(0)` ticked (a boolean).
+2. The same order for error callbacks (ENOENT `stat`, EBADF `read`). → I10
+
+## Fault matrix
+
+| axis × operation | honest outcome | artifact / fault target | trace |
+|---|---|---|---|
+| VFS error × any callback API | the error reaches the callback in the same kind of I/O turn as a success; never thrown synchronously | callback-turn-order case, error rows | → I10 |
+| owner RPC timeout × callback on Workbench | the callback gets the RPC error; the turn kind is unchanged | fault test with an injected RPC timeout | → I10 |
+
+## Out of scope
+
+- The speed of each fd call: units 4b and 4c.
+- Sync APIs: they stay synchronous.
+
+## Decisions
+
+- Callbacks complete in a host macrotask turn, not a microtask. This unit picks the shape per host
+  (MessageChannel or `setImmediate`).
+- A `process.nextTick` queued before an fs call still runs before its callback, as in Node.

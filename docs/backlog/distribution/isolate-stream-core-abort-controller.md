@@ -38,6 +38,13 @@ Open fork — owner: user, carried with the isolate Web API goal's question 1:
 
 The bytes are the same either way.
 
+## Open findings (review round 4)
+
+Carried verbatim from the manager's review of PR #450, round 4 (2026-11-25); owner = this unit. They close when the unit is taken into work, by its own contract and review.
+
+- S1 (owner 7/8c): «isolate-строки: Node сам создаёт `AbortController` в `pipeline.js:195`, `duplexify.js:213`, `operators.js:252`, `:62`»; «правила isolate заданы по именам, а не из данных (S1: регулярка `/pipeline/` теряет m7 «async gen stage throws»; `w1` pipeline в isolate → `['9r']` вместо 7, 8c, 9r) — либо добавь колонку isolate маршрута B из продуктового прогона, либо запиши как известный предел». Round 4 recorded it as a known limit (`reference/ownership.mjs`).
+- S4 (owner 7, P): «у 7 и P ноль строк, у P нет Acceptance».
+
 ## Challenge
 
 challenge: 2026-11-25 — none (child of a goal; premise in goal §Challenge)

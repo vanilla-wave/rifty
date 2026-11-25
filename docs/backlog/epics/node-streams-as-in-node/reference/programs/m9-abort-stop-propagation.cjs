@@ -1,5 +1,5 @@
-// S1: a guest listener that stops immediate propagation on 'abort' must not hide the abort from the
-// stream core (Node's internal listener resists it: kResistStopPropagation).
+// A guest listener that stops immediate propagation on 'abort' must not hide the abort from the stream
+// core: Node's internal listeners resist it (kResistStopPropagation on Node's own EventTarget).
 const { Readable, Writable, finished, addAbortSignal } = require('node:stream');
 const sp = require('node:stream/promises');
 const e2s = (e) => (e ? `${e.code || e.name}` : 'none');
@@ -7,6 +7,16 @@ const rows = [];
 const row = (name, fn) => rows.push([name, fn]);
 const settle = (ms = 40) => new Promise((r) => setTimeout(r, ms));
 const stopper = (ac) => ac.signal.addEventListener('abort', (e) => e.stopImmediatePropagation());
+const endless = () =>
+  Readable.from(
+    (async function* () {
+      for (;;) {
+        yield 1;
+        await settle(5);
+      }
+    })(),
+  );
+const race = (p) => Promise.race([p, settle(500).then(() => 'pending')]);
 row('promises.pipeline(r, w, {signal}), abort after a stopping listener', async (L) => {
   const ac = new AbortController();
   stopper(ac);
@@ -21,10 +31,7 @@ row('promises.pipeline(r, w, {signal}), abort after a stopping listener', async 
     (e) => e2s(e),
   );
   setTimeout(() => ac.abort(), 5);
-  L.push(
-    await Promise.race([p, settle(500).then(() => 'pending')]),
-    `destroyed=${r.destroyed}/${w.destroyed}`,
-  );
+  L.push(await race(p), `destroyed=${r.destroyed}/${w.destroyed}`);
 });
 row('finished(r, {signal}) after a stopping listener', async (L) => {
   const ac = new AbortController();
@@ -32,7 +39,7 @@ row('finished(r, {signal}) after a stopping listener', async (L) => {
   const r = new Readable({ read() {} });
   const p = new Promise((res) => finished(r, { signal: ac.signal }, (e) => res(e2s(e))));
   setTimeout(() => ac.abort(), 5);
-  L.push(await Promise.race([p, settle(500).then(() => 'pending')]));
+  L.push(await race(p));
 });
 row('addAbortSignal(signal, r) after a stopping listener', async (L) => {
   const ac = new AbortController();
@@ -43,42 +50,12 @@ row('addAbortSignal(signal, r) after a stopping listener', async (L) => {
   await settle(20);
   L.push(`destroyed=${r.destroyed}`);
 });
-row('Readable.from(gen).map(fn, {signal}) after a stopping listener', async (L) => {
+row('readable.map(fn, {signal}) after a stopping listener', async (L) => {
   const ac = new AbortController();
   stopper(ac);
-  const it = Readable.from(
-    (async function* () {
-      for (;;) {
-        yield 1;
-        await settle(5);
-      }
-    })(),
-  ).map((x) => x, { signal: ac.signal });
+  const it = endless().map((x) => x, { signal: ac.signal });
   setTimeout(() => ac.abort(), 20);
-  const p = row(
-    'Readable.reduce(fn, init, {signal}) after a stopping listener (operators.js direct listener)',
-    async (L) => {
-      const ac = new AbortController();
-      stopper(ac);
-      const src = Readable.from(
-        (async function* () {
-          for (;;) {
-            yield 1;
-            await settle(5);
-          }
-        })(),
-      );
-      const p = src
-        .reduce((a, x) => a + x, 0, { signal: ac.signal })
-        .then(
-          () => 'resolved',
-          (e) => e2s(e),
-        );
-      setTimeout(() => ac.abort(), 20);
-      L.push(await Promise.race([p, settle(500).then(() => 'pending')]));
-    },
-  );
-  (async () => {
+  const p = (async () => {
     try {
       for await (const _ of it);
       return 'ended';
@@ -86,7 +63,19 @@ row('Readable.from(gen).map(fn, {signal}) after a stopping listener', async (L) 
       return e2s(e);
     }
   })();
-  L.push(await Promise.race([p, settle(500).then(() => 'pending')]));
+  L.push(await race(p));
+});
+row('readable.reduce(fn, init, {signal}) after a stopping listener', async (L) => {
+  const ac = new AbortController();
+  stopper(ac);
+  const p = endless()
+    .reduce((a, x) => a + x, 0, { signal: ac.signal })
+    .then(
+      () => 'resolved',
+      (e) => e2s(e),
+    );
+  setTimeout(() => ac.abort(), 20);
+  L.push(await race(p));
 });
 (async () => {
   for (const [name, fn] of rows) {

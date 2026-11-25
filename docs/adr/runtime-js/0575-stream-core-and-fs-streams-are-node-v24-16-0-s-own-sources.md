@@ -39,7 +39,7 @@ rifty's `events`/`buffer`/`string_decoder`/`fs` and Node's own `internal/*`:
 | m1 lifecycle | 0/14 | 14/14 |
 | hook matrix (`stream-destroy-construct-hooks`) | 10/76 | 76/76 |
 | m2 state members, m3 legacy chain | 0/7, 0/4 | 7/7, 4/4 |
-| m4 `fs.ReadStream`, m5 `fs.WriteStream` | 3/22, 4/14 | 18/22, 13/14 |
+| m4 `fs.ReadStream`, m5 `fs.WriteStream` | 3/22, 5/15 | 18/22, 13/15 |
 | m6 Transform/Duplex, m7 pipeline, m8 options | 0/8, 0/11, 6/16 | 8/8, 11/11, 15/16 |
 | zlib goal `zlib-diff` state group: scenarios differing | 26/45 (154 fields) | 6/45 (6 fields) |
 | parity `cases/stream` (66 plain CJS) / fs-stream cases (6) | 66, 6 | 59, 3 |
@@ -124,8 +124,9 @@ The earlier `b1270101a` record is `results/route-b-product-build.txt`.
    That is 28 modules: 23 whole files and 5 cut down.
 
    Minify keeps identifiers: renaming changes V8's own `TypeError` text (parity `from-web-options`).
-   The Workbench consumer build renames, and that was measured: renamed, 0 of 105 parity cases
-   change (`results/route-b-minify.txt`). Map 8c keeps one guard row on the consumer bundle. The generator needs `acorn` as a dev dependency.
+   The Workbench consumer build renames, and that was measured: renamed, 1 of 105 parity cases run
+   changes, `from-web-options` (5 more skipped on both builds; `results/route-b-minify.txt`). Map 8c
+   keeps identifiers there or declares the row, with one guard row on the consumer bundle. The generator needs `acorn` as a dev dependency.
 
    License: an entry in `tools/publishing/third-party-manifest.json` (PR #445's mechanism), as for
    ADR-0574. Nothing is published before that entry exists (map 8a).
@@ -139,13 +140,10 @@ The earlier `b1270101a` record is `results/route-b-product-build.txt`.
    - `internal/util/types`, `debuglog`, `assert`;
    - `internal/buffer.FastBuffer`, which is rifty's `Buffer`;
    - `internal/event_target` symbols;
-   - `internal/events/abort_listener` as a binding, not Node's file. Node attaches with
-     `kResistStopPropagation`, which a host `EventTarget` ignores, so a guest listener that calls
-     `stopImmediatePropagation` would hide the abort: `pipeline`/`finished`/`addAbortSignal` would hang
-     (`m9`). The binding keeps Node's validation, reusing Node's validators, and listens on
-     `AbortSignal.any([signal])`. That dependent signal is aborted by the algorithm, not by a listener
-     (`results/route-b-abort-semantics.txt`: Node v24 and Chromium 148). It is a declared gap on
-     Chromium 108–115, which have no `any`. `events.addAbortListener` for guest code is its own unit;
+   - `internal/events/abort_listener` is not a binding: Node's file is taken whole (variant A of
+     `runtime-js/stream-core-abort-listeners-host-event-target`). On a host `EventTarget` Node's
+     `kResistStopPropagation` and `kWeakHandler` have no effect; which variant ships is that unit's
+     decision, not this ADR's. `events.addAbortListener` for guest code is its own unit (map 3);
    - `internal/blob.isBlob`;
    - `internal/fs/utils` (`copyObject`, `getOptions`, `getValidatedFd`, `validatePath`);
    - `internal/url.toPathIfFileURL`;
@@ -161,8 +159,8 @@ The earlier `b1270101a` record is `results/route-b-product-build.txt`.
    zlib. 8a provides the constants without loading the zlib module.
 
    Named gap: on a host `EventTarget`, `internal/event_target`'s `kResistStopPropagation` and
-   `kWeakHandler` have no effect. The abort-listener binding above covers the stop-propagation part.
-   `operators.js:255` (`reduce`) attaches directly, but the reduce row of `m9` still equals Node.
+   `kWeakHandler` have no effect (`abort_listener.js`, `operators.js:255` `reduce`, `:62` `map`).
+   Owner: `runtime-js/stream-core-abort-listeners-host-event-target` (variants A–D, rows `m9`, `m10`).
 
    Chromium 108 (the tier floor, ADR-0469) lacks APIs this code reaches, so the bindings supply them
    or the core waits on a floor shim. `check:es-floor` and the floor lane prove it:
@@ -270,9 +268,9 @@ Stays in force: ADR-0458 (io reads `node:process` through the registry factory);
   - generic +23 633 B gzip (288 404 → 312 037 of 332 000);
   - toolchain +23 695 (331 931 → 355 626 of 386 000).
 
-  With the zlib engine and its handle wired (#452; measured by the PR #450 reviewer on 2026-11-25, as
-  one build with the engine; not rerun here): generic 351 690
-  and toolchain 394 735, which is +19 690 and +8 735 over the caps, before `lib/zlib.js` itself.
+  With the zlib engine and its handle wired: generic 351 690 and toolchain 394 735 — review
+  measurement of 25.11 (PR #450 reviewer, one build with #452's engine; not rerun here, no script in
+  `results/`), which is +19 690 and +8 735 over the caps, before `lib/zlib.js` itself.
   - A lazy stream chunk is doubtful: `require('stream')` is synchronous, and the core is needed at
     boot (child stdio, `process-file-stdout`, `IncomingMessage`).
   - The cap is the user's question (goal map §Open questions), and it is not raised without them.
@@ -294,6 +292,8 @@ These are entry criteria of the core units (goal `map.md`):
 
 - the user's answer on the generic and toolchain caps (above);
 - the user's answer on isolate `AbortController` globals (Decision 6);
-- route B in Chromium: SDK 12/12 programs = Node, and Workbench 7/7 of the programs run, with the 5
-  closure programs not run (`results/chromium-b/`); Chromium 108 not run;
+- route B in Chromium: SDK 12/12 programs = Node, Workbench 7/7 programs plus the 5 closure programs
+  5/5 via `/tmp` (`results/chromium-b/`, `results/chromium-c/route-b/`); Chromium 108 not run;
+- abort listeners on a host `EventTarget`: variant choice A–D
+  (`runtime-js/stream-core-abort-listeners-host-event-target`), D with the user's globals question;
 - positional fd I/O by range: 4b before 9r, 4c before 9w.

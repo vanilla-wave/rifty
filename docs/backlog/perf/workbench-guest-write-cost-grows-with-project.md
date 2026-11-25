@@ -48,6 +48,12 @@ Repro (ad-hoc, not committed): a browser-unit spec that boots the sealed Workben
 per directory runs `node -e "…mkdirSync(dir,{recursive:true}); for 200: writeFileSync(dir+'/f'+i+'.js', Buffer.alloc(1024,1))"`,
 timed with `Date.now()` inside the guest. No fault test: perf only, no lost write was seen.
 
+## Open findings (review round 4)
+
+Carried verbatim from the manager's review of PR #450, round 4 (2026-11-25); owner = this unit. They close when the unit is taken into work, by its own contract and review.
+
+- S4 (owner 7, P): «у 7 и P ноль строк, у P нет Acceptance».
+
 ## Challenge
 
 challenge: 2026-11-25 — not run (factual capture)

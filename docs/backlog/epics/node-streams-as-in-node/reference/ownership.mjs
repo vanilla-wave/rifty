@@ -18,6 +18,7 @@ const ORDER = [
   '4',
   '4b',
   '7',
+  'AL',
   '8a',
   '8b',
   '8c',
@@ -28,6 +29,7 @@ const ORDER = [
   '9w',
   '7g',
 ];
+// AL: runtime-js/stream-core-abort-listeners-host-event-target (the variant choice A–D).
 // 7g: isolate guest globals AbortController/AbortSignal (the user's fork, with the Web API goal's question 1).
 const last = (units) => [...units].sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b)).at(-1);
 
@@ -63,7 +65,7 @@ function b1Unit(key) {
   if (/writev|fsync/.test(key)) return '5';
   return '4';
 }
-const CORE = /^m[1236789]-|^m1-hooks/;
+const CORE = /^m([1236789]|10)-|^m1-hooks/;
 const FS = /^(m4-|m5-|c-|w1-)/;
 const out = [];
 const add = (host, prog, key, units, today) => {
@@ -82,12 +84,13 @@ for (const f of readdirSync(res)
   const prog = f.replace(/\.txt$/, '');
   for (const [key, r] of parse(join(res, f))) {
     if (!r.node || r.node.value === '(no line)') continue;
-    const today = eq(r, 'rifty-inproc') && eq(r, 'rifty-isolate');
     const inprocToday = eq(r, 'rifty-inproc');
     const units = [];
     if (prog.startsWith('b1-')) units.push(b1Unit(key));
     else {
-      if (!eq(r, 'rifty-inproc-Bp')) units.push(bindingOf(r['rifty-inproc-Bp']?.value ?? ''));
+      // m9/m10 rows that route B misses wait for the abort-listener variant, not a binding.
+      if (!eq(r, 'rifty-inproc-Bp'))
+        units.push(/^m(9|10)-/.test(prog) ? 'AL' : bindingOf(r['rifty-inproc-Bp']?.value ?? ''));
       const fsRow = FS.test(prog) || / fs\.|fs streams|fs\.ReadStream|fs\.WriteStream/.test(key);
       // The core is needed when today's value differs from route B's; a window column that already
       // shows route B's value does not need the class it lacks.
@@ -100,18 +103,26 @@ for (const f of readdirSync(res)
     }
     // A row equal today stays a guard unless route B breaks it; then its units own it (the core keeps
     // it green and stands on the binding that fixes it).
-    add('in-process', prog, key, units, today && eq(r, 'rifty-inproc-Bp'));
-    // Equal in-process today but not in the isolate: the isolate's own walls.
-    if (inprocToday && !eq(r, 'rifty-isolate')) {
-      const fsRow = FS.test(prog);
-      add('isolate', prog, key, fsRow ? ['9r'] : prog.startsWith('m9-') ? ['7g'] : ['?'], false);
-      out.splice(out.length - 2, 1);
+    add('in-process', prog, key, units, inprocToday && eq(r, 'rifty-inproc-Bp'));
+    // Isolate rows. KNOWN LIMIT: no row-level isolate run on route B exists (the product build's
+    // isolate data is per program, results/route-b-product-programs.txt), so these rules go by name.
+    // - Node itself creates an AbortController in pipeline.js:195, duplexify.js:213 and
+    //   operators.js:62,252, and the guest has none, so any row that calls pipeline, compose or a
+    //   signal-taking operator needs 7 there.
+    // - A guest that makes its own AbortController (m9, m10) needs the guest global: 7g, the user's
+    //   fork.
+    // - An fs row that is equal in-process but not in the isolate hits the isolate ReadableStream wall,
+    //   which 9r removes.
+    const nodeMakesController =
+      /pipeline|async gen|compose|\.map\(|\.reduce\(/.test(key) || prog === 'c-pipeline-asyncgen';
+    const guestMakesController = /^m(9|10)-/.test(prog);
+    if (guestMakesController) add('isolate', prog, key, [...units, '7g'], false);
+    else if (!eq(r, 'rifty-isolate') && (nodeMakesController || (inprocToday && FS.test(prog)))) {
+      const iso = new Set(units);
+      if (nodeMakesController) iso.add('7');
+      if (FS.test(prog)) iso.add('8c').add('9r');
+      add('isolate', prog, key, [...iso], false);
     }
-    // Isolate: Node's pipeline needs unit 7 there (product build: m7 pipeline rows, c-pipeline-asyncgen).
-    // Isolate: a guest that makes its own AbortController needs the guest global (m9).
-    if (prog.startsWith('m9-') && !inprocToday) add('isolate', prog, key, [...units, '7g'], false);
-    if ((prog.startsWith('m7-') && /pipeline/.test(key)) || prog === 'c-pipeline-asyncgen')
-      add('isolate', prog, key, [...units, '7'], false);
   }
 }
 // Parity cases on route B (results/route-b-parity-*.txt): equal today but not on route B product
@@ -161,11 +172,17 @@ for (const [file, unit] of [
     ['write', '9w', '4c'],
   ]) {
     const grows = med('B', c, 16) / med('B', c, 4) > 10;
+    // Timers starve on route B where Node's tick (fs callbacks in microtasks: unit 4).
+    const tk = (route) =>
+      rows
+        .filter((x) => x.route === route && x.case === c && x.mib === 16)
+        .map((x) => x.ticks ?? 0);
+    const starves = tk('node').every((t) => t > 0) && tk('B').every((t) => t === 0);
     add(
       'workbench',
       'chromium-d',
       `${c} 16 MiB stream (B ${Math.round(med('B', c, 16))} ms, Node ${med('node', c, 16)} ms)`,
-      ['8c', cls, ...(grows ? [range] : [])],
+      ['8c', cls, ...(grows ? [range] : []), ...(starves ? ['4'] : [])],
       false,
     );
   }
@@ -182,6 +199,9 @@ for (const [file, unit] of [
 }
 const lines = [
   'Row ownership (ownership.mjs over results/): host | program | row | units | owner (last in order; guard = equal today)',
+  'Covers: in-process rows (all programs, parity cases), isolate rows by name rules (see ownership.mjs),',
+  'Workbench fd and stream-timing rows. Not covered: SDK rows, Workbench carrier and matrix rows (results/chromium*/',
+  'hold them as program summaries only).',
   `order: ${ORDER.join(' → ')}`,
   '',
 ];
@@ -194,6 +214,25 @@ for (const o of out) {
   for (const u of o.units)
     if (u !== o.owner && o.owner !== 'guard')
       edges[`${o.owner} ← ${u}`] = (edges[`${o.owner} ← ${u}`] ?? 0) + 1;
+}
+// Windows: rows whose outcome in a unit window (after 8c before 9r: -Bp8c; after 9r before 9w: -Bp9r)
+// differs from today's: they are declared changes, pinned on the window's outcome.
+lines.push('', '## window changes (window | program | row | today | window value)');
+for (const f of readdirSync(res)
+  .filter((n) => /^(b1|c-|m\d|w1).*\.txt$/.test(n))
+  .sort()) {
+  for (const [key, r] of parse(join(res, f))) {
+    for (const [win, col] of [
+      ['8c window', 'rifty-inproc-Bp8c'],
+      ['9r window', 'rifty-inproc-Bp9r'],
+    ]) {
+      const today = r['rifty-inproc']?.value;
+      const v = r[col]?.value;
+      if (!r.node || r.node.value === '(no line)' || v === undefined || v === today || r[col]?.same)
+        continue;
+      lines.push(`${win} | ${f.replace(/\.txt$/, '')} | ${key} | ${today} | ${v}`);
+    }
+  }
 }
 lines.push('', '## rows per owner');
 for (const u of [...ORDER, 'guard', '?', 'undefined']) if (per[u]) lines.push(`${u}: ${per[u]}`);

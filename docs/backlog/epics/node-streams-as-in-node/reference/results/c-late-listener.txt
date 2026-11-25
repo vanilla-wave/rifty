@@ -1,4 +1,4 @@
-# c-late-listener.cjs — node v24.16.0, rifty 4e0b2b4ba
+# c-late-listener.cjs — node v24.16.0, rifty e96e93a0d
 columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate | rifty-inproc-B | rifty-inproc-Bp | rifty-inproc-Bp8c | rifty-inproc-Bp9w | rifty-inproc-Bp9r
 
 exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 1 | rifty-inproc-B 0 | rifty-inproc-Bp 0 | rifty-inproc-Bp8c 0 | rifty-inproc-Bp9w 0 | rifty-inproc-Bp9r 0

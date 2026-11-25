@@ -15,7 +15,14 @@ const acorn = hoisted('acorn');
 const walk = hoisted('acorn-walk');
 const esbuild = createRequire(join(repo, 'package.json'))('esbuild');
 
-const WHOLE = new Set(['internal/fs/streams', 'internal/assert', 'internal/webstreams/adapters']);
+// ABORT=derived (variant B of the abort-listener unit): Node's abort_listener is left out and the
+// binding's dependent-signal version is used. Default (variant A): Node's file, as in the source.
+const WHOLE = new Set([
+  'internal/fs/streams',
+  'internal/assert',
+  'internal/webstreams/adapters',
+  ...(process.env.ABORT === 'derived' ? [] : ['internal/events/abort_listener']),
+]);
 const isWhole = (id) =>
   id === 'stream' ||
   id === 'stream/promises' ||
