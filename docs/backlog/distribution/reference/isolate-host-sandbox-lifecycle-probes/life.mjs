@@ -449,7 +449,10 @@ class Live {
     await (await this.A.fn(this.A.entry, 'restore')).apply(
       undefined,
       // v2f: the libraries as ordinary files in A's FS (no layer)
-      [from?.blob ?? ownOf(this.src, this.kind === 'v2f' ? [...this.extra, ...files] : this.extra), OPTS],
+      [
+        from?.blob ?? ownOf(this.src, this.kind === 'v2f' ? [...this.extra, ...files] : this.extra),
+        OPTS,
+      ],
       {
         arguments: { copy: true },
       },
@@ -484,7 +487,10 @@ class Live {
       // the restore point of a plain FS is the whole FS (ADR-0567 blob)
       this.capture = {
         apply: async () => [
-          await snap.apply(undefined, [OPTS], { arguments: { copy: true }, result: { copy: true } }),
+          await snap.apply(undefined, [OPTS], {
+            arguments: { copy: true },
+            result: { copy: true },
+          }),
           '[]',
         ],
       };
@@ -871,7 +877,15 @@ if (!fs.existsSync(marker)) {
       const a = await s.exec();
       const b = await s.exec();
       const after = JSON.parse(fp.applySync(undefined, []));
-      log({ sec: 'escape', case: 'control: an ordinary program twice', kind, exec1: a.out.trim(), codes: [a.code, b.code], fsRealmDiffsAfter: after.length, fsRealmDiffs: after.slice(0, 6) });
+      log({
+        sec: 'escape',
+        case: 'control: an ordinary program twice',
+        kind,
+        exec1: a.out.trim(),
+        codes: [a.code, b.code],
+        fsRealmDiffsAfter: after.length,
+        fsRealmDiffs: after.slice(0, 6),
+      });
       s.dispose();
     }
     {
@@ -1593,7 +1607,9 @@ for (let i = 0; ; i++) { const k = i % 64; const a = (i >> 6) % 2 ? 'v' : 'w', b
       } else {
         const T = new Turn(256);
         await T.create();
-        await T.op('mkdir', async () => T.live.hostCall('mkdirSync', ['/workspace/w', { recursive: true }]));
+        await T.op('mkdir', async () =>
+          T.live.hostCall('mkdirSync', ['/workspace/w', { recursive: true }]),
+        );
         for (const [p, d] of seed) await T.writeFile(p, new Uint8Array(d));
         await T.writeFile('/workspace/main.js', new TextEncoder().encode(mover));
         killOnce = (ms) => T.exec([], { timeoutMs: ms });
@@ -1602,7 +1618,11 @@ for (let i = 0; ; i++) { const k = i % 64; const a = (i >> 6) % 2 ? 'v' : 'w', b
           for (const d of ['w', 'v'])
             try {
               for (const e of T.live.hostCall('readdirSync', [`/workspace/${d}`]))
-                if (T.live.hostCall('readFileBytesSync', [`/workspace/${d}/${e.name}`]).byteLength === 4096) n++;
+                if (
+                  T.live.hostCall('readFileBytesSync', [`/workspace/${d}/${e.name}`]).byteLength ===
+                  4096
+                )
+                  n++;
             } catch {}
           return n;
         };
@@ -1617,53 +1637,71 @@ for (let i = 0; ; i++) { const k = i % 64; const a = (i >> 6) % 2 ? 'v' : 'w', b
           if (samples.length < 3) samples.push(`trial ${i} (end ${end}): ${n} files`);
         }
       }
-      log({ sec: 'life', case: `L5b killed mid-rename (${process.env.L5KIND}): 64 files must stay 64`, trials: TRIALS, ends, bad, samples });
+      log({
+        sec: 'life',
+        case: `L5b killed mid-rename (${process.env.L5KIND}): 64 files must stay 64`,
+        trials: TRIALS,
+        ends,
+        bad,
+        samples,
+      });
     } else {
-    let bad = 0;
-    const samples = [];
-    const s = await make(process.env.L5KIND ?? 'v2', process.env.L5B_OLD === '1' ? moverOld : mover, { extra: seed });
-    const ends = {};
-    for (let i = 0; i < TRIALS; i++) {
-      const r = await s.exec({ timeoutMs: 20 + ((i * 13) % 97) });
-      const end = r.termination ?? `exit ${r.code}`;
-      ends[end] = (ends[end] ?? 0) + 1;
-      let n = 0;
-      for (const d of ['w', 'v']) {
-        try {
-          for (const e of s.hostCall('readdirSync', [`/workspace/${d}`]))
-            if (s.hostCall('readFileBytesSync', [`/workspace/${d}/${e.name}`]).byteLength === 4096)
-              n++;
-        } catch {}
-      }
-      const issues = JSON.parse(s.check.applySync(undefined, []));
-      if (n !== 64 || issues.length) {
-        bad++;
-        if (samples.length < 3) {
-          // which file is gone, and does anything still name it
-          const present = new Set();
-          for (const d of ['w', 'v'])
-            try {
-              for (const e of s.hostCall('readdirSync', [`/workspace/${d}`])) present.add(`${d}/${e.name}`);
-            } catch {}
-          const missing = [];
-          for (let k = 0; k < 64; k++)
-            if (!present.has(`w/${k}`) && !present.has(`v/${k}`)) {
-              const ex = ['w', 'v'].map((d) => s.hostCall('existsSync', [`/workspace/${d}/${k}`]));
-              missing.push(`${k} exists w/v=${ex.join('/')}`);
-            }
-          samples.push(`trial ${i} (end ${end}): ${n} files; missing ${missing.join(', ')}; audit ${issues.slice(0, 2).join(' | ') || 'clean'}`);
+      let bad = 0;
+      const samples = [];
+      const s = await make(
+        process.env.L5KIND ?? 'v2',
+        process.env.L5B_OLD === '1' ? moverOld : mover,
+        { extra: seed },
+      );
+      const ends = {};
+      for (let i = 0; i < TRIALS; i++) {
+        const r = await s.exec({ timeoutMs: 20 + ((i * 13) % 97) });
+        const end = r.termination ?? `exit ${r.code}`;
+        ends[end] = (ends[end] ?? 0) + 1;
+        let n = 0;
+        for (const d of ['w', 'v']) {
+          try {
+            for (const e of s.hostCall('readdirSync', [`/workspace/${d}`]))
+              if (
+                s.hostCall('readFileBytesSync', [`/workspace/${d}/${e.name}`]).byteLength === 4096
+              )
+                n++;
+          } catch {}
+        }
+        const issues = JSON.parse(s.check.applySync(undefined, []));
+        if (n !== 64 || issues.length) {
+          bad++;
+          if (samples.length < 3) {
+            // which file is gone, and does anything still name it
+            const present = new Set();
+            for (const d of ['w', 'v'])
+              try {
+                for (const e of s.hostCall('readdirSync', [`/workspace/${d}`]))
+                  present.add(`${d}/${e.name}`);
+              } catch {}
+            const missing = [];
+            for (let k = 0; k < 64; k++)
+              if (!present.has(`w/${k}`) && !present.has(`v/${k}`)) {
+                const ex = ['w', 'v'].map((d) =>
+                  s.hostCall('existsSync', [`/workspace/${d}/${k}`]),
+                );
+                missing.push(`${k} exists w/v=${ex.join('/')}`);
+              }
+            samples.push(
+              `trial ${i} (end ${end}): ${n} files; missing ${missing.join(', ')}; audit ${issues.slice(0, 2).join(' | ') || 'clean'}`,
+            );
+          }
         }
       }
-    }
-    log({
-      sec: 'life',
-      case: `L5b killed mid-rename (${process.env.L5KIND ?? 'v2'}${process.env.L5B_OLD === '1' ? ', round-1 mover' : ''}): 64 files must stay 64`,
-      trials: TRIALS,
-      ends,
-      bad,
-      samples,
-    });
-    s.dispose();
+      log({
+        sec: 'life',
+        case: `L5b killed mid-rename (${process.env.L5KIND ?? 'v2'}${process.env.L5B_OLD === '1' ? ', round-1 mover' : ''}): 64 files must stay 64`,
+        trials: TRIALS,
+        ends,
+        bad,
+        samples,
+      });
+      s.dispose();
     }
   }
   // L6: out of isolate memory.

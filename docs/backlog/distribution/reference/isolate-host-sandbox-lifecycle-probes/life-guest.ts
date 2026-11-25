@@ -315,8 +315,30 @@ function installSafe(epoch: number): void {
  */
 const lifeRoots = (() => {
   const TA = Object.getPrototypeOf(Uint8Array);
-  const ctors = [Object, Array, Function, TA, Uint8Array, ArrayBuffer, DataView, Map, Set, WeakMap,
-    WeakSet, Error, TypeError, RangeError, String, Number, Boolean, Symbol, Promise, RegExp, Date, BigInt];
+  const ctors = [
+    Object,
+    Array,
+    Function,
+    TA,
+    Uint8Array,
+    ArrayBuffer,
+    DataView,
+    Map,
+    Set,
+    WeakMap,
+    WeakSet,
+    Error,
+    TypeError,
+    RangeError,
+    String,
+    Number,
+    Boolean,
+    Symbol,
+    Promise,
+    RegExp,
+    Date,
+    BigInt,
+  ];
   const roots: [string, object][] = [
     ['globalThis', globalThis],
     ['JSON', JSON],
@@ -332,15 +354,20 @@ const lifeRoots = (() => {
 type LifeSnap = Map<PropertyKey, PropertyDescriptor>;
 const lifeSnap = (o: object): { proto: object | null; ext: boolean; props: LifeSnap } => {
   const props: LifeSnap = new Map();
-  for (const k of Reflect.ownKeys(o)) props.set(k, Reflect.getOwnPropertyDescriptor(o, k) as PropertyDescriptor);
+  for (const k of Reflect.ownKeys(o))
+    props.set(k, Reflect.getOwnPropertyDescriptor(o, k) as PropertyDescriptor);
   return { proto: Reflect.getPrototypeOf(o), ext: Reflect.isExtensible(o), props };
 };
 const lifeBaseline = lifeRoots.map(([n, o]) => [n, o, lifeSnap(o)] as const);
 function fingerprint(): string {
   const diffs: string[] = [];
   const same = (a: PropertyDescriptor, b: PropertyDescriptor): boolean =>
-    Object.is(a.value, b.value) && a.get === b.get && a.set === b.set && a.writable === b.writable &&
-    a.enumerable === b.enumerable && a.configurable === b.configurable;
+    Object.is(a.value, b.value) &&
+    a.get === b.get &&
+    a.set === b.set &&
+    a.writable === b.writable &&
+    a.enumerable === b.enumerable &&
+    a.configurable === b.configurable;
   for (const [name, o, before] of lifeBaseline) {
     const now = lifeSnap(o);
     if (now.proto !== before.proto) diffs.push(`${name}: prototype`);
@@ -348,11 +375,13 @@ function fingerprint(): string {
     for (const [k, d] of now.props) {
       const was = before.props.get(k);
       // globalThis: the probe's own late globals (__life, __probe, __lifeLayered…) are not intrinsics
-      if (name === 'globalThis' && was === undefined && typeof k === 'string' && k.startsWith('__')) continue;
+      if (name === 'globalThis' && was === undefined && typeof k === 'string' && k.startsWith('__'))
+        continue;
       if (was === undefined) diffs.push(`${name}.${String(k)}: added`);
       else if (!same(was, d)) diffs.push(`${name}.${String(k)}: changed`);
     }
-    for (const k of before.props.keys()) if (!now.props.has(k)) diffs.push(`${name}.${String(k)}: removed`);
+    for (const k of before.props.keys())
+      if (!now.props.has(k)) diffs.push(`${name}.${String(k)}: removed`);
   }
   return JSON.stringify(diffs);
 }
