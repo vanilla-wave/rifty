@@ -22,6 +22,11 @@
  *   - `destroy(err?)` — marks destroyed, emits `error` (if err) then `close`.
  */
 
+import {
+  type CanonicalEncoding,
+  normalizeEncoding,
+  unknownEncodingError,
+} from '../buffer-codec.ts';
 import { Buffer } from '../buffer.ts';
 import { readBuiltinUncached } from '../builtin-registry.ts';
 import { EventEmitter } from '../event-emitter.ts';
@@ -126,39 +131,16 @@ function pushAfterEofError(): Error {
  */
 interface EncodingState {
   /** Node's canonical name (`readableEncoding` + the `Buffer.toString` arg). */
-  label: string;
+  label: CanonicalEncoding;
   decoder: TextDecoder | null;
 }
 
-/**
- * Node encoding name / alias → { canonical name, TextDecoder label or null }.
- * The TextDecoder set (utf8/utf16le) is streaming-decoded; the rest fall
- * through to a per-chunk `Buffer.toString` using the canonical name.
- */
-const ENCODINGS: Record<string, { canonical: string; td: string | null }> = {
-  utf8: { canonical: 'utf8', td: 'utf-8' },
-  'utf-8': { canonical: 'utf8', td: 'utf-8' },
-  utf16le: { canonical: 'utf16le', td: 'utf-16le' },
-  'utf-16le': { canonical: 'utf16le', td: 'utf-16le' },
-  ucs2: { canonical: 'utf16le', td: 'utf-16le' },
-  'ucs-2': { canonical: 'utf16le', td: 'utf-16le' },
-  latin1: { canonical: 'latin1', td: null },
-  binary: { canonical: 'latin1', td: null },
-  ascii: { canonical: 'ascii', td: null },
-  hex: { canonical: 'hex', td: null },
-  base64: { canonical: 'base64', td: null },
-  base64url: { canonical: 'base64url', td: null },
-};
-
-function makeEncodingState(encoding: string): EncodingState {
-  const entry = ENCODINGS[String(encoding).toLowerCase()];
-  if (!entry) {
-    const err = new TypeError(`Unknown encoding: ${encoding}`) as TypeError & { code?: string };
-    err.code = 'ERR_UNKNOWN_ENCODING';
-    throw err;
-  }
-  const decoder = entry.td ? new TextDecoder(entry.td, { ignoreBOM: true }) : null;
-  return { label: entry.canonical, decoder };
+/** Names as Node's `new StringDecoder(enc)`: `normalizeEncoding`, else `ERR_UNKNOWN_ENCODING`. */
+function makeEncodingState(encoding: unknown): EncodingState {
+  const label = normalizeEncoding(encoding);
+  if (label === undefined) throw unknownEncodingError(encoding);
+  const td = label === 'utf8' ? 'utf-8' : label === 'utf16le' ? 'utf-16le' : null;
+  return { label, decoder: td ? new TextDecoder(td, { ignoreBOM: true }) : null };
 }
 
 /**
@@ -443,7 +425,7 @@ class ReadableImplementation extends EventEmitter implements AsyncIterable<unkno
    * `NodeStream.toString`, which calls `stream.setEncoding('utf8')` before
    * reading a request body — so every POST-with-body route depends on it.
    */
-  setEncoding(encoding: string): this {
+  setEncoding(encoding?: string | null): this {
     this.encodingState = makeEncodingState(encoding);
     return this;
   }
@@ -459,7 +441,7 @@ class ReadableImplementation extends EventEmitter implements AsyncIterable<unkno
     if (enc === null || this._readableState.objectMode) return chunk;
     if (typeof chunk === 'string' || !(chunk instanceof Uint8Array)) return chunk;
     if (enc.decoder) return enc.decoder.decode(chunk, { stream: true });
-    return Buffer.from(chunk).toString(enc.label as Parameters<Buffer['toString']>[0]);
+    return Buffer.from(chunk).toString(enc.label);
   }
 
   /** Force-start flow on next tick. Used by `Readable.from`. */

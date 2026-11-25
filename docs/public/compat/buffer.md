@@ -51,6 +51,7 @@ implemented (throws `NotImplementedError` or `TypeError`).
 | `node:buffer` `isUtf8` / `isAscii` | ✅ | Byte-scan / fatal-decode predicates |
 | `node:buffer` `INSPECT_MAX_BYTES` | ✅ | Live getter/setter; drives `util.inspect(buf)` `<Buffer …>` truncation (default 50) |
 | `node:buffer` `resolveObjectURL(id)` | ❌ | `NotImplementedError` — no introspectable cross-realm blob registry |
+| `node:string_decoder` `StringDecoder` | ✅ | Every encoding and spelling above; chunk-boundary carry (split utf8, surrogate pair, base64 remainder, odd utf16le byte), `end`/`text`, `lastChar`/`lastNeed`/`lastTotal`, argument errors as Node (port of `src/string_decoder.cc`) |
 
 ## Encoding support
 
@@ -78,6 +79,7 @@ other characters, stops at `'='`; hex stops at the first bad pair.
   - `tools/node-parity-runner/cases/buffer/encoding-names.case.ts`
   - `tools/node-parity-runner/cases/buffer/decode-invalid-input.case.ts`
   - `tools/node-parity-runner/cases/buffer/readwrite.case.ts`
+  - `tools/node-parity-runner/cases/string_decoder/encodings-split.case.ts`
   - `tools/node-parity-runner/cases/buffer/concat-equals.case.ts`
   - `tools/node-parity-runner/cases/buffer/extends-uint8array.case.ts`
   - `tools/node-parity-runner/cases/buffer/from-backing-store-alias.case.ts`

@@ -1,43 +1,229 @@
 /**
- * Node-compatible `node:string_decoder` via TextDecoder. Only utf-8 is wired;
- * other encodings are loud.
+ * `node:string_decoder`: Node v24 `lib/string_decoder.js` (wrapper, verbatim shape) over a port of
+ * `src/string_decoder.cc` `DecodeData`/`FlushData` (the native state is the same 7-byte buffer:
+ * 4 incomplete-character bytes, missing, buffered, encoding). Strings come from the Buffer codec.
  *
- * Implemented as a *callable* constructor (not a class) so the legacy idiom
- * `StringDecoder.call(this, enc)` works: iconv-lite's `InternalDecoder` borrows
- * StringDecoder that way and then calls `StringDecoder.prototype.write` — which
- * body-parser hits when decoding a request body. A class would throw "Class
- * constructor StringDecoder cannot be invoked without 'new'".
+ * A callable constructor, not a class: iconv-lite's `InternalDecoder` runs
+ * `StringDecoder.call(this, enc)` (body-parser's body decode).
  */
-import { NotImplementedError } from '@riftydev/io';
+import {
+  Buffer,
+  type CanonicalEncoding,
+  bytesToString,
+  normalizeEncoding,
+  unknownEncodingError,
+} from '@riftydev/io';
+import { invalidArgType } from '../internal/node-received.ts';
 
-/** Public instance shape (declaration-merged with the constructor function). */
+const kIncompleteCharactersStart = 0;
+const kIncompleteCharactersEnd = 4;
+const kMissingBytes = 4;
+const kBufferedBytes = 5;
+const kEncodingField = 6;
+const kSize = 7;
+// `internalBinding('string_decoder').encodings`, the `kEncodingField` values.
+const ENCODINGS = ['ascii', 'utf8', 'base64', 'utf16le', 'latin1', 'hex', 'buffer', 'base64url'];
+const UTF8 = 1;
+const BASE64 = 2;
+const UCS2 = 3;
+const BASE64URL = 7;
+
+const kNativeDecoder: unique symbol = Symbol('kNativeDecoder');
+
 export interface StringDecoder {
-  encoding: string;
-  write(buf: Uint8Array): string;
-  end(buf?: Uint8Array): string;
+  encoding: CanonicalEncoding;
+  write(buf: string | ArrayBufferView): string;
+  end(buf?: string | ArrayBufferView): string;
+  text(buf: Uint8Array, offset: number): string;
+  readonly lastChar: Uint8Array;
+  readonly lastNeed: number;
+  readonly lastTotal: number;
 }
 
-/** Instance state, including the TextDecoder carried on `this`. */
 interface DecoderThis extends StringDecoder {
-  _decoder: TextDecoder;
+  [kNativeDecoder]: Uint8Array;
 }
 
-export function StringDecoder(this: DecoderThis, encoding = 'utf8'): void {
-  const enc = encoding.toLowerCase().replace('-', '');
-  if (enc !== 'utf8' && enc !== 'utf-8') {
-    throw new NotImplementedError(`string_decoder encoding '${encoding}'`);
+const makeString = (bytes: Uint8Array, enc: number): string =>
+  bytesToString(bytes, ENCODINGS[enc] as string);
+
+/** `StringDecoder::DecodeData`. */
+function decode(state: Uint8Array, view: ArrayBufferView): string {
+  const data =
+    view instanceof Uint8Array
+      ? view
+      : new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
+  const enc = state[kEncodingField] as number;
+  if (enc !== UTF8 && enc !== UCS2 && enc !== BASE64 && enc !== BASE64URL)
+    return makeString(data, enc);
+  let missing = state[kMissingBytes] as number;
+  let buffered = state[kBufferedBytes] as number;
+  let off = 0;
+  let nread = data.length;
+  let prepend: string | undefined;
+  if (missing > 0) {
+    if (enc === UTF8) {
+      // A non-continuation byte ends the incomplete character early; it starts a new one.
+      for (let i = 0; i < nread && i < missing; ++i) {
+        if (((data[i] as number) & 0xc0) !== 0x80) {
+          missing = 0;
+          state.set(data.subarray(0, i), buffered);
+          buffered += i;
+          off = i;
+          nread -= i;
+          break;
+        }
+      }
+    }
+    const found = Math.min(nread, missing);
+    state.set(data.subarray(off, off + found), buffered);
+    off += found;
+    nread -= found;
+    missing -= found;
+    buffered += found;
+    if (missing === 0) {
+      prepend = makeString(state.subarray(0, buffered), enc);
+      buffered = 0;
+    }
   }
-  this.encoding = 'utf8';
-  this._decoder = new TextDecoder('utf-8', { ignoreBOM: true }); // Node keeps a leading BOM
+  let body = '';
+  if (nread > 0) {
+    const last = data[off + nread - 1] as number;
+    if (enc === UTF8) {
+      if (last & 0x80) {
+        // Walk back to the lead byte of the last character; keep it if incomplete.
+        for (let i = nread - 1; ; --i) {
+          buffered++;
+          const b = data[off + i] as number;
+          if ((b & 0xc0) === 0x80) {
+            if (buffered >= 4 || i === 0) {
+              buffered = 0;
+              break;
+            }
+          } else {
+            if ((b & 0xe0) === 0xc0) missing = 2;
+            else if ((b & 0xf0) === 0xe0) missing = 3;
+            else if ((b & 0xf8) === 0xf0) missing = 4;
+            else {
+              buffered = 0;
+              break;
+            }
+            if (buffered >= missing) {
+              missing = 0;
+              buffered = 0;
+            }
+            missing -= buffered;
+            break;
+          }
+        }
+      }
+    } else if (enc === UCS2) {
+      if (nread % 2 === 1) {
+        buffered = 1;
+        missing = 1;
+      } else if ((last & 0xfc) === 0xd8) {
+        // High surrogate: wait for its pair.
+        buffered = 2;
+        missing = 2;
+      }
+    } else {
+      buffered = nread % 3;
+      if (buffered > 0) missing = 3 - buffered;
+    }
+    if (buffered > 0) {
+      nread -= buffered;
+      state.set(data.subarray(off + nread, off + nread + buffered), 0);
+    }
+    if (nread > 0) body = makeString(data.subarray(off, off + nread), enc);
+  }
+  state[kMissingBytes] = missing;
+  state[kBufferedBytes] = buffered;
+  return prepend === undefined ? body : prepend + body;
 }
 
-StringDecoder.prototype.write = function write(this: DecoderThis, buf: Uint8Array): string {
-  return this._decoder.decode(buf, { stream: true });
+/** `StringDecoder::FlushData`. */
+function flush(state: Uint8Array): string {
+  if (state[kEncodingField] === UCS2 && (state[kBufferedBytes] as number) % 2 === 1) {
+    // A lone trailing byte is dropped.
+    state[kMissingBytes] = (state[kMissingBytes] as number) - 1;
+    state[kBufferedBytes] = (state[kBufferedBytes] as number) - 1;
+  }
+  if (state[kBufferedBytes] === 0) return '';
+  const ret = makeString(state.subarray(0, state[kBufferedBytes]), state[kEncodingField] as number);
+  state[kMissingBytes] = 0;
+  state[kBufferedBytes] = 0;
+  return ret;
+}
+
+function invalidThis(): TypeError {
+  return Object.assign(new TypeError('Value of "this" must be of type StringDecoder'), {
+    code: 'ERR_INVALID_THIS',
+  });
+}
+
+export function StringDecoder(this: DecoderThis, encoding?: unknown): void {
+  this.encoding = normalizeEncoding(encoding) as CanonicalEncoding;
+  if (this.encoding === undefined) throw unknownEncodingError(encoding);
+  this[kNativeDecoder] = Buffer.alloc(kSize);
+  this[kNativeDecoder][kEncodingField] = ENCODINGS.indexOf(this.encoding);
+}
+
+StringDecoder.prototype.write = function write(this: DecoderThis, buf: unknown): string {
+  if (typeof buf === 'string') return buf;
+  if (!ArrayBuffer.isView(buf)) {
+    throw invalidArgType('"buf" argument', 'an instance of Buffer, TypedArray, or DataView', buf);
+  }
+  if (!this[kNativeDecoder]) throw invalidThis();
+  return decode(this[kNativeDecoder], buf);
 };
 
-StringDecoder.prototype.end = function end(this: DecoderThis, buf?: Uint8Array): string {
-  return this._decoder.decode(buf ?? new Uint8Array(0));
+StringDecoder.prototype.end = function end(this: DecoderThis, buf?: unknown): string {
+  const ret = buf === undefined ? '' : this.write(buf as ArrayBufferView);
+  if ((this[kNativeDecoder][kBufferedBytes] as number) > 0)
+    return ret + flush(this[kNativeDecoder]);
+  return ret;
 };
+
+StringDecoder.prototype.text = function text(
+  this: DecoderThis,
+  buf: Uint8Array,
+  offset: number,
+): string {
+  this[kNativeDecoder][kMissingBytes] = 0;
+  this[kNativeDecoder][kBufferedBytes] = 0;
+  return this.write(buf.slice(offset));
+};
+
+Object.defineProperties(StringDecoder.prototype, {
+  lastChar: {
+    configurable: true,
+    enumerable: true,
+    get(this: DecoderThis) {
+      return Uint8Array.prototype.subarray.call(
+        this[kNativeDecoder],
+        kIncompleteCharactersStart,
+        kIncompleteCharactersEnd,
+      );
+    },
+  },
+  lastNeed: {
+    configurable: true,
+    enumerable: true,
+    get(this: DecoderThis) {
+      return this[kNativeDecoder][kMissingBytes];
+    },
+  },
+  lastTotal: {
+    configurable: true,
+    enumerable: true,
+    get(this: DecoderThis) {
+      return (
+        (this[kNativeDecoder][kBufferedBytes] as number) +
+        (this[kNativeDecoder][kMissingBytes] as number)
+      );
+    },
+  },
+});
 
 const stringDecoderModule = { StringDecoder };
 export default stringDecoderModule;
