@@ -7,8 +7,8 @@ branch changes only docs and a compat inventory generator). Chromium results nam
 
 ## Items
 
-Status (the manager, round 4): **ready** — 0, 2, 3, 4, 4b (none depends on route B or the budget).
-**Done** — 1 (PR #462).
+Status (the manager, round 4): **ready** — 0, 2, 3, 4 (none depends on route B or the budget).
+**Done** — 1 (PR #462), 4b (PR #457).
 **Draft** — 4c, 5, P, 7, AL, 8a, 8b, 8c, 9r, 9w; each carries «Open findings (review round 4)»
 verbatim, closed when the unit is taken into work.
 
