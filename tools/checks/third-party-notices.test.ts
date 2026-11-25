@@ -8,6 +8,7 @@ import {
   collect,
   render,
   unusedRecords,
+  validateManifest,
 } from '../publishing/third-party-notices.mjs';
 import { checkPackage } from './third-party-notices.mjs';
 
@@ -56,6 +57,8 @@ beforeEach(() => {
   npmPkg('bare', '2.0.0');
   put('licenses/bare.LICENSE', 'MIT © Bare Author (from its README)');
   put('pkg/src/generated/up.js', 'export default 1;');
+  for (const f of ['pkg/src/a.ts', 'pkg/src/b.ts', 'pkg/src/own/generated/ids.json']) put(f, 'x');
+  put('pkg/tsup.config.ts', 'export default { dts: true };');
 });
 afterEach(() => rmSync(root, { recursive: true, force: true }));
 
@@ -207,6 +210,110 @@ describe('closed by default (review S1, S2)', () => {
     ]);
     expect(built({}, { 'package.json': '{}', 'CHANGELOG.md': '' })().violations).toEqual([
       '@riftydev/pkg: no dist/ in the tarball; run pnpm build:libs',
+    ]);
+  });
+});
+
+describe('one accounting rule for every packed file (review 2)', () => {
+  const NOT = 'not accounted — no bundler input list and not an own build output';
+  it('own outputs: map of an accounted file, the notices file, declarations of own code', () => {
+    const f = {
+      ...files(),
+      'dist/a.js.map': '{}',
+      'dist/a.d.ts': "export * from './types-AB12cd34.js';",
+      'dist/types-AB12cd34.d.ts': 'export type T = 1;',
+    };
+    expect(built(inputs, f)().violations).toEqual([]);
+  });
+
+  it('S1: a foreign .d.ts (no paired JS, not referenced by an own declaration) → red', () => {
+    const f = { ...files(), 'dist/esbuild.d.ts': 'export declare function build(): void;' };
+    expect(built(inputs, f)().violations).toEqual([`@riftydev/pkg dist/esbuild.d.ts: ${NOT}`]);
+    const vendored = { ...files(), 'dist/vendor/review-semver.d.ts': 'export {};' };
+    expect(built(inputs, vendored)().violations).toEqual([
+      `@riftydev/pkg dist/vendor/review-semver.d.ts: ${NOT}`,
+    ]);
+  });
+
+  it('S1: declarations are not own when tsup resolves dependency types into them', () => {
+    put('pkg/tsup.config.ts', 'export default { dts: { resolve: true } };');
+    const f = { ...files(), 'dist/a.d.ts': 'export {};' };
+    expect(built(inputs, f)().violations).toEqual([`@riftydev/pkg dist/a.d.ts: ${NOT}`]);
+  });
+
+  it('S2: an input that is no file in the repo → red, not skipped', () => {
+    const more = {
+      ...inputs,
+      'dist/a.js': [...inputs['dist/a.js'], 'webpack://dep/./src/index.ts'],
+    };
+    expect(built(more, files())().violations).toEqual([
+      '@riftydev/pkg dist/a.js: input webpack://dep/./src/index.ts is not a file in the repo',
+    ]);
+    const abs = { ...inputs, 'dist/b.js': [...inputs['dist/b.js'], '../../home/ci/dep/src/x.ts'] };
+    expect(built(abs, files())().violations).toEqual([
+      '@riftydev/pkg dist/b.js: input ../../home/ci/dep/src/x.ts is not a file in the repo',
+    ]);
+  });
+
+  it('files outside dist/ are their own inputs: own README is fine, a foreign one in vendor/ needs a record', () => {
+    put('pkg/README.md', '# pkg');
+    expect(built(inputs, { ...files(), 'README.md': '# pkg' })().violations).toEqual([]);
+  });
+});
+
+describe('manifest records work or are red (review 2)', () => {
+  it('S3: a generated record whose version is not in its sources.json → red', () => {
+    put('pkg/src/generated/sources.json', JSON.stringify({ version: '1.0.0' }));
+    expect(validateManifest(root, manifest)).toEqual([]);
+    put('pkg/src/generated/sources.json', JSON.stringify({ node: 'v24.16.0' }));
+    expect(validateManifest(root, manifest)).toEqual([
+      'third-party-manifest generated pkg/src/generated: version 1.0.0 is not in its sources.json',
+    ]);
+  });
+
+  it('S4: a record that adds no license text → red; ghost file; firstParty also in a generated record', () => {
+    const m = {
+      generated: {
+        'pkg/src/generated': {
+          files: ['up.js', 'ghost.js'],
+          package: 'upstream',
+          version: '1.0.0',
+        },
+        'pkg/src/node/generated': {
+          files: ['legacy.js'],
+          name: 'node',
+          version: 'v1',
+          license: 'MIT',
+          licenseFiles: [],
+        },
+      },
+      firstParty: ['pkg/src/generated/up.js'],
+      npm: { 'bare@2.0.0': { licenseFiles: [] } },
+    };
+    put('pkg/src/node/generated/legacy.js', 'x');
+    expect(validateManifest(root, m)).toEqual([
+      'third-party-manifest generated pkg/src/generated: lists ghost.js, which is not in the dir',
+      'third-party-manifest generated pkg/src/node/generated: adds no license text',
+      'third-party-manifest npm bare@2.0.0: adds no license text',
+      'third-party-manifest firstParty pkg/src/generated/up.js: also listed in generated pkg/src/generated',
+    ]);
+  });
+
+  it('the real manifest validates; a mutated Node version or emptied licenseFiles → red', () => {
+    const real = JSON.parse(readFileSync('tools/publishing/third-party-manifest.json', 'utf8'));
+    expect(validateManifest(process.cwd(), real)).toEqual([]);
+    const dir = 'packages/runtime-js/src/builtins/url-legacy/generated';
+    const bumped = structuredClone(real);
+    bumped.generated[dir].version = 'v24.99.0';
+    expect(validateManifest(process.cwd(), bumped)).toEqual([
+      `third-party-manifest generated ${dir}: version v24.99.0 is not in its sources.json`,
+    ]);
+    const emptied = structuredClone(real);
+    emptied.generated[dir].licenseFiles = [];
+    emptied.npm['pako@1.0.11'].licenseFiles = [];
+    expect(validateManifest(process.cwd(), emptied)).toEqual([
+      `third-party-manifest generated ${dir}: adds no license text`,
+      'third-party-manifest npm pako@1.0.11: adds no license text',
     ]);
   });
 });
