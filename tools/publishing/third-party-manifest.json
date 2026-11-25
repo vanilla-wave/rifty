@@ -24,6 +24,16 @@
       "resolveFrom": ".",
       "changes": "lib/typescript.js wrapped in a browser-scoped module (process, require undefined) and minified by esbuild, tools/publishing/generate-eval-compiler.mjs"
     },
+    "packages/runtime-js/src/zlib-engine/generated": {
+      "files": ["zlib-wasm.js", "LICENSE"],
+      "name": "node",
+      "version": "v24.16.0",
+      "license": "Zlib AND BSD-3-Clause AND MIT",
+      "licenseFiles": ["packages/runtime-js/src/zlib-engine/generated/LICENSE"],
+      "changes": "deps/zlib (Chromium zlib 1.3.1 fork) compiled unchanged to wasm32 (CPU_NO_SIMD, wasi-sdk-34, binaryen wasm-opt -O3) and inlined as base64, tools/publishing/generate-zlib-wasm.mjs; the handle in zlib-engine/handle.ts ports src/node_zlib.cc (MIT)",
+      "sourcesKey": "node.version",
+      "unshipped": "runtime-js/zlib-node-lib-port"
+    },
     "packages/ts-language-service/vendor": {
       "files": ["lib-bundle.json"],
       "package": "typescript",
@@ -48,6 +58,8 @@
     "packages/runtime-js/src/internal/generated/proxy-identity.js",
     "packages/runtime-js/src/module-loader/generated/README.md",
     "packages/runtime-js/src/module-loader/generated/typescript-browser.d.ts",
+    "packages/runtime-js/src/zlib-engine/generated/sources.json",
+    "packages/runtime-js/src/zlib-engine/generated/zlib-wasm.d.ts",
     "packages/workbench/src/generated/install-artifact-identity.json",
     "tools/shadow-registry/generated/esbuild-runtime-manifest.json",
     "tools/shadow-registry/generated/shadow-substitution-catalog.json"

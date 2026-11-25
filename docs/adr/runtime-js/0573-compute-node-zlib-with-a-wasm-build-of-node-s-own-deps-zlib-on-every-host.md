@@ -88,8 +88,8 @@ own `lib/zlib.js` also runs on each engine via a swapped `binding.Zlib`.
    probe's «raw» build already had Homebrew's); 63202 B, sha256 `f40cd936…`, equal on darwin-arm64,
    linux-arm64, linux-x64; no pin for darwin-x64 or Windows (the generator refuses them by name);
    wasm-opt.js runs on the pinned Node v24.16.0. CI: `zlib-wasm:rebuild` in `unit-and-conformance`/
-   `run`. Licence: `generated/LICENSE`, and the PR #445 manifest entry when this PR, held, is brought
-   up to `main` before its final ready.
+   `run`. Licence: `generated/LICENSE` + the `third-party-manifest.json` record (PR #445), marked
+   `unshipped` until unit 3 bundles the engine.
    Declared limit (manager, unit 2 review round 2): the handle snapshots a write's input when the
    write starts and reads that snapshot in lib/zlib.js's continuation writes; Node reads the caller's
    memory live, so input changed between them (a `'data'` listener in the async path, a

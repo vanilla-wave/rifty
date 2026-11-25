@@ -201,8 +201,21 @@ export function unusedRecords(manifest, usedSets) {
   const used = new Set(usedSets.flatMap((s) => [...s]));
   return [
     ...Object.keys(manifest.npm).map((k) => `npm ${k}`),
-    ...Object.keys(manifest.generated).map((k) => `generated ${k}`),
+    ...Object.entries(manifest.generated)
+      .filter(([, r]) => !r.unshipped)
+      .map(([k]) => `generated ${k}`),
   ].filter((k) => !used.has(k));
+}
+
+/**
+ * Generated records marked `unshipped` (the unit that ships them): in no package yet — and a package
+ * that uses one is red until that unit drops the mark.
+ */
+export function shippedUnshipped(manifest, usedSets) {
+  const used = new Set(usedSets.flatMap((s) => [...s]));
+  return Object.entries(manifest.generated)
+    .filter(([k, r]) => r.unshipped && used.has(`generated ${k}`))
+    .map(([k]) => `generated ${k}`);
 }
 
 /** A packed source file (outside `dist/`) in a `vendor/`/`generated/` dir, with no recorded list, is its own input. */
@@ -243,7 +256,10 @@ export function validateManifest(root, manifest, pkgDirs = []) {
     if (!r.package && !texts(r)) bad(`generated ${dir}`, 'adds no license text');
     const sources = join(root, dir, 'sources.json');
     if (!existsSync(sources)) continue;
-    const pinned = JSON.parse(readFileSync(sources, 'utf8'))[r.sourcesKey];
+    // `sourcesKey`: a key of sources.json, or a dotted path to a nested pin (`node.version`).
+    const pinned = (r.sourcesKey ?? '')
+      .split('.')
+      .reduce((o, k) => o?.[k], JSON.parse(readFileSync(sources, 'utf8')));
     if (!r.sourcesKey) bad(`generated ${dir}`, 'has sources.json but no sourcesKey');
     else if (pinned !== r.version)
       bad(

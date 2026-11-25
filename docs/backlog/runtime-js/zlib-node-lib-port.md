@@ -74,7 +74,9 @@ Draft until its dependency lands; seeds the compile:
    cause and numbers in `client-bundle-budget.mjs`'s note; `check:esbuild-legacy-retirement` refuses any
    inline `AGFzbQ` base64 in package outputs but exact pins, so the engine enters with an exact pin of
    its base64 (bytes + sha256 of `zlib-engine/generated/sources.json`) and a line in ADR-0391 → ADR-0573
-   (Unit 2, held to merge with this one, carries the PR #445 licence-manifest entry for `zlib-engine/generated/`.)
+   The engine's licence record (`third-party-manifest.json`, `zlib-engine/generated`) is marked
+   `unshipped: runtime-js/zlib-node-lib-port`: drop the mark when a bundle carries the engine (the
+   notices check is red until then).
    Compat ⚠️ row (`zlib.md`): input changed by the caller during one operation's continuation writes
    (async `'data'` listener, `SharedArrayBuffer`, resizable `ArrayBuffer`) — Node reads it live, rifty
    the snapshot taken at the operation's first write (ADR-0573 §1, unit 2 Decisions, pinned both ways).
