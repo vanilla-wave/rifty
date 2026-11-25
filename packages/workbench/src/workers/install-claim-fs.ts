@@ -45,6 +45,8 @@ export function createInstallClaimFs(raw: FsSync): {
     },
     existsSync: raw.existsSync.bind(raw),
     readFileBytesSync: (path) => raw.readFileBytesSync(path).slice(),
+    readFileRangeSync: (path, position, length) =>
+      raw.readFileRangeSync(path, position, length).slice(),
     readdirSync: raw.readdirSync.bind(raw),
     statSync: raw.statSync.bind(raw),
     statSyncOrNull: raw.statSyncOrNull.bind(raw),

@@ -17,7 +17,7 @@ import type { FsStat } from './stat-metadata.ts';
  * into an instance for a backend.
  */
 
-import type { FsSync } from './fs-sync.ts';
+import { type FsSync, sliceReadRange } from './fs-sync.ts';
 import { MemoryBackend } from './memory-backend.ts';
 import { MemoryVfs } from './memory.ts';
 import type { OpfsLayoutIssue } from './opfs-replica-types.ts';
@@ -42,6 +42,10 @@ export class MemoryFsSync implements FsSync {
 
   readFileBytesSync(path: string): Uint8Array {
     return this.#backend.readFile(normalizeAbsolute(path));
+  }
+
+  readFileRangeSync(path: string, position: number, length: number): Uint8Array {
+    return sliceReadRange(this.#backend.readFile(normalizeAbsolute(path)), position, length);
   }
 
   writeFileSync(path: string, data: Uint8Array): void {

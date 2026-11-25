@@ -12,8 +12,8 @@ code: [packages/runtime-js/src/ipc/fs-handlers.ts, packages/runtime-js/src/ipc/s
 ## Context
 
 Goal `node-streams-as-in-node` absorbs half of this draft:
-- its read half (1) goes to unit 4b, `runtime-js/fs-fd-read-by-range`;
-- its `writeChunk` append half (2) goes to unit 4c, `runtime-js/fs-fd-write-by-range`.
+- its read half (1) is done: `FsSync.readFileRangeSync` (ADR-0576, unit 4b); `fs.readChunk` reads only its range on the owner;
+- its `writeChunk` append half (2) goes to unit 4c, `runtime-js/fs-fd-write-by-range`, with ADR-0576's `writeFileRangeSync`.
 
 The base64 write inflation stays here.
 

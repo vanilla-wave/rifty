@@ -79,12 +79,15 @@ describe('nested sync-RPC relay forwards ADR-0365 reads', () => {
     owner.writeFileSync(PATH, bytes);
     const { ownerCalls, relayCalls, grandchild } = chain(owner);
     const ownerRead = vi.spyOn(owner, 'readFileBytesSync');
+    const ownerRange = vi.spyOn(owner, 'readFileRangeSync');
 
     expect(grandchild.readFileBytesSync(PATH)).toEqual(bytes);
     expect(relayCalls).toEqual(readSequence(size));
     // Before: every relayed request re-read the whole file upstream (6 × 6 requests).
     expect(ownerCalls).toEqual(readSequence(size));
-    expect(ownerRead).toHaveBeenCalledTimes(readSequence(size).length);
+    // One owner store call per request: the head reads the file, each chunk only its range (ADR-0576).
+    expect(ownerRead).toHaveBeenCalledTimes(1);
+    expect(ownerRange).toHaveBeenCalledTimes(readSequence(size).length - 1);
   });
 
   it('keeps single-chunk files at one request per hop', () => {

@@ -1,5 +1,6 @@
 # Changelog
 
+- `FsSync.readFileRangeSync(path, position, length)` (required, ADR-0576): exactly the bytes `[position, min(size, position + length))`, empty at/after EOF, errors as `readFileBytesSync`; `MemoryFsSync` a view of its store, `OpfsFsSync` a view of its authoritative content cache (not the disk). `assertReadRange` in `./internal`. Every `FsSync` implementation must add it.
 - Supply session-local inode/clock/link metadata through memory and OPFS stats for stock Node guests.
 
 ## [Unreleased]

@@ -55,18 +55,20 @@ export class SyncMirrorVfs implements Vfs {
     path: string,
     opts?: { chunkSize?: number; start?: number; end?: number },
   ): Promise<ReadableStream<Uint8Array>> {
-    const data = syncMirror().readFileBytesSync(normalizePath(path));
     const start = opts?.start ?? 0;
-    const end = Math.min(opts?.end ?? data.byteLength, data.byteLength);
+    const length = (opts?.end ?? Number.MAX_SAFE_INTEGER) - start;
+    // ADR-0576: only the window, read once at open (today's snapshot), copied:
+    // the range is valid only until the store's next mutation.
+    const data = syncMirror().readFileRangeSync(normalizePath(path), start, length).slice();
     const chunkSize = opts?.chunkSize ?? 64 * 1024;
-    let offset = start;
+    let offset = 0;
     return new ReadableStream<Uint8Array>({
       pull(controller) {
-        if (offset >= end) {
+        if (offset >= data.byteLength) {
           controller.close();
           return;
         }
-        const next = Math.min(offset + chunkSize, end);
+        const next = Math.min(offset + chunkSize, data.byteLength);
         controller.enqueue(data.subarray(offset, next));
         offset = next;
       },
