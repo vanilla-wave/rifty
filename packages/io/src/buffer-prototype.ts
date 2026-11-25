@@ -11,7 +11,17 @@
  * (via `declare`) so this file needs no type-back import — avoids a circular dep madge would flag.
  */
 
-import { type Encoding, compareSlices, decode, encode } from './buffer-codec.ts';
+import {
+  type CanonicalEncoding,
+  type Encoding,
+  compareSlices,
+  decode,
+  encode,
+  invalidArgType,
+  normalizeEncoding,
+  resolveEncoding,
+  unknownEncodingError,
+} from './buffer-codec.ts';
 
 // Opaque ctor (no `import type { Buffer }`) keeps the dependency one-way.
 type BufferLikeCtor = new (...args: unknown[]) => Uint8Array;
@@ -38,7 +48,7 @@ function dvFor(u8: Uint8Array): DataView {
 
 function bufferToString(
   this: Uint8Array,
-  encoding: Encoding = 'utf8',
+  encoding?: Encoding,
   start = 0,
   end: number = this.length,
 ): string {
@@ -46,11 +56,11 @@ function bufferToString(
   // `subarray()` throws, but Node still decodes that Buffer as an empty string.
   // Run the bounds through an attached empty view first so observable ToNumber
   // failures (for example a Symbol bound) are preserved before that fast path.
-  if (this.length === 0) {
-    new Uint8Array(0).subarray(start, end);
-    return decode(this, encoding);
-  }
-  return decode(this.subarray(start, end), encoding);
+  const view =
+    this.length === 0 ? new Uint8Array(0).subarray(start, end) : this.subarray(start, end);
+  // Node returns '' for an empty range before it looks at the encoding.
+  if (view.length === 0) return '';
+  return decode(view, encoding === undefined ? 'utf8' : resolveEncoding(encoding));
 }
 
 function bufferEquals(this: Uint8Array, other: Uint8Array): boolean {
@@ -69,7 +79,7 @@ function bufferWrite(
   // Node overloads write(s[, offset][, length][, encoding]) → (offset, length, encoding).
   let offset: number;
   let length: number | undefined;
-  let encoding: Encoding;
+  let encoding: Encoding | undefined;
 
   if (typeof offsetOrEncoding === 'string') {
     offset = 0;
@@ -82,7 +92,7 @@ function bufferWrite(
       encoding = lengthOrEncoding;
     } else {
       length = lengthOrEncoding;
-      encoding = encodingArg ?? 'utf8';
+      encoding = encodingArg;
     }
   }
 
@@ -98,8 +108,15 @@ function bufferWrite(
     );
   }
 
-  const bytes = encode(s, encoding);
-  const n = Math.min(bytes.length, length, this.length - offset);
+  // Node: a falsy encoding is utf8; any other goes through `getEncodingOps`.
+  const canonical = encoding ? resolveEncoding(encoding) : 'utf8';
+  const bytes = encode(s, canonical);
+  let n = Math.min(bytes.length, length, this.length - offset);
+  if (n < bytes.length) {
+    // Node writes whole characters only: no partial utf8 sequence or utf16 unit.
+    if (canonical === 'utf8') while (n > 0 && ((bytes[n] ?? 0) & 0xc0) === 0x80) n--;
+    else if (canonical === 'utf16le') n &= ~1;
+  }
   this.set(bytes.subarray(0, n), offset);
   return n;
 }
@@ -409,8 +426,11 @@ export function installIntMethods(BufferClass: BufferLikeCtor): void {
   };
 }
 
-/** Normalise an `indexOf`/`lastIndexOf` value to a searchable byte sequence. */
-function asBytes(value: number | string | Uint8Array, encoding: Encoding): Uint8Array {
+/**
+ * Normalise an `indexOf`/`lastIndexOf` value to a searchable byte sequence.
+ * Node checks the encoding only for a string needle (`bidirectionalIndexOf`).
+ */
+function asBytes(value: number | string | Uint8Array, encoding: Encoding | undefined): Uint8Array {
   if (typeof value === 'number') {
     // Node 22: a single integer needle wraps into 0-255 (incl. negative/out-of-range).
     const b = ((value | 0) + 256) & 0xff;
@@ -418,7 +438,9 @@ function asBytes(value: number | string | Uint8Array, encoding: Encoding): Uint8
     out[0] = b;
     return out;
   }
-  if (typeof value === 'string') return encode(value, encoding);
+  if (typeof value === 'string') {
+    return encode(value, encoding === undefined ? 'utf8' : resolveEncoding(encoding));
+  }
   return value;
 }
 
@@ -491,13 +513,13 @@ export function installExtraMethods(BufferClass: BufferLikeCtor): void {
     encoding?: Encoding,
   ) {
     let from: number;
-    let enc: Encoding;
+    let enc: Encoding | undefined;
     if (typeof byteOffsetOrEncoding === 'string') {
       from = 0;
       enc = byteOffsetOrEncoding;
     } else {
       from = byteOffsetOrEncoding ?? 0;
-      enc = encoding ?? 'utf8';
+      enc = encoding;
     }
     return findIndex(this, asBytes(value, enc), from);
   };
@@ -509,13 +531,13 @@ export function installExtraMethods(BufferClass: BufferLikeCtor): void {
     encoding?: Encoding,
   ) {
     let from: number;
-    let enc: Encoding;
+    let enc: Encoding | undefined;
     if (typeof byteOffsetOrEncoding === 'string') {
       from = this.length;
       enc = byteOffsetOrEncoding;
     } else {
       from = byteOffsetOrEncoding ?? this.length;
-      enc = encoding ?? 'utf8';
+      enc = encoding;
     }
     return findLastIndex(this, asBytes(value, enc), from);
   };
@@ -527,13 +549,13 @@ export function installExtraMethods(BufferClass: BufferLikeCtor): void {
     encoding?: Encoding,
   ) {
     let from: number;
-    let enc: Encoding;
+    let enc: Encoding | undefined;
     if (typeof byteOffsetOrEncoding === 'string') {
       from = 0;
       enc = byteOffsetOrEncoding;
     } else {
       from = byteOffsetOrEncoding ?? 0;
-      enc = encoding ?? 'utf8';
+      enc = encoding;
     }
     return findIndex(this, asBytes(value, enc), from) !== -1;
   };
@@ -548,7 +570,7 @@ export function installExtraMethods(BufferClass: BufferLikeCtor): void {
   ): Uint8Array {
     let offset: number;
     let end: number;
-    let enc: Encoding;
+    let enc: Encoding | undefined;
     if (typeof offsetOrEncoding === 'string') {
       offset = 0;
       end = this.length;
@@ -560,21 +582,42 @@ export function installExtraMethods(BufferClass: BufferLikeCtor): void {
         enc = endOrEncoding;
       } else {
         end = endOrEncoding ?? this.length;
-        enc = encodingArg ?? 'utf8';
+        enc = encodingArg;
       }
+    }
+    // Node `_fill`: a string value's encoding goes through `normalizeEncoding`
+    // before any range check.
+    let canonical: CanonicalEncoding = 'utf8';
+    if (typeof value === 'string') {
+      const c = normalizeEncoding(enc);
+      if (c === undefined) {
+        if (typeof enc !== 'string') throw invalidArgType('encoding', 'of type string', enc);
+        throw unknownEncodingError(enc);
+      }
+      canonical = c;
     }
     if (offset < 0 || end > this.length || offset > end) {
       throw new RangeError('Out of range index');
     }
-    if (typeof value === 'number') {
+    // Node: '' fills zeros; a value that is no string or view is ToUint32'd (`true` → 1, `{}` → 0).
+    const fillValue: unknown = value === '' ? 0 : value;
+    if (typeof fillValue !== 'string' && !ArrayBuffer.isView(fillValue)) {
       // Call Uint8Array.prototype.fill directly to avoid recursing into this override.
-      Uint8Array.prototype.fill.call(this, value & 0xff, offset, end);
+      Uint8Array.prototype.fill.call(this, +(fillValue as number) & 0xff, offset, end);
       return this;
     }
-    const bytes = typeof value === 'string' ? encode(value, enc) : value;
+    if (offset === end) return this;
+    const bytes =
+      typeof fillValue === 'string'
+        ? encode(fillValue, canonical)
+        : new Uint8Array(fillValue.buffer, fillValue.byteOffset, fillValue.byteLength);
     if (bytes.length === 0) {
-      // Node throws when string fill encodes to zero bytes.
-      throw new TypeError(`The argument 'value' is invalid. Received '${String(value)}'`);
+      // Node: a fill value that writes no bytes is invalid.
+      const error = new TypeError(
+        `The argument 'value' is invalid. Received '${String(value)}'`,
+      ) as TypeError & { code: string };
+      error.code = 'ERR_INVALID_ARG_VALUE';
+      throw error;
     }
     let pos = offset;
     while (pos < end) {

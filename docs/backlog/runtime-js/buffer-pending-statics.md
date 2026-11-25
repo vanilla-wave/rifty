@@ -8,7 +8,7 @@ user_story: As a dev using a lib that reads `Buffer.poolSize`/`Buffer.constants`
 sources: [compat/buffer.md]
 ---
 ## Context
-Open ❌ rows in docs/public/compat/buffer.md (stable public matrix): `Buffer.poolSize` + `Buffer.constants` (no real consumer hit yet), `Buffer.transcode(buffer, fromEnc, toEnc)`, and the `kStringMaxLength` / `kMaxLength` constants. The Buffer class itself (real Uint8Array subclass, ADR-0030) is otherwise implemented/tested; these are the residual static surface no package has forced yet.
+Open ❌ rows in docs/public/compat/buffer.md (stable public matrix): `Buffer.poolSize` + `Buffer.constants` (no real consumer hit yet), `Buffer.transcode(buffer, fromEnc, toEnc)`, and the `kStringMaxLength` / `kMaxLength` constants. Today `require('node:buffer').transcode` reads `undefined` (Node v24.16.0: `function`; 2026-11-25), not a loud throw. The Buffer class itself (real Uint8Array subclass, ADR-0030) is otherwise implemented/tested; these are the residual static surface no package has forced yet.
 ## Options / Next
 Next (per consumer that hits one): expose `Buffer.poolSize`/`Buffer.constants`/`kMaxLength`/`kStringMaxLength` with honest values for the rifty environment; implement `Buffer.transcode` over the existing codec path (or throw `NotImplementedError('buffer.transcode')` until needed — no fake value). Flip the relevant compat row to ✅ on landing. Add per-method coverage only when a real failure mode is articulable (don't bulk-implement to fill the matrix).
 ## Reversibility
