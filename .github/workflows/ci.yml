@@ -73,6 +73,7 @@ jobs:
       - run: pnpm test:docs-contract # lightweight source↔compat/ADR honesty guards
       - run: pnpm check:eval-compiler-drift
       - run: pnpm check:fetch-classes-drift
+      - run: pnpm check:url-legacy-drift
       - run: pnpm check:shadow-catalog-drift
       - run: pnpm check:install-artifact-drift
       - run: pnpm check:snapshot-artifact-drift
