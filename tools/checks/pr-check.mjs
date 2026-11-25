@@ -188,6 +188,7 @@ export const TASKS = [
   'check:eval-compiler-drift',
   'check:fetch-classes-drift',
   'check:url-legacy-drift',
+  'check:zlib-wasm-drift',
   'check:shadow-catalog-drift',
   'check:install-artifact-drift',
   'check:snapshot-artifact-drift',

@@ -9,6 +9,7 @@ import {
   collect,
   publishableDirs,
   render,
+  shippedUnshipped,
   unusedRecords,
   validateManifest,
 } from '../publishing/third-party-notices.mjs';
@@ -193,6 +194,54 @@ describe('closed by default (review S1, S2)', () => {
       'npm bare@2.0.0',
       'generated pkg/src/generated',
     ]);
+  });
+
+  it('an unshipped mark names an existing backlog unit', () => {
+    put(
+      'docs/backlog/runtime-js/zlib-node-lib-port.md',
+      '---\narea: runtime-js\nstatus: draft\n---\n# unit\n',
+    );
+    put('docs/backlog/runtime-js/README.md', '# area\n');
+    put('docs/backlog/runtime-js/body-status.md', '---\narea: runtime-js\n---\nstatus: draft\n');
+    put(
+      'docs/backlog/runtime-js/crlf.md',
+      '---\r\narea: runtime-js\r\nstatus: draft\r\n---\r\n# unit\r\n',
+    );
+    const marked = (unshipped: string) => ({
+      ...manifest,
+      generated: {
+        'pkg/src/generated': { ...manifest.generated['pkg/src/generated'], unshipped },
+      },
+    });
+    expect(validateManifest(root, marked('runtime-js/zlib-node-lib-port'), [])).toEqual([]);
+    expect(validateManifest(root, marked('runtime-js/crlf'), [])).toEqual([]);
+    for (const value of [
+      'runtime-js/body-status',
+      'runtime-js/gone',
+      'runtime-js/README',
+      '../runtime-js/zlib-node-lib-port',
+      'runtime-js',
+    ])
+      expect(validateManifest(root, marked(value), [])).toEqual([
+        `third-party-manifest generated pkg/src/generated: unshipped names no backlog unit docs/backlog/${value}.md`,
+      ]);
+  });
+
+  it('a generated record marked unshipped: unused is fine, used is red until the mark goes', () => {
+    const marked = {
+      ...manifest,
+      generated: {
+        'pkg/src/generated': {
+          ...manifest.generated['pkg/src/generated'],
+          unshipped: 'runtime-js/zlib-node-lib-port',
+        },
+      },
+    };
+    const none = collect(root, 'pkg', marked, { 'dist/a.js': ['pkg/src/a.ts'] }).used;
+    expect(unusedRecords(marked, [none])).toEqual(['npm bare@2.0.0']);
+    expect(shippedUnshipped(marked, [none])).toEqual([]);
+    const used = collect(root, 'pkg', marked, inputs).used;
+    expect(shippedUnshipped(marked, [used])).toEqual(['generated pkg/src/generated']);
   });
 
   it('S2: a renamed npm record no longer supplies its extra text — reported unused, not dropped silently', () => {
@@ -407,6 +456,51 @@ describe('manifest records (review 3)', () => {
     expect(validateManifest(root, at('0.28.0'), [])).toEqual([
       'third-party-manifest generated pkg/src/generated: has sources.json but no sourcesKey',
     ]);
+  });
+
+  it('a dotted sourcesKey names a nested pin of sources.json', () => {
+    put(
+      'pkg/src/generated/sources.json',
+      JSON.stringify({ node: { version: 'v24.16.0', sha256: 'ab' } }),
+    );
+    const at = (version: string) => ({
+      ...manifest,
+      generated: {
+        'pkg/src/generated': {
+          ...manifest.generated['pkg/src/generated'],
+          files: ['up.js', 'sources.json'],
+          version,
+          sourcesKey: 'node.version',
+        },
+      },
+    });
+    expect(validateManifest(root, at('v24.16.0'), [])).toEqual([]);
+    expect(validateManifest(root, at('v22.0.0'), [])).toEqual([
+      'third-party-manifest generated pkg/src/generated: version v22.0.0 is not sources.json "node.version" (v24.16.0)',
+    ]);
+  });
+
+  it('a dotted sourcesKey walks own keys of plain objects to a string only', () => {
+    put('pkg/src/generated/sources.json', JSON.stringify({ node: { version: 'v24.16.0' } }));
+    const at = (version: string, sourcesKey: string) => ({
+      ...manifest,
+      generated: {
+        'pkg/src/generated': {
+          ...manifest.generated['pkg/src/generated'],
+          files: ['up.js', 'sources.json'],
+          version,
+          sourcesKey,
+        },
+      },
+    });
+    for (const [version, key] of [
+      ['Object', 'constructor.name'],
+      ['v', 'node.version.0'],
+      ['[object Object]', 'node'],
+    ] as const)
+      expect(validateManifest(root, at(version, key), [])).toEqual([
+        `third-party-manifest generated pkg/src/generated: sources.json "${key}" is no string pin`,
+      ]);
   });
 });
 

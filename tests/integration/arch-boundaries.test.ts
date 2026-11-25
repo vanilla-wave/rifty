@@ -215,6 +215,32 @@ describe('check:arch layer boundaries', () => {
     expect(ruleNames([root])).not.toContain('editor-stack-loads-lazily');
   });
 
+  it('flags a builtin module importing the zlib engine or handle (ADR-0573, until unit 3)', () => {
+    const root = fixture({
+      'runtime-js/src/builtins/zlib.ts': "import '../zlib-engine/handle';\nexport const a = 1;\n",
+      'runtime-js/src/zlib-engine/handle.ts': "import './engine';\nexport const h = 1;\n",
+      'runtime-js/src/zlib-engine/engine.ts': 'export const e = 1;\n',
+    });
+    expect(ruleNames([root])).toContain('zlib-engine-has-no-production-importer');
+  });
+
+  it('flags the isolate guest ceiling-zlib.ts importing the zlib engine', () => {
+    const root = fixture({
+      'isolate-guest/src/guest/ceiling-zlib.ts':
+        "import '../../../runtime-js/src/zlib-engine/engine';\nexport const a = 1;\n",
+      'runtime-js/src/zlib-engine/engine.ts': 'export const e = 1;\n',
+    });
+    expect(ruleNames([root])).toContain('zlib-engine-has-no-production-importer');
+  });
+
+  it('allows the zlib engine modules to import each other', () => {
+    const root = fixture({
+      'runtime-js/src/zlib-engine/handle.ts': "import './engine';\nexport const h = 1;\n",
+      'runtime-js/src/zlib-engine/engine.ts': 'export const e = 1;\n',
+    });
+    expect(ruleNames([root])).not.toContain('zlib-engine-has-no-production-importer');
+  });
+
   it('resolves cross-package subpath exports (madge blindspot regression)', () => {
     const edges = runArch(['packages/runtime-js/src/worker-entry.ts']).modules.flatMap(
       (m) => m.dependencies,

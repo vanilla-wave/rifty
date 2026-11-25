@@ -18,7 +18,8 @@ so Node's `lib/zlib.js` comes to rifty only on a `Transform` equal to Node's on 
 3. `runtime-js/zlib-node-lib-port` — **Node's `lib/zlib.js` whole + `crc32` + the engine entering the
    bundles** (draft) — classes, `*Sync`, callback one-shots, `create*`, `info`, `_processChunk`,
    `crc32`; lazy compile with the import instrumentation test, the Chromium 108 floor run, the
-   chunk/budget measurement; today's browser `Gzip`/`CompressionStream` leaves in the same step;
+   chunk/budget measurement, the exact pin of the engine's base64 in `check:esbuild-legacy-retirement`
+   (ADR-0391); today's browser `Gzip`/`CompressionStream` leaves in the same step;
    `FinalizationRegistry` as Node's `MakeWeak`. Entry: `zlib-diff.mjs` state group = 0 (today 26/45
    scenarios, 154 fields). Exit: the same scenarios against product `node:zlib` in the isolate and in
    Chromium. Absorbs `runtime-js/zlib-crc32`, `runtime-js/zlib-trailing-bytes-after-stream-end`,

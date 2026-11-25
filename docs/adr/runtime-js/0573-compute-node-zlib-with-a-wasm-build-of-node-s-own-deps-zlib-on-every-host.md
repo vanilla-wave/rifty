@@ -82,10 +82,41 @@ own `lib/zlib.js` also runs on each engine via a swapped `binding.Zlib`.
    not pinned (whatever Homebrew has); a pinned toolchain, a Linux CI rebuild that matches the
    committed sha256, and the licence record (Zlib + Chromium BSD-3, the ported Node code MIT, via the
    `vendor/`/`generated/` manifest of PR #445) are unit 2's acceptance.
+   Unit 2 (2026-11-25): wasi-sdk-34 release tarball per host + binaryen version_133's JS/wasm
+   `wasm-opt -O3` as its own step, both sha256-pinned in `runtime-js/src/zlib-engine/generated/
+   sources.json`, run with an empty environment (clang's driver runs any `wasm-opt` on PATH — the
+   probe's «raw» build already had Homebrew's); 63202 B, sha256 `f40cd936…`, equal on darwin-arm64,
+   linux-arm64, linux-x64; no pin for darwin-x64 or Windows (the generator refuses them by name);
+   wasm-opt.js runs on the pinned Node v24.16.0. CI: `zlib-wasm:rebuild` in `unit-and-conformance`/
+   `run`. Licence: `generated/LICENSE` + the `third-party-manifest.json` record (PR #445), marked
+   `unshipped` until unit 3 bundles the engine.
+   Memory model (manager, unit 2 review round 3) — one declared class: the handle copies where
+   Node's zlib reads and writes the caller's memory live. A write's input is snapshotted when
+   `write`/`writeSync` is called; its output is copied into the caller's `out` when the work ends;
+   between calls only the unconsumed rest of one operation's input is kept (lib/zlib.js's
+   continuation writes read it); the dictionary's copy lives from init to close (Node keeps its own
+   copy too: no difference). Manifestations — pinned with both sides' results where Node's is
+   deterministic, named where Node races its thread pool (unit 2 Decisions): input changed between
+   one operation's continuation writes (an async `'data'` listener — reachable through lib/zlib.js);
+   input changed after an async `write()` before it completes (Node races: the new bytes in most
+   runs; the port: always the original); `out` changed or moved between an async `write()` and its
+   completion (the port: its state and callback as Node's, the bytes lost); `params()`/`init()` during
+   an async write (Node races); a `SharedArrayBuffer` input written by another thread, a resizable
+   `ArrayBuffer` resized mid-operation; `in` and `out` overlapping in one `ArrayBuffer`; `params()`
+   after the last `out` was transferred; a buffer transferred away before the call with
+   `off + len > 0` — Node aborts the process (`CHECK(Buffer::IsWithinBounds)`), the port reports
+   `Z_STREAM_ERROR` through `onerror` (with `off + len` 0 both read it as a null pointer of length 0:
+   equal, not part of the class).
+   All but the first two only via `_handle` or Node-aborting programs. Route to close: bounded input
+   windows read live with byte parity per level/strategy proven, and output written through before
+   an error; compat ⚠️ from unit 3. A failed port allocation takes Node's `Z_MEM_ERROR` path
+   (`onerror('insufficient memory')`) and leaves the handle usable for a retry — zlib's own
+   `Z_MEM_ERROR` in Node is sticky (Node has no port allocation to fail).
 2. Placement: runtime-js, shared by every host (browser Workers and the isolate guest bundle). The engine
    and the handle enter the bundles in unit 3, with `lib/zlib.js` and `crc32` (manager 2026-11-24,
    round 3: shipping the engine earlier for `crc32` alone would put ≈ 24 KB gzip of deflate/inflate
-   without a caller into every bundle against ≈ 15 KB of generic headroom — §Simplicity); unit 2 builds
+   without a caller into every bundle against ≈ 15 KB of generic headroom at the probe, 4.3 KB measured
+   2026-11-25 (§8) — §Simplicity); unit 2 builds
    and proves them unbundled, and its merge is held until unit 3 can follow. Inline
    bytes (base64), compiled synchronously on the first `node:zlib` call that needs the engine, never at
    module load (the SDK page imports the builtins on the main thread, where Chromium 108 refuses sync
@@ -113,12 +144,22 @@ own `lib/zlib.js` also runs on each engine via a swapped `binding.Zlib`.
 8. Bundle budget: engine only, inline costs +36950 B gzip in the client generic bundle (279754 →
    316704 of 332000: 15296 B left before the port of the handle and `lib/zlib.js`, minus today's
    `zlib.ts`) and +36855 B in toolchain (25530 B left). Kill condition: a PR that would cross a
-   `CLIENT_BUNDLE_BUDGETS` cap re-opens this placement — in order: the builtin `zlib` module (engine
+   `CLIENT_BUNDLE_BUDGETS` cap re-opens this placement (see the 2026-11-25 answer below: the ×1.5
+   recalibration first) — options: the builtin `zlib` module (engine
    included) as a lazily loaded chunk, if one can exist without changing `require('zlib')`'s
    synchronous semantics (it may not); the wasm as a host-published asset with a pre-entry preload
    (ADR-0351/0352; in browser Workers both `installNodeRuntime` and `worker-entry.ts`'s boot would
    need it); pako (Alternatives). None of the three is measured; unit 3 measures the first before
    wiring the engine.
+   Correction 2026-11-25 (unit 2; `main` c2d03ce05 with this unit's engine + handle + wasm wired into
+   the eager `zlib` builtin for one build): generic 288027 → 327680 B gzip (+39653, min +95161), 4320 B
+   left under 332000 before Node's `lib/zlib.js` (≈ 8.5 KB gzip unminified, probe) minus today's
+   `zlib.ts` — ≈ 4 KB short: this kill condition fires in unit 3; toolchain 331575 → 370684 (+39109,
+   15316 left). wasm-opt is part of it: inline base64 36541 B gzip without, 34954 B with (≈ 1.6 KB,
+   ≈ 37 % of what is left). Budget answered 2026-11-25: the cap is recalibrated by the ×1.5 rule
+   (`client-bundle-budget.mjs`) in the PR that crosses it — recorded by the manager in the zlib goal's
+   Decisions. The three placements above are then options, not an ordered obligation: for a growth
+   larger than measured.
 
 ## Alternatives
 
@@ -144,9 +185,10 @@ own `lib/zlib.js` also runs on each engine via a swapped `binding.Zlib`.
 
 - (+) One engine, one byte stream on every host, by construction Node's; zlib updates follow Node's.
 - (+) The rest of the goal is a port of Node's own JS/C++ logic, testable against Node's own suite.
-- (−) +37 KB gzip in client bundles for the engine alone (15 KB left under the generic cap before the
-  port); a vendored binary whose toolchain unit 2 pins; manual free of zlib state; linear memory never
-  shrinks; async calls block the realm's loop.
+- (−) +39.7 KB gzip in the client generic bundle for engine + handle (4.3 KB left under its cap before
+  the port, §8); a vendored binary whose toolchain unit 2 pins; manual free of zlib state; linear memory never
+  shrinks; async calls block the realm's loop; the handle copies the caller's buffers where Node uses
+  them live (§1 memory model: one declared class, each manifestation pinned).
 - (−) Order: everything guest-visible in `node:zlib`, `crc32` included, waits for the streams goal's
   core (map); until then main's behaviour stays per host. Units 2 and 3 merge back to back.
 - Follow-ups: goal `node-zlib-on-every-host` (map); compat `zlib.md`, isolate-host rows; ADR-0159 and
