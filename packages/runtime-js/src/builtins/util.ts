@@ -157,15 +157,18 @@ function hasBuiltInToString(value: object): boolean {
   } else if (hasOwn(value, toPrimitivePrimordial)) {
     return false;
   }
-  // The prototype owning that `toString`/`Symbol.toPrimitive` (as Node: a null end throws).
+  // The prototype owning that `toString`/`Symbol.toPrimitive`. A walk ending in null (rifty's
+  // vm membrane, a `getPrototypeOf` trap) counts as built-in: Node's null end is a Proxy,
+  // unwrapped first (its revoked target → `true`, "prevent crashes").
   let pointer: object | null = value;
   do {
     pointer = getPrototypeOfPrimordial(pointer) as object | null;
+    if (pointer === null) return true;
   } while (
     !hasOwnToString(pointer, 'toString') &&
     !hasOwnToPrimitive(pointer, toPrimitivePrimordial)
   );
-  const descriptor = getOwnPropertyDescriptorPrimordial(pointer as object, 'constructor');
+  const descriptor = getOwnPropertyDescriptorPrimordial(pointer, 'constructor');
   return (
     descriptor !== undefined &&
     typeof descriptor.value === 'function' &&
