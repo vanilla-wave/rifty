@@ -37,7 +37,9 @@ dropped with no U+FFFD even under `fatal`).
 3. Bindings (`node-encoding.ts`), captured at load, before guest code: `primordials`; Node's
    `makeNodeErrorWithCode` shapes (fixed message: own `stack, message, code`; function message:
    `stack, code[, errno], message`; `constructor` → the base; coded `toString`); a C++ binding's
-   throw is a plain error with an own `code`; validators, `internal/util/types`, `FastBuffer`'s
+   throw is a plain error with an own `code`; the validators' throw has Node's extra
+   `HideStackFramesError` class; a function message is computed before `super`, so V8's stack
+   header carries it; validators, `internal/util/types`, `FastBuffer`'s
    `latin1Slice`/`ucs2Slice`/`swap16`. `inspect` and the `ERR_INVALID_ARG_TYPE` message
    (`runtime-js/internal/node-received.ts`, shared with ADR-0574's bindings) are the runtime's,
    bound by the entry once it loads: the shim evaluates before any runtime module.
@@ -49,11 +51,15 @@ dropped with no U+FFFD even under `fatal`).
    `Buffer#toString` reaches the same function; browser hosts keep their native classes.
 5. `icu`: `getConverter` → @exodus/bytes 1.16.0's `TextDecoder` for utf-16le, utf-16be, gb18030
    (Node passes gbk as gb18030), evaluated on the first such decoder; `decode` maps its `fatal`
-   refusal to Node's C++ `ERR_ENCODING_INVALID_ENCODED_DATA`. Generated into
-   `exodus-bytes/generated/` by the same generator: its multi-byte tables trimmed to gb18030 (a
-   big5 table cannot slip in), every `globalThis` read replaced by an empty object, so it reads no
-   guest global (no guest `Buffer`, `TextDecoder`, `atob`: its pure-JS path). Exact pin, root
-   devDependency; the generator refuses another version.
+   refusal under `fatal` (only then) to Node's C++ `ERR_ENCODING_INVALID_ENCODED_DATA`; its input is
+   always a fresh primordial view, a detached or out-of-bounds input no bytes (Node's C++).
+   Generated into `exodus-bytes/generated/` by the same generator: its multi-byte tables trimmed to
+   gb18030 (a big5 table cannot slip in); every `globalThis` read → an empty object (no guest
+   `Buffer`, `TextDecoder`, `atob`) and every post-ES2022 feature read (`toBase64`, `fromBase64`,
+   `toHex`, `fromHex`, `isWellFormed`, `toWellFormed`) → `undefined`, with the native `toBase64`
+   branches those guard removed at exact-once anchors: its pure-JS path, under the browser floor
+   (ADR-0469; the generator runs `check:es-floor`'s check on its output). Exact pin, root
+   devDependency; the generator refuses another version or another set of source files.
 6. big5, euc-jp, iso-2022-jp, shift_jis, euc-kr: `getConverter` throws
    `NotImplementedError('isolate-host.TextDecoder(<enc>)')`, so Node's own `#prepareConverter`
    refuses at construction (the user's goal, manager decision 2026-11-25;
@@ -67,8 +73,9 @@ dropped with no U+FFFD even under `fatal`).
 | @exodus/bytes for utf-16le/be, gb18030 (Node: ICU) | substitution-environment; Node = WHATWG on the corpus (manager, PR #443 review) | `isolate-host/tests/text-decoder.test.ts` corpus vs live Node; generator version/sha pins | a Node re-pin whose ICU result differs (rerun the corpus) |
 | the five ICU-only encodings | platform-gap; manager decision 2026-11-25 | the five's corpus rows (every case refused with the gap) | `distribution/isolate-guest-textdecoder-icu-only-encodings` |
 | lazy `single-byte.js` (line 37) | the one edit; perf only | generator anchor + line pin | none |
+| a Node error's stack header (`RangeError: …`, Node `RangeError [ERR_ENCODING_NOT_SUPPORTED]: …`; `String(e)` has the label) | rifty's stack has no `kIsNodeError` header (`backlog/runtime-js/node-error-code-label`) | none | that item |
 | `util.inspect` of the classes | rifty's `inspect` honours no `inspect.custom` (`runtime-js/util-surface-completions`) | pinned `inspect`/`subclass` rows | that item lands |
-| intrinsics read at call time (@exodus/bytes evaluates on first use; `Uint16Array` `length` in the codec's `fromCharCode`) | `backlog/runtime-js/post-guest-paths-use-replaceable-intrinsics` | none | that item |
+| live intrinsics on every utf-16/gb18030 call (@exodus/bytes: `String.fromCharCode`, `subarray`, typed-array `length`; `Object.defineProperty` at its first evaluation) and the `length` the codec's `fromCharCode.apply` reads | `backlog/runtime-js/post-guest-paths-use-replaceable-intrinsics` (measured there) | none | that item |
 
 ## Alternatives rejected
 
@@ -86,16 +93,15 @@ dropped with no U+FFFD even under `fatal`).
   own keys; `encodeInto` validates as Node (closes `distribution/isolate-guest-textencoder-encodeinto-arg-checks`).
 - fontkit/pdfkit load; a CJK Mac `name` record in one of the five reads as raw bytes, silently
   (restructure catches the throw): declared ⚠️ in compat `isolate-host.md`.
-- Cost, 2026-11-25, M3 Pro, load average 4.5–6.5, base main `3d16cb7b8`: `guest.js` 7 173 116 →
-  7 320 802 B (gzip -9 1 512 671 → 1 559 350, +46 679; generated `encoding.js` 21 552 B,
-  `text-decoder.js` 76 618 B); warm `runCode('1')` median of 60 alternating, two runs: +0.59 and
-  −0.54 ms (inside base's p10–p90 of ~15–21 ms; eager `single-byte.js` was +3.3). utf-8 faster on
-  every row (small fresh/reused decoder −32 %/−18 %, small `toString` −7 %, 1 MiB ~−46 %;
-  isolate-host README §Cost). First non-utf-8 decoder per isolate: windows-1252 0.6–0.7 ms,
-  utf-16le 1.9–2.2, gb18030 3.8–4.2.
+- Cost, 2026-11-25, M3 Pro, load average 6.2–7.7, base main `3d16cb7b8`: `guest.js` 7 173 116 →
+  7 320 689 B (gzip -9 1 512 671 → 1 559 281, +46 610; generated `encoding.js` 21 552 B,
+  `text-decoder.js` 75 795 B); warm `runCode('1')` median of 60 alternating +0.73 ms (15.40 → 16.13;
+  earlier builds +0.59, −0.54; eager `single-byte.js` was +3.3). utf-8 faster on every row (small
+  fresh/reused decoder −32 %/−12 %, small `toString` −16 %, 1 MiB ~−49 %; isolate-host README
+  §Cost). First non-utf-8 decoder per isolate: windows-1252 0.7 ms, utf-16le 2.0, gb18030 4.3.
 - WPT `encoding` (Node v24.16.0's copy, 22 `.any.js` files, through the probe harness
-  `isolate-guest-web-api/reference/wpt` until the shared one lands): every subtest as live Node but
+  `isolate-guest-web-api/reference/wpt` until the shared one lands; 11 502 subtests): every subtest as live Node but
   «encodeInto() and a detached output buffer» (`MessageChannel`) and the five's 33 subtests;
   `idlharness`, `streams/*`, `iso-2022-jp-decoder` not run.
 - Publishing: both generated dirs carry their notice (`third-party-manifest.json`).
-- Re-pin of Node or @exodus/bytes: rerun the generator and `text-decoder.test.ts`.
+- Re-pin of Node or @exodus/bytes: rerun the generator and `text-decoder.test.ts` (the generator checks ids and primordial names, not the members a module destructures from its bindings: a new one fails only at run time).

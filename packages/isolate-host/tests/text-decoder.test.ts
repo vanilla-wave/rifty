@@ -126,7 +126,8 @@ process.stdout.write(JSON.stringify({ cases: tokens.length, refused: tokens.filt
 /** One line per observation; an error is its class, code, message, `String`, own and enumerable keys. */
 const PROBE = String.raw`(() => {
   const show = (v) => (typeof v === 'string' ? 'S:' + v : 'V:' + JSON.stringify(v));
-  const d = (f) => { try { return show(f()); } catch (e) { return 'E:' + [e && e.constructor && e.constructor.name, e && e.code, e && e.message, String(e), Object.getOwnPropertyNames(e).join(','), Object.keys(e).join(','), e && e.feature].join('|'); } };
+  const d = (f) => { try { return show(f()); } catch (e) { return 'E:' + [e && e.constructor && e.constructor.name, e && e.code, e && e.message, String(e), Object.getOwnPropertyNames(e).join(','), Object.keys(e).join(','), e && e.feature, depth(e), typeof e.stack === 'string' && e.stack.split('\n')[0].endsWith(e.message)].join('|'); } };
+  const depth = (e) => { let n = 0; for (let p = Object.getPrototypeOf(e); p && p !== Error.prototype; p = Object.getPrototypeOf(p)) n++; return n; };
   const util = require('util');
   const u8 = (...b) => new Uint8Array(b);
   const out = {};
@@ -158,6 +159,8 @@ const PROBE = String.raw`(() => {
     "latin1 decode('x')": d(() => new TextDecoder('latin1').decode('x')),
     "utf-16le decode('x')": d(() => new TextDecoder('utf-16le').decode('x')),
     "inputs": d(() => ['utf-8', 'latin1', 'utf-16le', 'gb18030'].map((enc) => { const x = new TextDecoder(enc); const b = u8(0x68, 0, 0x69, 0, 0xe9, 0x80, 0xff, 0); return [x.decode(b.buffer), x.decode(new DataView(b.buffer, 2, 4)), x.decode(new Uint16Array(b.buffer, 2, 2)), x.decode(b.subarray(1, 5)), typeof SharedArrayBuffer === 'function' ? x.decode(new Uint8Array(new SharedArrayBuffer(2)).fill(0x41)) : 'no SAB', x.decode(), x.decode(undefined)]; })),
+    "detached and out-of-bounds inputs": d(() => ['utf-8', 'latin1', 'utf-16le', 'gb18030'].map((enc) => { const x = new TextDecoder(enc); const b = new ArrayBuffer(8); const views = [new Uint8Array(b), new DataView(b), new Uint16Array(b, 2)]; b.transfer(); const r = new ArrayBuffer(8, { maxByteLength: 16 }); const oob = new Uint8Array(r, 4, 4); r.resize(2); return [x.decode(b), ...views.map((v) => x.decode(v)), x.decode(oob)]; })),
+    "Uint8Array subclass members": d(() => { class V extends Uint8Array { get byteLength() { return 1; } get length() { return 1; } } return ['utf-8', 'utf-16le', 'gb18030', 'latin1'].map((enc) => new TextDecoder(enc).decode(new V([0x41, 0x42, 0x43, 0x44]))); }),
     "decode.call({})": d(() => TextDecoder.prototype.decode.call({})),
     "decode.call(null)": d(() => TextDecoder.prototype.decode.call(null)),
     "encoding getter on {}": d(() => Object.getOwnPropertyDescriptor(TextDecoder.prototype, 'encoding').get.call({})),
@@ -222,7 +225,8 @@ function expected(node: Record<string, string>): Record<string, string> {
 function observed(guest: Record<string, string>): Record<string, string> {
   const out = { ...guest };
   for (const [k, v] of Object.entries(guest)) {
-    const m = /^E:NotImplementedError\|.*\|(isolate-host\.TextDecoder\([a-z0-9_-]+\))$/.exec(v);
+    const m =
+      /^E:NotImplementedError\|.*\|(isolate-host\.TextDecoder\([a-z0-9_-]+\))\|1\|true$/.exec(v);
     if (k.startsWith('label ') && m) out[k] = `GAP ${m[1]}`;
   }
   return out;

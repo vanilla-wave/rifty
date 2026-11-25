@@ -21,6 +21,7 @@ const getPrototypeOf = Reflect.getPrototypeOf;
 const ownKeys = Reflect.ownKeys;
 const freeze = Object.freeze;
 const assign = Object.assign;
+const deleteProperty = Reflect.deleteProperty;
 const isView = ArrayBuffer.isView;
 const fromCharCode = String.fromCharCode;
 const Uint8ArrayPrimordial = Uint8Array;
@@ -151,9 +152,15 @@ function nodeErrorFn(Base: ErrorConstructor, key: string, message: Message) {
   return class NodeError extends Base {
     code = key;
     constructor(a?: unknown, b?: unknown, c?: unknown) {
-      super();
+      // The message first, so V8's stack header carries it (Node formats it lazily); then Node's
+      // key order: `stack`, `code`, what the message function sets, `message`.
+      const fields = { __proto__: null } as unknown as Error;
+      const text = message(fields, a, b, c);
+      super(text);
+      deleteProperty(this, 'message');
+      assign(this, fields);
       defineProperty(this, 'message', {
-        value: message(this, a, b, c),
+        value: text,
         enumerable: false,
         writable: true,
         configurable: true,
@@ -165,6 +172,15 @@ function nodeErrorFn(Base: ErrorConstructor, key: string, message: Message) {
     }
     override toString(): string {
       return `${this.name} [${key}]: ${this.message}`;
+    }
+  };
+}
+/** What Node's `hideStackFrames` validators throw: one more class between the error and its NodeError. */
+function hideStackFramesError(NodeError: ReturnType<typeof nodeErrorFn>, Base: ErrorConstructor) {
+  return class HideStackFramesError extends NodeError {
+    // biome-ignore lint/complexity/useLiteralKeys: see nodeError
+    override get ['constructor']() {
+      return Base;
     }
   };
 }
@@ -219,13 +235,17 @@ function isAnyArrayBuffer(value: unknown): boolean {
   }
 }
 const isUint8Array = (value: unknown): boolean => apply(typedArrayTag, value, []) === 'Uint8Array';
+const ERR_INVALID_ARG_TYPE_HIDDEN = hideStackFramesError(
+  codes.ERR_INVALID_ARG_TYPE,
+  TypeErrorPrimordial,
+);
 const kValidateObjectAllowNullable = 1;
 const kValidateObjectAllowArray = 2;
 const kValidateObjectAllowFunction = 4;
 const isArray = Array.isArray;
 const validators = {
   validateString(value: unknown, name: string): void {
-    if (typeof value !== 'string') throw new codes.ERR_INVALID_ARG_TYPE(name, 'string', value);
+    if (typeof value !== 'string') throw new ERR_INVALID_ARG_TYPE_HIDDEN(name, 'string', value);
   },
   validateObject(value: unknown, name: string, options = 0): void {
     if (
@@ -234,7 +254,7 @@ const validators = {
       (typeof value !== 'object' &&
         (!(options & kValidateObjectAllowFunction) || typeof value !== 'function'))
     )
-      throw new codes.ERR_INVALID_ARG_TYPE(name, 'Object', value);
+      throw new ERR_INVALID_ARG_TYPE_HIDDEN(name, 'Object', value);
   },
   kValidateObjectAllowObjectsAndNull:
     kValidateObjectAllowNullable | kValidateObjectAllowArray | kValidateObjectAllowFunction,
@@ -289,24 +309,38 @@ function isAscii(bytes: Uint8Array): boolean {
   return true;
 }
 
-/** A binding's input as bytes, or Node's C++ refusal (`name`: `list` utf-8, `input` ICU). */
-function bytesOf(input: unknown, name: string): Uint8Array {
+const EMPTY = new Uint8ArrayPrimordial(0);
+/**
+ * A binding's input as bytes, or Node's C++ refusal (`name`: `list` utf-8, `input` ICU). A
+ * detached or out-of-bounds input is no bytes, as Node's C++ sees it. `copyView`: always a
+ * primordial view (a Uint8Array subclass's own members are never read by the engine).
+ */
+function bytesOf(input: unknown, name: string, copyView: boolean): Uint8Array {
   if (isView(input)) {
     const tag = apply(typedArrayTag, input, []);
-    if (tag === 'Uint8Array') return input as Uint8Array;
-    return tag === undefined
-      ? new Uint8ArrayPrimordial(
-          apply(dataViewBuffer, input, []) as ArrayBuffer,
-          apply(dataViewByteOffset, input, []) as number,
-          apply(dataViewByteLength, input, []) as number,
-        )
-      : new Uint8ArrayPrimordial(
-          apply(typedArrayBuffer, input, []) as ArrayBuffer,
-          apply(typedArrayByteOffset, input, []) as number,
-          apply(typedArrayByteLength, input, []) as number,
-        );
+    if (tag === 'Uint8Array' && !copyView) return input as Uint8Array;
+    try {
+      return tag === undefined
+        ? new Uint8ArrayPrimordial(
+            apply(dataViewBuffer, input, []) as ArrayBuffer,
+            apply(dataViewByteOffset, input, []) as number,
+            apply(dataViewByteLength, input, []) as number,
+          )
+        : new Uint8ArrayPrimordial(
+            apply(typedArrayBuffer, input, []) as ArrayBuffer,
+            apply(typedArrayByteOffset, input, []) as number,
+            apply(typedArrayByteLength, input, []) as number,
+          );
+    } catch {
+      return EMPTY;
+    }
   }
-  if (isAnyArrayBuffer(input)) return new Uint8ArrayPrimordial(input as ArrayBuffer);
+  if (isAnyArrayBuffer(input))
+    try {
+      return new Uint8ArrayPrimordial(input as ArrayBuffer);
+    } catch {
+      return EMPTY;
+    }
   throw cxxError(
     `The "${name}" argument must be an instance of SharedArrayBuffer, ArrayBuffer or ArrayBufferView.`,
     'ERR_INVALID_ARG_TYPE',
@@ -324,7 +358,7 @@ const encodingBinding = {
     encodeIntoResults[1] = written;
   },
   decodeUTF8(input: unknown, ignoreBOM: unknown, fatal: unknown): string {
-    return decodeUtf8(bytesOf(input, 'list'), !!fatal, !!ignoreBOM);
+    return decodeUtf8(bytesOf(input, 'list', false), !!fatal, !!ignoreBOM);
   },
 };
 
@@ -338,26 +372,31 @@ const hasIcuOnly = uncurry(Set.prototype.has);
 const ICU_ONLY_HINT =
   'decoded by ICU in Node; no source equals it in the rifty isolate host, ADR-0577';
 type Decoder = { decode(input: Uint8Array, options: { stream: boolean }): string };
+/** Node's ICU converter handle: the engine's decoder and the `fatal` flag it was opened with. */
+type Converter = { readonly decoder: Decoder; readonly fatal: boolean };
 let ExodusTextDecoder: ReturnType<typeof loadExodusTextDecoder> | undefined;
 const icuBinding = {
-  getConverter(encoding: string, flags: number): Decoder | undefined {
+  getConverter(encoding: string, flags: number): Converter | undefined {
     if (hasIcuOnly(ICU_ONLY, encoding))
       throw notImplemented(`isolate-host.TextDecoder(${encoding})`, ICU_ONLY_HINT);
     if (encoding !== 'utf-16le' && encoding !== 'utf-16be' && encoding !== 'gb18030') return;
     ExodusTextDecoder ??= loadExodusTextDecoder();
-    const Decoder = ExodusTextDecoder;
-    return new Decoder(encoding, {
-      fatal: (flags & CONVERTER_FLAGS_FATAL) !== 0,
+    const Engine = ExodusTextDecoder;
+    const fatal = (flags & CONVERTER_FLAGS_FATAL) !== 0;
+    const decoder = new Engine(encoding, {
+      fatal,
       ignoreBOM: (flags & CONVERTER_FLAGS_IGNORE_BOM) !== 0,
     });
+    return { decoder, fatal };
   },
-  decode(handle: Decoder, input: unknown, flags: number, encoding: string): string {
-    const bytes = bytesOf(input, 'input');
+  decode(handle: Converter, input: unknown, flags: number, encoding: string): string {
+    const bytes = bytesOf(input, 'input', true);
     try {
-      return handle.decode(bytes, { stream: (flags & CONVERTER_FLAGS_FLUSH) === 0 });
+      return handle.decoder.decode(bytes, { stream: (flags & CONVERTER_FLAGS_FLUSH) === 0 });
     } catch (error) {
       // @exodus/bytes refuses invalid data under `fatal` with a plain `TypeError`.
       if (
+        handle.fatal &&
         typeof error === 'object' &&
         error !== null &&
         getPrototypeOf(error) === TypeErrorPrototype

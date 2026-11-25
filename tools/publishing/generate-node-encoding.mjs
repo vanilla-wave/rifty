@@ -11,6 +11,7 @@ import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build, version as esbuildVersion, transform } from 'esbuild';
+import { bundleViolations } from '../checks/es-floor.mjs';
 
 const mode = process.argv[2];
 if (!['--write', '--check'].includes(mode) || process.argv.length !== 3)
@@ -162,6 +163,40 @@ const nodeSha = createHash('sha256').update(JSON.stringify(sources)).digest('hex
 
 // @exodus/bytes: its `TextDecoder` for the three encodings Node decodes through ICU here.
 const exodusSources = {};
+/** Feature reads of post-ES2022 builtins in the engine → `undefined` (its fallbacks run). */
+const POST_FLOOR = [
+  'Uint8Array.fromBase64',
+  'Uint8Array.fromHex',
+  'Uint8Array.prototype.toBase64',
+  'Uint8Array.prototype.toHex',
+  'String.prototype.isWellFormed',
+  'String.prototype.toWellFormed',
+];
+/**
+ * What `define` cannot reach, exact-once anchors: the same reads as destructuring, and the native
+ * `toBase64` branches they guard (dead once the reads are `undefined`; the floor check is lexical).
+ */
+const EDITS = {
+  'base64.js': [
+    ['const { toBase64: web64 } = Uint8Array.prototype // Modern engines have this\n', ''],
+    ['const haveWeb = (x) => web64 && x.toBase64 === web64\n', ''],
+    [
+      '  if (haveWeb(x)) return padding ? x.toBase64() : x.toBase64({ omitPadding: !padding }) // Modern, optionless is slightly faster\n',
+      '',
+    ],
+    [
+      "  if (haveWeb(x)) return x.toBase64({ alphabet: 'base64url', omitPadding: !padding }) // Modern\n",
+      '',
+    ],
+  ],
+  'fallback/latin1.js': [
+    [
+      '  if (\n    useLatin1atob &&\n    total >= 256 &&\n    total < 1e8 &&\n    arr.toBase64 === web64 &&\n    arr.BYTES_PER_ELEMENT === 1\n  ) {\n    const sliced = start === 0 && stop === arr.length ? arr : arr.subarray(start, stop)\n    return atob(sliced.toBase64())\n  }\n',
+      '',
+    ],
+  ],
+  'utf8.js': [['const { isWellFormed } = String.prototype', 'const isWellFormed = undefined']],
+};
 const KEPT_TABLES = (k) => k.startsWith('$') || k === 'gb18030' || k === 'gb18030-ranges';
 const exodus = await build({
   stdin: {
@@ -180,8 +215,12 @@ const exodus = await build({
   minify: true,
   keepNames: true,
   legalComments: 'none',
-  // The engine reads no guest global (no guest `Buffer`, `TextDecoder`, `atob`): pure-JS path.
-  define: { globalThis: 'noGuestGlobals' },
+  // The engine reads no guest global (no guest `Buffer`, `TextDecoder`, `atob`) and no
+  // post-ES2022 builtin it feature-detects (ADR-0469 floor): its pure-JS path.
+  define: {
+    globalThis: 'noGuestGlobals',
+    ...Object.fromEntries(POST_FLOOR.map((m) => [m, 'undefined'])),
+  },
   plugins: [
     {
       name: 'exodus-pinned-trimmed',
@@ -190,6 +229,15 @@ const exodus = await build({
           const text = await readFile(path, 'utf8');
           const rel = path.slice(exodusRoot.length + 1);
           exodusSources[rel] = createHash('sha256').update(text).digest('hex');
+          if (EDITS[rel]) {
+            let out = text;
+            for (const [from, to] of EDITS[rel]) {
+              if (out.split(from).length !== 2)
+                throw new Error(`exodus anchor drift: ${rel}: ${from}`);
+              out = out.replace(from, () => to);
+            }
+            return { contents: out, loader: 'js' };
+          }
           if (!rel.endsWith('multi-byte.encodings.json')) return undefined;
           const kept = Object.fromEntries(
             Object.entries(JSON.parse(text)).filter(([k]) => KEPT_TABLES(k)),
@@ -202,11 +250,16 @@ const exodus = await build({
 });
 const exodusCode = exodus.outputFiles[0].text;
 if (/\bglobalThis\b/.test(exodusCode)) throw new Error('exodus: a globalThis read survived');
+const floor = bundleViolations('exodus-bytes/generated/text-decoder.js', exodusCode);
+if (floor.length) throw new Error(`exodus: post-ES2022 builtins survived:\n${floor.join('\n')}`);
 // esbuild loads in parallel: sort, so the record is deterministic.
 const exodusSorted = Object.fromEntries(
   Object.entries(exodusSources).sort(([a], [b]) => (a < b ? -1 : 1)),
 );
 const exodusSha = createHash('sha256').update(JSON.stringify(exodusSorted)).digest('hex');
+// The engine's own files, pinned like Node's (the lockfile pins the tarball; this, what is bundled).
+if (exodusSha !== '35f50135d33d5e46aa0b5a2c06fca9a2fa2a32d68899b5d493c832cbedf41c06')
+  throw new Error(`@exodus/bytes source drift (${exodusSha}); re-probe ADR-0577`);
 
 const NODE_OUT = join(guest, 'node-encoding/generated');
 const EXODUS_OUT = join(guest, 'exodus-bytes/generated');

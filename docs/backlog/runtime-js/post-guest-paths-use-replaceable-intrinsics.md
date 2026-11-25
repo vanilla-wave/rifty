@@ -59,3 +59,12 @@ browser hosts the same read hits the browser's `WorkerNavigator`.
 ## Challenge
 
 challenge: 2026-11-18 — finding capture; no premise critic (README §Challenge)
+
+Isolate guest `TextDecoder` engine (ADR-0577, 2026-11-25, PR #459 critic): @exodus/bytes, which
+decodes utf-16le/be and gb18030 there (Node: C++ ICU), reads live intrinsics on every call:
+`String.fromCharCode = () => 'X'` → `new TextDecoder('utf-16le').decode(Uint8Array.of(0x41, 0))`
+is `'X'` (Node `'A'`); a replaced `%TypedArray%.prototype.subarray` or `length` getter changes or
+empties the result; `Object.defineProperty` replaced before the first such decoder makes its
+constructor throw the guest's error. Node's own `encoding.js` and the utf-8 codec run on intrinsics
+captured at load.
+
