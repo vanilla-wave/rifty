@@ -517,6 +517,56 @@ for (const [name, host, guest, readPath, expect] of MIXED) {
     rmSync(root, { recursive: true, force: true });
   }
 }
+console.log('\n## run → run: the next run sees what the previous one left');
+{
+  const first = [
+    ['rm', '/node_modules/a/index.js'],
+    ['rename', '/node_modules/a/lib', '/node_modules/a/lib2'],
+    ['write', '/workspace/out.txt', 'one'],
+  ];
+  const second = [
+    ['read', '/workspace/out.txt'],
+    ['require', '/node_modules/a/lib2/x.js'],
+    ['read', '/node_modules/a/index.js'],
+    ['read', '/node_modules/a/lib/x.js'],
+  ];
+  const root = nodeRoot();
+  try {
+    const nodeRun = (ops) => {
+      writeFileSync(join(root, 'workspace/main.js'), prog(ops));
+      return execFileSync(process.execPath, ['main.js', root], {
+        cwd: join(root, 'workspace'),
+        encoding: 'utf8',
+      })
+        .split(root)
+        .join('');
+    };
+    nodeRun(first);
+    const nodeLog = nodeRun(second);
+    const r1 = await run(fresh(), prog(first));
+    const r2 = await run(r1.next, prog(second));
+    const same = r2.stdout.trim() === nodeLog.trim() && eq(viewOf(r2.next), nodeView(root));
+    report('two runs in a row', same, { rifty: r2.stdout.trim(), node: nodeLog.trim() });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+console.log('\n## minimal difference: reading the template changes nothing');
+{
+  const r = await run(
+    fresh(),
+    prog([
+      ['require', '/node_modules/a/index.js'],
+      ['read', '/node_modules/a/lib/y.js'],
+    ]),
+  );
+  const d = r.next.difference();
+  const paths = Object.keys(viewOf(d.entries));
+  const ok = d.deleted.length === 0 && !paths.some((p) => p.startsWith('/node_modules'));
+  report('require / read of template files', ok, { paths, deleted: d.deleted });
+}
+
 const failed = results.filter((r) => !r.ok).length;
 console.log(`\n${results.length - failed}/${results.length} pass`);
-process.exit(0);
+process.exit(failed === 0 ? 0 : 1);

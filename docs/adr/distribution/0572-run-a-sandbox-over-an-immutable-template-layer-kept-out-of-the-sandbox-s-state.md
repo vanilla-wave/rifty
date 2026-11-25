@@ -32,7 +32,7 @@ hoisted/nested, missing). L — per-run cost of four ways a fresh isolate sees a
 Four concurrent runs on one process, T95 pdf-lib wall: 801 / 570 / 528 / 507 ms. The chosen
 construction (§2, arm `layered`, a later run on T95 = 23 654 files / 72.5 MB): semver 92 ms, pdf-lib
 318, 1 000 writes 106, floor 99–103 MiB, against `views` 184 / 341 / 195 / 107 in the same run; probe
-S: 21/21 operation sequences equal live Node. `worker`'s
+S: 23/23 operation sequences equal live Node. `worker`'s
 chunked-I/O row: runtime-js's fd layer reads or rewrites the whole file per chunk, a memcpy in the
 guest realm, a bridge copy per chunk across it.
 
@@ -66,10 +66,11 @@ the user's words»).
    upper's entries that are not pristine materializations (same path, same bytes reference, same
    times), with their directories, plus the template paths that were materialized and are gone
    (topmost only). Applying a difference to a fresh view = removing the deleted paths, then writing
-   the entries (pre-order, times restored). Probe S: 21 sequences (remove → write, remove dir →
+   the entries (pre-order, times restored). Probe S: 23 sequences (remove → write, remove dir →
    write child, `rmdir` + `mkdir`, renames and moves in and out, `utimes`, same-bytes overwrite,
    `EISDIR`/`EEXIST`/`ENOTEMPTY` errors, host ops, host ops → run → host) equal live `node` over a
-   real directory, guest and consumer, round trip included; dropping the deletions fails 8 of 21.
+   real directory, guest and consumer, round trip and run → run included; dropping the deletions fails
+   9 of 23.
    A sandbox without a template is the same class over an empty index (one lifecycle, ADR-0568 §8).
 3. **A run** (F1 (a), user 2026-11-25): the worker copies the template's buffer and index into the
    fresh isolate (one ivm copy); the guest builds the index, installs a `LayeredFsSync` over it as
@@ -128,8 +129,8 @@ the user's words»).
   the run and handing back the derived difference after it (beside `restore` / `snapshot`).
 - ADR-0567 §4 («v1 snapshots the whole FS»): on the internal consumer ↔ worker wire of a template
   sandbox, a v1 blob (template header: none) carries the difference's entries only, read as a layer
-  only by a template run; never handed out, so no format version changes. ADR-0567 §6 («restore …
-  replaces the whole target FS») holds for `restoreFs`; the difference is applied over a template
+  only by a template run; never handed out, so no format version changes. ADR-0567 §6 («Restore
+  decodes fully, then replaces the whole target FS») holds for `restoreFs`; the difference is applied over a template
   view by `LayeredFsSync` (§2). ADR-0567 §5 validates the blob unchanged; the deleted list beside
   it is validated by §5 above.
 
@@ -168,7 +169,9 @@ the user's words»).
   there; template files are read across the boundary as bytes. (c): no file stays in the guest's
   realm — an amendment of that Outcome.
 - The goal's own reading (Decisions, host-disk rejection): «every guest `fs` call becomes an exposed
-  host function … against «харденинг нужен только на внешнем шве: выставленные хостовые функции…»».
+  host function behind a jail of our own over `node:fs`» against the user's words «харденинг нужен
+  только на внешнем шве: выставленные хостовые функции, исходящий RPC, spawn наружу, передача
+  результата».
   (c) has that seam; (b) adds 3 read-only functions.
 
 - «rifty целиком внутри isolate, один одноразовый экземпляр на гостя. «Гость ломает собственный
@@ -243,14 +246,16 @@ the user's words»).
   four-library artifact. Structural, by unit tests: a host op (`writeFile`, `readFile`, `remove`,
   `list`, the cap check included) reads the template index only to materialize the not yet
   materialized directories on its path (and, for `list(dir)`, `dir`) — exactly their children,
-  counted — never a walk of the template; the cap check encodes only the derived difference; a
+  counted — never a walk of the template; the cap check derives the difference by visiting only the
+  entries materialized since the sandbox's last run (counted) and encodes only that difference; a
   warm `exec`'s request frame carries the encoded difference and the deleted list and nothing of
   the template (frame bytes counted), the template travels to a worker once per identity (frames
   counted, cold and warm); the consumer's buffers for a run are those encodings and their decode,
   never a copy of the template's buffer or index (the codec's inputs and outputs counted). Measured
   on landed code and published in the README for T1, T95 and the four-library artifact
   (`scripts/measure.mjs`): host-op medians, idle memory per sandbox, the consumer's peak memory per
-  run, a warm `exec`'s latency and isolate memory. An empty sandbox over T95 and over the
+  run, a warm `exec`'s latency and isolate memory (the smallest passing `memoryLimitMb`, bisection
+  in 4 MiB steps). An empty sandbox over T95 and over the
   four-library artifact runs with the default `maxFsBytes` and `memoryLimitMb`.
 - I6. Changed paths: `exec`'s result names exactly the paths the run created, changed (kind or
   bytes differ; times alone are not a change) or deleted (a deleted directory once, its contents
@@ -276,8 +281,12 @@ the user's words»).
   directory, a non-recursive `rm` of a non-empty directory, a copy out — done by the guest, by host
   ops, or host ops then a run, the files the host then sees (`list`, `readFile`, `stat` kind, size
   and file mtime) equal what the next run sees and what live `node` v24.16.0 leaves over a real
-  directory holding the same template and files, each call's error code included (probe S's table
-  is the seed).
+  directory holding the same template and files, each call's error code included, also from one
+  run to the next; reading template files changes nothing (the difference stays empty of them)
+  (probe S's table is the seed). A rename of a template directory moves its whole subtree into the
+  difference (rifty's FS has no cross-layer rename): over `maxFsBytes` it is the cap's named result
+  (`stateRefused: ERR_FS_SNAPSHOT_TOO_LARGE`), never a partial tree — declared compat ⚠️ (Node
+  renames in O(1)).
 
 ## Alternatives
 
@@ -291,7 +300,8 @@ the user's words»).
   rejected — `require` would not resolve into the artifact's files (scenario step 3), and every
   library change is a rifty build.
 - **A′ (a live isolate per agent run, restore once)**: still not chosen — it would save the
-  per-run materialization (T95 ~+125 ms, +100 MiB per run), but its reasons in ADR-0568 (a fresh
+  per-run template copy and index (`layered`, T95: semver 92 vs 50 ms without a template, isolate
+  floor 99–103 vs 19 MiB), but its reasons in ADR-0568 (a fresh
   realm per run — I2, an idempotent rerun of a lost worker's call, no slot pinned by an idle
   sandbox) do not depend on the template.
 
@@ -305,9 +315,18 @@ the user's words»).
   retire line.
 - A template arriving at a worker is decoded on its main thread, which every slot's host calls
   share: a delay for its neighbours (ADR-0563 §7 class), bounded by the template's size.
-- A run pays the template in its isolate: one copy, the index build and the capture walk, linear in
-  the template's entries and bytes (ADR-0568 Consequences' fork, brought back and answered by the
+- A run pays the template in its isolate: one copy and the index build, linear in the template's
+  entries and bytes (the capture visits only what the run touched) (ADR-0568 Consequences' fork, brought back and answered by the
   user 2026-11-25). The wire, the consumer's per-run memory and host ops carry the difference only.
+- A rename of a template directory materializes its subtree into the difference (no cross-layer
+  rename): its bytes count against `maxFsBytes` — a large one is the cap's named result where Node
+  renames in O(1) (compat ⚠️, goal I11).
+- The prototype's per-call overhead: four concurrent pdf-lib runs on T95 took 653 ms wall against
+  534 for `views` (each call re-walks its ancestors); item 5 of the map owns it, under the F1
+  return condition.
+- The difference is derived by visiting the entries materialized since the sandbox's last run:
+  a host op's cap check costs O(those + the difference), reset by every run (the consumer then
+  holds a fresh view with the run's difference).
 - `runCode` unchanged.
 - Overlap with PR #437 (open, the user's track: every guest's FS sync-only): a template run installs
   `LayeredFsSync` as the realm's only FS surface (§3), the same move for template runs; whichever

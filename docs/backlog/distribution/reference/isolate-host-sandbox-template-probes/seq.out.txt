@@ -27,4 +27,10 @@ PASS  host remove, run writes the same path, host reads
 PASS  host overwrites a template file, run requires it
 PASS  host removes a dir, run recreates and writes a child
 
-21/21 pass
+## run → run: the next run sees what the previous one left
+PASS  two runs in a row
+
+## minimal difference: reading the template changes nothing
+PASS  require / read of template files
+
+23/23 pass

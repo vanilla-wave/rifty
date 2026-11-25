@@ -79,7 +79,9 @@ held sandboxes, one 10 KiB own file each. Load average ~12 on 12 cores.
 | overlay (one shared index; a sandbox = its difference + deleted paths) | 0.15 / 0.01 ms | T1 0.20, T95 0.16 | T1 0.34, T95 0.30 | ≈ 0 / ≈ 0 (noise, ±0.5 MiB) |
 
 `readFile`, `list('/node_modules')`, `remove` < 0.01 ms in both. The overlay meets requirements
-§3's «O(размер записи + дифф)» and «память простаивающей песочницы … не включает шаблон»; the
+§3's «Хостовая запись стоит O(размер записи + дифф), а не O(всего состояния)» and «Память
+простаивающей песочницы у потребителя не включает шаблон: N песочниц на одном шаблоне держат одну
+его копию»; the
 per-sandbox views tree does not (ADR-0572 §2).
 
 ## S — the chosen construction through operation sequences (`layered.ts`, `seq.mjs`)
@@ -94,14 +96,15 @@ run → the host. Compared: each call's error code, the final tree (kind, size, 
 changed-paths list (derived from the two differences vs a walk of Node's before/after), the
 consumer's difference → apply round trip.
 
-Result (`seq.out.txt`): **21/21** — remove → write the same path; remove a directory → write a
+Result (`seq.out.txt`): **23/23**, exit 0 (non-zero on any FAIL) — remove → write the same path; remove a directory → write a
 child (`ENOENT`) and with `mkdir`; `rmdir` + `mkdir` (template children stay gone); `rename` of a
 template directory (then `require` from the new path); a template file moved out, a file moved in;
 a rename onto a non-empty directory (`ENOTEMPTY`); `utimes`; an overwrite with the same bytes; a
 write on a directory path (`EISDIR`); `mkdir` of an existing directory (`EEXIST`); a non-recursive
 `rm` of a non-empty directory (`ERR_FS_EISDIR`); a copy out; four host sequences; three host → run
-→ host sequences. Mutation check: dropping the derived deletions fails 8 of 21 (the probe
-discriminates). Directory times are not compared.
+→ host sequences; two runs in a row (the second reads what the first left); reading template files
+leaves no template path in the difference. Mutation check: dropping the derived deletions fails 9
+of 23 (the probe discriminates). Directory times are not compared.
 
 Cost of the same class (`layer-layered.out.txt`, arms `views` vs `layered`, T95 = 23 654 files /
 72.5 MB at main @ 57152054d's store, load 7–13; medians of 7, ms; floor MiB):
