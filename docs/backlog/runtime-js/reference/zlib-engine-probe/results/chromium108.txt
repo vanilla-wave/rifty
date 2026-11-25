@@ -1,0 +1,27 @@
+chromium 108.0.5359.29
+{
+ "mainSyncCompile": "RangeError: WebAssembly.Compile is disallowed on the main thread, if the buffer size is larger than 4KB. Use WebAssembly.compile, or compile on a worker thread.",
+ "mainAsyncCompileThenSyncInstance": "RangeError: WebAssembly.Instance is disallowed on the main thread, if the buffer size is larger than 4KB. Use WebAssembly.instantiate.",
+ "worker": {
+  "workerSyncCompile": "ok",
+  "workerFirstUseMs": 1.600000023841858,
+  "worker1MiB": {
+   "engine": "wasm",
+   "mib": 1,
+   "deflateMs": 32.4,
+   "inflateMs": 2.6,
+   "ratio": 2.4,
+   "roundTrip": true,
+   "wasmMemoryBytes": 1441792
+  },
+  "pako1MiB": {
+   "engine": "pako",
+   "mib": 1,
+   "deflateMs": 51.8,
+   "inflateMs": 7.4,
+   "ratio": 2.4,
+   "roundTrip": true,
+   "wasmMemoryBytes": null
+  }
+ }
+}

@@ -1,0 +1,2 @@
+{"engine":"wasm-node-zlib","reopenWasmMiB":38,"streams":"100 deflate + 100 inflate","openMiB":{"js":0.3,"wasm":38},"afterCloseMiB":{"js":0.1,"wasm":38}}
+{"engine":"pako@3.0.3","reopenWasmMiB":0,"streams":"100 deflate + 100 inflate","openMiB":{"js":33.4,"wasm":0},"afterCloseMiB":{"js":0.2,"wasm":0}}

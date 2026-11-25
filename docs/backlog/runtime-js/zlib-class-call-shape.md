@@ -4,11 +4,14 @@ status: draft
 title: "zlib stream classes accept Node's call-without-`new` and `X.call(this)` forms: Gzip constructs, ceilings throw their reason"
 created: 2026-11-18
 why: Node 24's zlib classes (except Zstd*) are callable legacy constructors; rifty's ES classes throw V8's bare class-constructor TypeError, so the PR #403 reasoned ceiling is never reached on that path
+epic: node-zlib-on-every-host
 sources: [docs/adr/runtime-js/0178-node-zlib-gzip-transform-stream-subset.md, docs/adr/runtime-js/0353-callable-node-stream-constructors-preserve-legacy-initialization.md, docs/adr/runtime-js/0464-named-loud-members-for-charted-unclaimed-mode-ceilings.md, docs/backlog/net/http-agent-call-shape.md]
 code: [packages/runtime-js/src/builtins/zlib.ts, packages/io/src/streams/callable-constructor.ts]
 ---
 
 ## Context
+
+Goal `node-zlib-on-every-host` (map, 2026-11-24): absorbed by unit 3 (`runtime-js/zlib-node-lib-port`) — the classes become Node's own `lib/zlib.js` constructors in one step with the engine (the `Next` shapes below are superseded: no intermediate callable ceilings, no zlib-local publisher); this item closes when unit 3 lands.
 
 This was found while PR #403 was being delivered: the PR body lists it as an outside finding.
 `http.Agent` has the same defect class (`net/http-agent-call-shape`).
