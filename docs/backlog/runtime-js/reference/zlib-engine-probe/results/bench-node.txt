@@ -1,0 +1,7 @@
+node v24.16.0 arm64
+{"engine":"node:zlib","mib":1,"deflateMs":25.3,"inflateMs":1.6,"ratio":2.4}
+{"engine":"pako","mib":1,"deflateMs":46.2,"inflateMs":5.8,"ratio":2.4,"roundTrip":true,"wasmMemoryBytes":null,"sameBytesAsNode":true}
+{"engine":"wasm","mib":1,"deflateMs":30.6,"inflateMs":2.7,"ratio":2.4,"roundTrip":true,"wasmMemoryBytes":1441792,"sameBytesAsNode":true}
+{"engine":"node:zlib","mib":50,"deflateMs":1257.1,"inflateMs":77.2,"ratio":2.4}
+{"engine":"pako","mib":50,"deflateMs":2439.9,"inflateMs":307.6,"ratio":2.4,"roundTrip":true,"wasmMemoryBytes":null,"sameBytesAsNode":true}
+{"engine":"wasm","mib":50,"deflateMs":1542.5,"inflateMs":137.7,"ratio":2.4,"roundTrip":true,"wasmMemoryBytes":1441792,"sameBytesAsNode":true}
