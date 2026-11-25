@@ -37,6 +37,7 @@ challenge: 2026-11-25 — clear (premise in goal §Challenge)
 
 1. `b1` row «new StringDecoder(name).write+end per name» = Node on in-process, isolate, Workbench and SDK: all 22 spellings, and `'nope'` → `ERR_UNKNOWN_ENCODING` with Node's message. → I9
 2. `m8` «options encoding "nope"» stays = Node (`ERR_UNKNOWN_ENCODING` from Readable, Duplex and Transform). → I9
+3. `Readable#setEncoding` names go through `normalizeEncoding` (the `ENCODINGS` table in `packages/io/src/streams/readable.ts` goes): `setEncoding('')`, `setEncoding(null)`, `setEncoding(undefined)` → Node `readableEncoding` `'utf8'`, rifty `ERR_UNKNOWN_ENCODING` today; `setEncoding('__proto__')`, `setEncoding('constructor')` → Node `ERR_UNKNOWN_ENCODING`, rifty accepts (prototype key of the table, `readableEncoding` `null`). Node v24.16.0 vs `@riftydev/io`, 2026-11-25 (PR #456 review). → I9
 
 ## Parity cases
 

@@ -8,6 +8,7 @@
  * downstream callers inspect `w._writableState.{destroyed,ended,finished,length}`).
  * Fields mirror Node's `internal/streams/state.js`.
  */
+import { unknownEncodingError } from '../buffer-codec.ts';
 import { Buffer, type Encoding } from '../buffer.ts';
 import { readBuiltinUncached } from '../builtin-registry.ts';
 import { EventEmitter } from '../event-emitter.ts';
@@ -138,12 +139,6 @@ function takeBuffered(state: WritableState): BufferedWrite[] {
   return entries;
 }
 
-function unknownEncodingError(encoding: string): TypeError & { code: string } {
-  const error = new TypeError(`Unknown encoding: ${encoding}`) as TypeError & { code: string };
-  error.code = 'ERR_UNKNOWN_ENCODING';
-  return error;
-}
-
 export function streamDestroyedError(): Error & { code: string } {
   const error = new Error('Cannot call end after a stream was destroyed') as Error & {
     code: string;
@@ -169,7 +164,7 @@ function admitWrite(
   if (!Buffer.isEncoding(encoding)) throw unknownEncodingError(encoding);
   if (typeof chunk === 'string') {
     return state.decodeStrings
-      ? { chunk: Buffer.from(chunk, encoding.toLowerCase() as Encoding), encoding: 'buffer' }
+      ? { chunk: Buffer.from(chunk, encoding as Encoding), encoding: 'buffer' }
       : { chunk, encoding };
   }
   if (Buffer.isBuffer(chunk)) return { chunk, encoding: 'buffer' };

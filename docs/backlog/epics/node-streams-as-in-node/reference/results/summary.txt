@@ -1,6 +1,6 @@
 node v24.16.0; rifty e96e93a0d; columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate | rifty-inproc-B | rifty-inproc-Bp | rifty-inproc-Bp8c | rifty-inproc-Bp9w | rifty-inproc-Bp9r
 program | Node rows | same as Node per rifty column (+ lines only that run printed)
-b1-bindings.cjs | 8 | rifty-inproc 3/8 | rifty-inproc-sync 3/8 | rifty-isolate 3/8 | rifty-inproc-B 3/8 | rifty-inproc-Bp 3/8 | rifty-inproc-Bp8c 3/8 | rifty-inproc-Bp9w 3/8 | rifty-inproc-Bp9r 3/8
+b1-bindings.cjs | 8 | rifty-inproc 5/8 | rifty-inproc-sync 5/8 | rifty-isolate 5/8
 c-csv-read.cjs | 1 | rifty-inproc 0/1 | rifty-inproc-sync 0/1 | rifty-isolate 0/1 | rifty-inproc-B 1/1 | rifty-inproc-Bp 1/1 | rifty-inproc-Bp8c 0/1 | rifty-inproc-Bp9w 0/1 | rifty-inproc-Bp9r 1/1
 c-csv-write-file.cjs | 1 | rifty-inproc 1/1 | rifty-inproc-sync 1/1 | rifty-isolate 1/1 | rifty-inproc-B 1/1 | rifty-inproc-Bp 1/1 | rifty-inproc-Bp8c 1/1 | rifty-inproc-Bp9w 1/1 | rifty-inproc-Bp9r 1/1
 c-for-await.cjs | 1 | rifty-inproc 0/1 | rifty-inproc-sync 0/1 | rifty-isolate 0/1 | rifty-inproc-B 1/1 | rifty-inproc-Bp 1/1 | rifty-inproc-Bp8c 0/1 | rifty-inproc-Bp9w 0/1 | rifty-inproc-Bp9r 1/1

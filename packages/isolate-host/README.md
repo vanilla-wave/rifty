@@ -12,9 +12,13 @@ const { stdout, stderr, exitCode } = await runCode("console.log(6 * 7)");
 // → { stdout: '42\n', stderr: '', exitCode: 0 }
 ```
 
-## Install (dev)
+## Install
 
-The package is not on npm yet. Install the packed tarball:
+```sh
+npm install @riftydev/isolate-host@next   # a draft prerelease (dist-tag next)
+```
+
+From a rifty checkout, the packed tarball:
 
 ```sh
 # in the rifty checkout
