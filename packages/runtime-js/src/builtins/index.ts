@@ -19,7 +19,7 @@ import diagnosticsChannelModule from './diagnostics_channel.ts';
  * `builtins/module.ts`) and `src/index.ts`'s public re-exports continue to
  * use a single import path.
  */
-import { EventEmitter, once as eventsOnce } from './events.ts';
+import { EventEmitter, addAbortListener, once as eventsOnce } from './events.ts';
 import fsModule, { promises as fsPromises } from './fs.ts';
 import { cluster, punycode, repl, sys, async_hooks, inspector, v8 } from './misc-stubs.ts';
 import moduleModule from './module.ts';
@@ -74,6 +74,7 @@ export function ensureRuntimeJsBuiltinsRegistered(): void {
     const exports = EventEmitter as unknown as Record<string, unknown>;
     exports.EventEmitter = EventEmitter;
     exports.once = eventsOnce;
+    exports.addAbortListener = addAbortListener;
     return exports;
   });
   registerBuiltin('util', () => utilModule);

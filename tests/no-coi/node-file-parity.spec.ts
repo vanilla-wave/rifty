@@ -1,5 +1,6 @@
 import {
   type NodeFileOutcome,
+  builtinPrograms,
   entryPrograms,
   fatalPrograms,
   nodeFileDump,
@@ -18,7 +19,7 @@ import { expect, test } from './fixtures/test.ts';
 // tests/browser-unit/node-file-parity.spec.ts.
 
 const root = process.cwd().replaceAll('\\', '/');
-const programs = [...entryPrograms, ...fatalPrograms];
+const programs = [...entryPrograms, ...builtinPrograms, ...fatalPrograms];
 
 test('node <file> matches Node (no-COI SDK)', async ({ page }) => {
   test.setTimeout(900_000);
