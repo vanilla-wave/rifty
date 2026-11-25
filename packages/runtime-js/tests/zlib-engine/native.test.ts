@@ -198,6 +198,75 @@ describe('product handle = Node native handle, direct calls', () => {
     expect(r.node.state).toEqual([56, 0]);
   });
 
+  it('every buffer entry point with a transferred-away buffer reads it as Node does', () => {
+    const det = () => {
+      const u = new Uint8Array(8);
+      u.buffer.transfer();
+      return u;
+    };
+    const r = both((b) => {
+      const rows: Record<string, unknown> = {};
+      rows.crc32 = b.crc32(det(), 5);
+      for (const [name, mode, input] of [
+        ['init dictionary, deflate', C.DEFLATE, Buffer.from('hello')],
+        ['init dictionary, inflateraw', C.INFLATERAW, zlib.deflateRawSync('hello')],
+      ] as const) {
+        const h = new b.Zlib(mode);
+        const state = new Uint32Array(2);
+        const events: unknown[] = [];
+        h.onerror = (...a) => events.push(a);
+        h.init(15, -1, 8, 0, state, () => {}, det());
+        const out = Buffer.alloc(64);
+        h.writeSync(C.Z_FINISH, input, 0, input.length, out, 0, 64);
+        h.close();
+        rows[name] = { events, out: out.subarray(0, 64 - state[0]!).toString('hex') };
+      }
+      for (const [name, at] of [
+        ['write in, len 0', 'in'],
+        ['write out, len 0', 'out'],
+      ] as const) {
+        const { h, state, events } = open(b, C.DEFLATE);
+        const out = Buffer.alloc(64);
+        if (at === 'in') h.writeSync(C.Z_FINISH, det(), 0, 0, out, 0, 64);
+        else h.writeSync(C.Z_FINISH, Buffer.from('x'), 0, 1, det(), 0, 0);
+        h.close();
+        rows[name] = { events, state: [...state] };
+      }
+      return rows;
+    });
+    expect(r.port).toEqual(r.node);
+    expect(r.node.crc32).toBe(5);
+  });
+
+  it('where Node aborts on a transferred-away buffer, the port: writeResult a check, in/out onerror', () => {
+    const det = () => {
+      const u = new Uint8Array(64);
+      u.buffer.transfer();
+      return u;
+    };
+    const h = new port.Zlib(C.DEFLATE);
+    const result = new Uint32Array(2);
+    result.buffer.transfer();
+    // Node: CHECK_GE(array->Length(), 2) → abort.
+    expect(() => h.init(15, -1, 8, 0, result, () => {}, undefined)).toThrow(
+      /zlib handle: writeResult/,
+    );
+    const rows: unknown[] = [];
+    for (const at of ['in', 'out']) {
+      const { h, events } = open(port, C.DEFLATE);
+      const out = Buffer.alloc(64);
+      if (at === 'in') h.writeSync(C.Z_FINISH, det(), 0, 1, out, 0, 64);
+      else h.writeSync(C.Z_FINISH, Buffer.from('x'), 0, 1, det(), 0, 64);
+      h.close();
+      rows.push([at, events]); // Node: CHECK(Buffer::IsWithinBounds)
+    }
+    const stream = ['stream error', -2, 'Z_STREAM_ERROR'];
+    expect(rows).toEqual([
+      ['in', [stream]],
+      ['out', [stream]],
+    ]);
+  });
+
   it('crc32 of strings and views, as Node', () => {
     const r = both((b) =>
       [

@@ -25,7 +25,7 @@ const product = createZlibBinding(() => new ZlibEngine(zlibWasmBytes()), setImme
 /** lib/zlib.js as Node compiles it: (exports, require, module, process, internalBinding, primordials). */
 function loadLibZlib(stream) {
   const zb = internalBinding('zlib');
-  const binding = Object.assign(Object.create(zb), { Zlib: product.Zlib });
+  const binding = Object.assign(Object.create(zb), { Zlib: product.Zlib, crc32: product.crc32 });
   const fn = vm.compileFunction(
     SRC,
     ['exports', 'require', 'module', 'process', 'internalBinding', 'primordials'],
@@ -437,6 +437,24 @@ const MEMORY = {
       const u = new Uint8Array(10);
       keep.push(u.buffer.transfer());
       return z.gzipSync(u);
+    }),
+  'memory: crc32 of a Uint8Array transferred before the call': ({ z }) =>
+    attempt(() => {
+      const u = new Uint8Array(8);
+      keep.push(u.buffer.transfer());
+      return z.crc32(u, 5);
+    }),
+  'memory: deflateSync with a dictionary transferred before the call': ({ z }) =>
+    attempt(() => {
+      const u = new Uint8Array(8);
+      keep.push(u.buffer.transfer());
+      return z.deflateSync(Buffer.from('hello'), { dictionary: u }).toString('hex');
+    }),
+  'memory: inflateRawSync with a dictionary transferred before the call': ({ z }) =>
+    attempt(() => {
+      const u = new Uint8Array(8);
+      keep.push(u.buffer.transfer());
+      return z.inflateRawSync(realZlib.deflateRawSync('hello'), { dictionary: u }).toString('hex');
     }),
   'memory: stream write() of a transferred buffer, then end(hi)': ({ z }) => {
     const d = z.createDeflate();

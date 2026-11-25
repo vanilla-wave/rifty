@@ -11,7 +11,8 @@ asset references — none exist).
   caller's `out` when it ends, nothing kept between calls but one operation's unconsumed input —
   where Node uses the caller's memory live (one declared class; pinned where Node's side is
   deterministic). A failed allocation is `onerror('insufficient memory', Z_MEM_ERROR)`; a buffer
-  transferred away before the call reads as length 0 (as Node); where `off + len > 0` (Node aborts)
+  transferred away before the call reads as length 0, as Node (every caller buffer enters through
+  `nodeBytes`); where `off + len > 0` (Node aborts)
   it is `onerror('stream error', Z_STREAM_ERROR)`; an internal failure is a loud exception.
 - `wasm-bytes.ts` — the committed module's bytes.
 - `generated/` — output of `tools/publishing/generate-zlib-wasm.mjs`; never edit by hand.

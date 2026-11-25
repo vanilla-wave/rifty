@@ -8,17 +8,10 @@
  */
 import { WasmMemoryError, ZS, Z_STREAM_SIZE, type ZlibEngine } from './engine';
 
-const Z_NO_FLUSH = 0;
-const Z_PARTIAL_FLUSH = 1;
-const Z_SYNC_FLUSH = 2;
-const Z_FULL_FLUSH = 3;
-const Z_FINISH = 4;
-const Z_BLOCK = 5;
-const Z_OK = 0;
-const Z_STREAM_END = 1;
-const Z_NEED_DICT = 2;
-const Z_DATA_ERROR = -3;
-const Z_BUF_ERROR = -5;
+const [Z_NO_FLUSH, Z_PARTIAL_FLUSH, Z_SYNC_FLUSH, Z_FULL_FLUSH, Z_FINISH, Z_BLOCK] = [
+  0, 1, 2, 3, 4, 5,
+];
+const [Z_OK, Z_STREAM_END, Z_NEED_DICT, Z_DATA_ERROR, Z_BUF_ERROR] = [0, 1, 2, -3, -5];
 const Z_DEFLATED = 8;
 const FLUSHES = new Set([
   Z_NO_FLUSH,
@@ -28,18 +21,11 @@ const FLUSHES = new Set([
   Z_FINISH,
   Z_BLOCK,
 ]);
-const GZIP_HEADER_ID1 = 0x1f;
-const GZIP_HEADER_ID2 = 0x8b;
-
+const [GZIP_HEADER_ID1, GZIP_HEADER_ID2] = [0x1f, 0x8b];
 /** node_zlib_mode */
-const NONE = 0;
-const DEFLATE = 1;
-const INFLATE = 2;
-const GZIP = 3;
-const GUNZIP = 4;
-const DEFLATERAW = 5;
-const INFLATERAW = 6;
-const UNZIP = 7;
+const [NONE, DEFLATE, INFLATE, GZIP, GUNZIP, DEFLATERAW, INFLATERAW, UNZIP] = [
+  0, 1, 2, 3, 4, 5, 6, 7,
+];
 
 const ZLIB_ERROR_CODES: Record<number, string> = {
   0: 'Z_OK',
@@ -96,19 +82,33 @@ const isError = (v: unknown): v is CompressionError => v === MEMORY_ERROR || v =
 const u32 = (v: unknown): number => +(v as number) >>> 0;
 const i32 = (v: unknown): number => +(v as number) | 0;
 
-/** Buffer::Data/Length of an ArrayBufferView: its bytes, never its elements. */
-function viewBytes(view: ArrayBufferView): Uint8Array {
-  return new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
+/**
+ * The one entry for a caller's buffer (input, output, dictionary, crc32 data, writeResult): its
+ * bytes as Node's Buffer::Data/Length see them — never its elements; a transferred-away
+ * (detached) ArrayBuffer is length 0 and a null pointer.
+ */
+function nodeBytes(view: ArrayBufferView): { bytes: Uint8Array; detached: boolean } {
+  try {
+    return {
+      bytes: new Uint8Array(view.buffer, view.byteOffset, view.byteLength),
+      detached: false,
+    };
+  } catch (e) {
+    if (!(e instanceof TypeError)) throw e;
+    return { bytes: new Uint8Array(0), detached: true };
+  }
 }
 
-/** viewBytes, or null when the view's ArrayBuffer was transferred away (detached). */
-function liveBytes(view: ArrayBufferView): Uint8Array | null {
-  try {
-    return viewBytes(view);
-  } catch (e) {
-    if (e instanceof TypeError) return null;
-    throw e;
-  }
+/**
+ * [off, off + len) of a caller's buffer under Node's bounds CHECK; null where that CHECK fails on a
+ * detached buffer (Node aborts; the port reports DETACHED_ERROR). A live buffer out of bounds
+ * fails `check`, as Node's CHECK does.
+ */
+function windowOf(view: ArrayBufferView, off: number, len: number, what: string) {
+  const { bytes, detached } = nodeBytes(view);
+  if (detached && off + len > 0) return null;
+  check(off + len <= bytes.byteLength, `${what} out of bounds`);
+  return bytes.subarray(off, off + len);
 }
 
 /** ZlibContext over one engine; `strm` is the z_stream's wasm address once Init ran. */
@@ -609,13 +609,15 @@ export function createZlibBinding(
       dictionary: unknown,
     ): void {
       const [wb, lv, ml, st] = [u32(windowBits), i32(level), u32(memLevel), u32(strategy)];
-      check(writeResult instanceof Uint32Array && writeResult.length >= 2, 'writeResult');
+      check(writeResult instanceof Uint32Array, 'writeResult');
+      const result = nodeBytes(writeResult).bytes;
+      check(result.byteLength >= 8, 'writeResult'); // CHECK_GE(Length(), 2); detached: length 0
       check(typeof writeCallback === 'function', 'writeCallback');
       const dict = ArrayBuffer.isView(dictionary)
-        ? viewBytes(dictionary).slice()
+        ? nodeBytes(dictionary).bytes.slice()
         : new Uint8Array(0);
       // Node writes the result at the start of the array's ArrayBuffer (`ab->Data()`).
-      this.writeResult = new Uint32Array(writeResult.buffer, 0, 2);
+      this.writeResult = new Uint32Array(result.buffer, 0, 2);
       this.writeCallback = writeCallback;
       this.initDone = true;
       // A second init() re-reads the options into the same context: the zlib stream continues.
@@ -666,30 +668,19 @@ export function createZlibBinding(
       check(flushArg !== undefined, 'must provide flush value');
       const flush = u32(flushArg);
       check(FLUSHES.has(flush), 'Invalid flush value');
-      let detached = false;
       let inView: Uint8Array | null = null;
+      let detached = false;
       if (input !== null) {
         check(ArrayBuffer.isView(input), 'input is not a buffer');
-        const off = u32(inOff);
-        const len = u32(inLen);
-        const bytes = liveBytes(input);
-        if (bytes === null)
-          detached ||= off + len > 0; // else: Node's null pointer, length 0
-        else {
-          check(off + len <= bytes.byteLength, 'input out of bounds');
-          inView = bytes.subarray(off, off + len);
-        }
+        const [off, len] = [u32(inOff), u32(inLen)];
+        inView = windowOf(input, off, len, 'input');
+        detached = inView === null;
       }
       check(ArrayBuffer.isView(out), 'output is not a buffer');
-      const oOff = u32(outOff);
-      const oLen = u32(outLen);
-      const outBytes = liveBytes(out);
-      let outView: Uint8Array = new Uint8Array(0); // detached, length 0: Node's null out
-      if (outBytes === null) detached ||= oOff + oLen > 0;
-      else {
-        check(oOff + oLen <= outBytes.byteLength, 'output out of bounds');
-        outView = outBytes.subarray(oOff, oOff + oLen);
-      }
+      const [oOff, oLen] = [u32(outOff), u32(outLen)];
+      const outWindow = windowOf(out, oOff, oLen, 'output');
+      detached ||= outWindow === null;
+      const outView = outWindow ?? new Uint8Array(0);
 
       check(this.initDone, 'write before init');
       check(!this.closed, 'already finalized');
@@ -790,7 +781,8 @@ export function createZlibBinding(
       check(ArrayBuffer.isView(data) || typeof data === 'string', 'crc32 data');
       check(Number.isInteger(value) && value >= 0 && value <= 0xffffffff, 'crc32 value');
       // Utf8Value: lone surrogates → U+FFFD, as TextEncoder.
-      const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : viewBytes(data);
+      const bytes =
+        typeof data === 'string' ? new TextEncoder().encode(data) : nodeBytes(data).bytes;
       return getEngine().crc32(bytes, value);
     },
   };

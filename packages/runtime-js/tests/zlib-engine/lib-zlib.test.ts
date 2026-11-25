@@ -1,8 +1,8 @@
 /**
  * Unit 2 Acceptance 2, differential half (ADR-0573): lib-zlib-diff.mjs in its own Node process
  * (`--expose-internals` for Node's `primordials`/`internalBinding`) — Node's verbatim lib/zlib.js
- * over the product handle and Node's `Transform`. Groups `state` (45), `load` (1) and `memory` (5:
- * input moved before the call or right after write()) equal real `node:zlib`; `declared` (2) pins both sides of the
+ * over the product handle and `binding.crc32` and Node's `Transform`. Groups `state` (45), `load` (1) and `memory` (8:
+ * a buffer — input, dictionary, crc32 data — moved before the call, or input right after write()) equal real `node:zlib`; `declared` (2) pins both sides of the
  * memory model's declared class; `aborts` (2) runs on the port only — where Node aborts the
  * process, the port's outcome is the handle's error channel. Values compared whole (bytes by hash,
  * errors by class, code, errno, message; the gzip OS byte normalised).
@@ -20,7 +20,7 @@ const SCRIPT = fileURLToPath(new URL('./lib-zlib-diff.mjs', import.meta.url));
 
 describe("Node's own lib/zlib.js over the product handle (port/N) vs node:zlib", () => {
   it(
-    'state 45/45, load 1/1, memory 5/5 equal Node; declared and Node-aborting paths pinned',
+    'state 45/45, load 1/1, memory 8/8 equal Node; declared and Node-aborting paths pinned',
     { timeout: 120_000 },
     () => {
       const out = execFileSync(
@@ -47,7 +47,7 @@ describe("Node's own lib/zlib.js over the product handle (port/N) vs node:zlib",
         )
           diffs.push(`${name}: ${JSON.stringify(r.node)} → ${JSON.stringify(r['port/N'])}`);
       }
-      expect(groups).toEqual({ state: 45, load: 1, declared: 2, memory: 5, aborts: 2 });
+      expect(groups).toEqual({ state: 45, load: 1, declared: 2, memory: 8, aborts: 2 });
       expect(diffs).toEqual([]);
       // Declared limit: input snapshotted for the whole write (Node reads it live). Both sides pinned.
       const declared = Object.fromEntries(
