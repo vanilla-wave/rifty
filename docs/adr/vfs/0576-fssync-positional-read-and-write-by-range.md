@@ -13,7 +13,7 @@ Date: 2026-11
 `fs.read`/`readSync(fd)` read the whole file per call (`readFileBytesSync`) and copied out the
 slice. Over sync-RPC that moves the whole file per 64 KiB call: 16 MiB in 257 calls = 4 311 744 512
 B out of `FsSync`, 18.5–26 s on Workbench against Node's 3 ms
-(`docs/backlog/runtime-js/fs-fd-read-by-range.md`). The ADR-0365 correction made relays forward a
+(unit 4b of `docs/backlog/epics/node-streams-as-in-node/`, PR #457). The ADR-0365 correction made relays forward a
 chunk (`ChunkedReadSource`), but the owner store still re-read the whole file per chunk
 (`perf/fs-rpc-chunk-perf`). `fs.write(fd)` has the same shape on the write side (unit 4c). ADR-0575 §4
 needs both before Node's fd streams run on every host.
