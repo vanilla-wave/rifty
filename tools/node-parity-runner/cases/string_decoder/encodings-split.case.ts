@@ -174,6 +174,27 @@ const c: ParityCase = {
         for (const [k, v] of saved) TA[k] = v;
       }
     }));
+    // detached and out-of-bounds views read as empty (Node: no throw)
+    const detached = (make) => { const ab = new ArrayBuffer(4); new Uint8Array(ab).set([0x41, 0xe2, 0x82, 0xac]); const v = make(ab); structuredClone(ab, { transfer: [ab] }); return v; };
+    const resized = (make, to) => { const ab = new ArrayBuffer(8, { maxByteLength: 16 }); new Uint8Array(ab).set([0x41, 0x42, 0xe2, 0x82, 0xac, 0x43, 0x44, 0x45]); const v = make(ab); ab.resize(to); return v; };
+    for (const [label, make] of [
+      ['detached Uint8Array', () => detached((ab) => new Uint8Array(ab))],
+      ['detached Buffer', () => detached((ab) => Buffer.from(ab))],
+      ['detached Uint16Array', () => detached((ab) => new Uint16Array(ab))],
+      ['detached DataView', () => detached((ab) => new DataView(ab))],
+      ['oob Uint8Array', () => resized((ab) => new Uint8Array(ab, 4, 4), 2)],
+      ['oob DataView', () => resized((ab) => new DataView(ab, 4, 4), 2)],
+      ['tracking Uint8Array', () => resized((ab) => new Uint8Array(ab, 1), 4)],
+      ['tracking DataView', () => resized((ab) => new DataView(ab, 1), 4)],
+    ]) {
+      for (const enc of ['utf8', 'hex', 'base64', 'utf16le']) {
+        console.log('view', label, enc, tryit(() => {
+          const d = new StringDecoder(enc);
+          const a = units(d.write(Buffer.from([0xe2]))) + ' ' + units(d.write(make())) + '@' + st(d);
+          return a + ' ' + units(d.end(make())) + '@' + st(d);
+        }));
+      }
+    }
     console.log('patched Buffer.isEncoding', tryit(() => {
       const saved = Buffer.isEncoding;
       Buffer.isEncoding = () => true;

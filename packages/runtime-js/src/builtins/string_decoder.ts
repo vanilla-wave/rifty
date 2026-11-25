@@ -64,12 +64,26 @@ const isView = ArrayBuffer.isView;
 const taSubarray = (TypedArrayProto as { subarray: (s: number, e: number) => Uint8Array }).subarray;
 
 /** A fresh `Uint8Array` over `view`'s bytes from `start`, `length` long (default: to the end). */
+/** A detached or out-of-bounds view reads as no bytes, as Node's (`%TypedArray%` getters give 0, `DataView`'s throw). */
 function bytesOf(view: ArrayBufferView, start = 0, length?: number): Uint8Array {
   const typed = taTag.call(view) !== undefined;
+  let size: number;
+  let offset: number;
+  if (typed) {
+    size = taByteLength.call(view) as number;
+    offset = taByteOffset.call(view) as number;
+  } else {
+    try {
+      size = dvByteLength.call(view) as number;
+      offset = dvByteOffset.call(view) as number;
+    } catch {
+      return new U8(0);
+    }
+  }
+  const n = length ?? size - start;
+  if (n === 0) return new U8(0);
   const buffer = (typed ? taBuffer : dvBuffer).call(view) as ArrayBuffer;
-  const offset = (typed ? taByteOffset : dvByteOffset).call(view) as number;
-  const size = (typed ? taByteLength : dvByteLength).call(view) as number;
-  return new U8(buffer, offset + start, length ?? size - start);
+  return new U8(buffer, offset + start, n);
 }
 
 const makeString = (bytes: Uint8Array, enc: number): string =>
