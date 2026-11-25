@@ -1,0 +1,81 @@
+Route B product build vs origin/main 692babe130764a6f30ec6366157753c3cc75ac72 (fetched 2026-11-25; node v24.16.0, esbuild 0.28.0).
+Route B = route-b/product/wiring.patch + bindings.ts + generate.mjs --minify (identifiers kept), each in a throwaway tree.
+Patch adaptation: none in content. The patch carries fs-streams.ts as a new file (whole replacement), so the old file is
+removed before `git apply`; every patched file is byte-identical between b1270101a and 692babe13.
+PR #452 (t3/zlib-engine, head a1639b1b644df18fa9d680402f5ed0f0e4e23bfd, open, not on main): merged into 692babe13 with
+`git merge --no-commit` (clean, no conflicts), measured alone and with route B on top.
+
+pnpm test:client-bundles (--surface-only --check-budgets), min / gzip B; all four runs exit 0 (budgets, SDK packaging,
+io guard, ioProbe vs Node, strict TypeScript graphs)
+artifact  | main 692babe13   | main + route B   | delta            | main + #452      | main + #452 + route B | budget
+main      | 91433 / 28548    | 91197 / 28521    | -236 / -27       | 91433 / 28548    | 91197 / 28521         | 128000 / 40000
+sw        | 16711 / 5848     | 16475 / 5805     | -236 / -43       | 16711 / 5848     | 16475 / 5805          | 23000 / 8000
+generic   | 956548 / 288404  | 1027341 / 312037 | +70793 / +23633  | 956548 / 288404  | 1027341 / 312037      | 1124000 / 332000
+toolchain | 1085625 / 331931 | 1155135 / 355626 | +69510 / +23695  | 1085625 / 331931 | 1155135 / 355626      | 1284000 / 386000
+headroom after route B: generic 96659 / 19963; toolchain 128865 / 30374.
+#452 adds 0 B to every artifact: nothing outside packages/runtime-js/src/zlib-engine/ imports it ("no guest surface").
+io bytes in main / sw (sdk-packaging-proof guard <= 5120): main 1186 / 1257; with route B 950 / 1021 (same with #452).
+
+packages/isolate-host/dist/guest.js: raw | gzip -9n raw | esbuild --minify | its gzip -9n
+main 692babe13   7173032 | 1509572 | 4429133 | 1275340
+main + route B   7291113 | 1529839 | 4504922 | 1300132   (delta +118081 | +20267 | +75789 | +24792)
+main + #452      minified bytes identical to main; main + #452 + route B identical to main + route B.
+
+Generated module (--minify, as bundled): marginal gzip = gzip(whole) - gzip(whole without that module), i.e. the bytes
+it adds; "alone" = that module gzipped by itself. raw B | gzip alone | marginal gzip.
+whole module: 173653 B, gzip -9 38563 B; per module: raw | gzip alone | marginal gzip (whole minus whole-without-it)
+
+## sliced internals + assert: raw 29220 | gzip alone 7912 | marginal 7343
+internal/errors | 16486 | 5081 | 4477
+internal/util | 5532 | 1704 | 1302
+internal/validators | 3844 | 1017 | 763
+internal/fs/utils | 2285 | 920 | 478
+internal/assert | 578 | 286 | 96
+internal/url | 495 | 267 | 129
+
+## events/abort_listener: raw 1150 | gzip alone 488 | marginal 227
+internal/events/abort_listener | 1150 | 488 | 227
+
+## fs/streams: raw 10247 | gzip alone 2721 | marginal 2213
+internal/fs/streams | 10247 | 2721 | 2213
+
+## stream core: raw 112454 | gzip alone 23480 | marginal 23678
+internal/streams/readable | 29777 | 7107 | 6281
+internal/streams/writable | 20434 | 4911 | 4174
+internal/streams/pipeline | 8104 | 2520 | 1869
+internal/streams/utils | 7669 | 1668 | 1586
+internal/streams/operators | 6537 | 1931 | 1607
+internal/streams/end-of-stream | 6439 | 1770 | 1239
+internal/streams/duplexify | 5590 | 1706 | 984
+internal/streams/destroy | 5023 | 1401 | 1109
+internal/streams/duplex | 4039 | 1096 | 741
+internal/streams/compose | 3496 | 1179 | 660
+stream | 3391 | 973 | 619
+internal/streams/from | 3082 | 967 | 623
+internal/streams/legacy | 2351 | 821 | 542
+internal/streams/transform | 2143 | 792 | 402
+internal/streams/state | 1466 | 543 | 289
+internal/streams/add-abort-signal | 1457 | 573 | 200
+stream/promises | 833 | 416 | 177
+internal/streams/passthrough | 623 | 298 | 96
+
+## duplexpair: raw 1402 | gzip alone 540 | marginal 315
+internal/streams/duplexpair | 1402 | 540 | 315
+
+## webstreams/adapters: raw 16090 | gzip alone 3628 | marginal 3123
+internal/webstreams/adapters | 16090 | 3628 | 3123
+
+## wrapper (loader, PRIMORDIALS/BINDINGS lists, __name helper): raw 3090 | gzip alone 1276
+
+Same groups in --minify-all (identifiers renamed; closer to what a renaming consumer bundler keeps):
+whole module: 112423 B, gzip -9 35016 B; per module: raw | gzip alone | marginal gzip (whole minus whole-without-it)
+## sliced internals + assert: raw 19104 | gzip alone 7018 | marginal 6472
+## events/abort_listener: raw 742 | gzip alone 436 | marginal 206
+## fs/streams: raw 7083 | gzip alone 2487 | marginal 2054
+## stream core: raw 72533 | gzip alone 21863 | marginal 21412
+## duplexpair: raw 797 | gzip alone 446 | marginal 257
+## webstreams/adapters: raw 9284 | gzip alone 3505 | marginal 3068
+## wrapper (loader, PRIMORDIALS/BINDINGS lists, __name helper): raw 2880 | gzip alone 1247
+
+Bundle delta vs module size: generic grows +70793 min / +23633 gzip = the generated module after the consumer's
+minifier, bindings.ts and the io/runtime-js wiring, minus rifty's own stream classes and fs-streams.ts it replaces.

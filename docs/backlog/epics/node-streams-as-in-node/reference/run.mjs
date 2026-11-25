@@ -134,6 +134,16 @@ if (process.env.ROUTE_B_GEN)
       { ROUTE_B: 'product', ROUTE_B_GEN: process.env.ROUTE_B_GEN },
       name,
     );
+// With ROUTE_B_GEN also rifty-inproc-Bp9r: product bindings, Node's ReadStream, rifty's WriteStream (unit 9r alone).
+if (process.env.ROUTE_B_GEN)
+  runs['rifty-inproc-Bp9r'] = (files, name) =>
+    spawnIn(
+      files,
+      process.execPath,
+      tsx,
+      { ROUTE_B: 'product', ROUTE_B_GEN: process.env.ROUTE_B_GEN, ROUTE_B_FS: 'read' },
+      name,
+    );
 const COLS = Object.keys(runs);
 // The thrown error's line (`Name: message`), else the first non-frame line.
 const firstLine = (s) => {

@@ -41,6 +41,7 @@ test('nsg programs in Chromium no-COI SDK', async ({ page, browser }) => {
         written += await page.evaluate(
           async (entries) => {
             // biome-ignore lint/suspicious/noExplicitAny: probe spec, copied into tests/ to run
+            // biome-ignore lint/suspicious/noExplicitAny: probe spec, copied into tests/ to run
             const sb = (globalThis as unknown as { __nsgSandbox: any }).__nsgSandbox;
             for (const [rel, b64] of entries) {
               const bin = atob(b64);
@@ -57,6 +58,7 @@ test('nsg programs in Chromium no-COI SDK', async ({ page, browser }) => {
     }
     const riftyNode = await page.evaluate(async () => {
       // biome-ignore lint/suspicious/noExplicitAny: probe spec, copied into tests/ to run
+      // biome-ignore lint/suspicious/noExplicitAny: probe spec, copied into tests/ to run
       const sb = (globalThis as unknown as { __nsgSandbox: any }).__nsgSandbox;
       await sb.fs.writeFile('/nsg/.keep', '');
       return (
@@ -68,6 +70,7 @@ test('nsg programs in Chromium no-COI SDK', async ({ page, browser }) => {
       const t0 = Date.now();
       const r = await page.evaluate(
         async ({ name, file, source }) => {
+          // biome-ignore lint/suspicious/noExplicitAny: probe spec, copied into tests/ to run
           // biome-ignore lint/suspicious/noExplicitAny: probe spec, copied into tests/ to run
           const sb = (globalThis as unknown as { __nsgSandbox: any }).__nsgSandbox;
           await sb.fs.writeFile(`/nsg/${name}/${file}`, source);
@@ -105,6 +108,7 @@ test('nsg programs in Chromium no-COI SDK', async ({ page, browser }) => {
     }
   } finally {
     await page.evaluate(() =>
+      // biome-ignore lint/suspicious/noExplicitAny: probe spec, copied into tests/ to run
       // biome-ignore lint/suspicious/noExplicitAny: probe spec, copied into tests/ to run
       (globalThis as unknown as { __nsgSandbox: any }).__nsgSandbox.dispose(),
     );

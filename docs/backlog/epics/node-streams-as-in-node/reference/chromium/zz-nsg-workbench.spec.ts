@@ -92,6 +92,7 @@ test('nsg programs in Chromium Workbench', async ({ page, browser }) => {
         async ({ fixtureUrl, line }) => {
           const fixture = await import(/* @vite-ignore */ fixtureUrl);
           // biome-ignore lint/suspicious/noExplicitAny: probe spec, copied into tests/ to run
+          // biome-ignore lint/suspicious/noExplicitAny: probe spec, copied into tests/ to run
           const g = globalThis as unknown as { __nsgTerm?: any };
           g.__nsgTerm ??= fixture.currentProject().terminals.open();
           const t = g.__nsgTerm;

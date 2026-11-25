@@ -1,0 +1,13 @@
+# c-csv-write-file.cjs — node v24.16.0, rifty 1df9e5f9a
+columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate | rifty-inproc-B | rifty-inproc-Bp | rifty-inproc-Bp9r
+
+exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 0 | rifty-inproc-B 0 | rifty-inproc-Bp 0 | rifty-inproc-Bp9r 0
+
+## line 1
+node: csv.writeFile 98 7bc0e9c9ffd573c1
+rifty-inproc (same): csv.writeFile 98 7bc0e9c9ffd573c1
+rifty-inproc-sync (same): csv.writeFile 98 7bc0e9c9ffd573c1
+rifty-isolate (same): csv.writeFile 98 7bc0e9c9ffd573c1
+rifty-inproc-B (same): csv.writeFile 98 7bc0e9c9ffd573c1
+rifty-inproc-Bp (same): csv.writeFile 98 7bc0e9c9ffd573c1
+rifty-inproc-Bp9r (same): csv.writeFile 98 7bc0e9c9ffd573c1

@@ -1,5 +1,5 @@
 Route B product build: b1270101a vs b1270101a + product/wiring.patch + generated module (node v24.16.0, esbuild 0.28.0).
-Generated module (product/generate.mjs): 28 modules (22 whole Node files, 5 selected: internal/{errors,validators,util,fs/utils,url}),
+Generated module (product/generate.mjs): 28 modules (23 whole Node files, 5 selected: internal/{errors,validators,util,fs/utils,url}),
 sources sha256 53e38600e16da16deccad1247eed381687bb73d067f3428011bc84791d04bc97 (per-file hashes in its sources.json).
   unminified 270605 B | --minify (whitespace+syntax, identifiers kept) 173477 B, gzip 38409 | --minify-all 112247 B, gzip 34898
   The build uses --minify: renamed identifiers change V8's own TypeError text ("J.addEventListener is not a function"

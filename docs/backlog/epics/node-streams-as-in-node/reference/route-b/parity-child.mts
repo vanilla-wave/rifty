@@ -83,4 +83,25 @@ if (process.env.ROUTE_B === '1' || process.env.ROUTE_B === 'product') {
   }
   loader = createModuleLoaderWithBuiltinOverrides(code, { cwd: '/work' }, over);
 }
+// kind 'http' (as the parity runner's installHttpMode): register rifty's node:http, claim window 0,
+// and the request driver over the port registry.
+if (c.kind === 'http') {
+  await load('packages/net/src/register-builtins.ts');
+  const { dispatchToPort } = await load('packages/net/src/registry.ts');
+  const { setDefaultClaimWindowMs } = await load('packages/net/src/index.ts');
+  setDefaultClaimWindowMs(0);
+  (globalThis as Record<string, unknown>).__riftyHttpRequest = async (
+    port: number,
+    p: string,
+    init?: RequestInit,
+  ) => {
+    const resp = await dispatchToPort(port, new Request(`http://preview.local:${port}${p}`, init));
+    return {
+      status: resp.status,
+      statusText: resp.statusText,
+      contentType: resp.headers.get('content-type'),
+      body: new TextDecoder('utf-8', { ignoreBOM: true }).decode(await resp.arrayBuffer()),
+    };
+  };
+}
 loader.require('./main.js', '/work/[main].js');

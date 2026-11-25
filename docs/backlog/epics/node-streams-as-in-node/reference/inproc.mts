@@ -67,12 +67,16 @@ if (process.env.ROUTE_B === '1' || process.env.ROUTE_B === 'product') {
   }
   const fsRifty = riftyRequire('fs') as Record<string, unknown>;
   const fsB = Object.create(fsRifty) as Record<string, unknown>;
+  // ROUTE_B_FS=read (unit 9r alone): only Node's ReadStream; WriteStream stays rifty's class.
   Object.assign(fsB, {
     ReadStream: v.fsStreams.ReadStream,
-    WriteStream: v.fsStreams.WriteStream,
     createReadStream: (p: unknown, o: unknown) => new v.fsStreams.ReadStream(p, o),
-    createWriteStream: (p: unknown, o: unknown) => new v.fsStreams.WriteStream(p, o),
   });
+  if (process.env.ROUTE_B_FS !== 'read')
+    Object.assign(fsB, {
+      WriteStream: v.fsStreams.WriteStream,
+      createWriteStream: (p: unknown, o: unknown) => new v.fsStreams.WriteStream(p, o),
+    });
   const { createModuleLoaderWithBuiltinOverrides } = await load(
     'packages/runtime-js/src/module-loader/loader.ts',
   );
