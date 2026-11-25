@@ -1,0 +1,128 @@
+# 2026-11-25T13:19:07Z 14:19  up 6 days,  4:22, 4 users, load averages: 2.94 2.96 5.40
+## cost conc floor heap retain host life
+{"node":"v24.16.0","ivm":"7.0.2","platform":"darwin/arm64","template":{"files":8000,"entries":8792,"MB":86.6},"load":"2.9"}
+{"sec":"cost","w":"empty","kind":"v1","load":"2.9","createMs":0.2,"firstMs":30.3,"repMs":30.4,"repRunMs":6.9,"repBootMs":9.2}
+{"sec":"cost","w":"empty","kind":"v1b","load":"2.9","createMs":0.2,"firstMs":23.5,"repMs":17.1,"repRunMs":6.7,"repBootMs":9.1}
+{"sec":"cost","w":"empty","kind":"v2","load":"2.9","createMs":22.8,"firstMs":11.9,"repMs":8.1,"repRunMs":3.2,"repBootMs":4.9}
+{"sec":"cost","w":"empty","kind":"v2b","load":"2.9","createMs":9.8,"firstMs":12.2,"repMs":8,"repRunMs":3.3,"repBootMs":4.7}
+{"sec":"cost","w":"empty","kind":"v3","load":"2.9","createMs":0.2,"firstMs":15.6,"repMs":16,"repRunMs":6.9,"repBootMs":9}
+{"sec":"cost","w":"pdf","kind":"v1","load":"3.2","createMs":0.1,"firstMs":204.7,"repMs":203,"repRunMs":179.2,"repBootMs":9.4}
+{"sec":"cost","w":"pdf","kind":"v1b","load":"3.2","createMs":0.1,"firstMs":202,"repMs":205,"repRunMs":194.4,"repBootMs":9.4}
+{"sec":"cost","w":"pdf","kind":"v2","load":"3.2","createMs":23.3,"firstMs":190.9,"repMs":144.8,"repRunMs":139.9,"repBootMs":4.9}
+{"sec":"cost","w":"pdf","kind":"v2b","load":"3.3","createMs":10.1,"firstMs":212.6,"repMs":145.5,"repRunMs":140.6,"repBootMs":4.9}
+{"sec":"cost","w":"pdf","kind":"v3","load":"3.3","createMs":0.1,"firstMs":252.3,"repMs":249.5,"repRunMs":240.1,"repBootMs":9.3}
+{"sec":"cost","w":"docx","kind":"v1","load":"3.2","createMs":0.1,"firstMs":172.6,"repMs":170.5,"repRunMs":146.3,"repBootMs":9.4}
+{"sec":"cost","w":"docx","kind":"v1b","load":"3.2","createMs":0.1,"firstMs":167.1,"repMs":165.6,"repRunMs":154.4,"repBootMs":9.5}
+{"sec":"cost","w":"docx","kind":"v2","load":"3.2","createMs":23.3,"firstMs":152.1,"repMs":124.7,"repRunMs":119.5,"repBootMs":5.1}
+{"sec":"cost","w":"docx","kind":"v2b","load":"3.2","createMs":10.7,"firstMs":165.1,"repMs":125.7,"repRunMs":120.4,"repBootMs":5.2}
+{"sec":"cost","w":"docx","kind":"v3","load":"3.2","createMs":0.1,"firstMs":160.3,"repMs":159.1,"repRunMs":149.6,"repBootMs":9.4}
+{"sec":"cost","w":"pptx","kind":"v1","load":"3.2","createMs":0.1,"firstMs":328.7,"repMs":331.9,"repRunMs":297.6,"repBootMs":15.5}
+{"sec":"cost","w":"pptx","kind":"v1b","load":"3.0","createMs":0.1,"firstMs":315.5,"repMs":323.9,"repRunMs":305.9,"repBootMs":14.2}
+{"sec":"cost","w":"pptx","kind":"v2","load":"3.0","createMs":24.4,"firstMs":304.6,"repMs":279.6,"repRunMs":270.7,"repBootMs":8.5}
+{"sec":"cost","w":"pptx","kind":"v2b","load":"3.4","createMs":11,"firstMs":303.7,"repMs":285.3,"repRunMs":279.7,"repBootMs":5.6}
+{"sec":"cost","w":"pptx","kind":"v3","load":"3.4","createMs":0.2,"firstMs":332.7,"repMs":330.2,"repRunMs":314.8,"repBootMs":15.3}
+{"sec":"cost","w":"xlsx","kind":"v1","load":"3.2","createMs":0.1,"firstMs":431.7,"repMs":429.6,"repRunMs":404.8,"repBootMs":10}
+{"sec":"cost","w":"xlsx","kind":"v1b","load":"3.4","createMs":0.1,"firstMs":461.4,"repMs":464.4,"repRunMs":452.4,"repBootMs":10}
+{"sec":"cost","w":"xlsx","kind":"v2","load":"3.5","createMs":24.4,"firstMs":432.4,"repMs":333.3,"repRunMs":327.4,"repBootMs":5.5}
+{"sec":"cost","w":"xlsx","kind":"v2b","load":"3.5","createMs":11.2,"firstMs":478.9,"repMs":335.7,"repRunMs":330.1,"repBootMs":5.6}
+{"sec":"cost","w":"xlsx","kind":"v3","load":"3.3","createMs":0.1,"firstMs":606.8,"repMs":604.3,"repRunMs":594,"repBootMs":10.2}
+{"sec":"conc","w":"pdf","kind":"v1","load":"3.2","wallMs":269.7}
+{"sec":"conc","w":"pdf","kind":"v1b","load":"3.3","wallMs":264.1}
+{"sec":"conc","w":"pdf","kind":"v2","load":"3.1","wallMs":244.9}
+{"sec":"conc","w":"pdf","kind":"v2b","load":"3.6","wallMs":230.5}
+{"sec":"conc","w":"pdf","kind":"v3","load":"4.3","wallMs":356.2}
+{"sec":"conc","w":"xlsx","kind":"v1","load":"3.6","wallMs":516.2}
+{"sec":"conc","w":"xlsx","kind":"v1b","load":"3.3","wallMs":590.7}
+{"sec":"conc","w":"xlsx","kind":"v2","load":"3.4","wallMs":480.1}
+{"sec":"conc","w":"xlsx","kind":"v2b","load":"3.3","wallMs":474.5}
+{"sec":"conc","w":"xlsx","kind":"v3","load":"3.9","wallMs":826.4}
+{"sec":"floor","w":"empty","kind":"v1","load":"3.9","floorMiB":103}
+{"sec":"floor","w":"empty","kind":"v1b","load":"3.9","floorMiB":19}
+{"sec":"floor","w":"empty","kind":"v2","load":"3.7","floorMiB":107}
+{"sec":"floor","w":"empty","kind":"v2b","load":"3.7","floorMiB":19}
+{"sec":"floor","w":"empty","kind":"v3","load":"3.7","floorMiB":19}
+{"sec":"floor","w":"pdf","kind":"v1","load":"3.7","floorMiB":107}
+{"sec":"floor","w":"pdf","kind":"v1b","load":"3.8","floorMiB":27}
+{"sec":"floor","w":"pdf","kind":"v2","load":"3.8","floorMiB":111}
+{"sec":"floor","w":"pdf","kind":"v2b","load":"3.5","floorMiB":31}
+{"sec":"floor","w":"pdf","kind":"v3","load":"3.3","floorMiB":23}
+{"sec":"floor","w":"xlsx","kind":"v1","load":"3.2","floorMiB":115}
+{"sec":"floor","w":"xlsx","kind":"v1b","load":"3.0","floorMiB":39}
+{"sec":"floor","w":"xlsx","kind":"v2","load":"2.9","floorMiB":115}
+{"sec":"floor","w":"xlsx","kind":"v2b","load":"2.6","floorMiB":39}
+{"sec":"floor","w":"xlsx","kind":"v3","load":"2.8","floorMiB":31}
+{"sec":"heap","kind":"v2","w":"pdf","load":"2.9","points":"[exec, usedMiB, totalMiB, ms]","pts":[[1,13.6,59.4,206.2],[5,23.1,62.4,157.4],[10,54.1,73.2,145.2],[15,51.7,86.4,145.4],[20,100,120.3,145.2],[25,113.2,142.7,145.8],[30,102.7,154.6,145.6],[35,119.9,179.8,151.1],[40,179.7,198.5,145.1]]}
+{"sec":"heap","kind":"v2","w":"xlsx","load":"2.8","points":"[exec, usedMiB, totalMiB, ms]","pts":[[1,22.6,44.7,438],[5,77.8,94.6,332.8],[10,34,70.4,328.2],[15,33.8,72.4,336.5],[20,43.8,77.4,332.1],[25,93.9,116.7,327.7],[30,33.9,71.9,328.6],[35,33.9,71.9,329.2],[40,33.9,76.9,331.3]]}
+{"sec":"heap","kind":"v2b","w":"pdf","load":"2.8","points":"[exec, usedMiB, totalMiB, ms]","pts":[[1,16.4,34.1,207.9],[5,31.9,64.4,147.5],[10,51.9,72.8,145.7],[15,68.9,95,149.1],[20,99.7,117.6,146.2],[25,131.8,153.6,146.8],[30,144.9,169.4,144.4],[35,161.8,182.1,145.5],[40,166.5,199.3,149.5]]}
+{"sec":"heap","kind":"v2b","w":"xlsx","load":"3.8","points":"[exec, usedMiB, totalMiB, ms]","pts":[[1,18.6,40.8,465.5],[5,31.9,68.3,335.2],[10,31.5,77.2,334],[15,31.3,68.9,333.9],[20,31.3,69.2,331.7],[25,31.3,69.2,331.2],[30,41.6,73.9,330.5],[35,31.3,69.7,335.9],[40,31.3,73.9,325.9]]}
+{"sec":"retain","kind":"v2","w":"pdf","limitMiB":160,"execsOk":60,"of":60,"end":"all ok","usedMiB":18.2,"usedAfterGcMiB":14.6,"gcInIsolate":"function"}
+/tmp/life-probe/final.sh: line 6: 14151 Segmentation fault: 11  N=7 $P cost conc floor heap retain host life
+## mem (one process per arm)
+{"sec":"mem","kind":"v1","K":8,"load":"3.9","perSandboxRssMiB":21,"perSandboxNodeHeapMiB":0,"perSandboxArrayBuffersMiB":0,"stateBytes":3120}
+{"sec":"mem-held","kind":"v1","K":8,"heldPerSandboxRssMiB":0}
+{"sec":"mem","kind":"v1b","K":8,"load":"3.8","perSandboxRssMiB":13.4,"perSandboxNodeHeapMiB":0,"perSandboxArrayBuffersMiB":0.4,"stateBytes":3120}
+{"sec":"mem-held","kind":"v1b","K":8,"heldPerSandboxRssMiB":0}
+{"sec":"mem","kind":"v2","K":8,"load":"3.8","perSandboxRssMiB":156.8,"perSandboxNodeHeapMiB":0,"perSandboxArrayBuffersMiB":0,"isolateUsedMiB":13.6,"isolateTotalMiB":59.7,"isolateExtMiB":97.3}
+{"sec":"mem-held","kind":"v2","K":8,"heldPerSandboxRssMiB":6.5}
+{"sec":"mem","kind":"v2b","K":8,"load":"3.8","perSandboxRssMiB":56.9,"perSandboxNodeHeapMiB":0,"perSandboxArrayBuffersMiB":0,"isolateUsedMiB":10.4,"isolateTotalMiB":31.5,"isolateExtMiB":17.2}
+{"sec":"mem-held","kind":"v2b","K":8,"heldPerSandboxRssMiB":4.4}
+{"sec":"mem","kind":"v3","K":8,"load":"3.6","perSandboxRssMiB":12.6,"perSandboxNodeHeapMiB":0.5,"perSandboxArrayBuffersMiB":0.4}
+{"sec":"mem-held","kind":"v3","K":8,"heldPerSandboxRssMiB":0}
+## ipc
+{"sec":"ipc","load":"3.5","roundTripMs":{"empty":0.015,"write 10 KiB":0.025,"read 1.4 KiB (pdf)":0.02,"read 1 MiB":6.395}}
+## cata (the process is expected to abort)
+{"node":"v24.16.0","ivm":"7.0.2","platform":"darwin/arm64","template":{"files":8000,"entries":8792,"MB":86.6},"load":"3.5"}
+{"sec":"cata","liveSandboxes":3,"note":"next line only if the process survives"}
+invalid table size
+is_heap_oom = 1
+exit=0
+# end 14:24  up 6 days,  4:27, 4 users, load averages: 3.34 3.20 4.76
+## rerun after the segfault: retain, host, life  14:28  up 6 days,  4:31, 4 users, load averages: 2.45 3.00 4.30
+{"sec":"retain","kind":"v2","w":"pdf","limitMiB":160,"execsOk":60,"of":60,"end":"all ok","usedMiB":21.3,"usedAfterGcMiB":14.3,"gcInIsolate":"function"}
+{"sec":"retain","kind":"v2","w":"xlsx","limitMiB":192,"execsOk":60,"of":60,"end":"all ok","usedMiB":66.8,"usedAfterGcMiB":25.2,"gcInIsolate":"function"}
+{"sec":"retain","kind":"v2b","w":"pdf","limitMiB":160,"execsOk":60,"of":60,"end":"all ok","usedMiB":64.8,"usedAfterGcMiB":11.4,"gcInIsolate":"function"}
+{"sec":"retain","kind":"v2b","w":"xlsx","limitMiB":192,"execsOk":60,"of":60,"end":"all ok","usedMiB":135.1,"usedAfterGcMiB":23.9,"gcInIsolate":"function"}
+{"sec":"host","kind":"v1","load":"3.1","writeFile10KiBMs":0.002,"readFilePdfMs":0.001,"listWorkspaceMs":0.001,"pdfBytes":1369}
+{"sec":"host","kind":"v2","load":"3.1","writeFile10KiBMs":0.009,"readFilePdfMs":0.005,"listWorkspaceMs":0.068,"pdfBytes":1369}
+{"sec":"host","kind":"v3","load":"3.1","writeFile10KiBMs":0.001,"readFilePdfMs":0.001,"listWorkspaceMs":0,"pdfBytes":1369}
+{"sec":"life","case":"L1 carry-over","kind":"v1","run1":"{\"global\":\"undefined\",\"exitCode\":null,\"cwd\":\"/workspace\",\"modN\":0,\"listeners\":0,\"env\":null,\"stackLimit\":10,\"json\":\"undefined\"}","run2":"{\"global\":\"undefined\",\"exitCode\":null,\"cwd\":\"/workspace\",\"modN\":0,\"listeners\":0,\"env\":null,\"stackLimit\":10,\"json\":\"undefined\"}","codes":[0,0]}
+{"sec":"life","case":"L1 carry-over","kind":"v2","run1":"{\"global\":\"undefined\",\"exitCode\":null,\"cwd\":\"/workspace\",\"modN\":0,\"listeners\":0,\"env\":null,\"stackLimit\":10,\"json\":\"undefined\"}","run2":"{\"global\":\"undefined\",\"exitCode\":null,\"cwd\":\"/workspace\",\"modN\":0,\"listeners\":0,\"env\":null,\"stackLimit\":10,\"json\":\"undefined\"}","codes":[0,0]}
+{"sec":"life","case":"L1 carry-over","kind":"v3","run1":"{\"global\":\"undefined\",\"exitCode\":null,\"cwd\":\"/workspace\",\"modN\":0,\"listeners\":0,\"env\":null,\"stackLimit\":10,\"json\":\"undefined\"}","run2":"{\"global\":\"undefined\",\"exitCode\":null,\"cwd\":\"/workspace\",\"modN\":0,\"listeners\":0,\"env\":null,\"stackLimit\":10,\"json\":\"undefined\"}","codes":[0,0]}
+{"sec":"life","case":"L2 reach FS realm","kind":"v2","out":"{\"statProto\":\"Stats\",\"bytesRealm\":true,\"errRealm\":true,\"errCode\":\"ENOENT\",\"lifeGlobals\":[\"__riftyGuest\",\"__probe\",\"__life\",\"__rifty\"]}","code":0}
+{"sec":"life","case":"L3 work after the run ended","chain":1,"kind":"v2","guard":true,"run1":"none","run4":"late-wasm.txt","lateWasm":true,"staleCalls":0}
+{"sec":"life","case":"L3 work after the run ended","chain":1,"kind":"v2","guard":false,"run1":"none","run4":"late-wasm.txt","lateWasm":true,"staleCalls":0}
+{"sec":"life","case":"L3 work after the run ended","chain":1,"kind":"v1","guard":true,"run1":"none","run4":"late-wasm.txt","lateWasm":true}
+{"sec":"life","case":"L3 work after the run ended","chain":1,"kind":"v3","guard":true,"run1":"none","run4":"none","lateWasm":false}
+{"sec":"life","case":"L3 work after the run ended","chain":30,"kind":"v2","guard":true,"run1":"none","run4":"none","lateWasm":false,"staleCalls":0}
+{"sec":"life","case":"L3 work after the run ended","chain":30,"kind":"v2","guard":false,"run1":"none","run4":"none","lateWasm":false,"staleCalls":0}
+{"sec":"life","case":"L3 work after the run ended","chain":30,"kind":"v1","guard":true,"run1":"none","run4":"none","lateWasm":false}
+{"sec":"life","case":"L3 work after the run ended","chain":30,"kind":"v3","guard":true,"run1":"none","run4":"none","lateWasm":false}
+{"sec":"life","case":"L4 kill syncLoop","kind":"v1","killed":"timeout","why":"Script execution timed out.","killMs":417,"isolateAlive":"n/a","next":"before.txt absent","nextCode":0}
+{"sec":"life","case":"L4 kill syncLoop","kind":"v2","killed":"timeout","why":"deadline","killMs":436,"isolateAlive":true,"next":"before.txt kept","nextCode":0}
+{"sec":"life","case":"L4 kill syncLoop","kind":"v3","killed":"timeout","why":"deadline","killMs":412,"isolateAlive":"n/a","next":"before.txt kept","nextCode":0}
+{"sec":"life","case":"L4 kill microtasks","kind":"v1","killed":"timeout","why":"Script execution timed out.","killMs":417,"isolateAlive":"n/a","next":"before.txt absent","nextCode":0}
+{"sec":"life","case":"L4 kill microtasks","kind":"v2","killed":"timeout","why":"deadline","killMs":418,"isolateAlive":true,"next":"before.txt kept","nextCode":0}
+{"sec":"life","case":"L4 kill microtasks","kind":"v3","killed":"timeout","why":"deadline","killMs":411,"isolateAlive":"n/a","next":"before.txt kept","nextCode":0}
+{"sec":"life","case":"L4 kill timerLoop","kind":"v1","killed":"timeout","why":"Script execution timed out.","killMs":417,"isolateAlive":"n/a","next":"before.txt absent","nextCode":0}
+{"sec":"life","case":"L4 kill timerLoop","kind":"v2","killed":"timeout","why":"deadline","killMs":426,"isolateAlive":true,"next":"before.txt kept","nextCode":0}
+{"sec":"life","case":"L4 kill timerLoop","kind":"v3","killed":"timeout","why":"deadline","killMs":411,"isolateAlive":"n/a","next":"before.txt kept","nextCode":0}
+{"sec":"life","case":"L4 kill pending","kind":"v1","killed":"timeout","why":"deadline","killMs":424,"isolateAlive":"n/a","next":"before.txt absent","nextCode":0}
+{"sec":"life","case":"L4 kill pending","kind":"v2","killed":"timeout","why":"deadline","killMs":407,"isolateAlive":true,"next":"before.txt kept","nextCode":0}
+{"sec":"life","case":"L4 kill pending","kind":"v3","killed":"timeout","why":"deadline","killMs":420,"isolateAlive":"n/a","next":"before.txt kept","nextCode":0}
+{"sec":"life","case":"L5 killed inside FS work (v2)","trials":40,"inconsistent":0,"samples":[]}
+{"sec":"life","case":"L5b killed mid-rename (v2): 64 files must stay 64","trials":200,"bad":0,"samples":[]}
+{"sec":"life","case":"L6 out of memory (limit 256)","kind":"v1","killed":"memory","why":"Isolate was disposed during execution due to memory limit","isolateAlive":"n/a","filesAfter":"state of before (rollback)"}
+{"sec":"life","case":"L6 out of memory (limit 256)","kind":"v2","killed":"memory","why":"Isolate was disposed during execution due to memory limit","isolateAlive":false,"filesAfter":"lost with the isolate"}
+{"sec":"life","case":"L6 out of memory (limit 256)","kind":"v3","killed":"memory","why":"Isolate was disposed during execution due to memory limit","isolateAlive":"n/a","filesAfter":"before.txt kept"}
+{"sec":"life","case":"L7 restore point","kind":"v2","rpCaptureMs":0.4,"rpBytes":2976,"rebuildMs":26.8}
+## cata, exit code of node
+bash: line 1: 69263 Abort trap: 6           $P cata > /tmp/life-probe/cata.txt 2>&1
+node exit=134
+{"node":"v24.16.0","ivm":"7.0.2","platform":"darwin/arm64","template":{"files":8000,"entries":8792,"MB":86.6},"load":"3.7"}
+{"sec":"cata","liveSandboxes":3,"note":"next line only if the process survives"}
+invalid table size
+is_heap_oom = 1
+# end 14:29  up 6 days,  4:32, 4 users, load averages: 3.84 3.26 4.25
+## retain with References into each run realm left unreleased (LEAK_REFS=1)  14:29  up 6 days,  4:33, 4 users, load averages: 3.69 3.24 4.24
+{"sec":"retain","kind":"v2","w":"pdf","limitMiB":160,"execsOk":13,"of":60,"end":{"termination":"memory","why":"Isolate was disposed during execution due to memory limit"},"usedMiB":null,"usedAfterGcMiB":null,"gcInIsolate":"function"}
+{"sec":"retain","kind":"v2","w":"xlsx","limitMiB":192,"execsOk":11,"of":60,"end":{"termination":"memory","why":"Isolate was disposed during execution due to memory limit","ms":817.0496669999993,"boot":58.59758399999919,"runMs":758.4512080000004,"rp":0,"out":""},"usedMiB":null,"usedAfterGcMiB":null,"gcInIsolate":"function"}

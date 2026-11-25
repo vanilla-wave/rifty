@@ -191,6 +191,8 @@ async function realm(iso, script, sink) {
   };
   const closeAll = () => {
     close();
+    // LEAK_REFS=1: the probe's first version — References into a run realm never released.
+    if (process.env.LEAK_REFS === '1') return;
     for (const x of refs.splice(0)) {
       try {
         x.release();
