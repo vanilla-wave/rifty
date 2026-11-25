@@ -49,10 +49,11 @@ const dataViewBuffer = getter(DataView.prototype, 'buffer');
 const dataViewByteOffset = getter(DataView.prototype, 'byteOffset');
 const dataViewByteLength = getter(DataView.prototype, 'byteLength');
 const arrayBufferByteLength = getter(ArrayBuffer.prototype, 'byteLength');
-const sharedByteLength =
-  typeof SharedArrayBuffer === 'function'
-    ? getter(SharedArrayBuffer.prototype, 'byteLength')
-    : undefined;
+/** Set by the shim once its policy allows the global: a disabled guest never reads it. */
+let sharedByteLength: Fn | undefined;
+export function bindSharedArrayBuffer(ctor: typeof SharedArrayBuffer): void {
+  sharedByteLength = getter(ctor.prototype, 'byteLength');
+}
 const arrayIterator = Array.prototype[Symbol.iterator];
 const arrayIteratorNext = (getPrototypeOf([][Symbol.iterator]()) as Iterator<unknown>).next;
 

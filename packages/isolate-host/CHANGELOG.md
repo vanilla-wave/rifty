@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Guest `TextDecoder`/`TextEncoder` are Node v24.16.0's (ADR-0577; see `@riftydev/isolate-guest`): pdfkit 0.17.2/fontkit load and write Node's PDF bytes (`tests/text-decoder.test.ts`: corpus, labels, errors, pdfkit with Helvetica, DejaVu Sans and CJK `name` records); the zlib scenario's case 4 now stops at `zlib.deflateSync`.
 - `dist/THIRD_PARTY_NOTICES.md` lists what the byte-copied `dist/guest.js` bundles (same as `@riftydev/isolate-guest`).
 - Tests only: the node:zlib goal's scenario as 10 cases vs live Node v24.16.0 (`tests/zlib-scenario.test.ts`, browser twins in `tests/browser-unit`/`tests/no-coi`), each pinning today's outcome; pdfkit 0.17.2 and pngjs 7.0.0 as exact devDependencies; the closure/oracle helpers move to `tests/closure-files.ts`.
 - Guest `url.parse`/`resolve`/`resolveObject`/`format` and `querystring` give Node v24.16.0's results (ADR-0574; they returned wrong values with no error, e.g. `url.resolve('https://example.com/a', 'b')` → `'b'`), DEP0170 as Node, no DEP0169 (declared); a non-ASCII or `xn--` hostname label throws `NotImplementedError('url.toASCII')` (no `URL` in the guest). `tests/url-legacy.test.ts`, parseurl 1.3.3 scenario.

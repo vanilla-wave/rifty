@@ -86,6 +86,16 @@ dropped with no U+FFFD even under `fatal`).
   own keys; `encodeInto` validates as Node (closes `distribution/isolate-guest-textencoder-encodeinto-arg-checks`).
 - fontkit/pdfkit load; a CJK Mac `name` record in one of the five reads as raw bytes, silently
   (restructure catches the throw): declared ⚠️ in compat `isolate-host.md`.
-- Cost: see the isolate-host README §Bundle cost (2026-11-25).
+- Cost, 2026-11-25, M3 Pro, load average 4.5–6.5, base main `3d16cb7b8`: `guest.js` 7 173 116 →
+  7 320 802 B (gzip -9 1 512 671 → 1 559 350, +46 679; generated `encoding.js` 21 552 B,
+  `text-decoder.js` 76 618 B); warm `runCode('1')` median of 60 alternating, two runs: +0.59 and
+  −0.54 ms (inside base's p10–p90 of ~15–21 ms; eager `single-byte.js` was +3.3). utf-8 faster on
+  every row (small fresh/reused decoder −32 %/−18 %, small `toString` −7 %, 1 MiB ~−46 %;
+  isolate-host README §Cost). First non-utf-8 decoder per isolate: windows-1252 0.6–0.7 ms,
+  utf-16le 1.9–2.2, gb18030 3.8–4.2.
+- WPT `encoding` (Node v24.16.0's copy, 22 `.any.js` files, through the probe harness
+  `isolate-guest-web-api/reference/wpt` until the shared one lands): every subtest as live Node but
+  «encodeInto() and a detached output buffer» (`MessageChannel`) and the five's 33 subtests;
+  `idlharness`, `streams/*`, `iso-2022-jp-decoder` not run.
 - Publishing: both generated dirs carry their notice (`third-party-manifest.json`).
 - Re-pin of Node or @exodus/bytes: rerun the generator and `text-decoder.test.ts`.

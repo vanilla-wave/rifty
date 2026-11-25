@@ -7,7 +7,7 @@
 import type { GuestHost } from '../contract.ts';
 import { notImplemented } from './loud.ts';
 import { installNavigator } from './navigator.ts';
-import { TextDecoder, TextEncoder } from './node-encoding.ts';
+import { TextDecoder, TextEncoder, bindSharedArrayBuffer } from './node-encoding.ts';
 import { encodeUtf8 } from './text-codec.ts';
 
 const g = globalThis as unknown as Record<string, unknown>;
@@ -36,7 +36,7 @@ if (!allowSharedArrayBuffer) {
   // biome-ignore lint/performance/noDelete: runtime feature detection must see the constructor absent.
   delete g.SharedArrayBuffer;
   if (typeof WebAssembly !== 'undefined') restrictWasmBuffers(WebAssembly.Memory.prototype);
-}
+} else if (typeof SharedArrayBuffer === 'function') bindSharedArrayBuffer(SharedArrayBuffer);
 
 /** Only release native ArrayBuffers. The captured getter tests V8 internal slots
  * without asking the guest for a brand, prototype or property. Applies equally
