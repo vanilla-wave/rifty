@@ -115,6 +115,7 @@ ports, and delete them afterwards. They ran the program set as it was when copie
 | `chromium-c/` | `chromium/closure-tmp/zz-nsg-closure-tmp.spec.ts`: closure in the guest's `/tmp` (PR #453 helpers), routes A and B, main `5763d8fa1`; `b-c-transform-big-route-b-workbench.log.txt` holds the 73.5 s row |
 | `chromium-d/` | `chromium/zz-nsg-streamprobe.spec.ts` with `streamprobe.cjs`/`streamplan.mjs`/`streamoracle.mjs`: 4/16 MiB stream read/write and a write in a 1000-file project, routes A/B, main `5763d8fa1`; `summary.txt` by `chromium/streamsummary.mjs` |
 | `chromium-fd/` | `chromium/zz-nsg-fdread.spec.ts`, `zz-nsg-fdwrite.spec.ts` with `fdread.cjs`/`fdwrite.cjs`; SDK fd read: `chromium/zz-nsg-fdread-sdk.spec.ts` → `sdk.jsonl` (lane output `sdk-lane.txt`) |
+| `chromium-fd-4b/` | the same fd read specs, out paths renamed: `base-*` on main `272d569ba`, `after-*` on unit 4b (PR #457); `summary.txt` by `summary.mjs` |
 | `abort-variants/` | `run.mjs` with `ONLY=m9` and `ONLY=m10`, `RESULTS=` that dir, `ROUTE_B_GEN` = variant A, `ROUTE_B_GEN_DERIVED` = `ABORT=derived product/generate.mjs` (variant B) |
 
 Each Chromium spec is copied into `tests/browser-unit/` or `tests/no-coi/` of a throwaway worktree, run

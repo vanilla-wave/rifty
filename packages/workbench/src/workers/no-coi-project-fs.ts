@@ -68,6 +68,8 @@ export function createNoCoiProjectFs(inner: NoCoiProjectFsInner): NoCoiProjectFs
   const fs: NoCoiProjectFs = {
     existsSync: (path) => inner.existsSync(absolute(path)),
     readFileBytesSync: (path) => inner.readFileBytesSync(absolute(path)).slice(),
+    readFileRangeSync: (path, position, length) =>
+      inner.readFileRangeSync(absolute(path), position, length).slice(),
     readdirSync: (path) => inner.readdirSync(absolute(path)).map((entry) => ({ ...entry })),
     statSync: (path) => ({ ...inner.statSync(absolute(path)) }),
     statSyncOrNull(path) {

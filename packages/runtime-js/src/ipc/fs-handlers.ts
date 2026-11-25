@@ -23,7 +23,7 @@ import {
   decodeFsPathRequest,
   decodeFsReadRangeRequest,
 } from './fs-rpc-protocol.ts';
-import { readChunkReplyOf, readFileHeadReplyOf } from './sync-rpc-fs.ts';
+import { readFileHeadReplyOf } from './sync-rpc-fs.ts';
 
 export type VfsAccessor = () => FsSync;
 
@@ -92,12 +92,13 @@ export function installRuntimeJsFsHandlers(
     { decodeBinaryRequest: decodeFsPathRequest },
   );
 
-  // Binary reply: one range of the current file (forwarded by a relay).
+  // Binary reply: one positional read of the current file (ADR-0576); a relay's
+  // SyncRpcFsSync forwards it as one upstream exchange.
   dispatcher.register(
     FS_METHODS.readChunk,
     (p): Uint8Array => {
       const r = obj(p);
-      return readChunkReplyOf(getVfs(), str(r, 'path'), num(r, 'offset'), num(r, 'length'));
+      return getVfs().readFileRangeSync(str(r, 'path'), num(r, 'offset'), num(r, 'length'));
     },
     { decodeBinaryRequest: decodeFsReadRangeRequest },
   );
