@@ -144,7 +144,8 @@ own `lib/zlib.js` also runs on each engine via a swapped `binding.Zlib`.
 8. Bundle budget: engine only, inline costs +36950 B gzip in the client generic bundle (279754 →
    316704 of 332000: 15296 B left before the port of the handle and `lib/zlib.js`, minus today's
    `zlib.ts`) and +36855 B in toolchain (25530 B left). Kill condition: a PR that would cross a
-   `CLIENT_BUNDLE_BUDGETS` cap re-opens this placement — in order: the builtin `zlib` module (engine
+   `CLIENT_BUNDLE_BUDGETS` cap re-opens this placement (see the 2026-11-25 answer below: the ×1.5
+   recalibration first) — options: the builtin `zlib` module (engine
    included) as a lazily loaded chunk, if one can exist without changing `require('zlib')`'s
    synchronous semantics (it may not); the wasm as a host-published asset with a pre-entry preload
    (ADR-0351/0352; in browser Workers both `installNodeRuntime` and `worker-entry.ts`'s boot would
@@ -155,9 +156,10 @@ own `lib/zlib.js` also runs on each engine via a swapped `binding.Zlib`.
    left under 332000 before Node's `lib/zlib.js` (≈ 8.5 KB gzip unminified, probe) minus today's
    `zlib.ts` — ≈ 4 KB short: this kill condition fires in unit 3; toolchain 331575 → 370684 (+39109,
    15316 left). wasm-opt is part of it: inline base64 36541 B gzip without, 34954 B with (≈ 1.6 KB,
-   ≈ 37 % of what is left). The manager put the budget to the user 2026-11-25 (re-derive the cap by
-   its own ×1.5 rule / the engine as a separate file / pako); no answer yet — unit 3 does not start
-   without it.
+   ≈ 37 % of what is left). Budget answered 2026-11-25: the cap is recalibrated by the ×1.5 rule
+   (`client-bundle-budget.mjs`) in the PR that crosses it — recorded by the manager in the zlib goal's
+   Decisions. The three placements above are then options, not an ordered obligation: for a growth
+   larger than measured.
 
 ## Alternatives
 
