@@ -36,7 +36,7 @@ against Node:
   interleave with them (`m4` «fs.read(fd) loop»: Node `ticks>0=true`, rifty `false`; Workbench 0 ticks
   on every fd path, `results/chromium-fd/`). A write before close lands today, so that is a guard
   row. It has its own regression row. → I10.
-- **4b** `runtime-js/fs-fd-read-by-range` — positional fd reads move only the range. In Workbench
+- **4b** `runtime-js/fs-fd-read-by-range` — **done**: PR #457, ADR-0576, after-measurements `results/chromium-fd-4b/`. Positional fd reads move only the range. In Workbench
   today each 64 KiB call moves the whole file: 16 MiB in 18.5–26 s, against Node's 3 ms.
   Per host:
   - in-process and isolate (memory) read linearly already (a view, no copy);

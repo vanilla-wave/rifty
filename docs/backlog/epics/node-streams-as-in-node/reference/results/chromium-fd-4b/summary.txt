@@ -1,0 +1,59 @@
+# unit 4b fd read, Chromium 148: base = main 272d569ba, after = PR #457 e757256bc; guest ms, median of 3 (node docs/backlog/epics/node-streams-as-in-node/reference/results/chromium-fd-4b/summary.mjs <file>)
+## base-workbench
+ephemeral readfilesync 1           median 2 runs 2/2/2
+ephemeral readsync 1               median 25 runs 24/27/25
+ephemeral fdread 1                 median 24 runs 27/23/24
+ephemeral readfilesync 4           median 10 runs 10/11/10
+ephemeral readsync 4               median 568 runs 568/571/563
+ephemeral fdread 4                 median 584 runs 565/584/602
+ephemeral readfilesync 16          median 87 runs 82/91/87
+ephemeral readsync 16              median 20745 runs 20745/19882/24047
+ephemeral fdread 16                median 25100 runs 25109/24854/25100
+required readfilesync 1            median 2 runs 2/2/2
+required readsync 1                median 23 runs 22/23/25
+required fdread 1                  median 24 runs 24/26/23
+required readfilesync 4            median 10 runs 10/10/11
+required readsync 4                median 592 runs 592/585/606
+required fdread 4                  median 581 runs 581/594/576
+required readfilesync 16           median 86 runs 87/81/86
+required readsync 16               median 22637 runs 21443/22637/25819
+required fdread 16                 median 22167 runs 21363/22167/29500
+## base-sdk
+sdk readfilesync 1                 median 0 runs 0/0/0
+sdk readsync 1                     median 3 runs 4/3/3
+sdk fdread 1                       median 3 runs 3/3/3
+sdk readfilesync 4                 median 1 runs 2/1/1
+sdk readsync 4                     median 39 runs 46/39/39
+sdk fdread 4                       median 39 runs 39/39/38
+sdk readfilesync 16                median 5 runs 4/5/5
+sdk readsync 16                    median 669 runs 690/666/669
+sdk fdread 16                      median 620 runs 657/603/620
+## after-workbench
+ephemeral readfilesync 1           median 2 runs 2/2/2
+ephemeral readsync 1               median 2 runs 2/2/2
+ephemeral fdread 1                 median 2 runs 2/2/2
+ephemeral readfilesync 4           median 5 runs 6/5/5
+ephemeral readsync 4               median 6 runs 6/5/7
+ephemeral fdread 4                 median 6 runs 6/8/6
+ephemeral readfilesync 16          median 20 runs 20/20/19
+ephemeral readsync 16              median 21 runs 21/24/20
+ephemeral fdread 16                median 23 runs 23/23/21
+required readfilesync 1            median 2 runs 2/2/2
+required readsync 1                median 2 runs 2/2/2
+required fdread 1                  median 2 runs 2/2/2
+required readfilesync 4            median 5 runs 5/5/5
+required readsync 4                median 6 runs 6/6/5
+required fdread 4                  median 6 runs 6/6/7
+required readfilesync 16           median 19 runs 19/18/19
+required readsync 16               median 21 runs 22/21/21
+required fdread 16                 median 22 runs 20/26/22
+## after-sdk
+sdk readfilesync 1                 median 0 runs 1/0/0
+sdk readsync 1                     median 0 runs 1/0/0
+sdk fdread 1                       median 0 runs 1/0/0
+sdk readfilesync 4                 median 1 runs 1/1/1
+sdk readsync 4                     median 1 runs 1/1/1
+sdk fdread 4                       median 1 runs 1/1/1
+sdk readfilesync 16                median 4 runs 3/5/4
+sdk readsync 16                    median 3 runs 4/3/3
+sdk fdread 16                      median 3 runs 3/3/3

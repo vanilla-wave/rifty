@@ -31,10 +31,9 @@ export type { BuiltinFactory } from './builtins/index.ts';
 export { NODE_PROCESS_IDENTITY } from './builtins/process-identity.ts';
 export { installRuntimeJsFsHandlers } from './ipc/fs-handlers.ts';
 export {
-  type ChunkedReadSource,
+  type ReadFileHeadSource,
   SyncRpcFsSync,
   installRemoteSyncFs,
-  readChunkReplyOf,
   readFileHeadReplyOf,
 } from './ipc/sync-rpc-fs.ts';
 export type { SyncBinaryCall, SyncCall } from './ipc/sync-rpc-fs.ts';
