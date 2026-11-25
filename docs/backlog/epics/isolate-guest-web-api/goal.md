@@ -130,7 +130,9 @@ the split-out of `URL`/ESM.
 
 - 2026-11-24 — user (manager thread `cf2ae711`, asked «Web API в isolate (`URL`, `Blob`, ESM) —
   открыть целью?»): «запускай».
-- 2026-11-25 — user, question 1 (API set): answered — recorded by the manager.
+- 2026-11-25 — user, question 1 (API set), in the manager thread cf2ae711. Asked first «а без них что не работает» and «я про поддержку офисных пакетов. Мы же не просто так начали эту цель»; the manager answered that of the four document libraries only the `Blob` outputs (`Packer.toBlob`, `pptx.write({outputType:'blob'})`) stop on a Web API, and recommended a narrowed goal. The user then answered «ок» to the manager's «Цель Web API — рекомендую сузить до Blob и кодировок TextDecoder, а URL и ES-модули вынести отдельной целью» and «ок» to «AbortController, EventTarget, Event в isolate — сделать обычными глобальными, как в Node».
+- 2026-11-25 — manager, by the user's delegation of this goal's design (questions 2–4 were not taken up by the user; reversible): the consumer's scenario closes the goal; cost is measured and recorded, no hard limit; tier works. Question 5 (ES modules in `-e`) left with ES modules.
+- 2026-11-25 — manager, on the questions this narrowing raised: (T) the five encodings Node decodes through ICU (big5, euc-jp, shift_jis, euc-kr, iso-2022-jp) stay a named loud gap — Node's results there are ICU's, not WHATWG's, so neither a WHATWG decoder nor a guess is Node; no measured consumer; a draft carries them. (M1) `CustomEvent` becomes a global with the four — same Node file, no added bytes. (M2) web streams in the isolate stay outside both goals: `Blob.stream()` and `TextDecoderStream` are named gaps, a draft carries them. The events-and-abort unit lives in the streams goal (its first consumer is Node's `pipeline`); this goal's I3 rows are that unit's acceptance.
 - 2026-11-25 — manager, reversible (questions 2–4 not taken up by the user): the scenario is the
   consumer's generators; cost is measured and recorded, no hard bound; tier `works`. Question 5
   (ESM in `-e`) dropped with ESM.
