@@ -242,6 +242,17 @@ function sourceDirFiles(root, pkgDirs) {
   return out;
 }
 
+/** `<area>/<slug>` naming a `docs/backlog/<area>/<slug>.md` with a `status:` front matter line. */
+function isBacklogUnit(root, unit) {
+  if (typeof unit !== 'string' || !/^[a-z0-9][a-z0-9-]*\/[a-z0-9][a-z0-9-]*$/u.test(unit))
+    return false;
+  const file = join(root, 'docs/backlog', `${unit}.md`);
+  return (
+    existsSync(file) &&
+    /^---\n[\s\S]*?^status: \S/mu.test(readText(root, `docs/backlog/${unit}.md`))
+  );
+}
+
 /** `sourcesKey`: a key of sources.json, or a dotted path through own keys of plain objects. */
 function pinAt(json, key) {
   let at = json;
@@ -265,8 +276,8 @@ export function validateManifest(root, manifest, pkgDirs = []) {
       if (!existsSync(join(root, dir, f)))
         bad(`generated ${dir}`, `lists ${f}, which is not in the dir`);
     if (!r.package && !texts(r)) bad(`generated ${dir}`, 'adds no license text');
-    if (r.unshipped !== undefined && !existsSync(join(root, 'docs/backlog', `${r.unshipped}.md`)))
-      bad(`generated ${dir}`, `unshipped names no docs/backlog/${r.unshipped}.md`);
+    if (r.unshipped !== undefined && !isBacklogUnit(root, r.unshipped))
+      bad(`generated ${dir}`, `unshipped names no backlog unit docs/backlog/${r.unshipped}.md`);
     const sources = join(root, dir, 'sources.json');
     if (!existsSync(sources)) continue;
     const pinned = pinAt(JSON.parse(readFileSync(sources, 'utf8')), r.sourcesKey ?? '');

@@ -79,8 +79,10 @@ Draft until its dependency lands; seeds the compile:
    engine — while both are there, `check:third-party-notices` is red.
    Compat ⚠️ row (`zlib.md`), one class (ADR-0573 §1 memory model): rifty copies the caller's buffers
    — input when a write is called, output when it ends — where Node uses them live: input changed
-   during one operation's continuation writes (async `'data'` listener), `SharedArrayBuffer`/resizable
-   `ArrayBuffer`, `in`/`out` overlap and `params()` after `out` moved (via `_handle`); pinned in unit 2.
+   during one operation's continuation writes (async `'data'` listener) or before an async write
+   completes, `out` moved before completion, `SharedArrayBuffer`/resizable `ArrayBuffer`, `in`/`out`
+   overlap and `params()` after `out` moved (via `_handle`); where Node aborts on a transferred buffer,
+   rifty reports `Z_STREAM_ERROR`. Listed in ADR-0573 §1, pinned in unit 2 where Node is deterministic.
 7. The `FinalizationRegistry` frees dropped objects' handles: a GC-lane test (`--expose-gc`) sees the
    allocator reuse their blocks → ADR-0573. Baseline without it (unit 2 review round 2): 2000 dropped
    handles hold 643 MiB of wasm memory; through lib/zlib.js RSS 738 → 3108 MiB, Node 314 → 336 MiB

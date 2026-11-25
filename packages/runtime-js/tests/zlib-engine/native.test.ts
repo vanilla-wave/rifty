@@ -205,6 +205,9 @@ describe('product handle = Node native handle, direct calls', () => {
  */
 describe('declared: the port copies where Node uses the caller’s memory live', () => {
   const sha16 = (b: Uint8Array) => createHash('sha256').update(b).digest('hex').slice(0, 16);
+  const keep: ArrayBuffer[] = [];
+  const NODE_MOVED = 'ea19b47b2e361ec9';
+  const PORT_MOVED = 'ad7facb2586fc6e9';
 
   it('in and out overlapping in one ArrayBuffer, deflate', () => {
     const r = both((b) => {
@@ -236,6 +239,57 @@ describe('declared: the port copies where Node uses the caller’s memory live',
       node: { events: [['unexpected end of file', -5, 'Z_BUF_ERROR']] },
       port: { out: '23aa90589ba8c145' },
     });
+  });
+
+  it('out transferred between async write() and its completion: state and callback as Node', async () => {
+    const run = (b: Binding) =>
+      new Promise<unknown>((res) => {
+        const h = new b.Zlib(C.DEFLATE);
+        const state = new Uint32Array(2);
+        const events: unknown[] = [];
+        let moved: ArrayBuffer | null = null;
+        h.onerror = (...a) => {
+          events.push(a);
+          res({ events });
+        };
+        h.init(
+          15,
+          6,
+          8,
+          0,
+          state,
+          () => {
+            h.close();
+            res({ events, state: [...state], moved: sha16(new Uint8Array(moved as ArrayBuffer)) });
+          },
+          undefined,
+        );
+        const out = new Uint8Array(4096);
+        h.write(C.Z_FINISH, TEXT, 0, TEXT.length, out, 0, out.length);
+        moved = out.buffer.transfer(); // Node writes into it from the pool; the port has lost it
+      });
+    expect({ node: await run(native), port: await run(port) }).toEqual({
+      node: { events: [], state: [4032, 0], moved: NODE_MOVED },
+      port: { events: [], state: [4032, 0], moved: PORT_MOVED },
+    });
+  });
+
+  it('a buffer transferred away before the call: Node aborts the process, the port reports it', async () => {
+    const r: unknown[] = [];
+    for (const async of [false, true]) {
+      const { h, events } = open(port, C.DEFLATE);
+      const input = Buffer.alloc(100, 1);
+      const out = new Uint8Array(64);
+      keep.push(input.buffer.transfer()); // Node: CHECK(Buffer::IsWithinBounds) → abort
+      (async ? h.write : h.writeSync).call(h, C.Z_FINISH, input, 0, 0, out, 0, 64);
+      if (async) await new Promise((k) => setImmediate(k));
+      r.push(events);
+      h.close();
+    }
+    expect(r).toEqual([
+      [['stream error', -2, 'Z_STREAM_ERROR']],
+      [['stream error', -2, 'Z_STREAM_ERROR']],
+    ]);
   });
 
   it('params() after the last out was transferred away', () => {

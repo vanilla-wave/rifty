@@ -10,6 +10,7 @@
 import '../../src/zlib-engine/engine';
 import '../../src/zlib-engine/handle';
 import '../../src/zlib-engine/wasm-bytes';
+import './copy-count.mjs?raw';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';

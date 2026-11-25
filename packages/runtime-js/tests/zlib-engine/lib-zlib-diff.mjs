@@ -357,10 +357,10 @@ const STATE = {
     ),
 };
 /**
- * Declared limit (ADR-0573, unit 2 Decisions): the port snapshots a write's input when the write
- * starts and does not re-read it until the write ends; Node reads the caller's memory live. Both
- * sides pinned, so convergence shows. lib/zlib.js's async path pushes output ('data') before its
- * continuation write — the window where a listener can change the input.
+ * Declared class (ADR-0573 §1 memory model): the port snapshots a write's input when write() is
+ * called and keeps one operation's unconsumed rest for its continuation writes; Node reads the
+ * caller's memory live. Both sides pinned, so convergence shows. lib/zlib.js's async path pushes
+ * output ('data') before its continuation write — the window where a listener can change the input.
  */
 const PLAIN = Buffer.concat([
   Buffer.from('abcdefghij'.repeat(20000)),
@@ -425,8 +425,6 @@ const MEMORY = {
     d.end();
     return r;
   },
-  // (An inflate whose input is transferred before its continuation write aborts Node itself:
-  // CHECK(Buffer::IsWithinBounds) — not a scenario.)
   'memory: deflate input moved by structuredClone transfer after write()': ({ z }) => {
     const d = z.createDeflate();
     const r = settle(d, (o) => ({ out: val(o), inflated: realZlib.inflateSync(o).length }));
@@ -438,6 +436,34 @@ const MEMORY = {
   },
 };
 const keep = [];
+/**
+ * Where Node aborts the process (node_zlib.cc CHECK(Buffer::IsWithinBounds)) — run on the port only:
+ * its outcome goes through the handle's error channel (Z_STREAM_ERROR), never an uncaught throw.
+ */
+const NODE_ABORTS = {
+  'aborts: inflate input transferred before its continuation write': ({ z }) => {
+    const i = z.createInflate();
+    const r = settle(i, (o) => ({ out: val(o) }));
+    const b = new Uint8Array(realZlib.deflateSync(Buffer.alloc(100000, 0x61)));
+    i.write(b);
+    keep.push(b.buffer.transfer());
+    i.end();
+    return r;
+  },
+  'aborts: a data chunk’s buffer transferred while the stream goes on': ({ z }) =>
+    new Promise((res) => {
+      const d = z.createDeflate({ chunkSize: 16384 });
+      const chunks = [];
+      let n = 0;
+      d.on('data', (c) => {
+        chunks.push(Buffer.from(c));
+        if (n++ === 0) keep.push(c.buffer.transfer());
+      });
+      d.on('error', (e) => res({ error: val(e) }));
+      d.on('end', () => res({ out: val(Buffer.concat(chunks)) }));
+      d.end(T);
+    }),
+};
 const LOAD = {
   // readableLength before reading is timing-dependent in Node itself: not observed.
   'load: 5 MB deflate with a paused consumer': async ({ z }) => {
@@ -462,10 +488,15 @@ for (const [group, set] of [
   ['load', LOAD],
   ['declared', DECLARED],
   ['memory', MEMORY],
+  ['aborts', NODE_ABORTS],
 ])
   for (const [name, run] of Object.entries(set)) {
     results[name] = { group };
     for (const [col, lib] of Object.entries(COLS)) {
+      if (group === 'aborts' && col === 'node') {
+        results[name][col] = { aborts: 'CHECK(Buffer::IsWithinBounds)' };
+        continue;
+      }
       try {
         results[name][col] = await Promise.race([
           run(lib),

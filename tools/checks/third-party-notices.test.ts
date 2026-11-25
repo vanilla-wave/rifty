@@ -197,7 +197,11 @@ describe('closed by default (review S1, S2)', () => {
   });
 
   it('an unshipped mark names an existing backlog unit', () => {
-    put('docs/backlog/runtime-js/zlib-node-lib-port.md', '# unit\n');
+    put(
+      'docs/backlog/runtime-js/zlib-node-lib-port.md',
+      '---\narea: runtime-js\nstatus: draft\n---\n# unit\n',
+    );
+    put('docs/backlog/runtime-js/README.md', '# area\n');
     const marked = (unshipped: string) => ({
       ...manifest,
       generated: {
@@ -205,9 +209,15 @@ describe('closed by default (review S1, S2)', () => {
       },
     });
     expect(validateManifest(root, marked('runtime-js/zlib-node-lib-port'), [])).toEqual([]);
-    expect(validateManifest(root, marked('runtime-js/gone'), [])).toEqual([
-      'third-party-manifest generated pkg/src/generated: unshipped names no docs/backlog/runtime-js/gone.md',
-    ]);
+    for (const value of [
+      'runtime-js/gone',
+      'runtime-js/README',
+      '../runtime-js/zlib-node-lib-port',
+      'runtime-js',
+    ])
+      expect(validateManifest(root, marked(value), [])).toEqual([
+        `third-party-manifest generated pkg/src/generated: unshipped names no backlog unit docs/backlog/${value}.md`,
+      ]);
   });
 
   it('a generated record marked unshipped: unused is fine, used is red until the mark goes', () => {

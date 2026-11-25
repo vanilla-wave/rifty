@@ -194,6 +194,79 @@ describe('zlib-engine after a failed port allocation', () => {
   });
 });
 
+describe('zlib-engine: no state left behind', () => {
+  it('a failed out copy after a fresh snapshot leaves zlib no pointer into the freed one', () => {
+    const engine = new ZlibEngine(zlibWasmBytes());
+    const seen: number[][] = [];
+    const x = engine.x;
+    Object.defineProperty(engine, 'x', {
+      value: {
+        ...x,
+        deflateParams: (strm: number, level: number, strategy: number) => {
+          seen.push([engine.u32(strm), engine.u32(strm + 4)]); // next_in, avail_in
+          return x.deflateParams(strm, level, strategy);
+        },
+      },
+    });
+    const binding = createZlibBinding(() => engine, setImmediate);
+    const errors: unknown[][] = [];
+    const h = new binding.Zlib(DEFLATE);
+    const state = new Uint32Array(2);
+    h.onerror = (...a) => errors.push(a);
+    h.init(15, 0, 8, 0, state, () => {}, undefined);
+    const P = Buffer.alloc(200000, 0x50);
+    h.writeSync(Z_NO_FLUSH, P, 0, P.length, Buffer.alloc(1000), 0, 1000);
+    expect(state[1]).toBeGreaterThan(0); // its snapshot is kept: P is not consumed
+    const room = engine.malloc(512 * 1024);
+    const blocks = exhaust(engine, 64);
+    engine.free(room);
+    const Q = Buffer.alloc(100000, 0x51); // snapshotted (P's freed); its 1 MiB out copy fails
+    h.writeSync(Z_NO_FLUSH, Q, 0, Q.length, Buffer.alloc(1 << 20), 0, 1 << 20);
+    for (const b of blocks) engine.free(b);
+    expect(errors).toEqual([MEM]);
+    h.params(1, 0);
+    h.close();
+    expect(seen).toEqual([[0, 0]]);
+  });
+
+  it('a dictionary re-given by a second init() is copied at first use; its failure is onerror', () => {
+    const engine = new ZlibEngine(zlibWasmBytes());
+    const binding = createZlibBinding(() => engine, setImmediate);
+    const errors: unknown[][] = [];
+    const h = new binding.Zlib(DEFLATE);
+    const state = new Uint32Array(2);
+    h.onerror = (...a) => errors.push(a);
+    h.init(15, -1, 8, 0, state, () => {}, undefined);
+    h.writeSync(Z_NO_FLUSH, Buffer.from('a'), 0, 1, Buffer.alloc(64), 0, 64); // zlib initialised
+    h.init(15, -1, 8, 0, state, () => {}, Buffer.alloc(1 << 20, 'd'));
+    const blocks = exhaust(engine, 64);
+    h.reset(); // ResetStream → SetDictionary: the copy is made here
+    for (const b of blocks) engine.free(b);
+    expect(errors).toEqual([MEM]);
+    h.close();
+  });
+});
+
+describe('zlib-engine with a module that does not load: a write with no input', () => {
+  it('sync and async: ZlibEngineError from the call itself, every time, nothing left in progress', () => {
+    const bad = zlibWasmBytes().slice(0, 1000);
+    for (const async of [false, true]) {
+      const binding = createZlibBinding(() => new ZlibEngine(bad), setImmediate);
+      const { h } = handle(binding, []);
+      const out = Buffer.alloc(64);
+      const thrown: string[] = [];
+      for (const input of [null, Buffer.alloc(0), Buffer.from('x')])
+        try {
+          (async ? h.write : h.writeSync).call(h, 2, input, 0, input?.length ?? 0, out, 0, 64);
+        } catch (e) {
+          thrown.push((e as Error).name);
+        }
+      expect(thrown).toEqual(['ZlibEngineError', 'ZlibEngineError', 'ZlibEngineError']);
+      h.close(); // not pending: no write was left in progress
+    }
+  });
+});
+
 describe('zlib-engine with a module that does not load', () => {
   it('the first engine operation throws ZlibEngineError, every time; no fallback', () => {
     const bad = zlibWasmBytes().slice(0, 1000);

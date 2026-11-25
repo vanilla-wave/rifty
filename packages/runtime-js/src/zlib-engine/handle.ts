@@ -70,6 +70,16 @@ const MEMORY_ERROR: CompressionError = {
   err: -4,
 };
 
+/**
+ * A buffer whose ArrayBuffer was transferred away: Node aborts the process (`CHECK(IsWithinBounds)`);
+ * the port reports zlib's `Z_STREAM_ERROR` through the same channel (declared, memory model).
+ */
+const DETACHED_ERROR: CompressionError = {
+  message: 'stream error',
+  code: 'Z_STREAM_ERROR',
+  err: -2,
+};
+
 /** Run `fn`; a WasmMemoryError becomes MEMORY_ERROR, anything else propagates. */
 function guarded<T>(fn: () => T): T | CompressionError {
   try {
@@ -79,7 +89,7 @@ function guarded<T>(fn: () => T): T | CompressionError {
     throw e;
   }
 }
-const isError = (v: unknown): v is CompressionError => v === MEMORY_ERROR;
+const isError = (v: unknown): v is CompressionError => v === MEMORY_ERROR || v === DETACHED_ERROR;
 
 /** V8's Uint32Value / Int32Value: ToNumber (a BigInt or Symbol throws TypeError), then wrap. */
 const u32 = (v: unknown): number => +(v as number) >>> 0;
@@ -88,6 +98,16 @@ const i32 = (v: unknown): number => +(v as number) | 0;
 /** Buffer::Data/Length of an ArrayBufferView: its bytes, never its elements. */
 function viewBytes(view: ArrayBufferView): Uint8Array {
   return new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
+}
+
+/** viewBytes, or null when the view's ArrayBuffer was transferred away (detached). */
+function liveBytes(view: ArrayBufferView): Uint8Array | null {
+  try {
+    return viewBytes(view);
+  } catch (e) {
+    if (e instanceof TypeError) return null;
+    throw e;
+  }
 }
 
 /** ZlibContext over one engine; `strm` is the z_stream's wasm address once Init ran. */
@@ -121,7 +141,11 @@ class ZlibContext {
   } = { ptr: 0, buffer: null, start: 0, end: 0, next: -1 };
   /** The caller's `out` of the last write and how much of it zlib filled (next_out, in JS). */
   private out: { view: Uint8Array | null; cursor: number } = { view: null, cursor: 0 };
-  /** The dictionary's wasm copy, made before zlib is initialised (no allocation after it). */
+  /**
+   * The dictionary's wasm copy (Node keeps its own std::vector): made before zlib is initialised,
+   * kept until `close`; after a second `init()` it is made again at first use (`reset`, Z_NEED_DICT),
+   * where a failed allocation is `onerror` Z_MEM_ERROR.
+   */
   private dictPtr = 0;
 
   constructor(
@@ -167,8 +191,19 @@ class ZlibContext {
   }
 
   private dropInput(): void {
-    if (this.input.ptr !== 0) this.engine.free(this.input.ptr);
+    if (this.input.ptr === 0) return;
+    this.engine.free(this.input.ptr);
     this.input = { ptr: 0, buffer: null, start: 0, end: 0, next: -1 };
+    if (this.strm !== 0) {
+      // zlib must never see a pointer into a freed snapshot (params' deflate(Z_BLOCK) reads it).
+      this.engine.setU32(this.strm + ZS.nextIn, 0);
+      this.engine.setU32(this.strm + ZS.availIn, 0);
+    }
+  }
+
+  /** Load the engine now (ZlibEngineError here, before a write is in progress). */
+  loadEngine(): void {
+    void this.engine;
   }
 
   close(): void {
@@ -254,18 +289,18 @@ class ZlibContext {
     flush: number,
     inPtr: number,
     inLen: number,
-    out: Uint8Array,
+    out: { view: Uint8Array; length: number; isNull: boolean },
   ): { availIn: number; availOut: number } {
     this.stream();
     const e = this.engine;
-    const outNull = out.buffer.byteLength === 0 && out.byteLength === 0;
-    const outPtr = outNull ? 0 : e.malloc(Math.max(out.byteLength, 1));
+    // `out`'s length and null-ness are the call's: a view moved away since gets no bytes (declared).
+    const outPtr = out.isNull ? 0 : e.malloc(Math.max(out.length, 1));
     try {
-      this.out = { view: outNull ? null : out, cursor: 0 };
+      this.out = { view: out.isNull ? null : out.view, cursor: 0 };
       e.setU32(this.strm + ZS.nextIn, inPtr);
       e.setU32(this.strm + ZS.availIn, inLen);
       e.setU32(this.strm + ZS.nextOut, outPtr);
-      e.setU32(this.strm + ZS.availOut, out.byteLength);
+      e.setU32(this.strm + ZS.availOut, out.length);
       this.flush = flush;
       this.doThreadPoolWork();
       this.copyOut(outPtr);
@@ -422,7 +457,7 @@ class ZlibContext {
   private initZlib(): boolean {
     if (this.zlibInitDone) return false;
     this.stream();
-    if (this.dictionary.byteLength > 0) this.dictionaryAddress(); // a RangeError here leaves zlib untouched
+    if (this.dictionary.byteLength > 0) this.dictionaryAddress(); // a WasmMemoryError here leaves zlib untouched
     const x = this.engine.x;
     switch (this.mode) {
       case DEFLATE:
@@ -630,35 +665,59 @@ export function createZlibBinding(
       check(flushArg !== undefined, 'must provide flush value');
       const flush = u32(flushArg);
       check(FLUSHES.has(flush), 'Invalid flush value');
+      let detached = false;
       let inView: Uint8Array | null = null;
       if (input !== null) {
         check(ArrayBuffer.isView(input), 'input is not a buffer');
-        const bytes = viewBytes(input);
         const off = u32(inOff);
         const len = u32(inLen);
-        check(off + len <= bytes.byteLength, 'input out of bounds');
-        inView = bytes.subarray(off, off + len);
+        const bytes = liveBytes(input);
+        if (bytes === null) detached = true;
+        else {
+          check(off + len <= bytes.byteLength, 'input out of bounds');
+          inView = bytes.subarray(off, off + len);
+        }
       }
       check(ArrayBuffer.isView(out), 'output is not a buffer');
-      const outBytes = viewBytes(out);
       const oOff = u32(outOff);
       const oLen = u32(outLen);
-      check(oOff + oLen <= outBytes.byteLength, 'output out of bounds');
-      const outView = outBytes.subarray(oOff, oOff + oLen);
+      const outBytes = liveBytes(out);
+      let outView: Uint8Array = new Uint8Array(0);
+      if (outBytes === null) detached = true;
+      else {
+        check(oOff + oLen <= outBytes.byteLength, 'output out of bounds');
+        outView = outBytes.subarray(oOff, oOff + oLen);
+      }
 
       check(this.initDone, 'write before init');
       check(!this.closed, 'already finalized');
       check(!this.writeInProgress, 'write in progress');
       check(!this.pendingClose, 'pending close');
       const ctx = this.context();
-      // The input is taken now, for both forms (memory model, ZlibContext).
-      const inPtr = guarded(() => ctx.snapshot(inView));
-      this.writeInProgress = true;
+      ctx.loadEngine();
+      // Taken now, for both forms (memory model, ZlibContext): the input and `out`'s geometry.
+      const inPtr = detached ? DETACHED_ERROR : guarded(() => ctx.snapshot(inView));
       const inBytes = inView === null ? 0 : inView.byteLength;
+      const outAt = {
+        view: outView,
+        length: outView.byteLength,
+        isNull: outView.buffer.byteLength === 0,
+      };
+      this.writeInProgress = true;
       const work = () =>
-        isError(inPtr) ? inPtr : guarded(() => ctx.work(flush, inPtr, inBytes, outView));
+        isError(inPtr) ? inPtr : guarded(() => ctx.work(flush, inPtr, inBytes, outAt));
+      /** An exception that is not zlib's (a bug, a CHECK) still ends the write. */
+      const settle = () => {
+        try {
+          return work();
+        } catch (e) {
+          this.writeInProgress = false;
+          if (async && this.pendingClose) this.close();
+          throw e;
+        }
+      };
       if (!async) {
-        const after = work();
+        const after = settle();
         if (isError(after)) this.emitError(after);
         else if (this.checkError()) {
           this.updateWriteResult(after);
@@ -667,7 +726,7 @@ export function createZlibBinding(
         return;
       }
       schedule(() => {
-        const after = work();
+        const after = settle();
         this.writeInProgress = false;
         if (isError(after)) return this.emitError(after);
         if (!this.checkError()) return;

@@ -1,13 +1,17 @@
 /**
  * Unit 2 Acceptance 2, differential half (ADR-0573): lib-zlib-diff.mjs in its own Node process
  * (`--expose-internals` for Node's `primordials`/`internalBinding`) — Node's verbatim lib/zlib.js
- * over the product handle and Node's `Transform` equals real `node:zlib` on every scenario; values
- * compared whole (bytes by hash, errors by class, code, errno, message; the gzip OS byte normalised).
+ * over the product handle and Node's `Transform`. Groups `state` (45), `load` (1) and `memory` (2:
+ * input moved right after write()) equal real `node:zlib`; `declared` (2) pins both sides of the
+ * memory model's declared class; `aborts` (2) runs on the port only — where Node aborts the
+ * process, the port's outcome is the handle's error channel. Values compared whole (bytes by hash,
+ * errors by class, code, errno, message; the gzip OS byte normalised).
  */
 // The child process loads these; imported here so `vitest --changed` relates this test to them.
 import '../../src/zlib-engine/engine';
 import '../../src/zlib-engine/handle';
 import '../../src/zlib-engine/wasm-bytes';
+import './lib-zlib-diff.mjs?raw';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -16,7 +20,7 @@ const SCRIPT = fileURLToPath(new URL('./lib-zlib-diff.mjs', import.meta.url));
 
 describe("Node's own lib/zlib.js over the product handle (port/N) vs node:zlib", () => {
   it(
-    'state group 45/45 and load group 1/1 equal Node; the declared snapshot limit pinned',
+    'state 45/45, load 1/1, memory 2/2 equal Node; declared and Node-aborting paths pinned',
     { timeout: 120_000 },
     () => {
       const out = execFileSync(
@@ -37,10 +41,13 @@ describe("Node's own lib/zlib.js over the product handle (port/N) vs node:zlib",
       const diffs: string[] = [];
       for (const [name, r] of Object.entries(results)) {
         groups[r.group] = (groups[r.group] ?? 0) + 1;
-        if (r.group !== 'declared' && JSON.stringify(r.node) !== JSON.stringify(r['port/N']))
+        if (
+          !['declared', 'aborts'].includes(r.group) &&
+          JSON.stringify(r.node) !== JSON.stringify(r['port/N'])
+        )
           diffs.push(`${name}: ${JSON.stringify(r.node)} → ${JSON.stringify(r['port/N'])}`);
       }
-      expect(groups).toEqual({ state: 45, load: 1, declared: 2, memory: 2 });
+      expect(groups).toEqual({ state: 45, load: 1, declared: 2, memory: 2, aborts: 2 });
       expect(diffs).toEqual([]);
       // Declared limit: input snapshotted for the whole write (Node reads it live). Both sides pinned.
       const declared = Object.fromEntries(
@@ -48,6 +55,17 @@ describe("Node's own lib/zlib.js over the product handle (port/N) vs node:zlib",
           .filter(([, r]) => r.group === 'declared')
           .map(([name, r]) => [name, { node: r.node, port: r['port/N'] }]),
       );
+      const stream = {
+        error: { error: 'Error', code: 'Z_STREAM_ERROR', errno: -2, message: 'stream error' },
+      };
+      expect(
+        Object.entries(results)
+          .filter(([, r]) => r.group === 'aborts')
+          .map(([name, r]) => [name, r['port/N']]),
+      ).toEqual([
+        ['aborts: inflate input transferred before its continuation write', stream],
+        ['aborts: a data chunk’s buffer transferred while the stream goes on', stream],
+      ]);
       expect(declared).toEqual({
         'declared: inflate input changed in the first data event': {
           node: {
