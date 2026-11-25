@@ -39,6 +39,18 @@ challenge: 2026-11-25 — clear (premise in goal §Challenge)
 
    It also runs a loop of 256 callback reads and prints whether `setInterval(0)` ticked (a boolean).
 2. The same order for error callbacks (ENOENT `stat`, EBADF `read`). → I10
+3. `fs.promises` settles in the same turn shape (`readFile`, `stat`, ENOENT `stat`; loops of 256 under a
+   0 ms interval). → I10
+4. The class rows of Acceptance 5, pinned only where Node gave N/N (counts in the case). → I10
+5. The lifecycle rows of Acceptance 6 (carrier on Workbench/SDK, isolate test, parity in-process where
+   its `process` is rifty's). → I10
+
+Not pinnable (Node varies, v24.16.0, 20 runs): `read(fd)` buffer read in a microtask (`000` 18, `777` 2);
+`readFileSync` right after an async write (`writeFile` `''` 18 / old 2; `write(fd)` new 18 / old 2;
+`fs.promises.writeFile` `''` 7 / old 13); the completion order of several ops in flight at once.
+Declared, not this unit: a multi-round-trip `writeFile` whose bytes the caller mutates in a
+`setImmediate` (Node `9,9,9`, rifty `1,2,3`: Node opens first, writes a round trip later) — a
+round-trip model, the class draft's.
 
 ## Fault matrix
 
@@ -59,3 +71,10 @@ challenge: 2026-11-25 — clear (premise in goal §Challenge)
 - Callbacks complete in a host macrotask turn, not a microtask. This unit picks the shape per host
   (MessageChannel or `setImmediate`).
 - A `process.nextTick` queued before an fs call still runs before its callback, as in Node.
+- 2026-11-26 (manager): one `ioTurn(op)` for the callback APIs and `fs.promises.*`; `op` runs in the
+  first host turn, the outcome settles in the second, so the immediates queued beside a call precede
+  its completion (Node 40/40 from an fs callback). `FileHandle` is compat ❌ (no surface to route).
+- Host turn = rifty's `setImmediate`, driven per host: a Node host's own `setImmediate` (a Node
+  `MessagePort` drains up to 1000 messages per loop turn: 512 chained messages gave 0–1 timer ticks),
+  the isolate bridge's next host turn (`timerStart` 0 ms → host `setImmediate`, was a 1 ms timer),
+  Chromium's `MessageChannel`. No `setTimeout` (4 ms clamp).
