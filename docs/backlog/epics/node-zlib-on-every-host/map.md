@@ -44,7 +44,7 @@ in `lib/zlib.js`. The load group is 0/1 (`docs/backlog/epics/node-streams-as-in-
 `route-b-product-zlib-diff.txt`).
 
 - unit 2 (engine + handle + `crc32`) ← no streams unit.
-- unit 3 (`lib/zlib.js` whole) ← streams unit «Core» (`runtime-js/stream-core-node-sources`) and the
+- unit 3 (`lib/zlib.js` whole) ← streams units 8a–8c «Core» (the last: `runtime-js/stream-core-node-sources`) and the
   bindings it stands on. Every row of `zlib-node-lib-port`'s gap table closes there.
 - unit 4 (if kept) ← the same «Core»; `Transform` backpressure is Node's code there.
 

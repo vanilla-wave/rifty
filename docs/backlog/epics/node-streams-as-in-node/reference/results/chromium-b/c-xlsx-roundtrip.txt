@@ -1,0 +1,23 @@
+# c-xlsx-roundtrip.cjs
+node v24.16.0; rifty 692babe13+route-B; workbench: Chromium 148.0.7778.96 (rifty process.version v24.0.0); sdk: Chromium 148.0.7778.96 (rifty process.version v24.0.0)
+columns: node | workbench | sdk
+
+exit: node 0 | workbench not run | sdk 0
+stderr workbench: (not run)
+
+## line 1
+node: writeBuffer ok 
+workbench (DIFF): (no line)
+sdk (same): writeBuffer ok 
+## line 2
+node: readFile ok 120
+workbench (DIFF): (no line)
+sdk (same): readFile ok 120
+## line 3
+node: writeFile ok 
+workbench (DIFF): (no line)
+sdk (same): writeFile ok 
+## line 4
+node: reload ok [[null,"Region","Revenue"],[null,"North",999],[null,"South",95]]
+workbench (DIFF): (no line)
+sdk (same): reload ok [[null,"Region","Revenue"],[null,"North",999],[null,"South",95]]

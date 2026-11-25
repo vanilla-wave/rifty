@@ -53,6 +53,12 @@ outcomes above, row for row. The exception is Workbench `c-transform-big`, which
 180 s (the SDK takes 870 ms). That run used the program set at copy time, without the content hashes.
 Chromium 108 has not been run.
 
+Route B (main `692babe13` + the product wiring, `results/chromium-b/`):
+- SDK: all 12 programs = Node;
+- Workbench: the 7 without the closure = Node, and the 5 closure programs did not run (seeding).
+
+The Workbench harness for the closure is this unit's to settle.
+
 ## Challenge
 
 challenge: 2026-11-25 — none (carrier of the goal; the premise is checked in goal §Challenge)

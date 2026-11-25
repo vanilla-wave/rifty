@@ -284,6 +284,6 @@ These are entry criteria of the core units (goal `map.md`):
 
 - the user's answer on the generic and toolchain caps (above);
 - the user's answer on isolate `AbortController` globals (Decision 6);
-- route B in Chromium: done on the SDK (12/12 programs = Node); Workbench in `results/chromium-b/`;
-  Chromium 108 not run;
+- route B in Chromium: SDK 12/12 programs = Node, and Workbench 7/7 of the programs run, with the 5
+  closure programs not run (`results/chromium-b/`); Chromium 108 not run;
 - positional fd I/O by range (map 4b/4c) before the fs-stream units.

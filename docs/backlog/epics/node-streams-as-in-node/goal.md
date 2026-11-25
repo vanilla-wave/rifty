@@ -74,7 +74,8 @@ without the async VFS surface, isolate sandbox exec):
   - m5 4/14; m6 0/8; m7 0/11; m8 6/16 (the 6 are options both accept or both reject);
   - b1 (bindings) 3/8.
 - I9–I10 false: b1 (StringDecoder utf8 only, 'UTF8' "Unsupported encoding", no addAbortListener, no
-  writev/fsync); m4 fs.read loop ticks>0=false.
+  writev/fsync); m4 fs.read loop ticks>0=false; Workbench fd read/write 16 MiB in 64 KiB calls
+  20–26 s / 50–82 s vs Node 3–7 ms (results/chromium-fd/).
 - Chromium 148 on main c2d03ce05 (results/chromium/summary.txt): Workbench and SDK give the same
   route-A outcomes as in-process, row for row (e.g. m1 0/14, hook matrix 10/76, m6 0/8). -->
 
@@ -113,8 +114,9 @@ without the async VFS surface, isolate sandbox exec):
   Node's `normalizeEncoding` accepts (`'UTF8'`, `'LATIN1'`, …). `events.addAbortListener` exists as
   in Node.
 - I10. `fs` callback APIs complete in an I/O turn as in Node, so timers interleave with a chain of
-  `fs.read`/`fs.write` callbacks. `fs.writev` and `fs.fsync` (and their `Sync` forms) exist as in
-  Node.
+  `fs.read`/`fs.write` callbacks. A positional fd read or write moves only its range, not the whole
+  file, so reading or writing a file in chunks scales linearly. `fs.writev` and `fs.fsync` (and their
+  `Sync` forms) exist as in Node.
 
 <!-- No I11: review S7 (a WriteStream file complete after 'finish' + exit + reload on
 Workbench/OPFS) holds today, 18/18 (reference/results/chromium/durability.jsonl); unit 9 guards it. -->
@@ -126,10 +128,9 @@ route-B rewrite: goal, map, ADR-0575, the probe, the seeded drafts and the zlib 
 «не готово». It reproduced the generator (sha `53e386…`), S1 and the AbortController sizes. Each
 finding was verified:
 
-1. blocker — the bundle budget. The «≈+27 KB» for the zlib engine had no source; measured it is
-   +36 950 B gzip (ADR-0573 §8). With route B, generic comes to 340 390 of 332 000. This is now an
-   `owner: user` question in map §Open questions, so the goal stays draft. ADR-0575 Consequences were
-   rewritten.
+1. blocker — the bundle budget. The «≈+27 KB» for the zlib engine had no source. It is now an
+   `owner: user` question in map §Open questions, so the goal stays draft. Round 2 re-measured the
+   numbers on main `692babe13` (below).
 2. major — the Chromium 108 floor: `AbortSignal.any`, `Symbol.dispose`/`asyncDispose`, and the probe's
    `Promise.withResolvers`. Now in ADR-0575 §2 and unit 8's acceptance (`check:es-floor`, floor lane).
 3. major — the «write before close lands» half of I10 is true on main (`b1`, fs parity A 6/6). It was
@@ -216,6 +217,30 @@ Added after it, from the zlib goal via the manager, not re-reviewed:
 - The 46-scenario `zlib-diff` (`ed8c785f1`). Each gap row is assigned to a unit in map §Links.
 - `m7` rows for `finished` after a write and after an error.
 
+External review of PR #450, round 2 (at `1df9e5f9a`, relayed by the manager): 2 blocker, 9 should,
+nits. Route B was confirmed: the 28 input files equal live v24.16.0's `natives`, and every column
+reproduced. All items were fixed:
+
+- **B1** — the budget was taken against a stale base. It is re-measured on main `692babe13`
+  (`results/route-b-product-build-main.txt`): generic 312 037, toolchain 355 626. With the zlib
+  engine and its handle the reviewer measured 351 690 / 394 735, both over the cap.
+- **B2** — the bench is regenerated (41 / 22 ms).
+- **Should items:**
+  - 8 split into 8a/8b/8c with a merge order;
+  - the 8→3 edge was false, so unit 3 is guest API only;
+  - unit 7's classes are reachable: the fact is recorded, and the globals fork is the user's;
+  - Chromium route B ran on the SDK (12/12);
+  - the fd I/O premise was measured and was quadratic in Workbench → 4b/4c, P, and 9r/9w split (the
+    manager's «ок»);
+  - identifier renaming is measured (`results/route-b-minify.txt`);
+  - es-floor rows are in 8c;
+  - S5 consumer rows were measured and moved into 8b/8c;
+  - the zlib-constants coupling goes to 8a;
+  - the license manifest goes to 8a;
+  - ADR-0154's superseded parts are listed;
+  - nits fixed.
+- Not re-reviewed after these fixes.
+
 ## Decisions
 
 - 2026-11-25 — manager, under the user's delegation («проектируешь ты сам»); the user is informed,
@@ -238,6 +263,17 @@ Added after it, from the zlib goal via the manager, not re-reviewed:
 - 2026-11-25 — the user, in the manager thread cf2ae711: «про потоки тут ок» to the manager's «Нужно от тебя: «ок» на состав и порядок и на уровень works, как у остальных целей». What that message put before the user: four parts in order — (1) `_destroy`/`_construct` hooks in the core, (2) `fs.ReadStream` as a `Readable` subclass, (3) `fs.WriteStream` as a `Writable` subclass in the shape graceful-fs expects, (4) `Transform` backpressure; outside the goal `http.ServerResponse`, `net.Socket`, `process.stdin` as the next goal's candidates; PRs #434 and #437 stay parked until the goal absorbs them; tier works. The later growth to the present units (the manager's extensions above) was reported to the user in the same thread on 2026-11-25 as «возрази, если не согласен»; no objection recorded.
 - tier: works — the user's choice (line above). Faults outside Node's own
   behaviour, so not covered by parity, are listed in map §Faults outside parity.
+- 2026-11-25 — manager, round 2:
+  - 4b (fd read by range) and 4c (fd write by range) are separate units;
+  - the publication cost per mutation (`perf/workbench-guest-write-cost-grows-with-project`) is a unit
+    of this goal;
+  - fs streams split into 9r (read; ← 8, 4, 4b) and 9w (write; ← 8, 4, 4c, 5, the publication cost);
+  - the core lands as 8a/8b/8c;
+  - the isolate `AbortController` globals are a fork for the user, carried with the Web API goal's
+    question 1.
+
+  Ground: Workbench fd I/O moves the whole file per call (`results/chromium-fd/`), and the read side
+  (exceljs `readFile`, `for await`, late listener, isolate read) needs none of the write work.
 - rejected route: route A, rifty's hand-written streams fixed per member in 8 units. It could meet the
   invariants in principle; it is rejected on delivery risk and §Simplicity, not on an invariant. Its
   unit graph had three hidden dependencies after one review, the same class that broke the zlib goal

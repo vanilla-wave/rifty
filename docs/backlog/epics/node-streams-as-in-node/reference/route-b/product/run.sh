@@ -2,7 +2,7 @@
 # Route B product shape, in-process parts: generate, check primordials, Bp columns (run.mjs, parity.mjs), zlib-diff.
 # usage: sh run.sh REPO NODE_SRC ZLIB_PROBE_DIR ZLIB_DEPS ZLIB_BUILD OUT_DIR   (absolute paths; run from REPO; OUT_DIR: scratch)
 # Product build (results/route-b-product-build.txt, the P columns): a throwaway worktree at b1270101a,
-#   git apply wiring.patch; cp bindings.ts packages/io/src/streams/node/;
+#   rm packages/runtime-js/src/builtins/fs-streams.ts (the patch recreates it); git apply wiring.patch; cp bindings.ts packages/io/src/streams/node/;
 #   node generate.mjs REPO NODE_SRC packages/io/src/streams/node/generated --minify; pnpm build:libs;
 #   pnpm test:client-bundles; RESULTS=… node --import tsx ../../run.mjs <worktree>; parity.mjs <worktree> NODE_SRC stream.
 set -e

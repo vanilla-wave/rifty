@@ -1,0 +1,11 @@
+# c-unzip-stored.cjs
+node v24.16.0; rifty 692babe13+route-B; workbench: Chromium 148.0.7778.96 (rifty process.version v24.0.0); sdk: Chromium 148.0.7778.96 (rifty process.version v24.0.0)
+columns: node | workbench | sdk
+
+exit: node 0 | workbench not run | sdk 0
+stderr workbench: (not run)
+
+## line 1
+node: extracted a.txt=eb06cb57b0a7944a dir/b.txt=0f882365d720e9c4
+workbench (DIFF): (no line)
+sdk (same): extracted a.txt=eb06cb57b0a7944a dir/b.txt=0f882365d720e9c4

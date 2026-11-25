@@ -1,0 +1,12 @@
+Identifier renaming (S1): parity cases/stream + cases/fs (plain CJS/http) on route B product bindings, generated module
+built with generate.mjs --minify (identifiers kept) vs --minify-all (identifiers renamed, as a renaming consumer bundler would).
+Commands: ROUTE_B_GEN=<gen>/node-streams.js node --import tsx route-b/parity.mjs REPO NODE_SRC stream,fs
+
+## --minify
+total plain cases 105, skipped 5; equal to Node: route A 105, route B 95, route B product bindings 102
+## --minify-all
+total plain cases 105, skipped 5; equal to Node: route A 105, route B 95, route B product bindings 101
+
+## cases that differ between the two (Bp column)
+< stream/from-web-options.case.ts | Bp 
+> stream/from-web-options.case.ts | Bp DIFF

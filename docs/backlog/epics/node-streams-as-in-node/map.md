@@ -6,71 +6,83 @@ Rows equal to Node, run at `725576a88` (main `b6d37fc01`'s code; this branch is 
 
 ## Items
 
-0. `runtime-js/node-streams-acceptance-carrier` — **carrier** — 10 `c-*` programs (files compared by
-   sha256) as cases against live Node, in the isolate host and in Chromium on both browser hosts
-   (Workbench, SDK); Chromium 108 is the tier floor (ADR-0469). It also runs the m-matrices in
-   Chromium. It comes first, before any code, and has one owner for the Chromium line. → I8.
+- **0** `runtime-js/node-streams-acceptance-carrier` — **carrier**. It runs the 10 `c-*` programs (files
+  compared by content) as cases against live Node, in the isolate host and in Chromium on both
+  browser hosts (Workbench, SDK; Chromium 108 is the tier floor, ADR-0469). It also runs the
+  m-matrices in Chromium. It comes first, before any code, and has one owner for the Chromium line.
+  → I8.
 
-Bindings. Each is a parity fix that holds without the core and carries its own proof against Node.
-They run in any order; 1–3 and 7 come before 8, and 4–5 before 9:
+Bindings and fs platform. Each is a parity fix that holds without the core, with its own proof
+against Node:
 
-1. `runtime-js/string-decoder-node-encodings` — `string_decoder` latin1/ucs2/utf16le and every
-   spelling Node accepts; an unknown encoding → `ERR_UNKNOWN_ENCODING`, not `NotImplementedError`
-   (`b1` rows). → I9.
-2. `runtime-js/buffer-encoding-names` — `Buffer.from`/`toString`/`write`/`byteLength` accept every
-   name Node's `normalizeEncoding` maps (`'UTF8'`, `'LATIN1'`, `'BASE64'`, …). Today `isEncoding` is
-   true, but `toString`/`from` throw `Unsupported encoding` (`b1` rows). → I9.
-3. `runtime-js/events-add-abort-listener` — `events.addAbortListener` is absent today (`b1`). It is
-   the only gap among the core's needs from `events`. → I9.
-4. `runtime-js/fs-callbacks-io-turn` — `fs` callback APIs complete in an I/O turn, not in a microtask
-   chain. Row: timers interleave with an `fs.read` loop (`m4` «fs.read(fd) loop»: Node `ticks>0=true`,
-   rifty `false`). A write issued before close lands on main already (`b1`, fs-stream parity A 6/6),
-   so that is a guard row, not a gap. It touches every callback API of `fs`, so it gets its own
-   regression row (§Regression risk). → I10.
-5. `runtime-js/fs-writev-fsync` — `fs.writev`/`writevSync`/`fsync`/`fsyncSync`/`fdatasync`, absent
-   today (`b1`). Without `writev`, Node's `WriteStream` sets `_writev = null` (`m5` route B); without
-   `fsync`, `flush: true` throws a misleading `ERR_INVALID_ARG_TYPE`
-   (`streams.js:373-374`). → I10.
-6. (dropped) durability after `'finish'` + exit + reload: it holds today (S7, 18/18, §Open questions);
-   it is kept as a guard row of 9.
-7. `distribution/isolate-stream-core-abort-controller` — the isolate's core-private
-   `AbortController`/`AbortSignal` for Node's `pipeline`/helpers. `pipeline` works in the isolate
-   today and must keep working. Measured route and cost: §Open questions. → I7 (isolate).
+- **1** `runtime-js/string-decoder-node-encodings` — `string_decoder` latin1/ucs2/utf16le/base64/hex/ascii
+  and every spelling Node accepts. An unknown encoding → `ERR_UNKNOWN_ENCODING`, not
+  `NotImplementedError` (`b1`). Comes before 8 (B2: `m4` «through 'data'»). → I9.
+- **2** `runtime-js/buffer-encoding-names` — `Buffer` entry points accept every name Node's
+  `normalizeEncoding` maps (`'UTF8'`, `'LATIN1'`, …). Today `isEncoding` is true while
+  `toString`/`from` throw (`b1`). → I9.
+- **3** `runtime-js/events-add-abort-listener` — `events.addAbortListener` for guest code (`b1`).
+  Independent of the core, which carries Node's own `abort_listener`. → I9.
+- **4** `runtime-js/fs-callbacks-io-turn` — `fs` callback APIs complete in an I/O turn, so timers
+  interleave with them (`m4` «fs.read(fd) loop»: Node `ticks>0=true`, rifty `false`; Workbench 0 ticks
+  on every fd path, `results/chromium-fd/`). A write before close lands today, so that is a guard
+  row. It has its own regression row. → I10.
+- **4b** `runtime-js/fs-fd-read-by-range` — positional fd reads move only the range. In Workbench
+  today each 64 KiB call moves the whole file: 16 MiB in 20–26 s, against Node's 3 ms. Acceptance is
+  by byte/RPC counter, with an explicit decision per implementation. → I10.
+- **4c** `runtime-js/fs-fd-write-by-range` — positional fd writes move only the range. Today
+  16 MiB takes 50–82 s, and positional writes 114–199 s. Same acceptance as 4b. → I10.
+- **5** `runtime-js/fs-writev-fsync` — `fs.writev`/`writevSync`/`fsync`/`fsyncSync`/`fdatasync`
+  (`b1`). Without `writev`, Node's `WriteStream` sets `_writev = null`; without `fsync`, `flush: true`
+  throws a misleading `ERR_INVALID_ARG_TYPE` (`streams.js:373-374`). → I10.
+- **P** `perf/workbench-guest-write-cost-grows-with-project` — **publication cost per mutation**. In
+  Workbench a write costs about +0.18 ms per project file (#453). The unit starts by establishing
+  the cause, and its body is a hypothesis until then. 9w stands on it, because Node's `WriteStream`
+  writes once per chunk.
+- **7** `distribution/isolate-stream-core-abort-controller` — Node's `AbortController` sources
+  for the isolate core. Without them, Node's `pipeline` fails in the isolate (`m7` 5/11 on the
+  product build). Reachable classes are a fact; the globals fork is the user's (§Open questions). →
+  I7 (isolate).
 
-Core and fs streams:
+Core, three adjacent PRs (ADR-0575 §7):
 
-8. `runtime-js/stream-core-node-sources` — **Core** — one replacement, no state with two cores. Stands
-   on 1–3 and 7. Absorbs 21 drafts. → I1–I3, I6, I7. Scope:
-   - `lib/stream.js`, `lib/stream/promises.js` and `lib/internal/streams/*.js` generated from the
-     pinned tarball (ADR-0574's pipeline), plus the bindings;
-   - the hand-written `packages/io/src/streams` and its unit tests removed;
-   - internal consumers moved (§Regression risk).
+- **8a** `runtime-js/stream-core-node-sources-unwired`:
+  - vendored sources, license manifest entry, generator, bindings, zlib constants without the zlib
+    module;
+  - not wired: `check:arch` «no product importer» and byte-identical `main` bundles;
+  - a CI differential «Node's bindings = rifty's» on `m1`–`m8`, the hook matrix, `cases/stream` and
+    `zlib-diff`.
+- **8b** `runtime-js/stream-core-consumer-guard-rows`: regression rows for internal consumers
+  and non-stream objects, green on today's core (§Regression risk).
+- **8c** `runtime-js/stream-core-node-sources`:
+  - wiring and consumer moves (`ServerResponse.write` → `false`; a stream shape `finished`
+    accepts for `PortRegistrySocket`), and removal of `packages/io/src/streams`;
+  - the es-floor extension;
+  - identifier renaming changes 1 of 105 parity cases (`results/route-b-minify.txt`): a declared ⚠️
+    with that message listed and a row on the consumer bundle.
 
-   Acceptance:
-   - the differential «verbatim core on Node's bindings = on rifty's» = 0, committed as a CI test (not
-     only a docs probe). `zlib-diff` = 0 is the consumer check that zlib unit 3 runs as its own entry
-     criterion;
-   - the plain-stream rows of `m1`–`m3`, `m6`–`m8` and the hook matrix = Node in the isolate and in
-     Chromium (the fs-stream rows of `m2`/`m3` belong to 9);
-   - `check:es-floor` on the generated module + bindings, and the Chromium 108 floor lane. Floor APIs
-     reached: `AbortSignal.any`, `Symbol.dispose`/`asyncDispose`;
-   - parity `cases/stream` 66/66;
-   - each absorbed draft's own repro (§Absorption) = Node;
-   - no regression in the existing lanes;
-   - one normal-completion row and one error/destroy row per internal stream kind (§Regression risk).
-9. `runtime-js/fs-streams-node-sources` — **fs streams** — `lib/internal/fs/streams.js` unedited over
-   the core, reading through fds on every host (ADR-0575 §3). Stands on 8, 4 and 5. Absorbs 5 drafts
-   and PRs #434/#437. → I4, I5. Acceptance:
-   - `m4`/`m5` and the fs-stream rows of `m2`/`m3` = Node on every host;
-   - the carrier = Node on every host (I8);
-   - guard: a `WriteStream` file is intact after `'finish'` + exit + reload on Workbench/OPFS
-     (`results/chromium/durability.jsonl`);
-   - route-B fs parity 6/6;
-   - PR #434's and #437's cases.
+  Stands on 8a, 8b, 1, 2 and, in the isolate, 7. Absorbs 21 drafts. → I1–I3, I6, I7.
 
-Order: 0 first, then 1–5 and 7 in any order. 8 comes after 1–3 and 7, then 9 after 8, 4 and 5.
+  Merge order: 8a and 8b merge once 8c is in work; 8a never sits unwired on `main` open-ended.
 
-Probe totals on route B, in-process, with Node's own `internal/*` as bindings:
+fs streams, split by side:
+
+- **9r** `runtime-js/fs-read-stream-node-source` — `fs.ReadStream` from Node's
+  `lib/internal/fs/streams.js`, which is loaded whole; only `ReadStream` is wired. Stands on 8, 4
+  and 4b. In the meantime `fs.WriteStream` is today's class. Measured in-process
+  (`results/route-b-9r/`): carrier 8/10 programs = Node. The two left fail on today's write class as
+  they do today, and backpressure into today's `WriteStream` holds (in-flight 65536). → I4, I8 (read
+  programs).
+- **9w** `runtime-js/fs-write-stream-node-source` — `fs.WriteStream` from the same file. Stands on
+  8, 4, 4c, 5 and the publication cost unit. Today's 16 MiB write stream on Workbench takes 518 ms,
+  and it stays so until 9w. → I5, I8 (write programs).
+
+Implementation order once the goal is ready:
+- 1, 2, 3 (independent) → 4, 4b → 8a → 8b → 8c → 9r;
+- in parallel and after: 4c, 5 and P (publication cost) → 9w;
+- 7 by the user's answer on `AbortController`.
+
+Probe totals on route B, in-process (`summary.txt`):
 
 | | equal to Node |
 |---|---|
@@ -85,17 +97,20 @@ Probe totals on route B, in-process, with Node's own `internal/*` as bindings:
 | `m7` | 11/11 |
 | `m8` | 15/16 |
 
+Chromium 148, on main `692babe13` + route B (`results/chromium-b/summary.txt`):
+- SDK: 12/12 programs = Node.
+- Workbench: the 7 that need no closure = Node (5 `c-*`, `m1`, hook matrix). The 5 closure programs
+  did not run, because seeding the 5941-file closure did not complete. `c-transform-big` takes
+  73.5 s there, on the quadratic fd paths (4b/4c).
+
 Remainder by binding:
 
-- `m4` timers → 4; `m4` `encoding` option → 1 (B2): every non-utf8 encoding throws `string_decoder` `NotImplementedError`,
-  where today base64/latin1/hex through `'data'` equal Node in-process (`m4` «through 'data'»). So 1
-  lands before 9; `m5` `_writev` → 5; `m8` unknown encoding → 1.
-- Parity `cases/stream` 59/66: latin1/utf16le → 1, `'UTF8'` → 2, and 4 rows from the probe's mixed
-  `Buffer`/adapters.
-- fs parity 3/6: a probe artefact, 6/6 with product bindings.
-- `zlib-diff` state 6/45, all flush paths: the probe's mixed `Buffer` drops `kFlushFlag`.
-
-The mixed-`Buffer` cause vanishes in product shape (§Open questions).
+- `m4` timers → 4;
+- `m4` `encoding` option → 1 (B2): every non-utf8 encoding throws `NotImplementedError`, while today
+  base64/latin1/hex through `'data'` equal Node in-process;
+- `m5` `_writev` → 5;
+- `m8` unknown encoding → 1;
+- parity `cases/stream` 63/66 with product bindings: latin1/utf16le → 1, `'UTF8'` → 2.
 
 ## Absorption
 
@@ -106,14 +121,15 @@ row of unit 8's acceptance; these repros have not yet been run on route B one by
 | unit | drafts |
 |---|---|
 | 8 Core (21) | the earlier lifecycle and member drafts: `stream-destroy-construct-hooks`, `stream-hook-multiple-callback`, `duplex-end-finish-close-order`, `readable-flowing-property`, `writable-sync-dispatch-state`, `stream-classes-skip-legacy-stream`, `transform-readable-backpressure`, `duplex-writable-surface-gaps`, `stream-pipeline-finished-callback-args`; the core residuals route A left outside: `pipe-unpipe-destination-events`, `readable-flow-new-listener-hook`, `readable-from-iterator-lifecycle`, `readable-pipe-ended-source`, `readable-read-option-non-function`, `readable-set-encoding-string-decoder-residue` (with 1), `readable-sized-read-hwm-growth`, `stream-byte-chunk-kinds`, `stream-internal-listener-registration`, `duplex-from-source-ownership`, `add-abort-signal-reason-identity`; with Node's web adapters (ADR-0575 §5): `web-stream-adapter-terminal-lifecycle` |
-| 9 fs streams (5) | `fs-readstream-pipe-node-options`, `fs-readstream-set-encoding`, `fs-stream-class-call-shape`, `fs-stream-close-method-missing`, `distribution/isolate-host-fs-read-stream-needs-web-readablestream` |
+| 9r read (3 + 2 halves) | `fs-readstream-pipe-node-options`, `fs-readstream-set-encoding`, `distribution/isolate-host-fs-read-stream-needs-web-readablestream`; read half of `fs-stream-class-call-shape` and `fs-stream-close-method-missing` |
+| 9w write (2 halves) | write half of `fs-stream-class-call-shape` and `fs-stream-close-method-missing` |
 
 Drafts that exist only on parked branches:
 
-- → 9: `fs-streams-not-node-streams`, `fs-stream-autoclose-false`,
+- → 9r/9w by side: `fs-streams-not-node-streams`, `fs-stream-autoclose-false`; → 9r:
   `fs-readstream-preaborted-signal-sync-destroy`, `fs-read-stream-flows-without-consumer`.
-- → 9 with §Open questions: `fs-read-stream-reads-snapshot-not-open-file`.
-- → 9 + 1: `fs-read-stream-utf16le-surrogate-split`; → 8: `stream-pipeline-callback-generator-stage`.
+- → 9r with §Open questions: `fs-read-stream-reads-snapshot-not-open-file`.
+- → 9r + 1: `fs-read-stream-utf16le-surrogate-split`; → 8: `stream-pipeline-callback-generator-stage`.
   These two live only in the local unpushed commit `397555c3d`.
 - → outside (events): `events-listener-argument-validation`.
 
@@ -121,7 +137,7 @@ Drafts that exist only on parked branches:
 
 - **Goal node-zlib-on-every-host.** Its `map.md` §Dependencies is updated in this branch. The line in
   both maps: «zlib unit 2 (engine) needs no streams unit. zlib unit 3 (`lib/zlib.js` whole) starts
-  after streams unit 8 «Core», whose acceptance includes `zlib-diff` = 0 (state and load).»
+  after streams units 8a–8c «Core»; 8a's differential includes `zlib-diff` = 0 (state and load).»
   - The earlier per-member mapping of `zlib-node-lib-port`'s gap rows is moot: in unit 8 they are all
     Node's code.
   - Route B measured `zlib-diff` at 6/45 state scenarios (`results/route-b-zlib-diff.txt`). All are
@@ -134,17 +150,18 @@ Drafts that exist only on parked branches:
     scenario name there is corrected in this branch.
   - The joint cases (unzipper `Extract` on DEFLATE, the `createGzip` pipe) are proposed for the zlib
     carrier, not carried here.
-- **PR #434** (`t3/fs-stream-close`, parked): its parity cases and conformance move into unit 9 as
-  Node-oracle cases. Its EventEmitter code does not move (rejected route).
-- **PR #437** (`t3/isolate-fs-read-stream`, parked): absorbed by unit 9, on condition that unit 9's
+- **PR #434** (`t3/fs-stream-close`, parked): its read-stream close cases move into 9r and its
+  write-stream cases into 9w, as Node-oracle cases. Its EventEmitter code does not move (rejected route).
+- **PR #437** (`t3/isolate-fs-read-stream`, parked): absorbed by 9r, on condition that 9r's
   isolate run shows the `isolate-host.ReadableStream` wall gone. The fd source already reads in the
   isolate (`m4` «Node's ReadStream source»).
-  - Moving to unit 9: `cases/fs/read-stream.case.ts`, corpus rows `fs-read-stream*`, its review
+  - Moving to 9r: `cases/fs/read-stream.case.ts`, corpus rows `fs-read-stream*`, its review
     findings.
   - Staying isolate work: the swap test (`fs-sync-mirror-swap.test.ts`), the isolate-host README cost
     numbers, compat `isolate-host.md`, the exceljs library-probe row.
-- **Goal isolate-guest-web-api**: its scenario 3 (exceljs `xlsx.readFile`) stands on unit 9. Unit 7
-  adds no global, so its question 1 stays open (ADR-0575 §6).
+- **Goal isolate-guest-web-api**: its scenario 3 (exceljs `xlsx.readFile`, then `writeFile`) stands on
+  9r for the read, and on today's write class until 9w. Unit 7's globals fork travels with its
+  question 1 (ADR-0575 §6).
 
 ## Regression risk
 
@@ -195,8 +212,23 @@ What they miss:
 - `Gzip`'s own `destroy()`;
 - Chromium ordering (parity runs on Node's event loop).
 
-So unit 8's acceptance carries one normal-completion row and one error/destroy row per internal
-stream kind, Writable kinds included.
+So 8b carries one normal-completion row and one error/destroy row per internal stream kind, Writable
+kinds included. It also carries rows for Node's `pipe`/`pipeline`/`finished` into `ServerResponse`,
+`ClientRequest`, `PortRegistrySocket`, `process.stdout` and the upgrade socket, success and error.
+
+Measured on route B in-process (`results/route-b-s5-consumers.txt`, cases `route-b/s5/`):
+- `finished(req.socket, cb)`: Node and today accept; on route B it throws `ERR_INVALID_ARG_TYPE`
+  synchronously, because `PortRegistrySocket` is a plain `EventEmitter`.
+- A source piped into an unread `ServerResponse`: Node reads 56–96 chunks, today 8, route B 2001.
+- `pipeline(src, res, cb)`: the callback runs on both today (`args=1`) and route B (`args=2`); route B
+  ordered it after the response once.
+
+8c closes the first two without turning `net.Socket`/`ServerResponse` into real streams:
+- `ServerResponse.write` returns `false` + `'drain'`;
+- `PortRegistrySocket` gets the shape `finished` accepts.
+
+Not measured on route B yet: `ClientRequest`, `process.stdout` (parity `stream/pipe-process-stdio*`),
+the upgrade socket. These are 8b's to write.
 
 Unit 4 changes the timing of every `fs` callback API. Its own row: the fs callback parity cases
 (`cases/fs`, 41) plus an ordering case of `fs.readFile`/`stat`/`write` callbacks against timers and
@@ -213,69 +245,66 @@ Reachable failures that are not plain Node behaviour; input to the tier (works):
 - Memory ceilings reached sooner than Node's RSS, by a guest that ignores backpressure.
 
 Each outcome must still be honest, never a silent truncation. Durability after `'finish'` holds today
-(S7, §Open questions), so it is a guard, not a fault.
+(S7, §Open questions), so it is a guard of 9w, not a fault.
 
 ## Open questions
 
-- Chromium baseline — measured on main `c2d03ce05`, Chromium 148.0.7778.96, Workbench (COI,
-  browser-unit) and SDK (no-COI toolchain sandbox). Data: `reference/chromium/`,
-  `results/chromium/summary.txt`. The program set is the one at copy time: `m4` 20 rows, and the
-  older `c-transform-big`/`c-unzip-stored` without content hashes.
-  - Both hosts give the in-process route-A outcomes row for row.
-  - Workbench `c-transform-big` does not finish in 180 s; the SDK takes 870 ms. Workbench `m4` adds
-    «no settle in 3s» on the fd-loop row.
-  - The SDK on a COI page has no `node <file>` entry; generic mode offers only `runtime.eval`.
-  - Not run yet: route B in Chromium, Chromium 108 — owner: agent — unit 0 (carrier) and unit 8's
-    floor lane.
+- Chromium — owner: agent, unit 0.
+  - Route A baseline on main `c2d03ce05`, Chromium 148: Workbench and SDK give the in-process route-A
+    outcomes row for row. Workbench `c-transform-big` does not finish in 180 s; the SDK takes 870 ms.
+    Data: `reference/chromium/`, `results/chromium/`, with the program set at copy time.
+  - Route B on main `692babe13`: the SDK gives 12/12 programs = Node (10 `c-*`, `m1`, hook matrix).
+    Workbench: the 7 programs without the closure = Node; 5 not run (closure seeding);
+    `c-transform-big` 73.5 s (`results/chromium-b/`).
+  - Chromium 108 not run.
+- fd I/O in Workbench (Chromium 148, main `692babe13`; `results/chromium-fd/`, probes `chromium/fd*`):
+  every fd read and write path moves the whole file per call. 16 MiB in 64 KiB calls takes 20–26 s
+  to read and 50–82 s to write; positional writes take 114–199 s. Node takes 3–7 ms; `readFileSync`
+  and `writeFileSync` are linear. Timer ticks are 0 on every path → units 4b, 4c, 4.
 - S7, measured (`results/chromium/durability.jsonl`): Workbench, OPFS `persistence: 'required'`,
   4 MiB through `fs.WriteStream`, then `'finish'` or `'close'` → `process.exit(0)` → reload. 18/18
   runs read back 4194304 bytes with Node's sha256, with or without a flush and with an immediate
-  reload. No gap: I11 is dropped and unit 6 is not seeded; the sequence becomes a guard row of unit 9.
+  reload. No gap: I11 is dropped and no unit is seeded; the sequence becomes a guard row of 9w.
   Side fact: rifty's `ws.bytesWritten` is `undefined` after finish (`m5`).
-- The generic bundle cap — owner: user — the measured sum does not fit:
-  - route B: +23 686 B gzip (303 440);
-  - the zlib engine: +36 950 (ADR-0573 §8);
-  - together 340 390 of 332 000, 8 390 over, before zlib's handle and `lib/zlib.js`; toolchain
-    383 798 of 386 000.
+- The bundle caps — owner: user — on main `692babe13` (`results/route-b-product-build-main.txt`):
+  - route B: generic gzip 288 404 → 312 037 (+23 633) of 332 000; toolchain 331 931 → 355 626
+    (+23 695) of 386 000;
+  - with the zlib engine and its handle wired (#452, measured by the PR #450 reviewer): 351 690 and
+    394 735, which is +19 690 and +8 735 over, before `lib/zlib.js`;
+  - #452 as it stands adds 0 B, because nothing imports it.
 
   A lazy stream chunk is doubtful: `require('stream')` is synchronous, and the core is used at boot.
   Options for the user:
-  - raise the cap;
-  - a lazy zlib engine (ADR-0573's own open question);
-  - order the two goals so that one lands under the cap.
+  - raise the caps;
+  - a lazy zlib engine;
+  - order the two goals.
 
   Until this is answered, the goal stays draft.
 - Product shape of route B — settled by the probe (`route-b/product/`, `results/route-b-product-*.txt`):
   - With rifty bindings only, the probe artefacts vanish: parity `cases/stream` 63/66 (3 binding
     rows → 1, 2); fs parity 6/6; `zlib-diff` 0 fields with `lib/zlib.js` on rifty's `Buffer`.
-  - On a throwaway product build `test:client-bundles` passes: generic gzip 279 754 → 303 440 of
-    332 000; `main`/`sw` −27/−43 B, io guard 950/1021 B. `guest.js` gzip is +24 786.
+  - On a throwaway product build `test:client-bundles` passes; the numbers are in the bundle-caps
+    item above. `main`/`sw` −27/−43 B, io guard 950/1021 B, `guest.js` gzip +24 792.
   - In the isolate, the m-matrices equal the in-process route-B rows, except `m7` 5/11 and
     `c-pipeline-asyncgen`: the guest has no `AbortController` (unit 7). The budget with the zlib
     engine is the user's question above.
   - Not run through `check:es-floor`; Chromium 108 floor APIs are listed at unit 8.
-- Isolate `AbortController` for unit 7 — owner: agent — measured file sizes (`results/route-b-size.txt`), esbuild min/gzip:
-  `lib/internal/abort_controller.js` 9 036/2 646, `internal/event_target.js` 16 768/4 296, their
-  `internal/webidl.js` 5 131/1 889 and `perf/utils` 520/265 — about 31 KB min / 9 KB gzip in
-  `guest.js`. They need `util.inspect` (rifty has it) and stubs for `internalBinding('messaging')`
-  symbols and the lazy `MessageChannel` transfer path (a named gap; the isolate has no
-  `MessageChannel`).
-  - Option (a): install them as guest globals. That decides the Web API goal's question 1 (b)
-    without the user.
-  - Option (b), chosen in ADR-0575 Decision 6: the same files private to the core. What the guest observes is the
-    `signal` handed to pipeline stages and `map`/`filter` (Node's object: `aborted`, `reason`,
-    `addEventListener`, `AbortError`), with no `AbortController`/`AbortSignal` global, as today.
-  - Not run in the isolate yet: the product-shape probe.
-  - Browser hosts use the host globals. Whether the verbatim core on Chromium's `AbortSignal`
-    (`any`, `reason`) equals Node is unmeasured; owner unit 0.
+- Isolate `AbortController` globals — owner: user — carried with the Web API goal's question 1.
+  - Unit 7 brings Node's `abort_controller.js` + `event_target.js` + `webidl.js` (≈31 KB min / 9 KB
+    gzip, `results/route-b-size.txt`).
+  - Without globals the classes are still reachable: through `signal.constructor` (statics work), an
+    `EventTarget` through the prototype chain, and `Event` through an event. The globals stay
+    ceiling throws, and `instanceof AbortSignal` throws.
+  - The fork: (a) leave it like that, or (b) make `AbortController`/`AbortSignal`/`EventTarget`/`Event`
+    isolate globals from the same sources. The bytes are the same either way.
+  - Browser hosts bind the host globals. On the SDK, route B equals Node; on Workbench, the 7 programs run equal Node. None calls
+    `AbortSignal`/`EventTarget` directly.
 - Web adapters — settled: Node's `internal/webstreams/adapters` verbatim over the host globals
   (ADR-0575 §5). 13 of the 14 parity cases using them equal Node in product shape; the 14th
   (`writable-admission`) fails on `'UTF8'` (unit 2).
 - A read through an fd after unlink/rewrite of the file (Node keeps the inode; rifty's `FsSync`/`Vfs`
   have no open-file handle; `fs-read-stream-reads-snapshot-not-open-file`) — owner: agent — probed
-  in unit 9 per VFS; a ⚠️ row until then.
-- OPFS cost of fd reads through owner-RPC on Workbench — owner: agent — measured in unit 9 (no perf
-  acceptance).
+  in 9r per VFS; a ⚠️ row until then.
 
 ## Out of scope
 
@@ -297,7 +326,7 @@ Each outcome must still be honest, never a silent truncation. Durability after `
 - **node:zlib**: goal node-zlib-on-every-host.
 - **Other areas**:
   - `cjs-record-guest-writable-lifecycle` (module loader);
-  - `fs-promises-filehandle` (FileHandle: a named gap in unit 9's bindings until it lands);
+  - `fs-promises-filehandle` (FileHandle: a named gap in 9r/9w's bindings until it lands);
   - `readline-chunk-stateful-decode`;
   - `builtin-function-names`, `guest-builtin-names`;
   - `fs-mode-arguments-ignored` (the VFS has no modes).

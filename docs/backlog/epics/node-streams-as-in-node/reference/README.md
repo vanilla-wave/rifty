@@ -30,8 +30,7 @@ status both equal Node's. A line only a rifty run printed, such as an uncaught e
 Not measured: Chromium. The in-process runs use Node's timers and microtasks, not a browser realm's.
 Owner of the Chromium column: the goal's carrier unit (map item 0).
 
-Limits: `route-b/parity.mjs` compares stdout only (exit and stderr not compared); `zlib-diff-b.mjs`
-gives the product-shape core Node's `process`.
+Limits: `route-b/parity.mjs` compares stdout only; exit status and stderr are not compared.
 
 | Program | Unit (map, route B) | Measures |
 |---|---|---|

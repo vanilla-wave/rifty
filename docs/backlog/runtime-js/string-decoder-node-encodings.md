@@ -18,7 +18,7 @@ Unit 1 of goal node-streams-as-in-node (map), a binding of the verbatim stream c
   utf16le surrogate (`Ā�|�!`);
 - on route B every non-utf8 encoding throws `NotImplementedError: string_decoder encoding …`.
 
-So this unit lands before unit 9: without it, route B breaks working reads.
+So this unit lands before unit 8: without it, route B breaks working reads.
 On route B, parity `readable-set-encoding-latin1` and `-bom` fail on it (`string_decoder encoding
 'latin1'`/`'utf16le'`), and so does `m8` «encoding nope». Overlaps `runtime-js/node-builtins-loud-stub-capability-gaps` (its string_decoder row): this unit
 closes that row. Scope: Node's `lib/string_decoder.js`

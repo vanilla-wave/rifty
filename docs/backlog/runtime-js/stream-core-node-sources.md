@@ -1,7 +1,7 @@
 ---
 area: runtime-js
 status: draft
-title: node:stream is Node v24.16.0's own lib/stream.js, lib/stream/promises.js and lib/internal/streams/*.js, generated from the pinned tarball over rifty's bindings
+title: node:stream runs Node v24.16.0's generated stream core: wired, internal consumers moved, the hand-written core removed
 created: 2026-11-25
 why: rifty's hand-written stream core differs from Node on every lifecycle, member, Transform and pipeline row measured (m1 0/14, hook matrix 10/76, zlib-diff 26/45); Node's own files over the same modules equal Node there (route B)
 epic: node-streams-as-in-node
@@ -10,15 +10,28 @@ sources: [docs/adr/runtime-js/0575-stream-core-and-fs-streams-are-node-v24-16-0-
 
 ## Context
 
-Unit 8 «Core» of goal node-streams-as-in-node; contract and acceptance: map item 8, ADR-0575.
-Stands on units 1–3 and 7. Absorbs 21 drafts (map §Absorption); each one's repro is an acceptance row.
-Entry criteria (map §Open questions, ADR-0575 §Open):
-- the user's answer on the generic bundle cap;
-- unit 7 (the isolate `AbortController`);
-- `check:es-floor` and the Chromium 108 floor for `AbortSignal.any` and `Symbol.dispose`/`asyncDispose`.
+Unit 8c «Core wiring» of goal node-streams-as-in-node (map item 8c, ADR-0575 §7). Stands on 8a, 8b and
+the bindings 1–2 (and 7 in the isolate).
 
-The product-shape probe is done (`results/route-b-product-*.txt`). It moves `ServerResponse.write` to
-Node's boolean (map §Regression risk).
+Scope:
+- wire the generated core into `@riftydev/io` and `node:stream`;
+- move the internal consumers: `ServerResponse.write` → `false` + `'drain'`; the stream shape that
+  `finished(req.socket)` needs; io's `onDestroy`;
+- remove the hand-written `packages/io/src/streams`, its unit tests and ADR-0353's callable
+  constructors.
+
+Acceptance:
+- 8b's rows stay green;
+- plain-stream rows of `m1`–`m3`, `m6`–`m8` and the hook matrix = Node in the isolate and Chromium;
+- parity `cases/stream` 66/66 and each absorbed draft's repro (map §Absorption, 21 drafts);
+- `check:es-floor` lists extended with `AbortSignal.any`, `Symbol.dispose`/`asyncDispose` and
+  `Promise.withResolvers`, and/or the Chromium 108 lane on those rows;
+- identifier renaming: measured on 1 of 105 parity cases (`stream/from-web-options`: V8's own
+  `TypeError` names a local, `results/route-b-minify.txt`). So 8c declares a ⚠️ for V8
+  property-access messages inside the core, lists the measured one, and runs that case as a row on
+  the Workbench consumer bundle.
+
+zlib unit 3 starts after this unit.
 
 ## Challenge
 
