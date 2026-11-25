@@ -1,10 +1,23 @@
+# run 1 (2026-11-25, load ~2.5, right after gen.mjs + sweep.mjs)
 node v24.16.0, isolated-vm 7.0.2, darwin/arm64; template: 8000 files, 86.6 MB
-{"w":"empty","state":7,"layered":27,"added":20,"floorStateMiB":190,"floorLayeredMiB":103}
-{"w":"pdf","state":202,"layered":223,"added":21}
-{"w":"docx","state":153,"layered":171,"added":18}
-{"w":"pptx","state":289,"layered":314,"added":25}
-{"w":"xlsx","state":417,"layered":436,"added":19}
+{"w":"empty","state":7,"layered":22,"added":15,"floorStateMiB":190,"floorLayeredMiB":103}
+{"w":"pdf","state":185,"layered":202,"added":17}
+{"w":"docx","state":152,"layered":168,"added":16}
+{"w":"pptx","state":293,"layered":321,"added":28}
+{"w":"xlsx","state":395,"layered":436,"added":41}
 
 ## four runs at once (wall, ms; state = its run phases only, the longest)
-{"w":"pdf","state":245,"layered":286}
-{"w":"xlsx","state":552,"layered":559}
+{"w":"pdf","state":241,"layered":270}
+{"w":"xlsx","state":484,"layered":555}
+
+# run 2 (2026-11-25, load 2.2 → 3.7 during the run)
+node v24.16.0, isolated-vm 7.0.2, darwin/arm64; template: 8000 files, 86.6 MB
+{"w":"empty","state":8,"layered":22,"added":14,"floorStateMiB":190,"floorLayeredMiB":103}
+{"w":"pdf","state":182,"layered":202,"added":20}
+{"w":"docx","state":152,"layered":168,"added":16}
+{"w":"pptx","state":291,"layered":321,"added":30}
+{"w":"xlsx","state":403,"layered":433,"added":30}
+
+## four runs at once (wall, ms; state = its run phases only, the longest)
+{"w":"pdf","state":234,"layered":260}
+{"w":"xlsx","state":467,"layered":504}

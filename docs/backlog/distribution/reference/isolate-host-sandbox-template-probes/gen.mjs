@@ -44,20 +44,28 @@ const MUTANTS = {
     'statSync = (p: string) => this.#atSelf(p, () => this.upper.statSync(p));',
     'statSync = (p: string) => this.#at(p, () => this.upper.statSync(p));',
   ],
-  'cp-dest-only': ['this.#copied(sn, dn, (to) => this.#dirty(to));', 'this.#dirty(dn);'],
+  'cp-dest-only': [
+    '      if (dir) this.#materialize(to);\n      this.#dirty(to);\n    });',
+    '      if (dir) this.#materialize(to);\n    });\n    this.#dirty(dn);',
+  ],
   'rm-no-dirty': [
-    '      this.#rekey(n, null, gone);\n      this.#dirty(parentOf(n));',
-    '      this.#rekey(n, null, gone);',
+    '    this.#dirty(parentOf(n));\n    this.upper.rmSync(p, o);',
+    '    this.upper.rmSync(p, o);',
   ],
   'write-no-dirty': [
-    '    this.upper.writeFileSync(p, d);\n    this.#dirty(n);',
+    '    this.#dirty(n);\n    this.upper.writeFileSync(p, d);',
     '    this.upper.writeFileSync(p, d);',
   ],
   'changed-ignored': [
-    'if (o === undefined || this.#changed.has(p)) return undefined;',
-    'if (o === undefined) return undefined;',
+    'return o === undefined || this.#changed.has(p) ? undefined : o;',
+    'return o;',
   ],
-  'rename-no-dirty': ['      this.#dirty(parentOf(sn));\n', ''],
+  'rename-no-dirty': ['    this.#dirty(parentOf(sn));\n', ''],
+  // Review 5, S1: marks set after the backend call — a copy failing midway leaves its writes unmarked.
+  'cp-mark-after': [
+    '      if (dir) this.#materialize(to);\n      this.#dirty(to);\n    });\n    this.upper.cpSync(s, d, o);',
+    '      if (dir) this.#materialize(to);\n    });\n    this.upper.cpSync(s, d, o);\n    this.#copied(sn, dn, (to) => this.#dirty(to));',
+  ],
 };
 let layeredSrc = join(here, 'layered.ts');
 if (MUTANT !== undefined) {
@@ -168,6 +176,7 @@ function sequence(seed) {
       'write',
       'hostwrite',
       'hostwrite',
+      'cpconflict',
       'rm',
       'rm',
       'rename',
@@ -182,7 +191,26 @@ function sequence(seed) {
     const p = pick(POOL);
     if (k === 'mkdir') ops.push([k, p, { recursive: r() < 0.5 }]);
     else if (k === 'write' || k === 'hostwrite') ops.push([k, p, pick(BODIES)]);
-    else if (k === 'rm') ops.push([k, p, { recursive: r() < 0.6, force: r() < 0.3 }]);
+    else if (k === 'cpconflict') {
+      // A source tree merged into a template directory, often with an entry whose kind clashes with
+      // the destination's, so the copy fails midway after writing its first entries: a file over a
+      // template directory (rifty EISDIR) or a directory over a template file (aborts Node v24.16.0,
+      // `gen-oracle.mjs`); else a clean merge into a template subdirectory.
+      const dst = pick(['/node_modules/a', '/node_modules/b', '/node_modules/a/lib']);
+      const v = r();
+      ops.push(['hostwrite', '/workspace/cc/f.js', 'f']);
+      if (v < 0.5) {
+        ops.push(['hostwrite', '/workspace/cc/index.js', pick(BODIES)]);
+        ops.push(['write', pick(['/workspace/cc/lib', '/workspace/cc/sub']), 'x']);
+      } else if (v < 0.75)
+        ops.push([
+          'hostwrite',
+          pick(['/workspace/cc/index.js/k.js', '/workspace/cc/x.js/k.js']),
+          'k',
+        ]);
+      else ops.push(['hostwrite', pick(['/workspace/cc/lib/n.js', '/workspace/cc/sub/n.js']), 'n']);
+      ops.push(['cp', '/workspace/cc', dst]);
+    } else if (k === 'rm') ops.push([k, p, { recursive: r() < 0.6, force: r() < 0.3 }]);
     else if (k === 'rename' || k === 'cp' || k === 'copy') ops.push([k, p, pick(POOL)]);
     else if (k === 'utimes') ops.push([k, p, pick(TIMES)]);
     else ops.push([k, p]);
@@ -224,44 +252,6 @@ function onFsSync(fs, [k, p, a]) {
         a: stamp(st.atime),
         c: stamp(st.metadata?.ctime),
         b: stamp(st.metadata?.birthtime),
-      })}`;
-    }
-    return 'ok';
-  } catch (e) {
-    return code(e);
-  }
-}
-function onNode(root, [k, p, a]) {
-  const at = (q) => join(root, q);
-  try {
-    if (k === 'mkdir') nfs.mkdirSync(at(p), a);
-    else if (k === 'write') nfs.writeFileSync(at(p), a);
-    else if (k === 'hostwrite') {
-      nfs.mkdirSync(join(at(p), '..'), { recursive: true });
-      nfs.writeFileSync(at(p), a);
-    } else if (k === 'rm') nfs.rmSync(at(p), a);
-    else if (k === 'rename') nfs.renameSync(at(p), at(a));
-    else if (k === 'cp') nfs.cpSync(at(p), at(a), { recursive: true });
-    else if (k === 'copy') nfs.copyFileSync(at(p), at(a));
-    else if (k === 'utimes') nfs.utimesSync(at(p), a / 1000, a / 1000);
-    else if (k === 'read') return `=${nfs.readFileSync(at(p), 'utf8')}`;
-    else if (k === 'readdir')
-      return `=${nfs
-        .readdirSync(at(p), { withFileTypes: true })
-        .map((d) => `${d.name}:${d.isDirectory() ? 'd' : 'f'}`)
-        .sort()
-        .join(',')}`;
-    else if (k === 'stat') {
-      const st = nfs.statSync(at(p));
-      return `=${JSON.stringify({
-        f: st.isFile(),
-        d: st.isDirectory(),
-        size: st.isDirectory() ? 0 : st.size,
-        nlink: st.nlink,
-        m: stamp(st.mtimeMs),
-        a: stamp(st.atimeMs),
-        c: stamp(st.ctimeMs),
-        b: stamp(st.birthtimeMs),
       })}`;
     }
     return 'ok';
@@ -397,6 +387,20 @@ const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
  * (layered.ts) the cap's budget equals the wire's count.
  */
 function check(impl, ops, cut = Math.floor(ops.length / 2)) {
+  try {
+    return checkOnce(impl, ops, cut);
+  } catch (e) {
+    // The layer's own code threw where rifty's FS returns: a class failure, not a probe crash.
+    return {
+      classOk: false,
+      fr: [],
+      lr: [`layer threw ${code(e)}: ${e?.message}`],
+      flatTree: {},
+      rebuilt: {},
+    };
+  }
+}
+function checkOnce(impl, ops, cut) {
   const f = flat();
   const L = IMPLS[impl].make();
   const fr = ops.map((o) => onFsSync(f, o));
@@ -436,9 +440,9 @@ function check(impl, ops, cut = Math.floor(ops.length / 2)) {
     budgetOk,
   };
 }
-/** Reads only (read, readdir, failed calls aside) leave the wire as a fresh sandbox's. */
+/** Reads only (read, readdir, stat; failed calls aside) leave the wire as a fresh sandbox's. */
 function minimal(impl, ops) {
-  const reads = ops.filter(([k]) => k === 'read' || k === 'readdir');
+  const reads = ops.filter(([k]) => k === 'read' || k === 'readdir' || k === 'stat');
   const L = IMPLS[impl].make();
   const fresh = IMPLS[impl].wire(L);
   for (const o of reads) onFsSync(L, o);
@@ -464,8 +468,15 @@ function minimize(impl, ops) {
 console.log(
   `node ${process.version}, ${process.platform}/${process.arch}; ${N} sequences, seeds ${SEED_BASE + 1}..${SEED_BASE + N}${MUTANT ? `; MUTANT ${MUTANT}` : ''}\n`,
 );
-/** Named regressions (reviews N2, S-b), checked before the random ones. */
+/** Named regressions (reviews N2, S-b, S1 of review 5), checked before the random ones. */
 const NAMED = [
+  [
+    ['hostwrite', '/workspace/w/index.js', 'NEW'],
+    ['write', '/workspace/w/lib', 'file'],
+    ['hostwrite', '/workspace/w/f.js', 'f'],
+    ['cp', '/workspace/w', '/node_modules/a'],
+    ['read', '/node_modules/a/index.js'],
+  ],
   [
     ['rename', '/node_modules/a', '/node_modules/c'],
     ['mkdir', '/node_modules/a', {}],
@@ -494,12 +505,56 @@ const NAMED = [
     ['stat', '/node_modules'],
   ],
 ];
+/** Node over a real directory, in its own process (a Node abort is one sequence's, not the run's). */
+const oracleCache = new Map();
+/** Node v24.16.0's `cpSync` abort (libc++ `filesystem_error`, SIGABRT). */
+const nodeAborted = (e) =>
+  (e?.signal === 'SIGABRT' || e?.status === 134) && String(e?.stderr).includes('filesystem_error');
+function oracle(ops) {
+  const key = JSON.stringify(ops);
+  if (oracleCache.has(key)) return oracleCache.get(key);
+  let out = null;
+  const root = nfs.realpathSync(nfs.mkdtempSync(join(tmpdir(), 'gen-')));
+  try {
+    out = JSON.parse(
+      execFileSync(process.execPath, [join(here, 'gen-oracle.mjs'), root], {
+        input: JSON.stringify({ tpl: TPL, t0: T0, ops }),
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      }),
+    );
+  } catch (e) {
+    // Only Node's own abort leaves a sequence without an oracle; anything else fails the probe.
+    if (!nodeAborted(e)) throw e;
+  } finally {
+    nfs.rmSync(root, { recursive: true, force: true });
+  }
+  oracleCache.set(key, out);
+  return out;
+}
+/**
+ * What the Node comparison keeps of a result: `stat` without `atime`/`ctime` (Node cannot set a
+ * past ctime; atime follows the mount's policy) and, on macOS, without `nlink` (APFS counts every
+ * entry, rifty and Linux only subdirectories).
+ */
+const forNode = (rs) =>
+  rs.map((r) => {
+    if (!r.startsWith('={')) return r;
+    const o = JSON.parse(r.slice(1));
+    // JSON.stringify drops undefined members.
+    o.a = undefined;
+    o.c = undefined;
+    if (process.platform === 'darwin') o.nlink = undefined;
+    return `=${JSON.stringify(o)}`;
+  });
+
 const summary = {};
 for (const impl of ['v1', 'v2', 'v3']) {
   let classFail = 0;
   let oracleFail = 0;
   let notMinimal = 0;
   let compared = 0;
+  let crashed = 0;
   let firstFail;
   const outsideClass = new Map();
   let namedFail = 0;
@@ -513,32 +568,32 @@ for (const impl of ['v1', 'v2', 'v3']) {
       firstFail ??= { seed, minimized: minimize(impl, ops) };
       continue;
     }
-    // Oracle: Node over a real directory.
-    const root = nodeRoot();
-    try {
-      const nr = ops.map((o) => onNode(root, o));
-      const nt = treeOfNode(root);
-      if (eq(c.flatTree, nt) && eq(c.fr, nr)) compared++;
-      if (!eq(c.rebuilt, nt) || !eq(c.lr, nr)) {
-        // Rifty's own FS (flat) already differs from node:fs here: outside the layer's class.
-        if (!eq(c.flatTree, nt) || !eq(c.fr, nr)) {
-          const key =
-            ops
-              .map((o, i) =>
-                c.fr[i] !== nr[i] ? `${o[0]}: rifty ${c.fr[i]} / node ${nr[i]}` : null,
-              )
-              .find(Boolean) ?? 'tree (times/order)';
-          outsideClass.set(key, (outsideClass.get(key) ?? 0) + 1);
-        } else oracleFail++;
-      }
-    } finally {
-      nfs.rmSync(root, { recursive: true, force: true });
+    // Oracle: Node over a real directory (its own process).
+    const o = oracle(ops);
+    if (o === null) {
+      crashed++;
+      continue;
+    }
+    const nr = forNode(o.nr);
+    const nt = o.nt;
+    const fr = forNode(c.fr);
+    const lr = forNode(c.lr);
+    if (eq(c.flatTree, nt) && eq(fr, nr)) compared++;
+    if (!eq(c.rebuilt, nt) || !eq(lr, nr)) {
+      // Rifty's own FS (flat) already differs from node:fs here: outside the layer's class.
+      if (!eq(c.flatTree, nt) || !eq(fr, nr)) {
+        const key =
+          ops
+            .map((op, i) => (fr[i] !== nr[i] ? `${op[0]}: rifty ${fr[i]} / node ${nr[i]}` : null))
+            .find(Boolean) ?? 'tree (times/order)';
+        outsideClass.set(key, (outsideClass.get(key) ?? 0) + 1);
+      } else oracleFail++;
     }
   }
   summary[impl] = { classFail: classFail + namedFail, oracleFail, notMinimal };
   console.log(`## ${impl}: named regressions failing: ${namedFail}/${NAMED.length}`);
   console.log(
-    `## ${impl}: layer ≠ flat rifty FS (calls, trees, rebuild, run boundary${impl === 'v3' ? ', cap count, mark audit' : ''}) in ${classFail}/${N}${impl === 'v1' ? '' : `; reading the template grows the state in ${notMinimal}/${N}`}; of the ${N - classFail} that pass, flat rifty = node:fs (calls and tree) in ${compared} — layer ≠ node among those: ${oracleFail}; the other ${N - classFail - compared} are rifty FS vs node:fs differences outside the layer`,
+    `## ${impl}: layer ≠ flat rifty FS (calls, trees, rebuild, run boundary${impl === 'v3' ? ', cap count, mark audit' : ''}) in ${classFail}/${N}${impl === 'v1' ? '' : `; reading the template grows the state in ${notMinimal}/${N}`}; of the ${N - classFail} that pass, flat rifty = node:fs (calls and tree) in ${compared} — layer ≠ node among those: ${oracleFail}; Node aborted in ${crashed} (not compared); the other ${N - classFail - compared - crashed} are rifty FS vs node:fs differences outside the layer`,
   );
   if (firstFail) {
     const c = check(impl, firstFail.minimized);
@@ -704,28 +759,39 @@ async function guestRun(ops, mode) {
 let guestClass = 0;
 let guestSame = 0;
 let guestOracleFail = 0;
+let guestCrash = 0;
 const guestDiff = new Map();
+const asNode = (log) => JSON.stringify(forNode(JSON.parse(log || '[]')));
 for (let seed = 1; seed <= GUEST; seed++) {
   const ops = sequence(SEED_BASE + 1_000_000 + seed);
   const root = nodeRoot();
   try {
     nfs.writeFileSync(join(root, 'workspace/main.js'), prog(ops));
-    const nodeLog = execFileSync(process.execPath, ['main.js', root], {
-      cwd: join(root, 'workspace'),
-      encoding: 'utf8',
-    })
-      .split(root)
-      .join('')
-      .trim();
-    const nodeTree = treeOfNode(root);
     const g = await guestRun(ops, 'layer');
     const f = await guestRun(ops, 'flat');
     if (g.log === f.log && eq(g.tree, f.tree)) guestClass++;
     else console.log(`   guest layer ≠ flat, seed ${10_000 + seed}: ${JSON.stringify(ops)}`);
-    if (g.log === nodeLog && eq(g.tree, nodeTree)) guestSame++;
-    else if (f.log === nodeLog && eq(f.tree, nodeTree)) guestOracleFail++;
+    let nodeLog;
+    try {
+      nodeLog = execFileSync(process.execPath, ['main.js', root], {
+        cwd: join(root, 'workspace'),
+        encoding: 'utf8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      })
+        .split(root)
+        .join('')
+        .trim();
+    } catch (e) {
+      if (!nodeAborted(e)) throw e;
+      guestCrash++;
+      continue;
+    }
+    nodeLog = asNode(nodeLog);
+    const nodeTree = treeOfNode(root);
+    if (asNode(g.log) === nodeLog && eq(g.tree, nodeTree)) guestSame++;
+    else if (asNode(f.log) === nodeLog && eq(f.tree, nodeTree)) guestOracleFail++;
     else {
-      const a = JSON.parse(f.log || '[]');
+      const a = JSON.parse(asNode(f.log));
       const b = JSON.parse(nodeLog);
       const i = a.findIndex((x, j) => x !== b[j]);
       const key = i >= 0 ? `${ops[i][0]}: rifty ${a[i]} / node ${b[i]}` : 'tree (times)';
@@ -736,7 +802,7 @@ for (let seed = 1; seed <= GUEST; seed++) {
   }
 }
 console.log(
-  `\n## guest sample (fresh isolate, rifty fs): layer = flat in ${guestClass}/${GUEST}; equal to node in ${guestSame}/${GUEST}; layer ≠ node where flat = node in ${guestOracleFail}/${GUEST}`,
+  `\n## guest sample (fresh isolate, rifty fs): layer = flat in ${guestClass}/${GUEST}; equal to node in ${guestSame}/${GUEST}; layer ≠ node where flat = node in ${guestOracleFail}/${GUEST}; node crashed in ${guestCrash}/${GUEST} (not compared)`,
 );
 for (const [k, n] of [...guestDiff].sort((a, b) => b[1] - a[1]))
   console.log(`   ${n} × rifty fs vs node (flat too), first difference ${k}`);

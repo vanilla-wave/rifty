@@ -13,6 +13,12 @@
  * template directories of depth 0/1/2, a removal, a FIRST read / list / stat of template entries,
  * a rename of a template directory, a copy into one, a `/workspace` write after one template
  * write (rows already on the wire), and an idle sandbox's memory, fresh and after one listing.
+ * Review 5, Б-П — the sum axis: the host touching k directories (10 packages, every directory:
+ * the ceiling — a whole walk, `readdir` + `stat` of every entry), what the next `exec` carries and
+ * the cap after it, and idle memory after the whole walk; a no-op `mkdir -p /workspace` and
+ * `/workspace` remove / rename, fresh and after the whole walk; idle memory after a run boundary
+ * (the sandbox rebuilt from its wire, as the consumer does after a run) following the whole walk,
+ * and following one write in a package.
  *
  *   node --expose-gc docs/backlog/distribution/reference/isolate-host-sandbox-template-probes/sweep.mjs [REAL_NODE_MODULES]
  *
@@ -32,7 +38,8 @@ const realmFile = join(tmpdir(), `sweep-realm-${process.pid}.mjs`);
 await build({
   stdin: {
     contents: `export { LayeredFs, templateLayer } from ${JSON.stringify(join(here, 'layered.ts'))};
-export { snapshotFs } from './src/snapshot.ts';`,
+export { MemoryFsSync } from '@riftydev/vfs/internal';
+export { snapshotFs, restoreFs } from './src/snapshot.ts';`,
     resolveDir: guestPkg,
     loader: 'ts',
   },
@@ -84,6 +91,26 @@ function hostWrite(L, p) {
   L.writeFileSync(p, data);
   L.budget();
 }
+/** Every directory under `from`, the template's included, `readdir` + `stat` of each entry. */
+function walk(L, from) {
+  for (const n of L.readdirSync(from)) {
+    const q = `${from}/${n.name}`;
+    L.statSync(q);
+    if (n.isDirectory) walk(L, q);
+  }
+}
+/** A run boundary: the sandbox rebuilt from its wire on a fresh view (ADR-0572 §3). */
+function rebuild(L, t) {
+  const w = L.toWire();
+  const e = new R.MemoryFsSync();
+  R.restoreFs(e, R.snapshotFs(w.entries, OPTS), OPTS);
+  return R.LayeredFs.fromWire(t.layer, e, JSON.parse(JSON.stringify(w.refs)));
+}
+const packages = (L, k) =>
+  L.readdirSync('/node_modules')
+    .filter((n) => n.isDirectory)
+    .slice(0, k)
+    .map((n) => `/node_modules/${n.name}`);
 const SCENARIOS = {
   'write /workspace': { op: (L) => hostWrite(L, '/workspace/x.js') },
   'write tpl depth 0': { op: (L) => hostWrite(L, '/node_modules/new.js') },
@@ -120,7 +147,7 @@ const SCENARIOS = {
   },
   // After the host listed every template directory it can reach in one level (records held).
   'remove /workspace file after listing the template': {
-    setup: (L, t) => {
+    setup: (L) => {
       hostWrite(L, '/workspace/z.js');
       for (const n of L.readdirSync('/node_modules'))
         if (n.isDirectory) L.readdirSync(`/node_modules/${n.name}`);
@@ -141,6 +168,51 @@ const SCENARIOS = {
       L.budget();
     },
   },
+  'walk 10 packages': {
+    op: (L) => {
+      for (const q of packages(L, 10)) walk(L, q);
+      L.budget();
+    },
+  },
+  'walk the whole template (ceiling)': {
+    op: (L) => {
+      walk(L, '/node_modules');
+      L.budget();
+    },
+  },
+  'write /workspace after the whole walk': {
+    setup: (L) => walk(L, '/node_modules'),
+    op: (L) => hostWrite(L, '/workspace/y.js'),
+  },
+  'write tpl depth 1 after the whole walk': {
+    setup: (L) => walk(L, '/node_modules'),
+    op: (L, t) => hostWrite(L, `${t.pkg}/new.js`),
+  },
+  'mkdir -p /workspace (no-op)': { op: (L) => L.mkdirSync('/workspace', { recursive: true }) },
+  'mkdir -p /workspace (no-op) after the whole walk': {
+    setup: (L) => walk(L, '/node_modules'),
+    op: (L) => L.mkdirSync('/workspace', { recursive: true }),
+  },
+  'remove /workspace file after the whole walk': {
+    setup: (L) => {
+      hostWrite(L, '/workspace/z.js');
+      walk(L, '/node_modules');
+    },
+    op: (L) => {
+      L.rmSync('/workspace/z.js', { recursive: true });
+      L.budget();
+    },
+  },
+  'rename /workspace file after the whole walk': {
+    setup: (L) => {
+      hostWrite(L, '/workspace/z.js');
+      walk(L, '/node_modules');
+    },
+    op: (L) => {
+      L.renameSync('/workspace/z.js', '/workspace/z2.js');
+      L.budget();
+    },
+  },
   'write /workspace after one tpl write': {
     setup: (L, t) => hostWrite(L, `${t.pkg}/new.js`),
     op: (L) => hostWrite(L, '/workspace/y.js'),
@@ -151,18 +223,36 @@ const heap = () => {
   globalThis.gc();
   return process.memoryUsage().heapUsed + process.memoryUsage().arrayBuffers;
 };
-function idleKiB(t, touch) {
-  const before = heap();
+const IDLE = {
+  'idle fresh': () => {},
+  'idle after list /node_modules': (L) => L.readdirSync('/node_modules'),
+  'idle after the whole walk (ceiling)': (L) => walk(L, '/node_modules'),
+  'idle after the whole walk + a run boundary': (L, t) => {
+    walk(L, '/node_modules');
+    return rebuild(L, t);
+  },
+  'idle after one tpl write + a run boundary': (L, t) => {
+    hostWrite(L, `${t.pkg}/new.js`);
+    return rebuild(L, t);
+  },
+};
+/**
+ * Memory held by 20 idle sandboxes, per sandbox: the heap holding them minus the heap after they
+ * are dropped (review 5 fresh check: a one-off process-level growth after the first walks showed
+ * as ~1 MiB per sandbox when measured against the heap before them); median of 3.
+ */
+function idleOnce(t, touch) {
   const held = [];
   for (let i = 0; i < 20; i++) {
     const L = fresh(t);
-    if (touch) L.readdirSync('/node_modules');
-    held.push(L);
+    const r = touch(L, t);
+    held.push(r instanceof R.LayeredFs ? r : L);
   }
-  const kib = Math.round((heap() - before) / 20 / 1024);
+  const holding = heap();
   held.length = 0;
-  return kib;
+  return (holding - heap()) / 20 / 1024;
 }
+const idleKiB = (t, touch) => Math.round(median([0, 1, 2].map(() => idleOnce(t, touch))));
 function cell(t, name) {
   const sc = SCENARIOS[name];
   const xs = [];
@@ -207,12 +297,8 @@ for (const [axis, values] of AXES) {
       all.push(row);
       console.log(JSON.stringify(row));
     }
-    for (const touch of [false, true]) {
-      const row = {
-        ...base,
-        scenario: touch ? 'idle after list /node_modules' : 'idle fresh',
-        idleKiB: idleKiB(t, touch),
-      };
+    for (const [name, touch] of Object.entries(IDLE)) {
+      const row = { ...base, scenario: name, idleKiB: idleKiB(t, touch) };
       all.push(row);
       console.log(JSON.stringify(row));
     }
@@ -222,7 +308,7 @@ console.log(
   '\n## ratio last / first value along each axis (≈ 1: does not grow; small times are noisy)',
 );
 for (const [axis] of AXES) {
-  for (const name of [...Object.keys(SCENARIOS), 'idle fresh', 'idle after list /node_modules']) {
+  for (const name of [...Object.keys(SCENARIOS), ...Object.keys(IDLE)]) {
     const rs = all.filter((r) => r.axis === axis && r.scenario === name);
     const a = rs[0];
     const b = rs[rs.length - 1];
@@ -271,13 +357,7 @@ if (REAL) {
   const base = { axis: 'real', entries: t.entries, templateMB: +(t.bytes / 1e6).toFixed(1), width };
   for (const name of Object.keys(SCENARIOS))
     console.log(JSON.stringify({ ...base, scenario: name, ...cell(t, name) }));
-  for (const touch of [false, true])
-    console.log(
-      JSON.stringify({
-        ...base,
-        scenario: touch ? 'idle after list /node_modules' : 'idle fresh',
-        idleKiB: idleKiB(t, touch),
-      }),
-    );
+  for (const [name, touch] of Object.entries(IDLE))
+    console.log(JSON.stringify({ ...base, scenario: name, idleKiB: idleKiB(t, touch) }));
 }
 process.exit(0);

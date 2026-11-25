@@ -82,15 +82,16 @@ package; idle = heap + ArrayBuffers per sandbox over 20 held sandboxes, one 10 K
 
 | arm | create T1 / T95 | `writeFile` 10 KiB + cap check T1 / T95 | write a template file T1 / T95 | 21 writes fresh / after listing, T95 | idle T1 / T95 |
 |---|---|---|---|---|---|
-| views (a `MemoryFsSync` of views per sandbox, cap check walks it) | 4.66 / 283 | 0.55 / 30.6 | 0.68 / 30.1 | 30.2 / 30.1 | 112 KiB / 9.4 MiB |
-| overlay (hand-written: difference + deleted set; rejected, ADR-0572 §2) | 0.11 / 0.02 | 0.16 / 0.15 | 0.29 / 0.30 | 0.16 / 0.14 | noise (−3 KiB / −480 KiB) |
-| layered (`layered.ts`; cap check = the count over the state on the wire) | 0.27 / 0.06 | 0.03 / 0.02 | 0.05 / 0.06 | 0.02 / 0.02 | 5 KiB / 4 KiB |
+| views (a `MemoryFsSync` of views per sandbox, cap check walks it) | 7.64 / 290 | 0.53 / 30.8 | 0.57 / 31.6 | 31.1 / 30.7 | 112 KiB / 9.3 MiB |
+| overlay (hand-written: difference + deleted set; rejected, ADR-0572 §2) | 0.10 / 0.02 | 0.16 / 0.15 | 0.30 / 0.29 | 0.21 / 0.15 | noise (−3 KiB / −479 KiB) |
+| layered (`layered.ts`; cap check = the count over the state on the wire) | 0.25 / 0.05 | 0.02 / 0.02 | 0.04 / 0.04 | 0.01 / 0.01 | 5 KiB / 4 KiB |
 
 `readFile`, `list('/node_modules')`, `remove` ≤ 0.06 ms in every arm. Requirements §3: «Хостовая
 запись стоит O(размер записи + дифф), а не O(всего состояния)», «Память простаивающей песочницы у
 потребителя не включает шаблон: N песочниц на одном шаблоне держат одну его копию» — `layered`
 meets both for writes in `/workspace` that follow no template change (H's rows); `views` does not.
-Every operation **touching a template directory** grows with that directory's width — probe W.
+Beyond that, a host op's cost and idle memory are bounded by the template entries touched and
+marked, never by bytes — probe W.
 
 ## S — named sequences against live Node (`layered.ts`, `seq.mjs`, `seq.out.txt`)
 
@@ -125,8 +126,11 @@ A seeded generator (`mulberry32`; `gen.mjs [N] [GUEST] [SEED_BASE] [--mutant=NAM
 1..3 000) builds 4–13-call sequences of `mkdir` (recursive or not), write, a host write (parents
 created), `rm` (recursive, forced or not), `rename`, `cpSync` (recursive), `copyFileSync`,
 `utimes`, read, `readdir` and `stat` over a 6-file template plus new paths, some named like
-template entries so copies and renames merge into template directories; seven named regressions
-(review N2's rows, S-a's `stat`, S-b's nested copy) run first. Each runs on rifty's flat
+template entries so copies and renames merge into template directories, and (review 5, S1) a
+source tree copied into a template directory, half the time with an entry whose kind clashes with
+the destination's, so the copy fails midway after writing its first entries; eight named
+regressions (review N2's rows, S-a's `stat`, S-b's nested copy, review 5's failing recursive copy
+into a template directory) run first. Each runs on rifty's flat
 `MemoryFsSync` holding the same files (no layer) and on each construction. Checked: every call's
 whole returned value (`stat`: kind, size, `nlink`, the four times stamped; `readdir`: names and
 kinds), the tree (kinds, bytes, directories' and files' mtimes «template era» or «now»), the tree
@@ -136,30 +140,38 @@ audit of the change marks (`LayeredFs.audit()`: no node that differs from its or
 unmarked origin directory), and that the sequence's reads alone leave the wire a fresh sandbox's.
 The sequences whose flat rifty FS agrees with `node:fs` over a real directory (calls and tree) are
 then compared with Node too; the others differ from Node without any layer (rifty FS semantics,
-counted apart). A failure prints its seed and a greedily minimized sequence.
+counted apart). Node runs each sequence in its own process (`gen-oracle.mjs`): `fs.cpSync` of a
+source directory onto a destination file aborts Node v24.16.0 (`libc++abi … filesystem_error …
+create_directory: File exists`, exit 134 — a Node bug, outside rifty), so those sequences are
+counted «Node aborted» and not compared. `stat` is compared with Node without `atime` / `ctime`
+(Node cannot set a past `ctime`) and, on macOS, without `nlink` (APFS counts every entry); with
+rifty's own FS, whole. A failure prints its seed and a greedily minimized sequence.
 
-| construction | named regressions failing | ≠ rifty without a layer | reading grows the state | compared with Node / layer ≠ Node |
+| construction | named regressions failing | ≠ rifty without a layer | reading grows the state | compared with Node / layer ≠ Node / Node aborted |
 |---|---|---|---|---|
-| `layered-v1.ts` (existence-derived difference) | 6 / 7 | **233 / 3 000** | — | 968 / 0 |
-| `layered-v2.ts` (every held node on the wire, `stat` not materializing) | 1 / 7 | 47 / 3 000 | **3 000 / 3 000** | 1 046 / 0 |
-| `layered.ts` (node identity, untouched = one row) | **0 / 7** | **0 / 3 000** | **0 / 3 000** | 1 046 / 0 |
+| `layered-v1.ts` (existence-derived difference) | 7 / 8 | **721 / 3 000** | — | 997 / 0 / 85 |
+| `layered-v2.ts` (every held node on the wire, `stat` not materializing) | 1 / 8 | 50 / 3 000 | **3 000 / 3 000** | 1 265 / 0 / 166 |
+| `layered.ts` (node identity, untouched = one row) | **0 / 8** | **0 / 3 000** | **0 / 3 000** | 1 288 / 0 / 167 |
 
-1 954 of `layered.ts`'s 3 000 sequences are outside the Node comparison: rifty's FS without a
-layer already differs from `node:fs` there — codes, `nlink` on APFS, and times; a part of the time
-differences is the oracle's (Node cannot set a past `ctime`, so a `stat` of a template entry shows
-«now» in Node and the template's time in rifty). Guest sample (seeds
+Node coverage of `layered.ts`: 1 288 / 3 000 (43 %) compared with Node; 167 Node aborted; 1 545
+outside the comparison — rifty's FS without a layer already differs from `node:fs` there (codes,
+times: rifty bumps a directory's mtime on an overwrite in it). Guest sample (seeds
 1 000 001..1 000 300, rifty `fs` in a fresh isolate over `layered.ts` vs rifty's plain
 `MemoryFsSync` with the same files in a fresh isolate vs `node` running the same program): layer =
-no layer 300 / 300 (whole `stat` values compared), equal to Node 110 / 300, the rest differ from Node without a template too
+no layer 300 / 300 (whole `stat` values compared), equal to Node 145 / 300, Node aborted 18, the rest differ from Node without a template too
 (recorded: `backlog/runtime-js/fs-generated-sequence-divergences-from-node`). The shared template
 bytes hash the same after all runs. Exit 0 only if `layered.ts` is clean on every count.
 
 Mutants (`gen.mjs 1000 0 0 --mutant=NAME`, `gen-mutants.out.txt`), each a one-line defect of the
-rule — all exit 1: `stat-lazy` (no materialize before `stat`) 18 / 1 000, minimized to one
+rule — all exit 1: `stat-lazy` (no materialize before `stat`) 17 / 1 000, minimized to one
 `stat('/node_modules')`; `cp-dest-only` (a copy marks only its destination root) the S-b named row
-+ 1 / 1 000, minimized to a host write of `/node_modules/b/lib/x.js` + `cp b → a`; `rm-no-dirty`
-143 / 1 000; `write-no-dirty` 214 / 1 000, minimized to one write; `changed-ignored` 728 / 1 000;
-`rename-no-dirty` 61 / 1 000, minimized to one rename.
++ 21 / 1 000, minimized to a host write of `/workspace/cc/sub/n.js` + `cp cc → /node_modules/b`;
+`cp-mark-after` (review 5, S1: a copy marks after the backend call) review 5's named row + 36 /
+1 000, minimized to a copy of a tree holding a directory over the template file
+`/node_modules/a/lib/x.js`; `rm-no-dirty` 94 / 1 000, minimized to one `rm`; `write-no-dirty`
+130 / 1 000, minimized to one write; `changed-ignored` 1 000 / 1 000; `rename-no-dirty` 38 / 1 000.
+A layer call throwing where rifty's FS returns counts as a class failure (`v1` throws on
+review 5's conflicting copies).
 
 ## W — the cost sweep (`sweep.mjs`, `sweep.out.txt`)
 
@@ -171,66 +183,111 @@ wire bytes = blob + rows' JSON) and the cap's count: host writes at `/workspace`
 directories of depth 0/1/2; a removal; the FIRST read of a template file, `list` and `stat` of
 `/node_modules`; a rename of a template package; a copy of one file into a package; a `/workspace`
 write after one template write; an idle sandbox's memory (heap + ArrayBuffers per sandbox over 20),
-fresh and after one `list('/node_modules')`. Not varied: the number of sandboxes (each holds its
+fresh, after one `list('/node_modules')` and after the whole walk. Not varied: the number of sandboxes (each holds its
 own), the in-isolate cost per run (template copy + index: grows with bytes and entries — the
 user-accepted F1 dependency, probes L and F).
 
-Scenarios added after review 5: removing a template file on a fresh sandbox; removing and
-renaming a `/workspace` file after the host listed `/node_modules` and every package.
+Scenarios added after review 4's fresh check: removing a template file on a fresh sandbox;
+removing and renaming a `/workspace` file after the host listed `/node_modules` and every package.
+Added after review 5 (Б-П) — the sum axis: the host walking 10 packages, then the whole template
+(the ceiling: `readdir` + `stat` of every entry), `/workspace` ops and a template write after the
+whole walk, a no-op `mkdir -p /workspace` fresh and after the walk, idle memory after the walk and
+after a run boundary (the sandbox rebuilt from its wire) following the walk or one template write.
+Idle memory: heap + ArrayBuffers holding 20 sandboxes minus after dropping them, per sandbox,
+median of 3.
+
+**The bound.** A host op's cost and an idle sandbox's memory are bounded by the entries of the
+template directories touched since the sandbox's last run plus those of every template directory
+marked since its creation — touching a directory (its first read, `list` or `stat`, or a write,
+removal, rename or copy in it) touches all its entries; any mutating call into one marks it, a
+failed one included, and a mark persists through runs; the ceiling is the whole index — never the
+bytes. A marked directory carries a row per entry on the wire and in the cap; each row costs the
+cap 384 + 8 × path length + 80 × depth units (ADR-0567 §7; ~730 at these paths). Idle memory per
+touched entry 0.49–0.70 KiB, growing with path length (after the whole walk: 0.52 on the
+four-library template, 0.54 at 5 000 packages, 0.70 at depth 12). A run boundary drops what only
+reading touched from the wire and the cap (1 row, 1 608 units, as fresh); idle memory falls with it
+but not to a fresh sandbox's (below; the residue's cause not isolated).
 
 Ratio last / first value along each axis (≈ 1 = flat; sub-0.05 ms times are noisy):
 
 | axis | every scenario: time, rows, wire, cap, idle |
 |---|---|
-| bytes ×16 | flat |
-| files ×10 | flat except a write at depth 2 (×1.70 time, ×1.43 rows: its own `lib` lists 5 → 50 children) and a first read of a file in `lib` (×1.77: `lib` 5 → 50 wide) — the width dependency at that level |
-| depth ×6 | flat except a first read of a template file (×1.54): O(path length), each directory on the path materialized once |
-| **width ×500** | `/workspace` with no template touch flat; **every scenario touching a template directory ×190–500**; `/workspace` remove / rename after the host touched the whole template ×9–15 (0.006 → 0.088 ms: the held records, no walk) |
+| bytes ×16 | flat (sub-0.01 ms times ×0.3–0.75), the whole walk and idle after it included |
+| files ×10 | flat except where more entries are touched: a write at depth 2 (×1.94 time, ×1.43 rows: its own `lib` lists 5 → 50 children), a first read of a file in `lib` (×1.63), a removal of a template file (×1.93), the walks (×5.1 / ×6.7), idle after the whole walk (×6.7) and after it + a run boundary (×6.1) — entries ×7.4; `/workspace` ops after the whole walk ×1.6–2.4 (≤ 0.008 ms) |
+| depth ×6 | flat except a first read / removal of a template file (×1.57 / ×1.63): O(path length); the walks (×4.6 / ×6.5), idle after the whole walk (×3.1) and after it + a run boundary (×2.8) — entries ×2.4, longer paths; `/workspace` ops after the whole walk ×1.5–1.7 |
+| **width ×500** | `/workspace` with no template touch: rows, wire and cap flat, time ×1.67 (0.003 → 0.005 ms); **a write, removal, rename or copy in a template directory ×156–406 time, ×357–500 rows**; a first read / `list` / `stat` ×249–529 time, rows ×1; walking 10 packages ×31 (its `list('/node_modules')`), the whole template ×605; idle after one listing ×326, after the whole walk ×441, after it + a run boundary ×193; after the whole walk, `/workspace` write / remove / rename ×6 / ×7.7 / ×4.8 and a no-op `mkdir -p /workspace` 0 → 0.005 ms |
+
+That last item is not a walk (the whole walk of 35 001 entries is 126 ms) nor per-call work of the
+layer: the no-op `mkdir` — one `#touch` of an already materialized path — slows alike. Cause not
+isolated.
 
 Width, `/node_modules` 10 → 100 → 1 000 → 5 000 packages (ms; rows on the wire after it):
 
 | scenario | 10 | 100 | 1 000 | 5 000 |
 |---|---|---|---|---|
-| write `/workspace` | 0.008, 1 | 0.007, 1 | 0.005, 1 | 0.009, 1 |
-| write in a package (depth 1) | 0.046, 10 | 0.245, 100 | 2.115, 1 000 | 10.654, 5 000 |
-| removal of a file just written in a package | 0.019, 10 | 0.109, 100 | 1.025, 1 000 | 5.228, 5 000 |
-| removal of a template file | 0.057, 13 | 0.255, 103 | 2.127, 1 003 | 10.896, 5 003 |
-| first read of a template file | 0.029, 1 | 0.113, 1 | 1.065, 1 | 5.534, 1 |
-| first `list` / `stat` of `/node_modules` | 0.016 / 0.014, 1 | 0.108 / 0.105, 1 | 1.087 / 1.082, 1 | 5.63 / 5.523, 1 |
-| rename a package | 0.035, 10 | 0.222, 100 | 2.094, 1 000 | 10.798, 5 000 |
-| copy 1 file into a package | 0.047, 10 | 0.235, 100 | 2.112, 1 000 | 10.891, 5 000 |
-| write `/workspace` after one template write | 0.019, 10 | 0.104, 100 | 1.025, 1 000 | 5.231, 5 000 |
-| remove / rename a `/workspace` file after listing the template | 0.006 / 0.009, 1 | 0.006 / 0.009, 1 | 0.016 / 0.019, 1 | 0.088 / 0.083, 1 |
-| idle sandbox, fresh / after one listing | 3 / 11 KiB | 3 / 75 KiB | 3 / 625 KiB | 4 / 3 297 KiB |
+| write `/workspace` | 0.003, 1 | 0.004, 1 | 0.004, 1 | 0.005, 1 |
+| write in a package (depth 1) | 0.021, 10 | 0.136, 100 | 1.39, 1 000 | 7.135, 5 000 |
+| removal of a file just written in a package | 0.008, 10 | 0.027, 100 | 0.238, 1 000 | 1.251, 5 000 |
+| removal of a template file | 0.037, 13 | 0.152, 103 | 1.388, 1 003 | 7.168, 5 003 |
+| first read of a template file | 0.023, 1 | 0.116, 1 | 1.097, 1 | 5.728, 1 |
+| first `list` / `stat` of `/node_modules` | 0.011 / 0.011, 1 | 0.106 / 0.104, 1 | 1.137 / 1.064, 1 | 5.817 / 5.727, 1 |
+| rename a package | 0.019, 10 | 0.134, 100 | 1.357, 1 000 | 7.117, 5 000 |
+| copy 1 file into a package | 0.027, 10 | 0.142, 100 | 1.402, 1 000 | 7.214, 5 000 |
+| write `/workspace` after one template write | 0.007, 10 | 0.028, 100 | 0.271, 1 000 | 1.247, 5 000 |
+| remove / rename a `/workspace` file after one listing | 0.003 / 0.006, 1 | 0.004 / 0.006, 1 | 0.005 / 0.007, 1 | 0.017 / 0.019, 1 |
+| walk 10 packages / the whole template (entries: 71 / 701 / 7 001 / 35 001) | 0.201 / 0.208, 1 | 0.302 / 2.187, 1 | 1.375 / 22.819, 1 | 6.206 / 125.889, 1 |
+| after the whole walk: write / remove / rename in `/workspace`; no-op `mkdir -p` | 0.003 / 0.003 / 0.006; 0 | 0.003 / 0.004 / 0.006; 0.001 | 0.007 / 0.011 / 0.014; 0.002 | 0.018 / 0.023 / 0.029; 0.005 |
+| after the whole walk: write in a package | 0.007, 10 | 0.028, 100 | 0.284, 1 000 | 1.419, 5 000 |
+| idle, KiB: fresh / after one listing / after the whole walk | 3 / 10 / 43 | 3 / 74 / 384 | 3 / 663 / 3 805 | 3 / 3 255 / 18 951 |
+| idle, KiB, after a run boundary: following the whole walk / one write in a package | 5 / 9 | 24 / 58 | 214 / 527 | 963 / 2 838 |
+
+The ceiling: 0.54 KiB of idle memory per touched entry (18 951 KiB / 35 001), ~3.6 µs to touch one
+(126 ms / 35 001); the cap after the whole walk is a fresh sandbox's (1 608 units: reads change
+nothing); after a run boundary 963 KiB stay (0.028 KiB per entry walked) — the wire is a fresh
+sandbox's, so this residue is not state; measured alone (the four-library template, 3 × 3 runs,
+not committed) it is 3 KiB, inside the sweep 231 KiB: not isolated, not claimed reset.
 
 The four-library template itself (`sweep.mjs <node_modules of npm ci ../isolate-library-probe/deps>`:
 8 793 entries, 86.6 MB, `/node_modules` width 180; package `pdf-lib`):
 
 | scenario | ms | rows on the wire | wire bytes | cap units |
 |---|---|---|---|---|
-| write `/workspace` | 0.005 | 1 | 388 | 2 282 |
-| first read of a template file / first `list` / first `stat` of `/node_modules` | 0.212 / 0.206 / 0.197 | 1 | 303 | 1 608 |
-| write in `pdf-lib` (depth 1) | 0.437 | 189 | 32 690 | 147 386 (0.2 % of the 64 MiB cap) |
-| removal of a template file / rename of `pdf-lib` / copy of 1 file into it | 0.423 / 0.399 / 0.438 | 188 / 181 / 189 | 32 395 / 31 102 / 32 852 | 145 632 / 138 888 / 148 844 |
-| write `/workspace` after one write in `pdf-lib` | 0.207 | 189 | 32 775 | 148 060 |
-| idle sandbox, fresh / after one `list('/node_modules')` | — | — | — | 4 / 132 KiB |
+| write `/workspace` | 0.004 | 1 | 388 | 2 282 |
+| first read of a template file / first `list` / first `stat` of `/node_modules` | 0.215 / 0.204 / 0.195 | 1 | 303 | 1 608 |
+| write in `pdf-lib` (depth 1) | 0.276 | 189 | 32 690 | 147 386 (0.2 % of the 64 MiB cap) |
+| removal of a template file / rename of `pdf-lib` / copy of 1 file into it | 0.272 / 0.259 / 0.281 | 188 / 181 / 189 | 32 395 / 31 102 / 32 852 | 145 632 / 138 888 / 148 844 |
+| write `/workspace` after one write in `pdf-lib` | 0.054 | 189 | 32 775 | 148 060 |
+| walk 10 packages / **the whole template (ceiling)** | 3.111 / **32.058** | 1 | 303 | 1 608 |
+| after the whole walk: write / remove / rename in `/workspace`; no-op `mkdir -p` | 0.009 / 0.014 / 0.017; 0.003 | 1 | 388 / 303 / 390 | 2 282 / 1 608 / 2 290 |
+| after the whole walk: write in `pdf-lib` | 0.075 | 189 | 32 690 | 147 386 |
+| idle sandbox, KiB: fresh / after one `list('/node_modules')` / **after the whole walk** | — | — | — | 3 / 132 / **4 549** |
+| idle sandbox, KiB, after a run boundary: following the whole walk / one write in `pdf-lib` | — | — | — | 231 / 108 |
 
-Cap: ~730 units per row (path-length dependent). Not timed here: `toWire`, the rebuild from the
-wire and the changed-paths diff — each linear in the rows, i.e. the same width dependency. The one
-non-flat axis is the width of the template directories an operation touches: they are materialized
-whole on first touch, and a changed one is explicit and opaque (ADR-0572 Consequences, the user
-fork in the goal map).
+The ceiling on the consumer's template: 4.4 MiB per idle sandbox that walked everything (0.52 KiB
+per entry), 32 ms for the walk; every write in a package carries ~189 rows (~0.2 % of the cap) for
+the sandbox's life. Not timed here: `toWire`, the rebuild from the wire and the changed-paths diff
+— each linear in the rows, i.e. the same bound. The cause: a template directory is materialized
+whole on first touch, and a marked one is explicit and opaque (ADR-0572 Consequences, the user fork
+in the goal map).
 
 ## F — the F1 return condition's metric on real programs (`gens.mjs`, `gens.out.txt`)
 
 The four libraries' canonical generators (`../isolate-library-probe/gen/{pdf,docx,pptx,xlsx}.cjs`)
 over the four-library `node_modules` (npm ci of `../isolate-library-probe/deps`: 8 000 files,
 86.6 MB) in a fresh isolate: `layered` (template copy + index + run + capture) vs `state` (the same
-files in the sandbox's state, its run phase only), medians of 7, ms, load ~5 on 12 cores:
+files in the sandbox's state, its run phase only), medians of 7, ms, 12 cores; re-run twice after
+review 5's `layered.ts` changes (marks before the upper call, the untouched check without `stat`,
+lazy rows' times from the origin — the capture's `toWire` path changed), both in `gens.out.txt`:
 
-| empty | pdf | docx | pptx | xlsx | 4 at once pdf / xlsx (wall) |
-|---|---|---|---|---|---|
-| +20 | +21 | +18 | +25 | +19 | 286 vs 245 / 559 vs 552 |
+| run | empty | pdf | docx | pptx | xlsx | 4 at once pdf / xlsx (wall) |
+|---|---|---|---|---|---|---|
+| before review 5, load ~5 | +20 | +21 | +18 | +25 | +19 | 286 vs 245 / 559 vs 552 |
+| 1, load ~2.5 | +15 | +17 | +16 | +28 | +41 | 270 vs 241 / 555 vs 484 (**+71**) |
+| 2, load 2.2 → 3.7 | +14 | +20 | +16 | +30 | +30 | 260 vs 234 / 504 vs 467 |
+
+Run 1's four-at-once xlsx, +71 ms, is 1 ms over the F1 return condition's 50 + 20 ms — at load
+~2.5, not the condition's idle machine (load < 2), on the probe, not landed code; run 2 +37. The
+condition is decided in map items 5 / 7; this edge goes to the user with the manager's report.
 
 Smallest passing `memoryLimit`, empty file: 103 MiB over the template vs 190 with the files in the
 state (an empty sandbox without a template: 19 MiB). Earlier runs at load 9–18 (before the per-call

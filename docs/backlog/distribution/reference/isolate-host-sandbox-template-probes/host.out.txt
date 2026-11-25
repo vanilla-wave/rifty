@@ -1,11 +1,11 @@
 node v24.16.0, darwin/arm64
 
 ## T1: 296 files, 1.0 MB
-{"tpl":"T1","arm":"views","createMs":4.66,"writeFile10KiBMs":0.55,"writeTemplateFileMs":0.68,"writeFreshMs":0.5,"writeAfterTouchMs":0.49,"readTemplateFileMs":0,"listNodeModulesMs":0,"removeMs":0,"idleKiBPerSandbox":112}
-{"tpl":"T1","arm":"overlay","createMs":0.11,"writeFile10KiBMs":0.16,"writeTemplateFileMs":0.29,"writeFreshMs":0.18,"writeAfterTouchMs":0.15,"readTemplateFileMs":0,"listNodeModulesMs":0,"removeMs":0,"idleKiBPerSandbox":-3}
-{"tpl":"T1","arm":"layered","createMs":0.27,"writeFile10KiBMs":0.03,"writeTemplateFileMs":0.05,"writeFreshMs":0.02,"writeAfterTouchMs":0.02,"readTemplateFileMs":0,"listNodeModulesMs":0,"removeMs":0.01,"idleKiBPerSandbox":5}
+{"tpl":"T1","arm":"views","createMs":7.64,"writeFile10KiBMs":0.53,"writeTemplateFileMs":0.57,"writeFreshMs":0.45,"writeAfterTouchMs":0.44,"readTemplateFileMs":0,"listNodeModulesMs":0,"removeMs":0,"idleKiBPerSandbox":112}
+{"tpl":"T1","arm":"overlay","createMs":0.1,"writeFile10KiBMs":0.16,"writeTemplateFileMs":0.3,"writeFreshMs":0.16,"writeAfterTouchMs":0.17,"readTemplateFileMs":0,"listNodeModulesMs":0,"removeMs":0,"idleKiBPerSandbox":-3}
+{"tpl":"T1","arm":"layered","createMs":0.25,"writeFile10KiBMs":0.02,"writeTemplateFileMs":0.04,"writeFreshMs":0.01,"writeAfterTouchMs":0.01,"readTemplateFileMs":0,"listNodeModulesMs":0,"removeMs":0.01,"idleKiBPerSandbox":5}
 
 ## T95: 23654 files, 72.5 MB
-{"tpl":"T95","arm":"views","createMs":282.69,"writeFile10KiBMs":30.58,"writeTemplateFileMs":30.13,"writeFreshMs":30.18,"writeAfterTouchMs":30.09,"readTemplateFileMs":0,"listNodeModulesMs":0,"removeMs":0,"idleKiBPerSandbox":9592}
-{"tpl":"T95","arm":"overlay","createMs":0.02,"writeFile10KiBMs":0.15,"writeTemplateFileMs":0.3,"writeFreshMs":0.16,"writeAfterTouchMs":0.14,"readTemplateFileMs":0,"listNodeModulesMs":0,"removeMs":0,"idleKiBPerSandbox":-480}
-{"tpl":"T95","arm":"layered","createMs":0.06,"writeFile10KiBMs":0.02,"writeTemplateFileMs":0.06,"writeFreshMs":0.02,"writeAfterTouchMs":0.02,"readTemplateFileMs":0,"listNodeModulesMs":0,"removeMs":0.01,"idleKiBPerSandbox":4}
+{"tpl":"T95","arm":"views","createMs":289.74,"writeFile10KiBMs":30.82,"writeTemplateFileMs":31.58,"writeFreshMs":31.12,"writeAfterTouchMs":30.68,"readTemplateFileMs":0,"listNodeModulesMs":0,"removeMs":0,"idleKiBPerSandbox":9540}
+{"tpl":"T95","arm":"overlay","createMs":0.02,"writeFile10KiBMs":0.15,"writeTemplateFileMs":0.29,"writeFreshMs":0.21,"writeAfterTouchMs":0.15,"readTemplateFileMs":0,"listNodeModulesMs":0,"removeMs":0,"idleKiBPerSandbox":-479}
+{"tpl":"T95","arm":"layered","createMs":0.05,"writeFile10KiBMs":0.02,"writeTemplateFileMs":0.04,"writeFreshMs":0.01,"writeAfterTouchMs":0.01,"readTemplateFileMs":0,"listNodeModulesMs":0,"removeMs":0,"idleKiBPerSandbox":4}

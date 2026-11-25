@@ -150,7 +150,7 @@ export class LayeredFs {
     // Materializing is not a change: the directory keeps its own times.
     this.upper.restoreStatSync(dir, own);
   }
-  /** Every existing ancestor of `p` materialized (a mark exists only on an existing directory). */
+  /** Every existing ancestor of `p` materialized (a lazy mark exists only on an existing directory). */
   #touch(p: string): void {
     if (this.#lazy.size === 0) return;
     this.#materialize('/');
@@ -228,7 +228,9 @@ export class LayeredFs {
         this.#copied(join(s, e.name), join(d, e.name), visit);
   }
 
-  // ---- FsSync: reads change nothing; each mutation marks its path ----
+  // ---- FsSync: reads change nothing. Every mutating call marks the paths it may write BEFORE it
+  // reaches the backend, so a call that fails midway (a recursive copy, a `mkdir -p`) leaves marks
+  // over a superset of what it changed; an extra mark only makes a directory explicit. ----
   existsSync = (p: string): boolean => this.#at(p, () => this.upper.existsSync(p));
   // A directory's own stat depends on its children (`nlink`): a lazy one is materialized first.
   statSync = (p: string) => this.#atSelf(p, () => this.upper.statSync(p));
@@ -243,14 +245,14 @@ export class LayeredFs {
   writeFileSync = (p: string, d: Uint8Array): void => {
     const n = norm(p);
     this.#touch(n);
-    this.upper.writeFileSync(p, d);
     this.#dirty(n);
+    this.upper.writeFileSync(p, d);
   };
   mkdirSync = (p: string, o: { recursive?: boolean }): void => {
     const n = norm(p);
     this.#touch(n);
-    this.upper.mkdirSync(p, o);
     this.#dirty(n);
+    this.upper.mkdirSync(p, o);
   };
   rmSync = (p: string, o: { recursive?: boolean; force?: boolean }): void => {
     const n = norm(p);
@@ -258,29 +260,27 @@ export class LayeredFs {
     // A non-recursive rm of a template directory must see its children (ENOTEMPTY).
     if (!o.recursive) this.#materialize(n);
     const gone = this.#subtree(n);
+    this.#dirty(parentOf(n));
     this.upper.rmSync(p, o);
-    if (gone.length > 0 && !this.upper.existsSync(n)) {
-      this.#rekey(n, null, gone);
-      this.#dirty(parentOf(n));
-    }
+    if (gone.length > 0 && !this.upper.existsSync(n)) this.#rekey(n, null, gone);
   };
   utimes = (p: string, a: number, m: number): void => {
     const n = norm(p);
     this.#touch(n);
-    this.upper.utimes(p, a, m);
     this.#dirty(n);
+    this.upper.utimes(p, a, m);
   };
   restoreStatSync = (p: string, t: Times): void => {
     const n = norm(p);
     this.#touch(n);
-    this.upper.restoreStatSync(p, t);
     this.#dirty(n);
+    this.upper.restoreStatSync(p, t);
   };
   copyFileSync = (s: string, d: string): void => {
     this.#touch(norm(s));
     this.#touch(norm(d));
-    this.upper.copyFileSync(s, d);
     this.#dirty(norm(d));
+    this.upper.copyFileSync(s, d);
   };
   cpSync = (s: string, d: string, o?: { recursive?: boolean }): void => {
     // A recursive copy merges into the destination: the directories it writes into must hold their
@@ -291,9 +291,9 @@ export class LayeredFs {
     this.#touch(dn);
     this.#copied(sn, dn, (to, dir) => {
       if (dir) this.#materialize(to);
+      this.#dirty(to);
     });
     this.upper.cpSync(s, d, o);
-    this.#copied(sn, dn, (to) => this.#dirty(to));
   };
   renameSync = (s: string, d: string): void => {
     const sn = norm(s);
@@ -304,12 +304,12 @@ export class LayeredFs {
     if (this.upper.existsSync(dn) && this.upper.statSync(dn).isDirectory) this.#materialize(dn);
     const replaced = sn === dn ? [] : this.#subtree(dn);
     const moved = sn === dn ? [] : this.#subtree(sn);
+    this.#dirty(parentOf(sn));
+    this.#dirty(parentOf(dn));
     this.upper.renameSync(s, d);
     if (sn !== dn && !under(dn, sn) && !this.upper.existsSync(sn)) {
       this.#rekey(dn, null, replaced);
       this.#rekey(sn, dn, moved);
-      this.#dirty(parentOf(sn));
-      this.#dirty(parentOf(dn));
     }
   };
 
@@ -358,11 +358,14 @@ export class LayeredFs {
   }
 
   // ---- the rule ----
+  /**
+   * A directory with an origin and no change mark is untouched: nothing but a marked mutation
+   * changes a directory's times or children (materializing keeps them), so no `stat` is needed —
+   * a `stat` of a materialized directory counts its children (`nlink`), O(its width).
+   */
   #untouchedDir(p: string): string | undefined {
     const o = this.#dirOrigin.get(p);
-    if (o === undefined || this.#changed.has(p)) return undefined;
-    const e = this.lower.get(o);
-    return e?.dir && sameTimes(this.#timesAt(p), e) ? o : undefined;
+    return o === undefined || this.#changed.has(p) ? undefined : o;
   }
   #untouchedFile(p: string): string | undefined {
     const o = this.#origin.get(p);
@@ -374,10 +377,9 @@ export class LayeredFs {
   #describe(
     emit: (p: string, kind: 'dir' | 'file' | 'lazy' | 'ref', origin: string | null) => void,
   ): void {
-    const node = (p: string): void => {
+    const node = (p: string, isDir: boolean): void => {
       counters.described++;
-      const st = this.upper.statSync(p);
-      if (st.isDirectory) {
+      if (isDir) {
         const o = this.#untouchedDir(p);
         if (o !== undefined) {
           emit(p, 'lazy', o);
@@ -385,13 +387,13 @@ export class LayeredFs {
         }
         if (p !== '/') emit(p, 'dir', null);
         this.#materialize(p);
-        for (const d of this.upper.readdirSync(p)) node(join(p, d.name));
+        for (const d of this.upper.readdirSync(p)) node(join(p, d.name), d.isDirectory);
         return;
       }
       const o = this.#untouchedFile(p);
       emit(p, o !== undefined ? 'ref' : 'file', o ?? null);
     };
-    node('/');
+    node('/', true);
   }
   /** The state cap's count (ADR-0567 §7 units) over the state on the wire. */
   budget(): number {
@@ -406,8 +408,18 @@ export class LayeredFs {
     const refs: RefRow[] = [];
     const dirs: string[] = [];
     this.#describe((p, kind, origin) => {
+      // An untouched row's times are its origin's (no stat of a wide directory).
+      if (kind === 'lazy') {
+        refs.push([
+          p,
+          kind,
+          origin as string,
+          timesOf(this.lower.get(origin as string) as LowerEntry),
+        ]);
+        return;
+      }
       const t = this.#timesAt(p);
-      if (kind === 'lazy' || kind === 'ref') refs.push([p, kind, origin as string, t]);
+      if (kind === 'ref') refs.push([p, kind, origin as string, t]);
       else if (kind === 'dir') {
         entries.mkdirSync(p, {});
         dirs.push(p);

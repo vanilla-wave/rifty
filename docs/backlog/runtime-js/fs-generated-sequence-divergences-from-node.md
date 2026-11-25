@@ -14,8 +14,8 @@ Found mid-task by the template goal's generator (`gen.mjs`, 2026-11-25, Node v24
 arm64): random sequences of `mkdir`, write, `rm`, `rename`, `cpSync`, `copyFileSync`, `utimes`,
 read, `readdir` and `stat` over a 6-file tree, run by rifty's flat `MemoryFsSync` (no template)
 and by `node:fs` over a real directory; a 300-sequence sample through rifty's guest `fs` in a fresh
-isolate against `node` running the same program (`gen.out.txt`: 110/300 equal with whole `stat` values; every other
-difference is there without a template too).
+isolate against `node` running the same program (`gen.out.txt`: 145/300 equal — `stat` without `atime`/`ctime`, and without `nlink` on macOS; 18
+not compared, Node aborted; every other difference is there without a template too).
 
 Minimal calls (Node v24.16.0 verified 2026-11-25; rifty from `gen.out.txt` and the code):
 
@@ -29,12 +29,15 @@ Minimal calls (Node v24.16.0 verified 2026-11-25; rifty from `gen.out.txt` and t
   parent is missing).
 - `cpSync(..., { recursive: true })` type mismatches: rifty `EISDIR` / `EEXIST`, Node
   `ERR_FS_CP_NON_DIR_TO_DIR` / `ERR_FS_CP_DIR_TO_NON_DIR` (known:
-  `runtime-js/fs-cp-type-mismatch-error-codes`).
-- `renameSync` of a directory onto a non-directory or a missing parent: rifty `EINVAL`, Node
-  `ENOTDIR` / `ENOENT`.
+  `runtime-js/fs-cp-type-mismatch-error-codes`); a file inside the source tree landing on a
+  directory of the destination: rifty `EISDIR`, Node `ENOTSUP` (both after copying the entries
+  before it).
+- `renameSync` of a directory into its own subtree whose parent is a file or missing
+  (`rename('/a', '/a/x/y')`): rifty `EINVAL`, Node `ENOTDIR` / `ENOENT` (Node's `EINVAL` only when
+  that parent is a directory).
 - **rifty throws where Node succeeds** — `cpSync('/a/x', '/m/n', { recursive: true })` with the
-  destination's parent missing: rifty `ENOENT`, Node creates the parents (90 × at the `FsSync`
-  level, 7 × in the guest sample).
+  destination's parent missing: rifty `ENOENT`, Node creates the parents (69 × at the `FsSync`
+  level, 10 × in the guest sample).
 - At the `FsSync` level a non-recursive `rm` of a directory is `ENOTEMPTY` (Node's `fs.rmSync`:
   `ERR_FS_EISDIR`); the guest's `fs.rmSync` maps it (absent from the guest sample) — interface,
   not observable.
@@ -42,6 +45,12 @@ Minimal calls (Node v24.16.0 verified 2026-11-25; rifty from `gen.out.txt` and t
   (`MemoryBackend.writeFile`, `parentNode.mtime = Date.now()`); Node does not.
 - Directory `nlink`: rifty counts subdirectories (as Linux); Node on macOS APFS counts every entry
   — platform-dependent, not a rifty defect on Linux.
+
+Not rifty's: `fs.cpSync('src', 'dst', { recursive: true })` with `src/lib` a directory and
+`dst/lib` a file aborts Node v24.16.0 itself (`libc++abi: … filesystem_error: … create_directory:
+File exists`, exit 134, macOS arm64, 2026-11-25) — a Node bug; the generator's oracle runs in a
+child process and counts these sequences as not compared. No matching upstream issue found (web
+search, 2026-11-25); not filed — filing is publishing, the user's call.
 
 Coupling with the template goal (`epics/isolate-host-sandbox-template`, ADR-0572 §2): its layered FS
 must mark every path a `cpSync` writes; fixing the overwrite mtime bump above without that rule

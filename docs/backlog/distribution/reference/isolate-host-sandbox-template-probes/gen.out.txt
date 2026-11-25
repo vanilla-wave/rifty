@@ -1,62 +1,47 @@
 node v24.16.0, darwin/arm64; 3000 sequences, seeds 1..3000
 
-## v1: named regressions failing: 6/7
-## v1: layer ≠ flat rifty FS (calls, trees, rebuild, run boundary) in 233/3000; of the 2767 that pass, flat rifty = node:fs (calls and tree) in 968 — layer ≠ node among those: 0; the other 1799 are rifty FS vs node:fs differences outside the layer
-   first failing seed 13, minimized: [["rm","/node_modules/a",{"recursive":true,"force":true}],["mkdir","/node_modules/a/lib",{"recursive":true}]]
-   flat: ["ok","ok"] {"/node_modules":"dir now","/node_modules/a":"dir now","/node_modules/a/lib":"dir now","/node_modules/b":"dir 1600000000000","/node_modules/b/index.js":"file b 1600000000000","/node_modules/b/sub":"dir 1600000000000","/node_modules/b/sub/s.js":"file s 1600000000000","/workspace":"dir now"}
-   layer: ["ok","ok"] rebuilt {"/node_modules":"dir now","/node_modules/a":"dir now","/node_modules/a/lib":"dir now","/node_modules/a/lib/x.js":"file x 1600000000000","/node_modules/a/lib/y.js":"file y 1600000000000","/node_modules/b":"dir 1600000000000","/node_modules/b/index.js":"file b 1600000000000","/node_modules/b/sub":"dir 1600000000000","/node_modules/b/sub/s.js":"file s 1600000000000","/workspace":"dir now"}
-## v2: named regressions failing: 1/7
-## v2: layer ≠ flat rifty FS (calls, trees, rebuild, run boundary) in 47/3000; reading the template grows the state in 3000/3000; of the 2953 that pass, flat rifty = node:fs (calls and tree) in 1046 — layer ≠ node among those: 0; the other 1907 are rifty FS vs node:fs differences outside the layer
+## v1: named regressions failing: 7/8
+## v1: layer ≠ flat rifty FS (calls, trees, rebuild, run boundary) in 721/3000; of the 2279 that pass, flat rifty = node:fs (calls and tree) in 997 — layer ≠ node among those: 0; Node aborted in 85 (not compared); the other 1197 are rifty FS vs node:fs differences outside the layer
+   first failing seed 2, minimized: [["stat","/node_modules"]]
+   flat: ["={\"f\":false,\"d\":true,\"size\":0,\"nlink\":4,\"m\":1600000000000,\"a\":1600000000000,\"c\":1600000000000,\"b\":1600000000000}"] {"/node_modules":"dir 1600000000000","/node_modules/a":"dir 1600000000000","/node_modules/a/index.js":"file module.exports = 'a'; 1600000000000","/node_modules/a/lib":"dir 1600000000000","/node_modules/a/lib/x.js":"file x 1600000000000","/node_modules/a/lib/y.js":"file y 1600000000000","/node_modules/a/package.json":"file {\"main\":\"index.js\"} 1600000000000","/node_modules/b":"dir 1600000000000","/node_modules/b/index.js":"file b 1600000000000","/node_modules/b/sub":"dir 1600000000000","/node_modules/b/sub/s.js":"file s 1600000000000","/workspace":"dir now"}
+   layer: ["={\"f\":false,\"d\":true,\"size\":0,\"nlink\":2,\"m\":1600000000000,\"a\":1600000000000,\"c\":1600000000000,\"b\":1600000000000}"] rebuilt {"/node_modules":"dir 1600000000000","/node_modules/a":"dir 1600000000000","/node_modules/a/index.js":"file module.exports = 'a'; 1600000000000","/node_modules/a/lib":"dir 1600000000000","/node_modules/a/lib/x.js":"file x 1600000000000","/node_modules/a/lib/y.js":"file y 1600000000000","/node_modules/a/package.json":"file {\"main\":\"index.js\"} 1600000000000","/node_modules/b":"dir 1600000000000","/node_modules/b/index.js":"file b 1600000000000","/node_modules/b/sub":"dir 1600000000000","/node_modules/b/sub/s.js":"file s 1600000000000","/workspace":"dir now"}
+## v2: named regressions failing: 1/8
+## v2: layer ≠ flat rifty FS (calls, trees, rebuild, run boundary) in 50/3000; reading the template grows the state in 3000/3000; of the 2950 that pass, flat rifty = node:fs (calls and tree) in 1265 — layer ≠ node among those: 0; Node aborted in 166 (not compared); the other 1519 are rifty FS vs node:fs differences outside the layer
    first failing seed 37, minimized: [["stat","/node_modules"]]
    flat: ["={\"f\":false,\"d\":true,\"size\":0,\"nlink\":4,\"m\":1600000000000,\"a\":1600000000000,\"c\":1600000000000,\"b\":1600000000000}"] {"/node_modules":"dir 1600000000000","/node_modules/a":"dir 1600000000000","/node_modules/a/index.js":"file module.exports = 'a'; 1600000000000","/node_modules/a/lib":"dir 1600000000000","/node_modules/a/lib/x.js":"file x 1600000000000","/node_modules/a/lib/y.js":"file y 1600000000000","/node_modules/a/package.json":"file {\"main\":\"index.js\"} 1600000000000","/node_modules/b":"dir 1600000000000","/node_modules/b/index.js":"file b 1600000000000","/node_modules/b/sub":"dir 1600000000000","/node_modules/b/sub/s.js":"file s 1600000000000","/workspace":"dir now"}
    layer: ["={\"f\":false,\"d\":true,\"size\":0,\"nlink\":2,\"m\":1600000000000,\"a\":1600000000000,\"c\":1600000000000,\"b\":1600000000000}"] rebuilt {"/node_modules":"dir 1600000000000","/node_modules/a":"dir 1600000000000","/node_modules/a/index.js":"file module.exports = 'a'; 1600000000000","/node_modules/a/lib":"dir 1600000000000","/node_modules/a/lib/x.js":"file x 1600000000000","/node_modules/a/lib/y.js":"file y 1600000000000","/node_modules/a/package.json":"file {\"main\":\"index.js\"} 1600000000000","/node_modules/b":"dir 1600000000000","/node_modules/b/index.js":"file b 1600000000000","/node_modules/b/sub":"dir 1600000000000","/node_modules/b/sub/s.js":"file s 1600000000000","/workspace":"dir now"}
-## v3: named regressions failing: 0/7
-## v3: layer ≠ flat rifty FS (calls, trees, rebuild, run boundary, cap count, mark audit) in 0/3000; reading the template grows the state in 0/3000; of the 3000 that pass, flat rifty = node:fs (calls and tree) in 1046 — layer ≠ node among those: 0; the other 1954 are rifty FS vs node:fs differences outside the layer
+## v3: named regressions failing: 0/8
+## v3: layer ≠ flat rifty FS (calls, trees, rebuild, run boundary, cap count, mark audit) in 0/3000; reading the template grows the state in 0/3000; of the 3000 that pass, flat rifty = node:fs (calls and tree) in 1288 — layer ≠ node among those: 0; Node aborted in 167 (not compared); the other 1545 are rifty FS vs node:fs differences outside the layer
    rifty FsSync vs node:fs where they differ (rifty FS semantics, not the layer), by first differing call:
-     500 × tree (times/order)
-     218 × stat: rifty ={"f":true,"d":false,"size":1,"nlink":1,"m":1600000000000,"a":1600000000000,"c":1600000000000,"b":1600000000000} / node ={"f":true,"d":false,"size":1,"nlink":1,"m":1600000000000,"a":1600000000000,"c":"now","b":1600000000000}
-     218 × rm: rifty ENOTEMPTY / node ERR_FS_EISDIR
-     120 × copy: rifty EISDIR / node ENOTSUP
-     90 × cp: rifty ENOENT / node ok
-     79 × cp: rifty EISDIR / node ERR_FS_CP_NON_DIR_TO_DIR
-     75 × copy: rifty EISDIR / node ENOENT
-     73 × rename: rifty EINVAL / node ENOTDIR
-     67 × rename: rifty ok / node ENOENT
-     54 × stat: rifty ={"f":true,"d":false,"size":21,"nlink":1,"m":1600000000000,"a":1600000000000,"c":1600000000000,"b":1600000000000} / node ={"f":true,"d":false,"size":21,"nlink":1,"m":1600000000000,"a":1600000000000,"c":"now","b":1600000000000}
-     50 × stat: rifty ={"f":false,"d":true,"size":0,"nlink":2,"m":1600000000000,"a":1600000000000,"c":1600000000000,"b":1600000000000} / node ={"f":false,"d":true,"size":0,"nlink":4,"m":1600000000000,"a":1600000000000,"c":"now","b":1600000000000}
-     46 × cp: rifty EINVAL / node ERR_FS_CP_EINVAL
+     519 × tree (times/order)
+     196 × rm: rifty ENOTEMPTY / node ERR_FS_EISDIR
+     190 × cp: rifty EISDIR / node ENOTSUP
+     135 × copy: rifty EISDIR / node ENOTSUP
+     73 × cp: rifty EISDIR / node ERR_FS_CP_NON_DIR_TO_DIR
+     69 × cp: rifty ENOENT / node ok
+     63 × copy: rifty EISDIR / node ENOENT
+     59 × rename: rifty EINVAL / node ENOTDIR
+     55 × rename: rifty ok / node ENOENT
+     50 × cp: rifty EINVAL / node ERR_FS_CP_EINVAL
+     43 × cp: rifty EEXIST / node ERR_FS_CP_DIR_TO_NON_DIR
+     39 × cp: rifty EINVAL / node ERR_FS_CP_DIR_TO_NON_DIR
 
-## guest sample (fresh isolate, rifty fs): layer = flat in 300/300; equal to node in 110/300; layer ≠ node where flat = node in 0/300
-   48 × rifty fs vs node (flat too), first difference tree (times)
-   21 × rifty fs vs node (flat too), first difference stat: rifty ={"f":true,"d":false,"size":1,"nlink":1,"m":1600000000000,"a":1600000000000,"c":1600000000000,"b":1600000000000} / node ={"f":true,"d":false,"size":1,"nlink":1,"m":1600000000000,"a":1600000000000,"c":"now","b":1600000000000}
-   13 × rifty fs vs node (flat too), first difference copy: rifty EISDIR / node ENOTSUP
-   10 × rifty fs vs node (flat too), first difference stat: rifty ={"f":false,"d":true,"size":0,"nlink":2,"m":1600000000000,"a":1600000000000,"c":1600000000000,"b":1600000000000} / node ={"f":false,"d":true,"size":0,"nlink":4,"m":1600000000000,"a":1600000000000,"c":"now","b":1600000000000}
-   10 × rifty fs vs node (flat too), first difference stat: rifty ={"f":false,"d":true,"size":0,"nlink":3,"m":1600000000000,"a":1600000000000,"c":1600000000000,"b":1600000000000} / node ={"f":false,"d":true,"size":0,"nlink":5,"m":1600000000000,"a":1600000000000,"c":"now","b":1600000000000}
-   9 × rifty fs vs node (flat too), first difference rename: rifty ok / node ENOENT
-   8 × rifty fs vs node (flat too), first difference rename: rifty EINVAL / node ENOTDIR
-   8 × rifty fs vs node (flat too), first difference stat: rifty ={"f":false,"d":true,"size":0,"nlink":2,"m":1600000000000,"a":1600000000000,"c":1600000000000,"b":1600000000000} / node ={"f":false,"d":true,"size":0,"nlink":3,"m":1600000000000,"a":1600000000000,"c":"now","b":1600000000000}
-   7 × rifty fs vs node (flat too), first difference copy: rifty EISDIR / node ENOENT
-   7 × rifty fs vs node (flat too), first difference cp: rifty ENOENT / node ok
-   6 × rifty fs vs node (flat too), first difference stat: rifty ={"f":false,"d":true,"size":0,"nlink":4,"m":1600000000000,"a":1600000000000,"c":1600000000000,"b":1600000000000} / node ={"f":false,"d":true,"size":0,"nlink":4,"m":1600000000000,"a":1600000000000,"c":"now","b":1600000000000}
-   6 × rifty fs vs node (flat too), first difference stat: rifty ={"f":true,"d":false,"size":21,"nlink":1,"m":1600000000000,"a":1600000000000,"c":1600000000000,"b":1600000000000} / node ={"f":true,"d":false,"size":21,"nlink":1,"m":1600000000000,"a":1600000000000,"c":"now","b":1600000000000}
-   5 × rifty fs vs node (flat too), first difference stat: rifty ={"f":false,"d":true,"size":0,"nlink":3,"m":1600000000000,"a":1600000000000,"c":1600000000000,"b":1600000000000} / node ={"f":false,"d":true,"size":0,"nlink":4,"m":1600000000000,"a":1600000000000,"c":"now","b":1600000000000}
-   4 × rifty fs vs node (flat too), first difference cp: rifty EEXIST / node ERR_FS_CP_DIR_TO_NON_DIR
-   3 × rifty fs vs node (flat too), first difference cp: rifty EINVAL / node ERR_FS_CP_DIR_TO_NON_DIR
-   3 × rifty fs vs node (flat too), first difference stat: rifty ={"f":true,"d":false,"size":19,"nlink":1,"m":1600000000000,"a":1600000000000,"c":1600000000000,"b":1600000000000} / node ={"f":true,"d":false,"size":19,"nlink":1,"m":1600000000000,"a":1600000000000,"c":"now","b":1600000000000}
-   3 × rifty fs vs node (flat too), first difference cp: rifty EISDIR / node ERR_FS_CP_NON_DIR_TO_DIR
-   3 × rifty fs vs node (flat too), first difference cp: rifty EINVAL / node ERR_FS_CP_EINVAL
-   3 × rifty fs vs node (flat too), first difference stat: rifty ={"f":false,"d":true,"size":0,"nlink":2,"m":"now","a":"now","c":"now","b":"now"} / node ={"f":false,"d":true,"size":0,"nlink":3,"m":"now","a":"now","c":"now","b":"now"}
-   2 × rifty fs vs node (flat too), first difference cp: rifty ok / node ERR_FS_CP_EINVAL
-   2 × rifty fs vs node (flat too), first difference stat: rifty ={"f":false,"d":true,"size":0,"nlink":2,"m":"now","a":1600000000000,"c":1600000000000,"b":1600000000000} / node ={"f":false,"d":true,"size":0,"nlink":4,"m":1600000000000,"a":1600000000000,"c":"now","b":1600000000000}
-   1 × rifty fs vs node (flat too), first difference stat: rifty ={"f":false,"d":true,"size":0,"nlink":2,"m":"now","a":1600000000000,"c":1600000000000,"b":1600000000000} / node ={"f":false,"d":true,"size":0,"nlink":4,"m":"now","a":1600000000000,"c":"now","b":1600000000000}
-   1 × rifty fs vs node (flat too), first difference cp: rifty ENOTDIR / node ERR_FS_CP_EINVAL
-   1 × rifty fs vs node (flat too), first difference stat: rifty ={"f":false,"d":true,"size":0,"nlink":3,"m":"now","a":1600000000000,"c":1600000000000,"b":1600000000000} / node ={"f":false,"d":true,"size":0,"nlink":4,"m":"now","a":1600000000000,"c":"now","b":1600000000000}
-   1 × rifty fs vs node (flat too), first difference stat: rifty ={"f":false,"d":true,"size":0,"nlink":3,"m":"now","a":1600000000000,"c":1600000000000,"b":1600000000000} / node ={"f":false,"d":true,"size":0,"nlink":4,"m":1600000000000,"a":1600000000000,"c":"now","b":1600000000000}
-   1 × rifty fs vs node (flat too), first difference stat: rifty ={"f":false,"d":true,"size":0,"nlink":3,"m":"now","a":1600000000000,"c":1600000000000,"b":1600000000000} / node ={"f":false,"d":true,"size":0,"nlink":5,"m":"now","a":1600000000000,"c":"now","b":1600000000000}
-   1 × rifty fs vs node (flat too), first difference stat: rifty ={"f":true,"d":false,"size":21,"nlink":1,"m":"now","a":"now","c":"now","b":"now"} / node ={"f":true,"d":false,"size":21,"nlink":1,"m":"now","a":1600000000000,"c":"now","b":1600000000000}
-   1 × rifty fs vs node (flat too), first difference stat: rifty ={"f":false,"d":true,"size":0,"nlink":2,"m":"now","a":1600000000000,"c":1600000000000,"b":1600000000000} / node ={"f":false,"d":true,"size":0,"nlink":3,"m":1600000000000,"a":1600000000000,"c":"now","b":1600000000000}
-   1 × rifty fs vs node (flat too), first difference stat: rifty ={"f":false,"d":true,"size":0,"nlink":2,"m":"now","a":1600000000000,"c":1600000000000,"b":1600000000000} / node ={"f":false,"d":true,"size":0,"nlink":3,"m":"now","a":1600000000000,"c":"now","b":1600000000000}
-   1 × rifty fs vs node (flat too), first difference stat: rifty ={"f":false,"d":true,"size":0,"nlink":4,"m":"now","a":1600000000000,"c":1600000000000,"b":1600000000000} / node ={"f":false,"d":true,"size":0,"nlink":5,"m":"now","a":1600000000000,"c":"now","b":1600000000000}
+## guest sample (fresh isolate, rifty fs): layer = flat in 300/300; equal to node in 145/300; layer ≠ node where flat = node in 0/300; node crashed in 18/300 (not compared)
+   54 × rifty fs vs node (flat too), first difference tree (times)
+   24 × rifty fs vs node (flat too), first difference cp: rifty EISDIR / node ENOTSUP
+   11 × rifty fs vs node (flat too), first difference copy: rifty EISDIR / node ENOTSUP
+   10 × rifty fs vs node (flat too), first difference cp: rifty ENOENT / node ok
+   8 × rifty fs vs node (flat too), first difference rename: rifty ok / node ENOENT
+   7 × rifty fs vs node (flat too), first difference cp: rifty EISDIR / node ERR_FS_CP_NON_DIR_TO_DIR
+   5 × rifty fs vs node (flat too), first difference copy: rifty EISDIR / node ENOENT
+   5 × rifty fs vs node (flat too), first difference rename: rifty EINVAL / node ENOTDIR
+   4 × rifty fs vs node (flat too), first difference cp: rifty EINVAL / node ERR_FS_CP_DIR_TO_NON_DIR
+   2 × rifty fs vs node (flat too), first difference cp: rifty EEXIST / node ERR_FS_CP_DIR_TO_NON_DIR
+   2 × rifty fs vs node (flat too), first difference cp: rifty EINVAL / node ERR_FS_CP_EINVAL
+   2 × rifty fs vs node (flat too), first difference stat: rifty ={"f":false,"d":true,"size":0,"m":"now","b":1600000000000} / node ={"f":false,"d":true,"size":0,"m":1600000000000,"b":1600000000000}
+   1 × rifty fs vs node (flat too), first difference rename: rifty EINVAL / node ENOENT
+   1 × rifty fs vs node (flat too), first difference cp: rifty ok / node ERR_FS_CP_EINVAL
+   1 × rifty fs vs node (flat too), first difference stat: rifty ={"f":true,"d":false,"size":1,"m":"now","b":"now"} / node ={"f":true,"d":false,"size":1,"m":"now","b":1600000000000}
 
 shared template bytes unchanged after all runs: true
-gen exit=0
+exit 0
