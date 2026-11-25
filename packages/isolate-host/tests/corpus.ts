@@ -191,6 +191,12 @@ export const CORPUS: readonly Row[] = [
     label: 'util-format-percent-s-null-chain-end',
     code: "const p = (v) => new Proxy(v, { getPrototypeOf() { return null } }); console.log([p([1]), p([1, [2]]), p({ a: 1 })].map((v) => { try { return util.format('%s', v) } catch (e) { return 'throw ' + e.message } }).join(' | ')); try { http.validateHeaderName(p([])) } catch (e) { console.log(e.code, e.message) }",
   },
+  {
+    // Node reads a Proxy's target without traps: `{ a: 1 }` and its ERR_INVALID_HTTP_TOKEN.
+    label: 'util-format-percent-s-throwing-trap',
+    code: "const g = new Proxy({ a: 1 }, { get(t, k, r) { if (k === 'toString') throw new Error('GET'); return Reflect.get(t, k, r) } }); try { console.log(util.format('%s', g)) } catch (e) { console.log('throw', e.message) } try { http.validateHeaderName(g) } catch (e) { console.log(e.code, e.message) }",
+    ceiling: 'a throwing Proxy trap throws in %s (backlog/runtime-js/format-inspect-proxy-traps)',
+  },
   { label: 'throw-sync', code: "console.log('before'); throw new Error('boom')", evalError: true },
   { label: 'reject-unhandled', code: "Promise.reject(new Error('rej'))", evalError: true },
   // Each promise origin, rejected unhandled, then a GC forced by allocation in the
