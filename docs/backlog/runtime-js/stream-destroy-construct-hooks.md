@@ -3,6 +3,7 @@ area: runtime-js
 status: draft
 title: A stream's `_destroy` and `_construct` hooks never run, however they are defined
 created: 2026-11-24
+epic: node-streams-as-in-node
 why: Node calls `_destroy(err, cb)` on every `destroy()` and `_construct(cb)` before the first read/write; rifty has neither hook on any stream class, so cleanup never runs, a replaced error is never reported and work starts before construction — silently, exit 0.
 sources: [docs/backlog/runtime-js/reference/stream-destroy-construct-hooks/matrix.cjs, docs/backlog/runtime-js/reference/stream-destroy-construct-hooks/node-v24.16.0.txt, docs/backlog/runtime-js/reference/stream-destroy-construct-hooks/rifty-diff.txt, docs/public/compat/streams.md]
 code: [packages/io/src/streams/readable.ts, packages/io/src/streams/writable.ts, packages/io/src/streams/duplex.ts, packages/io/src/streams/callable-constructor.ts]

@@ -1,0 +1,10 @@
+# c-pipeline-asyncgen.cjs
+node v24.16.0; rifty c2d03ce05; workbench: Chromium 148.0.7778.96 (rifty process.version v24.0.0); sdk: Chromium 148.0.7778.96 (rifty process.version v24.0.0)
+columns: node | workbench | sdk
+
+exit: node 0 | workbench 0 | sdk 0
+
+## line 1
+node: pipeline 200000 true
+workbench (DIFF): pipeline threw TypeError: pipeline: argument must be a stream (index 1 received a non-stream value)
+sdk (DIFF): pipeline threw TypeError: pipeline: argument must be a stream (index 1 received a non-stream value)

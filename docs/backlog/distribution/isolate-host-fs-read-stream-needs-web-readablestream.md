@@ -3,6 +3,7 @@ area: distribution
 status: draft
 title: In the isolate guest fs.createReadStream fails at the first read with the ReadableStream ceiling
 created: 2026-11-24
+epic: node-streams-as-in-node
 why: rifty's own fs read stream reads through `Vfs.openReadable`, which builds a web `ReadableStream` — a ceiling global in the isolate guest — so every `fs.createReadStream` read emits `NotImplementedError('isolate-host.ReadableStream')` where Node reads the file; the guest never named web streams.
 sources: [docs/backlog/distribution/reference/isolate-library-probe/README.md, docs/public/compat/isolate-host.md]
 code: [packages/vfs/src/memory.ts, packages/runtime-js/src/builtins/fs-streams.ts, packages/isolate-guest/src/guest/web-shim.ts]

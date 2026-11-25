@@ -1,0 +1,75 @@
+# z1-brotli-zstd.cjs — node v24.16.0, rifty d15f0af1a
+columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate
+
+exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 0
+
+## brotliCompressSync
+node: Buffer(20)
+rifty-inproc (DIFF): threw NotImplementedError: Not implemented: zlib.brotliCompressSync (brotli not implemented yet; node:zlib has no wor
+rifty-inproc-sync (DIFF): threw NotImplementedError: Not implemented: zlib.brotliCompressSync (brotli not implemented yet; node:zlib has no wor
+rifty-isolate (DIFF): threw NotImplementedError: Not implemented: isolate-host.zlib.brotliCompressSync (no compression engine in the rifty 
+## brotliDecompressSync(brotliCompressSync)
+node: hello hello hello hello
+rifty-inproc (DIFF): threw NotImplementedError: Not implemented: zlib.brotliCompressSync (brotli not implemented yet; node:zlib has no wor
+rifty-inproc-sync (DIFF): threw NotImplementedError: Not implemented: zlib.brotliCompressSync (brotli not implemented yet; node:zlib has no wor
+rifty-isolate (DIFF): threw NotImplementedError: Not implemented: isolate-host.zlib.brotliCompressSync (no compression engine in the rifty 
+## createBrotliCompress
+node: function
+rifty-inproc (DIFF): threw NotImplementedError: Not implemented: zlib.createBrotliCompress (brotli not implemented yet; node:zlib has no w
+rifty-inproc-sync (DIFF): threw NotImplementedError: Not implemented: zlib.createBrotliCompress (brotli not implemented yet; node:zlib has no w
+rifty-isolate (DIFF): threw NotImplementedError: Not implemented: isolate-host.zlib.createBrotliCompress (no compression engine in the rift
+## createBrotliDecompress
+node: function
+rifty-inproc (DIFF): threw NotImplementedError: Not implemented: zlib.createBrotliDecompress (brotli not implemented yet; node:zlib has no
+rifty-inproc-sync (DIFF): threw NotImplementedError: Not implemented: zlib.createBrotliDecompress (brotli not implemented yet; node:zlib has no
+rifty-isolate (DIFF): threw NotImplementedError: Not implemented: isolate-host.zlib.createBrotliDecompress (no compression engine in the ri
+## new zlib.BrotliCompress()
+node: function
+rifty-inproc (DIFF): threw NotImplementedError: Not implemented: zlib.BrotliCompress (brotli not implemented yet; node:zlib has no working
+rifty-inproc-sync (DIFF): threw NotImplementedError: Not implemented: zlib.BrotliCompress (brotli not implemented yet; node:zlib has no working
+rifty-isolate (DIFF): threw NotImplementedError: Not implemented: isolate-host.zlib.BrotliCompress (no compression engine in the rifty isol
+## constants.BROTLI_PARAM_QUALITY
+node: 1
+rifty-inproc (same): 1
+rifty-inproc-sync (same): 1
+rifty-isolate (same): 1
+## zstdCompressSync
+node: Buffer(21)
+rifty-inproc (DIFF): threw NotImplementedError: Not implemented: zlib.zstdCompressSync (zstd not implemented yet; node:zlib has no working
+rifty-inproc-sync (DIFF): threw NotImplementedError: Not implemented: zlib.zstdCompressSync (zstd not implemented yet; node:zlib has no working
+rifty-isolate (DIFF): threw NotImplementedError: Not implemented: isolate-host.zlib.zstdCompressSync (no compression engine in the rifty is
+## zstdDecompressSync(zstdCompressSync)
+node: hello hello hello hello
+rifty-inproc (DIFF): threw NotImplementedError: Not implemented: zlib.zstdCompressSync (zstd not implemented yet; node:zlib has no working
+rifty-inproc-sync (DIFF): threw NotImplementedError: Not implemented: zlib.zstdCompressSync (zstd not implemented yet; node:zlib has no working
+rifty-isolate (DIFF): threw NotImplementedError: Not implemented: isolate-host.zlib.zstdCompressSync (no compression engine in the rifty is
+## createZstdCompress
+node: function
+rifty-inproc (DIFF): threw NotImplementedError: Not implemented: zlib.createZstdCompress (zstd not implemented yet; node:zlib has no worki
+rifty-inproc-sync (DIFF): threw NotImplementedError: Not implemented: zlib.createZstdCompress (zstd not implemented yet; node:zlib has no worki
+rifty-isolate (DIFF): threw NotImplementedError: Not implemented: isolate-host.zlib.createZstdCompress (no compression engine in the rifty 
+## createZstdDecompress
+node: function
+rifty-inproc (DIFF): threw NotImplementedError: Not implemented: zlib.createZstdDecompress (zstd not implemented yet; node:zlib has no wor
+rifty-inproc-sync (DIFF): threw NotImplementedError: Not implemented: zlib.createZstdDecompress (zstd not implemented yet; node:zlib has no wor
+rifty-isolate (DIFF): threw NotImplementedError: Not implemented: isolate-host.zlib.createZstdDecompress (no compression engine in the rift
+## new zlib.ZstdCompress()
+node: function
+rifty-inproc (DIFF): threw NotImplementedError: Not implemented: zlib.ZstdCompress (zstd not implemented yet; node:zlib has no working alt
+rifty-inproc-sync (DIFF): threw NotImplementedError: Not implemented: zlib.ZstdCompress (zstd not implemented yet; node:zlib has no working alt
+rifty-isolate (DIFF): threw NotImplementedError: Not implemented: isolate-host.zlib.ZstdCompress (no compression engine in the rifty isolat
+## constants.ZSTD_c_compressionLevel
+node: 100
+rifty-inproc (same): 100
+rifty-inproc-sync (same): 100
+rifty-isolate (same): 100
+## brotliCompress(cb)
+node: Buffer(20)
+rifty-inproc (DIFF): threw NotImplementedError: Not implemented: zlib.brotliCompress (brotli not implemented yet; node:zlib has no working
+rifty-inproc-sync (DIFF): threw NotImplementedError: Not implemented: zlib.brotliCompress (brotli not implemented yet; node:zlib has no working
+rifty-isolate (DIFF): threw NotImplementedError: Not implemented: isolate-host.zlib.brotliCompress (no compression engine in the rifty isol
+## zstdCompress(cb)
+node: Buffer(21)
+rifty-inproc (DIFF): threw NotImplementedError: Not implemented: zlib.zstdCompress (zstd not implemented yet; node:zlib has no working alt
+rifty-inproc-sync (DIFF): threw NotImplementedError: Not implemented: zlib.zstdCompress (zstd not implemented yet; node:zlib has no working alt
+rifty-isolate (DIFF): threw NotImplementedError: Not implemented: isolate-host.zlib.zstdCompress (no compression engine in the rifty isolat

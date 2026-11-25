@@ -1,0 +1,2 @@
+node v24.16.0: {"anyExists":true,"dependent AbortSignal.any":true,"capture listener, guest bubble":false,"capture listener, guest capture":false,"plain listener (today)":false}
+chromium 148.0.7778.96: {"anyExists":true,"dependent AbortSignal.any":true,"capture listener, guest bubble":false,"capture listener, guest capture":false,"plain listener (today)":false}

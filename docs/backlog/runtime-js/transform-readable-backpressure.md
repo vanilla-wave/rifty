@@ -3,6 +3,7 @@ area: runtime-js
 status: draft
 title: A Transform keeps accepting writes while its readable buffer is full
 created: 2026-11-24
+epic: node-streams-as-in-node
 why: Node holds a Transform's `_transform` callback while the readable side is at its high-water mark, so `write()` returns `false` and writes queue; rifty calls back at once, `write()` always returns `true` and the readable buffer grows without bound.
 sources: ["PR #433 (stream hook dispatch)", docs/public/compat/streams.md]
 code: [packages/io/src/streams/transform.ts]

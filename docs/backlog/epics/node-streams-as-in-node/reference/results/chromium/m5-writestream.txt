@@ -1,0 +1,62 @@
+# m5-writestream.cjs
+node v24.16.0; rifty c2d03ce05; workbench: Chromium 148.0.7778.96 (rifty process.version v24.0.0); sdk: Chromium 148.0.7778.96 (rifty process.version v24.0.0)
+columns: node | workbench | sdk
+
+exit: node 0 | workbench 0 | sdk 0
+
+## instanceof Writable; prototype chain; isWritable
+node: true,true,true
+workbench (DIFF): false,false,
+sdk (DIFF): false,false,
+## member types
+node: write:function end:function cork:function uncork:function setDefaultEncoding:function destroy:function close:function destroySoon:function _write:function _writev:function _final:undefined _destroy:function _construct:function open:function
+workbench (DIFF): write:function end:function cork:undefined uncork:undefined setDefaultEncoding:undefined destroy:function close:undefined destroySoon:undefined _write:undefined _writev:undefined _final:undefined _destroy:undefined _construct:undefined open:function
+sdk (DIFF): write:function end:function cork:undefined uncork:undefined setDefaultEncoding:undefined destroy:function close:undefined destroySoon:undefined _write:undefined _writev:undefined _final:undefined _destroy:undefined _construct:undefined open:function
+## property values at create
+node: writable=true writableLength=0 writableHighWaterMark=65536 writableEnded=false writableFinished=false writableCorked=0 writableObjectMode=false destroyed=false closed=false errored=null pending=true bytesWritten=0 fd=null flags='w' mode=438 start=undefined pos=undefined autoClose=true
+workbench (DIFF): writable=undefined writableLength=undefined writableHighWaterMark=undefined writableEnded=undefined writableFinished=undefined writableCorked=undefined writableObjectMode=undefined destroyed=false closed=undefined errored=undefined pending=undefined bytesWritten=undefined fd=undefined flags={ append: false, exclusive: false, truncate: true, mustExist: false } mode=undefined start=undefined pos=0 autoClose=undefined
+sdk (DIFF): writable=undefined writableLength=undefined writableHighWaterMark=undefined writableEnded=undefined writableFinished=undefined writableCorked=undefined writableObjectMode=undefined destroyed=false closed=undefined errored=undefined pending=undefined bytesWritten=undefined fd=undefined flags={ append: false, exclusive: false, truncate: true, mustExist: false } mode=undefined start=undefined pos=0 autoClose=undefined
+## property values after end
+node: writable=false writableLength=0 writableHighWaterMark=65536 writableEnded=true writableFinished=true writableCorked=0 writableObjectMode=false destroyed=true closed=true errored=null pending=true bytesWritten=3 fd=null flags='w' mode=438 start=undefined pos=undefined autoClose=true
+workbench (DIFF): writable=undefined writableLength=undefined writableHighWaterMark=undefined writableEnded=undefined writableFinished=undefined writableCorked=undefined writableObjectMode=undefined destroyed=false closed=undefined errored=undefined pending=undefined bytesWritten=undefined fd=undefined flags={ append: false, exclusive: false, truncate: true, mustExist: false } mode=undefined start=undefined pos=3 autoClose=undefined
+sdk (DIFF): writable=undefined writableLength=undefined writableHighWaterMark=undefined writableEnded=undefined writableFinished=undefined writableCorked=undefined writableObjectMode=undefined destroyed=false closed=undefined errored=undefined pending=undefined bytesWritten=undefined fd=undefined flags={ append: false, exclusive: false, truncate: true, mustExist: false } mode=undefined start=undefined pos=3 autoClose=undefined
+## WriteStream(path) without new
+node: true,"x"
+workbench (DIFF): threw Class constructor FileWriteStream cannot be invoked without 
+sdk (DIFF): threw Class constructor FileWriteStream cannot be invoked without 
+## graceful-fs shape: WriteStream.apply(this) + prototype open override
+node: open number,"graceful"
+workbench (DIFF): threw Class constructor FileWriteStream cannot be invoked without 
+sdk (DIFF): threw Class constructor FileWriteStream cannot be invoked without 
+## class extends fs.WriteStream
+node: "cls"
+workbench (same): "cls"
+sdk (same): "cls"
+## write() returns false over highWaterMark, then drain
+node: w1=true,w2=false,drain
+workbench (same): w1=true,w2=false,drain
+sdk (same): w1=true,w2=false,drain
+## cork/uncork: one file content
+node: corked=1,"abc"
+workbench (DIFF): threw ws.cork is not a function
+sdk (DIFF): threw ws.cork is not a function
+## event order end(cb): finish/close/cb
+node: open,ready,prefinish,end cb,finish,close
+workbench (DIFF): open,ready,end cb,finish,close
+sdk (DIFF): open,ready,end cb,finish,close
+## close(cb) before end: pending writes land
+node: cb undefined,"keep"
+workbench (DIFF): threw ws.close is not a function
+sdk (DIFF): threw ws.close is not a function
+## write after end: callback and error
+node: cb ERR_STREAM_WRITE_AFTER_END:write after end,error ERR_STREAM_WRITE_AFTER_END:write after end
+workbench (same): cb ERR_STREAM_WRITE_AFTER_END:write after end,error ERR_STREAM_WRITE_AFTER_END:write after end
+sdk (same): cb ERR_STREAM_WRITE_AFTER_END:write after end,error ERR_STREAM_WRITE_AFTER_END:write after end
+## destroy(err): error, close, errored
+node: error stop,close errored=stop
+workbench (DIFF): close errored=undefined
+sdk (DIFF): close errored=undefined
+## Readable.pipe(ws) with slow source: bytes and finish
+node: finish,close,"123"
+workbench (same): finish,close,"123"
+sdk (same): finish,close,"123"

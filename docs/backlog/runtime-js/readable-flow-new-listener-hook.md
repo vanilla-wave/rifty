@@ -3,6 +3,7 @@ area: runtime-js
 status: draft
 title: "`Readable` starts flowing on `'data'` without a guest-removable `'newListener'` listener, as Node's `Readable.prototype.on`"
 created: 2026-11-17
+epic: node-streams-as-in-node
 why: rifty's Readable registers its data/readable start hook as an ordinary `'newListener'` listener, so a guest `removeAllListeners()` deletes it and a later `on('data')` never flows; Node keys flow to its `on` override
 sources: [docs/process/rules/fault-classes.md §Boundary failure models (builtin prototype → guest subclass/patch)]
 code: [packages/io/src/streams/callable-constructor.ts, packages/io/src/streams/readable.ts, packages/runtime-js/src/builtins/process-stdin-reader.ts]

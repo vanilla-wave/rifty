@@ -1,0 +1,62 @@
+# m1-lifecycle.cjs
+node v24.16.0; rifty 692babe13+route-B; workbench: Chromium 148.0.7778.96 (rifty process.version v24.0.0); sdk: Chromium 148.0.7778.96 (rifty process.version v24.0.0)
+columns: node | workbench | sdk
+
+exit: node 0 | workbench 0 | sdk 0
+
+## Writable _write cb twice
+node: error ERR_MULTIPLE_CALLBACK:Callback called multiple times,close
+workbench (same): error ERR_MULTIPLE_CALLBACK:Callback called multiple times,close
+sdk (same): error ERR_MULTIPLE_CALLBACK:Callback called multiple times,close
+## Writable _final cb twice
+node: prefinish,finish,error ERR_MULTIPLE_CALLBACK:Callback called multiple times,close
+workbench (same): prefinish,finish,error ERR_MULTIPLE_CALLBACK:Callback called multiple times,close
+sdk (same): prefinish,finish,error ERR_MULTIPLE_CALLBACK:Callback called multiple times,close
+## Transform _transform cb twice
+node: data x,data y,error ERR_MULTIPLE_CALLBACK:Callback called multiple times,close
+workbench (same): data x,data y,error ERR_MULTIPLE_CALLBACK:Callback called multiple times,close
+sdk (same): data x,data y,error ERR_MULTIPLE_CALLBACK:Callback called multiple times,close
+## Writable _construct cb twice
+node: error ERR_MULTIPLE_CALLBACK:Callback called multiple times,close
+workbench (same): error ERR_MULTIPLE_CALLBACK:Callback called multiple times,close
+sdk (same): error ERR_MULTIPLE_CALLBACK:Callback called multiple times,close
+## Writable _destroy cb twice
+node: _destroy,close
+workbench (same): _destroy,close
+sdk (same): _destroy,close
+## Readable destroy(err): sync destroyed/errored
+node: sync destroyed=true errored=boom,error boom,close
+workbench (same): sync destroyed=true errored=boom,error boom,close
+sdk (same): sync destroyed=true errored=boom,error boom,close
+## Readable _destroy replaces error
+node: _destroy orig,error replaced,close
+workbench (same): _destroy orig,error replaced,close
+sdk (same): _destroy orig,error replaced,close
+## Readable _construct before _read
+node: construct,construct cb,read,end,close
+workbench (same): construct,construct cb,read,end,close
+sdk (same): construct,construct cb,read,end,close
+## zlibBuffer shape: end(buf) -> data/end -> close() -> _destroy
+node: data ab,prefinish,end,_destroy null,finish,close cb,close
+workbench (same): data ab,prefinish,end,_destroy null,finish,close cb,close
+sdk (same): data ab,prefinish,end,_destroy null,finish,close cb,close
+## zlibOnError shape: destroy(err) inside _transform
+node: _destroy Z_DATA_ERROR:invalid,error Z_DATA_ERROR:invalid,close
+workbench (same): _destroy Z_DATA_ERROR:invalid,error Z_DATA_ERROR:invalid,close
+sdk (same): _destroy Z_DATA_ERROR:invalid,error Z_DATA_ERROR:invalid,close
+## Readable to end + Writable ended: close after end/finish
+node: W finish,R end,W close,R close
+workbench (same): W finish,R end,W close,R close
+sdk (same): W finish,R end,W close,R close
+## closed/destroyed/errored after destroy(err), each class
+node: sync Readable:true/true/x Writable:true/true/x Duplex:true/true/x Transform:true/true/x,later Readable:true/true Writable:true/true Duplex:true/true Transform:true/true
+workbench (same): sync Readable:true/true/x Writable:true/true/x Duplex:true/true/x Transform:true/true/x,later Readable:true/true Writable:true/true Duplex:true/true Transform:true/true
+sdk (same): sync Readable:true/true/x Writable:true/true/x Duplex:true/true/x Transform:true/true/x,later Readable:true/true Writable:true/true Duplex:true/true Transform:true/true
+## async Transform success: destroyed at end/finish/close
+node: end destroyed=false closed=false,finish destroyed=false closed=false,close destroyed=true closed=true
+workbench (same): end destroyed=false closed=false,finish destroyed=false closed=false,close destroyed=true closed=true
+sdk (same): end destroyed=false closed=false,finish destroyed=false closed=false,close destroyed=true closed=true
+## prototype _destroy is a function
+node: function,function,function,function
+workbench (same): function,function,function,function
+sdk (same): function,function,function,function

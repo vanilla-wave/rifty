@@ -3,6 +3,7 @@ area: runtime-js
 status: draft
 title: Stream byte chunk kinds and invalid-value rejection
 created: 2026-07-12
+epic: node-streams-as-in-node
 why: core admission now pins string Buffer and plain Uint8Array, but other views and invalid values still diverge
 user_story: As a Node stream producer, I want every byte chunk kind accepted or rejected exactly like Node without silent object delivery.
 blocked_by: []

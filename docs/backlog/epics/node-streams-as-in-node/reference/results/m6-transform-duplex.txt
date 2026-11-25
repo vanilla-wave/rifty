@@ -1,0 +1,85 @@
+# m6-transform-duplex.cjs — node v24.16.0, rifty e96e93a0d
+columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate | rifty-inproc-B | rifty-inproc-Bp | rifty-inproc-Bp8c | rifty-inproc-Bp9w | rifty-inproc-Bp9r
+
+exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 0 | rifty-inproc-B 0 | rifty-inproc-Bp 0 | rifty-inproc-Bp8c 0 | rifty-inproc-Bp9w 0 | rifty-inproc-Bp9r 0
+
+## Transform objectMode hwm 2, 8 writes, nobody reads
+node: true true false false false false false false,transformCalls=2,readableLength=2,writableLength=7
+rifty-inproc (DIFF): true true true true true true true true,transformCalls=8,readableLength=8,writableLength=0
+rifty-inproc-sync (DIFF): true true true true true true true true,transformCalls=8,readableLength=8,writableLength=0
+rifty-isolate (DIFF): true true true true true true true true,transformCalls=8,readableLength=8,writableLength=0
+rifty-inproc-B (same): true true false false false false false false,transformCalls=2,readableLength=2,writableLength=7
+rifty-inproc-Bp (same): true true false false false false false false,transformCalls=2,readableLength=2,writableLength=7
+rifty-inproc-Bp8c (same): true true false false false false false false,transformCalls=2,readableLength=2,writableLength=7
+rifty-inproc-Bp9w (same): true true false false false false false false,transformCalls=2,readableLength=2,writableLength=7
+rifty-inproc-Bp9r (same): true true false false false false false false,transformCalls=2,readableLength=2,writableLength=7
+## Transform bytes: writes of 1 KiB until write() is false (cap 1000)
+node: acceptedBeforeFalse=126,transformCalls=64,readableLength=65536
+rifty-inproc (DIFF): acceptedBeforeFalse=1000,transformCalls=1000,readableLength=1024000
+rifty-inproc-sync (DIFF): acceptedBeforeFalse=1000,transformCalls=1000,readableLength=1024000
+rifty-isolate (DIFF): acceptedBeforeFalse=1000,transformCalls=1000,readableLength=1024000
+rifty-inproc-B (same): acceptedBeforeFalse=126,transformCalls=64,readableLength=65536
+rifty-inproc-Bp (same): acceptedBeforeFalse=126,transformCalls=64,readableLength=65536
+rifty-inproc-Bp8c (same): acceptedBeforeFalse=126,transformCalls=64,readableLength=65536
+rifty-inproc-Bp9w (same): acceptedBeforeFalse=126,transformCalls=64,readableLength=65536
+rifty-inproc-Bp9r (same): acceptedBeforeFalse=126,transformCalls=64,readableLength=65536
+## PassThrough -> slow Writable, producer honors write(): max PassThrough buffer
+node: max<=256KiB=true,max=131072
+rifty-inproc (DIFF): max<=256KiB=false,max=1048576
+rifty-inproc-sync (DIFF): max<=256KiB=false,max=1048576
+rifty-isolate (DIFF): max<=256KiB=false,max=1048576
+rifty-inproc-B (same): max<=256KiB=true,max=131072
+rifty-inproc-Bp (same): max<=256KiB=true,max=131072
+rifty-inproc-Bp8c (same): max<=256KiB=true,max=131072
+rifty-inproc-Bp9w (same): max<=256KiB=true,max=131072
+rifty-inproc-Bp9r (same): max<=256KiB=true,max=131072
+## Transform event order end("x")
+node: T,data,F,prefinish,end,finish,close
+rifty-inproc (DIFF): T,F,prefinish,data,finish,end
+rifty-inproc-sync (DIFF): T,F,prefinish,data,finish,end
+rifty-isolate (DIFF): T,F,prefinish,data,finish,end
+rifty-inproc-B (same): T,data,F,prefinish,end,finish,close
+rifty-inproc-Bp (same): T,data,F,prefinish,end,finish,close
+rifty-inproc-Bp8c (same): T,data,F,prefinish,end,finish,close
+rifty-inproc-Bp9w (same): T,data,F,prefinish,end,finish,close
+rifty-inproc-Bp9r (same): T,data,F,prefinish,end,finish,close
+## Duplex event order end("x") with readable ended
+node: data,finish,end,close
+rifty-inproc (DIFF): finish,data,end
+rifty-inproc-sync (DIFF): finish,data,end
+rifty-isolate (DIFF): finish,data,end
+rifty-inproc-B (same): data,finish,end,close
+rifty-inproc-Bp (same): data,finish,end,close
+rifty-inproc-Bp8c (same): data,finish,end,close
+rifty-inproc-Bp9w (same): data,finish,end,close
+rifty-inproc-Bp9r (same): data,finish,end,close
+## Duplex writable members
+node: function function function,corked=0
+rifty-inproc (DIFF): undefined undefined undefined,corked=undefined
+rifty-inproc-sync (DIFF): undefined undefined undefined,corked=undefined
+rifty-isolate (DIFF): undefined undefined undefined,corked=undefined
+rifty-inproc-B (same): function function function,corked=0
+rifty-inproc-Bp (same): function function function,corked=0
+rifty-inproc-Bp8c (same): function function function,corked=0
+rifty-inproc-Bp9w (same): function function function,corked=0
+rifty-inproc-Bp9r (same): function function function,corked=0
+## per-side objectMode options
+node: T.writableObjectMode=true,T.writableHighWaterMark=16,PT.readableObjectMode=true
+rifty-inproc (DIFF): T.writableObjectMode=false,T.writableHighWaterMark=65536,PT.readableObjectMode=false
+rifty-inproc-sync (DIFF): T.writableObjectMode=false,T.writableHighWaterMark=65536,PT.readableObjectMode=false
+rifty-isolate (DIFF): T.writableObjectMode=false,T.writableHighWaterMark=65536,PT.readableObjectMode=false
+rifty-inproc-B (same): T.writableObjectMode=true,T.writableHighWaterMark=16,PT.readableObjectMode=true
+rifty-inproc-Bp (same): T.writableObjectMode=true,T.writableHighWaterMark=16,PT.readableObjectMode=true
+rifty-inproc-Bp8c (same): T.writableObjectMode=true,T.writableHighWaterMark=16,PT.readableObjectMode=true
+rifty-inproc-Bp9w (same): T.writableObjectMode=true,T.writableHighWaterMark=16,PT.readableObjectMode=true
+rifty-inproc-Bp9r (same): T.writableObjectMode=true,T.writableHighWaterMark=16,PT.readableObjectMode=true
+## allowHalfOpen false: readable end ends writable
+node: end,finish,close
+rifty-inproc (DIFF): end,finish
+rifty-inproc-sync (DIFF): end,finish
+rifty-isolate (DIFF): end,finish
+rifty-inproc-B (same): end,finish,close
+rifty-inproc-Bp (same): end,finish,close
+rifty-inproc-Bp8c (same): end,finish,close
+rifty-inproc-Bp9w (same): end,finish,close
+rifty-inproc-Bp9r (same): end,finish,close

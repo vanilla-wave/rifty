@@ -1,0 +1,765 @@
+# m1-hooks-matrix.cjs — node v24.16.0, rifty e96e93a0d
+columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate | rifty-inproc-B | rifty-inproc-Bp | rifty-inproc-Bp8c | rifty-inproc-Bp9w | rifty-inproc-Bp9r
+
+exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 0 | rifty-inproc-B 0 | rifty-inproc-Bp 0 | rifty-inproc-Bp8c 0 | rifty-inproc-Bp9w 0 | rifty-inproc-Bp9r 0
+
+## Readable option _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-sync (DIFF): sync destroyed=true,error boom,close
+rifty-isolate (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-B (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp8c (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9w (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9r (same): D:boom:true,sync destroyed=true,error replaced,close
+## Readable option _construct gates work
+node: pre=sync,C:true post=R
+rifty-inproc (DIFF): never-constructed ops=R
+rifty-inproc-sync (DIFF): never-constructed ops=R
+rifty-isolate (DIFF): never-constructed ops=R
+rifty-inproc-B (same): pre=sync,C:true post=R
+rifty-inproc-Bp (same): pre=sync,C:true post=R
+rifty-inproc-Bp8c (same): pre=sync,C:true post=R
+rifty-inproc-Bp9w (same): pre=sync,C:true post=R
+rifty-inproc-Bp9r (same): pre=sync,C:true post=R
+## Writable option _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-sync (DIFF): sync destroyed=true,error boom,close
+rifty-isolate (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-B (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp8c (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9w (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9r (same): D:boom:true,sync destroyed=true,error replaced,close
+## Writable option _construct gates work
+node: pre=sync,C:true post=Wx
+rifty-inproc (DIFF): never-constructed ops=Wx
+rifty-inproc-sync (DIFF): never-constructed ops=Wx
+rifty-isolate (DIFF): never-constructed ops=Wx
+rifty-inproc-B (same): pre=sync,C:true post=Wx
+rifty-inproc-Bp (same): pre=sync,C:true post=Wx
+rifty-inproc-Bp8c (same): pre=sync,C:true post=Wx
+rifty-inproc-Bp9w (same): pre=sync,C:true post=Wx
+rifty-inproc-Bp9r (same): pre=sync,C:true post=Wx
+## Duplex option _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-sync (DIFF): sync destroyed=true,error boom,close
+rifty-isolate (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-B (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp8c (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9w (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9r (same): D:boom:true,sync destroyed=true,error replaced,close
+## Duplex option _construct gates work
+node: pre=sync,C:true post=R,Wx
+rifty-inproc (DIFF): never-constructed ops=R,Wx
+rifty-inproc-sync (DIFF): never-constructed ops=R,Wx
+rifty-isolate (DIFF): never-constructed ops=R,Wx
+rifty-inproc-B (same): pre=sync,C:true post=R,Wx
+rifty-inproc-Bp (same): pre=sync,C:true post=R,Wx
+rifty-inproc-Bp8c (same): pre=sync,C:true post=R,Wx
+rifty-inproc-Bp9w (same): pre=sync,C:true post=R,Wx
+rifty-inproc-Bp9r (same): pre=sync,C:true post=R,Wx
+## Transform option _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-sync (DIFF): sync destroyed=true,error boom,close
+rifty-isolate (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-B (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp8c (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9w (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9r (same): D:boom:true,sync destroyed=true,error replaced,close
+## Transform option _construct gates work
+node: pre=sync,C:true post=Wx
+rifty-inproc (DIFF): never-constructed ops=Wx
+rifty-inproc-sync (DIFF): never-constructed ops=Wx
+rifty-isolate (DIFF): never-constructed ops=Wx
+rifty-inproc-B (same): pre=sync,C:true post=Wx
+rifty-inproc-Bp (same): pre=sync,C:true post=Wx
+rifty-inproc-Bp8c (same): pre=sync,C:true post=Wx
+rifty-inproc-Bp9w (same): pre=sync,C:true post=Wx
+rifty-inproc-Bp9r (same): pre=sync,C:true post=Wx
+## PassThrough option _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-sync (DIFF): sync destroyed=true,error boom,close
+rifty-isolate (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-B (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp8c (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9w (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9r (same): D:boom:true,sync destroyed=true,error replaced,close
+## PassThrough option _construct gates work
+node: pre=sync,C:true post=Wx
+rifty-inproc (DIFF): never-constructed ops=Wx
+rifty-inproc-sync (DIFF): never-constructed ops=Wx
+rifty-isolate (DIFF): never-constructed ops=Wx
+rifty-inproc-B (same): pre=sync,C:true post=Wx
+rifty-inproc-Bp (same): pre=sync,C:true post=Wx
+rifty-inproc-Bp8c (same): pre=sync,C:true post=Wx
+rifty-inproc-Bp9w (same): pre=sync,C:true post=Wx
+rifty-inproc-Bp9r (same): pre=sync,C:true post=Wx
+## Readable own _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-sync (DIFF): sync destroyed=true,error boom,close
+rifty-isolate (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-B (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp8c (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9w (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9r (same): D:boom:true,sync destroyed=true,error replaced,close
+## Readable own _construct gates work
+node: never-constructed ops=R
+rifty-inproc (same): never-constructed ops=R
+rifty-inproc-sync (same): never-constructed ops=R
+rifty-isolate (same): never-constructed ops=R
+rifty-inproc-B (same): never-constructed ops=R
+rifty-inproc-Bp (same): never-constructed ops=R
+rifty-inproc-Bp8c (same): never-constructed ops=R
+rifty-inproc-Bp9w (same): never-constructed ops=R
+rifty-inproc-Bp9r (same): never-constructed ops=R
+## Writable own _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-sync (DIFF): sync destroyed=true,error boom,close
+rifty-isolate (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-B (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp8c (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9w (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9r (same): D:boom:true,sync destroyed=true,error replaced,close
+## Writable own _construct gates work
+node: never-constructed ops=Wx
+rifty-inproc (same): never-constructed ops=Wx
+rifty-inproc-sync (same): never-constructed ops=Wx
+rifty-isolate (same): never-constructed ops=Wx
+rifty-inproc-B (same): never-constructed ops=Wx
+rifty-inproc-Bp (same): never-constructed ops=Wx
+rifty-inproc-Bp8c (same): never-constructed ops=Wx
+rifty-inproc-Bp9w (same): never-constructed ops=Wx
+rifty-inproc-Bp9r (same): never-constructed ops=Wx
+## Duplex own _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-sync (DIFF): sync destroyed=true,error boom,close
+rifty-isolate (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-B (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp8c (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9w (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9r (same): D:boom:true,sync destroyed=true,error replaced,close
+## Duplex own _construct gates work
+node: never-constructed ops=R,Wx
+rifty-inproc (same): never-constructed ops=R,Wx
+rifty-inproc-sync (same): never-constructed ops=R,Wx
+rifty-isolate (same): never-constructed ops=R,Wx
+rifty-inproc-B (same): never-constructed ops=R,Wx
+rifty-inproc-Bp (same): never-constructed ops=R,Wx
+rifty-inproc-Bp8c (same): never-constructed ops=R,Wx
+rifty-inproc-Bp9w (same): never-constructed ops=R,Wx
+rifty-inproc-Bp9r (same): never-constructed ops=R,Wx
+## Transform own _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-sync (DIFF): sync destroyed=true,error boom,close
+rifty-isolate (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-B (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp8c (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9w (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9r (same): D:boom:true,sync destroyed=true,error replaced,close
+## Transform own _construct gates work
+node: never-constructed ops=Wx
+rifty-inproc (same): never-constructed ops=Wx
+rifty-inproc-sync (same): never-constructed ops=Wx
+rifty-isolate (same): never-constructed ops=Wx
+rifty-inproc-B (same): never-constructed ops=Wx
+rifty-inproc-Bp (same): never-constructed ops=Wx
+rifty-inproc-Bp8c (same): never-constructed ops=Wx
+rifty-inproc-Bp9w (same): never-constructed ops=Wx
+rifty-inproc-Bp9r (same): never-constructed ops=Wx
+## PassThrough own _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-sync (DIFF): sync destroyed=true,error boom,close
+rifty-isolate (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-B (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp8c (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9w (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9r (same): D:boom:true,sync destroyed=true,error replaced,close
+## PassThrough own _construct gates work
+node: never-constructed ops=Wx
+rifty-inproc (same): never-constructed ops=Wx
+rifty-inproc-sync (same): never-constructed ops=Wx
+rifty-isolate (same): never-constructed ops=Wx
+rifty-inproc-B (same): never-constructed ops=Wx
+rifty-inproc-Bp (same): never-constructed ops=Wx
+rifty-inproc-Bp8c (same): never-constructed ops=Wx
+rifty-inproc-Bp9w (same): never-constructed ops=Wx
+rifty-inproc-Bp9r (same): never-constructed ops=Wx
+## Readable class _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-sync (DIFF): sync destroyed=true,error boom,close
+rifty-isolate (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-B (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp8c (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9w (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9r (same): D:boom:true,sync destroyed=true,error replaced,close
+## Readable class _construct gates work
+node: pre=sync,C:true post=R
+rifty-inproc (DIFF): never-constructed ops=R
+rifty-inproc-sync (DIFF): never-constructed ops=R
+rifty-isolate (DIFF): never-constructed ops=R
+rifty-inproc-B (same): pre=sync,C:true post=R
+rifty-inproc-Bp (same): pre=sync,C:true post=R
+rifty-inproc-Bp8c (same): pre=sync,C:true post=R
+rifty-inproc-Bp9w (same): pre=sync,C:true post=R
+rifty-inproc-Bp9r (same): pre=sync,C:true post=R
+## Writable class _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-sync (DIFF): sync destroyed=true,error boom,close
+rifty-isolate (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-B (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp8c (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9w (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9r (same): D:boom:true,sync destroyed=true,error replaced,close
+## Writable class _construct gates work
+node: pre=sync,C:true post=Wx
+rifty-inproc (DIFF): never-constructed ops=Wx
+rifty-inproc-sync (DIFF): never-constructed ops=Wx
+rifty-isolate (DIFF): never-constructed ops=Wx
+rifty-inproc-B (same): pre=sync,C:true post=Wx
+rifty-inproc-Bp (same): pre=sync,C:true post=Wx
+rifty-inproc-Bp8c (same): pre=sync,C:true post=Wx
+rifty-inproc-Bp9w (same): pre=sync,C:true post=Wx
+rifty-inproc-Bp9r (same): pre=sync,C:true post=Wx
+## Duplex class _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-sync (DIFF): sync destroyed=true,error boom,close
+rifty-isolate (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-B (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp8c (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9w (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9r (same): D:boom:true,sync destroyed=true,error replaced,close
+## Duplex class _construct gates work
+node: pre=sync,C:true post=R,Wx
+rifty-inproc (DIFF): never-constructed ops=R,Wx
+rifty-inproc-sync (DIFF): never-constructed ops=R,Wx
+rifty-isolate (DIFF): never-constructed ops=R,Wx
+rifty-inproc-B (same): pre=sync,C:true post=R,Wx
+rifty-inproc-Bp (same): pre=sync,C:true post=R,Wx
+rifty-inproc-Bp8c (same): pre=sync,C:true post=R,Wx
+rifty-inproc-Bp9w (same): pre=sync,C:true post=R,Wx
+rifty-inproc-Bp9r (same): pre=sync,C:true post=R,Wx
+## Transform class _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-sync (DIFF): sync destroyed=true,error boom,close
+rifty-isolate (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-B (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp8c (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9w (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9r (same): D:boom:true,sync destroyed=true,error replaced,close
+## Transform class _construct gates work
+node: pre=sync,C:true post=Wx
+rifty-inproc (DIFF): never-constructed ops=Wx
+rifty-inproc-sync (DIFF): never-constructed ops=Wx
+rifty-isolate (DIFF): never-constructed ops=Wx
+rifty-inproc-B (same): pre=sync,C:true post=Wx
+rifty-inproc-Bp (same): pre=sync,C:true post=Wx
+rifty-inproc-Bp8c (same): pre=sync,C:true post=Wx
+rifty-inproc-Bp9w (same): pre=sync,C:true post=Wx
+rifty-inproc-Bp9r (same): pre=sync,C:true post=Wx
+## PassThrough class _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-sync (DIFF): sync destroyed=true,error boom,close
+rifty-isolate (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-B (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp8c (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9w (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9r (same): D:boom:true,sync destroyed=true,error replaced,close
+## PassThrough class _construct gates work
+node: pre=sync,C:true post=Wx
+rifty-inproc (DIFF): never-constructed ops=Wx
+rifty-inproc-sync (DIFF): never-constructed ops=Wx
+rifty-isolate (DIFF): never-constructed ops=Wx
+rifty-inproc-B (same): pre=sync,C:true post=Wx
+rifty-inproc-Bp (same): pre=sync,C:true post=Wx
+rifty-inproc-Bp8c (same): pre=sync,C:true post=Wx
+rifty-inproc-Bp9w (same): pre=sync,C:true post=Wx
+rifty-inproc-Bp9r (same): pre=sync,C:true post=Wx
+## Readable es5 _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-sync (DIFF): sync destroyed=true,error boom,close
+rifty-isolate (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-B (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp8c (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9w (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9r (same): D:boom:true,sync destroyed=true,error replaced,close
+## Readable es5 _construct gates work
+node: pre=sync,C:true post=R
+rifty-inproc (DIFF): never-constructed ops=R
+rifty-inproc-sync (DIFF): never-constructed ops=R
+rifty-isolate (DIFF): never-constructed ops=R
+rifty-inproc-B (same): pre=sync,C:true post=R
+rifty-inproc-Bp (same): pre=sync,C:true post=R
+rifty-inproc-Bp8c (same): pre=sync,C:true post=R
+rifty-inproc-Bp9w (same): pre=sync,C:true post=R
+rifty-inproc-Bp9r (same): pre=sync,C:true post=R
+## Writable es5 _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-sync (DIFF): sync destroyed=true,error boom,close
+rifty-isolate (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-B (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp8c (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9w (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9r (same): D:boom:true,sync destroyed=true,error replaced,close
+## Writable es5 _construct gates work
+node: pre=sync,C:true post=Wx
+rifty-inproc (DIFF): never-constructed ops=Wx
+rifty-inproc-sync (DIFF): never-constructed ops=Wx
+rifty-isolate (DIFF): never-constructed ops=Wx
+rifty-inproc-B (same): pre=sync,C:true post=Wx
+rifty-inproc-Bp (same): pre=sync,C:true post=Wx
+rifty-inproc-Bp8c (same): pre=sync,C:true post=Wx
+rifty-inproc-Bp9w (same): pre=sync,C:true post=Wx
+rifty-inproc-Bp9r (same): pre=sync,C:true post=Wx
+## Duplex es5 _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-sync (DIFF): sync destroyed=true,error boom,close
+rifty-isolate (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-B (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp8c (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9w (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9r (same): D:boom:true,sync destroyed=true,error replaced,close
+## Duplex es5 _construct gates work
+node: pre=sync,C:true post=R,Wx
+rifty-inproc (DIFF): never-constructed ops=R,Wx
+rifty-inproc-sync (DIFF): never-constructed ops=R,Wx
+rifty-isolate (DIFF): never-constructed ops=R,Wx
+rifty-inproc-B (same): pre=sync,C:true post=R,Wx
+rifty-inproc-Bp (same): pre=sync,C:true post=R,Wx
+rifty-inproc-Bp8c (same): pre=sync,C:true post=R,Wx
+rifty-inproc-Bp9w (same): pre=sync,C:true post=R,Wx
+rifty-inproc-Bp9r (same): pre=sync,C:true post=R,Wx
+## Transform es5 _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-sync (DIFF): sync destroyed=true,error boom,close
+rifty-isolate (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-B (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp8c (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9w (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9r (same): D:boom:true,sync destroyed=true,error replaced,close
+## Transform es5 _construct gates work
+node: pre=sync,C:true post=Wx
+rifty-inproc (DIFF): never-constructed ops=Wx
+rifty-inproc-sync (DIFF): never-constructed ops=Wx
+rifty-isolate (DIFF): never-constructed ops=Wx
+rifty-inproc-B (same): pre=sync,C:true post=Wx
+rifty-inproc-Bp (same): pre=sync,C:true post=Wx
+rifty-inproc-Bp8c (same): pre=sync,C:true post=Wx
+rifty-inproc-Bp9w (same): pre=sync,C:true post=Wx
+rifty-inproc-Bp9r (same): pre=sync,C:true post=Wx
+## PassThrough es5 _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-sync (DIFF): sync destroyed=true,error boom,close
+rifty-isolate (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-B (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp8c (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9w (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9r (same): D:boom:true,sync destroyed=true,error replaced,close
+## PassThrough es5 _construct gates work
+node: pre=sync,C:true post=Wx
+rifty-inproc (DIFF): never-constructed ops=Wx
+rifty-inproc-sync (DIFF): never-constructed ops=Wx
+rifty-isolate (DIFF): never-constructed ops=Wx
+rifty-inproc-B (same): pre=sync,C:true post=Wx
+rifty-inproc-Bp (same): pre=sync,C:true post=Wx
+rifty-inproc-Bp8c (same): pre=sync,C:true post=Wx
+rifty-inproc-Bp9w (same): pre=sync,C:true post=Wx
+rifty-inproc-Bp9r (same): pre=sync,C:true post=Wx
+## Readable chain _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-sync (DIFF): sync destroyed=true,error boom,close
+rifty-isolate (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-B (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp8c (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9w (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9r (same): D:boom:true,sync destroyed=true,error replaced,close
+## Readable chain _construct gates work
+node: pre=sync,C:true post=R
+rifty-inproc (DIFF): never-constructed ops=R
+rifty-inproc-sync (DIFF): never-constructed ops=R
+rifty-isolate (DIFF): never-constructed ops=R
+rifty-inproc-B (same): pre=sync,C:true post=R
+rifty-inproc-Bp (same): pre=sync,C:true post=R
+rifty-inproc-Bp8c (same): pre=sync,C:true post=R
+rifty-inproc-Bp9w (same): pre=sync,C:true post=R
+rifty-inproc-Bp9r (same): pre=sync,C:true post=R
+## Writable chain _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-sync (DIFF): sync destroyed=true,error boom,close
+rifty-isolate (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-B (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp8c (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9w (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9r (same): D:boom:true,sync destroyed=true,error replaced,close
+## Writable chain _construct gates work
+node: pre=sync,C:true post=Wx
+rifty-inproc (DIFF): never-constructed ops=Wx
+rifty-inproc-sync (DIFF): never-constructed ops=Wx
+rifty-isolate (DIFF): never-constructed ops=Wx
+rifty-inproc-B (same): pre=sync,C:true post=Wx
+rifty-inproc-Bp (same): pre=sync,C:true post=Wx
+rifty-inproc-Bp8c (same): pre=sync,C:true post=Wx
+rifty-inproc-Bp9w (same): pre=sync,C:true post=Wx
+rifty-inproc-Bp9r (same): pre=sync,C:true post=Wx
+## Duplex chain _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-sync (DIFF): sync destroyed=true,error boom,close
+rifty-isolate (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-B (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp8c (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9w (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9r (same): D:boom:true,sync destroyed=true,error replaced,close
+## Duplex chain _construct gates work
+node: pre=sync,C:true post=R,Wx
+rifty-inproc (DIFF): never-constructed ops=R,Wx
+rifty-inproc-sync (DIFF): never-constructed ops=R,Wx
+rifty-isolate (DIFF): never-constructed ops=R,Wx
+rifty-inproc-B (same): pre=sync,C:true post=R,Wx
+rifty-inproc-Bp (same): pre=sync,C:true post=R,Wx
+rifty-inproc-Bp8c (same): pre=sync,C:true post=R,Wx
+rifty-inproc-Bp9w (same): pre=sync,C:true post=R,Wx
+rifty-inproc-Bp9r (same): pre=sync,C:true post=R,Wx
+## Transform chain _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-sync (DIFF): sync destroyed=true,error boom,close
+rifty-isolate (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-B (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp8c (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9w (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9r (same): D:boom:true,sync destroyed=true,error replaced,close
+## Transform chain _construct gates work
+node: pre=sync,C:true post=Wx
+rifty-inproc (DIFF): never-constructed ops=Wx
+rifty-inproc-sync (DIFF): never-constructed ops=Wx
+rifty-isolate (DIFF): never-constructed ops=Wx
+rifty-inproc-B (same): pre=sync,C:true post=Wx
+rifty-inproc-Bp (same): pre=sync,C:true post=Wx
+rifty-inproc-Bp8c (same): pre=sync,C:true post=Wx
+rifty-inproc-Bp9w (same): pre=sync,C:true post=Wx
+rifty-inproc-Bp9r (same): pre=sync,C:true post=Wx
+## PassThrough chain _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-sync (DIFF): sync destroyed=true,error boom,close
+rifty-isolate (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-B (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp8c (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9w (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9r (same): D:boom:true,sync destroyed=true,error replaced,close
+## PassThrough chain _construct gates work
+node: pre=sync,C:true post=Wx
+rifty-inproc (DIFF): never-constructed ops=Wx
+rifty-inproc-sync (DIFF): never-constructed ops=Wx
+rifty-isolate (DIFF): never-constructed ops=Wx
+rifty-inproc-B (same): pre=sync,C:true post=Wx
+rifty-inproc-Bp (same): pre=sync,C:true post=Wx
+rifty-inproc-Bp8c (same): pre=sync,C:true post=Wx
+rifty-inproc-Bp9w (same): pre=sync,C:true post=Wx
+rifty-inproc-Bp9r (same): pre=sync,C:true post=Wx
+## Readable late _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-sync (DIFF): sync destroyed=true,error boom,close
+rifty-isolate (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-B (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp8c (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9w (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9r (same): D:boom:true,sync destroyed=true,error replaced,close
+## Readable late _construct gates work
+node: never-constructed ops=R
+rifty-inproc (same): never-constructed ops=R
+rifty-inproc-sync (same): never-constructed ops=R
+rifty-isolate (same): never-constructed ops=R
+rifty-inproc-B (same): never-constructed ops=R
+rifty-inproc-Bp (same): never-constructed ops=R
+rifty-inproc-Bp8c (same): never-constructed ops=R
+rifty-inproc-Bp9w (same): never-constructed ops=R
+rifty-inproc-Bp9r (same): never-constructed ops=R
+## Writable late _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-sync (DIFF): sync destroyed=true,error boom,close
+rifty-isolate (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-B (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp8c (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9w (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9r (same): D:boom:true,sync destroyed=true,error replaced,close
+## Writable late _construct gates work
+node: never-constructed ops=Wx
+rifty-inproc (same): never-constructed ops=Wx
+rifty-inproc-sync (same): never-constructed ops=Wx
+rifty-isolate (same): never-constructed ops=Wx
+rifty-inproc-B (same): never-constructed ops=Wx
+rifty-inproc-Bp (same): never-constructed ops=Wx
+rifty-inproc-Bp8c (same): never-constructed ops=Wx
+rifty-inproc-Bp9w (same): never-constructed ops=Wx
+rifty-inproc-Bp9r (same): never-constructed ops=Wx
+## Duplex late _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-sync (DIFF): sync destroyed=true,error boom,close
+rifty-isolate (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-B (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp8c (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9w (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9r (same): D:boom:true,sync destroyed=true,error replaced,close
+## Duplex late _construct gates work
+node: never-constructed ops=R,Wx
+rifty-inproc (same): never-constructed ops=R,Wx
+rifty-inproc-sync (same): never-constructed ops=R,Wx
+rifty-isolate (same): never-constructed ops=R,Wx
+rifty-inproc-B (same): never-constructed ops=R,Wx
+rifty-inproc-Bp (same): never-constructed ops=R,Wx
+rifty-inproc-Bp8c (same): never-constructed ops=R,Wx
+rifty-inproc-Bp9w (same): never-constructed ops=R,Wx
+rifty-inproc-Bp9r (same): never-constructed ops=R,Wx
+## Transform late _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-sync (DIFF): sync destroyed=true,error boom,close
+rifty-isolate (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-B (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp8c (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9w (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9r (same): D:boom:true,sync destroyed=true,error replaced,close
+## Transform late _construct gates work
+node: never-constructed ops=Wx
+rifty-inproc (same): never-constructed ops=Wx
+rifty-inproc-sync (same): never-constructed ops=Wx
+rifty-isolate (same): never-constructed ops=Wx
+rifty-inproc-B (same): never-constructed ops=Wx
+rifty-inproc-Bp (same): never-constructed ops=Wx
+rifty-inproc-Bp8c (same): never-constructed ops=Wx
+rifty-inproc-Bp9w (same): never-constructed ops=Wx
+rifty-inproc-Bp9r (same): never-constructed ops=Wx
+## PassThrough late _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-sync (DIFF): sync destroyed=true,error boom,close
+rifty-isolate (DIFF): sync destroyed=true,error boom,close
+rifty-inproc-B (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp8c (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9w (same): D:boom:true,sync destroyed=true,error replaced,close
+rifty-inproc-Bp9r (same): D:boom:true,sync destroyed=true,error replaced,close
+## PassThrough late _construct gates work
+node: never-constructed ops=Wx
+rifty-inproc (same): never-constructed ops=Wx
+rifty-inproc-sync (same): never-constructed ops=Wx
+rifty-isolate (same): never-constructed ops=Wx
+rifty-inproc-B (same): never-constructed ops=Wx
+rifty-inproc-Bp (same): never-constructed ops=Wx
+rifty-inproc-Bp8c (same): never-constructed ops=Wx
+rifty-inproc-Bp9w (same): never-constructed ops=Wx
+rifty-inproc-Bp9r (same): never-constructed ops=Wx
+## Writable _destroy() without error, callback ok
+node: D null,close
+rifty-inproc (DIFF): close
+rifty-inproc-sync (DIFF): close
+rifty-isolate (DIFF): close
+rifty-inproc-B (same): D null,close
+rifty-inproc-Bp (same): D null,close
+rifty-inproc-Bp8c (same): D null,close
+rifty-inproc-Bp9w (same): D null,close
+rifty-inproc-Bp9r (same): D null,close
+## Writable _destroy() without error, callback error
+node: error X,close
+rifty-inproc (DIFF): close
+rifty-inproc-sync (DIFF): close
+rifty-isolate (DIFF): close
+rifty-inproc-B (same): error X,close
+rifty-inproc-Bp (same): error X,close
+rifty-inproc-Bp8c (same): error X,close
+rifty-inproc-Bp9w (same): error X,close
+rifty-inproc-Bp9r (same): error X,close
+## Writable async _destroy callback
+node: D,sync errored=e,t1,Dcb,error e,close
+rifty-inproc (DIFF): sync errored=undefined,error e,close,t1
+rifty-inproc-sync (DIFF): sync errored=undefined,error e,close,t1
+rifty-isolate (DIFF): sync errored=undefined,error e,close,t1
+rifty-inproc-B (same): D,sync errored=e,t1,Dcb,error e,close
+rifty-inproc-Bp (same): D,sync errored=e,t1,Dcb,error e,close
+rifty-inproc-Bp8c (same): D,sync errored=e,t1,Dcb,error e,close
+rifty-inproc-Bp9w (same): D,sync errored=e,t1,Dcb,error e,close
+rifty-inproc-Bp9r (same): D,sync errored=e,t1,Dcb,error e,close
+## Duplex _destroy runs once for both sides
+node: D e,error e,close
+rifty-inproc (DIFF): error e,close
+rifty-inproc-sync (DIFF): error e,close
+rifty-isolate (DIFF): error e,close
+rifty-inproc-B (same): D e,error e,close
+rifty-inproc-Bp (same): D e,error e,close
+rifty-inproc-Bp8c (same): D e,error e,close
+rifty-inproc-Bp9w (same): D e,error e,close
+rifty-inproc-Bp9r (same): D e,error e,close
+## Duplex write error reaches _destroy
+node: D w,error w
+rifty-inproc (DIFF): error w
+rifty-inproc-sync (DIFF): error w
+rifty-isolate (DIFF): error w
+rifty-inproc-B (same): D w,error w
+rifty-inproc-Bp (same): D w,error w
+rifty-inproc-Bp8c (same): D w,error w
+rifty-inproc-Bp9w (same): D w,error w
+rifty-inproc-Bp9r (same): D w,error w
+## Transform _destroy runs once for both sides
+node: D e,error e,close
+rifty-inproc (DIFF): error e,close
+rifty-inproc-sync (DIFF): error e,close
+rifty-isolate (DIFF): error e,close
+rifty-inproc-B (same): D e,error e,close
+rifty-inproc-Bp (same): D e,error e,close
+rifty-inproc-Bp8c (same): D e,error e,close
+rifty-inproc-Bp9w (same): D e,error e,close
+rifty-inproc-Bp9r (same): D e,error e,close
+## Transform write error reaches _destroy
+node: D w,error w
+rifty-inproc (DIFF): error w
+rifty-inproc-sync (DIFF): error w
+rifty-isolate (DIFF): error w
+rifty-inproc-B (same): D w,error w
+rifty-inproc-Bp (same): D w,error w
+rifty-inproc-Bp8c (same): D w,error w
+rifty-inproc-Bp9w (same): D w,error w
+rifty-inproc-Bp9r (same): D w,error w
+## Readable _construct error destroys
+node: C,D cfail,error cfail,close
+rifty-inproc (DIFF): R
+rifty-inproc-sync (DIFF): R
+rifty-isolate (DIFF): R
+rifty-inproc-B (same): C,D cfail,error cfail,close
+rifty-inproc-Bp (same): C,D cfail,error cfail,close
+rifty-inproc-Bp8c (same): C,D cfail,error cfail,close
+rifty-inproc-Bp9w (same): C,D cfail,error cfail,close
+rifty-inproc-Bp9r (same): C,D cfail,error cfail,close
+## Writable _construct error destroys
+node: C,D cfail,error cfail,close
+rifty-inproc (DIFF): W
+rifty-inproc-sync (DIFF): W
+rifty-isolate (DIFF): W
+rifty-inproc-B (same): C,D cfail,error cfail,close
+rifty-inproc-Bp (same): C,D cfail,error cfail,close
+rifty-inproc-Bp8c (same): C,D cfail,error cfail,close
+rifty-inproc-Bp9w (same): C,D cfail,error cfail,close
+rifty-inproc-Bp9r (same): C,D cfail,error cfail,close
+## Duplex _construct error destroys
+node: C,D cfail,error cfail,close
+rifty-inproc (DIFF): W,R
+rifty-inproc-sync (DIFF): W,R
+rifty-isolate (DIFF): W,R
+rifty-inproc-B (same): C,D cfail,error cfail,close
+rifty-inproc-Bp (same): C,D cfail,error cfail,close
+rifty-inproc-Bp8c (same): C,D cfail,error cfail,close
+rifty-inproc-Bp9w (same): C,D cfail,error cfail,close
+rifty-inproc-Bp9r (same): C,D cfail,error cfail,close
+## Transform _construct error destroys
+node: C,D cfail,error cfail,close
+rifty-inproc (DIFF): W,R
+rifty-inproc-sync (DIFF): W,R
+rifty-isolate (DIFF): W,R
+rifty-inproc-B (same): C,D cfail,error cfail,close
+rifty-inproc-Bp (same): C,D cfail,error cfail,close
+rifty-inproc-Bp8c (same): C,D cfail,error cfail,close
+rifty-inproc-Bp9w (same): C,D cfail,error cfail,close
+rifty-inproc-Bp9r (same): C,D cfail,error cfail,close
+## Readable destroy during _construct
+node: C,Cdone,D early,error early,close
+rifty-inproc (DIFF): error early,close
+rifty-inproc-sync (DIFF): error early,close
+rifty-isolate (DIFF): error early,close
+rifty-inproc-B (same): C,Cdone,D early,error early,close
+rifty-inproc-Bp (same): C,Cdone,D early,error early,close
+rifty-inproc-Bp8c (same): C,Cdone,D early,error early,close
+rifty-inproc-Bp9w (same): C,Cdone,D early,error early,close
+rifty-inproc-Bp9r (same): C,Cdone,D early,error early,close
+## Writable destroy during _construct
+node: C,wcb early,Cdone,D early,error early,close
+rifty-inproc (DIFF): W,wcb null,error early,close
+rifty-inproc-sync (DIFF): W,wcb null,error early,close
+rifty-isolate (DIFF): W,wcb null,error early,close
+rifty-inproc-B (same): C,wcb early,Cdone,D early,error early,close
+rifty-inproc-Bp (same): C,wcb early,Cdone,D early,error early,close
+rifty-inproc-Bp8c (same): C,wcb early,Cdone,D early,error early,close
+rifty-inproc-Bp9w (same): C,wcb early,Cdone,D early,error early,close
+rifty-inproc-Bp9r (same): C,wcb early,Cdone,D early,error early,close
+## Writable sync _construct still defers to next tick
+node: sync,C,Wa,Wb,FIN
+rifty-inproc (DIFF): Wa,Wb,FIN,sync
+rifty-inproc-sync (DIFF): Wa,Wb,FIN,sync
+rifty-isolate (DIFF): Wa,Wb,FIN,sync
+rifty-inproc-B (same): sync,C,Wa,Wb,FIN
+rifty-inproc-Bp (same): sync,C,Wa,Wb,FIN
+rifty-inproc-Bp8c (same): sync,C,Wa,Wb,FIN
+rifty-inproc-Bp9w (same): sync,C,Wa,Wb,FIN
+rifty-inproc-Bp9r (same): sync,C,Wa,Wb,FIN
+## Readable read() before _construct
+node: read=null,Cdone,R,dx
+rifty-inproc (DIFF): R,read=x
+rifty-inproc-sync (DIFF): R,read=x
+rifty-isolate (DIFF): R,read=x
+rifty-inproc-B (same): read=null,Cdone,R,dx
+rifty-inproc-Bp (same): read=null,Cdone,R,dx
+rifty-inproc-Bp8c (same): read=null,Cdone,R,dx
+rifty-inproc-Bp9w (same): read=null,Cdone,R,dx
+rifty-inproc-Bp9r (same): read=null,Cdone,R,dx
+## prototype shape
+node: Readable:function/undefined Writable:function/undefined Duplex:function/undefined Transform:function/undefined PassThrough:function/undefined duplex-destroy-is-readable:true
+rifty-inproc (DIFF): Readable:undefined/undefined Writable:undefined/undefined Duplex:undefined/undefined Transform:undefined/undefined PassThrough:undefined/undefined duplex-destroy-is-readable:true
+rifty-inproc-sync (DIFF): Readable:undefined/undefined Writable:undefined/undefined Duplex:undefined/undefined Transform:undefined/undefined PassThrough:undefined/undefined duplex-destroy-is-readable:true
+rifty-isolate (DIFF): Readable:undefined/undefined Writable:undefined/undefined Duplex:undefined/undefined Transform:undefined/undefined PassThrough:undefined/undefined duplex-destroy-is-readable:true
+rifty-inproc-B (same): Readable:function/undefined Writable:function/undefined Duplex:function/undefined Transform:function/undefined PassThrough:function/undefined duplex-destroy-is-readable:true
+rifty-inproc-Bp (same): Readable:function/undefined Writable:function/undefined Duplex:function/undefined Transform:function/undefined PassThrough:function/undefined duplex-destroy-is-readable:true
+rifty-inproc-Bp8c (same): Readable:function/undefined Writable:function/undefined Duplex:function/undefined Transform:function/undefined PassThrough:function/undefined duplex-destroy-is-readable:true
+rifty-inproc-Bp9w (same): Readable:function/undefined Writable:function/undefined Duplex:function/undefined Transform:function/undefined PassThrough:function/undefined duplex-destroy-is-readable:true
+rifty-inproc-Bp9r (same): Readable:function/undefined Writable:function/undefined Duplex:function/undefined Transform:function/undefined PassThrough:function/undefined duplex-destroy-is-readable:true

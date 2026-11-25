@@ -1,0 +1,11 @@
+<repo>/docs/backlog/epics/node-streams-as-in-node/reference/route-b/s5/pipe-to-unread-response.case.mjs | A same | B DIFF reads 2001 | Bp DIFF reads 2001
+  node: reads<=512 true
+  A: reads<=512 true [stderr: reads 8]
+  B: reads<=512 false [stderr: reads 2001]
+  Bp: reads<=512 false [stderr: reads 2001]
+<repo>/docs/backlog/epics/node-streams-as-in-node/reference/route-b/s5/pipeline-to-response.case.mjs | A DIFF  | B DIFF  | Bp DIFF 
+  node: pipeline cb args=2 none ¦ /pipeline status=200 body=abc ¦ finished(socket) accepted ¦ /finished-socket status=200 body=ok ¦ finished(res) cb none ¦ /finished-res status=200 body=done ¦ /pipe status=200 body=xy ¦ /echo body=echo:hello
+  A: pipeline cb args=1 none ¦ /pipeline status=200 body=abc ¦ finished(socket) accepted ¦ /finished-socket status=200 body=ok ¦ finished(res) cb none ¦ /finished-res status=200 body=done ¦ /pipe status=200 body=xy ¦ /echo body=echo:hello
+  B: /pipeline status=200 body=abc ¦ pipeline cb args=2 none ¦ finished(socket) threw ERR_INVALID_ARG_TYPE ¦ /finished-socket status=200 body=ok ¦ finished(res) cb none ¦ /finished-res status=200 body=done ¦ /pipe status=200 body=xy ¦ /echo body=echo:hello
+  Bp: pipeline cb args=2 none ¦ /pipeline status=200 body=abc ¦ finished(socket) threw ERR_INVALID_ARG_TYPE ¦ /finished-socket status=200 body=ok ¦ finished(res) cb none ¦ /finished-res status=200 body=done ¦ /pipe status=200 body=xy ¦ /echo body=echo:hello
+total plain cases 2, skipped 0; equal to Node: route A 1, route B 0, route B product bindings 0

@@ -3,6 +3,7 @@ area: runtime-js
 status: draft
 title: "`readable.readableFlowing` and `readable.isPaused()` report Node's flow state"
 created: 2026-11-17
+epic: node-streams-as-in-node
 why: rifty's Readable has neither `readableFlowing` nor `isPaused()`, so code branching on the flow state reads `undefined` or throws `TypeError: r.isPaused is not a function` (no loud gap)
 sources: [PR #400 alias-identity sweep]
 code: [packages/io/src/streams/readable.ts]
@@ -19,6 +20,11 @@ after 10 ms → Node `null true`, rifty `undefined false`; after
 (`_readableState.flowing`). `isPaused` is absent from `packages/` (`git grep`),
 so `r.isPaused()` throws `TypeError` where Node returns `false` after
 `resume()` and `true` after `pause()`.
+
+## Goal unit
+
+Absorbed by unit 8 «Core» of goal `node-streams-as-in-node` (ADR-0575): Node's `readable.js`
+defines these members; this draft's repro is an acceptance row there.
 
 ## Next
 

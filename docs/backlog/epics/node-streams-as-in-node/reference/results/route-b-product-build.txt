@@ -1,0 +1,24 @@
+Route B product build: b1270101a vs b1270101a + product/wiring.patch + generated module (node v24.16.0, esbuild 0.28.0).
+Generated module (product/generate.mjs): 28 modules (23 whole Node files, 5 selected: internal/{errors,validators,util,fs/utils,url}),
+sources sha256 53e38600e16da16deccad1247eed381687bb73d067f3428011bc84791d04bc97 (per-file hashes in its sources.json).
+  unminified 270605 B | --minify (whitespace+syntax, identifiers kept) 173477 B, gzip 38409 | --minify-all 112247 B, gzip 34898
+  The build uses --minify: renamed identifiers change V8's own TypeError text ("J.addEventListener is not a function"
+  vs Node's "signal.addEventListener …", parity stream/from-web-options). A consumer bundler that renames does the same.
+
+pnpm test:client-bundles (--surface-only --check-budgets): min / gzip B (budget)
+artifact  | b1270101a      | probe          | delta          | budget
+main      | 91433 / 28548  | 91197 / 28521  | -236 / -27     | 128000 / 40000
+sw        | 16711 / 5848   | 16475 / 5805   | -236 / -43     | 23000 / 8000
+generic   | 932920 / 279754| 1003635 / 303440| +70715 / +23686| 1124000 / 332000
+toolchain | 1061998 / 323615| 1131508 / 346943| +69510 / +23328| 1284000 / 386000
+exit      | 0              | 0 (budgets, SDK packaging io guard, ioProbe vs Node, strict TypeScript graphs pass)
+io bytes in main / sw (sdk-packaging-proof guard <= 5120): b1270101a 1186 / 1257; probe 950 / 1021.
+First probe build failed the guard (main 112152, sw 111975): esbuild keepNames emitted a top-level __name(...) call for
+the named factory; fixed by an anonymous factory inside a /* @__PURE__ */ IIFE. Its ioProbe also failed (io without
+runtime-js: no node:util for debuglog); fixed by bindings.ts' absent-module rule (debuglog off, AsyncResource pass-through).
+
+packages/io/dist/index.js: b1270101a 128250 B (gzip 29014); probe 268977 B (gzip 54600).
+packages/isolate-host/dist/guest.js (raw | gzip -9 | esbuild --minify | its gzip -9):
+  b1270101a 7123270 | 1497917 | 4404316 | 1266724
+  probe     7240932 | 1517844 | 4480138 | 1291510   (delta +117662 | +19927 | +75822 | +24786)
+pnpm build:libs: exit 0 both (no typecheck bypass needed; tsc on runtime-js reports type errors only in fs.test.ts).

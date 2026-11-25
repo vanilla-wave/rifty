@@ -1,0 +1,310 @@
+# m1-hooks-matrix.cjs
+node v24.16.0; rifty c2d03ce05; workbench: Chromium 148.0.7778.96 (rifty process.version v24.0.0); sdk: Chromium 148.0.7778.96 (rifty process.version v24.0.0)
+columns: node | workbench | sdk
+
+exit: node 0 | workbench 0 | sdk 0
+
+## Readable option _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+workbench (DIFF): sync destroyed=true,error boom,close
+sdk (DIFF): sync destroyed=true,error boom,close
+## Readable option _construct gates work
+node: pre=sync,C:true post=R
+workbench (DIFF): never-constructed ops=R
+sdk (DIFF): never-constructed ops=R
+## Writable option _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+workbench (DIFF): sync destroyed=true,error boom,close
+sdk (DIFF): sync destroyed=true,error boom,close
+## Writable option _construct gates work
+node: pre=sync,C:true post=Wx
+workbench (DIFF): never-constructed ops=Wx
+sdk (DIFF): never-constructed ops=Wx
+## Duplex option _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+workbench (DIFF): sync destroyed=true,error boom,close
+sdk (DIFF): sync destroyed=true,error boom,close
+## Duplex option _construct gates work
+node: pre=sync,C:true post=R,Wx
+workbench (DIFF): never-constructed ops=R,Wx
+sdk (DIFF): never-constructed ops=R,Wx
+## Transform option _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+workbench (DIFF): sync destroyed=true,error boom,close
+sdk (DIFF): sync destroyed=true,error boom,close
+## Transform option _construct gates work
+node: pre=sync,C:true post=Wx
+workbench (DIFF): never-constructed ops=Wx
+sdk (DIFF): never-constructed ops=Wx
+## PassThrough option _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+workbench (DIFF): sync destroyed=true,error boom,close
+sdk (DIFF): sync destroyed=true,error boom,close
+## PassThrough option _construct gates work
+node: pre=sync,C:true post=Wx
+workbench (DIFF): never-constructed ops=Wx
+sdk (DIFF): never-constructed ops=Wx
+## Readable own _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+workbench (DIFF): sync destroyed=true,error boom,close
+sdk (DIFF): sync destroyed=true,error boom,close
+## Readable own _construct gates work
+node: never-constructed ops=R
+workbench (same): never-constructed ops=R
+sdk (same): never-constructed ops=R
+## Writable own _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+workbench (DIFF): sync destroyed=true,error boom,close
+sdk (DIFF): sync destroyed=true,error boom,close
+## Writable own _construct gates work
+node: never-constructed ops=Wx
+workbench (same): never-constructed ops=Wx
+sdk (same): never-constructed ops=Wx
+## Duplex own _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+workbench (DIFF): sync destroyed=true,error boom,close
+sdk (DIFF): sync destroyed=true,error boom,close
+## Duplex own _construct gates work
+node: never-constructed ops=R,Wx
+workbench (same): never-constructed ops=R,Wx
+sdk (same): never-constructed ops=R,Wx
+## Transform own _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+workbench (DIFF): sync destroyed=true,error boom,close
+sdk (DIFF): sync destroyed=true,error boom,close
+## Transform own _construct gates work
+node: never-constructed ops=Wx
+workbench (same): never-constructed ops=Wx
+sdk (same): never-constructed ops=Wx
+## PassThrough own _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+workbench (DIFF): sync destroyed=true,error boom,close
+sdk (DIFF): sync destroyed=true,error boom,close
+## PassThrough own _construct gates work
+node: never-constructed ops=Wx
+workbench (same): never-constructed ops=Wx
+sdk (same): never-constructed ops=Wx
+## Readable class _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+workbench (DIFF): sync destroyed=true,error boom,close
+sdk (DIFF): sync destroyed=true,error boom,close
+## Readable class _construct gates work
+node: pre=sync,C:true post=R
+workbench (DIFF): never-constructed ops=R
+sdk (DIFF): never-constructed ops=R
+## Writable class _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+workbench (DIFF): sync destroyed=true,error boom,close
+sdk (DIFF): sync destroyed=true,error boom,close
+## Writable class _construct gates work
+node: pre=sync,C:true post=Wx
+workbench (DIFF): never-constructed ops=Wx
+sdk (DIFF): never-constructed ops=Wx
+## Duplex class _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+workbench (DIFF): sync destroyed=true,error boom,close
+sdk (DIFF): sync destroyed=true,error boom,close
+## Duplex class _construct gates work
+node: pre=sync,C:true post=R,Wx
+workbench (DIFF): never-constructed ops=R,Wx
+sdk (DIFF): never-constructed ops=R,Wx
+## Transform class _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+workbench (DIFF): sync destroyed=true,error boom,close
+sdk (DIFF): sync destroyed=true,error boom,close
+## Transform class _construct gates work
+node: pre=sync,C:true post=Wx
+workbench (DIFF): never-constructed ops=Wx
+sdk (DIFF): never-constructed ops=Wx
+## PassThrough class _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+workbench (DIFF): sync destroyed=true,error boom,close
+sdk (DIFF): sync destroyed=true,error boom,close
+## PassThrough class _construct gates work
+node: pre=sync,C:true post=Wx
+workbench (DIFF): never-constructed ops=Wx
+sdk (DIFF): never-constructed ops=Wx
+## Readable es5 _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+workbench (DIFF): sync destroyed=true,error boom,close
+sdk (DIFF): sync destroyed=true,error boom,close
+## Readable es5 _construct gates work
+node: pre=sync,C:true post=R
+workbench (DIFF): never-constructed ops=R
+sdk (DIFF): never-constructed ops=R
+## Writable es5 _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+workbench (DIFF): sync destroyed=true,error boom,close
+sdk (DIFF): sync destroyed=true,error boom,close
+## Writable es5 _construct gates work
+node: pre=sync,C:true post=Wx
+workbench (DIFF): never-constructed ops=Wx
+sdk (DIFF): never-constructed ops=Wx
+## Duplex es5 _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+workbench (DIFF): sync destroyed=true,error boom,close
+sdk (DIFF): sync destroyed=true,error boom,close
+## Duplex es5 _construct gates work
+node: pre=sync,C:true post=R,Wx
+workbench (DIFF): never-constructed ops=R,Wx
+sdk (DIFF): never-constructed ops=R,Wx
+## Transform es5 _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+workbench (DIFF): sync destroyed=true,error boom,close
+sdk (DIFF): sync destroyed=true,error boom,close
+## Transform es5 _construct gates work
+node: pre=sync,C:true post=Wx
+workbench (DIFF): never-constructed ops=Wx
+sdk (DIFF): never-constructed ops=Wx
+## PassThrough es5 _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+workbench (DIFF): sync destroyed=true,error boom,close
+sdk (DIFF): sync destroyed=true,error boom,close
+## PassThrough es5 _construct gates work
+node: pre=sync,C:true post=Wx
+workbench (DIFF): never-constructed ops=Wx
+sdk (DIFF): never-constructed ops=Wx
+## Readable chain _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+workbench (DIFF): sync destroyed=true,error boom,close
+sdk (DIFF): sync destroyed=true,error boom,close
+## Readable chain _construct gates work
+node: pre=sync,C:true post=R
+workbench (DIFF): never-constructed ops=R
+sdk (DIFF): never-constructed ops=R
+## Writable chain _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+workbench (DIFF): sync destroyed=true,error boom,close
+sdk (DIFF): sync destroyed=true,error boom,close
+## Writable chain _construct gates work
+node: pre=sync,C:true post=Wx
+workbench (DIFF): never-constructed ops=Wx
+sdk (DIFF): never-constructed ops=Wx
+## Duplex chain _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+workbench (DIFF): sync destroyed=true,error boom,close
+sdk (DIFF): sync destroyed=true,error boom,close
+## Duplex chain _construct gates work
+node: pre=sync,C:true post=R,Wx
+workbench (DIFF): never-constructed ops=R,Wx
+sdk (DIFF): never-constructed ops=R,Wx
+## Transform chain _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+workbench (DIFF): sync destroyed=true,error boom,close
+sdk (DIFF): sync destroyed=true,error boom,close
+## Transform chain _construct gates work
+node: pre=sync,C:true post=Wx
+workbench (DIFF): never-constructed ops=Wx
+sdk (DIFF): never-constructed ops=Wx
+## PassThrough chain _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+workbench (DIFF): sync destroyed=true,error boom,close
+sdk (DIFF): sync destroyed=true,error boom,close
+## PassThrough chain _construct gates work
+node: pre=sync,C:true post=Wx
+workbench (DIFF): never-constructed ops=Wx
+sdk (DIFF): never-constructed ops=Wx
+## Readable late _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+workbench (DIFF): sync destroyed=true,error boom,close
+sdk (DIFF): sync destroyed=true,error boom,close
+## Readable late _construct gates work
+node: never-constructed ops=R
+workbench (same): never-constructed ops=R
+sdk (same): never-constructed ops=R
+## Writable late _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+workbench (DIFF): sync destroyed=true,error boom,close
+sdk (DIFF): sync destroyed=true,error boom,close
+## Writable late _construct gates work
+node: never-constructed ops=Wx
+workbench (same): never-constructed ops=Wx
+sdk (same): never-constructed ops=Wx
+## Duplex late _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+workbench (DIFF): sync destroyed=true,error boom,close
+sdk (DIFF): sync destroyed=true,error boom,close
+## Duplex late _construct gates work
+node: never-constructed ops=R,Wx
+workbench (same): never-constructed ops=R,Wx
+sdk (same): never-constructed ops=R,Wx
+## Transform late _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+workbench (DIFF): sync destroyed=true,error boom,close
+sdk (DIFF): sync destroyed=true,error boom,close
+## Transform late _construct gates work
+node: never-constructed ops=Wx
+workbench (same): never-constructed ops=Wx
+sdk (same): never-constructed ops=Wx
+## PassThrough late _destroy replaces the error
+node: D:boom:true,sync destroyed=true,error replaced,close
+workbench (DIFF): sync destroyed=true,error boom,close
+sdk (DIFF): sync destroyed=true,error boom,close
+## PassThrough late _construct gates work
+node: never-constructed ops=Wx
+workbench (same): never-constructed ops=Wx
+sdk (same): never-constructed ops=Wx
+## Writable _destroy() without error, callback ok
+node: D null,close
+workbench (DIFF): close
+sdk (DIFF): close
+## Writable _destroy() without error, callback error
+node: error X,close
+workbench (DIFF): close
+sdk (DIFF): close
+## Writable async _destroy callback
+node: D,sync errored=e,t1,Dcb,error e,close
+workbench (DIFF): sync errored=undefined,error e,close,t1
+sdk (DIFF): sync errored=undefined,error e,close,t1
+## Duplex _destroy runs once for both sides
+node: D e,error e,close
+workbench (DIFF): error e,close
+sdk (DIFF): error e,close
+## Duplex write error reaches _destroy
+node: D w,error w
+workbench (DIFF): error w
+sdk (DIFF): error w
+## Transform _destroy runs once for both sides
+node: D e,error e,close
+workbench (DIFF): error e,close
+sdk (DIFF): error e,close
+## Transform write error reaches _destroy
+node: D w,error w
+workbench (DIFF): error w
+sdk (DIFF): error w
+## Readable _construct error destroys
+node: C,D cfail,error cfail,close
+workbench (DIFF): R
+sdk (DIFF): R
+## Writable _construct error destroys
+node: C,D cfail,error cfail,close
+workbench (DIFF): W
+sdk (DIFF): W
+## Duplex _construct error destroys
+node: C,D cfail,error cfail,close
+workbench (DIFF): W,R
+sdk (DIFF): W,R
+## Transform _construct error destroys
+node: C,D cfail,error cfail,close
+workbench (DIFF): W,R
+sdk (DIFF): W,R
+## Readable destroy during _construct
+node: C,Cdone,D early,error early,close
+workbench (DIFF): error early,close
+sdk (DIFF): error early,close
+## Writable destroy during _construct
+node: C,wcb early,Cdone,D early,error early,close
+workbench (DIFF): W,wcb null,error early,close
+sdk (DIFF): W,wcb null,error early,close
+## Writable sync _construct still defers to next tick
+node: sync,C,Wa,Wb,FIN
+workbench (DIFF): Wa,Wb,FIN,sync
+sdk (DIFF): Wa,Wb,FIN,sync
+## Readable read() before _construct
+node: read=null,Cdone,R,dx
+workbench (DIFF): R,read=x
+sdk (DIFF): R,read=x
+## prototype shape
+node: Readable:function/undefined Writable:function/undefined Duplex:function/undefined Transform:function/undefined PassThrough:function/undefined duplex-destroy-is-readable:true
+workbench (DIFF): Readable:undefined/undefined Writable:undefined/undefined Duplex:undefined/undefined Transform:undefined/undefined PassThrough:undefined/undefined duplex-destroy-is-readable:true
+sdk (DIFF): Readable:undefined/undefined Writable:undefined/undefined Duplex:undefined/undefined Transform:undefined/undefined PassThrough:undefined/undefined duplex-destroy-is-readable:true

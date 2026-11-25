@@ -1,0 +1,81 @@
+bindings.ts primordials vs node v24.16.0's own (--expose-internals); generated module's PRIMORDIALS list
+AggregateError: identical
+Array: identical
+ArrayIsArray: identical
+ArrayPrototypeFilter: same kind (bound call/1)
+ArrayPrototypeIncludes: same kind (bound call/1)
+ArrayPrototypeIndexOf: same kind (bound call/1)
+ArrayPrototypeJoin: same kind (bound call/1)
+ArrayPrototypeMap: same kind (bound call/1)
+ArrayPrototypePop: same kind (bound call/1)
+ArrayPrototypePush: same kind (bound call/1)
+ArrayPrototypeSlice: same kind (bound call/1)
+ArrayPrototypeSplice: same kind (bound call/1)
+ArrayPrototypeUnshift: same kind (bound call/1)
+Boolean: identical
+Error: identical
+ErrorCaptureStackTrace: identical
+FunctionPrototypeBind: same kind (bound call/1)
+FunctionPrototypeCall: same kind (bound call/1)
+FunctionPrototypeSymbolHasInstance: same kind (bound call/1)
+JSONStringify: identical
+MapPrototypeGet: same kind (bound call/1)
+MathAbs: identical
+MathFloor: identical
+MathMin: identical
+Number: identical
+NumberIsInteger: identical
+NumberIsNaN: identical
+NumberMAX_SAFE_INTEGER: identical
+NumberMIN_SAFE_INTEGER: identical
+NumberParseInt: identical
+ObjectDefineProperties: identical
+ObjectDefineProperty: identical
+ObjectFreeze: identical
+ObjectGetOwnPropertyDescriptor: identical
+ObjectGetOwnPropertyDescriptors: identical
+ObjectGetPrototypeOf: identical
+ObjectIs: identical
+ObjectIsExtensible: identical
+ObjectKeys: identical
+ObjectPrototypeHasOwnProperty: same kind (bound call/1)
+ObjectSetPrototypeOf: identical
+ObjectValues: identical
+Promise: identical
+PromisePrototypeThen: same kind (bound call/1)
+PromiseReject: same kind (bound reject/1)
+PromiseResolve: same kind (bound resolve/1)
+PromiseWithResolvers: same kind (bound withResolvers/0)
+RangeError: identical
+ReflectApply: identical
+ReflectConstruct: identical
+ReflectOwnKeys: identical
+RegExpPrototypeExec: same kind (bound call/1)
+SafeArrayIterator: same kind (SafeIterator/1)
+SafeMap: same kind (SafeMap/0)
+SafePromiseAllReturnVoid: same kind, name SafePromiseAllReturnVoid vs '' (internal helper)
+SafePromisePrototypeFinally: same kind, name SafePromisePrototypeFinally vs '' (internal helper)
+SafeSet: same kind (SafeSet/0)
+String: identical
+StringPrototypeEndsWith: same kind (bound call/1)
+StringPrototypeIncludes: same kind (bound call/1)
+StringPrototypeIndexOf: same kind (bound call/1)
+StringPrototypeSlice: same kind (bound call/1)
+StringPrototypeStartsWith: same kind (bound call/1)
+StringPrototypeToLowerCase: same kind (bound call/1)
+Symbol: identical
+SymbolAsyncDispose: identical
+SymbolAsyncIterator: identical
+SymbolDispose: identical
+SymbolFor: identical
+SymbolHasInstance: identical
+SymbolIterator: identical
+SymbolSpecies: identical
+TypeError: identical
+TypedArrayPrototypeGetBuffer: same kind (bound call/1)
+TypedArrayPrototypeGetByteLength: same kind (bound call/1)
+TypedArrayPrototypeGetByteOffset: same kind (bound call/1)
+TypedArrayPrototypeIncludes: same kind (bound call/1)
+TypedArrayPrototypeSet: same kind (bound call/1)
+Uint8Array: identical
+79 names; DIFF 0

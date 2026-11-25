@@ -3,6 +3,7 @@ area: runtime-js
 status: draft
 title: fs ReadStream exposes Readable#setEncoding
 created: 2026-11-17
+epic: node-streams-as-in-node
 why: rifty fs ReadStream extends EventEmitter, so `createReadStream(f).setEncoding('utf8')` throws "not a function" where Node decodes
 sources: [docs/public/compat/fs.md, docs/backlog/runtime-js/fs-readstream-pipe-node-options.md]
 code: [packages/runtime-js/src/builtins/fs-streams.ts, tools/compat-matrix-generator/fs-matrix.js]

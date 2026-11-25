@@ -3,6 +3,7 @@ area: runtime-js
 status: draft
 title: Writable public needDrain state
 created: 2026-07-12
+epic: node-streams-as-in-node
 why: completion timing now matches Node but the writableNeedDrain projection remains absent
 user_story: As a Node package inspecting Writable around write(), I want dispatch timing and need-drain state to match real Node.
 blocked_by: []

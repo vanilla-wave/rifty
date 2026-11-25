@@ -3,6 +3,7 @@ area: runtime-js
 status: draft
 title: fs.ReadStream lacks close() and async iteration, fs.WriteStream lacks close()
 created: 2026-11-24
+epic: node-streams-as-in-node
 why: Node's fs streams are `stream.Readable`/`Writable` with `close(cb)`; rifty's are EventEmitters without `close` or `Symbol.asyncIterator`, so `stream.close()` throws `TypeError: stream.close is not a function` and `for await (const c of rs)` throws `TypeError: rs is not async iterable`.
 sources: [docs/backlog/distribution/reference/isolate-library-probe/README.md, docs/public/compat/fs.md]
 code: [packages/runtime-js/src/builtins/fs-streams.ts, tools/compat-matrix-generator/fs-matrix.js]

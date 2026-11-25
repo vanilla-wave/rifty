@@ -1,0 +1,9 @@
+Workbench (COI, ephemeral), Chromium 148.0.7778.96, origin/main 5763d8fa1: route A = main, route B = main + route-B wiring; Node v24.16.0. The agent run stopped on an API error after the lanes; summary regenerated from rows.jsonl.
+case | MiB | node median ms (ticks) [runs, sha=node, exits] | A median ms (ticks) [runs, sha=node, exits] | B median ms (ticks) [runs, sha=node, exits]
+read | 4 | 4.3 (4) [3, yes, 0] | null (null) [3, NO/NO/NO, 1] | 625.8 (0) [3, yes, 0]
+read | 16 | 10.7 (10) [3, yes, 0] | null (null) [3, NO/NO/NO, 1] | 21005 (0) [3, yes, 0]
+write | 4 | 2.3 (2) [3, yes, 0] | 85.1 (0) [3, yes, 0] | 2275.8 (0) [3, yes, 0]
+write | 16 | 4.7 (3) [3, yes, 0] | 487.5 (0) [3, yes, 0] | 46506.3 (0) [3, yes, 0]
+setup-1000-files | 0 | 62.9 (0) [1, yes, 0] | 89366.9 (0) [1, yes, 0] | 85792.2 (0) [1, yes, 0]
+write-bigproject-root | 16 | 7.9 (5) [3, yes, 0] | 7753.8 (0) [3, yes, 0] | null (null) [3, NO/NO/NO, timeout (900 s)]
+write-bigproject-tmp | 16 | 10.3 (7) [3, yes, 0] | 7605.4 (0) [3, yes, 0] | 893952.3 (0) [3, NO/NO/y, timeout (900 s),0 median of 1 of 3 completed]

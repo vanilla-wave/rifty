@@ -3,6 +3,7 @@ area: runtime-js
 status: draft
 title: addAbortSignal reason identity
 created: 2026-07-12
+epic: node-streams-as-in-node
 why: addAbortSignal creates AbortError without preserving signal.reason as cause
 user_story: As a pipeline owner aborting with a sentinel reason, I want stream errors to retain that reason in AbortError.cause exactly like Node.
 blocked_by: []

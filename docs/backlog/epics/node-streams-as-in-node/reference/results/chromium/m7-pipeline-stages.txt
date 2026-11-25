@@ -1,0 +1,50 @@
+# m7-pipeline-stages.cjs
+node v24.16.0; rifty c2d03ce05; workbench: Chromium 148.0.7778.96 (rifty process.version v24.0.0); sdk: Chromium 148.0.7778.96 (rifty process.version v24.0.0)
+columns: node | workbench | sdk
+
+exit: node 0 | workbench 0 | sdk 0
+
+## promises.pipeline(Readable, async gen, Writable)
+node: w A,w B,resolved
+workbench (DIFF): threw pipeline: argument must be a stream (index 1 received a non-
+sdk (DIFF): threw pipeline: argument must be a stream (index 1 received a non-
+## promises.pipeline(async gen source, Writable)
+node: w q,resolved
+workbench (DIFF): threw pipeline: argument must be a stream (index 0 received a non-
+sdk (DIFF): threw pipeline: argument must be a stream (index 0 received a non-
+## promises.pipeline(Readable, async fn sink) returns value
+node: value xy
+workbench (DIFF): no settle in 3s
+sdk (DIFF): no settle in 3s
+## callback pipeline(Readable, async gen, Writable)
+node: w C,cb args=2 undef undef
+workbench (DIFF): threw pipeline: argument must be a stream (index 1 received a non-
+sdk (DIFF): threw pipeline: argument must be a stream (index 1 received a non-
+## async gen stage throws: error reaches callback
+node: cb gen boom
+workbench (DIFF): threw pipeline: argument must be a stream (index 1 received a non-
+sdk (DIFF): threw pipeline: argument must be a stream (index 1 received a non-
+## pipeline(Readable, PassThrough, Writable) success cb args
+node: w z,cb args=2 undef undef
+workbench (DIFF): w z,cb args=1 null
+sdk (DIFF): w z,cb args=1 null
+## finished(readable) success cb args
+node: cb args=0
+workbench (DIFF): cb args=1
+sdk (DIFF): cb args=1
+## finished on a Writable destroyed before any write
+node: cb args=1 ERR_STREAM_PREMATURE_CLOSE:Premature close
+workbench (DIFF): cb args=1 
+sdk (DIFF): cb args=1 
+## finished on a Readable destroyed before end
+node: cb args=1 ERR_STREAM_PREMATURE_CLOSE:Premature close
+workbench (DIFF): cb args=1 
+sdk (DIFF): cb args=1 
+## finished on a Transform destroyed after a write
+node: cb args=1 ERR_STREAM_PREMATURE_CLOSE:Premature close
+workbench (DIFF): cb args=1 
+sdk (DIFF): cb args=1 
+## close(cb)-shape (finished + destroy) on a Transform that already errored
+node: cb args=1 tfail
+workbench (DIFF): 
+sdk (DIFF): 

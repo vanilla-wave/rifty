@@ -1,0 +1,42 @@
+Route B product shape, run.mjs programs: rows equal to Node v24.16.0 (+ lines only that run printed).
+A = unmodified b1270101a (rifty streams today). B/Bp = in-process over the main worktree (stream code = b1270101a):
+B = Node stream core verbatim, Node internals (verbatim.cjs, --expose-internals); Bp = the same sources generated
+(product/generate.mjs) over product/bindings.ts, rifty's process, no Node internals (ROUTE_B=product).
+P = product build: b1270101a + product/wiring.patch + generated module (--minify), built with pnpm build:libs;
+P inproc = its src in-process, P isolate = its built dist/guest.js (isolate-host createSandbox().exec).
+
+program | Node rows | A inproc | A isolate | B inproc (Node internals) | Bp inproc (product bindings) | P inproc | P inproc-sync | P isolate
+---|---|---|---|---|---|---|---|---
+b1-bindings.cjs | 8 | 3/8 | 3/8 | 3/8 | 3/8 | 3/8 | 3/8 | 3/8
+c-csv-read.cjs | 1 | 0/1 | 0/1 | 1/1 | 1/1 | 1/1 | 1/1 | 1/1
+c-csv-write-file.cjs | 1 | 1/1 | 1/1 | 1/1 | 1/1 | 1/1 | 1/1 | 1/1
+c-for-await.cjs | 1 | 0/1 | 0/1 | 1/1 | 1/1 | 1/1 | 1/1 | 1/1
+c-graceful-fs.cjs | 1 | 0/1 | 0/1 | 1/1 | 1/1 | 1/1 | 1/1 | 1/1
+c-late-listener.cjs | 1 | 0/1 | 0/1 | 1/1 | 1/1 | 1/1 | 1/1 | 1/1
+c-pipeline-asyncgen.cjs | 1 | 0/1 | 0/1 | 1/1 | 1/1 | 1/1 | 1/1 | 0/1
+c-readable-read.cjs | 1 | 0/1 | 0/1 | 1/1 | 1/1 | 1/1 | 1/1 | 1/1
+c-transform-big.cjs | 1 | 0/1 | 0/1 | 1/1 | 1/1 | 1/1 | 1/1 | 1/1
+c-unzip-stored.cjs | 1 | 0/1 | 0/1 | 1/1 | 1/1 | 1/1 | 1/1 | 1/1
+c-xlsx-roundtrip.cjs | 4 | 1/4 | 1/4 | 4/4 | 4/4 | 4/4 | 4/4 | 4/4
+m1-lifecycle.cjs | 14 | 0/14 | 0/14 | 14/14 | 14/14 | 14/14 | 14/14 | 14/14
+m2-core-members.cjs | 7 | 0/7 | 0/7 | 7/7 | 7/7 | 7/7 | 7/7 | 7/7
+m3-legacy-stream.cjs | 4 | 0/4 | 0/4 | 4/4 | 4/4 | 4/4 | 4/4 | 4/4
+m4-readstream.cjs | 21 | 3/21 | 2/21 +14 extra | 18/21 | 18/21 | 18/21 | 18/21 | 18/21
+m5-writestream.cjs | 14 | 4/14 | 4/14 | 13/14 | 13/14 | 13/14 | 13/14 | 13/14
+m6-transform-duplex.cjs | 8 | 0/8 | 0/8 | 8/8 | 8/8 | 8/8 | 8/8 | 8/8
+m7-pipeline-stages.cjs | 11 | 0/11 | 0/11 | 11/11 | 11/11 | 11/11 | 11/11 | 5/11
+m8-constructor-options.cjs | 16 | 6/16 | 6/16 | 15/16 | 15/16 | 15/16 | 15/16 | 15/16
+m1-hooks-matrix.cjs | 76 | 10/76 | 10/76 | 76/76 | 76/76 | 76/76 | 76/76 | 76/76
+
+Rows still different from Node in Bp and P (identical sets; cause, rifty side):
+- b1-bindings: Buffer.from/toString with 'UTF8' 'LATIN1' … (rifty Buffer encoding names, backlog runtime-js/buffer-encoding-names);
+  StringDecoder non-utf8 (rifty string_decoder, backlog runtime-js/string-decoder-node-encodings);
+  events.addAbortListener absent (backlog runtime-js/events-add-abort-listener); fs.writev/fsync absent (backlog runtime-js/fs-writev-fsync).
+- m4: encoding option base64/utf16le/latin1/hex (rifty string_decoder); 2 timer rows, ticks>0=false during a 16 MiB read
+  (rifty fs callbacks complete in a microtask chain, backlog runtime-js/fs-callbacks-io-turn).
+- m5 member types: _writev null (Node's WriteStream sets it when fs.writev is absent: rifty fs).
+- m8 encoding "nope": rifty string_decoder throws NotImplementedError instead of ERR_UNKNOWN_ENCODING.
+P isolate only:
+- m7 6 rows, c-pipeline-asyncgen: "AbortController2 is not a constructor". The guest has no AbortController when the
+  stream core loads (isolate ceiling, web-shim.ts CEILING_GLOBALS); Node's pipeline creates one per call
+  (backlog distribution/isolate-stream-core-abort-controller).

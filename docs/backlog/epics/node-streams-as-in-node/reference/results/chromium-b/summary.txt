@@ -1,0 +1,16 @@
+node v24.16.0; rifty 692babe13+route-B; workbench: Chromium 148.0.7778.96 (rifty process.version v24.0.0); sdk: Chromium 148.0.7778.96 (rifty process.version v24.0.0)
+columns: node | workbench | sdk
+program | Node rows | same as Node per host (+ lines only that host printed)
+c-csv-read.cjs | 1 | workbench 0/1 | sdk 1/1
+c-csv-write-file.cjs | 1 | workbench 0/1 | sdk 1/1
+c-for-await.cjs | 1 | workbench 1/1 | sdk 1/1
+c-graceful-fs.cjs | 1 | workbench 0/1 | sdk 1/1
+c-late-listener.cjs | 1 | workbench 1/1 | sdk 1/1
+c-pipeline-asyncgen.cjs | 1 | workbench 1/1 | sdk 1/1
+c-readable-read.cjs | 1 | workbench 1/1 | sdk 1/1
+c-transform-big.cjs | 1 | workbench 1/1 | sdk 1/1
+c-unzip-stored.cjs | 1 | workbench 0/1 | sdk 1/1
+c-xlsx-roundtrip.cjs | 4 | workbench 0/4 | sdk 4/4
+m1-hooks-matrix.cjs | 76 | workbench 76/76 | sdk 76/76
+m1-lifecycle.cjs | 14 | workbench 14/14 | sdk 14/14
+notes: workbench "not run" = c-csv-read, c-csv-write-file, c-graceful-fs, c-unzip-stored, c-xlsx-roundtrip (need the exceljs closure; Workbench seeding not completed; run with the closure in /tmp: ../chromium-c/); counted 0 in their rows. Product: throwaway worktree at origin/main 692babe13 + route-B wiring.patch (old packages/runtime-js/src/builtins/fs-streams.ts removed first) + bindings.ts + generate.mjs --minify; pnpm build:libs exit 0. Workbench per-program cap 900 s (SDK 180 s). Hosts as in ../chromium/summary.txt.

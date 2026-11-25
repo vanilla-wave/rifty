@@ -1,0 +1,34 @@
+# m2-core-members.cjs
+node v24.16.0; rifty c2d03ce05; workbench: Chromium 148.0.7778.96 (rifty process.version v24.0.0); sdk: Chromium 148.0.7778.96 (rifty process.version v24.0.0)
+columns: node | workbench | sdk
+
+exit: node 0 | workbench 0 | sdk 0
+
+## Readable readableFlowing/isPaused: new, on(data), pause, resume
+node: new null/false,on(data) true/false,pause false/true,resume true/false
+workbench (DIFF): new undefined/no isPaused,on(data) undefined/no isPaused,pause undefined/no isPaused,resume undefined/no isPaused
+sdk (DIFF): new undefined/no isPaused,on(data) undefined/no isPaused,pause undefined/no isPaused,resume undefined/no isPaused
+## fs.ReadStream readableFlowing/isPaused: new, on(data), pause, resume
+node: new null/false,on(data) true/false,pause false/true,resume true/false
+workbench (DIFF): new undefined/no isPaused,on(data) undefined/no isPaused,threw r.pause is not a function
+sdk (DIFF): new undefined/no isPaused,on(data) undefined/no isPaused,threw r.pause is not a function
+## Writable writableNeedDrain below/over hwm, after drain
+node: start false,below false,over true,drain false
+workbench (DIFF): start undefined,below undefined,over undefined,drain undefined
+sdk (DIFF): start undefined,below undefined,over undefined,drain undefined
+## Duplex writableNeedDrain
+node: start false,below false,over true,drain false
+workbench (DIFF): start undefined,below undefined,over undefined,drain undefined
+sdk (DIFF): start undefined,below undefined,over undefined,drain undefined
+## fs.WriteStream writableNeedDrain
+node: start false,below false,over true,drain false
+workbench (DIFF): start undefined,below undefined,over undefined,drain undefined
+sdk (DIFF): start undefined,below undefined,over undefined,drain undefined
+## Symbol.asyncDispose / Symbol.dispose on each class prototype
+node: Readable:function/undefined Writable:function/undefined Duplex:function/undefined Transform:function/undefined PassThrough:function/undefined
+workbench (DIFF): Readable:undefined/undefined Writable:undefined/undefined Duplex:undefined/undefined Transform:undefined/undefined PassThrough:undefined/undefined
+sdk (DIFF): Readable:undefined/undefined Writable:undefined/undefined Duplex:undefined/undefined Transform:undefined/undefined PassThrough:undefined/undefined
+## await r[Symbol.asyncDispose](): destroyed, errored
+node: destroyed=true,errored=AbortError
+workbench (DIFF): no asyncDispose
+sdk (DIFF): no asyncDispose

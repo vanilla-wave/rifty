@@ -1,0 +1,11 @@
+# c-graceful-fs.cjs
+node v24.16.0; rifty 692babe13+route-B; workbench: Chromium 148.0.7778.96 (rifty process.version v24.0.0); sdk: Chromium 148.0.7778.96 (rifty process.version v24.0.0)
+columns: node | workbench | sdk
+
+exit: node 0 | workbench not run | sdk 0
+stderr workbench: (not run)
+
+## line 1
+node: read "graceful\n"
+workbench (DIFF): (no line)
+sdk (same): read "graceful\n"

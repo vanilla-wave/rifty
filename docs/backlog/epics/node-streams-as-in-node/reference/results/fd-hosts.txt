@@ -1,0 +1,13 @@
+node v24.16.0
+## node
+1 MiB => readSync loop 0 | readFileSync 0 | writeSync loop 0 | positional 0 | writeFileSync 0
+4 MiB => readSync loop 0 | readFileSync 0 | writeSync loop 1 | positional 1 | writeFileSync 1
+16 MiB => readSync loop 1 | readFileSync 1 | writeSync loop 4 | positional 3 | writeFileSync 4
+## rifty in-process (memory VFS)
+1 MiB => readSync loop 0 | readFileSync 0 | writeSync loop 1 | positional 1 | writeFileSync 0
+4 MiB => readSync loop 0 | readFileSync 0 | writeSync loop 7 | positional 10 | writeFileSync 0
+16 MiB => readSync loop 1 | readFileSync 1 | writeSync loop 101 | positional 153 | writeFileSync 0
+## rifty isolate sandbox (memory VFS)
+1 MiB => readSync loop 0 | readFileSync 0 | writeSync loop 1 | positional 1 | writeFileSync 0
+4 MiB => readSync loop 0 | readFileSync 0 | writeSync loop 4 | positional 7 | writeFileSync 0
+16 MiB => readSync loop 1 | readFileSync 1 | writeSync loop 126 | positional 135 | writeFileSync 0

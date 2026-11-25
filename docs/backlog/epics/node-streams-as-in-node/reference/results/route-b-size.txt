@@ -1,0 +1,12 @@
+node v24.16.0 source; esbuild 0.28.0
+verbatim core: internal/streams/* (without fast-utf8-stream), stream.js, stream/promises.js | min 68917 | gzip 20608
+verbatim lib/internal/fs/streams.js | min 8409 | gzip 2433
+  of which internal/streams/operators.js | min 4504 | gzip 1567
+  of which internal/streams/compose.js | min 2574 | gzip 1007
+  of which internal/streams/duplexify.js | min 4518 | gzip 1538
+rifty packages/io/src/streams (bundle, siblings external) | min 38382 | gzip 11064
+rifty runtime-js fs-streams.ts | min 14407 | gzip 4359
+isolate AbortController binding: internal/abort_controller.js | min 9036 | gzip 2646
+isolate AbortController binding: internal/event_target.js | min 16768 | gzip 4296
+isolate AbortController binding: internal/webidl.js | min 5131 | gzip 1889
+isolate AbortController binding: internal/perf/utils.js | min 520 | gzip 265

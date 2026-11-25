@@ -3,6 +3,7 @@ area: runtime-js
 status: draft
 title: fs `ReadStream.pipe` follows `Readable.pipe` (options, process-stdio end exemption, unpipe)
 created: 2026-09-23
+epic: node-streams-as-in-node
 why: fs ReadStream owns a separate `pipe` that always calls `dest.end()` and ignores options, so `fs.createReadStream(f).pipe(process.stdout)` throws `TypeError: dest.end is not a function` and `{end: false}` still ends the destination
 sources: [docs/backlog/runtime-js/reference/readable-pipe-never-ends-process-stdio-evidence.md, docs/backlog/runtime-js/reference/readable-pipe-never-ends-process-stdio-final-green.json, docs/public/compat/fs.md]
 code: [packages/runtime-js/src/builtins/fs-streams.ts, packages/io/src/streams/readable.ts]

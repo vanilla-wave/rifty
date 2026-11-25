@@ -1,0 +1,60 @@
+# m9-abort-stop-propagation.cjs — node v24.16.0, rifty e96e93a0d
+columns: node | rifty-inproc | rifty-inproc-sync | rifty-isolate | rifty-inproc-B | rifty-inproc-Bp | rifty-inproc-Bp-derived | rifty-inproc-Bp8c | rifty-inproc-Bp9w | rifty-inproc-Bp9r
+
+exit: node 0 | rifty-inproc 0 | rifty-inproc-sync 0 | rifty-isolate 0 | rifty-inproc-B 0 | rifty-inproc-Bp 0 | rifty-inproc-Bp-derived 0 | rifty-inproc-Bp8c 0 | rifty-inproc-Bp9w 0 | rifty-inproc-Bp9r 0
+
+## promises.pipeline(r, w, {signal}), abort after a stopping listener
+node: ABORT_ERR,destroyed=true/true
+rifty-inproc (DIFF): threw TypeError
+rifty-inproc-sync (DIFF): threw TypeError
+rifty-isolate (DIFF): threw NotImplementedError
+rifty-inproc-B (same): ABORT_ERR,destroyed=true/true
+rifty-inproc-Bp (DIFF): pending,destroyed=false/false
+rifty-inproc-Bp-derived (same): ABORT_ERR,destroyed=true/true
+rifty-inproc-Bp8c (DIFF): pending,destroyed=false/false
+rifty-inproc-Bp9w (DIFF): pending,destroyed=false/false
+rifty-inproc-Bp9r (DIFF): pending,destroyed=false/false
+## finished(r, {signal}) after a stopping listener
+node: ABORT_ERR
+rifty-inproc (DIFF): pending
+rifty-inproc-sync (DIFF): pending
+rifty-isolate (DIFF): threw NotImplementedError
+rifty-inproc-B (same): ABORT_ERR
+rifty-inproc-Bp (DIFF): pending
+rifty-inproc-Bp-derived (same): ABORT_ERR
+rifty-inproc-Bp8c (DIFF): pending
+rifty-inproc-Bp9w (DIFF): pending
+rifty-inproc-Bp9r (DIFF): pending
+## addAbortSignal(signal, r) after a stopping listener
+node: error ABORT_ERR,destroyed=true
+rifty-inproc (DIFF): destroyed=false
+rifty-inproc-sync (DIFF): destroyed=false
+rifty-isolate (DIFF): threw NotImplementedError
+rifty-inproc-B (same): error ABORT_ERR,destroyed=true
+rifty-inproc-Bp (DIFF): destroyed=false
+rifty-inproc-Bp-derived (same): error ABORT_ERR,destroyed=true
+rifty-inproc-Bp8c (DIFF): destroyed=false
+rifty-inproc-Bp9w (DIFF): destroyed=false
+rifty-inproc-Bp9r (DIFF): destroyed=false
+## readable.map(fn, {signal}) after a stopping listener
+node: ABORT_ERR
+rifty-inproc (DIFF): pending
+rifty-inproc-sync (DIFF): pending
+rifty-isolate (DIFF): threw NotImplementedError
+rifty-inproc-B (same): ABORT_ERR
+rifty-inproc-Bp (same): ABORT_ERR
+rifty-inproc-Bp-derived (same): ABORT_ERR
+rifty-inproc-Bp8c (same): ABORT_ERR
+rifty-inproc-Bp9w (same): ABORT_ERR
+rifty-inproc-Bp9r (same): ABORT_ERR
+## readable.reduce(fn, init, {signal}) after a stopping listener
+node: ABORT_ERR
+rifty-inproc (same): ABORT_ERR
+rifty-inproc-sync (same): ABORT_ERR
+rifty-isolate (DIFF): threw NotImplementedError
+rifty-inproc-B (same): ABORT_ERR
+rifty-inproc-Bp (same): ABORT_ERR
+rifty-inproc-Bp-derived (same): ABORT_ERR
+rifty-inproc-Bp8c (same): ABORT_ERR
+rifty-inproc-Bp9w (same): ABORT_ERR
+rifty-inproc-Bp9r (same): ABORT_ERR

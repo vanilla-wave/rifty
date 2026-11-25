@@ -3,6 +3,7 @@ area: runtime-js
 status: draft
 title: Duplex lacks Writable's cork/uncork/setDefaultEncoding and the per-side objectMode options
 created: 2026-11-24
+epic: node-streams-as-in-node
 why: A Node Duplex/Transform inherits every Writable method and takes `readableObjectMode`/`writableObjectMode`; rifty's Duplex has no `cork`/`uncork`/`setDefaultEncoding`/`writableCorked` (TypeError) and ignores the per-side objectMode options (HWM and mode wrong, silently).
 sources: ["PR #433 (stream hook dispatch)", docs/public/compat/streams.md]
 code: [packages/io/src/streams/duplex.ts, packages/io/src/streams/callable-constructor.ts]

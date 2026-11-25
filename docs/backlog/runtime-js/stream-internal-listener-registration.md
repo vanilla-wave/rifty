@@ -3,6 +3,7 @@ area: runtime-js
 status: draft
 title: Stream internals register their listeners through Node's methods (`prependListener('error')`, `once`)
 created: 2026-11-17
+epic: node-streams-as-in-node
 why: `Readable.pipe`, `pipeline` and `readline` attach every internal listener with `on`; Node prepends the destination's `'error'` handler and uses `once` for `'close'`/`'finish'`/`'end'`, so ordering against guest listeners and overrides of `once`/`prependListener` diverge
 sources: [docs/process/rules/fault-classes.md §Boundary failure models (builtin prototype → guest subclass/patch)]
 code: [packages/io/src/streams/readable.ts, packages/io/src/streams/pipeline.ts, packages/runtime-js/src/builtins/null-net-stubs.ts]

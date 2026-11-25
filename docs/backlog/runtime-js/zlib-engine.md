@@ -83,8 +83,7 @@ Oracle: Node v24.16.0 (`node:zlib`, live), at the handle's level.
 - Every guest-visible `node:zlib` change — `crc32`, classes, `*Sync`, `create*`, callback forms, the
   engine entering a bundle (lazy compile, the import instrumentation test, the Chromium 108 floor run,
   the chunk/budget measurement): `runtime-js/zlib-node-lib-port` (unit 3).
-- Brotli and zstd: `NotImplementedError` on every host, compat ❌ (manager's scoping, user confirmation
-  pending).
+- Brotli and zstd: `NotImplementedError` on every host, compat ❌ (deferred by the manager's decision (the user delegated it), draft `runtime-js/zlib-brotli-zstd`).
 - Node's output on Windows (no lane; goal Decisions).
 
 ## Decisions
