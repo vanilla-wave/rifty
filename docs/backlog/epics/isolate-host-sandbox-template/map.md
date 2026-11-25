@@ -12,16 +12,17 @@ the carrier hits it:
    RED (`it.fails`), I1–I11; I11's generator and named rows seeded from probes G (`gen.mjs`) and S
    (`seq.mjs`).
 2. `LayeredFsSync` in `@riftydev/vfs` (ADR-0572 §2): the layered class, its node-identity state
-   (lazy / reference / explicit nodes) and its rebuild, the per-operation budget, writable and
-   read-only modes; I11's generator in CI (fixed seed range, a failure prints seed + minimized
-   sequence) and its named rows, as an `FsSync` and through runtime-js `fs` (I3, I4 shared bytes,
+   (untouched = one `lazy` / `ref` row, anything else explicit) and its rebuild, the cap counted
+   over the state, writable and read-only modes; I11's generator in CI (fixed seed range; class,
+   run boundary, cap count and reads-only minimality per sequence; a failure prints seed +
+   minimized sequence) and its named rows, as an `FsSync` and through runtime-js `fs` (I3, I4 shared bytes,
    I6, I11).
 3. Template intake and host ops in the consumer, with every loud gap of the not-yet-run template in
    the same unit — `snapshot()` / `createSandbox({ snapshot })` over a template (I8) and `exec` over
    a template (`NotImplementedError('isolate-host.sandbox-template-exec')`, lifted by item 5), so no
    state between items runs silently without its template: artifact → decoded template (gzip/br,
    ustar + PAX), named refusals, identity and packages, a process registry by id, one shared buffer
-   and index per process; host ops on item 2's class, the cap as its per-operation budget (absorbs
+   and index per process; host ops on item 2's class, the cap counted over the state (absorbs
    `distribution/isolate-host-sandbox-write-cost-per-state`) (I1, I3 host side, I4, I5 host rows,
    I8).
 4. Worker template cache + binary request frame (absorbs
@@ -48,8 +49,8 @@ the carrier hits it:
   the realm's only FS surface itself (ADR-0572 §3), so neither the read-only mode nor streams wait
   for #437; whichever lands second rebases onto the other.
 - Per-call overhead of the layered class in a run (probe F, four-library artifact, run phase vs
-  the same files in the state, load 9–18: pdf +16…+39, docx +8…+17, pptx +29…+33, xlsx +32…+240 ms,
-  empty +18) — owner: agent — item 5 measures it idle against the F1 return condition; above the
+  the same files in the state, load ~5: +18…+25 ms per generator, four at once +7…+41) — owner:
+  agent — item 5 re-measures it on landed code against the F1 return condition; above the
   tolerance the run stops and the numbers go to the user.
 - The read-only oracle (I3): Node v24.16.0 on a Linux read-only mount (a read-only tmpfs or bind
   mount in a CI container) for every mutating call's code/syscall/path — owner: agent — settled at

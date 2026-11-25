@@ -36,7 +36,8 @@ const GUEST = Number(process.argv[3] ?? 60);
 const realmFile = join(tmpdir(), `gen-realm-${process.pid}.mjs`);
 await build({
   stdin: {
-    contents: `export * as V2 from ${JSON.stringify(join(here, 'layered.ts'))};
+    contents: `export * as V3 from ${JSON.stringify(join(here, 'layered.ts'))};
+export * as V2 from ${JSON.stringify(join(here, 'layered-v2.ts'))};
 export * as V1 from ${JSON.stringify(join(here, 'layered-v1.ts'))};
 export { MemoryFsSync } from '@riftydev/vfs/internal';
 export { snapshotFs, restoreFs } from './src/snapshot.ts';`,
@@ -259,29 +260,58 @@ const IMPLS = {
       return M;
     },
   },
-  v2: {
+  v2: wireImpl(() => R.V2),
+  v3: wireImpl(() => R.V3),
+};
+/** A construction carried as nodes + rows over the wire (`layered-v2.ts`, `layered.ts`). */
+function wireImpl(M) {
+  return {
     make() {
-      const L = new R.V2.LayeredFs(R.V2.templateLayer(pack, rows));
+      const L = new (M().LayeredFs)(M().templateLayer(pack, rows));
       L.mkdirSync('/workspace', {});
       return L;
     },
     rebuild(L) {
       const w = L.toWire();
-      const blob = R.snapshotFs(w.entries, OPTS);
       const e = new R.MemoryFsSync();
-      R.restoreFs(e, blob, OPTS);
-      return R.V2.LayeredFs.fromWire(
-        R.V2.templateLayer(pack, rows),
+      R.restoreFs(e, R.snapshotFs(w.entries, OPTS), OPTS);
+      return M().LayeredFs.fromWire(
+        M().templateLayer(pack, rows),
         e,
         JSON.parse(JSON.stringify(w.refs)),
       );
     },
-  },
-};
+    wire(L) {
+      const w = L.toWire();
+      return { tree: treeOfFs(w.entries), refs: w.refs.map((r) => r.slice(0, 3)) };
+    },
+  };
+}
+/** The state cap counted independently from the wire: rows + explicit entries (ADR-0567 §7). */
+function wireBudget(L) {
+  const w = L.toWire();
+  const charge = (q) => 384 + 8 * q.length + 80 * (q === '/' ? 0 : q.split('/').length - 1);
+  let n = 0;
+  for (const r of w.refs) n += charge(r[0]);
+  const walk = (dir) => {
+    for (const d of w.entries.readdirSync(dir)) {
+      const q = dir === '/' ? `/${d.name}` : `${dir}/${d.name}`;
+      n += charge(q);
+      if (d.isDirectory) walk(q);
+      else n += w.entries.readFileBytesSync(q).byteLength;
+    }
+  };
+  if (!w.refs.some((r) => r[0] === '/')) walk('/');
+  return n;
+}
 const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
-/** The layer vs the flat FS (class), and the rebuilt tree vs Node (oracle). */
-function check(impl, ops) {
+/**
+ * The layer vs the flat FS (class), and the rebuilt tree vs Node (oracle). For wire constructions
+ * also: the state rebuilt from the wire after a seeded op (a run boundary) changes nothing, and
+ * (layered.ts) the cap's budget equals the wire's count.
+ */
+function check(impl, ops, cut = Math.floor(ops.length / 2)) {
   const f = flat();
   const L = IMPLS[impl].make();
   const fr = ops.map((o) => onFsSync(f, o));
@@ -293,13 +323,37 @@ function check(impl, ops) {
     rebuilt = { rebuildThrew: code(e) };
   }
   const flatTree = treeOfFs(f);
+  let boundaryOk = true;
+  let budgetOk = true;
+  if (impl !== 'v1') {
+    let M = IMPLS[impl].make();
+    const mr = [];
+    ops.forEach((o, i) => {
+      if (i === cut) M = IMPLS[impl].rebuild(M);
+      mr.push(onFsSync(M, o));
+    });
+    boundaryOk = eq(mr, fr) && eq(treeOfFs(M), flatTree);
+    if (impl === 'v3') budgetOk = L.budget() === wireBudget(L) && M.budget() === wireBudget(M);
+  }
   return {
-    classOk: eq(fr, lr) && eq(treeOfFs(L), flatTree) && eq(rebuilt, flatTree),
+    classOk:
+      eq(fr, lr) && eq(treeOfFs(L), flatTree) && eq(rebuilt, flatTree) && boundaryOk && budgetOk,
     fr,
     lr,
     flatTree,
     rebuilt,
+    boundaryOk,
+    budgetOk,
   };
+}
+/** Reads only (read, readdir, failed calls aside) leave the wire as a fresh sandbox's. */
+function minimal(impl, ops) {
+  const reads = ops.filter(([k]) => k === 'read' || k === 'readdir');
+  const L = IMPLS[impl].make();
+  const fresh = IMPLS[impl].wire(L);
+  for (const o of reads) onFsSync(L, o);
+  for (const [p] of files) onFsSync(L, ['read', p]);
+  return eq(IMPLS[impl].wire(L), fresh);
 }
 function minimize(impl, ops) {
   let cur = ops;
@@ -321,14 +375,16 @@ console.log(
   `node ${process.version}, ${process.platform}/${process.arch}; ${N} sequences, seeds 1..${N}\n`,
 );
 const summary = {};
-for (const impl of ['v1', 'v2']) {
+for (const impl of ['v1', 'v2', 'v3']) {
   let classFail = 0;
   let oracleFail = 0;
+  let notMinimal = 0;
   let firstFail;
   const outsideClass = new Map();
   for (let seed = 1; seed <= N; seed++) {
     const ops = sequence(seed);
-    const c = check(impl, ops);
+    if (impl !== 'v1' && !minimal(impl, ops)) notMinimal++;
+    const c = check(impl, ops, Math.floor(rng(seed + 7)() * ops.length));
     if (!c.classOk) {
       classFail++;
       firstFail ??= { seed, minimized: minimize(impl, ops) };
@@ -355,9 +411,9 @@ for (const impl of ['v1', 'v2']) {
       nfs.rmSync(root, { recursive: true, force: true });
     }
   }
-  summary[impl] = { classFail, oracleFail };
+  summary[impl] = { classFail, oracleFail, notMinimal };
   console.log(
-    `## ${impl}: layer ≠ flat rifty FS in ${classFail}/${N}; rebuilt ≠ node where flat = node in ${oracleFail}/${N}`,
+    `## ${impl}: layer ≠ flat rifty FS in ${classFail}/${N}; rebuilt ≠ node where flat = node in ${oracleFail}/${N}${impl === 'v1' ? '' : `; reading the template grows the state in ${notMinimal}/${N}`}`,
   );
   if (firstFail) {
     const c = check(impl, firstFail.minimized);
@@ -367,7 +423,7 @@ for (const impl of ['v1', 'v2']) {
     console.log(`   flat: ${JSON.stringify(c.fr)} ${JSON.stringify(c.flatTree)}`);
     console.log(`   layer: ${JSON.stringify(c.lr)} rebuilt ${JSON.stringify(c.rebuilt)}`);
   }
-  if (impl === 'v2') {
+  if (impl === 'v3') {
     console.log(
       '   rifty FsSync vs node:fs where they differ (rifty FS semantics, not the layer), by first differing call:',
     );
@@ -399,6 +455,15 @@ Object.defineProperty(globalThis, '__gen', { value: Object.freeze({
   capture() {
     const w = L.toWire();
     return { blob: snapshotFs(w.entries, opts), refs: JSON.stringify(w.refs) };
+  },
+  // No layer at all: rifty's plain MemoryFsSync holding every file.
+  installFlat(blob) {
+    L = new MemoryFsSync();
+    restoreFs(L, blob, opts);
+    setSyncMirror(L);
+  },
+  captureFlat() {
+    return { blob: snapshotFs(L, opts), refs: '[]' };
   },
 }), configurable: true });`,
     resolveDir: join(guestPkg, 'src/guest'),
@@ -437,23 +502,22 @@ for (const [k, p, a] of ${JSON.stringify(ops)}) {
 }
 console.log(JSON.stringify(out));`;
 let cachedData;
-/** `layer`: the template as a LayeredFs; `flat`: the same files as plain entries, no template. */
+/** `layer`: the template as layered.ts; `flat`: rifty's plain MemoryFsSync with the same files. */
 async function guestRun(ops, mode) {
   let L;
-  if (mode === 'layer') L = IMPLS.v2.make();
-  else {
-    L = new R.V2.LayeredFs(R.V2.templateLayer(new Uint8Array(0), []));
-    const t = { mtimeMs: T0, atimeMs: T0, ctimeMs: T0, birthtimeMs: T0 };
-    for (const d of [...dirs].filter((x) => x !== '/').sort()) L.mkdirSync(d, {});
-    for (const [p, d] of files) L.writeFileSync(p, new Uint8Array(d));
-    for (const d of [...dirs].filter((x) => x !== '/')) L.restoreStatSync(d, t);
-    for (const [p] of files) L.restoreStatSync(p, t);
-    L.mkdirSync('/workspace', {});
+  let blob;
+  let refs = '[]';
+  if (mode === 'layer') {
+    L = IMPLS.v3.make();
+    L.writeFileSync('/workspace/main.js', enc.encode(prog(ops)));
+    const w = L.toWire();
+    blob = R.snapshotFs(w.entries, OPTS);
+    refs = JSON.stringify(w.refs);
+  } else {
+    L = flat();
+    L.writeFileSync('/workspace/main.js', enc.encode(prog(ops)));
+    blob = R.snapshotFs(L, OPTS);
   }
-  const lowerPack = mode === 'layer' ? pack : new Uint8Array(0);
-  const lowerRows = mode === 'layer' ? rows : [];
-  L.writeFileSync('/workspace/main.js', enc.encode(prog(ops)));
-  const w = L.toWire();
   const out = [];
   const g = {};
   const { functions, timeOrigin, close } = createHostBridge({
@@ -477,16 +541,16 @@ async function guestRun(ops, mode) {
     const entry = await context.global.get('__riftyGuest', { reference: true });
     const gen = await context.global.get('__gen', { reference: true });
     g.fire = await entry.get('fire', { reference: true });
-    await (await gen.get('install', { reference: true })).apply(
-      undefined,
-      [
-        new Uint8Array(lowerPack),
-        JSON.stringify(lowerRows),
-        R.snapshotFs(w.entries, OPTS),
-        JSON.stringify(w.refs),
-      ],
-      { arguments: { copy: true } },
-    );
+    if (mode === 'layer')
+      await (await gen.get('install', { reference: true })).apply(
+        undefined,
+        [new Uint8Array(pack), JSON.stringify(rows), blob, refs],
+        { arguments: { copy: true } },
+      );
+    else
+      await (await gen.get('installFlat', { reference: true })).apply(undefined, [blob], {
+        arguments: { copy: true },
+      });
     await (await entry.get('runFile', { reference: true })).apply(
       undefined,
       ['/workspace/main.js', []],
@@ -495,16 +559,15 @@ async function guestRun(ops, mode) {
         result: { promise: true, copy: true },
       },
     );
-    const cap = await (await gen.get('capture', { reference: true })).apply(undefined, [], {
-      result: { copy: true },
-    });
+    const cap = await (
+      await gen.get(mode === 'layer' ? 'capture' : 'captureFlat', { reference: true })
+    ).apply(undefined, [], { result: { copy: true } });
     const e = new R.MemoryFsSync();
     R.restoreFs(e, cap.blob, OPTS);
-    const next = R.V2.LayeredFs.fromWire(
-      R.V2.templateLayer(lowerPack, lowerRows),
-      e,
-      JSON.parse(cap.refs),
-    );
+    const next =
+      mode === 'layer'
+        ? R.V3.LayeredFs.fromWire(R.V3.templateLayer(pack, rows), e, JSON.parse(cap.refs))
+        : e;
     return { log: out.join('').trim(), tree: treeOfFs(next) };
   } finally {
     close();
@@ -553,8 +616,9 @@ for (const [k, n] of [...guestDiff].sort((a, b) => b[1] - a[1]))
 const intact = packHash() === packBefore;
 console.log(`\nshared template bytes unchanged after all runs: ${intact}`);
 process.exit(
-  summary.v2.classFail === 0 &&
-    summary.v2.oracleFail === 0 &&
+  summary.v3.classFail === 0 &&
+    summary.v3.oracleFail === 0 &&
+    summary.v3.notMinimal === 0 &&
     guestClass === GUEST &&
     guestOracleFail === 0 &&
     intact
