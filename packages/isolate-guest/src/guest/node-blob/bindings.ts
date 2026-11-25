@@ -33,13 +33,17 @@ for (const key of Reflect.ownKeys(setProto)) {
 
 const PromiseCtor = Promise;
 const promiseReject = Promise.reject;
-// ES2024 members the isolate's V8 has (Node v24's); the build's type lib is ES2022.
-const promiseWithResolvers = (Promise as unknown as { withResolvers: Fn }).withResolvers;
+const arraySlice = Array.prototype.slice;
+const arraySort = Array.prototype.sort;
+const replace = String.prototype.replace;
+// ES2023/2024 primordials as their ES2022 equivalents (the shipped-bundle floor, ADR-0469).
+const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
 const primordials = {
   ArrayBufferIsView: ArrayBuffer.isView,
   ArrayBufferPrototypeGetByteLength: uncurry(getter(ArrayBuffer.prototype, 'byteLength')),
   ArrayPrototypePush: uncurry(Array.prototype.push),
-  ArrayPrototypeToSorted: uncurry(Array.prototype.toSorted),
+  ArrayPrototypeToSorted: (array: unknown[], compare?: Fn) =>
+    apply(arraySort, apply(arraySlice, array, []), [compare]),
   DataViewPrototypeGetBuffer: uncurry(getter(DataView.prototype, 'buffer')),
   DateNow: Date.now,
   FunctionPrototypeCall: uncurry(Function.prototype.call),
@@ -59,16 +63,23 @@ const primordials = {
   ObjectSetPrototypeOf: Object.setPrototypeOf,
   PromisePrototypeThen: uncurry(Promise.prototype.then),
   PromiseReject: (reason: unknown) => apply(promiseReject, PromiseCtor, [reason]),
-  PromiseWithResolvers: () => apply(promiseWithResolvers, PromiseCtor, []),
+  PromiseWithResolvers: () => {
+    let resolve: unknown;
+    let reject: unknown;
+    const promise = new PromiseCtor((yes, no) => {
+      resolve = yes;
+      reject = no;
+    });
+    return { promise, resolve, reject };
+  },
   RegExpPrototypeExec: uncurry(RegExp.prototype.exec),
   RegExpPrototypeSymbolReplace: uncurry(RegExp.prototype[Symbol.replace]),
   SafeSet,
   String,
   StringPrototypeSplit: uncurry(String.prototype.split),
   StringPrototypeToLowerCase: uncurry(String.prototype.toLowerCase),
-  StringPrototypeToWellFormed: uncurry(
-    (String.prototype as unknown as { toWellFormed: Fn }).toWellFormed,
-  ),
+  StringPrototypeToWellFormed: (string: string) =>
+    apply(replace, string, [LONE_SURROGATE, '\uFFFD']),
   Symbol,
   SymbolIterator: Symbol.iterator,
   SymbolToStringTag: Symbol.toStringTag,
@@ -82,28 +93,42 @@ const kIsNodeError = Symbol('kIsNodeError');
 const defineProperty = Object.defineProperty;
 type Message = (...args: never[]) => string;
 type ErrorBase = new (message?: string) => Error;
+const captureStackTrace = Error.captureStackTrace;
+const indexOf = String.prototype.indexOf;
+const sliceString = String.prototype.slice;
 
-function nodeError(Base: ErrorBase, key: string, message: Message) {
+/** Node's stack header for its own errors (`TypeError [CODE]: message`, its prepareStackTrace);
+ * the isolate formats `stack` when it is captured. */
+function nodeStack(error: Error, key: string): void {
+  const stack = (error as { stack?: unknown }).stack;
+  if (typeof stack !== 'string') return;
+  const frames = apply(indexOf, stack, ['\n    at ']) as number;
+  defineProperty(error, 'stack', {
+    value: `${error.name} [${key}]: ${error.message}${frames < 0 ? '' : apply(sliceString, stack, [frames])}`,
+    enumerable: false,
+    writable: true,
+    configurable: true,
+  });
+}
+
+/**
+ * `makeNodeErrorWithCode(Base, key)`: a `%s` text (`formatted`) is passed to `super` (own keys
+ * `stack, message, code`), a function's text defined after it (`stack, code, message`).
+ */
+function nodeError(Base: ErrorBase, key: string, message: Message, formatted: boolean) {
   class NodeError extends Base {
     code = key;
     constructor(...args: never[]) {
-      super();
-      defineProperty(this, 'message', {
-        value: apply(message, undefined, args),
-        enumerable: false,
-        writable: true,
-        configurable: true,
-      });
-      // Node's own stack header (`TypeError [CODE]: message`, its prepareStackTrace for a Node
-      // error); the isolate formats `stack` at `super()`, before the message exists.
-      const stack = (this as { stack?: unknown }).stack;
-      if (typeof stack === 'string' && stack.startsWith(this.name))
-        defineProperty(this, 'stack', {
-          value: `${this.name} [${key}]: ${this.message}${stack.slice(this.name.length)}`,
+      if (formatted) super(apply(message, undefined, args));
+      else super();
+      if (!formatted)
+        defineProperty(this, 'message', {
+          value: apply(message, undefined, args),
           enumerable: false,
           writable: true,
           configurable: true,
         });
+      nodeStack(this, key);
     }
     // Node: «a workaround for wpt tests that expect that the error constructor has a `name`
     // property of the base class». A class cannot name an accessor `constructor`.
@@ -120,11 +145,31 @@ function nodeError(Base: ErrorBase, key: string, message: Message) {
   }
   return NodeError;
 }
-/** `E(key, message, Base, ...otherClasses)`: `codes[key]` plus `codes[key][Other.name]`. */
-function E(key: string, message: Message, Base: ErrorBase, ...others: ErrorBase[]) {
-  const ctor = nodeError(Base, key, message) as ReturnType<typeof nodeError> &
+/** Node's `makeNodeErrorForHideStackFrame`: what a `hideStackFrames` validator throws. */
+function hideStackFramesError(Err: new (...args: never[]) => Error, Base: ErrorBase) {
+  return class HideStackFramesError extends Err {
+    // biome-ignore lint/complexity/useLiteralKeys: as `nodeError`
+    override get ['constructor']() {
+      return Base;
+    }
+  };
+}
+/**
+ * `E(key, message, Base, ...otherClasses)`: `codes[key]`, `codes[key][Other.name]`, and with
+ * `HideStackFramesError` among them `codes[key].HideStackFramesError`. `formatted`: a `%s` text.
+ */
+function E(
+  key: string,
+  message: Message,
+  formatted: boolean,
+  Base: ErrorBase,
+  others: readonly ErrorBase[] = [],
+  hidesFrames = false,
+) {
+  const ctor = nodeError(Base, key, message, formatted) as ReturnType<typeof nodeError> &
     Record<string, unknown>;
-  for (const Other of others) ctor[Other.name] = nodeError(Other, key, message);
+  for (const Other of others) ctor[Other.name] = nodeError(Other, key, message, formatted);
+  if (hidesFrames) ctor.HideStackFramesError = hideStackFramesError(ctor, Base);
   return ctor;
 }
 
@@ -150,6 +195,7 @@ const codes = {
   ERR_BUFFER_TOO_LARGE: E(
     'ERR_BUFFER_TOO_LARGE',
     (max: number) => `Cannot create a Buffer larger than ${max} bytes`,
+    true,
     RangeError,
   ),
   ERR_INVALID_ARG_TYPE: E(
@@ -191,7 +237,10 @@ const codes = {
       }
       return `${msg}. ${describeReceived(actual)}`;
     },
+    false,
     TypeError,
+    [],
+    true,
   ),
   ERR_INVALID_ARG_VALUE: E(
     'ERR_INVALID_ARG_VALUE',
@@ -201,20 +250,25 @@ const codes = {
       const type = name.includes('.') ? 'property' : 'argument';
       return `The ${type} '${name}' ${reason}. Received ${inspected}`;
     },
+    false,
     TypeError,
-    RangeError,
+    [RangeError],
+    true,
   ),
   ERR_INVALID_STATE: E(
     'ERR_INVALID_STATE',
     (what: string) => `Invalid state: ${what}`,
+    true,
     Error,
-    TypeError,
-    RangeError,
+    [TypeError, RangeError],
   ),
   ERR_INVALID_THIS: E(
     'ERR_INVALID_THIS',
     (type: string) => `Value of "this" must be of type ${type}`,
+    true,
     TypeError,
+    [],
+    true,
   ),
   ERR_MISSING_ARGS: E(
     'ERR_MISSING_ARGS',
@@ -223,6 +277,7 @@ const codes = {
       const names = args.map((a) => (Array.isArray(a) ? a.map(wrap).join(' or ') : wrap(a)));
       return `The ${formatList(names)} argument${args.length > 1 ? 's' : ''} must be specified`;
     },
+    false,
     TypeError,
   ),
 };
@@ -266,6 +321,19 @@ const urlGap = function URL(): never {
   throw notImplemented('isolate-host.URL', 'not available in the rifty isolate host, ADR-0557');
 };
 
+/** Node's `hideStackFrames` validator: its error's frames start at the caller. */
+function validateDictionary(value: unknown, name: string): void {
+  if (value != null && typeof value !== 'object' && typeof value !== 'function') {
+    const Err = codes.ERR_INVALID_ARG_TYPE.HideStackFramesError as new (
+      ...args: unknown[]
+    ) => Error;
+    const error = new Err(name, 'a dictionary', value);
+    captureStackTrace(error, validateDictionary);
+    nodeStack(error, 'ERR_INVALID_ARG_TYPE');
+    throw error;
+  }
+}
+
 const BOUND: Readonly<Record<string, unknown>> = {
   'internal/constants': { EOL: '\n' },
   'internal/encoding': { TextDecoder, TextEncoder },
@@ -281,14 +349,7 @@ const BOUND: Readonly<Record<string, unknown>> = {
   'internal/util/inspect': { inspect },
   'internal/util/types': types,
   'internal/validators': {
-    validateDictionary(value: unknown, name: string): void {
-      if (value != null && typeof value !== 'object' && typeof value !== 'function')
-        throw new codes.ERR_INVALID_ARG_TYPE(
-          name as never,
-          'a dictionary' as never,
-          value as never,
-        );
-    },
+    validateDictionary,
   },
   // `stream()`: web streams are outside the isolate guest (goal isolate-guest-web-api, M2).
   'internal/webstreams/readablestream': {

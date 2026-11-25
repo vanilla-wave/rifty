@@ -27,6 +27,13 @@ const DECLARED: Readonly<Record<string, string>> = {
   // type is lower-cased and an overwrite does not make it unreadable.
   'fs.openAsBlob': '"true 3 text/x abc"',
   'fs.openAsBlob after an overwrite': '"abc"',
+  // Node quotes the value with its `inspect`, rifty with its own (every host): a long string is
+  // cut earlier and a lone surrogate is not escaped (compat row `Blob`, `File`).
+  'ERR_INVALID_ARG_VALUE of a long value': `throw TypeError [ERR_INVALID_ARG_VALUE]: The property 'options.endings' is invalid. Received '${'x'.repeat(120)}…'`,
+  'ERR_INVALID_ARG_VALUE of a lone surrogate':
+    "throw TypeError [ERR_INVALID_ARG_VALUE]: The property 'options.endings' is invalid. Received '\uFFFD'", // the unescaped lone surrogate, as UTF-8 output carries it
+  // rifty's `stream/consumers.blob` builds the guest's global `Blob` at call time (every host).
+  'stream/consumers.blob under a replaced global Blob': 'false',
   // rifty's `buffer.resolveObjectURL` as before this unit: no blob URL is ever minted here.
   'buffer.resolveObjectURL': 'throw NotImplementedError: Not implemented: buffer.resolveObjectURL',
 };

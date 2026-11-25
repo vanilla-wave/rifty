@@ -1,129 +1,189 @@
 /**
- * `internalBinding('blob')` of Node v24.16.0 as a JS byte store (ADR-0578 §2): a handle is a list
- * of immutable parts — the `Uint8Array` copies `blob.js` makes, or the parts of a source blob —
- * and `slice` keeps views of them, copying nothing. A reader yields what Node's `DataQueue`
- * yields for in-memory parts (measured: `blob.arrayBuffer()` settles after `2p - 1` reads of `p`
- * parts): one read per part, one read with no bytes between two parts, then end of stream.
- * Synchronous, as Node's in-memory pull.
+ * `internalBinding('blob')` of Node v24.16.0 as a JS byte store (ADR-0578 §2). A handle is a list
+ * of entries, as Node's `DataQueue`: a part (`blob.js`'s own copy, whose buffer the store takes
+ * over, detaching it as Node does) or a source blob's handle, kept nested; `slice` keeps views
+ * and nested slices, copying nothing. A reader pulls synchronously, as Node's in-memory reads:
+ * a part gives its bytes, the end of an entry gives a read without bytes unless it ends its queue
+ * (measured against live Node: `arrayBuffer()` of `p` parts settles after `2p − 1` reads).
+ * Every intrinsic is captured at bundle load; no guest-replaceable lookup.
  */
 import { notImplemented } from '../loud.ts';
 
+type Fn = (...args: never[]) => unknown;
 const apply = Reflect.apply;
+const getter = (proto: object, key: string) =>
+  Object.getOwnPropertyDescriptor(proto, key)?.get as Fn;
+const TypedArrayPrototype = Object.getPrototypeOf(Uint8Array.prototype) as object;
 const Uint8ArrayPrimordial = Uint8Array;
 const subarray = Uint8Array.prototype.subarray;
-const set = Uint8Array.prototype.set;
-const byteLengthOf = Object.getOwnPropertyDescriptor(
-  Object.getPrototypeOf(Uint8Array.prototype) as object,
-  'byteLength',
-)?.get as (this: Uint8Array) => number;
-const bufferOf = Object.getOwnPropertyDescriptor(
-  Object.getPrototypeOf(Uint8Array.prototype) as object,
-  'buffer',
-)?.get as (this: Uint8Array) => ArrayBuffer;
+const setBytes = Uint8Array.prototype.set;
+const byteLengthOf = getter(TypedArrayPrototype, 'byteLength');
+const byteOffsetOf = getter(TypedArrayPrototype, 'byteOffset');
+const bufferOf = getter(TypedArrayPrototype, 'buffer');
+const arrayBufferByteLength = getter(ArrayBuffer.prototype, 'byteLength');
 const sliceBuffer = ArrayBuffer.prototype.slice;
-const arrayBufferByteLength = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, 'byteLength')
-  ?.get as (this: ArrayBuffer) => number;
-const byteOffsetOf = Object.getOwnPropertyDescriptor(
-  Object.getPrototypeOf(Uint8Array.prototype) as object,
-  'byteOffset',
-)?.get as (this: Uint8Array) => number;
+// ES2024: the isolate's V8 (Node 24's) has it; without it a part is copied instead of taken over.
+const transferBuffer = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, 'transfer')?.value as
+  | Fn
+  | undefined;
 const push = Array.prototype.push;
+const pop = Array.prototype.pop;
+const MathMax = Math.max;
+const MathMin = Math.min;
 
 const STATUS_EOS = 0;
 const STATUS_CONTINUE = 1;
 
+type Entry = Uint8Array | BlobHandle;
 type Pull = (status: number, chunk?: ArrayBuffer) => void;
 
-/** A handle's parts, for `createBlob` only (no member hands them to a guest holding a handle). */
-let partsOf: (handle: BlobHandle) => readonly Uint8Array[];
+let isHandle: (value: unknown) => value is BlobHandle;
+let entriesOf: (handle: BlobHandle) => readonly Entry[];
+let lengthOf: (entry: Entry) => number;
 
-/** The parts of a blob; never mutated after construction (a part is a view nobody else holds). */
+/** A blob's entries; never mutated after construction, never handed to guest code. */
 class BlobHandle {
-  readonly #parts: readonly Uint8Array[];
-  constructor(parts: readonly Uint8Array[]) {
-    this.#parts = parts;
+  readonly #entries: readonly Entry[];
+  readonly #length: number;
+  constructor(entries: readonly Entry[]) {
+    let length = 0;
+    for (let i = 0; i < entries.length; i++) length += lengthOf(entries[i] as Entry);
+    this.#entries = entries;
+    this.#length = length;
   }
   /** Node's handle `slice(start, end)`: bounds already clamped by `blob.js`. */
   slice(start: number, end: number): BlobHandle {
-    const out: Uint8Array[] = [];
+    const out: Entry[] = [];
     if (end <= start) return new BlobHandle(out);
+    const entries = this.#entries;
     let at = 0;
-    for (const part of this.#parts) {
-      const length = apply(byteLengthOf, part, []);
-      const partEnd = at + length;
-      // Node's DataQueue starts at the first part ending at or after `start` (a part ending
-      // exactly there stays as an empty view) and keeps every part starting before `end`.
-      if (partEnd >= start && at < end) {
-        const from = Math.max(start - at, 0);
-        const to = Math.min(end - at, length);
-        apply(push, out, [apply(subarray, part, [from, to])]);
+    for (let i = 0; i < entries.length && at < end; i++) {
+      const entry = entries[i] as Entry;
+      const length = lengthOf(entry);
+      // Node's DataQueue starts at the first entry ending at or after `start` (one ending exactly
+      // there stays, empty) and keeps every entry starting before `end`.
+      if (at + length >= start) {
+        const from = MathMax(start - at, 0);
+        const to = MathMin(end - at, length);
+        apply(push, out, [
+          isHandle(entry) ? entry.slice(from, to) : apply(subarray, entry, [from, to]),
+        ]);
       }
-      at = partEnd;
-      if (at >= end) break;
+      at += length;
     }
     return new BlobHandle(out);
   }
   getReader(): BlobReader {
-    return new BlobReader(this.#parts);
+    return new BlobReader(this);
   }
   static {
-    partsOf = (handle) => handle.#parts;
+    isHandle = (value): value is BlobHandle =>
+      typeof value === 'object' && value !== null && #entries in value;
+    entriesOf = (handle) => handle.#entries;
+    lengthOf = (entry) =>
+      isHandle(entry) ? entry.#length : (apply(byteLengthOf, entry, []) as number);
   }
 }
 
+/** A queue being read: its entries and the next one. */
+interface Frame {
+  readonly entries: readonly Entry[];
+  next: number;
+}
+
 class BlobReader {
-  readonly #parts: readonly Uint8Array[];
-  #next = 0;
-  #between = false;
-  constructor(parts: readonly Uint8Array[]) {
-    this.#parts = parts;
+  readonly #stack: Frame[];
+  /** A part was handed out; its end is the next read. */
+  #partOut = false;
+  constructor(handle: BlobHandle) {
+    this.#stack = [{ entries: entriesOf(handle), next: 0 }];
   }
   pull(callback: Pull): void {
-    if (this.#between) {
-      this.#between = false;
-      callback(STATUS_CONTINUE);
+    const stack = this.#stack;
+    let ended = this.#partOut;
+    this.#partOut = false;
+    for (;;) {
+      const frame = stack[stack.length - 1];
+      if (frame === undefined) {
+        callback(STATUS_EOS);
+        return;
+      }
+      if (ended || frame.next >= frame.entries.length) {
+        // An entry ended: a read without bytes, unless it was its queue's last.
+        if (frame.next < frame.entries.length) {
+          callback(STATUS_CONTINUE);
+          return;
+        }
+        apply(pop, stack, []);
+        ended = true;
+        continue;
+      }
+      const entry = frame.entries[frame.next++] as Entry;
+      if (isHandle(entry)) {
+        apply(push, stack, [{ entries: entriesOf(entry), next: 0 }]);
+        continue;
+      }
+      this.#partOut = true;
+      // A copy, as Node's reader hands out: the part stays the blob's own.
+      const offset = apply(byteOffsetOf, entry, []) as number;
+      const length = apply(byteLengthOf, entry, []) as number;
+      callback(
+        STATUS_CONTINUE,
+        apply(sliceBuffer, apply(bufferOf, entry, []), [offset, offset + length]) as ArrayBuffer,
+      );
       return;
     }
-    if (this.#next >= this.#parts.length) {
-      callback(STATUS_EOS);
-      return;
-    }
-    const part = this.#parts[this.#next++] as Uint8Array;
-    this.#between = this.#next < this.#parts.length;
-    // A copy, as Node's reader hands out: the part itself stays the blob's own.
-    const offset = apply(byteOffsetOf, part, []);
-    const chunk = apply(sliceBuffer, apply(bufferOf, part, []), [
-      offset,
-      offset + apply(byteLengthOf, part, []),
-    ]) as ArrayBuffer;
-    callback(STATUS_CONTINUE, chunk);
   }
   /** Only `stream()` registers one; `stream()` is the `ReadableStream` gap. */
   setWakeup(): void {}
 }
 
-/** Node's `createBlob(sources, length)`: `sources` are `blob.js`'s own copies or source handles. */
-function createBlob(sources: readonly (Uint8Array | BlobHandle)[], _length: number): BlobHandle {
-  const parts: Uint8Array[] = [];
-  for (const source of sources) {
-    if (source instanceof BlobHandle) apply(push, parts, partsOf(source));
-    else apply(push, parts, [source]);
+/** The part's bytes, owned by the store: its buffer taken over (detached, as Node), else copied. */
+function own(view: Uint8Array): Uint8Array {
+  const buffer = apply(bufferOf, view, []) as ArrayBuffer;
+  const offset = apply(byteOffsetOf, view, []) as number;
+  const length = apply(byteLengthOf, view, []) as number;
+  if (transferBuffer !== undefined) {
+    try {
+      return new Uint8ArrayPrimordial(
+        apply(transferBuffer, buffer, []) as ArrayBuffer,
+        offset,
+        length,
+      );
+    } catch {
+      // Not detachable (a SharedArrayBuffer, a wasm memory): a copy.
+    }
   }
-  return new BlobHandle(parts);
+  return new Uint8ArrayPrimordial(
+    apply(sliceBuffer, buffer, [offset, offset + length]) as ArrayBuffer,
+  );
 }
 
-/** Node's `concat(chunks)`: one new `ArrayBuffer` holding every chunk in order. */
+/** Node's `createBlob(sources, length)`: `blob.js`'s own part copies or source handles. */
+function createBlob(sources: readonly unknown[], _length: number): BlobHandle {
+  const entries: Entry[] = [];
+  for (let i = 0; i < sources.length; i++) {
+    const source = sources[i];
+    apply(push, entries, [isHandle(source) ? source : own(source as Uint8Array)]);
+  }
+  return new BlobHandle(entries);
+}
+
+/** Node's `concat(chunks)`: one `ArrayBuffer` holding every chunk in order. */
 function concat(chunks: readonly ArrayBuffer[]): ArrayBuffer {
+  // A single chunk is already a fresh copy no one else holds.
   if (chunks.length === 1) return chunks[0] as ArrayBuffer;
   let total = 0;
-  for (const chunk of chunks) total += apply(arrayBufferByteLength, chunk, []);
+  for (let i = 0; i < chunks.length; i++)
+    total += apply(arrayBufferByteLength, chunks[i], []) as number;
   const out = new Uint8ArrayPrimordial(total);
   let at = 0;
-  for (const chunk of chunks) {
-    apply(set, out, [new Uint8ArrayPrimordial(chunk), at]);
-    at += apply(arrayBufferByteLength, chunk, []);
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i] as ArrayBuffer;
+    apply(setBytes, out, [new Uint8ArrayPrimordial(chunk), at]);
+    at += apply(arrayBufferByteLength, chunk, []) as number;
   }
-  return apply(bufferOf, out, []);
+  return apply(bufferOf, out, []) as ArrayBuffer;
 }
 
 /** `internalBinding('blob')`; blob URLs and file-backed blobs are not reachable here. */

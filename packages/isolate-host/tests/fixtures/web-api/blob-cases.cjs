@@ -241,6 +241,19 @@ async function main() {
     ['1 MiB part', () => new Blob([new Uint8Array(2 ** 20)])],
   ])
     lines.push(`turns ${id}\t${await turns(make())}`);
+  for (const [id, make] of [
+    ["[blob(),'a']", () => new Blob([new Blob([]), 'a'])],
+    ['[a,blob(),b]', () => new Blob(['a', new Blob([]), 'b'])],
+    ['[blob(),blob()]', () => new Blob([new Blob([]), new Blob([])])],
+    ["[blob(a).slice(1),'b']", () => new Blob([new Blob(['a']).slice(1), 'b'])],
+    ["[abc.slice(1,1),'x']", () => new Blob([abc().slice(1, 1), 'x'])],
+    ['[blob(a,b),c].slice(1,3)', () => new Blob([new Blob(['a', 'b']), 'c']).slice(1, 3)],
+    ['[blob(a,b),c].slice(2,3)', () => new Blob([new Blob(['a', 'b']), 'c']).slice(2, 3)],
+    ['[blob(a,b),c].slice(0,2)', () => new Blob([new Blob(['a', 'b']), 'c']).slice(0, 2)],
+    ['[x,blob(a,b)].slice(1)', () => new Blob(['x', new Blob(['a', 'b'])]).slice(1)],
+    ['[blob(blob(a),b)]', () => new Blob([new Blob([new Blob(['a']), 'b'])])],
+  ])
+    lines.push(`turns ${id}\t${await turns(make())}`);
   {
     const order = [];
     const b1 = new Blob(['a', 'b']).text().then(() => order.push('two parts'));
@@ -250,11 +263,106 @@ async function main() {
     lines.push(`settle order\t${order.join(', ')}`);
   }
 
+  // --- the store owns its parts, and holds many ---
+  await pinAsync('150 000 parts, then nested', () => {
+    const parts = [];
+    for (let i = 0; i < 150000; i++) parts.push(`${i},`);
+    const b = new Blob(parts);
+    return new File([b, new Blob([b.slice(3)])], 'x')
+      .text()
+      .then((t) => `${t.length} ${t.slice(0, 8)}`);
+  });
+  pin('b = new Blob([b, b]) 24 times', () => {
+    let b = new Blob(['ab']);
+    for (let i = 0; i < 24; i++) b = new Blob([b, b]);
+    return b.size;
+  });
+  await pinAsync('species buffer of a part', async () => {
+    let kept;
+    class Evil extends ArrayBuffer {
+      static get [Symbol.species]() {
+        return (n) => {
+          kept = new ArrayBuffer(n);
+          return kept;
+        };
+      }
+    }
+    const b = new Blob([new Evil(3)]);
+    const detached = kept.byteLength === 0;
+    if (!detached) new Uint8Array(kept)[0] = 42;
+    return `${detached} ${Array.from(await b.bytes())}`;
+  });
+  await pinAsync('a forged blob part', async () => {
+    const kHandle = Object.getOwnPropertySymbols(new Blob()).find(
+      (s) => s.description === 'kHandle',
+    );
+    const u8 = new Uint8Array([1, 2, 3]);
+    const b = new Blob([{ [kHandle]: u8, size: 3 }]);
+    return `${u8.byteLength} ${b.size}`;
+  });
+  await pinAsync('slice under a replaced Math.max/min', async () => {
+    const { max, min } = Math;
+    Math.max = Math.min = () => 0;
+    try {
+      return await new Blob(['ab', 'cd', 'ef']).slice(1, 5).text();
+    } finally {
+      Math.max = max;
+      Math.min = min;
+    }
+  });
+  await pinAsync('read under a replaced array iterator', async () => {
+    const b = new Blob(['ab', 'cd', 'ef']);
+    const proto = Object.getPrototypeOf([][Symbol.iterator]());
+    const next = proto.next;
+    proto.next = () => ({ done: true });
+    let p;
+    try {
+      p = b.slice(1, 5).arrayBuffer();
+    } finally {
+      proto.next = next;
+    }
+    return p;
+  });
+  pin('ERR_INVALID_THIS own keys', () => {
+    try {
+      Blob.prototype.slice.call({});
+    } catch (e) {
+      return Reflect.ownKeys(e).map(String).join();
+    }
+  });
+  pin('validateDictionary error shape', () => {
+    try {
+      new Blob([], 5);
+    } catch (e) {
+      const chain = [];
+      for (
+        let p = Object.getPrototypeOf(e);
+        p !== TypeError.prototype;
+        p = Object.getPrototypeOf(p)
+      )
+        chain.push(Object.getOwnPropertyNames(p).join('|'));
+      return `${Reflect.ownKeys(e).map(String)} ${chain.join(' / ')} ${e.stack.split('\n')[1].trim().split(' (')[0]}`;
+    }
+  });
+  pin('ERR_INVALID_ARG_VALUE of a long value', () => new Blob([], { endings: 'x'.repeat(200) }));
+  pin('ERR_INVALID_ARG_VALUE of a lone surrogate', () => new Blob([], { endings: '\ud800' }));
+
   // --- module consumers ---
   await pinAsync('stream/consumers.blob', async () => {
     const { Readable } = require('node:stream');
     const b = await require('node:stream/consumers').blob(Readable.from(['ab', 'c']));
     return `${Object.prototype.toString.call(b)} ${b.size} ${JSON.stringify(b.type)} ${await b.text()}`;
+  });
+  await pinAsync('stream/consumers.blob under a replaced global Blob', async () => {
+    const { Readable } = require('node:stream');
+    const real = globalThis.Blob;
+    globalThis.Blob = class Fake {};
+    try {
+      const b = await require('node:stream/consumers').blob(Readable.from(['x']));
+      return b instanceof real;
+    } finally {
+      globalThis.Blob = real;
+    }
   });
   fs.writeFileSync('blob-cases.txt', 'abc');
   await pinAsync('fs.openAsBlob', async () => {

@@ -28,24 +28,28 @@ They also require `internal/util/inspect`, `timers`, `task_queues`, `internal/en
 
 1. Vendor Node v24.16.0 `lib/internal/webidl.js`, `blob.js`, `file.js` and Node's `LICENSE` under
    `tools/publishing/node-blob/vendor/`, pinned by sha256. `generate-node-blob.mjs` checks each
-   file's exact `require`/`internalBinding` ids and its `primordials` names against the bindings
-   and writes `packages/isolate-guest/src/guest/node-blob/generated/` (identifiers kept: V8 names a
+   file's exact `require`/`internalBinding` ids and its `primordials` names against the lists the
+   bindings provide (an id outside them fails at load, `bound()`) and writes `packages/isolate-guest/src/guest/node-blob/generated/` (identifiers kept: V8 names a
    class by its source name in `Class constructor Blob cannot be invoked without 'new'`);
    `check:node-blob-drift` checks the committed output; the third-party manifest records it. No
    upstream line is edited: every input is a binding.
-2. Byte store (`byte-store.ts`), the one own mechanism: a handle is a list of immutable parts
-   (`blob.js`'s own copies, or a source blob's parts — no copy); `slice` keeps views, no copy;
-   a reader yields what Node's `DataQueue` yields for in-memory parts, measured against live Node:
-   one read per part, one empty read between parts, then end of stream (`arrayBuffer()` settles
-   after `2p − 1` microtask turns for `p` parts; a slice starts at the first part ending at or
-   after its start, so an empty view of the previous part stays). Each read hands out a copy; the
-   parts never reach guest code. `getDataObject` (blob URLs) and `createBlobFromFilePath`
-   (file-backed blobs) are named gaps no exported path reaches.
+2. Byte store (`byte-store.ts`), the one own mechanism, Node's `DataQueue` shape measured against
+   live Node: a handle is a list of entries — a part (`blob.js`'s own copy, whose buffer the store
+   takes over: detached, as Node's C++ does, copied if not detachable) or a source blob's handle,
+   kept nested (no flattening: 150 000 parts or 24 doublings `new Blob([b, b])` cost what they cost
+   in Node); `slice` keeps views and nested slices, no copy, starting at the first entry ending at
+   or after its start. A reader pulls synchronously: a part gives a copy of its bytes, the end of an
+   entry a read without bytes unless it ends its queue (`arrayBuffer()` of `p` parts settles after
+   `2p − 1` reads; an empty nested blob is one read). Intrinsics captured at bundle load; the parts
+   never reach guest code. `getDataObject` (blob URLs) and `createBlobFromFilePath` (file-backed
+   blobs) are named gaps no exported path reaches.
 3. Bindings (`bindings.ts`): `primordials` captured at bundle load (before guest code); Node's
    `makeNodeErrorWithCode` shape (own `code`, `constructor` → the base, `kIsNodeError`, coded
-   `toString`, Node's stack header) with the `E()` texts of `ERR_BUFFER_TOO_LARGE`,
+   `toString`, Node's stack header, own-key order by text kind, `HideStackFramesError` for the
+   validator) with the `E()` texts of `ERR_BUFFER_TOO_LARGE`,
    `ERR_INVALID_ARG_TYPE`, `ERR_INVALID_ARG_VALUE`, `ERR_INVALID_STATE`, `ERR_INVALID_THIS`,
-   `ERR_MISSING_ARGS`; `validateDictionary`; V8 brand checks for `internal/util/types` (captured
+   `ERR_MISSING_ARGS`; `validateDictionary`; `PromiseWithResolvers`, `ArrayPrototypeToSorted`,
+   `StringPrototypeToWellFormed` as ES2022 equivalents (the shipped-bundle floor, ADR-0469); V8 brand checks for `internal/util/types` (captured
    getters, no `Symbol.toStringTag` read); `kMaxLength` 2^53 − 1; the guest's UTF-8 codec,
    rifty's `inspect`, the guest's `DOMException`, `queueMicrotask` and rifty's `setImmediate`;
    `markTransferMode` a no-op and `kClone`/`kDeserialize` Node's symbol descriptions
@@ -60,7 +64,11 @@ They also require `internal/util/inspect`, `timers`, `task_queues`, `internal/en
    `NotImplementedError`); `structuredClone` of a `Blob`; rifty's `fs.openAsBlob` reads eagerly
    into a plain `Blob` (type lower-cased, an overwrite leaves it readable —
    `runtime-js/fs-open-as-blob-eager-read`); `util.inspect(blob)` follows rifty's inspect, which
-   reads no `inspect.custom` hook (compat `util.inspect.custom` row).
+   reads no `inspect.custom` hook (compat `util.inspect.custom` row), and error messages quote a
+   value through it (a string over ~120 characters cut earlier, a lone surrogate unescaped);
+   `stream/consumers.blob` builds the guest's global `Blob` at call time (Node: its own);
+   `String(Blob)` is the generated text; the handle class (reachable through the `kHandle` symbol)
+   is rifty's.
 
 ## Portability inventory
 
@@ -86,14 +94,14 @@ They also require `internal/util/inspect`, `timers`, `task_queues`, `internal/en
 
 ## Cost
 
-2026-11-25, M3 Pro, macOS, Node v24.16.0, isolated-vm 7.0.2, esbuild 0.28.0, load average ~4.3;
+2026-11-25, M3 Pro, macOS, Node v24.16.0, isolated-vm 7.0.2, esbuild 0.28.0, load average below;
 base = origin/main `3d16cb7b8`, change = this ADR's code; no bound (goal Decisions).
 
 | | base | change | Δ |
 |---|---|---|---|
-| `dist/guest.js` | 7 173 116 B | 7 210 074 B | +36 958 B (generated part 16 829 B) |
-| `gzip -9` | 1 509 645 B | 1 518 827 B | +9 182 B |
-| warm `runCode('1')`, median of 40, base and change alternating, 4 runs | 14.09–14.67 ms | 14.49–15.08 ms | +0.40 to +0.53 ms |
+| `dist/guest.js` | 7 173 116 B | 7 213 208 B | +40 092 B (generated part 16 829 B) |
+| `gzip -9` | 1 509 645 B | 1 519 624 B | +9 979 B |
+| warm `runCode('1')`, median of 40, base and change alternating, 4 runs (load ~7.8) | 15.39–16.03 ms | 15.94–16.69 ms | +0.29 to +0.66 ms |
 
 The warm Δ is the three files' and the bindings' evaluation in each fresh isolate (they load with
 the runtime, Decision 4); no lazy install (an accessor global is observable, goal Decisions).

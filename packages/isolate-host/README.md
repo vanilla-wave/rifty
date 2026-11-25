@@ -382,7 +382,7 @@ sleep 500 ms. A guest's heap counts on top of this, up to `memoryLimitMb`.
 Legacy `node:url` (ADR-0574, 2026-11-24, same machine): the bundle grew 47 706 B (gzip 11 147)
 to 7 170 976 B (remeasured 2026-11-25, `836e9501a` + review-round-4 nits); a warm `runCode` of 1 000 `url.parse(…, true)` + `url.resolve` p50 19.3 ms
 (31.4 ms before; an empty run 13.9 / 13.5 ms, 40 runs each).
-Node's `Blob`/`File` (ADR-0578, 2026-11-25, same machine, load ~4.3): the bundle grew 36 958 B
-(`gzip -9` 9 182) to 7 210 074 B; warm `runCode('1')`, median of 40 with base and change
-alternating, four runs: 14.1–14.7 → 14.5–15.1 ms (+0.40 to +0.53 ms).
+Node's `Blob`/`File` (ADR-0578, 2026-11-25, same machine, load ~7.8): the bundle grew 40 092 B
+(`gzip -9` 9 979) to 7 213 208 B; warm `runCode('1')`, median of 40 with base and change
+alternating, four runs: 15.4–16.0 → 15.9–16.7 ms (+0.29 to +0.66 ms).
 These are measurements, not promises.
