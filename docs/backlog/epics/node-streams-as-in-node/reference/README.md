@@ -110,6 +110,7 @@ ports, and delete them afterwards. They ran the program set as it was when copie
 | `fd-hosts.txt` | `node --import tsx fd/fd-hosts.mjs REPO` |
 | `ownership.txt` | `node ownership.mjs` over the directories above |
 | `chromium/` | route A Chromium baseline: `chromium/zz-nsg-workbench.spec.ts`, `zz-nsg-sdk.spec.ts`, `zz-nsg-durability*.spec.ts` |
+| `results/b1-bindings.txt`, `results/chromium/b1-bindings.txt` | rerun after unit 2 (PR #456, `329630f1d`): route A columns, and Workbench + SDK by `NSG_ONLY=b1`. The route B columns of `b1` stay in `git show 5bd600b96:<path>` |
 | `chromium-b/` | the same specs on a route-B product build (main `692babe13`); the 5 closure programs on Workbench are in `chromium-c/` |
 | `chromium-c/` | `chromium/closure-tmp/zz-nsg-closure-tmp.spec.ts`: closure in the guest's `/tmp` (PR #453 helpers), routes A and B, main `5763d8fa1`; `b-c-transform-big-route-b-workbench.log.txt` holds the 73.5 s row |
 | `chromium-d/` | `chromium/zz-nsg-streamprobe.spec.ts` with `streamprobe.cjs`/`streamplan.mjs`/`streamoracle.mjs`: 4/16 MiB stream read/write and a write in a 1000-file project, routes A/B, main `5763d8fa1`; `summary.txt` by `chromium/streamsummary.mjs` |
