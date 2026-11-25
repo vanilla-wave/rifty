@@ -40,6 +40,7 @@ type Pull = (status: number, chunk?: ArrayBuffer) => void;
 let isHandle: (value: unknown) => value is BlobHandle;
 let entriesOf: (handle: BlobHandle) => readonly Entry[];
 let lengthOf: (entry: Entry) => number;
+let makeHandle: (entries: readonly Entry[]) => BlobHandle;
 
 /** A blob's entries; never mutated after construction, never handed to guest code. */
 class BlobHandle {
@@ -51,27 +52,10 @@ class BlobHandle {
     this.#entries = entries;
     this.#length = length;
   }
-  /** Node's handle `slice(start, end)`: bounds already clamped by `blob.js`. */
+  /** Node's handle `slice(start, end)`: bounds already clamped by `blob.js`. Iterative: a slice
+   * of nested blobs is as deep as they are. */
   slice(start: number, end: number): BlobHandle {
-    const out: Entry[] = [];
-    if (end <= start) return new BlobHandle(out);
-    const entries = this.#entries;
-    let at = 0;
-    for (let i = 0; i < entries.length && at < end; i++) {
-      const entry = entries[i] as Entry;
-      const length = lengthOf(entry);
-      // Node's DataQueue starts at the first entry ending at or after `start` (one ending exactly
-      // there stays, empty) and keeps every entry starting before `end`.
-      if (at + length >= start) {
-        const from = MathMax(start - at, 0);
-        const to = MathMin(end - at, length);
-        apply(push, out, [
-          isHandle(entry) ? entry.slice(from, to) : apply(subarray, entry, [from, to]),
-        ]);
-      }
-      at += length;
-    }
-    return new BlobHandle(out);
+    return sliceHandle(this, start, end);
   }
   getReader(): BlobReader {
     return new BlobReader(this);
@@ -80,8 +64,66 @@ class BlobHandle {
     isHandle = (value): value is BlobHandle =>
       typeof value === 'object' && value !== null && #entries in value;
     entriesOf = (handle) => handle.#entries;
+    makeHandle = (entries) => new BlobHandle(entries);
     lengthOf = (entry) =>
       isHandle(entry) ? entry.#length : (apply(byteLengthOf, entry, []) as number);
+  }
+}
+
+/** A slice being built: the source's entries from `next`, bounds relative to them. */
+interface Cut {
+  readonly entries: readonly Entry[];
+  readonly start: number;
+  readonly end: number;
+  readonly out: Entry[];
+  next: number;
+  at: number;
+  /** The parent cut's slot this one fills. */
+  readonly slot: number;
+}
+
+function sliceHandle(handle: BlobHandle, start: number, end: number): BlobHandle {
+  if (end <= start) return makeHandle([]);
+  const stack: Cut[] = [
+    { entries: entriesOf(handle), start, end, out: [], next: 0, at: 0, slot: -1 },
+  ];
+  for (;;) {
+    const cut = stack[stack.length - 1] as Cut;
+    if (cut.next >= cut.entries.length || cut.at >= cut.end) {
+      apply(pop, stack, []);
+      const done = makeHandle(cut.out);
+      const parent = stack[stack.length - 1];
+      if (parent === undefined) return done;
+      parent.out[cut.slot] = done;
+      continue;
+    }
+    const entry = cut.entries[cut.next++] as Entry;
+    const length = lengthOf(entry);
+    const at = cut.at;
+    cut.at += length;
+    // Node's DataQueue starts at the first entry ending at or after `start` (one ending exactly
+    // there stays, empty) and keeps every entry starting before `end`.
+    if (at + length < cut.start) continue;
+    const from = MathMax(cut.start - at, 0);
+    const to = MathMin(cut.end - at, length);
+    if (!isHandle(entry)) {
+      apply(push, cut.out, [apply(subarray, entry, [from, to])]);
+    } else if (to <= from) {
+      apply(push, cut.out, [makeHandle([])]);
+    } else {
+      const slot = apply(push, cut.out, [undefined]) as number;
+      apply(push, stack, [
+        {
+          entries: entriesOf(entry),
+          start: from,
+          end: to,
+          out: [],
+          next: 0,
+          at: 0,
+          slot: slot - 1,
+        },
+      ]);
+    }
   }
 }
 
@@ -151,12 +193,12 @@ function own(view: Uint8Array): Uint8Array {
         length,
       );
     } catch {
-      // Not detachable (a SharedArrayBuffer, a wasm memory): a copy.
+      // Not detachable (a SharedArrayBuffer, growable or not; a wasm memory): a copy.
     }
   }
-  return new Uint8ArrayPrimordial(
-    apply(sliceBuffer, buffer, [offset, offset + length]) as ArrayBuffer,
-  );
+  const copy = new Uint8ArrayPrimordial(length);
+  apply(setBytes, copy, [view]);
+  return copy;
 }
 
 /** Node's `createBlob(sources, length)`: `blob.js`'s own part copies or source handles. */

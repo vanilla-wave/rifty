@@ -35,9 +35,28 @@ const PromiseCtor = Promise;
 const promiseReject = Promise.reject;
 const arraySlice = Array.prototype.slice;
 const arraySort = Array.prototype.sort;
-const replace = String.prototype.replace;
+const charCodeAt = String.prototype.charCodeAt;
+const sliceString = String.prototype.slice;
 // ES2023/2024 primordials as their ES2022 equivalents (the shipped-bundle floor, ADR-0469).
-const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
+/** `String.prototype.toWellFormed`: each lone surrogate → U+FFFD; no guest-replaceable lookup. */
+function toWellFormed(string: string): string {
+  let out = '';
+  let from = 0;
+  for (let i = 0; i < string.length; i++) {
+    const unit = apply(charCodeAt, string, [i]) as number;
+    if (unit < 0xd800 || unit > 0xdfff) continue;
+    if (unit <= 0xdbff && i + 1 < string.length) {
+      const next = apply(charCodeAt, string, [i + 1]) as number;
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        i++;
+        continue;
+      }
+    }
+    out += `${apply(sliceString, string, [from, i])}\uFFFD`;
+    from = i + 1;
+  }
+  return from === 0 ? string : out + apply(sliceString, string, [from]);
+}
 const primordials = {
   ArrayBufferIsView: ArrayBuffer.isView,
   ArrayBufferPrototypeGetByteLength: uncurry(getter(ArrayBuffer.prototype, 'byteLength')),
@@ -78,8 +97,7 @@ const primordials = {
   String,
   StringPrototypeSplit: uncurry(String.prototype.split),
   StringPrototypeToLowerCase: uncurry(String.prototype.toLowerCase),
-  StringPrototypeToWellFormed: (string: string) =>
-    apply(replace, string, [LONE_SURROGATE, '\uFFFD']),
+  StringPrototypeToWellFormed: toWellFormed,
   Symbol,
   SymbolIterator: Symbol.iterator,
   SymbolToStringTag: Symbol.toStringTag,
@@ -95,7 +113,6 @@ type Message = (...args: never[]) => string;
 type ErrorBase = new (message?: string) => Error;
 const captureStackTrace = Error.captureStackTrace;
 const indexOf = String.prototype.indexOf;
-const sliceString = String.prototype.slice;
 
 /** Node's stack header for its own errors (`TypeError [CODE]: message`, its prepareStackTrace);
  * the isolate formats `stack` when it is captured. */
