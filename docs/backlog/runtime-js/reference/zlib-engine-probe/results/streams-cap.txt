@@ -1,0 +1,4 @@
+{"mode":"DEFLATE","opts":{},"bytesPerStream":302776,"wasmMiBAt10000":2888,"opened":14182,"wasmMiBAtStop":4096,"error":"Zlib error [Z_MEM_ERROR]"}
+{"mode":"DEFLATE","opts":{"memLevel":9},"bytesPerStream":450232,"wasmMiBAt10000":null,"opened":9538,"wasmMiBAtStop":4096,"error":"Zlib error [Z_MEM_ERROR]"}
+{"mode":"INFLATE","opts":{},"bytesPerStream":58327,"wasmMiBAt10000":557,"opened":20000,"wasmMiBAtStop":1113,"error":null}
+{"mode":"node:zlib createDeflate","opened":10000,"rssGrowthMiB":2201}

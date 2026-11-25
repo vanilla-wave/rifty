@@ -1,0 +1,21 @@
+node v24.16.0
+exceljs-stream-writer | native exit 0 {"bytes":111420,"sha":"d0452ccd40ecb560"}
+exceljs-stream-writer | pako@3.0.3 | same as native
+exceljs-stream-writer | pako@3.0.3+params | same as native
+exceljs-stream-writer | wasm-node-zlib | same as native
+unzipper | native exit 0 {"open":["xl/theme/theme1.xml:f857ef82e4c0e273","_rels/.rels:1285b20099c64699","xl/worksheets/sheet1.xml:55134ee5328ef5df","[Content_Types].xml:0ee6278b34e013e9","docProps/app.xml:88c34a1117c06961","d
+unzipper | pako@3.0.3 | same as native
+unzipper | pako@3.0.3+params | same as native
+unzipper | wasm-node-zlib | same as native
+ws-permessage-deflate | native exit 0 {"params":{"client_max_window_bits":11,"server_max_window_bits":10},"out":["1d724d66457d710a","2cf24dba5fb0a30e","97d448bbcc1d5be8","partial:17","b94feaff3d9b2398","4f772cad45a56846","c9dfcbcb279d6931
+ws-permessage-deflate | pako@3.0.3 | same as native
+ws-permessage-deflate | pako@3.0.3+params | same as native
+ws-permessage-deflate | wasm-node-zlib | same as native
+pngjs-sync | native exit 0 {"file":"38da6fc0785db59b","roundTrip":true}
+pngjs-sync | pako@3.0.3 | same as native
+pngjs-sync | pako@3.0.3+params | same as native
+pngjs-sync | wasm-node-zlib | same as native
+pdfkit | native exit 0 {"bytes":1803,"sha":"bf850e44ea4aa192"}
+pdfkit | pako@3.0.3 | same as native
+pdfkit | pako@3.0.3+params | same as native
+pdfkit | wasm-node-zlib | same as native

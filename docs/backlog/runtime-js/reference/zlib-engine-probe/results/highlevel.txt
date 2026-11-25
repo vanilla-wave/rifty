@@ -1,0 +1,10 @@
+node v24.16.0
+fflate@0.8.3 | deflateRaw bytes = Node (levels 0/1/6/9 × corpus) | 9/28
+fflate@0.8.3 | inflate valid | 1/1
+fflate@0.8.3 | inflate + tail (\n, JUNK!, 8×0) as Node | 3/3
+fflate@0.8.3 | gunzip 2 members as Node | 0/1 | got "a"
+fflate@0.8.3 | gunzip fuzz: same ok/error class | 49/300
+fflate@0.8.3 | gunzip fuzz: same error text | 2/300 | fflate texts: "invalid block type", "unexpected EOF", …
+fflate@0.8.3 | z_stream primitives (params/reset/windowBits/memLevel 1-9/Z_FULL_FLUSH/Z_BLOCK/strategy) | 0/7 | API has level, mem, dictionary, flush(sync) only
+wasm-flate@1.0.2-browser | deflateRaw bytes = Node (default level × corpus) | 1/7 | no level/stream/dictionary API; 161 KB wasm
+wasm-flate@1.0.2-browser | inflate + JUNK! as Node | 1/1

@@ -4,12 +4,15 @@ status: draft
 title: "node:zlib async inflate / inflateRaw ignore trailing bytes, and gunzip accepts zero padding and multiple members, as Node does"
 created: 2026-11-18
 why: "In Node, a zlib/raw stream followed by extra bytes still decodes (e.g. a PDF FlateDecode slice that keeps its EOL), and gzip members are concatenated. rifty's DecompressionStream backend rejects both. Compat is ⚠️ since 2026-11-18"
+epic: node-zlib-on-every-host
 user_story: As an agent decoding PDF FlateDecode streams, I want `await util.promisify(zlib.inflate)(slice)` on a slice cut up to `endstream` to return the content as in Node, but today it rejects with `TypeError: Junk found after end of compressed data.`
 sources: [docs/adr/runtime-js/0159-node-zlib-web-compression-backed-async-subset.md, docs/public/compat/zlib.md, docs/backlog/runtime-js/reference/pr-403-final-green.json]
 code: [packages/runtime-js/src/builtins/zlib.ts]
 ---
 
 ## Context
+
+Goal `node-zlib-on-every-host` (map, 2026-11-24): absorbed by unit 3 (`runtime-js/zlib-node-lib-port`) — the engine under Node's `lib/zlib.js` gives Node's tails, zero padding and members in every form (probe matrix); no `DecompressionStream` bisection; this item closes when unit 3 lands.
 
 Source: the Final+GREEN Ecosystem-UX concern on PR #403
 (`reference/pr-403-final-green.json`). The PR's ceiling hint ("async `zlib.inflate`

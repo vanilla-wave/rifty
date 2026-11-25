@@ -1,0 +1,24 @@
+== none
+main: min 91433/128000 B; gzip 28548/40000 B
+sw: min 16711/23000 B; gzip 5848/8000 B
+generic: min 932920/1124000 B; gzip 279754/332000 B
+toolchain: min 1061998/1284000 B; gzip 323615/386000 B
+guest.js 7123270 B, gzip 1497917 B
+== pako
+main: min 91433/128000 B; gzip 28548/40000 B
+sw: min 16711/23000 B; gzip 5848/8000 B
+generic: min 977481/1124000 B; gzip 293952/332000 B
+toolchain: min 1106624/1284000 B; gzip 337560/386000 B
+guest.js 7233428 B, gzip 1518490 B
+== wasm
+main: min 91433/128000 B; gzip 28548/40000 B
+sw: min 16711/23000 B; gzip 5848/8000 B
+generic: min 1019292/1124000 B; gzip 316704/332000 B
+toolchain: min 1148454/1284000 B; gzip 360470/386000 B
+guest.js 7209815 B, gzip 1534774 B
+== none
+main: min 91433/128000 B; gzip 28548/40000 B
+sw: min 16711/23000 B; gzip 5848/8000 B
+generic: min 932920/1124000 B; gzip 279754/332000 B
+toolchain: min 1061998/1284000 B; gzip 323615/386000 B
+guest.js 7123270 B, gzip 1497917 B
