@@ -173,3 +173,52 @@
 {"sec":"tworealm","w":"xlsx","kind":"v1 (same run)","load":"4.0","repMs":454.2,"bad":0}
 {"sec":"tworealm","w":"xlsx","kind":"v1s (copy)","load":"4.4","repMs":508.8,"bad":0}
 {"sec":"tworealm","w":"xlsx","kind":"v1bs (lazy)","load":"4.2","repMs":514.4,"bad":0}
+## round 2b 15:37  up 6 days,  5:40, 4 users, load averages: 3.43 3.58 4.16
+## compile cache off (--no-compilation-cache): is the live isolate's repeated-exec gain V8's in-isolate compile cache?
+{"sec":"cost","w":"pdf","kind":"v1w","load":"3.4","createMs":0.3,"firstMs":203.4,"repMs":197.6,"repRunMs":195.2,"repBootMs":0.9}
+{"sec":"cost","w":"pdf","kind":"v2s","load":"3.3","createMs":23.7,"firstMs":212.6,"repMs":187.3,"repRunMs":181.3,"repBootMs":6.1}
+{"sec":"cost","w":"pdf","kind":"v2bs","load":"3.3","createMs":10.6,"firstMs":226.6,"repMs":183.6,"repRunMs":178.2,"repBootMs":5.8}
+{"sec":"cost","w":"xlsx","kind":"v1w","load":"3.3","createMs":0.1,"firstMs":424.4,"repMs":431,"repRunMs":428.1,"repBootMs":0.9}
+{"sec":"cost","w":"xlsx","kind":"v2s","load":"3.5","createMs":25.4,"firstMs":461.6,"repMs":425.3,"repRunMs":419,"repBootMs":6.3}
+{"sec":"cost","w":"xlsx","kind":"v2bs","load":"3.6","createMs":11.3,"firstMs":510.3,"repMs":427.4,"repRunMs":420.8,"repBootMs":6.3}
+## same, compile cache on (right after)
+{"sec":"cost","w":"pdf","kind":"v1w","load":"3.6","createMs":0.2,"firstMs":199.3,"repMs":196.6,"repRunMs":194.1,"repBootMs":0.9}
+{"sec":"cost","w":"pdf","kind":"v2s","load":"3.6","createMs":24.3,"firstMs":212.6,"repMs":167.2,"repRunMs":161.3,"repBootMs":5.8}
+{"sec":"cost","w":"pdf","kind":"v2bs","load":"3.6","createMs":10.9,"firstMs":223.7,"repMs":174.1,"repRunMs":167.8,"repBootMs":6.3}
+{"sec":"cost","w":"xlsx","kind":"v1w","load":"3.7","createMs":0.1,"firstMs":442.6,"repMs":440.2,"repRunMs":436.2,"repBootMs":0.9}
+{"sec":"cost","w":"xlsx","kind":"v2s","load":"3.5","createMs":24.5,"firstMs":487.3,"repMs":370.3,"repRunMs":362.7,"repBootMs":6.3}
+{"sec":"cost","w":"xlsx","kind":"v2bs","load":"3.5","createMs":11.1,"firstMs":514.6,"repMs":366.8,"repRunMs":360.9,"repBootMs":6.2}
+## haunt (from the round-2 critic)
+{"sec":"haunt","hold":"control","kind":"v2bs","run1":0,"next":"[code|termination, ms, used heap after gc MiB]","res":[[0,282.3,4.9],[0,194.9,8.9],[0,161.5,11.5],[0,164.4,11.5]],"alive":true}
+{"sec":"haunt","hold":"control","kind":"v1","run1":"memory","next":"[code|termination, ms, used heap after gc MiB]","res":[["memory",66.1,null],["memory",70.5,null],["memory",69,null],["memory",65.1,null]],"alive":"n/a"}
+{"sec":"haunt","hold":"wasmChain","kind":"v2bs","run1":"memory","next":"[code|termination, ms, used heap after gc MiB]","res":[["memory",0,null]],"alive":false}
+{"sec":"haunt","hold":"wasmChain","kind":"v1","run1":"memory","next":"[code|termination, ms, used heap after gc MiB]","res":[["memory",90.2,null],["memory",90.2,null],["memory",89.8,null],["memory",90.3,null]],"alive":"n/a"}
+{"sec":"haunt","hold":"pendingPromise","kind":"v2bs","run1":0,"next":"[code|termination, ms, used heap after gc MiB]","res":[[0,296.5,10.2],[0,194.6,8.9],[0,160.8,11.5],[0,162.6,11.5]],"alive":true}
+{"sec":"haunt","hold":"pendingPromise","kind":"v1","run1":0,"next":"[code|termination, ms, used heap after gc MiB]","res":[[0,222.8,null],[0,231.5,null],[0,221.2,null],[0,225.2,null]],"alive":"n/a"}
+{"sec":"haunt","hold":"finReg","kind":"v2bs","run1":0,"next":"[code|termination, ms, used heap after gc MiB]","res":[[0,270.1,4.9],[0,226.7,12.4],[0,179.7,11.5],[0,160.9,11.5]],"alive":true}
+{"sec":"haunt","hold":"finReg","kind":"v1","run1":0,"next":"[code|termination, ms, used heap after gc MiB]","res":[[0,221.7,null],[0,222.7,null],[0,234.5,null],[0,219.7,null]],"alive":"n/a"}
+## burst at LIMIT=256, v2s / v2bs (safe boundary)
+{"sec":"burst","kind":"v2s","load":"3.2","startMiB":363.4,"peakMiB":1387.4,"restWithSandboxesMiB":1387.5,"restAfterDropMiB":1296.2}
+{"sec":"burst","kind":"v2bs","load":"3.3","startMiB":363.4,"peakMiB":974.7,"restWithSandboxesMiB":974.6,"restAfterDropMiB":900.4}
+## life L1/L4/L6 incl. v2bs
+{"sec":"life","case":"L1 carry-over","kind":"v2bs","run1":"{\"global\":\"undefined\",\"exitCode\":null,\"cwd\":\"/workspace\",\"modN\":0,\"listeners\":0,\"env\":null,\"stackLimit\":10,\"json\":\"undefined\"}","run2":"{\"global\":\"undefined\",\"exitCode\":null,\"cwd\":\"/workspace\",\"modN\":0,\"listeners\":0,\"env\":null,\"stackLimit\":10,\"json\":\"undefined\"}","codes":[0,0]}
+{"sec":"life","case":"L4 kill syncLoop","kind":"v2bs","killed":"timeout","why":"deadline","killMs":409,"isolateAlive":true,"next":"before.txt kept","nextCode":0}
+{"sec":"life","case":"L4 kill microtasks","kind":"v2bs","killed":"timeout","why":"deadline","killMs":412,"isolateAlive":true,"next":"before.txt kept","nextCode":0}
+{"sec":"life","case":"L4 kill timerLoop","kind":"v2bs","killed":"timeout","why":"deadline","killMs":407,"isolateAlive":true,"next":"before.txt kept","nextCode":0}
+{"sec":"life","case":"L4 kill pending","kind":"v2bs","killed":"timeout","why":"deadline","killMs":406,"isolateAlive":true,"next":"before.txt kept","nextCode":0}
+{"sec":"life","case":"L6 out of memory (limit 256)","kind":"v2bs","killed":"memory","why":"Isolate was disposed during execution due to memory limit","isolateAlive":false,"filesAfter":"lost with the isolate"}
+# end 15:38  up 6 days,  5:41, 4 users, load averages: 3.60 3.59 4.12
+## haunt, MBN=50 (50 × 1 MiB arrays: fits both arms headroom)
+{"sec":"haunt","hold":"control","kind":"v2bs","run1":0,"next":"[code|termination, ms, used heap after gc MiB]","res":[[0,225.4,4.7],[0,198.7,8.9],[0,167.5,11.5],[0,159.4,11.5]],"alive":true}
+{"sec":"haunt","hold":"control","kind":"v1","run1":0,"next":"[code|termination, ms, used heap after gc MiB]","res":[[0,221.6,null],[0,220.2,null],[0,230.6,null],[0,225.1,null]],"alive":"n/a"}
+{"sec":"haunt","hold":"wasmChain","kind":"v2bs","run1":0,"next":"[code|termination, ms, used heap after gc MiB]","res":[[0,267.2,55.9],[0,196.7,63.4],[0,160.9,62.7],[0,158.5,62.7]],"alive":true}
+{"sec":"haunt","hold":"wasmChain","kind":"v1","run1":0,"next":"[code|termination, ms, used heap after gc MiB]","res":[[0,218.4,null],[0,232.3,null],[0,220.7,null],[0,219.1,null]],"alive":"n/a"}
+{"sec":"haunt","hold":"pendingPromise","kind":"v2bs","run1":0,"next":"[code|termination, ms, used heap after gc MiB]","res":[[0,213.7,4.7],[0,190.5,8.9],[0,171.1,11.5],[0,158.8,11.5]],"alive":true}
+{"sec":"haunt","hold":"pendingPromise","kind":"v1","run1":0,"next":"[code|termination, ms, used heap after gc MiB]","res":[[0,220.1,null],[0,220.1,null],[0,221.3,null],[0,227.2,null]],"alive":"n/a"}
+{"sec":"haunt","hold":"finReg","kind":"v2bs","run1":0,"next":"[code|termination, ms, used heap after gc MiB]","res":[[0,213.7,4.7],[0,188,8.9],[0,178.8,11.5],[0,163.9,11.5]],"alive":true}
+{"sec":"haunt","hold":"finReg","kind":"v1","run1":0,"next":"[code|termination, ms, used heap after gc MiB]","res":[[0,240.1,null],[0,222.1,null],[0,221.6,null],[0,222.6,null]],"alive":"n/a"}
+## mem with a GC inside each idle isolate before sampling (v2s / v2bs, mix and pdf)
+{"sec":"mem","kind":"v2s","w":"pdf","K":6,"load":"3.5","perSandboxRssMiB":143.7,"perSandboxNodeHeapMiB":0.1,"perSandboxArrayBuffersMiB":0,"isolateUsedMiB":20.6,"isolateTotalMiB":39.9,"isolateExtMiB":98.8,"afterGcUsedMiB":7.9,"afterGcTotalMiB":19.2,"afterGcExtMiB":96.8}
+{"sec":"mem","kind":"v2bs","w":"pdf","K":6,"load":"3.4","perSandboxRssMiB":49,"perSandboxNodeHeapMiB":0.1,"perSandboxArrayBuffersMiB":1.1,"isolateUsedMiB":15.1,"isolateTotalMiB":23.2,"isolateExtMiB":18.7,"afterGcUsedMiB":4.7,"afterGcTotalMiB":16.7,"afterGcExtMiB":16.8}
+{"sec":"mem","kind":"v2s","w":"mix","K":6,"load":"3.4","perSandboxRssMiB":155.2,"perSandboxNodeHeapMiB":0.1,"perSandboxArrayBuffersMiB":0,"isolateUsedMiB":23.8,"isolateTotalMiB":43.7,"isolateExtMiB":100.9,"afterGcUsedMiB":12.5,"afterGcTotalMiB":28.8,"afterGcExtMiB":96.9}
+{"sec":"mem","kind":"v2bs","w":"mix","K":6,"load":"3.7","perSandboxRssMiB":107.1,"perSandboxNodeHeapMiB":0,"perSandboxArrayBuffersMiB":0,"isolateUsedMiB":32,"isolateTotalMiB":39.8,"isolateExtMiB":49.1,"afterGcUsedMiB":10.2,"afterGcTotalMiB":28.6,"afterGcExtMiB":45.1}

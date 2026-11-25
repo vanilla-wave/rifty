@@ -324,7 +324,10 @@ Object.defineProperty(globalThis, '__life', {
     layeredPrepared,
     captureFull,
     check,
-    revoke: () => ++lifeEpoch,
+    revoke: () => {
+      lifePending = null;
+      return ++lifeEpoch;
+    },
     epoch: () => lifeEpoch,
     counters: () => JSON.stringify(lifeCounters),
   }),

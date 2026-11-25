@@ -605,6 +605,8 @@ if (SECTIONS.has('mem')) {
     const m1 = process.memoryUsage();
     const per = (k) => MiB((m1[k] - m0[k]) / K);
     const heaps = sbs.map((s) => (s.heap ? s.heap() : null)).filter(Boolean);
+    const gcd = [];
+    for (const s of sbs) if (s.heap && s.alive) { await s.A.ctx.eval('gc()'); gcd.push(s.heap()); }
     log({
       sec: 'mem',
       kind,
@@ -619,6 +621,9 @@ if (SECTIONS.has('mem')) {
             isolateUsedMiB: MiB(median(heaps.map((h) => h.used))),
             isolateTotalMiB: MiB(median(heaps.map((h) => h.total))),
             isolateExtMiB: MiB(median(heaps.map((h) => h.ext))),
+            afterGcUsedMiB: MiB(median(gcd.map((h) => h.used))),
+            afterGcTotalMiB: MiB(median(gcd.map((h) => h.total))),
+            afterGcExtMiB: MiB(median(gcd.map((h) => h.ext))),
           }
         : {}),
       ...(kind.startsWith('v1') ? { stateBytes: sbs[0].blob.byteLength + sbs[0].refs.length } : {}),
@@ -986,6 +991,49 @@ if (SECTIONS.has('tworealm')) {
   }
 }
 
+// ---- haunt (from the round-2 critic): a dead run's realm kept alive by V8-internal pending work
+// (30 chained WebAssembly.compile + 170 × 1 MiB arrays, then process.exit) — what the next execs see.
+if (SECTIONS.has('haunt')) {
+  const MBN = Number(process.env.MBN ?? 170);
+  const wasmPart = `
+function leb(n){const o=[];do{let b=n&0x7f;n>>>=7;if(n)b|=0x80;o.push(b)}while(n);return o}
+const body=[0x00]; for(let i=0;i<400;i++) body.push(0x41,0x01,0x1a); body.push(0x0b);
+const fb=[...leb(body.length),...body], N=4000, code=[...leb(N)]; for(let i=0;i<N;i++) code.push(...fb);
+const sec=(id,c)=>[id,...leb(c.length),...c];
+const wasm=new Uint8Array([0,97,115,109,1,0,0,0,...sec(1,[1,0x60,0,0]),...sec(3,[...leb(N),...Array(N).fill(0)]),...sec(10,code)]);`;
+  const holds = {
+    control: '',
+    wasmChain: `${wasmPart} let p = Promise.resolve(); for (let i = 0; i < 30; i++) p = p.then(() => WebAssembly.compile(wasm)); p.then(() => big.length);`,
+    pendingPromise: 'globalThis.keep = new Promise(() => {}); globalThis.keep.then(() => big.length);',
+    finReg: 'const fr = new FinalizationRegistry(() => { big.length; }); fr.register({}, 1); globalThis.fr = fr;',
+  };
+  for (const [name, hold] of Object.entries(holds)) {
+    const main = `const fs = require('fs');
+if (!fs.existsSync('/workspace/m')) { fs.writeFileSync('/workspace/m', '1');
+  const big = []; for (let i = 0; i < ${MBN}; i++) big.push(new Array(1 << 17).fill(i + 0.5));
+  ${hold}
+  process.exit(0);
+} else require('./g.cjs');`;
+    for (const kind of (process.env.HK ?? 'v2bs,v1').split(',')) {
+      const s = await make(kind, main, { limit: 256, extra: [['/workspace/g.cjs', Buffer.from(W.pdf)]] });
+      const a = await s.exec();
+      const res = [];
+      for (let i = 0; i < 4; i++) {
+        const r = await s.exec();
+        let used = null;
+        if (s.alive && s.heap) {
+          await s.A.ctx.eval('gc()');
+          used = MiB(s.heap().used);
+        }
+        res.push([r.code ?? r.termination, r1(r.ms ?? 0), used]);
+        if (s.alive === false) break;
+      }
+      log({ sec: 'haunt', hold: name, kind, run1: a.code ?? a.termination, next: '[code|termination, ms, used heap after gc MiB]', res, alive: s.alive ?? 'n/a' });
+      s.dispose();
+    }
+  }
+}
+
 // ---- host: one host op, worker side (v2: a call into context A; v3: the worker's LayeredFs;
 //      v1: the consumer's LayeredFs = probe H/W) --------------------------------------------------
 if (SECTIONS.has('host')) {
@@ -1041,7 +1089,7 @@ console.log(JSON.stringify(seen));
 globalThis.leak = 1; Array.prototype.leak = 1; m.n++; process.on('exit', () => {}); process.env.LEAK = '1';
 Error.stackTraceLimit = 3; JSON.leak = 1; process.chdir('/tmp');
 `;
-  for (const kind of ['v1', 'v2', 'v3']) {
+  for (const kind of ['v1', 'v2', 'v2bs', 'v3']) {
     const s = await make(kind, leak, { extra: [mod] });
     const a = await s.exec();
     const b = await s.exec();
@@ -1113,13 +1161,13 @@ process.exit(0);
   };
   const after = `console.log(require('fs').existsSync('/workspace/before.txt') ? 'before.txt kept' : 'before.txt absent')`;
   for (const [name, src] of Object.entries(KILLS)) {
-    for (const kind of ['v1', 'v2', 'v3']) {
+    for (const kind of ['v1', 'v2', 'v2bs', 'v3']) {
       const s = await make(kind, src);
       const t = performance.now();
       const k = await s.exec({ timeoutMs: 400 });
       const killMs = performance.now() - t;
       // the next exec runs a different main.js: written by a host op (v2/v3) or into the state (v1)
-      if (kind === 'v2') s.hostCall('writeFileSync', ['/workspace/main.js', new TextEncoder().encode(after)]);
+      if (kind.startsWith('v2')) s.hostCall('writeFileSync', ['/workspace/main.js', new TextEncoder().encode(after)]);
       else if (kind === 'v3') s.fs.writeFileSync('/workspace/main.js', new TextEncoder().encode(after));
       else {
         const up = createMemoryFs().fsSync;
@@ -1194,10 +1242,10 @@ for (let i = 0; ; i++) { const k = i % 64; const a = (i >> 6) % 2 ? 'v' : 'w', b
   }
   // L6: out of isolate memory.
   const oom = `require('fs').writeFileSync('/workspace/before.txt', '1'); const a = []; for (;;) a.push('x'.repeat(1e6) + Math.random());`;
-  for (const kind of ['v1', 'v2', 'v3']) {
+  for (const kind of ['v1', 'v2', 'v2bs', 'v3']) {
     const s = await make(kind, oom, { limit: 256 });
     const k = await s.exec({ timeoutMs: 20_000 });
-    log({ sec: 'life', case: 'L6 out of memory (limit 256)', kind, killed: k.termination ?? k.code, why: k.why, isolateAlive: s.alive ?? 'n/a', filesAfter: kind === 'v2' ? (s.alive ? 'in A' : 'lost with the isolate') : kind === 'v3' ? `before.txt ${s.fs.existsSync('/workspace/before.txt') ? 'kept' : 'absent'}` : 'state of before (rollback)' });
+    log({ sec: 'life', case: 'L6 out of memory (limit 256)', kind, killed: k.termination ?? k.code, why: k.why, isolateAlive: s.alive ?? 'n/a', filesAfter: kind.startsWith('v2') ? (s.alive ? 'in A' : 'lost with the isolate') : kind === 'v3' ? `before.txt ${s.fs.existsSync('/workspace/before.txt') ? 'kept' : 'absent'}` : 'state of before (rollback)' });
     s.dispose();
   }
   // L7: rebuild cost after a lost live isolate: a fresh isolate + template + the restore point.
