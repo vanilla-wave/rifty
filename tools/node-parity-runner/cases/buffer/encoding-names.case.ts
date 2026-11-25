@@ -8,7 +8,8 @@
  *
  * Inputs isolate name resolution: `'4142'` is valid in every encoding, the
  * haystack puts the utf16le needle at an even offset (Node searches utf16le by
- * aligned code units), writes never cut a character.
+ * aligned code units). The last block cuts writes: Node writes whole utf8
+ * sequences and utf16 units only.
  */
 import type { ParityCase } from '../../src/types.ts';
 
@@ -73,6 +74,13 @@ const c: ParityCase = {
         ['concat', () => Buffer.concat([Buffer.from('4142', n), Buffer.from('A\\u00e9', n)])],
       ];
       for (const [k, f] of rows) console.log(JSON.stringify(n), k, run(f));
+    }
+    const CUT = 'a\\u20ac\\ud83d\\ude00\\ud800b';
+    for (const enc of ['utf8', 'UTF-16LE', 'latin1', 'base64', 'hex']) {
+      const s = enc === 'base64' ? 'QUJDREVGR0g' : enc === 'hex' ? '0102030405060708' : CUT;
+      const out = [];
+      for (let len = 0; len <= 8; len++) out.push(run(written((b) => b.write(s, 0, len, enc))));
+      console.log('cut', enc, out.join(' '));
     }
   `,
 };
