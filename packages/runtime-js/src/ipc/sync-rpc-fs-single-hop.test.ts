@@ -57,6 +57,7 @@ describe('ADR-0365 single-hop owner-backed reads', () => {
   it('uses one head request through the chunk boundary and only continues after its first bytes', () => {
     const owner = new MemoryFsSync();
     const ownerRead = vi.spyOn(owner, 'readFileBytesSync');
+    const ownerRange = vi.spyOn(owner, 'readFileRangeSync');
     const ownerExists = vi.spyOn(owner, 'existsSync');
     const ownerReaddir = vi.spyOn(owner, 'readdirSync');
     const ownerStat = vi.spyOn(owner, 'statSync');
@@ -89,6 +90,7 @@ describe('ADR-0365 single-hop owner-backed reads', () => {
           headProbesBefore,
       ).toBe(0);
       const readsBefore = ownerRead.mock.calls.length;
+      const rangesBefore = ownerRange.mock.calls.length;
       const probesBefore =
         ownerExists.mock.calls.length +
         ownerReaddir.mock.calls.length +
@@ -96,7 +98,8 @@ describe('ADR-0365 single-hop owner-backed reads', () => {
         ownerStatOrNull.mock.calls.length;
 
       expect(remote.readFileBytesSync(path)).toEqual(bytes);
-      expect(ownerRead.mock.calls.length - readsBefore).toBe(size > FS_RPC_CHUNK ? 2 : 1);
+      expect(ownerRead.mock.calls.length - readsBefore).toBe(1);
+      expect(ownerRange.mock.calls.length - rangesBefore).toBe(size > FS_RPC_CHUNK ? 1 : 0);
       expect(
         ownerExists.mock.calls.length +
           ownerReaddir.mock.calls.length +

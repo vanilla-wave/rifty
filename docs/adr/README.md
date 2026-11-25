@@ -27,6 +27,7 @@ ADRs are immutable while active, except dated lines under `## Decisions` / `§Co
 | 0428 | Wait for native replica ownership before replay |
 | 0429 | Preserve subtree failure scope and native reader lifetimes |
 | 0476 | OPFS admission and structured storage startup failures |
+| 0576 | FsSync positional read and write by range |
 
 ### kernel
 

@@ -1,8 +1,4 @@
-import {
-  type ChunkedReadSource,
-  readChunkReplyOf,
-  readFileHeadReplyOf,
-} from '@riftydev/runtime-js';
+import { type ReadFileHeadSource, readFileHeadReplyOf } from '@riftydev/runtime-js';
 import { type CommandContext, ShellCommandLifecycleError } from '@riftydev/shell';
 import {
   type FsSync,
@@ -94,7 +90,7 @@ function assertNotReserved(resolved: GuestResolution, guestPath: string): void {
 }
 
 /** Guest view over the owner authority: mounts, virtual ancestors, and their edges (ADR-0531). */
-export class ProjectTerminalFsSync implements FsSync, ChunkedReadSource {
+export class ProjectTerminalFsSync implements FsSync, ReadFileHeadSource {
   constructor(
     private readonly inner: FsSync,
     private readonly layout: GuestLayout,
@@ -184,13 +180,13 @@ export class ProjectTerminalFsSync implements FsSync, ChunkedReadSource {
     return this.run(() => this.inner.readFileBytesSync(this.readable(path)));
   }
 
-  // A rooted relay forwards ADR-0365 reads through the same resolution.
-  readFileHeadReply(path: string): Uint8Array {
-    return this.run(() => readFileHeadReplyOf(this.inner, this.readable(path)));
+  readFileRangeSync(path: string, position: number, length: number): Uint8Array {
+    return this.run(() => this.inner.readFileRangeSync(this.readable(path), position, length));
   }
 
-  readChunkReply(path: string, offset: number, length: number): Uint8Array {
-    return this.run(() => readChunkReplyOf(this.inner, this.readable(path), offset, length));
+  // A rooted relay forwards ADR-0365 heads through the same resolution.
+  readFileHeadReply(path: string): Uint8Array {
+    return this.run(() => readFileHeadReplyOf(this.inner, this.readable(path)));
   }
 
   writeFileSync(path: string, data: Uint8Array): void {

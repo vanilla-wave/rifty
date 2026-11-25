@@ -2,13 +2,14 @@
  * Child-side remote `FsSync` (ADR-0150): a supervised child worker reads the
  * single-store owner's fs over sync-RPC. Delegates each call to the owner
  * over the kernel sync-RPC ring (`KernelSyncApi`). Reads pull raw bytes
- * (binary reply) in `FS_RPC_CHUNK` slices keyed by offset; writes push base64
+ * (binary reply) in `FS_RPC_CHUNK` slices keyed by offset (ADR-0365, ADR-0576); writes push base64
  * chunks. All calls block the child via `Atomics.wait` (inside `call`); legal
  * only in a kernel-spawned Worker. fd-level ops stay client-side (`fs.ts`
- * fdTable) — this implements only the 13 `FsSync` methods.
+ * fdTable) — this implements only the `FsSync` methods.
  */
 
 import { type FsSync, type VfsDirent, VfsError, type VfsErrorCode } from '@riftydev/vfs';
+import { assertReadRange } from '@riftydev/vfs/internal';
 import { setSyncMirror } from '../builtins/fs-sync-mirror.ts';
 import {
   FS_METHODS,
@@ -56,46 +57,26 @@ function restoreTransportVfsError(error: unknown): unknown {
 }
 
 /**
- * A VFS that answers one ADR-0365 head/continuation request with one upstream
- * request. A nested-Worker relay serving such a VFS forwards the request
- * instead of re-reading the whole file per request (O(N^2) across the hop).
+ * A VFS that answers one ADR-0365 head request with one upstream request. A
+ * nested-Worker relay serving such a VFS forwards it instead of a whole-file
+ * read. Continuations forward through `FsSync.readFileRangeSync` (ADR-0576).
  */
-export interface ChunkedReadSource {
+export interface ReadFileHeadSource {
   /** Exact `fs.readFileHead` reply bytes: f64LE total size + first chunk. */
   readFileHeadReply(path: string): Uint8Array;
-  /** Exact `fs.readChunk` reply bytes for one range of the current file. */
-  readChunkReply(path: string, offset: number, length: number): Uint8Array;
 }
 
-function isChunkedReadSource(vfs: FsSync): vfs is FsSync & ChunkedReadSource {
-  const candidate = vfs as Partial<ChunkedReadSource>;
-  return (
-    typeof candidate.readFileHeadReply === 'function' &&
-    typeof candidate.readChunkReply === 'function'
-  );
+function isReadFileHeadSource(vfs: FsSync): vfs is FsSync & ReadFileHeadSource {
+  return typeof (vfs as Partial<ReadFileHeadSource>).readFileHeadReply === 'function';
 }
 
 /** `fs.readFileHead` reply for `vfs`: forwarded when it can, else one current full read. */
 export function readFileHeadReplyOf(vfs: FsSync, path: string): Uint8Array {
-  if (isChunkedReadSource(vfs)) return vfs.readFileHeadReply(path);
+  if (isReadFileHeadSource(vfs)) return vfs.readFileHeadReply(path);
   return encodeReadFileHead(vfs.readFileBytesSync(path));
 }
 
-/** `fs.readChunk` reply for `vfs`: forwarded when it can, else a slice of one current full read. */
-export function readChunkReplyOf(
-  vfs: FsSync,
-  path: string,
-  offset: number,
-  length: number,
-): Uint8Array {
-  if (isChunkedReadSource(vfs)) return vfs.readChunkReply(path, offset, length);
-  // TODO(backlog: perf/fs-rpc-chunk-perf) — a non-forwarding store re-reads the whole file per chunk → O(N²)
-  const bytes = vfs.readFileBytesSync(path);
-  if (offset >= bytes.length) return new Uint8Array(0);
-  return bytes.subarray(offset, Math.min(bytes.length, offset + length));
-}
-
-export class SyncRpcFsSync implements FsSync, ChunkedReadSource {
+export class SyncRpcFsSync implements FsSync, ReadFileHeadSource {
   constructor(
     private readonly call: SyncCall,
     private readonly callBinary: SyncBinaryCall,
@@ -149,11 +130,46 @@ export class SyncRpcFsSync implements FsSync, ChunkedReadSource {
     return this.callFsBinary(FS_METHODS.readFileHead, encodeFsPathRequest(path)) as Uint8Array;
   }
 
-  readChunkReply(path: string, offset: number, length: number): Uint8Array {
-    return this.callFsBinary(
+  /** One `fs.readChunk` exchange: one owner store call, ≤ `length` bytes. */
+  private readPiece(path: string, offset: number, length: number): Uint8Array {
+    const piece = this.callFsBinary(
       FS_METHODS.readChunk,
       encodeFsReadRangeRequest(path, offset, length),
-    ) as Uint8Array;
+    );
+    if (!(piece instanceof Uint8Array)) {
+      throw new TypeError(`sync-rpc-fs: range reply for ${path} must be a Uint8Array`);
+    }
+    if (piece.length > length) {
+      throw new Error(
+        `sync-rpc-fs: oversized read for ${path} — ${piece.length} bytes exceeds the ${length} requested`,
+      );
+    }
+    return piece;
+  }
+
+  /**
+   * ADR-0576. ≤ `FS_RPC_CHUNK`: one exchange. Longer: one exchange per piece,
+   * each the file at its exchange (a concurrent write may land between them).
+   */
+  readFileRangeSync(path: string, position: number, length: number): Uint8Array {
+    assertReadRange(position, length);
+    if (length <= FS_RPC_CHUNK) return this.readPiece(path, position, length);
+    const pieces: Uint8Array[] = [];
+    let got = 0;
+    while (got < length) {
+      const want = Math.min(FS_RPC_CHUNK, length - got);
+      const piece = this.readPiece(path, position + got, want);
+      pieces.push(piece);
+      got += piece.length;
+      if (piece.length < want) break;
+    }
+    const out = new Uint8Array(got);
+    let at = 0;
+    for (const piece of pieces) {
+      out.set(piece, at);
+      at += piece.length;
+    }
+    return out;
   }
 
   readFileBytesSync(path: string): Uint8Array {
@@ -165,18 +181,13 @@ export class SyncRpcFsSync implements FsSync, ChunkedReadSource {
     let offset = firstChunk.length;
     while (offset < size) {
       const requested = Math.min(FS_RPC_CHUNK, size - offset);
-      const chunk = this.readChunkReply(path, offset, requested);
+      const chunk = this.readPiece(path, offset, requested);
       // Empty chunk before the admitted size means the owner store shrank mid-read
       // (snapshot inconsistent). ADR-0150 forbids silent truncation — fail loud
       // rather than hand the caller a partial file presented as the whole thing.
       if (chunk.length === 0) {
         throw new Error(
           `sync-rpc-fs: short read for ${path} — got ${offset} of ${size} bytes (owner store changed mid-read)`,
-        );
-      }
-      if (chunk.length > requested) {
-        throw new Error(
-          `sync-rpc-fs: oversized read for ${path} — ${chunk.length} bytes exceeds ${requested} remaining in the head snapshot`,
         );
       }
       out.set(chunk, offset);

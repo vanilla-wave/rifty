@@ -53,6 +53,9 @@ export class ScopedFsSync implements FsSync {
   readFileBytesSync(path: string): Uint8Array {
     return this.inner.readFileBytesSync(this.map(path));
   }
+  readFileRangeSync(path: string, position: number, length: number): Uint8Array {
+    return this.inner.readFileRangeSync(this.map(path), position, length);
+  }
   writeFileSync(path: string, data: Uint8Array): void {
     this.inner.writeFileSync(this.map(path), data);
   }
