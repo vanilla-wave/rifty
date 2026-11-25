@@ -4,7 +4,7 @@
  * `close()` while an async write is queued.
  */
 import zlib from 'node:zlib';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ZlibEngine } from '../../src/zlib-engine/engine';
 import { createZlibBinding } from '../../src/zlib-engine/handle';
 import { zlibWasmBytes } from '../../src/zlib-engine/wasm-bytes';
@@ -78,4 +78,95 @@ describe('zlib-engine handle frees zlib state on Node’s close paths', () => {
     expect(ends.n).toBe(1);
     expect(out.subarray(0, out.length - state[0]!).toString()).toBe('hello');
   });
+});
+
+/** The real engine whose `deflate` throws once (a stand-in for a wasm trap), optionally after `before()`. */
+function trappingEngine(before: () => void = () => {}) {
+  const engine = new ZlibEngine(zlibWasmBytes());
+  const x = engine.x;
+  let armed = true;
+  Object.defineProperty(engine, 'x', {
+    value: {
+      ...x,
+      deflate: (s: number, flush: number) => {
+        if (!armed) return x.deflate(s, flush);
+        armed = false;
+        before();
+        throw new Error('injected trap');
+      },
+    },
+  });
+  return engine;
+}
+
+describe('an internal failure in a write is a loud exception, not onerror', () => {
+  const DEFLATE = 1;
+  for (const async of [false, true])
+    for (const closeDuring of [false, true])
+      it(`${async ? 'async' : 'sync'}${closeDuring ? ', close() pending' : ''}: thrown, the write ends`, () => {
+        const queue: (() => void)[] = [];
+        let h: ReturnType<typeof open>['h'] | null = null;
+        const engine = trappingEngine(() => {
+          if (closeDuring) h?.close(); // pending: the write is in progress
+        });
+        const binding = createZlibBinding(
+          () => engine,
+          (run) => queue.push(run),
+        );
+        const opened = open(binding);
+        h = opened.h;
+        const out = Buffer.alloc(64);
+        const call = () => {
+          (async ? h!.write : h!.writeSync).call(h, Z_FINISH, Buffer.from('x'), 0, 1, out, 0, 64);
+          if (async) queue.shift()?.();
+        };
+        expect(call).toThrow('injected trap');
+        expect(opened.events).toEqual([]);
+        if (closeDuring)
+          expect(() => h!.writeSync(Z_FINISH, Buffer.from('x'), 0, 1, out, 0, 64)).toThrow(
+            /already finalized/,
+          );
+        else {
+          h.writeSync(Z_FINISH, Buffer.from('x'), 0, 1, out, 0, 64); // not left in progress
+          expect(zlib.inflateSync(out.subarray(0, 64 - opened.state[0]!)).toString()).toBe('x');
+          h.close();
+        }
+      });
+
+  it('a pending close that throws too: the write’s exception still propagates, the close’s is raised after', () => {
+    let h: ReturnType<typeof open>['h'] | null = null;
+    const engine = trappingEngine(() => h?.close());
+    const x = engine.x;
+    Object.defineProperty(engine, 'x', {
+      value: {
+        ...x,
+        deflateEnd: () => {
+          throw new Error('injected close failure');
+        },
+      },
+    });
+    const later: (() => void)[] = [];
+    const spy = vi.spyOn(globalThis, 'queueMicrotask').mockImplementation((f) => later.push(f));
+    try {
+      const opened = open(createZlibBinding(() => engine, setImmediate));
+      h = opened.h;
+      const out = Buffer.alloc(64);
+      expect(() => h!.writeSync(Z_FINISH, Buffer.from('x'), 0, 1, out, 0, 64)).toThrow(
+        'injected trap',
+      );
+    } finally {
+      spy.mockRestore();
+    }
+    expect(later.length).toBe(1);
+    expect(later[0]).toThrow('injected close failure');
+  });
+
+  function open(binding: ReturnType<typeof createZlibBinding>) {
+    const h = new binding.Zlib(DEFLATE);
+    const state = new Uint32Array(2);
+    const events: unknown[] = [];
+    h.onerror = (...a) => events.push(a);
+    h.init(15, -1, 8, 0, state, () => {}, undefined);
+    return { h, state, events };
+  }
 });

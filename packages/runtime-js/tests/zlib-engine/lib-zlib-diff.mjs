@@ -425,6 +425,28 @@ const MEMORY = {
     d.end();
     return r;
   },
+  // Transferred before the call: length 0, as Node reads it (only off + len > 0 aborts Node).
+  'memory: deflateSync of a buffer transferred before the call': ({ z }) =>
+    attempt(() => {
+      const b = Buffer.alloc(10);
+      keep.push(b.buffer.transfer());
+      return z.deflateSync(b);
+    }),
+  'memory: gzipSync of a Uint8Array transferred before the call': ({ z }) =>
+    attempt(() => {
+      const u = new Uint8Array(10);
+      keep.push(u.buffer.transfer());
+      return z.gzipSync(u);
+    }),
+  'memory: stream write() of a transferred buffer, then end(hi)': ({ z }) => {
+    const d = z.createDeflate();
+    const r = settle(d, (o) => ({ out: o.toString('hex') }));
+    const b = Buffer.alloc(10);
+    keep.push(b.buffer.transfer());
+    d.write(b);
+    d.end(Buffer.from('hi'));
+    return r;
+  },
   'memory: deflate input moved by structuredClone transfer after write()': ({ z }) => {
     const d = z.createDeflate();
     const r = settle(d, (o) => ({ out: val(o), inflated: realZlib.inflateSync(o).length }));

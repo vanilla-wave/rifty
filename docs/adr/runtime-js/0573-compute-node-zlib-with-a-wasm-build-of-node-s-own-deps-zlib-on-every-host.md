@@ -103,8 +103,10 @@ own `lib/zlib.js` also runs on each engine via a swapped `binding.Zlib`.
    completion (the port: its state and callback as Node's, the bytes lost); `params()`/`init()` during
    an async write (Node races); a `SharedArrayBuffer` input written by another thread, a resizable
    `ArrayBuffer` resized mid-operation; `in` and `out` overlapping in one `ArrayBuffer`; `params()`
-   after the last `out` was transferred; a buffer transferred away before the call — Node aborts the
-   process (`CHECK(Buffer::IsWithinBounds)`), the port reports `Z_STREAM_ERROR` through `onerror`.
+   after the last `out` was transferred; a buffer transferred away before the call with
+   `off + len > 0` — Node aborts the process (`CHECK(Buffer::IsWithinBounds)`), the port reports
+   `Z_STREAM_ERROR` through `onerror` (with `off + len` 0 both read it as a null pointer of length 0:
+   equal, not part of the class).
    All but the first two only via `_handle` or Node-aborting programs. Route to close: bounded input
    windows read live with byte parity per level/strategy proven, and output written through before
    an error; compat ⚠️ from unit 3. A failed port allocation takes Node's `Z_MEM_ERROR` path

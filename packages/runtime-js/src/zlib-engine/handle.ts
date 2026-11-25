@@ -71,8 +71,9 @@ const MEMORY_ERROR: CompressionError = {
 };
 
 /**
- * A buffer whose ArrayBuffer was transferred away: Node aborts the process (`CHECK(IsWithinBounds)`);
- * the port reports zlib's `Z_STREAM_ERROR` through the same channel (declared, memory model).
+ * A buffer whose ArrayBuffer was transferred away reads, as in Node, as length 0 and a null pointer.
+ * Where Node's bounds CHECK then fails (`off + len > 0`) it aborts the process; the port reports
+ * zlib's `Z_STREAM_ERROR` through the error channel instead (declared, memory model).
  */
 const DETACHED_ERROR: CompressionError = {
   message: 'stream error',
@@ -672,7 +673,8 @@ export function createZlibBinding(
         const off = u32(inOff);
         const len = u32(inLen);
         const bytes = liveBytes(input);
-        if (bytes === null) detached = true;
+        if (bytes === null)
+          detached ||= off + len > 0; // else: Node's null pointer, length 0
         else {
           check(off + len <= bytes.byteLength, 'input out of bounds');
           inView = bytes.subarray(off, off + len);
@@ -682,8 +684,8 @@ export function createZlibBinding(
       const oOff = u32(outOff);
       const oLen = u32(outLen);
       const outBytes = liveBytes(out);
-      let outView: Uint8Array = new Uint8Array(0);
-      if (outBytes === null) detached = true;
+      let outView: Uint8Array = new Uint8Array(0); // detached, length 0: Node's null out
+      if (outBytes === null) detached ||= oOff + oLen > 0;
       else {
         check(oOff + oLen <= outBytes.byteLength, 'output out of bounds');
         outView = outBytes.subarray(oOff, oOff + oLen);
@@ -706,14 +708,22 @@ export function createZlibBinding(
       this.writeInProgress = true;
       const work = () =>
         isError(inPtr) ? inPtr : guarded(() => ctx.work(flush, inPtr, inBytes, outAt));
-      /** An exception that is not zlib's (a bug, a CHECK) still ends the write. */
+      /**
+       * An internal failure (a broken check, a wasm trap — where Node's process would abort) is a
+       * loud exception, never `onerror`: the write ends and a pending close runs; the original
+       * exception still propagates, joined by the close's own if that throws too.
+       */
       const settle = () => {
+        let ended = false;
         try {
-          return work();
-        } catch (e) {
-          this.writeInProgress = false;
-          if (async && this.pendingClose) this.close();
-          throw e;
+          const after = work();
+          ended = true;
+          return after;
+        } finally {
+          if (!ended) {
+            this.writeInProgress = false;
+            if (this.pendingClose) this.closeAfterFailure();
+          }
         }
       };
       if (!async) {
@@ -737,6 +747,17 @@ export function createZlibBinding(
           if (this.pendingClose) this.close();
         }
       });
+    }
+
+    /** Runs inside a `finally` that rethrows the write's exception: a close failure is not dropped. */
+    private closeAfterFailure(): void {
+      try {
+        this.close();
+      } catch (e) {
+        queueMicrotask(() => {
+          throw e;
+        });
+      }
     }
 
     private updateWriteResult(after: { availIn: number; availOut: number }): void {

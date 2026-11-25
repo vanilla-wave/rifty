@@ -183,6 +183,21 @@ describe('product handle = Node native handle, direct calls', () => {
     expect(r.port).toEqual(r.node);
   });
 
+  it('a transferred-away input of length 0 is a null input, as Node', () => {
+    const r = both((b) => {
+      const { h, state, events } = open(b, C.DEFLATE);
+      const input = Buffer.alloc(10);
+      const moved = input.buffer.transfer();
+      const out = Buffer.alloc(64);
+      h.writeSync(C.Z_FINISH, input, 0, 0, out, 0, 64);
+      h.close();
+      void moved;
+      return { events, state: [...state], out: out.subarray(0, 64 - state[0]!).toString('hex') };
+    });
+    expect(r.port).toEqual(r.node);
+    expect(r.node.state).toEqual([56, 0]);
+  });
+
   it('crc32 of strings and views, as Node', () => {
     const r = both((b) =>
       [
@@ -274,21 +289,26 @@ describe('declared: the port copies where Node uses the caller’s memory live',
     });
   });
 
-  it('a buffer transferred away before the call: Node aborts the process, the port reports it', async () => {
+  it('a buffer transferred away before the call, in_len 0 (where Node aborts: len 1)', async () => {
     const r: unknown[] = [];
-    for (const async of [false, true]) {
-      const { h, events } = open(port, C.DEFLATE);
-      const input = Buffer.alloc(100, 1);
-      const out = new Uint8Array(64);
-      keep.push(input.buffer.transfer()); // Node: CHECK(Buffer::IsWithinBounds) → abort
-      (async ? h.write : h.writeSync).call(h, C.Z_FINISH, input, 0, 0, out, 0, 64);
-      if (async) await new Promise((k) => setImmediate(k));
-      r.push(events);
-      h.close();
-    }
+    for (const len of [0, 1])
+      for (const async of [false, true]) {
+        const { h, events } = open(port, C.DEFLATE);
+        const input = Buffer.alloc(100, 1);
+        const out = new Uint8Array(64);
+        keep.push(input.buffer.transfer()); // now length 0, Node's data pointer null
+        (async ? h.write : h.writeSync).call(h, C.Z_FINISH, input, 0, len, out, 0, 64);
+        if (async) await new Promise((k) => setImmediate(k));
+        r.push([len, async, events]);
+        h.close();
+      }
+    // len 0 is the equal-to-Node path (below); len 1: Node CHECK(Buffer::IsWithinBounds) → abort.
+    const stream = ['stream error', -2, 'Z_STREAM_ERROR'];
     expect(r).toEqual([
-      [['stream error', -2, 'Z_STREAM_ERROR']],
-      [['stream error', -2, 'Z_STREAM_ERROR']],
+      [0, false, []],
+      [0, true, []],
+      [1, false, [stream]],
+      [1, true, [stream]],
     ]);
   });
 

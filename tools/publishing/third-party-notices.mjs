@@ -246,11 +246,12 @@ function sourceDirFiles(root, pkgDirs) {
 function isBacklogUnit(root, unit) {
   if (typeof unit !== 'string' || !/^[a-z0-9][a-z0-9-]*\/[a-z0-9][a-z0-9-]*$/u.test(unit))
     return false;
-  const file = join(root, 'docs/backlog', `${unit}.md`);
-  return (
-    existsSync(file) &&
-    /^---\n[\s\S]*?^status: \S/mu.test(readText(root, `docs/backlog/${unit}.md`))
+  if (!existsSync(join(root, 'docs/backlog', `${unit}.md`))) return false;
+  // Only the front matter block at the top counts (LF or CRLF), not a `status:` line in the body.
+  const front = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/u.exec(
+    readText(root, `docs/backlog/${unit}.md`),
   );
+  return front !== null && /^status:[ \t]*\S/mu.test(front[1]);
 }
 
 /** `sourcesKey`: a key of sources.json, or a dotted path through own keys of plain objects. */

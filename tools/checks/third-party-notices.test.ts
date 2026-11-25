@@ -202,6 +202,11 @@ describe('closed by default (review S1, S2)', () => {
       '---\narea: runtime-js\nstatus: draft\n---\n# unit\n',
     );
     put('docs/backlog/runtime-js/README.md', '# area\n');
+    put('docs/backlog/runtime-js/body-status.md', '---\narea: runtime-js\n---\nstatus: draft\n');
+    put(
+      'docs/backlog/runtime-js/crlf.md',
+      '---\r\narea: runtime-js\r\nstatus: draft\r\n---\r\n# unit\r\n',
+    );
     const marked = (unshipped: string) => ({
       ...manifest,
       generated: {
@@ -209,7 +214,9 @@ describe('closed by default (review S1, S2)', () => {
       },
     });
     expect(validateManifest(root, marked('runtime-js/zlib-node-lib-port'), [])).toEqual([]);
+    expect(validateManifest(root, marked('runtime-js/crlf'), [])).toEqual([]);
     for (const value of [
+      'runtime-js/body-status',
       'runtime-js/gone',
       'runtime-js/README',
       '../runtime-js/zlib-node-lib-port',
