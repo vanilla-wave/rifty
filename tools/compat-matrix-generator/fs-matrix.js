@@ -8,7 +8,12 @@ export const fsMatrix = {
     [
       '`readFileSync` / `writeFileSync`',
       '✅',
-      'utf8 strings and binary `Uint8Array`/Buffer-like reads',
+      'utf8 strings; any TypedArray/DataView (incl. offset and SharedArrayBuffer views) writes its raw bytes, copied: the file never shares memory with a program buffer, written or read (`fs/write-read-buffer-ownership`, `fs/write-array-buffer-view-kinds`)',
+    ],
+    [
+      'write `data` that is not a string or ArrayBufferView; `writeSync` of a non-`Uint8Array` view',
+      '⚠️',
+      'Number/Array/ArrayBuffer are written as wrong bytes, `null` a code-less TypeError (Node: `ERR_INVALID_ARG_TYPE`); `writeSync(fd, new Uint16Array(…))` throws (Node writes its bytes) — `backlog/runtime-js/fs-write-data-argument-types`',
     ],
     ['`mkdirSync({ recursive })`', '✅', 'Creates parent directories'],
     [
@@ -50,6 +55,11 @@ export const fsMatrix = {
     ['Encoding reads', '✅', 'utf8, utf16le, latin1/ascii, hex parity cases'],
     ['Path resolution with `process.cwd()`', '✅', 'Relative fs paths anchor at runtime cwd'],
     ['Callback `readFile` / `writeFile`', '✅', 'Node-style error-first callbacks'],
+    [
+      'Buffer mutated while an async write is pending',
+      '⚠️',
+      "A mutation after the write completed never reaches the file, and `fs.write(fd)` / a `WriteStream` before `open` read it as Node does (`fs/async-write-buffer-moment`). `promises.writeFile`/`appendFile`, callback `writeFile` and an open `WriteStream` take the bytes at the call: a mutation later in the caller's turn lands in Node's file, not rifty's — `backlog/runtime-js/fs-callbacks-io-turn`; one in a `setImmediate` — `backlog/runtime-js/fs-async-op-io-rounds`",
+    ],
     [
       'Callback `fs.appendFile` / `fs.rm`',
       '❌',

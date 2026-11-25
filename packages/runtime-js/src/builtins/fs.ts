@@ -264,9 +264,15 @@ function decodeResult(bytes: Uint8Array, encoding: Encoding | null): Uint8Array 
   return bytesToString(bytes, encoding);
 }
 
+/**
+ * Guest data → bytes the store owns. A store may keep what it is given
+ * (`MemoryFsSync`), so never the guest's memory: the raw bytes of any view
+ * (TypedArray, DataView, SharedArrayBuffer), copied.
+ */
 function encodeData(data: Uint8Array | string, encoding: Encoding | null): Uint8Array {
   if (typeof data === 'string') return Buffer.from(data, encoding ?? 'utf8');
-  return data;
+  if (!ArrayBuffer.isView(data)) return data;
+  return new Uint8Array(data.buffer, data.byteOffset, data.byteLength).slice();
 }
 
 /**
