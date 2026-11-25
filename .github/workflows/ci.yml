@@ -74,6 +74,7 @@ jobs:
       - run: pnpm check:eval-compiler-drift
       - run: pnpm check:fetch-classes-drift
       - run: pnpm check:url-legacy-drift
+      - run: pnpm check:zlib-wasm-drift # committed zlib.wasm module, licence, fixtures = sources.json (no toolchain)
       - run: pnpm check:shadow-catalog-drift
       - run: pnpm check:install-artifact-drift
       - run: pnpm check:snapshot-artifact-drift
@@ -118,6 +119,15 @@ jobs:
         # lifecycle tests launch that Chromium (trap playwright-host-image).
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      # ADR-0573: rebuild zlib.wasm from the sha256-pinned Node tarball with the pinned wasi-sdk
+      # (generated/sources.json) and require the committed bytes; downloads cached by their sha256.
+      - if: matrix.suite == 'run'
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/rifty-zlib-wasm/dl
+          key: ${{ runner.os }}-zlib-wasm-${{ hashFiles('packages/runtime-js/src/zlib-engine/generated/sources.json') }}
+      - if: matrix.suite == 'run'
+        run: pnpm zlib-wasm:rebuild
       - run: pnpm test:${{ matrix.suite }}
 
   e2e-chromium:

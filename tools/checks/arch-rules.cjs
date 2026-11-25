@@ -93,6 +93,14 @@ const dependencyPolicyRules = [
     },
   },
   {
+    name: 'zlib-engine-has-no-production-importer',
+    severity: 'error',
+    comment:
+      'ADR-0573 unit 2: the zlib engine + handle reach no builtin, no isolate guest (ceiling-zlib.ts), no bundle — only their tests; unit 3 (zlib-node-lib-port) removes this rule',
+    from: { pathNot: '(?:^|/)runtime-js/src/zlib-engine/' },
+    to: { path: '(?:^|/)runtime-js/src/zlib-engine/' },
+  },
+  {
     name: 'no-browser-imports-agent-bench',
     severity: 'error',
     comment: 'I8: the external diagnostic harness is never a browser/runtime dependency',

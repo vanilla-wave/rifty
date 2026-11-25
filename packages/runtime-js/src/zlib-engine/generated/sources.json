@@ -1,0 +1,137 @@
+{
+  "node": {
+    "version": "v24.16.0",
+    "url": "https://nodejs.org/dist/v24.16.0/node-v24.16.0.tar.xz",
+    "sha256": "2ff84a6de70b6165290111b0fc656ded1ad207a799816fe720cc7c31232df30f"
+  },
+  "toolchain": {
+    "release": "wasi-sdk-34",
+    "hosts": {
+      "darwin-arm64": {
+        "url": "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-34/wasi-sdk-34.0-arm64-macos.tar.gz",
+        "sha256": "9c59398106b417f8f14913380fdf0097a8cc0ff4af9eb3ce0065a859e88d49e9"
+      },
+      "linux-x64": {
+        "url": "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-34/wasi-sdk-34.0-x86_64-linux.tar.gz",
+        "sha256": "b761e3a0721dbae9c09a0059e5fdb2bf917d1b4a8a7b430fb3b5aafb0984b2c4"
+      },
+      "linux-arm64": {
+        "url": "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-34/wasi-sdk-34.0-arm64-linux.tar.gz",
+        "sha256": "f7e243dff54d60bcc576e94d6166b69f410f2500ae4a9ceef34315be10e77971"
+      }
+    }
+  },
+  "build": {
+    "sources": [
+      "adler32.c",
+      "crc32.c",
+      "deflate.c",
+      "inflate.c",
+      "inftrees.c",
+      "inffast.c",
+      "trees.c",
+      "zutil.c",
+      "cpu_features.c"
+    ],
+    "flags": [
+      "--target=wasm32-wasip1",
+      "-mexec-model=reactor",
+      "-O2",
+      "-DCPU_NO_SIMD",
+      "-DHAVE_HIDDEN",
+      "-Wno-implicit-fallthrough",
+      "-Wno-deprecated-non-prototype",
+      "-I."
+    ],
+    "link": [
+      "-Wl,--no-entry",
+      "-Wl,--strip-all",
+      "-Wl,--export=deflateInit2_",
+      "-Wl,--export=inflateInit2_",
+      "-Wl,--export=deflate",
+      "-Wl,--export=inflate",
+      "-Wl,--export=deflateEnd",
+      "-Wl,--export=inflateEnd",
+      "-Wl,--export=deflateReset",
+      "-Wl,--export=inflateReset",
+      "-Wl,--export=deflateParams",
+      "-Wl,--export=deflateSetDictionary",
+      "-Wl,--export=inflateSetDictionary",
+      "-Wl,--export=crc32",
+      "-Wl,--export=zlibVersion",
+      "-Wl,--export=malloc",
+      "-Wl,--export=free"
+    ],
+    "toolchain": "wasi-sdk 34.0 (llvm 23.1.0 895aa2c896ad, wasi-libc 2e6fb9d8ee0c)"
+  },
+  "wasm": {
+    "bytes": 67043,
+    "sha256": "3c7a254209e2b34e1bcfbeda235622057a7479e04c0cad480aa04af8fea4687d"
+  },
+  "licence": "26d5f3886c611b3607d0d582eda5ee5798bcc0d5bfe65914fc878eac63ead075",
+  "fixtures": {
+    "LICENSE": "4573185d56580da2b890ba34a85a409257640f1c5632eade4300137266194d18",
+    "lib/zlib.js": "ed5e64bcd4f727fa3f3036fa430de530c3465007a09271f87c98fba475dcb9df",
+    "deps/zlib/deflate.c": "eb2eb5e88cb13f81b64bc3c6caa3e8da88f2d550ca9e9a9031de16a58440aa8e",
+    "deps/zlib/inflate.c": "69ea904d353e41a7f764f21f06c6fdab78da95c90d217f62c2f9810405658061",
+    "deps/zlib/trees.c": "05319a5f007d33fbc3b5a5dc17c2913e0ac06dd354acdea9d58ea5765e18444e",
+    "test/fixtures/person.jpg": "cf4c831d6da352a314c9d2483dcef3b6f97ffcc91c01223a8e15c6d5e97e37af",
+    "test/fixtures/person.jpg.gz": "34f916e5a3b4c298cbcd181c90545f6440d4caebf51371437722e4bb5f29095e",
+    "test/fixtures/pseudo-multimember-gzip.gz": "9a0fe4ea2df9fd8a8a894fb344c141e42277021d86230a6d07e972d6b4e3e8a1",
+    "test/fixtures/pseudo-multimember-gzip.z": "1a10fdb0bcd1ed52d634052387b05e22eba7212c67ed20f4a3c1e6c4df253480",
+    "test/fixtures/elipses.txt": "bbf4d728107c654c035a44207763f926484a54b9a0aeba06c414583fb70ba9a4",
+    "test/fixtures/empty.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "test/common/package.json": "8005a3491db7d92f36ac66369861589f9c47123d3a7c71e643fc2c06168cd45a",
+    "test/common/index.js": "2c4dfad56da99b976137511b070b2a6ed6a2c9443ff5d81c3cf15464da9a4b42",
+    "test/common/tmpdir.js": "32001ed4697fccbe8d7c4b12312731d2d45d9272157c46b07d09d5ceaaf77727",
+    "test/common/fixtures.js": "d2888d150463380169cd553b4289d37136a88b0ec96bc484ed2b1a15a9b31630",
+    "test/common/gc.js": "19ec816cdcbcf29aa768cfa741026f4049034dc11509354c910c1086f23abdea",
+    "test/parallel/test-zlib-close-after-error.js": "4e83cddf1b1dfa27a54dac1b5e5f701bf125a7e5a2d850480737b87437bd8129",
+    "test/parallel/test-zlib-close-after-write.js": "2725e1cf19ea00835a944572360b571e305e91e05f08e8c0add4e70a407eee2f",
+    "test/parallel/test-zlib-close-in-ondata.js": "02bbaf6dda8c340e9104f4201290fe41a85de99d2b7d5d8059cfdd09d71bf221",
+    "test/parallel/test-zlib-const.js": "8c06894eb2e0832d4935b0dea72712cd6d4f7c7485188e19fafd44ecdf7c856c",
+    "test/parallel/test-zlib-convenience-methods.js": "68d95f2f5050e7669771cbc66ae7d2153cac850e1a0e715943255b7aba43b35f",
+    "test/parallel/test-zlib-crc32.js": "4843610cef33bf352e2e9c8fc9b6368bafd6178d7891214000fa0035c451ee0a",
+    "test/parallel/test-zlib-create-raw.js": "854b01d874275f14aeb079fdcda96e128f418d89701421d28e5cfab3070e96b8",
+    "test/parallel/test-zlib-deflate-constructors.js": "f450bb33076737662aca269cf89eecbc0e334b3c18f61312cb6911c1d852fac9",
+    "test/parallel/test-zlib-deflate-raw-inherits.js": "67d08b1ee349d949bf56542b85eed57e079a338a026340f4dfbd5b3790ec3432",
+    "test/parallel/test-zlib-destroy-pipe.js": "2bcc6c1ee981f60de13bacf09d70ac039c91ad290b01c9b718893c98cca65e7b",
+    "test/parallel/test-zlib-destroy.js": "5d70e5f321acb778f41e992ea60840f9ec08549b7157651aac013434fea012bd",
+    "test/parallel/test-zlib-dictionary-fail.js": "4d00ffedff48c1f38a53184499a49cb211f7fdbcc5367777ba1bd6a0af740377",
+    "test/parallel/test-zlib-dictionary.js": "a2a78fbf308b490778b1732e7b40b158183a2ba21454f4cbb5587bc67eb3a102",
+    "test/parallel/test-zlib-empty-buffer.js": "d76d22af54cbdc112e1d99eea3d47e362967de7372662c74d84512407d6ab7dd",
+    "test/parallel/test-zlib-failed-init.js": "62f01c36d1ff4a837d430be3e8e07cb59b178c3eb2be552a4444afdfd9fae295",
+    "test/parallel/test-zlib-flush-drain-longblock.js": "36b791c01b9c9155bec1d9724c5f3fff22c095521d60213eb71586b348817551",
+    "test/parallel/test-zlib-flush-drain.js": "c652e3300895d4fcb6049c428dfa83dbfb9e4f3102a11f28a9c5f1f72da7c3a2",
+    "test/parallel/test-zlib-flush-flags.js": "be0b2f83a1fa0c5cc8710f08651e39dc3fe508f43f47f51ad6950206eee5fa17",
+    "test/parallel/test-zlib-flush-write-sync-interleaved.js": "3eb314253f9bb14666ee34458031d1974d17364dd6ceaab7dbb5e468e4341bdc",
+    "test/parallel/test-zlib-flush.js": "c93d23a8f7dde93f53386d8b56cdf46b55756327a5418b4e50c66bc1d8c0d351",
+    "test/parallel/test-zlib-from-concatenated-gzip.js": "12fd4932caa3c8894c1dca6bac26335bbceb05390ece7c898662f38da8ccca73",
+    "test/parallel/test-zlib-from-gzip-with-trailing-garbage.js": "5b99de86a8f1c6da0116876b64f1c88cc687df5397ef085eeaa50e90615403e7",
+    "test/parallel/test-zlib-from-gzip.js": "b8417b4c6b21b0ff294b4fbe3cb926584ce23b90d8ccb98e6f1c4284ec44b6e2",
+    "test/parallel/test-zlib-from-string.js": "710df25a808bf39929b964730aee798cc453b4f0c1d618bd0b547e1b675b2a08",
+    "test/parallel/test-zlib-invalid-input-memory.js": "2002f51c9df37a54afcca532237c72cc7b6faa90e9c196891804b727815a6246",
+    "test/parallel/test-zlib-invalid-input.js": "0cf58a14a037d792c2ab0c79694b0c3a8a3eef7e2f4bcad9de6a6181d73ec6c4",
+    "test/parallel/test-zlib-kmaxlength-rangeerror.js": "752ee06c92feb421fe6e46c6462829624528370d8532cab86751b46107dffcbd",
+    "test/parallel/test-zlib-maxOutputLength.js": "2be56547b74e394e2b8d6996b5313f45fe7863f9f502da0ffbfac0bd7778e353",
+    "test/parallel/test-zlib-no-stream.js": "afdeeebc4fa1c75751ec4b3afa9134c0d6718ab7743c6e21ece299b353f00eda",
+    "test/parallel/test-zlib-not-string-or-buffer.js": "b99f3e4a4125776e1a3d1b4d1973ac80e617e513e1b7b4714c583d46ddffe403",
+    "test/parallel/test-zlib-object-write.js": "7dfb30438f855b4e35d8ce083d14093da7030fe3129921727ce1c863580f9791",
+    "test/parallel/test-zlib-params.js": "e4810cf8c7c8a8849d3ab967730a920595acbb74cc6520db5c5775be38908cad",
+    "test/parallel/test-zlib-premature-end.js": "7f6105855d4cb4dbc5219a8795287672978a45974e461773d65864c326316bef",
+    "test/parallel/test-zlib-random-byte-pipes.js": "d7fa5e6fa125f204eab6f3d1efe46778fd207df116d48abb85da6d58116b80e7",
+    "test/parallel/test-zlib-reset-before-write.js": "0b3df7b300700cb19f7099e10813440ad8a98e6c425c9fa5dbe54061158bb978",
+    "test/parallel/test-zlib-reset-during-write.js": "8b10900688471580e8d44dbe7bd45bfea874d20d76c1e3fbf9b2ac30b741d4d1",
+    "test/parallel/test-zlib-sync-no-event.js": "26e7b01bfd0c894e8a1ef75ac6f6469d758ebbdd04f159b3aca55ed700395e30",
+    "test/parallel/test-zlib-truncated.js": "039707de290b4b305cf2f3b9a4d8299c6dafa9136dbae3b5d8bb92243f49eed1",
+    "test/parallel/test-zlib-type-error.js": "57fc473df7ecb698f30c9400e18d1aa406fb22dc56dcdbffcf76a5408e271d92",
+    "test/parallel/test-zlib-unused-weak.js": "e84334e89ab64d924c38d7f9f82e228bcce6bf134501aee6ff93335cdb3e92e5",
+    "test/parallel/test-zlib-unzip-one-byte-chunks.js": "6bb18e6da139c6161b44d65f764e132b5f30a73b3c463f1eb0fedf78d5d0ca4e",
+    "test/parallel/test-zlib-write-after-close.js": "f0d81fae2c8abe050025e4078e80ce2dd0b39c1d9ef47546fad858988e91a7b3",
+    "test/parallel/test-zlib-write-after-end.js": "34ae2a6489305c1be94fc0ae5110414284d793c2549ac03c4c83a8d3a64942db",
+    "test/parallel/test-zlib-write-after-flush.js": "baffbc402899bf8aaa30b219f1e072d11347eef4c1a30c29ae77e4859d6f0b4b",
+    "test/parallel/test-zlib-zero-byte.js": "37f39e254aa391491f2a8d1220870c72649c0c44673d13ac2a47eca827a54096",
+    "test/parallel/test-zlib-zero-windowBits.js": "be02791fcc7288eaa6dbdf2386e4eaf89a7eb1f5e5a749f52d24238372b6ec4b",
+    "test/parallel/test-zlib.js": "fddbf1cf4b55fb597224af04036017444943ed60eb0b5e2aebc176ba12a723c7"
+  }
+}

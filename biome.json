@@ -36,6 +36,7 @@
       "packages/runtime-js/tests/fixtures/url-legacy/hosts.json",
       "packages/runtime-js/tests/fixtures/url-legacy/chromium-residual.json",
       "packages/runtime-js/tests/fixtures/url-legacy/scenario-main.js",
+      "packages/runtime-js/tests/fixtures/zlib-engine/node/**",
       "tools/publishing/node-url-legacy/vendor/**",
       "packages/runtime-js/src/internal/generated/proxy-identity.js",
       "tools/shadow-registry/generated/**",
