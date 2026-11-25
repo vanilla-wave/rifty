@@ -7,7 +7,7 @@ Raw output: `life2.out.txt` (round 2, current: macOS, `memoryLimit` 256 unless a
 otherwise), `life-linux.out.txt` (round 2 on Linux), `life.out.txt` (round 1, limit 1024, kept for
 history — its v2 used an unsafe boundary, see «Boundary»). macOS: Apple M3 Pro, 12 cores, load 2–6
 (per row). Linux: colima VM aarch64, 4 CPUs, 7.7 GiB, container `node:24.16.0-bookworm` `--cpus 4
--m 6g`, on the same Mac (host load ~2–4). Node v24.16.0, isolated-vm 7.0.2, main @ `bc3412420`.
+-m 6g`, on the same Mac (host load ~2–4, the §think rows up to ~14: see each block's header). Node v24.16.0, isolated-vm 7.0.2, main @ `bc3412420`.
 
 ```sh
 mkdir -p /tmp/life-probe/deps && cp ../isolate-library-probe/deps/package*.json /tmp/life-probe/deps/
@@ -43,11 +43,13 @@ Host disk (ADR-0568 B) is not built: rejected by the user.
 
 ## What the numbers say (no recommendation)
 
-v2bs trades memory that grows with every open turn (55–105 MiB each, Memory) for a faster repeated
-`exec` (21–104 ms against v1, 32–149 ms with pauses; Cost); its first `exec` is not faster, its
+v2bs trades memory that grows with every open turn (22–34 MiB after one generator, 55–112 after
+four; Memory) for a faster repeated `exec` (20–109 ms against v1 back to back, 32–149 ms in §think;
+Cost); its first `exec` is not faster, its
 correctness needs a restore point, a rebuild path and a guard against dead realms (§haunt).
-v1w removes only v1's fixed cost, at 2× v1's memory and only when its spare is ready. v2's remaining
-gain over v1w is V8's in-isolate compile cache; whether a fresh isolate can get it is open. Which
+v1w removes only v1's fixed cost, at 2× v1's memory and only when its spare is ready. Most of v2's
+remaining gain over v1w goes with `--no-compilation-cache` (leading candidate: V8's in-isolate
+compile cache, not proven); whether a fresh isolate can get it is open. Which
 side matters depends on the strategy (an isolate per turn or per run) and on the load (open turns vs
 concurrent runs) — the user's.
 
@@ -104,23 +106,31 @@ Linux (`life-linux.out.txt`):
 | first `exec`, pdf / xlsx (+ create) | 262 / 583 | 245 / 505 | 288 / 673 | 254 + 35 / 547 + 38 | 304 + 12 / 1 071 + 39 | 510 / 1 470 |
 | 4 at once, pdf / xlsx | 540 / 1 019 | 569 / 1 006 | 492 / 1 149 | 474 / 948 | 464 / 987 | 770 / 2 325 |
 
-- **Against plain v1 (what is built), v2bs is 21–104 ms faster per warm `exec`** (macOS: empty 29.6
+- **Against plain v1 (what is built), v2bs is 20–109 ms faster per warm `exec`** (macOS: empty 29.6
   → 8.0, pdf 210 → 159, docx 180 → 135, pptx 315 → 282, xlsx 459 → 355; Linux: 41 → 10, 273 → 202,
   219 → 170, 382 → 362, 573 → 464). It buys that with memory that grows with every open turn
-  (Memory below). Its first `exec` of a sandbox is not faster: v2s ≈ v1, v2bs slower on the lazy
-  template's first reads (§think: Linux xlsx first 738–789 vs v1 618–724 ms).
+  (Memory below). Its first `exec` of a sandbox is not reliably faster (+ create 10–39 ms): macOS pdf v1 214 / v2s 211
+  / v2bs 211; xlsx 468 / 475 / 489; Linux pdf 262 / 254 / 304, xlsx 583 / 547 / 1 071 (one sample);
+  §think Linux xlsx first 618–724 (v1) / 567–642 (v2s) / 738–789 (v2bs: the lazy template's first
+  reads).
 - **v1w (a pre-warmed spare, not built) removes only v1's fixed cost**, at 2× v1's memory: its
-  window (`ms`) is 8.7 ms on the empty file, but it excludes waiting for the spare (`life.mjs`
-  `Fresh.exec` awaits `this.next` before `t.start`); the caller's wall is 8.9 → 24 ms back to back
-  and 16.4 ms after a 300 ms pause (external review), and equals v1's whenever the spare is not ready.
-  Its refill also competes with the measured run on few CPUs (Linux xlsx run phase 574 vs v1 537).
-- **What v2 keeps over v1w is the run phase of a repeated `exec`**, 5–26 % shorter, and its cause is
-  V8's in-isolate compilation cache (round-2 critic, rerun here and by the external review): with
-  `--no-compilation-cache` v2s − v1w goes from −30 to −10 ms (pdf) and from −70 to −6 ms (xlsx). Whether
+  window (`ms`, the cost tables) is 8.7 ms on the empty file, but it excludes waiting for the spare
+  (`life.mjs` `Fresh.exec` awaits `this.next` before `t.start`); the caller's wall in §think (macOS
+  empty): repeat 9.8 / first 37.1 ms interleaved without pause, 23.8 / 67.1 with a 1 s pause — the
+  interleaving lets the spare refill while the other arms run; the external review measured 24 ms
+  back to back and 16.4 after a 300 ms pause (not reproduced here). Without a ready spare it costs
+  v1's. Candidate cause, not probed: its refill competes with the measured run on few CPUs (Linux
+  xlsx run phase 574 vs v1 537).
+- **What v2 keeps over v1w is the run phase of a repeated `exec`**, 0–26 % shorter (Linux pptx
+  v2bs = v1w). With `--no-compilation-cache` most of the gap goes (v2s − v1w: pdf −30 → −10, xlsx
+  −70 → −6 ms; one run each, `life2.out.txt` «compile cache off»; the external review: pdf −32 → −11,
+  docx −26 → −6, xlsx −72 → +12): the leading candidate is V8's in-isolate compilation cache, not
+  proven. Whether
   a fresh isolate can get that gain (a V8 code cache for the template's sources) is an **open
   question, not probed** (below); it is not a measured substitute for the live isolate.
 - **§think — a 1 s pause before every `exec`, arms interleaved, the caller's wall** (K = 5 turns ×
-  (create + first + 2 repeats); macOS load 4.2–5.4, the Linux VM on a host at load 5–14):
+  (create + first + 2 repeats); macOS load 4.2–5.4 (the xlsx row rerun: the first ran at load 11);
+  Linux: the VM on a host at load ~14 at start, the same caveat as the superseded macOS row):
 
 | ms | v1 | v1w | v2s | v2bs |
 |---|---|---|---|---|
@@ -129,19 +139,30 @@ Linux (`life-linux.out.txt`):
 | Linux pdf: first / repeat / turn | 331 / 340 / 974 | 323 / 288 / 894 | 301 / 262 / 909 | 354 / 259 / 904 |
 | Linux xlsx: first / repeat / turn | 655 / 635 / 1 922 | 631 / 636 / 1 886 | 578 / 568 / 1 736 | 746 / 554 / 1 891 |
 
-  With pauses the repeated `exec` of v2 is 32–149 ms faster than v1's, v1w's gain over v1 mostly
-  disappears, and a 3-`exec` turn is 2–10 % shorter on v2 (create and the first `exec` included).
+  Linux rerun (host load 7.5 → 16.8 during it, `life-linux.out.txt` last «think» block): pdf repeat
+  v1 315 / v1w 289 / v2s 248 / v2bs 240, turn 948 / 899 / 823 / 816; xlsx repeat 660 / 596 / 570 /
+  587, turn 1 976 / 1 795 / 1 806 / 2 326, first-`exec` outliers up to 2.9 s in every arm. Neither
+  Linux §think run is decision-grade: the host was never quiet.
+  In §think the repeated `exec` of v2 is 32–149 ms faster than v1's. v1w's gain over v1 is gone on
+  macOS pdf and Linux xlsx, −52 ms on Linux pdf, −40 on the empty file. A 3-`exec` turn (create and
+  the first `exec` included) is 2–10 % shorter on v2 than on v1; against v1w, v1w is shorter on Linux
+  pdf (894 vs 904 / 909) and equal on Linux xlsx against v2bs (1 886 vs 1 891). The same interleaved
+  run without pauses (`life2.out.txt` «PAUSE=0», load 5.3–5.9): pdf repeat v1 277, v1w 272, v2s 249,
+  v2bs 252 — v1 − v2 = 25–28 ms against 31–36 with pauses, so the pause is not shown to change the
+  gap; the two runs differ in load from the back-to-back tables (2.4–3.6).
   The external review's own run (pause 1 s, N = 7, load 3.4–5.2): pdf v1w 251, v1 273, v2s 219, v2bs
   217; xlsx v1w 511, v1 476, v2s 432, v2bs 388. Round 2's «per turn on Linux v1w 1.66 s vs v2bs 2.04
   s» rested on one first-`exec` sample (1 071 ms) and is withdrawn.
 - The safe boundary costs ≤ 5 % against round 1's membrane (v2, same run: pdf 161 vs 159, xlsx 362
   vs 350, pptx 281 vs 269).
-- Four at once (the worker's 4 slots) the arms converge (macOS xlsx 566–582 for v1, v1w, v2s, v2bs).
+- Four at once (the worker's 4 slots): macOS xlsx 566–582 for v1, v1w, v2s, v2bs; pdf v2 10–12 %
+  faster (266 / 274 vs 303), Linux pdf 12–18 % (464 / 474 vs 540 / 569), xlsx 3–7 %.
 - v3 pays a host call per FS call on the worker's one thread: 1.2–2.5× slower on pdf/xlsx, worst on
   Linux (xlsx 1 417 vs 573); chunked I/O across it is quadratic (template probe L: 8 MiB 259 vs 64 ms).
 - v1 also moves the sandbox's own files both ways per `exec` (3 KB here): an input of S MiB costs the
   codec + base64 each way per `exec` (§rebuild's steps for 8 MiB: capture 8, wire out 1.4, validate
-  8.8, wire in 1.3–3.2 ms ≈ 2.5 ms / MiB each way); v2bs+rp pays the out-half after each mutation.
+  8.8, wire in 1.3–3.2 ms: ~1.2 ms / MiB out, ~1.3–1.5 in, ~2.5 round trip); v2bs+rp pays the
+  out-half after each mutation.
 - Heap of one live sandbox at limit 256 over 40 `exec`s (§heap): used 16–204 MiB, collected inside
   the limit, `exec` time mostly flat (pdf 157–182 ms; xlsx 347–415, one 500); 60 / 60 pass at 160 / 192 (round 1
   §retain). With the isolated-vm `Reference`s into each run realm left unreleased (`LEAK_REFS=1`)
@@ -154,7 +175,9 @@ The capture unit (`capture-outside-guest-realm`) does not need a live isolate: a
 `exec` can hold the FS in context A (restored from the state) and run the guest in context B behind
 the same boundary, capturing from A. Same run, macOS load ~4, ms: empty 31 → 40 (copy) / 24 (lazy),
 pdf 225 → 243 / 238, docx 192 → 196 / 185, pptx 313 → 331 / 317, xlsx 454 → 509 / 514 — +2…+12 %
-for the copy form (one more bundle boot + the boundary), off the path if pre-warmed (v1w). The
+on the generators and +29 % on the empty file for the copy form; the lazy form is +13 % on xlsx
+despite a cheaper boot, so part of the cost is in the run phase. Pre-warming it (v1w-style) is not
+measured. The
 two-realm timing includes the isolate's `dispose()`, the v1 reference does not (a small bias against
 two realms). The same split would let v1 keep a killed run's partial writes as Node does (capture A
 after a deadline instead of rolling back) — not measured; F4 was answered «rollback» as the cheap
@@ -193,10 +216,11 @@ Peak RSS of a worker, 4 sandboxes running xlsx at once, 5 rounds (§burst, start
 
 | | v1 | v2bs | v2s | v3 |
 |---|---|---|---|---|
-| macOS peak / at rest after dropping the sandboxes (v1, v3: round 1, limit 1024; v2bs, v2s: round 2b, 256) | +716 / +716 | +611 / +537 | +1 024 / +933 | +352 / +352 |
+| macOS peak / at rest after dropping the sandboxes (v1, v3: round 1, limit 1024; v2bs, v2s: round 2b, 256 — different limits: not comparable; Linux is one limit, 256) | +716 / +716 | +611 / +537 | +1 024 / +933 | +352 / +352 |
 | Linux | +395 / +395 | +662 / +543 | +978 / +508 | +311 / +311 |
 
-RSS stays near the peak after the burst on both systems in every arm (allocator retention): a worker
+RSS stays near the peak after the burst on both systems in v1 and v3, mostly in v2bs, and falls
+in v2s on Linux (+978 → +508) (allocator retention): a worker
 that has run 4 template runs at once sits above the 256 MiB idle-retire line
 (`protocol.ts` `RECYCLE_RSS_BYTES`) in v1 too — but a v1 worker holds no state and can be retired; a
 v2 worker holds live sandboxes.
@@ -205,20 +229,23 @@ v2 worker holds live sandboxes.
 
 T open turns (live sandboxes) and R_max concurrent `exec`s the consumer allows, per worker set,
 beyond one template per worker. Per-unit figures: isolate floor for a run (v1 107–115, v1b 27–39, v3
-23–31), idle sandbox after the 4 generators (v2s ~125–155, v2bs ~55–105: after GC … RSS, v3 ~1.6), a run's own garbage in a
-live isolate ≤ ~40 (floor xlsx − empty, v2bs).
+23–31), idle sandbox after the 4 generators (v2s ~109–155: used + external after GC … RSS; v2bs ~55–112:
+after GC … RSS; v3 ~1.6), a run's own garbage in a live isolate ~20 (floor xlsx − empty, v2bs:
+39 − 19) — the formula keeps 40 as a margin.
 
 | | formula | T 4, R 4 | T 20, R 4 | T 20, R 8 | T 100, R 8 |
 |---|---|---|---|---|---|
 | v1 | R × 115 | 0.45 GiB | 0.45 | 0.9 | 0.9 |
 | v1w | (R runs + R spares) × 115 | 0.9 | 0.9 | 1.8 | 1.8 |
 | v1b | R × 39 | 0.15 | 0.15 | 0.3 | 0.3 |
-| v2s | T × (125–155) + R × 40 | 0.6–0.8 | 2.6–3.2 | 2.8–3.3 | 12.5–15.5 |
-| v2bs | T × (55–105) + R × 40 | 0.4–0.6 | 1.2–2.2 | 1.4–2.4 | 5.7–10.6 |
+| v2s | T × (109–155) + R × 40 | 0.6–0.8 | 2.3–3.2 | 2.4–3.3 | 10.9–15.5 |
+| v2bs | T × (55–112) + R × 40 | 0.4–0.6 | 1.2–2.3 | 1.4–2.5 | 5.7–11.3 |
 | v3 | T × 1.6 + R × 31 | 0.13 | 0.15 | 0.27 | 0.4 |
 
 v1 does not depend on T at all; v2 grows with every open turn whatever the pause between `exec`s.
-v2bs ≤ v1 only while T ≈ R (every open turn runs at once). Idle eviction (capture + dispose after X s
+Units differ: v1's per-run figure is the smallest passing `memoryLimit`, v2's idle figure is heap /
+RSS; measured RSS per concurrent v1 xlsx run is 99–179 MiB (§burst), so «v2bs ≈ v1 at T ≈ R» holds
+only within that spread. Idle eviction (capture + dispose after X s
 without an op, rebuild on the next one, 12–43 ms) caps v2's T-term at the turns active within X s.
 
 ## Host op (§host, §ipc; worker side, median of 201)
@@ -238,7 +265,8 @@ call into context A, 0.005–0.07 ms + IPC; v3: 0.001 ms + IPC. IPC round trip, 
 | timeout (sync loop, microtasks, timer loop, pending wait, L4) | rollback | isolate alive, partial writes kept (Node) | rollback by rebuild: 13–15 ms, `partial.txt` gone, earlier `out.pdf` kept | partial writes kept |
 | killed inside an FS operation of A (L5/L5b, 240 kills) | — | 0 inconsistent trees; not excluded by construction | n/a: rebuilt from the point | a host call is not interruptible |
 | out of isolate memory (L6) | rollback | **the sandbox and all its files lost** (v2, v2bs) | rollback by rebuild: 23–29 ms | files kept |
-| a run ends (`process.exit`) with 30 chained `WebAssembly.compile` pending and 50 MiB live (§haunt, round-2 critic's probe) | gone with the isolate | **its realm stays alive: +51 MiB used heap after GC in the next 4 `exec`s** (62.7 vs 11.5); with 170 MiB the next run is a spurious `memory` and the sandbox is lost | same retention; a spurious `memory` → rollback. Needs a heap watermark → rebuild, not built | gone with the isolate |
+| a run ends (`process.exit`) with 30 chained `WebAssembly.compile` pending and 50 MiB live (§haunt, round-2 critic's probe) | gone with the isolate | **its realm stays alive: +51 MiB used heap after GC in the next 4 `exec`s** (62.7 vs 11.5); with 170 MiB the first run itself ended `memory` in both arms (inconclusive; the round-2 critic's
+run saw run 3 die) | same retention; a spurious `memory` → rollback. Needs a heap watermark → rebuild, not built | gone with the isolate |
 | `AbortSignal` mid-run | rollback (#431) | — | rollback by rebuild: 14–15 ms | — |
 | catastrophic OOM in one sandbox's run (§cata) | worker aborts (exit 134 macOS, 133 Linux); ≤ 4 runs in flight rerun from consumer bytes | **every live sandbox on the worker lost** | every sandbox of the worker rebuilt from its point elsewhere | same as v2 for the worker's FSs |
 | ordering, host ops + `exec` issued without awaiting | one chain per sandbox | — | one chain; `readBack: seq` | — |
@@ -249,7 +277,7 @@ decoding it (`restoreFs`) and rebuilding its rows over the template index.
 
 Rebuild from a restore point (§rebuild, v2bs, macOS / Linux): state 3 KB → 11.6 / 13.6 ms to ready
 (capture 0.5, validate 0.1, new isolate + A + restore 11–13); 1 MiB → 16 / 19; 8 MiB → 37 / 43
-(capture 7–8, validate 9, base64 both ways 2.7–4.6, rebuild 18–21). v2s (template copied): +13 ms.
+(capture 7–8, validate 9, base64 both ways 2.6–4.6, rebuild 17.5–21). v2s (template copied): +13 ms.
 
 Two probe processes died in long multi-arm runs, neither reproduced on rerun: a segmentation fault
 (round 1, §retain v2 xlsx after ~1 000 isolates) and a silent death (round 2, §cost after docx v1b,
@@ -261,12 +289,12 @@ worker for every arm.
 - v1: a crashed worker loses ≤ 4 runs in flight; each reruns alone from consumer bytes (ADR-0563
   §6); idle sandboxes are not on any worker. Retiring a worker needs nothing.
 - v2 without a restore point: every sandbox pinned to that worker, idle ones included, is lost. With
-  v2bs at 55–105 MiB idle, a worker holding T_w sandboxes loses T_w turns' files.
+  v2bs at 55–112 MiB idle (after four generators), a worker holding T_w sandboxes loses T_w turns' files.
 - v2bs+rp: the same crash costs T_w rebuilds elsewhere (12–43 ms each + IPC of the point) and reruns
   of the runs in flight from their points (the point is the state before the run, so a rerun is
   idempotent). Retiring a worker (RSS line, recycle) = moving its T_w sandboxes the same way; the
   idle-retire line has to count live sandboxes (a worker with the template ~130–150 MiB + one idle
-  v2bs sandbox 55–105 already crosses 256).
+  v2bs sandbox 55–112 already crosses 256).
 
 ## What moving to v2bs+rp redoes and reuses (merged code)
 
@@ -325,7 +353,7 @@ rollback (ADR-0568 §Not the user's words), the I-list's wording, one op at a ti
 | I1 no ending loses the sandbox; killed run rolled back | holds by rebuild (measured in one process) | holds only with a point; kills keep partial writes unless rebuilt — F4 asked again |
 | I2 fresh process per run | holds (context per run, §escape) | holds |
 | I5 destroy | dispose the isolate | drop the worker FS + dispose the run |
-| I6 «an idle sandbox holds no process and no isolate» | breaks (~50–110 MiB per idle turn) | holds no isolate; ~1.6 MiB of worker memory |
+| I6 «an idle sandbox holds no process and no isolate» | breaks (22–34 MiB per idle turn after one generator, 55–112 after four) | holds no isolate; ~1.6 MiB of worker memory |
 | I7 trust | the seam unchanged; A shares the guest's isolate (a V8 bug reaches it) | the FS becomes exposed host functions |
 | «Владелец ФС … в том же realm (внутри isolate)» | same isolate, another realm | breaks |
 | template open fork (touched-entries bound in the consumer) | gone from the consumer; the idle isolate grows with the libraries touched instead | gone from the consumer, into the worker |

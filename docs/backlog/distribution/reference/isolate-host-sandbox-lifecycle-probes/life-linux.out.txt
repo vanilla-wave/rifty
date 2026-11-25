@@ -121,3 +121,17 @@ container pipeline status: 133
 {"sec":"think","w":"xlsx","kind":"v2s","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"0.4","createMs":45.6,"firstMs":577.8,"firstAll":[577.8,623.5,566.5,572.6,642.2],"repMs":567.7,"turnMs":1736}
 {"sec":"think","w":"xlsx","kind":"v2bs","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"0.4","createMs":21.5,"firstMs":746.4,"firstAll":[788.8,738,746.4,749.5,741.2],"repMs":553.7,"turnMs":1891.4}
 # end 2026-11-25T15:04:15Z
+## think (round 3, Linux) rerun: the first started at host load 13.7  host: 16:12  up 6 days,  6:15, 4 users, load averages: 7.49 6.76 5.76
+{"sec":"think","w":"empty","kind":"v1","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"0.1","createMs":0.6,"firstMs":72.8,"firstAll":[96.7,52.9,72.8,57.7,106.9],"repMs":80.8,"turnMs":200.2}
+{"sec":"think","w":"empty","kind":"v1w","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"0.1","createMs":0.8,"firstMs":86.6,"firstAll":[101.7,86.6,77.1,62.3,96.3],"repMs":30.4,"turnMs":146.8}
+{"sec":"think","w":"empty","kind":"v2s","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"0.1","createMs":65.6,"firstMs":26.8,"firstAll":[37.7,26.8,16.1,21.9,30],"repMs":25.8,"turnMs":136}
+{"sec":"think","w":"empty","kind":"v2bs","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"0.1","createMs":32.5,"firstMs":16.5,"firstAll":[21.8,15,16.5,14,32.3],"repMs":26.9,"turnMs":107.9}
+{"sec":"think","w":"pdf","kind":"v1","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"0.3","createMs":0.1,"firstMs":310.1,"firstAll":[602.9,310.1,295.2,312.1,300.5],"repMs":315,"turnMs":947.8}
+{"sec":"think","w":"pdf","kind":"v1w","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"0.3","createMs":0.1,"firstMs":300.6,"firstAll":[340.4,307.2,289.7,300.6,298.7],"repMs":289.3,"turnMs":898.9}
+{"sec":"think","w":"pdf","kind":"v2s","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"0.3","createMs":41.2,"firstMs":269.8,"firstAll":[313.2,269.8,310.6,265.1,266.9],"repMs":247.8,"turnMs":822.6}
+{"sec":"think","w":"pdf","kind":"v2bs","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"0.3","createMs":14.8,"firstMs":316.2,"firstAll":[338.2,320.6,316.2,306.7,308.8],"repMs":240.3,"turnMs":815.5}
+{"sec":"think","w":"xlsx","kind":"v1","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"0.3","createMs":0.2,"firstMs":615.7,"firstAll":[589.2,615.7,1097,636.1,591.8],"repMs":659.6,"turnMs":1976}
+{"sec":"think","w":"xlsx","kind":"v1w","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"0.3","createMs":0.2,"firstMs":627.8,"firstAll":[618.3,2049.4,627.8,636.2,621.2],"repMs":596.3,"turnMs":1794.5}
+{"sec":"think","w":"xlsx","kind":"v2s","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"0.3","createMs":42.9,"firstMs":629.7,"firstAll":[653.1,1380.9,576.8,612.2,629.7],"repMs":569.6,"turnMs":1805.8}
+{"sec":"think","w":"xlsx","kind":"v2bs","pauseMs":1000,"turns":5,"repeatsPerTurn":2,"load":"0.3","createMs":18,"firstMs":905.7,"firstAll":[2911.1,905.7,1607.5,785.6,757.3],"repMs":587.1,"turnMs":2325.6}
+# end host: 16:17  up 6 days,  6:20, 4 users, load averages: 16.82 15.29 9.88
