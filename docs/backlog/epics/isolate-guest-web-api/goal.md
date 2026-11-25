@@ -39,8 +39,8 @@ pptxgenjs 4.0.1, docx 9.15.3 and pdfkit 0.17.2; each runs as `sandbox.exec(<file
    goal's case 4 (`packages/isolate-host/tests/zlib-scenario.test.ts`), reused, not duplicated.
 4. Runs 1–2 give the stdout, stderr, exit code and files `node` gives (OOXML timestamps masked as
    the library probe does). Run 3 gets past fontkit's load: while the zlib goal is open it stops at
-   the isolate's zlib gap (`NotImplementedError('isolate-host.zlib.*')`), never at `TextDecoder`;
-   once zlib lands it gives Node's output.
+   the isolate's zlib gap (`NotImplementedError('isolate-host.zlib.*')`) if this goal lands before
+   the zlib goal's unit 3, never at `TextDecoder`; once both have landed it gives Node's output.
 
 ## Invariants
 
@@ -104,8 +104,9 @@ split-out epic and the probes. Verified; dispositions:
    globals (its former 7g); I3's rows join its acceptance (map unit 4).
 10. cheaper-route: the seam unit is only `buffer.ts:42-43` here — folded into the Blob unit (map 2); the
     captured-at-load item moved to `isolate-guest-modern-code`.
-11. «every global before the runtime» forced a standalone event/abort copy — Decisions scope it to
-    `Blob`/`File`.
+11. «every global before the runtime» forced a standalone event/abort copy — Decisions now load all
+    three groups with the runtime (final-check: `blob.js` needs the runtime too), `buffer`'s
+    exports bound at install.
 12. cheaper-route: pdfkit duplicates the zlib carrier's case 4 — reused; its isolate stop is the
     zlib gap.
 13.–15. stale lines in the blob/textdecoder drafts, the compat `url.toASCII` owner, modern-code's
@@ -114,7 +115,8 @@ split-out epic and the probes. Verified; dispositions:
 
 final-check: 2026-11-25 — fresh reviewer NOT PASS (1 blocker, 6 concerns, 6 nits), fixed: I3 excludes
 `CustomEvent` tests while M1 is open; the duplicate globals unit removed (streams unit 7 already
-carries them); carrier text aligned (two cases + zlib case 4, isolate zlib gap); I2 exclusions
+carries them; re-pass: not seeded here until its home and M1 are settled); carrier text aligned
+(order with zlib unit 3 stated) (two cases + zlib case 4, isolate zlib gap); I2 exclusions
 (`encoding/streams`, idlharness streams); Blob's runtime dependencies → install with the runtime,
 `buffer` exports bound then; `DOMException` identity in I3; captured-at-load's `crypto.subtle` row
 owner; unit numbers; `owner:` values; «exhaustive» → sampled forms named; I1 exclusions match
@@ -141,7 +143,7 @@ the split-out of `URL`/ESM.
   (`URL.createObjectURL`/blob URLs) stays a named gap. Other ceilings stay as today.
 - 2026-11-25 — agent, sources: `AbortController`/`AbortSignal`/`EventTarget`/`Event`/`CustomEvent`
   from Node's `internal/abort_controller.js` + `event_target.js` + `webidl.js` verbatim (`CustomEvent`,
-  in the same `event_target.js`, is the manager's question M1)
+  in the same `event_target.js`, is map question M1)
   (`reference/sources-js`: 0/31 cases differ; ≈31 KB min / 9 KB gzip beside the streams core's
   shared `primordials`/`errors`, goal `node-streams-as-in-node` `route-b-size`; 88 KB / 30 KB gzip
   standalone); `TextDecoder` class from Node's `lib/internal/encoding.js`, single-byte and

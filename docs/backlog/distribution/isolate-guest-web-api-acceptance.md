@@ -16,9 +16,10 @@ Goal `isolate-guest-web-api` §User scenario: the pptx and docx generators as tw
 carrier's case 4 (pdfkit, `zlib-scenario.test.ts`) reused, not duplicated: the generators run in a sandbox over a `node_modules`
 closure (the library probe's way, or `tests/closure-files.ts` / `zlib-scenario.test.ts`) and as
 `node <file>` in a temp dir over the same files — stdout, stderr, exit code, output files (OOXML
-timestamps masked as the library probe does). For pdfkit this goal moves case 4's isolate stop from
-`TextDecoder(ascii)` to the isolate's zlib gap (`NotImplementedError('isolate-host.zlib.*')`), as that
-test pins after the zlib goal's unit 3; Node's output once zlib lands.
+timestamps masked as the library probe does). For pdfkit, case 4 pins «red after unit 3 too: at least
+`TextDecoder(ascii)`» (`zlib-scenario.test.ts:182`); this goal removes that stop — if it lands before
+the zlib goal's unit 3 the isolate then stops at its zlib gap
+(`NotImplementedError('isolate-host.zlib.*')`), and with both landed case 4 equals Node.
 
 Today (`reference/today`, main bc3412420, Node v24.16.0): `pptx.write()` → `Error: blob is not
 supported by this platform` (`jszip/lib/utils.js:378`), `Packer.toBlob` →

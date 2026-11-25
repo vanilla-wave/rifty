@@ -16,19 +16,21 @@ Probes in `reference/` (each README holds its command, results and «not verifie
    docx generators as `it.fails` sandbox cases against live `node`, plus the zlib carrier's case 4
    (pdfkit) reused (I5).
 2. `runtime-js/isolate-guest-blob-file` — draft — `Blob`/`File` from Node's `blob.js`/`file.js` over
-   a JS byte store, installed before the runtime loads so `buffer.ts:42-43` captures them
-   (`buffer.Blob`/`buffer.File`, the set's only load-time reads) (I1, I4).
+   a JS byte store, loaded with the runtime and installed as globals before guest code, `buffer`'s
+   `Blob`/`File` exports (`buffer.ts:42-43`, the set's only load-time reads) bound to them then
+   (I1, I4).
 3. `distribution/isolate-guest-textdecoder-legacy-encodings` — draft — `TextDecoder`/`TextEncoder`
    from Node's `encoding.js`, the 28 single-byte encodings and `x-user-defined` from Node's
    `single-byte.js`, utf-16le/be, gbk, gb18030 from @exodus/bytes 1.16.0 — utf-8 plus the 33 of 38
    other encodings where Node equals WHATWG; carries
    `distribution/isolate-guest-textencoder-encodeinto-arg-checks` (I2, I4). The five ICU-only
    encodings are not seeded (question T).
-4. `distribution/isolate-stream-core-abort-controller` — draft, goal `node-streams-as-in-node` unit 7
-   (branch `t3/node-streams-goal`, not on main yet) — Node's `abort_controller.js` +
-   `event_target.js` + `webidl.js` in the isolate, as guest globals (its former 7g; the user's
-   answer); first consumer Node's `pipeline`. This goal adds I3's rows to its acceptance; its home is
-   the manager's (report of 2026-11-25).
+Not seeded here: `distribution/isolate-stream-core-abort-controller` — goal `node-streams-as-in-node`
+unit 7 (branch `t3/node-streams-goal`, not on main yet): Node's `abort_controller.js` +
+`event_target.js` + `webidl.js` in the isolate as guest globals (its former 7g; the user's answer),
+first consumer Node's `pipeline`. Its contract has no rows yet; I3's rows (WPT `dom/abort`/
+`dom/events`, statics, `DOMException`, Node's `signal` APIs) join it once its home and M1 are
+settled — the questions below.
 
 Walls the carrier is expected to hit, owned elsewhere: zlib (`node-zlib-on-every-host`) after
 pdfkit's font load.
@@ -52,15 +54,15 @@ pdfkit's font load.
   goal, the user's narrowing left them out — owner: user (decided by the manager by delegation) —
   asked 2026-11-25. Until settled,
   `Blob.prototype.stream` and `TextDecoderStream` are named gaps.
-- Unit 4's home (this goal or `node-streams-as-in-node`) — owner: user (decided by the manager by
-  delegation).
+- Home of the abort/event unit (this goal or `node-streams-as-in-node`) and where I3's rows live —
+  owner: user (decided by the manager by delegation) — asked 2026-11-25.
 
 ## Out of scope
 
 - `URL`/`URLSearchParams`, ES modules, `url.toASCII` in the isolate, the runtime's other
   load-time captures (`runtime-js/isolate-web-globals-captured-at-load`): `isolate-guest-modern-code`.
 - Web streams (`Blob.prototype.stream` stays the `ReadableStream` named gap), `structuredClone`,
-  `MessageChannel` (unit 5 stubs `internalBinding('messaging')`; transferring a signal is a named
+  `MessageChannel` (the abort/event unit stubs `internalBinding('messaging')`; transferring a signal is a named
   gap), `fetch`, `crypto.subtle`, `CompressionStream`, `URLPattern`, `Performance*`.
 - `fs.createReadStream` reads: `node-streams-as-in-node` unit 9r
   (`distribution/isolate-host-fs-read-stream-needs-web-readablestream`).
