@@ -3,6 +3,7 @@ area: runtime-js
 status: draft
 title: A Readable never emits 'close' after 'end'; a Transform emits 'finish' before 'end', a Duplex 'finish' before 'data'
 created: 2026-11-24
+epic: node-streams-as-in-node
 why: Node's autoDestroy emits `'close'` after a Readable's `'end'` (Duplex/Transform: after both sides) and a Transform's `'end'` precedes `'finish'`; rifty never emits `'close'` after `'end'` (a Writable's `'close'` after `'finish'` does fire), and a Duplex/Transform emits `'finish'` before the pending `'data'`.
 sources: ["PR #433 (stream hook dispatch)", docs/public/compat/streams.md]
 code: [packages/io/src/streams/duplex.ts, packages/io/src/streams/transform.ts]

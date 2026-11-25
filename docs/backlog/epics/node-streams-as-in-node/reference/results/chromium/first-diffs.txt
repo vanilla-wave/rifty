@@ -1,0 +1,36 @@
+c-csv-read [workbench]: "line 1" node="csv [[null,"Region","Revenue"],[null,"North",120],[null,"South, East",95.5],[null,"Zürich ✓",-3]]" chromium="csv threw TypeError: stream.close is not a function" exit node=0 chromium=0
+c-csv-read [sdk]: "line 1" node="csv [[null,"Region","Revenue"],[null,"North",120],[null,"South, East",95.5],[null,"Zürich ✓",-3]]" chromium="csv threw TypeError: stream.close is not a function" exit node=0 chromium=0
+c-for-await [workbench]: "line 1" node="for-await 300000 5 d08928a16895" chromium="for-await threw TypeError: fs.createReadStream(...) is not a function or its return value is not async iterable" exit node=0 chromium=0
+c-for-await [sdk]: "line 1" node="for-await 300000 5 d08928a16895" chromium="for-await threw TypeError: fs.createReadStream(...) is not a function or its return value is not async iterable" exit node=0 chromium=0
+c-graceful-fs [workbench]: "line 1" node="read "graceful\n"" chromium="createWriteStream threw TypeError: Class constructor FileWriteStream cannot be invoked without 'new'" exit node=0 chromium=0
+c-graceful-fs [sdk]: "line 1" node="read "graceful\n"" chromium="createWriteStream threw TypeError: Class constructor FileWriteStream cannot be invoked without 'new'" exit node=0 chromium=0
+c-late-listener [workbench]: "line 1" node="exit bytes 200000 end true" chromium="exit bytes 0 end false" exit node=0 chromium=0
+c-late-listener [sdk]: "line 1" node="exit bytes 200000 end true" chromium="exit bytes 0 end false" exit node=0 chromium=0
+c-pipeline-asyncgen [workbench]: "line 1" node="pipeline 200000 true" chromium="pipeline threw TypeError: pipeline: argument must be a stream (index 1 received a non-stream value)" exit node=0 chromium=0
+c-pipeline-asyncgen [sdk]: "line 1" node="pipeline 200000 true" chromium="pipeline threw TypeError: pipeline: argument must be a stream (index 1 received a non-stream value)" exit node=0 chromium=0
+c-readable-read [workbench]: "line 1" node="exit bytes 150000 end true" chromium="exit bytes 0 end true" exit node=0 chromium=0
+c-readable-read [sdk]: "line 1" node="exit bytes 150000 end true" chromium="exit bytes 0 end true" exit node=0 chromium=0
+c-transform-big [workbench]: "line 1" node="size true maxInFlight<=1MiB true" chromium="(no line)" exit node=0 chromium=timeout (180 s)
+c-transform-big [sdk]: "line 1" node="size true maxInFlight<=1MiB true" chromium="size true maxInFlight<=1MiB false" exit node=0 chromium=0
+c-unzip-stored [workbench]: "line 1" node="extracted a.txt=6000 dir/b.txt=15000" chromium="close, then listing threw Error [ENOENT]: ENOENT: no such file or directory, scandir '<dir>/unz'" exit node=0 chromium=0
+c-unzip-stored [sdk]: "line 1" node="extracted a.txt=6000 dir/b.txt=15000" chromium="close, then listing threw Error [ENOENT]: ENOENT: no such file or directory, scandir '<dir>/unz'" exit node=0 chromium=0
+c-xlsx-roundtrip [workbench]: "line 2" node="readFile ok 120" chromium="readFile threw TypeError: stream.close is not a function" exit node=0 chromium=0
+c-xlsx-roundtrip [sdk]: "line 2" node="readFile ok 120" chromium="readFile threw TypeError: stream.close is not a function" exit node=0 chromium=0
+m1-hooks-matrix [workbench]: "Readable option _destroy replaces the error" node="D:boom:true,sync destroyed=true,error replaced,close" chromium="sync destroyed=true,error boom,close" exit node=0 chromium=0
+m1-hooks-matrix [sdk]: "Readable option _destroy replaces the error" node="D:boom:true,sync destroyed=true,error replaced,close" chromium="sync destroyed=true,error boom,close" exit node=0 chromium=0
+m1-lifecycle [workbench]: "Writable _write cb twice" node="error ERR_MULTIPLE_CALLBACK:Callback called multiple times,close" chromium="" exit node=0 chromium=0
+m1-lifecycle [sdk]: "Writable _write cb twice" node="error ERR_MULTIPLE_CALLBACK:Callback called multiple times,close" chromium="" exit node=0 chromium=0
+m2-core-members [workbench]: "Readable readableFlowing/isPaused: new, on(data), pause, resume" node="new null/false,on(data) true/false,pause false/true,resume true/false" chromium="new undefined/no isPaused,on(data) undefined/no isPaused,pause undefined/no isPaused,resume undefined/no isPaused" exit node=0 chromium=0
+m2-core-members [sdk]: "Readable readableFlowing/isPaused: new, on(data), pause, resume" node="new null/false,on(data) true/false,pause false/true,resume true/false" chromium="new undefined/no isPaused,on(data) undefined/no isPaused,pause undefined/no isPaused,resume undefined/no isPaused" exit node=0 chromium=0
+m3-legacy-stream [workbench]: "prototype chain" node="Readable:true Writable:true Duplex:false Transform:false PassThrough:false,Stream->EE:true" chromium="Readable:false Writable:false Duplex:false Transform:false PassThrough:false,Stream->EE:true" exit node=0 chromium=0
+m3-legacy-stream [sdk]: "prototype chain" node="Readable:true Writable:true Duplex:false Transform:false PassThrough:false,Stream->EE:true" chromium="Readable:false Writable:false Duplex:false Transform:false PassThrough:false,Stream->EE:true" exit node=0 chromium=0
+m4-readstream [workbench]: "instanceof Readable; prototype chain; isReadable" node="true,true,true" chromium="false,false," exit node=0 chromium=0
+m4-readstream [sdk]: "instanceof Readable; prototype chain; isReadable" node="true,true,true" chromium="false,false," exit node=0 chromium=0
+m5-writestream [workbench]: "instanceof Writable; prototype chain; isWritable" node="true,true,true" chromium="false,false," exit node=0 chromium=0
+m5-writestream [sdk]: "instanceof Writable; prototype chain; isWritable" node="true,true,true" chromium="false,false," exit node=0 chromium=0
+m6-transform-duplex [workbench]: "Transform objectMode hwm 2, 8 writes, nobody reads" node="true true false false false false false false,transformCalls=2,readableLength=2,writableLength=7" chromium="true true true true true true true true,transformCalls=8,readableLength=8,writableLength=0" exit node=0 chromium=0
+m6-transform-duplex [sdk]: "Transform objectMode hwm 2, 8 writes, nobody reads" node="true true false false false false false false,transformCalls=2,readableLength=2,writableLength=7" chromium="true true true true true true true true,transformCalls=8,readableLength=8,writableLength=0" exit node=0 chromium=0
+m7-pipeline-stages [workbench]: "promises.pipeline(Readable, async gen, Writable)" node="w A,w B,resolved" chromium="threw pipeline: argument must be a stream (index 1 received a non-" exit node=0 chromium=0
+m7-pipeline-stages [sdk]: "promises.pipeline(Readable, async gen, Writable)" node="w A,w B,resolved" chromium="threw pipeline: argument must be a stream (index 1 received a non-" exit node=0 chromium=0
+m8-constructor-options [workbench]: "options highWaterMark -1" node="Readable:ERR_INVALID_ARG_VALUE Writable:ERR_INVALID_ARG_VALUE Duplex:ERR_INVALID_ARG_VALUE Transform:ERR_INVALID_ARG_VALUE" chromium="Readable:ok hwm=-1/- Writable:ok hwm=-/-1 Duplex:ok hwm=-1/-1 Transform:ok hwm=-1/-1" exit node=0 chromium=0
+m8-constructor-options [sdk]: "options highWaterMark -1" node="Readable:ERR_INVALID_ARG_VALUE Writable:ERR_INVALID_ARG_VALUE Duplex:ERR_INVALID_ARG_VALUE Transform:ERR_INVALID_ARG_VALUE" chromium="Readable:ok hwm=-1/- Writable:ok hwm=-/-1 Duplex:ok hwm=-1/-1 Transform:ok hwm=-1/-1" exit node=0 chromium=0

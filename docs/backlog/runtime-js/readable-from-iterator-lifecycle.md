@@ -3,6 +3,7 @@ area: runtime-js
 status: draft
 title: Readable.from iterator lifecycle ownership
 created: 2026-07-12
+epic: node-streams-as-in-node
 why: Readable.from does not own iterator acquisition, async values, pending next, and terminal cleanup like Node
 user_story: As a CLI streaming an async generator, I want cancellation, errors, and backpressure to stop and close the generator exactly once without leaking work.
 blocked_by: []

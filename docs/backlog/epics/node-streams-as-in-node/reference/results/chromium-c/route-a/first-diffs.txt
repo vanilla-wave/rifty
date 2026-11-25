@@ -1,0 +1,5 @@
+c-csv-read [workbench]: "line 1" node="csv [[null,"Region","Revenue"],[null,"North",120],[null,"South, East",95.5],[null,"Zürich ✓",-3]]" chromium="csv threw TypeError: stream.close is not a function" exit node=0 chromium=0
+c-csv-write-file [workbench]: none
+c-graceful-fs [workbench]: "line 1" node="read "graceful\n"" chromium="createWriteStream threw TypeError: Class constructor FileWriteStream cannot be invoked without 'new'" exit node=0 chromium=0
+c-unzip-stored [workbench]: "line 1" node="extracted a.txt=eb06cb57b0a7944a dir/b.txt=0f882365d720e9c4" chromium="close, then listing threw Error [ENOENT]: ENOENT: no such file or directory, scandir '<dir>/unz'" exit node=0 chromium=0
+c-xlsx-roundtrip [workbench]: "line 2" node="readFile ok 120" chromium="readFile threw TypeError: stream.close is not a function" exit node=0 chromium=0

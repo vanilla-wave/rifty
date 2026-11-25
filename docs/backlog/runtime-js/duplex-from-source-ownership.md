@@ -3,6 +3,7 @@ area: runtime-js
 status: draft
 title: Duplex.from direct iterable source ownership
 created: 2026-07-12
+epic: node-streams-as-in-node
 why: Duplex.from bridges an eager intermediate Readable instead of owning one cold iterable source like Node
 user_story: As a CLI wrapped with Duplex.from, I want demand and cancellation to reach my generator directly without a second buffer or leaked iterator.
 blocked_by: [runtime-js/readable-from-iterator-lifecycle]

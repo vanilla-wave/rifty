@@ -1,0 +1,2 @@
+m9-abort-stop-propagation.cjs | 5 | rifty-inproc 1/5 | rifty-inproc-sync 1/5 | rifty-isolate 0/5 | rifty-inproc-B 5/5 | rifty-inproc-Bp 2/5 | rifty-inproc-Bp-derived 5/5 | rifty-inproc-Bp8c 2/5 | rifty-inproc-Bp9w 2/5 | rifty-inproc-Bp9r 2/5
+m10-abort-order-leak.cjs | 3 | rifty-inproc 0/3 | rifty-inproc-sync 0/3 | rifty-isolate 0/3 | rifty-inproc-B 3/3 | rifty-inproc-Bp 3/3 | rifty-inproc-Bp-derived 2/3 | rifty-inproc-Bp8c 3/3 | rifty-inproc-Bp9w 3/3 | rifty-inproc-Bp9r 3/3

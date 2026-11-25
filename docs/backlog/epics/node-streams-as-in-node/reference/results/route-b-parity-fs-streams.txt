@@ -1,0 +1,7 @@
+fs/createreadstream-byte-range.case.ts | A same | B same | Bp same
+fs/read-stream-abort-destroy.case.ts | A same | B same | Bp same
+fs/stream-string-options-encoding.case.ts | A same | B same | Bp same
+fs/streams-flags-relative-cwd.case.ts | A same | B DIFF  | Bp same
+fs/write-stream-chunk-kinds-end-semantics.case.ts | A same | B DIFF  | Bp same
+fs/write-stream-destroy-events.case.ts | A same | B DIFF  | Bp same
+total plain cases 6, skipped 0; equal to Node: route A 6, route B 3, route B product bindings 6

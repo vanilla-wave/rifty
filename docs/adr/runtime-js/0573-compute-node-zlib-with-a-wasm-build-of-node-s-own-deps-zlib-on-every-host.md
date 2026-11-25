@@ -108,8 +108,8 @@ own `lib/zlib.js` also runs on each engine via a swapped `binding.Zlib`.
    `MakeWeak` does — through a `FinalizationRegistry` when an object is dropped without closing.
    Proof: a GC-lane test (`--expose-gc`) that drops open streams and sees the allocator reuse their
    blocks — unit 3. Linear memory itself never shrinks: a realm keeps its peak until it ends.
-7. Boundary: brotli and zstd stay `NotImplementedError` on every host (manager's scoping, user
-   confirmation pending).
+7. Boundary: brotli and zstd stay `NotImplementedError` on every host (deferred by the manager's
+   decision, the user delegated it; draft `runtime-js/zlib-brotli-zstd`).
 8. Bundle budget: engine only, inline costs +36950 B gzip in the client generic bundle (279754 →
    316704 of 332000: 15296 B left before the port of the handle and `lib/zlib.js`, minus today's
    `zlib.ts`) and +36855 B in toolchain (25530 B left). Kill condition: a PR that would cross a

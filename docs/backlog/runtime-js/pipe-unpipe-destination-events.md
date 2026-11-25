@@ -3,6 +3,7 @@ area: runtime-js
 status: draft
 title: `Readable.pipe`/`unpipe` emit `'pipe'`/`'unpipe'` on the destination
 created: 2026-09-23
+epic: node-streams-as-in-node
 why: Node emits `dest.emit('pipe', src)` on `pipe()` and `'unpipe'` on `unpipe()`; rifty emits neither, so code tracking its sources by these events sees nothing
 sources: [docs/backlog/runtime-js/reference/readable-pipe-never-ends-process-stdio-evidence.md, docs/backlog/runtime-js/reference/readable-pipe-never-ends-process-stdio-final-green.json, docs/public/compat/streams.md]
 code: [packages/io/src/streams/readable.ts]

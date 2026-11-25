@@ -3,6 +3,7 @@ area: runtime-js
 status: draft
 title: A stream hook calling its callback twice (or calling back, then throwing) raises no ERR_MULTIPLE_CALLBACK
 created: 2026-11-24
+epic: node-streams-as-in-node
 why: Node errors a stream with `ERR_MULTIPLE_CALLBACK` when `_write`/`_final`/`_transform`/`_flush` call back twice; rifty ignores the second call or replays its effect (`'prefinish'` twice, Transform `_flush` re-run) — wrong lifecycle, silently.
 sources: ["PR #433 review round 1 (S2)", docs/public/compat/streams.md]
 code: [packages/io/src/streams/writable.ts, packages/io/src/streams/transform.ts]

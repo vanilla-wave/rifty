@@ -1,0 +1,20 @@
+Identifier renaming (S1): parity cases/stream + cases/fs (plain CJS/http) on route B product bindings, generated module
+built with generate.mjs --minify (identifiers kept) vs --minify-all (identifiers renamed, as a renaming consumer bundler would).
+Commands: ROUTE_B_GEN=<gen>/node-streams.js node --import tsx route-b/parity.mjs REPO NODE_SRC stream,fs
+
+Abort listeners: variant A (Node's internal/events/abort_listener whole).
+
+## --minify
+total plain cases 105, skipped 5; equal to Node: route A 105, route B 95, route B product bindings 102
+## --minify-all
+total plain cases 105, skipped 5; equal to Node: route A 105, route B 95, route B product bindings 101
+
+## cases that differ between the two (Bp column)
+stream/from-web-options.case.ts | A same | B same | Bp DIFF
+
+## skipped (both builds)
+stream/pipe-process-stdio-end-calls.case.ts | skipped (kind cjs, stdin)
+stream/pipe-process-stdio-exit.case.ts | skipped (kind node-cli-eval)
+stream/pipe-process-stdio.case.ts | skipped (kind cjs, stdin)
+fs/promises-constants.case.ts | skipped (kind esm)
+fs/stats-node-fields.case.ts | skipped (kind cjs, stdin)

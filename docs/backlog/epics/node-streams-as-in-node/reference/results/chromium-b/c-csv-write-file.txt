@@ -1,0 +1,11 @@
+# c-csv-write-file.cjs
+node v24.16.0; rifty 692babe13+route-B; workbench: Chromium 148.0.7778.96 (rifty process.version v24.0.0); sdk: Chromium 148.0.7778.96 (rifty process.version v24.0.0)
+columns: node | workbench | sdk
+
+exit: node 0 | workbench not run | sdk 0
+stderr workbench: (not run)
+
+## line 1
+node: csv.writeFile 98 7bc0e9c9ffd573c1
+workbench (DIFF): (no line)
+sdk (same): csv.writeFile 98 7bc0e9c9ffd573c1

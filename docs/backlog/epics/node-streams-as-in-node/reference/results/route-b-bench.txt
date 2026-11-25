@@ -1,0 +1,10 @@
+node v24.16.0, median of 5 (order of magnitude)
+## node
+pipe 64 MiB ms 1
+1e5 writes ms 5
+## route A (rifty streams today, in-process)
+pipe 64 MiB ms 1
+1e5 writes ms 38
+## route B (Node stream core verbatim, in-process)
+pipe 64 MiB ms 1
+1e5 writes ms 20

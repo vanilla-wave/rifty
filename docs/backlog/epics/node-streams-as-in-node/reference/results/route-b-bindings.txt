@@ -1,0 +1,3 @@
+route B, ids the verbatim files required over all programs
+rifty: async_hooks buffer events fs string_decoder
+node internals: internal/abort_controller internal/assert internal/buffer internal/errors internal/event_target internal/events/abort_listener internal/fs/promises internal/fs/utils internal/url internal/util internal/util/debuglog internal/util/types internal/validators

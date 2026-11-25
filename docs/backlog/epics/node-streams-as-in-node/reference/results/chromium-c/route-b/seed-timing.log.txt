@@ -1,0 +1,11 @@
+chromium 148.0.7778.96; closure 5941 files 35461447 bytes (+1 program file per step)
+c-csv-read: body 35799433 B fetch+writeFile 576 ms; guest unpack (5942 files) 11383 ms; seed total 11959 ms
+c-csv-read: run 2403 ms exit 0
+c-csv-write-file: body 35799739 B fetch+writeFile 517 ms; guest unpack (5942 files) 10663 ms; seed total 11180 ms
+c-csv-write-file: run 2412 ms exit 0
+c-graceful-fs: body 35799547 B fetch+writeFile 531 ms; guest unpack (5942 files) 11251 ms; seed total 11782 ms
+c-graceful-fs: run 437 ms exit 0
+c-unzip-stored: body 35800470 B fetch+writeFile 529 ms; guest unpack (5942 files) 10656 ms; seed total 11185 ms
+c-unzip-stored: run 1403 ms exit 0
+c-xlsx-roundtrip: body 35800301 B fetch+writeFile 528 ms; guest unpack (5942 files) 10549 ms; seed total 11077 ms
+c-xlsx-roundtrip: run 2478 ms exit 0

@@ -36,16 +36,17 @@ external review, back to draft after a clean review, draft until `zlib-diff.mjs`
 
 ## Dependencies on the streams goal (thread `t3/node-streams-goal`)
 
-What units 3–4 need from rifty's streams, measured by `zlib-diff.mjs` on main
-(`docs/backlog/runtime-js/reference/zlib-engine-probe/results/zlib-diff.txt`); the manager passes it to
-that goal, and the parts are named here by that goal's item slugs once they exist on its branch:
+Streams goal route B (ADR-0575, 2026-11-25): its unit `runtime-js/stream-core-node-sources` replaces
+rifty's stream core with Node v24.16.0's own sources. Unit 3 below starts once `zlib-diff.mjs` is 0
+on the state and the load group over that core; that is its entry criterion. The streams goal's
+route-B probe measured 6/45 state scenarios (all flush paths), and they vanish with rifty's `Buffer`
+in `lib/zlib.js`. The load group is 0/1 (`docs/backlog/epics/node-streams-as-in-node/reference/results/route-b-zlib-diff.txt`,
+`route-b-product-zlib-diff.txt`).
 
-- unit 3 ← `_destroy`/`_construct` hooks and `autoDestroy` (`runtime-js/stream-destroy-construct-hooks`);
-  `closed`, `errored`, `readableFlowing`; `Symbol.asyncDispose`; constructor option validation
-  (`highWaterMark`, `signal`); `finished` on a closed stream (`ERR_STREAM_PREMATURE_CLOSE`);
-  `write(chunk, '', cb)` taking the default encoding (Node's `flush()`/`params()` path); `'end'` before
-  `'finish'` where Node orders them so (`runtime-js/duplex-end-finish-close-order`).
-- unit 4 (if kept) ← `Transform` backpressure (`runtime-js/transform-readable-backpressure`).
+- unit 2 (engine + handle + `crc32`) ← no streams unit.
+- unit 3 (`lib/zlib.js` whole) ← streams units 8a–8c «Core» (the last: `runtime-js/stream-core-node-sources`) and the
+  bindings it stands on. Every row of `zlib-node-lib-port`'s gap table closes there.
+- unit 4 (if kept) ← the same «Core»; `Transform` backpressure is Node's code there.
 
 ## Open questions
 
@@ -61,7 +62,7 @@ that goal, and the parts are named here by that goal's item slugs once they exis
   rifty (pako needs a rifty `deflateParams` port and a rifty `crc32`; the handle is a port of Node's
   `node_zlib.cc` either way); no difference observable against Node.
 - Order: units 1–2 now, in threads from `main` after this map merges (unit 2's merge held, above); unit
-  3 after the streams goal's parts listed above; unit 4 only if measured. The final interleaving with the streams goal
+  3 after the streams goal's «Core» unit (above); unit 4 only if measured. The final interleaving with the streams goal
   is the manager's once both goals are ready.
 - Until unit 3, every `node:zlib` member keeps its behaviour on main per host (browser:
   `CompressionStream` subset, ADR-0159/0178; isolate: `NotImplementedError`) — no intermediate state
@@ -71,6 +72,6 @@ that goal, and the parts are named here by that goal's item slugs once they exis
 
 - Brotli (`brotliCompress`/`…Sync`/`createBrotli*`/`BrotliCompress`/`BrotliDecompress`) and zstd
   (`zstdCompress`/`…Sync`/`createZstd*`/`ZstdCompress`/`ZstdDecompress`): `NotImplementedError` on
-  every host, compat ❌ — manager's scoping, user confirmation pending.
+  every host, compat ❌ — deferred by the manager's decision (the user delegated it), draft `runtime-js/zlib-brotli-zstd`.
 - The gzip header OS byte of a macOS or Windows Node (19 / 10): rifty writes 3 (goal Decisions).
 - The SDK page's own main-thread import on Chromium 108 (`runtime-js/chromium108-sdk-sync-wasm-import`).

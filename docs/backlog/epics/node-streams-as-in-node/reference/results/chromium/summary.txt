@@ -1,0 +1,22 @@
+node v24.16.0; rifty c2d03ce05; workbench: Chromium 148.0.7778.96 (rifty process.version v24.0.0); sdk: Chromium 148.0.7778.96 (rifty process.version v24.0.0)
+columns: node | workbench | sdk
+program | Node rows | same as Node per host (+ lines only that host printed)
+c-csv-read.cjs | 1 | workbench 0/1 | sdk 0/1
+c-for-await.cjs | 1 | workbench 0/1 | sdk 0/1
+c-graceful-fs.cjs | 1 | workbench 0/1 | sdk 0/1
+c-late-listener.cjs | 1 | workbench 0/1 | sdk 0/1
+c-pipeline-asyncgen.cjs | 1 | workbench 0/1 | sdk 0/1
+c-readable-read.cjs | 1 | workbench 0/1 | sdk 0/1
+c-transform-big.cjs | 1 | workbench 0/1 | sdk 0/1
+c-unzip-stored.cjs | 1 | workbench 0/1 | sdk 0/1
+c-xlsx-roundtrip.cjs | 4 | workbench 1/4 | sdk 1/4
+m1-hooks-matrix.cjs | 76 | workbench 10/76 | sdk 10/76
+m1-lifecycle.cjs | 14 | workbench 0/14 | sdk 0/14
+m2-core-members.cjs | 7 | workbench 0/7 | sdk 0/7
+m3-legacy-stream.cjs | 4 | workbench 0/4 | sdk 0/4
+m4-readstream.cjs | 20 | workbench 3/20 +2 extra | sdk 3/20
+m5-writestream.cjs | 14 | workbench 4/14 | sdk 4/14
+m6-transform-duplex.cjs | 8 | workbench 0/8 | sdk 0/8
+m7-pipeline-stages.cjs | 11 | workbench 0/11 | sdk 0/11
+m8-constructor-options.cjs | 16 | workbench 6/16 | sdk 6/16
+hosts: workbench = COI Workbench (browser-unit sealed fixture: owner + kernel, ephemeral VFS), `cd /home/project/nsg/<name> && node <name>.cjs > ../<name>.stdout`, stderr = terminal output; sdk = no-COI SDK toolchain sandbox (`createSandbox({requireCrossOriginIsolation:false, toolchain})`), `project({root:'/nsg/<name>'}).run('node <name>.cjs')`. Chromium = Playwright chromium_headless_shell-1223. node oracle = `node <name>.cjs > ../<name>.stdout` in the same layout (pipe mode gave identical stdout/exit for all 18).

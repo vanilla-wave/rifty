@@ -1,0 +1,9 @@
+# c-csv-read.cjs
+node v24.16.0; rifty 5763d8fa1 (route A); workbench: Chromium 148.0.7778.96 (rifty process.version v24.0.0)
+columns: node | workbench
+
+exit: node 0 | workbench 0
+
+## line 1
+node: csv [[null,"Region","Revenue"],[null,"North",120],[null,"South, East",95.5],[null,"Zürich ✓",-3]]
+workbench (DIFF): csv threw TypeError: stream.close is not a function

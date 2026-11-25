@@ -3,6 +3,7 @@ area: perf
 status: draft
 title: In the Workbench, every guest fs write costs time proportional to the project's file count
 created: 2026-11-25
+epic: node-streams-as-in-node
 why: Measured while building the node:zlib goal's carrier — unpacking a 5945-file node_modules into a Workbench project did not finish in 300 s; the same files into `/tmp` of a small project unpack in 12 s
 user_story: As a developer in the Workbench, I want a program that writes many files (an unpack, a generator, an install-like step) to run at fs speed, but today each write slows down linearly as the project grows, so a few thousand files take minutes
 sources: [docs/backlog/perf/child-fs-write-publication-coalescing.md]
@@ -10,6 +11,10 @@ code: [packages/workbench/src/workers/workbench-project-vfs.ts, packages/workben
 ---
 
 ## Context
+
+A unit of goal `node-streams-as-in-node` (map, the write side). It has no other owner, and 9w stands on
+it. It starts by establishing the cause; until then the body below is a hypothesis.
+
 
 Finding, 2026-11-25, main dfad6553e, local macOS, Chromium (Playwright 1.60). Host: the
 browser-unit sealed Workbench (`hidden-empty`, `persistence: 'ephemeral'`, after `npm install`).
@@ -42,6 +47,12 @@ and last `/tmp` rows are not what a pure walk predicts). Sibling item: `perf/chi
 Repro (ad-hoc, not committed): a browser-unit spec that boots the sealed Workbench as above and
 per directory runs `node -e "…mkdirSync(dir,{recursive:true}); for 200: writeFileSync(dir+'/f'+i+'.js', Buffer.alloc(1024,1))"`,
 timed with `Date.now()` inside the guest. No fault test: perf only, no lost write was seen.
+
+## Open findings (review round 4)
+
+Carried verbatim from the manager's review of PR #450, round 4 (2026-11-25); owner = this unit. They close when the unit is taken into work, by its own contract and review.
+
+- S4 (owner 7, P): «у 7 и P ноль строк, у P нет Acceptance».
 
 ## Challenge
 

@@ -1,0 +1,38 @@
+# m6-transform-duplex.cjs
+node v24.16.0; rifty c2d03ce05; workbench: Chromium 148.0.7778.96 (rifty process.version v24.0.0); sdk: Chromium 148.0.7778.96 (rifty process.version v24.0.0)
+columns: node | workbench | sdk
+
+exit: node 0 | workbench 0 | sdk 0
+
+## Transform objectMode hwm 2, 8 writes, nobody reads
+node: true true false false false false false false,transformCalls=2,readableLength=2,writableLength=7
+workbench (DIFF): true true true true true true true true,transformCalls=8,readableLength=8,writableLength=0
+sdk (DIFF): true true true true true true true true,transformCalls=8,readableLength=8,writableLength=0
+## Transform bytes: writes of 1 KiB until write() is false (cap 1000)
+node: acceptedBeforeFalse=126,transformCalls=64,readableLength=65536
+workbench (DIFF): acceptedBeforeFalse=1000,transformCalls=1000,readableLength=1024000
+sdk (DIFF): acceptedBeforeFalse=1000,transformCalls=1000,readableLength=1024000
+## PassThrough -> slow Writable, producer honors write(): max PassThrough buffer
+node: max<=256KiB=true,max=131072
+workbench (DIFF): max<=256KiB=false,max=1048576
+sdk (DIFF): max<=256KiB=false,max=1048576
+## Transform event order end("x")
+node: T,data,F,prefinish,end,finish,close
+workbench (DIFF): T,F,prefinish,data,finish,end
+sdk (DIFF): T,F,prefinish,data,finish,end
+## Duplex event order end("x") with readable ended
+node: data,finish,end,close
+workbench (DIFF): finish,data,end
+sdk (DIFF): finish,data,end
+## Duplex writable members
+node: function function function,corked=0
+workbench (DIFF): undefined undefined undefined,corked=undefined
+sdk (DIFF): undefined undefined undefined,corked=undefined
+## per-side objectMode options
+node: T.writableObjectMode=true,T.writableHighWaterMark=16,PT.readableObjectMode=true
+workbench (DIFF): T.writableObjectMode=false,T.writableHighWaterMark=65536,PT.readableObjectMode=false
+sdk (DIFF): T.writableObjectMode=false,T.writableHighWaterMark=65536,PT.readableObjectMode=false
+## allowHalfOpen false: readable end ends writable
+node: end,finish,close
+workbench (DIFF): end,finish
+sdk (DIFF): end,finish

@@ -1,0 +1,62 @@
+# m1-lifecycle.cjs
+node v24.16.0; rifty c2d03ce05; workbench: Chromium 148.0.7778.96 (rifty process.version v24.0.0); sdk: Chromium 148.0.7778.96 (rifty process.version v24.0.0)
+columns: node | workbench | sdk
+
+exit: node 0 | workbench 0 | sdk 0
+
+## Writable _write cb twice
+node: error ERR_MULTIPLE_CALLBACK:Callback called multiple times,close
+workbench (DIFF): 
+sdk (DIFF): 
+## Writable _final cb twice
+node: prefinish,finish,error ERR_MULTIPLE_CALLBACK:Callback called multiple times,close
+workbench (DIFF): prefinish,prefinish,finish,close
+sdk (DIFF): prefinish,prefinish,finish,close
+## Transform _transform cb twice
+node: data x,data y,error ERR_MULTIPLE_CALLBACK:Callback called multiple times,close
+workbench (DIFF): data x,data y
+sdk (DIFF): data x,data y
+## Writable _construct cb twice
+node: error ERR_MULTIPLE_CALLBACK:Callback called multiple times,close
+workbench (DIFF): 
+sdk (DIFF): 
+## Writable _destroy cb twice
+node: _destroy,close
+workbench (DIFF): close
+sdk (DIFF): close
+## Readable destroy(err): sync destroyed/errored
+node: sync destroyed=true errored=boom,error boom,close
+workbench (DIFF): sync destroyed=true errored=undefined,error boom,close
+sdk (DIFF): sync destroyed=true errored=undefined,error boom,close
+## Readable _destroy replaces error
+node: _destroy orig,error replaced,close
+workbench (DIFF): error orig,close
+sdk (DIFF): error orig,close
+## Readable _construct before _read
+node: construct,construct cb,read,end,close
+workbench (DIFF): read,end
+sdk (DIFF): read,end
+## zlibBuffer shape: end(buf) -> data/end -> close() -> _destroy
+node: data ab,prefinish,end,_destroy null,finish,close cb,close
+workbench (DIFF): prefinish,data ab,finish,end,close,close cb
+sdk (DIFF): prefinish,data ab,finish,end,close,close cb
+## zlibOnError shape: destroy(err) inside _transform
+node: _destroy Z_DATA_ERROR:invalid,error Z_DATA_ERROR:invalid,close
+workbench (DIFF): error Z_DATA_ERROR:invalid,close
+sdk (DIFF): error Z_DATA_ERROR:invalid,close
+## Readable to end + Writable ended: close after end/finish
+node: W finish,R end,W close,R close
+workbench (DIFF): W finish,W close,R end
+sdk (DIFF): W finish,W close,R end
+## closed/destroyed/errored after destroy(err), each class
+node: sync Readable:true/true/x Writable:true/true/x Duplex:true/true/x Transform:true/true/x,later Readable:true/true Writable:true/true Duplex:true/true Transform:true/true
+workbench (DIFF): sync Readable:undefined/true/undefined Writable:false/true/undefined Duplex:undefined/true/undefined Transform:undefined/true/undefined,later Readable:undefined/true Writable:true/true Duplex:undefined/true Transform:undefined/true
+sdk (DIFF): sync Readable:undefined/true/undefined Writable:false/true/undefined Duplex:undefined/true/undefined Transform:undefined/true/undefined,later Readable:undefined/true Writable:true/true Duplex:undefined/true Transform:undefined/true
+## async Transform success: destroyed at end/finish/close
+node: end destroyed=false closed=false,finish destroyed=false closed=false,close destroyed=true closed=true
+workbench (DIFF): finish destroyed=false closed=undefined,end destroyed=false closed=undefined
+sdk (DIFF): finish destroyed=false closed=undefined,end destroyed=false closed=undefined
+## prototype _destroy is a function
+node: function,function,function,function
+workbench (DIFF): undefined,undefined,undefined,undefined
+sdk (DIFF): undefined,undefined,undefined,undefined

@@ -30,7 +30,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat / exact-vers
 | `Duplex` Writable surface | ⚠️ | No `cork`/`uncork`/`setDefaultEncoding`/`writableCorked` on Duplex/Transform (`TypeError`); `readableObjectMode`/`writableObjectMode` options ignored — backlog `runtime-js/duplex-writable-surface-gaps` |
 | `Duplex` / `Transform` event order | ⚠️ | `'finish'` fires before pending `'data'` (Transform: before `'end'`); no `'close'` after both sides end — backlog `runtime-js/duplex-end-finish-close-order` |
 | `stream/consumers` | ✅ | Text/buffer/json-style consumers covered |
-| Legacy streams | ✅ | Pipe/unpipe and callable core constructor parity |
+| Legacy streams | ⚠️ | Pipe/unpipe and callable core constructors parity-tested; `Readable`/`Writable` skip the legacy `Stream` in their chain (`instanceof Stream` false, no `Stream.prototype.pipe`) — backlog `runtime-js/stream-classes-skip-legacy-stream`, goal `node-streams-as-in-node` |
 | `Readable.fromWeb` | ⚠️ | Cold demand, chunks, option/error/acquisition order, and invalid-signal lock behavior are parity-tested; terminal reason/events/lock release still diverge — backlog `runtime-js/web-stream-adapter-terminal-lifecycle` |
 | `node:stream/web` module | ✅ | Re-exports the host WHATWG globals (`ReadableStream`/`WritableStream`/`TransformStream`/readers/controllers/`TextEncoderStream`/`TextDecoderStream`); each `=== globalThis.<Name>`, parity-tested |
 | `Readable.toWeb` | ✅ | Pull-driven `ReadableStream` honoring backpressure; `cancel()` → `destroy()`, error/end propagated (parity-tested) |
