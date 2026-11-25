@@ -67,11 +67,14 @@ the user's words»).
    directory it is) and, until a path through it is first touched, a lazy mark (children not yet
    materialized — then materialized with its own times kept); a template file as a node whose
    bytes are the template's bytes (the same reference) with an origin. Origins and marks belong to
-   their node: they move with it on `rename`, go with it on `rm`. Every mutation marks the
-   directories from `/` down to each path it may write as changed (reads mark nothing), before
-   the call reaches the upper: a call failing midway (a recursive copy, a `mkdir -p`) leaves marks
-   over a superset of what it wrote; an extra mark only makes a directory explicit. A read-only
-   refusal (§3) comes before any touch or mark and marks nothing. A node is **untouched
+   their node: they move with it on `rename`, go with it on `rm`. One source decides a
+   mutating call's effects: **the set of paths it writes** — each path it names, each destination
+   path of a recursive copy (found by walking its source), and a removed or replaced subtree
+   whole, the mount included when one of its ancestors is removed or replaced. From that set,
+   before the call reaches the upper: the read-only refusal (§3), then the change marks — the
+   directories from `/` down to each written path (reads mark nothing). A call failing midway (a
+   recursive copy) leaves marks over a superset of what it wrote; an extra mark only makes a
+   directory explicit. A node is **untouched
    from** its origin O when it is a file holding O's bytes reference with O's times, or a directory
    with origin O not marked changed (only a marked mutation changes a directory's times or
    children; its row carries O's times). **The rule**, once — the state, from `/` down: a node untouched
@@ -104,12 +107,16 @@ the user's words»).
    the realm's only FS surface (sync; promise and stream forms go through it, as PR #437 does for
    every guest), rebuilds the sandbox's state over it, runs, and hands back its state (§2's rule).
    The consumer validates it (§5) and rebuilds it on a fresh view, which becomes the sandbox. Read-only mode: the
-   same class refuses every mutating call under `/node_modules` as Node on a read-only mount (goal
-   I3, its oracle in `map.md`), in both realms — first, before §2's marks, so a refused call leaves
-   the state as it was (probe G's read-only row; its mutant `ro-after-mark` red). Measured (probe L `layered`, T95 23 654 files /
+   same class refuses every call whose write set (§2) reaches `/node_modules` as Node on a read-only
+   mount (goal I3, its oracle in `map.md`), in both realms — first, before §2's marks, so a refused
+   call leaves the state as it was; the probe refuses the whole call, its part outside the mount
+   too, while a real read-only mount may write that part first (a partial `cp`, an `rm -rf /`
+   removing what it reaches) — the oracle's question, the carrier follows Linux (probe G: the
+   read-only row incl. a copy onto `/` and `rm -rf /`, generated read-only sequences, mutants
+   `ro-after-mark` and `ro-named-path` red). Measured (probe L `layered`, T95 23 654 files /
    72.5 MB, M3 Pro, load ~5): restore (copy + index) 39–40 ms, capture 0.5–8 ms, isolate floor
    99–103 MiB (`views`: 88 ms, 35–39 ms, 107 MiB); probe F, the four-library artifact, its four
-   generators: +17…+39 ms over the same program with the files in the state, four at once +8…+32
+   generators: +16…+39 ms over the same program with the files in the state, four at once +8…+32
    (the longest measured phase of the four in both arms; two runs, load 3.1–4.9), empty file
    +15…+16 ms, floor 103 MiB against 19 without a template — inside the F1 return condition (goal
    Decisions), decided on landed code (map items 5 / 7).
@@ -267,12 +274,14 @@ the user's words»).
   and `module.paths` from `/workspace/main.js` resolve into it as Node's do over the same tree.
 - I3. Modes: over a writable template a change or deletion of a template path — by the guest or a
   host op — is seen by that sandbox's later runs and host ops and by no other sandbox; over a
-  read-only one every mutating call under `/node_modules`, from the guest (sync, callback, promise
-  and stream forms) and from host ops, fails as Node v24.16.0 fails it on a read-only mount (code,
+  read-only one every call whose writes reach `/node_modules` (by the path it names or through an
+  ancestor — a copy onto `/`, `rm -rf /`), from the guest (sync, callback, promise and stream
+  forms) and from host ops, fails as Node v24.16.0 fails it on a read-only mount (code,
   syscall, path — `EROFS` where Linux returns it, the earlier error where Linux checks first, e.g.
   `EEXIST` for `mkdir` of an existing directory; oracle: `map.md` Open questions), and the template
-  stays as it was — and so does the sandbox's state: a refusal comes before any change mark (probe
-  G's read-only row).
+  stays as it was — and so does the sandbox's state under the mount: a refusal comes before any
+  change mark (probe G's read-only row and generated read-only sequences); whether a refused call
+  writes its part outside the mount first is the oracle's (as Linux does).
 - I4. Layer: a template is held once per consumer process and once per worker per identity; N
   sandboxes over it share that one copy and its index — an idle sandbox holds its difference and
   the entries it touched as references into that copy, never a copy of the template's bytes or a
@@ -407,7 +416,7 @@ the user's words»).
   Requirements §3 ask constant costs between ~1 MB and ~95 MB templates and an idle memory without
   the template: a narrowing until the user accepts it, or a redesign (a directory delta +
   per-entry lazy lookup) replaces it.
-- Per-call overhead of the layered class in a run (probe F, two runs, load 3.1–4.9): +17…+39 ms
+- Per-call overhead of the layered class in a run (probe F, two runs, load 3.1–4.9): +16…+39 ms
   on the four libraries' generators, four at once +8…+32 ms (like for like: the longest measured
   phase in both arms) — inside the F1 return condition; map item 5 re-measures it on landed code.
 - The state cap is counted over the state by §2's walk: a host write in `/workspace` costs O(the

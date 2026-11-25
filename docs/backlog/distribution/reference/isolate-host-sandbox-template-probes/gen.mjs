@@ -38,49 +38,65 @@ const N = Number(args[0] ?? 3000);
 const GUEST = Number(args[1] ?? 300);
 const SEED_BASE = Number(args[2] ?? 0);
 const MUTANT = process.argv.find((a) => a.startsWith('--mutant='))?.slice(9);
-/** Known defects of the rule, as source patches of layered.ts: [find, replace]. */
+/**
+ * Known defects of the rule, as source patches of layered.ts: [find, replace], or a list of them.
+ * A marks-only defect keeps the read-only refusal (`if (this.readOnly) this.#mutate(…)`).
+ */
 const MUTANTS = {
   'stat-lazy': [
     'statSync = (p: string) => this.#atSelf(p, () => this.upper.statSync(p));',
     'statSync = (p: string) => this.#at(p, () => this.upper.statSync(p));',
   ],
-  'cp-dest-only': [
-    '      if (dir) this.#materialize(to);\n      this.#dirty(to);\n    });',
-    '      if (dir) this.#materialize(to);\n    });\n    this.#dirty(dn);',
-  ],
+  // A copy's write set = its destination root only (review 4, S-b).
+  'cp-dest-only': ['    this.#mutate(to);\n', '    this.#mutate([dn]);\n'],
   'rm-no-dirty': [
-    '    this.#dirty(parentOf(n));\n    this.upper.rmSync(p, o);',
-    '    this.upper.rmSync(p, o);',
+    '    this.#mutate([], [n]);\n    this.upper.rmSync(p, o);',
+    '    if (this.readOnly) this.#mutate([], [n]);\n    this.upper.rmSync(p, o);',
   ],
   'write-no-dirty': [
-    '    this.#dirty(n);\n    this.upper.writeFileSync(p, d);',
-    '    this.upper.writeFileSync(p, d);',
+    '    this.#mutate([n]);\n    this.upper.writeFileSync(p, d);',
+    '    if (this.readOnly) this.#mutate([n]);\n    this.upper.writeFileSync(p, d);',
   ],
   'changed-ignored': [
     'return o === undefined || this.#changed.has(p) ? undefined : o;',
     'return o;',
   ],
-  'rename-no-dirty': ['    this.#dirty(parentOf(sn));\n', ''],
-  // Review 6, S2: a read-only refusal after the marks — the refused write makes its directories explicit.
-  'ro-after-mark': [
-    '    this.#refuse(n);\n    this.#touch(n);\n    this.#dirty(n);\n    this.upper.writeFileSync(p, d);',
-    '    this.#touch(n);\n    this.#dirty(n);\n    this.#refuse(n);\n    this.upper.writeFileSync(p, d);',
-  ],
+  // A rename's write set without its source.
+  'rename-no-dirty': ['    this.#mutate([], [sn, dn]);\n', '    this.#mutate([], [dn]);\n'],
   // Review 5, S1: marks set after the backend call — a copy failing midway leaves its writes unmarked.
   'cp-mark-after': [
-    '      if (dir) this.#materialize(to);\n      this.#dirty(to);\n    });\n    this.upper.cpSync(s, d, o);',
-    '      if (dir) this.#materialize(to);\n    });\n    this.upper.cpSync(s, d, o);\n    this.#copied(sn, dn, (to) => this.#dirty(to));',
+    '    this.#mutate(to);\n    this.upper.cpSync(s, d, o);',
+    '    this.upper.cpSync(s, d, o);\n    this.#mutate(to);',
+  ],
+  // Review 6, S2: the read-only refusal after the marks — a refused call makes its directories explicit.
+  'ro-after-mark': [
+    '  #mutate(paths: readonly string[], gone: readonly string[] = []): void {\n',
+    '  #mutate(paths: readonly string[], gone: readonly string[] = []): void {\n    for (const p of paths) this.#dirty(p);\n    for (const p of gone) this.#dirty(parentOf(p));\n',
+  ],
+  // Review 7, S1: the read-only refusal by the path the call names, not by the paths it writes.
+  'ro-named-path': [
+    [
+      '?? gone.find((p) => under(p, MOUNT) || under(MOUNT, p));',
+      '?? gone.find((p) => under(p, MOUNT));',
+    ],
+    [
+      '    this.#mutate(to);\n',
+      '    if (this.readOnly) this.#mutate([dn]);\n    this.#mutate(to);\n',
+    ],
   ],
 };
 let layeredSrc = join(here, 'layered.ts');
 if (MUTANT !== undefined) {
   const m = MUTANTS[MUTANT];
   if (!m) throw new Error(`unknown mutant ${MUTANT}: ${Object.keys(MUTANTS).join(', ')}`);
-  const find = m[0].replaceAll('\\n', '\n');
-  const text = nfs.readFileSync(layeredSrc, 'utf8');
-  if (!text.includes(find)) throw new Error(`mutant ${MUTANT} does not apply`);
+  let text = nfs.readFileSync(layeredSrc, 'utf8');
+  for (const [find, replace] of Array.isArray(m[0]) ? m : [m]) {
+    const f = find.replaceAll('\\n', '\n');
+    if (!text.includes(f)) throw new Error(`mutant ${MUTANT} does not apply`);
+    text = text.replace(f, replace.replaceAll('\\n', '\n'));
+  }
   layeredSrc = join(here, `.mutant-${process.pid}.ts`);
-  nfs.writeFileSync(layeredSrc, text.replace(find, m[1].replaceAll('\\n', '\n')));
+  nfs.writeFileSync(layeredSrc, text);
   process.on('exit', () => nfs.rmSync(layeredSrc, { force: true }));
 }
 
@@ -554,8 +570,9 @@ const forNode = (rs) =>
   });
 
 /**
- * Named row (review 6, S2): over a read-only template every mutating call writing under
- * `/node_modules` is refused and leaves the state a fresh sandbox's (wire and cap).
+ * Named row (review 6, S2; review 7, S1): over a read-only template every call that writes under
+ * `/node_modules` — by the path it names or through an ancestor (a copy onto `/`, `rm -rf /`) — is
+ * refused, and the state is what the same host writes outside the mount make on a writable one.
  */
 const RO_OPS = [
   ['write', '/node_modules/a/index.js', 'x'],
@@ -569,15 +586,50 @@ const RO_OPS = [
   ['cp', '/workspace', '/node_modules/b/sub', { recursive: true }],
   ['copy', '/workspace/g.js', '/node_modules/a/lib/g.js'],
   ['utimes', '/node_modules/a', 1_610_000_000_000],
+  ['hostwrite', '/workspace/node_modules/a/index.js', 'HACKED'],
+  ['hostwrite', '/workspace/node_modules/z.js', 'z'],
+  ['cp', '/workspace', '/'],
+  ['rm', '/', { recursive: true, force: true }],
+  ['rename', '/workspace', '/'],
 ];
+const hostSide = ([k, p]) => k === 'hostwrite' && p.startsWith('/workspace/');
 function readOnlyOk() {
   const L = IMPLS.v3.make();
   L.readOnly = true;
-  const fresh = IMPLS.v3.make();
-  fresh.writeFileSync('/workspace/g.js', enc.encode('g'));
-  const rs = RO_OPS.map((o) => onFsSync(L, o));
-  const refused = rs.every((r, i) => (RO_OPS[i][0] === 'hostwrite' ? r === 'ok' : r === 'EROFS'));
-  return refused && eq(IMPLS.v3.wire(L), IMPLS.v3.wire(fresh)) && L.budget() === fresh.budget();
+  const W = IMPLS.v3.make();
+  const rs = RO_OPS.map((o) => {
+    if (hostSide(o)) onFsSync(W, o);
+    return onFsSync(L, o);
+  });
+  const refused = rs.every((r, i) => (hostSide(RO_OPS[i]) ? r === 'ok' : r === 'EROFS'));
+  return refused && eq(IMPLS.v3.wire(L), IMPLS.v3.wire(W)) && L.budget() === W.budget();
+}
+/** The mount on the wire of a read-only sandbox: one untouched `lazy` row, nothing under it. */
+function mountUntouched(L) {
+  const w = IMPLS.v3.wire(L);
+  const at = (p) => p === '/node_modules' || p.startsWith('/node_modules/');
+  return (
+    w.refs.some((r) => r[0] === '/node_modules' && r[1] === 'lazy') &&
+    !w.refs.some((r) => r[0] !== '/node_modules' && at(r[0])) &&
+    !Object.keys(w.tree).some(at)
+  );
+}
+/** A generated sequence for a read-only sandbox: the base grammar + calls reaching the mount through an ancestor. */
+function roSequence(seed) {
+  const r = rng(seed + 2_000_000);
+  const ops = sequence(seed);
+  const extra = [
+    ['hostwrite', '/workspace/node_modules/a/index.js', 'HACKED'],
+    ['hostwrite', '/workspace/node_modules/new.js', 'n'],
+    ['cp', '/workspace', '/'],
+    ['rm', '/', { recursive: true, force: r() < 0.5 }],
+    ['rename', '/workspace', '/node_modules/q'],
+    ['mkdir', '/node_modules/q/r', { recursive: true }],
+    ['cp', '/workspace/w', '/node_modules/a'],
+  ];
+  for (let i = 0, n = 1 + Math.floor(r() * 4); i < n; i++)
+    ops.splice(Math.floor(r() * (ops.length + 1)), 0, extra[Math.floor(r() * extra.length)]);
+  return ops;
 }
 const summary = {};
 for (const impl of ['v1', 'v2', 'v3']) {
@@ -592,9 +644,17 @@ for (const impl of ['v1', 'v2', 'v3']) {
   for (const ops of NAMED) if (!check(impl, ops).classOk) namedFail++;
   let readOnlyFail = 0;
   if (impl === 'v3') {
-    readOnlyFail = readOnlyOk() ? 0 : 1;
+    const rowOk = readOnlyOk();
+    let moved = 0;
+    for (let seed = SEED_BASE + 1; seed <= SEED_BASE + N; seed++) {
+      const L = IMPLS.v3.make();
+      L.readOnly = true;
+      for (const o of roSequence(seed)) onFsSync(L, o);
+      if (!mountUntouched(L)) moved++;
+    }
+    readOnlyFail = (rowOk ? 0 : 1) + moved;
     console.log(
-      `## v3: read-only refusals leave the state a fresh sandbox's: ${readOnlyFail === 0}`,
+      `## v3: read-only row (refusals, the rest as on a writable sandbox): ${rowOk}; generated read-only sequences where the mount's wire changed: ${moved}/${N}`,
     );
   }
   for (let seed = SEED_BASE + 1; seed <= SEED_BASE + N; seed++) {

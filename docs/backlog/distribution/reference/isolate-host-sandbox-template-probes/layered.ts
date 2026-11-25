@@ -94,6 +94,7 @@ const depth = (p: string): number => (p === '/' ? 0 : p.split('/').length - 1);
 /** ADR-0567 §7's charge of one wire entry (a row or an explicit node), bytes apart. */
 const charge = (p: string): number => 384 + 8 * p.length + 80 * depth(p);
 
+const MOUNT = '/node_modules';
 export const counters = { lookups: 0, materialized: 0, described: 0 };
 
 export class LayeredFs {
@@ -107,15 +108,24 @@ export class LayeredFs {
   readonly #changed = new Set<string>();
   readonly lower: Lower;
   /**
-   * Read-only mode (ADR-0572 §3): a mutating call writing under the mount is refused first, before
-   * any touch or mark, so a refusal leaves the state as it was. The probe refuses with `EROFS`
-   * whatever Linux checks first (the code order is the goal map's open oracle).
+   * Read-only mode (ADR-0572 §3): a call that writes under the mount is refused whole, before any
+   * mark or write, so a refusal leaves the state as it was. The probe refuses with `EROFS` whatever
+   * Linux checks first, and refuses the part outside the mount too (both: the goal map's open oracle).
    */
   readOnly = false;
-  #refuse(...ps: string[]): void {
-    if (!this.readOnly) return;
-    for (const p of ps)
-      if (p === '/node_modules' || p.startsWith('/node_modules/')) throw new VfsError('EROFS', p);
+  /**
+   * The one source of a mutating call's effects (ADR-0572 §2): the paths it writes — `paths` each
+   * written itself, `gone` each removed or replaced with its whole subtree. The read-only refusal and
+   * the change marks both come from it, before the call reaches the upper.
+   */
+  #mutate(paths: readonly string[], gone: readonly string[] = []): void {
+    if (this.readOnly) {
+      const hit =
+        paths.find((p) => under(p, MOUNT)) ?? gone.find((p) => under(p, MOUNT) || under(MOUNT, p));
+      if (hit !== undefined) throw new VfsError('EROFS', hit);
+    }
+    for (const p of paths) this.#dirty(p);
+    for (const p of gone) this.#dirty(parentOf(p));
   }
 
   constructor(lower: Lower, root = true) {
@@ -256,34 +266,30 @@ export class LayeredFs {
   };
   writeFileSync = (p: string, d: Uint8Array): void => {
     const n = norm(p);
-    this.#refuse(n);
     this.#touch(n);
-    this.#dirty(n);
+    this.#mutate([n]);
     this.upper.writeFileSync(p, d);
   };
   mkdirSync = (p: string, o: { recursive?: boolean }): void => {
     const n = norm(p);
-    this.#refuse(n);
     this.#touch(n);
-    this.#dirty(n);
+    this.#mutate([n]);
     this.upper.mkdirSync(p, o);
   };
   rmSync = (p: string, o: { recursive?: boolean; force?: boolean }): void => {
     const n = norm(p);
-    this.#refuse(n);
     this.#touch(n);
     // A non-recursive rm of a template directory must see its children (ENOTEMPTY).
     if (!o.recursive) this.#materialize(n);
     const gone = this.#subtree(n);
-    this.#dirty(parentOf(n));
+    this.#mutate([], [n]);
     this.upper.rmSync(p, o);
     if (gone.length > 0 && !this.upper.existsSync(n)) this.#rekey(n, null, gone);
   };
   utimes = (p: string, a: number, m: number): void => {
     const n = norm(p);
-    this.#refuse(n);
     this.#touch(n);
-    this.#dirty(n);
+    this.#mutate([n]);
     this.upper.utimes(p, a, m);
   };
   restoreStatSync = (p: string, t: Times): void => {
@@ -293,10 +299,9 @@ export class LayeredFs {
     this.upper.restoreStatSync(p, t);
   };
   copyFileSync = (s: string, d: string): void => {
-    this.#refuse(norm(d));
     this.#touch(norm(s));
     this.#touch(norm(d));
-    this.#dirty(norm(d));
+    this.#mutate([norm(d)]);
     this.upper.copyFileSync(s, d);
   };
   cpSync = (s: string, d: string, o?: { recursive?: boolean }): void => {
@@ -304,27 +309,26 @@ export class LayeredFs {
     // real children — only those, found by walking the source; then every path it wrote is a mutation.
     const sn = norm(s);
     const dn = norm(d);
-    this.#refuse(dn);
     this.#touchTree(sn);
     this.#touch(dn);
-    this.#copied(sn, dn, (to, dir) => {
-      if (dir) this.#materialize(to);
-      this.#dirty(to);
+    const to: string[] = [];
+    this.#copied(sn, dn, (q, dir) => {
+      if (dir) this.#materialize(q);
+      to.push(q);
     });
+    this.#mutate(to);
     this.upper.cpSync(s, d, o);
   };
   renameSync = (s: string, d: string): void => {
     const sn = norm(s);
     const dn = norm(d);
-    this.#refuse(sn, dn);
     this.#touch(sn);
     this.#touch(dn);
     // Replacing a directory needs its real children (ENOTEMPTY).
     if (this.upper.existsSync(dn) && this.upper.statSync(dn).isDirectory) this.#materialize(dn);
     const replaced = sn === dn ? [] : this.#subtree(dn);
     const moved = sn === dn ? [] : this.#subtree(sn);
-    this.#dirty(parentOf(sn));
-    this.#dirty(parentOf(dn));
+    this.#mutate([], [sn, dn]);
     this.upper.renameSync(s, d);
     if (sn !== dn && !under(dn, sn) && !this.upper.existsSync(sn)) {
       this.#rekey(dn, null, replaced);

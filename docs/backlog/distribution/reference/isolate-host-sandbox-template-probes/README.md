@@ -130,10 +130,15 @@ template entries so copies and renames merge into template directories, and (rev
 source tree copied into a template directory, half the time with an entry whose kind clashes with
 the destination's, so the copy fails midway after writing its first entries; eight named
 regressions (review N2's rows, S-a's `stat`, S-b's nested copy, review 5's failing recursive copy
-into a template directory) run first, and a read-only row (review 6, S2): over a read-only
-template (`layered.ts`'s `readOnly`, refusing `EROFS` first — the code order is the goal map's open
-oracle) eleven mutating calls writing under `/node_modules` are refused and the wire and cap stay a
-fresh sandbox's. Each runs on rifty's flat
+into a template directory) run first, and a read-only row (reviews 6 and 7): over a read-only
+template (`layered.ts`'s `readOnly`: the refusal from the call's write set, `EROFS` first, the whole
+call — the code order and the part outside the mount are the goal map's open oracle) fourteen calls
+writing under `/node_modules`, by the named path or through an ancestor (a copy of `/workspace`
+holding `node_modules/a/index.js` onto `/`, `rm -rf /`, a rename onto `/`), are refused, and the
+wire and cap are what the same host writes outside the mount make on a writable sandbox. Plus the
+generated read-only sequences: each sequence's base grammar with 1–4 calls reaching the mount
+through an ancestor, on a read-only sandbox — the mount stays one untouched `lazy` row, nothing
+under it on the wire (0 / 3 000). Each runs on rifty's flat
 `MemoryFsSync` holding the same files (no layer) and on each construction. Checked: every call's
 whole returned value (`stat`: kind, size, `nlink`, the four times stamped; `readdir`: names and
 kinds), the tree (kinds, bytes, directories' and files' mtimes «template era» or «now»), the tree
@@ -173,8 +178,9 @@ rule — all exit 1: `stat-lazy` (no materialize before `stat`) 17 / 1 000, mini
 1 000, minimized to a copy of a tree holding a directory over the template file
 `/node_modules/a/lib/x.js`; `rm-no-dirty` 94 / 1 000, minimized to one `rm`; `write-no-dirty`
 130 / 1 000, minimized to one write; `changed-ignored` 1 000 / 1 000; `rename-no-dirty` 38 / 1 000;
-`ro-after-mark` (review 6, S2: the read-only refusal of a write after its marks) the read-only row
-red (random sequences run writable: 0 / 1 000).
+`ro-after-mark` (review 6, S2: the refusal after the marks) the read-only row + 1 000 / 1 000 generated
+read-only sequences; `ro-named-path` (review 7, S1: the refusal by the named path — a copy's
+destination root, a removed path under the mount only) the read-only row + 309 / 1 000.
 A layer call throwing where rifty's FS returns counts as a class failure (`v1` throws on
 review 5's conflicting copies).
 

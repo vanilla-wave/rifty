@@ -74,7 +74,7 @@ the carrier hits it:
   the realm's only FS surface itself (ADR-0572 §3), so neither the read-only mode nor streams wait
   for #437; whichever lands second rebases onto the other.
 - Per-call overhead of the layered class in a run (probe F, four-library artifact, run phase vs
-  the same files in the state, two runs at load 3.1–4.9: +17…+39 ms per generator, four at once
+  the same files in the state, two runs at load 3.1–4.9: +16…+39 ms per generator, four at once
   +8…+32, the longest measured phase in both arms) — owner:
   agent — item 5 re-measures it on landed code against the F1 return condition; above the
   tolerance the run stops and the numbers go to the user.
@@ -82,6 +82,9 @@ the carrier hits it:
   mount in a CI container) for every mutating call's code/syscall/path — owner: agent — settled at
   item 2's PICKUP: the carrier records the table from live Node; without a runnable read-only mount
   in CI, the table is recorded once from a Linux machine with command, output and kernel version.
+  It includes calls reaching the mount through an ancestor (`cpSync` onto `/`, `rm -rf /`): whether
+  Node writes their part outside the mount before `EROFS` (the probe refuses the whole call first;
+  the class follows Linux).
 - Template mtimes: the artifact's tar records 0 for every entry (`dep-snapshot-tar.ts` `headerFor`);
   what `fs.statSync` of a template file reports vs `npm ci` (1985-10-26 from npm's tarballs) —
   owner: agent — probe against `npm ci`, then a compat row or the oracle's value.
