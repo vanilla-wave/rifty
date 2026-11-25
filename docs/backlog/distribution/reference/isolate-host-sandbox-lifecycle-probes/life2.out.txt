@@ -157,3 +157,19 @@
 {"sec":"conc","w":"xlsx","kind":"v2s","load":"4.4","wallMs":578.6}
 {"sec":"conc","w":"xlsx","kind":"v2bs","load":"4.5","wallMs":582.3}
 {"sec":"conc","w":"xlsx","kind":"v3","load":"4.7","wallMs":893.1}
+## tworealm (v1 + two realms per fresh isolate; v1 in the same run), LIMIT=256  15:25  up 6 days,  5:28, 4 users, load averages: 4.03 5.20 4.95
+{"sec":"tworealm","w":"empty","kind":"v1 (same run)","load":"4.0","repMs":30.9,"bad":0}
+{"sec":"tworealm","w":"empty","kind":"v1s (copy)","load":"4.0","repMs":39.9,"bad":0}
+{"sec":"tworealm","w":"empty","kind":"v1bs (lazy)","load":"4.0","repMs":23.7,"bad":0}
+{"sec":"tworealm","w":"pdf","kind":"v1 (same run)","load":"4.0","repMs":224.9,"bad":0}
+{"sec":"tworealm","w":"pdf","kind":"v1s (copy)","load":"4.1","repMs":243.2,"bad":0}
+{"sec":"tworealm","w":"pdf","kind":"v1bs (lazy)","load":"4.1","repMs":238.1,"bad":0}
+{"sec":"tworealm","w":"docx","kind":"v1 (same run)","load":"4.1","repMs":192.1,"bad":0}
+{"sec":"tworealm","w":"docx","kind":"v1s (copy)","load":"4.6","repMs":195.9,"bad":0}
+{"sec":"tworealm","w":"docx","kind":"v1bs (lazy)","load":"4.6","repMs":184.7,"bad":0}
+{"sec":"tworealm","w":"pptx","kind":"v1 (same run)","load":"4.2","repMs":312.9,"bad":0}
+{"sec":"tworealm","w":"pptx","kind":"v1s (copy)","load":"4.2","repMs":330.8,"bad":0}
+{"sec":"tworealm","w":"pptx","kind":"v1bs (lazy)","load":"4.0","repMs":317.1,"bad":0}
+{"sec":"tworealm","w":"xlsx","kind":"v1 (same run)","load":"4.0","repMs":454.2,"bad":0}
+{"sec":"tworealm","w":"xlsx","kind":"v1s (copy)","load":"4.4","repMs":508.8,"bad":0}
+{"sec":"tworealm","w":"xlsx","kind":"v1bs (lazy)","load":"4.2","repMs":514.4,"bad":0}

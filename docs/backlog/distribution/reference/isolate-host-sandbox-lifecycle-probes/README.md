@@ -117,6 +117,14 @@ Linux (`life-linux.out.txt`):
   the sandbox dies out of memory after 11–13 `exec`s (round 1): every handle into a run realm must be
   released.
 
+### v1 with v2's two realms (§tworealm)
+
+The capture unit (`capture-outside-guest-realm`) does not need a live isolate: a fresh isolate per
+`exec` can hold the FS in context A (restored from the state) and run the guest in context B behind
+the same boundary, capturing from A. Same run, macOS load ~4, ms: empty 31 → 40 (copy) / 24 (lazy),
+pdf 225 → 243 / 238, docx 192 → 196 / 185, pptx 313 → 331 / 317, xlsx 454 → 509 / 514 — +2…+12 %
+for the copy form (one more bundle boot + the boundary), off the path if pre-warmed (v1w).
+
 ## Memory
 
 Smallest passing `memoryLimit` (create + 3 `exec`s, 4 MiB steps; v2's is the sandbox's whole life),

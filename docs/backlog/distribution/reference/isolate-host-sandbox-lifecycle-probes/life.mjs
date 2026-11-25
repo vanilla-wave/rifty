@@ -952,6 +952,40 @@ if (SECTIONS.has('turn')) {
   log({ sec: 'turn', rebuilds: T.rebuilds, opTimes: T.log });
 }
 
+// ---- tworealm: v1 with v2's two realms — a fresh isolate per exec, the FS in context A (restored
+// from the state, template copied / lazy), the guest in context B behind the safe boundary, the end
+// state captured from A (outside the guest's realm). Per exec: create(state) + exec + capture + dispose.
+if (SECTIONS.has('tworealm')) {
+  const N = Number(process.env.N ?? 7);
+  for (const w of (process.env.WL ?? Object.keys(W).join(',')).split(',')) {
+    for (const kind of ['v1', 'v2s', 'v2bs']) {
+      let state;
+      const ref = kind === 'v1' ? await make('v1', W[w]) : null;
+      const once = async () => {
+        if (ref) {
+          const r = await ref.exec();
+          return { ms: r.ms, code: r.code };
+        }
+        const t = performance.now();
+        const L = new Live(kind, W[w]);
+        await L.create(state);
+        const r = await L.exec();
+        const [blob, refs] = await L.capture.apply(undefined, [MAXB], { result: { copy: true } });
+        state = { blob, refs };
+        L.dispose();
+        return { ms: performance.now() - t, code: r.code };
+      };
+      await once();
+      const xs = [];
+      for (let i = 0; i < N; i++) {
+        globalThis.gc?.();
+        xs.push(await once());
+      }
+      log({ sec: 'tworealm', w, kind: kind === 'v1' ? 'v1 (same run)' : kind === 'v2s' ? 'v1s (copy)' : 'v1bs (lazy)', load: load(), repMs: r1(median(xs.map((x) => x.ms))), bad: xs.filter((x) => x.code !== 0).length });
+    }
+  }
+}
+
 // ---- host: one host op, worker side (v2: a call into context A; v3: the worker's LayeredFs;
 //      v1: the consumer's LayeredFs = probe H/W) --------------------------------------------------
 if (SECTIONS.has('host')) {
