@@ -7,7 +7,8 @@ branch changes only docs and a compat inventory generator). Chromium results nam
 
 ## Items
 
-Status (the manager, round 4): **ready** — 0, 1, 2, 3, 4, 4b (none depends on route B or the budget).
+Status (the manager, round 4): **ready** — 0, 2, 3, 4, 4b (none depends on route B or the budget).
+**Done** — 1 (PR #462).
 **Draft** — 4c, 5, P, 7, AL, 8a, 8b, 8c, 9r, 9w; each carries «Open findings (review round 4)»
 verbatim, closed when the unit is taken into work.
 
@@ -23,7 +24,7 @@ verbatim, closed when the unit is taken into work.
 Bindings and fs platform. Each is a parity fix that holds without the core, with its own proof
 against Node:
 
-- **1** `runtime-js/string-decoder-node-encodings` — `string_decoder` latin1/ucs2/utf16le/base64/hex/ascii
+- **1** ~~string-decoder-node-encodings~~ **done** (PR #462; item file deleted) — `string_decoder` latin1/ucs2/utf16le/base64/hex/ascii
   and every spelling Node accepts. An unknown encoding → `ERR_UNKNOWN_ENCODING`, not
   `NotImplementedError` (`b1`). Comes before 8 (B2: `m4` «through 'data'»). → I9.
 - **2** `runtime-js/buffer-encoding-names` — `Buffer` entry points accept every name Node's
