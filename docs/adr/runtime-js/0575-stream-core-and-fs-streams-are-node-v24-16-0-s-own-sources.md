@@ -223,6 +223,9 @@ The earlier `b1270101a` record is `results/route-b-product-build.txt`.
 
 Superseded:
 
+Supersession takes effect when unit 8c lands; removals and §Corrections notes of the superseded
+ADRs (per `docs/adr/README.md`) are part of 8c; until then they stay in force.
+
 - **ADR-0034** (restoring Node's contract in rifty's streams): its stream parts. §1, the
   `'removeListener'` meta-event of `EventEmitter`, stays: `events` is a binding.
 - **ADR-0069** (`setEncoding` through a streaming `TextDecoder`): wholly, D2/D3 included. Node

@@ -23,8 +23,8 @@ The sources: Node's `internal/abort_controller.js` + `event_target.js` + `webidl
 9 KB gzip (`results/route-b-size.txt`). They need stubs for `internalBinding('messaging')`, and the
 `MessageChannel` transfer path becomes a named gap.
 
-Globals: answered — recorded by the manager. `AbortController`, `AbortSignal`, `EventTarget` and
-`Event` become ordinary isolate globals from these sources; the «private to the core» option is
+Globals: answered — recorded by the manager. `AbortController`, `AbortSignal`, `EventTarget`,
+`Event` (and `CustomEvent`, below) become ordinary isolate globals from these sources; the «private to the core» option is
 dropped, and the former 7g (guest globals) is part of this unit. So `signal instanceof AbortSignal`
 works, and the isolate `m9`/`m10` rows are this unit's (`results/ownership.txt`). In the isolate the
 `EventTarget` is Node's own, so the browser-host abort-listener question
@@ -32,8 +32,13 @@ works, and the isolate `m9`/`m10` rows are this unit's (`results/ownership.txt`)
 
 This unit comes before 8c: the isolate's pipeline rows need it, and `pipeline` works there today.
 
-Shared with goal isolate-guest-web-api (its scope: `Blob`/`File`, `TextDecoder` encodings and these
-globals). One owner delivers it; which goal: to be settled by the manager.
+`CustomEvent` becomes a global with the four (the manager's decision on the Web API goal's question;
+same Node file, no added bytes).
+
+This unit lives in this goal (manager's decision; its first consumer is Node's `pipeline`). Its
+acceptance includes invariant I3 of goal isolate-guest-web-api (goal isolate-guest-web-api on branch `origin/t3/isolate-web-api-goal` (PR #443, not yet on main)): WPT `dom/abort` and
+`dom/events` without `MessageChannel`/GC, the statics (`abort`/`timeout`/`any`/`throwIfAborted`),
+`signal.reason instanceof DOMException`, and Node APIs that take a `signal`.
 
 ## Open findings (review round 4)
 

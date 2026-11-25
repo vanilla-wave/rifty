@@ -40,7 +40,8 @@ const tryit = (f) => {
   try {
     return f();
   } catch (e) {
-    return e2s(e).split(':')[0];
+    // An error is labelled (threw <class> <code>), never printed like a value.
+    return `threw ${e?.name ?? typeof e}${e?.code !== undefined ? ` ${e.code}` : ''}: ${String(e?.message).slice(0, 40)}`;
   }
 };
 row('Buffer.isEncoding per name', async (L) => {

@@ -57,11 +57,14 @@ against Node:
   the cause, and its body is a hypothesis until then. 9w stands on it, because Node's `WriteStream`
   writes once per chunk.
 - **7** `distribution/isolate-stream-core-abort-controller` — Node's `AbortController`,
-  `AbortSignal`, `EventTarget` and `Event` from Node's sources as ordinary isolate globals (the
-  user's answer — recorded by the manager; the «private to the core» option is dropped and 7g is merged
-  in). Without them, Node's `pipeline` fails in the isolate (`m7` 5/11 on the product build). A unit
-  shared with goal isolate-guest-web-api; which goal delivers it: one owner, to be settled by the
-  manager. → I7 (isolate).
+  `AbortSignal`, `EventTarget`, `Event` and `CustomEvent` from Node's sources as ordinary isolate
+  globals (the user's answer — recorded by the manager; `CustomEvent` with the four is the manager's
+  decision on the Web API goal's question; the «private to the core» option is dropped and 7g is
+  merged in). Without them, Node's `pipeline` fails in the isolate (`m7` 5/11 on the product build).
+  The unit lives in this goal (manager's decision; its first consumer is Node's `pipeline`). Its
+  acceptance includes invariant I3 of goal isolate-guest-web-api: WPT `dom/abort` and `dom/events`
+  without `MessageChannel`/GC, the statics, `signal.reason instanceof DOMException`, Node APIs taking
+  `signal` (goal isolate-guest-web-api on branch `origin/t3/isolate-web-api-goal` (PR #443, not yet on main)). → I7 (isolate).
 - **AL** `runtime-js/stream-core-abort-listeners-host-event-target` — Node's core attaches abort
   listeners with `kResistStopPropagation`/`kWeakHandler`, which a host `EventTarget` ignores (browser
   hosts only; the isolate gets Node's own `EventTarget` from 7). Variants: (A) the direct listener as in
@@ -279,9 +282,9 @@ Drafts that exist only on parked branches:
     findings.
   - Staying isolate work: the swap test (`fs-sync-mirror-swap.test.ts`), the isolate-host README cost
     numbers, compat `isolate-host.md`, the exceljs library-probe row.
-- **Goal isolate-guest-web-api**: its scenario 3 (exceljs `xlsx.readFile`, then `writeFile`) stands on
-  9r for the read, and on today's write class until 9w. Unit 7 (isolate globals, the user's answer)
-  is shared with that goal; the manager settles which delivers it. ADR-0575 §6.
+- **Goal isolate-guest-web-api** (goal isolate-guest-web-api on branch `origin/t3/isolate-web-api-goal` (PR #443, not yet on main)): its scenario 3 is pdfkit with its built-in font, `compress: true` → `out.pdf`
+  (the zlib goal's case 4, reused); which stream units it stands on is not measured here. Unit 7 lives
+  in this goal and carries that goal's I3 rows in its acceptance. ADR-0575 §6.
 
 ## Regression risk
 
@@ -447,8 +450,8 @@ Each outcome must still be honest, never a silent truncation. Durability after `
 - Isolate `AbortController` globals — answered — recorded by the manager: `AbortController`,
   `AbortSignal`, `EventTarget`, `Event` become ordinary isolate globals from Node's sources (unit 7,
   ≈31 KB min / 9 KB gzip for `abort_controller.js` + `event_target.js` + `webidl.js`,
-  `results/route-b-size.txt`). Shared with goal isolate-guest-web-api; the delivering goal is the
-  manager's to settle.
+  `results/route-b-size.txt`), plus `CustomEvent` (the manager's decision, same Node file). Unit 7
+  lives in this goal; its acceptance includes goal isolate-guest-web-api's I3.
 - Abort listeners on browser hosts — owner: user (the goal's only open user question, so the goal
   stays draft; the ready units do not depend on it):
   - the abort-listener variants table of

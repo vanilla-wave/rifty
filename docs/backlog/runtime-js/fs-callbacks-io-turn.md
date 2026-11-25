@@ -29,7 +29,7 @@ challenge: 2026-11-25 — clear (premise in goal §Challenge)
 ## Acceptance
 
 1. `m4` «timers run during an fs.read(fd) loop over 16 MiB» = Node (`ticks>0=true`) on in-process, isolate, Workbench and SDK. → I10
-2. These guard rows stay = Node: `b1` «fs.read callback vs a timer due now» and «fs.write then fs.close in the same tick: bytes land»; `m5` «timers run while a WriteStream writes 16 MiB». → I10
+2. These guard rows stay = Node: `b1` «fs.read callback vs a timer due now» and «fs.write then fs.close in the same tick: bytes land»; `m5` «timers run while a WriteStream writes 16 MiB» in-process and in the isolate (the only hosts where it equals Node today; Workbench gives 0 ticks, `docs/backlog/epics/node-streams-as-in-node/reference/results/chromium-d/summary.txt`, so it is no guard there and not this unit's promise). → I10
 3. Every case of `tools/node-parity-runner/cases/fs` (41) stays green. → I10
 4. Regression lanes stay green: no `packages/*/src` code consumes the guest `fs` callback API (shell, kernel, npm-client and the module loader go through `FsSync`/`Vfs`), so the consumers are guest libraries. They are caught by the isolate-host library tests (`packages/isolate-host/tests/library-exceljs.test.ts`, `library-pptxgenjs.test.ts`) and the e2e dev-server specs (`tests/e2e/generic-dev-server-lifecycle.spec.ts`, `react-vite-*.spec.ts`, `vite7-build-preview.spec.ts`, `webpack-dev-server.spec.ts`). → I10
 
