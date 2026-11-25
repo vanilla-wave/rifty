@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * Third-party notices gate (backlog toolchain-build/third-party-notices-in-published-files).
- * After `pnpm build:libs`, per publishable package: the packed
- * `dist/THIRD_PARTY_NOTICES.md` (`npm pack --dry-run`) equals the one derived
- * from the bundler's inputs, and every packed JS file with a counted input
- * carries the link line. Every packed dist JS file needs a bundler input list.
+ * Third-party notices gate (docs/public/publishing.md §Third-party notices).
+ * After `pnpm build:libs`, per publishable package (`pnpm pack --dry-run`):
+ * every packed file is in one closed category (CATEGORIES below) or red by
+ * name; the packed `dist/THIRD_PARTY_NOTICES.md` equals the one derived from
+ * the bundler's inputs; every file with a counted input carries LINK.
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, statSync } from 'node:fs';
@@ -55,7 +55,7 @@ function ownDeclarations(root, dir, packed, read) {
     const text = read(d);
     for (const [, spec] of text.matchAll(/(?:from|import\()\s*['"](\.\.?\/[^'"]+)['"]/gu)) {
       const target = join(dirname(d), spec).replace(/\.([cm]?)js$/u, '.d.$1ts');
-      if (set.has(target) && !own.has(target)) {
+      if (DTS_RE.test(target) && set.has(target) && !own.has(target)) {
         own.add(target);
         todo.push(target);
       }
@@ -64,7 +64,16 @@ function ownDeclarations(root, dir, packed, read) {
   return own;
 }
 
-/** One rule: an input list whose every entry is a repo file, or an own build output. */
+/** (b) package metadata, by fixed name at the package root. */
+const META_RE =
+  /^(?:package\.json|README[^/]*|CHANGELOG[^/]*|LICEN[CS]E[^/]*|THIRD_PARTY_NOTICES\.md)$/iu;
+
+/**
+ * CATEGORIES — a packed file is (a) a build output with an input list, every
+ * input a repo file; (b) metadata by name; (c) a file of a vendor/generated
+ * dir (its own input; validateManifest covers the dir); (d) the map of a packed
+ * (a) file; (e) an own tsup declaration; or the notices file. Else red.
+ */
 function account(root, dir, packed, all, read) {
   const own = ownDeclarations(root, dir, packed, read);
   const isFile = (i) =>
@@ -77,7 +86,14 @@ function account(root, dir, packed, all, read) {
     if (all[p]) {
       for (const i of all[p])
         if (!isFile(i)) out.push(`${p}: input ${i} is not a file in the repo`);
-    } else if (!(p === NOTICES || (p.endsWith('.map') && all[p.slice(0, -4)]) || own.has(p))) {
+    } else if (
+      !(
+        p === NOTICES ||
+        META_RE.test(p) ||
+        (/\.[cm]?js\.map$/u.test(p) && packed.includes(p.slice(0, -4)) && all[p.slice(0, -4)]) ||
+        own.has(p)
+      )
+    ) {
       out.push(`${p}: ${NOT_ACCOUNTED}`);
     }
   }
@@ -90,7 +106,7 @@ function account(root, dir, packed, all, read) {
  * @returns {{ entries: number, violations: string[] }}
  */
 export function checkPackage({ root, dir, name, packed, read, inputs, manifest }) {
-  const all = withPackedSources(inputs ?? bundleInputs(root, dir), packed, dir, root);
+  const all = withPackedSources(inputs ?? bundleInputs(root, dir), packed, dir);
   const { entries, counted, used, violations } = collect(
     root,
     dir,
@@ -142,7 +158,7 @@ function main() {
     if (r.entries) console.log(`  ${name}: ${r.entries} entries in ${NOTICES}`);
     violations.push(...r.violations);
   }
-  violations.push(...validateManifest(ROOT, manifest));
+  violations.push(...validateManifest(ROOT, manifest, publishableDirs(ROOT)));
   for (const k of unusedRecords(manifest, usedSets))
     violations.push(`third-party-manifest ${k}: used by no package; remove or fix the record`);
   if (violations.length) {

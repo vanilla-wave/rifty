@@ -196,49 +196,69 @@ export function unusedRecords(manifest, usedSets) {
   return [
     ...Object.keys(manifest.npm).map((k) => `npm ${k}`),
     ...Object.keys(manifest.generated).map((k) => `generated ${k}`),
-    ...manifest.firstParty.map((k) => `firstParty ${k}`),
   ].filter((k) => !used.has(k));
 }
 
-/**
- * Packed files outside `dist/` are copied as is: each is its own input. A
- * package without its own LICENSE gets the workspace root's (pnpm pack does so).
- */
-export function withPackedSources(inputs, packedPaths, pkgDir, root = ROOT) {
+/** A packed source file (outside `dist/`) in a `vendor/`/`generated/` dir, with no recorded list, is its own input. */
+export function withPackedSources(inputs, packedPaths, pkgDir) {
   const out = { ...inputs };
-  for (const p of packedPaths) {
-    if (p.startsWith('dist/')) continue;
-    const own = `${pkgDir}/${p}`;
-    out[p] = [/^licen[cs]e/iu.test(p) && !existsSync(join(root, own)) ? 'LICENSE' : own];
-  }
+  for (const p of packedPaths)
+    if (!out[p] && !p.startsWith('dist/') && sourceDir(p)) out[p] = [`${pkgDir}/${p}`];
   return out;
 }
 
-/** Static manifest faults: each record must name real files and add text. */
-export function validateManifest(root, manifest) {
+/** Every file of the `vendor/`/`generated/` dirs under the given package dirs (root-relative). */
+function sourceDirFiles(root, pkgDirs) {
+  const out = [];
+  const visit = (rel) => {
+    for (const e of readdirSync(join(root, rel), { withFileTypes: true })) {
+      if (!e.isDirectory() || e.name === 'node_modules' || e.name === 'dist') continue;
+      const child = `${rel}/${e.name}`;
+      if (SOURCE_DIRS.has(e.name))
+        for (const f of readdirSync(join(root, child), { withFileTypes: true }))
+          if (f.isFile()) out.push(`${child}/${f.name}`);
+      visit(child);
+    }
+  };
+  for (const d of pkgDirs) visit(d);
+  return out;
+}
+
+/** Static manifest faults: records name real files, add non-empty texts, cover every vendor/generated file. */
+export function validateManifest(root, manifest, pkgDirs = []) {
   const out = [];
   const bad = (k, m) => out.push(`third-party-manifest ${k}: ${m}`);
-  const noText = (r) => 'licenseFiles' in r && r.licenseFiles.length === 0;
+  const texts = (r) =>
+    (r.licenseFiles ?? []).length > 0 &&
+    r.licenseFiles.every((f) => existsSync(join(root, f)) && readText(root, f).trim() !== '');
   for (const [dir, r] of Object.entries(manifest.generated)) {
     for (const f of r.files)
       if (!existsSync(join(root, dir, f)))
         bad(`generated ${dir}`, `lists ${f}, which is not in the dir`);
-    if (noText(r) || (!r.package && !r.licenseFiles))
-      bad(`generated ${dir}`, 'adds no license text');
+    if (!r.package && !texts(r)) bad(`generated ${dir}`, 'adds no license text');
     const sources = join(root, dir, 'sources.json');
-    if (
-      existsSync(sources) &&
-      !Object.values(JSON.parse(readFileSync(sources, 'utf8'))).includes(r.version)
-    )
-      bad(`generated ${dir}`, `version ${r.version} is not in its sources.json`);
+    if (!existsSync(sources)) continue;
+    const pinned = JSON.parse(readFileSync(sources, 'utf8'))[r.sourcesKey];
+    if (!r.sourcesKey) bad(`generated ${dir}`, 'has sources.json but no sourcesKey');
+    else if (pinned !== r.version)
+      bad(
+        `generated ${dir}`,
+        `version ${r.version} is not sources.json "${r.sourcesKey}" (${pinned})`,
+      );
   }
   for (const [id, r] of Object.entries(manifest.npm))
-    if (noText(r)) bad(`npm ${id}`, 'adds no license text');
+    if (!texts(r)) bad(`npm ${id}`, 'adds no license text');
+  const listed = new Set(
+    Object.entries(manifest.generated).flatMap(([dir, r]) => r.files.map((f) => `${dir}/${f}`)),
+  );
   for (const f of manifest.firstParty) {
-    const dir = dirname(f);
-    if (manifest.generated[dir]?.files.includes(basename(f)))
-      bad(`firstParty ${f}`, `also listed in generated ${dir}`);
+    if (listed.has(f)) bad(`firstParty ${f}`, `also listed in generated ${dirname(f)}`);
+    else if (!existsSync(join(root, f))) bad(`firstParty ${f}`, 'is not a file');
   }
+  const firstParty = new Set(manifest.firstParty);
+  for (const f of sourceDirFiles(root, pkgDirs))
+    if (!listed.has(f) && !firstParty.has(f))
+      out.push(`third-party-manifest: ${f} is in no record and not firstParty`);
   return out;
 }
 

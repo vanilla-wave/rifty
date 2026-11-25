@@ -1,19 +1,21 @@
 {
   "generated": {
     "packages/runtime-js/src/builtins/fetch/generated": {
-      "files": ["classes.js"],
+      "files": ["classes.js", "undici.LICENSE"],
       "package": "undici",
       "version": "7.25.0",
       "resolveFrom": ".",
-      "changes": "Request/Response/Headers/FormData graph patched at exact anchors and minified by esbuild, tools/publishing/generate-fetch-classes.mjs"
+      "changes": "Request/Response/Headers/FormData graph patched at exact anchors and minified by esbuild, tools/publishing/generate-fetch-classes.mjs",
+      "sourcesKey": "version"
     },
     "packages/runtime-js/src/builtins/url-legacy/generated": {
-      "files": ["legacy.js"],
+      "files": ["legacy.js", "node.LICENSE"],
       "name": "node",
       "version": "v24.16.0",
       "license": "MIT",
       "licenseFiles": ["packages/runtime-js/src/builtins/url-legacy/generated/node.LICENSE"],
-      "changes": "lib/url.js, lib/querystring.js, lib/internal/{querystring,constants}.js and the internal/url protocol sets bundled and minified by esbuild, tools/publishing/generate-url-legacy.mjs"
+      "changes": "lib/url.js, lib/querystring.js, lib/internal/{querystring,constants}.js and the internal/url protocol sets bundled and minified by esbuild, tools/publishing/generate-url-legacy.mjs",
+      "sourcesKey": "node"
     },
     "packages/runtime-js/src/module-loader/generated": {
       "files": ["typescript-browser.js"],
@@ -38,8 +40,16 @@
     }
   },
   "firstParty": [
+    "packages/runtime-js/src/builtins/fetch/generated/classes.d.ts",
+    "packages/runtime-js/src/builtins/fetch/generated/sources.json",
+    "packages/runtime-js/src/builtins/url-legacy/generated/legacy.d.ts",
+    "packages/runtime-js/src/builtins/url-legacy/generated/sources.json",
+    "packages/runtime-js/src/internal/generated/proxy-identity.d.ts",
     "packages/runtime-js/src/internal/generated/proxy-identity.js",
+    "packages/runtime-js/src/module-loader/generated/README.md",
+    "packages/runtime-js/src/module-loader/generated/typescript-browser.d.ts",
     "packages/workbench/src/generated/install-artifact-identity.json",
+    "tools/shadow-registry/generated/esbuild-runtime-manifest.json",
     "tools/shadow-registry/generated/shadow-substitution-catalog.json"
   ],
   "npm": {
