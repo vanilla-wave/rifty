@@ -95,13 +95,15 @@ They also require `internal/util/inspect`, `timers`, `task_queues`, `internal/en
 
 ## Cost
 
-2026-11-25, M3 Pro, macOS, Node v24.16.0, isolated-vm 7.0.2, esbuild 0.28.0, load average below;
-base = origin/main `3d16cb7b8`, change = this ADR's code; no bound (goal Decisions).
+2026-11-26, M3 Pro, macOS, Node v24.16.0, isolated-vm 7.0.2, esbuild 0.28.0. Bundle: base =
+origin/main `c2250727d`, change = this ADR's code merged on it. Warm call: 2026-11-25, base
+`3d16cb7b8` vs the change at `680f9920e` (guest code unchanged since but for main's merges); load
+below; no bound (goal Decisions).
 
 | | base | change | Δ |
 |---|---|---|---|
-| `dist/guest.js` | 7 173 116 B | 7 214 767 B | +41 651 B (generated part 16 829 B) |
-| `gzip -9` | 1 509 645 B | 1 520 077 B | +10 432 B |
+| `dist/guest.js` | 7 181 525 B | 7 223 180 B | +41 655 B (generated part 16 829 B) |
+| `gzip -9` | 1 511 685 B | 1 522 093 B | +10 408 B |
 | warm `runCode('1')`, median of 40, base and change alternating, 4 runs (load ~13) | 15.01–17.31 ms | 15.30–17.63 ms | +0.27 to +0.72 ms |
 
 Throughput, declared, not tuned: 200 000 parts `'ab'` → `new Blob` + `text()` 3.2 s in `runCode`
