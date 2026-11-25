@@ -240,18 +240,28 @@ for (const w of Object.keys(W)) {
   }
   console.log(JSON.stringify(row));
 }
-console.log('\n## four runs at once (wall, ms; state = its run phases only, the longest)');
+// Review 6, S3: both arms by the same measure — the longest of the four runs' measured phases (as
+// for one run: `state` its run phase, `layered` template copy + index + run + capture); the wall of
+// each, boot included in both, beside it.
+console.log(
+  '\n## four runs at once (ms, median of 5: the longest measured phase of the four; wall, boot included)',
+);
 for (const w of ['pdf', 'xlsx']) {
   const res = {};
   for (const arm of ['state', 'layered']) {
+    const phases = [];
     const walls = [];
     for (let i = 0; i < 5; i++) {
       const t = performance.now();
       const rs = await Promise.all([0, 1, 2, 3].map(() => run(arm, w, 1024)));
-      walls.push(arm === 'state' ? Math.max(...rs.map((r) => r.ms)) : performance.now() - t);
+      walls.push(performance.now() - t);
+      phases.push(Math.max(...rs.map((r) => r.ms)));
     }
-    res[arm] = Math.round(median(walls));
+    res[arm] = Math.round(median(phases));
+    res[`${arm}Wall`] = Math.round(median(walls));
   }
+  res.added = res.layered - res.state;
+  res.addedWall = res.layeredWall - res.stateWall;
   console.log(JSON.stringify({ w, ...res }));
 }
 process.exit(0);

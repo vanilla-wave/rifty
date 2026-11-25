@@ -15,16 +15,18 @@
  * write (rows already on the wire), and an idle sandbox's memory, fresh and after one listing.
  * Review 5, Б-П — the sum axis: the host touching k directories (10 packages, every directory:
  * the ceiling — a whole walk, `readdir` + `stat` of every entry), what the next `exec` carries and
- * the cap after it, and idle memory after the whole walk; a no-op `mkdir -p /workspace` and
- * `/workspace` remove / rename, fresh and after the whole walk; idle memory after a run boundary
- * (the sandbox rebuilt from its wire, as the consumer does after a run) following the whole walk,
- * and following one write in a package.
+ * the cap after it, and idle memory after the whole walk; idle memory after a run boundary (the
+ * sandbox rebuilt from its wire, as the consumer does after a run) following the whole walk, and
+ * following one write in a package. Review 6: `/workspace` write / remove / rename and a no-op
+ * `mkdir -p` timed 201 times on one sandbox, fresh and after the whole walk; idle memory measured
+ * in a child process per template point.
  *
  *   node --expose-gc docs/backlog/distribution/reference/isolate-host-sandbox-template-probes/sweep.mjs [REAL_NODE_MODULES]
  *
  * With REAL_NODE_MODULES (npm ci of ../isolate-library-probe/deps): the same scenarios on the
  * real four-library tree, package = `pdf-lib`, absolute figures for the consumer's template.
  */
+import { execFileSync } from 'node:child_process';
 import { lstatSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -180,34 +182,57 @@ const SCENARIOS = {
       L.budget();
     },
   },
-  'write /workspace after the whole walk': {
+  // `reps`: the op timed 201 times on ONE sandbox after its setup (`pre` untimed before each) —
+  // review 6, S1: a first op right after a 32 ms walk times the walk's aftermath, not the op.
+  'write /workspace, repeated': { reps: true, op: (L) => hostWrite(L, '/workspace/y.js') },
+  'write /workspace after the whole walk, repeated': {
+    reps: true,
     setup: (L) => walk(L, '/node_modules'),
     op: (L) => hostWrite(L, '/workspace/y.js'),
   },
-  'write tpl depth 1 after the whole walk': {
+  'write tpl depth 1 after the whole walk, repeated': {
+    reps: true,
     setup: (L) => walk(L, '/node_modules'),
     op: (L, t) => hostWrite(L, `${t.pkg}/new.js`),
   },
-  'mkdir -p /workspace (no-op)': { op: (L) => L.mkdirSync('/workspace', { recursive: true }) },
-  'mkdir -p /workspace (no-op) after the whole walk': {
+  'mkdir -p /workspace (no-op), repeated': {
+    reps: true,
+    op: (L) => L.mkdirSync('/workspace', { recursive: true }),
+  },
+  'mkdir -p /workspace (no-op) after the whole walk, repeated': {
+    reps: true,
     setup: (L) => walk(L, '/node_modules'),
     op: (L) => L.mkdirSync('/workspace', { recursive: true }),
   },
-  'remove /workspace file after the whole walk': {
-    setup: (L) => {
-      hostWrite(L, '/workspace/z.js');
-      walk(L, '/node_modules');
-    },
+  'remove /workspace file, repeated': {
+    reps: true,
+    pre: (L) => hostWrite(L, '/workspace/z.js'),
     op: (L) => {
       L.rmSync('/workspace/z.js', { recursive: true });
       L.budget();
     },
   },
-  'rename /workspace file after the whole walk': {
-    setup: (L) => {
-      hostWrite(L, '/workspace/z.js');
-      walk(L, '/node_modules');
+  'remove /workspace file after the whole walk, repeated': {
+    reps: true,
+    setup: (L) => walk(L, '/node_modules'),
+    pre: (L) => hostWrite(L, '/workspace/z.js'),
+    op: (L) => {
+      L.rmSync('/workspace/z.js', { recursive: true });
+      L.budget();
     },
+  },
+  'rename /workspace file, repeated': {
+    reps: true,
+    pre: (L) => hostWrite(L, '/workspace/z.js'),
+    op: (L) => {
+      L.renameSync('/workspace/z.js', '/workspace/z2.js');
+      L.budget();
+    },
+  },
+  'rename /workspace file after the whole walk, repeated': {
+    reps: true,
+    setup: (L) => walk(L, '/node_modules'),
+    pre: (L) => hostWrite(L, '/workspace/z.js'),
     op: (L) => {
       L.renameSync('/workspace/z.js', '/workspace/z2.js');
       L.budget();
@@ -238,8 +263,8 @@ const IDLE = {
 };
 /**
  * Memory held by 20 idle sandboxes, per sandbox: the heap holding them minus the heap after they
- * are dropped (review 5 fresh check: a one-off process-level growth after the first walks showed
- * as ~1 MiB per sandbox when measured against the heap before them); median of 3.
+ * are dropped, median of 3, each template point in its own process (review 6, S1: in one long
+ * process the heap's history showed as up to ~1 MiB per sandbox that the sandboxes do not hold).
  */
 function idleOnce(t, touch) {
   const held = [];
@@ -256,6 +281,23 @@ const idleKiB = (t, touch) => Math.round(median([0, 1, 2].map(() => idleOnce(t, 
 function cell(t, name) {
   const sc = SCENARIOS[name];
   const xs = [];
+  if (sc.reps) {
+    const L = fresh(t);
+    sc.setup?.(L, t);
+    for (let i = 0; i < 201; i++) {
+      sc.pre?.(L, t);
+      const s0 = performance.now();
+      sc.op(L, t);
+      xs.push(performance.now() - s0);
+    }
+    const w = L.toWire();
+    return {
+      ms: Math.round(median(xs) * 10_000) / 10_000,
+      rows: w.refs.length,
+      wireBytes: R.snapshotFs(w.entries, OPTS).length + JSON.stringify(w.refs).length,
+      budget: L.budget(),
+    };
+  }
   for (let i = 0; i < 21; i++) {
     const L = fresh(t);
     sc.setup?.(L, t);
@@ -274,6 +316,55 @@ function cell(t, name) {
     budget: L.budget(),
   };
 }
+
+function realTemplate(dir) {
+  const files = [];
+  const dirs = new Set(['/node_modules']);
+  (function walkDisk(abs, rel) {
+    for (const name of readdirSync(abs).sort()) {
+      const q = join(abs, name);
+      const st = lstatSync(q);
+      if (st.isSymbolicLink()) continue;
+      if (st.isDirectory()) {
+        dirs.add(`${rel}/${name}`);
+        walkDisk(q, `${rel}/${name}`);
+      } else if (st.isFile() && !q.endsWith('/.package-lock.json'))
+        files.push([`${rel}/${name}`, readFileSync(q)]);
+    }
+  })(dir, '/node_modules');
+  const pack = new Uint8Array(files.reduce((n, [, d]) => n + d.length, 0));
+  const rows = [...dirs].sort().map((d) => [1, d, 0, 0, T0, T0, T0, T0]);
+  let off = 0;
+  for (const [q, d] of files) {
+    pack.set(d, off);
+    rows.push([2, q, off, d.length, T0, T0, T0, T0]);
+    off += d.length;
+  }
+  return {
+    layer: R.templateLayer(pack, rows),
+    entries: dirs.size + files.length,
+    bytes: pack.length,
+    firstFile: '/node_modules/pdf-lib/package.json',
+    pkg: '/node_modules/pdf-lib',
+  };
+}
+const IDLE_ARG = process.argv.find((a) => a.startsWith('--idle='))?.slice(7);
+if (IDLE_ARG !== undefined) {
+  const spec = JSON.parse(IDLE_ARG);
+  const t = spec.real ? realTemplate(spec.real) : template(spec);
+  const out = {};
+  for (const [name, touch] of Object.entries(IDLE)) out[name] = idleKiB(t, touch);
+  process.stdout.write(JSON.stringify(out));
+  process.exit(0);
+}
+const idleIn = (spec) =>
+  JSON.parse(
+    execFileSync(
+      process.execPath,
+      ['--expose-gc', fileURLToPath(import.meta.url), `--idle=${JSON.stringify(spec)}`],
+      { encoding: 'utf8', maxBuffer: 1 << 24 },
+    ),
+  );
 
 const BASE = { width: 100, files: 5, size: 4096, depth: 2 };
 const AXES = [
@@ -297,8 +388,9 @@ for (const [axis, values] of AXES) {
       all.push(row);
       console.log(JSON.stringify(row));
     }
-    for (const [name, touch] of Object.entries(IDLE)) {
-      const row = { ...base, scenario: name, idleKiB: idleKiB(t, touch) };
+    const idle = idleIn(shape);
+    for (const name of Object.keys(IDLE)) {
+      const row = { ...base, scenario: name, idleKiB: idle[name] };
       all.push(row);
       console.log(JSON.stringify(row));
     }
@@ -321,35 +413,7 @@ for (const [axis] of AXES) {
 }
 const REAL = process.argv[2];
 if (REAL) {
-  const files = [];
-  const dirs = new Set(['/node_modules']);
-  (function walk(abs, rel) {
-    for (const name of readdirSync(abs).sort()) {
-      const q = join(abs, name);
-      const st = lstatSync(q);
-      if (st.isSymbolicLink()) continue;
-      if (st.isDirectory()) {
-        dirs.add(`${rel}/${name}`);
-        walk(q, `${rel}/${name}`);
-      } else if (st.isFile() && !q.endsWith('/.package-lock.json'))
-        files.push([`${rel}/${name}`, readFileSync(q)]);
-    }
-  })(REAL, '/node_modules');
-  const pack = new Uint8Array(files.reduce((n, [, d]) => n + d.length, 0));
-  const rows = [...dirs].sort().map((d) => [1, d, 0, 0, T0, T0, T0, T0]);
-  let off = 0;
-  for (const [q, d] of files) {
-    pack.set(d, off);
-    rows.push([2, q, off, d.length, T0, T0, T0, T0]);
-    off += d.length;
-  }
-  const t = {
-    layer: R.templateLayer(pack, rows),
-    entries: dirs.size + files.length,
-    bytes: pack.length,
-    firstFile: '/node_modules/pdf-lib/package.json',
-    pkg: '/node_modules/pdf-lib',
-  };
+  const t = realTemplate(REAL);
   const width = readdirSync(REAL).filter((n) => !n.startsWith('.')).length;
   console.log(
     `\n## the four-library template: ${t.entries} entries, ${(t.bytes / 1e6).toFixed(1)} MB, /node_modules width ${width}`,
@@ -357,7 +421,8 @@ if (REAL) {
   const base = { axis: 'real', entries: t.entries, templateMB: +(t.bytes / 1e6).toFixed(1), width };
   for (const name of Object.keys(SCENARIOS))
     console.log(JSON.stringify({ ...base, scenario: name, ...cell(t, name) }));
-  for (const [name, touch] of Object.entries(IDLE))
-    console.log(JSON.stringify({ ...base, scenario: name, idleKiB: idleKiB(t, touch) }));
+  const idle = idleIn({ real: REAL });
+  for (const name of Object.keys(IDLE))
+    console.log(JSON.stringify({ ...base, scenario: name, idleKiB: idle[name] }));
 }
 process.exit(0);

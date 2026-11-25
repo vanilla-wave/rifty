@@ -1,23 +1,23 @@
-# run 1 (2026-11-25, load ~2.5, right after gen.mjs + sweep.mjs)
+# run 1 (2026-11-25, after review 6's symmetric four-at-once metric, load 3.1 → 3.7)
 node v24.16.0, isolated-vm 7.0.2, darwin/arm64; template: 8000 files, 86.6 MB
-{"w":"empty","state":7,"layered":22,"added":15,"floorStateMiB":190,"floorLayeredMiB":103}
-{"w":"pdf","state":185,"layered":202,"added":17}
-{"w":"docx","state":152,"layered":168,"added":16}
-{"w":"pptx","state":293,"layered":321,"added":28}
-{"w":"xlsx","state":395,"layered":436,"added":41}
+{"w":"empty","state":8,"layered":23,"added":15,"floorStateMiB":190,"floorLayeredMiB":103}
+{"w":"pdf","state":182,"layered":201,"added":19}
+{"w":"docx","state":150,"layered":167,"added":17}
+{"w":"pptx","state":294,"layered":316,"added":22}
+{"w":"xlsx","state":402,"layered":433,"added":31}
 
-## four runs at once (wall, ms; state = its run phases only, the longest)
-{"w":"pdf","state":241,"layered":270}
-{"w":"xlsx","state":484,"layered":555}
+## four runs at once (ms, median of 5: the longest measured phase of the four; wall, boot included)
+{"w":"pdf","state":229,"stateWall":357,"layered":258,"layeredWall":272,"added":29,"addedWall":-85}
+{"w":"xlsx","state":487,"stateWall":612,"layered":495,"layeredWall":507,"added":8,"addedWall":-105}
 
-# run 2 (2026-11-25, load 2.2 → 3.7 during the run)
+# run 2 (load 3.7 → 4.9)
 node v24.16.0, isolated-vm 7.0.2, darwin/arm64; template: 8000 files, 86.6 MB
-{"w":"empty","state":8,"layered":22,"added":14,"floorStateMiB":190,"floorLayeredMiB":103}
-{"w":"pdf","state":182,"layered":202,"added":20}
-{"w":"docx","state":152,"layered":168,"added":16}
-{"w":"pptx","state":291,"layered":321,"added":30}
-{"w":"xlsx","state":403,"layered":433,"added":30}
+{"w":"empty","state":7,"layered":23,"added":16,"floorStateMiB":190,"floorLayeredMiB":103}
+{"w":"pdf","state":180,"layered":202,"added":22}
+{"w":"docx","state":151,"layered":167,"added":16}
+{"w":"pptx","state":290,"layered":319,"added":29}
+{"w":"xlsx","state":394,"layered":433,"added":39}
 
-## four runs at once (wall, ms; state = its run phases only, the longest)
-{"w":"pdf","state":234,"layered":260}
-{"w":"xlsx","state":467,"layered":504}
+## four runs at once (ms, median of 5: the longest measured phase of the four; wall, boot included)
+{"w":"pdf","state":234,"stateWall":361,"layered":266,"layeredWall":278,"added":32,"addedWall":-83}
+{"w":"xlsx","state":488,"stateWall":613,"layered":515,"layeredWall":527,"added":27,"addedWall":-86}

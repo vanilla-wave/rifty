@@ -20,6 +20,7 @@
  * So reading never changes the state, an untouched template directory is one row wherever it is,
  * and rebuilding = recreating the same nodes (no deletion list, no merge).
  */
+import { VfsError } from '@riftydev/vfs';
 import { MemoryFsSync } from '@riftydev/vfs/internal';
 
 export interface Times {
@@ -105,6 +106,17 @@ export class LayeredFs {
   /** Directories with a mutation at or below them since materialized / rebuilt. */
   readonly #changed = new Set<string>();
   readonly lower: Lower;
+  /**
+   * Read-only mode (ADR-0572 §3): a mutating call writing under the mount is refused first, before
+   * any touch or mark, so a refusal leaves the state as it was. The probe refuses with `EROFS`
+   * whatever Linux checks first (the code order is the goal map's open oracle).
+   */
+  readOnly = false;
+  #refuse(...ps: string[]): void {
+    if (!this.readOnly) return;
+    for (const p of ps)
+      if (p === '/node_modules' || p.startsWith('/node_modules/')) throw new VfsError('EROFS', p);
+  }
 
   constructor(lower: Lower, root = true) {
     this.lower = lower;
@@ -244,18 +256,21 @@ export class LayeredFs {
   };
   writeFileSync = (p: string, d: Uint8Array): void => {
     const n = norm(p);
+    this.#refuse(n);
     this.#touch(n);
     this.#dirty(n);
     this.upper.writeFileSync(p, d);
   };
   mkdirSync = (p: string, o: { recursive?: boolean }): void => {
     const n = norm(p);
+    this.#refuse(n);
     this.#touch(n);
     this.#dirty(n);
     this.upper.mkdirSync(p, o);
   };
   rmSync = (p: string, o: { recursive?: boolean; force?: boolean }): void => {
     const n = norm(p);
+    this.#refuse(n);
     this.#touch(n);
     // A non-recursive rm of a template directory must see its children (ENOTEMPTY).
     if (!o.recursive) this.#materialize(n);
@@ -266,6 +281,7 @@ export class LayeredFs {
   };
   utimes = (p: string, a: number, m: number): void => {
     const n = norm(p);
+    this.#refuse(n);
     this.#touch(n);
     this.#dirty(n);
     this.upper.utimes(p, a, m);
@@ -277,6 +293,7 @@ export class LayeredFs {
     this.upper.restoreStatSync(p, t);
   };
   copyFileSync = (s: string, d: string): void => {
+    this.#refuse(norm(d));
     this.#touch(norm(s));
     this.#touch(norm(d));
     this.#dirty(norm(d));
@@ -287,6 +304,7 @@ export class LayeredFs {
     // real children — only those, found by walking the source; then every path it wrote is a mutation.
     const sn = norm(s);
     const dn = norm(d);
+    this.#refuse(dn);
     this.#touchTree(sn);
     this.#touch(dn);
     this.#copied(sn, dn, (to, dir) => {
@@ -298,6 +316,7 @@ export class LayeredFs {
   renameSync = (s: string, d: string): void => {
     const sn = norm(s);
     const dn = norm(d);
+    this.#refuse(sn, dn);
     this.#touch(sn);
     this.#touch(dn);
     // Replacing a directory needs its real children (ENOTEMPTY).

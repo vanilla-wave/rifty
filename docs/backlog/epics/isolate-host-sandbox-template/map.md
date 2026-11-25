@@ -34,12 +34,14 @@ the carrier hits it:
 5. The run over the template (ADR-0572 §3), lifting item 3's `exec` refusal: index built in the
    isolate, item 2's class as the realm's only FS surface, the sandbox's state rebuilt before and
    handed back after the run, validated by the consumer (ADR-0572 §5); the changed-paths list; the F1 return condition measured
-   here (goal Decisions) (I2, I3, I6, I11).
+   here (goal Decisions), like with like — both arms by the same phase (or both by wall, boot in
+   both) (I2, I3, I6, I11).
 6. The end state taken where the guest's code cannot reach (absorbs
    `distribution/isolate-host-sandbox-capture-outside-guest-realm`; mechanism at its PICKUP,
    ADR-0572 §9) (I7).
 7. README cost table (T1, T95, the four-library artifact), the isolate rule's two cases, compat
-   rows (template snapshot ❌); the F1 return condition re-measured on landed code (I5, I10).
+   rows (template snapshot ❌); the F1 return condition re-measured on landed code, like with like as
+   in item 5 (I5, I10).
 
 ## Open questions
 
@@ -47,18 +49,18 @@ the carrier hits it:
   sandbox's memory are bounded by the entries of the template directories touched since the
   sandbox's last run plus those of every template directory marked since its creation — touching a
   directory (first read / `list` / `stat`, a write, removal, rename or copy in it) touches all its
-  entries; any mutating call into one marks it (a failed one too), a mark persists through runs;
-  ceiling the whole index (0.49–0.70 KiB idle per entry, path-dependent: four-library template,
-  8 793 entries, a whole walk 32 ms and 4 549 KiB per idle sandbox, 231 KiB after a run boundary;
-  35 001 synthetic entries 126 ms / 18 951 KiB); never by bytes; a marked directory carries a row
-  per entry on the wire and in the cap for the sandbox's life (384 + 8 × path length + 80 × depth
-  units per row; a write in `pdf-lib` 189 rows, 0.2 % of the cap) — owner: user — asked 2026-11-25
-  by the manager in the agent's earlier wording («width of a template directory»); **to be re-posed
-  in this bound's wording** (the whole-index ceiling, idle 4.4 MiB per sandbox after a walk, rows
-  persisting across runs change what is decided): (1) accept as a declared narrowing of
+  entries; any mutating call into one marks it (a failed one too; a read-only refusal does not), a
+  mark persists through runs; a run boundary resets what only reading touched; ceiling the whole
+  index (≈0.5 KiB idle per entry on the consumer's template, growing with path length: four-library
+  template, 8 793 entries, a whole walk 32 ms and 4 290 KiB per idle sandbox, 3 KiB after a run
+  boundary; 35 001 synthetic entries 127 ms / 17 983 KiB); never by bytes; a marked directory
+  carries a row per entry on the wire and in the cap for the sandbox's life (384 + 8 × path length
+  + 80 × depth units per row; a write in `pdf-lib` 189 rows, 0.2 % of the cap) — owner: user —
+  asked 2026-11-25 by the manager in this bound's form: (1) accept as a declared narrowing of
   requirements §3 + a backlog item (owner, trigger «a sandbox's touched + marked template entries
-  above N, or idle memory per sandbox above M», lifting condition); (2) redesign — a directory delta
-  (`lazy(O)` + changed children + removed names; only a recreated directory opaque) and per-entry
+  above N, or idle memory per sandbox above M» — N and M as numbers in the item at acceptance,
+  lifting condition); (2) redesign — a directory delta (`lazy(O)` + changed children + removed
+  names; only a recreated directory opaque) and per-entry
   lazy lookup (no sibling materialization): a different state description by node identity, unlike
   the existence-derived rule (N1/N2) and the every-node one (after N2); its risk — the delta must
   say what a removed or replaced child was, the ground N1/N2 broke on — checked by probe G's
@@ -72,8 +74,8 @@ the carrier hits it:
   the realm's only FS surface itself (ADR-0572 §3), so neither the read-only mode nor streams wait
   for #437; whichever lands second rebases onto the other.
 - Per-call overhead of the layered class in a run (probe F, four-library artifact, run phase vs
-  the same files in the state, two runs after review 5 at load 2.2–3.7: +16…+41 ms per generator,
-  four at once +26…+71 — +71 is 1 ms over the tolerance, off its idle-machine terms) — owner:
+  the same files in the state, two runs at load 3.1–4.9: +17…+39 ms per generator, four at once
+  +8…+32, the longest measured phase in both arms) — owner:
   agent — item 5 re-measures it on landed code against the F1 return condition; above the
   tolerance the run stops and the numbers go to the user.
 - The read-only oracle (I3): Node v24.16.0 on a Linux read-only mount (a read-only tmpfs or bind

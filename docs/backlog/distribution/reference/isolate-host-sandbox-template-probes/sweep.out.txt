@@ -1,445 +1,493 @@
 node v24.16.0, darwin/arm64; base {"width":100,"files":5,"size":4096,"depth":2}
 
 ## axis bytes
-{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"write /workspace","ms":0.012,"rows":1,"wireBytes":388,"budget":2282}
-{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"write tpl depth 0","ms":0.204,"rows":100,"wireBytes":16618,"budget":75122}
-{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"write tpl depth 1","ms":0.158,"rows":100,"wireBytes":16729,"budget":76122}
-{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"write tpl depth 2","ms":0.195,"rows":104,"wireBytes":17567,"budget":81074}
-{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"remove tpl depth 1","ms":0.034,"rows":100,"wireBytes":16614,"budget":75248}
-{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"first read of a tpl file","ms":0.123,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"first list /node_modules","ms":0.108,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"first stat /node_modules","ms":0.116,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"rename a tpl package","ms":0.149,"rows":100,"wireBytes":16523,"budget":74408}
-{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"cp 1 file into a tpl package","ms":0.156,"rows":100,"wireBytes":16891,"budget":77580}
-{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"remove a tpl file (fresh)","ms":0.156,"rows":103,"wireBytes":17262,"budget":79120}
-{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"remove /workspace file after listing the template","ms":0.004,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"write /workspace","ms":0.013,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"write tpl depth 0","ms":0.185,"rows":100,"wireBytes":16618,"budget":75122}
+{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"write tpl depth 1","ms":0.175,"rows":100,"wireBytes":16729,"budget":76122}
+{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"write tpl depth 2","ms":0.194,"rows":104,"wireBytes":17567,"budget":81074}
+{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"remove tpl depth 1","ms":0.032,"rows":100,"wireBytes":16614,"budget":75248}
+{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"first read of a tpl file","ms":0.124,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"first list /node_modules","ms":0.112,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"first stat /node_modules","ms":0.109,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"rename a tpl package","ms":0.154,"rows":100,"wireBytes":16523,"budget":74408}
+{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"cp 1 file into a tpl package","ms":0.154,"rows":100,"wireBytes":16891,"budget":77580}
+{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"remove a tpl file (fresh)","ms":0.162,"rows":103,"wireBytes":17262,"budget":79120}
+{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"remove /workspace file after listing the template","ms":0.005,"rows":1,"wireBytes":303,"budget":1608}
 {"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"rename /workspace file after listing the template","ms":0.007,"rows":1,"wireBytes":390,"budget":2290}
-{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"walk 10 packages","ms":0.343,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"walk the whole template (ceiling)","ms":2.281,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"write /workspace after the whole walk","ms":0.004,"rows":1,"wireBytes":388,"budget":2282}
-{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"write tpl depth 1 after the whole walk","ms":0.03,"rows":100,"wireBytes":16729,"budget":76122}
-{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"mkdir -p /workspace (no-op)","ms":0,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"mkdir -p /workspace (no-op) after the whole walk","ms":0.001,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"remove /workspace file after the whole walk","ms":0.005,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"rename /workspace file after the whole walk","ms":0.007,"rows":1,"wireBytes":390,"budget":2290}
+{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"walk 10 packages","ms":0.331,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"walk the whole template (ceiling)","ms":2.284,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"write /workspace, repeated","ms":0.0032,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"write /workspace after the whole walk, repeated","ms":0.0027,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"write tpl depth 1 after the whole walk, repeated","ms":0.0285,"rows":100,"wireBytes":16729,"budget":76122}
+{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"mkdir -p /workspace (no-op), repeated","ms":0.0004,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"mkdir -p /workspace (no-op) after the whole walk, repeated","ms":0.0004,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"remove /workspace file, repeated","ms":0.0034,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"remove /workspace file after the whole walk, repeated","ms":0.0031,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"rename /workspace file, repeated","ms":0.0065,"rows":1,"wireBytes":390,"budget":2290}
+{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"rename /workspace file after the whole walk, repeated","ms":0.0064,"rows":1,"wireBytes":390,"budget":2290}
 {"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"write /workspace after one tpl write","ms":0.027,"rows":100,"wireBytes":16814,"budget":76796}
 {"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"idle fresh","idleKiB":3}
-{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"idle after list /node_modules","idleKiB":68}
+{"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"idle after list /node_modules","idleKiB":64}
 {"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"idle after the whole walk (ceiling)","idleKiB":358}
 {"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"idle after the whole walk + a run boundary","idleKiB":3}
 {"axis":"bytes","size":4096,"entries":701,"templateMB":2,"scenario":"idle after one tpl write + a run boundary","idleKiB":57}
 {"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"write /workspace","ms":0.004,"rows":1,"wireBytes":388,"budget":2282}
-{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"write tpl depth 0","ms":0.146,"rows":100,"wireBytes":16618,"budget":75122}
-{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"write tpl depth 1","ms":0.14,"rows":100,"wireBytes":16729,"budget":76122}
-{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"write tpl depth 2","ms":0.158,"rows":104,"wireBytes":17567,"budget":81074}
-{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"remove tpl depth 1","ms":0.031,"rows":100,"wireBytes":16614,"budget":75248}
-{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"first read of a tpl file","ms":0.117,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"first list /node_modules","ms":0.117,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"first stat /node_modules","ms":0.118,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"rename a tpl package","ms":0.15,"rows":100,"wireBytes":16523,"budget":74408}
-{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"cp 1 file into a tpl package","ms":0.157,"rows":100,"wireBytes":16891,"budget":77580}
-{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"remove a tpl file (fresh)","ms":0.169,"rows":103,"wireBytes":17262,"budget":79120}
+{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"write tpl depth 0","ms":0.149,"rows":100,"wireBytes":16618,"budget":75122}
+{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"write tpl depth 1","ms":0.142,"rows":100,"wireBytes":16729,"budget":76122}
+{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"write tpl depth 2","ms":0.164,"rows":104,"wireBytes":17567,"budget":81074}
+{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"remove tpl depth 1","ms":0.028,"rows":100,"wireBytes":16614,"budget":75248}
+{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"first read of a tpl file","ms":0.123,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"first list /node_modules","ms":0.113,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"first stat /node_modules","ms":0.111,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"rename a tpl package","ms":0.142,"rows":100,"wireBytes":16523,"budget":74408}
+{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"cp 1 file into a tpl package","ms":0.151,"rows":100,"wireBytes":16891,"budget":77580}
+{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"remove a tpl file (fresh)","ms":0.162,"rows":103,"wireBytes":17262,"budget":79120}
 {"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"remove /workspace file after listing the template","ms":0.004,"rows":1,"wireBytes":303,"budget":1608}
 {"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"rename /workspace file after listing the template","ms":0.006,"rows":1,"wireBytes":390,"budget":2290}
-{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"walk 10 packages","ms":0.302,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"walk the whole template (ceiling)","ms":2.198,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"write /workspace after the whole walk","ms":0.003,"rows":1,"wireBytes":388,"budget":2282}
-{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"write tpl depth 1 after the whole walk","ms":0.03,"rows":100,"wireBytes":16729,"budget":76122}
-{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"mkdir -p /workspace (no-op)","ms":0,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"mkdir -p /workspace (no-op) after the whole walk","ms":0.001,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"remove /workspace file after the whole walk","ms":0.004,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"rename /workspace file after the whole walk","ms":0.006,"rows":1,"wireBytes":390,"budget":2290}
-{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"write /workspace after one tpl write","ms":0.026,"rows":100,"wireBytes":16814,"budget":76796}
+{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"walk 10 packages","ms":0.327,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"walk the whole template (ceiling)","ms":2.311,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"write /workspace, repeated","ms":0.0026,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"write /workspace after the whole walk, repeated","ms":0.0026,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"write tpl depth 1 after the whole walk, repeated","ms":0.0275,"rows":100,"wireBytes":16729,"budget":76122}
+{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"mkdir -p /workspace (no-op), repeated","ms":0.0004,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"mkdir -p /workspace (no-op) after the whole walk, repeated","ms":0.0004,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"remove /workspace file, repeated","ms":0.0029,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"remove /workspace file after the whole walk, repeated","ms":0.0029,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"rename /workspace file, repeated","ms":0.0062,"rows":1,"wireBytes":390,"budget":2290}
+{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"rename /workspace file after the whole walk, repeated","ms":0.0068,"rows":1,"wireBytes":390,"budget":2290}
+{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"write /workspace after one tpl write","ms":0.028,"rows":100,"wireBytes":16814,"budget":76796}
 {"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"idle fresh","idleKiB":3}
-{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"idle after list /node_modules","idleKiB":68}
-{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"idle after the whole walk (ceiling)","idleKiB":356}
+{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"idle after list /node_modules","idleKiB":64}
+{"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"idle after the whole walk (ceiling)","idleKiB":358}
 {"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"idle after the whole walk + a run boundary","idleKiB":3}
 {"axis":"bytes","size":65536,"entries":701,"templateMB":32.8,"scenario":"idle after one tpl write + a run boundary","idleKiB":57}
 
 ## axis width
 {"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"write /workspace","ms":0.003,"rows":1,"wireBytes":388,"budget":2282}
 {"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"write tpl depth 0","ms":0.018,"rows":10,"wireBytes":1948,"budget":9602}
-{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"write tpl depth 1","ms":0.021,"rows":10,"wireBytes":2059,"budget":10602}
-{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"write tpl depth 2","ms":0.039,"rows":14,"wireBytes":2897,"budget":15554}
+{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"write tpl depth 1","ms":0.022,"rows":10,"wireBytes":2059,"budget":10602}
+{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"write tpl depth 2","ms":0.04,"rows":14,"wireBytes":2897,"budget":15554}
 {"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"remove tpl depth 1","ms":0.008,"rows":10,"wireBytes":1944,"budget":9728}
-{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"first read of a tpl file","ms":0.023,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"first list /node_modules","ms":0.011,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"first stat /node_modules","ms":0.011,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"rename a tpl package","ms":0.019,"rows":10,"wireBytes":1853,"budget":8888}
-{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"cp 1 file into a tpl package","ms":0.027,"rows":10,"wireBytes":2221,"budget":12060}
-{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"remove a tpl file (fresh)","ms":0.037,"rows":13,"wireBytes":2592,"budget":13600}
-{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"remove /workspace file after listing the template","ms":0.003,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"first read of a tpl file","ms":0.027,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"first list /node_modules","ms":0.014,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"first stat /node_modules","ms":0.013,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"rename a tpl package","ms":0.022,"rows":10,"wireBytes":1853,"budget":8888}
+{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"cp 1 file into a tpl package","ms":0.031,"rows":10,"wireBytes":2221,"budget":12060}
+{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"remove a tpl file (fresh)","ms":0.043,"rows":13,"wireBytes":2592,"budget":13600}
+{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"remove /workspace file after listing the template","ms":0.004,"rows":1,"wireBytes":303,"budget":1608}
 {"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"rename /workspace file after listing the template","ms":0.006,"rows":1,"wireBytes":390,"budget":2290}
-{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"walk 10 packages","ms":0.201,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"walk the whole template (ceiling)","ms":0.208,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"write /workspace after the whole walk","ms":0.003,"rows":1,"wireBytes":388,"budget":2282}
-{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"write tpl depth 1 after the whole walk","ms":0.007,"rows":10,"wireBytes":2059,"budget":10602}
-{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"mkdir -p /workspace (no-op)","ms":0,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"mkdir -p /workspace (no-op) after the whole walk","ms":0,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"remove /workspace file after the whole walk","ms":0.003,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"rename /workspace file after the whole walk","ms":0.006,"rows":1,"wireBytes":390,"budget":2290}
+{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"walk 10 packages","ms":0.211,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"walk the whole template (ceiling)","ms":0.219,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"write /workspace, repeated","ms":0.0026,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"write /workspace after the whole walk, repeated","ms":0.0025,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"write tpl depth 1 after the whole walk, repeated","ms":0.0069,"rows":10,"wireBytes":2059,"budget":10602}
+{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"mkdir -p /workspace (no-op), repeated","ms":0.0004,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"mkdir -p /workspace (no-op) after the whole walk, repeated","ms":0.0003,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"remove /workspace file, repeated","ms":0.003,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"remove /workspace file after the whole walk, repeated","ms":0.0029,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"rename /workspace file, repeated","ms":0.0062,"rows":1,"wireBytes":390,"budget":2290}
+{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"rename /workspace file after the whole walk, repeated","ms":0.0058,"rows":1,"wireBytes":390,"budget":2290}
 {"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"write /workspace after one tpl write","ms":0.007,"rows":10,"wireBytes":2144,"budget":11276}
 {"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"idle fresh","idleKiB":3}
 {"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"idle after list /node_modules","idleKiB":10}
-{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"idle after the whole walk (ceiling)","idleKiB":43}
-{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"idle after the whole walk + a run boundary","idleKiB":5}
+{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"idle after the whole walk (ceiling)","idleKiB":39}
+{"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"idle after the whole walk + a run boundary","idleKiB":3}
 {"axis":"width","width":10,"entries":71,"templateMB":0.2,"scenario":"idle after one tpl write + a run boundary","idleKiB":9}
-{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"write /workspace","ms":0.004,"rows":1,"wireBytes":388,"budget":2282}
-{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"write tpl depth 0","ms":0.136,"rows":100,"wireBytes":16618,"budget":75122}
-{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"write tpl depth 1","ms":0.136,"rows":100,"wireBytes":16729,"budget":76122}
-{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"write tpl depth 2","ms":0.154,"rows":104,"wireBytes":17567,"budget":81074}
+{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"write /workspace","ms":0.003,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"write tpl depth 0","ms":0.135,"rows":100,"wireBytes":16618,"budget":75122}
+{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"write tpl depth 1","ms":0.142,"rows":100,"wireBytes":16729,"budget":76122}
+{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"write tpl depth 2","ms":0.159,"rows":104,"wireBytes":17567,"budget":81074}
 {"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"remove tpl depth 1","ms":0.027,"rows":100,"wireBytes":16614,"budget":75248}
-{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"first read of a tpl file","ms":0.116,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"first list /node_modules","ms":0.106,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"first stat /node_modules","ms":0.104,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"rename a tpl package","ms":0.134,"rows":100,"wireBytes":16523,"budget":74408}
-{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"cp 1 file into a tpl package","ms":0.142,"rows":100,"wireBytes":16891,"budget":77580}
-{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"remove a tpl file (fresh)","ms":0.152,"rows":103,"wireBytes":17262,"budget":79120}
-{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"remove /workspace file after listing the template","ms":0.004,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"first read of a tpl file","ms":0.118,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"first list /node_modules","ms":0.108,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"first stat /node_modules","ms":0.108,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"rename a tpl package","ms":0.137,"rows":100,"wireBytes":16523,"budget":74408}
+{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"cp 1 file into a tpl package","ms":0.146,"rows":100,"wireBytes":16891,"budget":77580}
+{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"remove a tpl file (fresh)","ms":0.157,"rows":103,"wireBytes":17262,"budget":79120}
+{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"remove /workspace file after listing the template","ms":0.003,"rows":1,"wireBytes":303,"budget":1608}
 {"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"rename /workspace file after listing the template","ms":0.006,"rows":1,"wireBytes":390,"budget":2290}
-{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"walk 10 packages","ms":0.302,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"walk the whole template (ceiling)","ms":2.187,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"write /workspace after the whole walk","ms":0.003,"rows":1,"wireBytes":388,"budget":2282}
-{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"write tpl depth 1 after the whole walk","ms":0.028,"rows":100,"wireBytes":16729,"budget":76122}
-{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"mkdir -p /workspace (no-op)","ms":0,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"mkdir -p /workspace (no-op) after the whole walk","ms":0.001,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"remove /workspace file after the whole walk","ms":0.004,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"rename /workspace file after the whole walk","ms":0.006,"rows":1,"wireBytes":390,"budget":2290}
-{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"write /workspace after one tpl write","ms":0.028,"rows":100,"wireBytes":16814,"budget":76796}
+{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"walk 10 packages","ms":0.319,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"walk the whole template (ceiling)","ms":2.256,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"write /workspace, repeated","ms":0.0025,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"write /workspace after the whole walk, repeated","ms":0.0025,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"write tpl depth 1 after the whole walk, repeated","ms":0.0276,"rows":100,"wireBytes":16729,"budget":76122}
+{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"mkdir -p /workspace (no-op), repeated","ms":0.0003,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"mkdir -p /workspace (no-op) after the whole walk, repeated","ms":0.0003,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"remove /workspace file, repeated","ms":0.0028,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"remove /workspace file after the whole walk, repeated","ms":0.0027,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"rename /workspace file, repeated","ms":0.0058,"rows":1,"wireBytes":390,"budget":2290}
+{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"rename /workspace file after the whole walk, repeated","ms":0.0058,"rows":1,"wireBytes":390,"budget":2290}
+{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"write /workspace after one tpl write","ms":0.027,"rows":100,"wireBytes":16814,"budget":76796}
 {"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"idle fresh","idleKiB":3}
-{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"idle after list /node_modules","idleKiB":74}
-{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"idle after the whole walk (ceiling)","idleKiB":384}
-{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"idle after the whole walk + a run boundary","idleKiB":24}
-{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"idle after one tpl write + a run boundary","idleKiB":58}
-{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"write /workspace","ms":0.004,"rows":1,"wireBytes":388,"budget":2282}
-{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"write tpl depth 0","ms":1.399,"rows":1000,"wireBytes":163318,"budget":730322}
-{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"write tpl depth 1","ms":1.39,"rows":1000,"wireBytes":163429,"budget":731322}
-{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"write tpl depth 2","ms":1.337,"rows":1004,"wireBytes":164267,"budget":736274}
-{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"remove tpl depth 1","ms":0.238,"rows":1000,"wireBytes":163314,"budget":730448}
-{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"first read of a tpl file","ms":1.097,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"first list /node_modules","ms":1.137,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"first stat /node_modules","ms":1.064,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"rename a tpl package","ms":1.357,"rows":1000,"wireBytes":163223,"budget":729608}
-{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"cp 1 file into a tpl package","ms":1.402,"rows":1000,"wireBytes":163591,"budget":732780}
-{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"remove a tpl file (fresh)","ms":1.388,"rows":1003,"wireBytes":163962,"budget":734320}
-{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"remove /workspace file after listing the template","ms":0.005,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"rename /workspace file after listing the template","ms":0.007,"rows":1,"wireBytes":390,"budget":2290}
-{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"walk 10 packages","ms":1.375,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"walk the whole template (ceiling)","ms":22.819,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"write /workspace after the whole walk","ms":0.007,"rows":1,"wireBytes":388,"budget":2282}
-{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"write tpl depth 1 after the whole walk","ms":0.284,"rows":1000,"wireBytes":163429,"budget":731322}
-{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"mkdir -p /workspace (no-op)","ms":0,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"mkdir -p /workspace (no-op) after the whole walk","ms":0.002,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"remove /workspace file after the whole walk","ms":0.011,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"rename /workspace file after the whole walk","ms":0.014,"rows":1,"wireBytes":390,"budget":2290}
-{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"write /workspace after one tpl write","ms":0.271,"rows":1000,"wireBytes":163514,"budget":731996}
+{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"idle after list /node_modules","idleKiB":64}
+{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"idle after the whole walk (ceiling)","idleKiB":358}
+{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"idle after the whole walk + a run boundary","idleKiB":3}
+{"axis":"width","width":100,"entries":701,"templateMB":2,"scenario":"idle after one tpl write + a run boundary","idleKiB":57}
+{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"write /workspace","ms":0.003,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"write tpl depth 0","ms":1.383,"rows":1000,"wireBytes":163318,"budget":730322}
+{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"write tpl depth 1","ms":1.356,"rows":1000,"wireBytes":163429,"budget":731322}
+{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"write tpl depth 2","ms":1.445,"rows":1004,"wireBytes":164267,"budget":736274}
+{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"remove tpl depth 1","ms":0.24,"rows":1000,"wireBytes":163314,"budget":730448}
+{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"first read of a tpl file","ms":1.095,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"first list /node_modules","ms":1.098,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"first stat /node_modules","ms":1.083,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"rename a tpl package","ms":1.356,"rows":1000,"wireBytes":163223,"budget":729608}
+{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"cp 1 file into a tpl package","ms":1.491,"rows":1000,"wireBytes":163591,"budget":732780}
+{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"remove a tpl file (fresh)","ms":1.413,"rows":1003,"wireBytes":163962,"budget":734320}
+{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"remove /workspace file after listing the template","ms":0.006,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"rename /workspace file after listing the template","ms":0.009,"rows":1,"wireBytes":390,"budget":2290}
+{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"walk 10 packages","ms":1.368,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"walk the whole template (ceiling)","ms":23.299,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"write /workspace, repeated","ms":0.0025,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"write /workspace after the whole walk, repeated","ms":0.0025,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"write tpl depth 1 after the whole walk, repeated","ms":0.252,"rows":1000,"wireBytes":163429,"budget":731322}
+{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"mkdir -p /workspace (no-op), repeated","ms":0.0003,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"mkdir -p /workspace (no-op) after the whole walk, repeated","ms":0.0003,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"remove /workspace file, repeated","ms":0.0028,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"remove /workspace file after the whole walk, repeated","ms":0.0028,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"rename /workspace file, repeated","ms":0.0058,"rows":1,"wireBytes":390,"budget":2290}
+{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"rename /workspace file after the whole walk, repeated","ms":0.0058,"rows":1,"wireBytes":390,"budget":2290}
+{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"write /workspace after one tpl write","ms":0.242,"rows":1000,"wireBytes":163514,"budget":731996}
 {"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"idle fresh","idleKiB":3}
-{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"idle after list /node_modules","idleKiB":663}
-{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"idle after the whole walk (ceiling)","idleKiB":3805}
-{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"idle after the whole walk + a run boundary","idleKiB":214}
-{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"idle after one tpl write + a run boundary","idleKiB":527}
-{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"write /workspace","ms":0.005,"rows":1,"wireBytes":388,"budget":2282}
-{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"write tpl depth 0","ms":7.313,"rows":5000,"wireBytes":815318,"budget":3642322}
-{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"write tpl depth 1","ms":7.135,"rows":5000,"wireBytes":815429,"budget":3643322}
-{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"write tpl depth 2","ms":7.302,"rows":5004,"wireBytes":816267,"budget":3648274}
-{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"remove tpl depth 1","ms":1.251,"rows":5000,"wireBytes":815314,"budget":3642448}
-{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"first read of a tpl file","ms":5.728,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"first list /node_modules","ms":5.817,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"first stat /node_modules","ms":5.727,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"rename a tpl package","ms":7.117,"rows":5000,"wireBytes":815223,"budget":3641608}
-{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"cp 1 file into a tpl package","ms":7.214,"rows":5000,"wireBytes":815591,"budget":3644780}
-{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"remove a tpl file (fresh)","ms":7.168,"rows":5003,"wireBytes":815962,"budget":3646320}
-{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"remove /workspace file after listing the template","ms":0.017,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"rename /workspace file after listing the template","ms":0.019,"rows":1,"wireBytes":390,"budget":2290}
-{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"walk 10 packages","ms":6.206,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"walk the whole template (ceiling)","ms":125.889,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"write /workspace after the whole walk","ms":0.018,"rows":1,"wireBytes":388,"budget":2282}
-{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"write tpl depth 1 after the whole walk","ms":1.419,"rows":5000,"wireBytes":815429,"budget":3643322}
-{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"mkdir -p /workspace (no-op)","ms":0,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"mkdir -p /workspace (no-op) after the whole walk","ms":0.005,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"remove /workspace file after the whole walk","ms":0.023,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"rename /workspace file after the whole walk","ms":0.029,"rows":1,"wireBytes":390,"budget":2290}
-{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"write /workspace after one tpl write","ms":1.247,"rows":5000,"wireBytes":815514,"budget":3643996}
+{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"idle after list /node_modules","idleKiB":582}
+{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"idle after the whole walk (ceiling)","idleKiB":3594}
+{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"idle after the whole walk + a run boundary","idleKiB":3}
+{"axis":"width","width":1000,"entries":7001,"templateMB":20.5,"scenario":"idle after one tpl write + a run boundary","idleKiB":521}
+{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"write /workspace","ms":0.003,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"write tpl depth 0","ms":8.001,"rows":5000,"wireBytes":815318,"budget":3642322}
+{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"write tpl depth 1","ms":7.182,"rows":5000,"wireBytes":815429,"budget":3643322}
+{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"write tpl depth 2","ms":7.135,"rows":5004,"wireBytes":816267,"budget":3648274}
+{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"remove tpl depth 1","ms":1.208,"rows":5000,"wireBytes":815314,"budget":3642448}
+{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"first read of a tpl file","ms":5.73,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"first list /node_modules","ms":5.992,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"first stat /node_modules","ms":6.588,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"rename a tpl package","ms":7.392,"rows":5000,"wireBytes":815223,"budget":3641608}
+{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"cp 1 file into a tpl package","ms":7.811,"rows":5000,"wireBytes":815591,"budget":3644780}
+{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"remove a tpl file (fresh)","ms":7.741,"rows":5003,"wireBytes":815962,"budget":3646320}
+{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"remove /workspace file after listing the template","ms":0.014,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"rename /workspace file after listing the template","ms":0.018,"rows":1,"wireBytes":390,"budget":2290}
+{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"walk 10 packages","ms":6.284,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"walk the whole template (ceiling)","ms":126.55,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"write /workspace, repeated","ms":0.003,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"write /workspace after the whole walk, repeated","ms":0.0026,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"write tpl depth 1 after the whole walk, repeated","ms":1.2242,"rows":5000,"wireBytes":815429,"budget":3643322}
+{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"mkdir -p /workspace (no-op), repeated","ms":0.0004,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"mkdir -p /workspace (no-op) after the whole walk, repeated","ms":0.0003,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"remove /workspace file, repeated","ms":0.0028,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"remove /workspace file after the whole walk, repeated","ms":0.0027,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"rename /workspace file, repeated","ms":0.0058,"rows":1,"wireBytes":390,"budget":2290}
+{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"rename /workspace file after the whole walk, repeated","ms":0.0056,"rows":1,"wireBytes":390,"budget":2290}
+{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"write /workspace after one tpl write","ms":1.202,"rows":5000,"wireBytes":815514,"budget":3643996}
 {"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"idle fresh","idleKiB":3}
-{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"idle after list /node_modules","idleKiB":3255}
-{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"idle after the whole walk (ceiling)","idleKiB":18951}
-{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"idle after the whole walk + a run boundary","idleKiB":963}
-{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"idle after one tpl write + a run boundary","idleKiB":2838}
+{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"idle after list /node_modules","idleKiB":3079}
+{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"idle after the whole walk (ceiling)","idleKiB":17983}
+{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"idle after the whole walk + a run boundary","idleKiB":3}
+{"axis":"width","width":5000,"entries":35001,"templateMB":102.4,"scenario":"idle after one tpl write + a run boundary","idleKiB":2808}
 
 ## axis files
-{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"write /workspace","ms":0.004,"rows":1,"wireBytes":388,"budget":2282}
-{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"write tpl depth 0","ms":0.137,"rows":100,"wireBytes":16618,"budget":75122}
-{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"write tpl depth 1","ms":0.135,"rows":100,"wireBytes":16729,"budget":76122}
+{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"write /workspace","ms":0.003,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"write tpl depth 0","ms":0.131,"rows":100,"wireBytes":16618,"budget":75122}
+{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"write tpl depth 1","ms":0.137,"rows":100,"wireBytes":16729,"budget":76122}
 {"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"write tpl depth 2","ms":0.154,"rows":104,"wireBytes":17567,"budget":81074}
 {"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"remove tpl depth 1","ms":0.027,"rows":100,"wireBytes":16614,"budget":75248}
-{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"first read of a tpl file","ms":0.115,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"first read of a tpl file","ms":0.116,"rows":1,"wireBytes":303,"budget":1608}
 {"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"first list /node_modules","ms":0.106,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"first stat /node_modules","ms":0.101,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"first stat /node_modules","ms":0.104,"rows":1,"wireBytes":303,"budget":1608}
 {"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"rename a tpl package","ms":0.134,"rows":100,"wireBytes":16523,"budget":74408}
-{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"cp 1 file into a tpl package","ms":0.142,"rows":100,"wireBytes":16891,"budget":77580}
-{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"remove a tpl file (fresh)","ms":0.153,"rows":103,"wireBytes":17262,"budget":79120}
-{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"remove /workspace file after listing the template","ms":0.004,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"rename /workspace file after listing the template","ms":0.007,"rows":1,"wireBytes":390,"budget":2290}
-{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"walk 10 packages","ms":0.311,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"walk the whole template (ceiling)","ms":2.213,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"write /workspace after the whole walk","ms":0.003,"rows":1,"wireBytes":388,"budget":2282}
-{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"write tpl depth 1 after the whole walk","ms":0.029,"rows":100,"wireBytes":16729,"budget":76122}
-{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"mkdir -p /workspace (no-op)","ms":0,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"mkdir -p /workspace (no-op) after the whole walk","ms":0.001,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"remove /workspace file after the whole walk","ms":0.005,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"rename /workspace file after the whole walk","ms":0.007,"rows":1,"wireBytes":390,"budget":2290}
+{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"cp 1 file into a tpl package","ms":0.143,"rows":100,"wireBytes":16891,"budget":77580}
+{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"remove a tpl file (fresh)","ms":0.152,"rows":103,"wireBytes":17262,"budget":79120}
+{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"remove /workspace file after listing the template","ms":0.003,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"rename /workspace file after listing the template","ms":0.006,"rows":1,"wireBytes":390,"budget":2290}
+{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"walk 10 packages","ms":0.31,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"walk the whole template (ceiling)","ms":2.22,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"write /workspace, repeated","ms":0.0025,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"write /workspace after the whole walk, repeated","ms":0.0025,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"write tpl depth 1 after the whole walk, repeated","ms":0.0271,"rows":100,"wireBytes":16729,"budget":76122}
+{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"mkdir -p /workspace (no-op), repeated","ms":0.0004,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"mkdir -p /workspace (no-op) after the whole walk, repeated","ms":0.0003,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"remove /workspace file, repeated","ms":0.0027,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"remove /workspace file after the whole walk, repeated","ms":0.0027,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"rename /workspace file, repeated","ms":0.0057,"rows":1,"wireBytes":390,"budget":2290}
+{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"rename /workspace file after the whole walk, repeated","ms":0.0056,"rows":1,"wireBytes":390,"budget":2290}
 {"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"write /workspace after one tpl write","ms":0.027,"rows":100,"wireBytes":16814,"budget":76796}
 {"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"idle fresh","idleKiB":3}
-{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"idle after list /node_modules","idleKiB":74}
-{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"idle after the whole walk (ceiling)","idleKiB":384}
-{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"idle after the whole walk + a run boundary","idleKiB":24}
-{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"idle after one tpl write + a run boundary","idleKiB":58}
-{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"write /workspace","ms":0.004,"rows":1,"wireBytes":388,"budget":2282}
-{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"write tpl depth 0","ms":0.131,"rows":100,"wireBytes":16618,"budget":75122}
-{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"write tpl depth 1","ms":0.136,"rows":100,"wireBytes":16729,"budget":76122}
-{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"write tpl depth 2","ms":0.298,"rows":149,"wireBytes":25837,"budget":124954}
-{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"remove tpl depth 1","ms":0.028,"rows":100,"wireBytes":16614,"budget":75248}
-{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"first read of a tpl file","ms":0.187,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"first list /node_modules","ms":0.106,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"first stat /node_modules","ms":0.102,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"idle after list /node_modules","idleKiB":64}
+{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"idle after the whole walk (ceiling)","idleKiB":358}
+{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"idle after the whole walk + a run boundary","idleKiB":3}
+{"axis":"files","files":5,"entries":701,"templateMB":2,"scenario":"idle after one tpl write + a run boundary","idleKiB":57}
+{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"write /workspace","ms":0.003,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"write tpl depth 0","ms":0.132,"rows":100,"wireBytes":16618,"budget":75122}
+{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"write tpl depth 1","ms":0.137,"rows":100,"wireBytes":16729,"budget":76122}
+{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"write tpl depth 2","ms":0.297,"rows":149,"wireBytes":25837,"budget":124954}
+{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"remove tpl depth 1","ms":0.027,"rows":100,"wireBytes":16614,"budget":75248}
+{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"first read of a tpl file","ms":0.189,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"first list /node_modules","ms":0.107,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"first stat /node_modules","ms":0.104,"rows":1,"wireBytes":303,"budget":1608}
 {"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"rename a tpl package","ms":0.134,"rows":100,"wireBytes":16523,"budget":74408}
-{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"cp 1 file into a tpl package","ms":0.143,"rows":100,"wireBytes":16891,"budget":77580}
-{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"remove a tpl file (fresh)","ms":0.295,"rows":148,"wireBytes":25532,"budget":123000}
-{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"remove /workspace file after listing the template","ms":0.004,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"rename /workspace file after listing the template","ms":0.007,"rows":1,"wireBytes":390,"budget":2290}
-{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"walk 10 packages","ms":1.592,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"walk the whole template (ceiling)","ms":14.842,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"write /workspace after the whole walk","ms":0.007,"rows":1,"wireBytes":388,"budget":2282}
-{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"write tpl depth 1 after the whole walk","ms":0.033,"rows":100,"wireBytes":16729,"budget":76122}
-{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"mkdir -p /workspace (no-op)","ms":0,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"mkdir -p /workspace (no-op) after the whole walk","ms":0.001,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"remove /workspace file after the whole walk","ms":0.008,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"rename /workspace file after the whole walk","ms":0.017,"rows":1,"wireBytes":390,"budget":2290}
-{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"write /workspace after one tpl write","ms":0.028,"rows":100,"wireBytes":16814,"budget":76796}
+{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"cp 1 file into a tpl package","ms":0.146,"rows":100,"wireBytes":16891,"budget":77580}
+{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"remove a tpl file (fresh)","ms":0.309,"rows":148,"wireBytes":25532,"budget":123000}
+{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"remove /workspace file after listing the template","ms":0.003,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"rename /workspace file after listing the template","ms":0.006,"rows":1,"wireBytes":390,"budget":2290}
+{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"walk 10 packages","ms":1.535,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"walk the whole template (ceiling)","ms":14.755,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"write /workspace, repeated","ms":0.0025,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"write /workspace after the whole walk, repeated","ms":0.0025,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"write tpl depth 1 after the whole walk, repeated","ms":0.0272,"rows":100,"wireBytes":16729,"budget":76122}
+{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"mkdir -p /workspace (no-op), repeated","ms":0.0004,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"mkdir -p /workspace (no-op) after the whole walk, repeated","ms":0.0003,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"remove /workspace file, repeated","ms":0.0027,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"remove /workspace file after the whole walk, repeated","ms":0.0027,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"rename /workspace file, repeated","ms":0.0057,"rows":1,"wireBytes":390,"budget":2290}
+{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"rename /workspace file after the whole walk, repeated","ms":0.0055,"rows":1,"wireBytes":390,"budget":2290}
+{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"write /workspace after one tpl write","ms":0.026,"rows":100,"wireBytes":16814,"budget":76796}
 {"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"idle fresh","idleKiB":3}
-{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"idle after list /node_modules","idleKiB":72}
-{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"idle after the whole walk (ceiling)","idleKiB":2568}
-{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"idle after the whole walk + a run boundary","idleKiB":147}
-{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"idle after one tpl write + a run boundary","idleKiB":58}
+{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"idle after list /node_modules","idleKiB":68}
+{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"idle after the whole walk (ceiling)","idleKiB":2419}
+{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"idle after the whole walk + a run boundary","idleKiB":3}
+{"axis":"files","files":50,"entries":5201,"templateMB":20.5,"scenario":"idle after one tpl write + a run boundary","idleKiB":57}
 
 ## axis depth
-{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"write /workspace","ms":0.004,"rows":1,"wireBytes":388,"budget":2282}
-{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"write tpl depth 0","ms":0.137,"rows":100,"wireBytes":16618,"budget":75122}
-{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"write tpl depth 1","ms":0.135,"rows":100,"wireBytes":16729,"budget":76122}
+{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"write /workspace","ms":0.003,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"write tpl depth 0","ms":0.131,"rows":100,"wireBytes":16618,"budget":75122}
+{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"write tpl depth 1","ms":0.136,"rows":100,"wireBytes":16729,"budget":76122}
 {"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"write tpl depth 2","ms":0.154,"rows":104,"wireBytes":17567,"budget":81074}
-{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"remove tpl depth 1","ms":0.028,"rows":100,"wireBytes":16614,"budget":75248}
-{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"first read of a tpl file","ms":0.114,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"first list /node_modules","ms":0.105,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"first stat /node_modules","ms":0.1,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"remove tpl depth 1","ms":0.027,"rows":100,"wireBytes":16614,"budget":75248}
+{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"first read of a tpl file","ms":0.118,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"first list /node_modules","ms":0.106,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"first stat /node_modules","ms":0.104,"rows":1,"wireBytes":303,"budget":1608}
 {"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"rename a tpl package","ms":0.133,"rows":100,"wireBytes":16523,"budget":74408}
-{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"cp 1 file into a tpl package","ms":0.142,"rows":100,"wireBytes":16891,"budget":77580}
+{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"cp 1 file into a tpl package","ms":0.147,"rows":100,"wireBytes":16891,"budget":77580}
 {"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"remove a tpl file (fresh)","ms":0.152,"rows":103,"wireBytes":17262,"budget":79120}
-{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"remove /workspace file after listing the template","ms":0.004,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"rename /workspace file after listing the template","ms":0.007,"rows":1,"wireBytes":390,"budget":2290}
-{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"walk 10 packages","ms":0.312,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"walk the whole template (ceiling)","ms":2.103,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"write /workspace after the whole walk","ms":0.003,"rows":1,"wireBytes":388,"budget":2282}
-{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"write tpl depth 1 after the whole walk","ms":0.029,"rows":100,"wireBytes":16729,"budget":76122}
-{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"mkdir -p /workspace (no-op)","ms":0,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"mkdir -p /workspace (no-op) after the whole walk","ms":0.001,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"remove /workspace file after the whole walk","ms":0.004,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"rename /workspace file after the whole walk","ms":0.007,"rows":1,"wireBytes":390,"budget":2290}
-{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"write /workspace after one tpl write","ms":0.027,"rows":100,"wireBytes":16814,"budget":76796}
+{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"remove /workspace file after listing the template","ms":0.003,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"rename /workspace file after listing the template","ms":0.005,"rows":1,"wireBytes":390,"budget":2290}
+{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"walk 10 packages","ms":0.308,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"walk the whole template (ceiling)","ms":2.209,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"write /workspace, repeated","ms":0.0024,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"write /workspace after the whole walk, repeated","ms":0.0024,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"write tpl depth 1 after the whole walk, repeated","ms":0.027,"rows":100,"wireBytes":16729,"budget":76122}
+{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"mkdir -p /workspace (no-op), repeated","ms":0.0003,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"mkdir -p /workspace (no-op) after the whole walk, repeated","ms":0.0003,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"remove /workspace file, repeated","ms":0.0027,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"remove /workspace file after the whole walk, repeated","ms":0.0027,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"rename /workspace file, repeated","ms":0.0056,"rows":1,"wireBytes":390,"budget":2290}
+{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"rename /workspace file after the whole walk, repeated","ms":0.0055,"rows":1,"wireBytes":390,"budget":2290}
+{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"write /workspace after one tpl write","ms":0.026,"rows":100,"wireBytes":16814,"budget":76796}
 {"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"idle fresh","idleKiB":3}
-{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"idle after list /node_modules","idleKiB":74}
-{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"idle after the whole walk (ceiling)","idleKiB":384}
-{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"idle after the whole walk + a run boundary","idleKiB":24}
-{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"idle after one tpl write + a run boundary","idleKiB":58}
-{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"write /workspace","ms":0.004,"rows":1,"wireBytes":388,"budget":2282}
-{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"write tpl depth 0","ms":0.132,"rows":100,"wireBytes":16618,"budget":75122}
-{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"write tpl depth 1","ms":0.135,"rows":100,"wireBytes":16729,"budget":76122}
-{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"write tpl depth 2","ms":0.139,"rows":100,"wireBytes":16834,"budget":77178}
+{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"idle after list /node_modules","idleKiB":64}
+{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"idle after the whole walk (ceiling)","idleKiB":358}
+{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"idle after the whole walk + a run boundary","idleKiB":3}
+{"axis":"depth","depth":2,"entries":701,"templateMB":2,"scenario":"idle after one tpl write + a run boundary","idleKiB":57}
+{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"write /workspace","ms":0.003,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"write tpl depth 0","ms":0.131,"rows":100,"wireBytes":16618,"budget":75122}
+{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"write tpl depth 1","ms":0.137,"rows":100,"wireBytes":16729,"budget":76122}
+{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"write tpl depth 2","ms":0.14,"rows":100,"wireBytes":16834,"budget":77178}
 {"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"remove tpl depth 1","ms":0.027,"rows":100,"wireBytes":16614,"budget":75248}
-{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"first read of a tpl file","ms":0.133,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"first list /node_modules","ms":0.105,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"first stat /node_modules","ms":0.103,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"first read of a tpl file","ms":0.135,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"first list /node_modules","ms":0.107,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"first stat /node_modules","ms":0.105,"rows":1,"wireBytes":303,"budget":1608}
 {"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"rename a tpl package","ms":0.133,"rows":100,"wireBytes":16523,"budget":74408}
-{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"cp 1 file into a tpl package","ms":0.143,"rows":100,"wireBytes":16891,"budget":77580}
-{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"remove a tpl file (fresh)","ms":0.191,"rows":103,"wireBytes":17782,"budget":85184}
-{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"remove /workspace file after listing the template","ms":0.004,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"rename /workspace file after listing the template","ms":0.007,"rows":1,"wireBytes":390,"budget":2290}
-{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"walk 10 packages","ms":0.63,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"walk the whole template (ceiling)","ms":5.667,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"write /workspace after the whole walk","ms":0.004,"rows":1,"wireBytes":388,"budget":2282}
-{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"write tpl depth 1 after the whole walk","ms":0.029,"rows":100,"wireBytes":16729,"budget":76122}
-{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"mkdir -p /workspace (no-op)","ms":0,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"mkdir -p /workspace (no-op) after the whole walk","ms":0.001,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"remove /workspace file after the whole walk","ms":0.005,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"rename /workspace file after the whole walk","ms":0.007,"rows":1,"wireBytes":390,"budget":2290}
-{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"write /workspace after one tpl write","ms":0.027,"rows":100,"wireBytes":16814,"budget":76796}
+{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"cp 1 file into a tpl package","ms":0.144,"rows":100,"wireBytes":16891,"budget":77580}
+{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"remove a tpl file (fresh)","ms":0.182,"rows":103,"wireBytes":17782,"budget":85184}
+{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"remove /workspace file after listing the template","ms":0.003,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"rename /workspace file after listing the template","ms":0.005,"rows":1,"wireBytes":390,"budget":2290}
+{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"walk 10 packages","ms":0.684,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"walk the whole template (ceiling)","ms":5.721,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"write /workspace, repeated","ms":0.0024,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"write /workspace after the whole walk, repeated","ms":0.0024,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"write tpl depth 1 after the whole walk, repeated","ms":0.0275,"rows":100,"wireBytes":16729,"budget":76122}
+{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"mkdir -p /workspace (no-op), repeated","ms":0.0003,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"mkdir -p /workspace (no-op) after the whole walk, repeated","ms":0.0003,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"remove /workspace file, repeated","ms":0.0027,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"remove /workspace file after the whole walk, repeated","ms":0.0027,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"rename /workspace file, repeated","ms":0.0057,"rows":1,"wireBytes":390,"budget":2290}
+{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"rename /workspace file after the whole walk, repeated","ms":0.0056,"rows":1,"wireBytes":390,"budget":2290}
+{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"write /workspace after one tpl write","ms":0.026,"rows":100,"wireBytes":16814,"budget":76796}
 {"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"idle fresh","idleKiB":3}
-{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"idle after list /node_modules","idleKiB":72}
-{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"idle after the whole walk (ceiling)","idleKiB":695}
-{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"idle after the whole walk + a run boundary","idleKiB":40}
-{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"idle after one tpl write + a run boundary","idleKiB":58}
-{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"write /workspace","ms":0.004,"rows":1,"wireBytes":388,"budget":2282}
-{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"write tpl depth 0","ms":0.139,"rows":100,"wireBytes":16618,"budget":75122}
-{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"write tpl depth 1","ms":0.136,"rows":100,"wireBytes":16729,"budget":76122}
-{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"write tpl depth 2","ms":0.141,"rows":100,"wireBytes":16834,"budget":77178}
-{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"remove tpl depth 1","ms":0.028,"rows":100,"wireBytes":16614,"budget":75248}
+{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"idle after list /node_modules","idleKiB":64}
+{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"idle after the whole walk (ceiling)","idleKiB":648}
+{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"idle after the whole walk + a run boundary","idleKiB":3}
+{"axis":"depth","depth":6,"entries":1101,"templateMB":2,"scenario":"idle after one tpl write + a run boundary","idleKiB":57}
+{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"write /workspace","ms":0.003,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"write tpl depth 0","ms":0.133,"rows":100,"wireBytes":16618,"budget":75122}
+{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"write tpl depth 1","ms":0.139,"rows":100,"wireBytes":16729,"budget":76122}
+{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"write tpl depth 2","ms":0.143,"rows":100,"wireBytes":16834,"budget":77178}
+{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"remove tpl depth 1","ms":0.026,"rows":100,"wireBytes":16614,"budget":75248}
 {"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"first read of a tpl file","ms":0.179,"rows":1,"wireBytes":303,"budget":1608}
 {"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"first list /node_modules","ms":0.107,"rows":1,"wireBytes":303,"budget":1608}
 {"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"first stat /node_modules","ms":0.105,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"rename a tpl package","ms":0.136,"rows":100,"wireBytes":16523,"budget":74408}
-{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"cp 1 file into a tpl package","ms":0.144,"rows":100,"wireBytes":16891,"budget":77580}
-{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"remove a tpl file (fresh)","ms":0.247,"rows":103,"wireBytes":18764,"budget":97488}
-{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"remove /workspace file after listing the template","ms":0.004,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"rename /workspace file after listing the template","ms":0.007,"rows":1,"wireBytes":390,"budget":2290}
-{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"walk 10 packages","ms":1.428,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"walk the whole template (ceiling)","ms":13.693,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"write /workspace after the whole walk","ms":0.005,"rows":1,"wireBytes":388,"budget":2282}
-{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"write tpl depth 1 after the whole walk","ms":0.031,"rows":100,"wireBytes":16729,"budget":76122}
-{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"mkdir -p /workspace (no-op)","ms":0,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"mkdir -p /workspace (no-op) after the whole walk","ms":0.001,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"remove /workspace file after the whole walk","ms":0.006,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"rename /workspace file after the whole walk","ms":0.008,"rows":1,"wireBytes":390,"budget":2290}
-{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"write /workspace after one tpl write","ms":0.027,"rows":100,"wireBytes":16814,"budget":76796}
+{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"rename a tpl package","ms":0.133,"rows":100,"wireBytes":16523,"budget":74408}
+{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"cp 1 file into a tpl package","ms":0.145,"rows":100,"wireBytes":16891,"budget":77580}
+{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"remove a tpl file (fresh)","ms":0.246,"rows":103,"wireBytes":18764,"budget":97488}
+{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"remove /workspace file after listing the template","ms":0.003,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"rename /workspace file after listing the template","ms":0.005,"rows":1,"wireBytes":390,"budget":2290}
+{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"walk 10 packages","ms":1.517,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"walk the whole template (ceiling)","ms":14.01,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"write /workspace, repeated","ms":0.0024,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"write /workspace after the whole walk, repeated","ms":0.0024,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"write tpl depth 1 after the whole walk, repeated","ms":0.0271,"rows":100,"wireBytes":16729,"budget":76122}
+{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"mkdir -p /workspace (no-op), repeated","ms":0.0003,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"mkdir -p /workspace (no-op) after the whole walk, repeated","ms":0.0003,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"remove /workspace file, repeated","ms":0.0027,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"remove /workspace file after the whole walk, repeated","ms":0.0027,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"rename /workspace file, repeated","ms":0.0057,"rows":1,"wireBytes":390,"budget":2290}
+{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"rename /workspace file after the whole walk, repeated","ms":0.0056,"rows":1,"wireBytes":390,"budget":2290}
+{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"write /workspace after one tpl write","ms":0.026,"rows":100,"wireBytes":16814,"budget":76796}
 {"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"idle fresh","idleKiB":3}
-{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"idle after list /node_modules","idleKiB":72}
-{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"idle after the whole walk (ceiling)","idleKiB":1183}
-{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"idle after the whole walk + a run boundary","idleKiB":67}
-{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"idle after one tpl write + a run boundary","idleKiB":58}
+{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"idle after list /node_modules","idleKiB":64}
+{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"idle after the whole walk (ceiling)","idleKiB":1115}
+{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"idle after the whole walk + a run boundary","idleKiB":3}
+{"axis":"depth","depth":12,"entries":1701,"templateMB":2,"scenario":"idle after one tpl write + a run boundary","idleKiB":57}
 
 ## ratio last / first value along each axis (≈ 1: does not grow; small times are noisy)
-{"axis":"bytes","scenario":"write /workspace","ms":0.33,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"bytes","scenario":"write tpl depth 0","ms":0.72,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"bytes","scenario":"write tpl depth 1","ms":0.89,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"bytes","scenario":"write tpl depth 2","ms":0.81,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"bytes","scenario":"remove tpl depth 1","ms":0.91,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"bytes","scenario":"first read of a tpl file","ms":0.95,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"bytes","scenario":"first list /node_modules","ms":1.08,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"bytes","scenario":"write /workspace","ms":0.31,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"bytes","scenario":"write tpl depth 0","ms":0.81,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"bytes","scenario":"write tpl depth 1","ms":0.81,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"bytes","scenario":"write tpl depth 2","ms":0.85,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"bytes","scenario":"remove tpl depth 1","ms":0.88,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"bytes","scenario":"first read of a tpl file","ms":0.99,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"bytes","scenario":"first list /node_modules","ms":1.01,"rows":1,"wireBytes":1,"budget":1}
 {"axis":"bytes","scenario":"first stat /node_modules","ms":1.02,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"bytes","scenario":"rename a tpl package","ms":1.01,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"bytes","scenario":"cp 1 file into a tpl package","ms":1.01,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"bytes","scenario":"remove a tpl file (fresh)","ms":1.08,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"bytes","scenario":"remove /workspace file after listing the template","ms":1,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"bytes","scenario":"rename a tpl package","ms":0.92,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"bytes","scenario":"cp 1 file into a tpl package","ms":0.98,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"bytes","scenario":"remove a tpl file (fresh)","ms":1,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"bytes","scenario":"remove /workspace file after listing the template","ms":0.8,"rows":1,"wireBytes":1,"budget":1}
 {"axis":"bytes","scenario":"rename /workspace file after listing the template","ms":0.86,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"bytes","scenario":"walk 10 packages","ms":0.88,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"bytes","scenario":"walk the whole template (ceiling)","ms":0.96,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"bytes","scenario":"write /workspace after the whole walk","ms":0.75,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"bytes","scenario":"write tpl depth 1 after the whole walk","ms":1,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"bytes","scenario":"mkdir -p /workspace (no-op)","ms":1,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"bytes","scenario":"mkdir -p /workspace (no-op) after the whole walk","ms":1,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"bytes","scenario":"remove /workspace file after the whole walk","ms":0.8,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"bytes","scenario":"rename /workspace file after the whole walk","ms":0.86,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"bytes","scenario":"write /workspace after one tpl write","ms":0.96,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"bytes","scenario":"walk 10 packages","ms":0.99,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"bytes","scenario":"walk the whole template (ceiling)","ms":1.01,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"bytes","scenario":"write /workspace, repeated","ms":0.81,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"bytes","scenario":"write /workspace after the whole walk, repeated","ms":0.96,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"bytes","scenario":"write tpl depth 1 after the whole walk, repeated","ms":0.96,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"bytes","scenario":"mkdir -p /workspace (no-op), repeated","ms":1,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"bytes","scenario":"mkdir -p /workspace (no-op) after the whole walk, repeated","ms":1,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"bytes","scenario":"remove /workspace file, repeated","ms":0.85,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"bytes","scenario":"remove /workspace file after the whole walk, repeated","ms":0.94,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"bytes","scenario":"rename /workspace file, repeated","ms":0.95,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"bytes","scenario":"rename /workspace file after the whole walk, repeated","ms":1.06,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"bytes","scenario":"write /workspace after one tpl write","ms":1.04,"rows":1,"wireBytes":1,"budget":1}
 {"axis":"bytes","scenario":"idle fresh","idleKiB":1}
 {"axis":"bytes","scenario":"idle after list /node_modules","idleKiB":1}
-{"axis":"bytes","scenario":"idle after the whole walk (ceiling)","idleKiB":0.99}
+{"axis":"bytes","scenario":"idle after the whole walk (ceiling)","idleKiB":1}
 {"axis":"bytes","scenario":"idle after the whole walk + a run boundary","idleKiB":1}
 {"axis":"bytes","scenario":"idle after one tpl write + a run boundary","idleKiB":1}
-{"axis":"width","scenario":"write /workspace","ms":1.67,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"width","scenario":"write tpl depth 0","ms":406.28,"rows":500,"wireBytes":418.54,"budget":379.33}
-{"axis":"width","scenario":"write tpl depth 1","ms":339.76,"rows":500,"wireBytes":396.03,"budget":343.64}
-{"axis":"width","scenario":"write tpl depth 2","ms":187.23,"rows":357.43,"wireBytes":281.76,"budget":234.56}
-{"axis":"width","scenario":"remove tpl depth 1","ms":156.37,"rows":500,"wireBytes":419.4,"budget":374.43}
-{"axis":"width","scenario":"first read of a tpl file","ms":249.04,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"width","scenario":"first list /node_modules","ms":528.82,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"width","scenario":"first stat /node_modules","ms":520.64,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"width","scenario":"rename a tpl package","ms":374.58,"rows":500,"wireBytes":439.95,"budget":409.72}
-{"axis":"width","scenario":"cp 1 file into a tpl package","ms":267.19,"rows":500,"wireBytes":367.22,"budget":302.22}
-{"axis":"width","scenario":"remove a tpl file (fresh)","ms":193.73,"rows":384.85,"wireBytes":314.8,"budget":268.11}
-{"axis":"width","scenario":"remove /workspace file after listing the template","ms":5.67,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"width","scenario":"rename /workspace file after listing the template","ms":3.17,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"width","scenario":"walk 10 packages","ms":30.88,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"width","scenario":"walk the whole template (ceiling)","ms":605.24,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"width","scenario":"write /workspace after the whole walk","ms":6,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"width","scenario":"write tpl depth 1 after the whole walk","ms":202.71,"rows":500,"wireBytes":396.03,"budget":343.64}
-{"axis":"width","scenario":"mkdir -p /workspace (no-op)","ms":1,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"width","scenario":"mkdir -p /workspace (no-op) after the whole walk","ms":"inf","rows":1,"wireBytes":1,"budget":1}
-{"axis":"width","scenario":"remove /workspace file after the whole walk","ms":7.67,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"width","scenario":"rename /workspace file after the whole walk","ms":4.83,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"width","scenario":"write /workspace after one tpl write","ms":178.14,"rows":500,"wireBytes":380.37,"budget":323.16}
+{"axis":"width","scenario":"write /workspace","ms":1,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"width","scenario":"write tpl depth 0","ms":444.5,"rows":500,"wireBytes":418.54,"budget":379.33}
+{"axis":"width","scenario":"write tpl depth 1","ms":326.45,"rows":500,"wireBytes":396.03,"budget":343.64}
+{"axis":"width","scenario":"write tpl depth 2","ms":178.38,"rows":357.43,"wireBytes":281.76,"budget":234.56}
+{"axis":"width","scenario":"remove tpl depth 1","ms":151,"rows":500,"wireBytes":419.4,"budget":374.43}
+{"axis":"width","scenario":"first read of a tpl file","ms":212.22,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"width","scenario":"first list /node_modules","ms":428,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"width","scenario":"first stat /node_modules","ms":506.77,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"width","scenario":"rename a tpl package","ms":336,"rows":500,"wireBytes":439.95,"budget":409.72}
+{"axis":"width","scenario":"cp 1 file into a tpl package","ms":251.97,"rows":500,"wireBytes":367.22,"budget":302.22}
+{"axis":"width","scenario":"remove a tpl file (fresh)","ms":180.02,"rows":384.85,"wireBytes":314.8,"budget":268.11}
+{"axis":"width","scenario":"remove /workspace file after listing the template","ms":3.5,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"width","scenario":"rename /workspace file after listing the template","ms":3,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"width","scenario":"walk 10 packages","ms":29.78,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"width","scenario":"walk the whole template (ceiling)","ms":577.85,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"width","scenario":"write /workspace, repeated","ms":1.15,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"width","scenario":"write /workspace after the whole walk, repeated","ms":1.04,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"width","scenario":"write tpl depth 1 after the whole walk, repeated","ms":177.42,"rows":500,"wireBytes":396.03,"budget":343.64}
+{"axis":"width","scenario":"mkdir -p /workspace (no-op), repeated","ms":1,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"width","scenario":"mkdir -p /workspace (no-op) after the whole walk, repeated","ms":1,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"width","scenario":"remove /workspace file, repeated","ms":0.93,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"width","scenario":"remove /workspace file after the whole walk, repeated","ms":0.93,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"width","scenario":"rename /workspace file, repeated","ms":0.94,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"width","scenario":"rename /workspace file after the whole walk, repeated","ms":0.97,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"width","scenario":"write /workspace after one tpl write","ms":171.71,"rows":500,"wireBytes":380.37,"budget":323.16}
 {"axis":"width","scenario":"idle fresh","idleKiB":1}
-{"axis":"width","scenario":"idle after list /node_modules","idleKiB":325.5}
-{"axis":"width","scenario":"idle after the whole walk (ceiling)","idleKiB":440.72}
-{"axis":"width","scenario":"idle after the whole walk + a run boundary","idleKiB":192.6}
-{"axis":"width","scenario":"idle after one tpl write + a run boundary","idleKiB":315.33}
+{"axis":"width","scenario":"idle after list /node_modules","idleKiB":307.9}
+{"axis":"width","scenario":"idle after the whole walk (ceiling)","idleKiB":461.1}
+{"axis":"width","scenario":"idle after the whole walk + a run boundary","idleKiB":1}
+{"axis":"width","scenario":"idle after one tpl write + a run boundary","idleKiB":312}
 {"axis":"files","scenario":"write /workspace","ms":1,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"files","scenario":"write tpl depth 0","ms":0.96,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"files","scenario":"write tpl depth 1","ms":1.01,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"files","scenario":"write tpl depth 2","ms":1.94,"rows":1.43,"wireBytes":1.47,"budget":1.54}
-{"axis":"files","scenario":"remove tpl depth 1","ms":1.04,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"files","scenario":"write tpl depth 0","ms":1.01,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"files","scenario":"write tpl depth 1","ms":1,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"files","scenario":"write tpl depth 2","ms":1.93,"rows":1.43,"wireBytes":1.47,"budget":1.54}
+{"axis":"files","scenario":"remove tpl depth 1","ms":1,"rows":1,"wireBytes":1,"budget":1}
 {"axis":"files","scenario":"first read of a tpl file","ms":1.63,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"files","scenario":"first list /node_modules","ms":1,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"files","scenario":"first stat /node_modules","ms":1.01,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"files","scenario":"first list /node_modules","ms":1.01,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"files","scenario":"first stat /node_modules","ms":1,"rows":1,"wireBytes":1,"budget":1}
 {"axis":"files","scenario":"rename a tpl package","ms":1,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"files","scenario":"cp 1 file into a tpl package","ms":1.01,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"files","scenario":"remove a tpl file (fresh)","ms":1.93,"rows":1.44,"wireBytes":1.48,"budget":1.55}
+{"axis":"files","scenario":"cp 1 file into a tpl package","ms":1.02,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"files","scenario":"remove a tpl file (fresh)","ms":2.03,"rows":1.44,"wireBytes":1.48,"budget":1.55}
 {"axis":"files","scenario":"remove /workspace file after listing the template","ms":1,"rows":1,"wireBytes":1,"budget":1}
 {"axis":"files","scenario":"rename /workspace file after listing the template","ms":1,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"files","scenario":"walk 10 packages","ms":5.12,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"files","scenario":"walk the whole template (ceiling)","ms":6.71,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"files","scenario":"write /workspace after the whole walk","ms":2.33,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"files","scenario":"write tpl depth 1 after the whole walk","ms":1.14,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"files","scenario":"mkdir -p /workspace (no-op)","ms":1,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"files","scenario":"mkdir -p /workspace (no-op) after the whole walk","ms":1,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"files","scenario":"remove /workspace file after the whole walk","ms":1.6,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"files","scenario":"rename /workspace file after the whole walk","ms":2.43,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"files","scenario":"write /workspace after one tpl write","ms":1.04,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"files","scenario":"walk 10 packages","ms":4.95,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"files","scenario":"walk the whole template (ceiling)","ms":6.65,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"files","scenario":"write /workspace, repeated","ms":1,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"files","scenario":"write /workspace after the whole walk, repeated","ms":1,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"files","scenario":"write tpl depth 1 after the whole walk, repeated","ms":1,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"files","scenario":"mkdir -p /workspace (no-op), repeated","ms":1,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"files","scenario":"mkdir -p /workspace (no-op) after the whole walk, repeated","ms":1,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"files","scenario":"remove /workspace file, repeated","ms":1,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"files","scenario":"remove /workspace file after the whole walk, repeated","ms":1,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"files","scenario":"rename /workspace file, repeated","ms":1,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"files","scenario":"rename /workspace file after the whole walk, repeated","ms":0.98,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"files","scenario":"write /workspace after one tpl write","ms":0.96,"rows":1,"wireBytes":1,"budget":1}
 {"axis":"files","scenario":"idle fresh","idleKiB":1}
-{"axis":"files","scenario":"idle after list /node_modules","idleKiB":0.97}
-{"axis":"files","scenario":"idle after the whole walk (ceiling)","idleKiB":6.69}
-{"axis":"files","scenario":"idle after the whole walk + a run boundary","idleKiB":6.13}
+{"axis":"files","scenario":"idle after list /node_modules","idleKiB":1.06}
+{"axis":"files","scenario":"idle after the whole walk (ceiling)","idleKiB":6.76}
+{"axis":"files","scenario":"idle after the whole walk + a run boundary","idleKiB":1}
 {"axis":"files","scenario":"idle after one tpl write + a run boundary","idleKiB":1}
 {"axis":"depth","scenario":"write /workspace","ms":1,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"depth","scenario":"write tpl depth 0","ms":1.01,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"depth","scenario":"write tpl depth 1","ms":1.01,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"depth","scenario":"write tpl depth 2","ms":0.92,"rows":0.96,"wireBytes":0.96,"budget":0.95}
-{"axis":"depth","scenario":"remove tpl depth 1","ms":1,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"depth","scenario":"first read of a tpl file","ms":1.57,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"depth","scenario":"first list /node_modules","ms":1.02,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"depth","scenario":"first stat /node_modules","ms":1.05,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"depth","scenario":"rename a tpl package","ms":1.02,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"depth","scenario":"cp 1 file into a tpl package","ms":1.01,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"depth","scenario":"remove a tpl file (fresh)","ms":1.63,"rows":1,"wireBytes":1.09,"budget":1.23}
+{"axis":"depth","scenario":"write tpl depth 0","ms":1.02,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"depth","scenario":"write tpl depth 1","ms":1.02,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"depth","scenario":"write tpl depth 2","ms":0.93,"rows":0.96,"wireBytes":0.96,"budget":0.95}
+{"axis":"depth","scenario":"remove tpl depth 1","ms":0.96,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"depth","scenario":"first read of a tpl file","ms":1.52,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"depth","scenario":"first list /node_modules","ms":1.01,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"depth","scenario":"first stat /node_modules","ms":1.01,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"depth","scenario":"rename a tpl package","ms":1,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"depth","scenario":"cp 1 file into a tpl package","ms":0.99,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"depth","scenario":"remove a tpl file (fresh)","ms":1.62,"rows":1,"wireBytes":1.09,"budget":1.23}
 {"axis":"depth","scenario":"remove /workspace file after listing the template","ms":1,"rows":1,"wireBytes":1,"budget":1}
 {"axis":"depth","scenario":"rename /workspace file after listing the template","ms":1,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"depth","scenario":"walk 10 packages","ms":4.58,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"depth","scenario":"walk the whole template (ceiling)","ms":6.51,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"depth","scenario":"write /workspace after the whole walk","ms":1.67,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"depth","scenario":"write tpl depth 1 after the whole walk","ms":1.07,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"depth","scenario":"mkdir -p /workspace (no-op)","ms":1,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"depth","scenario":"mkdir -p /workspace (no-op) after the whole walk","ms":1,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"depth","scenario":"remove /workspace file after the whole walk","ms":1.5,"rows":1,"wireBytes":1,"budget":1}
-{"axis":"depth","scenario":"rename /workspace file after the whole walk","ms":1.14,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"depth","scenario":"walk 10 packages","ms":4.93,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"depth","scenario":"walk the whole template (ceiling)","ms":6.34,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"depth","scenario":"write /workspace, repeated","ms":1,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"depth","scenario":"write /workspace after the whole walk, repeated","ms":1,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"depth","scenario":"write tpl depth 1 after the whole walk, repeated","ms":1,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"depth","scenario":"mkdir -p /workspace (no-op), repeated","ms":1,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"depth","scenario":"mkdir -p /workspace (no-op) after the whole walk, repeated","ms":1,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"depth","scenario":"remove /workspace file, repeated","ms":1,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"depth","scenario":"remove /workspace file after the whole walk, repeated","ms":1,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"depth","scenario":"rename /workspace file, repeated","ms":1.02,"rows":1,"wireBytes":1,"budget":1}
+{"axis":"depth","scenario":"rename /workspace file after the whole walk, repeated","ms":1.02,"rows":1,"wireBytes":1,"budget":1}
 {"axis":"depth","scenario":"write /workspace after one tpl write","ms":1,"rows":1,"wireBytes":1,"budget":1}
 {"axis":"depth","scenario":"idle fresh","idleKiB":1}
-{"axis":"depth","scenario":"idle after list /node_modules","idleKiB":0.97}
-{"axis":"depth","scenario":"idle after the whole walk (ceiling)","idleKiB":3.08}
-{"axis":"depth","scenario":"idle after the whole walk + a run boundary","idleKiB":2.79}
+{"axis":"depth","scenario":"idle after list /node_modules","idleKiB":1}
+{"axis":"depth","scenario":"idle after the whole walk (ceiling)","idleKiB":3.11}
+{"axis":"depth","scenario":"idle after the whole walk + a run boundary","idleKiB":1}
 {"axis":"depth","scenario":"idle after one tpl write + a run boundary","idleKiB":1}
 
 ## the four-library template: 8793 entries, 86.6 MB, /node_modules width 180
-{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"write /workspace","ms":0.004,"rows":1,"wireBytes":388,"budget":2282}
-{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"write tpl depth 0","ms":0.271,"rows":181,"wireBytes":31195,"budget":139586}
-{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"write tpl depth 1","ms":0.276,"rows":189,"wireBytes":32690,"budget":147386}
-{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"write tpl depth 2","ms":0.28,"rows":189,"wireBytes":32785,"budget":148322}
-{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"remove tpl depth 1","ms":0.058,"rows":189,"wireBytes":32579,"budget":146528}
-{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"first read of a tpl file","ms":0.215,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"first list /node_modules","ms":0.204,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"first stat /node_modules","ms":0.195,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"rename a tpl package","ms":0.259,"rows":181,"wireBytes":31102,"budget":138888}
+{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"write /workspace","ms":0.003,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"write tpl depth 0","ms":0.256,"rows":181,"wireBytes":31195,"budget":139586}
+{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"write tpl depth 1","ms":0.272,"rows":189,"wireBytes":32690,"budget":147386}
+{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"write tpl depth 2","ms":0.273,"rows":189,"wireBytes":32785,"budget":148322}
+{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"remove tpl depth 1","ms":0.055,"rows":189,"wireBytes":32579,"budget":146528}
+{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"first read of a tpl file","ms":0.208,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"first list /node_modules","ms":0.203,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"first stat /node_modules","ms":0.196,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"rename a tpl package","ms":0.255,"rows":181,"wireBytes":31102,"budget":138888}
 {"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"cp 1 file into a tpl package","ms":0.281,"rows":189,"wireBytes":32852,"budget":148844}
-{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"remove a tpl file (fresh)","ms":0.272,"rows":188,"wireBytes":32395,"budget":145632}
+{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"remove a tpl file (fresh)","ms":0.274,"rows":188,"wireBytes":32395,"budget":145632}
 {"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"remove /workspace file after listing the template","ms":0.004,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"rename /workspace file after listing the template","ms":0.007,"rows":1,"wireBytes":390,"budget":2290}
-{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"walk 10 packages","ms":3.111,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"walk the whole template (ceiling)","ms":32.058,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"write /workspace after the whole walk","ms":0.009,"rows":1,"wireBytes":388,"budget":2282}
-{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"write tpl depth 1 after the whole walk","ms":0.075,"rows":189,"wireBytes":32690,"budget":147386}
-{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"mkdir -p /workspace (no-op)","ms":0,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"mkdir -p /workspace (no-op) after the whole walk","ms":0.003,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"remove /workspace file after the whole walk","ms":0.014,"rows":1,"wireBytes":303,"budget":1608}
-{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"rename /workspace file after the whole walk","ms":0.017,"rows":1,"wireBytes":390,"budget":2290}
-{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"write /workspace after one tpl write","ms":0.054,"rows":189,"wireBytes":32775,"budget":148060}
+{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"rename /workspace file after listing the template","ms":0.006,"rows":1,"wireBytes":390,"budget":2290}
+{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"walk 10 packages","ms":3.125,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"walk the whole template (ceiling)","ms":32.188,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"write /workspace, repeated","ms":0.0025,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"write /workspace after the whole walk, repeated","ms":0.0025,"rows":1,"wireBytes":388,"budget":2282}
+{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"write tpl depth 1 after the whole walk, repeated","ms":0.0542,"rows":189,"wireBytes":32690,"budget":147386}
+{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"mkdir -p /workspace (no-op), repeated","ms":0.0004,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"mkdir -p /workspace (no-op) after the whole walk, repeated","ms":0.0003,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"remove /workspace file, repeated","ms":0.0027,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"remove /workspace file after the whole walk, repeated","ms":0.0027,"rows":1,"wireBytes":303,"budget":1608}
+{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"rename /workspace file, repeated","ms":0.0057,"rows":1,"wireBytes":390,"budget":2290}
+{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"rename /workspace file after the whole walk, repeated","ms":0.0055,"rows":1,"wireBytes":390,"budget":2290}
+{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"write /workspace after one tpl write","ms":0.055,"rows":189,"wireBytes":32775,"budget":148060}
 {"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"idle fresh","idleKiB":3}
-{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"idle after list /node_modules","idleKiB":132}
-{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"idle after the whole walk (ceiling)","idleKiB":4549}
-{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"idle after the whole walk + a run boundary","idleKiB":231}
-{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"idle after one tpl write + a run boundary","idleKiB":108}
+{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"idle after list /node_modules","idleKiB":116}
+{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"idle after the whole walk (ceiling)","idleKiB":4290}
+{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"idle after the whole walk + a run boundary","idleKiB":3}
+{"axis":"real","entries":8793,"templateMB":86.6,"width":180,"scenario":"idle after one tpl write + a run boundary","idleKiB":107}

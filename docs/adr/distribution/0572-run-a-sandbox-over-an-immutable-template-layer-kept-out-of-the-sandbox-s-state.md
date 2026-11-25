@@ -70,9 +70,11 @@ the user's words»).
    their node: they move with it on `rename`, go with it on `rm`. Every mutation marks the
    directories from `/` down to each path it may write as changed (reads mark nothing), before
    the call reaches the upper: a call failing midway (a recursive copy, a `mkdir -p`) leaves marks
-   over a superset of what it wrote; an extra mark only makes a directory explicit. A node is **untouched
-   from** its origin O when its kind and times are O's, a file's bytes are O's reference, and a
-   directory is not marked changed. **The rule**, once — the state, from `/` down: a node untouched
+   over a superset of what it wrote; an extra mark only makes a directory explicit. A read-only
+   refusal (§3) comes before any touch or mark and marks nothing. A node is **untouched
+   from** its origin O when it is a file holding O's bytes reference with O's times, or a directory
+   with origin O not marked changed (only a marked mutation changes a directory's times or
+   children; its row carries O's times). **The rule**, once — the state, from `/` down: a node untouched
    from its origin O is one row, `lazy(O)` for a directory (its subtree not descended into) or
    `ref(O)` for a file; any other directory is explicit and opaque (its children are exactly those
    described under it, each by this rule); any other file carries its bytes; all with their times.
@@ -103,13 +105,14 @@ the user's words»).
    every guest), rebuilds the sandbox's state over it, runs, and hands back its state (§2's rule).
    The consumer validates it (§5) and rebuilds it on a fresh view, which becomes the sandbox. Read-only mode: the
    same class refuses every mutating call under `/node_modules` as Node on a read-only mount (goal
-   I3, its oracle in `map.md`), in both realms. Measured (probe L `layered`, T95 23 654 files /
+   I3, its oracle in `map.md`), in both realms — first, before §2's marks, so a refused call leaves
+   the state as it was (probe G's read-only row; its mutant `ro-after-mark` red). Measured (probe L `layered`, T95 23 654 files /
    72.5 MB, M3 Pro, load ~5): restore (copy + index) 39–40 ms, capture 0.5–8 ms, isolate floor
    99–103 MiB (`views`: 88 ms, 35–39 ms, 107 MiB); probe F, the four-library artifact, its four
-   generators: +16…+41 ms over the same program with the files in the state, four at once +26…+71
-   (two runs after review 5, load 2.2–3.7; +71 is 1 ms over the tolerance, off its idle-machine
-   terms), empty file +14…+15 ms, floor 103 MiB against 19 without a template — the F1 return
-   condition (goal Decisions) is decided on landed code (map items 5 / 7).
+   generators: +17…+39 ms over the same program with the files in the state, four at once +8…+32
+   (the longest measured phase of the four in both arms; two runs, load 3.1–4.9), empty file
+   +15…+16 ms, floor 103 MiB against 19 without a template — inside the F1 return condition (goal
+   Decisions), decided on landed code (map items 5 / 7).
 4. **Identity** (registry and worker cache key) = `{rifty/manifest.json templateId, snapshotId}`
    (sha256 of the decoded tar, as the producer computes it; the same for gzip and br).
 5. **The state on the wire** (consumer ↔ worker, internal, never handed out): an ADR-0567 v1 blob
@@ -268,7 +271,8 @@ the user's words»).
   and stream forms) and from host ops, fails as Node v24.16.0 fails it on a read-only mount (code,
   syscall, path — `EROFS` where Linux returns it, the earlier error where Linux checks first, e.g.
   `EEXIST` for `mkdir` of an existing directory; oracle: `map.md` Open questions), and the template
-  stays as it was.
+  stays as it was — and so does the sandbox's state: a refusal comes before any change mark (probe
+  G's read-only row).
 - I4. Layer: a template is held once per consumer process and once per worker per identity; N
   sandboxes over it share that one copy and its index — an idle sandbox holds its difference and
   the entries it touched as references into that copy, never a copy of the template's bytes or a
@@ -286,13 +290,13 @@ the user's words»).
   directory for a non-recursive `remove`, both trees of a recursive copy — exactly their children,
   counted, never a walk of the template — in all, a host op reads at most the entries of the
   template directories touched since the sandbox's last run plus the rows of its marked ones, and
-  an idle sandbox holds at most c × those entries beyond its own state (c path-dependent, measured
-  and published as a maximum over the sweep; probe W: 0.49–0.70 KiB) — the ceiling, the
-  touched-entries bound of the Outcome; the cap check counts the state by entering only marked
-  directories (counted), so touching the whole template leaves a write's cap count unchanged and
-  adds no walk to it (probe W, four-library template: a `/workspace` write 0.004 ms fresh, 0.009 ms
-  after a walk of the whole template, every call alike, a no-op `mkdir` 0 → 0.003 ms — the cause not
-  isolated, published as a row);
+  an idle sandbox holds at most c × those entries beyond its own state (c grows with path length:
+  ≈0.5 KiB on the consumer's template, measured and published with the path lengths it holds;
+  probe W: 0.49 on the four-library one, 0.47–0.66 over the sweep) — the ceiling, the
+  touched-entries bound of the Outcome; a run boundary resets what only reading touched (probe W:
+  3 KiB after the whole walk); the cap check counts the state by entering only marked directories
+  (counted), so touching the whole template does not make a `/workspace` write dearer (probe W,
+  repeated on one sandbox: 0.0025 ms fresh and after the whole walk, cap units unchanged);
   a warm `exec`'s request frame carries the encoded state (own entries + reference rows) and
   nothing of the template's bytes (frame bytes counted), the template travels to a worker once per identity (frames
   counted, cold and warm); the consumer's buffers for a run are those encodings and their decode,
@@ -301,7 +305,9 @@ the user's words»).
   (`scripts/measure.mjs`) as a sweep — template bytes × entries × directory width × depth, host
   `writeFile` / `readFile` / `list` / `remove` and the next `exec`'s wire, at `/workspace` and at
   template directories of depth 0–2 — each claim «does not grow» a row with a last/first ratio ≈ 1, each other
-  slope named in the README (probe W's shape): host-op medians, idle memory per sandbox, the consumer's peak memory per
+  slope named in the README (probe W's shape): host-op medians (an op timed repeated, apart
+  from a first op right after a walk), idle memory per sandbox (per template point in a fresh
+  process), the consumer's peak memory per
   run, a warm `exec`'s latency and isolate memory (the smallest passing `memoryLimitMb`, bisection
   in 4 MiB steps). An empty sandbox over T95 and over the
   four-library artifact runs with the default `maxFsBytes` and `memoryLimitMb`.
@@ -329,9 +335,12 @@ the user's words»).
   `ino`) and the tree after the state is carried over the wire
   and rebuilt on a fresh view are equal, by the guest (rifty `fs` in a fresh isolate) and by host
   ops, from one run to the next; and where rifty's FS without a template agrees with live `node`
-  v24.16.0 over a real directory, so does the layered one — the share so compared published with
-  each run (probe G on macOS: 1 288 / 3 000; a sequence Node itself aborts on, `cpSync` of a
-  directory onto a file, counted apart, not compared); map item 2 runs the oracle on Linux too. A
+  v24.16.0 over a real directory, so does the layered one. The layer's acceptance is the first
+  equality, in every generated sequence (100 %); agreement with Node is the base FS's property, its
+  gaps tracked by `runtime-js/fs-generated-sequence-divergences-from-node`, the share compared
+  published with each run (probe G on macOS: 1 288 / 3 000; a sequence Node itself aborts on,
+  `cpSync` of a directory onto a file, counted apart, not compared); map item 2 runs the oracle on
+  Linux too. A
   failure prints its seed and a minimized sequence. Named rows stay as regressions: remove → write the same path, remove a
   directory → write a child, `rmdir` + `mkdir`, a template directory renamed then recreated, a
   template file turned into a directory and back, B → A after A → C, a rename onto an existing
@@ -381,32 +390,32 @@ the user's words»).
   cost and an idle sandbox's memory are bounded by the entries of the template directories touched
   since the sandbox's last run plus those of every template directory marked since its creation:
   touching a directory (its first read, `list` or `stat`; a write, removal, rename or copy in it)
-  touches all its entries; any mutating call into one marks it, a failed one included, and a mark
-  persists through runs; the ceiling is the whole index; never the bytes. A marked directory
-  carries a row per entry on the wire and in the cap (384 + 8 × path length + 80 × depth units per
-  row, ADR-0567 §7). A run boundary drops what only reading touched from the wire and the cap; idle
-  memory falls with it, not to a fresh sandbox's (residue not isolated). Probe W, 10 → 5 000
-  packages: first `list` 0.011 → 5.8 ms, a write in a package 0.021 → 7.1 ms / 10 → 5 000 rows, idle
-  after one listing 10 → 3 255 KiB, after a walk of the whole template 43 → 18 951 KiB (0.49–0.70
-  KiB per entry over the sweep, growing with path length); the four-library template (8 793
-  entries, `/node_modules` 180 wide): first touch ~0.2 ms, a write in `pdf-lib` 0.28 ms, 189 rows,
-  147 386 cap units (0.2 % of 64 MiB); the ceiling — a walk of everything — 32 ms and 4 549 KiB per
-  idle sandbox (231 KiB after a run boundary), the cap unchanged. Bytes are flat on every scenario;
-  `/workspace` with no template touch is flat in rows and cap, its time 0.003–0.005 ms (after the
-  whole walk ×6 at 5 000 packages, 0.018 ms, a no-op `mkdir` alike: the cause not isolated).
+  touches all its entries; any mutating call into one marks it, a failed one included (a read-only
+  refusal marks nothing, §3), and a mark persists through runs; the ceiling is the whole index;
+  never the bytes. A marked directory carries a row per entry on the wire and in the cap (384 + 8 ×
+  path length + 80 × depth units per row, ADR-0567 §7). A run boundary resets what only reading
+  touched: the sandbox rebuilt from its wire holds a fresh one's memory. Probe W, 10 → 5 000
+  packages: first `list` 0.014 → 6.0 ms, a write in a package 0.022 → 7.2 ms / 10 → 5 000 rows, idle
+  after one listing 10 → 3 079 KiB, after a walk of the whole template 39 → 17 983 KiB, 3 KiB after
+  a run boundary at every width (≈0.5 KiB per touched entry, growing with path length: 0.47–0.66
+  over the sweep); the four-library template (8 793 entries, `/node_modules` 180 wide): first touch
+  ~0.2 ms, a write in `pdf-lib` 0.27 ms, 189 rows, 147 386 cap units (0.2 % of 64 MiB); the ceiling
+  — a walk of everything — 32 ms and 4 290 KiB per idle sandbox (3 KiB after a run boundary), the
+  cap unchanged. Bytes are flat on every scenario; `/workspace` ops touching no template directory
+  are flat at every width, fresh or after the whole walk (repeated on one sandbox: a write
+  0.0025–0.003 ms, a no-op `mkdir` 0.0003–0.0004 ms).
   Requirements §3 ask constant costs between ~1 MB and ~95 MB templates and an idle memory without
   the template: a narrowing until the user accepts it, or a redesign (a directory delta +
   per-entry lazy lookup) replaces it.
-- Per-call overhead of the layered class in a run (probe F, two runs after review 5, load
-  2.2–3.7): +16…+41 ms on the four libraries' generators, four at once +26…+71 ms — one sample 1 ms
-  over the F1 return condition's tolerance, off its idle-machine terms; map item 5 re-measures it on
-  landed code.
+- Per-call overhead of the layered class in a run (probe F, two runs, load 3.1–4.9): +17…+39 ms
+  on the four libraries' generators, four at once +8…+32 ms (like for like: the longest measured
+  phase in both arms) — inside the F1 return condition; map item 5 re-measures it on landed code.
 - The state cap is counted over the state by §2's walk: a host write in `/workspace` costs O(the
   write + the state) — T95 0.02 ms, the same after the host listed the whole template (probe H,
   equal own files); N writes in a row cost O(N × the state); a state holding a changed template
   directory carries its entries (above). After the host touched the whole template a `/workspace`
-  write's cap count is unchanged and no walk is added (probe W, four-library template: 0.004 →
-  0.009 ms, every call alike, a no-op `mkdir` 0 → 0.003 ms, the cause not isolated).
+  write costs the same (probe W, four-library template, repeated on one sandbox: 0.0025 ms fresh
+  and after the walk, cap units unchanged).
 - `runCode` unchanged.
 - Overlap with PR #437 (open, the user's track: every guest's FS sync-only): a template run installs
   `LayeredFsSync` as the realm's only FS surface (§3), the same move for template runs; whichever

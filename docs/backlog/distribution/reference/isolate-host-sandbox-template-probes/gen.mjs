@@ -61,6 +61,11 @@ const MUTANTS = {
     'return o;',
   ],
   'rename-no-dirty': ['    this.#dirty(parentOf(sn));\n', ''],
+  // Review 6, S2: a read-only refusal after the marks — the refused write makes its directories explicit.
+  'ro-after-mark': [
+    '    this.#refuse(n);\n    this.#touch(n);\n    this.#dirty(n);\n    this.upper.writeFileSync(p, d);',
+    '    this.#touch(n);\n    this.#dirty(n);\n    this.#refuse(n);\n    this.upper.writeFileSync(p, d);',
+  ],
   // Review 5, S1: marks set after the backend call — a copy failing midway leaves its writes unmarked.
   'cp-mark-after': [
     '      if (dir) this.#materialize(to);\n      this.#dirty(to);\n    });\n    this.upper.cpSync(s, d, o);',
@@ -548,6 +553,32 @@ const forNode = (rs) =>
     return `=${JSON.stringify(o)}`;
   });
 
+/**
+ * Named row (review 6, S2): over a read-only template every mutating call writing under
+ * `/node_modules` is refused and leaves the state a fresh sandbox's (wire and cap).
+ */
+const RO_OPS = [
+  ['write', '/node_modules/a/index.js', 'x'],
+  ['write', '/node_modules/a/lib/new.js', 'x'],
+  ['mkdir', '/node_modules/c', { recursive: true }],
+  ['mkdir', '/node_modules/a', {}],
+  ['rm', '/node_modules/a/lib/x.js', { recursive: true, force: false }],
+  ['rename', '/node_modules/b/index.js', '/workspace/b.js'],
+  ['hostwrite', '/workspace/g.js', 'g'],
+  ['rename', '/workspace/g.js', '/node_modules/a/g.js'],
+  ['cp', '/workspace', '/node_modules/b/sub', { recursive: true }],
+  ['copy', '/workspace/g.js', '/node_modules/a/lib/g.js'],
+  ['utimes', '/node_modules/a', 1_610_000_000_000],
+];
+function readOnlyOk() {
+  const L = IMPLS.v3.make();
+  L.readOnly = true;
+  const fresh = IMPLS.v3.make();
+  fresh.writeFileSync('/workspace/g.js', enc.encode('g'));
+  const rs = RO_OPS.map((o) => onFsSync(L, o));
+  const refused = rs.every((r, i) => (RO_OPS[i][0] === 'hostwrite' ? r === 'ok' : r === 'EROFS'));
+  return refused && eq(IMPLS.v3.wire(L), IMPLS.v3.wire(fresh)) && L.budget() === fresh.budget();
+}
 const summary = {};
 for (const impl of ['v1', 'v2', 'v3']) {
   let classFail = 0;
@@ -559,6 +590,13 @@ for (const impl of ['v1', 'v2', 'v3']) {
   const outsideClass = new Map();
   let namedFail = 0;
   for (const ops of NAMED) if (!check(impl, ops).classOk) namedFail++;
+  let readOnlyFail = 0;
+  if (impl === 'v3') {
+    readOnlyFail = readOnlyOk() ? 0 : 1;
+    console.log(
+      `## v3: read-only refusals leave the state a fresh sandbox's: ${readOnlyFail === 0}`,
+    );
+  }
   for (let seed = SEED_BASE + 1; seed <= SEED_BASE + N; seed++) {
     const ops = sequence(seed);
     if (impl !== 'v1' && !minimal(impl, ops)) notMinimal++;
@@ -590,7 +628,7 @@ for (const impl of ['v1', 'v2', 'v3']) {
       } else oracleFail++;
     }
   }
-  summary[impl] = { classFail: classFail + namedFail, oracleFail, notMinimal };
+  summary[impl] = { classFail: classFail + namedFail + readOnlyFail, oracleFail, notMinimal };
   console.log(`## ${impl}: named regressions failing: ${namedFail}/${NAMED.length}`);
   console.log(
     `## ${impl}: layer ≠ flat rifty FS (calls, trees, rebuild, run boundary${impl === 'v3' ? ', cap count, mark audit' : ''}) in ${classFail}/${N}${impl === 'v1' ? '' : `; reading the template grows the state in ${notMinimal}/${N}`}; of the ${N - classFail} that pass, flat rifty = node:fs (calls and tree) in ${compared} — layer ≠ node among those: ${oracleFail}; Node aborted in ${crashed} (not compared); the other ${N - classFail - compared - crashed} are rifty FS vs node:fs differences outside the layer`,

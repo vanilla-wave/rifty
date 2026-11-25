@@ -48,8 +48,9 @@ Minimal calls (Node v24.16.0 verified 2026-11-25; rifty from `gen.out.txt` and t
 
 Not rifty's: `fs.cpSync('src', 'dst', { recursive: true })` with `src/lib` a directory and
 `dst/lib` a file aborts Node v24.16.0 itself (`libc++abi: … filesystem_error: … create_directory:
-File exists`, exit 134, macOS arm64, 2026-11-25) — a Node bug; the generator's oracle runs in a
-child process and counts these sequences as not compared. No matching upstream issue found (web
+File exists`, exit 134, macOS arm64, 2026-11-25) — a Node bug, also in v22.23.0 and v24.5.0; v22.16.0
+throws `ENOTDIR` (a regression between 22.16 and 22.23; checked 2026-11-25 with nvm builds); the
+generator's oracle runs in a child process and counts these sequences as not compared. No matching upstream issue found (web
 search, 2026-11-25); not filed — filing is publishing, the user's call.
 
 Coupling with the template goal (`epics/isolate-host-sandbox-template`, ADR-0572 §2): its layered FS
