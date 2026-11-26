@@ -5,6 +5,7 @@
  */
 
 import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
+import { isActiveProcessExiting } from './process-lifecycle-events.ts';
 
 /** Node's `Immediate`: the callback's `this`; `_onImmediate` is null once run or cleared. */
 class Immediate {
@@ -286,6 +287,8 @@ function drainOneImmediate(): void {
   immediates.delete(id);
   keepaliveUnref();
   if (immediates.size === 0) unrefImmediateHost?.();
+  // A dying process runs no later task (a host turn can come before its terminal lands).
+  if (isActiveProcessExiting()) return;
   runImmediate(item);
 }
 

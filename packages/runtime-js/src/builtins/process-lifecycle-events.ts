@@ -203,6 +203,11 @@ export function isNodeProcessExiting(process: unknown): boolean {
   return exitStateOf(process)?.exiting === true;
 }
 
+/** The active process is ending (`exit()`, a fatal error): Node runs no later task. */
+export function isActiveProcessExiting(): boolean {
+  return lifecycleTarget(undefined)?.exit.exiting === true;
+}
+
 /**
  * The active process's first terminal. The drain settles with it: an in-process
  * host has no control port to carry the exit request.

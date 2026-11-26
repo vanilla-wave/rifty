@@ -9,6 +9,7 @@ import { activeRefs, resetKeepalive } from '../internal/event-loop-keepalive.ts'
 import { installNodeProcessShim } from '../ipc/install-process.ts';
 import { resetSyncMirror, setSyncMirror } from './fs-sync-mirror.ts';
 import { closeSync, openSync, promises, readFileSync, write } from './fs.ts';
+import { setImmediate } from './timers.ts';
 
 const originalProcess = (globalThis as { process?: unknown }).process;
 
@@ -95,5 +96,14 @@ describe('process end with fs operations in flight', () => {
     expect(readFileSync('/e.txt', 'utf8')).toBe('x');
     expect(frames).toEqual([{ kind: 'control:self-exit', code: 2 }]);
     closeSync(fd);
+  });
+
+  it('an immediate queued before the process end does not run (a host turn can precede the terminal)', async () => {
+    const { process } = setup();
+    const ran: string[] = [];
+    setImmediate(() => ran.push('immediate'));
+    expect(() => process.exit(0)).toThrow(exitSignal(0));
+    await turns();
+    expect(ran).toEqual([]);
   });
 });
