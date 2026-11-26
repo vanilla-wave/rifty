@@ -6,7 +6,7 @@ import type { ParityCase } from '../../src/types.ts';
  * documented guarantee), and a completion comes after both; a cleared immediate leaves
  * no turn that an immediate queued later could take. Node v24.16.0: 240/240 under load
  * (8 parallel). The browser hosts have no such phases and the isolate guest races its host's
- * loop: declared there (`runtime-js/browser-loop-phase-order`).
+ * loop: declared there (`runtime-js/fs-completion-loop-phase-order`).
  */
 const c: ParityCase = {
   code: `

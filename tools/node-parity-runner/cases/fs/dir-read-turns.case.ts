@@ -67,6 +67,14 @@ const c: ParityCase = {
         dir.read().then(() => log.push('read() resolved'), (e) => log.push('read() rejects ' + e.code)).then(() => out(log.join(', ')));
       }, 20);
     });
+    row('a read queued behind a close while a read is in flight', (out) => {
+      const dir = fs.opendirSync('d');
+      const log = [];
+      dir.read(() => log.push('read1'));
+      dir.close((e) => log.push('close ' + (e && e.code)));
+      dir.read((e, d) => log.push('read2 ' + (e && e.code) + ' ' + (d && d.name)));
+      setTimeout(() => out(log.join(', ')), 30);
+    });
     (async () => { for (const run of rows) await run(); })();
   `,
 };

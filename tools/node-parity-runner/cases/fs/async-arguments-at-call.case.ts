@@ -48,6 +48,11 @@ const c: ParityCase = {
       futimes: () => fs.futimes(fd, 1, 2),
       'rm(path, null)': () => fs.rm('b.txt', null),
       'rmSync(path, null)': () => fs.rmSync('b.txt', null),
+      'rm(123, cb)': () => fs.rm(123, () => {}),
+      'opendirSync bufferSize 0': () => fs.opendirSync('.', { bufferSize: 0 }),
+      'opendirSync bufferSize -1': () => fs.opendirSync('.', { bufferSize: -1 }),
+      'opendirSync bufferSize 2.5': () => fs.opendirSync('.', { bufferSize: 2.5 }),
+      "opendirSync bufferSize '4'": () => fs.opendirSync('.', { bufferSize: '4' }),
       'rm(path, { force: "x" })': () => fs.rm('b.txt', { force: 'x' }, () => {}),
     };
     for (const [name, f] of Object.entries(noCb)) show(name, f);

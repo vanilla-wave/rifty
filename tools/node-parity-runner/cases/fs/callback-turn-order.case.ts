@@ -2,8 +2,8 @@ import type { ParityCase } from '../../src/types.ts';
 
 /**
  * fs callbacks (and `fs.promises` settlements) complete in a later event-loop turn, as Node's
- * threadpool completions do. Each op is called from inside an fs callback (Node's poll phase,
- * where its relations to timers/immediates are deterministic), with a tick, a promise, an
+ * threadpool completions do. Each op is called from inside an fs callback (Node's poll phase;
+ * from other contexts rifty's order is declared: `runtime-js/fs-completion-loop-phase-order`), with a tick, a promise, an
  * immediate and a 0 ms timer queued before and after it, then 3 ms of busy wait (both timers due).
  * Printed per op: which of those ran before the callback and which after, as sets: the
  * callback's place is this case's claim; the immediates' and timers' own order is
@@ -50,24 +50,26 @@ const c: ParityCase = {
     const probe = ([name, op]) => new Promise((done) => fs.stat('.', () => {
       const seen = [];
       let result = null;
-      const mark = (label) => () => seen.push(label);
+      // Printed once all nine have run, whatever the time (no fixed window).
+      const report = () => {
+        if (seen.length < 9) return;
+        const at = seen.indexOf('cb');
+        const group = (xs) => (xs.length ? xs.sort().join(',') : '-');
+        console.log(name + ' => ' + result + '; before: ' + group(seen.slice(0, at)) + '; after: ' + group(seen.slice(at + 1)));
+        done();
+      };
+      const mark = (label) => () => { seen.push(label); report(); };
       nextTick(mark('tick<'));
       Promise.resolve().then(mark('promise<'));
       setImmediate(mark('immediate<'));
       setTimeout(mark('timeout<'), 0);
-      op((r) => { result = r; seen.push('cb'); });
+      op((r) => { result = r; seen.push('cb'); report(); });
       nextTick(mark('tick>'));
       Promise.resolve().then(mark('promise>'));
       setImmediate(mark('immediate>'));
       setTimeout(mark('timeout>'), 0);
       const until = Date.now() + 3;
       while (Date.now() < until);
-      setTimeout(() => {
-        const at = seen.indexOf('cb');
-        const group = (xs) => (xs.length ? xs.sort().join(',') : '-');
-        console.log(name + ' => ' + result + '; before: ' + group(seen.slice(0, at)) + '; after: ' + group(seen.slice(at + 1)));
-        done();
-      }, 30);
     }));
     const interleaved = () => new Promise((done) => {
       const got = [];
