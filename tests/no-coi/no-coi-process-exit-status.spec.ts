@@ -312,7 +312,8 @@ const queuedAtExit: readonly {
 ];
 
 for (const { testCase, extra } of queuedAtExit) {
-  test(`declared: work queued at exit() still prints: ${testCase.name}`, async ({ page }) => {
+  const verdict = extra.length === 0 ? 'runs nothing, as Node' : 'declared: still prints';
+  test(`work queued at exit() ${verdict}: ${testCase.name}`, async ({ page }) => {
     test.setTimeout(120_000);
     const oracle = await runLifecycleOracle(testCase);
     const observed = await runProjectCommand(page, testCase);

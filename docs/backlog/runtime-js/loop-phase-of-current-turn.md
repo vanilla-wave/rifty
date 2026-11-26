@@ -62,22 +62,24 @@ case without timers. On main the guest's immediates were 1 ms timers.
 `setTimeout(T, 0)`, `fs.stat(cb)`, `setImmediate(I)`, 3 ms busy, from the context named; main
 module: `fs.stat(cb); setImmediate(I)`; b1: its row (`b1-bindings.cjs`). Node v24.16.0, 300 processes
 each, macOS: "alone" no own load (other sessions: load 4–25), "load" 16 parallel + 8 CPU burners
-(load 25–39). rifty at PR #468 head (two turns): in-process / isolate 30 processes, Workbench / SDK
-30 runs (b1 10). Bold: an order Node never gave.
+(load 25–39); the load column's range adds the round-3 reviewer's ~300 runs. rifty at PR #468 head
+(two turns), 30 processes each: in-process through the loader harness and through the parity runner
+(the case), isolate through `runCode` / a sandbox `exec`; Workbench / SDK 30 runs (b1 10). Bold: an
+order Node never gave (0 of ~900).
 
-| row | Node alone | Node load | in-process | isolate | Workbench / SDK |
+| row | Node alone | Node load | in-process | isolate `runCode` / sandbox | Workbench / SDK |
 |---|---|---|---|---|---|
-| in an fs callback | `I,T,cb` 300 | 300 | `I,T,cb` 30 | `I,T,cb` 29, **`T,I,cb`** 1 | **`T,I,cb`** 30 |
-| in an immediate | `T,cb,I` 298, `T,I,cb` 2 | `T,cb,I` 300 | `T,I,cb` 30 | **`cb,I,T`** 30 | `T,I,cb` 30 |
-| in a timer | `cb,I,T` 296, `I,T,cb` 4 | `cb,I,T` 300 | `I,T,cb` 30; in the case **`I,cb,T`** 26/30 | `cb,I,T` 26, **`cb,T,I`** 3, **`T,cb,I`** 1 | **`T,I,cb`** 30 |
-| main module | `cb,I` 289, `I,cb` 11 | `cb,I` 284, `I,cb` 16 | `I,cb` 30 | `cb,I` 30 | `I,cb` 30 |
-| b1 | `timer,read cb,immediate` 284, else `timer,immediate,read cb` | 276 | `timer,immediate,read cb` 30 | `timer,read cb,immediate` 10 | `timer,immediate,read cb` 10 |
+| in an fs callback | `I,T,cb` 300 | 300 | `I,T,cb` 30 | `I,T,cb` 29, **`T,I,cb`** 1 / `I,T,cb` 30 | **`T,I,cb`** 30 |
+| in an immediate | `T,cb,I` 298, `T,I,cb` 2 | `T,cb,I` 286–300, else `T,I,cb` | `T,I,cb` 30 | **`I,T,cb`** 30 / **`I,T,cb`** 26, `T,I,cb` 4 | `T,I,cb` 30 |
+| in a timer | `cb,I,T` 296, `I,T,cb` 4 | `cb,I,T` 293–300, else `I,T,cb` | harness `I,T,cb` 30; parity runner **`I,cb,T`** 8/10 alone, 26/30 under load | `I,T,cb` 25, **`T,I,cb`** 5 / `I,T,cb` 30 | **`T,I,cb`** 30 |
+| main module | `cb,I` 289, `I,cb` 11 | `cb,I` 267–284, else `I,cb` | `I,cb` 30 | `I,cb` 30 / 30 | `I,cb` 30 |
+| b1 | `timer,read cb,immediate` 284, else `timer,immediate,read cb` | 276 | `timer,immediate,read cb` 30 | — / `timer,immediate,read cb` 30 | `timer,immediate,read cb` 10 |
 
 Linux CI, b1: 35/36 `timer,read cb,immediate` (PR #471 run 45788011611). Pinned: «in an fs callback»
 (in-process, `fs/callback-phase-order`); «in an immediate» and «main module» there as «an order
-Node gives»; «in a timer» not (in-process `I,cb,T`); b1 in the streams carrier as a Node race.
-Under the dropped flag (one turn from timer/immediate/main module): in-process = Node's majority
-order on the first four rows (review round 3), isolate main module `cb,I` 30/30.
+Node gives»; «in a timer» not (parity runner `I,cb,T`); b1 in the streams carrier as a Node race.
+Correction (round-3 review): an earlier isolate column (`cb,I,T` from an immediate, `cb,I` main
+module, b1 `timer,read cb,immediate`) came from a guest bundle built while the flag was in.
 
 ### Foreign turns: messages, workers, HTTP
 

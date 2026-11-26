@@ -77,6 +77,8 @@ const c: ParityCase = {
       fs.promises.readFile('a.txt', opts).then((v) => r(v));
       opts.encoding = 'hex';
     });
+    // The fd is checked before the loud bigint gap (Node: EBADF).
+    settle('fstat(bad fd, { bigint: true })', (r) => fs.fstat(9999, { bigint: true }, (e) => r(e ? e.code : 'ok')));
     settle('readFile, Buffer path changed after the call', (r) => {
       const p = Buffer.from('a.txt');
       fs.readFile(p, 'utf8', (e, v) => r(e ? e.code : v));

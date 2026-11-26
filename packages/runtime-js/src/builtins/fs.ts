@@ -1330,8 +1330,9 @@ export function fstat(fd: number, options: unknown, cb?: unknown): void {
   deliver(
     done as AnyCallback,
     ioTurn(() => {
+      const stats = fstatSync(fd);
       if (bigint) throw new NotImplementedError('fs.fstat.bigint');
-      return fstatSync(fd);
+      return stats;
     }),
   );
 }
@@ -1397,8 +1398,13 @@ const _realpath = (p: unknown, options: unknown, cb?: unknown): void => {
 };
 // `fs.realpath.native` mirrors `realpathSync.native` — chokidar/promisify reach
 // for the callback form; some code reads `.native`.
+// Its binding takes `encoding` at the call (Node's `realpath.native`).
+const realpathNative = (p: unknown, options: unknown, cb?: unknown): void => {
+  const done = cbOf(typeof options === 'function' ? options : cb);
+  deliver(done, ioTurn(op.realpath(at.realpath(p, options, true))));
+};
 export const realpath: typeof _realpath & { native: typeof _realpath } = Object.assign(_realpath, {
-  native: _realpath,
+  native: realpathNative,
 });
 
 export function readlink(p: unknown, options: unknown, cb?: unknown): void {
@@ -1496,7 +1502,10 @@ import { FSWatcher, unwatchFile, watch, watchFile } from './fs-watch.ts';
 
 // Node's arities (`Function.length`): rest and optional parameters here count otherwise.
 for (const [target, lengths] of [
-  [{ stat, lstat, fstat, ftruncate, open, close, read, write }, [1, 1, 1, 1, 4, 1, 6, 6]],
+  [
+    { stat, lstat, fstat, ftruncate, open, close, read, write, symlink },
+    [1, 1, 1, 1, 4, 1, 6, 6, 4],
+  ],
   [
     promises,
     {
@@ -1521,6 +1530,7 @@ for (const [target, lengths] of [
       opendir: 3,
       utimes: 3,
       lutimes: 3,
+      symlink: 3,
     },
   ],
 ] as const) {

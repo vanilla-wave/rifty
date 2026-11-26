@@ -17,10 +17,11 @@ type Options = Record<string, unknown>;
 /** `getOptions`: a string is the encoding; an object is returned as it is, its `encoding` checked. */
 export function getOptions(options: unknown, defaults: Options = {}): Options {
   if (options == null || typeof options === 'function') return defaults;
-  if (typeof options === 'string') return { ...defaults, encoding: options };
-  if (typeof options !== 'object')
+  let o: Options;
+  if (typeof options === 'string') o = { ...defaults, encoding: options };
+  else if (typeof options !== 'object')
     throw invalidArgType('"options" argument', 'one of type string or Object', options);
-  const o = options as Options;
+  else o = options as Options;
   if (o.encoding !== 'buffer') assertEncoding(o.encoding);
   if (o.signal !== undefined && (typeof o.signal !== 'object' || o.signal === null))
     throw invalidArgType('"options.signal" property', 'an instance of AbortSignal', o.signal);
@@ -193,11 +194,11 @@ export const at = {
       },
     };
   },
-  realpath(path: unknown, options: unknown, promise: boolean) {
+  realpath(path: unknown, options: unknown, encodingAtCall: boolean) {
     const o = getOptions(options);
-    // The promise form hands `encoding` to its binding at the call; the callback form encodes
-    // its result after its lstat walk (`encodeRealpathResult`), reading the options then.
-    const atCall = promise ? { encoding: o.encoding } : null;
+    // The promise and `.native` forms hand `encoding` to their binding at the call; the callback
+    // form encodes its result after its lstat walk (`encodeRealpathResult`), reading the options then.
+    const atCall = encodingAtCall ? { encoding: o.encoding } : null;
     return {
       path: validatedPath(path),
       encode: (result: string): string | Buffer => encodeRealpathResult(result, atCall ?? o),

@@ -144,3 +144,5 @@ export class Dir implements AsyncIterable<Dirent> {
     if (this.#closed) throw this.#closedError();
   }
 }
+// Node's `Dir(handle, path, options)`.
+Object.defineProperty(Dir, 'length', { value: 3 });

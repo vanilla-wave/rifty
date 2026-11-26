@@ -41,8 +41,8 @@ Where it shows:
   `writeHost` bypassed the output drop (same at `50c9d8bf1`). Fixed by PR #421: the realm-uncaught terminal finds the
   exit's terminal and prints nothing (`guest-seam.test.ts`).
 - No-COI project command (status Node's, extra output pinned exactly in `declared:` rows of
-  `tests/no-coi/no-coi-process-exit-status.spec.ts`): after an `exit()` from a microtask of `-e`, a 0 ms timer, a
-  `setImmediate`, an fs callback, a timer and a microtask an `'exit'` listener queues; after a synchronous `exit()` or
+  `tests/no-coi/no-coi-process-exit-status.spec.ts`): after an `exit()` from a microtask of `-e`, a 0 ms timer, a timer
+  and a microtask an `'exit'` listener queues (a `setImmediate` and an fs callback run no more: rows = Node since PR #468); after a synchronous `exit()` or
   one in a timer, a microtask queued before it.
 - Kernel children (COI): a microtask queued before a synchronous `exit()` or one in a timer prints (external review
   probe, PR #416; not re-measured here).

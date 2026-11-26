@@ -1,13 +1,19 @@
 /**
  * The one completion path of the async `fs` APIs (callback and `fs.promises`; not
- * `read(0)`, stdin's own path): a Node fs request is a threadpool round trip that
- * completes in a later loop turn. `operation` runs in one host turn (an immediate),
- * its outcome settles in an I/O completion turn — so a chain of fs calls yields to
- * timers, the immediates queued beside a call run before its completion, and those a
- * completion queues run before a timer. The sync exchange behind `operation` is over
- * before the settling turn is queued: two requests never overlap on a sync-RPC ring.
- * The caller captures everything but the data bytes at the call (options, path,
- * position); `operation` reads the bytes when it runs.
+ * `read(0)`, stdin's own path), as Node's threadpool round trip. Every call takes two
+ * turns: `operation` runs in a host turn (an immediate), its outcome settles in the next
+ * I/O completion turn (a Node host's `MessagePort`, its poll phase; elsewhere the immediate
+ * queue). So a chain of fs calls yields to timers, the immediates queued beside a call run
+ * before its completion, and those a completion queues run before a due timer. Where Node
+ * races (a call from a timer, an immediate or the main module: the pool done or not by the
+ * next poll) this is Node's later order; one turn where rifty "knows" the turn is not poll
+ * was tried and dropped (`backlog/runtime-js/loop-phase-of-current-turn`). The sync exchange
+ * behind `operation` is over before the settling turn is queued: two requests never overlap
+ * on a sync-RPC ring. The caller parses its arguments at the call as Node's JS layer does
+ * (`fs-arguments.ts`); `operation` reads a view's data bytes when it runs (`view-bytes.ts`).
+ * A process end (`exit()`, a fatal error) runs the submitted operations, no callback
+ * (`fs-io-submitted.ts`; Node joins its pool); `worker.terminate()` and a sandbox stop do not.
+ * Cost (PR #468): one extra host turn per call, accepted.
  */
 import { inFlightIo } from './fs-io-submitted.ts';
 import { type PathLike, pathToString } from './fs-path.ts';
@@ -51,20 +57,10 @@ export function ioTurn<T>(operation: () => T): Promise<T> {
   });
 }
 
-const objectGetPrototypeOf = Object.getPrototypeOf;
-
-/** An options object as Node's callback forms read it: once, at the call (a shallow copy). */
-export function optionsAtCall(value: unknown): unknown {
-  if (typeof value !== 'object' || value === null) return value;
-  const proto = objectGetPrototypeOf(value);
-  return proto === Object.prototype || proto === null ? { ...value } : value;
-}
-
 /**
- * `sync` as an async fs API: its first `paths` arguments (a `Buffer`/`URL` path as its
- * string) are fixed at the call, as Node validates them there; options and data are read
- * when the operation runs (Node's promise forms read options as they go; the callback
- * forms copy theirs first, `fs-callback.ts`).
+ * `sync` as an async fs API whose arguments are a path and primitives (`open`, `close`,
+ * `ftruncate`): its first `paths` arguments (a `Buffer`/`URL` path as its string) are fixed at
+ * the call, as Node validates them there.
  */
 export function inTurn<A extends unknown[], R>(sync: (...args: A) => R, paths = 1) {
   return (...args: A): Promise<R> => {

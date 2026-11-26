@@ -2,13 +2,15 @@ import type { ParityCase } from '../../src/types.ts';
 
 /**
  * When an async fs API reads its options, as Node v24.16.0's JS layer does (`lib/fs.js`,
- * `lib/internal/fs/promises.js`): each API × option field × options-object shape (plain, a class
- * instance, the field on the prototype, a non-enumerable field, a getter counting its reads) ×
- * the field changed right after the call. Printed: the outcome and, for the getter, how many
- * times each field was read. Stable by construction (the reads are synchronous at the call or
- * after a fixed step). Then a `Buffer` path changed after the call (a `URL` is the in-process runner's Node class; the
- * isolate has none), and the arities (`fs.rmdir`/`cp`/`utimes`/`lutimes` are missing:
- * `runtime-js/fs-module-export-list`).
+ * `lib/internal/fs/promises.js`): each API × option field × options-object shape (plain, an array,
+ * a class instance, the field on the prototype, a non-enumerable field, a getter counting its
+ * reads) × the field changed right after the call. Printed: the outcome and, for the getter, how
+ * many times each field was read. Stable by construction (the reads are synchronous at the call or
+ * after a fixed step). Then a string encoding checked at the call (`getOptions`), a `Buffer` path
+ * changed after the call (a `URL` is the in-process runner's Node class; the isolate has none), and
+ * the arities (`fs.rmdir`/`cp`/`utimes`/`lutimes` are missing: `runtime-js/fs-module-export-list`).
+ * Not here, declared: `encoding: 'buffer'` for names, `opendir` `recursive` and its getter read
+ * counts, `cp`'s `ERR_FS_EISDIR` (`runtime-js/fs-async-option-corners`).
  */
 const c: ParityCase = {
   code: `
@@ -18,6 +20,7 @@ const c: ParityCase = {
     const fresh = () => 'o' + (n++);
     const shapes = {
       plain: (f) => ({ ...f }),
+      array: (f) => Object.assign([], f),
       class: (f) => Object.assign(new (class O {})(), f),
       proto: (f) => Object.create(f),
       hidden: (f) => Object.defineProperties({}, Object.fromEntries(Object.entries(f).map(([k, v]) => [k, { value: v, writable: true, enumerable: false }]))),
@@ -53,15 +56,30 @@ const c: ParityCase = {
       ['stat throwIfNoEntry', { throwIfNoEntry: true }, { throwIfNoEntry: false }, (o, done, f) => { fs.stat(f, o, done); }],
       ['promises.stat throwIfNoEntry', { throwIfNoEntry: true }, { throwIfNoEntry: false }, (o, done, f) => { fs.promises.stat(f, o).then((v) => done(null, v), done); }],
       ['realpath encoding', { encoding: 'utf8' }, { encoding: 'buffer' }, (o, done, f) => { fs.writeFileSync(f, ''); fs.realpath(f, o, (e, v) => done(e, v === undefined ? v : typeof v === 'string' ? 'string' : 'buffer')); }],
+      ['realpath.native encoding', { encoding: 'utf8' }, { encoding: 'buffer' }, (o, done, f) => { fs.writeFileSync(f, ''); fs.realpath.native(f, o, (e, v) => done(e, v === undefined ? v : typeof v === 'string' ? 'string' : 'buffer')); }],
+      ['opendir bufferSize', { bufferSize: 2 }, { bufferSize: 3 }, (o, done, f) => { fs.mkdirSync(f); fs.writeFileSync(f + '/x', ''); fs.opendir(f, o, (e, d) => (e ? done(e) : d.read((e2, x) => { done(e2, x && x.name); setImmediate(() => d.closeSync()); }))); }],
+      ['promises.opendir bufferSize', { bufferSize: 2 }, { bufferSize: 3 }, (o, done, f) => { fs.mkdirSync(f); fs.promises.opendir(f, o).then((d) => { d.closeSync(); done(null, 'opened'); }, done); }],
+      ['mkdtemp encoding', { encoding: 'utf8' }, { encoding: 'nope' }, (o, done, f) => { fs.mkdtemp(f, o, (e, v) => done(e, v === undefined ? v : typeof v)); }],
+      ['promises.mkdtemp encoding', { encoding: 'utf8' }, { encoding: 'nope' }, (o, done, f) => { fs.promises.mkdtemp(f, o).then((v) => done(null, typeof v), done); }],
+      ['readlink encoding', { encoding: 'utf8' }, { encoding: 'nope' }, (o, done, f) => { fs.writeFileSync(f, ''); fs.readlink(f, o, done); }],
+      ['promises.readlink encoding', { encoding: 'utf8' }, { encoding: 'nope' }, (o, done, f) => { fs.writeFileSync(f, ''); fs.promises.readlink(f, o).then((v) => done(null, v), done); }],
+      ['promises.cp recursive', { recursive: true }, { recursive: false }, (o, done, f) => { fs.mkdirSync(f + '/s', { recursive: true }); fs.writeFileSync(f + '/s/x', '1'); fs.promises.cp(f + '/s', f + '/t', o).then(() => done(null, 'copied'), () => done(null, 'not copied')); }],
       ['promises.realpath encoding', { encoding: 'utf8' }, { encoding: 'buffer' }, (o, done, f) => { fs.writeFileSync(f, ''); fs.promises.realpath(f, o).then((v) => done(null, typeof v === 'string' ? 'string' : 'buffer'), done); }],
     ];
+    // String options (the encoding): checked at the call, as \`getOptions\`.
+    for (const [name, call] of [['readFile', (cb) => fs.readFile('pa', 'nope', cb)], ['readdir', (cb) => fs.readdir('.', 'nope', cb)], ['mkdtemp', (cb) => fs.mkdtemp('t', 'nope', cb)], ['promises.readFile', () => fs.promises.readFile('pa', 'nope').catch((e) => console.log('promises.readFile string encoding => rejects ' + e.code))]])
+      try { call(() => console.log(name + ' string encoding => callback')); if (!name.startsWith('promises')) console.log(name + ' string encoding => no throw'); } catch (e) { console.log(name + ' string encoding => throws ' + e.code); }
     const run = ([name, base, change, start], shape) => new Promise((resolve) => {
       const f = fresh();
       const o = shapes[shape](base);
-      start(o, (e, v) => {
-        const reads = o.__reads ? ' reads ' + JSON.stringify(o.__reads) : '';
-        resolve(name + ' [' + shape + '] => ' + outcome(e, v) + reads);
-      }, f);
+      try {
+        start(o, (e, v) => {
+          const reads = o.__reads ? ' reads ' + JSON.stringify(o.__reads) : '';
+          resolve(name + ' [' + shape + '] => ' + outcome(e, v) + reads);
+        }, f);
+      } catch (e) {
+        resolve(name + ' [' + shape + '] => throws ' + e.code);
+      }
       Object.assign(o, change);
     });
     (async () => {
@@ -73,8 +91,9 @@ const c: ParityCase = {
       bufferPath.write('pb');
       console.log('readFile, Buffer path changed after the call => ' + (await r1));
       const arity = (o, names) => names.map((k) => k + '=' + o[k].length).join(' ');
-      console.log('arity ' + arity(fs, ['readFile', 'writeFile', 'appendFile', 'readdir', 'mkdir', 'rm', 'unlink', 'stat', 'lstat', 'fstat', 'readlink', 'realpath', 'access', 'copyFile', 'rename', 'truncate', 'ftruncate', 'mkdtemp', 'opendir', 'futimes', 'open', 'close', 'read', 'write']));
-      console.log('arity promises ' + arity(fs.promises, ['readFile', 'writeFile', 'appendFile', 'readdir', 'mkdir', 'rm', 'rmdir', 'unlink', 'stat', 'lstat', 'readlink', 'realpath', 'access', 'copyFile', 'rename', 'cp', 'truncate', 'mkdtemp', 'opendir', 'utimes', 'lutimes']));
+      console.log('arity ' + arity(fs, ['symlink', 'readFile', 'writeFile', 'appendFile', 'readdir', 'mkdir', 'rm', 'unlink', 'stat', 'lstat', 'fstat', 'readlink', 'realpath', 'access', 'copyFile', 'rename', 'truncate', 'ftruncate', 'mkdtemp', 'opendir', 'futimes', 'open', 'close', 'read', 'write']));
+      console.log('arity Dir ' + fs.Dir.length + ' realpath.native ' + fs.realpath.native.length);
+      console.log('arity promises ' + arity(fs.promises, ['symlink', 'readFile', 'writeFile', 'appendFile', 'readdir', 'mkdir', 'rm', 'rmdir', 'unlink', 'stat', 'lstat', 'readlink', 'realpath', 'access', 'copyFile', 'rename', 'cp', 'truncate', 'mkdtemp', 'opendir', 'utimes', 'lutimes']));
     })();
   `,
 };
