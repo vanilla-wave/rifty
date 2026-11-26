@@ -21,6 +21,7 @@ Measured today:
 - Node's own `fs.WriteStream` over this fs (route B): `docs/backlog/epics/node-streams-as-in-node/reference/results/m5-writestream.txt` «timers run while a
   WriteStream writes» gives `ticks>0=false`, where today's class gives `true`. Route B's write side
   therefore stands on this unit (`docs/backlog/epics/node-streams-as-in-node/reference/results/ownership.txt`).
+- Streams carrier (PR #467): Workbench `m4` row «timers run during an fs.read(fd) loop over 16 MiB (the fd source alone)» takes about 11.6 s and stably prints `ticks>0=false`; its pin holds today's timer starvation. Changing it updates that pin (`tests/browser-unit/streams-scenario.spec.ts`), with the reason.
 
 ## Challenge
 
