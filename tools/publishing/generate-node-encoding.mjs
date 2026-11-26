@@ -154,7 +154,15 @@ function load(id) {
 }
 return load('internal/encoding');
 }`,
-  { format: 'esm', target: 'es2022', minify: true, keepNames: true, legalComments: 'none' },
+  // Identifiers stay Node's: class and method names show in errors (`Class constructor TextDecoder
+  // cannot be invoked without 'new'`), `.name` and stack frames.
+  {
+    format: 'esm',
+    target: 'es2022',
+    minifyWhitespace: true,
+    minifySyntax: true,
+    legalComments: 'none',
+  },
 );
 const license = await vendored('LICENSE');
 const nodeLicense = license.slice(0, license.indexOf('The Node.js license applies to all parts'));

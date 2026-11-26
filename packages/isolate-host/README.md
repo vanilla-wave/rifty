@@ -510,12 +510,12 @@ sleep 500 ms. A guest's heap counts on top of this, up to `memoryLimitMb`.
 Legacy `node:url` (ADR-0574, 2026-11-24, same machine): the bundle grew 47 706 B (gzip 11 147)
 to 7 170 976 B (remeasured 2026-11-25, `836e9501a` + review-round-4 nits); a warm `runCode` of 1 000 `url.parse(…, true)` + `url.resolve` p50 19.3 ms
 (31.4 ms before; an empty run 13.9 / 13.5 ms, 40 runs each).
-Node's `TextDecoder`/`TextEncoder` (ADR-0577, 2026-11-26, same machine, load average 3.4–4.1, on
-main `d19d891b9` with Blob/File and `string_decoder`): `guest.js` 7 229 531 → 7 377 152 B (gzip -9
-1 526 604 → 1 573 548, +46 944); warm `runCode('1')` medians, before the goal (`3d16cb7b8`) / main /
-this, alternating triples, n = 200 each, three runs: 14.97 / 15.45 / 16.03, 15.06 / 15.48 / 16.11,
-15.06 / 15.54 / 16.14 ms (p10–p90 ~14.3–15.6 / 14.6–16.0 / 15.1–16.8) — this change +0.58 to +0.63,
-since the goal began +1.05 to +1.08 (main's share includes `string_decoder`, another goal's).
+Node's `TextDecoder`/`TextEncoder` (ADR-0577, 2026-11-26, same machine, on
+main `d19d891b9` with Blob/File and `string_decoder`): `guest.js` 7 229 531 → 7 381 563 B (gzip -9
+1 526 604 → 1 573 817, +47 213); warm `runCode('1')` medians, before the goal (`3d16cb7b8`) / main /
+this, alternating triples, n = 200 each, three runs at load 4–6: 15.22 / 15.78 / 16.44,
+15.53 / 15.99 / 16.66, 15.73 / 16.52 / 17.05 ms (p10–p90 of the first ~14.7–15.8 / 15.2–16.4 /
+15.9–17.2) — this change +0.53 to +0.67, since the goal began +1.13 to +1.32 (main's share includes `string_decoder`, another goal's).
 utf-8 medians of 9 (2026-11-25, base → this, ms): 20 000 × `new TextDecoder().decode(small)`
 8.35 → 5.69, a reused decoder 3.80 → 3.33, 20 000 × small `Buffer#toString()` 6.27 → 5.29,
 20 × 1 MiB `decode` 223 → 114, `toString` 221 → 114. First non-utf-8 decoder in an isolate:

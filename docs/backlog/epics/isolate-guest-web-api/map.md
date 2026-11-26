@@ -43,6 +43,8 @@ pdfkit's font load.
 
 ## Open questions
 
+- I2: the premise «the 33 equal WHATWG» is false for gb18030, gbk, utf-16le, utf-16be after an error over several `stream` calls (and a gb call filling Node's output limit exactly with bytes pending) — ADR-0577 inventory, compat ⚠️. Question to the user; the manager's choice (declare) is preliminary; I2 not marked done.
+
 - The `TextDecoder` composition's remaining +0.5–0.6 ms warm Δ with no non-utf-8 decoder (the load
   of `encoding.js`/`util.js` and the shims) — owner: agent — within the base's noise; unit 3
   records it (Acceptance 9).

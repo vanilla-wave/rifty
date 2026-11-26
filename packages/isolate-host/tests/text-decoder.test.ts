@@ -123,6 +123,70 @@ process.stdout.write(JSON.stringify({ cases: tokens.length, refused: tokens.filt
     });
 });
 
+const STREAMS = readFileSync(fixture('text-decoder/stream-cases.cjs'), 'utf8');
+vm.runInThisContext(STREAMS);
+const streams = globalThis as unknown as {
+  __runStreams: (td: typeof TextDecoder, name: string) => string[];
+  __streamScenario: (
+    name: string,
+    i: number,
+  ) => { fatal: boolean; chunks: number[][]; flush: boolean[] };
+};
+/**
+ * Declared per encoding: scenarios that differ from Node, by kind (ADR-0577; compat ⚠️ for these
+ * four). `afterError`: the decoder after one of its errors (ICU keeps the bytes at the error).
+ * `fullTarget`: a call that does not flush and leaves bytes pending, its output exactly
+ * `2 × min_char_size × length` — ICU stops on the full target and Node throws; the guest decodes.
+ */
+const STREAM_DECLARED: Readonly<Record<string, { afterError: number; fullTarget: number }>> = {
+  gb18030: { afterError: 65, fullTarget: 0 },
+  gbk: { afterError: 61, fullTarget: 0 },
+  'utf-16le': { afterError: 60, fullTarget: 0 },
+  'utf-16be': { afterError: 66, fullTarget: 0 },
+};
+const MIN_CHAR_SIZE: Readonly<Record<string, number>> = {
+  gb18030: 1,
+  gbk: 1,
+  'utf-16le': 2,
+  'utf-16be': 2,
+};
+
+describe('isolate guest TextDecoder over several stream calls vs Node v24.16.0', () => {
+  for (const name of IN_SET)
+    it(`${name}: equal to Node but the declared kinds`, { timeout: 120_000 }, async () => {
+      const node = streams.__runStreams(TextDecoder, name);
+      const r = await runCode(
+        `${STREAMS}\nprocess.stdout.write(JSON.stringify(__runStreams(TextDecoder, ${JSON.stringify(name)})))`,
+        BIG,
+      );
+      expect(r.stderr).toBe('');
+      const guest = JSON.parse(r.stdout) as string[];
+      expect(guest).toHaveLength(node.length);
+      const kinds = { afterError: 0, fullTarget: 0 };
+      const other: unknown[] = [];
+      for (let i = 0; i < node.length; i++) {
+        if (guest[i] === node[i]) continue;
+        const a = (node[i] as string).split('\u0002');
+        const b = (guest[i] as string).split('\u0002');
+        let k = 0;
+        while (a[k] === b[k]) k++;
+        const s = streams.__streamScenario(name, i);
+        const chunk = s.chunks[k] as number[];
+        if (a.slice(0, k).some((t) => t.startsWith('E'))) kinds.afterError++;
+        else if (
+          a[k]?.startsWith('E') &&
+          b[k]?.startsWith('S') &&
+          !s.flush[k] &&
+          (b[k] as string).length - 1 === 2 * (MIN_CHAR_SIZE[name] ?? 0) * chunk.length
+        )
+          kinds.fullTarget++;
+        else if (other.length < 3) other.push({ scenario: s, node: a, guest: b });
+      }
+      expect(other).toEqual([]);
+      expect(kinds).toEqual(STREAM_DECLARED[name] ?? { afterError: 0, fullTarget: 0 });
+    });
+});
+
 /** One line per observation; an error is its class, code, message, `String`, own and enumerable keys. */
 const PROBE = String.raw`(() => {
   const show = (v) => (typeof v === 'string' ? 'S:' + v : 'V:' + JSON.stringify(v));
@@ -184,6 +248,13 @@ const PROBE = String.raw`(() => {
     "Buffer#toString through the global": d(() => [Buffer.from([0xe2, 0x82, 0xac, 0xff]).toString(), Buffer.from([0xef, 0xbb, 0xbf, 0x41]).toString(), Buffer.from([0xe2, 0x82]).toString('utf8'), Buffer.from('hé').toString('latin1')]),
     "stream utf-8": d(() => { const x = new TextDecoder(); return [x.decode(u8(0xe2, 0x82), { stream: true }) + x.decode(u8(0xac)), x.decode(u8(0xef, 0xbb), { stream: true }) + x.decode(u8(0xbf, 0x41), { stream: true }) + x.decode(u8(0xef, 0xbb, 0xbf)) + x.decode(u8(0xf0), { stream: true }) + x.decode()]; }),
     "stream utf-16le": d(() => { const x = new TextDecoder('utf-16le'); return [x.decode(u8(0xff, 0xfe, 0x41), { stream: true }), x.decode(u8(0, 0x3d, 0xd8), { stream: true }), x.decode(u8(0, 0xde, 0x42)), x.decode(u8(0x41))]; }),
+    "utf-8 stream: a BOM after a completed prefix": d(() => { const x = new TextDecoder(); return [x.decode(u8(0xc3), { stream: true }), x.decode(u8(0xa9, 0xef, 0xbb, 0xbf, 0x41), { stream: true })]; }),
+    "gb18030/gbk stream: output past the binding's limit": d(() => ['gb18030', 'gbk'].map((enc) => { const x = new TextDecoder(enc); const r = [x.decode(u8(0x81, 0x30), { stream: true })]; try { r.push(x.decode(u8(0x41), { stream: true })); } catch (e) { r.push([e.constructor.name, e.code, e.message, String(e), Object.getOwnPropertyNames(e).join(',')].join('|')); } return r; })),
+    "utf-16le fatal: the decoder after a mid-stream error": d(() => { const x = new TextDecoder('utf-16le', { fatal: true }); return [u8(0, 0xd8), u8(0x41, 0), u8(0x42, 0)].map((b) => { try { return x.decode(b, { stream: true }); } catch (e) { return 'E ' + e.code; } }); }),
+    "gb18030 stream: a call that fills the output limit and leaves a byte pending": d(() => { const x = new TextDecoder('gb18030'); return [u8(0xa1, 0x30, 0x84), u8(0x18, 0xa1)].map((b) => { try { return x.decode(b, { stream: true }); } catch (e) { return 'E ' + e.code; } }); }),
+    "constructors without new": d(() => [() => TextDecoder(), () => TextEncoder()].map((f) => { try { f(); } catch (e) { return e.constructor.name + ': ' + e.message; } })),
+    "class and method names": d(() => [TextDecoder.name, TextEncoder.name, TextDecoder.prototype.decode.name, TextEncoder.prototype.encodeInto.name, Object.getOwnPropertyDescriptor(TextDecoder.prototype, 'encoding').get.name]),
+    "class source text": d(() => [String(TextDecoder).slice(0, 48), String(TextEncoder.prototype.encode).slice(0, 24)]),
     "stream gb18030": d(() => { const x = new TextDecoder('gb18030'); return [x.decode(u8(0x81, 0x30), { stream: true }), x.decode(u8(0x81, 0x30, 0xb0), { stream: true }), x.decode(u8(0xa1)), x.decode(u8(0x81))]; }),
   });
   return out;
@@ -201,6 +272,25 @@ const nodeProbe = (): Record<string, string> =>
  * `util.inspect` honours no `util.inspect.custom` on any rifty host (`runtime-js/util-surface-completions`):
  * Node's `[inspect.custom]` of these classes is never called. Pinned until that item lands.
  */
+/** Rows where the guest is not Node, each declared (ADR-0577 inventory, compat `isolate-host.md`): both sides. */
+const DECLARED: Readonly<Record<string, { readonly node: string; readonly guest: string }>> = {
+  // ICU keeps the bytes at a `fatal` error; the engine does not (compat ⚠️ utf-16/gb18030/gbk).
+  'utf-16le fatal: the decoder after a mid-stream error': {
+    node: 'V:["","E ERR_ENCODING_INVALID_ENCODED_DATA","䉁"]',
+    guest: 'V:["","E ERR_ENCODING_INVALID_ENCODED_DATA","B"]',
+  },
+  // ICU stops on a full output buffer with bytes left (Node throws); the engine has no such buffer.
+  'gb18030 stream: a call that fills the output limit and leaves a byte pending': {
+    node: 'V:["","E ERR_ENCODING_INVALID_ENCODED_DATA"]',
+    guest: 'V:["","�0�\\u0018"]',
+  },
+  // The guest bundle's source is esbuild-printed (every rifty builtin).
+  'class source text': {
+    node: 'V:["class TextDecoder {\\n  constructor(encoding = \'ut","encode(input = \'\') {\\n   "]',
+    guest:
+      'V:["class TextDecoder {\\n        constructor(encoding","encode(input2 = \\"\\") {\\n  "]',
+  },
+};
 const INSPECT_GAP = {
   inspect:
     'V:["TextDecoder {}","TextDecoder {}","TextDecoder {}","TextEncoder {}","TextDecoder {}","[Object]"]',
@@ -219,6 +309,10 @@ function expected(node: Record<string, string>): Record<string, string> {
     if (ICU_ONLY.includes(enc)) gapOf.set(l, enc);
   }
   for (const [label, enc] of gapOf) out[`label ${label}`] = `GAP isolate-host.TextDecoder(${enc})`;
+  for (const [k, { node: n, guest: g }] of Object.entries(DECLARED)) {
+    expect(node[k], `Node's side of the declared row ${k}`).toBe(n);
+    out[k] = g;
+  }
   return { ...out, ...INSPECT_GAP };
 }
 /** The guest's observations, its named-gap rows reduced to the gap (class + feature). */
@@ -263,6 +357,32 @@ describe('isolate guest TextDecoder labels, errors and identities vs Node v24.16
       await sb.destroy();
     }
   });
+});
+
+/** Guest code replaced an intrinsic before its first decoder (each run its own isolate). */
+describe('intrinsics a guest replaces before decoding', () => {
+  const rows = {
+    // The single-byte tables are built from `%TypedArray%.from` captured at load.
+    'TypedArray.from replaced, then x-user-defined': {
+      code: "Object.getPrototypeOf(Uint8Array).from = () => new Uint16Array(256); console.log(JSON.stringify(new TextDecoder('x-user-defined').decode(Uint8Array.of(0x41, 0x80, 0xff))));",
+    },
+    // Declared (`post-guest-paths-use-replaceable-intrinsics`): @exodus/bytes normalizes its label
+    // with the live `String.prototype.trim`, so it can open another decoder than Node's.
+    'String.prototype.trim replaced, then utf-16be': {
+      code: "String.prototype.trim = () => 'utf-16le'; console.log(JSON.stringify(new TextDecoder('utf-16be').decode(Uint8Array.of(0, 0x41))));",
+      node: '"A"\n',
+      guest: '"䄀"\n',
+    },
+  } as const;
+  for (const [name, row] of Object.entries(rows))
+    it(name, { timeout: 60_000 }, async () => {
+      const node = execFileSync(process.execPath, ['-e', row.code], { encoding: 'utf8' });
+      const guest = await runCode(row.code);
+      expect(guest.stderr).toBe('');
+      if ('node' in row) {
+        expect([node, guest.stdout]).toEqual([row.node, row.guest]);
+      } else expect(guest.stdout).toBe(node);
+    });
 });
 
 /** Paths over the guest's utf-16le decoder: `setEncoding` (parity `stream/readable-set-encoding-names`), `StringDecoder`, `Buffer#toString`. */

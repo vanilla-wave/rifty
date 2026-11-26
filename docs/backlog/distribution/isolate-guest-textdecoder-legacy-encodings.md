@@ -159,6 +159,8 @@ WHATWG `encoding` @ 7d2e3e08e1 (`encodings.json`, `indexes.json`) for the corpus
 
 ## Decisions
 
+- 2026-11-26 — I2: the premise «the 33 equal WHATWG» is false for gb18030, gbk, utf-16le, utf-16be over several `stream` calls on invalid input (Node's binding throws a non-flushing call past `2 × min_char_size × length` — repeated here; a decoder reused after an error, and a call that fills that limit exactly with bytes pending, follow ICU's state — declared, compat ⚠️, ADR-0577). Question to the user; the manager's choice (declare, do not emulate ICU's state) is preliminary. I2 not done.
+
 - 2026-11-25 — manager: the set is utf-8 + the 33 Node=WHATWG encodings; the five are a named gap
   (goal Decisions, question T).
 - 2026-11-25 — WPT through the one shared harness, `tests/wpt/` (built by the `Blob` unit, PR #458).

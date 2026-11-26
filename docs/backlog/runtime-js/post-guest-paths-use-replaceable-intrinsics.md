@@ -79,4 +79,9 @@ is `'X'` (Node `'A'`); a replaced `%TypedArray%.prototype.subarray` or `length` 
 empties the result; `Object.defineProperty` replaced before the first such decoder makes its
 constructor throw the guest's error. Node's own `encoding.js` and the utf-8 codec run on intrinsics
 captured at load.
+Its label too (PR #459 review S2): it normalizes the label it is given with the live
+`String.prototype.trim`/`toLowerCase`, so `String.prototype.trim = () => 'utf-16le'` then
+`new TextDecoder('utf-16be').decode(Uint8Array.of(0, 0x41))` gives `'䄀'` (Node `'A'`); pinned in
+`packages/isolate-host/tests/text-decoder.test.ts` («intrinsics a guest replaces»). The guest's own
+single-byte path reads `%TypedArray%.from` captured at load (same test, equal to Node).
 

@@ -16,8 +16,12 @@ own UTF-8 class accepted 3 of 228 WHATWG labels: pdfkit 0.17.2 died at fontkit's
 
 Node v24.16.0 decodes utf-8 in C++, the 28 single-byte encodings and `x-user-defined` in JS
 (`single-byte.js`, WHATWG tables), everything else by ICU `ucnv`. On the probe's corpus (every 1- and
-2-byte sequence, sampled longer forms, `fatal`, `ignoreBOM`, `stream`) Node equals WHATWG for
-utf-16le/be, gbk, gb18030 (gb18030's whole 4-byte space, 1 587 600 sequences: equal), and differs for
+2-byte sequence, sampled longer forms, `fatal`, `ignoreBOM`, one `stream` split then a flush) Node
+equals WHATWG for utf-16le/be, gbk, gb18030 (gb18030's whole 4-byte space, 1 587 600 sequences:
+equal; valid input in any split too). Over several `stream` calls on invalid input it does not
+(PR #459 review B2/S1; 50 000 fuzzed scenarios per encoding and mode): Node's binding throws a call
+whose output passes its buffer, and ICU keeps the bytes at an error for the decoder's next calls.
+It differs, at once, for
 big5, euc-jp, shift_jis, euc-kr, iso-2022-jp (ICU's tables and error handling, e.g. an invalid lead
 dropped with no U+FFFD even under `fatal`).
 
@@ -43,7 +47,8 @@ dropped with no U+FFFD even under `fatal`).
    `latin1Slice`/`ucs2Slice`/`swap16`. `inspect` and the `ERR_INVALID_ARG_TYPE` message
    (`runtime-js/internal/node-received.ts`, shared with ADR-0574's bindings) are the runtime's,
    bound by the entry once it loads: the shim evaluates before any runtime module.
-4. `encoding_binding` → `text-codec.ts`, the guest's one UTF-8 codec: `decodeUTF8` is a whole-input
+4. `encoding_binding` → `text-codec.ts`, the guest's one UTF-8 codec (its flags read as Node's C++
+   does, `IsTrue()`: `encoding.js` passes its `prefix` bytes as `ignoreBOM`): `decodeUTF8` is a whole-input
    decode (Node's class keeps the stream state) into one reused 32 Ki-unit buffer, no per-call
    decoder, closure or array; `encodeUtf8String`/`encodeInto` its encoder. The guest's own
    `TextDecoder`/`TextEncoder` classes are gone. `io/src/buffer-codec.ts` is unchanged: its
@@ -52,7 +57,14 @@ dropped with no U+FFFD even under `fatal`).
 5. `icu`: `getConverter` → @exodus/bytes 1.16.0's `TextDecoder` for utf-16le, utf-16be, gb18030
    (Node passes gbk as gb18030), evaluated on the first such decoder; `decode` maps its `fatal`
    refusal under `fatal` (only then) to Node's C++ `ERR_ENCODING_INVALID_ENCODED_DATA`; its input is
-   always a fresh primordial view, a detached or out-of-bounds input no bytes (Node's C++).
+   always a fresh primordial view, a detached or out-of-bounds input no bytes (Node's C++). Node's
+   `ConverterObject::Decode` output buffer too: a call that does not flush and would emit more than
+   `2 × min_char_size × input length` (gb18030 1, utf-16 2) throws `ERR_ENCODING_INVALID_ENCODED_DATA`.
+   Not repeated, being ICU's state, not the binding's: the decoder after an error, and ICU stopping
+   on an exactly full buffer with bytes left (portability inventory). The pure-JS path is forced:
+   its native paths would read the guest's `Buffer`/`TextDecoder` (this class) and post-ES2022
+   builtins, which the ES floor gate (`check:es-floor`, every `packages/*/dist` bundle, `guest.js` of
+   both packages included) refuses.
    Generated into `exodus-bytes/generated/` by the same generator: its multi-byte tables trimmed to
    gb18030 (a big5 table cannot slip in); every `globalThis` read → an empty object (no guest
    `Buffer`, `TextDecoder`, `atob`) and every post-ES2022 feature read (`toBase64`, `fromBase64`,
@@ -65,12 +77,21 @@ dropped with no U+FFFD even under `fatal`).
    refuses at construction (the user's goal, manager decision 2026-11-25;
    `distribution/isolate-guest-textdecoder-icu-only-encodings`). `replacement`: no converter, so
    Node's `RangeError [ERR_ENCODING_NOT_SUPPORTED]`.
+7. Class names are Node's: the generated module keeps identifiers (whitespace/syntax minified
+   only), and no other guest-bundle symbol is named `TextDecoder`/`TextEncoder` — the shim exports
+   the classes for its inject (the runtime's bare references bind to them, as `DOMException`) and
+   `util.ts` exports its globals under other names — so esbuild does not rename them (`Class
+   constructor TextDecoder cannot be invoked without 'new'`, `.name`). The source text stays
+   esbuild-printed.
 
 ## Portability inventory
 
 | Binding | Class / authority | Drift guard | Kill condition |
 |---|---|---|---|
 | @exodus/bytes for utf-16le/be, gb18030 (Node: ICU) | substitution-environment; Node = WHATWG on the corpus (manager, PR #443 review) | `isolate-host/tests/text-decoder.test.ts` corpus vs live Node; generator version/sha pins | a Node re-pin whose ICU result differs (rerun the corpus) |
+| a gb18030/gbk/utf-16 decoder reused after one of its errors (`fatal`, or the output-limit throw) | platform-gap: ICU's converter state (manager, PR #459 review, preliminary; question to the user) | `text-decoder.test.ts` stream rows: counts pinned per encoding | the user's answer |
+| a non-flushing gb18030/gbk call whose output fills the limit exactly, bytes left pending (Node throws) | same; 7 of 50 000 fuzzed scenarios | a pinned row | same |
+| @exodus/bytes normalizes its label with live `trim`/`toLowerCase` | `backlog/runtime-js/post-guest-paths-use-replaceable-intrinsics` | pinned row | that item |
 | the five ICU-only encodings | platform-gap; manager decision 2026-11-25 | the five's corpus rows (every case refused with the gap) | `distribution/isolate-guest-textdecoder-icu-only-encodings` |
 | lazy `single-byte.js` (line 37) | the one edit; perf only | generator anchor + line pin | none |
 | a Node error's stack header (`RangeError: …`, Node `RangeError [ERR_ENCODING_NOT_SUPPORTED]: …`; `String(e)` has the label) | rifty's stack has no `kIsNodeError` header (`backlog/runtime-js/node-error-code-label`) | none | that item |
@@ -88,17 +109,19 @@ dropped with no U+FFFD even under `fatal`).
 
 ## Consequences
 
-- utf-8 and the 33 encodings where Node equals WHATWG are Node's in the isolate: 194 labels + 6
+- utf-8, the 28 single-byte encodings and `x-user-defined` are Node's in the isolate; gb18030, gbk,
+  utf-16le/be are Node's but the two inventory rows above (compat ⚠️); 194 labels + 6
   `RangeError` equal Node, 28 the named gap; errors are Node's class, `code`, message, `String` and
   own keys; `encodeInto` validates as Node (closes `distribution/isolate-guest-textencoder-encodeinto-arg-checks`).
 - fontkit/pdfkit load; a CJK Mac `name` record in one of the five reads as raw bytes, silently
   (restructure catches the throw): declared ⚠️ in compat `isolate-host.md`.
-- Cost, M3 Pro, 2026-11-26, load average 3.4–4.1: `guest.js` on main `d19d891b9` (with Blob/File,
-  `string_decoder`) 7 229 531 → 7 377 152 B (gzip -9 1 526 604 → 1 573 548, +46 944; generated
-  `encoding.js` 21 552 B, `text-decoder.js` 75 795 B). Warm `runCode('1')` median, before the goal
-  (`3d16cb7b8`) / main / this, alternating triples, n = 200 each, three runs: this change +0.58,
-  +0.63, +0.60 ms; since the goal began +1.06, +1.05, +1.08 (p10–p90 of each ~1.2–1.7 ms wide;
-  the goal records cost, no hard limit; eager `single-byte.js` was +3.3). The class and
+- Cost, M3 Pro, 2026-11-26: `guest.js` on main `d19d891b9` (with Blob/File,
+  `string_decoder`) 7 229 531 → 7 381 563 B (gzip -9 1 526 604 → 1 573 817, +47 213; generated
+  `encoding.js` 25 199 B, `text-decoder.js` 75 795 B). Warm `runCode('1')` median, before the goal
+  (`3d16cb7b8`) / main / this, alternating triples, n = 200 each, three runs at load 4–6: this
+  change +0.66, +0.67, +0.53 ms; since the goal began +1.22, +1.13, +1.32 (p10–p90 of each ~1–1.6 ms
+  wide in the first run; the goal records cost, no hard limit; the build before the review fixes,
+  with minified identifiers, at load 3.4–4.1: +0.58 to +0.63 / +1.05 to +1.08; eager `single-byte.js` was +3.3). The class and
   bindings evaluate in ~0.1 ms (a vm context, median of 50). utf-8 faster on every row (small
   fresh/reused decoder −32 %/−12 %, small `toString` −16 %, 1 MiB ~−49 %; isolate-host README
   §Cost). First non-utf-8 decoder per isolate: windows-1252 0.7 ms, utf-16le 2.0, gb18030 4.3.

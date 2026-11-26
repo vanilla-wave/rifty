@@ -195,6 +195,8 @@ define('btoa', function btoa(...args: unknown[]): string {
 
 define('TextEncoder', TextEncoder);
 define('TextDecoder', TextDecoder);
+// The inject rebinds the runtime's bare `TextDecoder`/`TextEncoder` to these (as `DOMException`).
+export { TextDecoder, TextEncoder };
 
 // --- task scheduling ---
 /** The guest's `queueMicrotask`, also Node's `internal/process/task_queues` one for the generated Node sources. */

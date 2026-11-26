@@ -41,6 +41,8 @@ const uncurry =
     apply(fn as Fn, self, args);
 const getter = (proto: object, key: PropertyKey): Fn =>
   getOwnPropertyDescriptor(proto, key)?.get as Fn;
+const typedArrayFrom = TypedArray.from as Fn;
+const typedArrayOf = TypedArray.of as Fn;
 const typedArrayTag = getter(TypedArray.prototype, Symbol.toStringTag);
 const typedArrayLength = getter(TypedArray.prototype, 'length');
 const typedArrayBuffer = getter(TypedArray.prototype, 'buffer');
@@ -100,8 +102,8 @@ const primordials = freeze({
   StringPrototypeSlice: uncurry(String.prototype.slice),
   Symbol,
   SymbolToStringTag: Symbol.toStringTag,
-  TypedArrayFrom: (ctor: unknown, ...args: unknown[]) => apply(TypedArray.from as Fn, ctor, args),
-  TypedArrayOf: (ctor: unknown, ...args: unknown[]) => apply(TypedArray.of as Fn, ctor, args),
+  TypedArrayFrom: (ctor: unknown, ...args: unknown[]) => apply(typedArrayFrom, ctor, args),
+  TypedArrayOf: (ctor: unknown, ...args: unknown[]) => apply(typedArrayOf, ctor, args),
   TypedArrayPrototypeIncludes: uncurry((TypedArray.prototype as Uint8Array).includes),
   TypedArrayPrototypeSet: uncurry((TypedArray.prototype as Uint8Array).set),
   Uint16Array,
@@ -358,7 +360,9 @@ const encodingBinding = {
     encodeIntoResults[1] = written;
   },
   decodeUTF8(input: unknown, ignoreBOM: unknown, fatal: unknown): string {
-    return decodeUtf8(bytesOf(input, 'list', false), !!fatal, !!ignoreBOM);
+    // Node's C++ reads both flags with `IsTrue()` (encoding_binding.cc `DecodeUTF8`): `encoding.js`
+    // passes its `prefix` bytes as `ignoreBOM`, which is not `true`.
+    return decodeUtf8(bytesOf(input, 'list', false), fatal === true, ignoreBOM === true);
   },
 };
 
@@ -373,7 +377,12 @@ const ICU_ONLY_HINT =
   'decoded by ICU in Node; no source equals it in the rifty isolate host, ADR-0577';
 type Decoder = { decode(input: Uint8Array, options: { stream: boolean }): string };
 /** Node's ICU converter handle: the engine's decoder and the `fatal` flag it was opened with. */
-type Converter = { readonly decoder: Decoder; readonly fatal: boolean };
+type Converter = {
+  readonly decoder: Decoder;
+  readonly fatal: boolean;
+  /** ICU's `ucnv_getMinCharSize` of the converter Node opens. */
+  readonly minCharSize: number;
+};
 let ExodusTextDecoder: ReturnType<typeof loadExodusTextDecoder> | undefined;
 const icuBinding = {
   getConverter(encoding: string, flags: number): Converter | undefined {
@@ -387,12 +396,14 @@ const icuBinding = {
       fatal,
       ignoreBOM: (flags & CONVERTER_FLAGS_IGNORE_BOM) !== 0,
     });
-    return { decoder, fatal };
+    return { decoder, fatal, minCharSize: encoding === 'gb18030' ? 1 : 2 };
   },
   decode(handle: Converter, input: unknown, flags: number, encoding: string): string {
     const bytes = bytesOf(input, 'input', true);
+    const flush = (flags & CONVERTER_FLAGS_FLUSH) !== 0;
+    let text: string;
     try {
-      return handle.decoder.decode(bytes, { stream: (flags & CONVERTER_FLAGS_FLUSH) === 0 });
+      text = handle.decoder.decode(bytes, { stream: !flush });
     } catch (error) {
       // @exodus/bytes refuses invalid data under `fatal` with a plain `TypeError`.
       if (
@@ -407,6 +418,18 @@ const icuBinding = {
         );
       throw error;
     }
+    // Node v24.16.0 `node_i18n.cc` `ConverterObject::Decode`: a call that does not flush gets
+    // `2 × min_char_size × input.length` code units of output; more is ICU's
+    // `U_BUFFER_OVERFLOW_ERROR`, which Node throws as invalid data (that call's output lost).
+    if (
+      !flush &&
+      text.length > 2 * handle.minCharSize * (apply(typedArrayLength, bytes, []) as number)
+    )
+      throw cxxError(
+        `The encoded data was not valid for encoding ${encoding}`,
+        'ERR_ENCODING_INVALID_ENCODED_DATA',
+      );
+    return text;
   },
 };
 
@@ -439,8 +462,12 @@ const lookup = (table: Record<string, unknown>, id: string): unknown => {
   return table[id];
 };
 
-export const { TextDecoder, TextEncoder } = createNodeEncoding(
+// Bound under other names: the guest bundle's bare `TextDecoder` references (the runtime's) are
+// this export through the shim's inject, so no bundle symbol is named like the classes and esbuild
+// keeps Node's own class names (`Class constructor TextDecoder …`, `.name`).
+const { TextDecoder: NodeTextDecoder, TextEncoder: NodeTextEncoder } = createNodeEncoding(
   primordials,
   (id) => lookup(BINDINGS, id),
   (id) => lookup(MODULES, id),
 );
+export { NodeTextDecoder as TextDecoder, NodeTextEncoder as TextEncoder };
