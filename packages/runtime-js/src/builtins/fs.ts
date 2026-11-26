@@ -1375,6 +1375,23 @@ export function writeFile(
   );
 }
 
+/** A void callback over its `fs.promises` form: options optional, the callback last. */
+function voidCallback<O>(run: (opts: O | undefined) => Promise<void>, opts: unknown, cb: unknown) {
+  const cbFinal = (typeof opts === 'function' ? opts : cb) as Callback<void>;
+  run(typeof opts === 'function' ? undefined : (opts as O)).then(
+    () => runNodeCallback(cbFinal, null),
+    (e) => runNodeCallback(cbFinal, e as NodeJS.ErrnoException),
+  );
+}
+
+export function appendFile(p: string, data: Uint8Array | string, opts: unknown, cb?: unknown) {
+  voidCallback<WriteFileOptions | Encoding>((o) => promises.appendFile(p, data, o), opts, cb);
+}
+
+export function rm(p: string, opts: unknown, cb?: unknown): void {
+  voidCallback<RmOptions>((o) => promises.rm(p, o), opts, cb);
+}
+
 export function readdir(
   p: string,
   optsOrCb: { withFileTypes?: boolean; recursive?: boolean } | Callback<string[] | Dirent[]>,
@@ -1542,6 +1559,8 @@ const fs = {
   ftruncate,
   readFile,
   writeFile,
+  appendFile,
+  rm,
   readdir,
   mkdir,
   stat,

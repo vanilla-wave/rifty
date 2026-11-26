@@ -12,8 +12,8 @@ import type { ParityCase } from '../../src/types.ts';
  * explicitly: the in-process runner's globals are Node's (trap parity-runner-in-process).
  * Node v24.16.0: order rows 40/40, moment rows 30/30 (+80/80 under load for order). Not printed (Node
  * varies, its threadpool runs beside the loop): `read`'s buffer in a microtask, a sync read right
- * after an async write, single-round-trip `write(fd)` bytes mutated after the call (sync 29/30,
- * `setImmediate` 16/30 `9,9,9`). Declared, not here
+ * after an async write, single-round-trip `write(fd)` bytes mutated after the call (its threadpool races the
+ * loop: same tick 119/120 `9,9,9`, microtask 179/180, `setImmediate` 16/30). Declared, not here
  * (`runtime-js/fs-async-op-io-rounds`): `writeFile`/`fs.promises.writeFile` bytes mutated in a
  * `setImmediate` — Node `9,9,9` (it opens a round trip first), rifty `1,2,3`.
  */
@@ -35,6 +35,8 @@ const c: ParityCase = {
       ['read', (cb) => fs.read(fdR, Buffer.alloc(3), 0, 3, 0, (e, n, b) => cb(outcome(e, n + ' ' + b)))],
       ['write', (cb) => fs.write(fdW, 'xy', (e, n) => cb(outcome(e, n)))],
       ['close', (cb) => fs.close(fs.openSync('a.txt', 'r'), (e) => cb(outcome(e)))],
+      ['appendFile', (cb) => fs.appendFile('ap.txt', 'z', (e) => cb(outcome(e)))],
+      ['rm', (cb) => { fs.writeFileSync('rm.txt', ''); fs.rm('rm.txt', (e) => cb(outcome(e))); }],
       ['stat ENOENT', (cb) => fs.stat('nope.txt', (e) => cb(outcome(e)))],
       ['open ENOENT', (cb) => fs.open('nope.txt', 'r', (e) => cb(outcome(e)))],
       ['read EBADF', (cb) => fs.read(987654, Buffer.alloc(3), 0, 3, 0, (e) => cb(outcome(e)))],

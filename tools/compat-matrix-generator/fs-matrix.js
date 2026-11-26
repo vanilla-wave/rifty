@@ -57,8 +57,8 @@ export const fsMatrix = {
     ],
     [
       'Callback `fs.appendFile` / `fs.rm`',
-      '❌',
-      '`undefined`: a call is `TypeError: fs.appendFile is not a function` (measured 2026-11-23 in the isolate host); the sync and `fs.promises` forms exist. `backlog/runtime-js/fs-callback-append-file-rm-missing`',
+      '✅',
+      'Over their `fs.promises` forms, in the I/O turn shape above. Parity `fs/append-file-rm-callbacks`',
     ],
     [
       '`fs.promises` file ops',
