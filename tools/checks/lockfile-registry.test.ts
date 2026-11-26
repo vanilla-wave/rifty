@@ -281,6 +281,18 @@ describe('allowed hosts: npmjs origin by parsed URL, loopback and .test (manager
     },
   );
 
+  it('a leading space does not hide a scheme', () => {
+    expect(verdict(' https://evil.invalid/a.tgz')).toEqual([
+      onHost('x/package-lock.json', 1, 'https://evil.invalid'),
+    ]);
+  });
+
+  it('a scp-form git address (no scheme) is a git dependency, not a path', () => {
+    expect(verdict('git@evil.invalid:o/r.git#abc')).toEqual([
+      gitDep('x/package-lock.json', 1, 'evil.invalid'),
+    ]);
+  });
+
   it('git dependencies are refused with a reason; github: shorthand is not a URL', () => {
     const lock = JSON.stringify({
       lockfileVersion: 3,
@@ -299,25 +311,92 @@ describe('allowed hosts: npmjs origin by parsed URL, loopback and .test (manager
 });
 
 describe('pnpm and yarn locks', () => {
-  it('pnpm read line-wise: quoted keys, anchors (aliases add no URL), block scalars, git repo', () => {
+  it('pnpm canonical forms are read: flow resolution, quoted keys, git repo', () => {
     const yaml = `lockfileVersion: '9.0'
 packages:
   "ms@2.1.3":
-    resolution: &r {integrity: sha512-x, "tarball": ${FOREIGN}/ms.tgz}
-  ms2@2.1.3:
-    resolution: *r
-  debug@4.4.1:
-    resolution:
-      tarball: >-
-        ${FOREIGN}/debug.tgz
+    resolution: {integrity: sha512-x, "tarball": ${FOREIGN}/ms.tgz}
   dep@1.0.0:
     resolution: {type: git, repo: https://git.corp.example/o/dep, commit: abc}
 `;
     const path = put('p/pnpm-lock.yaml', yaml);
     expect(check([path]).violations).toEqual([
-      onHost(path, 2),
+      onHost(path, 1),
       gitDep(path, 1, 'git.corp.example'),
     ]);
+  });
+
+  // Manager decision 2026-11-26: text locks are read only in the form a package manager writes;
+  // any other notation around an address key is red, never interpreted.
+  it.each([
+    [
+      'escape in double quotes',
+      '      tarball: "https://registry.npmjs.org\\x40evil.invalid/ms.tgz"',
+    ],
+    ['escaped quote', '      tarball: "https://registry.npmjs.org\\"@evil.invalid/ms.tgz"'],
+    ["'' in single quotes", "      tarball: 'https://registry.npmjs.org''@evil.invalid/ms.tgz'"],
+    ['value on the next line', '      tarball:\n        https://evil.invalid/ms.tgz'],
+    [
+      'continuation line',
+      '      tarball: https://registry.npmjs.org\n        @evil.invalid/ms.tgz',
+    ],
+    ['tag (block)', '      tarball: !!str https://evil.invalid/ms.tgz'],
+    ['explicit key', '      ? tarball\n      : https://evil.invalid/ms.tgz'],
+    ['block scalar', '      tarball: >-\n        https://evil.invalid/ms.tgz'],
+    ['anchor', '      tarball: &a https://evil.invalid/ms.tgz'],
+    ['alias', '      tarball: *a'],
+  ])('pnpm non-canonical address notation is red: %s', (_, entry) => {
+    const path = put('n/pnpm-lock.yaml', `packages:\n  ms@2.1.3:\n    resolution:\n${entry}\n`);
+    const [violation, ...rest] = check([path]).violations;
+    expect(rest).toEqual([]);
+    expect(violation).toMatch(
+      /^n\/pnpm-lock\.yaml: 1 non-canonical address entr\(y\|ies\) .* regenerate the lock with its package manager$/u,
+    );
+  });
+
+  it('pnpm non-canonical in a flow mapping is red: tag', () => {
+    const path = put(
+      'n/pnpm-lock.yaml',
+      'packages:\n  ms@2.1.3:\n    resolution: {integrity: x, tarball: !!str https://evil.invalid/ms.tgz}\n',
+    );
+    expect(check([path]).violations).toHaveLength(1);
+    expect(check([path]).violations[0]).toMatch(/non-canonical address/u);
+  });
+
+  it('a quoted } inside a flow mapping does not hide the next key', () => {
+    const path = put(
+      'q/pnpm-lock.yaml',
+      'packages:\n  ms@2.1.3:\n    resolution: {a: "x}", tarball: https://evil.invalid/ms.tgz}\n',
+    );
+    expect(check([path]).violations).toEqual([onHost(path, 1, 'https://evil.invalid')]);
+  });
+
+  it.each([
+    ['userinfo', 'resolved "https://registry.npmjs.org@evil.invalid/ms.tgz"', 'host'],
+    [
+      'escaped quote',
+      'resolved "https://registry.npmjs.org\\"@evil.invalid/ms.tgz"',
+      'non-canonical',
+    ],
+  ])('yarn v1 %s form is red', (_, entry, kind) => {
+    const path = put('y1/yarn.lock', `ms@^2.1.3:\n  version "2.1.3"\n  ${entry}\n`);
+    const violations = check([path]).violations;
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toContain(
+      kind === 'host' ? 'on https://<userinfo>@evil.invalid' : 'non-canonical address',
+    );
+  });
+
+  it.each([
+    'exec:./gen.js',
+    'portal:../y',
+    'patch:z@npm%3A1.0.0#./p.patch::locator=w%40workspace%3A.',
+  ])('yarn berry local descriptor %s carries no host', (range) => {
+    const path = put(
+      'b2/yarn.lock',
+      `"x@${range}":\n  version: 1.0.0\n  resolution: "x@${range}"\n`,
+    );
+    expect(check([path]).violations).toEqual([]);
   });
 
   it.each([
