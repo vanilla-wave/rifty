@@ -174,9 +174,10 @@ describe('consumer treats the child channel as hostile', () => {
   it('accepted output is copied, never kept as views into received buffers', () => {
     // 2^16 valid one-byte frames, then the child idles. While the call is pending the
     // consumer holds the bytes (64 KiB) in one buffer, not 2^16 received chunk objects.
-    // Judged by live Uint8Arrays (Buffers too) the call added, counted after a precise GC:
-    // a heap-size delta also moves with V8's own code and lazily freed backing stores
-    // (±0.4 MiB, a negative delta red on CI), more than the 64 KiB claimed.
+    // Judged by the live holders of bytes the call added (Uint8Array incl. Buffer, DataView,
+    // ArrayBuffer), counted after a precise GC: a heap-size delta also moves with V8's own
+    // code and lazily freed backing stores (a negative delta red on CI). Not caught: a string
+    // per frame (green on the heap-delta oracle too).
     const entry = hostilePackage(
       'valid one-byte flood',
       'for (let i = 0; i < 1 << 16; i++) f(1, [1, 0, 65])',
@@ -186,13 +187,13 @@ describe('consumer treats the child channel as hostile', () => {
       '{ timeoutMs: 6000, maxOutputBytes: 1 << 20 }',
       ['--disable-warning=ExperimentalWarning'],
       `const { queryObjects } = await import('node:v8');
-       const views = () => queryObjects(Uint8Array, { format: 'count' });
+       const views = () => [Uint8Array, DataView, ArrayBuffer].reduce((n, c) => n + queryObjects(c, { format: 'count' }), 0);
        const base = views();
        setTimeout(() => { globalThis.held = views() - base; }, 4500);`,
     ) as { resolved?: { stdout: string; termination?: string }; held?: number };
     expect(report.resolved?.stdout.length).toBe(1 << 16);
     expect(report.resolved?.termination).toBe('timeout');
-    // The call's own buffers (stdout, stderr, frame reader): a handful; one per frame is 2^16.
+    // The call's own buffers (stdout, stderr, frame reader): a handful; one holder per frame is 2^16.
     expect(report.held).toBeLessThan(64);
   }, 30_000);
 
