@@ -29,8 +29,8 @@ AppleGothic → euc-kr ×6, Songti → gbk ×6); restructure's `readString` catc
 gap is **silent** at the consumer: PDF bytes equal Node's, the family names differ — Node
 `{ja: 'テスト', ko: '가나', zh: '测试', 'zh-Hant': '測試'}`, the guest `{ja: 'BYTES 6', ko: 'BYTES 4',
 zh: '测试', 'zh-Hant': 'BYTES 4'}` (probe font: DejaVu Sans 2.37.3 with Mac records added; Apple's
-fonts are not redistributable). Pinned in `distribution/isolate-guest-textdecoder-legacy-encodings`
-Acceptance 13, compat ⚠️.
+fonts are not redistributable). Pinned in `packages/isolate-host/tests/text-decoder.test.ts` (CJK name
+records; ADR-0577), compat ⚠️.
 
 Exit routes, none measured: a port of ICU's converters for the five — a Node-output dump of every
 2-byte sequence is 36–55 KB gzip per encoding (`results-icu-dump-size.txt`; big5 52, euc-jp 49,

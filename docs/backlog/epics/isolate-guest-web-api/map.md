@@ -19,11 +19,10 @@ Probes in `reference/` (each README holds its command, results and «not verifie
 2. `runtime-js/isolate-guest-blob-file` — **done** (PR #458, ADR-0578, file deleted) — `Blob`/`File`
    from Node's `blob.js`/`file.js` over a JS byte store; `buffer.Blob`/`File` the same objects;
    the shared WPT harness `tests/wpt/` (I1, I4, I5).
-3. `distribution/isolate-guest-textdecoder-legacy-encodings` — **ready** — `TextDecoder`/`TextEncoder`
-   from Node's `encoding.js` + `single-byte.js`, utf-16le/be, gbk, gb18030 from @exodus/bytes 1.16.0:
-   utf-8 + the 33 Node=WHATWG encodings; the five ICU-only a named gap
-   (`distribution/isolate-guest-textdecoder-icu-only-encodings`); closes
-   `distribution/isolate-guest-textencoder-encodeinto-arg-checks` (I2, I4, I5).
+3. `distribution/isolate-guest-textdecoder-legacy-encodings` — **done** (PR #459, ADR-0577, file
+   deleted) — `TextDecoder`/`TextEncoder` from Node's `encoding.js` + `single-byte.js`, utf-16le/be,
+   gbk, gb18030 from @exodus/bytes 1.16.0; the five ICU-only a named gap
+   (`distribution/isolate-guest-textdecoder-icu-only-encodings`); I2 open (below).
 
 Delivered elsewhere: `distribution/isolate-stream-core-abort-controller` — goal
 `node-streams-as-in-node` unit 7 (`docs/backlog/epics/node-streams-as-in-node/map.md`, on main since
@@ -43,7 +42,7 @@ pdfkit's font load.
 
 ## Open questions
 
-- I2: the premise «the 33 equal WHATWG» is false for gb18030, gbk, utf-16le, utf-16be after an error over several `stream` calls (and a gb call filling Node's output limit exactly with bytes pending) — ADR-0577 inventory, compat ⚠️. Question to the user; the manager's choice (declare) is preliminary; I2 not marked done.
+- I2 (open): the premise «the 33 equal WHATWG» is false for gb18030/gbk/utf-16 after a decoder's error (ADR-0577 inventory, compat ⚠️ `isolate-host.md`); question to the user; the manager's choice (declare, do not emulate ICU's state) is preliminary.
 
 - The `TextDecoder` composition's remaining +0.5–0.6 ms warm Δ with no non-utf-8 decoder (the load
   of `encoding.js`/`util.js` and the shims) — owner: agent — within the base's noise; unit 3

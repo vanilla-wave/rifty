@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 /**
- * ADR-0577 acceptance (backlog `distribution/isolate-guest-textdecoder-legacy-encodings`): the
+ * ADR-0577 acceptance (PR #459, goal `isolate-guest-web-api` unit 3): the
  * guest's `TextDecoder`/`TextEncoder` against live Node v24.16.0 (this process, and `node` over
  * the same files). utf-8 and the 33 encodings where Node equals WHATWG equal Node on the corpus
  * (`fixtures/text-decoder`); the five Node decodes by ICU's own tables (big5, euc-jp,

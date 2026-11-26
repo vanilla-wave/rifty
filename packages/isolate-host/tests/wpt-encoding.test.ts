@@ -1,7 +1,7 @@
 /**
  * WPT `encoding` (Node v24.16.0's vendored copy, `tests/wpt/fixtures`) through the shared
  * harness: every subtest of every `.any.js` file run gives the guest live Node's result (ADR-0577,
- * Acceptance 4 of `distribution/isolate-guest-textdecoder-legacy-encodings`), except the listed
+ * goal `isolate-guest-web-api` unit 3, PR #459), except the listed
  * ones. Not run, listed: below.
  */
 import { readFileSync } from 'node:fs';

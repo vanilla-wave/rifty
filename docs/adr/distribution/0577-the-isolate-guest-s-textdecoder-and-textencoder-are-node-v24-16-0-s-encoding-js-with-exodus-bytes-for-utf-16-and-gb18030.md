@@ -7,7 +7,7 @@ Date: 2026-11
 
 ## Context
 
-Contract: `docs/backlog/distribution/isolate-guest-textdecoder-legacy-encodings.md` (goal
+Contract: the unit doc of PR #459, `distribution/isolate-guest-textdecoder-legacy-encodings` (goal
 `isolate-guest-web-api` unit 3; deleted on done, its decisions are here, in compat and CHANGELOG);
 probes `docs/backlog/epics/isolate-guest-web-api/reference/textdecoder` and its `bundle/`. The guest's
 own UTF-8 class accepted 3 of 228 WHATWG labels: pdfkit 0.17.2 died at fontkit's
