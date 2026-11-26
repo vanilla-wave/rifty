@@ -98,10 +98,15 @@ pins `'exit'` after the last callback. ESM and `worker.terminate()` rows: Workbe
   stays a check-phase immediate, so timers get their phase every loop turn. Isolate and browsers: the
   immediate queue (browser and isolate order declared: `runtime-js/fs-completion-loop-phase-order`). An immediate's turn
   is bound to its id (a cleared one leaves an empty turn).
-- 2026-11-26 (manager): only data bytes are read in the operation turn; a callback form fixes its
-  options (copy), path (`Buffer`/`URL` → string), positions and lengths at the call and validates its
-  callback there (`makeCallback`; `opendir` names it `callback`, `close` defaults it, `rm` checks
-  options instead); a promise form reads its options as it goes (Node's `fs/promises`).
+- 2026-11-26 (manager, second review): no wrapper hands the caller's arguments to the operation. Each
+  async API parses at the call into primitives (`fs-arguments.ts` `at.*`: Node v24.16.0's JS layer,
+  the same fields through the same accessors as often — `getOptions`, `copyObject`'s for-in, the rm/cp
+  spreads), then `ioTurn(operation over the record)`; a field Node reads after an asynchronous step
+  (`promises.readFile`'s `encoding`, callback `realpath`'s `encoding`, `promises.stat`'s second
+  `throwIfNoEntry`) is read then. String data is encoded at the call; a view's bytes are read when
+  the operation runs (`view-bytes.ts`: lib/fs the memory, fs/promises the JS members). Callback
+  validated at the call (`makeCallback`; `opendir` `callback`, `close` defaulted, `rm` its path and
+  options instead). Node's arities. `fs/async-options-at-call` (API × field × shape × mutation).
 - 2026-11-26 (manager): `Dir` is Node's `dir.js` (batches of `bufferSize`, buffered reads on
   `process.nextTick`, operation queue, closed-handle errors). `fs.read(0)` keeps stdin's path:
   declared (`runtime-js/fs-read-stdin-turn`). The process end also runs the submitted operations before
