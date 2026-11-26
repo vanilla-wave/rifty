@@ -1,5 +1,5 @@
 import { type Page, expect, test } from '@playwright/test';
-import { bootOwner, closeOwner, execLine, gotoHarness, writeOwnerFile } from './fixtures.ts';
+import { attemptBootOwner, closeOwner, execLine, gotoHarness, writeOwnerFile } from './fixtures.ts';
 import {
   type MessagePortRefCase,
   portRows,
@@ -16,11 +16,13 @@ async function runInOwner(
   deadlineMs: number,
 ): Promise<{ readonly timedOut: boolean; readonly exit: number | null; readonly out: string }> {
   await gotoHarness(page);
-  await bootOwner(page, {
+  // Every nested cause: an owner realm that dies at install names its own error.
+  const boot = await attemptBootOwner(page, {
     workspaceId: `bu-port-ref-${fixture.name}`,
     template: 'hidden-empty',
     persistence: 'ephemeral',
   });
+  expect(boot).toEqual({ ok: true, messages: [] });
   try {
     const install = await execLine(page, 'npm install');
     expect(install.exit, install.out).toBe(0);
