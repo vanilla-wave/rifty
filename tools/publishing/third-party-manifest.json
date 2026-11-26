@@ -6,7 +6,7 @@
       "version": "1.16.0",
       "license": "MIT",
       "licenseFiles": ["packages/isolate-guest/src/guest/exodus-bytes/generated/exodus.LICENSE"],
-      "changes": "encoding.js TextDecoder bundled by esbuild, multi-byte tables trimmed to gb18030, globalThis reads replaced by an empty object, minified, tools/publishing/generate-node-encoding.mjs",
+      "changes": "encoding.js TextDecoder bundled by esbuild, multi-byte tables trimmed to gb18030, globalThis reads replaced by an empty object, post-ES2022 feature reads replaced by undefined and the native toBase64 branches they guard removed, minified, tools/publishing/generate-node-encoding.mjs",
       "sourcesKey": "version"
     },
     "packages/isolate-guest/src/guest/node-encoding/generated": {
