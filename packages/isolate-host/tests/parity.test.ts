@@ -96,8 +96,6 @@ describe('declared ceilings fail loudly (I1 ceilings, scenario step 4)', () => {
       'EventTarget',
       'Event',
       'CustomEvent',
-      'Blob',
-      'File',
       'Request',
       'Response',
       'Headers',

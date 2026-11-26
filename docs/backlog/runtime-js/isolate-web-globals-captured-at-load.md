@@ -89,7 +89,7 @@ Answered by probes 2026-11-24 (goal `isolate-guest-web-api`, `reference/seam-esm
   error substitutions (`create-require-path.ts:7`, `resolver.ts:251`) — a review checklist.
 
 2026-11-25 — split by the user's narrowing: goal `isolate-guest-web-api` takes the
-`Blob`/`File` rows into `runtime-js/isolate-guest-blob-file` (`buffer.ts:42-43`, the narrowed set's only load-time reads; `AbortController`,
+`Blob`/`File` rows into its `Blob` unit (done, PR #458, ADR-0578; `buffer.ts:42-43`, the narrowed set's only load-time reads; `AbortController`,
 `AbortSignal`, `EventTarget`, `Event`, `CustomEvent` are read at use, `reference/today`); the `URL`/
 `URLSearchParams` rows go to goal `isolate-guest-modern-code`; the web-streams, `structuredClone`,
 `MessageChannel` and `crypto.subtle` reads stay ceilings installed after the runtime — their leaks
