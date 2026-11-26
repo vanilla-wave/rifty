@@ -1,3 +1,6 @@
+// Not the worker's: no IPC/protocol, `write` a no-op, no `rejection` lookup or `__riftyGuest` delete,
+// no isolate callbacks (catastrophic error, dynamic import, unhandled rejection), a synchronous
+// dispose, HEAD's host bridge for every bundle; `total` = the sum of the phases' medians.
 // Phases of one warm `runCode('1')`-shaped call, worker side, as packages/isolate-host/src/child/main.ts
 // runs them: a fresh isolate, its context and bridge, the guest bundle compiled from the code cache,
 // the bundle's top-level evaluation, then `run('1')` (setUp: runtime installs, the Node-sources
@@ -41,6 +44,7 @@ async function once(i) {
     ...(caches[i] === undefined ? { produceCachedData: true } : { cachedData: caches[i] }),
   });
   if (caches[i] === undefined) caches[i] = script.cachedData;
+  else if (script.cachedDataRejected === true) throw new Error('code cache rejected');
   t.push(performance.now());
   await script.run(context);
   t.push(performance.now());
