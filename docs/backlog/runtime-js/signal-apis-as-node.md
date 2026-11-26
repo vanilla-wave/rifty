@@ -20,8 +20,8 @@ Node in the guest»), with `runtime-js/events-static-surface` (`events.on`/stati
 Measured 2026-11-26, Node v24.16.0, probe `reference/signal-apis-probe.cjs` (its header: commands);
 isolate = `sandbox.exec` on PR #472 (Node's `AbortSignal` in the guest); in-process = the parity
 runner (rifty's browser-host code over Node's native `AbortSignal`, the browser hosts' code path).
-Both rifty columns are equal on every row (the `{signal: 1}` row: `abort-cases.cjs`-style run in the
-isolate only). Rows marked † are closed by unit 7 on top of #468 (its Acceptance 5a):
+Both rifty columns are equal on every row (the `{signal: 1}` row: measured by hand in the isolate, `runCode` of
+`require('timers/promises').setTimeout(1,'v',{signal:1})`). Rows marked † are closed by unit 7 on top of #468 (its Acceptance 5a):
 
 | call | Node | rifty (isolate, in-process) |
 |---|---|---|
@@ -39,8 +39,8 @@ isolate only). Rows marked † are closed by unit 7 on top of #468 (its Acceptan
 | † `fs.promises.readFile(f,{signal: aborted})` | `AbortError` | the data |
 | † `fs.promises.writeFile(g,'x',{signal: aborted})`, `fs.writeFile(…, cb)` | `AbortError`, no file | resolves; the file is written |
 | † `fs.promises.appendFile(…, {signal: aborted})` | `AbortError` | resolves; written |
-| `fs.writeFile(f,'xyz',{signal},cb)`; `abort()` right after | `ABORT_ERR`, file size 0 | success, size 3 (after unit 7: `ABORT_ERR`, size 3) |
-| `fs.promises.writeFile(f,'xyz',{signal})`; `abort()` in a microtask | `ABORT_ERR`, size 0 | resolves, size 3 (after unit 7: `ABORT_ERR`, size 3) |
+| `fs.writeFile(f,'xyz',{signal},cb)`; `abort()` right after | `ABORT_ERR`, file size 0 | success, size 3 (expected after unit 7: `ABORT_ERR`, size 3) |
+| `fs.promises.writeFile(f,'xyz',{signal})`; `abort()` in a microtask | `ABORT_ERR`, size 0 | resolves, size 3 (expected after unit 7: `ABORT_ERR`, size 3) |
 
 Pinned in the isolate: `packages/isolate-host/tests/abort-event-target.test.ts` `CASES_DECLARED`.
 Before PR #472 the isolate rows stopped at `NotImplementedError('isolate-host.AbortController')`;

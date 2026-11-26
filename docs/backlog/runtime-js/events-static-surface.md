@@ -3,23 +3,24 @@ area: runtime-js
 status: draft
 title: node:events static surface
 created: 2026-06-20
-why: events factory exports EventEmitter, once, addAbortListener and two symbols only; the static helpers are thin pure-JS wrappers over existing instance methods + browser AbortSignal, and node:events is NOT in the loud-stub catch-all.
+why: rifty's events module lacks Node's statics (`on`, `getEventListeners`, `get/setMaxListeners`, `listenerCount`, `errorMonitor`, …) and node:events is NOT in the loud-stub catch-all, so they are a silent `undefined`.
 user_story: As a CLI/node:test author, I want events.on() async-iter + the EventEmitter statics, but today the events factory silently lacks them so for-await/AbortSignal idioms throw "not a function" with no loud stub.
 sources: [docs/research/node-parity-gaps-unbacklogged-2026-06-20.md §3, docs/backlog/runtime-js (misc-stubs AsyncResource stance)]
 epic: isolate-guest-web-api
+blocked_by: [distribution/isolate-stream-core-abort-controller]
 code: [packages/runtime-js/src/builtins/index.ts, packages/io/src/event-emitter.ts, packages/runtime-js/src/builtins/misc-stubs.ts, packages/runtime-js/src/builtins/events.ts]
 ---
 
 ## Context
 
-events factory (`builtins/index.ts`) exports only `EventEmitter`+`once`+`addAbortListener` (+ the two `kMaxEventTargetListeners*` symbols, PR #472). NOT in `node-builtins-loud-stub` catch-all (enumerates tls/dns/readline/…, never `events`) → missing members = bare `undefined`, not loud throw. Instance methods + symbols already exist; most statics are thin wrappers.
+events factory (`builtins/index.ts`) exports only `EventEmitter`+`once`+`addAbortListener` (+ the two `kMaxEventTargetListeners*` symbols, PR #472). NOT in `node-builtins-loud-stub` catch-all (enumerates tls/dns/readline/…, never `events`) → missing members = bare `undefined`, not loud throw. Instance methods + symbols already exist.
 
 | feature · since | possible path if rifty's own code (see Question) | anchor |
 |---|---|---|
 | `events.on(emitter,name[,opts])` AsyncIterableIterator · v13.6 | buffered queue + Promise resolvers on `on/off`; AbortSignal ends | new |
 | `EventEmitter.errorMonitor` symbol · v13.6 | `static errorMonitor=Symbol`; fire first in `emit('error')`, then throw-if-unhandled | new |
 | captureRejections opt + static default + `nodejs.rejection` · v13.4 | `emit()`: thenable listener → `.catch`→`[captureRejectionSymbol]`/`emit('error')` | event-emitter.ts:13,18 |
-| `events.getEventListeners` · v15.2 | delegate instance `listeners`; EventTarget→`[]` (matches Node) | event-emitter.ts:171 |
+| `events.getEventListeners` · v15.2 | delegate instance `listeners`; an EventTarget's listeners (Node reads its `kEvents`: `1` for one `abort` listener, measured) | event-emitter.ts:171 |
 | `events.getMaxListeners` static · v19.9 | wrap instance `getMaxListeners` | event-emitter.ts:196 |
 | `events.setMaxListeners(n,...targets)` · v15.4 | no-target→`defaultMaxListeners`; else loop | event-emitter.ts:17 |
 | `events.listenerCount` static (dep) · v0.9 | wrap instance `listenerCount` | event-emitter.ts:163 |
@@ -43,7 +44,7 @@ Measured 2026-11-26, isolate `runCode` on PR #472 vs Node v24.16.0, `Object.getO
 | `events.getEventListeners(signal,'abort').length` (one listener added) | `1` | `TypeError: … is not a function` |
 | `events.setMaxListeners(1, eventTarget); getMaxListeners(eventTarget)` | `1` | `TypeError: … is not a function` |
 
-Pinned: `packages/isolate-host/tests/abort-event-target.test.ts` (`typeof events.on`, …).
+Pinned: `packages/isolate-host/tests/abort-event-target.test.ts` (`typeof events.on`, …). Streams goal row `m10` «listeners left … reduce({signal})» needs `getEventListeners` here and Node's weak operator listeners (8c): rifty in-process with Node's `getEventListeners` gives `0`, Node `10000` (`node-streams-as-in-node/reference/results/m10-abort-order-leak.txt`).
 
 What Node's stream core (unit `runtime-js/stream-core-node-sources-unwired`, 8a, PR #471) takes from
 `require('events')` — its author's answer (2026-11-26, Node v24.16.0 vendored sources):

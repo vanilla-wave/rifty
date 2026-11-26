@@ -179,7 +179,7 @@ written by hand. It is an auxiliary tool, not the full source:
   `compose` and signal-taking operators → 7; a guest that makes one → 7 too), because no row-level
   isolate run on route B exists.
   Unit 7 (PR #472) measured the isolate's `m7`/`m9`/`m10` on today's stream and pinned them; the
-  rows left after it belong to 8c (and `m10` row 2 to `runtime-js/events-static-surface`).
+  rows left after it belong to 8c (`m10` row 2 to `runtime-js/events-static-surface` and 8c).
 
 Rules:
 - each row, on each host, gets the units it needs before it equals Node, read from the window
@@ -232,8 +232,9 @@ So the graph is:
 - 8c ← 1, 2, 7, AL;
 - 9r ← 1, 4, 4b, 7, 8c;
 - 9w ← 4, 4c, 5, 7, 8c, P; «9w ← 9r» is the last-owner rule's artefact, kept as order only;
-- 7 now includes the isolate guest globals (the user's answer; 7g merged into 7): it owns the
-  isolate `m9`/`m10` rows a guest-made `AbortController` needs; AL does not apply in the isolate;
+- 7 now includes the isolate guest globals (the user's answer; 7g merged into 7): by its
+  measurement (PR #472) it closes 3 isolate `m9` rows, the rest of `m9`/`m10` are 8c's (`m10` row 2
+  also `runtime-js/events-static-surface`); AL does not apply in the isolate;
 - 3 has no edge; P owns no row (review S4, open there).
 
 8a and 8b are 8c's build steps, so 8c's rows are theirs to keep pinned.

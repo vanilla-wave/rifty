@@ -32,7 +32,7 @@ includes this goal's I3 (`docs/backlog/distribution/isolate-stream-core-abort-co
 the shared WPT harness of unit 2. I3 is carried by three (manager's decision 2026-11-26): unit 7
 (the classes, statics, `DOMException`, `events.once`, `events.addAbortListener`, fs `signal` on top of
 #468, WPT `dom`; PR #472), `runtime-js/events-static-surface` (`events.on` with `signal`, the
-statics) and `runtime-js/signal-apis-as-node` (`timers/promises`; the fs remainder). I3 is not done
+statics) and `runtime-js/signal-apis-as-node` (`timers/promises`; the fs write remainder is beyond I3's `fs` rows). I3 is not done
 until all three have landed. **This goal closes when units 1–3 and those three have landed, green.**
 
 Order: 1 first (RED). Unit 2 builds the shared WPT harness (its Acceptance 10); unit 3 is built in

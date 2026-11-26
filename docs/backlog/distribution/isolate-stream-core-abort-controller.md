@@ -7,7 +7,7 @@ why: Node's pipeline creates an AbortController per call and every `signal` opti
 epic: node-streams-as-in-node
 blocked_by: [runtime-js/fs-callbacks-io-turn]
 sources: [docs/adr/runtime-js/0575-stream-core-and-fs-streams-are-node-v24-16-0-s-own-sources.md, docs/backlog/epics/node-streams-as-in-node/map.md, docs/backlog/epics/isolate-guest-web-api/goal.md, docs/backlog/epics/isolate-guest-web-api/reference/sources-js/README.md, docs/adr/distribution/0579-isolate-guest-eventtarget-event-customevent-abortcontroller-and-abortsignal-are-node-v24-16-0-s-event-target-js-and-abort-controller-js.md]
-code: [packages/isolate-guest/src/guest/node-event-target/bindings.ts, packages/isolate-guest/src/guest/web-shim.ts, packages/isolate-guest/src/guest/entry.ts, packages/runtime-js/src/builtins/events.ts, packages/io/src/node-event-target-symbols.ts, packages/isolate-host/tests/abort-event-target.test.ts, packages/isolate-host/tests/wpt-dom.test.ts]
+code: [packages/runtime-js/src/builtins/fs.ts, packages/isolate-guest/src/guest/node-event-target/bindings.ts, packages/isolate-guest/src/guest/web-shim.ts, packages/isolate-guest/src/guest/entry.ts, packages/runtime-js/src/builtins/events.ts, packages/io/src/node-event-target-symbols.ts, packages/isolate-host/tests/abort-event-target.test.ts, packages/isolate-host/tests/wpt-dom.test.ts]
 ---
 
 ## Context
@@ -38,7 +38,8 @@ Node. Node's globals are data properties before and after the first read (measur
   (`addAbortSignal`, `map`, `reduce` with a stopping listener), `pipeline(…, {signal})` and
   `finished(r, {signal}, cb)` (rifty's take no options) → 8c; `m10` was 0/3 (the same gap), now
   `TypeError` in row 1 (`pipeline` options) → 8c, `n/a` in row 2 (`events.getEventListeners`
-  absent) → `runtime-js/events-static-surface`, and an uncaught `cb is not a function` (rifty's
+  absent; with it rifty's stream gives `0`, Node `10000` — its weak `kWeakHandler` listeners, route B)
+  → `runtime-js/events-static-surface` + 8c, and an uncaught `cb is not a function` (rifty's
   `finished` calls the options) → 8c. That Node's stream core runs over these classes in the
   isolate is 8a/8c's proof (route B), not a row here. Node: `m9` 5/5
   `ABORT_ERR`, `m10` `destroyed=true`, `10000`, `0`.
@@ -103,11 +104,11 @@ Node. Node's globals are data properties before and after the first read (measur
 
 ## Parity cases
 
-1. `abort-cases.cjs` (147 observation lines): globals, shapes, errors, statics, dispatch semantics, `signal`
+1. `abort-cases.cjs` (148 observation lines): globals, shapes, errors, statics, dispatch semantics, `signal`
    options, MaxListeners warning, transfer path; Node = guest but `CASES_DECLARED`. → I3
 2. `abort-intrinsics.cjs`: the replaced-intrinsics table. → ADR-0579
-3. `tools/node-parity-runner/cases/events/once-signal.case.ts` (every host); the fs `signal` parity
-   case (every host, with 5a). → I3
+3. `tools/node-parity-runner/cases/events/once-signal.case.ts` (every host); with 5a,
+   `tools/node-parity-runner/cases/fs/file-signal.case.ts` (every host). → I3
 4. WPT `dom/abort`, `dom/events` (13 files). → I3
 5. `m7`, `m9`, `m10` (`fixtures/streams-scenario/`) in the isolate. → I7
 
