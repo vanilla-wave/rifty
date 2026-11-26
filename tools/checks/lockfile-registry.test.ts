@@ -10,12 +10,15 @@ import { EXEMPT, checkLockfileRegistry, repoPaths } from './lockfile-registry.mj
 const FOREIGN = 'https://registry.example.invalid';
 const NPM = 'https://registry.npmjs.org';
 const ALLOWED = '(allowed: registry.npmjs.org, loopback, *.test)';
+const lines = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+const HOST_ADVICE =
+  'a registry mirror: rewrite the host to https://registry.npmjs.org (keep integrity; npm ci verifies); a git/URL dependency: not allowed in committed locks, use a registry version';
 const onHost = (carrier: string, n: number, host = 'https://registry.example.invalid') =>
-  `${carrier}: ${n} address line(s) on ${host} ${ALLOWED}`;
+  `${carrier}: ${lines(n, 'address line', 'address lines')} on ${host} ${ALLOWED} — ${HOST_ADVICE}`;
 const unreadable = (carrier: string, n: number, value: string) =>
-  `${carrier}: ${n} unreadable address value(s) ${JSON.stringify(value)} (neither a URL nor a declared non-network form: file:, link:, workspace:, github:, rifty:, relative path)`;
+  `${carrier}: ${lines(n, 'unreadable address value', 'unreadable address values')} ${JSON.stringify(value)} (neither a URL nor a declared non-network form: file:, link:, workspace:, github:, rifty:, relative path)`;
 const gitDep = (carrier: string, n: number, host: string) =>
-  `${carrier}: ${n} git dependency address(es) on ${host} (git/URL dependencies are not allowed in committed locks: the host may be internal)`;
+  `${carrier}: ${lines(n, 'git dependency address', 'git dependency addresses')} on ${host} (git/URL dependencies are not allowed in committed locks: the host may be internal; use a registry version)`;
 
 const packageLock = (origin: string, minified = false) => {
   const lock = {
@@ -350,7 +353,7 @@ packages:
     const [violation, ...rest] = check([path]).violations;
     expect(rest).toEqual([]);
     expect(violation).toMatch(
-      /^n\/pnpm-lock\.yaml: 1 non-canonical address entr\(y\|ies\) .* regenerate the lock with its package manager$/u,
+      /^n\/pnpm-lock\.yaml: 1 non-canonical address entry .* regenerate the lock with its package manager$/u,
     );
   });
 
@@ -462,6 +465,64 @@ packages:
       '"ms@npm:^2.1.3":\n  version: 2.1.3\n  resolution: "ms@npm:2.1.3"\n',
     );
     expect(check([path]).violations).toEqual([]);
+  });
+
+  it('an unterminated double quote is non-canonical, never its first line', () => {
+    const path = put(
+      'u/pnpm-lock.yaml',
+      'packages:\n  ms@2.1.3:\n    resolution:\n      tarball: "https://registry.npmjs.org/ms.tgz\n        @evil.invalid/ms.tgz"\n',
+    );
+    const violations = check([path]).violations;
+    expect(violations.length).toBeGreaterThan(0);
+    expect(violations[0]).toBe(
+      'u/pnpm-lock.yaml: 1 non-canonical address entry (unterminated quote) — regenerate the lock with its package manager',
+    );
+  });
+
+  it('several non-canonical entries are counted in the plural', () => {
+    const path = put(
+      'u2/pnpm-lock.yaml',
+      'packages:\n  a@1.0.0:\n    resolution: {tarball: !!str x}\n  b@1.0.0:\n    resolution: {tarball: !!str y}\n',
+    );
+    expect(check([path]).violations[0]).toMatch(/: 2 non-canonical address entries \(/u);
+  });
+
+  // Manager decision 2026-11-26: yarn v1's default registry stays red, with yarn's own fix.
+  it('yarn v1 on its default registry.yarnpkg.com is red with the .yarnrc fix', () => {
+    const path = put(
+      'yd/yarn.lock',
+      'ms@^2.1.3:\n  version "2.1.3"\n  resolved "https://registry.yarnpkg.com/ms/-/ms-2.1.3.tgz#abc"\n',
+    );
+    expect(check([path]).violations).toEqual([
+      `${path}: 1 address line on https://registry.yarnpkg.com ${ALLOWED} — yarn v1 writes registry.yarnpkg.com by default: set registry "https://registry.npmjs.org" in .yarnrc and regenerate the lock`,
+    ]);
+  });
+
+  // github:jonschlinkert/is-number#7.0.0 as each package manager writes it.
+  const CODELOAD =
+    'https://codeload.github.com/jonschlinkert/is-number/tar.gz/98e8ff1da1a89f93d1397a24d7413ed15421c139';
+  it('pnpm git-hosted tarball (gitHosted: true) is a git dependency', () => {
+    const path = put(
+      'gh/pnpm-lock.yaml',
+      `packages:\n  is-number@${CODELOAD}:\n    resolution: {tarball: ${CODELOAD}, gitHosted: true}\n    version: 7.0.0\n`,
+    );
+    expect(check([path]).violations).toEqual([gitDep(path, 1, 'codeload.github.com')]);
+  });
+
+  it('yarn v1 codeload tarball gets the mirror-or-dependency advice', () => {
+    const path = put(
+      'gh/yarn.lock',
+      `"is-number@github:jonschlinkert/is-number#7.0.0":\n  version "7.0.0"\n  resolved "${CODELOAD}"\n`,
+    );
+    expect(check([path]).violations).toEqual([onHost(path, 1, 'https://codeload.github.com')]);
+  });
+
+  it('yarn berry git resolution (.git#commit=) is a git dependency', () => {
+    const path = put(
+      'gh2/yarn.lock',
+      '"is-number@github:jonschlinkert/is-number#7.0.0":\n  version: 7.0.0\n  resolution: "is-number@https://github.com/jonschlinkert/is-number.git#commit=98e8ff1da1a89f93d1397a24d7413ed15421c139"\n',
+    );
+    expect(check([path]).violations).toEqual([gitDep(path, 1, 'github.com')]);
   });
 
   it('yarn berry (YAML) resolution URLs are addresses', () => {
