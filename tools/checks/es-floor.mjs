@@ -1,5 +1,15 @@
 #!/usr/bin/env node
-/** Shipped browser code: ES2022 syntax and post-floor builtin call sites (ADR-0469). */
+/**
+ * Shipped browser code: ES2022 syntax and post-floor builtin call sites (ADR-0469).
+ * Threat model: catches the ordinary read forms — member access, destructuring, and a call
+ * holding receiver + string key (`getOwnPropertyDescriptor`, `Reflect.get`, a wrapper).
+ * Not seen (limits; completeness comes from executed floor proofs, e.g. the port-ref
+ * spec without `ArrayBuffer.prototype.detached`):
+ * - `Object.getOwnPropertyDescriptors(R).k` / `__lookupGetter__('k')` / `__lookupSetter__`;
+ * - a receiver taken from an instance (`getPrototypeOf(new ArrayBuffer(0))`, `buffer.k`);
+ * - a key built at run time (concatenation, array element, parameter, reassigned binding);
+ * - a wrapper whose receiver/key args are passed through from another file or function.
+ */
 import { existsSync, readFileSync, readdirSync, realpathSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join, relative } from 'node:path';
@@ -74,8 +84,12 @@ const PROTOTYPE_BUILTINS = new Set([
 
 // Receivers whose own post-floor METHODS a by-name reach names unambiguously.
 const METHOD_RECEIVER =
-  /^(?:Array|String|Set|ArrayBuffer|(?:Big)?(?:Int|Uint|Float)(?:8|16|32|64)(?:Clamped)?Array)\.prototype$/;
+  /^(?:Array|String|Set|ArrayBuffer|TypedArray|(?:Big)?(?:Int|Uint|Float)(?:8|16|32|64)(?:Clamped)?Array)\.prototype$/;
 const GLOBAL_RECEIVER = new Set(['globalThis', 'self', 'window']);
+// Calls that test presence or only pass values along: never a read of the member.
+const NOT_READS =
+  /^(?:Object\.hasOwn|Reflect\.has|console\.\w+)$|(?:^|\.)(?:hasOwnProperty|propertyIsEnumerable)(?:\.call|\.apply)?$/;
+const TYPED_ARRAY = /^(?:Big)?(?:Int|Uint|Float)(?:8|16|32|64)(?:Clamped)?Array$/;
 const PRESENCE_READS = new Set([
   'Object.getOwnPropertyDescriptor',
   'Reflect.getOwnPropertyDescriptor',
@@ -259,6 +273,16 @@ export function bundleViolations(file, source, loadSourceMap = () => null) {
         names.find((name) => name === 'Atomics' || name === 'Atomics.waitAsync') ?? names[0] ?? null
       );
     }
+    // `getPrototypeOf(Uint8Array.prototype)` is %TypedArray%.prototype (as node-ipc-advanced.ts).
+    if (node.type === 'CallExpression' && node.arguments.length === 1) {
+      const callee = nativeName(node.callee, seen, requireImmutable);
+      if (callee !== 'Object.getPrototypeOf' && callee !== 'Reflect.getPrototypeOf') return null;
+      const [owner, prototype] = (
+        nativeName(node.arguments[0], seen, requireImmutable) ?? ''
+      ).split('.');
+      if (!TYPED_ARRAY.test(owner)) return null;
+      return prototype === 'prototype' ? 'TypedArray.prototype' : prototype ? null : 'TypedArray';
+    }
     if (node.type !== 'MemberExpression') return null;
     const object = nativeName(node.object, seen, requireImmutable);
     return object ? `${object}.${propertyName(node)}`.replace(/^globalThis\./, '') : null;
@@ -425,14 +449,19 @@ export function bundleViolations(file, source, loadSourceMap = () => null) {
   function presenceGuarded(call) {
     // A wrapper may throw on absence itself (`nativeGetter`): only absence-returning reads.
     if (!PRESENCE_READS.has(nativeName(call.callee))) return false;
+    // `.value` on an absent result throws before any check: only `?.` (or a later step it shortens).
     let read = call;
+    let optional = false;
     for (
       let up = parents.get(read);
       (up?.type === 'MemberExpression' && up.object === read) ||
       (up?.type === 'ChainExpression' && up.expression === read);
       up = parents.get(up)
-    )
+    ) {
+      if (up.type === 'MemberExpression' && !up.optional && !optional) return false;
+      optional ||= up.optional === true;
       read = up;
+    }
     const declaration = parents.get(read);
     if (
       declaration?.type !== 'VariableDeclarator' ||
@@ -477,9 +506,11 @@ export function bundleViolations(file, source, loadSourceMap = () => null) {
       return node.quasis[0].value.cooked;
     if (node?.type !== 'Identifier') return null;
     const declaration = binding(node);
-    if (!declaration || !immutableBindings.has(declaration) || assignments.has(declaration))
-      return null;
-    return declaration.init?.type === 'Literal' ? stringValue(declaration.init) : null;
+    // One assignment is one value: bundlers emit a top-level `const` as `var`.
+    if (!declaration || assignments.has(declaration)) return null;
+    return ['Literal', 'TemplateLiteral'].includes(declaration.init?.type)
+      ? stringValue(declaration.init)
+      : null;
   }
   const errors = [];
   function report(node, name) {
@@ -630,7 +661,9 @@ export function bundleViolations(file, source, loadSourceMap = () => null) {
     if (node.type !== 'CallExpression' && node.type !== 'NewExpression') return;
     // A listed builtin reached by name: its receiver and key are arguments of one call
     // (`getOwnPropertyDescriptor(ArrayBuffer.prototype, 'detached')`, `Reflect.get`, a wrapper).
-    const keys = node.arguments.map(stringValue).filter((key) => key !== null);
+    const keys = NOT_READS.test(nativeName(node.callee) ?? '')
+      ? []
+      : node.arguments.map(stringValue).filter((key) => key !== null);
     for (const argument of keys.length > 0 ? node.arguments : []) {
       const receiver = nativeName(argument);
       const named = receiver && keys.map((key) => namedIntrinsic(receiver, key)).find(Boolean);
