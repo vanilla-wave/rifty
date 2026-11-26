@@ -35,6 +35,15 @@
       "changes": "lib/url.js, lib/querystring.js, lib/internal/{querystring,constants}.js and the internal/url protocol sets bundled and minified by esbuild, tools/publishing/generate-url-legacy.mjs",
       "sourcesKey": "node"
     },
+    "packages/isolate-guest/src/guest/node-blob/generated": {
+      "files": ["node-blob.js", "node.LICENSE"],
+      "name": "node",
+      "version": "v24.16.0",
+      "license": "MIT",
+      "licenseFiles": ["packages/isolate-guest/src/guest/node-blob/generated/node.LICENSE"],
+      "changes": "lib/internal/{webidl,blob,file}.js wrapped as modules over rifty bindings and minified by esbuild (whitespace and syntax, identifiers kept; the guest bundle may rename local bindings, e.g. require → require2), tools/publishing/generate-node-blob.mjs",
+      "sourcesKey": "node"
+    },
     "packages/runtime-js/src/module-loader/generated": {
       "files": ["typescript-browser.js"],
       "package": "typescript",
@@ -62,6 +71,8 @@
     "packages/isolate-guest/src/guest/exodus-bytes/generated/text-decoder.d.ts",
     "packages/isolate-guest/src/guest/node-encoding/generated/encoding.d.ts",
     "packages/isolate-guest/src/guest/node-encoding/generated/sources.json",
+    "packages/isolate-guest/src/guest/node-blob/generated/node-blob.d.ts",
+    "packages/isolate-guest/src/guest/node-blob/generated/sources.json",
     "packages/runtime-js/src/builtins/fetch/generated/classes.d.ts",
     "packages/runtime-js/src/builtins/fetch/generated/sources.json",
     "packages/runtime-js/src/builtins/url-legacy/generated/legacy.d.ts",

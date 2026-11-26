@@ -86,14 +86,16 @@ export function invalidArgType(what: string, expected: string, value: unknown): 
   );
 }
 
-/** `RangeError` with Node's `ERR_OUT_OF_RANGE` code and message for a number. */
-export function outOfRange(name: string, range: string, value: number): RangeError {
+/** `RangeError` with Node's `ERR_OUT_OF_RANGE` code and message for a number or bigint. */
+export function outOfRange(name: string, range: string, value: number | bigint): RangeError {
   const received =
-    Number.isInteger(value) && Math.abs(value) > 2 ** 32
-      ? addNumericalSeparator(String(value))
-      : Object.is(value, -0)
-        ? '-0'
-        : String(value);
+    typeof value === 'bigint'
+      ? `${value > 2n ** 32n || value < -(2n ** 32n) ? addNumericalSeparator(String(value)) : String(value)}n`
+      : Number.isInteger(value) && Math.abs(value) > 2 ** 32
+        ? addNumericalSeparator(String(value))
+        : Object.is(value, -0)
+          ? '-0'
+          : String(value);
   return Object.assign(
     new RangeError(
       `The value of "${name}" is out of range. It must be ${range}. Received ${received}`,

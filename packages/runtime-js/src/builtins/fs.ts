@@ -16,8 +16,10 @@ import { fsError, withSyscall } from './fs-errors.ts';
 import { type PathLike, pathToString, resolvePath } from './fs-path.ts';
 import {
   type FdReadOptions,
+  type ReadPosition,
   assertNonNegativeInteger,
   checkedSliceBounds,
+  readPositionOf,
 } from './fs-read-arguments.ts';
 import { Dirent, type StatOptions, Stats } from './fs-stats.ts';
 import { closeStdin, readStdin, readStdinSync, statStdin, writeStdio } from './fs-stdio.ts';
@@ -911,7 +913,7 @@ export function readSync(
   buffer: Uint8Array,
   offset: number,
   length: number,
-  position: number | null,
+  position: ReadPosition,
 ): number;
 export function readSync(fd: number, buffer: Uint8Array, options?: FdReadOptions): number;
 export function readSync(
@@ -919,12 +921,9 @@ export function readSync(
   buffer: Uint8Array,
   offsetOrOptions: number | FdReadOptions = 0,
   length?: number,
-  position?: number | null,
+  position?: ReadPosition,
 ): number {
-  const record = fd === 0 ? null : getFd(fd, 'read');
-  if (record && !record.readable) throw fsError('EBADF', undefined, 'read');
   if (!(buffer instanceof Uint8Array)) throw new TypeError('buffer must be a Uint8Array');
-
   const offset =
     typeof offsetOrOptions === 'number' ? offsetOrOptions : (offsetOrOptions.offset ?? 0);
   const count =
@@ -933,21 +932,25 @@ export function readSync(
       : (offsetOrOptions.length ?? buffer.byteLength - offset);
   const rawPos =
     typeof offsetOrOptions === 'number' ? (position ?? null) : (offsetOrOptions.position ?? null);
-  // Node: position -1 (and null) means "read from the current fd position".
-  const pos = rawPos === -1 ? null : rawPos;
+  // Node's order: offset, position, then a zero length returns 0 before the fd
+  // is touched (a write-only, closed or directory fd included), then bounds.
+  assertNonNegativeInteger(offset, 'offset');
+  assertNonNegativeInteger(count, 'length');
+  const pos = readPositionOf(rawPos, count);
+  if (count === 0) return 0;
+  const record = fd === 0 ? null : getFd(fd, 'read');
+  if (record && !record.readable) throw fsError('EBADF', undefined, 'read');
   checkedSliceBounds(buffer, offset, count);
-  if (pos !== null) assertNonNegativeInteger(pos, 'position');
 
   if (record === null) return readStdinSync(buffer, offset, count, pos);
-  const stat = withSyscall('read', record.path, () => syncMirror().statSync(record.path));
-  if (stat.isDirectory) throw fsError('EISDIR', undefined, 'read');
-  const bytes = withSyscall('read', record.path, () => syncMirror().readFileBytesSync(record.path));
   const start = pos ?? record.position;
-  const end = Math.min(bytes.byteLength, start + count);
-  const read = Math.max(0, end - start);
-  if (read > 0) buffer.set(bytes.subarray(start, end), offset);
-  if (pos === null) record.position += read;
-  return read;
+  // One positional store call (ADR-0576); EISDIR comes from the store.
+  const bytes = withSyscall('read', record.path, () =>
+    syncMirror().readFileRangeSync(record.path, start, count),
+  );
+  buffer.set(bytes, offset);
+  if (pos === null) record.position += bytes.byteLength;
+  return bytes.byteLength;
 }
 
 export function writeSync(
@@ -1094,7 +1097,8 @@ export async function openAsBlob(p: PathLike, options?: { type?: string }): Prom
   }
   // Copy into a fresh ArrayBuffer-backed view: the VFS bytes may be SharedArrayBuffer-
   // backed (OPFS mode), which `Blob` cannot hold (Blob copies the bytes regardless).
-  return new Blob([new Uint8Array(bytes)], { type: options?.type ?? '' });
+  // `globalThis.`: an unbound `Blob` makes esbuild rename the isolate guest's `class Blob` (ADR-0578).
+  return new globalThis.Blob([new Uint8Array(bytes)], { type: options?.type ?? '' });
 }
 
 export const promises = {
@@ -1235,7 +1239,7 @@ export function read(
   bufferOrOptsOrCb: Uint8Array | (FdReadOptions & { buffer?: Uint8Array }) | ReadCallback,
   offsetOrOptions?: number | FdReadOptions | ReadCallback,
   lengthOrCb?: number | ReadCallback,
-  positionOrCb?: number | null | ReadCallback,
+  positionOrCb?: ReadPosition | ReadCallback,
   cb?: ReadCallback,
 ): void {
   // Node also accepts read(fd, cb) and read(fd, options, cb) — the buffer
@@ -1266,7 +1270,8 @@ export function read(
       : {
           offset: typeof offsetOrOptions === 'number' ? offsetOrOptions : 0,
           length: typeof lengthOrCb === 'number' ? lengthOrCb : buffer.byteLength,
-          position: typeof positionOrCb === 'number' || positionOrCb === null ? positionOrCb : null,
+          position:
+            typeof positionOrCb === 'function' || positionOrCb === undefined ? null : positionOrCb,
         };
   const cbFinal = (
     typeof offsetOrOptions === 'function'
@@ -1277,6 +1282,8 @@ export function read(
           ? positionOrCb
           : cb
   ) as ReadCallback;
+  // Node validates the position synchronously, before any callback (stdin too).
+  readPositionOf(options.position, options.length ?? buffer.byteLength - (options.offset ?? 0));
   if (fd === 0) {
     try {
       readStdin(buffer, options, cbFinal);

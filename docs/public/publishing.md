@@ -115,6 +115,15 @@ NPM_TOKEN=<granular-token> bash tools/publishing/first-publish.sh --only @riftyd
 bash tools/publishing/setup-trusted-publishers.sh --only @riftydev/agent
 ```
 
+A single package's draft prerelease by hand (done for `@riftydev/isolate-host@0.1.0-draft.1`, 2026-11-25): set the version in that package's `package.json` only for the run (the repo keeps `0.1.0`; `release.yml` sets versions from the tag), pass `--tag next` — `pnpm publish` puts even a prerelease on `latest` without it — then `git checkout` the `package.json`. A new name's first version is its `latest` too, whatever `--tag` (seen: `latest` and `next` → `0.1.0-draft.1`). npm also adds a stub version `0.0.0-stage` ("placeholder for staged publishing") to a new name; the registry answered 404 for ~5 min after the publish succeeded.
+
+```bash
+sed -i '' 's/"version": "0.1.0"/"version": "0.1.0-draft.1"/' packages/isolate-host/package.json
+NPM_TOKEN=<granular-token> bash tools/publishing/first-publish.sh --only @riftydev/isolate-host --tag next --dry-run
+NPM_TOKEN=<granular-token> bash tools/publishing/first-publish.sh --only @riftydev/isolate-host --tag next
+git checkout packages/isolate-host/package.json
+```
+
 The script runs `build:libs`, bundles `LICENSE` into each package, and publishes the filtered set (`./packages/*` + `@riftydev/shadow-registry` + `@riftydev/eddy`, `--access public`; or just `--only`'s filter). The token is read from `$NPM_TOKEN` and **never written to disk** — a throwaway npmrc holds the literal `${NPM_TOKEN}` placeholder that pnpm interpolates at read time, and it (plus the `LICENSE` copies) is removed on exit. Equivalent manual form:
 
 ```bash

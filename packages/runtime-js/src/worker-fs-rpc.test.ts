@@ -18,6 +18,10 @@ class TestFs implements FsSync {
     return bytes;
   }
 
+  readFileRangeSync(path: string, position: number, length: number): Uint8Array {
+    return this.readFileBytesSync(path).subarray(position, position + length);
+  }
+
   writeFileSync(path: string, data: Uint8Array): void {
     const parent = path.slice(0, path.lastIndexOf('/')) || '/';
     if (!this.dirs.has(parent)) {

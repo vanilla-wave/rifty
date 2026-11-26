@@ -16,7 +16,12 @@ fs.writeFileSync(f, 'xyz!'); await b.text()` → `NotReadableError: The blob cou
 `openAsBlob` (`fs.ts:1080-1100`) copies the bytes at open into a plain `Blob`, so `text()` gives
 `abc` (reported by the PR #443 external review; rifty side not re-run here). Every host whose
 `Blob` is real; in the isolate guest it becomes reachable with goal `isolate-guest-web-api`'s
-`Blob` unit, which declares it ⚠️ there. No compat row yet. Owner runtime-js `fs`.
+`Blob` unit, which declares it ⚠️ there (compat `isolate-host.md` row `Blob`, `File`). Owner runtime-js `fs`.
+
+Also (measured 2026-11-25, isolate guest vs Node v24.16.0, `packages/isolate-host/tests/blob-file.test.ts`):
+`fs.openAsBlob(f, { type: 'Text/X' })` → Node's `type` is `'Text/X'` (`createBlobFromFilePath`
+keeps it as given), rifty's `'text/x'` (`new Blob(…, { type })` lower-cases it); on browser hosts
+the native `Blob` lower-cases it the same way (not run there).
 
 ## Challenge
 

@@ -55,6 +55,7 @@
     "@riftydev/runtime-js": "workspace:*",
     "@riftydev/vfs": "workspace:*",
     "core-js": "3.51.0",
+    "docx": "9.15.3",
     "esbuild": "0.28.0",
     "exceljs": "4.4.0",
     "is-async-function": "2.1.1",

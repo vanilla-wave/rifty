@@ -12,9 +12,13 @@ const { stdout, stderr, exitCode } = await runCode("console.log(6 * 7)");
 // → { stdout: '42\n', stderr: '', exitCode: 0 }
 ```
 
-## Install (dev)
+## Install
 
-The package is not on npm yet. Install the packed tarball:
+```sh
+npm install @riftydev/isolate-host@next   # a draft prerelease (dist-tag next)
+```
+
+From a rifty checkout, the packed tarball:
 
 ```sh
 # in the rifty checkout
@@ -393,4 +397,8 @@ base main `3d16cb7b8`): `guest.js` 7 173 116 → 7 320 689 B (gzip -9 1 512 671 
 20 × 1 MiB `decode` 223 → 114, `toString` 221 → 114. First non-utf-8 decoder in an isolate:
 windows-1252 0.7 ms (`single-byte.js` evaluates), utf-16le 2.0 ms, gb18030 4.3 ms (@exodus/bytes
 and its table); the next ≤ 0.1 ms.
+Node's `Blob`/`File` (ADR-0578, same machine): the bundle grew 41 655 B (`gzip -9` 10 408) to
+7 223 180 B (2026-11-26, on main `c2250727d`); 2026-11-25, load ~13, warm `runCode('1')`, median of 40 with base and change
+alternating, four runs: 15.0–17.3 → 15.3–17.6 ms (+0.27 to +0.72 ms). 200 000 parts `'ab'` →
+`new Blob` + `text()`: 3.2 s (Node 0.3 s).
 These are measurements, not promises.

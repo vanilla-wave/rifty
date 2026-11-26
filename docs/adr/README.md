@@ -27,6 +27,7 @@ ADRs are immutable while active, except dated lines under `## Decisions` / `§Co
 | 0428 | Wait for native replica ownership before replay |
 | 0429 | Preserve subtree failure scope and native reader lifetimes |
 | 0476 | OPFS admission and structured storage startup failures |
+| 0576 | FsSync positional read and write by range |
 
 ### kernel
 
@@ -440,6 +441,7 @@ ADRs are immutable while active, except dated lines under `## Decisions` / `§Co
 | 0570 | Depend on typebox directly for the public Type export |
 | 0572 | Run a sandbox over an immutable template layer kept out of the sandbox's state |
 | 0577 | The isolate guest's TextDecoder and TextEncoder are Node v24.16.0's encoding.js, with @exodus/bytes for utf-16 and gb18030 |
+| 0578 | Isolate guest Blob and File are Node v24.16.0's blob.js and file.js over a JS byte store |
 
 ## Superseded (removed)
 

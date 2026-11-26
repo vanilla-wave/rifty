@@ -99,9 +99,10 @@ dropped with no U+FFFD even under `fatal`).
   earlier builds +0.59, −0.54; eager `single-byte.js` was +3.3). utf-8 faster on every row (small
   fresh/reused decoder −32 %/−12 %, small `toString` −16 %, 1 MiB ~−49 %; isolate-host README
   §Cost). First non-utf-8 decoder per isolate: windows-1252 0.7 ms, utf-16le 2.0, gb18030 4.3.
-- WPT `encoding` (Node v24.16.0's copy, 22 `.any.js` files, through the probe harness
-  `isolate-guest-web-api/reference/wpt` until the shared one lands; 11 502 subtests): every subtest as live Node but
-  «encodeInto() and a detached output buffer» (`MessageChannel`) and the five's 33 subtests;
-  `idlharness`, `streams/*`, `iso-2022-jp-decoder` not run.
+- WPT `encoding` (Node v24.16.0's copy through the shared harness `tests/wpt/`,
+  `isolate-host/tests/wpt-encoding.test.ts`): 20 files, 11 476 subtests as live Node but 34 excluded
+  («detached output buffer»: `MessageChannel`; the five's 28 labels and 5 `TextEncoder` rows); 15 of
+  the 35 `.any.js` not run, each with its live reason (`idlharness`, `streams/*`: web streams;
+  `iso-2022-jp-decoder`: the five; `replacement-`/`unsupported-encodings`: `XMLHttpRequest`, absent in Node too).
 - Publishing: both generated dirs carry their notice (`third-party-manifest.json`).
 - Re-pin of Node or @exodus/bytes: rerun the generator and `text-decoder.test.ts` (the generator checks ids and primordial names, not the members a module destructures from its bindings: a new one fails only at run time).

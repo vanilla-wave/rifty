@@ -22,13 +22,13 @@ implemented (throws `NotImplementedError` or `TypeError`).
 | `buf.toString(encoding?, start?, end?)` | ✅ | utf8/utf16le/ascii/latin1/hex/base64/base64url |
 | `buf.slice(start?, end?)` | ✅ | Returns a Buffer-tagged subarray |
 | `buf.equals(other)` | ✅ | |
-| `buf.write(s, offset?, length?, encoding?)` | ✅ | Honors `length` truncation and `encoding`; flexible overloads |
+| `buf.write(s, offset?, length?, encoding?)` | ✅ | Honors `length` truncation (whole utf8 sequences / utf16 units, as Node) and `encoding`; flexible overloads |
 | `buf.compare(other, ...)` (instance) | ✅ | |
 | `buf.copy(target, targetStart?, sourceStart?, sourceEnd?)` | ✅ | |
 | `buf.fill(value, offset?, end?, encoding?)` | ✅ | Tile-fills strings; honors encoding |
-| `buf.indexOf(value, byteOffset?, encoding?)` | ✅ | Int byte / string / sub-Uint8Array |
-| `buf.lastIndexOf(value, byteOffset?, encoding?)` | ✅ | |
-| `buf.includes(value, byteOffset?, encoding?)` | ✅ | |
+| `buf.indexOf(value, byteOffset?, encoding?)` | ⚠️ | Int byte / string / sub-Uint8Array. utf16le needles match at any byte (Node: aligned 2-byte units); `byteOffset` coercion differs (`null`, non-numbers): `backlog/runtime-js/buffer-indexof-node-search` |
+| `buf.lastIndexOf(value, byteOffset?, encoding?)` | ⚠️ | As `indexOf` |
+| `buf.includes(value, byteOffset?, encoding?)` | ⚠️ | As `indexOf` |
 | `buf.readUInt8/16/32/Int8/16/32 {BE,LE}` | ✅ | Via `DataView` |
 | Lowercase `readUint*`/`writeUint*`/`readBigUint64*` aliases, `buf.toLocaleString()` | ❌ | Node's lowercase forms (same functions as `readUInt*`…) read `undefined`; `toLocaleString` is `Uint8Array`'s (`"104,105"`, Node: `=== toString`) — `backlog/runtime-js/builtin-alias-members` |
 | `buf.writeUInt8/16/32/Int8/16/32 {BE,LE}` | ✅ | Returns post-write offset (Node parity) |
@@ -64,6 +64,10 @@ implemented (throws `NotImplementedError` or `TypeError`).
 | `base64` | ✅ | ✅ |
 | `base64url` | ✅ | ✅ |
 
+Names follow Node's `normalizeEncoding` (any case: `'UTF8'`, `'Latin1'`, `'UCS-2'`); unknown → `ERR_UNKNOWN_ENCODING`.
+Decoding input outside the alphabet follows Node's native decoders: base64 takes both alphabets, skips
+other characters, stops at `'='`; hex stops at the first bad pair.
+
 ## Tests
 
 - Unit tests live in `packages/io/src/buffer.test.ts`.
@@ -71,6 +75,8 @@ implemented (throws `NotImplementedError` or `TypeError`).
   - `tools/node-parity-runner/cases/buffer/write-encodings.case.ts`
   - `tools/node-parity-runner/cases/buffer/alloc-fill-encoding.case.ts`
   - `tools/node-parity-runner/cases/buffer/from-and-encodings.case.ts`
+  - `tools/node-parity-runner/cases/buffer/encoding-names.case.ts`
+  - `tools/node-parity-runner/cases/buffer/decode-invalid-input.case.ts`
   - `tools/node-parity-runner/cases/buffer/readwrite.case.ts`
   - `tools/node-parity-runner/cases/buffer/concat-equals.case.ts`
   - `tools/node-parity-runner/cases/buffer/extends-uint8array.case.ts`
