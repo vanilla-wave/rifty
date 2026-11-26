@@ -25,11 +25,12 @@ controlled):
 | 2026-11-23 | `worker_threads/exec-argv-startup` | ~38 | 3/3 green in isolation | PR #425 author's run report (`pnpm pr:check`); in the tree only as the concern in `pr-425-final-green.json` |
 | 2026-11-24 | `process/exit-lifecycle-child` | 17–70 | first red, second green | PR #431 cross-review delegate's run report (`pnpm pr:check`); not in the tree |
 | 2026-11-24 | `worker_threads/exec-argv-startup` | ~13 | full `test:parity` green ("all cases match") | PR #441 author's run report (`pnpm pr:check`); not in the tree |
+| 2026-11-25 | `process/exit-lifecycle-child` | 25–49 | red again alone (`pnpm test:parity process/exit-lifecycle-child`, twice) under that load; GitHub checks green on the same head | PR #460 author's run (`pnpm pr:check` at `70d9be2fa`): `keepalive drain cap (10000ms) … (3 active ref(s))`, holders not captured |
 
 The last two reports quote `keepalive drain cap (10000ms)`; the first two say only
 "drain-cap timeout", so that they hit this 10 s cap and not the product's 30 s one is an
 inference. GitHub checks were green at the heads of PRs #425, #431 and #441 when they
-merged. No red is recorded on an unloaded run; no controlled repro attempted (untried: the
+merged. No red is recorded on an unloaded run; under load a case can stay red in isolation (2026-11-25 row); no controlled repro attempted (untried: the
 `yes`-process stand of `distribution/isolate-host-time-phase-rows-under-load`). Nearest
 earlier statement of the mechanism: `docs/public/compat/process.md` — the cap is
 wall-clock, so a CPU-busy worker can trip it.

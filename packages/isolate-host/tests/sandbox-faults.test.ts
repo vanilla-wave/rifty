@@ -29,8 +29,8 @@ const createSandbox = (options?: Record<string, unknown>): Promise<Sandbox> =>
 const text = async (sb: Sandbox, path: string) => Buffer.from(await sb.readFile(path)).toString();
 
 describe('surface (I8)', () => {
-  carrier('the package root exports createSandbox and runCode', () => {
-    expect(Object.keys(pkg).sort()).toEqual(['createSandbox', 'runCode']);
+  carrier('the package root exports createSandbox, registerTemplate and runCode', () => {
+    expect(Object.keys(pkg).sort()).toEqual(['createSandbox', 'registerTemplate', 'runCode']);
   });
 
   carrier('exec and createSandbox refuse what they do not do, loudly', async () => {
@@ -54,8 +54,9 @@ describe('surface (I8)', () => {
     } finally {
       await sb.destroy();
     }
+    // A template never registered in this process (README §Sandbox template).
     await expect(createSandbox({ template: { id: 't', version: '1' } })).rejects.toMatchObject({
-      message: expect.stringContaining('Not implemented: isolate-host.sandbox-template'),
+      code: 'ERR_ISOLATE_HOST_TEMPLATE_UNKNOWN',
     });
     await expect(createSandbox({ snapshot: new Uint8Array([1, 2, 3]) })).rejects.toMatchObject({
       code: 'ERR_FS_SNAPSHOT_CORRUPT',

@@ -2,7 +2,7 @@ export { createHostBridge, exitStatus } from './bridge.ts';
 export type { HostBridge, HostHooks } from './bridge.ts';
 export { GUEST_DIRS, IMPORT_GAP, UNCOPYABLE_REJECTION } from './contract.ts';
 export type { GuestEntry, GuestHost, HostFunctions } from './contract.ts';
-export { FsSnapshotError, restoreFs, snapshotFs } from './snapshot.ts';
+export { FsSnapshotError, restoreFs, snapshotBudget, snapshotFs } from './snapshot.ts';
 export type {
   FsSnapshotErrorCode,
   SnapshotFs,

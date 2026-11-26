@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- `internal`: the dependency snapshot envelope reader (`readDepSnapshotTar`, `readDepSnapshotManifest`; ustar + PAX, envelope paths, manifest v4/v5), moved from `@riftydev/workbench` so `@riftydev/isolate-host` reads the same artifacts; entries carry their `mtimeMs`. Workbench's behavior is unchanged.
+
 - A lockfile's shadow-substituted pin whose substitute bytes are not in the tarball cache fails `EBROKENLOCK` (new `reason: 'shadow-replay-cache-miss'`, was `shadow-trace-drift`) naming the locked package, its substitute and recipe, that replay never downloads substitutes so the lock cannot be reinstalled exactly there, and the exit: delete `package-lock.json` and install again (re-resolves, versions may change). An Eddy-staged lock says the cache lost its intact copy after Eddy seeded it and to run install again. Was `EBROKENLOCK: shadow recipe <id> is missing its pinned cache bytes`. Install behavior unchanged.
 
 - Refused substitutions name the requested package/range, exact substituted version and admission rule; stable feature ids and admission unchanged.
