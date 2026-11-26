@@ -200,6 +200,7 @@ export const TASKS = [
   'check:install-stamp-writers',
   'check:runtime-adapter-boundary',
   'check:esbuild-legacy-retirement',
+  'check:lockfile-registry', // docs-only diffs too: PR #443 leaked a lock under docs/
   'check:sync-sha256-cores',
   'backlog:check',
   'refs:check',
