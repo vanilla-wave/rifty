@@ -1,6 +1,5 @@
 {
   "node": "v24.16.0",
-  "esbuild": "0.28.0",
   "sha256": "b067911b2a2c5bf334fb7941be73da96b4558b2ca3c23db9b5a1afd2dfa51d5e",
   "sources": {
     "lib/stream.js": "3dec4d8da73ac37b6fcfd812ed252c12bf8355ccdc71ac6d669e76288f2a1857",
