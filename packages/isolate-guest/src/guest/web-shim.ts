@@ -254,6 +254,19 @@ define('setInterval', (fn: unknown, ms?: unknown, ...args: unknown[]) =>
 );
 define('clearTimeout', clearTimer);
 define('clearInterval', clearTimer);
+// The host's next turn, for the runtime's `setImmediate` to drive its queue (runtime-js
+// timers.ts); the runtime installs its own `setImmediate` over this one.
+define('setImmediate', (fn: unknown, ...args: unknown[]) => {
+  if (typeof fn !== 'function') throw argType('callback', 'of type function', fn);
+  const id = nextTimerId++;
+  reflectApplyPrimordial(mapSetPrimordial, timers, [
+    id,
+    new HostTimer(fn as HostTimer['fn'], args, false),
+  ]);
+  bridge.timerStart(id, 0, false);
+  return id;
+});
+define('clearImmediate', clearTimer);
 
 /** Host timer expiry → the guest callback; a throw takes the uncaught path. */
 export function fireTimer(id: number): void {

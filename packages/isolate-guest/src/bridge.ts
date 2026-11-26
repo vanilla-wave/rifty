@@ -58,9 +58,9 @@ export interface HostBridge {
   close(): void;
 }
 
-/** One armed timer: its host handle, or `null` while its expiry is with the guest. */
+/** One armed timer: its host cancel, or `null` while its expiry is with the guest. */
 interface Slot {
-  handle: NodeJS.Timeout | null;
+  cancel: (() => void) | null;
 }
 
 export function createHostBridge(hooks: HostHooks): HostBridge {
@@ -72,8 +72,7 @@ export function createHostBridge(hooks: HostHooks): HostBridge {
   const timers = new Map<number, Slot>();
   let closed = false;
   const clear = (id: number): void => {
-    const slot = timers.get(id);
-    if (slot?.handle) clearTimeout(slot.handle);
+    timers.get(id)?.cancel?.();
     timers.delete(id);
   };
   const functions: HostFunctions = {
@@ -89,15 +88,23 @@ export function createHostBridge(hooks: HostHooks): HostBridge {
       if (typeof repeat !== 'boolean') refuse('timerStart: repeat must be a boolean');
       if (closed) return;
       clear(id);
-      const slot: Slot = { handle: null };
+      const slot: Slot = { cancel: null };
       timers.set(id, slot);
       const live = (): boolean => !closed && timers.get(id) === slot;
+      // 0 ms = the next host turn (the guest's `setImmediate`): the host's check phase,
+      // not a 1 ms timer.
       const arm = (delay: number): void => {
-        slot.handle = setTimeout(tick, delay);
+        if (delay === 0) {
+          const handle = setImmediate(tick);
+          slot.cancel = () => clearImmediate(handle);
+        } else {
+          const handle = setTimeout(tick, delay);
+          slot.cancel = () => clearTimeout(handle);
+        }
       };
       const tick = (): void => {
         const started = performance.now();
-        slot.handle = null;
+        slot.cancel = null;
         if (!repeat) timers.delete(id);
         // Node re-arms from the tick's start (its period holds; an overrun ticks again at
         // once), but only once the guest ran it: no tick queues behind a running one.
@@ -136,7 +143,7 @@ export function createHostBridge(hooks: HostHooks): HostBridge {
     timeOrigin: performance.timeOrigin + origin,
     close() {
       closed = true;
-      for (const slot of timers.values()) if (slot.handle) clearTimeout(slot.handle);
+      for (const slot of timers.values()) slot.cancel?.();
       timers.clear();
     },
   };
