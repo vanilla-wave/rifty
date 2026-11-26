@@ -4,19 +4,26 @@
  * runner over the same files. Shared by the isolate-host test and the browser-host specs
  * (tests/browser-unit, tests/no-coi); no sandbox import.
  *
- * Carrier decisions:
+ * Carrier decisions (PR #467):
  * - Programs: the 10 `c-*` (every host) and the matrices `m1`–`m10`, `w1`, `b1` (browser hosts),
- *   here in `fixtures/streams-scenario/`, their one source (the goal's probe `run.mjs` reads them
- *   here; the goal's dir under `docs/` goes when the goal closes). A `c-*` program gets exceljs 4.4.0's installed
- *   closure as `node_modules`.
+ *   in `fixtures/streams-scenario/`, their one source (its README; the goal's probe `run.mjs`
+ *   reads them there). A `c-*` program gets exceljs 4.4.0's installed closure as `node_modules`.
+ * - Hosts: isolate `exec`; Workbench (COI, closure in the guest's `/tmp`, the zlib carrier's
+ *   `serveSteps`/`UNPACK`); SDK (no-COI toolchain). Each case has its own sandbox or page and runs
+ *   its own oracle, so order and subset do not change outcomes.
  * - Written output: every file the run leaves in its directory outside `node_modules`, the program
- *   excepted, as `<path> <entry>` lines (`manifest`: sha256, an archive by entry: `entriesOf`), in
- *   the zlib carrier's `Observed.output`.
- * - Pins, masks: the zlib carrier's (`Pin`, `pinOf`, `Mask`, `browserMasks`).
+ *   excepted, as `<path> <entry>` lines (`manifest`): sha256; a zip (`.xlsx` too) by every byte of
+ *   its container except the closed `ZIP_MASKS` (`zip-manifest.ts`), in the zlib carrier's
+ *   `Observed.output`.
+ * - Pins, masks: the zlib carrier's (`Pin`, `pinOf`, `Mask`, `browserMasks`): the whole outcome.
+ * - Declared skips, each tied to its owner's backlog item by a marker: `WORKBENCH_SKIPPED`,
+ *   `BROWSER_SKIPPED_ROWS` (a row skipped by the program's own `--skip=` on both sides; a row whose
+ *   outcome is set by speed is pinned on no host where it behaves so).
+ * - The oracle must exit on its own within `ORACLE_TIMEOUT_MS`; each host's own bounds sum below
+ *   its test's limit, so a hang fails by name.
  * - Owners: the units that own the program's rows differing from Node, from the goal's
- *   `reference/results/ownership.txt` (its in-process rows, and isolate rows where that host runs the
- *   program; the browser hosts' rows are
- *   not in that table).
+ *   `reference/results/ownership.txt` (its in-process rows, and isolate rows where that host runs
+ *   the program; the browser hosts' rows are not in that table).
  */
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -35,7 +42,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { closureFiles } from './closure-files.ts';
-import { ooxmlParts } from './ooxml-parts.ts';
+import { zipEntries } from './zip-manifest.ts';
 import type { Observed } from './zlib-scenario.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -166,8 +173,8 @@ export const isWritten = (p: Program, path: string): boolean =>
   path !== programFile(p) && path !== 'node_modules' && !path.startsWith('node_modules/');
 
 /**
- * Is a written file a zip archive (`.xlsx` too), compared by part? Its bytes carry the write time
- * (entry dates; an xlsx's `docProps/core.xml`), so they differ run to run, in Node too.
+ * Is a written file a zip archive (`.xlsx` too), compared field by field? Its bytes carry the write
+ * time (entry dates; an xlsx's `docProps/core.xml`), so they differ run to run, in Node too.
  */
 export const ARCHIVE = /\.(?:xlsx|zip)$/;
 export const isArchive = (path: string): boolean => ARCHIVE.test(path);
@@ -175,41 +182,17 @@ export const isArchive = (path: string): boolean => ARCHIVE.test(path);
 const sha256 = (b: Uint8Array | string): string => createHash('sha256').update(b).digest('hex');
 export const sha256Entry = (hex: string): string => `sha256 ${hex}`;
 
-/** A zip's central directory: each entry's name and compression method (0 STORE, 8 DEFLATE). */
-function zipDirectory(bytes: Uint8Array): { name: string; method: number }[] {
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  let end = bytes.byteLength - 22;
-  while (end >= 0 && view.getUint32(end, true) !== 0x06054b50) end--;
-  if (end < 0) throw new Error('no end of central directory');
-  const out: { name: string; method: number }[] = [];
-  let at = view.getUint32(end + 16, true);
-  for (let n = view.getUint16(end + 10, true); n > 0; n--) {
-    if (view.getUint32(at, true) !== 0x02014b50) throw new Error(`no central header at ${at}`);
-    const nameLength = view.getUint16(at + 28, true);
-    const name = new TextDecoder().decode(bytes.subarray(at + 46, at + 46 + nameLength));
-    out.push({ name, method: view.getUint16(at + 10, true) });
-    at += 46 + nameLength + view.getUint16(at + 30, true) + view.getUint16(at + 32, true);
-  }
-  return out;
-}
-
 /**
- * A written file's manifest entries: `[path, 'sha256 <hex>']`; an archive one per zip entry,
- * `[<path>!<entry>, 'method <n> dir' | 'method <n> sha256 <hex>']`, the content as `ooxmlParts` gives
- * it (the web-api carrier's comparison: `docProps/core.xml` timestamps masked, nothing else).
+ * A written file's manifest entries: `[path, 'sha256 <hex>']`; an archive by every byte of its
+ * container except `ZIP_MASKS` (`zip-manifest.ts`); one it cannot parse by its name, the error and
+ * its sha256.
  */
 export async function entriesOf(path: string, bytes: Uint8Array): Promise<[string, string][]> {
   if (!isArchive(path)) return [[path, sha256Entry(sha256(bytes))]];
   try {
-    const parts = await ooxmlParts(bytes);
-    return zipDirectory(bytes).map(({ name, method }) => [
-      `${path}!${name}`,
-      name.endsWith('/')
-        ? `method ${method} dir`
-        : `method ${method} ${sha256Entry(sha256(parts[name] ?? ''))}`,
-    ]);
+    return zipEntries(path, bytes);
   } catch (e) {
-    return [[path, `unreadable zip: ${(e as Error).name}: ${(e as Error).message}`]];
+    return [[path, `unreadable zip: ${(e as Error).message}; ${sha256Entry(sha256(bytes))}`]];
   }
 }
 

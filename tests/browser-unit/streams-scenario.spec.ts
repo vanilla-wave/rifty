@@ -81,22 +81,39 @@ const PINS: Readonly<Record<string, Pin>> = {
 readFile threw TypeError: stream.close is not a function
 `,
     stderr: '',
-    output: `in.xlsx![Content_Types].xml method 8 sha256 0ee6278b34e013e933862925f7cc8fbfa34529af82df0b64f7e7de9d8e31084e
-in.xlsx!_rels/ method 0 dir
-in.xlsx!_rels/.rels method 8 sha256 1285b20099c64699001f9d90ea040ca1c177fa99bc3ae8a841128874820f01a4
-in.xlsx!docProps/ method 0 dir
-in.xlsx!docProps/app.xml method 8 sha256 351686dafc92b804882bc4a5b2b5d8e61a218ddeeba980588aa6a93659084e5a
-in.xlsx!docProps/core.xml method 8 sha256 792e3aef103f422afdf0d049ae13527118d6ee0fd2b91a5c972616e5927b2fd0
-in.xlsx!xl/ method 0 dir
-in.xlsx!xl/_rels/ method 0 dir
-in.xlsx!xl/_rels/workbook.xml.rels method 8 sha256 db152538ca9d0a12609bf550b2577971a880d45d8ba0799dfe277871531bb3b1
-in.xlsx!xl/sharedStrings.xml method 8 sha256 2cc860482e908f45ed5c3c13c1390c484b6a7a606be37c68ed248c62c4bd0e35
-in.xlsx!xl/styles.xml method 8 sha256 b162294abd5acb68586c0433eae4f5c97480787c08dda49d1fa145f3b7b0a692
-in.xlsx!xl/theme/ method 0 dir
-in.xlsx!xl/theme/theme1.xml method 8 sha256 f857ef82e4c0e273a16e5efcf5cb12ff7a9943851cbdbd992cd2722616b271ed
-in.xlsx!xl/workbook.xml method 8 sha256 f034bd45edb557b11f3452e6732994cd2636bbd3dfb30d687c466f0ad47bf049
-in.xlsx!xl/worksheets/ method 0 dir
-in.xlsx!xl/worksheets/sheet1.xml method 8 sha256 96a293dca7217643fd2534edba56758199ddf8774575e649cd6242d174ae2671
+    output: `in.xlsx!cd#0000 name="[Content_Types].xml" made=0x14 need=10 flags=0x0 method=8 time=<masked> crc=0x9c0db91 csize=345 usize=1264 extra=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 comment=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 disk=0 iattr=0x0 eattr=0x0 offset=0
+in.xlsx!cd#0001 name="_rels/" made=0x14 need=10 flags=0x0 method=0 time=<masked> crc=0x0 csize=0 usize=0 extra=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 comment=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 disk=0 iattr=0x0 eattr=0x10 offset=394
+in.xlsx!cd#0002 name="_rels/.rels" made=0x14 need=10 flags=0x0 method=8 time=<masked> crc=0xda499ff2 csize=233 usize=587 extra=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 comment=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 disk=0 iattr=0x0 eattr=0x0 offset=430
+in.xlsx!cd#0003 name="xl/" made=0x14 need=10 flags=0x0 method=0 time=<masked> crc=0x0 csize=0 usize=0 extra=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 comment=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 disk=0 iattr=0x0 eattr=0x10 offset=704
+in.xlsx!cd#0004 name="xl/_rels/" made=0x14 need=10 flags=0x0 method=0 time=<masked> crc=0x0 csize=0 usize=0 extra=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 comment=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 disk=0 iattr=0x0 eattr=0x10 offset=737
+in.xlsx!cd#0005 name="xl/_rels/workbook.xml.rels" made=0x14 need=10 flags=0x0 method=8 time=<masked> crc=0x56b12484 csize=233 usize=697 extra=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 comment=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 disk=0 iattr=0x0 eattr=0x0 offset=776
+in.xlsx!cd#0006 name="xl/worksheets/" made=0x14 need=10 flags=0x0 method=0 time=<masked> crc=0x0 csize=0 usize=0 extra=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 comment=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 disk=0 iattr=0x0 eattr=0x10 offset=1065
+in.xlsx!cd#0007 name="xl/worksheets/sheet1.xml" made=0x14 need=10 flags=0x0 method=8 time=<masked> crc=0x164f6293 csize=492 usize=1068 extra=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 comment=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 disk=0 iattr=0x0 eattr=0x0 offset=1109
+in.xlsx!cd#0008 name="xl/sharedStrings.xml" made=0x14 need=10 flags=0x0 method=8 time=<masked> crc=0x47b51438 csize=171 usize=246 extra=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 comment=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 disk=0 iattr=0x0 eattr=0x0 offset=1655
+in.xlsx!cd#0009 name="xl/theme/" made=0x14 need=10 flags=0x0 method=0 time=<masked> crc=0x0 csize=0 usize=0 extra=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 comment=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 disk=0 iattr=0x0 eattr=0x10 offset=1876
+in.xlsx!cd#0010 name="xl/theme/theme1.xml" made=0x14 need=10 flags=0x0 method=8 time=<masked> crc=0xdf309b76 csize=1569 usize=7961 extra=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 comment=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 disk=0 iattr=0x0 eattr=0x0 offset=1915
+in.xlsx!cd#0011 name="xl/styles.xml" made=0x14 need=10 flags=0x0 method=8 time=<masked> crc=0x5e803b05 csize=630 usize=1539 extra=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 comment=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 disk=0 iattr=0x0 eattr=0x0 offset=3533
+in.xlsx!cd#0012 name="docProps/" made=0x14 need=10 flags=0x0 method=0 time=<masked> crc=0x0 csize=0 usize=0 extra=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 comment=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 disk=0 iattr=0x0 eattr=0x10 offset=4206
+in.xlsx!cd#0013 name="docProps/app.xml" made=0x14 need=10 flags=0x0 method=8 time=<masked> crc=0x8ed8f77a csize=387 usize=804 extra=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 comment=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 disk=0 iattr=0x0 eattr=0x0 offset=4245
+in.xlsx!cd#0014 name="docProps/core.xml" made=0x14 need=10 flags=0x0 method=8 time=<masked> crc=<masked> csize=<masked> usize=<masked> extra=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 comment=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 disk=0 iattr=0x0 eattr=0x0 offset=4678
+in.xlsx!cd#0015 name="xl/workbook.xml" made=0x14 need=10 flags=0x0 method=8 time=<masked> crc=0x12ac888e csize=347 usize=626 extra=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 comment=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 disk=0 iattr=0x0 eattr=0x0 offset=4725
+in.xlsx!eocd disk=0 cdDisk=0 entriesHere=16 entries=16 cdSize=966 cdOffset=5117 comment=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+in.xlsx!local#0000 name==cd need=10 flags=0x0 method=8 time=<masked> crc=0x9c0db91 csize=345 usize=1264 extra=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 data=345:1e05d7bd7b04a1db2ea486009e4bdddbe3224b0b4406261fdb9669c501672d97 content=1264:0ee6278b34e013e933862925f7cc8fbfa34529af82df0b64f7e7de9d8e31084e descriptor=none
+in.xlsx!local#0001 name==cd need=10 flags=0x0 method=0 time=<masked> crc=0x0 csize=0 usize=0 extra=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 data=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 content=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 descriptor=none
+in.xlsx!local#0002 name==cd need=10 flags=0x0 method=8 time=<masked> crc=0xda499ff2 csize=233 usize=587 extra=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 data=233:5ad7f61fcb29f78ed338931577f98325fc40259c1b4adbb8bd09f94688b02c0c content=587:1285b20099c64699001f9d90ea040ca1c177fa99bc3ae8a841128874820f01a4 descriptor=none
+in.xlsx!local#0003 name==cd need=10 flags=0x0 method=0 time=<masked> crc=0x0 csize=0 usize=0 extra=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 data=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 content=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 descriptor=none
+in.xlsx!local#0004 name==cd need=10 flags=0x0 method=0 time=<masked> crc=0x0 csize=0 usize=0 extra=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 data=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 content=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 descriptor=none
+in.xlsx!local#0005 name==cd need=10 flags=0x0 method=8 time=<masked> crc=0x56b12484 csize=233 usize=697 extra=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 data=233:b3a6bec70cec13a628181a9a857f5b1c2fb101bcdcb37cf15d1d4dd228c94240 content=697:db152538ca9d0a12609bf550b2577971a880d45d8ba0799dfe277871531bb3b1 descriptor=none
+in.xlsx!local#0006 name==cd need=10 flags=0x0 method=0 time=<masked> crc=0x0 csize=0 usize=0 extra=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 data=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 content=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 descriptor=none
+in.xlsx!local#0007 name==cd need=10 flags=0x0 method=8 time=<masked> crc=0x164f6293 csize=492 usize=1068 extra=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 data=492:822cf16aae682e13b56b573d47162b0d19feab963cf7a0b3c8c10b8c313fb85f content=1068:96a293dca7217643fd2534edba56758199ddf8774575e649cd6242d174ae2671 descriptor=none
+in.xlsx!local#0008 name==cd need=10 flags=0x0 method=8 time=<masked> crc=0x47b51438 csize=171 usize=246 extra=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 data=171:d7c9456af6320bdab392ada608d5787f28d080f6546a95bb4358f7a9b115d87f content=246:2cc860482e908f45ed5c3c13c1390c484b6a7a606be37c68ed248c62c4bd0e35 descriptor=none
+in.xlsx!local#0009 name==cd need=10 flags=0x0 method=0 time=<masked> crc=0x0 csize=0 usize=0 extra=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 data=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 content=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 descriptor=none
+in.xlsx!local#0010 name==cd need=10 flags=0x0 method=8 time=<masked> crc=0xdf309b76 csize=1569 usize=7961 extra=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 data=1569:d97ac6916c0620e129e391dca660709e5ae7dd4017985df54e1284968c167491 content=7961:f857ef82e4c0e273a16e5efcf5cb12ff7a9943851cbdbd992cd2722616b271ed descriptor=none
+in.xlsx!local#0011 name==cd need=10 flags=0x0 method=8 time=<masked> crc=0x5e803b05 csize=630 usize=1539 extra=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 data=630:a3df2b8a6a5a4a8cc637567d998289fb41cf68128992bce4e7506f9eb0747a27 content=1539:b162294abd5acb68586c0433eae4f5c97480787c08dda49d1fa145f3b7b0a692 descriptor=none
+in.xlsx!local#0012 name==cd need=10 flags=0x0 method=0 time=<masked> crc=0x0 csize=0 usize=0 extra=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 data=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 content=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 descriptor=none
+in.xlsx!local#0013 name==cd need=10 flags=0x0 method=8 time=<masked> crc=0x8ed8f77a csize=387 usize=804 extra=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 data=387:7555958dac21dfe584ec5f07e524ffe12cbc0b92bff6edca680986ffba919c75 content=804:351686dafc92b804882bc4a5b2b5d8e61a218ddeeba980588aa6a93659084e5a descriptor=none
+in.xlsx!local#0014 name==cd need=10 flags=0x0 method=8 time=<masked> crc=<masked> csize=<masked> usize=<masked> extra=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 data=<masked> content=masked-times:792e3aef103f422afdf0d049ae13527118d6ee0fd2b91a5c972616e5927b2fd0 descriptor=none
+in.xlsx!local#0015 name==cd need=10 flags=0x0 method=8 time=<masked> crc=0x12ac888e csize=347 usize=626 extra=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 data=347:7a15ca3ec5d162663b8f055fd478b357641d49f8fd74c09da1cd8728996c897a content=626:f034bd45edb557b11f3452e6732994cd2636bbd3dfb30d687c466f0ad47bf049 descriptor=none
 `,
   },
   'c-csv-read': {
@@ -119,9 +136,13 @@ in.xlsx!xl/worksheets/sheet1.xml method 8 sha256 96a293dca7217643fd2534edba56758
     stdout: `close, then listing threw Error [ENOENT]: ENOENT: no such file or directory, scandir '/tmp/sc-unzip-stored/unz'
 `,
     stderr: '',
-    output: `a.zip!a.txt method 0 sha256 b53a397c07aa67b8e768b08b36a85531ab0c44342199ce5e15c7fd53fafc7114
-a.zip!dir/ method 0 dir
-a.zip!dir/b.txt method 0 sha256 12fd37d78287b8f1a9a1837ceb096dbe75bf1591666ca996b0baf1cb715f90b9
+    output: `a.zip!cd#0000 name="a.txt" made=0x14 need=10 flags=0x0 method=0 time=<masked> crc=0x7811f98b csize=9890 usize=9890 extra=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 comment=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 disk=0 iattr=0x0 eattr=0x0 offset=0
+a.zip!cd#0001 name="dir/" made=0x14 need=10 flags=0x0 method=0 time=<masked> crc=0x0 csize=0 usize=0 extra=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 comment=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 disk=0 iattr=0x0 eattr=0x10 offset=9925
+a.zip!cd#0002 name="dir/b.txt" made=0x14 need=10 flags=0x0 method=0 time=<masked> crc=0x225e88ee csize=31411 usize=31411 extra=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 comment=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 disk=0 iattr=0x0 eattr=0x0 offset=9959
+a.zip!eocd disk=0 cdDisk=0 entriesHere=3 entries=3 cdSize=156 cdOffset=41409 comment=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+a.zip!local#0000 name==cd need=10 flags=0x0 method=0 time=<masked> crc=0x7811f98b csize=9890 usize=9890 extra=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 data=9890:eb06cb57b0a7944a5fdd77b42dc87f454b57a87c6c11d32a10edcd710d9d3d03 content=9890:eb06cb57b0a7944a5fdd77b42dc87f454b57a87c6c11d32a10edcd710d9d3d03 descriptor=none
+a.zip!local#0001 name==cd need=10 flags=0x0 method=0 time=<masked> crc=0x0 csize=0 usize=0 extra=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 data=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 content=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 descriptor=none
+a.zip!local#0002 name==cd need=10 flags=0x0 method=0 time=<masked> crc=0x225e88ee csize=31411 usize=31411 extra=0:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 data=31411:0f882365d720e9c4fc399ff41f81728abe2196760810a9da2f7913759d05207b content=31411:0f882365d720e9c4fc399ff41f81728abe2196760810a9da2f7913759d05207b descriptor=none
 `,
   },
   'c-for-await': {

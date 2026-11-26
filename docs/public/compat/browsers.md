@@ -43,7 +43,8 @@ native detached getter`. `packages/runtime-js/src/internal/message-port-ref.ts:1
 [Finding](../../backlog/runtime-js/chromium108-workbench-owner-arraybuffer-detached.md). The
 computed floors above are not moved: the read is unguarded product code, not an accepted binding
 (ADR-0469: a floor moves with executed evidence or a landed change plus its guard). Which other
-modes, engines and versions it reaches is unmeasured.
+modes, engines and versions it reaches is unmeasured. `(inferred)` on `❌108 owner-boot` (COI / persistent): not run; the failing read is in the owner's
+startup, which comes before and does not depend on the persistence choice.
 
 Bindings: clone = `structuredClone`; modules = module Workers; decompress =
 `DecompressionStream`; writable = `FileSystemFileHandle.createWritable`; sync OPFS =
