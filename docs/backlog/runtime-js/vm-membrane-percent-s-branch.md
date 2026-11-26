@@ -38,6 +38,11 @@ vm (`ensureVmEngineReady` not preloaded). Compat modules.md "`util.format('%s')`
 `node:vm` value" ⚠️. Neighbour: `runtime-js/vm-quickjs-seed-readonly-and-brand` (membrane
 brand), not a duplicate.
 
+Same membrane, a brand check (PR #462 review n5, verified in-process 2026-11-26):
+`new StringDecoder('hex').write(vm.runInNewContext('new DataView(new Uint8Array([2,3]).buffer)'))`
+→ Node `0203`, rifty `ERR_INVALID_ARG_TYPE … Received an instance of DataView` (the membrane's
+`DataView` is no view: `ArrayBuffer.isView` false); a vm `Uint8Array` decodes as Node.
+
 ## Challenge
 
 challenge: 2026-11-25 — finding capture; no premise critic (README §Challenge)
