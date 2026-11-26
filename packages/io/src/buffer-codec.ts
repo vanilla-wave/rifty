@@ -32,7 +32,10 @@ export type CanonicalEncoding =
   | 'base64url'
   | 'hex';
 
-const toLower = (s: unknown): string => String.prototype.toLowerCase.call(s);
+// Captured at load: a guest's `String.prototype.toLowerCase = …` must not rename encodings (Node: primordial).
+const { apply } = Reflect;
+const strToLower = String.prototype.toLowerCase;
+const toLower = (s: unknown): string => apply(strToLower, s, []);
 
 /**
  * Node v24 `normalizeEncoding` + `slowCases` (lib/internal/util.js), verbatim:

@@ -26,6 +26,18 @@ const kEncodingField = 6;
 const kSize = 7;
 // `internalBinding('string_decoder').encodings`, the `kEncodingField` values.
 const ENCODINGS = ['ascii', 'utf8', 'base64', 'utf16le', 'latin1', 'hex', 'buffer', 'base64url'];
+// `encodingsMap`: a plain lookup, no prototype methods a guest can replace.
+const ENCODING_FIELD: Record<string, number> = {
+  __proto__: null,
+  ascii: 0,
+  utf8: 1,
+  base64: 2,
+  utf16le: 3,
+  latin1: 4,
+  hex: 5,
+  buffer: 6,
+  base64url: 7,
+} as unknown as Record<string, number>;
 const UTF8 = 1;
 const BASE64 = 2;
 const UCS2 = 3;
@@ -61,28 +73,32 @@ const dvBuffer = getter(DataView.prototype, 'buffer');
 const dvByteOffset = getter(DataView.prototype, 'byteOffset');
 const dvByteLength = getter(DataView.prototype, 'byteLength');
 const isView = ArrayBuffer.isView;
+const { apply } = Reflect;
+const read = (get: (this: unknown) => unknown, view: unknown): unknown => apply(get, view, []);
 const taSubarray = (TypedArrayProto as { subarray: (s: number, e: number) => Uint8Array }).subarray;
 
-/** A fresh `Uint8Array` over `view`'s bytes from `start`, `length` long (default: to the end). */
-/** A detached or out-of-bounds view reads as no bytes, as Node's (`%TypedArray%` getters give 0, `DataView`'s throw). */
+/**
+ * A fresh `Uint8Array` over `view`'s bytes from `start`, `length` long (default: to the end). A detached
+ * or out-of-bounds view reads as no bytes, as Node's (`%TypedArray%` getters give 0, `DataView`'s throw).
+ */
 function bytesOf(view: ArrayBufferView, start = 0, length?: number): Uint8Array {
-  const typed = taTag.call(view) !== undefined;
+  const typed = read(taTag, view) !== undefined;
   let size: number;
   let offset: number;
   if (typed) {
-    size = taByteLength.call(view) as number;
-    offset = taByteOffset.call(view) as number;
+    size = read(taByteLength, view) as number;
+    offset = read(taByteOffset, view) as number;
   } else {
     try {
-      size = dvByteLength.call(view) as number;
-      offset = dvByteOffset.call(view) as number;
+      size = read(dvByteLength, view) as number;
+      offset = read(dvByteOffset, view) as number;
     } catch {
       return new U8(0);
     }
   }
   const n = length ?? size - start;
   if (n === 0) return new U8(0);
-  const buffer = (typed ? taBuffer : dvBuffer).call(view) as ArrayBuffer;
+  const buffer = read(typed ? taBuffer : dvBuffer, view) as ArrayBuffer;
   return new U8(buffer, offset + start, n);
 }
 
@@ -103,7 +119,7 @@ function decode(state: Uint8Array, view: ArrayBufferView): string {
   let missing = state[kMissingBytes] as number;
   let buffered = state[kBufferedBytes] as number;
   let off = 0;
-  let nread = taByteLength.call(data) as number;
+  let nread = read(taByteLength, data) as number;
   let prepend: string | undefined;
   if (missing > 0) {
     if (enc === UTF8) {
@@ -119,7 +135,7 @@ function decode(state: Uint8Array, view: ArrayBufferView): string {
         }
       }
     }
-    const found = Math.min(nread, missing);
+    const found = nread < missing ? nread : missing;
     copyInto(state, buffered, data, off, found);
     off += found;
     nread -= found;
@@ -203,16 +219,18 @@ function flush(state: Uint8Array): string {
 }
 
 function invalidThis(): TypeError {
-  return Object.assign(new TypeError('Value of "this" must be of type StringDecoder'), {
-    code: 'ERR_INVALID_THIS',
-  });
+  const error = new TypeError('Value of "this" must be of type StringDecoder') as TypeError & {
+    code: string;
+  };
+  error.code = 'ERR_INVALID_THIS';
+  return error;
 }
 
 export function StringDecoder(this: DecoderThis, encoding?: unknown): void {
   this.encoding = normalizeEncoding(encoding) as CanonicalEncoding;
   if (this.encoding === undefined) throw unknownEncodingError(encoding);
   this[kNativeDecoder] = Buffer.alloc(kSize);
-  this[kNativeDecoder][kEncodingField] = ENCODINGS.indexOf(this.encoding);
+  this[kNativeDecoder][kEncodingField] = ENCODING_FIELD[this.encoding] as number;
 }
 
 StringDecoder.prototype.write = function write(this: DecoderThis, buf: unknown): string {
@@ -246,11 +264,10 @@ Object.defineProperties(StringDecoder.prototype, {
     configurable: true,
     enumerable: true,
     get(this: DecoderThis) {
-      return taSubarray.call(
-        this[kNativeDecoder],
+      return apply(taSubarray, this[kNativeDecoder], [
         kIncompleteCharactersStart,
         kIncompleteCharactersEnd,
-      );
+      ]);
     },
   },
   lastNeed: {

@@ -175,7 +175,7 @@ const c: ParityCase = {
       }
     }));
     // detached and out-of-bounds views read as empty (Node: no throw)
-    const detached = (make) => { const ab = new ArrayBuffer(4); new Uint8Array(ab).set([0x41, 0xe2, 0x82, 0xac]); const v = make(ab); structuredClone(ab, { transfer: [ab] }); return v; };
+    const detached = (make) => { const ab = new ArrayBuffer(4); new Uint8Array(ab).set([0x41, 0xe2, 0x82, 0xac]); const v = make(ab); ab.transfer(); return v; };
     const resized = (make, to) => { const ab = new ArrayBuffer(8, { maxByteLength: 16 }); new Uint8Array(ab).set([0x41, 0x42, 0xe2, 0x82, 0xac, 0x43, 0x44, 0x45]); const v = make(ab); ab.resize(to); return v; };
     for (const [label, make] of [
       ['detached Uint8Array', () => detached((ab) => new Uint8Array(ab))],
@@ -194,6 +194,31 @@ const c: ParityCase = {
           return a + ' ' + units(d.end(make())) + '@' + st(d);
         }));
       }
+    }
+    // guest-replaced intrinsics do not reach the decoder (Node: primordials / native)
+    const intrinsics = [
+      ['Array.prototype.indexOf', Array.prototype, 'indexOf', () => -1],
+      ['String.prototype.toLowerCase', String.prototype, 'toLowerCase', () => 'nope'],
+      ['Math.min', Math, 'min', () => 0],
+      ['Object.assign', Object, 'assign', () => ({})],
+      ['Function.prototype.call', Function.prototype, 'call', () => 'P'],
+    ];
+    for (const [label, target, key, fake] of intrinsics) {
+      const inputs = [Buffer.from('hi'), Buffer.from([0xe2, 0x82]), Buffer.from([0xac, 0x41])];
+      const saved = target[key];
+      let out;
+      target[key] = fake;
+      try {
+        const a = new StringDecoder('UTF-8');
+        const b = new StringDecoder('Hex');
+        out = [a.write(inputs[0]), a.write(inputs[1]), a.write(inputs[2]), a.end(), a.lastNeed, b.write(inputs[0]), b.encoding];
+        try { StringDecoder.prototype.write.call({}, inputs[0]); } catch (e) { out.push(e.code + ':' + e.message); }
+      } catch (e) {
+        out = ['threw', e.name, e.code, e.message];
+      } finally {
+        target[key] = saved;
+      }
+      console.log('patched', label, out.map(String).join(' '));
     }
     console.log('patched Buffer.isEncoding', tryit(() => {
       const saved = Buffer.isEncoding;
