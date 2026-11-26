@@ -43,9 +43,11 @@ async function runOne(file: string): Promise<CaseRun> {
   const testCase = mod.default;
   try {
     // These modes temporarily install an isolated rifty NodeProcess on the
-    // shared harness global. Run the native oracle first so it can never
-    // observe the replacement while selecting/spawning the real Node process.
+    // shared harness global (or patch its intrinsics: `patchesSharedRealm`).
+    // Run the native oracle first so it can never observe the replacement
+    // while selecting/spawning or reading the real Node process.
     const installsProcess =
+      testCase.patchesSharedRealm === true ||
       testCase.kind === 'exec-sync' ||
       testCase.kind === 'worker-env' ||
       testCase.kind === 'child-worker' ||

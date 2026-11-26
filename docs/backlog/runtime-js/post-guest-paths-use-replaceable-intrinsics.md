@@ -56,6 +56,28 @@ throw; a `-1` getter gives `-1` and `os.cpus().length` 0 (Node `12 12`, its
 `os` reads the binding); `5e6` ends the run `termination: 'memory'`. On the
 browser hosts the same read hits the browser's `WorkerNavigator`.
 
+Decode path (PR #462 review n3, 2026-11-26): `string_decoder` captures its own intrinsics
+(PR #462: view getters, `Reflect.apply`, the encoding table, `toLowerCase` in `normalizeEncoding`),
+but the strings come from `@riftydev/io`'s codec through live ones (on `main` too): a guest's
+`TextDecoder.prototype.decode = …` changes every utf8 decode (`Buffer#toString`, `string_decoder`,
+`setEncoding`); utf16le/latin1/ascii/base64 build with `String.fromCharCode.apply`, `Math.min`,
+`new Array`; hex with `Number.prototype.toString`/`padStart`; base64 with `btoa`/`String.prototype.replace`.
+In the COI Workbench the realm's `TextDecoder.prototype.decode` is rifty's shared-memory wrapper
+(`ipc/worker-realm-compat.ts`) calling `orig.call`: with `Function.prototype.call` replaced, the
+utf8 rows of parity `string_decoder/encodings-split` «patched Function.prototype.call» print `P`
+there (in-process, SDK, isolate = Node). `ERR_INVALID_ARG_TYPE` (`internal/node-received.ts`) builds
+with `Object.assign`, `Object.is`, `JSON.stringify`.
+
+Store transport on the browser hosts (PR #469, measured 2026-11-26 with
+`tools/node-parity-runner/cases/fs/write-view-bytes-patched-intrinsics.case.ts` as a `node <file>`
+program; in-process and isolate equal Node): COI Workbench — a guest that patched
+`%TypedArray%.prototype.subarray` or `byteLength`, or replaced global `Uint8Array`/`DataView`/`ArrayBuffer`,
+makes the next write fail inside the sync-rpc transport (`sync-rpc call 'fs.writeChunk' failed:
+decodeReply: unknown frame discriminator 0x5`, `offset is out of bounds`, `guest Uint8Array called`);
+no-COI SDK — the run passes but OPFS write-through fails afterwards (`SandboxPersistenceError: OPFS
+persistence failed (7 unhealed): … guest Uint8Array called; … guest DataView called`). Node writes the
+bytes. Compat: `fs.md` row on write data.
+
 ## Challenge
 
 challenge: 2026-11-18 — finding capture; no premise critic (README §Challenge)

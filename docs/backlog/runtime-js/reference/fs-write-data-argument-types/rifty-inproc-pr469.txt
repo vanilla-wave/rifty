@@ -1,0 +1,90 @@
+writeFileSync 123 ok size 0
+appendFileSync 123 ok size 0
+writeFileSync r+ 123 throws RangeError undefined offset is out of bounds size 2
+writeSync 123 throws TypeError undefined data must be a string or Uint8Array size 0
+writeFile 123 ok size 0
+appendFile 123 throws TypeError undefined fs.appendFile is not a function size ENOENT
+write 123 cb err TypeError undefined data must be a string or Uint8Array size 0
+promises.writeFile 123 ok size 0
+promises.appendFile 123 ok size 0
+writeFileSync null ok size undefined
+appendFileSync null throws TypeError undefined Cannot read properties of null (reading 'length') size 0
+writeFileSync r+ null throws TypeError undefined Cannot read properties of null (reading 'length') size 2
+writeSync null throws TypeError undefined data must be a string or Uint8Array size 0
+writeFile null ok size undefined
+appendFile null throws TypeError undefined fs.appendFile is not a function size ENOENT
+write null cb err TypeError undefined data must be a string or Uint8Array size 0
+promises.writeFile null ok size undefined
+promises.appendFile null cb err TypeError undefined Cannot read properties of null (reading 'length') size 0
+writeFileSync undefined ok size undefined
+appendFileSync undefined throws TypeError undefined Cannot read properties of undefined (reading 'length') size 0
+writeFileSync r+ undefined throws TypeError undefined Cannot read properties of undefined (reading 'length') size 2
+writeSync undefined throws TypeError undefined data must be a string or Uint8Array size 0
+writeFile undefined ok size undefined
+appendFile undefined throws TypeError undefined fs.appendFile is not a function size ENOENT
+write undefined cb err TypeError undefined data must be a string or Uint8Array size 0
+promises.writeFile undefined ok size undefined
+promises.appendFile undefined cb err TypeError undefined Cannot read properties of undefined (reading 'length') size 0
+writeFileSync [] ok size 0
+appendFileSync [] ok size 0
+writeFileSync r+ [] ok size 2
+writeSync [] throws TypeError undefined data must be a string or Uint8Array size 0
+writeFile [] ok size 0
+appendFile [] throws TypeError undefined fs.appendFile is not a function size ENOENT
+write [] cb err TypeError undefined data must be a string or Uint8Array size 0
+promises.writeFile [] ok size 0
+promises.appendFile [] ok size 0
+writeFileSync [1,2,3] ok size 3
+appendFileSync [1,2,3] ok size 3
+writeFileSync r+ [1,2,3] ok size 3
+writeSync [1,2,3] throws TypeError undefined data must be a string or Uint8Array size 0
+writeFile [1,2,3] ok size 3
+appendFile [1,2,3] throws TypeError undefined fs.appendFile is not a function size ENOENT
+write [1,2,3] cb err TypeError undefined data must be a string or Uint8Array size 0
+promises.writeFile [1,2,3] ok size 3
+promises.appendFile [1,2,3] ok size 3
+writeFileSync {} ok size 0
+appendFileSync {} ok size 0
+writeFileSync r+ {} ok size 2
+writeSync {} throws TypeError undefined data must be a string or Uint8Array size 0
+writeFile {} ok size 0
+appendFile {} throws TypeError undefined fs.appendFile is not a function size ENOENT
+write {} cb err TypeError undefined data must be a string or Uint8Array size 0
+promises.writeFile {} ok size 0
+promises.appendFile {} ok size 0
+writeFileSync toString obj ok size 0
+appendFileSync toString obj ok size 0
+writeFileSync r+ toString obj ok size 2
+writeSync toString obj throws TypeError undefined data must be a string or Uint8Array size 0
+writeFile toString obj ok size 0
+appendFile toString obj throws TypeError undefined fs.appendFile is not a function size ENOENT
+write toString obj cb err TypeError undefined data must be a string or Uint8Array size 0
+promises.writeFile toString obj ok size 0
+promises.appendFile toString obj ok size 0
+writeFileSync ArrayBuffer throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of ArrayBuffer size ENOENT
+appendFileSync ArrayBuffer throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of ArrayBuffer size ENOENT
+writeFileSync r+ ArrayBuffer throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of ArrayBuffer size 2
+writeSync ArrayBuffer throws TypeError undefined data must be a string or Uint8Array size 0
+writeFile ArrayBuffer cb err TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of ArrayBuffer size ENOENT
+appendFile ArrayBuffer throws TypeError undefined fs.appendFile is not a function size ENOENT
+write ArrayBuffer cb err TypeError undefined data must be a string or Uint8Array size 0
+promises.writeFile ArrayBuffer cb err TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of ArrayBuffer size ENOENT
+promises.appendFile ArrayBuffer cb err TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of ArrayBuffer size ENOENT
+writeFileSync SharedArrayBuffer throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of SharedArrayBuffer size ENOENT
+appendFileSync SharedArrayBuffer throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of SharedArrayBuffer size ENOENT
+writeFileSync r+ SharedArrayBuffer throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of SharedArrayBuffer size 2
+writeSync SharedArrayBuffer throws TypeError undefined data must be a string or Uint8Array size 0
+writeFile SharedArrayBuffer cb err TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of SharedArrayBuffer size ENOENT
+appendFile SharedArrayBuffer throws TypeError undefined fs.appendFile is not a function size ENOENT
+write SharedArrayBuffer cb err TypeError undefined data must be a string or Uint8Array size 0
+promises.writeFile SharedArrayBuffer cb err TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of SharedArrayBuffer size ENOENT
+promises.appendFile SharedArrayBuffer cb err TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of SharedArrayBuffer size ENOENT
+writeFileSync new String ok size 1
+appendFileSync new String ok size 1
+writeFileSync r+ new String ok size 2
+writeSync new String throws TypeError undefined data must be a string or Uint8Array size 0
+writeFile new String ok size 1
+appendFile new String throws TypeError undefined fs.appendFile is not a function size ENOENT
+write new String cb err TypeError undefined data must be a string or Uint8Array size 0
+promises.writeFile new String ok size 1
+promises.appendFile new String ok size 1

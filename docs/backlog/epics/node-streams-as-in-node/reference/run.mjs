@@ -37,8 +37,10 @@ const HOOKS = join(
   repo,
   'docs/backlog/runtime-js/reference/stream-destroy-construct-hooks/matrix.cjs',
 );
-// PROGRAMS: another directory of programs (e.g. a sibling probe), run the same way.
-const progDir = process.env.PROGRAMS ?? join(here, 'programs');
+// PROGRAMS: another directory of programs (e.g. a sibling probe), run the same way. Default: the
+// carrier's programs, their one source (programs/README.md).
+const progDir =
+  process.env.PROGRAMS ?? join(repo, 'packages/isolate-host/tests/fixtures/streams-scenario');
 const programs = [
   ...readdirSync(progDir)
     .filter((n) => n.endsWith('.cjs'))

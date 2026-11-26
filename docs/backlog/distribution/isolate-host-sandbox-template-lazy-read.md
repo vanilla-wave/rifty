@@ -3,7 +3,7 @@ area: distribution
 status: draft
 title: A sandbox run reads template files on demand from the worker instead of copying the whole template into its isolate
 created: 2026-11-25
-why: The template goal copies the template into every run's isolate (user 2026-11-25), so a run pays isolate memory and latency growing with the template (four-library template, extrapolated from probe L, not measured: ~90–100 MiB, ~+50 ms per `exec`); reading template files lazily makes both independent of it (requirements §3).
+why: Every run's isolate holds the whole template — today as the sandbox's own files (template goal, user 2026-11-25), under the deferred layer as a copy (ADR-0572 F1 (a)) — so a run pays isolate memory and latency growing with the template (four-library template today: floor ~220 MiB, ~0.6 s per `exec`); reading template files lazily makes both independent of it (requirements §3).
 sources: [/Users/vanilla-wave/ai/rifty-requirements/2026-11-24-server-sandbox-requirements.md §3, ADR-0572, docs/backlog/distribution/reference/isolate-host-sandbox-template-probes/README.md]
 code: [packages/isolate-guest/src/guest/entry.ts, packages/isolate-host/src/child/main.ts]
 ---
@@ -12,7 +12,8 @@ code: [packages/isolate-guest/src/guest/entry.ts, packages/isolate-host/src/chil
 
 User, 2026-11-25, «ок» to: «сейчас копировать шаблон в изолят … Ленивое чтение записать в backlog
 с поводом взяться: память на одновременный прогон становится узким местом или шаблон заметно
-растёт» (template goal Decisions).
+растёт» (ADR-0572 §Forks F1; since 2026-11-25 F1 applies to the deferred layer,
+`distribution/isolate-host-sandbox-template-layer`, which this item builds on).
 
 Measured (probe L, arms `views` = materialize vs `lazy`, T95 = 23 654 files / 88.8 MB): `exec`
 190 vs 80 ms (semver), 454 vs 406 ms (pdf-lib); isolate floor 123 vs 19–23 MiB; T1 (1 MB) equal.
@@ -30,4 +31,4 @@ consumer's bottleneck, or the template grows well past the four libraries.
 
 ## Challenge
 
-challenge: 2026-11-25 — none yet (user-deferred capture; premise critic of 2026-11-24, template goal `## Challenge`)
+challenge: 2026-11-25 — none yet (user-deferred capture; premise critic of 2026-11-24, ADR-0572 §Forks)

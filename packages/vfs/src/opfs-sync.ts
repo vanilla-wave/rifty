@@ -11,7 +11,7 @@
  */
 
 import { NotImplementedError, VfsError } from './errors.ts';
-import type { FsSync } from './fs-sync.ts';
+import { type FsSync, sliceReadRange } from './fs-sync.ts';
 import {
   type FlushProgressSnapshot,
   OpfsDrainScheduler,
@@ -515,6 +515,11 @@ export class OpfsFsSync implements FsSync {
     }
     if (entry.kind === 'dir') throw new VfsError('EISDIR', path);
     return this.readCachedContent(normalized, path);
+  }
+
+  /** ADR-0576: a view of the authoritative cache; the disk lags it until write-through drains. */
+  readFileRangeSync(path: string, position: number, length: number): Uint8Array {
+    return sliceReadRange(this.readFileBytesSync(path), position, length);
   }
 
   private readCachedContent(normalized: string, reportPath: string): Uint8Array {

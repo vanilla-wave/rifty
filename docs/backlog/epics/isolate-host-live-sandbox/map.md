@@ -2,9 +2,9 @@
 
 ## Items
 
-1. `distribution/isolate-host-sandbox-capture-outside-guest-realm` — owned by
-   `epics/isolate-host-sandbox-template` (its map item 6, I7) since 2026-11-25; this goal closes
-   there, when that unit lands (or the user narrows I1).
+1. `distribution/isolate-host-sandbox-capture-outside-guest-realm` — this goal's again since
+   2026-11-25 (the template goal's simple form rewrites no capture); this goal closes when it lands
+   (or the user narrows I1).
 
 ## Open questions
 
@@ -20,7 +20,7 @@ None: the `owner: user` question on behavior divergences was answered 2026-11-23
 
 ## Out of scope
 
-- The library template (`createSandbox({ template })` → `NotImplementedError('isolate-host.sandbox-template')`).
+- The library template: the template goal (closed, PR #460).
 - Web API shims (`URL`, `structuredClone`, web streams, `AbortController`, `EventTarget`): loud ceilings as in `runCode`; their own ROADMAP direction.
 - ESM: an ESM entry or module (`.mjs`, `"type": "module"`, ESM syntax in a typeless `.js`) → `NotImplementedError('isolate-host.esm')` + compat ❌.
 - `exec` options `env`, `cwd`, `stdin` → `NotImplementedError('isolate-host.sandbox-exec-<option>')`; shell syntax (the path is one file path, never parsed).

@@ -7,23 +7,24 @@ branch changes only docs and a compat inventory generator). Chromium results nam
 
 ## Items
 
-Status (the manager, round 4): **ready** — 0, 1, 2, 3, 4, 4b (none depends on route B or the budget).
+Status (the manager, round 4): **ready** — 0, 2, 3, 4 (none depends on route B or the budget).
+**Done** — 1 (PR #462), 4b (PR #457).
 **Draft** — 4c, 5, P, 7, AL, 8a, 8b, 8c, 9r, 9w; each carries «Open findings (review round 4)»
 verbatim, closed when the unit is taken into work.
 
-- **0** `runtime-js/node-streams-acceptance-carrier` — **carrier**. In Workbench it lays the exceljs
-  closure out in the guest's `/tmp` through `packages/isolate-host/tests/closure-files.ts` and the zlib
-  carrier's `serveSteps`/`UNPACK`/`RUNNER` (PR #453). That takes 11–12 s per program, so there is no
-  edge 0 ← P (`results/chromium-c/`). It runs the 10 `c-*` programs (files
-  compared by content) as cases against live Node, in the isolate host and in Chromium on both
-  browser hosts (Workbench, SDK; Chromium 108 is the tier floor, ADR-0469). It also runs the
-  m-matrices in Chromium. It comes first, before any code, and has one owner for the Chromium line.
-  → I8.
+- **0** `runtime-js/node-streams-acceptance-carrier` — **done**: PR #467. The 10 `c-*` programs on the
+  isolate host (`packages/isolate-host/tests/streams-scenario.test.ts`), and those plus `m1`–`m10`,
+  `w1`, `b1` on Workbench and SDK (`tests/{browser-unit,no-coi}/streams-scenario.spec.ts`), each
+  pinning today's whole outcome against live Node and naming its owners. Programs' one source:
+  `packages/isolate-host/tests/fixtures/streams-scenario/`. Declared skips, tied to 4c by markers:
+  `c-transform-big` on Workbench, the `m5` 16 MiB WriteStream row on Workbench and SDK. Chromium
+  108: SDK import and Workbench owner boot fail by name (`runtime-js/chromium108-sdk-sync-wasm-import`,
+  `runtime-js/chromium108-workbench-owner-arraybuffer-detached`). → I8.
 
 Bindings and fs platform. Each is a parity fix that holds without the core, with its own proof
 against Node:
 
-- **1** `runtime-js/string-decoder-node-encodings` — `string_decoder` latin1/ucs2/utf16le/base64/hex/ascii
+- **1** ~~string-decoder-node-encodings~~ **done** (PR #462; item file deleted) — `string_decoder` latin1/ucs2/utf16le/base64/hex/ascii
   and every spelling Node accepts. An unknown encoding → `ERR_UNKNOWN_ENCODING`, not
   `NotImplementedError` (`b1`). Comes before 8 (B2: `m4` «through 'data'»). → I9.
 - **2** `runtime-js/buffer-encoding-names` — `Buffer` entry points accept every name Node's
@@ -35,7 +36,7 @@ against Node:
   interleave with them (`m4` «fs.read(fd) loop»: Node `ticks>0=true`, rifty `false`; Workbench 0 ticks
   on every fd path, `results/chromium-fd/`). A write before close lands today, so that is a guard
   row. It has its own regression row. → I10.
-- **4b** `runtime-js/fs-fd-read-by-range` — positional fd reads move only the range. In Workbench
+- **4b** `runtime-js/fs-fd-read-by-range` — **done**: PR #457, ADR-0576, after-measurements `results/chromium-fd-4b/`. Positional fd reads move only the range. In Workbench
   today each 64 KiB call moves the whole file: 16 MiB in 18.5–26 s, against Node's 3 ms.
   Per host:
   - in-process and isolate (memory) read linearly already (a view, no copy);
@@ -353,7 +354,7 @@ Measured on route B in-process (`results/route-b-s5-consumers.txt`, cases `route
 Not measured on route B yet: `ClientRequest`, `process.stdout` (parity `stream/pipe-process-stdio*`),
 the upgrade socket. These are 8b's to write.
 
-Windows between units (`programs/w1-fs-windows.cjs`, `results/w1-fs-windows.txt`). The columns are
+Windows between units (`packages/isolate-host/tests/fixtures/streams-scenario/w1-fs-windows.cjs`, `results/w1-fs-windows.txt`). The columns are
 Node, today, after 8c before 9r (`rifty-inproc-Bp8c`: Node's core with today's fs classes) and after
 9r before 9w (`rifty-inproc-Bp9r`). Each row is pinned as declared:
 

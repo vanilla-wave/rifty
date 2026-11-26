@@ -40,6 +40,9 @@ describe('path_create_directory', () => {
       readFileBytesSync: () => {
         throw new Error('unused');
       },
+      readFileRangeSync: () => {
+        throw new Error('unused');
+      },
       writeFileSync: () => {},
       readdirSync: () => [],
       mkdirSync: () => {
@@ -67,6 +70,9 @@ describe('path_create_directory', () => {
       readFileBytesSync: () => {
         throw new Error('unused');
       },
+      readFileRangeSync: () => {
+        throw new Error('unused');
+      },
       writeFileSync: () => {},
       readdirSync: () => [],
       mkdirSync: () => {
@@ -92,6 +98,9 @@ describe('path_create_directory', () => {
     setSyncMirror({
       existsSync: () => false,
       readFileBytesSync: () => {
+        throw new Error('unused');
+      },
+      readFileRangeSync: () => {
         throw new Error('unused');
       },
       writeFileSync: () => {},
@@ -123,6 +132,9 @@ describe('path_create_directory', () => {
     setSyncMirror({
       existsSync: () => false,
       readFileBytesSync: () => {
+        throw new Error('unused');
+      },
+      readFileRangeSync: () => {
         throw new Error('unused');
       },
       writeFileSync: () => {},

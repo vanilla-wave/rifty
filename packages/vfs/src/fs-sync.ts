@@ -18,6 +18,19 @@ import type { VfsDirent } from './types.ts';
 export interface FsSync {
   existsSync(path: string): boolean;
   readFileBytesSync(path: string): Uint8Array;
+  /**
+   * Positional read (ADR-0576): exactly bytes `[position, min(size, position +
+   * length))` of the current content, empty at/after EOF. Errors as
+   * {@link readFileBytesSync}. Read-only, valid until the store's next
+   * mutation (may be a view). `TypeError` unless both are non-negative safe
+   * integers.
+   */
+  readFileRangeSync(path: string, position: number, length: number): Uint8Array;
+  /**
+   * `data` is handed over: a store may keep it as the file's bytes
+   * (`MemoryFsSync` does, `OpfsFsSync` copies). A caller passing memory a guest
+   * still holds copies first (runtime-js `fs` does).
+   */
   writeFileSync(path: string, data: Uint8Array): void;
   /**
    * Immediate children of `path` as dirent records. Symmetric with
@@ -72,4 +85,25 @@ export interface FsSync {
    * `src === dst` (post-normalize) → no-op; dir into its own subtree → `EINVAL`.
    */
   renameSync(src: string, dst: string): void;
+}
+
+/** ADR-0576 argument check shared by every range-serving store. */
+export function assertReadRange(position: number, length: number): void {
+  if (!Number.isSafeInteger(position) || position < 0) {
+    throw new TypeError(
+      `readFileRangeSync position must be a non-negative safe integer; got ${position}`,
+    );
+  }
+  if (!Number.isSafeInteger(length) || length < 0) {
+    throw new TypeError(
+      `readFileRangeSync length must be a non-negative safe integer; got ${length}`,
+    );
+  }
+}
+
+/** `[position, position + length)` of `bytes`, clamped to EOF; a view. */
+export function sliceReadRange(bytes: Uint8Array, position: number, length: number): Uint8Array {
+  assertReadRange(position, length);
+  const start = Math.min(position, bytes.byteLength);
+  return bytes.subarray(start, Math.min(bytes.byteLength, start + length));
 }

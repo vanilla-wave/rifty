@@ -38,6 +38,17 @@ vm (`ensureVmEngineReady` not preloaded). Compat modules.md "`util.format('%s')`
 `node:vm` value" ⚠️. Neighbour: `runtime-js/vm-quickjs-seed-readonly-and-brand` (membrane
 brand), not a duplicate.
 
+Same membrane, a brand check (PR #462 review n5, verified in-process 2026-11-26):
+`new StringDecoder('hex').write(vm.runInNewContext('new DataView(new Uint8Array([2,3]).buffer)'))`
+→ Node `0203`, rifty `ERR_INVALID_ARG_TYPE … Received an instance of DataView` (the membrane's
+`DataView` is no view: `ArrayBuffer.isView` false); a vm `Uint8Array` decodes as Node.
+
+Same membrane shape in `fs` (PR #469 external review, 2026-11-26, in-process; Node v24.16.0 re-run here):
+`fs.writeFileSync(p, vm.runInNewContext('new DataView(new Uint8Array([1,2,3]).buffer, 1)'))` → Node
+writes `2,3`, rifty an empty file (the membrane value is no view: `ArrayBuffer.isView` false, copied as an
+object's elements); `vm.runInNewContext('new ArrayBuffer(3)')` as data → Node `ERR_INVALID_ARG_TYPE`,
+rifty not refused. A vm `Uint8Array` writes `1,2,3` in Node (rifty side not re-run here).
+
 ## Challenge
 
 challenge: 2026-11-25 — finding capture; no premise critic (README §Challenge)
