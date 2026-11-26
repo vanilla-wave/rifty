@@ -4,9 +4,8 @@
  * `@riftydev/runtime-js/builtins`) continue to work bit-identically.
  */
 
-import { EventEmitter } from '@riftydev/io';
+import { EventEmitter, resistingOnceOptions } from '@riftydev/io';
 import { AbortError } from '../internal/abort-error.ts';
-import { resistingOnceOptions } from '../internal/node-event-target-symbols.ts';
 import { invalidArgType } from '../internal/node-received.ts';
 
 export { EventEmitter } from '@riftydev/io';

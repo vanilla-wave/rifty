@@ -30,6 +30,7 @@ import {
 import { Buffer } from '../buffer.ts';
 import { readBuiltinUncached } from '../builtin-registry.ts';
 import { EventEmitter } from '../event-emitter.ts';
+import { resistingOnceOptions } from '../node-event-target-symbols.ts';
 import {
   type CallableStreamConstructor,
   initializeReadable,
@@ -1387,7 +1388,7 @@ export function addAbortSignal<T extends AbortableStream>(signal: AbortSignal, s
   const onAbort = (): void => {
     stream.destroy(abortError());
   };
-  signal.addEventListener('abort', onAbort, { once: true });
+  signal.addEventListener('abort', onAbort, resistingOnceOptions());
   const cleanup = (): void => {
     signal.removeEventListener('abort', onAbort);
   };
@@ -1497,7 +1498,7 @@ async function* mappedGenerator(
         if (signal.aborted) reject(abortError());
         else {
           abortListener = (): void => reject(abortError());
-          signal.addEventListener('abort', abortListener, { once: true });
+          signal.addEventListener('abort', abortListener, resistingOnceOptions());
         }
       })
     : null;

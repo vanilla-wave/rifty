@@ -19,6 +19,7 @@
  */
 
 export { NotImplementedError } from './errors.ts';
+export { bindNodeEventTargetSymbols, resistingOnceOptions } from './node-event-target-symbols.ts';
 export { EventEmitter, captureEventEmitterListenerScope } from './event-emitter.ts';
 export {
   Buffer,

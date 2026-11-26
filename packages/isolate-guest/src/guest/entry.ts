@@ -4,7 +4,7 @@
  * `runNodeEntry({kind:'eval'})` → `awaitDrain` → natural `exit()`; a
  * `RIFTY_PROCESS_EXIT` carries its code, any other throw is stderr + 1.
  */
-import { NotImplementedError } from '@riftydev/io';
+import { NotImplementedError, bindNodeEventTargetSymbols } from '@riftydev/io';
 import { awaitDrain, registerBuiltin } from '@riftydev/runtime-js';
 import nodeBuffer, { Buffer } from '@riftydev/runtime-js/builtins/buffer';
 import nodeConsole from '@riftydev/runtime-js/builtins/console';
@@ -16,7 +16,6 @@ import {
 } from '@riftydev/runtime-js/builtins/process';
 import { installTimerGlobals } from '@riftydev/runtime-js/builtins/timers';
 import {
-  bindNodeEventTargetSymbols,
   declareNoEsmLoader,
   fatalReportText,
   handleRealmUncaughtError,
