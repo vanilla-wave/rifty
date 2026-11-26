@@ -43,6 +43,8 @@
       "packages/isolate-host/tests/fixtures/text-decoder/encodings.json",
       "tools/publishing/node-blob/vendor/**",
       "packages/isolate-guest/src/guest/node-blob/generated/**",
+      "tools/publishing/node-event-target/vendor/**",
+      "packages/isolate-guest/src/guest/node-event-target/generated/**",
       "tests/wpt/fixtures/**",
       "packages/runtime-js/src/internal/generated/proxy-identity.js",
       "tools/shadow-registry/generated/**",

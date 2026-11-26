@@ -5,9 +5,16 @@ import { setImmediate } from '@riftydev/runtime-js/builtins/timers';
  * validator they throw through, the JS byte store, and the guest's own codec, inspect,
  * `DOMException`, microtask queue and immediates. Everything else is upstream's text.
  */
-import { describeReceived, inspect } from '@riftydev/runtime-js/internal';
+import { inspect } from '@riftydev/runtime-js/internal';
 import { notImplemented } from '../loud.ts';
 import { TextDecoder, TextEncoder } from '../node-encoding.ts';
+import { codes, nodeStack } from '../node-errors.ts';
+import {
+  customInspectSymbol,
+  jsTransferable,
+  kEmptyObject,
+  kEnumerableProperty,
+} from '../node-internal.ts';
 import { DOMException, queueMicrotask } from '../web-shim.ts';
 import { blobBinding } from './byte-store.ts';
 import createNodeBlob from './generated/node-blob.js';
@@ -106,199 +113,6 @@ const primordials = {
   Uint8Array,
 };
 
-// --- internal/errors: Node's `makeNodeErrorWithCode` shape and the `E()` texts these files throw ---
-const kIsNodeError = Symbol('kIsNodeError');
-const defineProperty = Object.defineProperty;
-type Message = (...args: never[]) => string;
-type ErrorBase = new (message?: string) => Error;
-const captureStackTrace = Error.captureStackTrace;
-const indexOf = String.prototype.indexOf;
-
-/** Node's stack header for its own errors (`TypeError [CODE]: message`, its prepareStackTrace);
- * the isolate formats `stack` when it is captured. */
-function nodeStack(error: Error, key: string): void {
-  const stack = (error as { stack?: unknown }).stack;
-  if (typeof stack !== 'string') return;
-  const frames = apply(indexOf, stack, ['\n    at ']) as number;
-  defineProperty(error, 'stack', {
-    value: `${error.name} [${key}]: ${error.message}${frames < 0 ? '' : apply(sliceString, stack, [frames])}`,
-    enumerable: false,
-    writable: true,
-    configurable: true,
-  });
-}
-
-/**
- * `makeNodeErrorWithCode(Base, key)`: a `%s` text (`formatted`) is passed to `super` (own keys
- * `stack, message, code`), a function's text defined after it (`stack, code, message`).
- */
-function nodeError(Base: ErrorBase, key: string, message: Message, formatted: boolean) {
-  class NodeError extends Base {
-    code = key;
-    constructor(...args: never[]) {
-      if (formatted) super(apply(message, undefined, args));
-      else super();
-      if (!formatted)
-        defineProperty(this, 'message', {
-          value: apply(message, undefined, args),
-          enumerable: false,
-          writable: true,
-          configurable: true,
-        });
-      nodeStack(this, key);
-    }
-    // Node: «a workaround for wpt tests that expect that the error constructor has a `name`
-    // property of the base class». A class cannot name an accessor `constructor`.
-    // biome-ignore lint/complexity/useLiteralKeys: see above
-    override get ['constructor']() {
-      return Base;
-    }
-    get [kIsNodeError]() {
-      return true;
-    }
-    override toString(): string {
-      return `${this.name} [${key}]: ${this.message}`;
-    }
-  }
-  return NodeError;
-}
-/** Node's `makeNodeErrorForHideStackFrame`: what a `hideStackFrames` validator throws. */
-function hideStackFramesError(Err: new (...args: never[]) => Error, Base: ErrorBase) {
-  return class HideStackFramesError extends Err {
-    // biome-ignore lint/complexity/useLiteralKeys: as `nodeError`
-    override get ['constructor']() {
-      return Base;
-    }
-  };
-}
-/**
- * `E(key, message, Base, ...otherClasses)`: `codes[key]`, `codes[key][Other.name]`, and with
- * `HideStackFramesError` among them `codes[key].HideStackFramesError`. `formatted`: a `%s` text.
- */
-function E(
-  key: string,
-  message: Message,
-  formatted: boolean,
-  Base: ErrorBase,
-  others: readonly ErrorBase[] = [],
-  hidesFrames = false,
-) {
-  const ctor = nodeError(Base, key, message, formatted) as ReturnType<typeof nodeError> &
-    Record<string, unknown>;
-  for (const Other of others) ctor[Other.name] = nodeError(Other, key, message, formatted);
-  if (hidesFrames) ctor.HideStackFramesError = hideStackFramesError(ctor, Base);
-  return ctor;
-}
-
-/** `internal/errors` `formatList`. */
-function formatList(list: readonly string[], type = 'and'): string {
-  if (list.length < 3) return list.join(` ${type} `);
-  return `${list.slice(0, -1).join(', ')}, ${type} ${list[list.length - 1]}`;
-}
-const kTypes = [
-  'string',
-  'function',
-  'number',
-  'object',
-  'Function',
-  'Object',
-  'boolean',
-  'bigint',
-  'symbol',
-];
-const classRegExp = /^[A-Z][a-zA-Z0-9]*$/;
-
-const codes = {
-  ERR_BUFFER_TOO_LARGE: E(
-    'ERR_BUFFER_TOO_LARGE',
-    (max: number) => `Cannot create a Buffer larger than ${max} bytes`,
-    true,
-    RangeError,
-  ),
-  ERR_INVALID_ARG_TYPE: E(
-    'ERR_INVALID_ARG_TYPE',
-    (name: string, expected: string | string[], actual: unknown) => {
-      let msg = 'The ';
-      if (name.endsWith(' argument')) msg += `${name} `;
-      else msg += `"${name}" ${name.includes('.') ? 'property' : 'argument'} `;
-      msg += 'must be ';
-      const types: string[] = [];
-      const instances: string[] = [];
-      const other: string[] = [];
-      for (const value of Array.isArray(expected) ? expected : [expected]) {
-        if (kTypes.includes(value)) types.push(value.toLowerCase());
-        else if (classRegExp.test(value)) instances.push(value);
-        else other.push(value);
-      }
-      if (instances.length > 0) {
-        const pos = types.indexOf('object');
-        if (pos !== -1) {
-          types.splice(pos, 1);
-          instances.push('Object');
-        }
-      }
-      if (types.length > 0) {
-        msg += `${types.length > 1 ? 'one of type' : 'of type'} ${formatList(types, 'or')}`;
-        if (instances.length > 0 || other.length > 0) msg += ' or ';
-      }
-      if (instances.length > 0) {
-        msg += `an instance of ${formatList(instances, 'or')}`;
-        if (other.length > 0) msg += ' or ';
-      }
-      if (other.length > 0) {
-        if (other.length > 1) msg += `one of ${formatList(other, 'or')}`;
-        else {
-          if ((other[0] as string).toLowerCase() !== other[0]) msg += 'an ';
-          msg += `${other[0]}`;
-        }
-      }
-      return `${msg}. ${describeReceived(actual)}`;
-    },
-    false,
-    TypeError,
-    [],
-    true,
-  ),
-  ERR_INVALID_ARG_VALUE: E(
-    'ERR_INVALID_ARG_VALUE',
-    (name: string, value: unknown, reason = 'is invalid') => {
-      let inspected = inspect(value);
-      if (inspected.length > 128) inspected = `${inspected.slice(0, 128)}...`;
-      const type = name.includes('.') ? 'property' : 'argument';
-      return `The ${type} '${name}' ${reason}. Received ${inspected}`;
-    },
-    false,
-    TypeError,
-    [RangeError],
-    true,
-  ),
-  ERR_INVALID_STATE: E(
-    'ERR_INVALID_STATE',
-    (what: string) => `Invalid state: ${what}`,
-    true,
-    Error,
-    [TypeError, RangeError],
-  ),
-  ERR_INVALID_THIS: E(
-    'ERR_INVALID_THIS',
-    (type: string) => `Value of "this" must be of type ${type}`,
-    true,
-    TypeError,
-    [],
-    true,
-  ),
-  ERR_MISSING_ARGS: E(
-    'ERR_MISSING_ARGS',
-    (...args: (string | string[])[]) => {
-      const wrap = (a: string) => `"${a}"`;
-      const names = args.map((a) => (Array.isArray(a) ? a.map(wrap).join(' or ') : wrap(a)));
-      return `The ${formatList(names)} argument${args.length > 1 ? 's' : ''} must be specified`;
-    },
-    false,
-    TypeError,
-  ),
-};
-
 // --- internal/util/types: V8 brand checks through captured getters, no guest lookup ---
 const abByteLength = getter(ArrayBuffer.prototype, 'byteLength');
 const SharedArrayBufferCtor = globalThis.SharedArrayBuffer as
@@ -325,8 +139,7 @@ const types = {
   isTypedArray: (value: unknown): boolean => apply(typedArrayTag, value, []) !== undefined,
 };
 
-const freeze = Object.freeze;
-const kEmptyObject = freeze({ __proto__: null });
+const captureStackTrace = Error.captureStackTrace;
 const readableStreamGap = (): never => {
   throw notImplemented(
     'isolate-host.ReadableStream',
@@ -359,9 +172,9 @@ const BOUND: Readonly<Record<string, unknown>> = {
     },
   },
   'internal/util': {
-    customInspectSymbol: Symbol.for('nodejs.util.inspect.custom'),
+    customInspectSymbol,
     kEmptyObject,
-    kEnumerableProperty: freeze({ __proto__: null, enumerable: true }),
+    kEnumerableProperty,
     lazyDOMException: (message: string, name: string) => new DOMException(message, name),
   },
   'internal/util/inspect': { inspect },
@@ -375,12 +188,7 @@ const BOUND: Readonly<Record<string, unknown>> = {
       return readableStreamGap();
     },
   },
-  'internal/worker/js_transferable': {
-    // Transfer marks serve `structuredClone`/`postMessage`, ceilings here.
-    markTransferMode(): void {},
-    kClone: Symbol('messaging_clone_symbol'),
-    kDeserialize: Symbol('messaging_deserialize_symbol'),
-  },
+  'internal/worker/js_transferable': jsTransferable,
   timers: { setImmediate },
 };
 const BINDINGS: Readonly<Record<string, unknown>> = {
@@ -393,8 +201,9 @@ function bound(table: Readonly<Record<string, unknown>>, id: string): unknown {
   return table[id];
 }
 
-/** Evaluates Node's three files once; the classes the guest installs as its globals. */
-export function createBlobClasses(): { readonly Blob: unknown; readonly File: unknown } {
+/** Evaluates Node's three files once: the classes the guest installs as its globals, and the
+ * evaluated `internal/webidl` (node-event-target binds the same one). */
+export function createBlobClasses(): ReturnType<typeof createNodeBlob> {
   return createNodeBlob(
     primordials,
     (id) => bound(BINDINGS, id),

@@ -16,6 +16,7 @@ import {
 } from '@riftydev/runtime-js/builtins/process';
 import { installTimerGlobals } from '@riftydev/runtime-js/builtins/timers';
 import {
+  bindNodeEventTargetSymbols,
   declareNoEsmLoader,
   fatalReportText,
   handleRealmUncaughtError,
@@ -39,8 +40,10 @@ import { createNet } from './egress-net.ts';
 import { bindNotImplemented } from './loud.ts';
 import { createBlobClasses } from './node-blob/bindings.ts';
 import { bindEncodingRuntime } from './node-encoding.ts';
+import { createEventClasses } from './node-event-target/bindings.ts';
 // Evaluated before every runtime module: the build injects it first (scripts/build-runtime.mjs).
 import {
+  bindEventClasses,
   bridge,
   fireTimer,
   installCeilingGlobals,
@@ -402,7 +405,15 @@ function setUp(): void {
       return hostGap[name];
     });
   installCeilingGlobals();
-  installBlobGlobals();
+  const { webidl } = installBlobGlobals();
+  // Node's EventTarget/Event/CustomEvent/AbortController/AbortSignal (ADR-0579), over the same
+  // `internal/webidl` as `Blob`, as in Node.
+  const events = createEventClasses(webidl);
+  bindEventClasses(events);
+  // The runtime's own abort listeners (`events.addAbortListener`) resist stopPropagation, as Node's.
+  bindNodeEventTargetSymbols({
+    kResistStopPropagation: events.eventTarget.kResistStopPropagation as symbol,
+  });
   const g = globalThis as unknown as PortGlobals;
   portGlobals = {
     MessagePort: g.MessagePort,
@@ -418,8 +429,8 @@ function setUp(): void {
  * timers and codec), globals before guest code; `buffer.Blob`/`buffer.File`, which `buffer.ts`
  * read at load (`undefined` here), bound to the same classes.
  */
-function installBlobGlobals(): void {
-  const { Blob, File } = createBlobClasses();
+function installBlobGlobals(): { readonly webidl: unknown } {
+  const { Blob, File, webidl } = createBlobClasses();
   for (const [name, value] of [
     ['Blob', Blob],
     ['File', File],
@@ -432,6 +443,7 @@ function installBlobGlobals(): void {
     });
     nodeBuffer[name] = value;
   }
+  return { webidl };
 }
 
 /** A rejection isolated-vm found unhandled after the microtask checkpoint (a copy of the reason). */

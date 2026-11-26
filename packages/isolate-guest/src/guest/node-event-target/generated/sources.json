@@ -1,0 +1,9 @@
+{
+  "node": "v24.16.0",
+  "esbuild": "0.28.0",
+  "sha256": "2652c800d093c8653e95a68f7e949bbe4a34a62676acb6c1feaa1b27e0857f1e",
+  "sources": {
+    "lib/internal/event_target.js": "f5817a1875e4ddc8772e888c6a5c59aa74ed01f58e78096e0e36b780d604004c",
+    "lib/internal/abort_controller.js": "3302a512a8882723e4cb756113ed53f2f24216d1a16c187d33e3ba663f236cbc"
+  }
+}

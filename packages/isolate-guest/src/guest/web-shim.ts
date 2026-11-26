@@ -198,6 +198,43 @@ define('TextDecoder', TextDecoder);
 // The inject rebinds the runtime's bare `TextDecoder`/`TextEncoder` to these (as `DOMException`).
 export { TextDecoder, TextEncoder };
 
+// --- EventTarget, Event, CustomEvent, AbortController, AbortSignal (ADR-0579) ---
+// Node's, created with the runtime (their sources need its timers, inspect, process) and bound
+// here before guest code; the inject rebinds the bundle's bare references (the kernel's
+// `new AbortController()`, read at call time) to these, so no bundle symbol is named like Node's
+// classes and esbuild keeps their names (`AbortController.name`, `Class constructor …`).
+let boundEventTarget: unknown;
+let boundEvent: unknown;
+let boundCustomEvent: unknown;
+let boundAbortController: unknown;
+let boundAbortSignal: unknown;
+/** Installs the five as globals (data properties, as Node's). */
+export function bindEventClasses(classes: {
+  readonly EventTarget: unknown;
+  readonly Event: unknown;
+  readonly CustomEvent: unknown;
+  readonly AbortController: unknown;
+  readonly AbortSignal: unknown;
+}): void {
+  boundEventTarget = classes.EventTarget;
+  boundEvent = classes.Event;
+  boundCustomEvent = classes.CustomEvent;
+  boundAbortController = classes.AbortController;
+  boundAbortSignal = classes.AbortSignal;
+  define('EventTarget', boundEventTarget);
+  define('Event', boundEvent);
+  define('CustomEvent', boundCustomEvent);
+  define('AbortController', boundAbortController);
+  define('AbortSignal', boundAbortSignal);
+}
+export {
+  boundAbortController as AbortController,
+  boundAbortSignal as AbortSignal,
+  boundCustomEvent as CustomEvent,
+  boundEvent as Event,
+  boundEventTarget as EventTarget,
+};
+
 // --- task scheduling ---
 /** The guest's `queueMicrotask`, also Node's `internal/process/task_queues` one for the generated Node sources. */
 export function queueMicrotask(callback: unknown): void {
@@ -357,11 +394,6 @@ export const CEILING_GLOBALS = [
   'TextEncoderStream',
   'CompressionStream',
   'DecompressionStream',
-  'AbortController',
-  'AbortSignal',
-  'EventTarget',
-  'Event',
-  'CustomEvent',
   'Request',
   'Response',
   'Headers',
