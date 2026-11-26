@@ -20,6 +20,11 @@ budget as a function, not only a refusal.
 
 Owner: distribution (isolate host). Trigger: the template goal putting a large layer in the state, or a consumer's host writes dominating a run.
 
+2026-11-25 — the first trigger fires: the template goal's simple form puts the template's
+`node_modules` (~88 MB) into the state, so every host write encodes it; the user accepted that price
+for the start («начать с самого простого», ADR-0568 Corrections 2026-11-25), measured in the isolate-host README
+§Sandbox template table. Kept deferred with `distribution/isolate-host-sandbox-template-layer`, which absorbs it.
+
 ## Challenge
 
 challenge: 2026-11-23 — none yet (factual capture, live-sandbox goal, ADR-0568)
