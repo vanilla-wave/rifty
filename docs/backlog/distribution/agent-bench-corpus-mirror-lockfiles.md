@@ -27,6 +27,12 @@ sha256 of the bytes; changed/deleted bytes fail the row).
   (`finalDiff` before/after), `docs/backlog/distribution/reference/agent-eval-csv-export-controls-data.json.gz`,
   `tools/agent-bench/reports/summaries/{2026-09-13-gpt-5.6-sol,2026-09-27-gpt-6-luna-baseline,2026-09-28-gpt-6-luna-rerun}/source-artifacts.json.gz`.
 
+Outside the guard (prose, not locks), the same host in committed bytes
+(sweep 2026-11-26: `git grep` + every tracked `.json.gz`):
+`tools/agent-bench/reports/summaries/{2026-10-15-eval-v18-corrected,2026-11-23-pi-0.85.1-baseline,2026-11-23-pi-1.6.0-upgrade}/report.json.gz`
+(`resolved` lines in `/runs/N/terminalTail`), `CHANGELOG.md:582`,
+`docs/backlog/distribution/reference/ai-agent-mode-refine-evidence.md:44`.
+
 Functional impact: not measured. Native lanes write the seed and run a bare
 `npm install --no-audit --no-fund` (`tools/agent-bench/src/lanes/local-reference.ts:35`,
 no `--registry`: the user's `.npmrc` applies); rifty lanes type `npm install`
@@ -37,6 +43,8 @@ mirror host in committed bytes.
 
 ## Question
 
+Scope of the answer: every place above that names the host in committed bytes
+(19 exempt files, 3 report archives, 2 prose lines) — not only the locks.
 Rewrite the 14 seed hosts to `https://registry.npmjs.org` now (new
 `inputsSha256`/`lockSha256` in both manifests, prior reports' byte identity
 becomes historical), or wait for the next corpus version
