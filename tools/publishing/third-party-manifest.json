@@ -46,9 +46,21 @@
       "version": "0.28.0",
       "resolveFrom": "tools/shadow-registry",
       "changes": "lib/browser.js patched at exact anchors, tools/shadow-registry/tools/generate-esbuild-runtime.ts"
+    },
+    "packages/io/src/streams/node/generated": {
+      "files": ["node-streams.js", "node.LICENSE"],
+      "name": "node",
+      "version": "v24.16.0",
+      "license": "MIT",
+      "licenseFiles": ["packages/io/src/streams/node/generated/node.LICENSE"],
+      "changes": "lib/stream.js, lib/stream/promises.js, lib/internal/streams/*.js (17), lib/internal/fs/streams.js, lib/internal/{assert,events/abort_listener,webstreams/adapters}.js whole and the statements of lib/internal/{errors,validators,util,fs/utils,url}.js the others read, each in Node's builtin wrapper over rifty bindings, minified by esbuild (whitespace and syntax, identifiers kept), tools/publishing/generate-node-streams.mjs",
+      "sourcesKey": "node",
+      "unshipped": "runtime-js/stream-core-node-sources"
     }
   },
   "firstParty": [
+    "packages/io/src/streams/node/generated/node-streams.d.ts",
+    "packages/io/src/streams/node/generated/sources.json",
     "packages/isolate-guest/src/guest/node-blob/generated/node-blob.d.ts",
     "packages/isolate-guest/src/guest/node-blob/generated/sources.json",
     "packages/runtime-js/src/builtins/fetch/generated/classes.d.ts",

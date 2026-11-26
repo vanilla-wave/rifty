@@ -201,8 +201,21 @@ export function unusedRecords(manifest, usedSets) {
   const used = new Set(usedSets.flatMap((s) => [...s]));
   return [
     ...Object.keys(manifest.npm).map((k) => `npm ${k}`),
-    ...Object.keys(manifest.generated).map((k) => `generated ${k}`),
+    ...Object.entries(manifest.generated)
+      .filter(([, r]) => !r.unshipped)
+      .map(([k]) => `generated ${k}`),
   ].filter((k) => !used.has(k));
+}
+
+/**
+ * Generated records marked `unshipped` (the unit that ships them): in no package yet — and a package
+ * that uses one is red until that unit drops the mark.
+ */
+export function shippedUnshipped(manifest, usedSets) {
+  const used = new Set(usedSets.flatMap((s) => [...s]));
+  return Object.entries(manifest.generated)
+    .filter(([k, r]) => r.unshipped && used.has(`generated ${k}`))
+    .map(([k]) => `generated ${k}`);
 }
 
 /** A packed source file (outside `dist/`) in a `vendor/`/`generated/` dir, with no recorded list, is its own input. */
@@ -229,6 +242,18 @@ function sourceDirFiles(root, pkgDirs) {
   return out;
 }
 
+/** `<area>/<slug>` naming a `docs/backlog/<area>/<slug>.md` with a `status:` front matter line. */
+function isBacklogUnit(root, unit) {
+  if (typeof unit !== 'string' || !/^[a-z0-9][a-z0-9-]*\/[a-z0-9][a-z0-9-]*$/u.test(unit))
+    return false;
+  if (!existsSync(join(root, 'docs/backlog', `${unit}.md`))) return false;
+  // Only the front matter block at the top counts (LF or CRLF), not a `status:` line in the body.
+  const front = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/u.exec(
+    readText(root, `docs/backlog/${unit}.md`),
+  );
+  return front !== null && /^status:[ \t]*\S/mu.test(front[1]);
+}
+
 /** Static manifest faults: records name real files, add non-empty texts, cover every vendor/generated file. */
 export function validateManifest(root, manifest, pkgDirs = []) {
   const out = [];
@@ -241,6 +266,8 @@ export function validateManifest(root, manifest, pkgDirs = []) {
       if (!existsSync(join(root, dir, f)))
         bad(`generated ${dir}`, `lists ${f}, which is not in the dir`);
     if (!r.package && !texts(r)) bad(`generated ${dir}`, 'adds no license text');
+    if (r.unshipped !== undefined && !isBacklogUnit(root, r.unshipped))
+      bad(`generated ${dir}`, `unshipped names no backlog unit docs/backlog/${r.unshipped}.md`);
     const sources = join(root, dir, 'sources.json');
     if (!existsSync(sources)) continue;
     const pinned = JSON.parse(readFileSync(sources, 'utf8'))[r.sourcesKey];
