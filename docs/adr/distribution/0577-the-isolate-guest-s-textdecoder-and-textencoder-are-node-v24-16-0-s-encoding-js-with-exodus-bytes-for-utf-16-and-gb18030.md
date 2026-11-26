@@ -93,11 +93,12 @@ dropped with no U+FFFD even under `fatal`).
   own keys; `encodeInto` validates as Node (closes `distribution/isolate-guest-textencoder-encodeinto-arg-checks`).
 - fontkit/pdfkit load; a CJK Mac `name` record in one of the five reads as raw bytes, silently
   (restructure catches the throw): declared ⚠️ in compat `isolate-host.md`.
-- Cost, M3 Pro: `guest.js` on main `e430522e8` (with Blob/File, 2026-11-26) 7 223 180 → 7 370 808 B
-  (gzip -9 1 525 031 → 1 571 900, +46 869; generated `encoding.js` 21 552 B, `text-decoder.js`
-  75 795 B). Warm `runCode('1')` median, before the goal / main / this, alternating, three runs at
-  load 9–11: this change +0.22, +0.58, +0.51 ms; the goal so far +0.44, +0.99, +1.11 (the
-  goal's bound is 1 ms; base p10–p90 ~15–21 ms; eager `single-byte.js` was +3.3). The class and
+- Cost, M3 Pro, 2026-11-26, load average 3.4–4.1: `guest.js` on main `d19d891b9` (with Blob/File,
+  `string_decoder`) 7 229 531 → 7 377 152 B (gzip -9 1 526 604 → 1 573 548, +46 944; generated
+  `encoding.js` 21 552 B, `text-decoder.js` 75 795 B). Warm `runCode('1')` median, before the goal
+  (`3d16cb7b8`) / main / this, alternating triples, n = 200 each, three runs: this change +0.58,
+  +0.63, +0.60 ms; since the goal began +1.06, +1.05, +1.08 (p10–p90 of each ~1.2–1.7 ms wide;
+  the goal records cost, no hard limit; eager `single-byte.js` was +3.3). The class and
   bindings evaluate in ~0.1 ms (a vm context, median of 50). utf-8 faster on every row (small
   fresh/reused decoder −32 %/−12 %, small `toString` −16 %, 1 MiB ~−49 %; isolate-host README
   §Cost). First non-utf-8 decoder per isolate: windows-1252 0.7 ms, utf-16le 2.0, gb18030 4.3.
