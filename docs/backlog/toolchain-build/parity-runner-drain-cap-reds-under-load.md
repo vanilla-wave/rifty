@@ -26,6 +26,7 @@ controlled):
 | 2026-11-24 | `process/exit-lifecycle-child` | 17–70 | first red, second green | PR #431 cross-review delegate's run report (`pnpm pr:check`); not in the tree |
 | 2026-11-24 | `worker_threads/exec-argv-startup` | ~13 | full `test:parity` green ("all cases match") | PR #441 author's run report (`pnpm pr:check`); not in the tree |
 | 2026-11-25 | `process/exit-lifecycle-child` | 25–49 | red again alone (`pnpm test:parity process/exit-lifecycle-child`, twice) under that load; GitHub checks green on the same head | PR #460 author's run (`pnpm pr:check` at `70d9be2fa`): `keepalive drain cap (10000ms) … (3 active ref(s))`, holders not captured |
+| 2026-11-26 | `process/exit-lifecycle-child` (3 refs), `worker_threads/exec-argv-startup` (2 refs) | 4–7 at the reruns | both red again alone; `exit-lifecycle-child` red alone on the base tree `ebaf4945c` too | PR #474 author's run (`pnpm pr:check` at `b483b7ff5`, diff: an isolate-host test + docs); holders not captured |
 
 The last two reports quote `keepalive drain cap (10000ms)`; the first two say only
 "drain-cap timeout", so that they hit this 10 s cap and not the product's 30 s one is an
