@@ -26,6 +26,10 @@ rows declared in `egress-modules.test.ts` (`DECLARED_FORMAT_ROWS`); a fix turns 
 Silent (no throw): a printed value differs from Node. Browser hosts share `repl/inspect.ts` by
 source, not probed there.
 
+Also through `%s` (PR #462 review N6, verified in-process 2026-11-26; every host shares the
+formatter): `new StringDecoder(Object.create(null))` and `readable.setEncoding(Object.create(null))`
+→ Node `Unknown encoding: [Object: null prototype] {}`, rifty `Unknown encoding: {}`.
+
 ## Challenge
 
 challenge: 2026-11-24 — none yet (factual capture, unit distribution/isolate-host-egress-modules-load)

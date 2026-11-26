@@ -32,7 +32,10 @@ export type CanonicalEncoding =
   | 'base64url'
   | 'hex';
 
-const toLower = (s: unknown): string => String.prototype.toLowerCase.call(s);
+// Captured at load: a guest's `String.prototype.toLowerCase = …` must not rename encodings (Node: primordial).
+const { apply } = Reflect;
+const strToLower = String.prototype.toLowerCase;
+const toLower = (s: unknown): string => apply(strToLower, s, []);
 
 /**
  * Node v24 `normalizeEncoding` + `slowCases` (lib/internal/util.js), verbatim:
@@ -100,9 +103,17 @@ export function bufferEncoding(enc: unknown): CanonicalEncoding | undefined {
   return s === '' ? undefined : normalizeEncoding(s);
 }
 
-/** Node's `ERR_UNKNOWN_ENCODING`. */
+let formatName: ((enc: unknown) => string) | undefined;
+
+/** Node's `%s` for a non-string name; runtime-js sets it once at builtin registration, before guest code. */
+export function setEncodingNameFormat(format: (enc: unknown) => string): void {
+  formatName ??= format;
+}
+
+/** Node's `ERR_UNKNOWN_ENCODING` (`'Unknown encoding: %s'`; `{}` → `{}`, `-0`, `5n`). */
 export function unknownEncodingError(enc: unknown): TypeError & { code: string } {
-  const error = new TypeError(`Unknown encoding: ${String(enc)}`) as TypeError & { code: string };
+  const shown = typeof enc === 'string' || !formatName ? String(enc) : formatName(enc);
+  const error = new TypeError(`Unknown encoding: ${shown}`) as TypeError & { code: string };
   error.code = 'ERR_UNKNOWN_ENCODING';
   return error;
 }

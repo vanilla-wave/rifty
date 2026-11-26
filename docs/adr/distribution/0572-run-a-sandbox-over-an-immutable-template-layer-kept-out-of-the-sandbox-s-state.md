@@ -3,6 +3,8 @@
 Status: Proposed
 Date: 2026-11
 
+2026-11-25 — deferred, not accepted, not withdrawn: the user, on the lifecycle revisit, «Как будто можно начать с самого простого и дальше оптимизировать. Что в данном случае будет самым простым?», then «ок» to «Начинаем с „библиотеки = файлы песочницы"? Да — оформляю это целью и запускаю реализацию; слой шаблона и живой изолят уходят в backlog следующими ступенями». The goal `isolate-host-sandbox-template` now starts with the template as the sandbox's own files (ADR-0568 as merged); this layer is the next step `distribution/isolate-host-sandbox-template-layer`, with its open user fork (the touched-entries bound) unanswered and probe G as its acceptance. F2–F4 stay the user's answers and hold in the simple start; F1 applies only to this layer. The «Goal … verbatim» sections below quote the goal's layer draft; that goal closed with the simple form (PR #460, its final invariants: ADR-0568 Corrections 2026-11-25) and its directory is deleted — every «goal Decisions», «goal I#», «`map.md`» and «map item N» below means that layer draft, the backlog's `epics/isolate-host-sandbox-template/` (`goal.md`, `map.md`) at commit `3d16cb7b8`.
+
 > TL;DR: A sandbox's template (`produceDependencySnapshot` artifact) is decoded once per consumer process and once per worker and never enters the per-run state; one layered FS class (rifty's `MemoryFsSync` with template entries materialized lazily; its state by node identity — an untouched template node is one row, anything else explicit) runs a sandbox's host ops in the consumer and its `fs` in each run, over one shared template index (host ops and idle memory independent of the template's bytes, bounded by the template entries touched since the last run plus those of the template directories marked — the open user fork); each run's fresh isolate gets the template copied in (F1 (a), user 2026-11-25); writable or read-only per sandbox; persisting a template sandbox is deferred.
 
 ## Context
@@ -177,7 +179,7 @@ the user's words»).
 ## Forks (user)
 
 - **F1 — who owns the guest's FS during a run.**
-  **Answered 2026-11-25: (a)** (goal Decisions; (b) deferred to
+  **Answered 2026-11-25: (a)** (the user's words: `distribution/isolate-host-sandbox-template-lazy-read`; (b) deferred to
   `distribution/isolate-host-sandbox-template-lazy-read`, (c) recorded in
   `distribution/isolate-host-sandbox-killed-run-partial-writes`).
   (a) the template in the isolate per run — first measured as `views`, built as `layered`
@@ -199,7 +201,7 @@ the user's words»).
 - **F2 — template files writable or read-only.** Answered 2026-11-25: both, per sandbox (§1; «per sandbox» the agent's reading).
 - **F3 — mount `/node_modules` or `/workspace/node_modules`; `payload/package.json`/lock visible.**
   Answered 2026-11-25: `/node_modules`, `node_modules` only (§1).
-- **F4 — a killed run's writes: kept as Node, or rolled back (documented, the tools say so).** Answered 2026-11-25: rolled back (goal Decisions).
+- **F4 — a killed run's writes: kept as Node, or rolled back (documented, the tools say so).** Answered 2026-11-25: rolled back (the user's words: `distribution/isolate-host-sandbox-killed-run-partial-writes`).
   Keeping needs (c) (or a write journal to the worker); even then a lost worker loses them.
 
 ## Trust (what F1 (b)/(c) would change in recorded decisions; (a) changes none)

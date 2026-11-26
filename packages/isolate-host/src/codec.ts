@@ -4,4 +4,11 @@
  * packed host carries it with no `@riftydev/*` dependency.
  */
 export { MemoryFsSync } from '@riftydev/vfs/internal';
-export { FsSnapshotError, GUEST_DIRS, restoreFs, snapshotFs } from '@riftydev/isolate-guest';
+export {
+  FsSnapshotError,
+  GUEST_DIRS,
+  restoreFs,
+  snapshotBudget,
+  snapshotFs,
+} from '@riftydev/isolate-guest';
+export { readDepSnapshotManifest, readDepSnapshotTar } from '@riftydev/npm-client/internal';

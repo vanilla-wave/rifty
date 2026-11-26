@@ -53,7 +53,7 @@ throws `ENOTDIR` (a regression between 22.16 and 22.23; checked 2026-11-25 with 
 generator's oracle runs in a child process and counts these sequences as not compared. No matching upstream issue found (web
 search, 2026-11-25); not filed — filing is publishing, the user's call.
 
-Coupling with the template goal (`epics/isolate-host-sandbox-template`, ADR-0572 §2): its layered FS
+Coupling with the template layer (`distribution/isolate-host-sandbox-template-layer`, ADR-0572 §2): its layered FS
 must mark every path a `cpSync` writes; fixing the overwrite mtime bump above without that rule
 would lose files silently (the template probe's `cp` mutant). The layered class marks them since
 2026-11-25; its generator audits the marks independently of times.

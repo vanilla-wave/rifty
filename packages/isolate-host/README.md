@@ -125,8 +125,8 @@ await sandbox.destroy();
 |---|---|---|
 | `snapshot` | — | bytes of `sandbox.snapshot()`: the new sandbox starts with those files |
 | `maxFileBytes` | 32 MiB | largest file one `readFile`/`writeFile` moves (`ERR_FS_FILE_TOO_LARGE`) |
-| `maxFsBytes` | 64 MiB | largest state, in the snapshot codec's budget units (ADR-0567: blob bytes + 384 per entry + 8 per path code unit + 80 per depth level): a host write past it rejects `ERR_ISOLATE_HOST_SANDBOX_FULL` and leaves the files as they were, times included, a run whose end state is past it gets `stateRefused`. A run needs an isolate of at least 2 × `maxFsBytes` + 16 MiB (the default 256 holds the default 64 MiB); raise both together. Below the budget of an empty sandbox (its two directories) `createSandbox` rejects `ERR_OUT_OF_RANGE` |
-| `template` | — | not implemented: `NotImplementedError('isolate-host.sandbox-template')` |
+| `maxFsBytes` | 64 MiB | largest state, in the snapshot codec's budget units (ADR-0567: blob bytes + 384 per entry + 8 per path code unit + 80 per depth level): a host write past it rejects `ERR_ISOLATE_HOST_SANDBOX_FULL` and leaves the files as they were, times included, a run whose end state is past it gets `stateRefused`. Without a template a run needs an isolate of at least 2 × `maxFsBytes` + 16 MiB (at template scale this understates: §Sandbox template) (the default 256 holds the default 64 MiB); raise both together. Below the budget of an empty sandbox (its two directories) `createSandbox` rejects `ERR_OUT_OF_RANGE` |
+| `template` | — | a `produceDependencySnapshot` artifact (bytes) or the `{ id, version }` `registerTemplate` returned: its `node_modules` become the sandbox's own files at `/node_modules` (§Sandbox template). `maxFsBytes` still bounds the sandbox's own files: the template's budget comes on top |
 
 A fresh sandbox holds the empty directories `/workspace` (the cwd) and `/tmp`
 (rifty's `os.tmpdir()`). Paths: a relative path resolves against
@@ -142,7 +142,7 @@ sandbox paths. rifty's FS has no links: every entry is a file or a directory.
 | `list(path = '/workspace')` | `{ name, type: 'file' \| 'directory', size }[]`, by name |
 | `remove(path)` | a file or a directory tree |
 | `exec(path, options?)` | `node <path> [args]` in `/workspace`: `runCode`'s options plus `args` (strings) and `signal`; `env`, `cwd`, `stdin` are `NotImplementedError('isolate-host.sandbox-exec-<option>')`. The path is one file, never a shell command |
-| `snapshot()` | the files as bytes (ADR-0567), taken between operations |
+| `snapshot()` | the files as bytes (ADR-0567), taken between operations; over a template `NotImplementedError('isolate-host.sandbox-template-snapshot')` |
 | `destroy()` | every operation whose promise has not settled yet (a run, a host op) and everything after reject `ERR_ISOLATE_HOST_SANDBOX_DESTROYED`; the state is dropped; resolves once no isolate of the sandbox runs (whenever it is called, also in the microtasks around a run's result) |
 
 Cancel with an `AbortSignal`: `exec(path, { signal })`, and `{ signal }` as the last argument of
@@ -216,7 +216,7 @@ for a state of S — an upper bound over every measurement so far (S = 56 MB: 21
 and 255 MiB for one run, 884–925 MiB for four at once; 16 MB: 88 / 276 MiB), not
 a mean. Size your service's cgroup for the idle sandboxes' files plus 5 × S + 16
 MiB per concurrent run, beside the workers' bound above. All of it is
-bounded by `maxFsBytes`. A run that timed out keeps your process alive until its isolate
+bounded by `maxFsBytes` (over a template, by its cap: §Sandbox template). A run that timed out keeps your process alive until its isolate
 has stopped, so `destroy` can wait for it. That wait is bounded: an isolate still running
 1 s after its run's result (a builtin that ignores termination, or a broken worker that
 never reports it stopped) retires its worker, which ends once its other calls have
@@ -231,6 +231,128 @@ an idle sandbox ~1.6 KiB plus its files.
 
 If your result type has `exitCode: number`, map a killed run yourself from
 `termination` (`exitCode: null` is never a guest's status).
+
+## Sandbox template: libraries from a dependency artifact
+
+Not in the published `0.1.0-draft.1` (`@next`): the next release (CHANGELOG «Unreleased»).
+
+The libraries your agent's code `require`s come prebuilt: in CI, `produceDependencySnapshot`
+(`@riftydev/workbench`, runs in plain Node ≥ 24 from the published package) turns your
+`package.json` + lock into an artifact; the host registers it once and starts every sandbox over
+it. No network and no npm in the guest.
+
+```js
+// CI: node build-template.mjs  →  template.tar.gz  (rifty's tests run this step through the
+// workspace producer, not this file; the published package in plain Node: library probe, PR #430)
+import { readFileSync, writeFileSync } from 'node:fs';
+import { produceDependencySnapshot } from '@riftydev/workbench';
+const { archive } = await produceDependencySnapshot({
+  templateId: 'documents',
+  packageJsonText: readFileSync('package.json', 'utf8'), // pptxgenjs, pdf-lib, docx, exceljs
+  packageLockText: readFileSync('package-lock.json', 'utf8'),
+  registryUrl: process.env.NPM_REGISTRY, // the registry the lock resolves on
+  profile: 'frozen', // or 'replay'; encoding: 'gzip' (default) or 'br'
+});
+writeFileSync('template.tar.gz', archive);
+```
+
+```js
+// The service, once at start:
+import { readFileSync } from 'node:fs';
+import { createSandbox, registerTemplate } from '@riftydev/isolate-host';
+const template = await registerTemplate(readFileSync('template.tar.gz')); // { id, version }
+
+// Per agent turn:
+const sandbox = await createSandbox({ template }); // the defaults hold
+await sandbox.writeFile('main.js', `
+  const { PDFDocument } = require('pdf-lib');
+  require('docx'); require('pptxgenjs'); require('exceljs');
+  PDFDocument.create().then(async (d) => {
+    d.addPage();
+    require('fs').writeFileSync(process.argv[2], await d.save());
+  });
+`);
+const r = await sandbox.exec('main.js', { args: ['out.pdf'] });
+if (r.exitCode !== 0 || r.stateRefused) throw new Error(r.stderr || r.stateRefused);
+const pdf = await sandbox.readFile('out.pdf');
+await sandbox.destroy();
+```
+
+- **What the guest sees.** The artifact's `payload/node_modules` at `/node_modules`, byte for byte,
+  with the tar's file times (the producer writes 0: the epoch — all four times; `tar -x` would give
+  the extraction time for atime and ctime), and nothing else of it: no `rifty/*`, no `package.json` or lock. `require('<lib>')` from
+  `/workspace/main.js` resolves into it as Node's resolution does (`/workspace/node_modules`, then
+  `/node_modules`).
+- **They are the sandbox's own files.** Writable: a change or deletion under `/node_modules`, by
+  the run or by a host op, is that sandbox's alone, seen by its later runs; no other sandbox and no
+  later sandbox sees it. A killed run's writes there roll back like any other. A read-only mode is
+  not there (backlog `distribution/isolate-host-sandbox-template-read-only`): an option for it is
+  refused like any unknown option (`ERR_INVALID_ARG_VALUE`).
+- **Identity.** `{ id, version }` = the manifest's `templateId` and the producer's `snapshotId`
+  (`sha256:` of the decoded tar — the same for the gzip and the br of one tar). Rebuilding the
+  artifact with another lock gives another `version`.
+- **Intake.** `registerTemplate(bytes)` or `createSandbox({ template: bytes })` accepts gzip or br,
+  profile `replay` or `frozen`, and decodes an artifact once per process, concurrent calls included
+  (the same bytes again cost a sha256 of them); your buffer is read at the call. The artifact is
+  your CI's output, trusted input: no decompression bound beyond Node's own. br carries no
+  checksum: a corrupted br artifact is refused or registers under another `version` — compare it
+  with the producer's `snapshotId`. A registered template is kept for the process's life (there is no unregister;
+  each distinct artifact holds ~1× its encoded state). A broken, truncated or unsupported artifact
+  rejects `ERR_ISOLATE_HOST_TEMPLATE_ARTIFACT` (the reason in its message), an identity never
+  registered `ERR_ISOLATE_HOST_TEMPLATE_UNKNOWN` — before any sandbox exists.
+- **Limits.** `maxFsBytes` (default 64 MiB) bounds the sandbox's own files as without a template:
+  the template's budget is added on top of it (the cap), so the default holds and the refusals name
+  your number. While the template's files are there: removing or replacing them frees room in that
+  budget (after `remove('/node_modules')` ~150 MiB of your own files fit under 64). Each run's
+  isolate holds the whole state, so over a template a run's default `memoryLimitMb` is max(256,
+  3 × the cap + 32 MiB) — ≈ 503 MiB for the four libraries at the default `maxFsBytes`. Without a
+  template the default stays 256. Below what the state needs a run's files are lost at random, not
+  refused up front: at 256 MiB pdf's generator lost them in 5 of 200 runs (`stateRefused:
+  ERR_ISOLATE_HOST_SANDBOX_CAPTURE`, `exitCode: 0`), while one bisection run passes at 216–224.
+  Pass a lower `memoryLimitMb` only with that in mind. The workers' RSS ceiling follows the limits
+  (256 MiB + 3 × the sum of the live runs' `memoryLimitMb`, §API): 1 765 MiB for one run at 503,
+  6 292 MiB for a full worker of four; measured worker RSS 1.0–1.35 GiB per run, ~2.0 GiB near the
+  cap.
+- **Not kept.** `snapshot()` of a sandbox over a template and `createSandbox({ template, snapshot })`
+  throw `NotImplementedError('isolate-host.sandbox-template-snapshot')`: a turn's sandbox is
+  destroyed, the host keeps the files it took.
+
+What it costs: every `exec` restores and captures the whole state, the template's ~88 MB included,
+and every host write encodes it once (§Sandbox); each sandbox holds its own copy. Measured with
+`node --expose-gc scripts/measure-template.mjs <artifact>` (`--concurrent N`, `--repeat N --limits
+…`; public API only, every option at its default) on the four libraries' `frozen` gzip artifact
+(pptxgenjs 4.0.1, pdf-lib 1.17.1, docx 9.15.3, exceljs 4.4.0; 8 753 tar entries), Node 24.16.0,
+medians. macOS: M3 Pro, 12 cores, load ~2–5. Linux: aarch64, a colima VM container
+(`node:24.16.0-bookworm`, 4 CPUs, 7 GiB) on the same Mac — not linux-x64, where rifty's CI runs the
+acceptance but measures no cost:
+
+| | macOS | Linux (arm64 VM) |
+|---|---|---|
+| artifact | 18.9 MiB | |
+| `registerTemplate`, first / the same bytes again | 377 / 7 ms | 970 / 9 ms |
+| the template's budget (on top of `maxFsBytes`) | 97 433 506 (92.9 MiB) | |
+| `createSandbox({ template })` | 91 ms | 147 ms |
+| an idle sandbox in your process (heap + ArrayBuffers) | 86 MiB | 86 MiB |
+| host `writeFile` 10 KiB / `list('/node_modules')` | 113 / 0.03 ms | 148 / 0.04 ms |
+| warm `exec`: empty file / pdf / docx / pptx / xlsx generator | 596 / 763 / 757 / 880 / 1 007 ms | 1 405 / 1 201 / 2 041 / 1 224 / 1 403 ms |
+| your process during one `exec` (pdf): peak over idle / longest event-loop stall | 406 MiB / 80 ms | 157 MiB / 122 ms |
+| 4 sandboxes running pdf at once, 10 rounds: `exec` median / max, workers' RSS peak | 1 657 / 1 999 ms, 2.4 GiB | 2 638 / 3 235 ms, 2.3 GiB |
+| 8 at once: the same | 2 931 / 3 551 ms, 4.3 GiB | 6 000 / 8 039 ms, 2.9 GiB |
+| smallest `memoryLimitMb` one run passes with (4 MiB steps): empty / pdf / docx / pptx / xlsx | 212 / 216 / 224 / 220 / 220 | 188 / 196 / 196 / 200 / 200 |
+| runs that lost their files, 100 each: at the default `memoryLimitMb`, empty / pdf / docx / pptx / xlsx | 0 / 0 / 0 / 0 / 0 | not run |
+| the same, empty / pdf / xlsx, at 224 / 256 (two series) / 320 / 384 | 0 / pdf 5, then 0 / 0 / 0 | not run |
+
+Under concurrency some runs run twice (all complete): the external review of PR #460 counted ~12 %
+reruns at 4–8 runs at once on macOS — a worker retiring on its RSS watchdog after a momentary
+idle, or a swallowed `ENOBUFS` writing a state to it — so `exec` latency there is up to twice a
+lone one's (compat Sandbox row «Concurrent runs over a template»). Your process during 8 runs at
+once: 3.8–4.7 GiB on macOS (same review).
+
+Deferred, so these numbers fall later without a change to this API: a template layer kept out of
+the sandbox's state (backlog `distribution/isolate-host-sandbox-template-layer`), a live isolate
+per agent turn (`distribution/isolate-host-sandbox-live-isolate-per-turn` — that one would change
+what `memoryLimitMb` per `exec` bounds), lazy template reads
+(`distribution/isolate-host-sandbox-template-lazy-read`).
 
 ## What the guest gets
 
