@@ -16,9 +16,11 @@ Measured 2026-11-22 (PR #416), `node -e` v24.16.0 runs none of it. Who dispatche
 
 - V8: microtasks of the same checkpoint (`Promise.resolve().then(() => process.exit(0)); Promise.resolve().then(f)`),
   one an `'exit'` listener queues. JS cannot drop V8's microtask queue; only ending the isolate/Worker stops them.
-- rifty: a timer, `setImmediate` or fs callback ripe before the drain's first tick, a timer an `'exit'` listener arms.
-  Dispatch points: `KeepaliveTimerHandle` (`fireTimeout`, `shouldRunInterval`), the immediate queue (`timers.ts`), fs
-  callback scheduling (`fs.ts`, `fs-streams.ts` `queueMicrotask`) — several, shared with kernel children. A queued
+- rifty: a timer ripe before the drain's first tick, a timer an `'exit'` listener arms. (`setImmediate` and fs
+  callbacks no longer: since PR #468 a process already ending runs no queued immediate and the process end
+  settles no fs request — no-COI `no-coi-process-exit-status.spec.ts` rows `immediate`/`fs-callback` = Node.)
+  Dispatch points left: `KeepaliveTimerHandle` (`fireTimeout`, `shouldRunInterval`) and `fs-streams.ts`'s
+  `queueMicrotask` — shared with kernel children. A queued
   `nextTick` after an exit in `nextTick` already does not run.
 - Checked dead end for one point: settling `awaitDrain` at once (`tick()` without the macrotask hop) when a
   terminal already exists stops the isolate host's ripe timers but breaks no-COI `setImmediate` ordering

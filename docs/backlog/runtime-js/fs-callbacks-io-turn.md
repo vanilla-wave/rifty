@@ -96,7 +96,7 @@ pins `'exit'` after the last callback. ESM and `worker.terminate()` rows: Workbe
   it has one — a Node host's `MessagePort` (poll), so an immediate queued in an fs callback runs
   before a due 0 ms timer (Node's guarantee, `fs/callback-phase-order` 240/240); the operation turn
   stays a check-phase immediate, so timers get their phase every loop turn. Isolate and browsers: the
-  immediate queue (browser and isolate order declared: `runtime-js/browser-loop-phase-order`). An immediate's turn
+  immediate queue (browser and isolate order declared: `runtime-js/fs-completion-loop-phase-order`). An immediate's turn
   is bound to its id (a cleared one leaves an empty turn).
 - 2026-11-26 (manager): only data bytes are read in the operation turn; a callback form fixes its
   options (copy), path (`Buffer`/`URL` → string), positions and lengths at the call and validates its

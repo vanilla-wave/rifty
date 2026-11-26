@@ -1,7 +1,7 @@
 ---
 area: runtime-js
 status: draft
-title: In the isolate guest every fs call with a Buffer path throws "Right-hand side of 'instanceof' is not an object"
+title: In the isolate guest every sync fs call with a Buffer path throws "Right-hand side of 'instanceof' is not an object"
 created: 2026-11-26
 why: "`fs.readFileSync(Buffer.from('a.txt'))` throws a bare TypeError in the isolate guest: `fs-path.ts` checks `p instanceof URLConstructor`, and `URLConstructor` is `globalThis.URL` captured at load, when the isolate guest has no `URL`"
 sources: ["PR #468 (runtime-js/fs-callbacks-io-turn) isolate run of `fs/async-arguments-at-call`"]
@@ -17,8 +17,9 @@ fails with `threw Right-hand side of 'instanceof' is not an object`; Node v24.16
 `URLConstructor = globalThis.URL` is captured when the runtime loads. The isolate guest
 installs `URL` only later, as a ceiling global (`isolate-guest/src/guest/web-shim.ts`
 `CEILING_GLOBALS`), so the capture is `undefined`. Every `Buffer` path goes through
-`pathToString`, so this hits sync, callback and `fs.promises` forms alike. Excluded from
-the isolate run of `fs/async-arguments-at-call` (PR #468) until fixed. Dedup: no backlog
+`pathToString`, so this hits every sync form. The async forms validate their path at the call
+from PR #468 on (`fs-arguments.ts` `validatedPath` turns a view into its text first), so they are
+not affected. Dedup: no backlog
 match.
 
 ## Challenge
