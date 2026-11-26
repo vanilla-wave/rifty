@@ -18,8 +18,9 @@ verbatim, closed when the unit is taken into work.
   pinning today's whole outcome against live Node and naming its owners. Programs' one source:
   `packages/isolate-host/tests/fixtures/streams-scenario/`. Declared skips, tied to 4c by markers:
   `c-transform-big` on Workbench, the `m5` 16 MiB WriteStream row on Workbench and SDK. Chromium
-  108: SDK import and Workbench owner boot fail by name (`runtime-js/chromium108-sdk-sync-wasm-import`,
-  `runtime-js/chromium108-workbench-owner-arraybuffer-detached`). → I8.
+  108: SDK import fails by name (`runtime-js/chromium108-sdk-sync-wasm-import`); the Workbench owner
+  boots with #470 (Chromium 108.0.5359.29, 2026-11-26) and the Workbench carrier passes there (21 + 1 declared skip); the lane's other 108
+  reds: `distribution/chromium108-coi-browser-unit-reds`. → I8.
 
 Bindings and fs platform. Each is a parity fix that holds without the core, with its own proof
 against Node:
