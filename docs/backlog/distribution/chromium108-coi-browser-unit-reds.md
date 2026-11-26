@@ -61,7 +61,11 @@ Product, 108-specific (exact error, spec):
    resolved the race); a lost Playwright 1.60 ↔ Chromium 108 channel is not excluded.
    `fatal-rejection` alone on a fresh owner: 108 `exit 1 218ms closed 1ms`, 148 `exit 1 199ms closed 1ms`.
    Whole spec green on the local 148 re-run. Repro: the spec on 108. Which earlier case leaves the
-   state, and what blocks, not isolated.
+   state, and what blocks, not isolated. The stuck case is not fixed: three runs on 108 stopped at
+   three different cases — this probe at `fatal-rejection`, the PR #470 review's two delegate runs at
+   `exit-listener-timer` (no `done` line, 400 s timeout) and at `exit-in-rejection-handler` (90 s
+   timeout; `exit-listener-timer` passed there); their logs were in `/tmp`, not kept. That points
+   at accumulated owner state or the driver channel rather than at one case.
 8. Hangs, root unisolated, reproduced in an isolated 108 re-run, green on the local 148 re-run:
    `workbench-vite-lifecycle` (300 s), `esbuild-upstream-twin` esbuild-wasm 0.21.5/0.25.12/0.28.2
    (page closed after timeout).
