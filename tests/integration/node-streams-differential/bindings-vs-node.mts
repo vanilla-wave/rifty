@@ -189,21 +189,30 @@ for (const name of ['SafeMap', 'SafeSet']) {
   ];
   if (x !== y) out.push(`SafeArrayIterator: rifty ${x} / Node ${y}`);
 }
-for (const name of ['SafePromiseAllReturnVoid', 'SafePromisePrototypeFinally']) {
-  const order: string[] = [];
-  const tuples: unknown[][] =
-    name === 'SafePromiseAllReturnVoid'
-      ? [
-          [[]],
-          [[Promise.resolve(1), 2]],
-          [[Promise.reject(new Error('r'))]],
-          [[1, 2], (x: number) => Promise.resolve(x)],
-        ]
-      : [
-          [Promise.resolve(1), () => order.push('f')],
-          [Promise.reject(new Error('r')), () => order.push('g')],
-        ];
-  await compare(name, ours[name] as F, node.primordials[name] as F, tuples);
+await compare(
+  'SafePromiseAllReturnVoid',
+  ours.SafePromiseAllReturnVoid as F,
+  node.primordials.SafePromiseAllReturnVoid as F,
+  [
+    [[]],
+    [[Promise.resolve(1), 2]],
+    [[Promise.reject(new Error('r'))]],
+    [[1, 2], (x: number) => Promise.resolve(x)],
+  ],
+);
+// `finally` also by its callback: called once on fulfilment and on rejection, the value kept.
+for (const settle of ['resolve', 'reject'] as const) {
+  const run = async (f: F) => {
+    const calls: string[] = [];
+    const p = settle === 'resolve' ? Promise.resolve(1) : Promise.reject(new Error('r'));
+    const r = await show(f(p, () => calls.push('onFinally')));
+    return `${r} calls=${calls.join()}`;
+  };
+  const [x, y] = [
+    await run(ours.SafePromisePrototypeFinally as F),
+    await run(node.primordials.SafePromisePrototypeFinally as F),
+  ];
+  if (x !== y) out.push(`SafePromisePrototypeFinally(${settle}): rifty ${x} / Node ${y}`);
 }
 // internalBinding and the internal modules: each member the bindings supply, against Node's.
 const b = coreBindings();

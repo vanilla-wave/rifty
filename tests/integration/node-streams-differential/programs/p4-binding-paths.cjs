@@ -156,6 +156,21 @@ row('destroy(err) on an errored stream: aggregate', async () => {
   });
   return `${e2s(e)} errors=${e.errors ? e.errors.map((x) => x.message).join('+') : 'none'}`;
 });
+row("a guest's util.inspect/format after load: an ERR_* text", async () => {
+  const util = require('node:util');
+  const [inspect, format] = [util.inspect, util.format];
+  util.inspect = () => 'FAKE-INSPECT';
+  util.format = () => 'FAKE-FORMAT';
+  try {
+    new Readable({ highWaterMark: 'x' });
+    return 'no throw';
+  } catch (e) {
+    return e.message;
+  } finally {
+    util.inspect = inspect;
+    util.format = format;
+  }
+});
 
 (async () => {
   for (const [name, fn] of rows) {
