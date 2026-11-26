@@ -198,6 +198,8 @@ the split-out of `URL`/ESM.
   live Node per subtest (`reference/wpt`: real `testharness.js` + a 26-line shim runs in the guest).
 - 2026-11-25 — manager (PR #443 review S2, should): `single-byte.js` is required lazily (one
   declared anchored edit); utf-8 throughput is an acceptance row.
+- 2026-11-26 — user (manager thread cf2ae711), on I2. Asked «Китайские кодировки и utf-16: устраивает ли „равно Node, кроме декодера, который продолжают использовать после его ошибки“? Цель обещала полное равенство; инвариант я сделанным не отметил»: «ок». So I2 holds with that declared exception for gb18030, gbk, utf-16le, utf-16be (rule and numbers: ADR-0577, compat `isolate-host.md` ⚠️); ICU's state after a decoder's error is not emulated.
+- 2026-11-26 — user (same thread), on the per-call cost. Asked «Цена вызова в isolate: runCode('1') вырос с 15,0 до 16,8 мс (+11,5 %) из-за трёх единиц с исходниками Node, а ядро потоков добавит ещё. Нужен ли бюджет?»: «пока нет, оптимизируем отдельно». No per-call budget; the cost stays measured and recorded, its optimisation is separate work.
 - rejected route: npm polyfills (`event-target-shim` 6.0.2 + `abortcontroller-polyfill` 1.7.8:
   22/31 differ; `formdata-node` Blob 9/19, `blob-polyfill` 13/19; `text-encoding` 0.7.0 differs on
   `iso-8859-8-i` and gbk/gb18030; iconv-lite has no `fatal`) — violates I1–I3.

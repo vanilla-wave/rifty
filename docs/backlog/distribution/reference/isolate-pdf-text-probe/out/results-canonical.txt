@@ -1,0 +1,529 @@
+
+=== mupdf-import.cjs  [mupdf] tree 11 files 13.6 MiB, memoryLimitMb 256
+  GUEST-STOPS cyrillic-pdfkit.pdf  node exit 0 62ms | guest exit 1 222ms
+    guest stderr: NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568)
+                      at esmGap (rifty-isolate-guest.js:139794:22)
+                      at executeEsm (rifty-isolate-guest.js:136283:46)
+                      at Object.loadAsyncResolved (rifty-isolate-guest.js:137411:18)
+                      at Object.loadAsync (rifty-isolate-guest.js:137402:21)
+                      at dynamicImport (rifty-isolate-guest.js:132529:27)
+                      at eval (/workspace/gen/mupdf-import.cjs:5:23)
+                      at Object.<anonymous> (/workspace/gen/mupdf-import.cjs:12:3)
+                      at compileCjsSource (rifty-isolate-guest.js:132576:8)
+                      at Object.value (rifty-isolate-guest.js:132615:9)
+                      at Object.defaultJsExtension [as .js] (rifty-isolate-guest.js:137308:14)
+  GUEST-STOPS cyrillic.pdf  node exit 0 54ms | guest exit 1 221ms
+    guest stderr: NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568)
+                      at esmGap (rifty-isolate-guest.js:139794:22)
+                      at executeEsm (rifty-isolate-guest.js:136283:46)
+                      at Object.loadAsyncResolved (rifty-isolate-guest.js:137411:18)
+                      at Object.loadAsync (rifty-isolate-guest.js:137402:21)
+                      at dynamicImport (rifty-isolate-guest.js:132529:27)
+                      at eval (/workspace/gen/mupdf-import.cjs:5:23)
+                      at Object.<anonymous> (/workspace/gen/mupdf-import.cjs:12:3)
+                      at compileCjsSource (rifty-isolate-guest.js:132576:8)
+                      at Object.value (rifty-isolate-guest.js:132615:9)
+                      at Object.defaultJsExtension [as .js] (rifty-isolate-guest.js:137308:14)
+  GUEST-STOPS latin-raw.pdf  node exit 0 61ms | guest exit 1 256ms
+    guest stderr: NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568)
+                      at esmGap (rifty-isolate-guest.js:139794:22)
+                      at executeEsm (rifty-isolate-guest.js:136283:46)
+                      at Object.loadAsyncResolved (rifty-isolate-guest.js:137411:18)
+                      at Object.loadAsync (rifty-isolate-guest.js:137402:21)
+                      at dynamicImport (rifty-isolate-guest.js:132529:27)
+                      at eval (/workspace/gen/mupdf-import.cjs:5:23)
+                      at Object.<anonymous> (/workspace/gen/mupdf-import.cjs:12:3)
+                      at compileCjsSource (rifty-isolate-guest.js:132576:8)
+                      at Object.value (rifty-isolate-guest.js:132615:9)
+                      at Object.defaultJsExtension [as .js] (rifty-isolate-guest.js:137308:14)
+  GUEST-STOPS multi-flate.pdf  node exit 0 67ms | guest exit 1 235ms
+    guest stderr: NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568)
+                      at esmGap (rifty-isolate-guest.js:139794:22)
+                      at executeEsm (rifty-isolate-guest.js:136283:46)
+                      at Object.loadAsyncResolved (rifty-isolate-guest.js:137411:18)
+                      at Object.loadAsync (rifty-isolate-guest.js:137402:21)
+                      at dynamicImport (rifty-isolate-guest.js:132529:27)
+                      at eval (/workspace/gen/mupdf-import.cjs:5:23)
+                      at Object.<anonymous> (/workspace/gen/mupdf-import.cjs:12:3)
+                      at compileCjsSource (rifty-isolate-guest.js:132576:8)
+                      at Object.value (rifty-isolate-guest.js:132615:9)
+                      at Object.defaultJsExtension [as .js] (rifty-isolate-guest.js:137308:14)
+  GUEST-STOPS cyrillic-pdfkit.pdf+cyrillic.pdf+latin-raw.pdf+multi-flate.pdf  node exit 0 71ms | guest exit 1 230ms
+    guest stderr: NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568)
+                      at esmGap (rifty-isolate-guest.js:139794:22)
+                      at executeEsm (rifty-isolate-guest.js:136283:46)
+                      at Object.loadAsyncResolved (rifty-isolate-guest.js:137411:18)
+                      at Object.loadAsync (rifty-isolate-guest.js:137402:21)
+                      at dynamicImport (rifty-isolate-guest.js:132529:27)
+                      at eval (/workspace/gen/mupdf-import.cjs:5:23)
+                      at Object.<anonymous> (/workspace/gen/mupdf-import.cjs:12:3)
+                      at compileCjsSource (rifty-isolate-guest.js:132576:8)
+                      at Object.value (rifty-isolate-guest.js:132615:9)
+                      at Object.defaultJsExtension [as .js] (rifty-isolate-guest.js:137308:14)
+
+=== mupdf.mjs  [mupdf] tree 11 files 13.6 MiB, memoryLimitMb 256
+  GUEST-STOPS cyrillic-pdfkit.pdf  node exit 0 59ms | guest exit 1 219ms
+    guest stderr: NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {
+                    feature: 'isolate-host.esm'
+                  }
+                  Node.js v24.0.0
+  GUEST-STOPS cyrillic.pdf  node exit 0 56ms | guest exit 1 225ms
+    guest stderr: NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {
+                    feature: 'isolate-host.esm'
+                  }
+                  Node.js v24.0.0
+  GUEST-STOPS latin-raw.pdf  node exit 0 62ms | guest exit 1 204ms
+    guest stderr: NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {
+                    feature: 'isolate-host.esm'
+                  }
+                  Node.js v24.0.0
+  GUEST-STOPS multi-flate.pdf  node exit 0 59ms | guest exit 1 204ms
+    guest stderr: NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {
+                    feature: 'isolate-host.esm'
+                  }
+                  Node.js v24.0.0
+  GUEST-STOPS cyrillic-pdfkit.pdf+cyrillic.pdf+latin-raw.pdf+multi-flate.pdf  node exit 0 73ms | guest exit 1 206ms
+    guest stderr: NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {
+                    feature: 'isolate-host.esm'
+                  }
+                  Node.js v24.0.0
+
+=== pdf2json-buffer.cjs  [pdf2json] tree 12 files 11.3 MiB, memoryLimitMb 256
+  EQUAL       cyrillic-pdfkit.pdf  node exit 0 63ms | guest exit 0 481ms
+  EQUAL       cyrillic.pdf  node exit 0 61ms | guest exit 0 485ms
+  EQUAL       latin-raw.pdf  node exit 0 55ms | guest exit 0 468ms
+  EQUAL       multi-flate.pdf  node exit 0 62ms | guest exit 0 478ms
+  EQUAL       cyrillic-pdfkit.pdf+cyrillic.pdf+latin-raw.pdf+multi-flate.pdf  node exit 0 75ms | guest exit 0 633ms
+
+=== pdf2json.cjs  [pdf2json] tree 12 files 11.3 MiB, memoryLimitMb 256
+  EQUAL       cyrillic-pdfkit.pdf  node exit 0 70ms | guest exit 0 530ms
+  EQUAL       cyrillic.pdf  node exit 0 67ms | guest exit 0 566ms
+  EQUAL       latin-raw.pdf  node exit 0 70ms | guest exit 0 514ms
+  EQUAL       multi-flate.pdf  node exit 0 63ms | guest exit 0 560ms
+  EQUAL       cyrillic-pdfkit.pdf+cyrillic.pdf+latin-raw.pdf+multi-flate.pdf  node exit 0 105ms | guest exit 0 634ms
+
+=== pdfjs-import.cjs  [pdfjs-dist] tree 570 files 35.9 MiB, memoryLimitMb 256
+  GUEST-STOPS cyrillic-pdfkit.pdf  node exit 0 104ms | guest exit 1 374ms
+    guest stderr: NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568)
+                      at esmGap (rifty-isolate-guest.js:139794:22)
+                      at executeEsm (rifty-isolate-guest.js:136283:46)
+                      at Object.loadAsyncResolved (rifty-isolate-guest.js:137411:18)
+                      at Object.loadAsync (rifty-isolate-guest.js:137402:21)
+                      at dynamicImport (rifty-isolate-guest.js:132529:27)
+                      at eval (/workspace/gen/pdfjs-import.cjs:5:33)
+                      at Object.<anonymous> (/workspace/gen/pdfjs-import.cjs:17:3)
+                      at compileCjsSource (rifty-isolate-guest.js:132576:8)
+                      at Object.value (rifty-isolate-guest.js:132615:9)
+                      at Object.defaultJsExtension [as .js] (rifty-isolate-guest.js:137308:14)
+  GUEST-STOPS cyrillic.pdf  node exit 0 108ms | guest exit 1 372ms
+    guest stderr: NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568)
+                      at esmGap (rifty-isolate-guest.js:139794:22)
+                      at executeEsm (rifty-isolate-guest.js:136283:46)
+                      at Object.loadAsyncResolved (rifty-isolate-guest.js:137411:18)
+                      at Object.loadAsync (rifty-isolate-guest.js:137402:21)
+                      at dynamicImport (rifty-isolate-guest.js:132529:27)
+                      at eval (/workspace/gen/pdfjs-import.cjs:5:33)
+                      at Object.<anonymous> (/workspace/gen/pdfjs-import.cjs:17:3)
+                      at compileCjsSource (rifty-isolate-guest.js:132576:8)
+                      at Object.value (rifty-isolate-guest.js:132615:9)
+                      at Object.defaultJsExtension [as .js] (rifty-isolate-guest.js:137308:14)
+  GUEST-STOPS latin-raw.pdf  node exit 0 106ms | guest exit 1 361ms
+    guest stderr: NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568)
+                      at esmGap (rifty-isolate-guest.js:139794:22)
+                      at executeEsm (rifty-isolate-guest.js:136283:46)
+                      at Object.loadAsyncResolved (rifty-isolate-guest.js:137411:18)
+                      at Object.loadAsync (rifty-isolate-guest.js:137402:21)
+                      at dynamicImport (rifty-isolate-guest.js:132529:27)
+                      at eval (/workspace/gen/pdfjs-import.cjs:5:33)
+                      at Object.<anonymous> (/workspace/gen/pdfjs-import.cjs:17:3)
+                      at compileCjsSource (rifty-isolate-guest.js:132576:8)
+                      at Object.value (rifty-isolate-guest.js:132615:9)
+                      at Object.defaultJsExtension [as .js] (rifty-isolate-guest.js:137308:14)
+  GUEST-STOPS multi-flate.pdf  node exit 0 155ms | guest exit 1 405ms
+    guest stderr: NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568)
+                      at esmGap (rifty-isolate-guest.js:139794:22)
+                      at executeEsm (rifty-isolate-guest.js:136283:46)
+                      at Object.loadAsyncResolved (rifty-isolate-guest.js:137411:18)
+                      at Object.loadAsync (rifty-isolate-guest.js:137402:21)
+                      at dynamicImport (rifty-isolate-guest.js:132529:27)
+                      at eval (/workspace/gen/pdfjs-import.cjs:5:33)
+                      at Object.<anonymous> (/workspace/gen/pdfjs-import.cjs:17:3)
+                      at compileCjsSource (rifty-isolate-guest.js:132576:8)
+                      at Object.value (rifty-isolate-guest.js:132615:9)
+                      at Object.defaultJsExtension [as .js] (rifty-isolate-guest.js:137308:14)
+  GUEST-STOPS cyrillic-pdfkit.pdf+cyrillic.pdf+latin-raw.pdf+multi-flate.pdf  node exit 0 128ms | guest exit 1 422ms
+    guest stderr: NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568)
+                      at esmGap (rifty-isolate-guest.js:139794:22)
+                      at executeEsm (rifty-isolate-guest.js:136283:46)
+                      at Object.loadAsyncResolved (rifty-isolate-guest.js:137411:18)
+                      at Object.loadAsync (rifty-isolate-guest.js:137402:21)
+                      at dynamicImport (rifty-isolate-guest.js:132529:27)
+                      at eval (/workspace/gen/pdfjs-import.cjs:5:33)
+                      at Object.<anonymous> (/workspace/gen/pdfjs-import.cjs:17:3)
+                      at compileCjsSource (rifty-isolate-guest.js:132576:8)
+                      at Object.value (rifty-isolate-guest.js:132615:9)
+                      at Object.defaultJsExtension [as .js] (rifty-isolate-guest.js:137308:14)
+
+=== pdfjs.mjs  [pdfjs-dist] tree 570 files 35.9 MiB, memoryLimitMb 256
+  GUEST-STOPS cyrillic-pdfkit.pdf  node exit 0 100ms | guest exit 1 360ms
+    guest stderr: NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {
+                    feature: 'isolate-host.esm'
+                  }
+                  Node.js v24.0.0
+  GUEST-STOPS cyrillic.pdf  node exit 0 129ms | guest exit 1 401ms
+    guest stderr: NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {
+                    feature: 'isolate-host.esm'
+                  }
+                  Node.js v24.0.0
+  GUEST-STOPS latin-raw.pdf  node exit 0 123ms | guest exit 1 384ms
+    guest stderr: NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {
+                    feature: 'isolate-host.esm'
+                  }
+                  Node.js v24.0.0
+  GUEST-STOPS multi-flate.pdf  node exit 0 141ms | guest exit 1 451ms
+    guest stderr: NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {
+                    feature: 'isolate-host.esm'
+                  }
+                  Node.js v24.0.0
+  GUEST-STOPS cyrillic-pdfkit.pdf+cyrillic.pdf+latin-raw.pdf+multi-flate.pdf  node exit 0 134ms | guest exit 1 354ms
+    guest stderr: NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {
+                    feature: 'isolate-host.esm'
+                  }
+                  Node.js v24.0.0
+
+=== pdfjs3.cjs  [pdfjs-dist-v3] tree 313 files 31.0 MiB, memoryLimitMb 256
+  GUEST-STOPS cyrillic-pdfkit.pdf  node exit 0 114ms | guest exit 1 694ms
+    guest stderr: NotImplementedError: Not implemented: isolate-host.URLSearchParams (not available in the rifty isolate host, ADR-0557)
+                      at Object.<anonymous> (/node_modules/pdfjs-dist-v3/legacy/build/pdf.js:2413:14)
+                      at __w_pdfjs_require__ (/node_modules/pdfjs-dist-v3/legacy/build/pdf.js:22782:42)
+                      at Object.<anonymous> (/node_modules/pdfjs-dist-v3/legacy/build/pdf.js:69:1)
+                      at __w_pdfjs_require__ (/node_modules/pdfjs-dist-v3/legacy/build/pdf.js:22782:42)
+                      at /node_modules/pdfjs-dist-v3/legacy/build/pdf.js:23062:13
+                      at /node_modules/pdfjs-dist-v3/legacy/build/pdf.js:23073:3
+                      at /node_modules/pdfjs-dist-v3/legacy/build/pdf.js:23076:12
+                      at webpackUniversalModuleDefinition (/node_modules/pdfjs-dist-v3/legacy/build/pdf.js:25:36) {
+                    feature: 'isolate-host.URLSearchParams'
+                  }
+                  Node.js v24.0.0
+  GUEST-STOPS cyrillic.pdf  node exit 0 135ms | guest exit 1 742ms
+    guest stderr: NotImplementedError: Not implemented: isolate-host.URLSearchParams (not available in the rifty isolate host, ADR-0557)
+                      at Object.<anonymous> (/node_modules/pdfjs-dist-v3/legacy/build/pdf.js:2413:14)
+                      at __w_pdfjs_require__ (/node_modules/pdfjs-dist-v3/legacy/build/pdf.js:22782:42)
+                      at Object.<anonymous> (/node_modules/pdfjs-dist-v3/legacy/build/pdf.js:69:1)
+                      at __w_pdfjs_require__ (/node_modules/pdfjs-dist-v3/legacy/build/pdf.js:22782:42)
+                      at /node_modules/pdfjs-dist-v3/legacy/build/pdf.js:23062:13
+                      at /node_modules/pdfjs-dist-v3/legacy/build/pdf.js:23073:3
+                      at /node_modules/pdfjs-dist-v3/legacy/build/pdf.js:23076:12
+                      at webpackUniversalModuleDefinition (/node_modules/pdfjs-dist-v3/legacy/build/pdf.js:25:36) {
+                    feature: 'isolate-host.URLSearchParams'
+                  }
+                  Node.js v24.0.0
+  GUEST-STOPS latin-raw.pdf  node exit 0 106ms | guest exit 1 766ms
+    guest stderr: NotImplementedError: Not implemented: isolate-host.URLSearchParams (not available in the rifty isolate host, ADR-0557)
+                      at Object.<anonymous> (/node_modules/pdfjs-dist-v3/legacy/build/pdf.js:2413:14)
+                      at __w_pdfjs_require__ (/node_modules/pdfjs-dist-v3/legacy/build/pdf.js:22782:42)
+                      at Object.<anonymous> (/node_modules/pdfjs-dist-v3/legacy/build/pdf.js:69:1)
+                      at __w_pdfjs_require__ (/node_modules/pdfjs-dist-v3/legacy/build/pdf.js:22782:42)
+                      at /node_modules/pdfjs-dist-v3/legacy/build/pdf.js:23062:13
+                      at /node_modules/pdfjs-dist-v3/legacy/build/pdf.js:23073:3
+                      at /node_modules/pdfjs-dist-v3/legacy/build/pdf.js:23076:12
+                      at webpackUniversalModuleDefinition (/node_modules/pdfjs-dist-v3/legacy/build/pdf.js:25:36) {
+                    feature: 'isolate-host.URLSearchParams'
+                  }
+                  Node.js v24.0.0
+  GUEST-STOPS multi-flate.pdf  node exit 0 114ms | guest exit 1 859ms
+    guest stderr: NotImplementedError: Not implemented: isolate-host.URLSearchParams (not available in the rifty isolate host, ADR-0557)
+                      at Object.<anonymous> (/node_modules/pdfjs-dist-v3/legacy/build/pdf.js:2413:14)
+                      at __w_pdfjs_require__ (/node_modules/pdfjs-dist-v3/legacy/build/pdf.js:22782:42)
+                      at Object.<anonymous> (/node_modules/pdfjs-dist-v3/legacy/build/pdf.js:69:1)
+                      at __w_pdfjs_require__ (/node_modules/pdfjs-dist-v3/legacy/build/pdf.js:22782:42)
+                      at /node_modules/pdfjs-dist-v3/legacy/build/pdf.js:23062:13
+                      at /node_modules/pdfjs-dist-v3/legacy/build/pdf.js:23073:3
+                      at /node_modules/pdfjs-dist-v3/legacy/build/pdf.js:23076:12
+                      at webpackUniversalModuleDefinition (/node_modules/pdfjs-dist-v3/legacy/build/pdf.js:25:36) {
+                    feature: 'isolate-host.URLSearchParams'
+                  }
+                  Node.js v24.0.0
+  GUEST-STOPS cyrillic-pdfkit.pdf+cyrillic.pdf+latin-raw.pdf+multi-flate.pdf  node exit 0 163ms | guest exit 1 685ms
+    guest stderr: NotImplementedError: Not implemented: isolate-host.URLSearchParams (not available in the rifty isolate host, ADR-0557)
+                      at Object.<anonymous> (/node_modules/pdfjs-dist-v3/legacy/build/pdf.js:2413:14)
+                      at __w_pdfjs_require__ (/node_modules/pdfjs-dist-v3/legacy/build/pdf.js:22782:42)
+                      at Object.<anonymous> (/node_modules/pdfjs-dist-v3/legacy/build/pdf.js:69:1)
+                      at __w_pdfjs_require__ (/node_modules/pdfjs-dist-v3/legacy/build/pdf.js:22782:42)
+                      at /node_modules/pdfjs-dist-v3/legacy/build/pdf.js:23062:13
+                      at /node_modules/pdfjs-dist-v3/legacy/build/pdf.js:23073:3
+                      at /node_modules/pdfjs-dist-v3/legacy/build/pdf.js:23076:12
+                      at webpackUniversalModuleDefinition (/node_modules/pdfjs-dist-v3/legacy/build/pdf.js:25:36) {
+                    feature: 'isolate-host.URLSearchParams'
+                  }
+                  Node.js v24.0.0
+
+=== pdfjsextract.cjs  [pdf.js-extract, dommatrix] tree 200 files 4.5 MiB, memoryLimitMb 256
+  GUEST-STOPS cyrillic-pdfkit.pdf  node exit 0 106ms | guest exit 1 184ms
+    guest stderr: NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568)
+                      at esmGap (rifty-isolate-guest.js:139794:22)
+                      at executeEsm (rifty-isolate-guest.js:136283:46)
+                      at Object.loadAsyncResolved (rifty-isolate-guest.js:137411:18)
+                      at Object.loadAsync (rifty-isolate-guest.js:137402:21)
+                      at dynamicImport (rifty-isolate-guest.js:132529:27)
+                      at eval (/node_modules/pdf.js-extract/lib/index.cjs:2:27)
+                      at Object.<anonymous> (/node_modules/pdf.js-extract/lib/index.cjs:4:3)
+                      at compileCjsSource (rifty-isolate-guest.js:132576:8)
+                      at Object.value (rifty-isolate-guest.js:132615:9)
+                      at Object.defaultJsExtension [as .js] (rifty-isolate-guest.js:137308:14)
+  GUEST-STOPS cyrillic.pdf  node exit 0 105ms | guest exit 1 65ms
+    guest stderr: NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568)
+                      at esmGap (rifty-isolate-guest.js:139794:22)
+                      at executeEsm (rifty-isolate-guest.js:136283:46)
+                      at Object.loadAsyncResolved (rifty-isolate-guest.js:137411:18)
+                      at Object.loadAsync (rifty-isolate-guest.js:137402:21)
+                      at dynamicImport (rifty-isolate-guest.js:132529:27)
+                      at eval (/node_modules/pdf.js-extract/lib/index.cjs:2:27)
+                      at Object.<anonymous> (/node_modules/pdf.js-extract/lib/index.cjs:4:3)
+                      at compileCjsSource (rifty-isolate-guest.js:132576:8)
+                      at Object.value (rifty-isolate-guest.js:132615:9)
+                      at Object.defaultJsExtension [as .js] (rifty-isolate-guest.js:137308:14)
+  GUEST-STOPS latin-raw.pdf  node exit 0 128ms | guest exit 1 78ms
+    guest stderr: NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568)
+                      at esmGap (rifty-isolate-guest.js:139794:22)
+                      at executeEsm (rifty-isolate-guest.js:136283:46)
+                      at Object.loadAsyncResolved (rifty-isolate-guest.js:137411:18)
+                      at Object.loadAsync (rifty-isolate-guest.js:137402:21)
+                      at dynamicImport (rifty-isolate-guest.js:132529:27)
+                      at eval (/node_modules/pdf.js-extract/lib/index.cjs:2:27)
+                      at Object.<anonymous> (/node_modules/pdf.js-extract/lib/index.cjs:4:3)
+                      at compileCjsSource (rifty-isolate-guest.js:132576:8)
+                      at Object.value (rifty-isolate-guest.js:132615:9)
+                      at Object.defaultJsExtension [as .js] (rifty-isolate-guest.js:137308:14)
+  GUEST-STOPS multi-flate.pdf  node exit 0 141ms | guest exit 1 209ms
+    guest stderr: NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568)
+                      at esmGap (rifty-isolate-guest.js:139794:22)
+                      at executeEsm (rifty-isolate-guest.js:136283:46)
+                      at Object.loadAsyncResolved (rifty-isolate-guest.js:137411:18)
+                      at Object.loadAsync (rifty-isolate-guest.js:137402:21)
+                      at dynamicImport (rifty-isolate-guest.js:132529:27)
+                      at eval (/node_modules/pdf.js-extract/lib/index.cjs:2:27)
+                      at Object.<anonymous> (/node_modules/pdf.js-extract/lib/index.cjs:4:3)
+                      at compileCjsSource (rifty-isolate-guest.js:132576:8)
+                      at Object.value (rifty-isolate-guest.js:132615:9)
+                      at Object.defaultJsExtension [as .js] (rifty-isolate-guest.js:137308:14)
+  GUEST-STOPS cyrillic-pdfkit.pdf+cyrillic.pdf+latin-raw.pdf+multi-flate.pdf  node exit 0 133ms | guest exit 1 68ms
+    guest stderr: NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568)
+                      at esmGap (rifty-isolate-guest.js:139794:22)
+                      at executeEsm (rifty-isolate-guest.js:136283:46)
+                      at Object.loadAsyncResolved (rifty-isolate-guest.js:137411:18)
+                      at Object.loadAsync (rifty-isolate-guest.js:137402:21)
+                      at dynamicImport (rifty-isolate-guest.js:132529:27)
+                      at eval (/node_modules/pdf.js-extract/lib/index.cjs:2:27)
+                      at Object.<anonymous> (/node_modules/pdf.js-extract/lib/index.cjs:4:3)
+                      at compileCjsSource (rifty-isolate-guest.js:132576:8)
+                      at Object.value (rifty-isolate-guest.js:132615:9)
+                      at Object.defaultJsExtension [as .js] (rifty-isolate-guest.js:137308:14)
+
+=== pdfparse1-default.cjs  [pdf-parse-v1, debug, ms, node-ensure] tree 788 files 31.8 MiB, memoryLimitMb 256
+  EQUAL       cyrillic-pdfkit.pdf  node exit 0 78ms | guest exit 0 567ms
+  EQUAL       cyrillic.pdf  node exit 0 79ms | guest exit 0 564ms
+  EQUAL       latin-raw.pdf  node exit 0 75ms | guest exit 0 822ms
+  EQUAL       multi-flate.pdf  node exit 0 102ms | guest exit 0 774ms
+  NODE-FAILS  cyrillic-pdfkit.pdf+cyrillic.pdf+latin-raw.pdf+multi-flate.pdf  node exit 1 120ms | guest exit 0 670ms
+    node stderr: Error
+                     at UnknownErrorExceptionClosure (/private/tmp/rifty-pdf-text/oracle/pdf-parse-v1_debug_ms_node-ensure/node_modules/pdf-parse-v1/lib/pdf.js/v1.10.100/build/pdf.js:443:37)
+                     at Object.<anonymous> (/private/tmp/rifty-pdf-text/oracle/pdf-parse-v1_debug_ms_node-ensure/node_modules/pdf-parse-v1/lib/pdf.js/v1.10.100/build/pdf.js:446:2)
+                     at __w_pdfjs_require__ (/private/tmp/rifty-pdf-text/oracle/pdf-parse-v1_debug_ms_node-ensure/node_modules/pdf-parse-v1/lib/pdf.js/v1.10.100/build/pdf.js:45:30)
+                     at Object.<anonymous> (/private/tmp/rifty-pdf-text/oracle/pdf-parse-v1_debug_ms_node-ensure/node_modules/pdf-parse-v1/lib/pdf.js/v1.10.100/build/pdf.js:7939:23)
+                     at __w_pdfjs_require__ (/private/tmp/rifty-pdf-text/oracle/pdf-parse-v1_debug_ms_node-ensure/node_modules/pdf-parse-v1/lib/pdf.js/v1.10.100/build/pdf.js:45:30)
+    guest stderr: 
+
+=== pdfparse1.cjs  [pdf-parse-v1, debug, ms, node-ensure] tree 788 files 31.8 MiB, memoryLimitMb 256
+  EQUAL       cyrillic-pdfkit.pdf  node exit 0 74ms | guest exit 0 727ms
+  EQUAL       cyrillic.pdf  node exit 0 81ms | guest exit 0 718ms
+  EQUAL       latin-raw.pdf  node exit 0 87ms | guest exit 0 703ms
+  EQUAL       multi-flate.pdf  node exit 0 113ms | guest exit 0 691ms
+  NODE-FAILS  cyrillic-pdfkit.pdf+cyrillic.pdf+latin-raw.pdf+multi-flate.pdf  node exit 1 106ms | guest exit 0 732ms
+    node stderr: Error
+                     at UnknownErrorExceptionClosure (/private/tmp/rifty-pdf-text/oracle/pdf-parse-v1_debug_ms_node-ensure/node_modules/pdf-parse-v1/lib/pdf.js/v1.10.100/build/pdf.js:443:37)
+                     at Object.<anonymous> (/private/tmp/rifty-pdf-text/oracle/pdf-parse-v1_debug_ms_node-ensure/node_modules/pdf-parse-v1/lib/pdf.js/v1.10.100/build/pdf.js:446:2)
+                     at __w_pdfjs_require__ (/private/tmp/rifty-pdf-text/oracle/pdf-parse-v1_debug_ms_node-ensure/node_modules/pdf-parse-v1/lib/pdf.js/v1.10.100/build/pdf.js:45:30)
+                     at Object.<anonymous> (/private/tmp/rifty-pdf-text/oracle/pdf-parse-v1_debug_ms_node-ensure/node_modules/pdf-parse-v1/lib/pdf.js/v1.10.100/build/pdf.js:7939:23)
+                     at __w_pdfjs_require__ (/private/tmp/rifty-pdf-text/oracle/pdf-parse-v1_debug_ms_node-ensure/node_modules/pdf-parse-v1/lib/pdf.js/v1.10.100/build/pdf.js:45:30)
+    guest stderr: 
+
+=== pdfparse2.cjs  [pdf-parse, @napi-rs] tree 505 files 55.3 MiB, memoryLimitMb 256
+  NODE-FAILS  cyrillic-pdfkit.pdf  node exit 1 44ms | guest exit 1 801ms
+    node stderr: Warning: Cannot load "@napi-rs/canvas" package: "Error: Failed to load native binding".
+                 Warning: Cannot polyfill `DOMMatrix`, rendering may be broken.
+                 Warning: Cannot polyfill `ImageData`, rendering may be broken.
+                 Warning: Cannot polyfill `Path2D`, rendering may be broken.
+                 /private/tmp/rifty-pdf-text/oracle/pdf-parse_napi-rs/node_modules/pdf-parse/dist/pdf-parse/cjs/index.cjs:1
+                 "use strict";var t,e,i,s,n,r,a,o,l,h,c,d,u,p,g=t=>{throw TypeError(t)},m=(t,e,i)=>e.has(t)||g("Cannot "+i),f=(t,e,i)=>(m(t,e,"read from private field"),i?i.call(t):e.get(t)),b=(t,e,i)=>e.has(t)?g("Can…[line of 65420]
+    guest stderr: NotImplementedError: Not implemented: isolate-host.URLSearchParams (not available in the rifty isolate host, ADR-0557)
+                      at 4603 (/node_modules/pdf-parse/dist/pdf-parse/cjs/index.cjs:1:21492)
+                      at _ (/node_modules/pdf-parse/dist/pdf-parse/cjs/index.cjs:1:54276)
+                      at Object.<anonymous> (/node_modules/pdf-parse/dist/pdf-parse/cjs/index.cjs:1:64744) {
+                    feature: 'isolate-host.URLSearchParams'
+                  }
+                  Node.js v24.0.0
+  NODE-FAILS  cyrillic.pdf  node exit 1 46ms | guest exit 1 755ms
+    node stderr: Warning: Cannot load "@napi-rs/canvas" package: "Error: Failed to load native binding".
+                 Warning: Cannot polyfill `DOMMatrix`, rendering may be broken.
+                 Warning: Cannot polyfill `ImageData`, rendering may be broken.
+                 Warning: Cannot polyfill `Path2D`, rendering may be broken.
+                 /private/tmp/rifty-pdf-text/oracle/pdf-parse_napi-rs/node_modules/pdf-parse/dist/pdf-parse/cjs/index.cjs:1
+                 "use strict";var t,e,i,s,n,r,a,o,l,h,c,d,u,p,g=t=>{throw TypeError(t)},m=(t,e,i)=>e.has(t)||g("Cannot "+i),f=(t,e,i)=>(m(t,e,"read from private field"),i?i.call(t):e.get(t)),b=(t,e,i)=>e.has(t)?g("Can…[line of 65420]
+    guest stderr: NotImplementedError: Not implemented: isolate-host.URLSearchParams (not available in the rifty isolate host, ADR-0557)
+                      at 4603 (/node_modules/pdf-parse/dist/pdf-parse/cjs/index.cjs:1:21492)
+                      at _ (/node_modules/pdf-parse/dist/pdf-parse/cjs/index.cjs:1:54276)
+                      at Object.<anonymous> (/node_modules/pdf-parse/dist/pdf-parse/cjs/index.cjs:1:64744) {
+                    feature: 'isolate-host.URLSearchParams'
+                  }
+                  Node.js v24.0.0
+  NODE-FAILS  latin-raw.pdf  node exit 1 63ms | guest exit 1 709ms
+    node stderr: Warning: Cannot load "@napi-rs/canvas" package: "Error: Failed to load native binding".
+                 Warning: Cannot polyfill `DOMMatrix`, rendering may be broken.
+                 Warning: Cannot polyfill `ImageData`, rendering may be broken.
+                 Warning: Cannot polyfill `Path2D`, rendering may be broken.
+                 /private/tmp/rifty-pdf-text/oracle/pdf-parse_napi-rs/node_modules/pdf-parse/dist/pdf-parse/cjs/index.cjs:1
+                 "use strict";var t,e,i,s,n,r,a,o,l,h,c,d,u,p,g=t=>{throw TypeError(t)},m=(t,e,i)=>e.has(t)||g("Cannot "+i),f=(t,e,i)=>(m(t,e,"read from private field"),i?i.call(t):e.get(t)),b=(t,e,i)=>e.has(t)?g("Can…[line of 65420]
+    guest stderr: NotImplementedError: Not implemented: isolate-host.URLSearchParams (not available in the rifty isolate host, ADR-0557)
+                      at 4603 (/node_modules/pdf-parse/dist/pdf-parse/cjs/index.cjs:1:21492)
+                      at _ (/node_modules/pdf-parse/dist/pdf-parse/cjs/index.cjs:1:54276)
+                      at Object.<anonymous> (/node_modules/pdf-parse/dist/pdf-parse/cjs/index.cjs:1:64744) {
+                    feature: 'isolate-host.URLSearchParams'
+                  }
+                  Node.js v24.0.0
+  NODE-FAILS  multi-flate.pdf  node exit 1 45ms | guest exit 1 765ms
+    node stderr: Warning: Cannot load "@napi-rs/canvas" package: "Error: Failed to load native binding".
+                 Warning: Cannot polyfill `DOMMatrix`, rendering may be broken.
+                 Warning: Cannot polyfill `ImageData`, rendering may be broken.
+                 Warning: Cannot polyfill `Path2D`, rendering may be broken.
+                 /private/tmp/rifty-pdf-text/oracle/pdf-parse_napi-rs/node_modules/pdf-parse/dist/pdf-parse/cjs/index.cjs:1
+                 "use strict";var t,e,i,s,n,r,a,o,l,h,c,d,u,p,g=t=>{throw TypeError(t)},m=(t,e,i)=>e.has(t)||g("Cannot "+i),f=(t,e,i)=>(m(t,e,"read from private field"),i?i.call(t):e.get(t)),b=(t,e,i)=>e.has(t)?g("Can…[line of 65420]
+    guest stderr: NotImplementedError: Not implemented: isolate-host.URLSearchParams (not available in the rifty isolate host, ADR-0557)
+                      at 4603 (/node_modules/pdf-parse/dist/pdf-parse/cjs/index.cjs:1:21492)
+                      at _ (/node_modules/pdf-parse/dist/pdf-parse/cjs/index.cjs:1:54276)
+                      at Object.<anonymous> (/node_modules/pdf-parse/dist/pdf-parse/cjs/index.cjs:1:64744) {
+                    feature: 'isolate-host.URLSearchParams'
+                  }
+                  Node.js v24.0.0
+  NODE-FAILS  cyrillic-pdfkit.pdf+cyrillic.pdf+latin-raw.pdf+multi-flate.pdf  node exit 1 82ms | guest exit 1 728ms
+    node stderr: Warning: Cannot load "@napi-rs/canvas" package: "Error: Failed to load native binding".
+                 Warning: Cannot polyfill `DOMMatrix`, rendering may be broken.
+                 Warning: Cannot polyfill `ImageData`, rendering may be broken.
+                 Warning: Cannot polyfill `Path2D`, rendering may be broken.
+                 /private/tmp/rifty-pdf-text/oracle/pdf-parse_napi-rs/node_modules/pdf-parse/dist/pdf-parse/cjs/index.cjs:1
+                 "use strict";var t,e,i,s,n,r,a,o,l,h,c,d,u,p,g=t=>{throw TypeError(t)},m=(t,e,i)=>e.has(t)||g("Cannot "+i),f=(t,e,i)=>(m(t,e,"read from private field"),i?i.call(t):e.get(t)),b=(t,e,i)=>e.has(t)?g("Can…[line of 65420]
+    guest stderr: NotImplementedError: Not implemented: isolate-host.URLSearchParams (not available in the rifty isolate host, ADR-0557)
+                      at 4603 (/node_modules/pdf-parse/dist/pdf-parse/cjs/index.cjs:1:21492)
+                      at _ (/node_modules/pdf-parse/dist/pdf-parse/cjs/index.cjs:1:54276)
+                      at Object.<anonymous> (/node_modules/pdf-parse/dist/pdf-parse/cjs/index.cjs:1:64744) {
+                    feature: 'isolate-host.URLSearchParams'
+                  }
+                  Node.js v24.0.0
+
+=== pdfreader-buffer.cjs  [pdfreader] tree 101 files 11.3 MiB, memoryLimitMb 256
+  EQUAL       cyrillic-pdfkit.pdf  node exit 0 65ms | guest exit 0 473ms
+  EQUAL       cyrillic.pdf  node exit 0 64ms | guest exit 0 461ms
+  EQUAL       latin-raw.pdf  node exit 0 57ms | guest exit 0 694ms
+  EQUAL       multi-flate.pdf  node exit 0 88ms | guest exit 0 610ms
+  NODE-FAILS  cyrillic-pdfkit.pdf+cyrillic.pdf+latin-raw.pdf+multi-flate.pdf  node exit 1 608ms | guest exit 0 585ms
+    node stderr: Error: Error: Unknown compression method in flate stream: 190, 213
+                 {
+                   parserError: 'Error: Error: Unknown compression method in flate stream: 190, 213'
+                 }
+    guest stderr: 
+
+=== pdfreader.cjs  [pdfreader] tree 101 files 11.3 MiB, memoryLimitMb 256
+  EQUAL       cyrillic-pdfkit.pdf  node exit 0 66ms | guest exit 0 550ms
+  EQUAL       cyrillic.pdf  node exit 0 68ms | guest exit 0 506ms
+  EQUAL       latin-raw.pdf  node exit 0 59ms | guest exit 0 516ms
+  EQUAL       multi-flate.pdf  node exit 0 76ms | guest exit 0 560ms
+  EQUAL       cyrillic-pdfkit.pdf+cyrillic.pdf+latin-raw.pdf+multi-flate.pdf  node exit 0 97ms | guest exit 0 620ms
+
+=== unpdf-import.cjs  [unpdf] tree 177 files 3.0 MiB, memoryLimitMb 256
+  GUEST-STOPS cyrillic-pdfkit.pdf  node exit 0 83ms | guest exit 1 192ms
+    guest stderr: NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568)
+                      at esmGap (rifty-isolate-guest.js:139794:22)
+                      at executeEsm (rifty-isolate-guest.js:136283:46)
+                      at Object.loadAsyncResolved (rifty-isolate-guest.js:137411:18)
+                      at Object.loadAsync (rifty-isolate-guest.js:137402:21)
+                      at dynamicImport (rifty-isolate-guest.js:132529:27)
+                      at eval (/workspace/gen/unpdf-import.cjs:5:51)
+                      at Object.<anonymous> (/workspace/gen/unpdf-import.cjs:11:3)
+                      at compileCjsSource (rifty-isolate-guest.js:132576:8)
+                      at Object.value (rifty-isolate-guest.js:132615:9)
+                      at Object.defaultJsExtension [as .js] (rifty-isolate-guest.js:137308:14)
+  GUEST-STOPS cyrillic.pdf  node exit 0 81ms | guest exit 1 57ms
+    guest stderr: NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568)
+                      at esmGap (rifty-isolate-guest.js:139794:22)
+                      at executeEsm (rifty-isolate-guest.js:136283:46)
+                      at Object.loadAsyncResolved (rifty-isolate-guest.js:137411:18)
+                      at Object.loadAsync (rifty-isolate-guest.js:137402:21)
+                      at dynamicImport (rifty-isolate-guest.js:132529:27)
+                      at eval (/workspace/gen/unpdf-import.cjs:5:51)
+                      at Object.<anonymous> (/workspace/gen/unpdf-import.cjs:11:3)
+                      at compileCjsSource (rifty-isolate-guest.js:132576:8)
+                      at Object.value (rifty-isolate-guest.js:132615:9)
+                      at Object.defaultJsExtension [as .js] (rifty-isolate-guest.js:137308:14)
+  GUEST-STOPS latin-raw.pdf  node exit 0 70ms | guest exit 1 58ms
+    guest stderr: NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568)
+                      at esmGap (rifty-isolate-guest.js:139794:22)
+                      at executeEsm (rifty-isolate-guest.js:136283:46)
+                      at Object.loadAsyncResolved (rifty-isolate-guest.js:137411:18)
+                      at Object.loadAsync (rifty-isolate-guest.js:137402:21)
+                      at dynamicImport (rifty-isolate-guest.js:132529:27)
+                      at eval (/workspace/gen/unpdf-import.cjs:5:51)
+                      at Object.<anonymous> (/workspace/gen/unpdf-import.cjs:11:3)
+                      at compileCjsSource (rifty-isolate-guest.js:132576:8)
+                      at Object.value (rifty-isolate-guest.js:132615:9)
+                      at Object.defaultJsExtension [as .js] (rifty-isolate-guest.js:137308:14)
+  GUEST-STOPS multi-flate.pdf  node exit 0 78ms | guest exit 1 55ms
+    guest stderr: NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568)
+                      at esmGap (rifty-isolate-guest.js:139794:22)
+                      at executeEsm (rifty-isolate-guest.js:136283:46)
+                      at Object.loadAsyncResolved (rifty-isolate-guest.js:137411:18)
+                      at Object.loadAsync (rifty-isolate-guest.js:137402:21)
+                      at dynamicImport (rifty-isolate-guest.js:132529:27)
+                      at eval (/workspace/gen/unpdf-import.cjs:5:51)
+                      at Object.<anonymous> (/workspace/gen/unpdf-import.cjs:11:3)
+                      at compileCjsSource (rifty-isolate-guest.js:132576:8)
+                      at Object.value (rifty-isolate-guest.js:132615:9)
+                      at Object.defaultJsExtension [as .js] (rifty-isolate-guest.js:137308:14)
+  GUEST-STOPS cyrillic-pdfkit.pdf+cyrillic.pdf+latin-raw.pdf+multi-flate.pdf  node exit 0 95ms | guest exit 1 57ms
+    guest stderr: NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568)
+                      at esmGap (rifty-isolate-guest.js:139794:22)
+                      at executeEsm (rifty-isolate-guest.js:136283:46)
+                      at Object.loadAsyncResolved (rifty-isolate-guest.js:137411:18)
+                      at Object.loadAsync (rifty-isolate-guest.js:137402:21)
+                      at dynamicImport (rifty-isolate-guest.js:132529:27)
+                      at eval (/workspace/gen/unpdf-import.cjs:5:51)
+                      at Object.<anonymous> (/workspace/gen/unpdf-import.cjs:11:3)
+                      at compileCjsSource (rifty-isolate-guest.js:132576:8)
+                      at Object.value (rifty-isolate-guest.js:132615:9)
+                      at Object.defaultJsExtension [as .js] (rifty-isolate-guest.js:137308:14)
+
+=== unpdf.mjs  [unpdf] tree 177 files 3.0 MiB, memoryLimitMb 256
+  GUEST-STOPS cyrillic-pdfkit.pdf  node exit 0 127ms | guest exit 1 71ms
+    guest stderr: NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {
+                    feature: 'isolate-host.esm'
+                  }
+                  Node.js v24.0.0
+  GUEST-STOPS cyrillic.pdf  node exit 0 124ms | guest exit 1 89ms
+    guest stderr: NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {
+                    feature: 'isolate-host.esm'
+                  }
+                  Node.js v24.0.0
+  GUEST-STOPS latin-raw.pdf  node exit 0 118ms | guest exit 1 73ms
+    guest stderr: NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {
+                    feature: 'isolate-host.esm'
+                  }
+                  Node.js v24.0.0
+  GUEST-STOPS multi-flate.pdf  node exit 0 133ms | guest exit 1 94ms
+    guest stderr: NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {
+                    feature: 'isolate-host.esm'
+                  }
+                  Node.js v24.0.0
+  GUEST-STOPS cyrillic-pdfkit.pdf+cyrillic.pdf+latin-raw.pdf+multi-flate.pdf  node exit 0 129ms | guest exit 1 74ms
+    guest stderr: NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) {
+                    feature: 'isolate-host.esm'
+                  }
+                  Node.js v24.0.0

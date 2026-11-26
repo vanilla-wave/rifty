@@ -1,0 +1,7 @@
+
+## pdfium-keepalive.cjs [@hyzyla] 13.5 MiB, 37 files
+  EQUAL       cyrillic-pdfkit.pdf  node 0 / guest 0  56ms / 312ms
+  EQUAL       cyrillic.pdf         node 0 / guest 0  54ms / 321ms
+  EQUAL       latin-raw.pdf        node 0 / guest 0  57ms / 312ms
+  EQUAL       multi-flate.pdf      node 0 / guest 0  60ms / 318ms
+  EQUAL       ALL                  node 0 / guest 0  69ms / 317ms

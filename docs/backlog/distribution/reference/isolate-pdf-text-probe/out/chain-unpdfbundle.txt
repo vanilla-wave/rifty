@@ -1,0 +1,17 @@
+# unpdfbundle: node (no stubs) exit 0
+
+step 1 stubs [none] → guest exit 1
+  error: Error: Setting up fake worker failed: "Not implemented: isolate-host.AbortController (not available in the rifty isolate host, ADR-0557)".
+  frames: at eval (/workspace/bundles/unpdf.cjs:35410:42)
+
+step 2 stubs [AbortController] → guest exit 1
+  error: NotImplementedError: Not implemented: isolate-host.structuredClone (not available in the rifty isolate host, ADR-0557)
+  frames: at LoopbackPort.postMessage (/workspace/bundles/unpdf.cjs:31053:26) < at MessageHandler.sendWithPromise (/workspace/bundles/unpdf.cjs:31230:19) < at eval (/workspace/bundles/unpdf.cjs:4669:32)
+
+step 3 stubs [AbortController, structuredClone] → guest exit 1
+  error: NotImplementedError: Not implemented: isolate-host.ReadableStream (not available in the rifty isolate host, ADR-0557)
+  frames: at MessageHandler.sendWithStream (/workspace/bundles/unpdf.cjs:31238:16) < at PDFPageProxy.streamTextContent (/workspace/bundles/unpdf.cjs:35259:47) < at PDFPageProxy.getTextContent (/workspace/bundles/unpdf.cjs:35263:23) < at getPageText (/workspace/bundles/unpdf.cjs:40710:55)
+
+step 4 stubs [AbortController, structuredClone, ReadableStream] → guest exit 0  TEXT = NODE
+
+minimal ponyfill set with text = node: [AbortController, structuredClone, ReadableStream]

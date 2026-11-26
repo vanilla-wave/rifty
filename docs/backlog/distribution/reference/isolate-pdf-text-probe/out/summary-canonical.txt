@@ -1,0 +1,208 @@
+
+## mupdf-import.cjs [mupdf] 13.6 MiB, 11 files
+  GUEST-STOPS cyrillic-pdfkit.pdf  node 0 / guest 1  62ms / 222ms
+      guest: NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568)
+      frames: at eval (/workspace/gen/mupdf-import.cjs:5:23) < at Object.<anonymous> (/workspace/gen/mupdf-import.cjs:12:3)
+  GUEST-STOPS cyrillic.pdf         node 0 / guest 1  54ms / 221ms
+  GUEST-STOPS latin-raw.pdf        node 0 / guest 1  61ms / 256ms
+  GUEST-STOPS multi-flate.pdf      node 0 / guest 1  67ms / 235ms
+  GUEST-STOPS ALL                  node 0 / guest 1  71ms / 230ms
+  trace(node, exit 0): modules: fs, fs (import), module (import), path, url
+    esm: mupdf/dist/mupdf.js(module), mupdf/dist/mupdf-wasm.js(module)
+    globals read: window (absent in Node too), WorkerGlobalScope (absent in Node too), TextDecoder, URL, WebAssembly, navigator, FinalizationRegistry
+    used: new URL×2, WebAssembly.instantiate()×1, new FinalizationRegistry×5
+    TextDecoder labels: utf-8
+
+## mupdf.mjs [mupdf] 13.6 MiB, 11 files
+  GUEST-STOPS cyrillic-pdfkit.pdf  node 0 / guest 1  59ms / 219ms
+      guest: NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) { ⏎   feature: 'isolate-host.esm' ⏎ } ⏎ Node.js v24.0.0
+      frames: 
+  GUEST-STOPS cyrillic.pdf         node 0 / guest 1  56ms / 225ms
+  GUEST-STOPS latin-raw.pdf        node 0 / guest 1  62ms / 204ms
+  GUEST-STOPS multi-flate.pdf      node 0 / guest 1  59ms / 204ms
+  GUEST-STOPS ALL                  node 0 / guest 1  73ms / 206ms
+  trace(node, exit 0): modules: fs (import), module (import), fs, path, url
+    esm: mupdf.mjs(module), mupdf/dist/mupdf.js(module), mupdf/dist/mupdf-wasm.js(module)
+    globals read: window (absent in Node too), WorkerGlobalScope (absent in Node too), TextDecoder, URL, WebAssembly, navigator, FinalizationRegistry
+    used: new URL×2, WebAssembly.instantiate()×1, new FinalizationRegistry×5
+    TextDecoder labels: utf-8
+
+## pdf2json-buffer.cjs [pdf2json] 11.3 MiB, 12 files
+  EQUAL       cyrillic-pdfkit.pdf  node 0 / guest 0  63ms / 481ms
+  EQUAL       cyrillic.pdf         node 0 / guest 0  61ms / 485ms
+  EQUAL       latin-raw.pdf        node 0 / guest 0  55ms / 468ms
+  EQUAL       multi-flate.pdf      node 0 / guest 0  62ms / 478ms
+  EQUAL       ALL                  node 0 / guest 0  75ms / 633ms
+  trace(node, exit 0): modules: fs, fs/promises, events, stream, process, console, buffer
+    esm: -
+    globals read: window (absent in Node too), URL, TextDecoder
+    used: URL.createObjectURL (read)×1
+    TextDecoder labels: -
+
+## pdf2json.cjs [pdf2json] 11.3 MiB, 12 files
+  EQUAL       cyrillic-pdfkit.pdf  node 0 / guest 0  70ms / 530ms
+  EQUAL       cyrillic.pdf         node 0 / guest 0  67ms / 566ms
+  EQUAL       latin-raw.pdf        node 0 / guest 0  70ms / 514ms
+  EQUAL       multi-flate.pdf      node 0 / guest 0  63ms / 560ms
+  EQUAL       ALL                  node 0 / guest 0  105ms / 634ms
+  trace(node, exit 0): modules: fs, fs/promises, events, stream, process, console, buffer
+    esm: -
+    globals read: window (absent in Node too), URL, TextDecoder
+    used: URL.createObjectURL (read)×1
+    TextDecoder labels: -
+
+## pdfjs-import.cjs [pdfjs-dist] 35.9 MiB, 570 files
+  GUEST-STOPS cyrillic-pdfkit.pdf  node 0 / guest 1  104ms / 374ms
+      guest: NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568)
+      frames: at eval (/workspace/gen/pdfjs-import.cjs:5:33) < at Object.<anonymous> (/workspace/gen/pdfjs-import.cjs:17:3)
+  GUEST-STOPS cyrillic.pdf         node 0 / guest 1  108ms / 372ms
+  GUEST-STOPS latin-raw.pdf        node 0 / guest 1  106ms / 361ms
+  GUEST-STOPS multi-flate.pdf      node 0 / guest 1  155ms / 405ms
+  GUEST-STOPS ALL                  node 0 / guest 1  128ms / 422ms
+  trace(node, exit 0): modules: fs, module (process.getBuiltinModule)
+    esm: pdfjs-dist/legacy/build/pdf.mjs(module), pdfjs-dist/legacy/build/pdf.worker.mjs(module)
+    globals read: document (absent in Node too), navigator, Uint8Array.prototype.toBase64 (absent in Node too), Uint8Array.prototype.toHex (absent in Node too), URL, URLSearchParams, Blob, Response, DOMException, DOMMatrix (absent in Node too), Path2D (absent in Node too), Math.sumPrecise (absent in Node too), Uint8Array.fromBase64 (absent in Node too), Buffer, self (absent in Node too), TextDecoder, ImageDecoder (absent in Node too), window (absent in Node too), AbortController, AbortSignal, structuredClone, ReadableStream, DecompressionStream
+    used: new URL×10, URL.parse (read)×2, Promise.try()×1, Promise.withResolvers()×93, new AbortController×16, structuredClone()×142, new ReadableStream×8, new DecompressionStream×2
+    TextDecoder labels: utf-8 fatal
+
+## pdfjs.mjs [pdfjs-dist] 35.9 MiB, 570 files
+  GUEST-STOPS cyrillic-pdfkit.pdf  node 0 / guest 1  100ms / 360ms
+      guest: NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) { ⏎   feature: 'isolate-host.esm' ⏎ } ⏎ Node.js v24.0.0
+      frames: 
+  GUEST-STOPS cyrillic.pdf         node 0 / guest 1  129ms / 401ms
+  GUEST-STOPS latin-raw.pdf        node 0 / guest 1  123ms / 384ms
+  GUEST-STOPS multi-flate.pdf      node 0 / guest 1  141ms / 451ms
+  GUEST-STOPS ALL                  node 0 / guest 1  134ms / 354ms
+  trace(node, exit 0): modules: fs (import), module (process.getBuiltinModule)
+    esm: pdfjs.mjs(module), pdfjs-dist/legacy/build/pdf.mjs(module), pdfjs-dist/legacy/build/pdf.worker.mjs(module)
+    globals read: document (absent in Node too), navigator, Uint8Array.prototype.toBase64 (absent in Node too), Uint8Array.prototype.toHex (absent in Node too), URL, URLSearchParams, Blob, Response, DOMException, DOMMatrix (absent in Node too), Path2D (absent in Node too), Math.sumPrecise (absent in Node too), Uint8Array.fromBase64 (absent in Node too), Buffer, self (absent in Node too), TextDecoder, ImageDecoder (absent in Node too), window (absent in Node too), AbortController, AbortSignal, structuredClone, ReadableStream, DecompressionStream
+    used: new URL×10, URL.parse (read)×2, Promise.try()×1, Promise.withResolvers()×93, new AbortController×16, structuredClone()×142, new ReadableStream×8, new DecompressionStream×2
+    TextDecoder labels: utf-8 fatal
+
+## pdfjs3.cjs [pdfjs-dist-v3] 31.0 MiB, 313 files
+  GUEST-STOPS cyrillic-pdfkit.pdf  node 0 / guest 1  114ms / 694ms
+      guest: NotImplementedError: Not implemented: isolate-host.URLSearchParams (not available in the rifty isolate host, ADR-0557) ⏎   feature: 'isolate-host.URLSearchParams' ⏎ } ⏎ Node.js v24.0.0
+      frames: at Object.<anonymous> (/node_modules/pdfjs-dist-v3/legacy/build/pdf.js:2413:14) < at __w_pdfjs_require__ (/node_modules/pdfjs-dist-v3/legacy/build/pdf.js:22782:42) < at Object.<anonymous> (/node_modules/pdfjs-dist-v3/legacy/build/pdf.js:69:1)
+  GUEST-STOPS cyrillic.pdf         node 0 / guest 1  135ms / 742ms
+  GUEST-STOPS latin-raw.pdf        node 0 / guest 1  106ms / 766ms
+  GUEST-STOPS multi-flate.pdf      node 0 / guest 1  114ms / 859ms
+  GUEST-STOPS ALL                  node 0 / guest 1  163ms / 685ms
+  trace(node, exit 0): modules: fs
+    esm: -
+    globals read: document (absent in Node too), navigator, WebAssembly, URLSearchParams, structuredClone, DOMException, DOMMatrix (absent in Node too), Path2D (absent in Node too), URL, Buffer, self (absent in Node too), window (absent in Node too), ReadableStream
+    used: structuredClone()×5, globalThis.structuredClone = … (replaced by the library)×1, new ReadableStream×8
+    TextDecoder labels: -
+
+## pdfjsextract.cjs [pdf.js-extract, dommatrix] 4.5 MiB, 200 files
+  GUEST-STOPS cyrillic-pdfkit.pdf  node 0 / guest 1  106ms / 184ms
+      guest: NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568)
+      frames: at eval (/node_modules/pdf.js-extract/lib/index.cjs:2:27) < at Object.<anonymous> (/node_modules/pdf.js-extract/lib/index.cjs:4:3)
+  GUEST-STOPS cyrillic.pdf         node 0 / guest 1  105ms / 65ms
+  GUEST-STOPS latin-raw.pdf        node 0 / guest 1  128ms / 78ms
+  GUEST-STOPS multi-flate.pdf      node 0 / guest 1  141ms / 209ms
+  GUEST-STOPS ALL                  node 0 / guest 1  133ms / 68ms
+  trace(node, exit 0): modules: fs, fs (import), url (import), path (import), module (import), buffer (import), module (process.getBuiltinModule)
+    esm: pdf.js-extract/lib/index.mjs(module), pdf.js-extract/lib/utils.mjs(module), pdf.js-extract/lib/pdfjs/pdf.mjs(module), dommatrix/dist/dommatrix.js(?), pdf.js-extract/lib/extraction/images.mjs(module), pdf.js-extract/lib/extraction/attachments.mjs(module), pdf.js-extract/lib/extraction/annotations.mjs(module), pdf.js-extract/lib/extraction/content.mjs(module), pdf.js-extract/lib/extraction/metadata.mjs(module), pdf.js-extract/lib/pdfjs/pdf.worker.mjs(module)
+    globals read: document (absent in Node too), navigator, structuredClone, MessageChannel, Math.sumPrecise (absent in Node too), Uint8Array.prototype.toBase64 (absent in Node too), Uint8Array.prototype.toHex (absent in Node too), URL, URLSearchParams, Response, AbortSignal, DOMException, DOMMatrix (absent in Node too), ImageData (absent in Node too), Path2D (absent in Node too), Uint8Array.fromBase64 (absent in Node too), Buffer, self (absent in Node too), TextDecoder, ImageDecoder (absent in Node too), window (absent in Node too), AbortController, ReadableStream, DecompressionStream, TextEncoder
+    used: new URL×11, URL.parse (read)×2, Promise.try()×78, Promise.withResolvers()×286, new AbortController×16, structuredClone()×359, new ReadableStream×16, new DecompressionStream×18, new TextEncoder×5
+    TextDecoder labels: utf-8 fatal, utf-8, utf-16be fatal
+
+## pdfparse1-default.cjs [pdf-parse-v1, debug, ms, node-ensure] 31.8 MiB, 788 files
+  EQUAL       cyrillic-pdfkit.pdf  node 0 / guest 0  78ms / 567ms
+  EQUAL       cyrillic.pdf         node 0 / guest 0  79ms / 564ms
+  EQUAL       latin-raw.pdf        node 0 / guest 0  75ms / 822ms
+  EQUAL       multi-flate.pdf      node 0 / guest 0  102ms / 774ms
+  NODE-FAILS  ALL                  node 1 / guest 0  120ms / 670ms
+      guest: 
+      frames: 
+      node: Error ⏎   message: 'bad XRef entry', ⏎   details: 'FormatError: bad XRef entry' ⏎ }
+  trace(node, exit 1): modules: fs, http, https, url
+    esm: -
+    globals read: self (absent in Node too), window (absent in Node too), navigator, URL, XMLHttpRequest (absent in Node too), importScripts (absent in Node too), ReadableStream, document (absent in Node too), setImmediate
+    used: new URL×1, new ReadableStream×6
+    TextDecoder labels: -
+
+## pdfparse1.cjs [pdf-parse-v1, debug, ms, node-ensure] 31.8 MiB, 788 files
+  EQUAL       cyrillic-pdfkit.pdf  node 0 / guest 0  74ms / 727ms
+  EQUAL       cyrillic.pdf         node 0 / guest 0  81ms / 718ms
+  EQUAL       latin-raw.pdf        node 0 / guest 0  87ms / 703ms
+  EQUAL       multi-flate.pdf      node 0 / guest 0  113ms / 691ms
+  NODE-FAILS  ALL                  node 1 / guest 0  106ms / 732ms
+      guest: 
+      frames: 
+      node: Error ⏎   message: 'bad XRef entry', ⏎   details: 'FormatError: bad XRef entry' ⏎ }
+  trace(node, exit 1): modules: fs, http, https, url
+    esm: -
+    globals read: self (absent in Node too), window (absent in Node too), navigator, URL, XMLHttpRequest (absent in Node too), importScripts (absent in Node too), ReadableStream, document (absent in Node too), setImmediate
+    used: new URL×1, new ReadableStream×6
+    TextDecoder labels: -
+
+## pdfparse2.cjs [pdf-parse, @napi-rs] 55.3 MiB, 505 files
+  NODE-FAILS  cyrillic-pdfkit.pdf  node 1 / guest 1  44ms / 801ms
+      guest: NotImplementedError: Not implemented: isolate-host.URLSearchParams (not available in the rifty isolate host, ADR-0557) ⏎   feature: 'isolate-host.URLSearchParams' ⏎ } ⏎ Node.js v24.0.0
+      frames: at 4603 (/node_modules/pdf-parse/dist/pdf-parse/cjs/index.cjs:1:21492) < at _ (/node_modules/pdf-parse/dist/pdf-parse/cjs/index.cjs:1:54276) < at Object.<anonymous> (/node_modules/pdf-parse/dist/pdf-parse/cjs/index.cjs:1:64744) {
+      node: Warning: Cannot load "@napi-rs/canvas" package: "Error: Failed to load native binding". ⏎ Warning: Cannot polyfill `DOMMatrix`, rendering may be broken. ⏎ Warning: Cannot polyfill `ImageData`, rendering may be broken. ⏎ Warning: Cannot polyfill `Path2D`, rendering may be broken.
+  NODE-FAILS  cyrillic.pdf         node 1 / guest 1  46ms / 755ms
+  NODE-FAILS  latin-raw.pdf        node 1 / guest 1  63ms / 709ms
+  NODE-FAILS  multi-flate.pdf      node 1 / guest 1  45ms / 765ms
+  NODE-FAILS  ALL                  node 1 / guest 1  82ms / 728ms
+  trace(node, exit 1): modules: fs, module (process.getBuiltinModule), url, os, path
+    esm: -
+    globals read: document (absent in Node too), navigator, structuredClone, MessageChannel, Math.sumPrecise (absent in Node too), Uint8Array.fromBase64 (absent in Node too), Uint8Array.prototype.toBase64 (absent in Node too), Uint8Array.prototype.toHex (absent in Node too), DOMException, URL, URLSearchParams, AbortSignal, DOMMatrix (absent in Node too), ImageData (absent in Node too), Path2D (absent in Node too)
+    used: Promise.try()×1, new URL×5, URL.parse (read)×1
+    TextDecoder labels: -
+
+## pdfreader-buffer.cjs [pdfreader] 11.3 MiB, 101 files
+  EQUAL       cyrillic-pdfkit.pdf  node 0 / guest 0  65ms / 473ms
+  EQUAL       cyrillic.pdf         node 0 / guest 0  64ms / 461ms
+  EQUAL       latin-raw.pdf        node 0 / guest 0  57ms / 694ms
+  EQUAL       multi-flate.pdf      node 0 / guest 0  88ms / 610ms
+  NODE-FAILS  ALL                  node 1 / guest 0  608ms / 585ms
+      guest: 
+      frames: 
+      node: Error: Error: Unknown compression method in flate stream: 190, 213 ⏎ { ⏎   parserError: 'Error: Error: Unknown compression method in flate stream: 190, 213' ⏎ }
+  trace(node, exit 1): modules: fs, util, fs/promises, events, process, console, buffer, stream
+    esm: -
+    globals read: window (absent in Node too), URL, TextDecoder, Worker (absent in Node too)
+    used: URL.createObjectURL (read)×1
+    TextDecoder labels: -
+
+## pdfreader.cjs [pdfreader] 11.3 MiB, 101 files
+  EQUAL       cyrillic-pdfkit.pdf  node 0 / guest 0  66ms / 550ms
+  EQUAL       cyrillic.pdf         node 0 / guest 0  68ms / 506ms
+  EQUAL       latin-raw.pdf        node 0 / guest 0  59ms / 516ms
+  EQUAL       multi-flate.pdf      node 0 / guest 0  76ms / 560ms
+  EQUAL       ALL                  node 0 / guest 0  97ms / 620ms
+  trace(node, exit 0): modules: util, fs, fs/promises, events, process, console, buffer, stream
+    esm: -
+    globals read: window (absent in Node too), URL, TextDecoder, Worker (absent in Node too)
+    used: URL.createObjectURL (read)×1
+    TextDecoder labels: -
+
+## unpdf-import.cjs [unpdf] 3.0 MiB, 177 files
+  GUEST-STOPS cyrillic-pdfkit.pdf  node 0 / guest 1  83ms / 192ms
+      guest: NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568)
+      frames: at eval (/workspace/gen/unpdf-import.cjs:5:51) < at Object.<anonymous> (/workspace/gen/unpdf-import.cjs:11:3)
+  GUEST-STOPS cyrillic.pdf         node 0 / guest 1  81ms / 57ms
+  GUEST-STOPS latin-raw.pdf        node 0 / guest 1  70ms / 58ms
+  GUEST-STOPS multi-flate.pdf      node 0 / guest 1  78ms / 55ms
+  GUEST-STOPS ALL                  node 0 / guest 1  95ms / 57ms
+  trace(node, exit 0): modules: fs, path (process.getBuiltinModule), url (process.getBuiltinModule)
+    esm: unpdf/dist/index.mjs(module), unpdf/dist/pdfjs.mjs(module)
+    globals read: DOMMatrix (absent in Node too), FinalizationRegistry, navigator, ReadableStream, Uint8Array.fromBase64 (absent in Node too), Uint8Array.prototype.toBase64 (absent in Node too), Uint8Array.prototype.toHex (absent in Node too), Math.sumPrecise (absent in Node too), TextDecoder, ImageDecoder (absent in Node too), window (absent in Node too), Buffer, WebAssembly, document (absent in Node too), AbortController, AbortSignal, structuredClone, DecompressionStream
+    used: globalThis.DOMMatrix = … (defined by the library)×1, new WebAssembly.Module×1, Promise.withResolvers()×82, new AbortController×16, structuredClone()×128, Promise.try()×45, new ReadableStream×8, new DecompressionStream×2
+    TextDecoder labels: utf-8 fatal
+
+## unpdf.mjs [unpdf] 3.0 MiB, 177 files
+  GUEST-STOPS cyrillic-pdfkit.pdf  node 0 / guest 1  127ms / 71ms
+      guest: NotImplementedError: Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568) { ⏎   feature: 'isolate-host.esm' ⏎ } ⏎ Node.js v24.0.0
+      frames: 
+  GUEST-STOPS cyrillic.pdf         node 0 / guest 1  124ms / 89ms
+  GUEST-STOPS latin-raw.pdf        node 0 / guest 1  118ms / 73ms
+  GUEST-STOPS multi-flate.pdf      node 0 / guest 1  133ms / 94ms
+  GUEST-STOPS ALL                  node 0 / guest 1  129ms / 74ms
+  trace(node, exit 0): modules: fs (import), path (process.getBuiltinModule), url (process.getBuiltinModule)
+    esm: unpdf.mjs(module), unpdf/dist/index.mjs(module), unpdf/dist/pdfjs.mjs(module)
+    globals read: DOMMatrix (absent in Node too), FinalizationRegistry, navigator, ReadableStream, Uint8Array.fromBase64 (absent in Node too), Uint8Array.prototype.toBase64 (absent in Node too), Uint8Array.prototype.toHex (absent in Node too), Math.sumPrecise (absent in Node too), TextDecoder, ImageDecoder (absent in Node too), window (absent in Node too), Buffer, WebAssembly, document (absent in Node too), AbortController, AbortSignal, structuredClone, DecompressionStream
+    used: globalThis.DOMMatrix = … (defined by the library)×1, new WebAssembly.Module×1, Promise.withResolvers()×82, new AbortController×16, structuredClone()×128, Promise.try()×45, new ReadableStream×8, new DecompressionStream×2
+    TextDecoder labels: utf-8 fatal

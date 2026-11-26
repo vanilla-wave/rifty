@@ -1,5 +1,15 @@
 #!/usr/bin/env node
-/** Shipped browser code: ES2022 syntax and post-floor builtin call sites (ADR-0469). */
+/**
+ * Shipped browser code: ES2022 syntax and post-floor builtin call sites (ADR-0469).
+ * Threat model: catches the ordinary read forms — member access, destructuring, and a call
+ * holding receiver + string key (`getOwnPropertyDescriptor`, `Reflect.get`, a wrapper).
+ * Not seen (limits; completeness comes from executed floor proofs, e.g. the port-ref
+ * spec without `ArrayBuffer.prototype.detached`):
+ * - `Object.getOwnPropertyDescriptors(R).k` / `__lookupGetter__('k')` / `__lookupSetter__`;
+ * - a receiver taken from an instance (`getPrototypeOf(new ArrayBuffer(0))`, `buffer.k`);
+ * - a key built at run time (concatenation, array element, parameter, reassigned binding);
+ * - a wrapper whose receiver/key args are passed through from another file or function.
+ */
 import { existsSync, readFileSync, readdirSync, realpathSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join, relative } from 'node:path';
@@ -71,6 +81,30 @@ const PROTOTYPE_BUILTINS = new Set([
   'DataView.prototype.getFloat16',
   'DataView.prototype.setFloat16',
 ]);
+
+// Receivers whose own post-floor METHODS a by-name reach names unambiguously.
+const METHOD_RECEIVER =
+  /^(?:Array|String|Set|ArrayBuffer|TypedArray|(?:Big)?(?:Int|Uint|Float)(?:8|16|32|64)(?:Clamped)?Array)\.prototype$/;
+const GLOBAL_RECEIVER = new Set(['globalThis', 'self', 'window']);
+// Calls that test presence or only pass values along: never a read of the member.
+const NOT_READS =
+  /^(?:Object\.hasOwn|Reflect\.has|console\.\w+)$|(?:^|\.)(?:hasOwnProperty|propertyIsEnumerable)(?:\.call|\.apply)?$/;
+const TYPED_ARRAY = /^(?:Big)?(?:Int|Uint|Float)(?:8|16|32|64)(?:Clamped)?Array$/;
+const PRESENCE_READS = new Set([
+  'Object.getOwnPropertyDescriptor',
+  'Reflect.getOwnPropertyDescriptor',
+  'Reflect.get',
+]);
+
+/** Listed builtin `receiver.key` names, or null: the by-name form of {@link intrinsicName}. */
+function namedIntrinsic(receiver, key) {
+  if (GLOBAL_RECEIVER.has(receiver)) return CONSTRUCTORS.has(key) ? key : null;
+  const name = `${receiver}.${key}`;
+  if (STATIC_BUILTINS.has(name) || PROTOTYPE_BUILTINS.has(name) || FEATURE_DETECTED.has(name))
+    return name;
+  if (CONSTRUCTORS.has(receiver.split('.')[0])) return name;
+  return METHODS.has(key) && METHOD_RECEIVER.test(receiver) ? name : null;
+}
 
 function intrinsicName(member) {
   const name = memberName(member)?.replace(/^globalThis\./, '');
@@ -239,6 +273,16 @@ export function bundleViolations(file, source, loadSourceMap = () => null) {
         names.find((name) => name === 'Atomics' || name === 'Atomics.waitAsync') ?? names[0] ?? null
       );
     }
+    // `getPrototypeOf(Uint8Array.prototype)` is %TypedArray%.prototype (as node-ipc-advanced.ts).
+    if (node.type === 'CallExpression' && node.arguments.length === 1) {
+      const callee = nativeName(node.callee, seen, requireImmutable);
+      if (callee !== 'Object.getPrototypeOf' && callee !== 'Reflect.getPrototypeOf') return null;
+      const [owner, prototype] = (
+        nativeName(node.arguments[0], seen, requireImmutable) ?? ''
+      ).split('.');
+      if (!TYPED_ARRAY.test(owner)) return null;
+      return prototype === 'prototype' ? 'TypedArray.prototype' : prototype ? null : 'TypedArray';
+    }
     if (node.type !== 'MemberExpression') return null;
     const object = nativeName(node.object, seen, requireImmutable);
     return object ? `${object}.${propertyName(node)}`.replace(/^globalThis\./, '') : null;
@@ -286,7 +330,7 @@ export function bundleViolations(file, source, loadSourceMap = () => null) {
     if (statement?.type === 'BlockStatement') return terminates(statement.body.at(-1));
     return statement?.type === 'ThrowStatement' || statement?.type === 'ReturnStatement';
   }
-  function locallyGuarded(node, feature) {
+  function locallyGuarded(node, feature, holds = guarantees) {
     let operand = node;
     let directParent = parents.get(operand);
     while (
@@ -315,15 +359,15 @@ export function bundleViolations(file, source, loadSourceMap = () => null) {
       )
         return true;
       if (['IfStatement', 'ConditionalExpression'].includes(parent.type)) {
-        if (child === parent.consequent && guarantees(parent.test, true, feature, allowDefined))
+        if (child === parent.consequent && holds(parent.test, true, feature, allowDefined))
           return true;
-        if (child === parent.alternate && guarantees(parent.test, false, feature, allowDefined))
+        if (child === parent.alternate && holds(parent.test, false, feature, allowDefined))
           return true;
       }
       if (parent.type === 'LogicalExpression' && child === parent.right) {
-        if (parent.operator === '&&' && guarantees(parent.left, true, feature, allowDefined))
+        if (parent.operator === '&&' && holds(parent.left, true, feature, allowDefined))
           return true;
-        if (parent.operator === '||' && guarantees(parent.left, false, feature, allowDefined))
+        if (parent.operator === '||' && holds(parent.left, false, feature, allowDefined))
           return true;
       }
       if (parent.type === 'BlockStatement') {
@@ -332,7 +376,7 @@ export function bundleViolations(file, source, loadSourceMap = () => null) {
           preceding.some(
             (statement) =>
               statement.type === 'IfStatement' &&
-              guarantees(statement.test, false, feature, allowDefined) &&
+              holds(statement.test, false, feature, allowDefined) &&
               terminates(statement.consequent),
           )
         )
@@ -371,6 +415,78 @@ export function bundleViolations(file, source, loadSourceMap = () => null) {
     });
     return valid;
   }
+  /** Does `test` evaluating to `truth` prove `declaration` holds a value (`!== void 0`, typeof)? */
+  function present(test, truth, declaration) {
+    if (test.type === 'UnaryExpression' && test.operator === '!')
+      return present(test.argument, !truth, declaration);
+    if (test.type === 'LogicalExpression') {
+      if ((test.operator === '&&' && truth) || (test.operator === '||' && !truth))
+        return present(test.left, truth, declaration) || present(test.right, truth, declaration);
+      return false;
+    }
+    const negated = ['!==', '!='].includes(test.operator);
+    if (test.type !== 'BinaryExpression' || (!negated && !['===', '=='].includes(test.operator)))
+      return false;
+    const ref = (node) => node?.type === 'Identifier' && binding(node) === declaration;
+    for (const [probe, other] of [
+      [test.left, test.right],
+      [test.right, test.left],
+    ]) {
+      if (probe.type === 'UnaryExpression' && probe.operator === 'typeof' && ref(probe.argument))
+        return other.type === 'Literal' && other.value === 'function' && truth !== negated;
+      const absent =
+        (other.type === 'Identifier' && other.name === 'undefined') ||
+        (other.type === 'UnaryExpression' && other.operator === 'void') ||
+        (other.type === 'Literal' && other.value === null && test.operator.length === 2);
+      if (ref(probe)) return absent && truth === negated;
+    }
+    return false;
+  }
+  /**
+   * A by-name read that is itself the probe: `f = Object.getOwnPropertyDescriptor(R, 'k')?.value`,
+   * never reassigned, every use of `f` under a presence check of `f`.
+   */
+  function presenceGuarded(call) {
+    // A wrapper may throw on absence itself (`nativeGetter`): only absence-returning reads.
+    if (!PRESENCE_READS.has(nativeName(call.callee))) return false;
+    // `.value` on an absent result throws before any check: only `?.` (or a later step it shortens).
+    let read = call;
+    let optional = false;
+    for (
+      let up = parents.get(read);
+      (up?.type === 'MemberExpression' && up.object === read) ||
+      (up?.type === 'ChainExpression' && up.expression === read);
+      up = parents.get(up)
+    ) {
+      if (up.type === 'MemberExpression' && !up.optional && !optional) return false;
+      optional ||= up.optional === true;
+      read = up;
+    }
+    const declaration = parents.get(read);
+    if (
+      declaration?.type !== 'VariableDeclarator' ||
+      declaration.init !== read ||
+      declaration.id.type !== 'Identifier' ||
+      assignments.has(declaration)
+    )
+      return false;
+    const probes = (node) =>
+      node && (present(node, true, declaration) || present(node, false, declaration));
+    let valid = true;
+    walk(scopeAt(parents.get(declaration), true), (reference, parent, grandparent) => {
+      if (
+        reference.type !== 'Identifier' ||
+        reference === declaration.id ||
+        binding(reference) !== declaration ||
+        (parent?.type === 'MemberExpression' && parent.property === reference && !parent.computed)
+      )
+        return;
+      if (probes(parent) || (parent?.type === 'UnaryExpression' && probes(grandparent))) return;
+      if (!locallyGuarded(reference, null, (test, truth) => present(test, truth, declaration)))
+        valid = false;
+    });
+    return valid;
+  }
   function featureAllowed(node, feature) {
     // Minification can erase an unused typeof probe, leaving only its safe property read.
     const discardedConstructorLookup =
@@ -382,6 +498,19 @@ export function bundleViolations(file, source, loadSourceMap = () => null) {
       locallyGuarded(node, feature) ||
       guardedExtraction(node, feature)
     );
+  }
+  /** A string the argument is at runtime: literal, plain template, or const bound to one. */
+  function stringValue(node) {
+    if (node?.type === 'Literal') return typeof node.value === 'string' ? node.value : null;
+    if (node?.type === 'TemplateLiteral' && node.expressions.length === 0)
+      return node.quasis[0].value.cooked;
+    if (node?.type !== 'Identifier') return null;
+    const declaration = binding(node);
+    // One assignment is one value: bundlers emit a top-level `const` as `var`.
+    if (!declaration || assignments.has(declaration)) return null;
+    return ['Literal', 'TemplateLiteral'].includes(declaration.init?.type)
+      ? stringValue(declaration.init)
+      : null;
   }
   const errors = [];
   function report(node, name) {
@@ -530,6 +659,21 @@ export function bundleViolations(file, source, loadSourceMap = () => null) {
       if (parent?.type !== 'Property') inspectPattern(node, receiver);
     }
     if (node.type !== 'CallExpression' && node.type !== 'NewExpression') return;
+    // A listed builtin reached by name: its receiver and key are arguments of one call
+    // (`getOwnPropertyDescriptor(ArrayBuffer.prototype, 'detached')`, `Reflect.get`, a wrapper).
+    const keys = NOT_READS.test(nativeName(node.callee) ?? '')
+      ? []
+      : node.arguments.map(stringValue).filter((key) => key !== null);
+    for (const argument of keys.length > 0 ? node.arguments : []) {
+      const receiver = nativeName(argument);
+      const named = receiver && keys.map((key) => namedIntrinsic(receiver, key)).find(Boolean);
+      if (
+        named &&
+        !presenceGuarded(node) &&
+        !(FEATURE_DETECTED.has(named) && featureAllowed(node, named))
+      )
+        report(node, `${named} (by name)`);
+    }
     const name = memberName(node.callee)?.replace(/^globalThis\./, '');
     if (CONSTRUCTORS.has(name)) {
       if (!FEATURE_DETECTED.has(name) || !featureAllowed(node, name)) report(node, name);

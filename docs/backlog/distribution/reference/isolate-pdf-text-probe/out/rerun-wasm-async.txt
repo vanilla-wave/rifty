@@ -1,0 +1,48 @@
+--- tiny compile
+  node     exit 0: bytes 34 | compile: settled Module | exit event code 0
+  exec     exit 0: bytes 34 | compile: settled Module | exit event code 0
+  runCode  exit 0: bytes 34 | compile: settled Module | exit event code 0
+--- tiny compile-await
+  node     exit 0: bytes 34 | await compile: Module | exit event code 0
+  exec     exit 0: bytes 34 | await compile: Module | exit event code 0
+  runCode  exit 0: bytes 34 | await compile: Module | exit event code 0
+--- tiny instantiate-bytes
+  node     exit 0: bytes 34 | instantiate(bytes): settled {module: Module, instance: Instance} | exit event code 0
+  exec     exit 0: bytes 34 | instantiate(bytes): settled {module: Module, instance: Instance} | exit event code 0
+  runCode  exit 0: bytes 34 | instantiate(bytes): settled {module: Module, instance: Instance} | exit event code 0
+--- tiny instantiate-module
+  node     exit 0: bytes 34 | instantiate(Module): settled Instance | exit event code 0
+  exec     exit 0: bytes 34 | instantiate(Module): settled Instance | exit event code 0
+  runCode  exit 0: bytes 34 | instantiate(Module): settled Instance | exit event code 0
+--- tiny streaming
+  node     exit 0: bytes 34 | typeof compileStreaming function, typeof instantiateStreaming function, typeof Response function | instantiateStreaming: settled {module: Module, instance: Instance} | exit event code 0
+  exec     exit 0: bytes 34 | typeof compileStreaming undefined, typeof instantiateStreaming undefined, typeof Response function | exit event code 0
+  runCode  exit 0: bytes 34 | typeof compileStreaming undefined, typeof instantiateStreaming undefined, typeof Response function | exit event code 0
+--- tiny unsubscribed-invalid
+  node     exit 1: bytes 34 | exit event code 1 || stderr: node:internal/process/promises:394
+  exec     exit 1: bytes 34 | exit event code 1 || stderr: [CompileError: WebAssembly.compile(): expected 4 bytes, fell off end @+4]
+  runCode  exit 1: bytes 34 | exit event code 1 || stderr: [CompileError: WebAssembly.compile(): expected 4 bytes, fell off end @+4]
+--- pdfium compile
+  node     exit 0: bytes 5298237 | compile: settled Module | exit event code 0
+  exec     exit 0: bytes 5298237 | exit event code 0
+  runCode  exit 0: bytes 5298237 | exit event code 0
+--- pdfium compile-await
+  node     exit 0: bytes 5298237 | await compile: Module | exit event code 0
+  exec     exit 0: bytes 5298237 | exit event code 0
+  runCode  exit 0: bytes 5298237 | exit event code 0
+--- pdfium instantiate-bytes
+  node     exit 0: bytes 5298237 | instantiate(bytes): rejected TypeError | exit event code 0
+  exec     exit 0: bytes 5298237 | exit event code 0
+  runCode  exit 0: bytes 5298237 | exit event code 0
+--- pdfium instantiate-module
+  node     exit 0: bytes 5298237 | instantiate(Module): rejected TypeError | exit event code 0
+  exec     exit 0: bytes 5298237 | instantiate(Module): rejected TypeError | exit event code 0
+  runCode  exit 0: bytes 5298237 | instantiate(Module): rejected TypeError | exit event code 0
+--- pdfium streaming
+  node     exit 0: bytes 5298237 | typeof compileStreaming function, typeof instantiateStreaming function, typeof Response function | instantiateStreaming: rejected TypeError | exit event code 0
+  exec     exit 0: bytes 5298237 | typeof compileStreaming undefined, typeof instantiateStreaming undefined, typeof Response function | exit event code 0
+  runCode  exit 0: bytes 5298237 | typeof compileStreaming undefined, typeof instantiateStreaming undefined, typeof Response function | exit event code 0
+--- pdfium unsubscribed-invalid-large
+  node     exit 1: bytes 5298237 | exit event code 1 || stderr: node:internal/process/promises:394
+  exec     exit 1: bytes 5298237 | exit event code 1 || stderr: [CompileError: WebAssembly.compile(): section (code 11, "Data") extends past end of the module (length 1803008, remaining bytes 1802008) @+3495225]
+  runCode  exit 1: bytes 5298237 | exit event code 1 || stderr: [CompileError: WebAssembly.compile(): section (code 11, "Data") extends past end of the module (length 1803008, remaining bytes 1802008) @+3495225]

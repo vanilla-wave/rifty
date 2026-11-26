@@ -24,7 +24,9 @@ by source); `fs.createReadStream` reads until goal `node-streams-as-in-node` uni
 Known consumers: `Blob.prototype.stream()`; `Readable.toWeb`/`fromWeb`; the Fetch classes' bodies
 (ADR-0541's `Response`/`Request`, not installed in the guest without `fetch`); exceljs read
 paths only through `fs.createReadStream` (now 9r's). No measured consumer stop of the four document
-libraries.
+libraries. Measured stop 2026-11-26: pdf.js `getTextContent` (pdfjs-dist 3.11.174 and 6.5.438,
+unpdf 2.2.3) at `isolate-host.ReadableStream`, behind earlier stops
+(`distribution/isolate-host-pdf-text-extraction`).
 
 Source and size: a port of Node's `lib/internal/webstreams/*` verbatim measured in a bare isolate
 (`reference/sources-js`, with events/abort): 169 KB min / 50 KB gzip, +5.4 ms per isolate, 0/55

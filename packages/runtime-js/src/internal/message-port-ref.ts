@@ -34,6 +34,7 @@ const apply = Reflect.apply;
 const objectCreate = Object.create;
 const defineProperty = Object.defineProperty;
 const SymbolIterator: typeof Symbol.iterator = Symbol.iterator;
+const NativeArrayBuffer = ArrayBuffer;
 
 /** `list[index] = value` without consulting `Array.prototype` setters. */
 export function setOwn(list: unknown[], index: number, value: unknown): void {
@@ -189,7 +190,10 @@ export function installMessagePortReference(): void {
   const portBrand = nativeGetter(Port.prototype, 'onmessage');
   const port1 = nativeGetter(Channel.prototype, 'port1');
   const port2 = nativeGetter(Channel.prototype, 'port2');
-  const isDetached = nativeGetter(ArrayBuffer.prototype, 'detached');
+  // Detach test of the transfer probe only — this module's own native fixed-length
+  // 1-byte buffer, never a guest's: its `byteLength` is 0 exactly when detached.
+  // Not `ArrayBuffer.prototype.detached`: Chrome 114, the ADR-0469 floor is 108.
+  const byteLength = nativeGetter(NativeArrayBuffer.prototype, 'byteLength');
 
   const recordOf = (port: unknown): PortRecord | undefined => {
     Reflect.apply(portBrand, port, []); // TypeError: Illegal invocation, as in Node
@@ -284,12 +288,12 @@ export function installMessagePortReference(): void {
         setOwn(forwarded, 1, read.forward(read.list));
         return apply(native, receiver, forwarded);
       }
-      const probe = new ArrayBuffer(0);
+      const probe = new NativeArrayBuffer(1);
       const withProbe = copyList(read.list);
       setOwn(withProbe, withProbe.length, probe);
       setOwn(forwarded, 1, read.forward(withProbe));
       const result = apply(native, receiver, forwarded);
-      if (apply(isDetached, probe, []) === true) {
+      if (apply(byteLength, probe, []) === 0) {
         for (let i = 0; i < moving.length; i++) {
           const record = moving[i] as PortRecord;
           record.moved = true;

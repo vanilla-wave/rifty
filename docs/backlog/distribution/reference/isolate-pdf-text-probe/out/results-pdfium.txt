@@ -1,0 +1,26 @@
+
+=== pdfium.cjs  [@hyzyla] tree 37 files 13.5 MiB, memoryLimitMb 256
+  DIFFERS     cyrillic-pdfkit.pdf  node exit 0 58ms | guest exit 0 291ms
+    guest stderr: 
+    node stdout:  {"file":"pdfs/cyrillic-pdfkit.pdf","pages":["Документ из PDFKit: первая страница.\r\nВ чащах юга жил бы цитрус? Да, но фальшивый экземпляр!","Страница два: итого 1 234,56 ₽."]}
+
+    guest stdout: 
+  DIFFERS     cyrillic.pdf  node exit 0 55ms | guest exit 0 357ms
+    guest stderr: 
+    node stdout:  {"file":"pdfs/cyrillic.pdf","pages":["Привет, мир! Это проверка извлечения текста.\r\nСъешь же ещё этих мягких французских булок, да выпей чаю.\r\nСмешанная строка: rifty isolate № 42 — «кавычки», ёЁ.","Вторая страница.\r\nШирокая электрификация южных губерний даст мощный толчок подъёму сельского хозяйства.\r\nLatin tail: The quick brown fox."]}
+
+    guest stdout: 
+  DIFFERS     latin-raw.pdf  node exit 0 78ms | guest exit 0 390ms
+    guest stderr: 
+    node stdout:  {"file":"pdfs/latin-raw.pdf","pages":["Hello rifty PDF text\r\nSecond line: The quick brown fox jumps over the lazy dog.\r\nNumbers 0123456789 and symbols (a+b) = c."]}
+
+    guest stdout: 
+  DIFFERS     multi-flate.pdf  node exit 0 83ms | guest exit 0 382ms
+    guest stderr: 
+    node stdout:  {"file":"pdfs/multi-flate.pdf","pages":["Page 1 of 3: heading\r\np1 line 1: lorem ipsum dolor sit amet, consectetur adipiscing elit 101.\r\np1 line 2: lorem ipsum dolor sit amet, consectetur adipiscing elit 102.\r\np1 line 3: lorem ipsum dolor sit amet, consectetur adipiscing elit 103.\r\np1 line 4: lorem ipsum dolor sit amet, consectetur adipiscing elit 104.\r\np1 line 5: lorem ipsum dolor sit amet, consectetur adipiscing elit 105.\r\np1 line 6: lorem ipsum dolor sit amet, consectetur adipiscin
+    guest stdout: 
+  DIFFERS     cyrillic-pdfkit.pdf+cyrillic.pdf+latin-raw.pdf+multi-flate.pdf  node exit 0 66ms | guest exit 0 287ms
+    guest stderr: 
+    node stdout:  {"file":"pdfs/cyrillic-pdfkit.pdf","pages":["Документ из PDFKit: первая страница.\r\nВ чащах юга жил бы цитрус? Да, но фальшивый экземпляр!","Страница два: итого 1 234,56 ₽."]}
+{"file":"pdfs/cyrillic.pdf","pages":["Привет, мир! Это проверка извлечения текста.\r\nСъешь же ещё этих мягких французских булок, да выпей чаю.\r\nСмешанная строка: rifty isolate № 42 — «кавычки», ёЁ.","Вторая страница.\r\nШирокая электрификация южных губерний даст мощный толчок подъёму сельского хозяйства.\r\nLatin tail:
+    guest stdout: 

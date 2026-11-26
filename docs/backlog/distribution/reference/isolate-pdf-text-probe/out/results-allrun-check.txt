@@ -1,0 +1,28 @@
+=== pdfparse1.cjs  [pdf-parse-v1, debug, ms, node-ensure] tree 788 files 31.8 MiB, memoryLimitMb 256
+  all-files guest stdout == per-file node stdouts joined: true
+  EQUAL       cyrillic-pdfkit.pdf  node exit 0 71ms | guest exit 0 585ms
+  EQUAL       cyrillic.pdf  node exit 0 71ms | guest exit 0 574ms
+  EQUAL       latin-raw.pdf  node exit 0 68ms | guest exit 0 581ms
+  EQUAL       multi-flate.pdf  node exit 0 70ms | guest exit 0 581ms
+  NODE-FAILS  cyrillic-pdfkit.pdf+cyrillic.pdf+latin-raw.pdf+multi-flate.pdf  node exit 1 77ms | guest exit 0 581ms
+=== pdfparse1-default.cjs  [pdf-parse-v1, debug, ms, node-ensure] tree 788 files 31.8 MiB, memoryLimitMb 256
+  all-files guest stdout == per-file node stdouts joined: true
+  EQUAL       cyrillic-pdfkit.pdf  node exit 0 71ms | guest exit 0 584ms
+  EQUAL       cyrillic.pdf  node exit 0 74ms | guest exit 0 586ms
+  EQUAL       latin-raw.pdf  node exit 0 67ms | guest exit 0 575ms
+  EQUAL       multi-flate.pdf  node exit 0 69ms | guest exit 0 580ms
+  NODE-FAILS  cyrillic-pdfkit.pdf+cyrillic.pdf+latin-raw.pdf+multi-flate.pdf  node exit 1 73ms | guest exit 0 590ms
+=== pdfreader-buffer.cjs  [pdfreader] tree 101 files 11.3 MiB, memoryLimitMb 256
+  all-files guest stdout == per-file node stdouts joined: true
+  EQUAL       cyrillic-pdfkit.pdf  node exit 0 69ms | guest exit 0 487ms
+  EQUAL       cyrillic.pdf  node exit 0 65ms | guest exit 0 483ms
+  EQUAL       latin-raw.pdf  node exit 0 56ms | guest exit 0 476ms
+  EQUAL       multi-flate.pdf  node exit 0 63ms | guest exit 0 480ms
+  NODE-FAILS  cyrillic-pdfkit.pdf+cyrillic.pdf+latin-raw.pdf+multi-flate.pdf  node exit 1 575ms | guest exit 0 509ms
+=== pdf2json.cjs  [pdf2json] tree 12 files 11.3 MiB, memoryLimitMb 256
+  all-files guest stdout == per-file node stdouts joined: true
+  EQUAL       cyrillic-pdfkit.pdf  node exit 0 63ms | guest exit 0 522ms
+  EQUAL       cyrillic.pdf  node exit 0 63ms | guest exit 0 626ms
+  EQUAL       latin-raw.pdf  node exit 0 55ms | guest exit 0 496ms
+  EQUAL       multi-flate.pdf  node exit 0 65ms | guest exit 0 544ms
+  EQUAL       cyrillic-pdfkit.pdf+cyrillic.pdf+latin-raw.pdf+multi-flate.pdf  node exit 0 83ms | guest exit 0 526ms

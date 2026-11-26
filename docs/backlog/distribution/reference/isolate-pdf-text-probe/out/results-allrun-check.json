@@ -1,0 +1,394 @@
+[
+  {
+    "case": "pdfparse1.cjs",
+    "pkgs": ["pdf-parse-v1", "debug", "ms", "node-ensure"],
+    "tree": {
+      "files": 788,
+      "bytes": 33375418,
+      "nativeFiles": 0
+    },
+    "memoryLimitMb": 256,
+    "runs": [
+      {
+        "guestStdoutSha": "ed0b2cb42c09e08a280348849aa215948e27ac5ae878a1b8e456545e93c2260d",
+        "files": ["cyrillic-pdfkit.pdf"],
+        "node": {
+          "exitCode": 0,
+          "ms": 71,
+          "stdout": "{\"file\":\"pdfs/cyrillic-pdfkit.pdf\",\"pages\":[\"Документ из PDFKit: первая страница.\\nВ чащах юга жил бы цитрус? Да, но фальшивый экземпляр!\",\"Страница два: итого 1 234,56 ₽.\"]}\n",
+          "stderr": ""
+        },
+        "guest": {
+          "exitCode": 0,
+          "ms": 585,
+          "stdout": "{\"file\":\"pdfs/cyrillic-pdfkit.pdf\",\"pages\":[\"Документ из PDFKit: первая страница.\\nВ чащах юга жил бы цитрус? Да, но фальшивый экземпляр!\",\"Страница два: итого 1 234,56 ₽.\"]}\n",
+          "stderr": ""
+        },
+        "verdict": "EQUAL"
+      },
+      {
+        "guestStdoutSha": "6d81f494e40c7911054484a10d00c34e26e3e8b3fd020a5dc62ce3c3baba00e5",
+        "files": ["cyrillic.pdf"],
+        "node": {
+          "exitCode": 0,
+          "ms": 71,
+          "stdout": "{\"file\":\"pdfs/cyrillic.pdf\",\"pages\":[\"Привет, мир! Это проверка извлечения текста.\\nСъешь же ещё этих мягких французских булок, да выпей чаю.\\nСмешанная строка: rifty isolate No 42 — «кавычки», ёЁ.\",\"Вторая страница.\\nШирокая электрификация южных губерний даст мощный толчок подъёму сельского хозяйства.\\nLatin tail: The quick brown fox.\"]}\n",
+          "stderr": ""
+        },
+        "guest": {
+          "exitCode": 0,
+          "ms": 574,
+          "stdout": "{\"file\":\"pdfs/cyrillic.pdf\",\"pages\":[\"Привет, мир! Это проверка извлечения текста.\\nСъешь же ещё этих мягких французских булок, да выпей чаю.\\nСмешанная строка: rifty isolate No 42 — «кавычки», ёЁ.\",\"Вторая страница.\\nШирокая электрификация южных губерний даст мощный толчок подъёму сельского хозяйства.\\nLatin tail: The quick brown fox.\"]}\n",
+          "stderr": ""
+        },
+        "verdict": "EQUAL"
+      },
+      {
+        "guestStdoutSha": "cfb4115d3ef51dde52fcd497d717533854f2b623df9d24744ae2b88fb42bb218",
+        "files": ["latin-raw.pdf"],
+        "node": {
+          "exitCode": 0,
+          "ms": 68,
+          "stdout": "{\"file\":\"pdfs/latin-raw.pdf\",\"pages\":[\"Hello rifty PDF text\\nSecond line: The quick brown fox jumps over the lazy dog.\\nNumbers 0123456789 and symbols (a+b) = c.\"]}\n",
+          "stderr": ""
+        },
+        "guest": {
+          "exitCode": 0,
+          "ms": 581,
+          "stdout": "{\"file\":\"pdfs/latin-raw.pdf\",\"pages\":[\"Hello rifty PDF text\\nSecond line: The quick brown fox jumps over the lazy dog.\\nNumbers 0123456789 and symbols (a+b) = c.\"]}\n",
+          "stderr": ""
+        },
+        "verdict": "EQUAL"
+      },
+      {
+        "guestStdoutSha": "e43a758cab735f219ddcba66678a77b2bfd1e924bd6867efdf3fb4ebcba69277",
+        "files": ["multi-flate.pdf"],
+        "node": {
+          "exitCode": 0,
+          "ms": 70,
+          "stdout": "{\"file\":\"pdfs/multi-flate.pdf\",\"pages\":[\"Page 1 of 3: heading\\np1 line 1: lorem ipsum dolor sit amet, consectetur adipiscing elit 101.\\np1 line 2: lorem ipsum dolor sit amet, consectetur adipiscing elit 102.\\np1 line 3: lorem ipsum dolor sit amet, consectetur adipiscing elit 103.\\np1 line 4: lorem ipsum dolor sit amet, consectetur adipiscing elit 104.\\np1 line 5: lorem ipsum dolor sit amet, consectetur adipiscing elit 105.\\np1 line 6: lorem ipsum dolor sit amet, consectetur adipiscing elit 106.\\np1 line 7: lorem ipsum dolor sit amet, consectetur adipiscing elit 107.\\np1 line 8: lorem ipsum dolor sit amet, consectetur adipiscing elit 108.\\np1 line 9: lorem ipsum dolor sit amet, consectetur adipiscing elit 109.\\np1 line 10: lorem ipsum dolor sit amet, consectetur adipiscing elit 110.\\np1 line 11: lorem ipsum dolor sit amet, consectetur adipiscing elit 111.\\np1 line 12: lorem ipsum dolor sit amet, consectetur adipiscing elit 112.\",\"Page 2 of 3: heading\\np2 line 1: lorem ipsum dolor sit amet, consectetur adipiscing elit 201.\\np2 line 2: lorem ipsum dolor sit amet, consectetur adipiscing elit 202.\\np2 line 3: lorem ipsum dolor sit amet, consectetur adipiscing elit 203.\\np2 line 4: lorem ipsum dolor sit amet, consectetur adipiscing elit 204.\\np2 line 5: lorem ipsum dolor sit amet, consectetur adipiscing elit 205.\\np2 line 6: lorem ipsum dolor sit amet, consectetur adipiscing elit 206.\\np2 line 7: lorem ipsum dolor sit amet, consectetur adipiscing elit 207.\\np2 line 8: lorem ipsum dolor sit amet, consectetur adipiscing elit 208.\\np2 line 9: lorem ipsum dolor sit amet, consectetur adipiscing elit 209.\\np2 line 10: lorem ipsum dolor sit amet, consectetur adipiscing elit 210.\\np2 line 11: lorem ipsum dolor sit amet, consectetur adipiscing elit 211.\\np2 line 12: lorem ipsum dolor …[+948]",
+          "stderr": ""
+        },
+        "guest": {
+          "exitCode": 0,
+          "ms": 581,
+          "stdout": "{\"file\":\"pdfs/multi-flate.pdf\",\"pages\":[\"Page 1 of 3: heading\\np1 line 1: lorem ipsum dolor sit amet, consectetur adipiscing elit 101.\\np1 line 2: lorem ipsum dolor sit amet, consectetur adipiscing elit 102.\\np1 line 3: lorem ipsum dolor sit amet, consectetur adipiscing elit 103.\\np1 line 4: lorem ipsum dolor sit amet, consectetur adipiscing elit 104.\\np1 line 5: lorem ipsum dolor sit amet, consectetur adipiscing elit 105.\\np1 line 6: lorem ipsum dolor sit amet, consectetur adipiscing elit 106.\\np1 line 7: lorem ipsum dolor sit amet, consectetur adipiscing elit 107.\\np1 line 8: lorem ipsum dolor sit amet, consectetur adipiscing elit 108.\\np1 line 9: lorem ipsum dolor sit amet, consectetur adipiscing elit 109.\\np1 line 10: lorem ipsum dolor sit amet, consectetur adipiscing elit 110.\\np1 line 11: lorem ipsum dolor sit amet, consectetur adipiscing elit 111.\\np1 line 12: lorem ipsum dolor sit amet, consectetur adipiscing elit 112.\",\"Page 2 of 3: heading\\np2 line 1: lorem ipsum dolor sit amet, consectetur adipiscing elit 201.\\np2 line 2: lorem ipsum dolor sit amet, consectetur adipiscing elit 202.\\np2 line 3: lorem ipsum dolor sit amet, consectetur adipiscing elit 203.\\np2 line 4: lorem ipsum dolor sit amet, consectetur adipiscing elit 204.\\np2 line 5: lorem ipsum dolor sit amet, consectetur adipiscing elit 205.\\np2 line 6: lorem ipsum dolor sit amet, consectetur adipiscing elit 206.\\np2 line 7: lorem ipsum dolor sit amet, consectetur adipiscing elit 207.\\np2 line 8: lorem ipsum dolor sit amet, consectetur adipiscing elit 208.\\np2 line 9: lorem ipsum dolor sit amet, consectetur adipiscing elit 209.\\np2 line 10: lorem ipsum dolor sit amet, consectetur adipiscing elit 210.\\np2 line 11: lorem ipsum dolor sit amet, consectetur adipiscing elit 211.\\np2 line 12: lorem ipsum dolor …[+948]",
+          "stderr": ""
+        },
+        "verdict": "EQUAL"
+      },
+      {
+        "guestStdoutSha": "0d8205262bf570422bce36d002af87c0ff4f6599c9b99601961c91fb381872c0",
+        "files": ["cyrillic-pdfkit.pdf", "cyrillic.pdf", "latin-raw.pdf", "multi-flate.pdf"],
+        "node": {
+          "exitCode": 1,
+          "ms": 77,
+          "stdout": "{\"file\":\"pdfs/cyrillic-pdfkit.pdf\",\"pages\":[\"Документ из PDFKit: первая страница.\\nВ чащах юга жил бы цитрус? Да, но фальшивый экземпляр!\",\"Страница два: итого 1 234,56 ₽.\"]}\n{\"file\":\"pdfs/cyrillic.pdf\",\"pages\":[\"Привет, мир! Это проверка извлечения текста.\\nСъешь же ещё этих мягких французских булок, да выпей чаю.\\nСмешанная строка: rifty isolate No 42 — «кавычки», ёЁ.\",\"Вторая страница.\\nШирокая электрификация южных губерний даст мощный толчок подъёму сельского хозяйства.\\nLatin tail: The quick brown fox.\"]}\n",
+          "stderr": "Error\n    at UnknownErrorExceptionClosure (/private/tmp/rifty-pdf-text/oracle/pdf-parse-v1_debug_ms_node-ensure/node_modules/pdf-parse-v1/lib/pdf.js/v1.10.100/build/pdf.js:443:37)\n    at Object.<anonymous> (/private/tmp/rifty-pdf-text/oracle/pdf-parse-v1_debug_ms_node-ensure/node_modules/pdf-parse-v1/lib/pdf.js/v1.10.100/build/pdf.js:446:2)\n    at __w_pdfjs_require__ (/private/tmp/rifty-pdf-text/oracle/pdf-parse-v1_debug_ms_node-ensure/node_modules/pdf-parse-v1/lib/pdf.js/v1.10.100/build/pdf.js:45:30)\n    at Object.<anonymous> (/private/tmp/rifty-pdf-text/oracle/pdf-parse-v1_debug_ms_node-ensure/node_modules/pdf-parse-v1/lib/pdf.js/v1.10.100/build/pdf.js:7939:23)\n    at __w_pdfjs_require__ (/private/tmp/rifty-pdf-text/oracle/pdf-parse-v1_debug_ms_node-ensure/node_modules/pdf-parse-v1/lib/pdf.js/v1.10.100/build/pdf.js:45:30)\n    at /private/tmp/rifty-pdf-text/oracle/pdf-parse-v1_debug_ms_node-ensure/node_modules/pdf-parse-v1/lib/pdf.js/v1.10.100/build/pdf.js:88:18\n    at /private/tmp/rifty-pdf-text/oracle/pdf-parse-v1_debug_ms_node-ensure/node_modules/pdf-parse-v1/lib/pdf.js/v1.10.100/build/pdf.js:91:10\n    at webpackUniversalModuleDefinition (/private/tmp/rifty-pdf-text/oracle/pdf-parse-v1_debug_ms_node-ensure/node_modules/pdf-parse-v1/lib/pdf.js/v1.10.100/build/pdf.js:18:20)\n    at Object.<anonymous> (/private/tmp/rifty-pdf-text/oracle/pdf-parse-v1_debug_ms_node-ensure/node_modules/pdf-parse-v1/lib/pdf.js/v1.10.100/build/pdf.js:25:3)\n    at Module._compile (node:internal/modules/cjs/loader:1854:14) {\n  message: 'bad XRef entry',\n  details: 'FormatError: bad XRef entry'\n}\n"
+        },
+        "guest": {
+          "exitCode": 0,
+          "ms": 581,
+          "stdout": "{\"file\":\"pdfs/cyrillic-pdfkit.pdf\",\"pages\":[\"Документ из PDFKit: первая страница.\\nВ чащах юга жил бы цитрус? Да, но фальшивый экземпляр!\",\"Страница два: итого 1 234,56 ₽.\"]}\n{\"file\":\"pdfs/cyrillic.pdf\",\"pages\":[\"Привет, мир! Это проверка извлечения текста.\\nСъешь же ещё этих мягких французских булок, да выпей чаю.\\nСмешанная строка: rifty isolate No 42 — «кавычки», ёЁ.\",\"Вторая страница.\\nШирокая электрификация южных губерний даст мощный толчок подъёму сельского хозяйства.\\nLatin tail: The quick brown fox.\"]}\n{\"file\":\"pdfs/latin-raw.pdf\",\"pages\":[\"Hello rifty PDF text\\nSecond line: The quick brown fox jumps over the lazy dog.\\nNumbers 0123456789 and symbols (a+b) = c.\"]}\n{\"file\":\"pdfs/multi-flate.pdf\",\"pages\":[\"Page 1 of 3: heading\\np1 line 1: lorem ipsum dolor sit amet, consectetur adipiscing elit 101.\\np1 line 2: lorem ipsum dolor sit amet, consectetur adipiscing elit 102.\\np1 line 3: lorem ipsum dolor sit amet, consectetur adipiscing elit 103.\\np1 line 4: lorem ipsum dolor sit amet, consectetur adipiscing elit 104.\\np1 line 5: lorem ipsum dolor sit amet, consectetur adipiscing elit 105.\\np1 line 6: lorem ipsum dolor sit amet, consectetur adipiscing elit 106.\\np1 line 7: lorem ipsum dolor sit amet, consectetur adipiscing elit 107.\\np1 line 8: lorem ipsum dolor sit amet, consectetur adipiscing elit 108.\\np1 line 9: lorem ipsum dolor sit amet, consectetur adipiscing elit 109.\\np1 line 10: lorem ipsum dolor sit amet, consectetur adipiscing elit 110.\\np1 line 11: lorem ipsum dolor sit amet, consectetur adipiscing elit 111.\\np1 line 12: lorem ipsum dolor sit amet, consectetur adipiscing elit 112.\",\"Page 2 of 3: heading\\np2 line 1: lorem ipsum dolor sit amet, consectetur adipiscing elit 201.\\np2 line 2: lorem ipsum dolor sit amet, consectetur adipiscing elit 202.\\np2 line …[+1629]",
+          "stderr": ""
+        },
+        "verdict": "NODE-FAILS"
+      }
+    ],
+    "allRunGuestEqualsPerFileNode": true
+  },
+  {
+    "case": "pdfparse1-default.cjs",
+    "pkgs": ["pdf-parse-v1", "debug", "ms", "node-ensure"],
+    "tree": {
+      "files": 788,
+      "bytes": 33375418,
+      "nativeFiles": 0
+    },
+    "memoryLimitMb": 256,
+    "runs": [
+      {
+        "guestStdoutSha": "baacfd2622fee180db63e5ce1d879d3a651828e89f8f6c5e34f9d992c47c3a04",
+        "files": ["cyrillic-pdfkit.pdf"],
+        "node": {
+          "exitCode": 0,
+          "ms": 71,
+          "stdout": "{\"file\":\"pdfs/cyrillic-pdfkit.pdf\",\"pages\":[\"numpages=2\",\"\\n\\nДокумент из PDFKit: первая страница.\\nВ чащах юга жил бы цитрус? Да, но фальшивый экземпляр!\\n\\nСтраница два: итого 1 234,56 ₽.\"]}\n",
+          "stderr": ""
+        },
+        "guest": {
+          "exitCode": 0,
+          "ms": 584,
+          "stdout": "{\"file\":\"pdfs/cyrillic-pdfkit.pdf\",\"pages\":[\"numpages=2\",\"\\n\\nДокумент из PDFKit: первая страница.\\nВ чащах юга жил бы цитрус? Да, но фальшивый экземпляр!\\n\\nСтраница два: итого 1 234,56 ₽.\"]}\n",
+          "stderr": ""
+        },
+        "verdict": "EQUAL"
+      },
+      {
+        "guestStdoutSha": "dfb8f3b38443b8a78cba5c2ffd30d1bb2f3dfb2a4819e91f738e80db09487840",
+        "files": ["cyrillic.pdf"],
+        "node": {
+          "exitCode": 0,
+          "ms": 74,
+          "stdout": "{\"file\":\"pdfs/cyrillic.pdf\",\"pages\":[\"numpages=2\",\"\\n\\nПривет, мир! Это проверка извлечения текста.\\nСъешь же ещё этих мягких французских булок, да выпей чаю.\\nСмешанная строка: rifty isolate No 42 — «кавычки», ёЁ.\\n\\nВторая страница.\\nШирокая электрификация южных губерний даст мощный толчок подъёму сельского хозяйства.\\nLatin tail: The quick brown fox.\"]}\n",
+          "stderr": ""
+        },
+        "guest": {
+          "exitCode": 0,
+          "ms": 586,
+          "stdout": "{\"file\":\"pdfs/cyrillic.pdf\",\"pages\":[\"numpages=2\",\"\\n\\nПривет, мир! Это проверка извлечения текста.\\nСъешь же ещё этих мягких французских булок, да выпей чаю.\\nСмешанная строка: rifty isolate No 42 — «кавычки», ёЁ.\\n\\nВторая страница.\\nШирокая электрификация южных губерний даст мощный толчок подъёму сельского хозяйства.\\nLatin tail: The quick brown fox.\"]}\n",
+          "stderr": ""
+        },
+        "verdict": "EQUAL"
+      },
+      {
+        "guestStdoutSha": "7c93ad4df62a00252656c0c6b3e4b0047102d6085ed85e082788bc6148b5dd91",
+        "files": ["latin-raw.pdf"],
+        "node": {
+          "exitCode": 0,
+          "ms": 67,
+          "stdout": "{\"file\":\"pdfs/latin-raw.pdf\",\"pages\":[\"numpages=1\",\"\\n\\nHello rifty PDF text\\nSecond line: The quick brown fox jumps over the lazy dog.\\nNumbers 0123456789 and symbols (a+b) = c.\"]}\n",
+          "stderr": ""
+        },
+        "guest": {
+          "exitCode": 0,
+          "ms": 575,
+          "stdout": "{\"file\":\"pdfs/latin-raw.pdf\",\"pages\":[\"numpages=1\",\"\\n\\nHello rifty PDF text\\nSecond line: The quick brown fox jumps over the lazy dog.\\nNumbers 0123456789 and symbols (a+b) = c.\"]}\n",
+          "stderr": ""
+        },
+        "verdict": "EQUAL"
+      },
+      {
+        "guestStdoutSha": "54252e908e6e49d4038f0e0b3d111d77c085137eb540fb837057b4f6b4198171",
+        "files": ["multi-flate.pdf"],
+        "node": {
+          "exitCode": 0,
+          "ms": 69,
+          "stdout": "{\"file\":\"pdfs/multi-flate.pdf\",\"pages\":[\"numpages=3\",\"\\n\\nPage 1 of 3: heading\\np1 line 1: lorem ipsum dolor sit amet, consectetur adipiscing elit 101.\\np1 line 2: lorem ipsum dolor sit amet, consectetur adipiscing elit 102.\\np1 line 3: lorem ipsum dolor sit amet, consectetur adipiscing elit 103.\\np1 line 4: lorem ipsum dolor sit amet, consectetur adipiscing elit 104.\\np1 line 5: lorem ipsum dolor sit amet, consectetur adipiscing elit 105.\\np1 line 6: lorem ipsum dolor sit amet, consectetur adipiscing elit 106.\\np1 line 7: lorem ipsum dolor sit amet, consectetur adipiscing elit 107.\\np1 line 8: lorem ipsum dolor sit amet, consectetur adipiscing elit 108.\\np1 line 9: lorem ipsum dolor sit amet, consectetur adipiscing elit 109.\\np1 line 10: lorem ipsum dolor sit amet, consectetur adipiscing elit 110.\\np1 line 11: lorem ipsum dolor sit amet, consectetur adipiscing elit 111.\\np1 line 12: lorem ipsum dolor sit amet, consectetur adipiscing elit 112.\\n\\nPage 2 of 3: heading\\np2 line 1: lorem ipsum dolor sit amet, consectetur adipiscing elit 201.\\np2 line 2: lorem ipsum dolor sit amet, consectetur adipiscing elit 202.\\np2 line 3: lorem ipsum dolor sit amet, consectetur adipiscing elit 203.\\np2 line 4: lorem ipsum dolor sit amet, consectetur adipiscing elit 204.\\np2 line 5: lorem ipsum dolor sit amet, consectetur adipiscing elit 205.\\np2 line 6: lorem ipsum dolor sit amet, consectetur adipiscing elit 206.\\np2 line 7: lorem ipsum dolor sit amet, consectetur adipiscing elit 207.\\np2 line 8: lorem ipsum dolor sit amet, consectetur adipiscing elit 208.\\np2 line 9: lorem ipsum dolor sit amet, consectetur adipiscing elit 209.\\np2 line 10: lorem ipsum dolor sit amet, consectetur adipiscing elit 210.\\np2 line 11: lorem ipsum dolor sit amet, consectetur adipiscing elit 211.\\np2 line 12: …[+967]",
+          "stderr": ""
+        },
+        "guest": {
+          "exitCode": 0,
+          "ms": 580,
+          "stdout": "{\"file\":\"pdfs/multi-flate.pdf\",\"pages\":[\"numpages=3\",\"\\n\\nPage 1 of 3: heading\\np1 line 1: lorem ipsum dolor sit amet, consectetur adipiscing elit 101.\\np1 line 2: lorem ipsum dolor sit amet, consectetur adipiscing elit 102.\\np1 line 3: lorem ipsum dolor sit amet, consectetur adipiscing elit 103.\\np1 line 4: lorem ipsum dolor sit amet, consectetur adipiscing elit 104.\\np1 line 5: lorem ipsum dolor sit amet, consectetur adipiscing elit 105.\\np1 line 6: lorem ipsum dolor sit amet, consectetur adipiscing elit 106.\\np1 line 7: lorem ipsum dolor sit amet, consectetur adipiscing elit 107.\\np1 line 8: lorem ipsum dolor sit amet, consectetur adipiscing elit 108.\\np1 line 9: lorem ipsum dolor sit amet, consectetur adipiscing elit 109.\\np1 line 10: lorem ipsum dolor sit amet, consectetur adipiscing elit 110.\\np1 line 11: lorem ipsum dolor sit amet, consectetur adipiscing elit 111.\\np1 line 12: lorem ipsum dolor sit amet, consectetur adipiscing elit 112.\\n\\nPage 2 of 3: heading\\np2 line 1: lorem ipsum dolor sit amet, consectetur adipiscing elit 201.\\np2 line 2: lorem ipsum dolor sit amet, consectetur adipiscing elit 202.\\np2 line 3: lorem ipsum dolor sit amet, consectetur adipiscing elit 203.\\np2 line 4: lorem ipsum dolor sit amet, consectetur adipiscing elit 204.\\np2 line 5: lorem ipsum dolor sit amet, consectetur adipiscing elit 205.\\np2 line 6: lorem ipsum dolor sit amet, consectetur adipiscing elit 206.\\np2 line 7: lorem ipsum dolor sit amet, consectetur adipiscing elit 207.\\np2 line 8: lorem ipsum dolor sit amet, consectetur adipiscing elit 208.\\np2 line 9: lorem ipsum dolor sit amet, consectetur adipiscing elit 209.\\np2 line 10: lorem ipsum dolor sit amet, consectetur adipiscing elit 210.\\np2 line 11: lorem ipsum dolor sit amet, consectetur adipiscing elit 211.\\np2 line 12: …[+967]",
+          "stderr": ""
+        },
+        "verdict": "EQUAL"
+      },
+      {
+        "guestStdoutSha": "a88a83ae06d5aa8b4bfeb3e3a5d6ad2948f6db7459275156196a460c1e2e7adb",
+        "files": ["cyrillic-pdfkit.pdf", "cyrillic.pdf", "latin-raw.pdf", "multi-flate.pdf"],
+        "node": {
+          "exitCode": 1,
+          "ms": 73,
+          "stdout": "{\"file\":\"pdfs/cyrillic-pdfkit.pdf\",\"pages\":[\"numpages=2\",\"\\n\\nДокумент из PDFKit: первая страница.\\nВ чащах юга жил бы цитрус? Да, но фальшивый экземпляр!\\n\\nСтраница два: итого 1 234,56 ₽.\"]}\n{\"file\":\"pdfs/cyrillic.pdf\",\"pages\":[\"numpages=2\",\"\\n\\nПривет, мир! Это проверка извлечения текста.\\nСъешь же ещё этих мягких французских булок, да выпей чаю.\\nСмешанная строка: rifty isolate No 42 — «кавычки», ёЁ.\\n\\nВторая страница.\\nШирокая электрификация южных губерний даст мощный толчок подъёму сельского хозяйства.\\nLatin tail: The quick brown fox.\"]}\n",
+          "stderr": "Error\n    at UnknownErrorExceptionClosure (/private/tmp/rifty-pdf-text/oracle/pdf-parse-v1_debug_ms_node-ensure/node_modules/pdf-parse-v1/lib/pdf.js/v1.10.100/build/pdf.js:443:37)\n    at Object.<anonymous> (/private/tmp/rifty-pdf-text/oracle/pdf-parse-v1_debug_ms_node-ensure/node_modules/pdf-parse-v1/lib/pdf.js/v1.10.100/build/pdf.js:446:2)\n    at __w_pdfjs_require__ (/private/tmp/rifty-pdf-text/oracle/pdf-parse-v1_debug_ms_node-ensure/node_modules/pdf-parse-v1/lib/pdf.js/v1.10.100/build/pdf.js:45:30)\n    at Object.<anonymous> (/private/tmp/rifty-pdf-text/oracle/pdf-parse-v1_debug_ms_node-ensure/node_modules/pdf-parse-v1/lib/pdf.js/v1.10.100/build/pdf.js:7939:23)\n    at __w_pdfjs_require__ (/private/tmp/rifty-pdf-text/oracle/pdf-parse-v1_debug_ms_node-ensure/node_modules/pdf-parse-v1/lib/pdf.js/v1.10.100/build/pdf.js:45:30)\n    at /private/tmp/rifty-pdf-text/oracle/pdf-parse-v1_debug_ms_node-ensure/node_modules/pdf-parse-v1/lib/pdf.js/v1.10.100/build/pdf.js:88:18\n    at /private/tmp/rifty-pdf-text/oracle/pdf-parse-v1_debug_ms_node-ensure/node_modules/pdf-parse-v1/lib/pdf.js/v1.10.100/build/pdf.js:91:10\n    at webpackUniversalModuleDefinition (/private/tmp/rifty-pdf-text/oracle/pdf-parse-v1_debug_ms_node-ensure/node_modules/pdf-parse-v1/lib/pdf.js/v1.10.100/build/pdf.js:18:20)\n    at Object.<anonymous> (/private/tmp/rifty-pdf-text/oracle/pdf-parse-v1_debug_ms_node-ensure/node_modules/pdf-parse-v1/lib/pdf.js/v1.10.100/build/pdf.js:25:3)\n    at Module._compile (node:internal/modules/cjs/loader:1854:14) {\n  message: 'bad XRef entry',\n  details: 'FormatError: bad XRef entry'\n}\n"
+        },
+        "guest": {
+          "exitCode": 0,
+          "ms": 590,
+          "stdout": "{\"file\":\"pdfs/cyrillic-pdfkit.pdf\",\"pages\":[\"numpages=2\",\"\\n\\nДокумент из PDFKit: первая страница.\\nВ чащах юга жил бы цитрус? Да, но фальшивый экземпляр!\\n\\nСтраница два: итого 1 234,56 ₽.\"]}\n{\"file\":\"pdfs/cyrillic.pdf\",\"pages\":[\"numpages=2\",\"\\n\\nПривет, мир! Это проверка извлечения текста.\\nСъешь же ещё этих мягких французских булок, да выпей чаю.\\nСмешанная строка: rifty isolate No 42 — «кавычки», ёЁ.\\n\\nВторая страница.\\nШирокая электрификация южных губерний даст мощный толчок подъёму сельского хозяйства.\\nLatin tail: The quick brown fox.\"]}\n{\"file\":\"pdfs/latin-raw.pdf\",\"pages\":[\"numpages=1\",\"\\n\\nHello rifty PDF text\\nSecond line: The quick brown fox jumps over the lazy dog.\\nNumbers 0123456789 and symbols (a+b) = c.\"]}\n{\"file\":\"pdfs/multi-flate.pdf\",\"pages\":[\"numpages=3\",\"\\n\\nPage 1 of 3: heading\\np1 line 1: lorem ipsum dolor sit amet, consectetur adipiscing elit 101.\\np1 line 2: lorem ipsum dolor sit amet, consectetur adipiscing elit 102.\\np1 line 3: lorem ipsum dolor sit amet, consectetur adipiscing elit 103.\\np1 line 4: lorem ipsum dolor sit amet, consectetur adipiscing elit 104.\\np1 line 5: lorem ipsum dolor sit amet, consectetur adipiscing elit 105.\\np1 line 6: lorem ipsum dolor sit amet, consectetur adipiscing elit 106.\\np1 line 7: lorem ipsum dolor sit amet, consectetur adipiscing elit 107.\\np1 line 8: lorem ipsum dolor sit amet, consectetur adipiscing elit 108.\\np1 line 9: lorem ipsum dolor sit amet, consectetur adipiscing elit 109.\\np1 line 10: lorem ipsum dolor sit amet, consectetur adipiscing elit 110.\\np1 line 11: lorem ipsum dolor sit amet, consectetur adipiscing elit 111.\\np1 line 12: lorem ipsum dolor sit amet, consectetur adipiscing elit 112.\\n\\nPage 2 of 3: heading\\np2 line 1: lorem ipsum dolor sit amet, consectetur adipiscing elit 201.\\np2 line 2:…[+1701]",
+          "stderr": ""
+        },
+        "verdict": "NODE-FAILS"
+      }
+    ],
+    "allRunGuestEqualsPerFileNode": true
+  },
+  {
+    "case": "pdfreader-buffer.cjs",
+    "pkgs": ["pdfreader"],
+    "tree": {
+      "files": 101,
+      "bytes": 11809765,
+      "nativeFiles": 0
+    },
+    "memoryLimitMb": 256,
+    "runs": [
+      {
+        "guestStdoutSha": "ed0b2cb42c09e08a280348849aa215948e27ac5ae878a1b8e456545e93c2260d",
+        "files": ["cyrillic-pdfkit.pdf"],
+        "node": {
+          "exitCode": 0,
+          "ms": 69,
+          "stdout": "{\"file\":\"pdfs/cyrillic-pdfkit.pdf\",\"pages\":[\"Документ из PDFKit: первая страница.\\nВ чащах юга жил бы цитрус? Да, но фальшивый экземпляр!\",\"Страница два: итого 1 234,56 ₽.\"]}\n",
+          "stderr": ""
+        },
+        "guest": {
+          "exitCode": 0,
+          "ms": 487,
+          "stdout": "{\"file\":\"pdfs/cyrillic-pdfkit.pdf\",\"pages\":[\"Документ из PDFKit: первая страница.\\nВ чащах юга жил бы цитрус? Да, но фальшивый экземпляр!\",\"Страница два: итого 1 234,56 ₽.\"]}\n",
+          "stderr": ""
+        },
+        "verdict": "EQUAL"
+      },
+      {
+        "guestStdoutSha": "cb13e411ed8bc0cb2e631cd202c3cf9213576fc9b4031f9e29ea25ace1de2c01",
+        "files": ["cyrillic.pdf"],
+        "node": {
+          "exitCode": 0,
+          "ms": 65,
+          "stdout": "{\"file\":\"pdfs/cyrillic.pdf\",\"pages\":[\"Привет, мир! Это проверка извлечения текста.\\nСъешь же ещё этих мягких французских булок, да выпей чаю.\\nСмешанная строка: rifty isolate № 42 — «кавычки», ёЁ.\",\"Вторая страница.\\nШирокая электрификация южных губерний даст мощный толчок подъёму сельского хозяйства.\\nLatin tail: The quick brown fox.\"]}\n",
+          "stderr": ""
+        },
+        "guest": {
+          "exitCode": 0,
+          "ms": 483,
+          "stdout": "{\"file\":\"pdfs/cyrillic.pdf\",\"pages\":[\"Привет, мир! Это проверка извлечения текста.\\nСъешь же ещё этих мягких французских булок, да выпей чаю.\\nСмешанная строка: rifty isolate № 42 — «кавычки», ёЁ.\",\"Вторая страница.\\nШирокая электрификация южных губерний даст мощный толчок подъёму сельского хозяйства.\\nLatin tail: The quick brown fox.\"]}\n",
+          "stderr": ""
+        },
+        "verdict": "EQUAL"
+      },
+      {
+        "guestStdoutSha": "cfb4115d3ef51dde52fcd497d717533854f2b623df9d24744ae2b88fb42bb218",
+        "files": ["latin-raw.pdf"],
+        "node": {
+          "exitCode": 0,
+          "ms": 56,
+          "stdout": "{\"file\":\"pdfs/latin-raw.pdf\",\"pages\":[\"Hello rifty PDF text\\nSecond line: The quick brown fox jumps over the lazy dog.\\nNumbers 0123456789 and symbols (a+b) = c.\"]}\n",
+          "stderr": ""
+        },
+        "guest": {
+          "exitCode": 0,
+          "ms": 476,
+          "stdout": "{\"file\":\"pdfs/latin-raw.pdf\",\"pages\":[\"Hello rifty PDF text\\nSecond line: The quick brown fox jumps over the lazy dog.\\nNumbers 0123456789 and symbols (a+b) = c.\"]}\n",
+          "stderr": ""
+        },
+        "verdict": "EQUAL"
+      },
+      {
+        "guestStdoutSha": "e43a758cab735f219ddcba66678a77b2bfd1e924bd6867efdf3fb4ebcba69277",
+        "files": ["multi-flate.pdf"],
+        "node": {
+          "exitCode": 0,
+          "ms": 63,
+          "stdout": "{\"file\":\"pdfs/multi-flate.pdf\",\"pages\":[\"Page 1 of 3: heading\\np1 line 1: lorem ipsum dolor sit amet, consectetur adipiscing elit 101.\\np1 line 2: lorem ipsum dolor sit amet, consectetur adipiscing elit 102.\\np1 line 3: lorem ipsum dolor sit amet, consectetur adipiscing elit 103.\\np1 line 4: lorem ipsum dolor sit amet, consectetur adipiscing elit 104.\\np1 line 5: lorem ipsum dolor sit amet, consectetur adipiscing elit 105.\\np1 line 6: lorem ipsum dolor sit amet, consectetur adipiscing elit 106.\\np1 line 7: lorem ipsum dolor sit amet, consectetur adipiscing elit 107.\\np1 line 8: lorem ipsum dolor sit amet, consectetur adipiscing elit 108.\\np1 line 9: lorem ipsum dolor sit amet, consectetur adipiscing elit 109.\\np1 line 10: lorem ipsum dolor sit amet, consectetur adipiscing elit 110.\\np1 line 11: lorem ipsum dolor sit amet, consectetur adipiscing elit 111.\\np1 line 12: lorem ipsum dolor sit amet, consectetur adipiscing elit 112.\",\"Page 2 of 3: heading\\np2 line 1: lorem ipsum dolor sit amet, consectetur adipiscing elit 201.\\np2 line 2: lorem ipsum dolor sit amet, consectetur adipiscing elit 202.\\np2 line 3: lorem ipsum dolor sit amet, consectetur adipiscing elit 203.\\np2 line 4: lorem ipsum dolor sit amet, consectetur adipiscing elit 204.\\np2 line 5: lorem ipsum dolor sit amet, consectetur adipiscing elit 205.\\np2 line 6: lorem ipsum dolor sit amet, consectetur adipiscing elit 206.\\np2 line 7: lorem ipsum dolor sit amet, consectetur adipiscing elit 207.\\np2 line 8: lorem ipsum dolor sit amet, consectetur adipiscing elit 208.\\np2 line 9: lorem ipsum dolor sit amet, consectetur adipiscing elit 209.\\np2 line 10: lorem ipsum dolor sit amet, consectetur adipiscing elit 210.\\np2 line 11: lorem ipsum dolor sit amet, consectetur adipiscing elit 211.\\np2 line 12: lorem ipsum dolor …[+948]",
+          "stderr": ""
+        },
+        "guest": {
+          "exitCode": 0,
+          "ms": 480,
+          "stdout": "{\"file\":\"pdfs/multi-flate.pdf\",\"pages\":[\"Page 1 of 3: heading\\np1 line 1: lorem ipsum dolor sit amet, consectetur adipiscing elit 101.\\np1 line 2: lorem ipsum dolor sit amet, consectetur adipiscing elit 102.\\np1 line 3: lorem ipsum dolor sit amet, consectetur adipiscing elit 103.\\np1 line 4: lorem ipsum dolor sit amet, consectetur adipiscing elit 104.\\np1 line 5: lorem ipsum dolor sit amet, consectetur adipiscing elit 105.\\np1 line 6: lorem ipsum dolor sit amet, consectetur adipiscing elit 106.\\np1 line 7: lorem ipsum dolor sit amet, consectetur adipiscing elit 107.\\np1 line 8: lorem ipsum dolor sit amet, consectetur adipiscing elit 108.\\np1 line 9: lorem ipsum dolor sit amet, consectetur adipiscing elit 109.\\np1 line 10: lorem ipsum dolor sit amet, consectetur adipiscing elit 110.\\np1 line 11: lorem ipsum dolor sit amet, consectetur adipiscing elit 111.\\np1 line 12: lorem ipsum dolor sit amet, consectetur adipiscing elit 112.\",\"Page 2 of 3: heading\\np2 line 1: lorem ipsum dolor sit amet, consectetur adipiscing elit 201.\\np2 line 2: lorem ipsum dolor sit amet, consectetur adipiscing elit 202.\\np2 line 3: lorem ipsum dolor sit amet, consectetur adipiscing elit 203.\\np2 line 4: lorem ipsum dolor sit amet, consectetur adipiscing elit 204.\\np2 line 5: lorem ipsum dolor sit amet, consectetur adipiscing elit 205.\\np2 line 6: lorem ipsum dolor sit amet, consectetur adipiscing elit 206.\\np2 line 7: lorem ipsum dolor sit amet, consectetur adipiscing elit 207.\\np2 line 8: lorem ipsum dolor sit amet, consectetur adipiscing elit 208.\\np2 line 9: lorem ipsum dolor sit amet, consectetur adipiscing elit 209.\\np2 line 10: lorem ipsum dolor sit amet, consectetur adipiscing elit 210.\\np2 line 11: lorem ipsum dolor sit amet, consectetur adipiscing elit 211.\\np2 line 12: lorem ipsum dolor …[+948]",
+          "stderr": ""
+        },
+        "verdict": "EQUAL"
+      },
+      {
+        "guestStdoutSha": "f0868657982c1abf235f2e8d6bac57aa6ce238e50f0325bb1f722a6b955d8715",
+        "files": ["cyrillic-pdfkit.pdf", "cyrillic.pdf", "latin-raw.pdf", "multi-flate.pdf"],
+        "node": {
+          "exitCode": 1,
+          "ms": 575,
+          "stdout": "{\"file\":\"pdfs/cyrillic-pdfkit.pdf\",\"pages\":[\"Документ из PDFKit: первая страница.\\nВ чащах юга жил бы цитрус? Да, но фальшивый экземпляр!\",\"Страница два: итого 1 234,56 ₽.\"]}\n{\"file\":\"pdfs/cyrillic.pdf\",\"pages\":[\"Привет, мир! Это проверка извлечения текста.\\nСъешь же ещё этих мягких французских булок, да выпей чаю.\\nСмешанная строка: rifty isolate № 42 — «кавычки», ёЁ.\",\"Вторая страница.\\nШирокая электрификация южных губерний даст мощный толчок подъёму сельского хозяйства.\\nLatin tail: The quick brown fox.\"]}\n{\"file\":\"pdfs/latin-raw.pdf\",\"pages\":[\"Hello rifty PDF text\\nSecond line: The quick brown fox jumps over the lazy dog.\\nNumbers 0123456789 and symbols (a+b) = c.\"]}\n(while reading XRef): Error: Unknown compression method in flate stream: 190, 213\nError: Error: Error: Unknown compression method in flate stream: 190, 213\n    at Pe (/private/tmp/rifty-pdf-text/oracle/pdfreader/node_modules/pdfreader/node_modules/pdf2json/dist/pdfparser.cjs:1:26768)\n    at e.parse (/private/tmp/rifty-pdf-text/oracle/pdfreader/node_modules/pdfreader/node_modules/pdf2json/dist/pdfparser.cjs:1:76562)\n    at e.ensure (/private/tmp/rifty-pdf-text/oracle/pdfreader/node_modules/pdfreader/node_modules/pdf2json/dist/pdfparser.cjs:1:454704)\n    at e.ensureModel (/private/tmp/rifty-pdf-text/oracle/pdfreader/node_modules/pdfreader/node_modules/pdf2json/dist/pdfparser.cjs:1:453828)\n    at Object.onResolve (/private/tmp/rifty-pdf-text/oracle/pdfreader/node_modules/pdfreader/node_modules/pdf2json/dist/pdfparser.cjs:1:390828)\n    at Object.runHandlers (/private/tmp/rifty-pdf-text/oracle/pdfreader/node_modules/pdfreader/node_modules/pdf2json/dist/pdfparser.cjs:1:34448)\n    at listOnTimeout (node:internal/timers:605:17)\n    at process.processTimers (node:internal/timers:541:7)\n",
+          "stderr": "Error: Error: Unknown compression method in flate stream: 190, 213\n{\n  parserError: 'Error: Error: Unknown compression method in flate stream: 190, 213'\n}\n"
+        },
+        "guest": {
+          "exitCode": 0,
+          "ms": 509,
+          "stdout": "{\"file\":\"pdfs/cyrillic-pdfkit.pdf\",\"pages\":[\"Документ из PDFKit: первая страница.\\nВ чащах юга жил бы цитрус? Да, но фальшивый экземпляр!\",\"Страница два: итого 1 234,56 ₽.\"]}\n{\"file\":\"pdfs/cyrillic.pdf\",\"pages\":[\"Привет, мир! Это проверка извлечения текста.\\nСъешь же ещё этих мягких французских булок, да выпей чаю.\\nСмешанная строка: rifty isolate № 42 — «кавычки», ёЁ.\",\"Вторая страница.\\nШирокая электрификация южных губерний даст мощный толчок подъёму сельского хозяйства.\\nLatin tail: The quick brown fox.\"]}\n{\"file\":\"pdfs/latin-raw.pdf\",\"pages\":[\"Hello rifty PDF text\\nSecond line: The quick brown fox jumps over the lazy dog.\\nNumbers 0123456789 and symbols (a+b) = c.\"]}\n{\"file\":\"pdfs/multi-flate.pdf\",\"pages\":[\"Page 1 of 3: heading\\np1 line 1: lorem ipsum dolor sit amet, consectetur adipiscing elit 101.\\np1 line 2: lorem ipsum dolor sit amet, consectetur adipiscing elit 102.\\np1 line 3: lorem ipsum dolor sit amet, consectetur adipiscing elit 103.\\np1 line 4: lorem ipsum dolor sit amet, consectetur adipiscing elit 104.\\np1 line 5: lorem ipsum dolor sit amet, consectetur adipiscing elit 105.\\np1 line 6: lorem ipsum dolor sit amet, consectetur adipiscing elit 106.\\np1 line 7: lorem ipsum dolor sit amet, consectetur adipiscing elit 107.\\np1 line 8: lorem ipsum dolor sit amet, consectetur adipiscing elit 108.\\np1 line 9: lorem ipsum dolor sit amet, consectetur adipiscing elit 109.\\np1 line 10: lorem ipsum dolor sit amet, consectetur adipiscing elit 110.\\np1 line 11: lorem ipsum dolor sit amet, consectetur adipiscing elit 111.\\np1 line 12: lorem ipsum dolor sit amet, consectetur adipiscing elit 112.\",\"Page 2 of 3: heading\\np2 line 1: lorem ipsum dolor sit amet, consectetur adipiscing elit 201.\\np2 line 2: lorem ipsum dolor sit amet, consectetur adipiscing elit 202.\\np2 line 3…[+1628]",
+          "stderr": ""
+        },
+        "verdict": "NODE-FAILS"
+      }
+    ],
+    "allRunGuestEqualsPerFileNode": true
+  },
+  {
+    "case": "pdf2json.cjs",
+    "pkgs": ["pdf2json"],
+    "tree": {
+      "files": 12,
+      "bytes": 11893152,
+      "nativeFiles": 0
+    },
+    "memoryLimitMb": 256,
+    "runs": [
+      {
+        "guestStdoutSha": "6f6ea3f5a38f52af51178eb5c471ac49d184c0f3479cb3ad4e512a8144c15b85",
+        "files": ["cyrillic-pdfkit.pdf"],
+        "node": {
+          "exitCode": 0,
+          "ms": 63,
+          "stdout": "Warning: Setting up fake worker.\n{\"file\":\"pdfs/cyrillic-pdfkit.pdf\",\"pages\":[\"Документ из PDFKit: первая страница.\\nВ чащах юга жил бы цитрус? Да, но фальшивый экземпляр!\",\"Страница два: итого 1 234,56 ₽.\"]}\n",
+          "stderr": ""
+        },
+        "guest": {
+          "exitCode": 0,
+          "ms": 522,
+          "stdout": "Warning: Setting up fake worker.\n{\"file\":\"pdfs/cyrillic-pdfkit.pdf\",\"pages\":[\"Документ из PDFKit: первая страница.\\nВ чащах юга жил бы цитрус? Да, но фальшивый экземпляр!\",\"Страница два: итого 1 234,56 ₽.\"]}\n",
+          "stderr": ""
+        },
+        "verdict": "EQUAL"
+      },
+      {
+        "guestStdoutSha": "59e2065dba3c957c14802a0330f7361145ba51917c9067658500b0eb4edf72bc",
+        "files": ["cyrillic.pdf"],
+        "node": {
+          "exitCode": 0,
+          "ms": 63,
+          "stdout": "Warning: Setting up fake worker.\n{\"file\":\"pdfs/cyrillic.pdf\",\"pages\":[\"Привет, мир! Это проверка извлечения текста.\\nСъешь же ещё этих мягких французских булок, да выпей чаю.\\nСмешанная строка: rifty isolate № 42 — «кавычки», ёЁ.\",\"Вторая страница.\\nШирокая электрификация южных губерний даст мощный толчок подъёму сельского хозяйства.\\nLatin tail: The quick brown fox.\"]}\n",
+          "stderr": ""
+        },
+        "guest": {
+          "exitCode": 0,
+          "ms": 626,
+          "stdout": "Warning: Setting up fake worker.\n{\"file\":\"pdfs/cyrillic.pdf\",\"pages\":[\"Привет, мир! Это проверка извлечения текста.\\nСъешь же ещё этих мягких французских булок, да выпей чаю.\\nСмешанная строка: rifty isolate № 42 — «кавычки», ёЁ.\",\"Вторая страница.\\nШирокая электрификация южных губерний даст мощный толчок подъёму сельского хозяйства.\\nLatin tail: The quick brown fox.\"]}\n",
+          "stderr": ""
+        },
+        "verdict": "EQUAL"
+      },
+      {
+        "guestStdoutSha": "6d16ca0358e80237d0127788383dbbd6a3eeebc783ee813074b3744be2bc2cec",
+        "files": ["latin-raw.pdf"],
+        "node": {
+          "exitCode": 0,
+          "ms": 55,
+          "stdout": "Warning: Setting up fake worker.\n{\"file\":\"pdfs/latin-raw.pdf\",\"pages\":[\"Hello rifty PDF text\\nSecond line: The quick brown fox jumps over the lazy dog.\\nNumbers 0123456789 and symbols (a+b) = c.\"]}\n",
+          "stderr": ""
+        },
+        "guest": {
+          "exitCode": 0,
+          "ms": 496,
+          "stdout": "Warning: Setting up fake worker.\n{\"file\":\"pdfs/latin-raw.pdf\",\"pages\":[\"Hello rifty PDF text\\nSecond line: The quick brown fox jumps over the lazy dog.\\nNumbers 0123456789 and symbols (a+b) = c.\"]}\n",
+          "stderr": ""
+        },
+        "verdict": "EQUAL"
+      },
+      {
+        "guestStdoutSha": "a94a693fcd245a9e2b5dd9ffceb4ac494939eb5db981790dfc84ff74e9fcac64",
+        "files": ["multi-flate.pdf"],
+        "node": {
+          "exitCode": 0,
+          "ms": 65,
+          "stdout": "Warning: Setting up fake worker.\n{\"file\":\"pdfs/multi-flate.pdf\",\"pages\":[\"Page 1 of 3: heading\\np1 line 1: lorem ipsum dolor sit amet, consectetur adipiscing elit 101.\\np1 line 2: lorem ipsum dolor sit amet, consectetur adipiscing elit 102.\\np1 line 3: lorem ipsum dolor sit amet, consectetur adipiscing elit 103.\\np1 line 4: lorem ipsum dolor sit amet, consectetur adipiscing elit 104.\\np1 line 5: lorem ipsum dolor sit amet, consectetur adipiscing elit 105.\\np1 line 6: lorem ipsum dolor sit amet, consectetur adipiscing elit 106.\\np1 line 7: lorem ipsum dolor sit amet, consectetur adipiscing elit 107.\\np1 line 8: lorem ipsum dolor sit amet, consectetur adipiscing elit 108.\\np1 line 9: lorem ipsum dolor sit amet, consectetur adipiscing elit 109.\\np1 line 10: lorem ipsum dolor sit amet, consectetur adipiscing elit 110.\\np1 line 11: lorem ipsum dolor sit amet, consectetur adipiscing elit 111.\\np1 line 12: lorem ipsum dolor sit amet, consectetur adipiscing elit 112.\",\"Page 2 of 3: heading\\np2 line 1: lorem ipsum dolor sit amet, consectetur adipiscing elit 201.\\np2 line 2: lorem ipsum dolor sit amet, consectetur adipiscing elit 202.\\np2 line 3: lorem ipsum dolor sit amet, consectetur adipiscing elit 203.\\np2 line 4: lorem ipsum dolor sit amet, consectetur adipiscing elit 204.\\np2 line 5: lorem ipsum dolor sit amet, consectetur adipiscing elit 205.\\np2 line 6: lorem ipsum dolor sit amet, consectetur adipiscing elit 206.\\np2 line 7: lorem ipsum dolor sit amet, consectetur adipiscing elit 207.\\np2 line 8: lorem ipsum dolor sit amet, consectetur adipiscing elit 208.\\np2 line 9: lorem ipsum dolor sit amet, consectetur adipiscing elit 209.\\np2 line 10: lorem ipsum dolor sit amet, consectetur adipiscing elit 210.\\np2 line 11: lorem ipsum dolor sit amet, consectetur adipiscing elit 211…[+981]",
+          "stderr": ""
+        },
+        "guest": {
+          "exitCode": 0,
+          "ms": 544,
+          "stdout": "Warning: Setting up fake worker.\n{\"file\":\"pdfs/multi-flate.pdf\",\"pages\":[\"Page 1 of 3: heading\\np1 line 1: lorem ipsum dolor sit amet, consectetur adipiscing elit 101.\\np1 line 2: lorem ipsum dolor sit amet, consectetur adipiscing elit 102.\\np1 line 3: lorem ipsum dolor sit amet, consectetur adipiscing elit 103.\\np1 line 4: lorem ipsum dolor sit amet, consectetur adipiscing elit 104.\\np1 line 5: lorem ipsum dolor sit amet, consectetur adipiscing elit 105.\\np1 line 6: lorem ipsum dolor sit amet, consectetur adipiscing elit 106.\\np1 line 7: lorem ipsum dolor sit amet, consectetur adipiscing elit 107.\\np1 line 8: lorem ipsum dolor sit amet, consectetur adipiscing elit 108.\\np1 line 9: lorem ipsum dolor sit amet, consectetur adipiscing elit 109.\\np1 line 10: lorem ipsum dolor sit amet, consectetur adipiscing elit 110.\\np1 line 11: lorem ipsum dolor sit amet, consectetur adipiscing elit 111.\\np1 line 12: lorem ipsum dolor sit amet, consectetur adipiscing elit 112.\",\"Page 2 of 3: heading\\np2 line 1: lorem ipsum dolor sit amet, consectetur adipiscing elit 201.\\np2 line 2: lorem ipsum dolor sit amet, consectetur adipiscing elit 202.\\np2 line 3: lorem ipsum dolor sit amet, consectetur adipiscing elit 203.\\np2 line 4: lorem ipsum dolor sit amet, consectetur adipiscing elit 204.\\np2 line 5: lorem ipsum dolor sit amet, consectetur adipiscing elit 205.\\np2 line 6: lorem ipsum dolor sit amet, consectetur adipiscing elit 206.\\np2 line 7: lorem ipsum dolor sit amet, consectetur adipiscing elit 207.\\np2 line 8: lorem ipsum dolor sit amet, consectetur adipiscing elit 208.\\np2 line 9: lorem ipsum dolor sit amet, consectetur adipiscing elit 209.\\np2 line 10: lorem ipsum dolor sit amet, consectetur adipiscing elit 210.\\np2 line 11: lorem ipsum dolor sit amet, consectetur adipiscing elit 211…[+981]",
+          "stderr": ""
+        },
+        "verdict": "EQUAL"
+      },
+      {
+        "guestStdoutSha": "69d8a8329c19b69edbfd13f14db727834ca93149e0d0dead93328d152e50393e",
+        "files": ["cyrillic-pdfkit.pdf", "cyrillic.pdf", "latin-raw.pdf", "multi-flate.pdf"],
+        "node": {
+          "exitCode": 0,
+          "ms": 83,
+          "stdout": "Warning: Setting up fake worker.\n{\"file\":\"pdfs/cyrillic-pdfkit.pdf\",\"pages\":[\"Документ из PDFKit: первая страница.\\nВ чащах юга жил бы цитрус? Да, но фальшивый экземпляр!\",\"Страница два: итого 1 234,56 ₽.\"]}\nWarning: Setting up fake worker.\n{\"file\":\"pdfs/cyrillic.pdf\",\"pages\":[\"Привет, мир! Это проверка извлечения текста.\\nСъешь же ещё этих мягких французских булок, да выпей чаю.\\nСмешанная строка: rifty isolate № 42 — «кавычки», ёЁ.\",\"Вторая страница.\\nШирокая электрификация южных губерний даст мощный толчок подъёму сельского хозяйства.\\nLatin tail: The quick brown fox.\"]}\nWarning: Setting up fake worker.\n{\"file\":\"pdfs/latin-raw.pdf\",\"pages\":[\"Hello rifty PDF text\\nSecond line: The quick brown fox jumps over the lazy dog.\\nNumbers 0123456789 and symbols (a+b) = c.\"]}\nWarning: Setting up fake worker.\n{\"file\":\"pdfs/multi-flate.pdf\",\"pages\":[\"Page 1 of 3: heading\\np1 line 1: lorem ipsum dolor sit amet, consectetur adipiscing elit 101.\\np1 line 2: lorem ipsum dolor sit amet, consectetur adipiscing elit 102.\\np1 line 3: lorem ipsum dolor sit amet, consectetur adipiscing elit 103.\\np1 line 4: lorem ipsum dolor sit amet, consectetur adipiscing elit 104.\\np1 line 5: lorem ipsum dolor sit amet, consectetur adipiscing elit 105.\\np1 line 6: lorem ipsum dolor sit amet, consectetur adipiscing elit 106.\\np1 line 7: lorem ipsum dolor sit amet, consectetur adipiscing elit 107.\\np1 line 8: lorem ipsum dolor sit amet, consectetur adipiscing elit 108.\\np1 line 9: lorem ipsum dolor sit amet, consectetur adipiscing elit 109.\\np1 line 10: lorem ipsum dolor sit amet, consectetur adipiscing elit 110.\\np1 line 11: lorem ipsum dolor sit amet, consectetur adipiscing elit 111.\\np1 line 12: lorem ipsum dolor sit amet, consectetur adipiscing elit 112.\",\"Page 2 of 3: heading\\np2 line 1: lorem ipsum …[+1760]",
+          "stderr": ""
+        },
+        "guest": {
+          "exitCode": 0,
+          "ms": 526,
+          "stdout": "Warning: Setting up fake worker.\n{\"file\":\"pdfs/cyrillic-pdfkit.pdf\",\"pages\":[\"Документ из PDFKit: первая страница.\\nВ чащах юга жил бы цитрус? Да, но фальшивый экземпляр!\",\"Страница два: итого 1 234,56 ₽.\"]}\nWarning: Setting up fake worker.\n{\"file\":\"pdfs/cyrillic.pdf\",\"pages\":[\"Привет, мир! Это проверка извлечения текста.\\nСъешь же ещё этих мягких французских булок, да выпей чаю.\\nСмешанная строка: rifty isolate № 42 — «кавычки», ёЁ.\",\"Вторая страница.\\nШирокая электрификация южных губерний даст мощный толчок подъёму сельского хозяйства.\\nLatin tail: The quick brown fox.\"]}\nWarning: Setting up fake worker.\n{\"file\":\"pdfs/latin-raw.pdf\",\"pages\":[\"Hello rifty PDF text\\nSecond line: The quick brown fox jumps over the lazy dog.\\nNumbers 0123456789 and symbols (a+b) = c.\"]}\nWarning: Setting up fake worker.\n{\"file\":\"pdfs/multi-flate.pdf\",\"pages\":[\"Page 1 of 3: heading\\np1 line 1: lorem ipsum dolor sit amet, consectetur adipiscing elit 101.\\np1 line 2: lorem ipsum dolor sit amet, consectetur adipiscing elit 102.\\np1 line 3: lorem ipsum dolor sit amet, consectetur adipiscing elit 103.\\np1 line 4: lorem ipsum dolor sit amet, consectetur adipiscing elit 104.\\np1 line 5: lorem ipsum dolor sit amet, consectetur adipiscing elit 105.\\np1 line 6: lorem ipsum dolor sit amet, consectetur adipiscing elit 106.\\np1 line 7: lorem ipsum dolor sit amet, consectetur adipiscing elit 107.\\np1 line 8: lorem ipsum dolor sit amet, consectetur adipiscing elit 108.\\np1 line 9: lorem ipsum dolor sit amet, consectetur adipiscing elit 109.\\np1 line 10: lorem ipsum dolor sit amet, consectetur adipiscing elit 110.\\np1 line 11: lorem ipsum dolor sit amet, consectetur adipiscing elit 111.\\np1 line 12: lorem ipsum dolor sit amet, consectetur adipiscing elit 112.\",\"Page 2 of 3: heading\\np2 line 1: lorem ipsum …[+1760]",
+          "stderr": ""
+        },
+        "verdict": "EQUAL"
+      }
+    ],
+    "allRunGuestEqualsPerFileNode": true
+  }
+]

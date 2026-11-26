@@ -1,0 +1,20 @@
+# node v24.16.0: node gen/pdfparse2.cjs pdfs/latin-raw.pdf (deps installed --omit=optional); stderr lines < 300 chars; exit 1
+Warning: Cannot load "@napi-rs/canvas" package: "Error: Failed to load native binding".
+Warning: Cannot polyfill `DOMMatrix`, rendering may be broken.
+Warning: Cannot polyfill `ImageData`, rendering may be broken.
+Warning: Cannot polyfill `Path2D`, rendering may be broken.
+<oracle>/node_modules/pdf-parse/dist/pdf-parse/cjs/index.cjs:1
+
+ReferenceError: DOMMatrix is not defined
+    at Module.<anonymous> (<oracle>/node_modules/pdf-parse/dist/pdf-parse/cjs/index.cjs:1:191957)
+    at Module._compile (node:internal/modules/cjs/loader:1854:14)
+    at Object..js (node:internal/modules/cjs/loader:1985:10)
+    at Module.load (node:internal/modules/cjs/loader:1577:32)
+    at Module._load (node:internal/modules/cjs/loader:1379:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+    at Module.require (node:internal/modules/cjs/loader:1600:12)
+    at require (node:internal/modules/helpers:153:16)
+    at Object.<anonymous> (<oracle>/gen/pdfparse2.cjs:3:22)
+    at Module._compile (node:internal/modules/cjs/loader:1854:14)
+
+Node.js v24.16.0
