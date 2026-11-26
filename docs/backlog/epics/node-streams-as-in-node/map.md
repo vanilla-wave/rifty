@@ -63,9 +63,10 @@ against Node:
   decision on the Web API goal's question; the «private to the core» option is dropped and 7g is
   merged in). Without them, Node's `pipeline` fails in the isolate (`m7` 5/11 on the product build).
   The unit lives in this goal (manager's decision; its first consumer is Node's `pipeline`). Its
-  acceptance includes invariant I3 of goal isolate-guest-web-api: WPT `dom/abort` and `dom/events`
-  without `MessageChannel`/GC, the statics, `signal.reason instanceof DOMException`, Node APIs taking
-  `signal` (goal isolate-guest-web-api on branch `origin/t3/isolate-web-api-goal` (PR #443, not yet on main)). → I7 (isolate).
+  acceptance includes invariant I3 of goal isolate-guest-web-api (with `runtime-js/events-static-surface`
+  and `runtime-js/signal-apis-as-node`, the other carriers, manager 2026-11-26): WPT `dom/abort` and
+  `dom/events`, the statics, `signal.reason instanceof DOMException`, Node APIs taking `signal`.
+  **ready**, PR #472. Its isolate `m7`/`m9`/`m10` rows are measured and pinned there. → I7 (isolate).
 - **AL** `runtime-js/stream-core-abort-listeners-host-event-target` — Node's core attaches abort
   listeners with `kResistStopPropagation`/`kWeakHandler`, which a host `EventTarget` ignores (browser
   hosts only; the isolate gets Node's own `EventTarget` from 7). Variants: (A) the direct listener as in

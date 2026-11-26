@@ -29,8 +29,11 @@ Delivered elsewhere: `distribution/isolate-stream-core-abort-controller` — goa
 PR #450; manager decision 2026-11-25): Node's `abort_controller.js` + `event_target.js` + `webidl.js` in the isolate as guest
 globals (`AbortController`, `AbortSignal`, `EventTarget`, `Event`, `CustomEvent`); its acceptance
 includes this goal's I3 (`docs/backlog/distribution/isolate-stream-core-abort-controller.md`) through
-the shared WPT harness of unit 2 — so unit 7's WPT rows, like unit 3's, wait for that harness. **This goal closes when units 1–3 and that unit have landed, its merged contract carrying
-I3's rows and `CustomEvent`, green.**
+the shared WPT harness of unit 2. I3 is carried by three (manager's decision 2026-11-26): unit 7
+(the classes, statics, `DOMException`, `events.once`, `events.addAbortListener`, fs `signal` on top of
+#468, WPT `dom`; PR #472), `runtime-js/events-static-surface` (`events.on` with `signal`, the
+statics) and `runtime-js/signal-apis-as-node` (`timers/promises`; the fs remainder). I3 is not done
+until all three have landed. **This goal closes when units 1–3 and those three have landed, green.**
 
 Order: 1 first (RED). Unit 2 builds the shared WPT harness (its Acceptance 10); unit 3 is built in
 parallel but merges after unit 2 — one of its 13 rows (Acceptance 4, WPT `encoding`) runs on that

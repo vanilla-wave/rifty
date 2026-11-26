@@ -442,6 +442,7 @@ ADRs are immutable while active, except dated lines under `## Decisions` / `§Co
 | 0572 | Run a sandbox over an immutable template layer kept out of the sandbox's state |
 | 0577 | The isolate guest's TextDecoder and TextEncoder are Node v24.16.0's encoding.js, with @exodus/bytes for utf-16 and gb18030 |
 | 0578 | Isolate guest Blob and File are Node v24.16.0's blob.js and file.js over a JS byte store |
+| 0579 | Isolate guest EventTarget, Event, CustomEvent, AbortController and AbortSignal are Node v24.16.0's event_target.js and abort_controller.js |
 
 ## Superseded (removed)
 

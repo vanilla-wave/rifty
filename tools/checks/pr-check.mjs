@@ -190,6 +190,7 @@ export const TASKS = [
   'check:url-legacy-drift',
   'check:node-encoding-drift',
   'check:node-blob-drift',
+  'check:node-event-target-drift',
   'check:shadow-catalog-drift',
   'check:install-artifact-drift',
   'check:snapshot-artifact-drift',

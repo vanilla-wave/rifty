@@ -44,6 +44,15 @@
       "changes": "lib/internal/{webidl,blob,file}.js wrapped as modules over rifty bindings and minified by esbuild (whitespace and syntax, identifiers kept; the guest bundle may rename local bindings, e.g. require → require2), tools/publishing/generate-node-blob.mjs",
       "sourcesKey": "node"
     },
+    "packages/isolate-guest/src/guest/node-event-target/generated": {
+      "files": ["node-event-target.js", "node.LICENSE"],
+      "name": "node",
+      "version": "v24.16.0",
+      "license": "MIT",
+      "licenseFiles": ["packages/isolate-guest/src/guest/node-event-target/generated/node.LICENSE"],
+      "changes": "lib/internal/{event_target,abort_controller}.js wrapped in Node's builtin module wrapper over rifty bindings and minified by esbuild (whitespace and syntax, identifiers kept), tools/publishing/generate-node-event-target.mjs",
+      "sourcesKey": "node"
+    },
     "packages/runtime-js/src/module-loader/generated": {
       "files": ["typescript-browser.js"],
       "package": "typescript",
@@ -73,6 +82,8 @@
     "packages/isolate-guest/src/guest/node-encoding/generated/sources.json",
     "packages/isolate-guest/src/guest/node-blob/generated/node-blob.d.ts",
     "packages/isolate-guest/src/guest/node-blob/generated/sources.json",
+    "packages/isolate-guest/src/guest/node-event-target/generated/node-event-target.d.ts",
+    "packages/isolate-guest/src/guest/node-event-target/generated/sources.json",
     "packages/runtime-js/src/builtins/fetch/generated/classes.d.ts",
     "packages/runtime-js/src/builtins/fetch/generated/sources.json",
     "packages/runtime-js/src/builtins/url-legacy/generated/legacy.d.ts",
