@@ -51,7 +51,11 @@ describe('fs completions take their own loop turn, as in Node (isolate guest)', 
     // Where a due timer lands against a completion races here: the guest's thread runs beside the
     // host loop (`runtime-js/loop-phase-of-current-turn`). The callback's place against ticks,
     // promises and immediates is compared; the timers' is not.
-    const untimed = (out: string) => out.replace(/,?timeout[<>]/gu, '').replace(/: ,/gu, ': ');
+    const untimed = (out: string) =>
+      out
+        .replace(/,?timeout[<>]/gu, '')
+        .replace(/: ,/gu, ': ')
+        .replace(/: (?=;|$)/gmu, ': -');
     const node = nodeEval(callbackTurnOrder.code);
     expect(node.code).toBe(0);
     const result = await runCode(callbackTurnOrder.code);
