@@ -220,15 +220,19 @@ function textValue(
 function textAddresses(text) {
   /** @type {Address[]} */
   const out = [];
+  // pnpm marks a git-hosted tarball with `gitHosted: true` in the same `resolution: {…}`.
+  let gitHosted = false;
   const push = (/** @type {string} */ key, /** @type {ReturnType<typeof textValue>} */ v) => {
-    if (v && 'odd' in v) out.push({ key, value: '', odd: v.odd });
-    else if (v) out.push({ key, value: v.value });
+    const as = gitHosted && key === 'tarball' ? 'repo' : key;
+    if (v && 'odd' in v) out.push({ key: as, value: '', odd: v.odd });
+    else if (v) out.push({ key: as, value: v.value });
   };
   const lines = text.split('\n');
   /** Indent of the last block-scalar address key: a deeper line under it is a continuation. */
   let scalarIndent = -1;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i] ?? '';
+    gitHosted = /[{,]\s*gitHosted:\s*true\s*[,}]/u.test(line);
     const indent = line.length - line.trimStart().length;
     if (line.trim() && scalarIndent >= 0) {
       if (indent > scalarIndent) out.push({ key: '', value: '', odd: 'continuation line' });
@@ -308,7 +312,9 @@ export function classifyAddress({ key, value: raw, odd }) {
   } catch {
     return { kind: 'unreadable', label: value };
   }
-  if (key === 'repo' || scheme === 'git' || scheme.startsWith('git+'))
+  // yarn berry writes a git dependency as `name@<url>.git#commit=<sha>`.
+  const berryGit = key === 'resolution' && /\.git#commit=/u.test(value);
+  if (key === 'repo' || scheme === 'git' || scheme.startsWith('git+') || berryGit)
     return { kind: 'git', label: parsed.hostname || value };
   const userinfo = parsed.username !== '' || parsed.password !== '';
   if (!userinfo) {
@@ -395,6 +401,24 @@ export function lockCarriers(path, bytes) {
   }));
 }
 
+const counted = (/** @type {number} */ n, /** @type {string} */ one, /** @type {string} */ many) =>
+  `${n} ${n === 1 ? one : many}`;
+const HOST_ADVICE = `a registry mirror: rewrite the host to ${ALLOWED_ORIGIN} (keep integrity; npm ci verifies); a git/URL dependency: not allowed in committed locks, use a registry version`;
+// Manager decision 2026-11-26: yarn v1's default registry is not a second allowed host.
+const YARNPKG = 'https://registry.yarnpkg.com';
+const YARNPKG_ADVICE = `yarn v1 writes registry.yarnpkg.com by default: set registry "${ALLOWED_ORIGIN}" in .yarnrc and regenerate the lock`;
+
+/** @param {string} kind @param {string} label @param {number} count */
+function refusal(kind, label, count) {
+  if (kind === 'git')
+    return `${counted(count, 'git dependency address', 'git dependency addresses')} on ${label} (git/URL dependencies are not allowed in committed locks: the host may be internal; use a registry version)`;
+  if (kind === 'noncanonical')
+    return `${counted(count, 'non-canonical address entry', 'non-canonical address entries')} (${label}) — regenerate the lock with its package manager`;
+  if (kind === 'unreadable')
+    return `${counted(count, 'unreadable address value', 'unreadable address values')} ${JSON.stringify(label)} ${NON_NETWORK_NOTE}`;
+  return `${counted(count, 'address line', 'address lines')} on ${label} ${ALLOWED_NOTE} — ${label === YARNPKG ? YARNPKG_ADVICE : HOST_ADVICE}`;
+}
+
 /**
  * @param {string} root
  * @param {string[]} paths repo-relative
@@ -461,17 +485,8 @@ export function checkLockfileRegistry(root, paths, exempt = EXEMPT) {
         entry.count += 1;
         refused.set(id, entry);
       }
-      for (const { kind, label, count } of refused.values()) {
-        violations.push(
-          kind === 'git'
-            ? `${lock.carrier}: ${count} git dependency address(es) on ${label} (git/URL dependencies are not allowed in committed locks: the host may be internal)`
-            : kind === 'noncanonical'
-              ? `${lock.carrier}: ${count} non-canonical address entr(y|ies) (${label}) — regenerate the lock with its package manager`
-              : kind === 'unreadable'
-                ? `${lock.carrier}: ${count} unreadable address value(s) ${JSON.stringify(label)} ${NON_NETWORK_NOTE}`
-                : `${lock.carrier}: ${count} address line(s) on ${label} ${ALLOWED_NOTE}`,
-        );
-      }
+      for (const { kind, label, count } of refused.values())
+        violations.push(`${lock.carrier}: ${refusal(kind, label, count)}`);
     }
   }
   for (const row of exempt)
@@ -498,9 +513,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if (violations.length) {
     console.error(`✗ lockfile-registry: ${violations.length} violation(s); ${summary}`);
     for (const v of violations) console.error(`  ${v}`);
-    console.error(
-      `Host fix: rewrite it to ${ALLOWED_ORIGIN}, keep \`integrity\`, verify with \`npm ci --cache <empty dir> --registry=${ALLOWED_ORIGIN}/\`.`,
-    );
     process.exit(1);
   }
   console.log(`✓ lockfile-registry: ${summary}`);
