@@ -62,6 +62,7 @@ describe('pr:check lanes follow the diff class', () => {
     );
     expect(names).toContain('backlog:check');
     expect(names).toContain('lint');
+    expect(names).toContain('check:lockfile-registry'); // PR #443 was a docs-only lock leak
   });
 
   it('one source path, an empty diff, or an unknown diff keeps the full gate (fail-open)', () => {

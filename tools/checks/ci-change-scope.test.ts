@@ -128,6 +128,9 @@ describe('CI change scope', () => {
 
     const lint = jobBlock(workflow, 'lint-and-typecheck');
     expect(lint).toContain('pnpm check:compat-drift');
+    // Unconditional job: a docs-only PR (PR #443's lock leak) still runs the lockfile guard.
+    expect(lint).toContain('pnpm check:lockfile-registry');
+    expect(lint).not.toMatch(/^ {4}if:/mu);
     expect(lint).toContain('pnpm check:es-floor');
     expect(lint).toContain('pnpm test:docs-contract');
     for (const contract of [
