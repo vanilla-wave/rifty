@@ -13,6 +13,9 @@ code: [packages/runtime-js/src/builtins/process-identity.ts:11]
 `process.version` (ADR-0571 P2). Owner: runtime-js (process identity).
 Trigger: a package that mis-routes on `versions.node`, or the next ADR-0026
 amendment.
+2026-11-26 (stream core 8a differential, PR #471, `p4-binding-paths`): `process.argv0` `'rifty'`
+reaches a warning's hint — `(Use \`rifty --trace-deprecation ...\` …)`, Node `node`. Pinned there.
+
 ## Options / Next
 Chosen (provisional): A — keep impersonation; write an ADR-0026 amendment carving out `versions.node` rather than silent code drift. Alts: B honest-everywhere (`versions.rifty` only, drop `versions.node`) — doubles per-pkg shim cost beyond the ~10-pkg budget, pkgs silently take "no Node" branch; C keep + warn on direct `process.version` read — noisy, cries wolf. Promote A via ADR amendment to clear the marker.
 ## Reversibility

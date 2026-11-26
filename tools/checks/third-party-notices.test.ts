@@ -9,6 +9,7 @@ import {
   collect,
   publishableDirs,
   render,
+  shippedUnshipped,
   unusedRecords,
   validateManifest,
 } from '../publishing/third-party-notices.mjs';
@@ -193,6 +194,54 @@ describe('closed by default (review S1, S2)', () => {
       'npm bare@2.0.0',
       'generated pkg/src/generated',
     ]);
+  });
+
+  it('an unshipped mark names an existing backlog unit', () => {
+    put(
+      'docs/backlog/runtime-js/zlib-node-lib-port.md',
+      '---\narea: runtime-js\nstatus: draft\n---\n# unit\n',
+    );
+    put('docs/backlog/runtime-js/README.md', '# area\n');
+    put('docs/backlog/runtime-js/body-status.md', '---\narea: runtime-js\n---\nstatus: draft\n');
+    put(
+      'docs/backlog/runtime-js/crlf.md',
+      '---\r\narea: runtime-js\r\nstatus: draft\r\n---\r\n# unit\r\n',
+    );
+    const marked = (unshipped: string) => ({
+      ...manifest,
+      generated: {
+        'pkg/src/generated': { ...manifest.generated['pkg/src/generated'], unshipped },
+      },
+    });
+    expect(validateManifest(root, marked('runtime-js/zlib-node-lib-port'), [])).toEqual([]);
+    expect(validateManifest(root, marked('runtime-js/crlf'), [])).toEqual([]);
+    for (const value of [
+      'runtime-js/body-status',
+      'runtime-js/gone',
+      'runtime-js/README',
+      '../runtime-js/zlib-node-lib-port',
+      'runtime-js',
+    ])
+      expect(validateManifest(root, marked(value), [])).toEqual([
+        `third-party-manifest generated pkg/src/generated: unshipped names no backlog unit docs/backlog/${value}.md`,
+      ]);
+  });
+
+  it('a generated record marked unshipped: unused is fine, used is red until the mark goes', () => {
+    const marked = {
+      ...manifest,
+      generated: {
+        'pkg/src/generated': {
+          ...manifest.generated['pkg/src/generated'],
+          unshipped: 'runtime-js/zlib-node-lib-port',
+        },
+      },
+    };
+    const none = collect(root, 'pkg', marked, { 'dist/a.js': ['pkg/src/a.ts'] }).used;
+    expect(unusedRecords(marked, [none])).toEqual(['npm bare@2.0.0']);
+    expect(shippedUnshipped(marked, [none])).toEqual([]);
+    const used = collect(root, 'pkg', marked, inputs).used;
+    expect(shippedUnshipped(marked, [used])).toEqual(['generated pkg/src/generated']);
   });
 
   it('S2: a renamed npm record no longer supplies its extra text — reported unused, not dropped silently', () => {

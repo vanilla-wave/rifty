@@ -52,6 +52,11 @@ through `%s`'s inspect branch: a vm context's `Map`/`Set` → Node `Map(1) { 1 =
 `NumberFormat {}`; `Object.create({ constructor: Map, toString() {} })` → Node `{}`, rifty
 `Map {}`.
 
+2026-11-26 (stream core 8a differential, PR #471, `p3-function-names`): a function's own
+properties are not printed — `util.inspect(Readable)` Node `[Function: Readable] { ReadableState: …,
+from: [Function (anonymous)], … }`, rifty `[Function: Readable]`; `pipeline` Node
+`[Function: pipeline] { Symbol(nodejs.util.promisify.custom): [Getter] }`. Pinned there.
+
 ## Challenge
 
 challenge: 2026-11-18 — finding capture; no premise critic (README §Challenge)

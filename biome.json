@@ -42,6 +42,8 @@
       "tools/publishing/node-encoding/vendor/**",
       "packages/isolate-host/tests/fixtures/text-decoder/encodings.json",
       "tools/publishing/node-blob/vendor/**",
+      "tools/publishing/node-streams/vendor/**",
+      "packages/io/src/streams/node/generated/**",
       "packages/isolate-guest/src/guest/node-blob/generated/**",
       "tests/wpt/fixtures/**",
       "packages/runtime-js/src/internal/generated/proxy-identity.js",

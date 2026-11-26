@@ -9,7 +9,7 @@ branch changes only docs and a compat inventory generator). Chromium results nam
 
 Status (the manager, round 4): **ready** — 0, 2, 3, 4 (none depends on route B or the budget).
 **Done** — 1 (PR #462), 4b (PR #457).
-**Draft** — 4c, 5, P, 7, AL, 8a, 8b, 8c, 9r, 9w; each carries «Open findings (review round 4)»
+**Ready** — 8a (PR #471, held for 8c). **Draft** — 4c, 5, P, 7, AL, 8b, 8c, 9r, 9w; each carries «Open findings (review round 4)»
 verbatim, closed when the unit is taken into work.
 
 - **0** `runtime-js/node-streams-acceptance-carrier` — **done**: PR #467. The 10 `c-*` programs on the
@@ -79,13 +79,13 @@ against Node:
 
 Core, three adjacent PRs (ADR-0575 §7):
 
-- **8a** `runtime-js/stream-core-node-sources-unwired`:
+- **8a** `runtime-js/stream-core-node-sources-unwired` — **ready**, PR #471 (held for 8c):
   - vendored sources, license manifest entry, generator, bindings, zlib constants without the zlib
     module;
   - `internal/events/abort_listener` whole (variant A); AL decides the variant;
   - not wired: `check:arch` «no product importer» and 0 B on every bundle artifact;
   - a CI differential «Node's bindings = rifty's» over the rows `results/ownership.txt` gives to the
-    core. Rows of later owners stay pinned on their window's outcome (S7 open, see the unit). `zlib-diff`
+    core. Rows of landed owners equal; rows of 4, 5, AL and three binding findings (`post-guest-paths-use-replaceable-intrinsics`, `events-once-wrapper-bind`, `events-prototype-shape`) pinned on today's rifty value with the owner (S7 closed in the unit). `zlib-diff`
     is not part of 8a: it is zlib unit 3's entry criterion, measured there after 8c.
 - **8b** `runtime-js/stream-core-consumer-guard-rows`: regression rows for internal consumers
   and non-stream objects, green on today's core (§Regression risk).

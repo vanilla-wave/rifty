@@ -19,6 +19,7 @@ import {
   loadManifest,
   publishableDirs,
   render,
+  shippedUnshipped,
   unusedRecords,
   validateManifest,
   withPackedSources,
@@ -168,6 +169,8 @@ function main() {
   violations.push(...validateManifest(ROOT, manifest, publishableDirs(ROOT)));
   for (const k of unusedRecords(manifest, usedSets))
     violations.push(`third-party-manifest ${k}: used by no package; remove or fix the record`);
+  for (const k of shippedUnshipped(manifest, usedSets))
+    violations.push(`third-party-manifest ${k}: shipped by a package; drop its 'unshipped' mark`);
   if (violations.length) {
     console.error(`third-party-notices: ${violations.length} violation(s):`);
     for (const v of violations) console.error(`  ${v}`);

@@ -124,6 +124,7 @@ The earlier `b1270101a` record is `results/route-b-product-build.txt`.
    That is 28 modules: 23 whole files and 5 cut down.
 
    Minify keeps identifiers: renaming changes V8's own `TypeError` text (parity `from-web-options`).
+   (8a: no minifier in the generator at all, §2 note 2026-11-26.)
    The Workbench consumer build renames, and that was measured: renamed, 1 of 105 parity cases run
    changes, `from-web-options` (5 more skipped on both builds; `results/route-b-minify.txt`). Map 8c
    keeps identifiers there or declares the row, with one guard row on the consumer bundle. The generator needs `acorn` as a dev dependency.
@@ -136,7 +137,8 @@ The earlier `b1270101a` record is `results/route-b-product-build.txt`.
    - `internal/errors`: the 26 codes the files use, `AbortError`, `aggregateTwoErrors`; Node's `E()`
      texts;
    - `internal/validators` (10 functions);
-   - `internal/util` (`deprecate`, `kEmptyObject`, `once`, `constructSharedArrayBuffer`);
+   - `internal/util` (as generated, 8a: `deprecate`, `isWindows`, `kEmptyObject`, `normalizeEncoding`,
+     `once`, `promisify`, `setOwnProperty`);
    - `internal/util/types`, `debuglog`, `assert`;
    - `internal/buffer.FastBuffer`, which is rifty's `Buffer`;
    - `internal/event_target` symbols;
@@ -171,6 +173,15 @@ The earlier `b1270101a` record is `results/route-b-product-build.txt`.
    rifty modules (`events`, `buffer`, `string_decoder`, `timers`, `async_hooks`, `fs`) are reached
    through the builtin registry's lazy lookup, as `io` streams do today (`readBuiltinUncached`). No
    new layer edge; `check:arch` unchanged.
+
+   2026-11-26 (8a, PR #471): primordials and the host globals are captured when the bindings module
+   evaluates, each primordial built as `per_context/primordials.js` builds it; a rifty module not
+   registered throws by name (no fallback); the zlib constants are a data module in io. `check:arch`
+   gains `node-stream-core-has-no-production-importer` for 8a's window; 8c removes it. `acorn` is runtime-js's
+   own dependency (8.16.0, pinned by the generator), not a root one: a root `node_modules/acorn`
+   changed the playground bundle (measured). The generated module is committed unminified: esbuild's
+   `minifySyntax` dropped 9 of Node's function names and renamed a class (review of PR #471); the
+   test holds every function reachable from the exports to Node's `name`/`length`.
 3. `fs.ReadStream`/`fs.WriteStream` read and write through fds on every host. This replaces
    ADR-0020's «`createReadStream` rebuilds on `Vfs.openReadable`». The condition: positional fd I/O
    by range (map 4b/4c).

@@ -48,6 +48,13 @@ starts `function() {` (Node `function EventEmitter(opts) {`), `require('stream')
 a property key since PR #425 (frames read Node's name; the source text has
 none).
 
+Node's stream core reads the store (stream core 8a differential, PR #471, 2026-11-26, in-process,
+`tests/integration/node-streams-differential/programs/p2-emitter-store.cjs`): its constructors
+pre-shape `this._events` (`readable.js:326`, `writable.js:394`, `duplex.js:68`) and
+`Stream.prototype.eventNames` walks `this._events` (`legacy.js:98`). On rifty's emitter every core
+stream's `eventNames()` is `[]` (Node `["data","foo"]`, `["error","finish"]`) and `_eventsCount`
+`undefined`; a consumer of 8c's core. A second trigger for exposing the store.
+
 ## Next
 
 Owner runtime-js (`node:events` via `@riftydev/io`). Trigger: a claimed
