@@ -107,7 +107,8 @@ Node. Node's globals are data properties before and after the first read (measur
 1. `abort-cases.cjs` (148 observation lines): globals, shapes, errors, statics, dispatch semantics, `signal`
    options, MaxListeners warning, transfer path; Node = guest but `CASES_DECLARED`. → I3
 2. `abort-intrinsics.cjs`: the replaced-intrinsics table. → ADR-0579
-3. `tools/node-parity-runner/cases/events/once-signal.case.ts` (every host); with 5a,
+3. `tools/node-parity-runner/cases/events/once-signal.case.ts` (in-process; Workbench and SDK as
+   `node-file-parity` rows `events-once-signal`, `events-once-signal-stop-propagation`); with 5a,
    `tools/node-parity-runner/cases/fs/file-signal.case.ts` (every host). → I3
 4. WPT `dom/abort`, `dom/events` (13 files). → I3
 5. `m7`, `m9`, `m10` (`fixtures/streams-scenario/`) in the isolate. → I7

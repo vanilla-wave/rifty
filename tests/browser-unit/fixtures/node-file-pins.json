@@ -15,6 +15,12 @@
       "stderr": "",
       "exitCode": 0
     },
+    "events-once-signal": "node",
+    "events-once-signal-stop-propagation": {
+      "stdout": "resolved [\"late\"]\n",
+      "stderr": "",
+      "exitCode": 0
+    },
     "events-add-abort-listener-throw": {
       "stdout": "uncaughtException: from listener\nafter abort\n",
       "stderr": "",
@@ -335,6 +341,12 @@
     "events-add-abort-listener": "node",
     "events-add-abort-listener-stop-propagation": {
       "stdout": "first listener: stopImmediatePropagation\ndone\n",
+      "stderr": "",
+      "exitCode": 0
+    },
+    "events-once-signal": "node",
+    "events-once-signal-stop-propagation": {
+      "stdout": "resolved [\"late\"]\n",
       "stderr": "",
       "exitCode": 0
     },
