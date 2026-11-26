@@ -7,7 +7,8 @@
  * - Intrinsics and host globals are captured when this module evaluates (before guest code, as
  *   Node's per-context primordials), so a guest's later `Array.prototype.push = …` or
  *   `globalThis.Promise = …` does not reach the core; nothing below reads a live intrinsic at
- *   call time.
+ *   call time but io's builtin registry (`startsWith` in `loadBuiltin`/`readBuiltinUncached`,
+ *   reached by every `process.nextTick`; the registry's, see `rifty`).
  * - rifty modules (`buffer`, `events`, `fs`, `string_decoder`, `url`, `util`, `util/types`,
  *   `async_hooks`, `process`) through the builtin registry, when the core first reads them; one
  *   not registered throws by name.
@@ -20,7 +21,7 @@
  * Not imported by any product module until unit 8c (`check:arch`
  * `node-stream-core-has-no-production-importer`).
  */
-import { builtinFactory } from '../../builtin-registry.ts';
+import { loadBuiltin, readBuiltinUncached } from '../../builtin-registry.ts';
 import { NotImplementedError } from '../../errors.ts';
 import createNodeStreamCore from './generated/node-streams.js';
 import { ZLIB_CONSTANTS } from './zlib-constants.ts';
@@ -309,24 +310,21 @@ const gapClass = (feature: string) =>
   };
 
 /**
- * A rifty module by bare id, through its registered factory (`loadBuiltin` runs `startsWith`; the
- * core requires some lazily, at call time). The tables below cache each one.
+ * A rifty module by bare id through io's builtin registry, when the core first reads it (cached
+ * below). The registry itself reads `String.prototype.startsWith` live (`builtin-registry.ts`,
+ * `runtime-js/post-guest-paths-use-replaceable-intrinsics`); a new registry entry point would change
+ * the bundles 8a must leave byte-equal, so that fix is the registry's.
  */
 function rifty(id: string): Mod {
-  const factory = builtinFactory(id);
-  if (factory === undefined)
-    throw new Error(`node-streams: node:${id} is not registered in this realm`);
-  return factory() as Mod;
+  const m = loadBuiltin(id);
+  if (m === null) throw new Error(`node-streams: node:${id} is not registered in this realm`);
+  return m;
 }
-/**
- * The active process at call time (ADR-0458: the registry factory, uncached), read through
- * `builtinFactory`, which calls no live intrinsic (`readBuiltinUncached` runs `startsWith`).
- */
+/** The active process at call time (ADR-0458: read through the registry factory, uncached). */
 function active(): Mod {
-  const factory = builtinFactory('process');
-  if (factory === undefined)
-    throw new Error('node-streams: node:process is not registered in this realm');
-  return factory() as Mod;
+  const p = readBuiltinUncached('process');
+  if (p === null) throw new Error('node-streams: node:process is not registered in this realm');
+  return p;
 }
 /** `process` as the core reads it: `nextTick`, `emitWarning`, `platform`, `noDeprecation`, `stdout`, `stderr`. */
 const processBinding = {

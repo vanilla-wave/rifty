@@ -42,8 +42,8 @@ owner is the binding unit, since the differential bypasses the wiring 8c/9r/9w):
 Added here (not in the table; programs in `tests/integration/node-streams-differential/programs/`,
 review of PR #471 round 1):
 - `p1-intrinsics-replaced` (31 rows, a process each) — a guest replaces an intrinsic after load. The
-  core and the bindings read none (`builtinFactory`, no `startsWith`); 14 rows differ, all in rifty
-  modules the core binds to: io `EventEmitter` (`slice`, `Map` get/set/delete), the vfs/fs path layer
+  core and the bindings read none but through io's builtin registry (`startsWith`); 14 rows differ,
+  all in rifty modules the core binds to (the registry included): io `EventEmitter` (`slice`, `Map` get/set/delete), the vfs/fs path layer
   (`String` slice/includes/startsWith/endsWith/split, `Number.isInteger`), `fs.open`'s `Promise`
   (owner `runtime-js/post-guest-paths-use-replaceable-intrinsics`); `bind` (rifty `once` completes
   where Node's `_onceWrap` throws) and the uncaught report of `shift`/`splice` (owner
@@ -88,7 +88,8 @@ challenge: 2026-11-25 — none (child of a goal; premise in goal §Challenge). T
    every member of every `internalBinding`/internal module the bindings supply returns what Node's
    does on the same inputs (`bindings-vs-node.mts`), declared: `internalBinding('types')`'s brand
    tests (below). Intrinsics and host globals are captured at load, `util.inspect`/`format` when the
-   core is created; the bindings call no live intrinsic (`p1`). Every binding mutant is killed by a
+   core is created; the bindings call no live intrinsic but io's builtin registry's `startsWith`
+   (`loadBuiltin`/`readBuiltinUncached`, every `nextTick`; `p1` row pinned, the registry's fix). Every binding mutant is killed by a
    row or declared unreachable (the table in the PR). → ADR-0575, I1
 4. Differential (`tests/integration/node-streams-differential.test.ts`, CI `test:run`): every
    fixture program of the goal (`packages/isolate-host/tests/fixtures/streams-scenario/`), the hook
@@ -152,7 +153,7 @@ stopping-listener rows (AL); `p1` 14 rows (post-guest intrinsics, events, fatal 
 - 2026-11-26 — author: output in `packages/io/src/streams/node/` (the probe's wiring place; 8c consumes it), committed as built: no minifier (review round 1: esbuild `minifySyntax` dropped 9 of Node's function names, its renamer made `HideStackFramesError2`); 271 022 B raw / 62 042 gzip; bundles minify downstream (8c's, with ADR §1's identifier rule).
 - 2026-11-26 — author: the shared generator steps move to `tools/publishing/node-sources.mjs` (third consumer of the ADR-0574 pipeline); url-legacy and node-blob output byte-identical. PR #459's generator would join it.
 - 2026-11-26 — author: primordials built as Node's `per_context/primordials.js` builds each (`uncurryThis = bind.bind(call)`, `makeSafe`, `SafePromise*` assigned, not named), per ADR-0575 §2 (not Node's file whole: ~1 500 entries for 79).
-- 2026-11-26 — author: rifty modules through their registered factory (`builtinFactory`, io's registry, no live intrinsic) when the core reads them, each cached once; one not registered throws by name (no fallback); `process` read per call through the factory (ADR-0458); host globals captured with the primordials at bindings load, `util.inspect`/`format` when the core is created (Node's errors read `internal/util/inspect`, not the public `util`). Load order per host is 8c's.
+- 2026-11-26 — author: rifty modules through io's builtin registry when the core reads them, each cached once; the registry reads `startsWith` live (a new registry export to avoid it changed the Workbench chunking and maps — measured, reverted — so it stays the registry's fix, pinned); one not registered throws by name (no fallback); `process` read per call through the factory (ADR-0458); host globals captured with the primordials at bindings load, `util.inspect`/`format` when the core is created (Node's errors read `internal/util/inspect`, not the public `util`). Load order per host is 8c's.
 - 2026-11-26 — author: zlib constants are a data module in io (generated from live Node's binding, equal by test); runtime-js keeps its copy until 8c or zlib unit 3 dedups (no product bytes change here).
 - 2026-11-26 — author: `internalBinding('types')` → rifty's `util/types` (C++ `IsPromise`/`IsNativeError` have no exact JS brand check; read only by `promisify`'s DEP0174 test).
 - 2026-11-26 — author: acorn is runtime-js's own dependency (8.16.0, pinned by the generator), the AST walk the generator's own: a root `acorn` devDependency (ADR-0575 §1's wording) hoisted `node_modules/acorn` and changed the playground bundle's CJS interop (`function-bind`'s lazy init; measured, reverted).
