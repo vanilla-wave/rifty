@@ -13,6 +13,7 @@ import { NotImplementedError, bytesToString } from '@riftydev/io';
 import { VfsError } from '@riftydev/vfs';
 import { Buffer, type Encoding } from './buffer.ts';
 import { fsError, withSyscall } from './fs-errors.ts';
+import { ioTurn } from './fs-io-turn.ts';
 import { type PathLike, pathToString, resolvePath } from './fs-path.ts';
 import {
   type FdReadOptions,
@@ -202,15 +203,13 @@ class Dir implements AsyncIterable<Dirent> {
   read(cb: (err: NodeJS.ErrnoException | null, dirent?: Dirent | null) => void): void;
   read(cb?: (err: NodeJS.ErrnoException | null, dirent?: Dirent | null) => void) {
     if (cb) {
-      Promise.resolve()
-        .then(() => this.readSync())
-        .then(
-          (dirent) => runNodeCallback(cb, null, dirent),
-          (err) => runNodeCallback(cb, err as NodeJS.ErrnoException),
-        );
+      ioTurn(() => this.readSync()).then(
+        (dirent) => runNodeCallback(cb, null, dirent),
+        (err) => runNodeCallback(cb, err as NodeJS.ErrnoException),
+      );
       return;
     }
-    return Promise.resolve().then(() => this.readSync());
+    return ioTurn(() => this.readSync());
   }
 
   closeSync(): void {
@@ -222,15 +221,13 @@ class Dir implements AsyncIterable<Dirent> {
   close(cb: (err: NodeJS.ErrnoException | null) => void): void;
   close(cb?: (err: NodeJS.ErrnoException | null) => void) {
     if (cb) {
-      Promise.resolve()
-        .then(() => this.closeSync())
-        .then(
-          () => runNodeCallback(cb, null),
-          (err) => runNodeCallback(cb, err as NodeJS.ErrnoException),
-        );
+      ioTurn(() => this.closeSync()).then(
+        () => runNodeCallback(cb, null),
+        (err) => runNodeCallback(cb, err as NodeJS.ErrnoException),
+      );
       return;
     }
-    return Promise.resolve().then(() => this.closeSync());
+    return ioTurn(() => this.closeSync());
   }
 
   async *[Symbol.asyncIterator](): AsyncIterator<Dirent> {
@@ -1071,12 +1068,10 @@ export function futimes(
   mtime: number | Date,
   cb: VoidCallback,
 ): void {
-  Promise.resolve()
-    .then(() => futimesSync(fd, atime, mtime))
-    .then(
-      () => runNodeCallback(cb, null),
-      (e) => runNodeCallback(cb, e as NodeJS.ErrnoException),
-    );
+  ioTurn(() => futimesSync(fd, atime, mtime)).then(
+    () => runNodeCallback(cb, null),
+    (e) => runNodeCallback(cb, e as NodeJS.ErrnoException),
+  );
 }
 
 /**
@@ -1101,49 +1096,58 @@ export async function openAsBlob(p: PathLike, options?: { type?: string }): Prom
 }
 
 export const promises = {
-  async readFile(
-    p: string,
-    opts?: ReadFileOptions | Encoding | null,
-  ): Promise<Uint8Array | string> {
-    return readFileSync(p, opts);
+  readFile(p: string, opts?: ReadFileOptions | Encoding | null): Promise<Uint8Array | string> {
+    return ioTurn(() => readFileSync(p, opts));
   },
-  async writeFile(
+  writeFile(
     p: string,
     data: Uint8Array | string,
     opts?: WriteFileOptions | Encoding | null,
   ): Promise<void> {
-    writeFileSync(p, data, opts);
+    return ioTurn(() => {
+      writeFileSync(p, data, opts);
+    });
   },
-  async appendFile(
+  appendFile(
     p: string,
     data: Uint8Array | string,
     opts?: WriteFileOptions | Encoding | null,
   ): Promise<void> {
-    appendFileSync(p, data, opts);
+    return ioTurn(() => {
+      appendFileSync(p, data, opts);
+    });
   },
-  async readdir(
+  readdir(
     p: string,
     opts?: { withFileTypes?: boolean; recursive?: boolean },
   ): Promise<string[] | Dirent[]> {
-    return readdirSync(p, opts);
+    return ioTurn(() => readdirSync(p, opts));
   },
-  async mkdir(p: string, opts?: MkdirOptions): Promise<void> {
-    mkdirSync(p, opts);
+  mkdir(p: string, opts?: MkdirOptions): Promise<void> {
+    return ioTurn(() => {
+      mkdirSync(p, opts);
+    });
   },
-  async rm(p: string, opts?: RmOptions): Promise<void> {
-    rmSync(p, opts);
+  rm(p: string, opts?: RmOptions): Promise<void> {
+    return ioTurn(() => {
+      rmSync(p, opts);
+    });
   },
-  async rmdir(p: string, opts?: { recursive?: boolean }): Promise<void> {
-    rmdirSync(p, opts);
+  rmdir(p: string, opts?: { recursive?: boolean }): Promise<void> {
+    return ioTurn(() => {
+      rmdirSync(p, opts);
+    });
   },
-  async unlink(p: string): Promise<void> {
-    unlinkSync(p);
+  unlink(p: string): Promise<void> {
+    return ioTurn(() => {
+      unlinkSync(p);
+    });
   },
-  async stat(p: string, opts?: StatOptions): Promise<Stats> {
-    return statImpl(p, opts, 'fs.promises.stat.bigint') as Stats;
+  stat(p: string, opts?: StatOptions): Promise<Stats> {
+    return ioTurn(() => statImpl(p, opts, 'fs.promises.stat.bigint') as Stats);
   },
-  async lstat(p: string, opts?: StatOptions): Promise<Stats> {
-    return lstatImpl(p, opts, 'fs.promises.lstat.bigint');
+  lstat(p: string, opts?: StatOptions): Promise<Stats> {
+    return ioTurn(() => lstatImpl(p, opts, 'fs.promises.lstat.bigint'));
   },
   async symlink(...args: unknown[]): Promise<never> {
     return symlink(...args);
@@ -1151,43 +1155,54 @@ export const promises = {
   async link(...args: unknown[]): Promise<never> {
     return link(...args);
   },
-  async readlink(p: string): Promise<string> {
-    return readlinkSync(p);
+  readlink(p: string): Promise<string> {
+    return ioTurn(() => readlinkSync(p));
   },
-  async realpath(p: string): Promise<string> {
-    return realpathSync(p);
+  realpath(p: string): Promise<string> {
+    return ioTurn(() => realpathSync(p));
   },
-  async access(p: string): Promise<void> {
-    // Strict probe: access through a file is ENOTDIR (Node), never ENOENT.
-    const st = withSyscall('access', p, () => statStrictOrNull(resolvePath(p)));
-    if (st === null) throw fsError('ENOENT', pathToString(p), 'access');
+  access(p: string): Promise<void> {
+    return ioTurn(() => {
+      // Strict probe: access through a file is ENOTDIR (Node), never ENOENT.
+      const st = withSyscall('access', p, () => statStrictOrNull(resolvePath(p)));
+      if (st === null) throw fsError('ENOENT', pathToString(p), 'access');
+    });
   },
-  async copyFile(src: string, dst: string, mode = 0): Promise<void> {
-    copyFileSync(src, dst, mode);
+  copyFile(src: string, dst: string, mode = 0): Promise<void> {
+    return ioTurn(() => {
+      copyFileSync(src, dst, mode);
+    });
   },
-  async rename(src: string, dst: string): Promise<void> {
-    renameSync(src, dst);
+  rename(src: string, dst: string): Promise<void> {
+    return ioTurn(() => {
+      renameSync(src, dst);
+    });
   },
-  async cp(src: string, dst: string, opts?: CpOptions): Promise<void> {
-    cpSync(src, dst, opts);
+  cp(src: string, dst: string, opts?: CpOptions): Promise<void> {
+    return ioTurn(() => {
+      cpSync(src, dst, opts);
+    });
   },
-  async truncate(p: PathLike, len = 0): Promise<void> {
-    truncateSync(p, len);
+  truncate(p: PathLike, len = 0): Promise<void> {
+    return ioTurn(() => {
+      truncateSync(p, len);
+    });
   },
-  async mkdtemp(
-    prefix: PathLike,
-    opts?: Encoding | { encoding?: Encoding | null },
-  ): Promise<string> {
-    return mkdtempSync(prefix, opts);
+  mkdtemp(prefix: PathLike, opts?: Encoding | { encoding?: Encoding | null }): Promise<string> {
+    return ioTurn(() => mkdtempSync(prefix, opts));
   },
-  async opendir(p: PathLike, opts?: { encoding?: Encoding; bufferSize?: number }): Promise<Dir> {
-    return opendirSync(p, opts);
+  opendir(p: PathLike, opts?: { encoding?: Encoding; bufferSize?: number }): Promise<Dir> {
+    return ioTurn(() => opendirSync(p, opts));
   },
-  async utimes(p: string, atime: number | Date, mtime: number | Date): Promise<void> {
-    utimesSync(p, atime, mtime);
+  utimes(p: string, atime: number | Date, mtime: number | Date): Promise<void> {
+    return ioTurn(() => {
+      utimesSync(p, atime, mtime);
+    });
   },
-  async lutimes(p: string, atime: number | Date, mtime: number | Date): Promise<void> {
-    lutimesSync(p, atime, mtime);
+  lutimes(p: string, atime: number | Date, mtime: number | Date): Promise<void> {
+    return ioTurn(() => {
+      lutimesSync(p, atime, mtime);
+    });
   },
   constants,
 };
@@ -1216,21 +1231,17 @@ export function open(
     typeof flagsOrCb === 'function' ? flagsOrCb : typeof modeOrCb === 'function' ? modeOrCb : cb
   ) as FdCallback;
   const mode = typeof modeOrCb === 'number' ? modeOrCb : undefined;
-  Promise.resolve()
-    .then(() => openSync(p, flags, mode))
-    .then(
-      (fd) => runNodeCallback(cbFinal, null, fd),
-      (e) => runNodeCallback(cbFinal, e as NodeJS.ErrnoException),
-    );
+  ioTurn(() => openSync(p, flags, mode)).then(
+    (fd) => runNodeCallback(cbFinal, null, fd),
+    (e) => runNodeCallback(cbFinal, e as NodeJS.ErrnoException),
+  );
 }
 
 export function close(fd: number, cb: VoidCallback): void {
-  Promise.resolve()
-    .then(() => closeSync(fd))
-    .then(
-      () => runNodeCallback(cb, null),
-      (e) => runNodeCallback(cb, e as NodeJS.ErrnoException),
-    );
+  ioTurn(() => closeSync(fd)).then(
+    () => runNodeCallback(cb, null),
+    (e) => runNodeCallback(cb, e as NodeJS.ErrnoException),
+  );
 }
 
 export function read(
@@ -1291,12 +1302,10 @@ export function read(
     }
     return;
   }
-  Promise.resolve()
-    .then(() => readSync(fd, buffer, options))
-    .then(
-      (bytesRead) => runNodeCallback(cbFinal, null, bytesRead, buffer),
-      (e) => runNodeCallback(cbFinal, e as NodeJS.ErrnoException),
-    );
+  ioTurn(() => readSync(fd, buffer, options)).then(
+    (bytesRead) => runNodeCallback(cbFinal, null, bytesRead, buffer),
+    (e) => runNodeCallback(cbFinal, e as NodeJS.ErrnoException),
+  );
 }
 
 export function write(
@@ -1316,46 +1325,40 @@ export function write(
           ? positionOrCb
           : cb
   ) as WriteCallback;
-  Promise.resolve()
-    .then(() => {
-      if (typeof data === 'string') {
-        const position =
-          typeof offsetOrPositionOrCb === 'number' || offsetOrPositionOrCb === null
-            ? offsetOrPositionOrCb
-            : null;
-        const encoding = typeof lengthOrEncodingOrCb === 'string' ? lengthOrEncodingOrCb : 'utf8';
-        return writeSync(fd, data, position, encoding);
-      }
-      const offset = typeof offsetOrPositionOrCb === 'number' ? offsetOrPositionOrCb : 0;
-      const length = typeof lengthOrEncodingOrCb === 'number' ? lengthOrEncodingOrCb : undefined;
+  ioTurn(() => {
+    if (typeof data === 'string') {
       const position =
-        typeof positionOrCb === 'number' || positionOrCb === null ? positionOrCb : null;
-      return writeSync(fd, data, offset, length, position);
-    })
-    .then(
-      (bytesWritten) => runNodeCallback(cbFinal, null, bytesWritten, data),
-      (e) => runNodeCallback(cbFinal, e as NodeJS.ErrnoException),
-    );
+        typeof offsetOrPositionOrCb === 'number' || offsetOrPositionOrCb === null
+          ? offsetOrPositionOrCb
+          : null;
+      const encoding = typeof lengthOrEncodingOrCb === 'string' ? lengthOrEncodingOrCb : 'utf8';
+      return writeSync(fd, data, position, encoding);
+    }
+    const offset = typeof offsetOrPositionOrCb === 'number' ? offsetOrPositionOrCb : 0;
+    const length = typeof lengthOrEncodingOrCb === 'number' ? lengthOrEncodingOrCb : undefined;
+    const position =
+      typeof positionOrCb === 'number' || positionOrCb === null ? positionOrCb : null;
+    return writeSync(fd, data, offset, length, position);
+  }).then(
+    (bytesWritten) => runNodeCallback(cbFinal, null, bytesWritten, data),
+    (e) => runNodeCallback(cbFinal, e as NodeJS.ErrnoException),
+  );
 }
 
 export function fstat(fd: number, cb: StatsCallback): void {
-  Promise.resolve()
-    .then(() => fstatSync(fd))
-    .then(
-      (stats) => runNodeCallback(cb, null, stats),
-      (e) => runNodeCallback(cb, e as NodeJS.ErrnoException),
-    );
+  ioTurn(() => fstatSync(fd)).then(
+    (stats) => runNodeCallback(cb, null, stats),
+    (e) => runNodeCallback(cb, e as NodeJS.ErrnoException),
+  );
 }
 
 export function ftruncate(fd: number, lenOrCb?: number | VoidCallback, cb?: VoidCallback): void {
   const len = typeof lenOrCb === 'number' ? lenOrCb : 0;
   const cbFinal = (typeof lenOrCb === 'function' ? lenOrCb : cb) as VoidCallback;
-  Promise.resolve()
-    .then(() => ftruncateSync(fd, len))
-    .then(
-      () => runNodeCallback(cbFinal, null),
-      (e) => runNodeCallback(cbFinal, e as NodeJS.ErrnoException),
-    );
+  ioTurn(() => ftruncateSync(fd, len)).then(
+    () => runNodeCallback(cbFinal, null),
+    (e) => runNodeCallback(cbFinal, e as NodeJS.ErrnoException),
+  );
 }
 
 export function writeFile(
@@ -1486,12 +1489,10 @@ export function rename(src: string, dst: string, cb: Callback<void>): void {
 export function truncate(p: PathLike, lenOrCb?: number | VoidCallback, cb?: VoidCallback): void {
   const len = typeof lenOrCb === 'number' ? lenOrCb : 0;
   const cbFinal = (typeof lenOrCb === 'function' ? lenOrCb : cb) as VoidCallback;
-  Promise.resolve()
-    .then(() => truncateSync(p, len))
-    .then(
-      () => runNodeCallback(cbFinal, null),
-      (e) => runNodeCallback(cbFinal, e as NodeJS.ErrnoException),
-    );
+  ioTurn(() => truncateSync(p, len)).then(
+    () => runNodeCallback(cbFinal, null),
+    (e) => runNodeCallback(cbFinal, e as NodeJS.ErrnoException),
+  );
 }
 
 export function mkdtemp(
@@ -1501,12 +1502,10 @@ export function mkdtemp(
 ): void {
   const opts = typeof optsOrCb === 'function' ? undefined : optsOrCb;
   const cbFinal = (typeof optsOrCb === 'function' ? optsOrCb : cb) as Callback<string>;
-  Promise.resolve()
-    .then(() => mkdtempSync(prefix, opts))
-    .then(
-      (dir) => runNodeCallback(cbFinal, null, dir),
-      (e) => runNodeCallback(cbFinal, e as NodeJS.ErrnoException),
-    );
+  ioTurn(() => mkdtempSync(prefix, opts)).then(
+    (dir) => runNodeCallback(cbFinal, null, dir),
+    (e) => runNodeCallback(cbFinal, e as NodeJS.ErrnoException),
+  );
 }
 
 export function opendir(
@@ -1516,12 +1515,10 @@ export function opendir(
 ): void {
   const opts = typeof optsOrCb === 'function' ? undefined : optsOrCb;
   const cbFinal = (typeof optsOrCb === 'function' ? optsOrCb : cb) as DirCallback;
-  Promise.resolve()
-    .then(() => opendirSync(p, opts))
-    .then(
-      (dir) => runNodeCallback(cbFinal, null, dir),
-      (e) => runNodeCallback(cbFinal, e as NodeJS.ErrnoException),
-    );
+  ioTurn(() => opendirSync(p, opts)).then(
+    (dir) => runNodeCallback(cbFinal, null, dir),
+    (e) => runNodeCallback(cbFinal, e as NodeJS.ErrnoException),
+  );
 }
 
 export { Stats, Dirent, Dir };

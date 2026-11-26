@@ -10,6 +10,7 @@
  * `Symbol.for` slot, never a module-local import.
  */
 import { FATAL_TRAILER, formatFatalReport, formatFatalStack } from './fatal-report.ts';
+import { completeSubmittedIo } from './fs-io-submitted.ts';
 import { readActiveNodeProcessBootstrap } from './process-bootstrap-identity.ts';
 
 const NODE_PROCESS_LIFECYCLE = Symbol.for('rifty.runtime-js.process-lifecycle.v1');
@@ -125,6 +126,8 @@ export class NodeProcessExit {
     } catch {
       // Node: "Nothing to be done about it at this point."
     }
+    // The process is dying: hosts that print the report themselves never reach `#terminate`.
+    completeSubmittedIo();
     this.#fatalExitCode = { value: this.#host.readExitCode() };
   }
 
@@ -162,6 +165,7 @@ export class NodeProcessExit {
    * in-process host (no-COI runBin) reads a declared gap from it.
    */
   #terminate(status: number, died?: { readonly cause: unknown }): never {
+    completeSubmittedIo();
     const signal = Object.assign(new Error(`process.exit(${status})`, died), {
       code: RIFTY_PROCESS_EXIT,
       exitCode: status,
