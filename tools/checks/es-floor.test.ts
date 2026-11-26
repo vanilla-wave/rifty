@@ -337,6 +337,91 @@ describe('shipped ES2022 floor', () => {
     ).toContain('Object.groupBy');
   });
 
+  it.each([
+    ['nativeGetter(ArrayBuffer.prototype, "detached")', 'ArrayBuffer.prototype.detached'],
+    [
+      'Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, "detached").get.call(b)',
+      'ArrayBuffer.prototype.detached',
+    ],
+    [
+      'const P = ArrayBuffer.prototype; const k = "detached"; read(P, k)',
+      'ArrayBuffer.prototype.detached',
+    ],
+    ['Reflect.get(Object, `groupBy`)(items, key)', 'Object.groupBy'],
+    ['Reflect.get(Array.prototype, "toSorted").call(items)', 'Array.prototype.toSorted'],
+    ['new (Reflect.get(globalThis, "Iterator"))()', 'Iterator'],
+    ['Reflect.get(Atomics, "waitAsync")(words, 0, 0)', 'Atomics.waitAsync'],
+    // A wrapper may throw on absence before any presence check runs.
+    [
+      'const d = nativeGetter(ArrayBuffer.prototype, "detached"); if (d !== void 0) d.call(b)',
+      'ArrayBuffer.prototype.detached',
+    ],
+    [
+      'const t = Reflect.get(ArrayBuffer.prototype, "transfer"); t.call(b)',
+      'ArrayBuffer.prototype.transfer',
+    ],
+    [
+      'var t = Reflect.get(ArrayBuffer.prototype, "transfer"); t = f; if (t !== void 0) t.call(b)',
+      'ArrayBuffer.prototype.transfer',
+    ],
+    [
+      'const t = Reflect.get(ArrayBuffer.prototype, "transfer"); if (t !== null) t.call(b)',
+      'ArrayBuffer.prototype.transfer',
+    ],
+  ])('rejects a listed builtin reached by name: %s', (source, builtin) => {
+    expect(violations(source).join('\n')).toContain(`${builtin} (by name)`);
+  });
+
+  it.each([
+    'nativeGetter(ArrayBuffer.prototype, "byteLength")',
+    'function read(target) { return Object.getOwnPropertyDescriptor(target, "detached"); }',
+    'let k = "detached"; k = "byteLength"; read(ArrayBuffer.prototype, k)',
+    'Reflect.get(Foo.prototype, "union")',
+    'const t = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, "transfer")?.value; if (t !== undefined) t.call(b)',
+    'const t = Reflect.get(ArrayBuffer.prototype, "transfer"); function f(b) { if (t === void 0) return b; return t.call(b); }',
+    'const g = Reflect.get(ArrayBuffer.prototype, "detached"); const f = (b) => typeof g === "function" ? g.call(b) : 0',
+    'if (typeof Atomics.waitAsync === "function") Reflect.get(Atomics, "waitAsync")(words, 0, 0)',
+  ])('accepts by-name reads that are pre-floor or presence-checked: %s', (source) => {
+    expect(violations(source)).toEqual([]);
+  });
+
+  it('rejects the real port-ref install when it reads the Chrome 114 detached getter', () => {
+    const bundle = (contents: string) =>
+      buildSync({
+        stdin: {
+          contents,
+          resolveDir: 'packages/runtime-js/src/internal',
+          sourcefile: 'message-port-ref.ts',
+          loader: 'ts',
+        },
+        bundle: true,
+        write: false,
+        format: 'esm',
+        platform: 'browser',
+        target: 'es2022',
+        minify: true,
+      }).outputFiles[0].text;
+    const source = readFileSync('packages/runtime-js/src/internal/message-port-ref.ts', 'utf8');
+    expect(violations(bundle(source))).toEqual([]);
+    const mutant = source.replace(
+      "nativeGetter(ArrayBuffer.prototype, 'byteLength')",
+      "nativeGetter(ArrayBuffer.prototype, 'detached')",
+    );
+    expect(mutant).not.toBe(source);
+    expect(violations(bundle(mutant)).join('\n')).toContain(
+      'ArrayBuffer.prototype.detached (by name)',
+    );
+  });
+
+  it('admits the real blob store transfer probe only while every use checks presence', () => {
+    const source = readFileSync('packages/isolate-guest/src/guest/node-blob/byte-store.ts', 'utf8');
+    const emitted = transformSync(source, { loader: 'ts', target: 'es2022' }).code;
+    expect(violations(emitted)).toEqual([]);
+    const unchecked = emitted.replace('if (transferBuffer !== void 0) {', 'if (true) {');
+    expect(unchecked).not.toBe(emitted);
+    expect(violations(unchecked).join('\n')).toContain('ArrayBuffer.prototype.transfer (by name)');
+  });
+
   it('checks nested package and playground assets, ignoring maps and declarations', () => {
     const directory = mkdtempSync(join(tmpdir(), 'rifty-es-floor-'));
     scratch.push(directory);
