@@ -12,6 +12,8 @@ const NPM = 'https://registry.npmjs.org';
 const ALLOWED = '(allowed: registry.npmjs.org, loopback, *.test)';
 const onHost = (carrier: string, n: number, host = 'https://registry.example.invalid') =>
   `${carrier}: ${n} address line(s) on ${host} ${ALLOWED}`;
+const unreadable = (carrier: string, n: number, value: string) =>
+  `${carrier}: ${n} unreadable address value(s) ${JSON.stringify(value)} (neither a URL nor a declared non-network form: file:, link:, workspace:, github:, relative path)`;
 const gitDep = (carrier: string, n: number, host: string) =>
   `${carrier}: ${n} git dependency address(es) on ${host} (git/URL dependencies are not allowed in committed locks: the host may be internal)`;
 
@@ -107,7 +109,7 @@ describe('committed lockfiles pin only registry.npmjs.org', () => {
       put('apps/playground/public/snapshots/x-node-modules.json.gz', snapshot(NPM)),
       put('tsconfig.json', '{ // jsonc\n "compilerOptions": {} }'),
     ];
-    expect(check(paths)).toEqual({ violations: [], carriers: 5, exempted: 0, skipped: 0 });
+    expect(check(paths)).toEqual({ violations: [], carriers: 5, exempted: 0 });
   });
 
   it.each([
@@ -244,6 +246,41 @@ describe('allowed hosts: npmjs origin by parsed URL, loopback and .test (manager
     expect(violation).toBe(onHost('x/package-lock.json', 1, host));
   });
 
+  it.each([
+    // The whole value is parsed: a fragment cut at ' } , or a missing // would hide the host.
+    [
+      "https://registry.npmjs.org'x@evil.invalid/ms/-/ms-2.1.3.tgz",
+      'https://<userinfo>@evil.invalid',
+    ],
+    [
+      'https://registry.npmjs.org}@evil.invalid/ms/-/ms-2.1.3.tgz',
+      'https://<userinfo>@evil.invalid',
+    ],
+    ['https:evil.invalid/ms/-/ms-2.1.3.tgz', 'https://evil.invalid'],
+    ['https:\\\\evil.invalid\\a.tgz', 'https://evil.invalid'],
+  ])('reviewer form %s is refused in a lock object', (url, host) => {
+    expect(verdict(url)).toEqual([onHost('x/package-lock.json', 1, host)]);
+  });
+
+  it.each([
+    'file:../local',
+    'link:../local',
+    'workspace:*',
+    'packages/foo',
+    '../foo',
+    'github:o/x#abc',
+  ])('declared non-network form %s passes', (value) => {
+    expect(verdict(value)).toEqual([]);
+  });
+
+  // 127.evil.1.1.1: WHATWG rejects a host whose last label is numeric but not IPv4.
+  it.each(['//evil.invalid/ms.tgz', 'http://[bad/ms.tgz', 'http://127.evil.1.1.1/ms.tgz'])(
+    'an address value that is no URL nor a non-network form is red: %s',
+    (value) => {
+      expect(verdict(value)).toEqual([unreadable('x/package-lock.json', 1, value)]);
+    },
+  );
+
   it('git dependencies are refused with a reason; github: shorthand is not a URL', () => {
     const lock = JSON.stringify({
       lockfileVersion: 3,
@@ -283,6 +320,52 @@ packages:
     ]);
   });
 
+  it.each([
+    ["https://registry.npmjs.org'x@evil.invalid/ms.tgz", 'https://<userinfo>@evil.invalid'],
+    ['https://registry.npmjs.org}@evil.invalid/ms.tgz', 'https://<userinfo>@evil.invalid'],
+    ['https:evil.invalid/ms.tgz', 'https://evil.invalid'],
+  ])('reviewer form %s is refused in yarn.lock and pnpm-lock.yaml (block value)', (url, host) => {
+    const yarn = put('r/yarn.lock', `ms@^2.1.3:\n  resolved "${url}"\n`);
+    const pnpm = put(
+      'r/pnpm-lock.yaml',
+      `packages:\n  ms@2.1.3:\n    resolution:\n      tarball: ${url}\n`,
+    );
+    expect(check([yarn, pnpm]).violations).toEqual([onHost(yarn, 1, host), onHost(pnpm, 1, host)]);
+  });
+
+  it("pnpm flow value keeps ' inside a plain scalar", () => {
+    const path = put(
+      'f/pnpm-lock.yaml',
+      "packages:\n  ms@2.1.3:\n    resolution: {integrity: x, tarball: https://registry.npmjs.org'x@evil.invalid/ms.tgz}\n",
+    );
+    expect(check([path]).violations).toEqual([onHost(path, 1, 'https://<userinfo>@evil.invalid')]);
+  });
+
+  it('pnpm: a single-quoted key and a block-form repo: line are read', () => {
+    const yaml = `packages:
+  ms@2.1.3:
+    'resolution': {tarball: ${FOREIGN}/ms.tgz}
+  dep@1.0.0:
+    resolution:
+      type: git
+      repo: https://git.corp.example/o/dep
+      commit: abc
+`;
+    const path = put('q/pnpm-lock.yaml', yaml);
+    expect(check([path]).violations).toEqual([
+      onHost(path, 1),
+      gitDep(path, 1, 'git.corp.example'),
+    ]);
+  });
+
+  it('yarn berry npm: descriptors carry no host', () => {
+    const path = put(
+      'b/yarn.lock',
+      '"ms@npm:^2.1.3":\n  version: 2.1.3\n  resolution: "ms@npm:2.1.3"\n',
+    );
+    expect(check([path]).violations).toEqual([]);
+  });
+
   it('yarn berry (YAML) resolution URLs are addresses', () => {
     const berry = `__metadata:
   version: 8
@@ -307,9 +390,13 @@ describe('robustness', () => {
     expect(violation).toMatch(/^broken\/package-lock\.json: unparseable lock .* regenerate/u);
   });
 
-  it('an unparseable .json with lock markers is skipped and counted', () => {
+  it('an unparseable .json with lock markers is red (closed failure)', () => {
     const path = put('jsonc/data.json', '{ // note\n "lockfileVersion": 3 }');
-    expect(check([path])).toEqual({ violations: [], carriers: 0, exempted: 0, skipped: 1 });
+    const { violations } = check([path]);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toMatch(
+      /^jsonc\/data\.json: \.json with lock markers does not parse .* make the file valid JSON or remove the lock$/u,
+    );
   });
 
   it('a directory or symlink named like a carrier is ignored', () => {
@@ -324,7 +411,6 @@ describe('robustness', () => {
       violations: [],
       carriers: 0,
       exempted: 0,
-      skipped: 0,
     });
   });
 });
@@ -362,7 +448,6 @@ describe('declared exemptions cover exact bytes only', () => {
       violations: [`${CASES}/gone/project.json: exemption row for a missing file — drop the row`],
       carriers: 0,
       exempted: 0,
-      skipped: 0,
     });
   });
 
