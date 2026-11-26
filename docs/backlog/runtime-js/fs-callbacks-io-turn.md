@@ -45,7 +45,8 @@ challenge: 2026-11-25 — clear (premise in goal §Challenge)
 5. The lifecycle rows of Acceptance 6 (carrier on Workbench/SDK, isolate test, parity in-process where
    its `process` is rifty's). → I10
 
-Not pinnable (Node varies, v24.16.0, 20 runs): `read(fd)` buffer read in a microtask (`000` 18, `777` 2);
+Pinned rows hold 240/240 (16 parallel) in Node or are stable by construction (synchronous checks).
+Not pinnable (Node varies, v24.16.0): `read(fd)`'s buffer right after the call (`000` 97/100) or in a microtask (`000` 18/20, `777` 2);
 `readFileSync` right after an async write (`writeFile` `''` 18 / old 2; `write(fd)` new 18 / old 2;
 `fs.promises.writeFile` `''` 7 / old 13); the completion order of several ops in flight at once.
 Declared, not this unit: a multi-round-trip `writeFile` whose bytes the caller mutates in a
@@ -62,9 +63,9 @@ pins `'exit'` after the last callback. ESM and `worker.terminate()` rows: Workbe
 |---|---|---|---|
 | VFS error × any callback API | the error reaches the callback in the same kind of I/O turn as a success; never thrown synchronously | callback-turn-order case, error rows | → I10 |
 | SAB sync-RPC oversize reply × callback on Workbench | the in-band error reply reaches the callback as an error, in its I/O turn | fault test with a reply over the ring size | → I10 |
-| SAB sync-RPC responder death mid-exchange × callback on Workbench | unchanged by this unit: the ring's loud permanent wedge, the caller blocked until owner teardown (no timeout exists in production, `packages/kernel/src/ipc/sync-client.ts:21`); no callback runs with partial data | fault test killing the responder in `HANDLING`, asserting the wedge diagnostic and no callback | → I10 |
+| SAB sync-RPC responder death mid-exchange × callback on Workbench | unchanged by this unit: the ring's loud permanent wedge, the caller blocked until owner teardown (no timeout exists in production, `packages/kernel/src/ipc/sync-client.ts:21`); no callback runs with partial data | fault test killing the responder in `HANDLING`: no callback, the caller blocked until teardown, then the next caller's exchange refused (`previous request is being handled`) | → I10 |
 | SAB sync-RPC responder death × the process end on Workbench | the end runs the submitted op over the ring: the same wedge, blocked until owner teardown, no exit request, no callback (2026-11-26, manager) | fault test: exit in the tick of a submitted `stat`, responder dead in `HANDLING` | → I10 |
-| two callback APIs in flight × one ring | each sync exchange completes before the callback's turn is queued, so two exchanges never overlap on the ring (a second claim would fail loudly) | callback-turn-order case, interleaved calls | → I10 |
+| two callback APIs in flight × one ring | each sync exchange completes before the callback's turn is queued, so two exchanges never overlap on the ring | by construction, not by test: an operation is one synchronous call inside one host turn, so no mutant can overlap two (2026-11-26, external review); the case's interleaved row checks the outcomes only | → I10 |
 
 ## Out of scope
 
@@ -83,7 +84,7 @@ pins `'exit'` after the last callback. ESM and `worker.terminate()` rows: Workbe
   `beginFatal`) runs the operations in flight with no callback or promise, as Node joins its threadpool
   (Node 20/20 + 80/80 under load: `write(fd)`+`exit()` → `"data"`, uncaught throw and unhandled
   rejection → `"data"` exit 1, an op an `'exit'` listener submits before an explicit `exit()` → written,
-  `exit()` in an fs callback with another write in flight → both). Its errors neither surface nor change
+  `exit()` in an fs callback with another write in flight → both — later 239/240, not pinned). Its errors neither surface nor change
   the status; it runs only what is in flight then. An external stop is not a process end:
   `worker.terminate()` drops the not-yet-run op (Node: a queued request is cancelled — pool saturated,
   10/10 `""`; one already running completes, idle pool 79/80 `"data"`: not pinned), a sandbox stop
@@ -91,6 +92,20 @@ pins `'exit'` after the last callback. ESM and `worker.terminate()` rows: Workbe
   Not pinnable (Node varies): an op an `'exit'` listener submits at a natural exit (13/20 not written).
 - 2026-11-26 (manager): cost accepted, two turns stay — the numbers (micro loops, library tests,
   `react-vite-preset` phases and `ioTurn` counters) are in PR #468; no per-batch operation turn.
+- 2026-11-26 (manager, external review of PR #468): the completion turn is the host's I/O phase where
+  it has one — a Node host's `MessagePort` (poll), so an immediate queued in an fs callback runs
+  before a due 0 ms timer (Node's guarantee, `fs/callback-phase-order` 240/240); the operation turn
+  stays a check-phase immediate, so timers get their phase every loop turn. Isolate and browsers: the
+  immediate queue (browser and isolate order declared: `runtime-js/browser-loop-phase-order`). An immediate's turn
+  is bound to its id (a cleared one leaves an empty turn).
+- 2026-11-26 (manager): only data bytes are read in the operation turn; a callback form fixes its
+  options (copy), path (`Buffer`/`URL` → string), positions and lengths at the call and validates its
+  callback there (`makeCallback`; `opendir` names it `callback`, `close` defaults it, `rm` checks
+  options instead); a promise form reads its options as it goes (Node's `fs/promises`).
+- 2026-11-26 (manager): `Dir` is Node's `dir.js` (batches of `bufferSize`, buffered reads on
+  `process.nextTick`, operation queue, closed-handle errors). `fs.read(0)` keeps stdin's path:
+  declared (`runtime-js/fs-read-stdin-turn`). The process end also runs the submitted operations before
+  the `'exit'` listeners (Node's pool has usually finished them: 212/240, not pinned).
 - Host turn = rifty's `setImmediate`, driven per host: a Node host's own `setImmediate` (a Node
   `MessagePort` drains up to 1000 messages per loop turn: 512 chained messages gave 0–1 timer ticks),
   the isolate bridge's next host turn (`timerStart` 0 ms → host `setImmediate`, was a 1 ms timer),

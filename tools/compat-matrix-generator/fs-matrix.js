@@ -53,12 +53,12 @@ export const fsMatrix = {
     [
       'Async completion turn (callbacks, `fs.promises`)',
       '⚠️',
-      'As Node\'s threadpool round trip: the operation runs in one loop turn, its callback or promise settles in the next, so a chain of fs calls yields to timers and the immediates queued beside a call run first; the process end (`exit()`, a fatal error) runs submitted operations, no callback (Node joins its pool). Declared: one round trip per call, so a multi-round-trip `writeFile` differs where Node opens first — bytes mutated in a `setImmediate` (Node `9,9,9`, rifty `1,2,3`), `writeFile` + `exit()` in one tick (Node `""`, rifty the data): `backlog/runtime-js/fs-async-op-io-rounds`. Parity `fs/callback-turn-order`',
+      'As Node\'s threadpool round trip: the operation runs in one loop turn (a host immediate), its callback or promise settles in an I/O completion turn, so a chain of fs calls yields to timers and the immediates queued beside a call run first; a callback form fixes its options, path and positions at the call and throws a non-function callback there (`makeCallback`); the process end (`exit()`, a fatal error) runs submitted operations, no callback (Node joins its pool); `Dir` reads one batch of `bufferSize` per request, the rest on `process.nextTick`. Declared: one round trip per call, so a multi-round-trip `writeFile` differs where Node opens first — bytes mutated in a `setImmediate` (Node `9,9,9`, rifty `1,2,3`), `writeFile` + `exit()` in one tick (Node `""`, rifty the data): `backlog/runtime-js/fs-async-op-io-rounds`; `fs.read(0)` (stdin) keeps its own path, its callback outside the turn: `backlog/runtime-js/fs-read-stdin-turn`; on Workbench/SDK a due 0 ms timer runs before an immediate queued in an fs callback, in the isolate either by race (Node: the immediate): `backlog/runtime-js/browser-loop-phase-order`. Parity `fs/callback-turn-order`, `fs/callback-phase-order`, `fs/async-arguments-at-call`, `fs/dir-read-turns`',
     ],
     [
       'Callback `fs.appendFile` / `fs.rm`',
-      '✅',
-      'Over their `fs.promises` forms, in the I/O turn shape above. Parity `fs/append-file-rm-callbacks`',
+      '⚠️',
+      'Over their `fs.promises` forms, in the I/O turn shape above; `rm` checks its options at the call. Declared: a `data` that is not a string or view (`appendFile(p, 123, cb)`) is not refused (Node `ERR_INVALID_ARG_TYPE`): `backlog/runtime-js/fs-write-data-argument-types`. Parity `fs/append-file-rm-callbacks`',
     ],
     [
       '`fs.promises` file ops',
