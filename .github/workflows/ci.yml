@@ -269,6 +269,13 @@ jobs:
     # tested against the REAL owner worker under COI — thin harness page, no App
     # boot. Own job (not an e2e matrix lane): different tier, different config.
     runs-on: ubuntu-24.04
+    # suite + the node-streams carrier (tests/browser-unit/streams-scenario.spec.ts, a fresh
+    # Workbench per case) as parallel matrix jobs: the carrier's minutes ride a second runner
+    # beside the suite (the gate's critical path) instead of lengthening it.
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [suite, streams-carrier]
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4 # version from package.json `packageManager`
@@ -293,17 +300,23 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
       # Serial by config (workers:1) — concurrent owner boots starve the owner
       # worker on shared runners (same reason chromium-light is serialized).
-      - run: pnpm test:browser-unit
+      - run: pnpm test:browser-unit ${{ matrix.part == 'suite' && '--grep-invert "node-streams goal scenario vs Node"' || 'tests/browser-unit/streams-scenario.spec.ts' }}
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report-browser-unit
+          name: playwright-report-browser-unit-${{ matrix.part }}
           path: playwright-report
 
   no-coi-chromium:
     needs: change-scope
     if: ${{ !cancelled() && needs.change-scope.outputs.code != 'false' && !github.event.pull_request.draft }}
     runs-on: ubuntu-24.04
+    # suite + the node-streams carrier (tests/no-coi/streams-scenario.spec.ts, a fresh sandbox per
+    # case) as parallel matrix jobs, as browser-unit-chromium.
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [suite, streams-carrier]
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -326,12 +339,13 @@ jobs:
       - if: steps.pw-cache.outputs.cache-hit != 'true'
         run: pnpm exec playwright install --with-deps chromium
       - name: Packed client bundle budgets
+        if: matrix.part == 'suite'
         run: pnpm test:client-bundles
-      - run: pnpm test:no-coi
+      - run: pnpm test:no-coi ${{ matrix.part == 'suite' && '--grep-invert "node-streams goal scenario vs Node"' || 'tests/no-coi/streams-scenario.spec.ts' }}
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report-no-coi
+          name: playwright-report-no-coi-${{ matrix.part }}
           path: playwright-report/no-coi
 
   ci-gate:

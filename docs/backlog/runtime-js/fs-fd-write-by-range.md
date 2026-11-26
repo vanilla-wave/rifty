@@ -43,6 +43,10 @@ shared by the implementations:
 The `vfs` contract change records an ADR together with 4b. Acceptance as 4b by byte/RPC counters, append and positional rows
 included, with the durability guard (`results/chromium/durability.jsonl`) kept green.
 
+## Acceptance
+
+1. Lifts the streams carrier's declared skips on Workbench: `c-transform-big` and the `m5` row «timers run while a WriteStream writes 16 MiB in 64 KiB chunks» (`packages/isolate-host/tests/streams-scenario.ts` `WORKBENCH_SKIPPED`, `WORKBENCH_SKIPPED_ROWS`). → I8
+
 ## Open findings (review round 4)
 
 Carried verbatim from the manager's review of PR #450, round 4 (2026-11-25); owner = this unit. They close when the unit is taken into work, by its own contract and review.

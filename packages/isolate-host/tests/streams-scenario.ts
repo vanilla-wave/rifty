@@ -108,6 +108,34 @@ export const MATRICES: readonly Program[] = [
   ),
 ];
 
+/**
+ * Workbench's declared skips, each until its owner lands. The marker ties each to its owner's
+ * backlog item: removing the item reds `backlog:check` while the skip stays. A whole program:
+ */
+export const WORKBENCH_SKIPPED: Readonly<Record<string, string>> = {
+  // TODO(backlog: runtime-js/fs-fd-write-by-range)
+  'c-transform-big':
+    'skipped until runtime-js/fs-fd-write-by-range (4c): 16 MiB through fs.WriteStream on the quadratic positional fd write path does not finish in 180 s',
+};
+/**
+ * …and single rows, skipped by the program's own `--skip=` on both sides (the Node oracle and the
+ * guest run the same rows), the other rows pinned.
+ */
+export const WORKBENCH_SKIPPED_ROWS: Readonly<
+  Record<string, readonly { readonly row: string; readonly why: string }[]>
+> = {
+  'm5-writestream': [
+    {
+      // TODO(backlog: runtime-js/fs-fd-write-by-range)
+      row: 'timers run while a WriteStream writes 16 MiB in 64 KiB chunks',
+      why: 'until runtime-js/fs-fd-write-by-range (4c): 256 positional 64 KiB writes on the quadratic fd write path take about 16 min, and the row prints `no settle in 3s` only because the write outlasts 3 s (an outcome set by speed)',
+    },
+  ],
+};
+/** `node <program> <args>`: the program's `--skip=` of `rows`. */
+export const skipArgs = (rows: readonly { readonly row: string }[] = []): string[] =>
+  rows.map(({ row }) => `--skip=${encodeURIComponent(row)}`);
+
 /** The case's title tail: who turns it green, or that it is a guard. */
 export const verdict = (p: Program): string =>
   p.owners.length === 0
@@ -140,7 +168,8 @@ export const isWritten = (p: Program, path: string): boolean =>
  * carries its write time (entry dates; an xlsx's docProps), so its bytes differ run to run, in
  * Node too.
  */
-export const isReloaded = (path: string): boolean => /\.(?:xlsx|zip)$/.test(path);
+export const RELOADED = /\.(?:xlsx|zip)$/;
+export const isReloaded = (path: string): boolean => RELOADED.test(path);
 
 const ExcelJS = fromHost('exceljs') as {
   Workbook: new () => {
@@ -196,8 +225,8 @@ export const manifestOf = async (
     ),
   );
 
-/** Real Node v24.16.0: `node <program>` in a fresh directory holding `workspace(p)`. */
-export async function inNode(p: Program): Promise<Observed> {
+/** Real Node v24.16.0: `node <program> <args>` in a fresh directory holding `workspace(p)`. */
+export async function inNode(p: Program, args: readonly string[] = []): Promise<Observed> {
   if (process.version !== 'v24.16.0')
     throw new Error(`oracle is Node v24.16.0, this is ${process.version}`);
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'streams-scenario-oracle-')));
@@ -206,7 +235,7 @@ export async function inNode(p: Program): Promise<Observed> {
       mkdirSync(dirname(join(dir, rel)), { recursive: true });
       writeFileSync(join(dir, rel), data);
     }
-    const r = spawnSync(process.execPath, [programFile(p)], {
+    const r = spawnSync(process.execPath, [programFile(p), ...args], {
       cwd: dir,
       env: {},
       encoding: 'utf8',

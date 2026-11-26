@@ -1,7 +1,6 @@
 import type { Page } from '@playwright/test';
-import type { OracleStep } from '../../../packages/isolate-host/tests/zlib-scenario.ts';
 
-// node:zlib goal carrier on the browser hosts (Workbench: ../zlib-scenario.spec.ts, SDK:
+// node:zlib and node-streams goal carriers on the browser hosts (Workbench: ../zlib-scenario.spec.ts, SDK:
 // tests/no-coi/zlib-scenario.spec.ts): a step's workspace (thousands of closure files) reaches the
 // guest as one routed body, `u32 index length · JSON [path, size][] · bytes`, written as one file
 // and unpacked by a guest `node` (UNPACK): one host write instead of one per file.
@@ -11,7 +10,7 @@ export const STEP_URL = '/__zlib-scenario/';
 /** Serves each step's workspace at `STEP_URL + <id>`; route set before boot (trap late-fetch-interception). */
 export async function serveSteps(
   page: Page,
-  oracle: () => ReadonlyMap<string, OracleStep>,
+  oracle: () => ReadonlyMap<string, { readonly files: ReadonlyMap<string, Uint8Array> }>,
 ): Promise<void> {
   await page.route(`**${STEP_URL}*`, (route) => {
     const id = decodeURIComponent(new URL(route.request().url()).pathname.slice(STEP_URL.length));
