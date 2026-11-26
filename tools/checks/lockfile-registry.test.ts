@@ -354,6 +354,17 @@ packages:
     );
   });
 
+  it.each([
+    ['tag on the key', 'resolution: {integrity: x, !!str tarball: https://evil.invalid/ms.tgz}'],
+    ['explicit key', 'resolution: {integrity: x, ? tarball: https://evil.invalid/ms.tgz}'],
+    ['mapping as an address value', 'tarball: {url: https://evil.invalid/ms.tgz}'],
+  ])('pnpm non-canonical flow notation is red: %s', (_, entry) => {
+    const path = put('n2/pnpm-lock.yaml', `packages:\n  ms@2.1.3:\n    ${entry}\n`);
+    const violations = check([path]).violations;
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toMatch(/non-canonical address/u);
+  });
+
   it('pnpm non-canonical in a flow mapping is red: tag', () => {
     const path = put(
       'n/pnpm-lock.yaml',

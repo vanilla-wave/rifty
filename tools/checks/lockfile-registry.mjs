@@ -11,10 +11,14 @@
  *   parsing as an object with `lockfileVersion`. A `.json` with lock markers that does not
  *   parse (JSONC, trailing comma, `NaN`) is red.
  * Address = the whole value of a `resolved` / `tarball` / `resolution` / `repo` key (any depth
- * in JSON; in pnpm / yarn text the keyed line or flow-mapping entry, plus its block scalar),
- * judged by one function, `classifyAddress` — never funding or deprecation prose.
- * Declared limits (not read): pnpm/yarn YAML beyond that line-wise form (`yaml` is only a
- * `packages/agent` dependency); bun.lock(b), deno.lock; `.yarnrc.yml` / `.npmrc` registry
+ * in JSON; in pnpm / yarn text the keyed line or flow-mapping entry), judged by one function,
+ * `classifyAddress` — never funding or deprecation prose. Text locks are accepted only in the
+ * form pnpm / yarn write; any other notation around an address key (escape, tag, anchor, alias,
+ * block scalar, explicit key, value off the key line, continuation) is red: regenerate the lock.
+ * Threat model: locks written by package managers (the three incidents), not hand-crafted bypass.
+ * Declared limits (not read): yarn berry `patch:` nested descriptors (not inspected);
+ * `gitlab:` / `bitbucket:` / `gist:` shorthands red as unreadable (`github:` passes);
+ * bun.lock(b), deno.lock; `.yarnrc.yml` / `.npmrc` registry
  * settings; `.jsonl`, `.zip`/`.tar`; `.tgz` fixtures (upstream bytes, none carries a lock
  * 2026-11-25); a lock encoded twice (a JSON string of a JSON string); a symlink named as a lock
  * (not followed; its target is read only if itself a carrier); size — each document is read and
@@ -41,10 +45,14 @@ export const LOCK_BASENAMES = new Set([
 ]);
 const JSON_LOCKS = new Set(['package-lock.json', 'npm-shrinkwrap.json']);
 const ADDRESS_KEYS = new Set(['resolved', 'tarball', 'resolution', 'repo']);
-// Text locks: an address key leading a line (yarn `resolved "…"`, YAML `key: …`) or inside a
-// YAML flow mapping (`{…, tarball: …}`); key bare, '…' or "…".
-const LINE_KEY = /^(\s*)(["']?)(resolved|tarball|resolution|repo)\2(?:\s*:|\s)\s*/u;
-const FLOW_KEY = /^\s*(["']?)(resolved|tarball|resolution|repo)\1\s*:\s*/u;
+// Text locks are read only in the form pnpm / yarn write (manager decision 2026-11-26): an address
+// key leading a line (yarn v1 `resolved "…"`, YAML `key: …`) or a flow-mapping entry
+// (`{…, tarball: …}`); key bare, '…' or "…". Any other notation around an address key is red.
+const LINE_KEY = /^(\s*)(["']?)(resolved|tarball|resolution|repo)\2(?::(?=\s|$)|\s)\s*/u;
+const FLOW_KEY = /^\s*(["']?)(resolved|tarball|resolution|repo)\1\s*:(?=\s|$)\s*/u;
+// An address key behind an explicit-key `?`, a tag or an anchor.
+const ODD_KEY =
+  /^\s*(?:\?|![^\s]*|&\S+)\s*["']?(?:resolved|tarball|resolution|repo)["']?(?:\s|:|$)/u;
 const ALLOWED_NOTE = '(allowed: registry.npmjs.org, loopback, *.test)';
 const SCHEME_RE = /^([a-z][a-z0-9+.-]*):/iu;
 // Declared non-network forms (no host): a value with one of these schemes, or no scheme at all
@@ -160,7 +168,7 @@ export const EXEMPT = [
 const basename = (/** @type {string} */ p) => p.slice(p.lastIndexOf('/') + 1);
 const stripBom = (/** @type {string} */ t) => (t.charCodeAt(0) === 0xfeff ? t.slice(1) : t);
 
-/** @typedef {{ key: string, value: string }} Address — the whole value of an address key */
+/** @typedef {{ key: string, value: string, odd?: string }} Address — the whole value of an address key; `odd` = non-canonical notation */
 /** @typedef {{ carrier: string, value: unknown, format: 'object' | 'json' | 'text' }} Lock */
 
 /** @param {unknown} lock @returns {Address[]} */
@@ -179,52 +187,63 @@ function objectAddresses(lock) {
 }
 
 /**
- * The whole value after an address key in a text line: quoted → up to the closing quote; plain
- * → rest of line (block) or up to `,` / `}` (flow); a block scalar (`>-`, `|`) → its lines.
- * `{` (nested mapping) and an empty value (block mapping below) carry no value of their own.
- * @returns {string | null}
+ * The value after an address key, only in a canonical notation: plain (not starting with
+ * `! & * | > [ ' "`) or quoted without escapes (`\\` in "…", `''` in '…'), non-empty, on the key's
+ * line, nothing after it but `,` / `}` (flow) or a comment (block). `{` = nested mapping (pnpm
+ * `resolution: {…}`), no value of its own; an empty `resolution:` heads a block mapping.
+ * @returns {{ value: string } | { odd: string } | null}
  */
 function textValue(
-  /** @type {string[]} */ lines,
-  /** @type {number} */ i,
+  /** @type {string} */ key,
   /** @type {string} */ rest,
   /** @type {boolean} */ flow,
-  /** @type {number} */ indent,
 ) {
-  let v = rest.replace(/^&\S+\s*/u, ''); // YAML anchor
-  if (v.startsWith('{') || v.startsWith('*')) return null; // nested flow mapping, alias
-  const quote = v[0];
+  if (rest.startsWith('{')) return key === 'resolution' ? null : { odd: 'mapping as value' };
+  if (rest === '' || /^#/u.test(rest))
+    return key === 'resolution' ? null : { odd: 'value not on the key line' };
+  const tail = flow ? /^\s*(?:[,}]|$)/u : /^\s*(?:#.*)?$/u;
+  const quote = rest[0];
   if (quote === '"' || quote === "'") {
-    const end = v.indexOf(quote, 1);
-    return end < 0 ? v.slice(1) : v.slice(1, end);
+    const end = rest.indexOf(quote, 1);
+    if (end < 0) return { odd: 'unterminated quote' };
+    const inner = rest.slice(1, end);
+    if (quote === '"' && inner.includes('\\')) return { odd: 'escape in quotes' };
+    if (!tail.test(rest.slice(end + 1))) return { odd: 'text after the quoted value' };
+    return { value: inner };
   }
-  v = (flow ? (v.split(/[,}]/u)[0] ?? '') : v.replace(/\s+#.*$/u, '')).trim();
-  if (flow) return v || null;
-  if (/^[>|][-+0-9]*$/u.test(v)) {
-    const body = [];
-    for (let k = i + 1; k < lines.length; k++) {
-      const next = lines[k] ?? '';
-      if (next.trim() && next.length - next.trimStart().length <= indent) break;
-      body.push(next.trim());
-    }
-    return body.join(' ').trim();
-  }
-  return v || null;
+  if (/^[!&*|>[]/u.test(rest)) return { odd: 'tag, anchor, alias or block scalar' };
+  const value = (flow ? (rest.split(/[,}]/u)[0] ?? '') : rest.replace(/\s+#.*$/u, '')).trim();
+  return { value };
 }
 
-/** Address values of a pnpm / yarn text lock, line-wise. @param {string} text @returns {Address[]} */
+/** Address values of a pnpm / yarn text lock. @param {string} text @returns {Address[]} */
 function textAddresses(text) {
   /** @type {Address[]} */
   const out = [];
+  const push = (/** @type {string} */ key, /** @type {ReturnType<typeof textValue>} */ v) => {
+    if (v && 'odd' in v) out.push({ key, value: '', odd: v.odd });
+    else if (v) out.push({ key, value: v.value });
+  };
   const lines = text.split('\n');
+  /** Indent of the last block-scalar address key: a deeper line under it is a continuation. */
+  let scalarIndent = -1;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i] ?? '';
+    const indent = line.length - line.trimStart().length;
+    if (line.trim() && scalarIndent >= 0) {
+      if (indent > scalarIndent) out.push({ key: '', value: '', odd: 'continuation line' });
+      scalarIndent = -1;
+    }
+    if (ODD_KEY.test(line))
+      out.push({ key: '', value: '', odd: 'explicit key, tag or anchor on the key' });
     const lead = LINE_KEY.exec(line);
     if (lead) {
-      const value = textValue(lines, i, line.slice(lead[0].length), false, lead[1]?.length ?? 0);
-      if (value !== null) out.push({ key: lead[3] ?? '', value });
+      const key = lead[3] ?? '';
+      const v = textValue(key, line.slice(lead[0].length), false);
+      push(key, v);
+      if (v && 'value' in v) scalarIndent = lead[1]?.length ?? 0;
     }
-    // Keys inside a flow mapping: brace depth > 0, outside quotes.
+    // Flow-mapping entries: brace depth > 0, outside quotes.
     let depth = 0;
     let quote = '';
     for (let p = 0; p < line.length; p++) {
@@ -236,10 +255,11 @@ function textAddresses(text) {
       } else if (c === '}') depth -= 1;
       else if (c === '{' || (c === ',' && depth > 0)) {
         if (c === '{') depth += 1;
-        const m = FLOW_KEY.exec(line.slice(p + 1));
-        if (!m) continue;
-        const value = textValue(lines, i, line.slice(p + 1 + m[0].length), true, 0);
-        if (value !== null) out.push({ key: m[2] ?? '', value });
+        const after = line.slice(p + 1);
+        if (ODD_KEY.test(after))
+          out.push({ key: '', value: '', odd: 'explicit key, tag or anchor on the key' });
+        const m = FLOW_KEY.exec(after);
+        if (m) push(m[2] ?? '', textValue(m[2] ?? '', after.slice(m[0].length), true));
       }
     }
   }
@@ -266,17 +286,21 @@ const isLoopback = (/** @type {string} */ host) =>
  * dependencies are refused whatever the host: it may be internal. Anything else that does not
  * parse is refused, never "not an address".
  * @param {Address} address
- * @returns {{ kind: 'host' | 'git' | 'unreadable', label: string } | null}
+ * @returns {{ kind: 'host' | 'git' | 'unreadable' | 'noncanonical', label: string } | null}
  */
-export function classifyAddress({ key, value: raw }) {
+export function classifyAddress({ key, value: raw, odd }) {
+  if (odd) return { kind: 'noncanonical', label: odd };
   let value = raw.trim();
   if (key === 'resolution' && !SCHEME_RE.test(value)) {
     const descriptor = /^(@?[^@\s]+)@(.+)$/u.exec(value); // yarn berry `name@<range>`
     if (descriptor) value = descriptor[2] ?? '';
   }
   const scheme = SCHEME_RE.exec(value)?.[1]?.toLowerCase();
-  if (scheme === undefined)
+  if (scheme === undefined) {
+    const scp = /^[^@/\s]+@([^:/\s]+):/u.exec(value); // git scp form `git@host:o/r.git`
+    if (scp) return { kind: 'git', label: scp[1] ?? value };
     return /^[\\/]{2}/u.test(value) ? { kind: 'unreadable', label: value } : null; // `//host/…`
+  }
   if (NON_NETWORK.has(scheme)) return null;
   let parsed;
   try {
@@ -441,9 +465,11 @@ export function checkLockfileRegistry(root, paths, exempt = EXEMPT) {
         violations.push(
           kind === 'git'
             ? `${lock.carrier}: ${count} git dependency address(es) on ${label} (git/URL dependencies are not allowed in committed locks: the host may be internal)`
-            : kind === 'unreadable'
-              ? `${lock.carrier}: ${count} unreadable address value(s) ${JSON.stringify(label)} ${NON_NETWORK_NOTE}`
-              : `${lock.carrier}: ${count} address line(s) on ${label} ${ALLOWED_NOTE}`,
+            : kind === 'noncanonical'
+              ? `${lock.carrier}: ${count} non-canonical address entr(y|ies) (${label}) — regenerate the lock with its package manager`
+              : kind === 'unreadable'
+                ? `${lock.carrier}: ${count} unreadable address value(s) ${JSON.stringify(label)} ${NON_NETWORK_NOTE}`
+                : `${lock.carrier}: ${count} address line(s) on ${label} ${ALLOWED_NOTE}`,
         );
       }
     }
