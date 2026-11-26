@@ -1,0 +1,5 @@
+Warning: Cannot load "@napi-rs/canvas" package: "Error: Failed to load native binding".
+Warning: Cannot polyfill `DOMMatrix`, rendering may be broken.
+Warning: Cannot polyfill `ImageData`, rendering may be broken.
+Warning: Cannot polyfill `Path2D`, rendering may be broken.
+/private/tmp/rifty-pdf-text/deps/node_modules/pdf-parse/dist/pdf-parse/cjs/index.cjs:1

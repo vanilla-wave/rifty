@@ -1,0 +1,41 @@
+node exit 0, guest exit 0; 79 node lines, 79 guest lines
+  GUEST new URL: THROWS NotImplementedError: Not implemented: isolate-host.URL (not available in the rifty isolate host, ADR-0557)
+   NODE new URL: file:///a/b.pdf
+  GUEST URL.parse: undefined
+   NODE URL.parse: function
+  GUEST URL.createObjectURL: undefined
+   NODE URL.createObjectURL: function
+  GUEST new URLSearchParams: THROWS NotImplementedError: Not implemented: isolate-host.URLSearchParams (not available in the rifty isolate host, ADR-0557)
+   NODE new URLSearchParams: 1
+  GUEST structuredClone: THROWS NotImplementedError: Not implemented: isolate-host.structuredClone (not available in the rifty isolate host, ADR-0557)
+   NODE structuredClone: {"a":{"0":1,"1":2}}
+  GUEST new ReadableStream: THROWS NotImplementedError: Not implemented: isolate-host.ReadableStream (not available in the rifty isolate host, ADR-0557)
+   NODE new ReadableStream: function
+  GUEST new DecompressionStream: THROWS NotImplementedError: Not implemented: isolate-host.DecompressionStream (not available in the rifty isolate host, ADR-0557)
+   NODE new DecompressionStream: object
+  GUEST new AbortController: THROWS NotImplementedError: Not implemented: isolate-host.AbortController (not available in the rifty isolate host, ADR-0557)
+   NODE new AbortController: false
+  GUEST AbortSignal.any: undefined
+   NODE AbortSignal.any: function
+  GUEST new EventTarget: THROWS NotImplementedError: Not implemented: isolate-host.EventTarget (not available in the rifty isolate host, ADR-0557)
+   NODE new EventTarget: function
+  GUEST new MessageChannel: THROWS NotImplementedError: Not implemented: isolate-host.MessageChannel (not available in the rifty isolate host, ADR-0557)
+   NODE new MessageChannel: function
+  GUEST process.getBuiltinModule: undefined
+   NODE process.getBuiltinModule: function
+  GUEST process.getBuiltinModule(fs): THROWS TypeError: process.getBuiltinModule is not a function
+   NODE process.getBuiltinModule(fs): function
+  GUEST process.getBuiltinModule(module).createRequire: THROWS TypeError: process.getBuiltinModule is not a function
+   NODE process.getBuiltinModule(module).createRequire: function
+  GUEST createRequire(file URL string): THROWS TypeError: The argument filename must be a file URL object, file URL string, or absolute path string
+   NODE createRequire(file URL string): function
+  GUEST url.pathToFileURL: THROWS TypeError: URLConstructor is not a constructor
+   NODE url.pathToFileURL: diag.cjs
+  GUEST url.fileURLToPath: THROWS TypeError: URLConstructor is not a constructor
+   NODE url.fileURLToPath: /a/b
+  GUEST zlib.inflateSync: THROWS NotImplementedError: Not implemented: isolate-host.zlib.inflateSync (no compression engine in the rifty isolate host (rifty zlib runs on web 
+   NODE zlib.inflateSync: THROWS Error: incorrect data check
+  GUEST fs.readFileSync pooled offset: 0,0 buffer 100
+   NODE fs.readFileSync pooled offset: THROWS Error: EROFS: read-only file system, open '/tmp-probe-a'
+  GUEST import(cjs file): default,module.exports,emit
+   NODE import(cjs file): default,emit,module.exports

@@ -1,0 +1,19 @@
+{
+  "name": "rifty-pdf-text-probe-deps",
+  "private": true,
+  "dependencies": {
+    "@hyzyla/pdfium": "^3.0.0",
+    "abort-controller": "^3.0.0",
+    "core-js-pure": "^3.51.0",
+    "mupdf": "1.28.6",
+    "pdf-parse": "2.4.5",
+    "pdf-parse-v1": "npm:pdf-parse@1.1.1",
+    "pdf.js-extract": "1.0.1",
+    "pdf2json": "4.1.1",
+    "pdfjs-dist": "6.5.438",
+    "pdfjs-dist-v3": "npm:pdfjs-dist@3.11.174",
+    "pdfreader": "3.0.8",
+    "unpdf": "2.2.3",
+    "web-streams-polyfill": "4.5.1"
+  }
+}

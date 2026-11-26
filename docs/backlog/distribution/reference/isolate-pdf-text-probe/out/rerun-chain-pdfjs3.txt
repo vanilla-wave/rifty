@@ -1,0 +1,14 @@
+# pdfjs3: node (no stubs) exit 0
+
+step 1 stubs [none] → guest exit 1
+  error: NotImplementedError: Not implemented: isolate-host.URLSearchParams (not available in the rifty isolate host, ADR-0557) ⏎   feature: 'isolate-host.URLSearchParams' ⏎ } ⏎ Node.js v24.0.0
+  frames: at Object.<anonymous> (/node_modules/pdfjs-dist-v3/legacy/build/pdf.js:2413:14) < at __w_pdfjs_require__ (/node_modules/pdfjs-dist-v3/legacy/build/pdf.js:22782:42) < at Object.<anonymous> (/node_modules/pdfjs-dist-v3/legacy/build/pdf.js:69:1) < at __w_pdfjs_require__ (/node_modules/pdfjs-dist-v3/legacy/build/pdf.js:22782:42)
+
+step 2 stubs [URLSearchParams] → guest exit 1
+  error: NotImplementedError: Not implemented: isolate-host.ReadableStream (not available in the rifty isolate host, ADR-0557)
+  frames: at MessageHandler.sendWithStream (/node_modules/pdfjs-dist-v3/legacy/build/pdf.js:13846:12) < at PDFPageProxy.streamTextContent (/node_modules/pdfjs-dist-v3/legacy/build/pdf.js:4061:43) < at PDFPageProxy.getTextContent (/node_modules/pdfjs-dist-v3/legacy/build/pdf.js:4079:33) < at eval (/workspace/chain/pdfjs3.cjs:10:47)
+
+step 3 stubs [URLSearchParams, ReadableStream] → guest exit 0  TEXT = NODE
+  guest stdout, non-result lines: Warning: Cannot polyfill `DOMMatrix`, rendering may be broken: "Error: Cannot find module 'canvas' ⏎ Require stack: ⏎ - /node_modules/pdfjs-dist-v3/legacy/build/pdf.js". ⏎ Warning: Cannot polyfill `Path2D`, rendering may be broken: "Error: Cannot find module 'canvas' ⏎ Require stack: ⏎ - /node_modules/pdfjs-dist-v3/legacy/build/pdf.js". ⏎ Warning: fetchStandardFontData: failed to fetch file "LiberationSans-Regular.ttf" with "UnknownErrorException: The standard font "baseUrl" parameter must be specified, ensure that the "standardFontDataUrl" API parameter is provided.". ⏎ Warning: fetchStandardFontData: failed to fetch file "LiberationSans-Regular.ttf" with "UnknownErrorException: The standar
+
+minimal ponyfill set with text = node: [URLSearchParams, ReadableStream]

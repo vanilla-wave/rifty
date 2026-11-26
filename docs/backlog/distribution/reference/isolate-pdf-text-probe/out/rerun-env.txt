@@ -1,0 +1,4 @@
+date 2026-11-26T14:54:50Z
+rifty ebaf4945c (origin/main ebaf4945c)
+node v24.16.0
+os Darwin arm64

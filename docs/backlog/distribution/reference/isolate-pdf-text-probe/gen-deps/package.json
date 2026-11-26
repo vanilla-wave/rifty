@@ -1,0 +1,10 @@
+{
+  "name": "rifty-pdf-text-gen-deps",
+  "private": true,
+  "dependencies": {
+    "pdf-lib": "1.17.1",
+    "@pdf-lib/fontkit": "1.1.1",
+    "dejavu-fonts-ttf": "2.37.3",
+    "pdfkit": "0.21.0"
+  }
+}

@@ -1,0 +1,18 @@
+# pdfjs6bundle: node (no stubs) exit 0
+
+step 1 stubs [none] → guest exit 1
+  error: Warning: Cannot access the `require` function: "TypeError: process.getBuiltinModule is not a function". ⏎ Warning: Cannot polyfill `DOMMatrix`, rendering may be broken. ⏎ Warning: Cannot polyfill `Path2D`, rendering may be broken. ⏎ Error: Setting up fake worker failed: "Not implemented: isolate-host.AbortController (not available in the rifty isolate host, ADR-0557)".
+  frames: at eval (/workspace/bundles/pdfjs-legacy.cjs:21091:31)
+
+step 2 stubs [AbortController] → guest exit 1
+  error: Warning: Cannot access the `require` function: "TypeError: process.getBuiltinModule is not a function". ⏎ Warning: Cannot polyfill `DOMMatrix`, rendering may be broken. ⏎ Warning: Cannot polyfill `Path2D`, rendering may be broken. ⏎ NotImplementedError: Not implemented: isolate-host.structuredClone (not available in the rifty isolate host, ADR-0557)
+  frames: at LoopbackPort.postMessage (/workspace/bundles/pdfjs-legacy.cjs:11322:13) < at MessageHandler.sendWithPromise (/workspace/bundles/pdfjs-legacy.cjs:11725:20) < at eval (/workspace/bundles/pdfjs-legacy.cjs:20261:51)
+
+step 3 stubs [AbortController, structuredClone] → guest exit 1
+  error: Warning: Cannot access the `require` function: "TypeError: process.getBuiltinModule is not a function". ⏎ Warning: Cannot polyfill `DOMMatrix`, rendering may be broken. ⏎ Warning: Cannot polyfill `Path2D`, rendering may be broken. ⏎ NotImplementedError: Not implemented: isolate-host.ReadableStream (not available in the rifty isolate host, ADR-0557)
+  frames: at MessageHandler.sendWithStream (/workspace/bundles/pdfjs-legacy.cjs:11739:12) < at _PDFPageProxy.streamTextContent (/workspace/bundles/pdfjs-legacy.cjs:20755:43) < at _PDFPageProxy.getTextContent (/workspace/bundles/pdfjs-legacy.cjs:20769:33) < at eval (/workspace/chain/pdfjs6bundle.cjs:11:47)
+
+step 4 stubs [AbortController, structuredClone, ReadableStream] → guest exit 0  TEXT = NODE
+  guest stderr (run still passes): Warning: Cannot access the `require` function: "TypeError: process.getBuiltinModule is not a function". ⏎ Warning: Cannot polyfill `DOMMatrix`, rendering may be broken. ⏎ Warning: Cannot polyfill `Path2D`, rendering may be broken. ⏎ Warning: UnknownErrorException: Ensure that the `standardFontDataUrl` API parameter is provided. ⏎ Warning: UnknownErrorException: Ensure that the `standardFontDataUrl` API parameter is provided.
+
+minimal ponyfill set with text = node: [AbortController, structuredClone, ReadableStream]

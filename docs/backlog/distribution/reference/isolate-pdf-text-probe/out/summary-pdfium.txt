@@ -1,0 +1,17 @@
+
+## pdfium.cjs [@hyzyla] 13.5 MiB, 37 files
+  DIFFERS     cyrillic-pdfkit.pdf  node 0 / guest 0  58ms / 291ms
+      guest: 
+      frames: 
+      node out:  {"file":"pdfs/cyrillic-pdfkit.pdf","pages":["Документ из PDFKit: первая страница.\r\nВ чащах юга жил бы цитрус? Да, но фальшивый экземпляр!","Страница два: итого 1 234,56 ₽."]}
+
+      guest out: 
+  DIFFERS     cyrillic.pdf         node 0 / guest 0  55ms / 357ms
+  DIFFERS     latin-raw.pdf        node 0 / guest 0  78ms / 390ms
+  DIFFERS     multi-flate.pdf      node 0 / guest 0  83ms / 382ms
+  DIFFERS     ALL                  node 0 / guest 0  66ms / 287ms
+  trace(node, exit 0): modules: fs
+    esm: -
+    globals read: document (absent in Node too), window (absent in Node too), navigator, WorkerGlobalScope (absent in Node too), WebAssembly, TextDecoder, Buffer
+    used: WebAssembly.instantiate()×1
+    TextDecoder labels: utf-8, utf-16le

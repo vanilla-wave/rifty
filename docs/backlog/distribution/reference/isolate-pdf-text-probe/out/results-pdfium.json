@@ -1,0 +1,155 @@
+[
+  {
+    "case": "pdfium.cjs",
+    "pkgs": ["@hyzyla"],
+    "tree": {
+      "files": 37,
+      "bytes": 14122523,
+      "nativeFiles": 0
+    },
+    "memoryLimitMb": 256,
+    "runs": [
+      {
+        "files": ["cyrillic-pdfkit.pdf"],
+        "node": {
+          "exitCode": 0,
+          "ms": 58,
+          "stdout": "{\"file\":\"pdfs/cyrillic-pdfkit.pdf\",\"pages\":[\"Документ из PDFKit: первая страница.\\r\\nВ чащах юга жил бы цитрус? Да, но фальшивый экземпляр!\",\"Страница два: итого 1 234,56 ₽.\"]}\n",
+          "stderr": ""
+        },
+        "guest": {
+          "exitCode": 0,
+          "ms": 291,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verdict": "DIFFERS"
+      },
+      {
+        "files": ["cyrillic.pdf"],
+        "node": {
+          "exitCode": 0,
+          "ms": 55,
+          "stdout": "{\"file\":\"pdfs/cyrillic.pdf\",\"pages\":[\"Привет, мир! Это проверка извлечения текста.\\r\\nСъешь же ещё этих мягких французских булок, да выпей чаю.\\r\\nСмешанная строка: rifty isolate № 42 — «кавычки», ёЁ.\",\"Вторая страница.\\r\\nШирокая электрификация южных губерний даст мощный толчок подъёму сельского хозяйства.\\r\\nLatin tail: The quick brown fox.\"]}\n",
+          "stderr": ""
+        },
+        "guest": {
+          "exitCode": 0,
+          "ms": 357,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verdict": "DIFFERS"
+      },
+      {
+        "files": ["latin-raw.pdf"],
+        "node": {
+          "exitCode": 0,
+          "ms": 78,
+          "stdout": "{\"file\":\"pdfs/latin-raw.pdf\",\"pages\":[\"Hello rifty PDF text\\r\\nSecond line: The quick brown fox jumps over the lazy dog.\\r\\nNumbers 0123456789 and symbols (a+b) = c.\"]}\n",
+          "stderr": ""
+        },
+        "guest": {
+          "exitCode": 0,
+          "ms": 390,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verdict": "DIFFERS"
+      },
+      {
+        "files": ["multi-flate.pdf"],
+        "node": {
+          "exitCode": 0,
+          "ms": 83,
+          "stdout": "{\"file\":\"pdfs/multi-flate.pdf\",\"pages\":[\"Page 1 of 3: heading\\r\\np1 line 1: lorem ipsum dolor sit amet, consectetur adipiscing elit 101.\\r\\np1 line 2: lorem ipsum dolor sit amet, consectetur adipiscing elit 102.\\r\\np1 line 3: lorem ipsum dolor sit amet, consectetur adipiscing elit 103.\\r\\np1 line 4: lorem ipsum dolor sit amet, consectetur adipiscing elit 104.\\r\\np1 line 5: lorem ipsum dolor sit amet, consectetur adipiscing elit 105.\\r\\np1 line 6: lorem ipsum dolor sit amet, consectetur adipiscing elit 106.\\r\\np1 line 7: lorem ipsum dolor sit amet, consectetur adipiscing elit 107.\\r\\np1 line 8: lorem ipsum dolor sit amet, consectetur adipiscing elit 108.\\r\\np1 line 9: lorem ipsum dolor sit amet, consectetur adipiscing elit 109.\\r\\np1 line 10: lorem ipsum dolor sit amet, consectetur adipiscing elit 110.\\r\\np1 line 11: lorem ipsum dolor sit amet, consectetur adipiscing elit 111.\\r\\np1 line 12: lorem ipsum dolor sit amet, consectetur adipiscing elit 112.\",\"Page 2 of 3: heading\\r\\np2 line 1: lorem ipsum dolor sit amet, consectetur adipiscing elit 201.\\r\\np2 line 2: lorem ipsum dolor sit amet, consectetur adipiscing elit 202.\\r\\np2 line 3: lorem ipsum dolor sit amet, consectetur adipiscing elit 203.\\r\\np2 line 4: lorem ipsum dolor sit amet, consectetur adipiscing elit 204.\\r\\np2 line 5: lorem ipsum dolor sit amet, consectetur adipiscing elit 205.\\r\\np2 line 6: lorem ipsum dolor sit amet, consectetur adipiscing elit 206.\\r\\np2 line 7: lorem ipsum dolor sit amet, consectetur adipiscing elit 207.\\r\\np2 line 8: lorem ipsum dolor sit amet, consectetur adipiscing elit 208.\\r\\np2 line 9: lorem ipsum dolor sit amet, consectetur adipiscing elit 209.\\r\\np2 line 10: lorem ipsum dolor sit amet, consectetur adipiscing elit 210.\\r\\np2 line 11: lorem ipsum dolor sit amet, consectetur adipis…[+1020]",
+          "stderr": ""
+        },
+        "guest": {
+          "exitCode": 0,
+          "ms": 382,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verdict": "DIFFERS"
+      },
+      {
+        "files": ["cyrillic-pdfkit.pdf", "cyrillic.pdf", "latin-raw.pdf", "multi-flate.pdf"],
+        "node": {
+          "exitCode": 0,
+          "ms": 66,
+          "stdout": "{\"file\":\"pdfs/cyrillic-pdfkit.pdf\",\"pages\":[\"Документ из PDFKit: первая страница.\\r\\nВ чащах юга жил бы цитрус? Да, но фальшивый экземпляр!\",\"Страница два: итого 1 234,56 ₽.\"]}\n{\"file\":\"pdfs/cyrillic.pdf\",\"pages\":[\"Привет, мир! Это проверка извлечения текста.\\r\\nСъешь же ещё этих мягких французских булок, да выпей чаю.\\r\\nСмешанная строка: rifty isolate № 42 — «кавычки», ёЁ.\",\"Вторая страница.\\r\\nШирокая электрификация южных губерний даст мощный толчок подъёму сельского хозяйства.\\r\\nLatin tail: The quick brown fox.\"]}\n{\"file\":\"pdfs/latin-raw.pdf\",\"pages\":[\"Hello rifty PDF text\\r\\nSecond line: The quick brown fox jumps over the lazy dog.\\r\\nNumbers 0123456789 and symbols (a+b) = c.\"]}\n{\"file\":\"pdfs/multi-flate.pdf\",\"pages\":[\"Page 1 of 3: heading\\r\\np1 line 1: lorem ipsum dolor sit amet, consectetur adipiscing elit 101.\\r\\np1 line 2: lorem ipsum dolor sit amet, consectetur adipiscing elit 102.\\r\\np1 line 3: lorem ipsum dolor sit amet, consectetur adipiscing elit 103.\\r\\np1 line 4: lorem ipsum dolor sit amet, consectetur adipiscing elit 104.\\r\\np1 line 5: lorem ipsum dolor sit amet, consectetur adipiscing elit 105.\\r\\np1 line 6: lorem ipsum dolor sit amet, consectetur adipiscing elit 106.\\r\\np1 line 7: lorem ipsum dolor sit amet, consectetur adipiscing elit 107.\\r\\np1 line 8: lorem ipsum dolor sit amet, consectetur adipiscing elit 108.\\r\\np1 line 9: lorem ipsum dolor sit amet, consectetur adipiscing elit 109.\\r\\np1 line 10: lorem ipsum dolor sit amet, consectetur adipiscing elit 110.\\r\\np1 line 11: lorem ipsum dolor sit amet, consectetur adipiscing elit 111.\\r\\np1 line 12: lorem ipsum dolor sit amet, consectetur adipiscing elit 112.\",\"Page 2 of 3: heading\\r\\np2 line 1: lorem ipsum dolor sit amet, consectetur adipiscing elit 201.\\r\\np2 line 2: lorem ipsum dolor sit amet, c…[+1714]",
+          "stderr": ""
+        },
+        "guest": {
+          "exitCode": 0,
+          "ms": 287,
+          "stdout": "",
+          "stderr": ""
+        },
+        "verdict": "DIFFERS"
+      }
+    ],
+    "trace": {
+      "modules": {
+        "fs": ["(script)"]
+      },
+      "esm": {},
+      "globals": {
+        "document (absent in Node too)": [
+          "@hyzyla/pdfium/dist/index.cjs:738:32",
+          "@hyzyla/pdfium/dist/index.cjs:5799:4",
+          "@hyzyla/pdfium/dist/index.cjs:17:49",
+          "@hyzyla/pdfium/dist/index.cjs:5804:5"
+        ],
+        "window (absent in Node too)": [
+          "@hyzyla/pdfium/dist/index.cjs:627:8",
+          "@hyzyla/pdfium/dist/index.cjs:5807:30"
+        ],
+        "navigator": [
+          "@hyzyla/pdfium/dist/index.cjs:757:21",
+          "@hyzyla/pdfium/dist/index.cjs:765:6",
+          "@hyzyla/pdfium/dist/index.cjs:633:27",
+          "@hyzyla/pdfium/dist/index.cjs:5807:30"
+        ],
+        "WorkerGlobalScope (absent in Node too)": [
+          "@hyzyla/pdfium/dist/index.cjs:768:45",
+          "@hyzyla/pdfium/dist/index.cjs:633:27",
+          "@hyzyla/pdfium/dist/index.cjs:5807:30"
+        ],
+        "WebAssembly": [
+          "@hyzyla/pdfium/dist/index.cjs:834:20",
+          "@hyzyla/pdfium/dist/index.cjs:633:27",
+          "@hyzyla/pdfium/dist/index.cjs:5807:30"
+        ],
+        "TextDecoder": [
+          "@hyzyla/pdfium/dist/index.cjs:1178:33",
+          "@hyzyla/pdfium/dist/index.cjs:633:27",
+          "@hyzyla/pdfium/dist/index.cjs:5807:30"
+        ],
+        "Buffer": [
+          "@hyzyla/pdfium/dist/index.cjs:793:22",
+          "@hyzyla/pdfium/dist/index.cjs:966:27",
+          "@hyzyla/pdfium/dist/index.cjs:973:25",
+          "@hyzyla/pdfium/dist/index.cjs:989:12",
+          "@hyzyla/pdfium/dist/index.cjs:1023:45",
+          "@hyzyla/pdfium/dist/index.cjs:5784:28"
+        ]
+      },
+      "used": {
+        "WebAssembly.instantiate()": {
+          "n": 1,
+          "at": [
+            "@hyzyla/pdfium/dist/index.cjs:974:31",
+            "@hyzyla/pdfium/dist/index.cjs:1023:39",
+            "@hyzyla/pdfium/dist/index.cjs:5784:22",
+            "@hyzyla/pdfium/dist/index.cjs:633:13",
+            "@hyzyla/pdfium/dist/index.cjs:5807:10"
+          ]
+        }
+      },
+      "textDecoderLabels": ["utf-8", "utf-16le"]
+    },
+    "traceExit": 0
+  }
+]

@@ -1,0 +1,97 @@
+{
+  "name": "pdfparse2",
+  "nodeExit": 1,
+  "nodeStderr": [
+    "Warning: Cannot load \"@napi-rs/canvas\" package: \"Error: Failed to load native binding\".",
+    "Warning: Cannot polyfill `DOMMatrix`, rendering may be broken.",
+    "Warning: Cannot polyfill `ImageData`, rendering may be broken.",
+    "Warning: Cannot polyfill `Path2D`, rendering may be broken.",
+    "/private/tmp/rifty-pdf-text/oracle/chain-pdfparse2/node_modules/pdf-parse/dist/pdf-parse/cjs/index.cjs:1",
+    "\"use strict\";var t,e,i,s,n,r,a,o,l,h,c,d,u,p,g=t=>{throw TypeError(t)},m=(t,e,i)=>e.has(t)||g(\"Cannot \"+i),f=(t,e,i)=>(m(t,e,\"read from private field\"),i?i.call…[line of 65422]"
+  ],
+  "steps": [
+    {
+      "stdoutNoise": [],
+      "stubs": [],
+      "exitCode": 1,
+      "equalToNode": false,
+      "error": "NotImplementedError: Not implemented: isolate-host.URLSearchParams (not available in the rifty isolate host, ADR-0557) ⏎   feature: 'isolate-host.URLSearchParams' ⏎ } ⏎ Node.js v24.0.0",
+      "frames": [
+        "at 4603 (/node_modules/pdf-parse/dist/pdf-parse/cjs/index.cjs:1:21492)",
+        "at _ (/node_modules/pdf-parse/dist/pdf-parse/cjs/index.cjs:1:54276)",
+        "at Object.<anonymous> (/node_modules/pdf-parse/dist/pdf-parse/cjs/index.cjs:1:64744) {"
+      ],
+      "stdoutHead": "",
+      "stderrAll": [
+        "NotImplementedError: Not implemented: isolate-host.URLSearchParams (not available in the rifty isolate host, ADR-0557)",
+        "    at 4603 (/node_modules/pdf-parse/dist/pdf-parse/cjs/index.cjs:1:21492)",
+        "    at _ (/node_modules/pdf-parse/dist/pdf-parse/cjs/index.cjs:1:54276)",
+        "    at Object.<anonymous> (/node_modules/pdf-parse/dist/pdf-parse/cjs/index.cjs:1:64744) {",
+        "  feature: 'isolate-host.URLSearchParams'",
+        "}",
+        "Node.js v24.0.0"
+      ]
+    },
+    {
+      "stdoutNoise": [],
+      "stubs": ["URLSearchParams"],
+      "exitCode": 1,
+      "equalToNode": false,
+      "error": "Warning: Cannot access the `require` function: \"TypeError: process.getBuiltinModule is not a function\". ⏎ Warning: Cannot polyfill `DOMMatrix`, rendering may be broken. ⏎ Warning: Cannot polyfill `ImageData`, rendering may be broken. ⏎ Warning: Cannot polyfill `Path2D`, rendering may be broken. ⏎ ReferenceError: DOMMatrix is not defined",
+      "frames": [
+        "at Object.<anonymous> (/node_modules/pdf-parse/dist/pdf-parse/cjs/index.cjs:1:191957)",
+        "at Object.<anonymous> (/workspace/chain/pdfparse2.cjs:4:22)"
+      ],
+      "stdoutHead": "",
+      "stderrAll": [
+        "Warning: Cannot access the `require` function: \"TypeError: process.getBuiltinModule is not a function\".",
+        "Warning: Cannot polyfill `DOMMatrix`, rendering may be broken.",
+        "Warning: Cannot polyfill `ImageData`, rendering may be broken.",
+        "Warning: Cannot polyfill `Path2D`, rendering may be broken.",
+        "ReferenceError: DOMMatrix is not defined",
+        "    at Object.<anonymous> (/node_modules/pdf-parse/dist/pdf-parse/cjs/index.cjs:1:191957)",
+        "    at Object.<anonymous> (/workspace/chain/pdfparse2.cjs:4:22)",
+        "Node.js v24.0.0"
+      ]
+    },
+    {
+      "stdoutNoise": [],
+      "stubs": ["URLSearchParams", "getBuiltinModule"],
+      "exitCode": 1,
+      "equalToNode": false,
+      "error": "Warning: Cannot access the `require` function: \"TypeError: URLConstructor is not a constructor\". ⏎ Warning: Cannot polyfill `DOMMatrix`, rendering may be broken. ⏎ Warning: Cannot polyfill `ImageData`, rendering may be broken. ⏎ Warning: Cannot polyfill `Path2D`, rendering may be broken. ⏎ ReferenceError: DOMMatrix is not defined",
+      "frames": [
+        "at Object.<anonymous> (/node_modules/pdf-parse/dist/pdf-parse/cjs/index.cjs:1:191957)",
+        "at Object.<anonymous> (/workspace/chain/pdfparse2.cjs:4:22)"
+      ],
+      "stdoutHead": "",
+      "stderrAll": [
+        "Warning: Cannot access the `require` function: \"TypeError: URLConstructor is not a constructor\".",
+        "Warning: Cannot polyfill `DOMMatrix`, rendering may be broken.",
+        "Warning: Cannot polyfill `ImageData`, rendering may be broken.",
+        "Warning: Cannot polyfill `Path2D`, rendering may be broken.",
+        "ReferenceError: DOMMatrix is not defined",
+        "    at Object.<anonymous> (/node_modules/pdf-parse/dist/pdf-parse/cjs/index.cjs:1:191957)",
+        "    at Object.<anonymous> (/workspace/chain/pdfparse2.cjs:4:22)",
+        "Node.js v24.0.0"
+      ]
+    },
+    {
+      "stdoutNoise": [],
+      "stubs": ["URLSearchParams", "getBuiltinModule", "DOMMatrix"],
+      "exitCode": 1,
+      "equalToNode": false,
+      "error": "Warning: Cannot access the `require` function: \"TypeError: URLConstructor is not a constructor\". ⏎ Warning: Cannot polyfill `ImageData`, rendering may be broken. ⏎ Warning: Cannot polyfill `Path2D`, rendering may be broken. ⏎ Error: Setting up fake worker failed: \"Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568)\".",
+      "frames": ["at eval (/node_modules/pdf-parse/dist/pdf-parse/cjs/index.cjs:1:288238)"],
+      "stdoutHead": "",
+      "stderrAll": [
+        "Warning: Cannot access the `require` function: \"TypeError: URLConstructor is not a constructor\".",
+        "Warning: Cannot polyfill `ImageData`, rendering may be broken.",
+        "Warning: Cannot polyfill `Path2D`, rendering may be broken.",
+        "Error: Setting up fake worker failed: \"Not implemented: isolate-host.esm (ES modules need URL, absent in the rifty isolate host; use CommonJS require(), ADR-0568)\".",
+        "    at eval (/node_modules/pdf-parse/dist/pdf-parse/cjs/index.cjs:1:288238)",
+        "    at wrapR (rifty-isolate-guest.js:113341:16)"
+      ]
+    }
+  ]
+}

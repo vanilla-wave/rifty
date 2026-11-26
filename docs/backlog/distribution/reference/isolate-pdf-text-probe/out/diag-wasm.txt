@@ -1,0 +1,12 @@
+--- sync
+  node  exit 0: wasm bytes 5298237 | new WebAssembly.Module: ok, 33 imports | exit event code 0
+  guest exit 0: wasm bytes 5298237 | new WebAssembly.Module: ok, 33 imports | exit event code 0
+--- compile
+  node  exit 0: wasm bytes 5298237 | WebAssembly.compile: settled (object, Module) | exit event code 0
+  guest exit 0: wasm bytes 5298237 | exit event code 0
+--- compile-keepalive
+  node  exit 0: wasm bytes 5298237 | WebAssembly.compile + interval: settled (object, Module) | exit event code 0
+  guest exit 0: wasm bytes 5298237 | WebAssembly.compile + interval: settled (object, Module) | exit event code 0
+--- compile-await-timer
+  node  exit 0: wasm bytes 5298237 | WebAssembly.compile + 3 s timer: settled (object, Module) | timer fired | exit event code 0
+  guest exit 0: wasm bytes 5298237 | WebAssembly.compile + 3 s timer: settled (object, Module) | timer fired | exit event code 0
