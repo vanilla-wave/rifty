@@ -93,6 +93,14 @@ const dependencyPolicyRules = [
     },
   },
   {
+    name: 'node-stream-core-has-no-production-importer',
+    severity: 'error',
+    comment:
+      'ADR-0575 §7 unit 8a: the generated Node stream core and its bindings reach no product module and no bundle — only their tests and the differential; unit 8c (runtime-js/stream-core-node-sources) wires them and removes this rule',
+    from: { pathNot: '(?:^|/)io/src/streams/node/' },
+    to: { path: '(?:^|/)io/src/streams/node/' },
+  },
+  {
     name: 'no-browser-imports-agent-bench',
     severity: 'error',
     comment: 'I8: the external diagnostic harness is never a browser/runtime dependency',
