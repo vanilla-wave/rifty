@@ -5,7 +5,7 @@ title: Runtime lifecycle work after guest code uses guest-replaceable intrinsics
 created: 2026-11-18
 why: The drain, keepalive and exit paths call `Map.prototype.get`, `Function.prototype.bind`, `Promise.prototype.constructor` and `process.emit` through the live globals, so guest code can change or hang its own run's outcome.
 sources: [docs/public/compat/isolate-host.md]
-code: [packages/io/src/event-emitter.ts, packages/runtime-js/src/builtins/fs.ts, packages/runtime-js/src/builtins/os.ts, packages/runtime-js/src/internal/event-loop-keepalive.ts, packages/runtime-js/src/builtins/timers.ts, packages/runtime-js/src/builtins/process-lifecycle-events.ts]
+code: [packages/io/src/event-emitter.ts, packages/runtime-js/src/builtins/fs.ts, packages/vfs/src/path.ts, packages/runtime-js/src/builtins/fs-path.ts, packages/runtime-js/src/builtins/os.ts, packages/runtime-js/src/internal/event-loop-keepalive.ts, packages/runtime-js/src/builtins/timers.ts, packages/runtime-js/src/builtins/process-lifecycle-events.ts]
 ---
 
 ## Context
@@ -90,6 +90,13 @@ in-process vs the same core on Node's bindings, Node v24.16.0):
   live `Promise.resolve().then` (`builtins/fs.ts:1241`), so `fs.ReadStream` cannot open
   (`threw replaced then called` / `Promise.resolve is not a function`); Node reads the file.
   Unit 4 (`runtime-js/fs-callbacks-io-turn`, PR #468) rewrites this path.
+- `String.prototype.slice/includes/startsWith/endsWith/split` throwing: the vfs path layer
+  (`vfs/src/path.ts` `normalizePath`/`isAbsolute`, `builtins/fs-path.ts` `pathToString`/`resolvePath`)
+  reads them live, so `fs.createReadStream` throws where Node reads; `Number.isInteger` likewise in
+  `fs.ts` `parseOpenFlags`.
+- `Map.prototype.get/set` throwing: io's `EventEmitter` (`on`, `emitNewListener`) reads them live,
+  the pipeline throws; `Map.prototype.delete`: `removeListener` throws inside the core's unpipe and
+  the run dies (exit 1). Node completes each.
 
 ## Challenge
 

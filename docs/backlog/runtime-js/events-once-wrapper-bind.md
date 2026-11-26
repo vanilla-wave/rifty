@@ -16,7 +16,8 @@ throwing function after load, then a pipeline): live Node and the core on Node's
 `threw replaced bind called` — Node's `lib/events.js` `_onceWrap` calls `onceWrapper.bind(state)`
 (stack `_onceWrap (node:events:637)`, `Transform.once`, `Readable.pipe`); the core on rifty's
 bindings completes (`A.B.C. 12 hello intrinsics finished:ok`): io's `once` builds no bound wrapper.
-The row is pinned in `tests/integration/node-streams-differential.test.ts` with this item as owner.
+The row is pinned in `tests/integration/node-streams-differential.test.ts` under
+`runtime-js/events-static-surface` (the stream core's `EventEmitter` dependency table).
 Not the class of `runtime-js/post-guest-paths-use-replaceable-intrinsics` (capturing intrinsics
 cannot make it equal: Node reads this one live).
 

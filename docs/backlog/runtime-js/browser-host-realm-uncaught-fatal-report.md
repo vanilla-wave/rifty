@@ -39,6 +39,11 @@ Facts established:
   `fatal-with-queued-*`, `rethrow-after-import`,
   `listener-rethrows-from-later-timer`; `distribution/no-coi-command-unhandled-rejection-exit`).
 
+2026-11-26 (stream core 8a differential, PR #471, in-process browser-host modules): an uncaught
+throw prints the stack only (`Error: replaced shift called` + frames), Node its report
+(`file:line`, source, caret, `Node.js v24.16.0`); rows `p1 … shift/splice throws` stderr pinned
+there with this item as owner.
+
 ## Question
 
 Can the child's report be written only after the dispatch, from the flag, while
