@@ -10,7 +10,7 @@ import { EXEMPT, checkLockfileRegistry, repoPaths } from './lockfile-registry.mj
 const FOREIGN = 'https://registry.example.invalid';
 const NPM = 'https://registry.npmjs.org';
 const ALLOWED = '(allowed: registry.npmjs.org, loopback, *.test)';
-const onHost = (carrier: string, n: number, host = 'registry.example.invalid') =>
+const onHost = (carrier: string, n: number, host = 'https://registry.example.invalid') =>
   `${carrier}: ${n} address line(s) on ${host} ${ALLOWED}`;
 const gitDep = (carrier: string, n: number, host: string) =>
   `${carrier}: ${n} git dependency address(es) on ${host} (git/URL dependencies are not allowed in committed locks: the host may be internal)`;
@@ -262,7 +262,7 @@ describe('allowed hosts: npmjs origin by parsed URL, loopback and .test (manager
 });
 
 describe('pnpm and yarn locks', () => {
-  it('pnpm YAML is parsed: quoted keys, aliases, folded scalars, git repo', () => {
+  it('pnpm read line-wise: quoted keys, anchors (aliases add no URL), block scalars, git repo', () => {
     const yaml = `lockfileVersion: '9.0'
 packages:
   "ms@2.1.3":
@@ -278,7 +278,7 @@ packages:
 `;
     const path = put('p/pnpm-lock.yaml', yaml);
     expect(check([path]).violations).toEqual([
-      onHost(path, 3),
+      onHost(path, 2),
       gitDep(path, 1, 'git.corp.example'),
     ]);
   });
