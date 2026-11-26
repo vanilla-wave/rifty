@@ -6,6 +6,8 @@
 
 ## 0.1.0-draft.1
 
+- Guest `Blob`/`File` and `buffer.Blob`/`buffer.File` as Node v24.16.0's (ADR-0578): pptxgenjs 4.0.1 `write()` and docx 9.15.3 `Packer.toBlob` give the package Node writes (`tests/web-api-scenario.test.ts`; were `blob is not supported by this platform` and `isolate-host.Blob`); WPT FileAPI 296/298 subtests equal live Node (`tests/wpt-fileapi.test.ts`); `stream/consumers.blob` works; `fs.openAsBlob` reads eagerly (declared ⚠️). `blob.stream()` is the `ReadableStream` gap.
+- Tests only: a shared WPT harness (`tests/wpt/` at the repo root: WPT's `testharness.js` and Node v24.16.0's vendored WPT files, sha256-pinned, compared per subtest with live Node; `tests/wpt-guest.ts` runs it in a sandbox); docx 9.15.3 as an exact devDependency.
 - First npm publish: a draft prerelease under dist-tag `next`, published by hand (`first-publish.sh --only @riftydev/isolate-host --tag next`; the repo keeps `0.1.0`, as for every package the release sets the version).
 - `dist/THIRD_PARTY_NOTICES.md` lists what the byte-copied `dist/guest.js` bundles (same as `@riftydev/isolate-guest`).
 - Tests only: the node:zlib goal's scenario as 10 cases vs live Node v24.16.0 (`tests/zlib-scenario.test.ts`, browser twins in `tests/browser-unit`/`tests/no-coi`), each pinning today's outcome; pdfkit 0.17.2 and pngjs 7.0.0 as exact devDependencies; the closure/oracle helpers move to `tests/closure-files.ts`.

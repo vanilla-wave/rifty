@@ -6,7 +6,7 @@
  */
 import { NotImplementedError } from '@riftydev/io';
 import { awaitDrain, registerBuiltin } from '@riftydev/runtime-js';
-import { Buffer } from '@riftydev/runtime-js/builtins/buffer';
+import nodeBuffer, { Buffer } from '@riftydev/runtime-js/builtins/buffer';
 import nodeConsole from '@riftydev/runtime-js/builtins/console';
 import { runNodeEntry } from '@riftydev/runtime-js/builtins/node-entry';
 import {
@@ -35,6 +35,7 @@ import type { Base } from './egress-gaps.ts';
 import { createHttp } from './egress-http.ts';
 import { createNet } from './egress-net.ts';
 import { bindNotImplemented } from './loud.ts';
+import { createBlobClasses } from './node-blob/bindings.ts';
 // Evaluated before every runtime module: the build injects it first (scripts/build-runtime.mjs).
 import {
   bridge,
@@ -397,6 +398,7 @@ function setUp(): void {
       return hostGap[name];
     });
   installCeilingGlobals();
+  installBlobGlobals();
   const g = globalThis as unknown as PortGlobals;
   portGlobals = {
     MessagePort: g.MessagePort,
@@ -405,6 +407,27 @@ function setUp(): void {
   };
   setProcessCwd(CWD);
   nativeExit = riftyProcess.exit.bind(riftyProcess) as () => void;
+}
+
+/**
+ * Node's `Blob`/`File` (ADR-0578): loaded with the runtime (their Node sources need its inspect,
+ * timers and codec), globals before guest code; `buffer.Blob`/`buffer.File`, which `buffer.ts`
+ * read at load (`undefined` here), bound to the same classes.
+ */
+function installBlobGlobals(): void {
+  const { Blob, File } = createBlobClasses();
+  for (const [name, value] of [
+    ['Blob', Blob],
+    ['File', File],
+  ] as const) {
+    Object.defineProperty(globalThis, name, {
+      value,
+      writable: true,
+      configurable: true,
+      enumerable: false,
+    });
+    nodeBuffer[name] = value;
+  }
 }
 
 /** A rejection isolated-vm found unhandled after the microtask checkpoint (a copy of the reason). */

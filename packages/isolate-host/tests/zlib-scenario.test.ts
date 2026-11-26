@@ -179,7 +179,7 @@ Node.js v24.0.0
 };
 /** Per step, when it stops being a pin. */
 const GREEN: Partial<Record<StepId, string>> = {
-  '4': 'red after unit 3 too: at least isolate-host TextDecoder(ascii), outside this goal',
+  '4': 'red after unit 3 too: isolate-host TextDecoder(ascii) — goal isolate-guest-web-api unit 3 (distribution/isolate-guest-textdecoder-legacy-encodings); then the isolate zlib gap until unit 3 here',
 };
 
 let oracle: ReadonlyMap<StepId, OracleStep>;

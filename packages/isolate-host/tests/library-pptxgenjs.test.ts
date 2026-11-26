@@ -8,51 +8,19 @@
  * the ISO timestamps of `docProps/core.xml` are masked, nested packages (chart data) by part.
  */
 import { readFileSync, realpathSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { ooxmlParts as parts } from './ooxml-parts.ts';
 import { closureFiles, inNode, inSandbox } from './package-closure.ts';
-
-interface ZipEntry {
-  readonly dir: boolean;
-  async(type: 'nodebuffer'): Promise<Buffer>;
-}
-interface Zip {
-  readonly files: Readonly<Record<string, ZipEntry>>;
-}
-interface JSZipStatic {
-  loadAsync(data: Uint8Array): Promise<Zip>;
-}
 
 const here = dirname(fileURLToPath(import.meta.url));
 const PPTXGENJS = realpathSync(join(here, '../node_modules/pptxgenjs'));
-// pptxgenjs's own JSZip: the reader the library writes with, in real Node.
-const JSZip = createRequire(join(PPTXGENJS, 'package.json'))('jszip') as JSZipStatic;
 // The probe's 1×1 PNG (`gen/pptx.cjs` data URI).
 const DOT_PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==',
   'base64',
 );
-
-const mask = (text: string): string =>
-  text.replace(/\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?Z/g, '<time>');
-
-/** Part name → masked text (XML) or base64 (binary); a nested package as `<name>!<part>`. */
-async function parts(bytes: Uint8Array, prefix = ''): Promise<Record<string, string>> {
-  const zip = await JSZip.loadAsync(bytes);
-  const out: Record<string, string> = {};
-  for (const [name, entry] of Object.entries(zip.files)) {
-    if (entry.dir) continue;
-    const data = await entry.async('nodebuffer');
-    if (/\.(xlsx|docx|pptx|zip)$/.test(name)) Object.assign(out, await parts(data, `${name}!`));
-    else if (/\.(xml|rels|vml)$/.test(name)) {
-      const text = data.toString('utf8');
-      out[prefix + name] = name === 'docProps/core.xml' ? mask(text) : text;
-    } else out[prefix + name] = data.toString('base64');
-  }
-  return out;
-}
 
 const closure = closureFiles('pptxgenjs', PPTXGENJS);
 
