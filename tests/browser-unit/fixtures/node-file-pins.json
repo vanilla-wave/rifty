@@ -315,7 +315,12 @@
       "stdout": "",
       "stderr": "ModuleLoadError: Failed to parse ESM source for <root>/main.mjs: Unexpected token (2:8)\n    at transformEsm (<runtime>/packages/runtime-js/src/module-loader/esm-ast.ts)\n    at cachedTransformEsm (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at finishPreparation (<runtime>/packages/runtime-js/src/module-loader/esm-job-preparation.ts)\n    at runAsyncGraph (<runtime>/packages/runtime-js/src/module-loader/esm-job.ts)\n    at executeEsm (<runtime>/packages/runtime-js/src/module-loader/esm-job.ts)\n    at Object.loadAsyncResolved (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n    at importNodeMain (<runtime>/packages/runtime-js/src/builtins/node-entry-main.ts)\n    at runNodeEntry (<runtime>/packages/runtime-js/src/builtins/node-entry.ts)\n    at runInPlace (<runtime>/packages/workbench/src/workers/no-coi-project-command.ts)\n",
       "exitCode": 1
-    }
+    },
+    "fs-write-read-buffer-ownership": "node",
+    "fs-read-stream-chunk-ownership": "node",
+    "fs-write-array-buffer-view-kinds": "node",
+    "fs-async-write-buffer-moment": "node",
+    "fs-write-view-bytes-intrinsics": "node"
   },
   "COI": {
     "entry-facts": "node",
@@ -633,7 +638,13 @@
       "stdout": "",
       "stderr": "ModuleLoadError: Failed to parse ESM source for <root>/main.mjs: Unexpected token (2:8)\n    at transformEsm (<runtime>/packages/runtime-js/src/module-loader/esm-ast.ts)\n    at cachedTransformEsm (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at finishPreparation (<runtime>/packages/runtime-js/src/module-loader/esm-job-preparation.ts)\n    at runAsyncGraph (<runtime>/packages/runtime-js/src/module-loader/esm-job.ts)\n    at executeEsm (<runtime>/packages/runtime-js/src/module-loader/esm-job.ts)\n    at Object.loadAsyncResolved (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n    at importNodeMain (<runtime>/packages/runtime-js/src/builtins/node-entry-main.ts)\n    at runNodeEntry (<runtime>/packages/runtime-js/src/builtins/node-entry.ts)\n    at Object.runEntry (<runtime>/packages/workbench/src/workers/node-entry-bootstrap.ts)\n",
       "exitCode": 1
-    }
+    },
+    "fs-write-read-buffer-ownership": "node",
+    "fs-read-stream-chunk-ownership": "node",
+    "fs-write-array-buffer-view-kinds": "node",
+    "fs-async-write-buffer-moment": "node",
+    "fs-write-view-bytes-intrinsics": "node",
+    "fs-write-shared-array-buffer-ownership": "node"
   },
   "isolate": {
     "first-line-html-close": "node",
