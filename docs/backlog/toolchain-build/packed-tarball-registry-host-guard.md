@@ -4,7 +4,7 @@ status: draft
 title: Can a published package tarball carry a non-public registry host?
 created: 2026-11-25
 why: The lockfile guard (PR #465) covers committed bytes only; nothing checks the packed tarballs of published `@riftydev/*` packages for a mirror host picked up at build time.
-sources: [PR #465, docs/backlog/toolchain-build/committed-lockfile-registry-host-guard.md]
+sources: [PR #465, tools/checks/lockfile-registry.mjs]
 code: [tools/checks/lockfile-registry.mjs, tools/checks/third-party-notices.mjs, tools/publishing/sync-publish-config.mjs]
 ---
 

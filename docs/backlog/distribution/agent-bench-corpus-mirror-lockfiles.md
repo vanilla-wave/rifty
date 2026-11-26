@@ -4,7 +4,7 @@ status: draft
 title: Frozen bench corpus seeds and evidence archives pin locks on an internal mirror
 created: 2026-11-25
 why: 19 frozen files embed package-locks whose `resolved` sits on an internal npm mirror — host leaked, replay outside that network unverified; the lockfile guard exempts them by sha256 until the user decides.
-sources: [PR #465, tools/checks/lockfile-registry.mjs, docs/backlog/toolchain-build/committed-lockfile-registry-host-guard.md]
+sources: [PR #465, tools/checks/lockfile-registry.mjs]
 code: [tools/checks/lockfile-registry.mjs, tools/agent-bench/corpus/core-v1.json, tools/agent-bench/corpus/boundary-v1.json]
 ---
 
