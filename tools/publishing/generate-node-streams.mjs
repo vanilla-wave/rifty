@@ -14,13 +14,7 @@
 // built, not minified (see `generate`); `buildNodeStreams` returns its modules for the verbatim test.
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import {
-  NODE,
-  cliMode,
-  emit,
-  nodeLicensePart,
-  vendorReader,
-} from './node-sources.mjs';
+import { NODE, cliMode, emit, nodeLicensePart, vendorReader } from './node-sources.mjs';
 
 // acorn: runtime-js's own dependency, not a root one (a root `node_modules/acorn` changes the
 // playground bundle's CJS interop, measured 2026-11-26). Pinned: its AST is the slicer's input.

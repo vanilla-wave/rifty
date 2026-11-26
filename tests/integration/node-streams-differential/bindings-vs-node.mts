@@ -176,7 +176,7 @@ for (const name of PRIMORDIALS as string[]) {
 for (const name of ['SafeMap', 'SafeSet']) {
   const run = async (C: new (x?: unknown) => Map<unknown, unknown> & Set<unknown>) => {
     const m = new C(name === 'SafeMap' ? [[1, 'a']] : [1, 2]);
-    return show([...m.entries()].map(String).join(';') + ` size=${m.size} has=${m.has(1)}`);
+    return show(`${[...m.entries()].map(String).join(';')} size=${m.size} has=${m.has(1)}`);
   };
   const [x, y] = [await run(ours[name] as never), await run(node.primordials[name] as never)];
   if (x !== y) out.push(`${name}: rifty ${x} / Node ${y}`);
