@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import addAbortListenerCase from '../../../tools/node-parity-runner/cases/events/add-abort-listener.case.ts';
+import { fsIoTurnPrograms } from './fs-io-turn-programs.ts';
 
 // ADR-0571: `node <file>` programs run verbatim in live Node
 // (temp dir) and in rifty (`<root>` = the project root). Three surfaces: what
@@ -190,6 +191,7 @@ console.log(JSON.stringify({
 
 /** Builtin rows on the browser hosts' own platform objects (`AbortSignal`, `EventTarget`). */
 export const builtinPrograms: readonly NodeFileProgram[] = [
+  ...fsIoTurnPrograms,
   {
     name: 'events-add-abort-listener',
     files: { 'main.js': addAbortListenerCase.code },

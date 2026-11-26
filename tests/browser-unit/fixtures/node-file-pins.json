@@ -87,7 +87,7 @@
     },
     "rejection-fs-enoent": {
       "stdout": "",
-      "stderr": "Error: ENOENT: no such file or directory, open 'missing.txt'\n    at fsError (<runtime>/packages/runtime-js/src/builtins/fs-errors.ts)\n    at toNodeFsError (<runtime>/packages/runtime-js/src/builtins/fs-errors.ts)\n    at withSyscall (<runtime>/packages/runtime-js/src/builtins/fs-errors.ts)\n    at readFileSync (<runtime>/packages/runtime-js/src/builtins/fs.ts)\n    at Object.readFile (<runtime>/packages/runtime-js/src/builtins/fs.ts)\n    at Object.<anonymous> (<root>/main.js:1:143)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at executeCjs (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n",
+      "stderr": "Error: ENOENT: no such file or directory, open 'missing.txt'\n    at fsError (<runtime>/packages/runtime-js/src/builtins/fs-errors.ts)\n    at toNodeFsError (<runtime>/packages/runtime-js/src/builtins/fs-errors.ts)\n    at withSyscall (<runtime>/packages/runtime-js/src/builtins/fs-errors.ts)\n    at readFileSync (<runtime>/packages/runtime-js/src/builtins/fs.ts)\n    at <runtime>/packages/runtime-js/src/builtins/fs.ts\n    at Immediate.<anonymous> (<runtime>/packages/runtime-js/src/builtins/fs-io-turn.ts)\n    at runImmediate (<runtime>/packages/runtime-js/src/builtins/timers.ts)\n    at MessagePort.drainOneImmediate (<runtime>/packages/runtime-js/src/builtins/timers.ts)\n",
       "exitCode": 1
     },
     "rejection-after-stack-read": {
@@ -315,6 +315,19 @@
       "stdout": "",
       "stderr": "ModuleLoadError: Failed to parse ESM source for <root>/main.mjs: Unexpected token (2:8)\n    at transformEsm (<runtime>/packages/runtime-js/src/module-loader/esm-ast.ts)\n    at cachedTransformEsm (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at finishPreparation (<runtime>/packages/runtime-js/src/module-loader/esm-job-preparation.ts)\n    at runAsyncGraph (<runtime>/packages/runtime-js/src/module-loader/esm-job.ts)\n    at executeEsm (<runtime>/packages/runtime-js/src/module-loader/esm-job.ts)\n    at Object.loadAsyncResolved (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n    at importNodeMain (<runtime>/packages/runtime-js/src/builtins/node-entry-main.ts)\n    at runNodeEntry (<runtime>/packages/runtime-js/src/builtins/node-entry.ts)\n    at runInPlace (<runtime>/packages/workbench/src/workers/no-coi-project-command.ts)\n",
       "exitCode": 1
+    },
+    "fs-callback-turn-order": "node",
+    "fs-callback-chain-lifecycle": "node",
+    "fs-promises-esm-await-loop": "node",
+    "fs-exit-completes-submitted": {
+      "stdout": "",
+      "stderr": "NotImplementedError: Not implemented: child_process.spawn.service-worker (no-COI Node children require a controlling rifty Service Worker)\n    at noCoiChildTransport (<runtime>/packages/runtime-js/src/ipc/no-coi-child-transport.ts)\n    at openNoCoiChildRoute (<runtime>/packages/runtime-js/src/ipc/no-coi-child-transport.ts)\n    at spawnNoCoiChild (<runtime>/packages/runtime-js/src/ipc/no-coi-child-process.ts)\n    at spawn (<runtime>/packages/runtime-js/src/builtins/child_process.ts)\n    at eval (<root>/main.js:4:17)\n    at new Promise (<anonymous>)\n    at run (<root>/main.js:3:23)\n    at eval (<root>/main.js:15:106)\n    at Object.<anonymous> (<root>/main.js:16:3)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n",
+      "exitCode": null
+    },
+    "fs-worker-terminate-in-flight": {
+      "stdout": "",
+      "stderr": "NotImplementedError: Not implemented: worker_threads.Worker (no-COI toolchain Workers require a separate event loop; use cross-origin isolation and the kernel-backed runtime)\n    at new Worker (<runtime>/packages/runtime-js/src/builtins/worker_threads.ts)\n    at Object.<anonymous> (<root>/main.js:2:11)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at executeCjs (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n    at loadedNamespace (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.importCjs (<runtime>/packages/runtime-js/src/module-loader/cjs-interop-authority.ts)\n    at Object.loadAsyncResolved (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n",
+      "exitCode": null
     }
   },
   "COI": {
@@ -405,7 +418,7 @@
     },
     "rejection-fs-enoent": {
       "stdout": "",
-      "stderr": "Error: ENOENT: no such file or directory, open 'missing.txt'\n    at fsError (<runtime>/packages/runtime-js/src/builtins/fs-errors.ts)\n    at toNodeFsError (<runtime>/packages/runtime-js/src/builtins/fs-errors.ts)\n    at withSyscall (<runtime>/packages/runtime-js/src/builtins/fs-errors.ts)\n    at readFileSync (<runtime>/packages/runtime-js/src/builtins/fs.ts)\n    at Object.readFile (<runtime>/packages/runtime-js/src/builtins/fs.ts)\n    at Object.<anonymous> (<root>/main.js:1:143)\n    at compileCjsSource (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.value (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n    at Object.defaultJsExtension [as .js] (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at executeCjs (<runtime>/packages/runtime-js/src/module-loader/cjs.ts)\n",
+      "stderr": "Error: ENOENT: no such file or directory, open 'missing.txt'\n    at fsError (<runtime>/packages/runtime-js/src/builtins/fs-errors.ts)\n    at toNodeFsError (<runtime>/packages/runtime-js/src/builtins/fs-errors.ts)\n    at withSyscall (<runtime>/packages/runtime-js/src/builtins/fs-errors.ts)\n    at readFileSync (<runtime>/packages/runtime-js/src/builtins/fs.ts)\n    at <runtime>/packages/runtime-js/src/builtins/fs.ts\n    at Immediate.<anonymous> (<runtime>/packages/runtime-js/src/builtins/fs-io-turn.ts)\n    at runImmediate (<runtime>/packages/runtime-js/src/builtins/timers.ts)\n    at MessagePort.drainOneImmediate (<runtime>/packages/runtime-js/src/builtins/timers.ts)\n",
       "exitCode": 1
     },
     "rejection-after-stack-read": {
@@ -633,7 +646,12 @@
       "stdout": "",
       "stderr": "ModuleLoadError: Failed to parse ESM source for <root>/main.mjs: Unexpected token (2:8)\n    at transformEsm (<runtime>/packages/runtime-js/src/module-loader/esm-ast.ts)\n    at cachedTransformEsm (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at finishPreparation (<runtime>/packages/runtime-js/src/module-loader/esm-job-preparation.ts)\n    at runAsyncGraph (<runtime>/packages/runtime-js/src/module-loader/esm-job.ts)\n    at executeEsm (<runtime>/packages/runtime-js/src/module-loader/esm-job.ts)\n    at Object.loadAsyncResolved (<runtime>/packages/runtime-js/src/module-loader/loader.ts)\n    at <runtime>/packages/runtime-js/src/module-loader/loader.ts\n    at importNodeMain (<runtime>/packages/runtime-js/src/builtins/node-entry-main.ts)\n    at runNodeEntry (<runtime>/packages/runtime-js/src/builtins/node-entry.ts)\n    at Object.runEntry (<runtime>/packages/workbench/src/workers/node-entry-bootstrap.ts)\n",
       "exitCode": 1
-    }
+    },
+    "fs-callback-turn-order": "node",
+    "fs-callback-chain-lifecycle": "node",
+    "fs-promises-esm-await-loop": "node",
+    "fs-exit-completes-submitted": "node",
+    "fs-worker-terminate-in-flight": "node"
   },
   "isolate": {
     "first-line-html-close": "node",
