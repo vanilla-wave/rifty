@@ -65,7 +65,7 @@ test('port reference installs and sees a moved port without ArrayBuffer.prototyp
 }) => {
   await gotoHarness(page);
   const rows = await page.evaluate(async (url) => {
-    const removed = delete (ArrayBuffer.prototype as { detached?: boolean }).detached;
+    const removed = Reflect.deleteProperty(ArrayBuffer.prototype, 'detached');
     const out = [
       `removed=${removed && !('detached' in ArrayBuffer.prototype)}`,
       `before=${'ref' in MessagePort.prototype}`,
