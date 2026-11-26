@@ -19,7 +19,7 @@ Not wired: nothing imports it (as the zlib engine, PR #452). User scenario: the 
 program's outcome: the carrier, `packages/isolate-host/tests/streams-scenario.test.ts`, stays as is).
 
 Baseline on main `aa7b332cc` (after #455, #456, #457, #462, #467, #469), in-process, Node v24.16.0:
-the generated core on Node's own bindings equals live Node on every row of every item run (119); on
+the generated core on Node's own bindings equals live Node on every row of every item run (120); on
 rifty's bindings it equals that on all but the rows pinned below. The probe's `results/` numbers
 predate #455–#469 and are not this unit's base.
 
@@ -42,7 +42,10 @@ Added here (not in the table): `p1-intrinsics-replaced` — a guest replaces an 
 18 of 22 rows equal; 4 differ in rifty modules the core binds to, pinned: io `EventEmitter.emit`'s
 live `slice` and `fs.open`'s live `Promise` (3 rows, owner
 `runtime-js/post-guest-paths-use-replaceable-intrinsics`); rifty `once` not reading `bind` where
-Node's `_onceWrap` does (owner `runtime-js/events-once-wrapper-bind`).
+Node's `_onceWrap` does (owner `runtime-js/events-once-wrapper-bind`). And `p2-emitter-store`: the
+core reads Node's emitter store (`this._events` pre-shaped by its constructors, walked by
+`Stream.prototype.eventNames`, `legacy.js:98`); rifty's emitter keeps `_listenersMap`, so
+`eventNames()` is `[]` on every core stream — 3 rows pinned, owner `runtime-js/events-prototype-shape`.
 
 ## Challenge
 
@@ -69,7 +72,7 @@ challenge: 2026-11-25 — none (child of a goal; premise in goal §Challenge). T
    `p1-intrinsics-replaced`'s rows equal Node where only the core and the bindings run. → ADR-0575, I1
 4. Differential (`tests/integration/node-streams-differential.test.ts`, CI `test:run`): every
    fixture program of the goal (`packages/isolate-host/tests/fixtures/streams-scenario/`), the hook
-   matrix, `p1` (a process per row) and the parity cases above, three ways — live Node, the core on
+   matrix, `p1` (a process per row), `p2` and the parity cases above, three ways — live Node, the core on
    Node's bindings, the core on rifty's — compared whole (exit, every stdout line, stderr without
    frames and the loader's source excerpt, the files written; the one exception, `MASKED_OUTPUT`:
    `w1` `win-4.out`, whose bytes a race inside Node sets — 7 of 8 live-Node runs 0 B, 1 of 8 1024 B).
@@ -77,7 +80,7 @@ challenge: 2026-11-25 — none (child of a goal; premise in goal §Challenge). T
    live Node on every row; on rifty's it equals that on every row but `PINNED`, each pinned on
    today's rifty value with its owner: 4 (`runtime-js/fs-callbacks-io-turn`), 5
    (`runtime-js/fs-writev-fsync`), AL, `runtime-js/post-guest-paths-use-replaceable-intrinsics`,
-   `runtime-js/events-once-wrapper-bind`. Rows of landed owners 1, 2, 3 are equal, not pinned (4b's
+   `runtime-js/events-once-wrapper-bind`, `runtime-js/events-prototype-shape`. Rows of landed owners 1, 2, 3 are equal, not pinned (4b's
    rows are all Workbench, not run). A pinned row that turns equal is red until
    its pin goes; every program and case is run or in `NOT_RUN` with its reason. → I1–I7, I9, I10
 5. Not wired: `check:arch` `node-stream-core-has-no-production-importer` (a product importer is
@@ -101,7 +104,7 @@ PR #468) turns red here: the PR merging second drops it.
 The oracle is live Node v24.16.0 and Node's own bindings, per row (Acceptance 4). RED targets,
 pinned with owner: `b1` writev types and `m5` member types (5); `m4`/`m5` timer rows (4); `m9` three
 stopping-listener rows (AL); `p1` slice / then / Promise (post-guest intrinsics), bind
-(`runtime-js/events-once-wrapper-bind`).
+(`runtime-js/events-once-wrapper-bind`); `p2` three `eventNames` rows (`runtime-js/events-prototype-shape`).
 
 ## Out of scope
 

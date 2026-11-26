@@ -85,7 +85,7 @@ Core, three adjacent PRs (ADR-0575 §7):
   - `internal/events/abort_listener` whole (variant A); AL decides the variant;
   - not wired: `check:arch` «no product importer» and 0 B on every bundle artifact;
   - a CI differential «Node's bindings = rifty's» over the rows `results/ownership.txt` gives to the
-    core. Rows of landed owners equal; rows of 4, 5, AL and two binding findings (`post-guest-paths-use-replaceable-intrinsics`, `events-once-wrapper-bind`) pinned on today's rifty value with the owner (S7 closed in the unit). `zlib-diff`
+    core. Rows of landed owners equal; rows of 4, 5, AL and three binding findings (`post-guest-paths-use-replaceable-intrinsics`, `events-once-wrapper-bind`, `events-prototype-shape`) pinned on today's rifty value with the owner (S7 closed in the unit). `zlib-diff`
     is not part of 8a: it is zlib unit 3's entry criterion, measured there after 8c.
 - **8b** `runtime-js/stream-core-consumer-guard-rows`: regression rows for internal consumers
   and non-stream objects, green on today's core (§Regression risk).

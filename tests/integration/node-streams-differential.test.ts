@@ -58,6 +58,8 @@ const IO_TURN = 'runtime-js/fs-callbacks-io-turn';
 const AL = 'runtime-js/stream-core-abort-listeners-host-event-target';
 // TODO(backlog: runtime-js/post-guest-paths-use-replaceable-intrinsics)
 const LIVE = 'runtime-js/post-guest-paths-use-replaceable-intrinsics';
+// TODO(backlog: runtime-js/events-prototype-shape)
+const EE_STORE = 'runtime-js/events-prototype-shape';
 // TODO(backlog: runtime-js/events-once-wrapper-bind)
 const ONCE_BIND = 'runtime-js/events-once-wrapper-bind';
 const pin = (owner: string, rifty: string) => ({ owner, rifty });
@@ -95,6 +97,15 @@ const PINNED: Readonly<Record<string, Readonly<Record<string, { owner: string; r
       ),
       'finished(r, {signal}) after a stopping listener': pin(AL, 'pending'),
       'addAbortSignal(signal, r) after a stopping listener': pin(AL, 'destroyed=false'),
+    },
+    // rifty's EventEmitter keeps listeners in `_listenersMap`; the core's `eventNames` walks `_events`.
+    'p2-emitter-store': {
+      'Readable eventNames, _events keys, _eventsCount': pin(
+        EE_STORE,
+        '[] close,error,data,end,readable undefined',
+      ),
+      'Writable eventNames, error listeners': pin(EE_STORE, '[] 1'),
+      'pipe destination: error listeners, eventNames': pin(EE_STORE, '1 []'),
     },
     // io's EventEmitter.emit reads `slice` live: the run dies (exit 1), Node completes.
     'p1-intrinsics-replaced: Array.prototype.slice throws': {
