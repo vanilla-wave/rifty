@@ -11,9 +11,9 @@ export const fsMatrix = {
       'utf8 strings; any TypedArray/DataView (incl. offset and SharedArrayBuffer views) writes its raw bytes, copied: the file never shares memory with a program buffer, written or read (`fs/write-read-buffer-ownership`, `fs/write-array-buffer-view-kinds`)',
     ],
     [
-      'write `data` that is not a string or ArrayBufferView; `writeSync` of a non-`Uint8Array` view',
+      'write `data` that is neither a string nor an ArrayBufferView',
       '⚠️',
-      'Array/ArrayBuffer are written as wrong bytes, a number or `null` throws a code-less TypeError (Node: `ERR_INVALID_ARG_TYPE`); `writeSync(fd, new Uint16Array(…))` throws (Node writes its bytes) — `backlog/runtime-js/fs-write-data-argument-types`',
+      'An `ArrayBuffer`/`SharedArrayBuffer` is Node\'s `ERR_INVALID_ARG_TYPE` on the sync and `fs.promises` entries (`fs/write-array-buffer-refused`; callback `writeFile` hands it to the callback, Node throws). A number/`null`/`undefined` writes an empty file and an Array or other object its elements\' bytes (Node: `ERR_INVALID_ARG_TYPE`, callback forms synchronously); `writeSync`/`write` refuse them without a code — `backlog/runtime-js/fs-write-data-argument-types`. A program that patched `%TypedArray%.prototype` members or replaced global `Uint8Array`/`DataView`/`ArrayBuffer` writes as Node in-process and in the isolate (`fs/write-view-bytes-patched-intrinsics`); on Workbench and the SDK the store transport fails — `backlog/runtime-js/post-guest-paths-use-replaceable-intrinsics`',
     ],
     ['`mkdirSync({ recursive })`', '✅', 'Creates parent directories'],
     [
@@ -58,7 +58,7 @@ export const fsMatrix = {
     [
       'Buffer mutated while an async write is pending',
       '⚠️',
-      "A mutation after the write completed never reaches the file, and `fs.write(fd)` / a `WriteStream` before `open` read it as Node does (`fs/async-write-buffer-moment`). `promises.writeFile`/`appendFile`, callback `writeFile` and an open `WriteStream` take the bytes at the call: a mutation later in the caller's turn lands in Node's file, not rifty's — `backlog/runtime-js/fs-callbacks-io-turn`; one in a `setImmediate` — `backlog/runtime-js/fs-async-op-io-rounds`",
+      "A mutation after the write completed never reaches the file; one in the caller's synchronous turn after a `WriteStream` write before `open` lands, as in Node (`fs/async-write-buffer-moment`). Not Node: `promises.writeFile`/`appendFile`, callback `writeFile` and an open `WriteStream` take the bytes at the call (a mutation in the caller's turn or a microtask lands in Node's file, not rifty's), `fs.write(fd)` in the next microtask (one in a microtask lands in Node's) — `backlog/runtime-js/fs-callbacks-io-turn`; one in a `setImmediate` — `backlog/runtime-js/fs-async-op-io-rounds`. After `fs.write(fd)` a mutation in the caller's turn or a `nextTick` races in Node (macOS 9,9,9; Linux CI 1,2,3), not pinned",
     ],
     [
       'Callback `fs.appendFile` / `fs.rm`',

@@ -11,6 +11,7 @@
 
 import { NotImplementedError, bytesToString } from '@riftydev/io';
 import { VfsError } from '@riftydev/vfs';
+import { invalidArgType } from '../internal/node-received.ts';
 import { Buffer, type Encoding } from './buffer.ts';
 import { fsError, withSyscall } from './fs-errors.ts';
 import { type PathLike, pathToString, resolvePath } from './fs-path.ts';
@@ -27,6 +28,8 @@ import { syncMirror } from './fs-sync-mirror.ts';
 import { setTimes, utimesArgs } from './fs-times.ts';
 import { link, linkSync, statfsSync, symlink, symlinkSync } from './loud-members.ts';
 import { runNodeCallback } from './process-lifecycle-events.ts';
+import { bytesOf, copyBytes, isAnyArrayBuffer, isView, jsViewBytes } from './view-bytes.ts';
+const { Uint8Array } = globalThis; // as at load: a program replacing the global changes no write
 
 type Callback<T> = (err: NodeJS.ErrnoException | null, value?: T) => void;
 type OpenFlags = string | number;
@@ -264,11 +267,22 @@ function decodeResult(bytes: Uint8Array, encoding: Encoding | null): Uint8Array 
   return bytesToString(bytes, encoding);
 }
 
-/** Write data as raw bytes: a string encoded, any TypedArray/DataView as a view of its own bytes. */
+/**
+ * Write data as bytes: a string encoded; a view's memory as the engine's, `byteLength` long as Node's
+ * lib/fs reads it (the caller copies a view the store keeps). (Shared)ArrayBuffer: Node's refusal.
+ * Other object: its elements, copied; primitive: as given (Node refuses both: fs-write-data-argument-types).
+ */
 function encodeData(data: Uint8Array | string, encoding: Encoding | null): Uint8Array {
   if (typeof data === 'string') return Buffer.from(data, encoding ?? 'utf8');
-  if (!ArrayBuffer.isView(data)) return data;
-  return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+  if (isView(data)) return bytesOf(data, 0, data.byteLength);
+  if (isAnyArrayBuffer(data)) {
+    const expected = 'of type string or an instance of Buffer, TypedArray, or DataView';
+    throw invalidArgType('"data" argument', expected, data);
+  }
+  if (data === null || typeof data !== 'object') return data;
+  const own = new Uint8Array((data as ArrayLike<number>).length >>> 0);
+  own.set(data as ArrayLike<number>);
+  return own;
 }
 
 /**
@@ -529,9 +543,11 @@ function writeFileImpl(
   const flag = flagOf(opts) ?? defaultFlag;
   const parsed = parseOpenFlags(flag);
   const next = encodeData(data, enc);
-  // A store may keep what it is given (`MemoryFsSync`), never a guest's memory: one copy of
-  // a view; an encoded string is already ours; merged writes build their own bytes.
-  const owned = () => (typeof data === 'string' ? next : next.slice());
+  // A store may keep what it is given (`MemoryFsSync`), never a guest's memory: one copy of a
+  // view; merged writes build their own bytes. A truncating write copies before open's side
+  // effects, so a refused copy leaves no file.
+  const copy = () => (isView(data) ? copyBytes(next) : next);
+  const own = parsed.truncate && !parsed.append ? copy() : undefined;
   // 'w'/'w+' fast path: plain overwrite, one mirror call (errors open-shaped).
   // Keep behavioral gates here in sync with openPreflight: numeric flags can
   // smuggle O_DIRECTORY alongside the w-family bits, and that must be checked
@@ -543,7 +559,7 @@ function writeFileImpl(
     !parsed.append &&
     !parsed.directory
   ) {
-    withSyscall('open', p, () => syncMirror().writeFileSync(np, owned()));
+    withSyscall('open', p, () => syncMirror().writeFileSync(np, own ?? copy()));
     return;
   }
   const { existed } = openPreflight(p, parsed);
@@ -559,7 +575,7 @@ function writeFileImpl(
     return;
   }
   if (parsed.truncate || !existed) {
-    withSyscall('open', p, () => syncMirror().writeFileSync(np, owned()));
+    withSyscall('open', p, () => syncMirror().writeFileSync(np, own ?? copy()));
     return;
   }
   withSyscall('open', p, () => {
@@ -988,14 +1004,14 @@ export function writeSync(
       ? writeStdio(fd, bytes, rawPos === -1 ? null : rawPos)
       : writeBytesAt(record, bytes, rawPos === -1 ? null : rawPos);
   }
-  if (!(data instanceof Uint8Array)) throw new TypeError('data must be a string or Uint8Array');
+  if (!isView(data)) throw new TypeError('data must be a string or Uint8Array');
   const offset = offsetOrPosition ?? 0;
   const length = typeof lengthOrEncoding === 'number' ? lengthOrEncoding : data.byteLength - offset;
   // Node: position -1 (and null) means "write at the current fd position".
   const rawPos = position ?? null;
   const pos = rawPos === -1 ? null : rawPos;
   checkedSliceBounds(data, offset, length);
-  const bytes = data.subarray(offset, offset + length);
+  const bytes = bytesOf(data, offset, length);
   return record === null ? writeStdio(fd, bytes, pos) : writeBytesAt(record, bytes, pos);
 }
 
@@ -1118,14 +1134,14 @@ export const promises = {
     data: Uint8Array | string,
     opts?: WriteFileOptions | Encoding | null,
   ): Promise<void> {
-    writeFileSync(p, data, opts);
+    writeFileSync(p, isView(data) ? jsViewBytes(data) : data, opts);
   },
   async appendFile(
     p: string,
     data: Uint8Array | string,
     opts?: WriteFileOptions | Encoding | null,
   ): Promise<void> {
-    appendFileSync(p, data, opts);
+    appendFileSync(p, isView(data) ? jsViewBytes(data) : data, opts);
   },
   async readdir(
     p: string,
@@ -1372,7 +1388,8 @@ export function writeFile(
 ): void {
   const optsFinal = typeof opts === 'function' ? null : opts;
   const cbFinal = (typeof opts === 'function' ? opts : cb) as Callback<void>;
-  promises.writeFile(p, data, optsFinal).then(
+  // lib/fs semantics (not fs/promises'): the bytes as writeFileSync reads them.
+  new Promise<void>((done) => done(writeFileSync(p, data, optsFinal))).then(
     () => runNodeCallback(cbFinal, null),
     (e) => runNodeCallback(cbFinal, e as NodeJS.ErrnoException),
   );

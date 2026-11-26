@@ -3,8 +3,9 @@ import type { ParityCase } from '../../src/types.ts';
 /**
  * An async write never changes the file after it completed: a mutation of the
  * caller's buffer once the callback ran / the promise settled leaves the file
- * alone, on every async write entry. Plus the caller-tick rows that equal Node
- * by their own read moment (fs.write, a WriteStream before open). Declared ≠
+ * alone, on every async write entry. Plus the caller-tick row that equals Node
+ * by its own read moment (a WriteStream before open); after `fs.write(fd)` that
+ * row races in Node (9,9,9 on macOS, 1,2,3 on Linux CI). Declared ≠
  * Node: a caller-tick mutation after promises.writeFile/appendFile, writeFile
  * cb or an open WriteStream's write (Node writes it, rifty reads at the call;
  * owner backlog runtime-js/fs-callbacks-io-turn). appendFile(cb), FileHandle:
@@ -32,7 +33,7 @@ const c: ParityCase = {
         ws.on('open', () => { ws.write(b); s(); ws.end(res); });
       }),
     };
-    const callerTick = ['write fd cb', 'WriteStream before open'];
+    const callerTick = ['WriteStream before open'];
     (async () => {
       let n = 0;
       for (const [entry, run] of Object.entries(entries)) {

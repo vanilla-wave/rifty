@@ -20,6 +20,15 @@ write rows of `m2`/`m3` = Node on every host; carrier write programs (`c-gracefu
 `c-unzip-stored`, `c-xlsx-roundtrip` write half) = Node; the 16 MiB stream on Workbench within a small
 factor of today's 518 ms in a project with many files; the durability guard; PR #434's cases.
 
+## Open findings (PR #469 external review)
+
+- Today's class hands the store its own image (`persist()` → `writeFileSync(np, this.bytes)`), and a
+  later in-range write (`r+`, `start`) overlays `this.bytes` in place: the store's bytes change before
+  the next flush, with no write call (no mtime bump; a reader of the store sees it first). Measured
+  2026-11-26 (`r+`: write `XY`, then in its callback write `Z` and `readFileSync` at once): Node v24.16.0
+  `XYZdef` 20/20, rifty in-process `XYZdef` — no divergence found from a program yet. Node's fd-backed
+  class writes through `fs.write`, which closes it by construction (owner: this unit).
+
 ## Open findings (review round 4)
 
 Carried verbatim from the manager's review of PR #450, round 4 (2026-11-25); owner = this unit. They close when the unit is taken into work, by its own contract and review.

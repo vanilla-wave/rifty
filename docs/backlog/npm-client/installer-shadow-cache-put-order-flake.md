@@ -5,8 +5,8 @@ title: installer-shadow-recipe-v2 contract test asserts cross-package cache.puts
 created: 2026-08-16
 why: one order-sensitive assert intermittently fails pr:check test:run under load (observed 2026-08-16, twice), poisoning unrelated PR gates
 user_story: As an agent running pr:check, I want deterministic gates, but installer-shadow-recipe-v2-embedded-source-authority.contract.test.ts ("fresh nested consumes the official embedded source without standalone acquisition") asserts the ORDER of cross-package cache.puts while concurrent tarball acquisition completes in load-dependent order
-sources: [packages/npm-client/src/installer-shadow-recipe-v2-embedded-source-authority.contract.test.ts]
-code: [packages/npm-client/src/installer-shadow-recipe-v2-embedded-source-authority.contract.test.ts]
+sources: [packages/npm-client/src/installer-shadow-recipe-v2-embedded-source-authority.contract.test.ts, packages/npm-client/src/shadow-recipe-v2-data-authority.contract.test.ts]
+code: [packages/npm-client/src/installer-shadow-recipe-v2-embedded-source-authority.contract.test.ts, packages/npm-client/src/shadow-recipe-v2-data-authority.contract.test.ts]
 ---
 
 ## Context
@@ -20,6 +20,13 @@ OpfsFsSync wiring — concurrent acquisition completion order is
 load-timing-sensitive; the assert should be order-insensitive on the
 cross-package axis (per-package order may stay exact). Fault class:
 observable-order (test-side over-pin), not a product defect.
+
+Second instance 2026-11-26, CI run 45732002074 (`unit-and-conformance (run)`, PR #469 at 28cbc6ece,
+which touches only guest `node:fs`; npm-client does not reach it): `shadow-recipe-v2-data-authority.contract.test.ts`
+› `shadow recipe v2 data authority — ordinary install` › `'esbuild transitive fresh supported'`,
+`expectEventLedger` (`:391`): expected `… "tarball:esbuild-wasm", "cache:put:shadow-authority-host@1.0.0",
+"cache:put:esbuild-wasm@0.28.0"`, received the two `cache:put` swapped. Same class: the
+`!concurrentFreshPuts` branch pins cross-package put order.
 
 ## Acceptance (sketch — settle at pickup)
 

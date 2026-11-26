@@ -98,7 +98,9 @@ describe('state that cannot be kept', () => {
         await sb.writeFile('keep', 'k');
         await sb.writeFile(
           'fill.js',
-          "require('fs').writeFileSync('big', Buffer.alloc(40 << 20, 1)); console.log('wrote')",
+          // 30 MiB as three files: the store keeps its own copy of what a write is given, so one
+          // 40 MiB write (the old setup) would hold 80 MiB at once.
+          "for (let i = 0; i < 3; i++) require('fs').writeFileSync('big' + i, Buffer.alloc(10 << 20, 1)); console.log('wrote')",
         );
         const r = await sb.exec('fill.js', { memoryLimitMb: 64 });
         expect(r).toEqual({

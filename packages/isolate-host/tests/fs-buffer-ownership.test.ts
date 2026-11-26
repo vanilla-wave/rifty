@@ -6,9 +6,12 @@
  */
 import { expect, it } from 'vitest';
 import moment from '../../../tools/node-parity-runner/cases/fs/async-write-buffer-moment.case.ts';
+import refused from '../../../tools/node-parity-runner/cases/fs/write-array-buffer-refused.case.ts';
 import viewKinds from '../../../tools/node-parity-runner/cases/fs/write-array-buffer-view-kinds.case.ts';
 import ownership from '../../../tools/node-parity-runner/cases/fs/write-read-buffer-ownership.case.ts';
 import shared from '../../../tools/node-parity-runner/cases/fs/write-shared-array-buffer-ownership.case.ts';
+import intrinsics from '../../../tools/node-parity-runner/cases/fs/write-view-bytes-intrinsics.case.ts';
+import patched from '../../../tools/node-parity-runner/cases/fs/write-view-bytes-patched-intrinsics.case.ts';
 import { createSandbox, runCode } from '../src/index.ts';
 import { nodeEval } from './support.ts';
 
@@ -18,9 +21,15 @@ const programs = [
   ['buffers', ownership.code],
   ['view kinds', viewKinds.code],
   ['async writes', moment.code],
+  ['view bytes, view shapes', intrinsics.code],
+  ['view bytes, patched shared intrinsics', patched.code],
 ] as const;
 
-for (const [name, code] of [...programs, ['SharedArrayBuffer', shared.code]] as const) {
+for (const [name, code] of [
+  ...programs,
+  ['SharedArrayBuffer', shared.code],
+  ['ArrayBuffer data refused', refused.code],
+] as const) {
   it(`runCode: file bytes are not the program's ${name}`, async () => {
     const oracle = nodeEval(code);
     expect(oracle.code).toBe(0);

@@ -56,6 +56,16 @@ throw; a `-1` getter gives `-1` and `os.cpus().length` 0 (Node `12 12`, its
 `os` reads the binding); `5e6` ends the run `termination: 'memory'`. On the
 browser hosts the same read hits the browser's `WorkerNavigator`.
 
+Store transport on the browser hosts (PR #469, measured 2026-11-26 with
+`tools/node-parity-runner/cases/fs/write-view-bytes-patched-intrinsics.case.ts` as a `node <file>`
+program; in-process and isolate equal Node): COI Workbench — a guest that patched
+`%TypedArray%.prototype.subarray` or `byteLength`, or replaced global `Uint8Array`/`DataView`/`ArrayBuffer`,
+makes the next write fail inside the sync-rpc transport (`sync-rpc call 'fs.writeChunk' failed:
+decodeReply: unknown frame discriminator 0x5`, `offset is out of bounds`, `guest Uint8Array called`);
+no-COI SDK — the run passes but OPFS write-through fails afterwards (`SandboxPersistenceError: OPFS
+persistence failed (7 unhealed): … guest Uint8Array called; … guest DataView called`). Node writes the
+bytes. Compat: `fs.md` row on write data.
+
 ## Challenge
 
 challenge: 2026-11-18 — finding capture; no premise critic (README §Challenge)

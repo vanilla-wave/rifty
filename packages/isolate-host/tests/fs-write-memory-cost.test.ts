@@ -46,3 +46,14 @@ it('sandbox exec: the refused write names its error, the sandbox stays usable', 
     await sandbox.destroy();
   }
 });
+
+it("a refused 'wx' write leaves no file: the copy comes before open creates it", async () => {
+  const code = `const fs = require('node:fs');
+const b = new Uint8Array(50 * 1024 * 1024);
+try { fs.writeFileSync('/big', b, { flag: 'wx' }); } catch (e) { console.log(e.name, fs.existsSync('/big')); }`;
+  expect(await runCode(code, { memoryLimitMb: 96, timeoutMs: 60_000 })).toEqual({
+    stdout: 'RangeError false\n',
+    stderr: '',
+    exitCode: 0,
+  });
+});

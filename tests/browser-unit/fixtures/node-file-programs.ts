@@ -8,6 +8,8 @@ import asyncWriteBufferMomentCase from '../../../tools/node-parity-runner/cases/
 import readStreamChunkOwnershipCase from '../../../tools/node-parity-runner/cases/fs/read-stream-chunk-ownership.case.ts';
 import writeArrayBufferViewKindsCase from '../../../tools/node-parity-runner/cases/fs/write-array-buffer-view-kinds.case.ts';
 import writeReadBufferOwnershipCase from '../../../tools/node-parity-runner/cases/fs/write-read-buffer-ownership.case.ts';
+import writeSharedArrayBufferOwnershipCase from '../../../tools/node-parity-runner/cases/fs/write-shared-array-buffer-ownership.case.ts';
+import writeViewBytesIntrinsicsCase from '../../../tools/node-parity-runner/cases/fs/write-view-bytes-intrinsics.case.ts';
 
 // ADR-0571: `node <file>` programs run verbatim in live Node
 // (temp dir) and in rifty (`<root>` = the project root). Three surfaces: what
@@ -213,6 +215,11 @@ export const builtinPrograms: readonly NodeFileProgram[] = [
     argv: ['main.js'],
   },
   {
+    name: 'fs-write-view-bytes-intrinsics',
+    files: { 'main.js': writeViewBytesIntrinsicsCase.code },
+    argv: ['main.js'],
+  },
+  {
     name: 'fs-read-stream-chunk-ownership',
     files: { 'main.js': readStreamChunkOwnershipCase.code, 'o.bin': 'abc' },
     argv: ['main.js'],
@@ -256,6 +263,15 @@ ac.abort();
 console.log('after abort');
 `,
     },
+    argv: ['main.js'],
+  },
+];
+
+/** Rows that need `SharedArrayBuffer`: the COI host only (no-COI has none by construction). */
+export const coiBuiltinPrograms: readonly NodeFileProgram[] = [
+  {
+    name: 'fs-write-shared-array-buffer-ownership',
+    files: { 'main.js': writeSharedArrayBufferOwnershipCase.code },
     argv: ['main.js'],
   },
 ];
