@@ -1,5 +1,8 @@
 import { type Page, expect, test } from '@playwright/test';
 import { attemptBootOwner, closeOwner, execLine, gotoHarness, writeOwnerFile } from './fixtures.ts';
+
+const workspacePath = process.cwd().replaceAll('\\', '/');
+const messagePortRefUrl = `/@fs${workspacePath}/packages/runtime-js/src/internal/message-port-ref.ts`;
 import {
   type MessagePortRefCase,
   portRows,
@@ -52,4 +55,49 @@ test('transfers that would hide a referenced port release fail by name', async (
   expect(run.timedOut, run.out).toBe(false);
   expect(portRows(run.out), run.out).toEqual(transferCeilingRows);
   expect(run.exit, run.out).toBe(0);
+});
+
+// ADR-0469 floor (Chromium 108) on a fresh Chromium: the realm loses the Chrome 114
+// `ArrayBuffer.prototype.detached` before the module loads, so any read of it, in any
+// syntax, fails install. Install and the moved-port verdict must not depend on it.
+test('port reference installs and sees a moved port without ArrayBuffer.prototype.detached', async ({
+  page,
+}) => {
+  await gotoHarness(page);
+  const rows = await page.evaluate(async (url) => {
+    const removed = delete (ArrayBuffer.prototype as { detached?: boolean }).detached;
+    const out = [
+      `removed=${removed && !('detached' in ArrayBuffer.prototype)}`,
+      `before=${'ref' in MessagePort.prototype}`,
+    ];
+    const { installMessagePortReference } = await import(/* @vite-ignore */ url);
+    installMessagePortReference();
+    type Port = MessagePort & { ref(): void; unref(): void; hasRef(): boolean };
+    const { port1: kept, port2: sent } = new MessageChannel() as unknown as {
+      port1: Port;
+      port2: Port;
+    };
+    const copy = structuredClone(sent, { transfer: [sent] }) as MessagePort;
+    try {
+      kept.ref();
+      out.push('ref-peer-transferred=no-throw');
+    } catch (error) {
+      out.push(`ref-peer-transferred=${(error as { feature?: string }).feature}`);
+    }
+    const { port1: local, port2: peer } = new MessageChannel() as unknown as {
+      port1: Port;
+      port2: Port;
+    };
+    local.ref();
+    out.push(`ref-local=${local.hasRef()}`);
+    local.unref();
+    for (const port of [copy, kept, local, peer]) port.close();
+    return out;
+  }, messagePortRefUrl);
+  expect(rows).toEqual([
+    'removed=true',
+    'before=false',
+    'ref-peer-transferred=MessagePort.ref.transferred',
+    'ref-local=true',
+  ]);
 });
