@@ -52,6 +52,12 @@ Not reproduced by the manager on a clean `11b9397ee` copy: 30/30 five runs, load
 and 45–88 under 24 `yes` processes; main CI green. Cause unknown (memory or
 process-creation pressure, not CPU load alone).
 
+2026-11-26 — PR #474 review: `protocol` «accepted output is copied» takes its count at a
+wall-clock 4.5 s into the call (a `setTimeout`, not an event). A flood not yet read by
+then gives a green row on a consumer that keeps a holder per frame. Margin today: the
+flood ends by ~0.2 s idle, ≤ 0.85 s under CPU saturation (reviewer's stand). Inherited,
+not red yet; fix shape: take the count on an event (the last frame read), not a time.
+
 ## Challenge
 
 challenge: 2026-11-22 — finding capture; no premise critic (README §Challenge)

@@ -3,8 +3,8 @@ area: toolchain-build
 status: draft
 title: Parity-runner physical-worker cases red under host load at the harness's 10 s drain cap
 created: 2026-11-25
-why: A `test:parity` red that a rerun clears costs every local `pnpm pr:check` a second run and trains agents to rerun a red gate; agent runs reported it four times in three days, and it reds at load 4–10 too (2026-11-26).
-sources: [docs/process/traps.md, docs/backlog/epics/node-file-entry-parity/ledger.md, docs/backlog/runtime-js/reference/pr-425-final-green.json, docs/public/compat/process.md, PR-425-author-run, PR-431-cross-review, PR-441-author-run, PR-468-author-run]
+why: A `test:parity` red that a rerun clears costs every local `pnpm pr:check` a second run and trains agents to rerun a red gate; reported seven times in five days, once in CI (2026-11-26).
+sources: [docs/process/traps.md, docs/backlog/epics/node-file-entry-parity/ledger.md, docs/backlog/runtime-js/reference/pr-425-final-green.json, docs/public/compat/process.md, PR-425-author-run, PR-431-cross-review, PR-441-author-run, PR-468-author-run, PR-474-author-run, https://github.com/vanilla-wave/rifty/actions/runs/45839749821/job/139983536138]
 code: [tools/node-parity-runner/src/run-in-rifty.ts, packages/runtime-js/src/internal/event-loop-keepalive.ts, tools/node-parity-runner/cases/worker_threads/exec-argv-startup.case.ts, tools/node-parity-runner/cases/process/exit-lifecycle-child.case.ts]
 ---
 
@@ -17,7 +17,7 @@ exceeded keepalive drain cap (10000ms) — suspected hang or leaked handle (N ac
 ref(s))`. Physical-worker kinds: `worker-env`, `child-worker`, `node-cli-eval`.
 
 Observed on one machine (macOS arm64), load from other agent sessions on it (not
-controlled):
+controlled), and once on a GitHub `ubuntu-24.04` runner:
 
 | date | case | load average | rerun | source |
 |---|---|---|---|---|
@@ -26,26 +26,32 @@ controlled):
 | 2026-11-24 | `process/exit-lifecycle-child` | 17–70 | first red, second green | PR #431 cross-review delegate's run report (`pnpm pr:check`); not in the tree |
 | 2026-11-24 | `worker_threads/exec-argv-startup` | ~13 | full `test:parity` green ("all cases match") | PR #441 author's run report (`pnpm pr:check`); not in the tree |
 | 2026-11-25 | `process/exit-lifecycle-child` | 25–49 | red again alone (`pnpm test:parity process/exit-lifecycle-child`, twice) under that load; GitHub checks green on the same head | PR #460 author's run (`pnpm pr:check` at `70d9be2fa`): `keepalive drain cap (10000ms) … (3 active ref(s))`, holders not captured |
+| 2026-11-26 | `process/exit-lifecycle-child` (3 refs), `worker_threads/exec-argv-startup` (2 refs) | 4–7 at the reruns | both red again alone; `exit-lifecycle-child` red alone on the base tree `ebaf4945c` too | PR #474 author's run (`pnpm pr:check` at `b483b7ff5`, diff: an isolate-host test + docs); holders not captured |
+| 2026-11-26 | `process/exit-lifecycle-child` (3 refs) | CI runner | **first CI red**: `unit-and-conformance (parity)`, PR #474 head `9dde248ef` (no parity input in its diff; main `ebaf4945c` green) | run 45839749821, job 139983536138; holders not captured |
 
-The last two reports quote `keepalive drain cap (10000ms)`; the first two say only
-"drain-cap timeout", so that they hit this 10 s cap and not the product's 30 s one is an
-inference. GitHub checks were green at the heads of PRs #425, #431 and #441 when they
-merged. No red is recorded on an unloaded run before 2026-11-26 (load 3.6–9.8 reds below); under load a case can stay red in isolation (2026-11-25 row); no controlled repro attempted (untried: the
-`yes`-process stand of `distribution/isolate-host-time-phase-rows-under-load`). Nearest
+The 2026-11-25 and 2026-11-26 rows quote `keepalive drain cap (10000ms)`; the first two
+say only "drain-cap timeout", so that they hit this 10 s cap and not the product's 30 s one
+is an inference. GitHub checks were green at the heads of PRs #425, #431 and #441 when they
+merged. Load does not explain all reds: the 2026-11-26 local reds came at load 4–7 (12
+CPUs), red alone and on a base tree whose CI was green; a case can stay red in isolation
+(2026-11-25, 2026-11-26 rows); no controlled repro attempted (untried: the `yes`-process
+stand of `distribution/isolate-host-time-phase-rows-under-load`). Nearest
 earlier statement of the mechanism: `docs/public/compat/process.md` — the cap is
 wall-clock, so a CPU-busy worker can trip it.
 
 Open, not established: whether the drain is only late (a starved worker that would settle)
-or a ref a slow schedule really leaves behind — no observer recorded what held the
-`N active ref(s)` (2 or 3 in the 2026-11-26 reds). The ~13 load of the last row is low for plain
-starvation.
+or a ref a slow schedule really leaves behind — no observer recorded the message's
+`N active ref(s)` holders (counts only: 3 for `exit-lifecycle-child`, 2 for
+`exec-argv-startup`). The ~13 load of the 2026-11-24 #441 row and the 4–7 of the
+2026-11-26 local row are low for plain starvation.
 
 Rule, by analogy (the bound here is the harness's cap, not a test's assertion):
 `docs/process/traps.md` wall-clock-assertion-under-load — assert the event, not the time;
 a time bound stays only with a stall injected at the judged point as its RED.
 
 Owner: toolchain-build (parity runner). Trigger: the same message in CI, or the next
-local red — capture the ref count and its holders before rerunning.
+local red — capture the ref count and its holders before rerunning. **Trigger fired
+2026-11-26** (CI row above); pickup per the user's decision.
 
 Low load, 2026-11-26 (PR #468 author, macOS arm64; interleaved pairs, main `c2250727d` against the PR):
 
@@ -53,7 +59,8 @@ Low load, 2026-11-26 (PR #468 author, macOS arm64; interleaved pairs, main `c225
   the cap rejection comes at 10.9–12.8 s with `(3 active ref(s))`.
 - `pnpm test:parity exit-lifecycle-child`: green runs take 11.0–11.8 s wall, about 1.5 s of
   that the runner's start, on both sides. Red 5/15 on main and 8/15 on the PR at load 3.6–9.8.
-- `worker_threads/exec-argv-startup`: red 2/6 main, 4/6 PR at load 10–17, same wall.
+- `worker_threads/exec-argv-startup`: red 2/6 main, 4/6 PR at load 10–17, same wall; later the same
+  day 3/3 on main `c2250727d` and 3/3 on the PR at load 21–27, and `exit-lifecycle-child` 1/1 each.
 
 So the case's drain ends just under the 10 s cap even when green. Not established which it
 is: ~10 s of real work (12 sequential forks), or a drain that waits on something until near the
