@@ -16,7 +16,7 @@ Run: the whole COI browser-unit lane (`playwright.browser-unit.config.ts` + `use
 08:58–10:04. Revision: PR #470 branch at `5e064a606` (owner-boot fix in); the dev server serves live
 source and `message-port-ref.ts` changed during the run (`5b8acd5dd`, probe built from the load-time
 `ArrayBuffer`; briefly the pre-fix `main` file during a parity check) — no red carries the owner-boot
-error, but the lane was not re-run whole at a later head. 424 cases: 373 passed, 49 failed, 2 skipped.
+error, but the lane was not re-run whole at a later head. 424 cases: 373 passed, 49 failed, 2 skipped. Command: `RIFTY_PLAYGROUND_PORT=5398 npx playwright test --config <copy> [spec]` (binary install: `docs/backlog/runtime-js/reference/chromium108-workbench-owner-boot-evidence.md` §Fix run).
 First error line per red only: `reference/chromium108-browser-unit-reds.txt`. Ambiguous reds re-run in
 isolation on 108 and on the workspace Chromium (148.0.7778.96 per `browser.version()` in this session).
 "Green on 148" below = these specs are in the gating CI browser-unit lane; not re-checked here per spec.
@@ -43,17 +43,29 @@ Product, 108-specific (exact error, spec):
    where Node gives `xn--fa-hia.de`; also `patched-intrinsics-idna` (`url-legacy`). Inferred: host IDNA
    follows the engine's URL parser.
 6. OPFS `TypeError: Name is not allowed.` for a storage namespace with leading/trailing spaces
-   (`' owner-A '`): `workbench-storage-namespace` — `required` fails at that open, `preferred` runs
-   memory-backed with `fallback.reason: "Name is not allowed."`; the default namespace under `required`
+   (`' owner-A '`): `workbench-storage-namespace` — `preferred` runs memory-backed with
+   `fallback.reason: "Name is not allowed."` (observed); `required` fails at that open with
+   `Workspace owner startup and cleanup failed` — that its cause is the same OPFS refusal is
+   inferred, not observed (the aggregate was not flattened); the default namespace under `required`
    opens durable on 108. The namespace reaches `getDirectoryHandle` as given
    (`workbench-owner-storage.ts:70`, `vfs/src/boot.ts:91`); which call throws not isolated. Same engine
    refusal in the orphan-scratch fixture's own setup (namespace `' recovery-A '`, raw OPFS, not the
    product path): `workbench-orphan-scratch-recovery` ×17, an 18th at owner startup, cause not flattened.
-7. Hangs, root unisolated, reproduced in an isolated 108 re-run, green on the local 148 re-run:
-   `owner-node-process-lifecycle` (900 s test timeout, page closed in `closeOwner`),
+7. Hang, `owner-node-process-lifecycle` (all its `processLifecycleCases` as `node` lines on one
+   Workbench owner); product vs harness not isolated. Probe at `daf92cd01` (same cases in order, each
+   `terminal.run` raced against a 20 s page timer, `terminal.close()` against 30 s; output in
+   `runtime-js/reference/chromium108-workbench-owner-boot-evidence.md` §Lifecycle sequence probe):
+   the first 24 cases each exit (199–417 ms) and close in ≤ 1 ms (`exit-listener-timer` included:
+   `exit 0 214ms closed 0ms`); at the 25th, `fatal-rejection`, the `page.evaluate` does not return
+   before the 900 s test timeout. Inferred, not observed: the page stops answering (neither page timer
+   resolved the race); a lost Playwright 1.60 ↔ Chromium 108 channel is not excluded.
+   `fatal-rejection` alone on a fresh owner: 108 `exit 1 218ms closed 1ms`, 148 `exit 1 199ms closed 1ms`.
+   Whole spec green on the local 148 re-run. Repro: the spec on 108. Which earlier case leaves the
+   state, and what blocks, not isolated.
+8. Hangs, root unisolated, reproduced in an isolated 108 re-run, green on the local 148 re-run:
    `workbench-vite-lifecycle` (300 s), `esbuild-upstream-twin` esbuild-wasm 0.21.5/0.25.12/0.28.2
    (page closed after timeout).
-8. Message/stack text: `zlib-scenario` step 2 (unzipper 0.10.14, pinned) frame
+9. Message/stack text: `zlib-scenario` step 2 (unzipper 0.10.14, pinned) frame
    `at Async.drainQueues [as _onImmediate]`; `node-file-parity` `rethrow-in-catch` — the `JSON.parse`
    message lacks Node's `(line 1 column 2)`. Inferred: V8 108 text.
 
@@ -82,4 +94,4 @@ Related: the node-streams epic's unit 8 floor APIs (`epics/node-streams-as-in-no
 Open:
 - per item, rifty defect to repair at the floor or engine ceiling to declare (compat ⚠/❌ with
   reason) — the user's call against ADR-0469;
-- the rolldown URL input (1), the throwing OPFS call (6), the hang causes (7).
+- the rolldown URL input (1), the throwing OPFS call (6), the hang causes (7, 8).
