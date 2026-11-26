@@ -10,6 +10,11 @@ const out = () => path.join(__dirname, `w${k++}.txt`);
 const read = (f) => JSON.stringify(fs.readFileSync(f, 'utf8'));
 const rows = [];
 const row = (name, fn) => rows.push([name, fn]);
+// `--skip=<encodeURIComponent(row name)>`: that row prints `skipped` and runs nothing (carrier skips).
+const SKIP = process.argv
+  .slice(2)
+  .filter((a) => a.startsWith('--skip='))
+  .map((a) => decodeURIComponent(a.slice('--skip='.length)));
 const settle = (ms = 40) => new Promise((r) => setTimeout(r, ms));
 const MEMBERS = [
   'write',
@@ -190,6 +195,10 @@ row('Readable.pipe(ws) with slow source: bytes and finish', async (L) => {
 });
 (async () => {
   for (const [name, fn] of rows) {
+    if (SKIP.includes(name)) {
+      console.log(`${name} => skipped`);
+      continue;
+    }
     const L = [];
     try {
       await Promise.race([fn(L), settle(3000).then(() => L.push('no settle in 3s'))]);
