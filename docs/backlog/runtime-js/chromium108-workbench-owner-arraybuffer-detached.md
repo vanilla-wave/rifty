@@ -17,15 +17,24 @@ Finding of the node-streams carrier's Chromium 108 run (evidence: `reference/chr
   (code 1, signal null)` / `Error: message-port-ref: no native detached getter`, thrown by
   `nativeGetter` (`packages/runtime-js/src/internal/message-port-ref.ts:77-79`; the stack's `:35` is
   the dev server's transformed line).
-- The read is `nativeGetter(ArrayBuffer.prototype, 'detached')` (`message-port-ref.ts:192`).
-  `ArrayBuffer.prototype.detached` ships in Chrome 114 (`@mdn/browser-compat-data`); the floor is 108.
+- The read is `nativeGetter(ArrayBuffer.prototype, 'detached')` (`message-port-ref.ts:192`); with no
+  getter `nativeGetter` throws (`:79`). It came with `71be444c1` (2026-09-23, «Count referenced
+  MessagePorts as child-realm keepalive handles», ADR-0447).
+- `@mdn/browser-compat-data` 8.1.8 (`npm pack`, `data.json` `javascript.builtins.ArrayBuffer.detached`):
+  Chrome, Edge, Chrome Android 114; Firefox 122; Safari 17.4. So Chrome 108–113 lack the getter, under
+  ADR-0469's Chrome floor of 108; by the same data, Firefox 114–121 too (non-COI Firefox floor 114),
+  unmeasured.
 - `check:es-floor` lists `ArrayBuffer.prototype.detached` (`tools/checks/es-floor.mjs:67`), yet it
   passed in this PR's `pnpm pr:check` with the read in the built bundles. By reading the guard: it
-  matches member expressions (`es-floor.mjs:79,85,499`), and a property name passed as a string to a
-  helper is not one.
-- Compat: `docs/public/compat/browsers.md` has COI `openWorkbench` on 108 as uncharacterized and
-  «❌108 sdk-import (inferred)». Measured now: ❌ owner boot, a different failure from the SDK import
-  one (`runtime-js/chromium108-sdk-sync-wasm-import`). Chromium 109–113 not measured.
+  matches member expressions (`es-floor.mjs:79,85,499`); here the property name is a string argument
+  to a helper that calls `Object.getOwnPropertyDescriptor(target, key)`, so no callsite names it.
+  What it should catch: a listed intrinsic reached by name, e.g. a string literal equal to a listed
+  member's key with that member's intrinsic receiver in the same call
+  (`getOwnPropertyDescriptor(ArrayBuffer.prototype, 'detached')`, `Reflect.get`, a wrapper like
+  `nativeGetter`).
+- Compat: `docs/public/compat/browsers.md` COI rows carry `❌108 owner-boot` (executed, this run), a
+  different failure from the SDK import one (`runtime-js/chromium108-sdk-sync-wasm-import`); the
+  computed floors are not moved. Chromium 109–113 not measured.
 
 Open, not measured:
 - `installMessagePortReference` runs in every runtime-js process realm

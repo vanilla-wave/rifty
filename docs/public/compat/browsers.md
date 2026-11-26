@@ -22,17 +22,27 @@ Default `preferred` uses OPFS when available, otherwise memory with the reason i
 |---|---|---|---|---|---|---|---|---|
 | Non-COI / ephemeral | 98 · clone · ❌108 sdk-import | 98 · clone | 114 · modules | 16.4 · decompress | 98 · clone | 16.4 · decompress | 18 · clone | ❓ exact build needed |
 | Non-COI / persistent | 108 · sync OPFS · ❌108 sdk-import | 108 · sync OPFS | 114 · modules | 26 · writable | 109 · OPFS | 26 · writable | 21 · OPFS | ❓ exact build needed |
-| COI / ephemeral | 98 · clone · ❌108 sdk-import (inferred) | 98 · clone | 145 · waitAsync | ❌ credentialless | 98 · clone | ❌ credentialless | 18 · clone | ❓ exact build needed |
-| COI / persistent | 108 · sync OPFS · ❌108 sdk-import (inferred) | 108 · sync OPFS | 145 · waitAsync | ❌ credentialless | 109 · OPFS | ❌ credentialless | 21 · OPFS | ❓ exact build needed |
+| COI / ephemeral | 98 · clone · ❌108 sdk-import (inferred) · ❌108 owner-boot | 98 · clone | 145 · waitAsync | ❌ credentialless | 98 · clone | ❌ credentialless | 18 · clone | ❓ exact build needed |
+| COI / persistent | 108 · sync OPFS · ❌108 sdk-import (inferred) · ❌108 owner-boot | 108 · sync OPFS | 145 · waitAsync | ❌ credentialless | 109 · OPFS | ❌ credentialless | 21 · OPFS | ❓ exact build needed |
 
 `❌108 sdk-import`: executed on Playwright Chromium 108.0.5359.29, headerless (non-COI)
 protocol page; `@riftydev/sdk` import itself throws (main-thread sync WASM >4KB
 refused): bundled cjs-module-lexer `initSync` runs at import, before mode or storage
 choice. `(inferred)`: COI marks follow from that SDK import graph; no COI run.
-COI `openWorkbench` host on 108: uncharacterized (`@riftydev/workbench` entry does
-not import the lexer). Only 108 itself failed; affected version range unmeasured;
+Only 108 itself failed; affected version range unmeasured;
 [finding](../../backlog/runtime-js/chromium108-sdk-sync-wasm-import.md). Edge shares
 that Chromium base, but no Edge build was run: no mark.
+
+`❌108 owner-boot`: executed 2026-11-26 on Playwright 1.28.1's Chromium 108.0.5359.29 (driven by
+Playwright 1.60), COI browser-unit sealed Workbench fixture, ephemeral, main `e430522e8` (the
+node-streams carrier's 108 run, PR #467): the Workbench owner exits at boot, `message-port-ref: no
+native detached getter`. `packages/runtime-js/src/internal/message-port-ref.ts:192` reads
+`ArrayBuffer.prototype.detached`, which MDN BCD 8.1.8 dates Chrome/Edge/Chrome Android 114, Firefox
+122, Safari 17.4; `check:es-floor` does not see the read.
+[Finding](../../backlog/runtime-js/chromium108-workbench-owner-arraybuffer-detached.md). The
+computed floors above are not moved: the read is unguarded product code, not an accepted binding
+(ADR-0469: a floor moves with executed evidence or a landed change plus its guard). Which other
+modes, engines and versions it reaches is unmeasured.
 
 Bindings: clone = `structuredClone`; modules = module Workers; decompress =
 `DecompressionStream`; writable = `FileSystemFileHandle.createWritable`; sync OPFS =
@@ -111,7 +121,7 @@ harness failure stays `❓`, never a product `❌`. Firefox's pinned available
 
 | Floor / real hardware | Dated observation | Storage / memory / eviction |
 |---|---|---|
-| Chromium 108.0.5359.29 | ❌ 2026-09-28: SDK import throws on main-thread sync WASM >4KB | no boot/storage steps reached |
+| Chromium 108.0.5359.29 | ❌ 2026-09-28: SDK import throws on main-thread sync WASM >4KB; ❌ 2026-11-26 (COI Workbench fixture, not the floor lane): owner exits at boot, `ArrayBuffer.prototype.detached` | no boot/storage steps reached |
 | Firefox 114.0b3 beta (UA114.0) | ❌ 2026-09-28: install/build/flush pass, saved source ENOENT after reload | OPFS selected both boots; namespace unchanged; stable114 still uncharacterized |
 | WebKit 26.0, macOS26.6 | ❓ 2026-09-28: pinned runner fails `Playwright.setDownloadBehavior`: no default context | harness cannot launch; not a product failure or Safari result |
 | Safari26.6.2 macOS, real device | ⚠26.6.2 · 2026-09-28: native Safari WebDriver; support probe DataCloneError, all ten subsequent SDK steps pass | quota82,463,372,084 B; usage37,721,687 B; memory/eviction unknown |
