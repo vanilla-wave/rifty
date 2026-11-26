@@ -97,14 +97,15 @@ properties from the start (`w1e0c1` before and after the first read, measured): 
 
 2026-11-26, M3 Pro, macOS, Node v24.16.0, isolated-vm 7.0.2, esbuild 0.28.0. Base = origin/main
 `be99bee9e`, change = this ADR's code. Warm `runCode('1')`: alternating triples (ABA/BAB) after 20
-warm-ups each, n = 240 per side, median Δ with a 2 000-sample bootstrap 95 % interval; no bound
+warm-ups each, n = 300 per side, median Δ with a 2 000-sample bootstrap 95 % interval; no bound
 (goal Decisions).
 
 | | base | change | Δ |
 |---|---|---|---|
 | `dist/guest.js` | 7 383 235 B | 7 441 458 B | +58 223 B (generated part 31 798 B) |
 | `gzip -9` | 1 570 874 B | 1 581 877 B | +11 003 B |
-| warm `runCode('1')`, median (p10–p90), load 5.2 | 17.84 (15.50–24.46) ms | 18.67 (16.23–24.89) ms | +0.83 ms (95 % 0.11–1.45) |
+| warm `runCode('1')`, median (p10–p90), load 4.0 | 15.89 (15.46–16.44) ms | 16.49 (16.17–17.07) ms | +0.60 ms (95 % 0.56–0.64) |
+| same, an earlier run at load 5.2, n = 240 | 17.84 (15.50–24.46) ms | 18.67 (16.23–24.89) ms | +0.83 ms (95 % 0.11–1.45) |
 
 The warm Δ is the two files' and the bindings' evaluation in each fresh isolate (eager, as Node's
 globals are data properties).
