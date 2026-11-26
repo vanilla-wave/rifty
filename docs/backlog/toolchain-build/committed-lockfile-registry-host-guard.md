@@ -35,8 +35,8 @@ address count and the foreign host; the fix line says rewrite host to
 ## Acceptance
 
 1. Every lock carrier in every tracked path (`git ls-files --cached`, staged included; regular files only) is scanned: file locks `package-lock.json`, `npm-shrinkwrap.json`, `pnpm-lock.yaml`, `yarn.lock`; and locks embedded in `.json`/`.json.gz` documents by one content rule — at any depth an object with `lockfileVersion`, any value under a lockfile-named key, or a string parsing as an object with `lockfileVersion` (baked snapshots' `lockfile`, corpus seeds, probe outputs, evidence archives) → scenario
-2. An address off the allowed set is red with carrier (file or `file#/json/pointer`), line count and `scheme//host`; the npmjs origin is compared on the parsed URL (host suffix, userinfo, foreign port red; `:443`, host case pass); funding/deprecation URLs, `file:`, `github:o/x#sha` are not addresses; git dependencies red with their own reason; unparseable lock by name red; mutants per format, per historical path, object locks, a new `.json.gz` in an arbitrary directory are red (`tools/checks/lockfile-registry.test.ts`) → scenario
-3. Declared exemptions pin path + sha256 of the file bytes; a new, changed or deleted exempt file is red; the check prints the exemption count and the skipped-unparseable count; corpus rows equal their manifest `inputsSha256` → scenario
+2. One verdict function (`classifyAddress`) takes the whole value of an address key (`resolved`/`tarball`/`resolution`/`repo`; text locks: the whole value after the key — quoted, plain, flow entry or block scalar) and parses it with WHATWG `URL`, as npm does. Red with carrier (file or `file#/json/pointer`), line count and `scheme//host`: off the allowed set (host suffix, userinfo incl. `registry.npmjs.org'x@evil…` / `}@evil…`, `https:evil…`, `https:\\evil…`, foreign port; `:443`, host case pass); git dependencies with their own reason; a value that is no URL nor a declared non-network form (`file:`, `link:`, `workspace:`, `github:`, `rifty:`, berry `npm:`/local protocols, relative path) — e.g. `//host/…` — as unreadable; unparseable lock by name; unparseable `.json` with lock markers. Mutants per format, per historical path, object locks, a new `.json.gz` in an arbitrary directory are red (`tools/checks/lockfile-registry.test.ts`) → scenario
+3. Declared exemptions pin path + sha256 of the file bytes; a new, changed or deleted exempt file is red; the check prints the exemption count; corpus rows equal their manifest `inputsSha256` → scenario
 4. Runs in `pnpm pr:check` outside `SOURCE_LANES` (kept on a docs-only tree) and in CI `lint-and-typecheck` (no `if`, runs on docs-only PRs); a docs-only diff with a foreign lock under `docs/` is red in both → scenario
 5. Current tree green: 19 exempt frozen files (14 corpus seeds, 5 evidence archives), no other violator → scenario
 
@@ -45,19 +45,22 @@ address count and the foreign host; the fix line says rewrite host to
 - Rewriting the 19 exempt frozen files: `docs/backlog/distribution/agent-bench-corpus-mirror-lockfiles.md` (user-owned).
 - Registry hosts inside packed tarballs of published packages: separate mechanism, `docs/backlog/toolchain-build/packed-tarball-registry-host-guard.md`.
 - Declared limits, not read (none present in the tree 2026-11-26):
-  - pnpm/yarn-berry YAML beyond the line-wise form (keyed line, quoted key, block scalar): no YAML parser reachable from `tools/checks` (`yaml` is only a `packages/agent` dependency), no new dependency.
+  - pnpm/yarn-berry YAML beyond the line-wise form (keyed line, `'…'`/`"…"` key, flow-mapping entry, anchor, block scalar): no YAML parser reachable from `tools/checks` (`yaml` is only a `packages/agent` dependency), no new dependency.
   - `bun.lock`/`bun.lockb`, `deno.lock`.
   - Registry settings in `.yarnrc.yml` / `.npmrc` fixtures (config, not addresses).
   - `.jsonl`, `.zip`/`.tar` documents.
   - `.tgz` fixtures (upstream package bytes; none carries a lock).
   - A lock encoded twice (JSON string of a JSON string).
-  - Protocol-relative `//host/…` addresses.
-  - Untracked files (contract is committed bytes).
+  - A symlink named as a lock: not followed; its target is read only if itself a carrier.
+  - Size: each document is read and parsed whole (a 65 MB JSON costs memory/time; past V8's string limit it fails red).
+  - Untracked files (contract is committed bytes); bytes come from the working tree at index paths (trap `lockfile-mirror-host`).
 
 ## Decisions
 
 - Allowed: `https://registry.npmjs.org` (parsed URL: scheme, host, default port, no userinfo) — policy value, not a fetch target; no D-004 config (AGENTS.md §Simplicity).
-- 2026-11-26, manager decision: also allowed by rule (not exemptions) — loopback (`127.0.0.0/8`, `[::1]`, `localhost`) and the `.test` zone (RFC 6761): cannot be a mirror, disclose nothing (probe outputs on `127.0.0.1:<port>`, shadow fixture on `registry.test`). `.invalid`/`.example`/`.internal` stay red.
+- 2026-11-26, manager decision: also allowed by rule (not exemptions) — loopback (`127.0.0.0/8`, `[::1]`, `localhost`) and the `.test` zone (RFC 6761): cannot be a mirror, disclose nothing (today 4 carriers / 5 addresses: 2 probe outputs on `127.0.0.1:<port>`, shadow fixture on `registry.test`). `.invalid`/`.example`/`.internal` stay red.
+- 2026-11-26, manager decision: the whole address value is parsed by `URL` in one function; a pattern only locates the value in text locks. An address value that parses to no host and is no declared non-network form is red, never "not an address". `rifty:` (npm-client shadow-substitution identity) is a declared non-network form.
+- 2026-11-26, manager decision (replaces skip-and-count): an unparseable `.json` with lock markers is red — no pass through JSONC/trailing comma/`NaN`.
 - Git dependencies (`git+ssh://`, `git+https://`, pnpm `repo:`) red whatever the host: the host may be internal. `github:o/x#sha` carries no host, passes.
 - 2026-11-26, manager decision: tracked paths only (`git ls-files --cached`) — untracked agent junk would make local red while CI is green.
 - Embedded-lock rule by content form, not a path list: the next carrier kind needs no code change.
