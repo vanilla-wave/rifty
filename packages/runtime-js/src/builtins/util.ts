@@ -667,8 +667,11 @@ export function inherits(ctor: unknown, superCtor: unknown): void {
 // `node:util/types` builtin). Re-exported here as `util.types`, matching Node.
 export { types } from './util-types.ts';
 
-export const TextEncoder = globalThis.TextEncoder;
-export const TextDecoder = globalThis.TextDecoder;
+// Not named like the classes: a bundle symbol `TextDecoder` makes esbuild rename the isolate guest's
+// own class (`Class constructor TextDecoder2 …`, ADR-0577).
+const utilTextEncoder = globalThis.TextEncoder;
+const utilTextDecoder = globalThis.TextDecoder;
+export { utilTextEncoder as TextEncoder, utilTextDecoder as TextDecoder };
 
 const util = {
   inspect,
@@ -685,7 +688,7 @@ const util = {
   deprecate,
   inherits,
   types: utilTypes,
-  TextEncoder,
-  TextDecoder,
+  TextEncoder: utilTextEncoder,
+  TextDecoder: utilTextDecoder,
 };
 export default util;

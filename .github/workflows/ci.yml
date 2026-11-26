@@ -75,6 +75,7 @@ jobs:
       - run: pnpm check:eval-compiler-drift
       - run: pnpm check:fetch-classes-drift
       - run: pnpm check:url-legacy-drift
+      - run: pnpm check:node-encoding-drift
       - run: pnpm check:node-blob-drift
       - run: pnpm check:shadow-catalog-drift
       - run: pnpm check:install-artifact-drift

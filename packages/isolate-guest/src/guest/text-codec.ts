@@ -1,74 +1,39 @@
 /**
- * WHATWG UTF-8 TextEncoder/TextDecoder for a bare V8 isolate (ADR-0557 §5).
- * Differential-tested against Node's (`tests/text-codec.test.ts`). Other
- * encodings are a loud gap.
+ * The guest's one UTF-8 codec (ADR-0557 §5, ADR-0577): what Node's C++ `encoding_binding` does for
+ * `lib/internal/encoding.js` (`node-encoding.ts`) and what the shim writes to the host. Whole
+ * inputs only: Node's class keeps the stream state itself. Differential-tested against Node
+ * (`tests/text-codec.test.ts`).
  */
-import { notImplemented } from './loud.ts';
 
-// Captured at load, before guest code: a guest replacing a global or a
-// prototype member must not break the runtime's own encode/decode, nor mute the
-// host's fatal diagnostic (ADR-0557 §5).
+// Captured at load, before guest code: a guest replacing a global or a prototype member must not
+// break the runtime's own encode/decode, nor mute the host's fatal diagnostic (ADR-0557 §5).
 const Uint8ArrayPrimordial = Uint8Array;
+const Uint16ArrayPrimordial = Uint16Array;
+const TypeErrorPrimordial = TypeError;
 const reflectApplyPrimordial = Reflect.apply;
+const fromCharCodePrimordial = String.fromCharCode;
 const charCodeAtPrimordial = String.prototype.charCodeAt;
-const typedArraySlicePrimordial = Uint8Array.prototype.slice;
-const typedArraySetPrimordial = Uint8Array.prototype.set;
+const TypedArrayPrototype = Object.getPrototypeOf(Uint8Array.prototype) as Uint8Array;
+const typedArraySlicePrimordial = TypedArrayPrototype.slice;
+const typedArrayLengthPrimordial = Object.getOwnPropertyDescriptor(TypedArrayPrototype, 'length')
+  ?.get as (this: Uint8Array) => number;
 const charCodeAt = (s: string, at: number): number =>
   reflectApplyPrimordial(charCodeAtPrimordial, s, [at]) as number;
-const sliceBytes = (bytes: Uint8Array, start: number, end?: number): Uint8Array =>
-  reflectApplyPrimordial(typedArraySlicePrimordial, bytes, [start, end]) as Uint8Array;
-const setBytes = (target: Uint8Array, source: Uint8Array, at: number): void => {
-  reflectApplyPrimordial(typedArraySetPrimordial, target, [source, at]);
-};
+const lengthOf = (bytes: Uint8Array): number =>
+  reflectApplyPrimordial(typedArrayLengthPrimordial, bytes, []) as number;
 
-const UTF8_LABELS = new Set(['utf-8', 'utf8', 'unicode-1-1-utf-8']);
 const REPLACEMENT = 0xfffd;
-
-function toBytes(input: unknown): Uint8Array {
-  if (input === undefined) return new Uint8ArrayPrimordial(0);
-  if (input instanceof ArrayBuffer) return new Uint8ArrayPrimordial(input);
-  if (ArrayBuffer.isView(input))
-    return new Uint8ArrayPrimordial(input.buffer, input.byteOffset, input.byteLength);
-  if (typeof SharedArrayBuffer === 'function' && input instanceof SharedArrayBuffer)
-    return new Uint8ArrayPrimordial(input);
-  throw Object.assign(
-    new TypeError(
-      'The "input" argument must be an instance of ArrayBuffer, SharedArrayBuffer, or ArrayBufferView.',
-    ),
-    { code: 'ERR_INVALID_ARG_TYPE' },
-  );
-}
-
-function fromCodeUnits(units: number[]): string {
-  let out = '';
-  for (let i = 0; i < units.length; i += 0x8000) {
-    out += String.fromCharCode.apply(null, units.slice(i, i + 0x8000));
-  }
-  return out;
-}
-
-export class TextEncoder {
-  get encoding(): string {
-    return 'utf-8';
-  }
-
-  encode(input = ''): Uint8Array {
-    return encodeUtf8(String(input));
-  }
-
-  encodeInto(input: string, dest: Uint8Array): { read: number; written: number } {
-    return encodeInto(String(input), dest);
-  }
-}
 
 /** UTF-8 of a string with no member lookup the guest can replace (the host's own writes). */
 export function encodeUtf8(s: string): Uint8Array {
   const out = new Uint8ArrayPrimordial(s.length * 3);
-  const { written } = encodeInto(s, out);
-  return sliceBytes(out, 0, written);
+  const { written } = encodeIntoUtf8(s, out);
+  return reflectApplyPrimordial(typedArraySlicePrimordial, out, [0, written]) as Uint8Array;
 }
 
-function encodeInto(s: string, dest: Uint8Array): { read: number; written: number } {
+/** WHATWG `encodeInto`: whole code points that fit; a lone surrogate is U+FFFD. */
+export function encodeIntoUtf8(s: string, dest: Uint8Array): { read: number; written: number } {
+  const room = lengthOf(dest);
   let read = 0;
   let written = 0;
   while (read < s.length) {
@@ -83,7 +48,7 @@ function encodeInto(s: string, dest: Uint8Array): { read: number; written: numbe
     }
     if (cp >= 0xd800 && cp <= 0xdfff) cp = REPLACEMENT;
     const size = cp < 0x80 ? 1 : cp < 0x800 ? 2 : cp < 0x10000 ? 3 : 4;
-    if (written + size > dest.length) break;
+    if (written + size > room) break;
     if (size === 1) dest[written] = cp;
     else if (size === 2) {
       dest[written] = 0xc0 | (cp >> 6);
@@ -104,111 +69,88 @@ function encodeInto(s: string, dest: Uint8Array): { read: number; written: numbe
   return { read, written };
 }
 
-/** Lead byte → [continuation count, first-continuation lower, upper]. */
-function lead(b: number): readonly [number, number, number] | null {
-  if (b >= 0xc2 && b <= 0xdf) return [1, 0x80, 0xbf];
-  if (b === 0xe0) return [2, 0xa0, 0xbf];
-  if ((b >= 0xe1 && b <= 0xec) || b === 0xee || b === 0xef) return [2, 0x80, 0xbf];
-  if (b === 0xed) return [2, 0x80, 0x9f];
-  if (b === 0xf0) return [3, 0x90, 0xbf];
-  if (b >= 0xf1 && b <= 0xf3) return [3, 0x80, 0xbf];
-  if (b === 0xf4) return [3, 0x80, 0x8f];
-  return null;
+/** Code units flushed to a string per `fromCharCode` call (+1: a pair never splits). */
+const FLUSH = 0x8000;
+const units = new Uint16ArrayPrimordial(FLUSH + 1);
+const unitsBuffer = units.buffer;
+
+/** The first `w` buffered units as a string. */
+function flush(w: number): string {
+  if (w === 0) return '';
+  // A view by the captured constructor (`subarray` would read the guest-replaceable species).
+  const part = new Uint16ArrayPrimordial(unitsBuffer, 0, w) as unknown as number[];
+  return reflectApplyPrimordial(fromCharCodePrimordial, null, part) as string;
 }
 
-export class TextDecoder {
-  readonly #fatal: boolean;
-  readonly #ignoreBOM: boolean;
-  #pending: Uint8Array = new Uint8ArrayPrimordial(0);
-  #bomSeen = false;
+/** Node's C++ shape: a plain `TypeError` with an own `code`. */
+function invalid(): TypeError {
+  return Object.assign(
+    new TypeErrorPrimordial('The encoded data was not valid for encoding utf-8'),
+    { code: 'ERR_ENCODING_INVALID_ENCODED_DATA' },
+  );
+}
 
-  constructor(label = 'utf-8', options: { fatal?: unknown; ignoreBOM?: unknown } = {}) {
-    const normalized = String(label).trim().toLowerCase();
-    if (!UTF8_LABELS.has(normalized)) {
-      throw notImplemented(`isolate-host.TextDecoder(${normalized})`, 'only utf-8');
+/**
+ * WHATWG UTF-8 decode of a whole input: maximal subpart → U+FFFD (`fatal`: throws), one leading
+ * BOM dropped unless `ignoreBOM`. No closure, no array: units go through one reused buffer.
+ */
+export function decodeUtf8(bytes: Uint8Array, fatal: boolean, ignoreBOM: boolean): string {
+  const n = lengthOf(bytes);
+  let i = 0;
+  if (!ignoreBOM && n >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) i = 3;
+  let out = '';
+  let w = 0;
+  while (i < n) {
+    if (w >= FLUSH) {
+      out += flush(w);
+      w = 0;
     }
-    // WebIDL boolean conversion: any truthy value, as Node.
-    this.#fatal = Boolean(options.fatal);
-    this.#ignoreBOM = Boolean(options.ignoreBOM);
-  }
-
-  get encoding(): string {
-    return 'utf-8';
-  }
-  get fatal(): boolean {
-    return this.#fatal;
-  }
-  get ignoreBOM(): boolean {
-    return this.#ignoreBOM;
-  }
-
-  decode(input?: unknown, options: { stream?: unknown } = {}): string {
-    const stream = Boolean(options.stream);
-    const fresh = toBytes(input);
-    let bytes = fresh;
-    if (this.#pending.length > 0) {
-      bytes = new Uint8ArrayPrimordial(this.#pending.length + fresh.length);
-      setBytes(bytes, this.#pending, 0);
-      setBytes(bytes, fresh, this.#pending.length);
+    const b0 = bytes[i] as number;
+    if (b0 < 0x80) {
+      units[w++] = b0;
+      i++;
+      continue;
     }
-    this.#pending = new Uint8ArrayPrimordial(0);
-    const units: number[] = [];
-    const push = (cp: number): void => {
-      if (!this.#bomSeen) {
-        this.#bomSeen = true;
-        if (cp === 0xfeff && !this.#ignoreBOM) return;
-      }
-      if (cp >= 0x10000) {
-        const v = cp - 0x10000;
-        units.push(0xd800 + (v >> 10), 0xdc00 + (v & 0x3ff));
-      } else units.push(cp);
-    };
-    const fail = (): void => {
-      if (this.#fatal) {
-        this.#bomSeen = false;
-        throw Object.assign(new TypeError('The encoded data was not valid for encoding utf-8'), {
-          code: 'ERR_ENCODING_INVALID_ENCODED_DATA',
-        });
-      }
-      push(REPLACEMENT);
-    };
-    let i = 0;
-    while (i < bytes.length) {
-      const b0 = bytes[i] as number;
-      if (b0 < 0x80) {
-        push(b0);
-        i++;
-        continue;
-      }
-      const shape = lead(b0);
-      if (shape === null) {
-        fail();
-        i++;
-        continue;
-      }
-      const [need, lower, upper] = shape;
-      let cp = b0 & (need === 1 ? 0x1f : need === 2 ? 0x0f : 0x07);
-      let k = 1;
-      for (; k <= need; k++) {
-        if (i + k >= bytes.length) break;
-        const b = bytes[i + k] as number;
-        const lo = k === 1 ? lower : 0x80;
-        const hi = k === 1 ? upper : 0xbf;
-        if (b < lo || b > hi) break;
-        cp = (cp << 6) | (b & 0x3f);
-      }
-      if (k > need) {
-        push(cp);
-        i += need + 1;
-      } else if (i + k >= bytes.length && stream) {
-        this.#pending = sliceBytes(bytes, i);
-        break;
-      } else {
-        fail();
-        i += k;
-      }
+    let need: number;
+    let lower = 0x80;
+    let upper = 0xbf;
+    if (b0 >= 0xc2 && b0 <= 0xdf) need = 1;
+    else if (b0 >= 0xe0 && b0 <= 0xef) {
+      need = 2;
+      if (b0 === 0xe0) lower = 0xa0;
+      else if (b0 === 0xed) upper = 0x9f;
+    } else if (b0 >= 0xf0 && b0 <= 0xf4) {
+      need = 3;
+      if (b0 === 0xf0) lower = 0x90;
+      else if (b0 === 0xf4) upper = 0x8f;
+    } else {
+      if (fatal) throw invalid();
+      units[w++] = REPLACEMENT;
+      i++;
+      continue;
     }
-    if (!stream) this.#bomSeen = false;
-    return fromCodeUnits(units);
+    let cp = b0 & (need === 1 ? 0x1f : need === 2 ? 0x0f : 0x07);
+    let k = 1;
+    for (; k <= need && i + k < n; k++) {
+      const b = bytes[i + k] as number;
+      if (b < lower || b > upper) break;
+      cp = (cp << 6) | (b & 0x3f);
+      lower = 0x80;
+      upper = 0xbf;
+    }
+    if (k <= need) {
+      if (fatal) throw invalid();
+      units[w++] = REPLACEMENT;
+      i += k;
+    } else if (cp >= 0x10000) {
+      cp -= 0x10000;
+      units[w++] = 0xd800 + (cp >> 10);
+      units[w++] = 0xdc00 + (cp & 0x3ff);
+      i += k;
+    } else {
+      units[w++] = cp;
+      i += k;
+    }
   }
+  return out + flush(w);
 }
