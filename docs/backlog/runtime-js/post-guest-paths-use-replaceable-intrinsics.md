@@ -68,6 +68,16 @@ utf8 rows of parity `string_decoder/encodings-split` «patched Function.prototyp
 there (in-process, SDK, isolate = Node). `ERR_INVALID_ARG_TYPE` (`internal/node-received.ts`) builds
 with `Object.assign`, `Object.is`, `JSON.stringify`.
 
+Store transport on the browser hosts (PR #469, measured 2026-11-26 with
+`tools/node-parity-runner/cases/fs/write-view-bytes-patched-intrinsics.case.ts` as a `node <file>`
+program; in-process and isolate equal Node): COI Workbench — a guest that patched
+`%TypedArray%.prototype.subarray` or `byteLength`, or replaced global `Uint8Array`/`DataView`/`ArrayBuffer`,
+makes the next write fail inside the sync-rpc transport (`sync-rpc call 'fs.writeChunk' failed:
+decodeReply: unknown frame discriminator 0x5`, `offset is out of bounds`, `guest Uint8Array called`);
+no-COI SDK — the run passes but OPFS write-through fails afterwards (`SandboxPersistenceError: OPFS
+persistence failed (7 unhealed): … guest Uint8Array called; … guest DataView called`). Node writes the
+bytes. Compat: `fs.md` row on write data.
+
 ## Challenge
 
 challenge: 2026-11-18 — finding capture; no premise critic (README §Challenge)

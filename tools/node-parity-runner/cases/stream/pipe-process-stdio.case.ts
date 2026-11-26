@@ -10,6 +10,8 @@
 import type { ParityCase } from '../../src/types.ts';
 
 const c: ParityCase = {
+  // The rifty side replaces `globalThis.process` until a later `setImmediate` in the runner's own realm.
+  patchesSharedRealm: true,
   stdin: [],
   expected: [
     'a',

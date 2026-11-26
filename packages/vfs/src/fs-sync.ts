@@ -26,6 +26,11 @@ export interface FsSync {
    * integers.
    */
   readFileRangeSync(path: string, position: number, length: number): Uint8Array;
+  /**
+   * `data` is handed over: a store may keep it as the file's bytes
+   * (`MemoryFsSync` does, `OpfsFsSync` copies). A caller passing memory a guest
+   * still holds copies first (runtime-js `fs` does).
+   */
   writeFileSync(path: string, data: Uint8Array): void;
   /**
    * Immediate children of `path` as dirent records. Symmetric with

@@ -24,6 +24,13 @@ export interface ParityCase {
    * only rely on the anchoring.
    */
   readonly cwd?: string;
+  /**
+   * The rifty side patches shared intrinsics of the harness realm (`%TypedArray%.prototype`
+   * members, global `Uint8Array`/`ArrayBuffer`/`DataView`) and restores them only after an
+   * async boundary: the native oracle runs first, as for the process-installing kinds, so the
+   * harness never reads its child through the patched intrinsics.
+   */
+  readonly patchesSharedRealm?: true;
   /** Optional stdin chunks written to both runtimes after the entry attaches listeners. */
   readonly stdin?: readonly Uint8Array[];
   /** Source to evaluate as CJS in /work/main.js (or ESM in /work/main.mjs). */
