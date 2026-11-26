@@ -1,4 +1,4 @@
-import { registerBuiltin } from '@riftydev/io';
+import { registerBuiltin, setEncodingNameFormat } from '@riftydev/io';
 import assertModule, { strict as assertStrict } from './assert.ts';
 import bufferModule from './buffer.ts';
 import childProcessModule, { ensureExecSyncHandlerInstalled } from './child_process.ts';
@@ -37,7 +37,7 @@ import timersModule, { timersPromises } from './timers.ts';
 import ttyModule from './tty.ts';
 import urlModule from './url.ts';
 import utilTypesModule from './util-types.ts';
-import utilModule from './util.ts';
+import utilModule, { format as utilFormat } from './util.ts';
 import vmModule from './vm/index.ts';
 import wasiModule from './wasi.ts';
 import workerThreadsModule from './worker_threads.ts';
@@ -78,6 +78,8 @@ export function ensureRuntimeJsBuiltinsRegistered(): void {
     return exports;
   });
   registerBuiltin('util', () => utilModule);
+  // Captured, not read live: a guest's `util.format = …` must not reach ERR_UNKNOWN_ENCODING.
+  setEncodingNameFormat((enc) => utilFormat('%s', enc));
   registerBuiltin('util/types', () => utilTypesModule);
   registerBuiltin('querystring', () => querystringModule);
   registerBuiltin('url', () => urlModule);

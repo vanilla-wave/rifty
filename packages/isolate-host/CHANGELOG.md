@@ -1,5 +1,9 @@
 # @riftydev/isolate-host
 
+## Unreleased
+
+- Sandbox template: `registerTemplate(artifact)` and `createSandbox({ template })` take a `produceDependencySnapshot` artifact (gzip or br, `replay` or `frozen`) or its registered `{ id, version }` (`templateId`, `snapshotId`); its `payload/node_modules` becomes the sandbox's own files at `/node_modules` (writable), decoded once per process. A broken artifact rejects `ERR_ISOLATE_HOST_TEMPLATE_ARTIFACT`, an unknown identity `ERR_ISOLATE_HOST_TEMPLATE_UNKNOWN`. `maxFsBytes` bounds the sandbox's own files, the template's budget on top (the defaults hold); over a template a run's default `memoryLimitMb` is max(256, 3 × the cap + 32 MiB) (≈ 503 MiB for the four document libraries; sandboxes without a template keep 256). `snapshot()` over a template is `NotImplementedError('isolate-host.sandbox-template-snapshot')`; a read-only option is unknown (`ERR_INVALID_ARG_VALUE`). Was `NotImplementedError('isolate-host.sandbox-template')` (as in the published `0.1.0-draft.1`). The package root exports `registerTemplate`. The four document libraries write Node's documents from an artifact (`tests/sandbox-template.test.ts`); cost table: README §Sandbox template, `scripts/measure-template.mjs`.
+
 ## 0.1.0-draft.1
 
 - Guest file writes keep their own bytes: refilling a buffer after `fs.writeFileSync`/`promises.writeFile`/callback `writeFile` no longer changes the file, and any TypedArray/DataView writes its raw bytes (runtime-js CHANGELOG; `tests/fs-buffer-ownership.test.ts`, `runCode` and `sandbox.exec` vs live Node). Cost: while the guest holds the buffer, its file is a second copy in isolate memory (a 50 MiB buffer written in one call peaks at ~100 MiB; `snapshot-acceptance` builds its 50 MiB tree as five files).

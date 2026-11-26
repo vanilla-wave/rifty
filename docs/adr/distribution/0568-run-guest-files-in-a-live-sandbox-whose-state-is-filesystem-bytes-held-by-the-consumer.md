@@ -424,3 +424,70 @@ time per sandbox with the deadline from dequeue, `/workspace` and `/tmp` in a fr
 - 2026-11-23 — §3 (PR #424): a run's end state is captured after the guest's run settled, and a timer the guest queued could still fire in between (the host timer is in flight when the result is): its writes were captured, an endless one made the run a `timeout`. The guest's run phase (`running` → `natural` → `ended`, `isolate-guest` `entry.ts`) is the one state for its consumers: output follows the runtime's terminal (dropped after `exit()` or a fatal terminal, kept for a natural exit's listener work), while every host delivery — `fire` (a timer's expiry) and `rejection` (an unhandled rejection isolated-vm reports after the checkpoint) — passes one gate and runs nothing once the phase leaves `running`, i.e. once the run's status is out (the host's other calls are the launch, `run`/`runFile`, and state, `snapshot`/`restore`; cross-review round 1 found `rejection` ungated). The gate closes once the run leaves `running` (a natural exit included). The run's output is fixed at the same point: what the guest's realm prints while its state is captured is dropped (child `write` during the capture). RED `sandbox-acceptance` "nothing of the guest runs after its run has ended", "no host delivery reaches the guest after its run has ended", "the guest's realm while its state is captured". The two moments differ: the terminal is recorded at `exit()` or at a fatal thrown in a callback, before the status is out (callbacks due in that turn still run, their output dropped); a fatal thrown by the entry's synchronous run records none. Microtasks of the same checkpoint and callbacks due before the status is out still run (compat Sandbox row "A run's lifecycle and exit status").
 
 - 2026-11-23 — Consequences «an isolate limit of at least 231 MiB (≈ 2.3 × S) before guest code»: superseded by ADR-0567 §7 (goal `isolate-host-fs-snapshot` close, PR #422) — a run's restore → run → snapshot needs 223–225 MiB at template scale; only a snapshot straight after a restore with no guest code between needs up to ~3 × the bytes (`distribution/isolate-host-fs-snapshot-restore-then-snapshot-peak`).
+
+- 2026-11-25 — §1 `options.template` and Consequences «the template goal must keep the layer out of the per-run state or bring this fork back to the user»: brought back; the user, on the lifecycle revisit: «Как будто можно начать с самого простого и дальше оптимизировать. Что в данном случае будет самым простым?», then «ок» to «Начинаем с „библиотеки = файлы песочницы"? Да — оформляю это целью и запускаю реализацию; слой шаблона и живой изолят уходят в backlog следующими ступенями». Chosen start (goal `isolate-host-sandbox-template`): `createSandbox({ template })` decodes a `produceDependencySnapshot` artifact into the sandbox's own files at `/node_modules`; §2–§3 and §6 unchanged — every run and host write pays the template (requirements §3 deferred: `distribution/isolate-host-sandbox-template-layer`, ADR-0572 Proposed). Deferred, the user's: an isolate per agent turn vs per `node` run («Изолейты - быстрые короткоживущие(один ход агента) рантаймы. Но давай на цифры посмотрим, мб передумаем»), until real load (the manager's words) — `distribution/isolate-host-sandbox-live-isolate-per-turn`.
+- 2026-11-25 — §1, the template's public API (goal `isolate-host-sandbox-template`, the agent's decisions, durable here): `registerTemplate(artifact: Uint8Array) → Promise<{ id, version }>` and `createSandbox({ template: Uint8Array | { id, version } })`; identity = the artifact's `rifty/manifest.json` `templateId` and the producer's `snapshotId` (sha256 of the decoded tar); one decode per artifact per process, a registered template kept for the process's life (no unregister: a consumer rotating templates holds one encoded state per registration — trigger to add a release: a consumer registering more than one template per process lifetime); refusals `ERR_ISOLATE_HOST_TEMPLATE_ARTIFACT` / `ERR_ISOLATE_HOST_TEMPLATE_UNKNOWN`; the mount `/node_modules` with the tar's times; `maxFsBytes` = the sandbox's own files, the template's budget on top; `snapshot()` / `createSandbox({ template, snapshot })` → `NotImplementedError('isolate-host.sandbox-template-snapshot')`.
+- 2026-11-25 — §6 «a run needs `memoryLimitMb` ≥ 2 × it + 16 MiB»: understates at template scale — on the four-library template (cap 108.9 MiB) `memoryLimitMb` 256 (> 2 × 108.9 + 16) lost pdf's files in 5 / 100 runs, 0 / 100 in a second series (`stateRefused: ERR_ISOLATE_HOST_SANDBOX_CAPTURE`, measured through the public API, `scripts/measure-template.mjs --repeat`); over a template a run's default `memoryLimitMb` is max(256, 3 × the codec cap + 32 MiB) (≈ 503 MiB for the four libraries at the default `maxFsBytes`: 0 of 500 runs lost, 0 of 2 136 under load in the external review); without a template the default stays 256 and this section's rule stands as the README's advice. The workers' RSS ceiling follows (256 MiB + 3 × the sum of live limits: 1 765 MiB for one such run); measured worker RSS 1.0–1.35 GiB per run, ~2.0 GiB near the cap.
+- 2026-11-25 — goal `isolate-host-sandbox-template` closed (PR #460); its durable decisions live here and in the isolate-host README §Sandbox template. Contract stability (the manager's promise to the user «контракт для сервиса потом не меняется»), per observable property — a next step may only lower a number or lift a refusal: the `createSandbox({ template })` / `registerTemplate` forms, errors and identity; `/node_modules` content and writable semantics; `maxFsBytes` = the sandbox's own files, the template's budget on top (named difference: removing or replacing template files frees room here, a layer may count them); limit errors and numbers; host ops' results; `snapshot()` a liftable refusal; a killed run rolled back; `exec`'s result. The layer (`distribution/isolate-host-sandbox-template-layer`) keeps them; a live isolate per turn does not keep four (that item). User answers 2026-11-25: read-only «ок» to backlog (`distribution/isolate-host-sandbox-template-read-only`), changed paths «в бэклог» (`distribution/isolate-host-exec-changed-paths`); the template's package list stays with `epics/isolate-host-agent-tools`.
+- 2026-11-25 — goal `isolate-host-sandbox-template` (closed, PR #460), kept here as the goal directory is deleted.
+  What the user answered «ок» to (the manager's description, verbatim): «Самое простое — библиотеки как обычные файлы песочницы, на том, что уже влито. Без слоя шаблона и без смены жизненного цикла… `createSandbox({ template })` означает „распаковать артефакт в файлы песочницы"… Цена: 0,6–1 с на `exec` и 88 МБ на песочницу; `maxFsBytes` поднять до 95+ МиБ; лимит памяти изолята на запуск от ~215 МиБ… Контракт для сервиса потом не меняется, оба следующих шага остаются открытыми… Что ты этим откладываешь: своё требование §3 „стоимость не зависит от размера шаблона"». The price as delivered differs (the user was told the corrections 2026-11-25): `maxFsBytes` needs no raise (the sandbox's own files, the template on top); a run's default `memoryLimitMb` over the four libraries ≈ 503 MiB (at 256 a run lost its files 5 / 200), the workers' RSS ceiling 1 765 MiB per such run (measured 1.0–1.35 GiB), the consumer's peak per `exec` ~406 MiB on macOS (5 × S + 16 MiB bound), ~12 % reruns at 4–8 runs at once (`distribution/isolate-host-pool-rerun-at-template-scale`); `exec` 0.6–1.0 s and ~86 MiB per idle sandbox as said (README §Sandbox template).
+  Rejected routes: the consumer lays `node_modules` out with the internal codec and passes `createSandbox({ snapshot })` (library probe, PR #430) — violates I3 (public API only) and I1 (no conversion on the consumer's side); a second artifact reader inside isolate-host beside workbench's — violates I1 (two readers drift on what «corrupted or unsupported» is), so the envelope reader moved to `@riftydev/npm-client` internal.
+  Its final invariants, verbatim (the `(I#)` of `packages/isolate-host/tests/sandbox-template.test.ts`; ADR-0572's «verbatim» sections are the earlier layer draft); I6's derived default was narrowed the same day to sandboxes over a template (line above):
+
+  - I1. Intake: `registerTemplate(artifact)` and `createSandbox({ template })` accept a
+    `produceDependencySnapshot` artifact — gzip or br, profile `replay` or `frozen` — and
+    `createSandbox` also the identity `registerTemplate` returned; the identity `{ id, version }` is
+    the manifest's `templateId` and the producer's `snapshotId` (sha256 of the decoded tar, the same
+    for gzip and br), documented; an artifact already registered in the process is not decoded again,
+    concurrent calls included (counted); the bytes are read at the call; a truncated or unsupported
+    artifact, one whose container checks fail (gzip CRC, tar header checksums and envelope), and an
+    unknown identity, are refused with a named error before any sandbox exists, and a refusal leaves
+    the registry as it was; br carries no checksum — a corrupted br artifact is refused or yields
+    another `version` than the producer's `snapshotId`, never the same one (the consumer compares
+    them); the consumer converts nothing. The artifact is the consumer's own CI output: trusted
+    input, no decompression bound beyond Node's own.
+  - I2. Mount: the guest sees exactly the artifact's `payload/node_modules` at `/node_modules`,
+    byte for byte with the tar's mtimes, and nothing else of the artifact (`rifty/*` of either
+    profile, `payload/package.json`, the lock);
+    `require('<lib>')`, `require.resolve` and `module.paths` from `/workspace/main.js` give what live
+    Node v24.16.0 gives over the same tree.
+  - I3. Libraries, public API only: the four canonical generators of the library probe (`gen/pdf.cjs`,
+    `gen/docx.cjs`, `gen/pptx.cjs`, `gen/xlsx.cjs`) run in a sandbox created by `createSandbox({ template })`
+    from a real `produceDependencySnapshot` artifact of the four libraries, exit 0, and write the
+    document live Node writes over the same `node_modules` (timestamps masked, the probe's masks), a
+    valid one (PDF: `pdf-lib` loads it in Node; OOXML: a ZIP whose XML parts parse) — no import of
+    the package's internals anywhere on the path. In rifty's CI.
+  - I4. Writable (default): a change, creation or deletion under `/node_modules` — by the guest or by
+    a host op — is seen by that sandbox's later runs and host ops, by no other sandbox over the same
+    template, and by no sandbox created later.
+  - I5. Read-only — moved to `distribution/isolate-host-sandbox-template-read-only` (amend
+    2026-11-25); here a read-only option is an unknown `createSandbox` option
+    (`ERR_INVALID_ARG_VALUE`) + compat ❌.
+  - I6. Limits, honest: `maxFsBytes` bounds the sandbox's own files exactly as without a template
+    (the codec's cap = `maxFsBytes` + the template's budget − an empty sandbox's), so the defaults
+    hold and the same refusals carry the consumer's number: below an empty sandbox's budget
+    `ERR_OUT_OF_RANGE`; past the cap a host write `ERR_ISOLATE_HOST_SANDBOX_FULL` and a run's end
+    state `stateRefused: ERR_FS_SNAPSHOT_TOO_LARGE`. A run's default `memoryLimitMb` is derived from
+    the cap (max(256, 3 × cap + 32 MiB)), measured with repeats to keep every generator's files
+    (≥ 100 runs each, zero refusals); an explicit `memoryLimitMb` below what the state needs is the
+    named outcome it is without a template (`stateRefused`, `termination: 'memory'`). The README
+    gives the rule and the measured refusal rates.
+  - I7. Unchanged guarantees: what `isolate-host-live-sandbox` I1–I8 hold for a sandbox without a
+    template holds over one — a killed or aborted run rolls back its writes under `/node_modules`
+    too; destroy, ordering, limits, trust — and its open part stays open for both (I1's «a guest that
+    broke its own snapshot», `distribution/isolate-host-sandbox-capture-outside-guest-realm`);
+    sandboxes without a template and `runCode` keep their behavior (their suites green; the package
+    root's export list gains `registerTemplate`).
+  - I8. Persistence deferred, loud: `snapshot()` of a sandbox over a template and
+    `createSandbox({ template, snapshot })` throw `NotImplementedError('isolate-host.sandbox-template-snapshot')`
+    + compat ❌.
+  - I9. Price, published: the README's cost table, measured through the public API on the
+    four-library artifact — `registerTemplate`, `createSandbox`, a warm `exec` of an empty file and
+    of each generator, a host `writeFile`, the consumer's memory per idle sandbox and its peak per
+    run, the longest stall of the consumer's event loop during an `exec`, the I6 numbers —
+    and requirements §3 named as deferred with its backlog items.
+  - I10. Documented route: the README builds the template from `package.json` + lock with
+    `produceDependencySnapshot` in plain Node (published `@riftydev/workbench`), registers it, and
+    requires each of the four libraries from a sandbox run — the steps I3 runs (the carrier calls the
+    workspace producer in vitest; the published package in plain Node: Decisions 2026-11-24).
+  («Decisions 2026-11-24» in I10: published `@riftydev/workbench@0.11.0` produced the four libraries' artifact in plain Node 24 — library probe, PR #430; the repo's own `packages/workbench/dist` does not load in plain Node, the packed package does.)
