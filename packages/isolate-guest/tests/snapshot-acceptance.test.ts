@@ -125,7 +125,9 @@ describe('guest FS snapshot — scenario', () => {
       { op: 'isolate', memoryLimit: 96 },
       {
         op: 'run',
-        code: "require('fs').writeFileSync('/workspace/big', new Uint8Array(50 * 1024 * 1024))",
+        // Five files: the store keeps its own copy of what a write is given, so one 50 MiB
+        // write would hold 100 MiB at once.
+        code: "for (let i = 0; i < 5; i++) require('fs').writeFileSync('/workspace/big' + i, new Uint8Array(10 * 1024 * 1024))",
       },
       { op: 'snapshot', options: { ...OPTIONS, maxBytes: MiB } },
       { op: 'snapshot', options: { ...OPTIONS, maxBytes: 1 << 30 } },
@@ -248,7 +250,9 @@ describe('guest FS snapshot — scenario', () => {
         { op: 'isolate', memoryLimit: 96 },
         {
           op: 'run',
-          code: "require('fs').writeFileSync('/workspace/big', new Uint8Array(50 * 1024 * 1024))",
+          // Five files: the store keeps its own copy of what a write is given, so one 50 MiB
+          // write would hold 100 MiB at once.
+          code: "for (let i = 0; i < 5; i++) require('fs').writeFileSync('/workspace/big' + i, new Uint8Array(10 * 1024 * 1024))",
         },
         { op: 'snapshot', options },
         // The FS is still there: the same refusal again, not a broken realm.
