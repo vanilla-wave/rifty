@@ -30,6 +30,11 @@ microtasks → exit 0, Node 1. Open: whether the rejection should
 terminate before the next macrotask in every realm (kernel child, no-COI,
 isolate) — `awaitDrain` owner.
 
+PR #468 (2026-11-26), isolate: `fs.write(fd, 'data', cb)` + `Promise.reject(…)` in one tick = Node
+(no callback; `fs-io-turn.test.ts`). With a self-chaining `fs.write` loop and a `setImmediate` loop
+beside it (each capped at 2000): Node 0, 0; main `c2250727d` 2000 callbacks, 1 immediate; PR #468 0
+callbacks, 1 immediate (`runCode` 10/10, sandbox 8/8): the late report lets one host turn run.
+
 ## Challenge
 
 challenge: 2026-11-18 — finding capture; no premise critic (README §Challenge)

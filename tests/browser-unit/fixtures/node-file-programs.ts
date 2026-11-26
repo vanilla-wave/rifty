@@ -10,6 +10,7 @@ import writeArrayBufferViewKindsCase from '../../../tools/node-parity-runner/cas
 import writeReadBufferOwnershipCase from '../../../tools/node-parity-runner/cases/fs/write-read-buffer-ownership.case.ts';
 import writeSharedArrayBufferOwnershipCase from '../../../tools/node-parity-runner/cases/fs/write-shared-array-buffer-ownership.case.ts';
 import writeViewBytesIntrinsicsCase from '../../../tools/node-parity-runner/cases/fs/write-view-bytes-intrinsics.case.ts';
+import { fsIoTurnPrograms } from './fs-io-turn-programs.ts';
 
 // ADR-0571: `node <file>` programs run verbatim in live Node
 // (temp dir) and in rifty (`<root>` = the project root). Three surfaces: what
@@ -199,6 +200,7 @@ console.log(JSON.stringify({
  * their own file stores (buffer ownership: the store behind the guest differs per host).
  */
 export const builtinPrograms: readonly NodeFileProgram[] = [
+  ...fsIoTurnPrograms,
   {
     name: 'fs-write-read-buffer-ownership',
     files: { 'main.js': writeReadBufferOwnershipCase.code },

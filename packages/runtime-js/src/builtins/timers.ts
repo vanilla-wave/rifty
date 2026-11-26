@@ -1,11 +1,11 @@
 /**
  * Node-compatible timers. We rely on the host's `setTimeout`/`clearTimeout`/
  * `setInterval`/`clearInterval` and polyfill `setImmediate`/`clearImmediate`
- * via `MessageChannel` (post-task scheduling on browsers; jsdom-like envs in
- * Node tests use a `setTimeout(fn, 0)` fallback).
+ * over one host turn per immediate (see the drain contract below).
  */
 
 import { ref as keepaliveRef, unref as keepaliveUnref } from '../internal/event-loop-keepalive.ts';
+import { isActiveProcessExiting } from './process-lifecycle-events.ts';
 
 /** Node's `Immediate`: the callback's `this`; `_onImmediate` is null once run or cleared. */
 class Immediate {
@@ -242,13 +242,14 @@ export function clearInterval(handle: unknown): void {
 // a Map iterates them in numeric-ascending = insertion order → FIFO drain for
 // free. clearImmediate is O(1) (`delete`), replacing the old O(n) findIndex+splice.
 //
-// Drain: EXACTLY ONE immediate per MessageChannel message. One message per
-// setImmediate call ⇒ one immediate per macrotask ⇒ the microtask queue drains
-// BETWEEN consecutive immediates — Node check-phase parity. A nested setImmediate
-// posts its own (higher-id) message serviced in a LATER check phase (no snapshot
-// needed). MessageChannel (not setTimeout(0)) keeps setImmediate ahead of a
-// setTimeout(0) task; the no-MessageChannel fallback uses setTimeout(0) and is
-// realm-specific (jsdom/node test envs without a check phase).
+// Drain: EXACTLY ONE immediate per host turn, the turn bound to its id. One turn per setImmediate call ⇒
+// the microtask queue drains BETWEEN consecutive immediates — Node check-phase
+// parity. A nested setImmediate gets its own (higher-id) turn, serviced later.
+// The host turn: the host's own `setImmediate` where it has one (a Node process,
+// the isolate host's bridge) — its check phase yields to due timers every loop
+// turn, where a Node MessagePort drains up to 1000 messages first; else a
+// MessageChannel (Chromium), which keeps setImmediate ahead of a setTimeout(0)
+// task; else setTimeout(0) (realm-specific, no check phase).
 const immediates = new Map<number, { handle: Immediate; args: unknown[] }>();
 
 /** Node's processImmediate: `immediate._onImmediate(...argv)`, then `_onImmediate = null`. */
@@ -263,8 +264,10 @@ function runImmediate(item: { handle: Immediate; args: unknown[] }): void {
 }
 let nextImmediateId = 1;
 
+const hostSetImmediate: ((fn: () => void) => unknown) | null =
+  typeof globalThis.setImmediate === 'function' ? globalThis.setImmediate.bind(globalThis) : null;
 const channel: MessageChannel | null =
-  typeof MessageChannel === 'function' ? new MessageChannel() : null;
+  hostSetImmediate === null && typeof MessageChannel === 'function' ? new MessageChannel() : null;
 // Native Node test/embedding hosts auto-ref onmessage. Chromium lifetime is
 // already owned by keepaliveRef; never invoke the guest MessagePort ref shim.
 const nativeImmediatePort =
@@ -274,22 +277,20 @@ const nativeImmediatePort =
 const refImmediateHost = nativeImmediatePort?.ref?.bind(nativeImmediatePort);
 const unrefImmediateHost = nativeImmediatePort?.unref?.bind(nativeImmediatePort);
 
+/** One host turn per immediate, bound to its id: a cleared immediate's turn runs nothing. */
+function runImmediateTurn(id: number): void {
+  const item = immediates.get(id);
+  if (item === undefined) return;
+  immediates.delete(id);
+  keepaliveUnref();
+  if (immediates.size === 0) unrefImmediateHost?.();
+  // A dying process runs no later task (a host turn can come before its terminal lands).
+  if (isActiveProcessExiting()) return;
+  runImmediate(item);
+}
+
 if (channel) {
-  channel.port1.onmessage = () => {
-    // Drain EXACTLY ONE (lowest id; Map iterates ascending = FIFO). One message
-    // per setImmediate call, so consecutive immediates run in SEPARATE macrotasks
-    // and the microtask queue drains BETWEEN them — Node check-phase parity. A
-    // nested immediate posts its own (higher-id) message → next check phase.
-    const first = immediates.keys().next();
-    if (first.done) return;
-    const id = first.value;
-    const item = immediates.get(id);
-    if (item === undefined) return; // cleared between message post and dispatch
-    immediates.delete(id);
-    keepaliveUnref();
-    if (immediates.size === 0) unrefImmediateHost?.();
-    runImmediate(item);
-  };
+  channel.port1.onmessage = (event: MessageEvent<number>) => runImmediateTurn(event.data);
   unrefImmediateHost?.();
 }
 
@@ -302,16 +303,50 @@ export function setImmediate(
   immediates.set(id, { handle, args });
   if (immediates.size === 1) refImmediateHost?.();
   keepaliveRef();
-  if (channel) channel.port2.postMessage(null);
-  else
-    hostSetTimeout(() => {
-      const item = immediates.get(id);
-      if (!item) return; // cleared before its timer fired
-      immediates.delete(id);
-      keepaliveUnref();
-      runImmediate(item);
-    }, 0);
+  if (hostSetImmediate) hostSetImmediate(() => runImmediateTurn(id));
+  else if (channel) channel.port2.postMessage(id);
+  else hostSetTimeout(() => runImmediateTurn(id), 0);
   return handle;
+}
+
+// An I/O completion's turn (`fs-io-turn.ts`). A Node host delivers it in its poll
+// phase (a MessagePort), so the check phase that follows runs the immediates the
+// completion queues before any timer, as Node's guarantee; the submitting turn stays
+// a check-phase immediate, so timers get their phase every loop turn. Other hosts
+// have no phases to tell apart: the immediate queue.
+const ioCompletions = new Map<number, () => void>();
+let nextIoCompletionId = 1;
+const ioChannel: MessageChannel | null =
+  hostSetImmediate !== null && typeof MessageChannel === 'function' ? new MessageChannel() : null;
+const ioPort = ioChannel?.port1 as (MessagePort & HostTimerRefHooks) | undefined;
+if (ioChannel && ioPort) {
+  ioPort.onmessage = (event: MessageEvent<number>) => {
+    const run = ioCompletions.get(event.data);
+    if (run === undefined) return;
+    ioCompletions.delete(event.data);
+    keepaliveUnref();
+    if (ioCompletions.size === 0) ioPort.unref?.();
+    run();
+  };
+  ioPort.unref?.();
+}
+
+/** @internal Queue `run` in an I/O completion turn; returns its cancel. */
+export function queueIoCompletion(run: () => void): () => void {
+  if (ioChannel === null || ioPort === undefined) {
+    const handle = setImmediate(run);
+    return () => clearImmediate(handle);
+  }
+  const id = nextIoCompletionId++;
+  ioCompletions.set(id, run);
+  if (ioCompletions.size === 1) ioPort.ref?.();
+  keepaliveRef();
+  ioChannel.port2.postMessage(id);
+  return () => {
+    if (!ioCompletions.delete(id)) return;
+    keepaliveUnref();
+    if (ioCompletions.size === 0) ioPort.unref?.();
+  };
 }
 
 export function clearImmediate(handle: ImmediateHandle | undefined): void {

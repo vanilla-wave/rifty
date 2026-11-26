@@ -9,7 +9,7 @@ import type { SnapshotOptions } from './snapshot.ts';
 export interface HostFunctions {
   /** Guest stdout (1) / stderr (2) bytes. */
   write(fd: 1 | 2, bytes: Uint8Array): void;
-  /** Arm host timer `id` (1..2^31-1) for `ms` (0..2^31-1); expiry → `GuestEntry.fire(id)`. */
+  /** Arm host timer `id` (1..2^31-1) for `ms` (0..2^31-1; 0 = the next host turn); expiry → `GuestEntry.fire(id)`. */
   timerStart(id: number, ms: number, repeat: boolean): void;
   timerClear(id: number): void;
   /** ms since `timeOrigin` (the call's start). */

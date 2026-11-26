@@ -105,6 +105,11 @@ Precedents add one class each on the same seam: ADR-0158 (fetch), ADR-0446
 
 ## Corrections
 
+- 2026-11-26 — `fs.promises` and the fs callbacks leave §3: they settle in their own host
+  turns now, as Node's threadpool round trip (`runtime-js/fs-callbacks-io-turn`, PR #468), each
+  turn holding a keepalive ref until it runs, so they are counted. The deterministic §3 row drops
+  `fs-promises`; the fs lifecycle rows are the node-file carrier's (`fs-io-turn-programs.ts`).
+
 - 2026-10-20 — ADR-0541 replaces native Request/Response constructor/consumer
   holds and the native-body gap (§2/§4) with Node's JS classes; real Blob I/O
   remains held. Other host API classes and navigator.locks are unchanged.

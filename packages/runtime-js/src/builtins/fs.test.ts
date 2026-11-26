@@ -557,7 +557,6 @@ describe('node:fs directory and temp APIs (M11 runtime-local surface)', () => {
       (
         dir as unknown as { read(cb: (err: Error | null, dirent?: { name: string }) => void): void }
       ).read((err, dirent) => (err ? reject(err) : resolve(dirent?.name)));
-      setTimeout(() => resolve('not-called'), 0);
     });
     expect(first).toBe('a.txt');
 
@@ -565,7 +564,6 @@ describe('node:fs directory and temp APIs (M11 runtime-local surface)', () => {
       (dir as unknown as { close(cb: (err: Error | null) => void): void }).close((err) =>
         err ? reject(err) : resolve('closed'),
       );
-      setTimeout(() => resolve('not-called'), 0);
     });
     expect(closeResult).toBe('closed');
     expect(codeOf(() => dir.closeSync())).toBe('ERR_DIR_CLOSED');

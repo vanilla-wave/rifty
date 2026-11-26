@@ -3,9 +3,10 @@ import { expect, it } from 'vitest';
 
 const implementation = new URL('./timers.ts', import.meta.url).href;
 
-it('native scheduler port references only pending immediates', () => {
-  // Observe the real external MessagePort; the scheduler and queue stay real.
-  const source = `const Channel=MessageChannel;let port;
+it('a host without setImmediate: the scheduler port references only pending immediates', () => {
+  // Observe the real external MessagePort; the scheduler and queue stay real. A host with
+  // its own setImmediate (this Node) drives the queue with it, not the port.
+  const source = `delete globalThis.setImmediate;const Channel=MessageChannel;let port;
 globalThis.MessageChannel=class extends Channel {constructor(){super();port=this.port1;}};
 const timers=await import(${JSON.stringify(implementation)});
 const states=[port.hasRef()];

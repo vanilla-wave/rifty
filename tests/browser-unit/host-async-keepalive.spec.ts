@@ -68,7 +68,6 @@ test('uncounted Node-surface work settles with no host task', async ({ page }) =
     const run = await runOwnerCommand(page, 'node uncounted.cjs', 60_000);
     expect(run.timedOut, run.out).toBe(false);
     expect(rows(run.out), run.out).toEqual([
-      'HA|ticks:fs-promises=0',
       'HA|ticks:zlib-gzip=0',
       'HA|ticks:zlib-gzip-stream=0',
       'HA|ticks:response-string-body=0',

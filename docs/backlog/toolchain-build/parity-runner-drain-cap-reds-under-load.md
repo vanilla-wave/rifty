@@ -4,7 +4,7 @@ status: draft
 title: Parity-runner physical-worker cases red under host load at the harness's 10 s drain cap
 created: 2026-11-25
 why: A `test:parity` red that a rerun clears costs every local `pnpm pr:check` a second run and trains agents to rerun a red gate; reported seven times in five days, once in CI (2026-11-26).
-sources: [docs/process/traps.md, docs/backlog/epics/node-file-entry-parity/ledger.md, docs/backlog/runtime-js/reference/pr-425-final-green.json, docs/public/compat/process.md, PR-425-author-run, PR-431-cross-review, PR-441-author-run, PR-474-author-run, https://github.com/vanilla-wave/rifty/actions/runs/45839749821/job/139983536138]
+sources: [docs/process/traps.md, docs/backlog/epics/node-file-entry-parity/ledger.md, docs/backlog/runtime-js/reference/pr-425-final-green.json, docs/public/compat/process.md, PR-425-author-run, PR-431-cross-review, PR-441-author-run, PR-468-author-run, PR-474-author-run, https://github.com/vanilla-wave/rifty/actions/runs/45839749821/job/139983536138]
 code: [tools/node-parity-runner/src/run-in-rifty.ts, packages/runtime-js/src/internal/event-loop-keepalive.ts, tools/node-parity-runner/cases/worker_threads/exec-argv-startup.case.ts, tools/node-parity-runner/cases/process/exit-lifecycle-child.case.ts]
 ---
 
@@ -52,6 +52,19 @@ a time bound stays only with a stall injected at the judged point as its RED.
 Owner: toolchain-build (parity runner). Trigger: the same message in CI, or the next
 local red — capture the ref count and its holders before rerunning. **Trigger fired
 2026-11-26** (CI row above); pickup per the user's decision.
+
+Low load, 2026-11-26 (PR #468 author, macOS arm64; interleaved pairs, main `c2250727d` against the PR):
+
+- `runInRifty(exit-lifecycle-child)` resolves in 10.19–10.23 s when green (load ~8). When red,
+  the cap rejection comes at 10.9–12.8 s with `(3 active ref(s))`.
+- `pnpm test:parity exit-lifecycle-child`: green runs take 11.0–11.8 s wall, about 1.5 s of
+  that the runner's start, on both sides. Red 5/15 on main and 8/15 on the PR at load 3.6–9.8.
+- `worker_threads/exec-argv-startup`: red 2/6 main, 4/6 PR at load 10–17, same wall; later the same
+  day 3/3 on main `c2250727d` and 3/3 on the PR at load 21–27, and `exit-lifecycle-child` 1/1 each.
+
+So the case's drain ends just under the 10 s cap even when green. Not established which it
+is: ~10 s of real work (12 sequential forks), or a drain that waits on something until near the
+cap.
 
 ## Challenge
 

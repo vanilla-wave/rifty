@@ -260,23 +260,26 @@ for (const testCase of commandCases) {
 
 // Declared gap (backlog runtime-js/node-eval-work-queued-at-exit-runs): work already
 // queued when exit() runs still runs and prints here; the status is Node's. Pinned
-// exactly, so a fix or another regression turns it red.
+// exactly, so a fix or another regression turns it red. Rows with no extra equal Node.
 const QUEUED_EXIT = 'Promise.resolve().then(()=>process.exit(3))';
 const queuedAtExit: readonly {
   readonly testCase: ProcessLifecycleCase;
   readonly extra: readonly string[];
 }[] = [
   { testCase: evalCase('ripe-timer', microtaskExit(0)), extra: ['L|timer'] },
+  // An immediate or an fs request queued at exit() runs nothing, as in Node
+  // (runtime-js/fs-callbacks-io-turn: a dying process runs no queued immediate; the
+  // process end settles no fs request). Node v24.16.0: no output, exit 3.
   {
     testCase: evalCase('immediate', `setImmediate(()=>console.log('L|immediate'));${QUEUED_EXIT}`),
-    extra: ['L|immediate'],
+    extra: [],
   },
   {
     testCase: evalCase(
       'fs-callback',
       `require('fs').stat('.',()=>console.log('L|fs'));${QUEUED_EXIT}`,
     ),
-    extra: ['L|fs'],
+    extra: [],
   },
   {
     testCase: evalCase(
@@ -309,7 +312,8 @@ const queuedAtExit: readonly {
 ];
 
 for (const { testCase, extra } of queuedAtExit) {
-  test(`declared: work queued at exit() still prints: ${testCase.name}`, async ({ page }) => {
+  const verdict = extra.length === 0 ? 'runs nothing, as Node' : 'declared: still prints';
+  test(`work queued at exit() ${verdict}: ${testCase.name}`, async ({ page }) => {
     test.setTimeout(120_000);
     const oracle = await runLifecycleOracle(testCase);
     const observed = await runProjectCommand(page, testCase);

@@ -141,6 +141,42 @@ export const BROWSER_SKIPPED_ROWS: Readonly<
     },
   ],
 };
+/**
+ * Rows whose order live Node races, on the browser hosts: the pin keeps the guest's line; the
+ * comparison with Node drops the row on both sides, after Node's line is checked to be one of
+ * `node` (a third order fails by name).
+ */
+export const NODE_RACE_ROWS: Readonly<
+  Record<
+    string,
+    readonly { readonly row: string; readonly why: string; readonly node: readonly string[] }[]
+  >
+> = {
+  'b1-bindings': [
+    {
+      row: 'fs.read callback vs a timer due now',
+      why: "Node's pool read is done or not by the poll after the timer (an immediate pending, poll does not wait): Node v24.16.0 macOS `timer,read cb,immediate` 284/300 alone, 276/300 under load, else `timer,immediate,read cb`; Linux CI 35/36 (PR #471 run 45788011611). PR #468",
+      node: ['timer,read cb,immediate', 'timer,immediate,read cb'],
+    },
+  ],
+};
+/** `o` without its program's Node-race rows; `fromNode`: each race line must be one of Node's orders. */
+export function withoutRaceRows<T extends { readonly stdout: string }>(
+  id: string,
+  o: T,
+  fromNode = false,
+): T {
+  let stdout = o.stdout;
+  for (const { row, node } of NODE_RACE_ROWS[id] ?? []) {
+    const line = new RegExp(`^${row.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} => (.*)$`, 'm');
+    const value = line.exec(stdout)?.[1];
+    if (value === undefined) throw new Error(`${id}: race row «${row}» not printed`);
+    if (fromNode && !node.includes(value))
+      throw new Error(`${id}: Node printed «${row} => ${value}», not one of ${node.join(' | ')}`);
+    stdout = stdout.replace(line, `${row} => <Node race>`);
+  }
+  return { ...o, stdout };
+}
 /** `node <program> <args>`: the program's `--skip=` of `rows`. */
 export const skipArgs = (rows: readonly { readonly row: string }[] = []): string[] =>
   rows.map(({ row }) => `--skip=${encodeURIComponent(row)}`);

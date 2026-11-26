@@ -10,6 +10,7 @@
  * `Symbol.for` slot, never a module-local import.
  */
 import { FATAL_TRAILER, formatFatalReport, formatFatalStack } from './fatal-report.ts';
+import { completeSubmittedIo } from './fs-io-submitted.ts';
 import { readActiveNodeProcessBootstrap } from './process-bootstrap-identity.ts';
 
 const NODE_PROCESS_LIFECYCLE = Symbol.for('rifty.runtime-js.process-lifecycle.v1');
@@ -110,6 +111,8 @@ export class NodeProcessExit {
     if (hasCode) this.#host.writeExitCode(code);
     if (!this.#exiting) {
       this.#exiting = true;
+      // Node's pool has finished what was submitted before its 'exit' listeners run.
+      completeSubmittedIo();
       this.#host.process.emit('exit', this.#host.readExitCode() ?? 0);
     }
     return this.#terminate(toUint8ExitCode(this.#host.readExitCode() ?? 0));
@@ -119,12 +122,15 @@ export class NodeProcessExit {
   beginFatal(): void {
     if (this.#exiting) return;
     this.#exiting = true;
+    completeSubmittedIo();
     try {
       this.#host.writeExitCode(1);
       this.#host.process.emit('exit', 1);
     } catch {
       // Node: "Nothing to be done about it at this point."
     }
+    // The process is dying: hosts that print the report themselves never reach `#terminate`.
+    completeSubmittedIo();
     this.#fatalExitCode = { value: this.#host.readExitCode() };
   }
 
@@ -162,6 +168,7 @@ export class NodeProcessExit {
    * in-process host (no-COI runBin) reads a declared gap from it.
    */
   #terminate(status: number, died?: { readonly cause: unknown }): never {
+    completeSubmittedIo();
     const signal = Object.assign(new Error(`process.exit(${status})`, died), {
       code: RIFTY_PROCESS_EXIT,
       exitCode: status,
@@ -197,6 +204,11 @@ function exitStateOf(process: unknown): NodeProcessExitLike | null {
 /** True once `process`'s exit has begun (Node `_exiting`); false for a non-runtime process. */
 export function isNodeProcessExiting(process: unknown): boolean {
   return exitStateOf(process)?.exiting === true;
+}
+
+/** The active process is ending (`exit()`, a fatal error): Node runs no later task. */
+export function isActiveProcessExiting(): boolean {
+  return lifecycleTarget(undefined)?.exit.exiting === true;
 }
 
 /**

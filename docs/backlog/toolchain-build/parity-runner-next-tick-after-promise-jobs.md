@@ -4,7 +4,7 @@ status: draft
 title: The parity runner's rifty side runs a process.nextTick after a promise job queued later; Node and the product hosts run it first
 created: 2026-11-25
 why: a parity case on nextTick-vs-promise order is red in the runner while every product host equals Node, so the runner can neither prove nor guard that order
-sources: [docs/backlog/runtime-js/fs-callback-before-queued-microtask.md, docs/backlog/epics/node-streams-as-in-node/reference/README.md, docs/backlog/runtime-js/stream-core-node-sources.md]
+sources: [tools/node-parity-runner/cases/fs/callback-turn-order.case.ts, docs/backlog/epics/node-streams-as-in-node/reference/README.md, docs/backlog/runtime-js/stream-core-node-sources.md]
 code: [tools/node-parity-runner/src/run-in-rifty.ts, packages/runtime-js/src/builtins/process.ts]
 ---
 
@@ -21,7 +21,7 @@ Program `process.nextTick(() => log('tick')); Promise.resolve().then(() => log('
 | streams probe harness (`reference/inproc.mts`, `require('process')`) | `tick, p` | `node --import tsx inproc.mts` |
 
 The PR #455 review reported `p, tick` on every host; only the runner reproduced it here. Not the
-same item as `runtime-js/fs-callback-before-queued-microtask` (fs callback timing on product hosts):
+same item as the fs callback timing on product hosts (closed by PR #468, `fs/callback-turn-order`):
 this one is a runner-only nextTick order. Same
 runner, aborted signal: `addAbortListener(aborted, …)`, then `nextTick`, then `then` → Node
 `tick, listener, p`, runner `listener, p, tick`. Not established: why. Code-read leads (review):

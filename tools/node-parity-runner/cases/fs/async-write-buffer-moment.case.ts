@@ -6,10 +6,11 @@ import type { ParityCase } from '../../src/types.ts';
  * alone, on every async write entry. Plus the caller-tick row that equals Node
  * by its own read moment (a WriteStream before open); after `fs.write(fd)` that
  * row races in Node (9,9,9 on macOS, 1,2,3 on Linux CI). Declared ≠
- * Node: a caller-tick mutation after promises.writeFile/appendFile, writeFile
- * cb or an open WriteStream's write (Node writes it, rifty reads at the call;
- * owner backlog runtime-js/fs-callbacks-io-turn). appendFile(cb), FileHandle:
- * missing (fs-callback-append-file-rm-missing, fs-promises-filehandle).
+ * Node: a caller-tick mutation after an open WriteStream's write (Node writes it,
+ * rifty reads at the call; owner backlog runtime-js/fs-write-stream-node-source).
+ * The caller-tick row of promises.writeFile/appendFile and writeFile/appendFile cb
+ * equals Node since runtime-js/fs-callbacks-io-turn (the bytes are read when the
+ * write runs; Node v24.16.0 240/240). FileHandle: missing (fs-promises-filehandle).
  */
 const c: ParityCase = {
   code: `
@@ -20,6 +21,7 @@ const c: ParityCase = {
       'promises.writeFile': (p, b, s) => { const r = fs.promises.writeFile(p, b); s(); return r; },
       'promises.appendFile': (p, b, s) => { const r = fs.promises.appendFile(p, b); s(); return r; },
       'writeFile cb': (p, b, s) => new Promise((res, rej) => { fs.writeFile(p, b, done(res, rej)); s(); }),
+      'appendFile cb': (p, b, s) => new Promise((res, rej) => { fs.appendFile(p, b, done(res, rej)); s(); }),
       'write fd cb': (p, b, s) => new Promise((res, rej) => {
         const fd = fs.openSync(p, 'w');
         fs.write(fd, b, (e) => { fs.closeSync(fd); e ? rej(e) : res(); });
@@ -33,7 +35,7 @@ const c: ParityCase = {
         ws.on('open', () => { ws.write(b); s(); ws.end(res); });
       }),
     };
-    const callerTick = ['WriteStream before open'];
+    const callerTick = ['promises.writeFile', 'promises.appendFile', 'writeFile cb', 'appendFile cb', 'WriteStream before open'];
     (async () => {
       let n = 0;
       for (const [entry, run] of Object.entries(entries)) {

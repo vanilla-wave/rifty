@@ -507,7 +507,6 @@ fetch(request)
  * holds the loop so a miscount reports instead of being reaped.
  */
 export const uncountedHostTaskCase = `const zlib = require('node:zlib');
-const fsp = require('node:fs/promises');
 const keep = setTimeout(() => {}, 60000);
 const big = 16 * 1024 * 1024;
 const readAll = async (stream) => { const reader = stream.getReader(); while (!(await reader.read()).done); };
@@ -523,7 +522,6 @@ async function ticks(label, op) {
   console.log('HA|ticks:' + label + '=' + count);
 }
 (async () => {
-  await ticks('fs-promises', async () => { await fsp.writeFile('ticks.bin', Buffer.alloc(big, 1)); await fsp.readFile('ticks.bin'); });
   await ticks('zlib-gzip', () => new Promise((resolve, reject) => zlib.gzip(Buffer.alloc(big, 65), (e) => (e ? reject(e) : resolve()))));
   await ticks('zlib-gzip-stream', () => new Promise((resolve, reject) => {
     const gzip = zlib.createGzip();

@@ -53,6 +53,13 @@ callback (rifty runs it as a promise reaction in the same task —
 `runNodeCallback`), a `fs.promises` settlement. ADR-0445 rule 3's trap-time
 terminal is correct once the trap runs; the trap cannot run earlier.
 
+PR #468 (2026-11-26), `fs.write(fd, 'data', cb)` + `Promise.reject(…)` in one tick: = Node on
+Workbench/SDK (exit 1, no callback; carrier `fs-exit-completes-submitted`, `fs-io-turn-exit.spec.ts`).
+Beside it a self-chaining `fs.write` loop and a `setImmediate` loop (each capped at 2000): Node 0
+callbacks, 0 immediates; main `c2250727d` 2000 callbacks (the chain on microtasks), 1 immediate, SDK
+exit `null` 3/3; PR #468 0, 0, exit 1 (5/5 each). A one-turn completion (tried in PR #468, dropped)
+gave 1 callback.
+
 ## Options
 
 - **Rejection fence** (the only order-true route found): run each Node
