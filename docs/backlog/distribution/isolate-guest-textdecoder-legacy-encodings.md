@@ -77,7 +77,7 @@ Goal §User scenario step 3: pdfkit with its built-in font loads in the isolate 
    for utf-8, utf-16le, gb18030, a single-byte encoding; `decode('x')`/`decode(1)`
    (`ERR_INVALID_ARG_TYPE`), a foreign `this` (`ERR_INVALID_THIS`), invalid `options` → I2
 4. WPT `encoding` (Node v24.16.0's vendored copy, sha256-pinned) through the shared WPT harness of
-   `runtime-js/isolate-guest-blob-file` (Acceptance 10 there): every subtest gives the guest the
+   `tests/wpt/` (`README.md` there; PR #458, ADR-0578): every subtest gives the guest the
    result live Node gives it (not Node's `status/encoding.json`, which still skips files Node now
    passes, `reference/wpt`), except, listed in the test: the `encodeInto` «detached output buffer»
    subtest (`MessageChannel`), `idlharness.any.js` and `encoding/streams/*`
@@ -161,7 +161,7 @@ WHATWG `encoding` @ 7d2e3e08e1 (`encodings.json`, `indexes.json`) for the corpus
 
 - 2026-11-25 — manager: the set is utf-8 + the 33 Node=WHATWG encodings; the five are a named gap
   (goal Decisions, question T).
-- 2026-11-25 — WPT through the one shared harness owned by `runtime-js/isolate-guest-blob-file`.
+- 2026-11-25 — WPT through the one shared harness, `tests/wpt/` (built by the `Blob` unit, PR #458).
 - 2026-11-25 — @exodus/bytes only for utf-16/gb18030 (Node uses ICU there but its results equal
   WHATWG on the corpus); Node's own JS for the rest.
 - rejected route: `text-encoding` 0.7.0 (differs on `iso-8859-8-i` and gbk/gb18030, tables at load

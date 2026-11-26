@@ -1,0 +1,17 @@
+{
+  "node": "v24.16.0",
+  "source": "nodejs/node v24.16.0 test/fixtures/wpt (FileAPI 7f5130188818b6c12c636491186b459ec2bf131f, resources 1d2c5fb36a6e477c8f915bde7eca027be6abe792)",
+  "files": {
+    "FileAPI/blob/Blob-array-buffer.any.js": "eb5ac8ab115dfb3f91202132c144b33c1e530a456f463324066dbe11ade2f60b",
+    "FileAPI/blob/Blob-bytes.any.js": "a305534e59646650d71826a838e499a57da1c2ea60ebb3fdb899f1ea0d6a5964",
+    "FileAPI/blob/Blob-constructor.any.js": "7a09f45aa13c1634489425c08a0d77f69f92fc5da4bc2d3cf341e9e290aabe8b",
+    "FileAPI/blob/Blob-newobject.any.js": "64257c4adfd0ff059fb492605a62e921ff17b63c9b66c3a87d94c1626a9c3444",
+    "FileAPI/blob/Blob-slice-overflow.any.js": "5da17f7ad6fa2e15a0ae6e8435f9cfd0413b64a39ea337bedd99e915048d8d5d",
+    "FileAPI/blob/Blob-slice.any.js": "506fc067d18adb43b2b3b01fcc1123fadaaaf78bfed311b8e863c5f7edd64cda",
+    "FileAPI/blob/Blob-text.any.js": "e1fa952af9b0bb70c103d0aa63a9524142904b66d60481e25d4c957426e13101",
+    "FileAPI/file/File-constructor.any.js": "106ca99025bf075fbcad76a37c919064f07036845b5805be9963eecc51a4ae85",
+    "FileAPI/support/Blob.js": "a1152b82af45d952c56f8b6f82c3a87e9ac58f834114a9813778418bfa7df25d",
+    "LICENSE.md": "5fac07febb0e2a97fb0d7b0def149ec08b642e1ba4b9c345283ab1cbd2af6570",
+    "resources/testharness.js": "0b44fbdd33bdff9cefc626229a0f5537197c37c271c4ea40ec3d9dd87498db22"
+  }
+}
