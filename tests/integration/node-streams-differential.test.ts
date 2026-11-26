@@ -62,71 +62,97 @@ const LIVE = 'runtime-js/post-guest-paths-use-replaceable-intrinsics';
 const EE_STORE = 'runtime-js/events-prototype-shape';
 // TODO(backlog: runtime-js/events-once-wrapper-bind)
 const ONCE_BIND = 'runtime-js/events-once-wrapper-bind';
-const pin = (owner: string, rifty: string) => ({ owner, rifty });
-const PINNED: Readonly<Record<string, Readonly<Record<string, { owner: string; rifty: string }>>>> =
-  {
-    'b1-bindings': {
-      'fs.writev / fs.fsync / fs.writevSync / fs.fsyncSync types': pin(
-        WRITEV,
-        'writev:undefined fsync:undefined writevSync:undefined fsyncSync:undefined fdatasync:undefined',
-      ),
+interface Pin {
+  readonly owner: string;
+  /** Today's rifty value; more than one only where the value is set by speed (declared at the pin). */
+  readonly rifty: readonly string[];
+}
+const pin = (owner: string, ...rifty: string[]): Pin => ({ owner, rifty });
+const PINNED: Readonly<Record<string, Readonly<Record<string, Pin>>>> = {
+  'b1-bindings': {
+    'fs.writev / fs.fsync / fs.writevSync / fs.fsyncSync types': pin(
+      WRITEV,
+      'writev:undefined fsync:undefined writevSync:undefined fsyncSync:undefined fdatasync:undefined',
+    ),
+  },
+  'm4-readstream': {
+    'timers run while 16 MiB streams (for await)': pin(IO_TURN, 'bytes=16777216,ticks>0=false'),
+    'timers run during an fs.read(fd) loop over 16 MiB (the fd source alone)': pin(
+      IO_TURN,
+      'bytes=16777216,ticks>0=false',
+    ),
+  },
+  'm5-writestream': {
+    // Node's WriteStream sets `_writev = null` without `fs.writev` (streams.js:373).
+    'member types': pin(
+      WRITEV,
+      'write:function end:function cork:function uncork:function setDefaultEncoding:function destroy:function close:function destroySoon:function _write:function _writev:object _final:undefined _destroy:function _construct:function open:function',
+    ),
+    // The row prints `no settle in 3s` when the write outlasts the program's bound (CI load).
+    'timers run while a WriteStream writes 16 MiB in 64 KiB chunks': pin(
+      IO_TURN,
+      'bytes=16777216,ticks>0=false',
+      'bytes=16777216,ticks>0=false,no settle in 3s',
+    ),
+  },
+  // Fresh `kResistStopPropagation`/`kWeakHandler` (a host EventTarget ignores them), variant A.
+  'm9-abort-stop-propagation': {
+    'promises.pipeline(r, w, {signal}), abort after a stopping listener': pin(
+      AL,
+      'pending,destroyed=false/false',
+    ),
+    'finished(r, {signal}) after a stopping listener': pin(AL, 'pending'),
+    'addAbortSignal(signal, r) after a stopping listener': pin(AL, 'destroyed=false'),
+  },
+  // rifty's EventEmitter keeps listeners in `_listenersMap`; the core's `eventNames` walks `_events`.
+  'p2-emitter-store': {
+    'Readable eventNames, _events keys, _eventsCount': pin(
+      EE_STORE,
+      '[] close,error,data,end,readable undefined',
+    ),
+    'Writable eventNames, error listeners': pin(EE_STORE, '[] 1'),
+    'pipe destination: error listeners, eventNames': pin(EE_STORE, '1 []'),
+  },
+  // io's EventEmitter.emit reads `slice` live: the run dies (exit 1), Node completes.
+  'p1-intrinsics-replaced: Array.prototype.slice throws': {
+    exit: pin(LIVE, '1'),
+    stderr: pin(LIVE, '\nError: replaced slice called\n\nNode.js v24.16.0\n'),
+    'line 1': pin(LIVE, ''),
+    'Array.prototype.slice throws': pin(LIVE, '(no row)'),
+    'line 2': pin(LIVE, '(no row)'),
+  },
+  // fs.open chains through the live Promise.resolve().then.
+  'p1-intrinsics-replaced: Promise.prototype.then throws': {
+    'Promise.prototype.then throws': pin(LIVE, 'threw replaced then called'),
+  },
+  'p1-intrinsics-replaced: globalThis.Promise is another class': {
+    'globalThis.Promise is another class': pin(LIVE, 'threw Promise.resolve is not a function'),
+  },
+  // Node's events `_onceWrap` reads `bind` live and throws; rifty's `once` does not.
+  'p1-intrinsics-replaced: Function.prototype.bind throws': {
+    'Function.prototype.bind throws': pin(ONCE_BIND, 'A.B.C. 12 hello intrinsics finished:ok'),
+  },
+};
+/**
+ * Rows whose value a race inside Node sets (timer vs libuv pool, two timers under load): each
+ * column's value must be one of Node's declared outcomes, each seen from live Node.
+ */
+const RACES: Readonly<
+  Record<string, Readonly<Record<string, { why: string; node: readonly string[] }>>>
+> = {
+  'b1-bindings': {
+    'fs.read callback vs a timer due now': {
+      why: 'the pool read completes before or after the check phase (live Node under load: 1 of 36 runs `immediate` first, CI run 2026-11-26)',
+      node: ['timer,read cb,immediate', 'timer,immediate,read cb'],
     },
-    'm4-readstream': {
-      'timers run while 16 MiB streams (for await)': pin(IO_TURN, 'bytes=16777216,ticks>0=false'),
-      'timers run during an fs.read(fd) loop over 16 MiB (the fd source alone)': pin(
-        IO_TURN,
-        'bytes=16777216,ticks>0=false',
-      ),
+  },
+  'm1-hooks-matrix': {
+    'Writable async _destroy callback': {
+      why: 'a 1 ms and a 3 ms timer fire in one loop turn or two (CI run 2026-11-26: live Node one order, the core on Node bindings the other)',
+      node: ['D,sync errored=e,t1,Dcb,error e,close', 'D,sync errored=e,Dcb,error e,close,t1'],
     },
-    'm5-writestream': {
-      // Node's WriteStream sets `_writev = null` without `fs.writev` (streams.js:373).
-      'member types': pin(
-        WRITEV,
-        'write:function end:function cork:function uncork:function setDefaultEncoding:function destroy:function close:function destroySoon:function _write:function _writev:object _final:undefined _destroy:function _construct:function open:function',
-      ),
-      'timers run while a WriteStream writes 16 MiB in 64 KiB chunks': pin(
-        IO_TURN,
-        'bytes=16777216,ticks>0=false',
-      ),
-    },
-    // Fresh `kResistStopPropagation`/`kWeakHandler` (a host EventTarget ignores them), variant A.
-    'm9-abort-stop-propagation': {
-      'promises.pipeline(r, w, {signal}), abort after a stopping listener': pin(
-        AL,
-        'pending,destroyed=false/false',
-      ),
-      'finished(r, {signal}) after a stopping listener': pin(AL, 'pending'),
-      'addAbortSignal(signal, r) after a stopping listener': pin(AL, 'destroyed=false'),
-    },
-    // rifty's EventEmitter keeps listeners in `_listenersMap`; the core's `eventNames` walks `_events`.
-    'p2-emitter-store': {
-      'Readable eventNames, _events keys, _eventsCount': pin(
-        EE_STORE,
-        '[] close,error,data,end,readable undefined',
-      ),
-      'Writable eventNames, error listeners': pin(EE_STORE, '[] 1'),
-      'pipe destination: error listeners, eventNames': pin(EE_STORE, '1 []'),
-    },
-    // io's EventEmitter.emit reads `slice` live: the run dies (exit 1), Node completes.
-    'p1-intrinsics-replaced: Array.prototype.slice throws': {
-      exit: pin(LIVE, '1'),
-      stderr: pin(LIVE, '\nError: replaced slice called\n\nNode.js v24.16.0\n'),
-      'line 1': pin(LIVE, ''),
-      'Array.prototype.slice throws': pin(LIVE, '(no row)'),
-      'line 2': pin(LIVE, '(no row)'),
-    },
-    // fs.open chains through the live Promise.resolve().then.
-    'p1-intrinsics-replaced: Promise.prototype.then throws': {
-      'Promise.prototype.then throws': pin(LIVE, 'threw replaced then called'),
-    },
-    'p1-intrinsics-replaced: globalThis.Promise is another class': {
-      'globalThis.Promise is another class': pin(LIVE, 'threw Promise.resolve is not a function'),
-    },
-    // Node's events `_onceWrap` reads `bind` live and throws; rifty's `once` does not.
-    'p1-intrinsics-replaced: Function.prototype.bind throws': {
-      'Function.prototype.bind throws': pin(ONCE_BIND, 'A.B.C. 12 hello intrinsics finished:ok'),
-    },
-  };
+  },
+};
 /** Written files whose bytes a race inside Node sets, masked in every column (path → why). */
 const MASKED_OUTPUT: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   'w1-fs-windows': {
@@ -236,9 +262,9 @@ function coverageProblems(): string[] {
     ...Object.keys(NOT_RUN)
       .filter((k) => !all.has(k))
       .map((k) => `NOT_RUN names no program or case: ${k}`),
-    ...[...Object.keys(PINNED), ...Object.keys(MASKED_OUTPUT)]
+    ...[...Object.keys(PINNED), ...Object.keys(MASKED_OUTPUT), ...Object.keys(RACES)]
       .filter((k) => !ITEMS.some((i) => i.id === k))
-      .map((k) => `PINNED/MASKED_OUTPUT names an item not run: ${k}`),
+      .map((k) => `PINNED/MASKED_OUTPUT/RACES names an item not run: ${k}`),
     ...[...all]
       .filter((k) => !(k in NOT_RUN) && !ITEMS.some((i) => i.id === k))
       .map((k) => `neither run nor listed: ${k}`),
@@ -295,22 +321,34 @@ describe('stream core 8a differential: Node v24.16.0 core on Node bindings = on 
         );
         const keys = [...new Set([...node.keys(), ...nodeCore.keys(), ...rifty.keys()])];
         const pins = PINNED[item.id] ?? {};
+        const races = RACES[item.id] ?? {};
         const oracle: string[] = [];
         const differs: Record<string, { owner: string; rifty: string }> = {};
         const unpinnedEqual: string[] = [];
         for (const k of keys) {
-          if (node.get(k) !== nodeCore.get(k))
-            oracle.push(
-              `${k}: node ${JSON.stringify(node.get(k))} / node-core ${JSON.stringify(nodeCore.get(k))}`,
-            );
-          if (nodeCore.get(k) !== rifty.get(k))
-            differs[k] = { owner: pins[k]?.owner ?? '?', rifty: rifty.get(k) ?? '(no row)' };
-          else if (k in pins)
-            unpinnedEqual.push(`${k}: equal now, drop its pin (owner ${pins[k]?.owner})`);
+          const [n, nc, r] = [node.get(k), nodeCore.get(k), rifty.get(k)];
+          const race = races[k];
+          if (race === undefined) {
+            if (n !== nc)
+              oracle.push(`${k}: node ${JSON.stringify(n)} / node-core ${JSON.stringify(nc)}`);
+          } else
+            for (const [col, v] of [
+              ['node', n],
+              ['node-core', nc],
+            ] as const)
+              if (!race.node.includes(v ?? ''))
+                oracle.push(`${k}: ${col} ${JSON.stringify(v)} is no declared outcome`);
+          const equal = race === undefined ? nc === r : race.node.includes(r ?? '');
+          const p = pins[k];
+          if (p === undefined) {
+            if (!equal) differs[k] = { owner: '?', rifty: r ?? '(no row)' };
+          } else if (equal) unpinnedEqual.push(`${k}: equal now, drop its pin (owner ${p.owner})`);
+          else if (!p.rifty.includes(r ?? '(no row)'))
+            differs[k] = { owner: p.owner, rifty: r ?? '(no row)' };
         }
         expect({ oracle, differs, unpinnedEqual }).toEqual({
           oracle: [],
-          differs: pins,
+          differs: {},
           unpinnedEqual: [],
         });
       },

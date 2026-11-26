@@ -30,7 +30,7 @@ owner is the binding unit, since the differential bypasses the wiring 8c/9r/9w):
 |---|---|
 | in-process `m1`, hook matrix, `m2`, `m3`, `m6`, `m7`, `m8`, `m10` (8c, 9r, 9w, guard) | equal |
 | in-process `m4`, `m5`, `w1`, `c-*` (10 programs) | equal but: `m4` «timers … for await», «timers … fs.read(fd) loop», `m5` «timers … WriteStream», pinned, owner 4; `m5` «member types» (`_writev`), owner 5; `w1` `win-4.out` masked (a race inside Node) |
-| `b1` rows of 1, 2, 3 (landed) and its guards | equal |
+| `b1` rows of 1, 2, 3 (landed) and its guards | equal (the fs.read-vs-timer guard by its declared Node outcomes, `RACES`) |
 | `b1` «fs.writev / fs.fsync …» (5) | pinned, owner 5 |
 | in-process `m9` (AL, 8c, guard) | «promises.pipeline … stopping listener», «finished(r, {signal}) …», «addAbortSignal …» pinned, owner AL; `map`, `reduce` equal |
 | parity `cases/stream` (70) and `cases/fs` stream cases (7) | 74 run, equal; 3 not run (stdin/node-cli-eval kinds) |
@@ -75,7 +75,10 @@ challenge: 2026-11-25 — none (child of a goal; premise in goal §Challenge). T
    matrix, `p1` (a process per row), `p2` and the parity cases above, three ways — live Node, the core on
    Node's bindings, the core on rifty's — compared whole (exit, every stdout line, stderr without
    frames and the loader's source excerpt, the files written; the one exception, `MASKED_OUTPUT`:
-   `w1` `win-4.out`, whose bytes a race inside Node sets — 7 of 8 live-Node runs 0 B, 1 of 8 1024 B).
+   `w1` `win-4.out`, whose bytes a race inside Node sets — 7 of 8 live-Node runs 0 B, 1 of 8 1024 B); and `RACES`, two rows whose value a race inside
+   Node sets (`b1` «fs.read callback vs a timer due now», hook matrix «Writable async _destroy
+   callback»: both orders seen from live Node under load), where every column must give one of
+   Node's declared outcomes.
    The core on Node's bindings equals
    live Node on every row; on rifty's it equals that on every row but `PINNED`, each pinned on
    today's rifty value with its owner: 4 (`runtime-js/fs-callbacks-io-turn`), 5
