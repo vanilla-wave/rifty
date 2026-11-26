@@ -13,7 +13,7 @@ const ALLOWED = '(allowed: registry.npmjs.org, loopback, *.test)';
 const onHost = (carrier: string, n: number, host = 'https://registry.example.invalid') =>
   `${carrier}: ${n} address line(s) on ${host} ${ALLOWED}`;
 const unreadable = (carrier: string, n: number, value: string) =>
-  `${carrier}: ${n} unreadable address value(s) ${JSON.stringify(value)} (neither a URL nor a declared non-network form: file:, link:, workspace:, github:, relative path)`;
+  `${carrier}: ${n} unreadable address value(s) ${JSON.stringify(value)} (neither a URL nor a declared non-network form: file:, link:, workspace:, github:, rifty:, relative path)`;
 const gitDep = (carrier: string, n: number, host: string) =>
   `${carrier}: ${n} git dependency address(es) on ${host} (git/URL dependencies are not allowed in committed locks: the host may be internal)`;
 
@@ -339,6 +339,14 @@ packages:
       "packages:\n  ms@2.1.3:\n    resolution: {integrity: x, tarball: https://registry.npmjs.org'x@evil.invalid/ms.tgz}\n",
     );
     expect(check([path]).violations).toEqual([onHost(path, 1, 'https://<userinfo>@evil.invalid')]);
+  });
+
+  it('a pnpm flow value ends at , or } as YAML reads it', () => {
+    const path = put(
+      'e/pnpm-lock.yaml',
+      'packages:\n  ms@2.1.3:\n    resolution: {tarball: http://localhost:4873, integrity: sha512-x}\n',
+    );
+    expect(check([path]).violations).toEqual([]);
   });
 
   it('pnpm: a single-quoted key and a block-form repo: line are read', () => {
