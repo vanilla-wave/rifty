@@ -15,6 +15,7 @@ import {
   type SnapshotOptions,
   type SnapshotTemplate,
   restoreFs,
+  snapshotBudget,
   snapshotFs,
 } from '../src/index.ts';
 import { listFs } from './snapshot-support.ts';
@@ -718,6 +719,19 @@ describe('limits (ADR-0567 §7, I4)', () => {
       refused(blob, 'ERR_FS_SNAPSHOT_TOO_LARGE', { template: null, maxBytes: budget - 1 });
     },
   );
+
+  carrier('snapshotBudget is the least maxBytes the snapshot fits', () => {
+    const fs = createMemoryFs().fsSync;
+    fs.mkdirSync('/a/b', { recursive: true });
+    fs.writeFileSync('/a/b/big', new Uint8Array(10_000));
+    fs.writeFileSync('/a/x', new Uint8Array(3));
+    const budget = snapshotBudget(fs);
+    expect(budget).toBe(budgetOf(fs, snapshotFs(fs, OPTIONS)));
+    expect(snapshotFs(fs, { template: null, maxBytes: budget }).length).toBeGreaterThan(0);
+    expect(() => snapshotFs(fs, { template: null, maxBytes: budget - 1 })).toThrow(
+      /^ERR_FS_SNAPSHOT_TOO_LARGE: /,
+    );
+  });
 
   carrier('restore: length over maxBytes is refused first, even for garbage', () => {
     refused(new Uint8Array(100).fill(0x41), 'ERR_FS_SNAPSHOT_TOO_LARGE', {

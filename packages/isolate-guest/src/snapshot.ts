@@ -231,11 +231,18 @@ export function snapshotFs(fs: SnapshotFs, options: SnapshotOptions): Uint8Array
   }
 }
 
-function writeSnapshot(
+/** The codec's budget of `fs`'s tree: the least `maxBytes` its snapshot fits (no template). */
+export function snapshotBudget(fs: SnapshotFs): number {
+  const { size, charges } = walk(fs, null, Number.POSITIVE_INFINITY);
+  return size + charges;
+}
+
+/** The tree in snapshot order, its encoded size and its charges; over `maxBytes` throws first. */
+function walk(
   fs: SnapshotFs,
   template: SnapshotTemplate | null,
   maxBytes: number,
-): Uint8Array {
+): { entries: Entry[]; size: number; charges: number } {
   let size =
     HEADER +
     (template === null ? 0 : 4 + 2 * (template.id.length + template.version.length)) +
@@ -276,6 +283,15 @@ function writeSnapshot(
     charges += entryCost(path.length, depth);
     if (size + charges > maxBytes) throw tooLarge();
   }
+  return { entries, size, charges };
+}
+
+function writeSnapshot(
+  fs: SnapshotFs,
+  template: SnapshotTemplate | null,
+  maxBytes: number,
+): Uint8Array {
+  const { entries, size } = walk(fs, template, maxBytes);
   const out = new Uint8Array(size);
   const view = new DataView(out.buffer);
   out.set(MAGIC, 0);

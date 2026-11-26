@@ -39,6 +39,10 @@ Acceptance:
 
 zlib unit 3 starts after this unit.
 
+Row to close (PR #462 review N4): `new Readable({ encoding: 'UTF-8' }).readableEncoding` — Node keeps the option
+value (`'UTF-8'`, `'Binary'`; also Duplex/Transform), rifty normalises (`utf8`): `callable-constructor.ts`
+routes the option through `setEncoding`. Node's `ReadableState` sets `encoding = options.encoding`.
+
 ## Open findings (review round 4)
 
 Carried verbatim from the manager's review of PR #450, round 4 (2026-11-25); owner = this unit. They close when the unit is taken into work, by its own contract and review.

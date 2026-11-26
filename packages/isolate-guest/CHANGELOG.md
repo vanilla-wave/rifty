@@ -3,6 +3,8 @@
 ## Unreleased
 
 - The bridge's `timerStart(id, 0, …)` arms the next host turn (host `setImmediate`; was a 1 ms timer) and the guest's `setImmediate` (the runtime's queue driver) uses it: an immediate, and each of an fs call's two turns, no longer costs a 1 ms timer.
+- `snapshotBudget(fs)`: the codec's budget of a tree (the least `maxBytes` its snapshot fits), counted by the walk `snapshotFs` runs, without encoding.
+- `Blob` and `File` are Node v24.16.0's own classes (`lib/internal/blob.js`, `file.js`, `webidl.js`, generated from pinned sources over a JS byte store, ADR-0578), and `require('buffer').Blob`/`.File` are the same objects — were ceiling throwers (`isolate-host.Blob`/`File`) and `undefined`. `blob.stream()` throws `NotImplementedError('isolate-host.ReadableStream')`. `guest.js` +41 655 B (`gzip -9` +10 408; 7 223 180 B on main `c2250727d`); warm `runCode('1')` +0.3–0.7 ms; many small parts are ~10× slower than Node (200 000 parts: 3.2 s vs 0.3 s). Node errors these classes throw carry Node's `[CODE]` in `toString` and the stack header.
 - `dist/THIRD_PARTY_NOTICES.md` lists what `guest.js` bundles (acorn, cjs-module-lexer, quickjs-emscripten-core, @jitl/quickjs-ffi-types, the generated TypeScript compiler and Node v24.16.0 `url`/`querystring`); `guest.js` ends with a link line to it (+84 B).
 - `http.validateHeaderName`/`validateHeaderValue` messages print a non-string argument as Node's `%s` (its `toString`/`Symbol.toPrimitive`, `-0`); a throwing `Symbol.toPrimitive` rethrows as in Node instead of `ERR_INVALID_HTTP_TOKEN`.
 - The guest bundle carries runtime-js's generated legacy `node:url`/`querystring` (ADR-0574): `guest.js` 7 123 270 → 7 170 976 B (+47 706; gzip 1 497 917 → 1 509 064, +11 147).

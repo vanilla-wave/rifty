@@ -1,0 +1,11 @@
+{
+  "node": "v24.16.0",
+  "esbuild": "0.28.0",
+  "sha256": "4e2c1951146e4c7e807b4ba175400a3e81d94ac6a546adfeb53ce23ee2169e62",
+  "sources": {
+    "lib/internal/webidl.js": "ade772548eef5a10c1a82bcac554b482f4ebc3f31accd3fb8d89bfafcb8d48a2",
+    "lib/internal/blob.js": "547deb661f508360bd5ce294d28e882a1ce5db14e831dacdbd4bde067135e6c1",
+    "lib/internal/file.js": "a6935dd6037ce604b5075c3f7dbe98000ae2d65e6fa589af36267ff40f0cdd09",
+    "LICENSE": "4573185d56580da2b890ba34a85a409257640f1c5632eade4300137266194d18"
+  }
+}

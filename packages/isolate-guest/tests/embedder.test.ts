@@ -192,6 +192,7 @@ describe('the packed export (ADR-0558 §1)', () => {
           'createHostBridge',
           'exitStatus',
           'restoreFs',
+          'snapshotBudget',
           'snapshotFs',
         ],
         bundle: true,

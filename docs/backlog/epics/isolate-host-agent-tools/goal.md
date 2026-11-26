@@ -39,7 +39,7 @@ packages (read from the template), time, memory and size limits.
 
 ## Invariants
 
-<!-- Drafted at FIT: blocked on the template goal's API (template package list, changed paths); the
+<!-- Drafted at FIT: blocked on the template goal's API (`createSandbox({ template })`; the package list and changed paths left it 2026-11-25 — map.md); the
 killed-run text (rollback) and the mount (`/node_modules`) are decided; `exec`'s `signal` landed (PR #431). False on main @ b3731e9c0:
 `packages/agent/src/index.ts` exports no tools; tools are Pi `AgentTool` + TypeBox
 (`tools.ts:1-3`, `:55-71`); `AgentFiles.read` is `string` only, a binary file is "Binary file is

@@ -10,9 +10,10 @@ import { CORPUS, GC_CHURN, parityView } from './corpus.ts';
 import { nodeEval } from './support.ts';
 
 describe('package surface (ADR-0557 §1)', () => {
-  it('the package root exports runCode and createSandbox only (ADR-0568)', async () => {
+  it('the package root exports runCode, createSandbox and registerTemplate only (ADR-0568)', async () => {
     expect(Object.keys(await import('../src/index.ts')).sort()).toEqual([
       'createSandbox',
+      'registerTemplate',
       'runCode',
     ]);
   });
@@ -96,8 +97,6 @@ describe('declared ceilings fail loudly (I1 ceilings, scenario step 4)', () => {
       'EventTarget',
       'Event',
       'CustomEvent',
-      'Blob',
-      'File',
       'Request',
       'Response',
       'Headers',

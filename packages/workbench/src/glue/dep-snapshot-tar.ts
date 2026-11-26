@@ -1,189 +1,20 @@
 import { TARBALL_CACHE_ROOT } from '@riftydev/npm-client';
+import {
+  DEP_SNAPSHOT_TAR_BLOCK as BLOCK,
+  type DepSnapshotTarEntry,
+  depSnapshotTarChecksum as checksum,
+  failDepSnapshotTar as fail,
+  readDepSnapshotManifest,
+  readDepSnapshotTar,
+  validateDepSnapshotEntries as validateEntries,
+} from '@riftydev/npm-client/internal';
 import type { DepSnapshot } from './dep-snapshot.ts';
 import type { WorkspaceArchiveFile, WorkspaceArchiveV1 } from './workspace-archive.ts';
 
-const BLOCK = 512;
 const enc = new TextEncoder();
 const dec = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
 
-interface TarEntry {
-  readonly path: string;
-  readonly directory: boolean;
-  readonly bytes: Uint8Array;
-}
-
-function fail(reason: string): never {
-  throw new Error(`Malformed dependency snapshot tar: ${reason}`);
-}
-
-function safePath(path: string, directory: boolean): string {
-  const canonical = directory && path.endsWith('/') ? path.slice(0, -1) : path;
-  if (
-    canonical.includes('\0') ||
-    canonical.split('/').some((part) => part === '' || part === '.' || part === '..')
-  ) {
-    fail(`unsafe path "${path}"`);
-  }
-  return canonical;
-}
-
-function textField(header: Uint8Array, start: number, length: number): string {
-  const bytes = header.subarray(start, start + length);
-  const end = bytes.indexOf(0);
-  if (end !== -1 && bytes.subarray(end).some((byte) => byte !== 0)) fail('invalid header text');
-  return dec.decode(end === -1 ? bytes : bytes.subarray(0, end));
-}
-
-function octalField(header: Uint8Array, start: number, length: number): number {
-  const text = dec.decode(header.subarray(start, start + length));
-  if (!/^[ \0]*[0-7]+[ \0]*$/.test(text)) fail('invalid octal header field');
-  const value = Number.parseInt(text.replace(/^[ \0]+|[ \0]+$/g, ''), 8);
-  if (!Number.isSafeInteger(value)) fail('oversized header field');
-  return value;
-}
-
-function checksum(header: Uint8Array): number {
-  return header.reduce((sum, byte, index) => sum + (index >= 148 && index < 156 ? 32 : byte), 0);
-}
-
-function paxFields(bytes: Uint8Array): Map<string, string> {
-  const fields = new Map<string, string>();
-  for (let offset = 0; offset < bytes.length; ) {
-    const space = bytes.indexOf(32, offset);
-    if (space === -1) fail('invalid PAX record length');
-    const digits = dec.decode(bytes.subarray(offset, space));
-    if (!/^[1-9][0-9]*$/.test(digits)) fail('invalid PAX record length');
-    const length = Number(digits);
-    const end = offset + length;
-    if (
-      !Number.isSafeInteger(end) ||
-      end > bytes.length ||
-      end <= space + 1 ||
-      bytes[end - 1] !== 10
-    ) {
-      fail('truncated PAX record');
-    }
-    const record = bytes.subarray(space + 1, end - 1);
-    const equals = record.indexOf(61);
-    const key = dec.decode(record.subarray(0, equals));
-    // Host xattrs are outside dependency bytes. SCHILY values can be binary;
-    // admit their framing without interpreting them as paths or file content.
-    const xattr = /^(LIBARCHIVE|SCHILY)\.xattr\..+$/.test(key);
-    const value = xattr ? '' : dec.decode(record.subarray(equals + 1));
-    if (
-      equals <= 0 ||
-      fields.has(key) ||
-      (!xattr &&
-        !['path', 'size', 'uid', 'gid', 'uname', 'gname', 'mtime', 'atime', 'ctime'].includes(
-          key,
-        )) ||
-      value.includes('\0')
-    ) {
-      fail(`unsupported or duplicate PAX field "${key}"`);
-    }
-    if (
-      key === 'size' &&
-      (!/^(0|[1-9][0-9]*)$/.test(value) || !Number.isSafeInteger(Number(value)))
-    ) {
-      fail('invalid PAX size');
-    }
-    fields.set(key, value);
-    offset = end;
-  }
-  return fields;
-}
-
-function validateEntries(entries: readonly TarEntry[]): void {
-  const byPath = new Map<string, TarEntry>();
-  for (const entry of entries) {
-    if (safePath(entry.path, entry.directory) !== entry.path) fail('noncanonical entry path');
-    if (byPath.has(entry.path)) fail(`duplicate path "${entry.path}"`);
-    byPath.set(entry.path, entry);
-    const allowed = entry.directory
-      ? ['payload', 'payload/node_modules', 'rifty', 'rifty/replay-cache'].includes(entry.path) ||
-        entry.path.startsWith('payload/node_modules/') ||
-        entry.path.startsWith('rifty/replay-cache/')
-      : ['payload/package.json', 'payload/package-lock.json', 'rifty/manifest.json'].includes(
-          entry.path,
-        ) ||
-        entry.path.startsWith('payload/node_modules/') ||
-        entry.path.startsWith('rifty/replay-cache/');
-    if (!allowed) fail(`unsupported envelope entry "${entry.path}"`);
-  }
-  for (const entry of entries) {
-    let slash = entry.path.lastIndexOf('/');
-    while (slash !== -1) {
-      const parent = byPath.get(entry.path.slice(0, slash));
-      if (parent && !parent.directory) fail(`file ancestor of "${entry.path}"`);
-      slash = entry.path.lastIndexOf('/', slash - 1);
-    }
-  }
-  for (const path of ['payload/package.json', 'payload/package-lock.json', 'rifty/manifest.json']) {
-    if (!byPath.has(path)) fail(`missing "${path}"`);
-  }
-}
-
-function readEntries(bytes: Uint8Array): readonly TarEntry[] {
-  if (bytes.length % BLOCK !== 0) fail('truncated block');
-  const entries: TarEntry[] = [];
-  let pax: Map<string, string> | undefined;
-  for (let offset = 0; offset + BLOCK <= bytes.length; ) {
-    const header = bytes.subarray(offset, offset + BLOCK);
-    if (header.every((byte) => byte === 0)) {
-      if (
-        pax ||
-        offset + BLOCK * 2 > bytes.length ||
-        bytes.subarray(offset).some((byte) => byte !== 0)
-      ) {
-        fail('invalid end-of-archive blocks');
-      }
-      validateEntries(entries);
-      return entries;
-    }
-    if (octalField(header, 148, 8) !== checksum(header)) fail('header checksum mismatch');
-    if (textField(header, 257, 6) !== 'ustar' || textField(header, 263, 2) !== '00') {
-      fail('unsupported tar header');
-    }
-    for (const [start, length] of [
-      [100, 8],
-      [108, 8],
-      [116, 8],
-      [136, 12],
-    ] as const) {
-      octalField(header, start, length);
-    }
-    const type = header[156];
-    if (type !== 0 && type !== 48 && type !== 53 && type !== 120)
-      fail(`unsupported entry type ${type}`);
-    if (textField(header, 157, 100) !== '') fail('unexpected link target');
-    const prefix = textField(header, 345, 155);
-    const name = textField(header, 0, 100);
-    const directory = type === 53;
-    const headerPath = safePath(prefix ? `${prefix}/${name}` : name, directory);
-    const headerSize = octalField(header, 124, 12);
-    if (type === 120 && pax) fail('stacked PAX headers');
-    const size = type !== 120 && pax?.has('size') ? Number(pax.get('size')) : headerSize;
-    const dataStart = offset + BLOCK;
-    const next = dataStart + Math.ceil(size / BLOCK) * BLOCK;
-    if (!Number.isSafeInteger(next) || next > bytes.length) fail('truncated entry body');
-    if (bytes.subarray(dataStart + size, next).some((byte) => byte !== 0))
-      fail('nonzero entry padding');
-    const content = bytes.subarray(dataStart, dataStart + size);
-    if (type === 120) {
-      pax = paxFields(content);
-    } else {
-      if (directory && size !== 0) fail('directory carries file bytes');
-      entries.push({
-        path: safePath(pax?.get('path') ?? headerPath, directory),
-        directory,
-        bytes: content,
-      });
-      pax = undefined;
-    }
-    offset = next;
-  }
-  fail('missing end-of-archive blocks');
-}
+type TarEntry = Omit<DepSnapshotTarEntry, 'mtimeMs'>;
 
 function bytesToBase64(bytes: Uint8Array): string {
   let binary = '';
@@ -194,7 +25,7 @@ function bytesToBase64(bytes: Uint8Array): string {
 }
 
 function archiveFromEntries(
-  entries: readonly TarEntry[],
+  entries: readonly DepSnapshotTarEntry[],
   prefix: string,
   root: string,
 ): WorkspaceArchiveV1 {
@@ -211,45 +42,13 @@ function archiveFromEntries(
 
 /** Container preflight; the snapshot owner then validates metadata and replay trust. */
 export function decodeDepSnapshotTar(bytes: Uint8Array): unknown {
-  const entries = readEntries(bytes);
+  const entries = readDepSnapshotTar(bytes);
   const fileText = (path: string): string => {
     const entry = entries.find((candidate) => candidate.path === path);
     if (!entry) fail(`missing "${path}"`);
     return dec.decode(entry.bytes);
   };
-  const manifest: unknown = JSON.parse(fileText('rifty/manifest.json'));
-  if (
-    typeof manifest !== 'object' ||
-    manifest === null ||
-    Array.isArray(manifest) ||
-    !('version' in manifest) ||
-    (manifest.version !== 4 && manifest.version !== 5) ||
-    (manifest.version === 5
-      ? !('profile' in manifest) || manifest.profile !== 'frozen'
-      : 'profile' in manifest) ||
-    Object.keys(manifest).some(
-      (key) =>
-        ![
-          'version',
-          'profile',
-          'templateId',
-          'packages',
-          'deps',
-          'installArtifactIdentity',
-        ].includes(key),
-    )
-  ) {
-    fail('invalid dependency snapshot manifest');
-  }
-  if (
-    manifest.version === 5 &&
-    entries.some(
-      (entry) =>
-        entry.path === 'rifty/replay-cache' || entry.path.startsWith('rifty/replay-cache/'),
-    )
-  ) {
-    fail('frozen snapshot contains replay cache namespace');
-  }
+  const manifest = readDepSnapshotManifest(entries);
   return {
     ...manifest,
     version: manifest.version === 5 ? 5 : 3,

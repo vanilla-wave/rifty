@@ -133,7 +133,7 @@ const LEGACY_CODES: Readonly<Record<string, number>> = {
   InvalidNodeTypeError: 24,
   DataCloneError: 25,
 };
-class DOMException extends Error {
+export class DOMException extends Error {
   readonly #name: string;
   constructor(message = '', name = 'Error') {
     super(String(message));
@@ -196,7 +196,8 @@ define('TextEncoder', TextEncoder);
 define('TextDecoder', TextDecoder);
 
 // --- task scheduling ---
-define('queueMicrotask', function queueMicrotask(callback: unknown): void {
+/** The guest's `queueMicrotask`, also Node's `internal/process/task_queues` one for the generated Node sources. */
+export function queueMicrotask(callback: unknown): void {
   if (typeof callback !== 'function') throw argType('callback', 'of type function', callback);
   const run = (): void => {
     try {
@@ -210,7 +211,8 @@ define('queueMicrotask', function queueMicrotask(callback: unknown): void {
     run,
     uncaught,
   );
-});
+}
+define('queueMicrotask', queueMicrotask);
 
 /** A host-scheduled timer; expiry runs `_onTimeout`. Not `Timeout`: that name is the runtime's guest-visible handle. */
 class HostTimer {
@@ -370,8 +372,6 @@ export const CEILING_GLOBALS = [
   'EventTarget',
   'Event',
   'CustomEvent',
-  'Blob',
-  'File',
   'Request',
   'Response',
   'Headers',
