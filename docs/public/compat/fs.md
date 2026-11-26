@@ -9,7 +9,7 @@ Legend: ✅ implemented and tested · ⚠️ partial / known caveat / exact-vers
 | Feature | Status | Notes |
 |---|---|---|
 | `readFileSync` / `writeFileSync` | ✅ | utf8 strings; any TypedArray/DataView (incl. offset and SharedArrayBuffer views) writes its raw bytes, copied: the file never shares memory with a program buffer, written or read (`fs/write-read-buffer-ownership`, `fs/write-array-buffer-view-kinds`) |
-| write `data` that is not a string or ArrayBufferView; `writeSync` of a non-`Uint8Array` view | ⚠️ | Number/Array/ArrayBuffer are written as wrong bytes, `null` a code-less TypeError (Node: `ERR_INVALID_ARG_TYPE`); `writeSync(fd, new Uint16Array(…))` throws (Node writes its bytes) — `backlog/runtime-js/fs-write-data-argument-types` |
+| write `data` that is not a string or ArrayBufferView; `writeSync` of a non-`Uint8Array` view | ⚠️ | Array/ArrayBuffer are written as wrong bytes, a number or `null` throws a code-less TypeError (Node: `ERR_INVALID_ARG_TYPE`); `writeSync(fd, new Uint16Array(…))` throws (Node writes its bytes) — `backlog/runtime-js/fs-write-data-argument-types` |
 | `mkdirSync({ recursive })` | ✅ | Creates parent directories |
 | `mode` of `writeFile*` / `appendFile*` / `mkdir*` / `open*` / `createWriteStream`, `mkdtemp*` | ⚠️ | Ignored: the entry is created and reports 0o100666/0o40777 whatever `mode` asks (Node: `mode & ~umask`, e.g. 0o600; `mkdtemp` 0o700 & ~umask); no `chmod` family — backlog `runtime-js/fs-mode-arguments-ignored` |
 | `readdirSync` / `Dirent[]` | ✅ | Sorted names; `withFileTypes`; `{ recursive: true }` BFS walk + `Dirent.parentPath` (no removed-in-v24 `path` alias) |

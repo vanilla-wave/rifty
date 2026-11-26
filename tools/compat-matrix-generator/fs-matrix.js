@@ -13,7 +13,7 @@ export const fsMatrix = {
     [
       'write `data` that is not a string or ArrayBufferView; `writeSync` of a non-`Uint8Array` view',
       '⚠️',
-      'Number/Array/ArrayBuffer are written as wrong bytes, `null` a code-less TypeError (Node: `ERR_INVALID_ARG_TYPE`); `writeSync(fd, new Uint16Array(…))` throws (Node writes its bytes) — `backlog/runtime-js/fs-write-data-argument-types`',
+      'Array/ArrayBuffer are written as wrong bytes, a number or `null` throws a code-less TypeError (Node: `ERR_INVALID_ARG_TYPE`); `writeSync(fd, new Uint16Array(…))` throws (Node writes its bytes) — `backlog/runtime-js/fs-write-data-argument-types`',
     ],
     ['`mkdirSync({ recursive })`', '✅', 'Creates parent directories'],
     [

@@ -264,15 +264,11 @@ function decodeResult(bytes: Uint8Array, encoding: Encoding | null): Uint8Array 
   return bytesToString(bytes, encoding);
 }
 
-/**
- * Guest data → bytes the store owns. A store may keep what it is given
- * (`MemoryFsSync`), so never the guest's memory: the raw bytes of any view
- * (TypedArray, DataView, SharedArrayBuffer), copied.
- */
+/** Write data as raw bytes: a string encoded, any TypedArray/DataView as a view of its own bytes. */
 function encodeData(data: Uint8Array | string, encoding: Encoding | null): Uint8Array {
   if (typeof data === 'string') return Buffer.from(data, encoding ?? 'utf8');
   if (!ArrayBuffer.isView(data)) return data;
-  return new Uint8Array(data.buffer, data.byteOffset, data.byteLength).slice();
+  return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
 }
 
 /**
@@ -533,6 +529,9 @@ function writeFileImpl(
   const flag = flagOf(opts) ?? defaultFlag;
   const parsed = parseOpenFlags(flag);
   const next = encodeData(data, enc);
+  // A store may keep what it is given (`MemoryFsSync`), never a guest's memory: one copy of
+  // a view; an encoded string is already ours; merged writes build their own bytes.
+  const owned = () => (typeof data === 'string' ? next : next.slice());
   // 'w'/'w+' fast path: plain overwrite, one mirror call (errors open-shaped).
   // Keep behavioral gates here in sync with openPreflight: numeric flags can
   // smuggle O_DIRECTORY alongside the w-family bits, and that must be checked
@@ -544,7 +543,7 @@ function writeFileImpl(
     !parsed.append &&
     !parsed.directory
   ) {
-    withSyscall('open', p, () => syncMirror().writeFileSync(np, next));
+    withSyscall('open', p, () => syncMirror().writeFileSync(np, owned()));
     return;
   }
   const { existed } = openPreflight(p, parsed);
@@ -560,7 +559,7 @@ function writeFileImpl(
     return;
   }
   if (parsed.truncate || !existed) {
-    withSyscall('open', p, () => syncMirror().writeFileSync(np, next));
+    withSyscall('open', p, () => syncMirror().writeFileSync(np, owned()));
     return;
   }
   withSyscall('open', p, () => {
