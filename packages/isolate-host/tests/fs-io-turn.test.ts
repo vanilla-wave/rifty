@@ -4,7 +4,7 @@
  * flight, against live `node` over the same code. ESM rows and `worker.terminate()` are
  * the Workbench/SDK carrier's (`tests/browser-unit/fixtures/fs-io-turn-programs.ts`):
  * this host has no ES module loader and no `worker_threads`. `fs/callback-phase-order` is
- * declared here (`runtime-js/browser-loop-phase-order`): the guest runs on its own thread beside
+ * declared here (`runtime-js/fs-completion-loop-phase-order`): the guest runs on its own thread beside
  * the host loop, so its immediates and timers interleave by race.
  */
 import { spawnSync } from 'node:child_process';
@@ -18,6 +18,7 @@ import {
 } from '../../../tests/browser-unit/fixtures/fs-io-turn-programs.ts';
 import appendFileRm from '../../../tools/node-parity-runner/cases/fs/append-file-rm-callbacks.case.ts';
 import argumentsAtCall from '../../../tools/node-parity-runner/cases/fs/async-arguments-at-call.case.ts';
+import optionsAtCall from '../../../tools/node-parity-runner/cases/fs/async-options-at-call.case.ts';
 import callbackTurnOrder from '../../../tools/node-parity-runner/cases/fs/callback-turn-order.case.ts';
 import dirReadTurns from '../../../tools/node-parity-runner/cases/fs/dir-read-turns.case.ts';
 import { createSandbox, runCode } from '../src/index.ts';
@@ -60,15 +61,14 @@ describe('fs completions take their own loop turn, as in Node (isolate guest)', 
   for (const [name, testCase] of [
     ['dir-read-turns', dirReadTurns],
     ['async-arguments-at-call', argumentsAtCall],
+    ['async-options-at-call', optionsAtCall],
     ['append-file-rm-callbacks', appendFileRm],
   ] as const) {
     it(`parity case fs/${name}`, async () => {
-      // A Buffer path throws in this guest whatever the turn: `runtime-js/isolate-fs-buffer-path-throws`.
-      const lines = (out: string) => out.split('\n').filter((l) => !l.includes('Buffer path'));
       const node = nodeEval(testCase.code);
       const result = await runCode(testCase.code);
-      expect({ stdout: lines(result.stdout), exitCode: result.exitCode }).toEqual({
-        stdout: lines(node.stdout),
+      expect({ stdout: result.stdout, exitCode: result.exitCode }).toEqual({
+        stdout: node.stdout,
         exitCode: node.code,
       });
     }, 60_000);

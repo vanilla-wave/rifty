@@ -331,7 +331,8 @@
     },
     "fs-append-file-rm-callbacks": "node",
     "fs-async-arguments-at-call": "node",
-    "fs-dir-read-turns": "node"
+    "fs-dir-read-turns": "node",
+    "fs-async-options-at-call": "node"
   },
   "COI": {
     "entry-facts": "node",
@@ -657,7 +658,8 @@
     "fs-worker-terminate-in-flight": "node",
     "fs-append-file-rm-callbacks": "node",
     "fs-async-arguments-at-call": "node",
-    "fs-dir-read-turns": "node"
+    "fs-dir-read-turns": "node",
+    "fs-async-options-at-call": "node"
   },
   "isolate": {
     "first-line-html-close": "node",
