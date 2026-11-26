@@ -425,9 +425,9 @@ async function inWorkbench(page: Page, p: Program, args: readonly string[]): Pro
       { fixtureUrl: sealedWorkbenchFixtureUrl, line, cap: RUN_CAP_MS },
     );
     if (run.capped) {
-      const rows = run.out.split(/\r?\n/).filter((l) => l.includes(' => '));
+      const rows = run.out.split(/\r?\n/).filter((l) => l.includes(' => ') && !l.includes('@@SS'));
       throw new Error(
-        `${p.id}: no exit within ${RUN_CAP_MS / 1000} s; last row printed: ${rows.at(-1) ?? '(none)'}`,
+        `${p.id}: no exit within ${RUN_CAP_MS / 1000} s; last row printed: ${rows.at(-1) ?? '(none)'}; the row after it did not finish`,
       );
     }
     const json = /@@SS(.*)SS@@/su.exec(run.out)?.[1];
