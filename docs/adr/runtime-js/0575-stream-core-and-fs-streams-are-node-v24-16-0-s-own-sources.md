@@ -175,7 +175,9 @@ The earlier `b1270101a` record is `results/route-b-product-build.txt`.
    2026-11-26 (8a, PR #471): primordials and the host globals are captured when the bindings module
    evaluates, each primordial built as `per_context/primordials.js` builds it; a rifty module not
    registered throws by name (no fallback); the zlib constants are a data module in io. `check:arch`
-   gains `node-stream-core-has-no-production-importer` for 8a's window; 8c removes it.
+   gains `node-stream-core-has-no-production-importer` for 8a's window; 8c removes it. `acorn` is runtime-js's
+   own dependency (8.16.0, pinned by the generator), not a root one: a root `node_modules/acorn`
+   changed the playground bundle (measured).
 3. `fs.ReadStream`/`fs.WriteStream` read and write through fds on every host. This replaces
    ADR-0020's «`createReadStream` rebuilds on `Vfs.openReadable`». The condition: positional fd I/O
    by range (map 4b/4c).
