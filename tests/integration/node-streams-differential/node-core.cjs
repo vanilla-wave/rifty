@@ -39,3 +39,4 @@ Module._load = function (request, parent, isMain) {
     return over[id];
   return ReflectApply(original, this, [request, parent, isMain]);
 };
+module.exports = { load };
