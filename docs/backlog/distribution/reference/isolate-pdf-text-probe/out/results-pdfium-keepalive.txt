@@ -1,0 +1,7 @@
+
+=== pdfium-keepalive.cjs  [@hyzyla] tree 37 files 13.5 MiB, memoryLimitMb 256
+  EQUAL       cyrillic-pdfkit.pdf  node exit 0 56ms | guest exit 0 312ms
+  EQUAL       cyrillic.pdf  node exit 0 54ms | guest exit 0 321ms
+  EQUAL       latin-raw.pdf  node exit 0 57ms | guest exit 0 312ms
+  EQUAL       multi-flate.pdf  node exit 0 60ms | guest exit 0 318ms
+  EQUAL       cyrillic-pdfkit.pdf+cyrillic.pdf+latin-raw.pdf+multi-flate.pdf  node exit 0 69ms | guest exit 0 317ms

@@ -1,0 +1,7 @@
+## pdf2json.cjs cyrillic.pdf guest exit 0 verdict EQUAL
+Warning: Setting up fake worker.
+{"file":"pdfs/cyrillic.pdf","pages":["Привет, мир! Это проверка извлечения текста.\nСъешь же ещё этих мягких французских булок, да выпей чаю.\nСмешанная строка: rifty isolate № 42 — «кавычки», ёЁ.","Вторая страница.\nШирокая электрификация южных губерний даст мощный толчок подъёму сельского хозяйства.\nLatin tail: The quick brown fox."]}
+
+## pdfparse1-default.cjs cyrillic.pdf guest exit 0 verdict EQUAL
+{"file":"pdfs/cyrillic.pdf","pages":["numpages=2","\n\nПривет, мир! Это проверка извлечения текста.\nСъешь же ещё этих мягких французских булок, да выпей чаю.\nСмешанная строка: rifty isolate No 42 — «кавычки», ёЁ.\n\nВторая страница.\nШирокая электрификация южных губерний даст мощный толчок подъёму сельского хозяйства.\nLatin tail: The quick brown fox."]}
+

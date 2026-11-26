@@ -1,0 +1,4 @@
+{"file":"cyrillic-pdfkit.pdf","bytes":11976,"FlateDecode":true,"ObjStm":false,"XRefStream":false,"ToUnicode":true,"FontFile2":true,"IdentityH":true,"pages":2}
+{"file":"cyrillic.pdf","bytes":12805,"FlateDecode":true,"ObjStm":true,"XRefStream":true,"ToUnicode":true,"FontFile2":true,"IdentityH":true,"pages":2}
+{"file":"latin-raw.pdf","bytes":793,"FlateDecode":false,"ObjStm":false,"XRefStream":false,"ToUnicode":false,"FontFile2":false,"IdentityH":false,"pages":1}
+{"file":"multi-flate.pdf","bytes":2555,"FlateDecode":true,"ObjStm":true,"XRefStream":true,"ToUnicode":false,"FontFile2":false,"IdentityH":false,"pages":3}
