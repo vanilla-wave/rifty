@@ -4,7 +4,6 @@ status: draft
 title: fs write data that is neither a string nor an ArrayBufferView behaves as Node on every write entry
 created: 2026-11-26
 why: rifty writes numbers, null, arrays and objects as empty or wrong files, or throws code-less TypeErrors, where Node throws ERR_INVALID_ARG_TYPE (callback forms synchronously); fs.promises.writeFile/appendFile lack Node's iterable data
-blocked_by: [runtime-js/fs-callbacks-io-turn]
 sources: [docs/backlog/runtime-js/reference/fs-write-data-argument-types/probe.cjs, PR-469]
 code: [packages/runtime-js/src/builtins/fs.ts]
 ---
@@ -28,19 +27,19 @@ it. Summary (Node → rifty at PR #469):
 | `new Proxy(new Uint8Array([1,2]), {})` | throw `ERR_INVALID_ARG_TYPE` `Received an instance of Uint8Array` → `TypeError: Method get TypedArray.prototype.length called on incompatible receiver [object Uint8Array]`, no code (`writeFileSync`; other entries not run) | | | |
 | `ArrayBuffer`, `SharedArrayBuffer` | throw (= Node since #469) | as `123` | sync throw → the error in the callback | reject (= Node since #469) |
 
-`fs.appendFile(cb)` is missing (`backlog/runtime-js/fs-callback-append-file-rm-missing`). On main the
+Callback `fs.appendFile` exists since PR #468. On main the
 store kept the object itself (`writeFileSync(p, arr); arr[0] = 9` changed the file; `stat.size` 0
 while `readFileSync` gave 1,2,3); PR #469 removed that.
 
 Contract of the unit, three parts:
 - (a) `ERR_INVALID_ARG_TYPE` with Node's argument name (`"data"` for the whole-file entries,
   `"buffer"` for `writeSync`/`write`) and `Received …` text on every write entry, nothing created;
-- (b) callback forms throw synchronously (validation outside the operation, after
-  `fs-callbacks-io-turn`'s `ioTurn(op)` lands);
+- (b) callback forms throw synchronously (validation at the call, outside the
+  operation of `ioTurn(op)`, PR #468);
 - (c) iterable / async-iterable / stream `data` in `fs.promises.writeFile`/`appendFile` — a Node
   capability rifty lacks (today `[]`/`new String` equal Node by accident).
 
-Depends on PR #468 (`fs-callbacks-io-turn`) and PR #469. Compat: `fs.md` ⚠️ row.
+PR #468 and PR #469 landed. Compat: `fs.md` ⚠️ row.
 
 ## Challenge
 

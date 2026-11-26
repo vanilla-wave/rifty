@@ -4,7 +4,7 @@ status: draft
 title: A multi-round async fs operation reads the caller's buffer as late as Node's last round before the write
 created: 2026-11-26
 why: Node's writeFile is open + write + close, each a threadpool round, so a buffer mutation in a setImmediate after the call still lands in the file; a single I/O turn per operation (fs-callbacks-io-turn) does not reach it
-sources: [docs/backlog/runtime-js/reference/fs-async-op-io-rounds/moment.cjs, docs/backlog/runtime-js/fs-callbacks-io-turn.md, tools/node-parity-runner/cases/fs/async-write-buffer-moment.case.ts]
+sources: [docs/backlog/runtime-js/reference/fs-async-op-io-rounds/moment.cjs, packages/runtime-js/src/builtins/fs-io-turn.ts, tools/node-parity-runner/cases/fs/async-write-buffer-moment.case.ts]
 code: [packages/runtime-js/src/builtins/fs.ts, packages/runtime-js/src/builtins/fs-streams.ts]
 ---
 

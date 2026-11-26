@@ -4,7 +4,7 @@ status: draft
 title: fs.read(0) calls back outside the I/O turn: a stdin read loop starves timers, an error callback runs before a promise queued after it
 created: 2026-11-26
 why: "`fs.read(0, …, cb)` takes stdin's own path (`readStdin`), not the fs I/O turn (`fs-io-turn.ts`): Node completes it on a loop turn like every other fs request"
-sources: ["PR #468 external review (manager-relayed, 2026-11-26)", docs/backlog/runtime-js/fs-callbacks-io-turn.md]
+sources: ["PR #468 external review (manager-relayed, 2026-11-26)", packages/runtime-js/src/builtins/fs-io-turn.ts]
 code: [packages/runtime-js/src/builtins/fs.ts, packages/runtime-js/src/builtins/fs-stdio.ts]
 ---
 

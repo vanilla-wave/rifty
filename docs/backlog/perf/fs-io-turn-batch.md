@@ -4,7 +4,7 @@ status: draft
 title: A batch of async fs calls costs two host turns per call; one operation turn per batch would halve it
 created: 2026-11-26
 why: "After PR #468 (`runtime-js/fs-callbacks-io-turn`) each async fs call takes two host turns (operation, completion): `Promise.all` of 5000 `fs.promises.stat` in the isolate takes ~130 ms where Node takes ~15 ms and rifty took ~4 ms before"
-sources: ["PR #468 cost table (author and external review, 2026-11-26)", docs/backlog/runtime-js/fs-callbacks-io-turn.md]
+sources: ["PR #468 cost table (author and external review, 2026-11-26)", packages/runtime-js/src/builtins/fs-io-turn.ts]
 code: [packages/runtime-js/src/builtins/fs-io-turn.ts, packages/runtime-js/src/builtins/timers.ts]
 ---
 

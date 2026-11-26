@@ -8,7 +8,7 @@ branch changes only docs and a compat inventory generator). Chromium results nam
 ## Items
 
 Status (the manager, round 4): **ready** — 0, 2, 3, 4 (none depends on route B or the budget).
-**Done** — 1 (PR #462), 4b (PR #457).
+**Done** — 1 (PR #462), 4 (PR #468), 4b (PR #457).
 **Draft** — 4c, 5, P, 7, AL, 8a, 8b, 8c, 9r, 9w; each carries «Open findings (review round 4)»
 verbatim, closed when the unit is taken into work.
 
@@ -33,7 +33,7 @@ against Node:
   `toString`/`from` throw (`b1`). → I9.
 - **3** `runtime-js/events-add-abort-listener` — `events.addAbortListener` for guest code (`b1`).
   Independent of the core, which carries Node's own `abort_listener`. → I9.
-- **4** `runtime-js/fs-callbacks-io-turn` — `fs` callback APIs complete in an I/O turn, so timers
+- **4** ~~fs-callbacks-io-turn~~ **done** (PR #468; item file deleted; decisions in `packages/runtime-js/src/builtins/fs-io-turn.ts`'s header, compat `fs.md`, `runtime-js/loop-phase-of-current-turn`) — `fs` callback APIs complete in an I/O turn, so timers
   interleave with them (`m4` «fs.read(fd) loop»: Node `ticks>0=true`, rifty `false`; Workbench 0 ticks
   on every fd path, `results/chromium-fd/`). A write before close lands today, so that is a guard
   row. It has its own regression row. → I10.

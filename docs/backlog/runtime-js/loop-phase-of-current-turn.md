@@ -22,8 +22,8 @@ promises (a host API's `then`, `fetch`).
 Tried in PR #468 and dropped (manager decision (b), 2026-11-26), so no next executor repeats it:
 a "not poll" flag in `timers.ts` — one I/O turn queued at the call when the call is made in rifty's
 own timer turn, immediate turn or the main module's run. It rested on b1 «fs.read callback vs a
-timer due now» being a deterministic Node row; Node races it (Acceptance 2 of
-`runtime-js/fs-callbacks-io-turn`). Its costs: the flag leaked into foreign turns that followed a
+timer due now» being a deterministic Node row; Node races it (table below; it
+was Acceptance 2 of the unit `fs-callbacks-io-turn`, PR #468). Its costs: the flag leaked into foreign turns that followed a
 raise (one-turn completions where Node takes two: tables below); `fs.write(fd, 'data', cb)` +
 `Promise.reject` gave `cb` on Workbench/SDK/isolate (two turns: Node's `""`); clearing it by a host
 task posted on the immediates' `MessageChannel` broke the pinned no-COI row
