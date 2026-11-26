@@ -53,7 +53,7 @@ export const fsMatrix = {
     [
       'Async completion turn (callbacks, `fs.promises`)',
       '⚠️',
-      "As Node's threadpool round trip: the operation runs in one loop turn, its callback or promise settles in the next, so a chain of fs calls yields to timers and the immediates queued beside a call run first; the process end (`exit()`, a fatal error) runs submitted operations, no callback (Node joins its pool). Declared: one round trip per call, so a multi-round-trip `writeFile` differs where Node opens first — bytes mutated in a `setImmediate` (Node `9,9,9`, rifty `1,2,3`), `writeFile` + `exit()` in one tick (Node `\"\"`, rifty the data): `backlog/runtime-js/fs-async-op-io-rounds`. Parity `fs/callback-turn-order`",
+      'As Node\'s threadpool round trip: the operation runs in one loop turn, its callback or promise settles in the next, so a chain of fs calls yields to timers and the immediates queued beside a call run first; the process end (`exit()`, a fatal error) runs submitted operations, no callback (Node joins its pool). Declared: one round trip per call, so a multi-round-trip `writeFile` differs where Node opens first — bytes mutated in a `setImmediate` (Node `9,9,9`, rifty `1,2,3`), `writeFile` + `exit()` in one tick (Node `""`, rifty the data): `backlog/runtime-js/fs-async-op-io-rounds`. Parity `fs/callback-turn-order`',
     ],
     [
       'Callback `fs.appendFile` / `fs.rm`',

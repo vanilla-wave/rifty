@@ -718,7 +718,7 @@
     },
     "rejection-fs-enoent": {
       "stdout": "",
-      "stderr": "Error: ENOENT: no such file or directory, open 'missing.txt'\n    at Object.<anonymous> (<root>/main.js:1:24)\n\nNode.js v24.0.0\n",
+      "stderr": "Error: ENOENT: no such file or directory, open 'missing.txt'\n\nNode.js v24.0.0\n",
       "exitCode": 1
     },
     "rejection-after-stack-read": "node",
