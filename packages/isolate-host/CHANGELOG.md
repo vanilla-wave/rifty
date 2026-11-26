@@ -1,5 +1,9 @@
 # @riftydev/isolate-host
 
+## Unreleased
+
+- Guest fs callbacks and `fs.promises` complete in their own loop turn, as in Node: a loop of fs calls lets timers run (was 0 ticks), `setImmediate` is a host turn, not a 1 ms timer (`@riftydev/isolate-guest`, `@riftydev/runtime-js`). Tests: `tests/fs-io-turn.test.ts` against live Node.
+
 ## 0.1.0-draft.1
 
 - First npm publish: a draft prerelease under dist-tag `next`, published by hand (`first-publish.sh --only @riftydev/isolate-host --tag next`; the repo keeps `0.1.0`, as for every package the release sets the version).

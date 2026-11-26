@@ -51,6 +51,10 @@ Not pinnable (Node varies, v24.16.0, 20 runs): `read(fd)` buffer read in a micro
 Declared, not this unit: a multi-round-trip `writeFile` whose bytes the caller mutates in a
 `setImmediate` (Node `9,9,9`, rifty `1,2,3`: Node opens first, writes a round trip later) — a
 round-trip model, the class draft's.
+`'beforeExit'` around the last callbacks (Node: `beforeExit 0`, a `stat` it schedules, `beforeExit 0`,
+`exit 0`, 20/20) is never emitted on a rifty host (`runtime-js/process-before-exit-event`): the chain row
+pins `'exit'` after the last callback. ESM and `worker.terminate()` rows: Workbench (no ES loader, no
+`worker_threads` in the isolate; SDK `Worker` and no-SW `child_process` are pinned ceilings).
 
 ## Fault matrix
 
@@ -59,6 +63,7 @@ round-trip model, the class draft's.
 | VFS error × any callback API | the error reaches the callback in the same kind of I/O turn as a success; never thrown synchronously | callback-turn-order case, error rows | → I10 |
 | SAB sync-RPC oversize reply × callback on Workbench | the in-band error reply reaches the callback as an error, in its I/O turn | fault test with a reply over the ring size | → I10 |
 | SAB sync-RPC responder death mid-exchange × callback on Workbench | unchanged by this unit: the ring's loud permanent wedge, the caller blocked until owner teardown (no timeout exists in production, `packages/kernel/src/ipc/sync-client.ts:21`); no callback runs with partial data | fault test killing the responder in `HANDLING`, asserting the wedge diagnostic and no callback | → I10 |
+| SAB sync-RPC responder death × the process end on Workbench | the end runs the submitted op over the ring: the same wedge, blocked until owner teardown, no exit request, no callback (2026-11-26, manager) | fault test: exit in the tick of a submitted `stat`, responder dead in `HANDLING` | → I10 |
 | two callback APIs in flight × one ring | each sync exchange completes before the callback's turn is queued, so two exchanges never overlap on the ring (a second claim would fail loudly) | callback-turn-order case, interleaved calls | → I10 |
 
 ## Out of scope
@@ -74,6 +79,16 @@ round-trip model, the class draft's.
 - 2026-11-26 (manager): one `ioTurn(op)` for the callback APIs and `fs.promises.*`; `op` runs in the
   first host turn, the outcome settles in the second, so the immediates queued beside a call precede
   its completion (Node 40/40 from an fs callback). `FileHandle` is compat ❌ (no surface to route).
+- 2026-11-26 (manager): the process end (`exit()`, a fatal error, one call from `#terminate` and
+  `beginFatal`) runs the operations in flight with no callback or promise, as Node joins its threadpool
+  (Node 20/20 + 80/80 under load: `write(fd)`+`exit()` → `"data"`, uncaught throw and unhandled
+  rejection → `"data"` exit 1, an op an `'exit'` listener submits before an explicit `exit()` → written,
+  `exit()` in an fs callback with another write in flight → both). Its errors neither surface nor change
+  the status; it runs only what is in flight then. An external stop is not a process end:
+  `worker.terminate()` drops the not-yet-run op (Node: a queued request is cancelled — pool saturated,
+  10/10 `""`; one already running completes, idle pool 79/80 `"data"`: not pinned), a sandbox stop
+  does not run it (no Node counterpart; compat isolate-host.md).
+  Not pinnable (Node varies): an op an `'exit'` listener submits at a natural exit (13/20 not written).
 - Host turn = rifty's `setImmediate`, driven per host: a Node host's own `setImmediate` (a Node
   `MessagePort` drains up to 1000 messages per loop turn: 512 chained messages gave 0–1 timer ticks),
   the isolate bridge's next host turn (`timerStart` 0 ms → host `setImmediate`, was a 1 ms timer),

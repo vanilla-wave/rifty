@@ -51,6 +51,11 @@ export const fsMatrix = {
     ['Path resolution with `process.cwd()`', '✅', 'Relative fs paths anchor at runtime cwd'],
     ['Callback `readFile` / `writeFile`', '✅', 'Node-style error-first callbacks'],
     [
+      'Async completion turn (callbacks, `fs.promises`)',
+      '⚠️',
+      "As Node's threadpool round trip: the operation runs in one loop turn, its callback or promise settles in the next, so a chain of fs calls yields to timers and the immediates queued beside a call run first; the process end (`exit()`, a fatal error) runs submitted operations, no callback (Node joins its pool). Declared: one round trip per call, so a multi-round-trip `writeFile` differs where Node opens first — bytes mutated in a `setImmediate` (Node `9,9,9`, rifty `1,2,3`), `writeFile` + `exit()` in one tick (Node `\"\"`, rifty the data): `backlog/runtime-js/fs-async-op-io-rounds`. Parity `fs/callback-turn-order`",
+    ],
+    [
       'Callback `fs.appendFile` / `fs.rm`',
       '❌',
       '`undefined`: a call is `TypeError: fs.appendFile is not a function` (measured 2026-11-23 in the isolate host); the sync and `fs.promises` forms exist. `backlog/runtime-js/fs-callback-append-file-rm-missing`',
