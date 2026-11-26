@@ -219,6 +219,8 @@ interface EventEmitterConstructor {
   readonly prototype: EventEmitter;
   defaultMaxListeners: number;
   captureRejectionSymbol: symbol;
+  readonly kMaxEventTargetListeners: symbol;
+  readonly kMaxEventTargetListenersWarned: symbol;
 }
 
 /**
@@ -275,6 +277,13 @@ export const EventEmitter = /* @__PURE__ */ (() => {
   const constructor = CallableEventEmitter as EventEmitterConstructor;
   constructor.defaultMaxListeners = DEFAULT_MAX_LISTENERS;
   constructor.captureRejectionSymbol = captureRejectionSymbol;
+  // Node's: an EventTarget's own limit and warned flag (`lib/internal/event_target.js`).
+  for (const [key, description] of [
+    ['kMaxEventTargetListeners', 'events.maxEventTargetListeners'],
+    ['kMaxEventTargetListenersWarned', 'events.maxEventTargetListenersWarned'],
+  ] as const) {
+    Object.defineProperty(constructor, key, { value: Symbol(description) });
+  }
   return constructor;
 })();
 
@@ -301,28 +310,6 @@ export function captureEventEmitterListenerScope(emitter: EventEmitter): () => v
       else current.set(event, survivors);
     }
   };
-}
-
-export function once(emitter: EventEmitter, event: string | symbol): Promise<unknown[]> {
-  return new Promise((resolve, reject) => {
-    // Remove BOTH listeners on either path. `once` wrappers auto-remove the
-    // firing one, but explicit cleanup stays correct if a custom `once` doesn't.
-    // Through `removeListener`, as Node: an override of that name sees it.
-    const cleanup = (): void => {
-      emitter.removeListener(event, onEvent);
-      if (event !== 'error') emitter.removeListener('error', onError);
-    };
-    const onEvent = (...args: unknown[]): void => {
-      cleanup();
-      resolve(args);
-    };
-    const onError = (err: unknown): void => {
-      cleanup();
-      reject(err);
-    };
-    emitter.once(event, onEvent);
-    if (event !== 'error') emitter.once('error', onError);
-  });
 }
 
 export default EventEmitter;

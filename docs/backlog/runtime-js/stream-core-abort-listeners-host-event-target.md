@@ -94,7 +94,7 @@ Carried verbatim from the manager's review of PR #450, round 4 (2026-11-25); own
 
 ## Guest `events.addAbortListener` (PR #455)
 
-- rifty's `events.addAbortListener` cannot pass Node's `kResistStopPropagation`, so an earlier listener's `stopImmediatePropagation()` hides the abort on every host, in-process included; in the isolate this stays after Node's `EventTarget` arrives (unit 7) until the binding passes Node's symbol. Pinned: `packages/runtime-js/src/builtins/events-add-abort-listener.test.ts`, node-file row `events-add-abort-listener-stop-propagation`.
+- rifty's `events.addAbortListener` cannot pass Node's `kResistStopPropagation`, so an earlier listener's `stopImmediatePropagation()` hides the abort on every host, in-process included; in the isolate it is gone since unit 7 (PR #472, ADR-0579 §4: the binding passes Node's symbol); browser hosts as before. Pinned: `packages/runtime-js/src/builtins/events-add-abort-listener.test.ts`, node-file row `events-add-abort-listener-stop-propagation`.
 - Workbench and SDK: a throw from its listener on a later abort reaches `uncaughtException` inside `abort()` (`uncaughtException: …` before the code after it); Node's `EventTarget` rethrows on a later tick (in-process = Node). Pinned: node-file row `events-add-abort-listener-throw`.
 
 ## Challenge

@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import addAbortListenerCase from '../../../tools/node-parity-runner/cases/events/add-abort-listener.case.ts';
+import onceSignalCase from '../../../tools/node-parity-runner/cases/events/once-signal.case.ts';
 import asyncWriteBufferMomentCase from '../../../tools/node-parity-runner/cases/fs/async-write-buffer-moment.case.ts';
 import readStreamChunkOwnershipCase from '../../../tools/node-parity-runner/cases/fs/read-stream-chunk-ownership.case.ts';
 import writeArrayBufferViewKindsCase from '../../../tools/node-parity-runner/cases/fs/write-array-buffer-view-kinds.case.ts';
@@ -244,6 +245,30 @@ addAbortListener(ac.signal, () => console.log('addAbortListener: ran'));
 ac.signal.addEventListener('abort', () => console.log('later addEventListener: ran'));
 ac.abort();
 console.log('done');
+`,
+    },
+    argv: ['main.js'],
+  },
+  {
+    name: 'events-once-signal',
+    files: { 'main.js': onceSignalCase.code },
+    argv: ['main.js'],
+  },
+  {
+    // As `events-add-abort-listener-stop-propagation`: `events.once`'s abort listener resists in
+    // Node, not on a host `EventTarget` (same owner); the event then resolves it.
+    name: 'events-once-signal-stop-propagation',
+    files: {
+      'main.js': `const { EventEmitter, once } = require('node:events');
+const ee = new EventEmitter();
+const ac = new AbortController();
+ac.signal.addEventListener('abort', (event) => event.stopImmediatePropagation());
+once(ee, 'x', { signal: ac.signal }).then(
+  (args) => console.log('resolved ' + JSON.stringify(args)),
+  (error) => console.log('rejected ' + error.code),
+);
+ac.abort();
+setTimeout(() => ee.emit('x', 'late'), 10);
 `,
     },
     argv: ['main.js'],

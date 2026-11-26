@@ -4,7 +4,7 @@
  * shrink back to empty and the internal stdio emitters MUST drop their
  * listeners so a long-lived host (the playground) doesn't accumulate.
  */
-import { once } from '@riftydev/io';
+import { once } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_CWD, ProcessManager } from '../src/process-manager.ts';
 import {

@@ -63,9 +63,10 @@ against Node:
   decision on the Web API goal's question; the «private to the core» option is dropped and 7g is
   merged in). Without them, Node's `pipeline` fails in the isolate (`m7` 5/11 on the product build).
   The unit lives in this goal (manager's decision; its first consumer is Node's `pipeline`). Its
-  acceptance includes invariant I3 of goal isolate-guest-web-api: WPT `dom/abort` and `dom/events`
-  without `MessageChannel`/GC, the statics, `signal.reason instanceof DOMException`, Node APIs taking
-  `signal` (goal isolate-guest-web-api on branch `origin/t3/isolate-web-api-goal` (PR #443, not yet on main)). → I7 (isolate).
+  acceptance includes invariant I3 of goal isolate-guest-web-api (with `runtime-js/events-static-surface`
+  and `runtime-js/signal-apis-as-node`, the other carriers, manager 2026-11-26): WPT `dom/abort` and
+  `dom/events`, the statics, `signal.reason instanceof DOMException`, Node APIs taking `signal`.
+  **ready**, PR #472. Its isolate `m7`/`m9`/`m10` rows are measured and pinned there. → I7 (isolate).
 - **AL** `runtime-js/stream-core-abort-listeners-host-event-target` — Node's core attaches abort
   listeners with `kResistStopPropagation`/`kWeakHandler`, which a host `EventTarget` ignores (browser
   hosts only; the isolate gets Node's own `EventTarget` from 7). Variants: (A) the direct listener as in
@@ -177,6 +178,8 @@ written by hand. It is an auxiliary tool, not the full source:
 - known limit: the isolate rows go by name rules (Node makes an `AbortController` in `pipeline`,
   `compose` and signal-taking operators → 7; a guest that makes one → 7 too), because no row-level
   isolate run on route B exists.
+  Unit 7 (PR #472) measured the isolate's `m7`/`m9`/`m10` on today's stream and pinned them; the
+  rows left after it belong to 8c (`m10` row 2 to `runtime-js/events-static-surface` and 8c).
 
 Rules:
 - each row, on each host, gets the units it needs before it equals Node, read from the window
@@ -229,8 +232,9 @@ So the graph is:
 - 8c ← 1, 2, 7, AL;
 - 9r ← 1, 4, 4b, 7, 8c;
 - 9w ← 4, 4c, 5, 7, 8c, P; «9w ← 9r» is the last-owner rule's artefact, kept as order only;
-- 7 now includes the isolate guest globals (the user's answer; 7g merged into 7): it owns the
-  isolate `m9`/`m10` rows a guest-made `AbortController` needs; AL does not apply in the isolate;
+- 7 now includes the isolate guest globals (the user's answer; 7g merged into 7): by its
+  measurement (PR #472) it closes 3 isolate `m9` rows, the rest of `m9`/`m10` are 8c's (`m10` row 2
+  also `runtime-js/events-static-surface`); AL does not apply in the isolate;
 - 3 has no edge; P owns no row (review S4, open there).
 
 8a and 8b are 8c's build steps, so 8c's rows are theirs to keep pinned.

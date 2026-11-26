@@ -48,6 +48,7 @@ routes the option through `setEncoding`. Node's `ReadableState` sets `encoding =
 Carried verbatim from the manager's review of PR #450, round 4 (2026-11-25); owner = this unit. They close when the unit is taken into work, by its own contract and review.
 
 - S1 (owner 7/8c): «isolate-строки: Node сам создаёт `AbortController` в `pipeline.js:195`, `duplexify.js:213`, `operators.js:252`, `:62`»; «правила isolate заданы по именам, а не из данных (S1: регулярка `/pipeline/` теряет m7 «async gen stage throws»; `w1` pipeline в isolate → `['9r']` вместо 7, 8c, 9r) — либо добавь колонку isolate маршрута B из продуктового прогона, либо запиши как известный предел». Round 4 recorded it as a known limit (`reference/ownership.mjs`).
+  Unit 7's share (PR #472): its isolate rows `m7`/`m9`/`m10` measured on rifty's current stream and pinned (`packages/isolate-host/tests/abort-event-target.test.ts`); `m9` 3/5 equal Node by unit 7; left to this unit (8c): `m7` 11/11, `m9`'s `pipeline`/`finished` options rows, `m10` rows 1 and 3 (row 2 with `runtime-js/events-static-surface`); the route-B isolate column and `w1` stay open here.
 - S7 (owner 8c): «isolate-строки 8c in-process дифференциалом не прогнать; 8c не упоминает свои m9-строки».
 - B5 (owner 8c): «в окнах исход меняется на 6 строках (окно 8c: `c-unzip-stored`, `c-pipeline-asyncgen`, m4 `Readable.from(fs.ReadStream)`, `w1` `promises.pipeline`; …). Формула: «закреплены на исходе своего окна (колонка окна), изменения относительно сегодняшнего перечислены и объявлены»».
 

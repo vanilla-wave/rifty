@@ -19,7 +19,8 @@
  */
 
 export { NotImplementedError } from './errors.ts';
-export { EventEmitter, once, captureEventEmitterListenerScope } from './event-emitter.ts';
+export { bindNodeEventTargetSymbols, resistingOnceOptions } from './node-event-target-symbols.ts';
+export { EventEmitter, captureEventEmitterListenerScope } from './event-emitter.ts';
 export {
   Buffer,
   getInspectMaxBytes,
