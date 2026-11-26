@@ -12,14 +12,14 @@ Status (the manager, round 4): **ready** — 0, 2, 3, 4 (none depends on route B
 **Draft** — 4c, 5, P, 7, AL, 8a, 8b, 8c, 9r, 9w; each carries «Open findings (review round 4)»
 verbatim, closed when the unit is taken into work.
 
-- **0** `runtime-js/node-streams-acceptance-carrier` — **carrier**. In Workbench it lays the exceljs
-  closure out in the guest's `/tmp` through `packages/isolate-host/tests/closure-files.ts` and the zlib
-  carrier's `serveSteps`/`UNPACK`/`RUNNER` (PR #453). That takes 11–12 s per program, so there is no
-  edge 0 ← P (`results/chromium-c/`). It runs the 10 `c-*` programs (files
-  compared by content) as cases against live Node, in the isolate host and in Chromium on both
-  browser hosts (Workbench, SDK; Chromium 108 is the tier floor, ADR-0469). It also runs the
-  m-matrices in Chromium. It comes first, before any code, and has one owner for the Chromium line.
-  → I8.
+- **0** `runtime-js/node-streams-acceptance-carrier` — **done**: PR #467. The 10 `c-*` programs on the
+  isolate host (`packages/isolate-host/tests/streams-scenario.test.ts`), and those plus `m1`–`m10`,
+  `w1`, `b1` on Workbench and SDK (`tests/{browser-unit,no-coi}/streams-scenario.spec.ts`), each
+  pinning today's whole outcome against live Node and naming its owners. Programs' one source:
+  `packages/isolate-host/tests/fixtures/streams-scenario/`. Declared skips, tied to 4c by markers:
+  `c-transform-big` on Workbench, the `m5` 16 MiB WriteStream row on Workbench and SDK. Chromium
+  108: SDK import and Workbench owner boot fail by name (`runtime-js/chromium108-sdk-sync-wasm-import`,
+  `runtime-js/chromium108-workbench-owner-arraybuffer-detached`). → I8.
 
 Bindings and fs platform. Each is a parity fix that holds without the core, with its own proof
 against Node:
