@@ -56,7 +56,7 @@ const asyncs = {
 (async () => {
   for (const [vn, v] of Object.entries(vals)) {
     for (const [en, f] of Object.entries(sync)) {
-      const p = 'f' + n++;
+      const p = `f${n++}`;
       try {
         f(p, v);
         console.log(en, vn, 'ok size', size(p));
@@ -65,11 +65,11 @@ const asyncs = {
       }
     }
     for (const [en, f] of Object.entries(asyncs)) {
-      const p = 'f' + n++;
+      const p = `f${n++}`;
       await new Promise((res) => {
         try {
           f(p, v, (e) => {
-            console.log(en, vn, e ? 'cb err ' + desc(e) : 'ok', 'size', size(p));
+            console.log(en, vn, e ? `cb err ${desc(e)}` : 'ok', 'size', size(p));
             res();
           });
         } catch (e) {

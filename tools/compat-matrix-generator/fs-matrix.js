@@ -8,12 +8,12 @@ export const fsMatrix = {
     [
       '`readFileSync` / `writeFileSync`',
       '✅',
-      'utf8 strings; any TypedArray/DataView (incl. offset and SharedArrayBuffer views) writes its raw bytes, copied: the file never shares memory with a program buffer, written or read (`fs/write-read-buffer-ownership`, `fs/write-array-buffer-view-kinds`); a view\'s memory and length as Node reads them (`fs/write-view-bytes-intrinsics`). The copy is one memcpy: on the no-COI SDK, whose store copies too, `writeFileSync` of 16 MiB takes 4.8 ms (was 3.3); Workbench, in-process and isolate within noise',
+      "utf8 strings; any TypedArray/DataView (incl. offset and SharedArrayBuffer views) writes its raw bytes, copied: the file never shares memory with a program buffer, written or read (`fs/write-read-buffer-ownership`, `fs/write-array-buffer-view-kinds`); a view's memory and length as Node reads them (`fs/write-view-bytes-intrinsics`). The copy is one memcpy: on the no-COI SDK, whose store copies too, `writeFileSync` of 16 MiB takes 4.8 ms (was 3.3); Workbench, in-process and isolate within noise",
     ],
     [
       'write `data` that is neither a string nor an ArrayBufferView',
       '⚠️',
-      'An `ArrayBuffer`/`SharedArrayBuffer` is Node\'s `ERR_INVALID_ARG_TYPE` on the sync and `fs.promises` entries (`fs/write-array-buffer-refused`; callback `writeFile` hands it to the callback, Node throws). A number/`null`/`undefined` writes an empty file and an Array or other object its elements\' bytes (Node: `ERR_INVALID_ARG_TYPE`, callback forms synchronously); `writeSync`/`write` refuse them without a code — `backlog/runtime-js/fs-write-data-argument-types`. A program that patched `%TypedArray%.prototype` members or replaced global `Uint8Array`/`DataView`/`ArrayBuffer` writes as Node in-process and in the isolate (`fs/write-view-bytes-patched-intrinsics`); on Workbench and the SDK the store transport fails — `backlog/runtime-js/post-guest-paths-use-replaceable-intrinsics`',
+      "An `ArrayBuffer`/`SharedArrayBuffer` is Node's `ERR_INVALID_ARG_TYPE` on the sync and `fs.promises` entries (`fs/write-array-buffer-refused`; callback `writeFile` hands it to the callback, Node throws). A number/`null`/`undefined` writes an empty file and an Array or other object its elements' bytes (Node: `ERR_INVALID_ARG_TYPE`, callback forms synchronously); `writeSync`/`write` refuse them without a code — `backlog/runtime-js/fs-write-data-argument-types`. A program that patched `%TypedArray%.prototype` members or replaced global `Uint8Array`/`DataView`/`ArrayBuffer` writes as Node in-process and in the isolate (`fs/write-view-bytes-patched-intrinsics`); on Workbench and the SDK the store transport fails — `backlog/runtime-js/post-guest-paths-use-replaceable-intrinsics`",
     ],
     ['`mkdirSync({ recursive })`', '✅', 'Creates parent directories'],
     [

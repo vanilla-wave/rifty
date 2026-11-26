@@ -80,10 +80,14 @@ it('every write entry hands the store bytes of its own, never a guest object or 
   const entries: Record<string, (p: string, v: never) => unknown> = {
     writeFileSync: (p, v) => fs.writeFileSync(p, v),
     'writeFileSync wx': (p, v) => fs.writeFileSync(p, v, { flag: 'wx' }),
-    'writeFileSync r+': (p, v) => (
-      fs.writeFileSync(p, 'zzzzzz'), fs.writeFileSync(p, v, { flag: 'r+' })
-    ),
-    appendFileSync: (p, v) => (fs.writeFileSync(p, 'z'), fs.appendFileSync(p, v)),
+    'writeFileSync r+': (p, v) => {
+      fs.writeFileSync(p, 'zzzzzz');
+      fs.writeFileSync(p, v, { flag: 'r+' });
+    },
+    appendFileSync: (p, v) => {
+      fs.writeFileSync(p, 'z');
+      fs.appendFileSync(p, v);
+    },
     'promises.writeFile': (p, v) => fs.promises.writeFile(p, v),
     'promises.appendFile': (p, v) => fs.promises.appendFile(p, v),
     'writeFile cb': (p, v) => new Promise<void>((r) => fs.writeFile(p, v, done(r))),
