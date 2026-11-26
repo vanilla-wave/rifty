@@ -17,7 +17,7 @@
  * (skipped outside SAB-capable runtimes). These kernel-level tests use the
  * stub-Worker factory so they can run in plain Vitest.
  */
-import { once } from '@riftydev/io';
+import { once } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProcessManager } from '../src/process-manager.ts';
 import { clearKernelWorkerUrl, setKernelWorkerUrl } from '../src/spawn-worker.ts';

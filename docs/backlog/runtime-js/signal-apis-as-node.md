@@ -1,13 +1,13 @@
 ---
 area: runtime-js
 status: draft
-title: Node APIs taking a `signal` — `timers/promises` and `fs.readFile`/`writeFile`/`appendFile` — behave as Node's on every host
+title: Node APIs taking a `signal` — `timers/promises`, and the `fs` write aborted after its call — behave as Node's on every host
 created: 2026-11-26
-why: rifty's `timers/promises` rejects with the abort reason itself and checks no options; rifty's `fs` file APIs ignore `signal` entirely — an aborted signal reads or writes the file
+why: rifty's `timers/promises` rejects with the abort reason itself and checks no options; rifty's `fs` file APIs ignore `signal` (unit 7 adds Node's checks on #468; a write aborted after its call still writes the file)
 epic: isolate-guest-web-api
-blocked_by: [runtime-js/fs-callbacks-io-turn]
+blocked_by: [runtime-js/fs-callbacks-io-turn, distribution/isolate-stream-core-abort-controller]
 sources: [docs/adr/distribution/0579-isolate-guest-eventtarget-event-customevent-abortcontroller-and-abortsignal-are-node-v24-16-0-s-event-target-js-and-abort-controller-js.md, PR-472, PR-468]
-code: [packages/runtime-js/src/builtins/timers.ts, packages/runtime-js/src/builtins/fs.ts, packages/isolate-host/tests/abort-event-target.test.ts]
+code: [packages/runtime-js/src/builtins/timers.ts, packages/runtime-js/src/builtins/fs.ts, packages/isolate-host/tests/abort-event-target.test.ts, docs/backlog/runtime-js/reference/signal-apis-probe.cjs]
 ---
 
 ## Context
@@ -17,9 +17,11 @@ Node in the guest»), with `runtime-js/events-static-surface` (`events.on`/stati
 `distribution/isolate-stream-core-abort-controller` (the classes, `events.once`,
 `addAbortListener`; PR #472). After that unit (manager's decision, 2026-11-26).
 
-Measured 2026-11-26, Node v24.16.0; isolate = `sandbox.exec` on PR #472 (Node's `AbortSignal` in the
-guest); in-process = the parity runner (rifty's browser-host code over Node's native `AbortSignal`,
-the browser hosts' code path). Both rifty columns are equal on every row:
+Measured 2026-11-26, Node v24.16.0, probe `reference/signal-apis-probe.cjs` (its header: commands);
+isolate = `sandbox.exec` on PR #472 (Node's `AbortSignal` in the guest); in-process = the parity
+runner (rifty's browser-host code over Node's native `AbortSignal`, the browser hosts' code path).
+Both rifty columns are equal on every row (the `{signal: 1}` row: `abort-cases.cjs`-style run in the
+isolate only). Rows marked † are closed by unit 7 on top of #468 (its Acceptance 5a):
 
 | call | Node | rifty (isolate, in-process) |
 |---|---|---|
@@ -31,12 +33,14 @@ the browser hosts' code path). Both rifty columns are equal on every row:
 | `setTimeout(1,'v',null)` | `ERR_INVALID_ARG_TYPE` (`"options"`) | `TypeError` without `code` |
 | `setTimeout(1,'v',{ref: 1})` | `ERR_INVALID_ARG_TYPE` (`"options.ref"`) | resolves `'v'` |
 | `setTimeout(1,'v',{signal: 1})` | `ERR_INVALID_ARG_TYPE` (`"options.signal"`) | `signal.addEventListener is not a function`, then an uncaught `signal.removeEventListener is not a function` ends the process |
-| `fs.readFile(f,{signal: aborted},cb)` | `AbortError` | the data |
-| `fs.readFile(f,{signal},cb)`; `abort()` right after | `AbortError` | the data |
-| `fs.readFile(f,{signal: {}},cb)` | `ERR_INVALID_ARG_TYPE` (`"options.signal"`) | the data |
-| `fs.promises.readFile(f,{signal: aborted})` | `AbortError` | the data |
-| `fs.promises.writeFile(g,'x',{signal: aborted})`, `fs.writeFile(…, cb)` | `AbortError`, no file | resolves; the file is written |
-| `fs.promises.appendFile(…, {signal: aborted})` | `AbortError` | resolves; written |
+| † `fs.readFile(f,{signal: aborted},cb)` | `AbortError` | the data |
+| † `fs.readFile(f,{signal},cb)`; `abort()` right after | `AbortError` | the data |
+| † `fs.readFile(f,{signal: {}},cb)` | `ERR_INVALID_ARG_TYPE` (`"options.signal"`) | the data |
+| † `fs.promises.readFile(f,{signal: aborted})` | `AbortError` | the data |
+| † `fs.promises.writeFile(g,'x',{signal: aborted})`, `fs.writeFile(…, cb)` | `AbortError`, no file | resolves; the file is written |
+| † `fs.promises.appendFile(…, {signal: aborted})` | `AbortError` | resolves; written |
+| `fs.writeFile(f,'xyz',{signal},cb)`; `abort()` right after | `ABORT_ERR`, file size 0 | success, size 3 (after unit 7: `ABORT_ERR`, size 3) |
+| `fs.promises.writeFile(f,'xyz',{signal})`; `abort()` in a microtask | `ABORT_ERR`, size 0 | resolves, size 3 (after unit 7: `ABORT_ERR`, size 3) |
 
 Pinned in the isolate: `packages/isolate-host/tests/abort-event-target.test.ts` `CASES_DECLARED`.
 Before PR #472 the isolate rows stopped at `NotImplementedError('isolate-host.AbortController')`;

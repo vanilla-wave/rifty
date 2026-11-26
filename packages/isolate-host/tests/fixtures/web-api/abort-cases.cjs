@@ -109,7 +109,8 @@ const turn = () => new Promise((r) => setTimeout(r, 0));
   );
   {
     const ac = new AbortController();
-    out('signal identity', ac.signal === ac.signal);
+    const first = ac.signal;
+    out('signal identity', first === ac.signal);
     out(
       'signal instanceof',
       `${ac.signal instanceof AbortSignal} ${ac.signal instanceof EventTarget}`,
@@ -249,7 +250,9 @@ const turn = () => new Promise((r) => setTimeout(r, 0));
   await pinAsync('listener throw is uncaught', async () => {
     const t = new EventTarget();
     let got;
-    const h = (e) => (got = e.message);
+    const h = (e) => {
+      got = e.message;
+    };
     process.once('uncaughtException', h);
     t.addEventListener('x', () => {
       throw new Error('in listener');
@@ -272,7 +275,9 @@ const turn = () => new Promise((r) => setTimeout(r, 0));
   await pinAsync('MaxListeners warning', async () => {
     const t = new EventTarget();
     let w;
-    const h = (x) => (w = `${x.name} ${x.message} count=${x.count} type=${x.type}`);
+    const h = (x) => {
+      w = `${x.name} ${x.message} count=${x.count} type=${x.type}`;
+    };
     // Without the default printer: the warning is this line, not stderr.
     process.removeAllListeners('warning');
     process.on('warning', h);
@@ -286,14 +291,17 @@ const turn = () => new Promise((r) => setTimeout(r, 0));
     (() => {
       const s = new AbortController().signal;
       let warned = false;
-      const h = () => (warned = true);
+      const h = () => {
+        warned = true;
+      };
       process.on('warning', h);
       for (let i = 0; i < 50; i++) s.addEventListener('abort', () => {});
       process.off('warning', h);
       return warned;
     })(),
   );
-  pin('events.kMaxEventTargetListeners', () => descriptor(events, 'kMaxEventTargetListeners'));
+  for (const k of ['kMaxEventTargetListeners', 'kMaxEventTargetListenersWarned'])
+    pin(`events.${k}`, () => `${descriptor(events, k)} ${events[k].description}`);
 
   // --- Node APIs taking a signal ---
   {

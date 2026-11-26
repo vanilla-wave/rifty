@@ -178,6 +178,8 @@ written by hand. It is an auxiliary tool, not the full source:
 - known limit: the isolate rows go by name rules (Node makes an `AbortController` in `pipeline`,
   `compose` and signal-taking operators → 7; a guest that makes one → 7 too), because no row-level
   isolate run on route B exists.
+  Unit 7 (PR #472) measured the isolate's `m7`/`m9`/`m10` on today's stream and pinned them; the
+  rows left after it belong to 8c (and `m10` row 2 to `runtime-js/events-static-surface`).
 
 Rules:
 - each row, on each host, gets the units it needs before it equals Node, read from the window

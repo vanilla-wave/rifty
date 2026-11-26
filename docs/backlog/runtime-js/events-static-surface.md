@@ -3,8 +3,8 @@ area: runtime-js
 status: draft
 title: node:events static surface
 created: 2026-06-20
-why: events factory exports only EventEmitter+once; the static helpers are thin pure-JS wrappers over existing instance methods + browser AbortSignal, and node:events is NOT in the loud-stub catch-all.
-user_story: As a CLI/node:test author, I want events.on() async-iter + once(signal) + the EventEmitter statics, but today the events factory silently lacks them so for-await/AbortSignal idioms throw "not a function" with no loud stub.
+why: events factory exports EventEmitter, once, addAbortListener and two symbols only; the static helpers are thin pure-JS wrappers over existing instance methods + browser AbortSignal, and node:events is NOT in the loud-stub catch-all.
+user_story: As a CLI/node:test author, I want events.on() async-iter + the EventEmitter statics, but today the events factory silently lacks them so for-await/AbortSignal idioms throw "not a function" with no loud stub.
 sources: [docs/research/node-parity-gaps-unbacklogged-2026-06-20.md §3, docs/backlog/runtime-js (misc-stubs AsyncResource stance)]
 epic: isolate-guest-web-api
 code: [packages/runtime-js/src/builtins/index.ts, packages/io/src/event-emitter.ts, packages/runtime-js/src/builtins/misc-stubs.ts, packages/runtime-js/src/builtins/events.ts]
@@ -12,9 +12,9 @@ code: [packages/runtime-js/src/builtins/index.ts, packages/io/src/event-emitter.
 
 ## Context
 
-events factory (`builtins/index.ts:61`) exports only `EventEmitter`+`once`+`addAbortListener`. NOT in `node-builtins-loud-stub` catch-all (enumerates tls/dns/readline/…, never `events`) → missing members = bare `undefined`, not loud throw. Instance methods + symbols already exist; most statics are thin wrappers.
+events factory (`builtins/index.ts`) exports only `EventEmitter`+`once`+`addAbortListener` (+ the two `kMaxEventTargetListeners*` symbols, PR #472). NOT in `node-builtins-loud-stub` catch-all (enumerates tls/dns/readline/…, never `events`) → missing members = bare `undefined`, not loud throw. Instance methods + symbols already exist; most statics are thin wrappers.
 
-| feature · since | real path | anchor |
+| feature · since | possible path if rifty's own code (see Question) | anchor |
 |---|---|---|
 | `events.on(emitter,name[,opts])` AsyncIterableIterator · v13.6 | buffered queue + Promise resolvers on `on/off`; AbortSignal ends | new |
 | `EventEmitter.errorMonitor` symbol · v13.6 | `static errorMonitor=Symbol`; fire first in `emit('error')`, then throw-if-unhandled | new |
@@ -31,7 +31,7 @@ Carrier of part of I3 of goal `isolate-guest-web-api` (`events.on` with `signal`
 `runtime-js/signal-apis-as-node`; after unit 7 (manager's decision, 2026-11-26). PR #472 made
 `events.once(emitter, name, options)` Node's `lib/events.js` `once` on every host (`options.signal`,
 EventTarget emitters, parity `events/once-signal`) and added `EventEmitter.kMaxEventTargetListeners`/
-`kMaxEventTargetListenersWarned`; the table's `once(signal)` row is done.
+`kMaxEventTargetListenersWarned`; `once(signal)` is done (its table row removed).
 
 Measured 2026-11-26, isolate `runCode` on PR #472 vs Node v24.16.0, `Object.getOwnPropertyNames(require('events'))`:
 - isolate: `EventEmitter, addAbortListener, captureRejectionSymbol, defaultMaxListeners, kMaxEventTargetListeners, kMaxEventTargetListenersWarned, length, name, once, prototype`;
@@ -40,7 +40,7 @@ Measured 2026-11-26, isolate `runCode` on PR #472 vs Node v24.16.0, `Object.getO
 | call (Node v24.16.0) | Node | isolate, PR #472 |
 |---|---|---|
 | `events.on(ee,'x',{signal})`, `abort()` while iterating | `AbortError [ABORT_ERR]`, `cause` = reason | `TypeError: events.on is not a function` |
-| `events.getEventListeners(signal,'abort').length` | the count | `TypeError: … is not a function` |
+| `events.getEventListeners(signal,'abort').length` (one listener added) | `1` | `TypeError: … is not a function` |
 | `events.setMaxListeners(1, eventTarget); getMaxListeners(eventTarget)` | `1` | `TypeError: … is not a function` |
 
 Pinned: `packages/isolate-host/tests/abort-event-target.test.ts` (`typeof events.on`, …).
@@ -70,7 +70,7 @@ What Node's stream core (unit `runtime-js/stream-core-node-sources-unwired`, 8a,
 
 ## Options or Next
 
-Parity-first, per-feature promotable: add failing parity test (real Node oracle) per row, then implement. Order: errorMonitor / get*/set*/listenerCount/getEventListeners (trivial wrappers) → once(signal) → events.on async-iter → captureRejections (needs ctor-options without breaking the constructor-less `util.inherits`/express idiom). EventEmitterAsyncResource: sync-scope faithful only (matches AsyncResource/ALS ceiling) — document the cross-await subset, no silent stub.
+After the Question: parity-first per row (a failing parity test against live Node, then the implementation), whichever carrier is chosen. EventEmitterAsyncResource: the AsyncResource/ALS ceiling applies either way.
 
 ## Reversibility
 

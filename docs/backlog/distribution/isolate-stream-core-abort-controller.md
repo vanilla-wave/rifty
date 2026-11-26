@@ -1,10 +1,11 @@
 ---
 area: distribution
 status: ready
-title: The isolate guest's EventTarget, Event, CustomEvent, AbortController and AbortSignal are Node v24.16.0's own classes as ordinary globals, so Node's APIs taking a signal and Node's stream code keep working
+title: The isolate guest's EventTarget, Event, CustomEvent, AbortController and AbortSignal are Node v24.16.0's own classes as ordinary globals, so Node's APIs taking a signal work there and Node's stream core can bind them
 created: 2026-11-25
 why: Node's pipeline creates an AbortController per call and every `signal` option needs one; in the isolate guest the five were ceiling throwers
 epic: node-streams-as-in-node
+blocked_by: [runtime-js/fs-callbacks-io-turn]
 sources: [docs/adr/runtime-js/0575-stream-core-and-fs-streams-are-node-v24-16-0-s-own-sources.md, docs/backlog/epics/node-streams-as-in-node/map.md, docs/backlog/epics/isolate-guest-web-api/goal.md, docs/backlog/epics/isolate-guest-web-api/reference/sources-js/README.md, docs/adr/distribution/0579-isolate-guest-eventtarget-event-customevent-abortcontroller-and-abortsignal-are-node-v24-16-0-s-event-target-js-and-abort-controller-js.md]
 code: [packages/isolate-guest/src/guest/node-event-target/bindings.ts, packages/isolate-guest/src/guest/web-shim.ts, packages/isolate-guest/src/guest/entry.ts, packages/runtime-js/src/builtins/events.ts, packages/io/src/node-event-target-symbols.ts, packages/isolate-host/tests/abort-event-target.test.ts, packages/isolate-host/tests/wpt-dom.test.ts]
 ---
@@ -27,14 +28,19 @@ Node. Node's globals are data properties before and after the first read (measur
 
 ## Open findings (review round 4) — closed
 
-- S1 (isolate row ownership by names): closed by data. This unit measures the isolate's `m7`/`m9`/`m10`
-  on main and on its build (`sandbox.exec`) and pins its rows (`abort-event-target.test.ts`):
+- S1 (isolate row ownership by names): unit 7's share closed by data; the route-B isolate column and
+  `w1` stay with 8c (`runtime-js/stream-core-node-sources`, S1 there). This unit measures the
+  isolate's `m7`/`m9`/`m10` on rifty's current stream — `sandbox.exec` of each program on a build of
+  origin/main `be99bee9e` and on this unit's build, Node = `node <program>` v24.16.0 — and pins the
+  after state (`abort-event-target.test.ts`):
   `m7` 0/11 = Node before and after (rifty's `pipeline`: no function/generator stages, `finished`'s
   callback arguments) → 8c; `m9` was 0/5 (`NotImplementedError` at `new AbortController`), now 3/5
   (`addAbortSignal`, `map`, `reduce` with a stopping listener), `pipeline(…, {signal})` and
   `finished(r, {signal}, cb)` (rifty's take no options) → 8c; `m10` was 0/3 (the same gap), now
-  `TypeError` in row 1 (`pipeline` options), `n/a` in row 2 (`getEventListeners` absent), and an
-  uncaught `cb is not a function` (rifty's `finished` calls the options) → 8c. Node: `m9` 5/5
+  `TypeError` in row 1 (`pipeline` options) → 8c, `n/a` in row 2 (`events.getEventListeners`
+  absent) → `runtime-js/events-static-surface`, and an uncaught `cb is not a function` (rifty's
+  `finished` calls the options) → 8c. That Node's stream core runs over these classes in the
+  isolate is 8a/8c's proof (route B), not a row here. Node: `m9` 5/5
   `ABORT_ERR`, `m10` `destroyed=true`, `10000`, `0`.
 - S4 (no rows, no Acceptance): below.
 
@@ -61,13 +67,19 @@ Node. Node's globals are data properties before and after the first read (measur
 5. Node's APIs taking a `signal` in the guest equal Node: `events.addAbortListener` (an earlier
    `stopImmediatePropagation()` does not hide the abort), `events.once(emitter, name, {signal})`
    (Node's `lib/events.js` `once` on every host: aborted before / same tick / microtask / after the
-   event / never, bad signal, no listener left — parity `events/once-signal`), and, on top of #468,
-   `fs.readFile`/`writeFile`/`appendFile` and `fs.promises.readFile`/`writeFile`/`appendFile`:
-   `validateAbortSignal` + Node's `checkAborted` at call and before a read's result (aborted before
-   the call, `abort()` in the same tick, in a microtask, after completion without effect, a bad
-   `signal` → `ERR_INVALID_ARG_TYPE`). `events.on`/statics and `timers/promises` are pinned as
-   today with their owners (`runtime-js/events-static-surface`, `runtime-js/signal-apis-as-node`).
-   `child_process` signals: the module is a gap in the isolate (no row). → I3
+   event / never, bad signal, no listener left — parity `events/once-signal`). `events.on`/statics
+   and `timers/promises` are pinned as today with their owners (`runtime-js/events-static-surface`,
+   `runtime-js/signal-apis-as-node`). `child_process` signals: the module is a gap in the isolate
+   (no row). → I3
+5a. On top of #468, every host: `validateAbortSignal` + Node's `checkAborted` at call and before the
+   result is delivered, in `fs.readFile`/`writeFile`/`appendFile` and `fs.promises.readFile`/
+   `writeFile`/`appendFile`. Reads equal Node for a signal aborted before the call, `abort()` in the
+   same tick, in a microtask, after completion (no effect), a bad `signal` (`ERR_INVALID_ARG_TYPE`);
+   writes for aborted before the call (`AbortError`, nothing written), after completion and a bad
+   `signal`. Declared remainder (owner `runtime-js/signal-apis-as-node`): a write aborted after the
+   call, same tick or microtask — Node `ABORT_ERR` and the file created empty (measured v24.16.0:
+   size 0), rifty `ABORT_ERR` with the file written. Proof: parity case over the in-process host +
+   the isolate rows. → I3
 6. Replaced intrinsics after load (`Array.prototype.*`, its iterator, `Function.prototype.call/apply/
    bind`, `Promise.prototype.*`, `Map`/`Set`/`WeakMap`/`WeakSet`/`WeakRef`/`FinalizationRegistry`
    prototypes, `Object.*`, `Reflect.apply`) change the classes' results as they change Node's
@@ -91,10 +103,11 @@ Node. Node's globals are data properties before and after the first read (measur
 
 ## Parity cases
 
-1. `abort-cases.cjs` (147 lines): globals, shapes, errors, statics, dispatch semantics, `signal`
+1. `abort-cases.cjs` (147 observation lines): globals, shapes, errors, statics, dispatch semantics, `signal`
    options, MaxListeners warning, transfer path; Node = guest but `CASES_DECLARED`. → I3
 2. `abort-intrinsics.cjs`: the replaced-intrinsics table. → ADR-0579
-3. `tools/node-parity-runner/cases/events/once-signal.case.ts` (every host). → I3
+3. `tools/node-parity-runner/cases/events/once-signal.case.ts` (every host); the fs `signal` parity
+   case (every host, with 5a). → I3
 4. WPT `dom/abort`, `dom/events` (13 files). → I3
 5. `m7`, `m9`, `m10` (`fixtures/streams-scenario/`) in the isolate. → I7
 
@@ -106,7 +119,7 @@ Node. Node's globals are data properties before and after the first read (measur
   `runtime-js/util-surface-completions`).
 - `DOMException`'s shape (`distribution/isolate-guest-domexception-node-shape`).
 - `events.on`, `getEventListeners`, `get/setMaxListeners` (`runtime-js/events-static-surface`);
-  `timers/promises` `signal` (`runtime-js/signal-apis-as-node`).
+  `timers/promises` `signal` and a write aborted after its call (`runtime-js/signal-apis-as-node`).
 - Browser hosts' `EventTarget` and `kResistStopPropagation` there
   (`runtime-js/stream-core-abort-listeners-host-event-target`).
 - GC-proven cleanup of weak listeners and `AbortSignal.any` (no `gc()` in the guest).
@@ -115,7 +128,8 @@ Node. Node's globals are data properties before and after the first read (measur
 
 - 2026-11-25 — user (goal Decisions): ordinary globals, as in Node; manager M1: `CustomEvent` with the four.
 - 2026-11-26 — manager: `events` surface and `timers/promises` are other carriers of I3; `events.once`
-  and fs `signal` (on #468) here; `addAbortListener` with `kResistStopPropagation` through a binding.
+  and fs `signal` (on #468) here, the write-after-call remainder declared; `addAbortListener` with
+  `kResistStopPropagation` through a binding; until #468 is in main the PR stays draft.
 - 2026-11-26 — agent: eager data globals (Node's are data from the start); errors/validators/
   primordials as rifty bindings with Node's text, shared with node-blob (ADR-0579).
 - 2026-11-26 — agent: the `kResistStopPropagation` seam lives in `@riftydev/io` (lowest layer using

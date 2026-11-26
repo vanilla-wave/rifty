@@ -42,7 +42,7 @@ const CASES_DECLARED: Declared = {
   'timers/promises.setTimeout abort later': NOT_ABORT,
   'timers/promises.setImmediate aborted': 'throw why',
   'timers/promises.setInterval aborted': NOT_ABORT,
-  // TODO(backlog: runtime-js/signal-apis-as-node) fs `signal` lands on top of #468 (unit 7).
+  // TODO(backlog: distribution/isolate-stream-core-abort-controller) fs `signal` lands here on top of #468.
   'fs.readFile signal aborted': '"abc"',
   'fs.promises.readFile signal aborted': '"abc"',
   'fs.promises.writeFile signal aborted': 'undefined',
