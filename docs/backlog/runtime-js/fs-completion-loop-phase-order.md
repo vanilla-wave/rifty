@@ -31,7 +31,9 @@ Isolate, PR #468, 8 runs: each line is Node's in 5–7 runs, else a timer first 
 `immediate<,timeout<,immediate>,timeout>,cb`). The cleared-immediate line was 8/8. The guest runs on
 the isolate's thread beside the host loop. The host's 1 ms timers and its `setImmediate` deliveries
 (the bridge's 0 ms `timerStart`) are queued into the isolate as they come due, so a guest busy wait
-does not hold the host's timers back. On main the guest's immediates were 1 ms timers (FIFO with its
+does not hold the host's timers back. The same race moves a due timer after a completion in `fs/callback-turn-order`
+on CI (PR #468 run 45765007596: `stat`, `read EBADF`, `promises.readFile` `after: timeout<,timeout>`); the
+isolate test compares that case without the timers. On main the guest's immediates were 1 ms timers (FIFO with its
 timers, not Node's order).
 
 Outside an fs callback, 2026-11-26 (PR #468 second external review; Node v24.16.0 300/300). Program
