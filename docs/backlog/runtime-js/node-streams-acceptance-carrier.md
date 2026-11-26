@@ -13,7 +13,7 @@ code: [packages/isolate-host/tests/library-exceljs.test.ts, packages/isolate-hos
 
 Unit 0 of goal `node-streams-as-in-node` (map). It turns the goal's scenario into executable cases,
 pinned on today's outcome, before any stream code changes. The programs are the 10 `c-*` files of the
-goal's `reference/programs/`. Each compares the files it writes by content: by sha256, or by the values
+goal's `reference/programs/`, now at `packages/isolate-host/tests/fixtures/streams-scenario/` (their one source). Each compares the files it writes by content: by sha256, or by the values
 a reload reads.
 
 Today's measurements. These are not the pins: the unit takes its own baseline when it is implemented

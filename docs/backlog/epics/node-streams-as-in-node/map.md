@@ -354,7 +354,7 @@ Measured on route B in-process (`results/route-b-s5-consumers.txt`, cases `route
 Not measured on route B yet: `ClientRequest`, `process.stdout` (parity `stream/pipe-process-stdio*`),
 the upgrade socket. These are 8b's to write.
 
-Windows between units (`programs/w1-fs-windows.cjs`, `results/w1-fs-windows.txt`). The columns are
+Windows between units (`packages/isolate-host/tests/fixtures/streams-scenario/w1-fs-windows.cjs`, `results/w1-fs-windows.txt`). The columns are
 Node, today, after 8c before 9r (`rifty-inproc-Bp8c`: Node's core with today's fs classes) and after
 9r before 9w (`rifty-inproc-Bp9r`). Each row is pinned as declared:
 

@@ -30,7 +30,22 @@ const PINS: Readonly<Record<string, Pin>> = {
 readFile threw TypeError: stream.close is not a function
 `,
     stderr: '',
-    output: `in.xlsx values [["Revenue",[[null,"Region","Revenue"],[null,"North",120],[null,"South",95]]]]
+    output: `in.xlsx![Content_Types].xml method 8 sha256 0ee6278b34e013e933862925f7cc8fbfa34529af82df0b64f7e7de9d8e31084e
+in.xlsx!_rels/ method 0 dir
+in.xlsx!_rels/.rels method 8 sha256 1285b20099c64699001f9d90ea040ca1c177fa99bc3ae8a841128874820f01a4
+in.xlsx!docProps/ method 0 dir
+in.xlsx!docProps/app.xml method 8 sha256 351686dafc92b804882bc4a5b2b5d8e61a218ddeeba980588aa6a93659084e5a
+in.xlsx!docProps/core.xml method 8 sha256 792e3aef103f422afdf0d049ae13527118d6ee0fd2b91a5c972616e5927b2fd0
+in.xlsx!xl/ method 0 dir
+in.xlsx!xl/_rels/ method 0 dir
+in.xlsx!xl/_rels/workbook.xml.rels method 8 sha256 db152538ca9d0a12609bf550b2577971a880d45d8ba0799dfe277871531bb3b1
+in.xlsx!xl/sharedStrings.xml method 8 sha256 2cc860482e908f45ed5c3c13c1390c484b6a7a606be37c68ed248c62c4bd0e35
+in.xlsx!xl/styles.xml method 8 sha256 b162294abd5acb68586c0433eae4f5c97480787c08dda49d1fa145f3b7b0a692
+in.xlsx!xl/theme/ method 0 dir
+in.xlsx!xl/theme/theme1.xml method 8 sha256 f857ef82e4c0e273a16e5efcf5cb12ff7a9943851cbdbd992cd2722616b271ed
+in.xlsx!xl/workbook.xml method 8 sha256 f034bd45edb557b11f3452e6732994cd2636bbd3dfb30d687c466f0ad47bf049
+in.xlsx!xl/worksheets/ method 0 dir
+in.xlsx!xl/worksheets/sheet1.xml method 8 sha256 96a293dca7217643fd2534edba56758199ddf8774575e649cd6242d174ae2671
 `,
   },
   'c-csv-read': {
@@ -53,7 +68,9 @@ readFile threw TypeError: stream.close is not a function
     stdout: `extract error ${NO_RS}
 `,
     stderr: '',
-    output: `a.zip entries a.txt=eb06cb57b0a7944a5fdd77b42dc87f454b57a87c6c11d32a10edcd710d9d3d03 dir/b.txt=0f882365d720e9c4fc399ff41f81728abe2196760810a9da2f7913759d05207b
+    output: `a.zip!a.txt method 0 sha256 b53a397c07aa67b8e768b08b36a85531ab0c44342199ce5e15c7fd53fafc7114
+a.zip!dir/ method 0 dir
+a.zip!dir/b.txt method 0 sha256 12fd37d78287b8f1a9a1837ceb096dbe75bf1591666ca996b0baf1cb715f90b9
 `,
   },
   'c-for-await': {
@@ -124,7 +141,8 @@ async function inIsolate(p: Program): Promise<Observed> {
 
 describe('node-streams goal scenario vs Node (isolate host)', () => {
   for (const p of CARRIER) {
-    it(`${p.id} ${p.title} — ${verdict(p)}`, { timeout: 120_000 }, async () => {
+    // Above the oracle's bound plus the sandbox's `exec` bound (120 s, `inSandboxWritten`).
+    it(`${p.id} ${p.title} — ${verdict(p)}`, { timeout: 240_000 }, async () => {
       const node = pinOf(await inNode(p));
       const rifty = pinOf(await inIsolate(p));
       const pin = PINS[p.id];

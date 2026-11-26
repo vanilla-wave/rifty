@@ -1,10 +1,10 @@
 import {
+  ARCHIVE,
   BROWSER_SKIPPED_ROWS,
   CARRIER,
   MATRICES,
   type Program,
-  RELOADED,
-  entryOf,
+  entriesOf,
   inNode,
   manifest,
   programFile,
@@ -50,7 +50,22 @@ const PINS: Readonly<Record<string, SdkPin>> = {
 readFile threw TypeError: stream.close is not a function
 `,
     stderr: '',
-    output: `in.xlsx values [["Revenue",[[null,"Region","Revenue"],[null,"North",120],[null,"South",95]]]]
+    output: `in.xlsx![Content_Types].xml method 8 sha256 0ee6278b34e013e933862925f7cc8fbfa34529af82df0b64f7e7de9d8e31084e
+in.xlsx!_rels/ method 0 dir
+in.xlsx!_rels/.rels method 8 sha256 1285b20099c64699001f9d90ea040ca1c177fa99bc3ae8a841128874820f01a4
+in.xlsx!docProps/ method 0 dir
+in.xlsx!docProps/app.xml method 8 sha256 351686dafc92b804882bc4a5b2b5d8e61a218ddeeba980588aa6a93659084e5a
+in.xlsx!docProps/core.xml method 8 sha256 792e3aef103f422afdf0d049ae13527118d6ee0fd2b91a5c972616e5927b2fd0
+in.xlsx!xl/ method 0 dir
+in.xlsx!xl/_rels/ method 0 dir
+in.xlsx!xl/_rels/workbook.xml.rels method 8 sha256 db152538ca9d0a12609bf550b2577971a880d45d8ba0799dfe277871531bb3b1
+in.xlsx!xl/sharedStrings.xml method 8 sha256 2cc860482e908f45ed5c3c13c1390c484b6a7a606be37c68ed248c62c4bd0e35
+in.xlsx!xl/styles.xml method 8 sha256 b162294abd5acb68586c0433eae4f5c97480787c08dda49d1fa145f3b7b0a692
+in.xlsx!xl/theme/ method 0 dir
+in.xlsx!xl/theme/theme1.xml method 8 sha256 f857ef82e4c0e273a16e5efcf5cb12ff7a9943851cbdbd992cd2722616b271ed
+in.xlsx!xl/workbook.xml method 8 sha256 f034bd45edb557b11f3452e6732994cd2636bbd3dfb30d687c466f0ad47bf049
+in.xlsx!xl/worksheets/ method 0 dir
+in.xlsx!xl/worksheets/sheet1.xml method 8 sha256 96a293dca7217643fd2534edba56758199ddf8774575e649cd6242d174ae2671
 `,
     status: 'exited',
     worker: 'retained',
@@ -94,7 +109,9 @@ readFile threw TypeError: stream.close is not a function
     stdout: `close, then listing threw Error [ENOENT]: ENOENT: no such file or directory, scandir '/ss/sc-unzip-stored/unz'
 `,
     stderr: '',
-    output: `a.zip entries a.txt=eb06cb57b0a7944a5fdd77b42dc87f454b57a87c6c11d32a10edcd710d9d3d03 dir/b.txt=0f882365d720e9c4fc399ff41f81728abe2196760810a9da2f7913759d05207b
+    output: `a.zip!a.txt method 0 sha256 b53a397c07aa67b8e768b08b36a85531ab0c44342199ce5e15c7fd53fafc7114
+a.zip!dir/ method 0 dir
+a.zip!dir/b.txt method 0 sha256 12fd37d78287b8f1a9a1837ceb096dbe75bf1591666ca996b0baf1cb715f90b9
 `,
     status: 'exited',
     worker: 'retained',
@@ -493,6 +510,8 @@ w.txt sha256 3a6eb0790f39ac87c94f3856b2dd2c5d110e6811602261a9a923d3bb23adc8b7
   },
 };
 
+/** A run's cap: with the oracle's bound, below the test's 300 s. */
+const RUN_CAP_MS = 180_000;
 const root = process.cwd().replaceAll('\\', '/');
 const masks = browserMasks(root);
 
@@ -504,8 +523,8 @@ interface SdkRun {
   readonly worker: string;
   readonly effects: unknown;
   readonly failure: Failure | null;
-  /** Written file → its bytes (a reloaded one) or its sha256 by the page's WebCrypto. */
-  readonly files: Record<string, { bytes: number[] } | { sha256: string }>;
+  /** Written file → its bytes (an archive) or its sha256 by the page's WebCrypto. */
+  readonly files: [string, { bytes: number[] } | { sha256: string }][];
 }
 
 /** The program's run in a fresh SDK sandbox on `page`, its written files read back by the page. */
@@ -513,7 +532,7 @@ async function inSdk(page: Page, p: Program, args: readonly string[]): Promise<S
   await serveSteps(page, () => new Map([[p.id, { files: workspace(p) }]]));
   await page.goto('/no-coi-harness.html');
   const r = await page.evaluate(
-    async ({ root, url, id, program, args, unpack, reloaded }): Promise<SdkRun> => {
+    async ({ root, url, id, program, args, unpack, archive, cap }): Promise<SdkRun> => {
       interface Outcome {
         stdout: string;
         stderr: string;
@@ -529,7 +548,9 @@ async function inSdk(page: Page, p: Program, args: readonly string[]): Promise<S
           readFile(p: string): Promise<Uint8Array>;
           readdir(p: string): Promise<readonly { name: string; isDirectory: boolean }[]>;
         };
-        project(o: { root: string }): { run(line: string): { completion: Promise<Outcome> } };
+        project(o: { root: string }): {
+          run(line: string): { completion: Promise<Outcome>; stop(): Promise<unknown> };
+        };
         dispose(): void;
       }
       const { createSandbox } = await import(`/@fs${root}/packages/rifty/src/index.ts`);
@@ -549,9 +570,17 @@ async function inSdk(page: Page, p: Program, args: readonly string[]): Promise<S
           .run(`node zunpack.cjs s${id}.bin s${id}`).completion;
         if (unpacked.exitCode !== 0) throw new Error(`unpack: ${unpacked.stderr}`);
         const dir = `/ss/s${id}`;
-        const done = await sandbox.project({ root: dir }).run(['node', program, ...args].join(' '))
-          .completion;
-        const files: SdkRun['files'] = {};
+        const run = sandbox.project({ root: dir }).run(['node', program, ...args].join(' '));
+        const first = await Promise.race([
+          run.completion,
+          new Promise<'cap'>((res) => setTimeout(() => res('cap'), cap)),
+        ]);
+        if (first === 'cap') {
+          await run.stop();
+          throw new Error(`${id}: no exit within ${cap / 1000} s`);
+        }
+        const done = first;
+        const files: [string, { bytes: number[] } | { sha256: string }][] = [];
         const walk = async (rel: string): Promise<void> => {
           for (const e of await sandbox.fs.readdir(rel === '' ? dir : `${dir}/${rel}`)) {
             const path = rel === '' ? e.name : `${rel}/${e.name}`;
@@ -561,14 +590,17 @@ async function inSdk(page: Page, p: Program, args: readonly string[]): Promise<S
               continue;
             }
             const b = await sandbox.fs.readFile(`${dir}/${path}`);
-            files[path] = new RegExp(reloaded).test(path)
-              ? { bytes: Array.from(b) }
-              : {
-                  sha256: Array.from(
-                    new Uint8Array(await crypto.subtle.digest('SHA-256', new Uint8Array(b))),
-                    (x) => x.toString(16).padStart(2, '0'),
-                  ).join(''),
-                };
+            files.push([
+              path,
+              new RegExp(archive).test(path)
+                ? { bytes: Array.from(b) }
+                : {
+                    sha256: Array.from(
+                      new Uint8Array(await crypto.subtle.digest('SHA-256', new Uint8Array(b))),
+                      (x) => x.toString(16).padStart(2, '0'),
+                    ).join(''),
+                  },
+            ]);
           }
         };
         await walk('');
@@ -594,20 +626,19 @@ async function inSdk(page: Page, p: Program, args: readonly string[]): Promise<S
       program: programFile(p),
       args,
       unpack: UNPACK,
-      reloaded: RELOADED.source,
+      archive: ARCHIVE.source,
+      cap: RUN_CAP_MS,
     },
   );
   const entries = await Promise.all(
-    Object.entries(r.files).map(
-      async ([path, f]) =>
-        [
-          path,
-          'sha256' in f ? sha256Entry(f.sha256) : await entryOf(path, Uint8Array.from(f.bytes)),
-        ] as const,
+    r.files.map(([path, f]) =>
+      'sha256' in f
+        ? [[path, sha256Entry(f.sha256)] as [string, string]]
+        : entriesOf(path, Uint8Array.from(f.bytes)),
     ),
   );
   const pin = pinOf(
-    { exitCode: r.exitCode, stdout: r.stdout, stderr: r.stderr, output: manifest(entries) },
+    { exitCode: r.exitCode, stdout: r.stdout, stderr: r.stderr, output: manifest(entries.flat()) },
     masks,
   );
   const failure =

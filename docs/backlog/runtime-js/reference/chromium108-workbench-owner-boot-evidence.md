@@ -1,7 +1,7 @@
 # Chromium 108: COI Workbench owner boot (2026-11-26)
 
-Run by the node-streams carrier unit (PR #467), checkout = main `e430522e8` + the carrier's commits
-(tests, CI matrix, docs; no product source). Browser: Playwright 1.28.1's `chromium-1033` = Chromium 108.0.5359.29, macOS arm64, driven by
+Run by the node-streams carrier unit (PR #467), checkout = main `e430522e8` + the carrier's commits up to
+`1c200d7ef` (tests, CI matrix, docs; no product source). Browser: Playwright 1.28.1's `chromium-1033` = Chromium 108.0.5359.29, macOS arm64, driven by
 the workspace's Playwright 1.60 (`use.launchOptions.executablePath`), COI dev server of
 `playwright.browser-unit.config.ts`.
 

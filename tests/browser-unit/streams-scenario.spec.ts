@@ -1,12 +1,12 @@
 import { type Page, expect, test } from '@playwright/test';
 import {
+  ARCHIVE,
   BROWSER_SKIPPED_ROWS,
   CARRIER,
   MATRICES,
   type Program,
-  RELOADED,
   WORKBENCH_SKIPPED,
-  entryOf,
+  entriesOf,
   inNode,
   manifest,
   programFile,
@@ -39,8 +39,8 @@ import { STEP_URL, UNPACK, serveSteps } from './fixtures/zlib-scenario.ts';
 
 /**
  * `node srun.cjs <dir> <program> [args]`: the child's stdio and exit code, then each written file (outside
- * `node_modules`, the program excepted): a reloaded one's bytes (base64), any other's sha256 by
- * the guest's `crypto` (a 16 MiB file through the terminal costs more than the run).
+ * `node_modules`, the program excepted) as `[path, file]` pairs: an archive's bytes (base64), any
+ * other's sha256 by the guest's `crypto` (a 16 MiB file through the terminal costs more than the run).
  */
 const RUNNER = `const { spawn } = require('node:child_process');
 const fs = require('node:fs');
@@ -54,7 +54,7 @@ let stderr = '';
 child.stdout.setEncoding('utf8').on('data', (c) => { stdout += c; process.stdout.write(c); });
 child.stderr.setEncoding('utf8').on('data', (c) => { stderr += c; });
 child.on('close', (exitCode) => {
-  const files = {};
+  const files = [];
   const walk = (rel) => {
     for (const name of fs.readdirSync(path.join(cwd, rel)).sort()) {
       const p = rel === '' ? name : rel + '/' + name;
@@ -62,9 +62,9 @@ child.on('close', (exitCode) => {
       if (fs.statSync(path.join(cwd, p)).isDirectory()) walk(p);
       else {
         const b = fs.readFileSync(path.join(cwd, p));
-        files[p] = ${RELOADED}.test(p)
+        files.push([p, ${ARCHIVE}.test(p)
           ? { base64: b.toString('base64') }
-          : { sha256: require('node:crypto').createHash('sha256').update(b).digest('hex') };
+          : { sha256: require('node:crypto').createHash('sha256').update(b).digest('hex') }]);
       }
     }
   };
@@ -81,7 +81,22 @@ const PINS: Readonly<Record<string, Pin>> = {
 readFile threw TypeError: stream.close is not a function
 `,
     stderr: '',
-    output: `in.xlsx values [["Revenue",[[null,"Region","Revenue"],[null,"North",120],[null,"South",95]]]]
+    output: `in.xlsx![Content_Types].xml method 8 sha256 0ee6278b34e013e933862925f7cc8fbfa34529af82df0b64f7e7de9d8e31084e
+in.xlsx!_rels/ method 0 dir
+in.xlsx!_rels/.rels method 8 sha256 1285b20099c64699001f9d90ea040ca1c177fa99bc3ae8a841128874820f01a4
+in.xlsx!docProps/ method 0 dir
+in.xlsx!docProps/app.xml method 8 sha256 351686dafc92b804882bc4a5b2b5d8e61a218ddeeba980588aa6a93659084e5a
+in.xlsx!docProps/core.xml method 8 sha256 792e3aef103f422afdf0d049ae13527118d6ee0fd2b91a5c972616e5927b2fd0
+in.xlsx!xl/ method 0 dir
+in.xlsx!xl/_rels/ method 0 dir
+in.xlsx!xl/_rels/workbook.xml.rels method 8 sha256 db152538ca9d0a12609bf550b2577971a880d45d8ba0799dfe277871531bb3b1
+in.xlsx!xl/sharedStrings.xml method 8 sha256 2cc860482e908f45ed5c3c13c1390c484b6a7a606be37c68ed248c62c4bd0e35
+in.xlsx!xl/styles.xml method 8 sha256 b162294abd5acb68586c0433eae4f5c97480787c08dda49d1fa145f3b7b0a692
+in.xlsx!xl/theme/ method 0 dir
+in.xlsx!xl/theme/theme1.xml method 8 sha256 f857ef82e4c0e273a16e5efcf5cb12ff7a9943851cbdbd992cd2722616b271ed
+in.xlsx!xl/workbook.xml method 8 sha256 f034bd45edb557b11f3452e6732994cd2636bbd3dfb30d687c466f0ad47bf049
+in.xlsx!xl/worksheets/ method 0 dir
+in.xlsx!xl/worksheets/sheet1.xml method 8 sha256 96a293dca7217643fd2534edba56758199ddf8774575e649cd6242d174ae2671
 `,
   },
   'c-csv-read': {
@@ -104,7 +119,9 @@ readFile threw TypeError: stream.close is not a function
     stdout: `close, then listing threw Error [ENOENT]: ENOENT: no such file or directory, scandir '/tmp/sc-unzip-stored/unz'
 `,
     stderr: '',
-    output: `a.zip entries a.txt=eb06cb57b0a7944a5fdd77b42dc87f454b57a87c6c11d32a10edcd710d9d3d03 dir/b.txt=0f882365d720e9c4fc399ff41f81728abe2196760810a9da2f7913759d05207b
+    output: `a.zip!a.txt method 0 sha256 b53a397c07aa67b8e768b08b36a85531ab0c44342199ce5e15c7fd53fafc7114
+a.zip!dir/ method 0 dir
+a.zip!dir/b.txt method 0 sha256 12fd37d78287b8f1a9a1837ceb096dbe75bf1591666ca996b0baf1cb715f90b9
 `,
   },
   'c-for-await': {
@@ -367,7 +384,7 @@ w.txt sha256 3a6eb0790f39ac87c94f3856b2dd2c5d110e6811602261a9a923d3bb23adc8b7
 };
 
 /** A run's cap, below the test's: a run past it fails naming the last row it printed. */
-const RUN_CAP_MS = 200_000;
+const RUN_CAP_MS = 120_000;
 
 const root = process.cwd().replaceAll('\\', '/');
 
@@ -436,20 +453,21 @@ async function inWorkbench(page: Page, p: Program, args: readonly string[]): Pro
       stdout: string;
       stderr: string;
       exitCode: number | null;
-      files: Record<string, { base64: string } | { sha256: string }>;
+      files: [string, { base64: string } | { sha256: string }][];
     };
     const entries = await Promise.all(
-      Object.entries(r.files).map(
-        async ([path, f]) =>
-          [
-            path,
-            'sha256' in f
-              ? sha256Entry(f.sha256)
-              : await entryOf(path, Buffer.from(f.base64, 'base64')),
-          ] as const,
+      r.files.map(([path, f]) =>
+        'sha256' in f
+          ? [[path, sha256Entry(f.sha256)] as [string, string]]
+          : entriesOf(path, Buffer.from(f.base64, 'base64')),
       ),
     );
-    return { exitCode: r.exitCode, stdout: r.stdout, stderr: r.stderr, output: manifest(entries) };
+    return {
+      exitCode: r.exitCode,
+      stdout: r.stdout,
+      stderr: r.stderr,
+      output: manifest(entries.flat()),
+    };
   } finally {
     await closeOwner(page);
   }

@@ -23,7 +23,7 @@ Default `preferred` uses OPFS when available, otherwise memory with the reason i
 | Non-COI / ephemeral | 98 · clone · ❌108 sdk-import | 98 · clone | 114 · modules | 16.4 · decompress | 98 · clone | 16.4 · decompress | 18 · clone | ❓ exact build needed |
 | Non-COI / persistent | 108 · sync OPFS · ❌108 sdk-import | 108 · sync OPFS | 114 · modules | 26 · writable | 109 · OPFS | 26 · writable | 21 · OPFS | ❓ exact build needed |
 | COI / ephemeral | 98 · clone · ❌108 sdk-import (inferred) · ❌108 owner-boot | 98 · clone | 145 · waitAsync | ❌ credentialless | 98 · clone | ❌ credentialless | 18 · clone | ❓ exact build needed |
-| COI / persistent | 108 · sync OPFS · ❌108 sdk-import (inferred) · ❌108 owner-boot | 108 · sync OPFS | 145 · waitAsync | ❌ credentialless | 109 · OPFS | ❌ credentialless | 21 · OPFS | ❓ exact build needed |
+| COI / persistent | 108 · sync OPFS · ❌108 sdk-import (inferred) · ❌108 owner-boot (inferred) | 108 · sync OPFS | 145 · waitAsync | ❌ credentialless | 109 · OPFS | ❌ credentialless | 21 · OPFS | ❓ exact build needed |
 
 `❌108 sdk-import`: executed on Playwright Chromium 108.0.5359.29, headerless (non-COI)
 protocol page; `@riftydev/sdk` import itself throws (main-thread sync WASM >4KB
@@ -34,8 +34,9 @@ Only 108 itself failed; affected version range unmeasured;
 that Chromium base, but no Edge build was run: no mark.
 
 `❌108 owner-boot`: executed 2026-11-26 on Playwright 1.28.1's Chromium 108.0.5359.29 (driven by
-Playwright 1.60), COI browser-unit sealed Workbench fixture, ephemeral, main `e430522e8` (the
-node-streams carrier's 108 run, PR #467): the Workbench owner exits at boot, `message-port-ref: no
+Playwright 1.60), COI browser-unit sealed Workbench fixture, ephemeral (persistent: inferred, the
+same owner boot, not run), main `e430522e8` + PR #467 at `1c200d7ef` (the node-streams carrier's 108
+run): the Workbench owner exits at boot, `message-port-ref: no
 native detached getter`. `packages/runtime-js/src/internal/message-port-ref.ts:192` reads
 `ArrayBuffer.prototype.detached`, which MDN BCD 8.1.8 dates Chrome/Edge/Chrome Android 114, Firefox
 122, Safari 17.4; `check:es-floor` does not see the read.

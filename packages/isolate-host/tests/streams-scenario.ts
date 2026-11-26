@@ -6,14 +6,16 @@
  *
  * Carrier decisions:
  * - Programs: the 10 `c-*` (every host) and the matrices `m1`–`m10`, `w1`, `b1` (browser hosts),
- *   copied from the goal's `reference/programs/`. A `c-*` program gets exceljs 4.4.0's installed
+ *   here in `fixtures/streams-scenario/`, their one source (the goal's probe `run.mjs` reads them
+ *   here; the goal's dir under `docs/` goes when the goal closes). A `c-*` program gets exceljs 4.4.0's installed
  *   closure as `node_modules`.
  * - Written output: every file the run leaves in its directory outside `node_modules`, the program
- *   excepted, as `<path> <entry>` lines (`manifest`, by sha256 or reloaded values: `entryOf`), in
+ *   excepted, as `<path> <entry>` lines (`manifest`: sha256, an archive by entry: `entriesOf`), in
  *   the zlib carrier's `Observed.output`.
  * - Pins, masks: the zlib carrier's (`Pin`, `pinOf`, `Mask`, `browserMasks`).
  * - Owners: the units that own the program's rows differing from Node, from the goal's
- *   `reference/results/ownership.txt` (in-process and isolate rows; the browser hosts' rows are
+ *   `reference/results/ownership.txt` (its in-process rows, and isolate rows where that host runs the
+ *   program; the browser hosts' rows are
  *   not in that table).
  */
 import { spawnSync } from 'node:child_process';
@@ -33,6 +35,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { closureFiles } from './closure-files.ts';
+import { ooxmlParts } from './ooxml-parts.ts';
 import type { Observed } from './zlib-scenario.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -163,52 +166,52 @@ export const isWritten = (p: Program, path: string): boolean =>
   path !== programFile(p) && path !== 'node_modules' && !path.startsWith('node_modules/');
 
 /**
- * Is a written file compared by the values a reload reads, not by its bytes? A zip (`.xlsx` too)
- * carries its write time (entry dates; an xlsx's docProps), so its bytes differ run to run, in
- * Node too.
+ * Is a written file a zip archive (`.xlsx` too), compared by part? Its bytes carry the write time
+ * (entry dates; an xlsx's `docProps/core.xml`), so they differ run to run, in Node too.
  */
-export const RELOADED = /\.(?:xlsx|zip)$/;
-export const isReloaded = (path: string): boolean => RELOADED.test(path);
+export const ARCHIVE = /\.(?:xlsx|zip)$/;
+export const isArchive = (path: string): boolean => ARCHIVE.test(path);
 
-const ExcelJS = fromHost('exceljs') as {
-  Workbook: new () => {
-    xlsx: { load(data: Uint8Array): Promise<unknown> };
-    worksheets: readonly { name: string; getSheetValues(): unknown[] }[];
-  };
-};
-// exceljs's own JSZip: the reader the programs write zips with, in real Node.
-const JSZip = createRequire(join(EXCELJS, 'package.json'))('jszip') as {
-  loadAsync(data: Uint8Array): Promise<{
-    readonly files: Readonly<
-      Record<string, { dir: boolean; async(t: 'uint8array'): Promise<Uint8Array> }>
-    >;
-  }>;
-};
-const sha256 = (b: Uint8Array): string => createHash('sha256').update(b).digest('hex');
+const sha256 = (b: Uint8Array | string): string => createHash('sha256').update(b).digest('hex');
+export const sha256Entry = (hex: string): string => `sha256 ${hex}`;
+
+/** A zip's central directory: each entry's name and compression method (0 STORE, 8 DEFLATE). */
+function zipDirectory(bytes: Uint8Array): { name: string; method: number }[] {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let end = bytes.byteLength - 22;
+  while (end >= 0 && view.getUint32(end, true) !== 0x06054b50) end--;
+  if (end < 0) throw new Error('no end of central directory');
+  const out: { name: string; method: number }[] = [];
+  let at = view.getUint32(end + 16, true);
+  for (let n = view.getUint16(end + 10, true); n > 0; n--) {
+    if (view.getUint32(at, true) !== 0x02014b50) throw new Error(`no central header at ${at}`);
+    const nameLength = view.getUint16(at + 28, true);
+    const name = new TextDecoder().decode(bytes.subarray(at + 46, at + 46 + nameLength));
+    out.push({ name, method: view.getUint16(at + 10, true) });
+    at += 46 + nameLength + view.getUint16(at + 30, true) + view.getUint16(at + 32, true);
+  }
+  return out;
+}
+
 /**
- * A written file's manifest entry: `sha256 <hex>`; for `isReloaded`, what real Node reloads: an
- * `.xlsx`'s sheet values by exceljs, a `.zip`'s entries (name, sha256) by JSZip.
+ * A written file's manifest entries: `[path, 'sha256 <hex>']`; an archive one per zip entry,
+ * `[<path>!<entry>, 'method <n> dir' | 'method <n> sha256 <hex>']`, the content as `ooxmlParts` gives
+ * it (the web-api carrier's comparison: `docProps/core.xml` timestamps masked, nothing else).
  */
-export async function entryOf(path: string, bytes: Uint8Array): Promise<string> {
-  if (!isReloaded(path)) return sha256Entry(sha256(bytes));
+export async function entriesOf(path: string, bytes: Uint8Array): Promise<[string, string][]> {
+  if (!isArchive(path)) return [[path, sha256Entry(sha256(bytes))]];
   try {
-    if (path.endsWith('.zip')) {
-      const zip = await JSZip.loadAsync(bytes);
-      const entries = await Promise.all(
-        Object.entries(zip.files)
-          .filter(([, e]) => !e.dir)
-          .map(async ([name, e]) => `${name}=${sha256(await e.async('uint8array'))}`),
-      );
-      return `entries ${entries.sort().join(' ')}`;
-    }
-    const wb = new ExcelJS.Workbook();
-    await wb.xlsx.load(bytes);
-    return `values ${JSON.stringify(wb.worksheets.map((ws) => [ws.name, ws.getSheetValues().filter(Boolean)]))}`;
+    const parts = await ooxmlParts(bytes);
+    return zipDirectory(bytes).map(({ name, method }) => [
+      `${path}!${name}`,
+      name.endsWith('/')
+        ? `method ${method} dir`
+        : `method ${method} ${sha256Entry(sha256(parts[name] ?? ''))}`,
+    ]);
   } catch (e) {
-    return `reload threw ${(e as Error).name}: ${(e as Error).message}`;
+    return [[path, `unreadable zip: ${(e as Error).name}: ${(e as Error).message}`]];
   }
 }
-export const sha256Entry = (hex: string): string => `sha256 ${hex}`;
 
 /** Written files as sorted `<path> <entry>` lines; null when the run wrote none. */
 export function manifest(entries: Iterable<readonly [string, string]>): string | null {
@@ -218,13 +221,12 @@ export function manifest(entries: Iterable<readonly [string, string]>): string |
 export const manifestOf = async (
   written: ReadonlyMap<string, Uint8Array>,
 ): Promise<string | null> =>
-  manifest(
-    await Promise.all(
-      [...written].map(async ([path, b]) => [path, await entryOf(path, b)] as const),
-    ),
-  );
+  manifest((await Promise.all([...written].map(([path, b]) => entriesOf(path, b)))).flat());
 
-/** Real Node v24.16.0: `node <program> <args>` in a fresh directory holding `workspace(p)`. */
+/** The oracle's bound; each host's test limit leaves room for it and the host's own bound. */
+export const ORACLE_TIMEOUT_MS = 60_000;
+
+/** Real Node v24.16.0: `node <program> <args>` in a fresh directory holding `workspace(p)`; fails unless it exits on its own. */
 export async function inNode(p: Program, args: readonly string[] = []): Promise<Observed> {
   if (process.version !== 'v24.16.0')
     throw new Error(`oracle is Node v24.16.0, this is ${process.version}`);
@@ -238,8 +240,12 @@ export async function inNode(p: Program, args: readonly string[] = []): Promise<
       cwd: dir,
       env: {},
       encoding: 'utf8',
-      timeout: 120_000,
+      timeout: ORACLE_TIMEOUT_MS,
     });
+    if (r.error !== undefined || r.signal !== null || r.status === null)
+      throw new Error(
+        `oracle ${p.id} did not finish on its own: ${r.error?.message ?? `signal ${r.signal}`}`,
+      );
     const written = new Map<string, Uint8Array>();
     const walk = (abs: string): void => {
       for (const name of readdirSync(abs)) {

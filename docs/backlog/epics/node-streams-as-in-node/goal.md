@@ -32,7 +32,7 @@ throws (compat ❌/⚠️).
 
 One set of programs and their input files, run as `node <program>` by real Node v24.16.0, by the
 isolate host (sandbox `exec`) and by a browser host (Chromium, Workbench and SDK). The programs are
-the `c-*` carrier programs of `reference/programs/`. Each file written is compared by content: by
+the `c-*` carrier programs of `packages/isolate-host/tests/fixtures/streams-scenario/` (moved from `reference/programs/`). Each file written is compared by content: by
 sha256, or by the values a reload reads.
 
 1. exceljs 4.4.0 writes `in.xlsx`, then `xlsx.readFile` (an `fs.createReadStream` + `for await`
