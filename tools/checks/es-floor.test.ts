@@ -404,8 +404,8 @@ describe('shipped ES2022 floor', () => {
     const source = readFileSync('packages/runtime-js/src/internal/message-port-ref.ts', 'utf8');
     expect(violations(bundle(source))).toEqual([]);
     const mutant = source.replace(
-      "nativeGetter(ArrayBuffer.prototype, 'byteLength')",
-      "nativeGetter(ArrayBuffer.prototype, 'detached')",
+      "nativeGetter(NativeArrayBuffer.prototype, 'byteLength')",
+      "nativeGetter(NativeArrayBuffer.prototype, 'detached')",
     );
     expect(mutant).not.toBe(source);
     expect(violations(bundle(mutant)).join('\n')).toContain(
