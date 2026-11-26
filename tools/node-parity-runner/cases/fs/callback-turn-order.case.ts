@@ -5,13 +5,16 @@ import type { ParityCase } from '../../src/types.ts';
  * threadpool completions do. Each op is called from inside an fs callback (Node's poll phase,
  * where its relations to timers/immediates are deterministic), with a tick, a promise, an
  * immediate and a 0 ms timer queued before and after it, then 3 ms of busy wait (both timers due).
- * Printed per op: which of those ran before the callback (sorted: their mutual order is not this
- * case's claim) and which after. Then 256 callback reads (and `fs.promises` loops) under a 0 ms
+ * Printed per op: which of those ran before the callback and which after, as sets: the
+ * callback's place is this case's claim; the immediates' and timers' own order is
+ * `fs/callback-phase-order` (as observed, not sorted), the ticks' against the promises' is the
+ * in-process runner's artifact (`toolchain-build/parity-runner-next-tick-after-promise-jobs`). Then 256 callback reads (and `fs.promises` loops) under a 0 ms
  * interval: whether the interval ticked. Then the operation's own moment: the caller mutating the
- * written bytes after the call, and `read`'s buffer right after it. `process`/timers are required
+ * written bytes after the call. `process`/timers are required
  * explicitly: the in-process runner's globals are Node's (trap parity-runner-in-process).
  * Node v24.16.0: order rows 40/40, moment rows 30/30 (+80/80 under load for order). Not printed (Node
- * varies, its threadpool runs beside the loop): `read`'s buffer in a microtask, a sync read right
+ * varies, its threadpool runs beside the loop): `read`'s buffer right after the call (`000` 97/100,
+ * `979899` 2, `09899` 1) or in a microtask, a sync read right
  * after an async write, single-round-trip `write(fd)` bytes mutated after the call (its threadpool races the
  * loop: same tick 119/120 `9,9,9`, microtask 179/180, `setImmediate` 16/30). Declared, not here
  * (`runtime-js/fs-async-op-io-rounds`): `writeFile`/`fs.promises.writeFile` bytes mutated in a
@@ -105,10 +108,6 @@ const c: ParityCase = {
         const file = await done;
         console.log(name + ' then fill(9) [' + when + '] => ' + [...fs.readFileSync(file)].join(','));
       }
-      const buf = Buffer.alloc(3);
-      const read = new Promise((r) => fs.read(fdR, buf, 0, 3, 0, () => r([...buf].join(''))));
-      const atCall = [...buf].join('');
-      console.log('read buffer right after the call => ' + atCall + ', in the callback => ' + (await read));
     };
     (async () => {
       for (const op of ops) await probe(op);
