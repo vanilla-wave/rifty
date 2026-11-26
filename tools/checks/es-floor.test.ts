@@ -368,7 +368,29 @@ describe('shipped ES2022 floor', () => {
       'const t = Reflect.get(ArrayBuffer.prototype, "transfer"); if (t !== null) t.call(b)',
       'ArrayBuffer.prototype.transfer',
     ],
+    // %TypedArray%.prototype reached through getPrototypeOf, as node-ipc-advanced.ts does.
+    [
+      'const getPrototypeOf = Object.getPrototypeOf; const TA = getPrototypeOf(Uint8Array.prototype); getter(TA, "toSorted")',
+      'TypedArray.prototype.toSorted',
+    ],
+    [
+      'const TA = Reflect.getPrototypeOf(Float64Array.prototype); Object.getOwnPropertyDescriptor(TA, "toReversed").value',
+      'TypedArray.prototype.toReversed',
+    ],
+    ['Reflect.get(Object.getPrototypeOf(Int8Array), "from")', null],
+    // `.value` on an absent descriptor throws before any presence check.
+    [
+      'const t = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, "transfer").value; if (t !== undefined) t.call(b)',
+      'ArrayBuffer.prototype.transfer',
+    ],
+    // Bundlers emit a top-level const as var: one assignment is still one value.
+    ['var K = "detached"; ng(ArrayBuffer.prototype, K)', 'ArrayBuffer.prototype.detached'],
+    ['let K = `detached`; ng(ArrayBuffer.prototype, K)', 'ArrayBuffer.prototype.detached'],
   ])('rejects a listed builtin reached by name: %s', (source, builtin) => {
+    if (builtin === null) {
+      expect(violations(source)).toEqual([]);
+      return;
+    }
     expect(violations(source).join('\n')).toContain(`${builtin} (by name)`);
   });
 
@@ -381,6 +403,14 @@ describe('shipped ES2022 floor', () => {
     'const t = Reflect.get(ArrayBuffer.prototype, "transfer"); function f(b) { if (t === void 0) return b; return t.call(b); }',
     'const g = Reflect.get(ArrayBuffer.prototype, "detached"); const f = (b) => typeof g === "function" ? g.call(b) : 0',
     'if (typeof Atomics.waitAsync === "function") Reflect.get(Atomics, "waitAsync")(words, 0, 0)',
+    // Presence tests and non-reads, like `in`.
+    'Object.hasOwn(ArrayBuffer.prototype, "detached")',
+    'Object.prototype.hasOwnProperty.call(ArrayBuffer.prototype, "detached")',
+    'const has = Object.prototype.hasOwnProperty; has.call(ArrayBuffer.prototype, "transfer")',
+    'Reflect.has(ArrayBuffer.prototype, "detached")',
+    'Object.prototype.propertyIsEnumerable.call(ArrayBuffer.prototype, "detached")',
+    'console.warn(ArrayBuffer.prototype, "transfer")',
+    'var k = "detached"; k = "byteLength"; read(ArrayBuffer.prototype, k)',
   ])('accepts by-name reads that are pre-floor or presence-checked: %s', (source) => {
     expect(violations(source)).toEqual([]);
   });
@@ -420,6 +450,40 @@ describe('shipped ES2022 floor', () => {
     const unchecked = emitted.replace('if (transferBuffer !== void 0) {', 'if (true) {');
     expect(unchecked).not.toBe(emitted);
     expect(violations(unchecked).join('\n')).toContain('ArrayBuffer.prototype.transfer (by name)');
+    const asserted = source.replace("'transfer')?.value", "'transfer')!.value");
+    expect(asserted).not.toBe(source);
+    const assertedEmitted = transformSync(asserted, { loader: 'ts', target: 'es2022' }).code;
+    expect(violations(assertedEmitted).join('\n')).toContain(
+      'ArrayBuffer.prototype.transfer (by name)',
+    );
+  });
+
+  it('rejects a by-name post-floor key held in a bundled top-level const', () => {
+    const emitted = buildSync({
+      stdin: {
+        contents:
+          "const KEY = 'detached';\nexport const read = (ng: (o: object, k: string) => unknown) => ng(ArrayBuffer.prototype, KEY);",
+        loader: 'ts',
+      },
+      bundle: true,
+      write: false,
+      format: 'esm',
+      target: 'es2022',
+    }).outputFiles[0].text;
+    expect(emitted).toMatch(/var KEY = "detached"/);
+    expect(violations(emitted).join('\n')).toContain('ArrayBuffer.prototype.detached (by name)');
+  });
+
+  it('checks the real advanced-IPC %TypedArray% getters before and after a post-floor key', () => {
+    const source = readFileSync('packages/runtime-js/src/internal/node-ipc-advanced.ts', 'utf8');
+    const emitted = transformSync(source, { loader: 'ts', target: 'es2022' }).code;
+    expect(violations(emitted)).toEqual([]);
+    const mutant = emitted.replace(
+      'getter(TypedArrayPrototype, "buffer")',
+      'getter(TypedArrayPrototype, "toSorted")',
+    );
+    expect(mutant).not.toBe(emitted);
+    expect(violations(mutant).join('\n')).toContain('TypedArray.prototype.toSorted (by name)');
   });
 
   it('checks nested package and playground assets, ignoring maps and declarations', () => {
