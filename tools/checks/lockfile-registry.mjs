@@ -2,8 +2,12 @@
 /**
  * Committed lockfiles pin package addresses only on the public npm registry. A lock generated
  * behind a mirror replays nowhere else and leaks the mirror host (PR #266, #430, #443).
- * Scope: tracked paths only (`git ls-files --cached`, staged included, never a disk walk):
- * one answer locally and in CI. Regular files only (no directories, symlinks).
+ * Threat model: locks written by package managers, not a hand-crafted bypass — a further
+ * "hand-written form no manager writes passes" finding is one more declared limit below.
+ * Runs in `pnpm pr:check` (not a SOURCE_LANE: docs-only trees keep it) and CI
+ * `lint-and-typecheck` (unconditional job: docs-only PRs too; PR #443 leaked under docs/).
+ * Scope: tracked paths only (`git ls-files --cached`, staged included, never a disk walk) —
+ * untracked agent junk would make local red while CI is green. Regular files only.
  * Lock carriers — one rule, by content form, never a path list:
  * - file lock: basename in `LOCK_BASENAMES` (unparseable = red);
  * - embedded lock: in any `.json` / `.json.gz` document, at any depth, an object with
@@ -12,17 +16,30 @@
  *   parse (JSONC, trailing comma, `NaN`) is red.
  * Address = the whole value of a `resolved` / `tarball` / `resolution` / `repo` key (any depth
  * in JSON; in pnpm / yarn text the keyed line or flow-mapping entry), judged by one function,
- * `classifyAddress` — never funding or deprecation prose. Text locks are accepted only in the
- * form pnpm / yarn write; any other notation around an address key (escape, tag, anchor, alias,
- * block scalar, explicit key, value off the key line, continuation) is red: regenerate the lock.
- * Threat model: locks written by package managers (the three incidents), not hand-crafted bypass.
- * Declared limits (not read): yarn berry `patch:` nested descriptors (not inspected);
- * `gitlab:` / `bitbucket:` / `gist:` shorthands red as unreadable (`github:` passes);
- * bun.lock(b), deno.lock; `.yarnrc.yml` / `.npmrc` registry
- * settings; `.jsonl`, `.zip`/`.tar`; `.tgz` fixtures (upstream bytes, none carries a lock
- * 2026-11-25); a lock encoded twice (a JSON string of a JSON string); a symlink named as a lock
- * (not followed; its target is read only if itself a carrier); size — each document is read and
- * parsed whole (a 65 MB JSON costs memory/time; past V8's string limit it fails red).
+ * `classifyAddress`, which parses it with WHATWG `URL` as npm does — never a fragment.
+ * Decisions (2026-11-26, manager unless noted):
+ * - allowed: the npmjs origin (scheme, host, default port, no userinfo); loopback and `.test`
+ *   (RFC 6761) — no mirror, nothing disclosed; `.invalid` / `.example` / `.internal` red. No D-004
+ *   config: one policy value, not a fetch target.
+ * - `registry.yarnpkg.com` (yarn v1 default) is no second allowed host: red, fix via `.yarnrc`.
+ * - git dependencies (git+ / git: schemes, scp `user@host:path`, pnpm `repo:` or
+ *   `gitHosted: true`, berry `….git#commit=`) red whatever the host: it may be internal.
+ * - declared non-network forms pass: `file:`, `link:`, `workspace:`, `github:`, `rifty:` (npm
+ *   client shadow substitution), berry `npm:` / `portal:` / `patch:` / `exec:`, relative path.
+ *   Any other value without a host (e.g. `//host/…`) is red as unreadable.
+ * - text locks are accepted only in the notation pnpm / yarn write (YAML is not parsed: `yaml` is
+ *   only a `packages/agent` dependency): value plain or quoted without escapes, non-empty, on the
+ *   key's line. Escape, tag, anchor, alias, block scalar, explicit key, value off the key line,
+ *   continuation, mapping as value → red "non-canonical: regenerate the lock".
+ * - exemptions pin path + sha256 of the bytes (= corpus `inputsSha256`), not a git blob id.
+ * Declared limits (not read): yarn berry `patch:` nested descriptors; `gitlab:` / `bitbucket:` /
+ * `gist:` red as unreadable while `github:` passes; pnpm git `repo: file:///…` passes (no host);
+ * bun.lock(b), deno.lock; `.yarnrc.yml` / `.npmrc` registry settings; `.jsonl`, `.zip`/`.tar`;
+ * `.tgz` fixtures (upstream bytes, none carries a lock 2026-11-25); a lock encoded twice (a JSON
+ * string of a JSON string); a symlink named as a lock (not followed; its target is read only if
+ * itself a carrier); size — each document is read and parsed whole (a 65 MB JSON costs
+ * memory/time; past V8's string limit it fails red). Packed tarballs of published packages:
+ * `docs/backlog/toolchain-build/packed-tarball-registry-host-guard.md`.
  * Bytes are read from the working tree at index paths: see trap `lockfile-mirror-host`.
  */
 import { execFileSync } from 'node:child_process';
