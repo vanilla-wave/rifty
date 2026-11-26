@@ -11,9 +11,11 @@
 
 import { NotImplementedError, bytesToString } from '@riftydev/io';
 import { VfsError } from '@riftydev/vfs';
+import { invalidArgType } from '../internal/node-received.ts';
 import { Buffer, type Encoding } from './buffer.ts';
+import { type AnyCallback, cbOf, deliver, optional, orOptions } from './fs-callback.ts';
 import { fsError, withSyscall } from './fs-errors.ts';
-import { ioTurn } from './fs-io-turn.ts';
+import { inTurn, ioTurn, optionsAtCall } from './fs-io-turn.ts';
 import { type PathLike, pathToString, resolvePath } from './fs-path.ts';
 import {
   type FdReadOptions,
@@ -28,11 +30,9 @@ import { syncMirror } from './fs-sync-mirror.ts';
 import { setTimes, utimesArgs } from './fs-times.ts';
 import { link, linkSync, statfsSync, symlink, symlinkSync } from './loud-members.ts';
 import { runNodeCallback } from './process-lifecycle-events.ts';
+import { riftyProcess } from './process.ts';
 
-type Callback<T> = (err: NodeJS.ErrnoException | null, value?: T) => void;
 type OpenFlags = string | number;
-type FdCallback = (err: NodeJS.ErrnoException | null, fd?: number) => void;
-type VoidCallback = (err: NodeJS.ErrnoException | null) => void;
 type ReadCallback = (
   err: NodeJS.ErrnoException | null,
   bytesRead?: number,
@@ -43,8 +43,6 @@ type WriteCallback = (
   bytesWritten?: number,
   data?: Uint8Array | string,
 ) => void;
-type StatsCallback = (err: NodeJS.ErrnoException | null, stats?: Stats) => void;
-type DirCallback = (err: NodeJS.ErrnoException | null, dir?: Dir) => void;
 
 interface ReadFileOptions {
   encoding?: Encoding | null;
@@ -180,70 +178,138 @@ function statStrictOrNull(np: string): { isFile: boolean; isDirectory: boolean }
   }
 }
 
+type DirCb = (err: NodeJS.ErrnoException | null, dirent?: Dirent | null) => void;
+
+/**
+ * Node's `Dir` (`lib/internal/fs/dir.js`): entries come in batches of `bufferSize`, one
+ * I/O request per batch; a read the buffer answers calls back on `process.nextTick`;
+ * calls made while a request is in flight wait for it (its operation queue).
+ */
 class Dir implements AsyncIterable<Dirent> {
   readonly path: string;
   readonly #entries: Dirent[];
+  readonly #bufferSize: number;
   #index = 0;
+  #buffered: Dirent[] = [];
   #closed = false;
+  #queue: (() => void)[] | null = null;
 
-  constructor(path: string, entries: Dirent[]) {
+  constructor(path: string, entries: Dirent[], bufferSize = 32) {
     this.path = path;
     this.#entries = entries;
+    this.#bufferSize = bufferSize;
+  }
+
+  /** The next batch (the directory handle's read); false at the end. */
+  #fill(): boolean {
+    const batch = this.#entries.slice(this.#index, this.#index + this.#bufferSize);
+    this.#index += batch.length;
+    this.#buffered.push(...batch);
+    return batch.length > 0;
   }
 
   readSync(): Dirent | null {
     this.#assertOpen();
-    const entry = this.#entries[this.#index];
-    if (!entry) return null;
-    this.#index += 1;
-    return entry;
+    if (this.#queue !== null) throw fsError('ERR_DIR_CONCURRENT_OPERATION', this.path, 'readdir');
+    if (this.#buffered.length === 0 && !this.#fill()) return null;
+    return this.#buffered.shift() ?? null;
   }
 
   read(): Promise<Dirent | null>;
-  read(cb: (err: NodeJS.ErrnoException | null, dirent?: Dirent | null) => void): void;
-  read(cb?: (err: NodeJS.ErrnoException | null, dirent?: Dirent | null) => void) {
-    if (cb) {
-      ioTurn(() => this.readSync()).then(
-        (dirent) => runNodeCallback(cb, null, dirent),
-        (err) => runNodeCallback(cb, err as NodeJS.ErrnoException),
-      );
+  read(cb: DirCb): void;
+  read(...args: [] | [unknown]) {
+    if (args.length === 0 || args[0] === undefined) return this.#readPromised();
+    this.#assertOpen();
+    this.#read(true, cbOf(args[0], 'callback') as DirCb);
+  }
+
+  #readPromised(): Promise<Dirent | null> {
+    return new Promise((resolve, reject) => {
+      this.#assertOpen();
+      this.#read(false, (err, dirent) => (err ? reject(err) : resolve(dirent ?? null)));
+    });
+  }
+
+  #read(maybeSync: boolean, cb: DirCb): void {
+    if (this.#queue !== null) {
+      this.#queue.push(() => this.#read(maybeSync, cb));
       return;
     }
-    return ioTurn(() => this.readSync());
+    const buffered = this.#buffered.shift();
+    if (buffered !== undefined) {
+      if (maybeSync) riftyProcess.nextTick(() => runNodeCallback(cb, null, buffered));
+      else cb(null, buffered);
+      return;
+    }
+    this.#queue = [];
+    const settled = (): void =>
+      riftyProcess.nextTick(() => {
+        const queue = this.#queue ?? [];
+        this.#queue = null;
+        for (const op of queue) op();
+      });
+    ioTurn(() => this.#fill()).then(
+      (more) => {
+        settled();
+        runNodeCallback(cb, null, more ? (this.#buffered.shift() ?? null) : null);
+      },
+      (err) => {
+        settled();
+        runNodeCallback(cb, err as NodeJS.ErrnoException);
+      },
+    );
   }
 
   closeSync(): void {
     this.#assertOpen();
+    if (this.#queue !== null) throw fsError('ERR_DIR_CONCURRENT_OPERATION', this.path, 'readdir');
     this.#closed = true;
   }
 
   close(): Promise<void>;
   close(cb: (err: NodeJS.ErrnoException | null) => void): void;
-  close(cb?: (err: NodeJS.ErrnoException | null) => void) {
-    if (cb) {
-      ioTurn(() => this.closeSync()).then(
-        () => runNodeCallback(cb, null),
-        (err) => runNodeCallback(cb, err as NodeJS.ErrnoException),
+  close(cb?: unknown) {
+    if (cb === undefined) {
+      if (this.#closed) return Promise.reject(this.#closedError());
+      return new Promise<void>((resolve, reject) =>
+        this.close((err: NodeJS.ErrnoException | null) => (err ? reject(err) : resolve())),
       );
+    }
+    const done = cbOf(cb, 'callback') as (err: NodeJS.ErrnoException | null) => void;
+    if (this.#closed) {
+      riftyProcess.nextTick(() => runNodeCallback(done, this.#closedError()));
       return;
     }
-    return ioTurn(() => this.closeSync());
+    if (this.#queue !== null) {
+      this.#queue.push(() => this.close(done));
+      return;
+    }
+    this.#closed = true;
+    deliver(
+      done,
+      ioTurn(() => {}),
+      true,
+    );
   }
 
   async *[Symbol.asyncIterator](): AsyncIterator<Dirent> {
     try {
       while (true) {
-        const entry = this.readSync();
+        const entry = await this.#readPromised();
         if (entry === null) return;
         yield entry;
       }
     } finally {
-      this.closeSync();
+      await this.close();
     }
   }
 
+  #closedError(): NodeJS.ErrnoException {
+    return fsError('ERR_DIR_CLOSED', this.path, 'readdir');
+  }
+
   #assertOpen(): void {
-    if (this.#closed) throw fsError('ERR_DIR_CLOSED', this.path, 'readdir');
+    if (this.#closed) throw this.#closedError();
   }
 }
 
@@ -697,7 +763,20 @@ export function unlinkSync(p: string): void {
   });
 }
 
+/** Node's `validateRmOptions` type checks (at the call for `fs.rm`). */
+function rmOptionsOf(opts: unknown): void {
+  if (opts === undefined) return;
+  if (typeof opts !== 'object' || opts === null || Array.isArray(opts))
+    throw invalidArgType('"options" argument', 'of type object', opts);
+  for (const key of ['recursive', 'force'] as const) {
+    const value = (opts as RmOptions)[key];
+    if (value !== undefined && typeof value !== 'boolean')
+      throw invalidArgType(`"options.${key}" property`, 'of type boolean', value);
+  }
+}
+
 export function rmSync(p: string, opts?: RmOptions): void {
+  rmOptionsOf(opts);
   const np = resolvePath(p);
   // Node's rm refuses ANY directory without `recursive` — ERR_FS_EISDIR, a
   // JS-layer SystemError (POSITIVE errno, message embeds the path AS PASSED).
@@ -1028,10 +1107,7 @@ export function mkdtempSync(
   throw fsError('EEXIST', prefixText, 'mkdtemp');
 }
 
-export function opendirSync(
-  p: PathLike,
-  _opts?: { encoding?: Encoding; bufferSize?: number },
-): Dir {
+export function opendirSync(p: PathLike, opts?: { encoding?: Encoding; bufferSize?: number }): Dir {
   const displayPath = pathToString(p);
   // 'opendir' is PATHLESS in Node's rendering — withSyscall omits the name.
   const entries = withSyscall(
@@ -1039,7 +1115,7 @@ export function opendirSync(
     p,
     () => readdirSyncImpl(p as string, { withFileTypes: true }) as Dirent[],
   );
-  return new Dir(displayPath, entries.slice());
+  return new Dir(displayPath, entries.slice(), opts?.bufferSize ?? 32);
 }
 
 export function utimesSync(p: string, atime: number | Date, mtime: number | Date): void {
@@ -1062,16 +1138,9 @@ export function futimesSync(fd: number, atime: number | Date, mtime: number | Da
   withSyscall('futime', record.path, () => setTimes(record.path, times));
 }
 
-export function futimes(
-  fd: number,
-  atime: number | Date,
-  mtime: number | Date,
-  cb: VoidCallback,
-): void {
-  ioTurn(() => futimesSync(fd, atime, mtime)).then(
-    () => runNodeCallback(cb, null),
-    (e) => runNodeCallback(cb, e as NodeJS.ErrnoException),
-  );
+export function futimes(fd: number, atime: number | Date, mtime: number | Date, cb: unknown) {
+  const done = cbOf(cb);
+  deliver(done, inTurn(futimesSync)(fd, atime, mtime), true);
 }
 
 /**
@@ -1097,370 +1166,210 @@ export async function openAsBlob(p: PathLike, options?: { type?: string }): Prom
 }
 
 export const promises = {
-  readFile(p: string, opts?: ReadFileOptions | Encoding | null): Promise<Uint8Array | string> {
-    return ioTurn(() => readFileSync(p, opts));
-  },
-  writeFile(
-    p: string,
-    data: Uint8Array | string,
-    opts?: WriteFileOptions | Encoding | null,
-  ): Promise<void> {
-    return ioTurn(() => {
-      writeFileSync(p, data, opts);
-    });
-  },
-  appendFile(
-    p: string,
-    data: Uint8Array | string,
-    opts?: WriteFileOptions | Encoding | null,
-  ): Promise<void> {
-    return ioTurn(() => {
-      appendFileSync(p, data, opts);
-    });
-  },
-  readdir(
-    p: string,
-    opts?: { withFileTypes?: boolean; recursive?: boolean },
-  ): Promise<string[] | Dirent[]> {
-    return ioTurn(() => readdirSync(p, opts));
-  },
-  mkdir(p: string, opts?: MkdirOptions): Promise<void> {
-    return ioTurn(() => {
-      mkdirSync(p, opts);
-    });
-  },
-  rm(p: string, opts?: RmOptions): Promise<void> {
-    return ioTurn(() => {
-      rmSync(p, opts);
-    });
-  },
-  rmdir(p: string, opts?: { recursive?: boolean }): Promise<void> {
-    return ioTurn(() => {
-      rmdirSync(p, opts);
-    });
-  },
-  unlink(p: string): Promise<void> {
-    return ioTurn(() => {
-      unlinkSync(p);
-    });
-  },
-  stat(p: string, opts?: StatOptions): Promise<Stats> {
-    return ioTurn(() => statImpl(p, opts, 'fs.promises.stat.bigint') as Stats);
-  },
-  lstat(p: string, opts?: StatOptions): Promise<Stats> {
-    return ioTurn(() => lstatImpl(p, opts, 'fs.promises.lstat.bigint'));
-  },
+  readFile: inTurn(readFileSync),
+  writeFile: inTurn(writeFileSync),
+  appendFile: inTurn(appendFileSync),
+  readdir: inTurn(readdirSync),
+  mkdir: inTurn((p: string, opts?: MkdirOptions): void => {
+    mkdirSync(p, opts);
+  }),
+  rm: inTurn(rmSync),
+  rmdir: inTurn(rmdirSync),
+  unlink: inTurn(unlinkSync),
+  stat: inTurn(
+    (p: string, opts?: StatOptions) => statImpl(p, opts, 'fs.promises.stat.bigint') as Stats,
+  ),
+  lstat: inTurn((p: string, opts?: StatOptions) => lstatImpl(p, opts, 'fs.promises.lstat.bigint')),
   async symlink(...args: unknown[]): Promise<never> {
     return symlink(...args);
   },
   async link(...args: unknown[]): Promise<never> {
     return link(...args);
   },
-  readlink(p: string): Promise<string> {
-    return ioTurn(() => readlinkSync(p));
-  },
-  realpath(p: string): Promise<string> {
-    return ioTurn(() => realpathSync(p));
-  },
-  access(p: string): Promise<void> {
-    return ioTurn(() => {
-      // Strict probe: access through a file is ENOTDIR (Node), never ENOENT.
-      const st = withSyscall('access', p, () => statStrictOrNull(resolvePath(p)));
-      if (st === null) throw fsError('ENOENT', pathToString(p), 'access');
-    });
-  },
-  copyFile(src: string, dst: string, mode = 0): Promise<void> {
-    return ioTurn(() => {
-      copyFileSync(src, dst, mode);
-    });
-  },
-  rename(src: string, dst: string): Promise<void> {
-    return ioTurn(() => {
-      renameSync(src, dst);
-    });
-  },
-  cp(src: string, dst: string, opts?: CpOptions): Promise<void> {
-    return ioTurn(() => {
-      cpSync(src, dst, opts);
-    });
-  },
-  truncate(p: PathLike, len = 0): Promise<void> {
-    return ioTurn(() => {
-      truncateSync(p, len);
-    });
-  },
-  mkdtemp(prefix: PathLike, opts?: Encoding | { encoding?: Encoding | null }): Promise<string> {
-    return ioTurn(() => mkdtempSync(prefix, opts));
-  },
-  opendir(p: PathLike, opts?: { encoding?: Encoding; bufferSize?: number }): Promise<Dir> {
-    return ioTurn(() => opendirSync(p, opts));
-  },
-  utimes(p: string, atime: number | Date, mtime: number | Date): Promise<void> {
-    return ioTurn(() => {
-      utimesSync(p, atime, mtime);
-    });
-  },
-  lutimes(p: string, atime: number | Date, mtime: number | Date): Promise<void> {
-    return ioTurn(() => {
-      lutimesSync(p, atime, mtime);
-    });
-  },
+  readlink: inTurn(readlinkSync),
+  realpath: inTurn((p: string) => realpathSync(p)),
+  access: inTurn((p: string, _mode?: number): void => {
+    // Strict probe: access through a file is ENOTDIR (Node), never ENOENT.
+    const st = withSyscall('access', p, () => statStrictOrNull(resolvePath(p)));
+    if (st === null) throw fsError('ENOENT', pathToString(p), 'access');
+  }),
+  copyFile: inTurn(copyFileSync, 2),
+  rename: inTurn(renameSync, 2),
+  cp: inTurn(cpSync, 2),
+  truncate: inTurn(truncateSync),
+  mkdtemp: inTurn(mkdtempSync),
+  opendir: inTurn(opendirSync),
+  utimes: inTurn(utimesSync),
+  lutimes: inTurn(lutimesSync),
   constants,
 };
 
-export function readFile(
-  p: string,
-  opts: ReadFileOptions | Encoding | null | Callback<Uint8Array | string>,
-  cb?: Callback<Uint8Array | string>,
-): void {
-  const optsFinal = typeof opts === 'function' ? null : opts;
-  const cbFinal = (typeof opts === 'function' ? opts : cb) as Callback<Uint8Array | string>;
-  promises.readFile(p, optsFinal).then(
-    (v) => runNodeCallback(cbFinal, null, v),
-    (e) => runNodeCallback(cbFinal, e as NodeJS.ErrnoException),
-  );
+export function readFile(p: PathLike | number, optsOrCb: unknown, cb?: unknown): void {
+  const [opts, done] = orOptions(optsOrCb, cb);
+  deliver(done, promises.readFile(p as string, opts as ReadFileOptions));
 }
 
-export function open(
-  p: PathLike,
-  flagsOrCb?: OpenFlags | FdCallback,
-  modeOrCb?: number | FdCallback,
-  cb?: FdCallback,
-): void {
-  const flags = typeof flagsOrCb === 'function' || flagsOrCb === undefined ? 'r' : flagsOrCb;
-  const cbFinal = (
-    typeof flagsOrCb === 'function' ? flagsOrCb : typeof modeOrCb === 'function' ? modeOrCb : cb
-  ) as FdCallback;
-  const mode = typeof modeOrCb === 'number' ? modeOrCb : undefined;
-  ioTurn(() => openSync(p, flags, mode)).then(
-    (fd) => runNodeCallback(cbFinal, null, fd),
-    (e) => runNodeCallback(cbFinal, e as NodeJS.ErrnoException),
-  );
+export function open(p: PathLike, ...rest: unknown[]): void {
+  // Node's open: the callback is the last argument.
+  const done = cbOf(rest[rest.length - 1]);
+  const [flags, mode] = rest.slice(0, -1);
+  deliver(done, inTurn(openSync)(p, (flags ?? 'r') as OpenFlags, mode as number | undefined));
 }
 
-export function close(fd: number, cb: VoidCallback): void {
-  ioTurn(() => closeSync(fd)).then(
-    () => runNodeCallback(cb, null),
-    (e) => runNodeCallback(cb, e as NodeJS.ErrnoException),
-  );
+export function close(fd: number, cb?: unknown): void {
+  // Node's `close(fd)` takes a default callback.
+  deliver(cb === undefined ? () => {} : cbOf(cb), inTurn(closeSync)(fd), true);
 }
 
+/** Node's `fs.read` argument forms; the position and lengths are fixed at the call. */
 export function read(
   fd: number,
-  bufferOrOptsOrCb: Uint8Array | (FdReadOptions & { buffer?: Uint8Array }) | ReadCallback,
-  offsetOrOptions?: number | FdReadOptions | ReadCallback,
-  lengthOrCb?: number | ReadCallback,
-  positionOrCb?: ReadPosition | ReadCallback,
+  buffer: Uint8Array,
+  offset: number | FdReadOptions | ReadCallback,
+  length?: number | ReadCallback,
+  position?: ReadPosition | ReadCallback,
   cb?: ReadCallback,
-): void {
-  // Node also accepts read(fd, cb) and read(fd, options, cb) — the buffer
-  // defaults to a fresh 16 KiB allocation (fs.read docs).
-  if (!(bufferOrOptsOrCb instanceof Uint8Array)) {
-    const opts = typeof bufferOrOptsOrCb === 'object' ? bufferOrOptsOrCb : {};
-    const cbShort = (
-      typeof bufferOrOptsOrCb === 'function' ? bufferOrOptsOrCb : offsetOrOptions
-    ) as ReadCallback;
-    const buf = opts.buffer ?? Buffer.alloc(16384);
-    read(
-      fd,
-      buf,
-      {
-        offset: opts.offset ?? 0,
-        length: opts.length ?? buf.byteLength,
-        position: opts.position ?? null,
-      },
-      cbShort,
-    );
-    return;
+): void;
+export function read(fd: number, ...args: unknown[]): void;
+export function read(fd: number, ...args: unknown[]): void {
+  let [buffer, offset, length, position, callback] = args;
+  if (args.length <= 3) {
+    let params = null as (FdReadOptions & { buffer?: Uint8Array }) | null;
+    if (args.length === 3) {
+      callback = length;
+      params = offset as FdReadOptions;
+    } else if (args.length === 2) {
+      if (!(buffer instanceof Uint8Array)) {
+        params = buffer as typeof params;
+        buffer = params?.buffer ?? Buffer.alloc(16384);
+      }
+      callback = offset;
+    } else {
+      callback = buffer;
+      buffer = Buffer.alloc(16384);
+    }
+    const view = buffer as Uint8Array;
+    ({ offset = 0, length = view.byteLength - (offset as number), position = null } = params ?? {});
   }
-  const buffer = bufferOrOptsOrCb;
-  if (offsetOrOptions === undefined) throw new TypeError('callback is required');
-  const options =
-    typeof offsetOrOptions === 'object'
-      ? offsetOrOptions
-      : {
-          offset: typeof offsetOrOptions === 'number' ? offsetOrOptions : 0,
-          length: typeof lengthOrCb === 'number' ? lengthOrCb : buffer.byteLength,
-          position:
-            typeof positionOrCb === 'function' || positionOrCb === undefined ? null : positionOrCb,
-        };
-  const cbFinal = (
-    typeof offsetOrOptions === 'function'
-      ? offsetOrOptions
-      : typeof lengthOrCb === 'function'
-        ? lengthOrCb
-        : typeof positionOrCb === 'function'
-          ? positionOrCb
-          : cb
-  ) as ReadCallback;
+  const view = buffer as Uint8Array;
+  const done = cbOf(callback) as ReadCallback;
+  const options = {
+    offset: typeof offset === 'number' ? offset : 0,
+    length: typeof length === 'number' ? length : view.byteLength,
+    position: (position ?? null) as ReadPosition,
+  };
   // Node validates the position synchronously, before any callback (stdin too).
-  readPositionOf(options.position, options.length ?? buffer.byteLength - (options.offset ?? 0));
+  readPositionOf(options.position, options.length);
   if (fd === 0) {
     try {
-      readStdin(buffer, options, cbFinal);
+      readStdin(view, options, done);
     } catch (error) {
-      queueMicrotask(() => runNodeCallback(cbFinal, error as NodeJS.ErrnoException));
+      queueMicrotask(() => runNodeCallback(done, error as NodeJS.ErrnoException));
     }
     return;
   }
-  ioTurn(() => readSync(fd, buffer, options)).then(
-    (bytesRead) => runNodeCallback(cbFinal, null, bytesRead, buffer),
-    (e) => runNodeCallback(cbFinal, e as NodeJS.ErrnoException),
+  ioTurn(() => readSync(fd, view, options)).then(
+    (bytesRead) => runNodeCallback(done, null, bytesRead, view),
+    (e) => runNodeCallback(done, e as NodeJS.ErrnoException),
   );
 }
 
+/** Node's `fs.write` argument forms; offset, length, position and encoding are the call's. */
 export function write(
   fd: number,
   data: Uint8Array | string,
-  offsetOrPositionOrCb?: number | null | WriteCallback,
-  lengthOrEncodingOrCb?: number | Encoding | WriteCallback,
-  positionOrCb?: number | null | WriteCallback,
+  offset?: number | null | WriteCallback,
+  length?: number | Encoding | WriteCallback,
+  position?: number | null | WriteCallback,
   cb?: WriteCallback,
-): void {
-  const cbFinal = (
-    typeof offsetOrPositionOrCb === 'function'
-      ? offsetOrPositionOrCb
-      : typeof lengthOrEncodingOrCb === 'function'
-        ? lengthOrEncodingOrCb
-        : typeof positionOrCb === 'function'
-          ? positionOrCb
-          : cb
-  ) as WriteCallback;
-  ioTurn(() => {
-    if (typeof data === 'string') {
-      const position =
-        typeof offsetOrPositionOrCb === 'number' || offsetOrPositionOrCb === null
-          ? offsetOrPositionOrCb
-          : null;
-      const encoding = typeof lengthOrEncodingOrCb === 'string' ? lengthOrEncodingOrCb : 'utf8';
-      return writeSync(fd, data, position, encoding);
+): void;
+export function write(fd: number, data: Uint8Array | string, ...args: unknown[]): void;
+export function write(fd: number, data: Uint8Array | string, ...args: unknown[]): void {
+  let [offset, length, position, callback] = args;
+  let run: () => number;
+  if (typeof data !== 'string') {
+    callback = callback || position || length || offset;
+    if (typeof offset === 'object' && offset !== null)
+      ({
+        offset = 0,
+        length = data.byteLength - (offset as unknown as number),
+        position = null,
+      } = offset as FdReadOptions);
+    const at = typeof offset === 'number' ? offset : 0;
+    const len = typeof length === 'number' ? length : data.byteLength - at;
+    const pos = typeof position === 'number' ? position : null;
+    run = () => writeSync(fd, data, at, len, pos);
+  } else {
+    if (typeof position !== 'function') {
+      if (typeof offset === 'function') [position, offset] = [offset, null];
+      else position = length;
+      length = 'utf8';
     }
-    const offset = typeof offsetOrPositionOrCb === 'number' ? offsetOrPositionOrCb : 0;
-    const length = typeof lengthOrEncodingOrCb === 'number' ? lengthOrEncodingOrCb : undefined;
-    const position =
-      typeof positionOrCb === 'number' || positionOrCb === null ? positionOrCb : null;
-    return writeSync(fd, data, offset, length, position);
-  }).then(
-    (bytesWritten) => runNodeCallback(cbFinal, null, bytesWritten, data),
-    (e) => runNodeCallback(cbFinal, e as NodeJS.ErrnoException),
+    callback = position;
+    const pos = typeof offset === 'number' ? offset : null;
+    const encoding = (typeof length === 'string' ? length : 'utf8') as Encoding;
+    run = () => writeSync(fd, data, pos, encoding);
+  }
+  const done = cbOf(callback) as WriteCallback;
+  ioTurn(run).then(
+    (bytesWritten) => runNodeCallback(done, null, bytesWritten, data),
+    (e) => runNodeCallback(done, e as NodeJS.ErrnoException),
   );
 }
 
-export function fstat(fd: number, cb: StatsCallback): void {
-  ioTurn(() => fstatSync(fd)).then(
-    (stats) => runNodeCallback(cb, null, stats),
-    (e) => runNodeCallback(cb, e as NodeJS.ErrnoException),
-  );
+export function fstat(fd: number, optsOrCb: unknown, cb?: unknown): void {
+  deliver(optional(optsOrCb, cb)[1], inTurn(fstatSync)(fd));
 }
 
-export function ftruncate(fd: number, lenOrCb?: number | VoidCallback, cb?: VoidCallback): void {
-  const len = typeof lenOrCb === 'number' ? lenOrCb : 0;
-  const cbFinal = (typeof lenOrCb === 'function' ? lenOrCb : cb) as VoidCallback;
-  ioTurn(() => ftruncateSync(fd, len)).then(
-    () => runNodeCallback(cbFinal, null),
-    (e) => runNodeCallback(cbFinal, e as NodeJS.ErrnoException),
-  );
+export function ftruncate(fd: number, lenOrCb?: unknown, cb?: unknown): void {
+  const [len, done] = optional(lenOrCb, cb);
+  deliver(done, inTurn(ftruncateSync)(fd, typeof len === 'number' ? len : 0), true);
 }
 
-export function writeFile(
-  p: string,
-  data: Uint8Array | string,
-  opts: WriteFileOptions | Encoding | null | Callback<void>,
-  cb?: Callback<void>,
-): void {
-  const optsFinal = typeof opts === 'function' ? null : opts;
-  const cbFinal = (typeof opts === 'function' ? opts : cb) as Callback<void>;
-  promises.writeFile(p, data, optsFinal).then(
-    () => runNodeCallback(cbFinal, null),
-    (e) => runNodeCallback(cbFinal, e as NodeJS.ErrnoException),
-  );
+export function writeFile(p: string, data: Uint8Array | string, optsOrCb: unknown, cb?: unknown) {
+  const [opts, done] = orOptions(optsOrCb, cb);
+  deliver(done, promises.writeFile(p, data, opts as WriteFileOptions), true);
 }
 
-/** A void callback over its `fs.promises` form: options optional, the callback last. */
-function voidCallback<O>(run: (opts: O | undefined) => Promise<void>, opts: unknown, cb: unknown) {
-  const cbFinal = (typeof opts === 'function' ? opts : cb) as Callback<void>;
-  run(typeof opts === 'function' ? undefined : (opts as O)).then(
-    () => runNodeCallback(cbFinal, null),
-    (e) => runNodeCallback(cbFinal, e as NodeJS.ErrnoException),
-  );
+export function appendFile(p: string, data: Uint8Array | string, optsOrCb: unknown, cb?: unknown) {
+  const [opts, done] = orOptions(optsOrCb, cb);
+  deliver(done, promises.appendFile(p, data, opts as WriteFileOptions), true);
 }
 
-export function appendFile(p: string, data: Uint8Array | string, opts: unknown, cb?: unknown) {
-  voidCallback<WriteFileOptions | Encoding>((o) => promises.appendFile(p, data, o), opts, cb);
+export function rm(p: string, optsOrCb: unknown, cb?: unknown): void {
+  // Node's rm validates its options at the call, not its callback.
+  const [opts, done] =
+    typeof optsOrCb === 'function' ? [undefined, optsOrCb] : [optionsAtCall(optsOrCb), cb];
+  rmOptionsOf(opts);
+  deliver(done as AnyCallback, promises.rm(p, opts as RmOptions), true);
 }
 
-export function rm(p: string, opts: unknown, cb?: unknown): void {
-  voidCallback<RmOptions>((o) => promises.rm(p, o), opts, cb);
+export function readdir(p: string, optsOrCb: unknown, cb?: unknown): void {
+  const [opts, done] = optional(optsOrCb, cb);
+  deliver(done, promises.readdir(p, opts as { withFileTypes?: boolean }));
 }
 
-export function readdir(
-  p: string,
-  optsOrCb: { withFileTypes?: boolean; recursive?: boolean } | Callback<string[] | Dirent[]>,
-  cb?: Callback<string[] | Dirent[]>,
-): void {
-  const opts = typeof optsOrCb === 'function' ? undefined : optsOrCb;
-  const cbFinal = (typeof optsOrCb === 'function' ? optsOrCb : cb) as Callback<string[] | Dirent[]>;
-  promises.readdir(p, opts).then(
-    (v) => runNodeCallback(cbFinal, null, v),
-    (e) => runNodeCallback(cbFinal, e as NodeJS.ErrnoException),
-  );
+export function mkdir(p: string, optsOrCb: unknown, cb?: unknown): void {
+  const [opts, done] = optional(optsOrCb, cb);
+  deliver(done, promises.mkdir(p, opts as MkdirOptions), true);
 }
 
-export function mkdir(
-  p: string,
-  optsOrCb: MkdirOptions | Callback<void>,
-  cb?: Callback<void>,
-): void {
-  const opts = typeof optsOrCb === 'function' ? {} : optsOrCb;
-  const cbFinal = (typeof optsOrCb === 'function' ? optsOrCb : cb) as Callback<void>;
-  promises.mkdir(p, opts).then(
-    () => runNodeCallback(cbFinal, null),
-    (e) => runNodeCallback(cbFinal, e as NodeJS.ErrnoException),
-  );
+export function stat(p: string, optsOrCb: unknown, cb?: unknown): void {
+  const [opts, done] = optional(optsOrCb, cb);
+  deliver(done, promises.stat(p, opts as StatOptions));
 }
 
-export function stat(p: string, cb: Callback<Stats>): void;
-export function stat(p: string, opts: StatOptions, cb: Callback<Stats>): void;
-export function stat(
-  p: string,
-  optsOrCb: StatOptions | Callback<Stats>,
-  cb?: Callback<Stats>,
-): void {
-  const opts = typeof optsOrCb === 'function' ? undefined : optsOrCb;
-  const cbFinal = (typeof optsOrCb === 'function' ? optsOrCb : cb) as Callback<Stats>;
-  promises.stat(p, opts).then(
-    (v) => runNodeCallback(cbFinal, null, v),
-    (e) => runNodeCallback(cbFinal, e as NodeJS.ErrnoException),
-  );
+export function lstat(p: string, optsOrCb: unknown, cb?: unknown): void {
+  const [opts, done] = optional(optsOrCb, cb);
+  deliver(done, promises.lstat(p, opts as StatOptions));
 }
 
-export function unlink(p: string, cb: Callback<void>): void {
-  promises.unlink(p).then(
-    () => runNodeCallback(cb, null),
-    (e) => runNodeCallback(cb, e as NodeJS.ErrnoException),
-  );
+export function unlink(p: string, cb: unknown): void {
+  deliver(cbOf(cb), promises.unlink(p), true);
 }
 
-export function lstat(p: string, cb: Callback<Stats>): void;
-export function lstat(p: string, opts: StatOptions, cb: Callback<Stats>): void;
-export function lstat(
-  p: string,
-  optsOrCb: StatOptions | Callback<Stats>,
-  cb?: Callback<Stats>,
-): void {
-  const opts = typeof optsOrCb === 'function' ? undefined : optsOrCb;
-  const cbFinal = (typeof optsOrCb === 'function' ? optsOrCb : cb) as Callback<Stats>;
-  promises.lstat(p, opts).then(
-    (v) => runNodeCallback(cbFinal, null, v),
-    (e) => runNodeCallback(cbFinal, e as NodeJS.ErrnoException),
-  );
-}
-
-const _realpath = (p: string, cb: Callback<string>): void => {
-  promises.realpath(p).then(
-    (v) => runNodeCallback(cb, null, v),
-    (e) => runNodeCallback(cb, e as NodeJS.ErrnoException),
-  );
+const _realpath = (p: string, optsOrCb: unknown, cb?: unknown): void => {
+  deliver(optional(optsOrCb, cb)[1], promises.realpath(p));
 };
 // `fs.realpath.native` mirrors `realpathSync.native` — chokidar/promisify reach
 // for the callback form; some code reads `.native`.
@@ -1468,75 +1377,36 @@ export const realpath: typeof _realpath & { native: typeof _realpath } = Object.
   native: _realpath,
 });
 
-export function readlink(p: string, cb: Callback<string>): void {
-  promises.readlink(p).then(
-    (v) => runNodeCallback(cb, null, v),
-    (e) => runNodeCallback(cb, e as NodeJS.ErrnoException),
-  );
+export function readlink(p: string, optsOrCb: unknown, cb?: unknown): void {
+  deliver(optional(optsOrCb, cb)[1], promises.readlink(p));
 }
 
-export function access(p: string, modeOrCb: number | Callback<void>, cb?: Callback<void>): void {
-  const cbFinal = (typeof modeOrCb === 'function' ? modeOrCb : cb) as Callback<void>;
-  promises.access(p).then(
-    () => runNodeCallback(cbFinal, null),
-    (e) => runNodeCallback(cbFinal, e as NodeJS.ErrnoException),
-  );
+export function access(p: string, modeOrCb: unknown, cb?: unknown): void {
+  deliver(optional(modeOrCb, cb)[1], promises.access(p), true);
 }
 
-export function copyFile(
-  src: string,
-  dst: string,
-  modeOrCb: number | Callback<void>,
-  cb?: Callback<void>,
-): void {
-  const mode = typeof modeOrCb === 'number' ? modeOrCb : 0;
-  const cbFinal = (typeof modeOrCb === 'function' ? modeOrCb : cb) as Callback<void>;
-  promises.copyFile(src, dst, mode).then(
-    () => runNodeCallback(cbFinal, null),
-    (e) => runNodeCallback(cbFinal, e as NodeJS.ErrnoException),
-  );
+export function copyFile(src: string, dst: string, modeOrCb: unknown, cb?: unknown): void {
+  const [mode, done] = optional(modeOrCb, cb);
+  deliver(done, promises.copyFile(src, dst, typeof mode === 'number' ? mode : 0), true);
 }
 
-export function rename(src: string, dst: string, cb: Callback<void>): void {
-  promises.rename(src, dst).then(
-    () => runNodeCallback(cb, null),
-    (e) => runNodeCallback(cb, e as NodeJS.ErrnoException),
-  );
+export function rename(src: string, dst: string, cb: unknown): void {
+  deliver(cbOf(cb), promises.rename(src, dst), true);
 }
 
-export function truncate(p: PathLike, lenOrCb?: number | VoidCallback, cb?: VoidCallback): void {
-  const len = typeof lenOrCb === 'number' ? lenOrCb : 0;
-  const cbFinal = (typeof lenOrCb === 'function' ? lenOrCb : cb) as VoidCallback;
-  ioTurn(() => truncateSync(p, len)).then(
-    () => runNodeCallback(cbFinal, null),
-    (e) => runNodeCallback(cbFinal, e as NodeJS.ErrnoException),
-  );
+export function truncate(p: PathLike, lenOrCb?: unknown, cb?: unknown): void {
+  const [len, done] = optional(lenOrCb, cb);
+  deliver(done, promises.truncate(p, typeof len === 'number' ? len : 0), true);
 }
 
-export function mkdtemp(
-  prefix: PathLike,
-  optsOrCb?: Encoding | { encoding?: Encoding | null } | Callback<string>,
-  cb?: Callback<string>,
-): void {
-  const opts = typeof optsOrCb === 'function' ? undefined : optsOrCb;
-  const cbFinal = (typeof optsOrCb === 'function' ? optsOrCb : cb) as Callback<string>;
-  ioTurn(() => mkdtempSync(prefix, opts)).then(
-    (dir) => runNodeCallback(cbFinal, null, dir),
-    (e) => runNodeCallback(cbFinal, e as NodeJS.ErrnoException),
-  );
+export function mkdtemp(prefix: PathLike, optsOrCb?: unknown, cb?: unknown): void {
+  const [opts, done] = optional(optsOrCb, cb);
+  deliver(done, promises.mkdtemp(prefix, opts as Encoding));
 }
 
-export function opendir(
-  p: PathLike,
-  optsOrCb?: { encoding?: Encoding; bufferSize?: number } | DirCallback,
-  cb?: DirCallback,
-): void {
-  const opts = typeof optsOrCb === 'function' ? undefined : optsOrCb;
-  const cbFinal = (typeof optsOrCb === 'function' ? optsOrCb : cb) as DirCallback;
-  ioTurn(() => opendirSync(p, opts)).then(
-    (dir) => runNodeCallback(cbFinal, null, dir),
-    (e) => runNodeCallback(cbFinal, e as NodeJS.ErrnoException),
-  );
+export function opendir(p: PathLike, optsOrCb?: unknown, cb?: unknown): void {
+  const [opts, done] = optional(optsOrCb, cb, 'callback');
+  deliver(done, promises.opendir(p, opts as { bufferSize?: number }));
 }
 
 export { Stats, Dirent, Dir };

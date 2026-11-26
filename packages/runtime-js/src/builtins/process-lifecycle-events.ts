@@ -111,6 +111,8 @@ export class NodeProcessExit {
     if (hasCode) this.#host.writeExitCode(code);
     if (!this.#exiting) {
       this.#exiting = true;
+      // Node's pool has finished what was submitted before its 'exit' listeners run.
+      completeSubmittedIo();
       this.#host.process.emit('exit', this.#host.readExitCode() ?? 0);
     }
     return this.#terminate(toUint8ExitCode(this.#host.readExitCode() ?? 0));
@@ -120,6 +122,7 @@ export class NodeProcessExit {
   beginFatal(): void {
     if (this.#exiting) return;
     this.#exiting = true;
+    completeSubmittedIo();
     try {
       this.#host.writeExitCode(1);
       this.#host.process.emit('exit', 1);
