@@ -58,6 +58,8 @@ const IO_TURN = 'runtime-js/fs-callbacks-io-turn';
 const AL = 'runtime-js/stream-core-abort-listeners-host-event-target';
 // TODO(backlog: runtime-js/post-guest-paths-use-replaceable-intrinsics)
 const LIVE = 'runtime-js/post-guest-paths-use-replaceable-intrinsics';
+// TODO(backlog: runtime-js/events-once-wrapper-bind)
+const ONCE_BIND = 'runtime-js/events-once-wrapper-bind';
 const pin = (owner: string, rifty: string) => ({ owner, rifty });
 const PINNED: Readonly<Record<string, Readonly<Record<string, { owner: string; rifty: string }>>>> =
   {
@@ -111,7 +113,7 @@ const PINNED: Readonly<Record<string, Readonly<Record<string, { owner: string; r
     },
     // Node's events `_onceWrap` reads `bind` live and throws; rifty's `once` does not.
     'p1-intrinsics-replaced: Function.prototype.bind throws': {
-      'Function.prototype.bind throws': pin(LIVE, 'A.B.C. 12 hello intrinsics finished:ok'),
+      'Function.prototype.bind throws': pin(ONCE_BIND, 'A.B.C. 12 hello intrinsics finished:ok'),
     },
   };
 /** Written files whose bytes a race inside Node sets, masked in every column (path → why). */

@@ -34,14 +34,15 @@ owner is the binding unit, since the differential bypasses the wiring 8c/9r/9w):
 | `b1` «fs.writev / fs.fsync …» (5) | pinned, owner 5 |
 | in-process `m9` (AL, 8c, guard) | «promises.pipeline … stopping listener», «finished(r, {signal}) …», «addAbortSignal …» pinned, owner AL; `map`, `reduce` equal |
 | parity `cases/stream` (70) and `cases/fs` stream cases (7) | 74 run, equal; 3 not run (stdin/node-cli-eval kinds) |
-| isolate rows (17) | not run: in-process differential; the isolate gets the core at 8c (and 7) |
-| Workbench `chromium-fd`/`chromium-d` rows (39) | not run: browser-host fd cost, units 4b/4c/P/9r/9w |
+| isolate rows (19) | not run: Node's bindings exist only in a Node process; the isolate gets the core at 8c (and 7) |
+| Workbench `chromium-fd`/`chromium-d` rows (39; all of 4b's) | not run: browser-host fd cost, the core wired there at 8c/9r/9w |
 | `zlib-diff` | not here: zlib unit 3's entry criterion, after 8c |
 
 Added here (not in the table): `p1-intrinsics-replaced` — a guest replaces an intrinsic after load.
-18 of 22 rows equal; 4 differ in rifty modules the core binds to (io `EventEmitter.emit`'s live
-`slice`, `fs.open`'s live `Promise`, rifty `once` not reading `bind`), pinned, owner
-`runtime-js/post-guest-paths-use-replaceable-intrinsics`.
+18 of 22 rows equal; 4 differ in rifty modules the core binds to, pinned: io `EventEmitter.emit`'s
+live `slice` and `fs.open`'s live `Promise` (3 rows, owner
+`runtime-js/post-guest-paths-use-replaceable-intrinsics`); rifty `once` not reading `bind` where
+Node's `_onceWrap` does (owner `runtime-js/events-once-wrapper-bind`).
 
 ## Challenge
 
@@ -70,26 +71,37 @@ challenge: 2026-11-25 — none (child of a goal; premise in goal §Challenge). T
    fixture program of the goal (`packages/isolate-host/tests/fixtures/streams-scenario/`), the hook
    matrix, `p1` (a process per row) and the parity cases above, three ways — live Node, the core on
    Node's bindings, the core on rifty's — compared whole (exit, every stdout line, stderr without
-   frames and the loader's source excerpt, the files written). The core on Node's bindings equals
+   frames and the loader's source excerpt, the files written; the one exception, `MASKED_OUTPUT`:
+   `w1` `win-4.out`, whose bytes a race inside Node sets — 7 of 8 live-Node runs 0 B, 1 of 8 1024 B).
+   The core on Node's bindings equals
    live Node on every row; on rifty's it equals that on every row but `PINNED`, each pinned on
    today's rifty value with its owner: 4 (`runtime-js/fs-callbacks-io-turn`), 5
-   (`runtime-js/fs-writev-fsync`), AL, `runtime-js/post-guest-paths-use-replaceable-intrinsics`. Rows
-   of landed owners (1, 2, 3, 4b) are equal, not pinned. A pinned row that turns equal is red until
+   (`runtime-js/fs-writev-fsync`), AL, `runtime-js/post-guest-paths-use-replaceable-intrinsics`,
+   `runtime-js/events-once-wrapper-bind`. Rows of landed owners 1, 2, 3 are equal, not pinned (4b's
+   rows are all Workbench, not run). A pinned row that turns equal is red until
    its pin goes; every program and case is run or in `NOT_RUN` with its reason. → I1–I7, I9, I10
 5. Not wired: `check:arch` `node-stream-core-has-no-production-importer` (a product importer is
-   red); every file of every package's `dist/` after `pnpm build:libs` and every client bundle of
-   `pnpm test:client-bundles` is byte-equal to main's; `check:es-floor` and the budgets unchanged.
-   → ADR-0575 §7
+   red). 0 B on every artifact, measured on HEAD against its merge-base with main (worktrees at
+   equal-length paths): every file of `packages/*/dist`, `tools/shadow-registry/dist`,
+   `services/eddy/dist` after `pnpm build:libs` (sha256; `guest.js` included) and of
+   `apps/playground/dist` after `pnpm build:playground` byte-equal; `pnpm test:client-bundles`
+   min/gzip of `main`/`sw`/generic/toolchain equal; `check:es-floor` green. Recorded in the PR
+   body; re-measured by the reviewer at merge time. → ADR-0575 §7
 6. License: `tools/publishing/third-party-manifest.json` records `io/src/streams/node/generated` as
    Node `v24.16.0` (MIT, `node.LICENSE`), marked `unshipped: runtime-js/stream-core-node-sources`
    (PR #452's mechanism, carried here): unused it is green, a package shipping it is red until 8c
    drops the mark; `pnpm check:third-party-notices` green. → ADR-0575 §1
 
+Merge: 8a and 8b merge only once 8c's PR is open and its CI differential is green (ADR-0575 §7);
+the PR stays open, titled `[hold: merges with stream-core 8c]`. A pin whose owner lands first (4,
+PR #468) turns red here: the PR merging second drops it.
+
 ## Parity cases
 
 The oracle is live Node v24.16.0 and Node's own bindings, per row (Acceptance 4). RED targets,
 pinned with owner: `b1` writev types and `m5` member types (5); `m4`/`m5` timer rows (4); `m9` three
-stopping-listener rows (AL); `p1` slice / then / Promise / bind (post-guest intrinsics).
+stopping-listener rows (AL); `p1` slice / then / Promise (post-guest intrinsics), bind
+(`runtime-js/events-once-wrapper-bind`).
 
 ## Out of scope
 
@@ -111,5 +123,6 @@ stopping-listener rows (AL); `p1` slice / then / Promise / bind (post-guest intr
 - 2026-11-26 — author: rifty modules through the builtin registry when the core reads them; one not registered throws by name (no fallback); host globals captured with the primordials at bindings load. Load order per host is 8c's.
 - 2026-11-26 — author: zlib constants are a data module in io (generated from live Node's binding, equal by test); runtime-js keeps its copy until 8c or zlib unit 3 dedups (no product bytes change here).
 - 2026-11-26 — author: `internalBinding('types')` → rifty's `util/types` (C++ `IsPromise`/`IsNativeError` have no exact JS brand check; read only by `promisify`'s DEP0174 test).
+- 2026-11-26 — author: acorn is runtime-js's own dependency (8.16.0, pinned by the generator), the AST walk the generator's own: a root `acorn` devDependency (ADR-0575 §1's wording) hoisted `node_modules/acorn` and changed the playground bundle's CJS interop (`function-bind`'s lazy init; measured, reverted).
 - 2026-11-26 — author: differential columns live Node / Node bindings / rifty bindings in children (rifty in-process, memory VFS); `fs` = the column's `fs` with the core's stream classes, as `lib/fs.js`; `p1` rows that end Node's process outside the core (`pop`, `apply`) are not rows.
 - 2026-11-26 — author: the `unshipped` manifest mark is PR #452's code, carried verbatim; whichever merges second drops the duplicate.

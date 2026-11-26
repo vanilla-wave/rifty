@@ -90,8 +90,6 @@ in-process vs the same core on Node's bindings, Node v24.16.0):
   live `Promise.resolve().then` (`builtins/fs.ts:1241`), so `fs.ReadStream` cannot open
   (`threw replaced then called` / `Promise.resolve is not a function`); Node reads the file.
   Unit 4 (`runtime-js/fs-callbacks-io-turn`, PR #468) rewrites this path.
-- `Function.prototype.bind` throwing: Node's `events` `_onceWrap` reads it live and the pipeline
-  throws; rifty's `once` does not, and completes.
 
 ## Challenge
 
