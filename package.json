@@ -91,8 +91,6 @@
     "@biomejs/biome": "^1.9.4",
     "@playwright/test": "^1.49.0",
     "@types/node": "^22.10.0",
-    "acorn": "8.16.0",
-    "acorn-walk": "8.3.5",
     "dependency-cruiser": "^17.4.3",
     "esbuild": "0.28.0",
     "tsup": "^8.3.5",

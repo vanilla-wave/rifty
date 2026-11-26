@@ -13,9 +13,8 @@
 // read (`EXPECTED`) — a new upstream input is drift, not a silent gap. esbuild then minifies
 // whitespace and syntax (identifiers kept: V8's TypeError texts quote them). `buildNodeStreams`
 // returns the text before esbuild (`modules`) for the verbatim test.
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import * as acorn from 'acorn';
-import * as walk from 'acorn-walk';
 import { transform } from 'esbuild';
 import {
   NODE,
@@ -25,6 +24,30 @@ import {
   nodeLicensePart,
   vendorReader,
 } from './node-sources.mjs';
+
+// acorn: runtime-js's own dependency, not a root one (a root `node_modules/acorn` changes the
+// playground bundle's CJS interop, measured 2026-11-26). Pinned: its AST is the slicer's input.
+export const acorn = createRequire(
+  new URL('../../packages/runtime-js/package.json', import.meta.url),
+)('acorn');
+if (acorn.version !== '8.16.0')
+  throw new Error(`acorn drift (${acorn.version}): re-probe ADR-0575`);
+/** Every AST node under `node` (acorn-walk `full`/`fullAncestor`): `cb(node, ancestors)`, ancestors ending in node. */
+function visitAll(node, cb, ancestors = []) {
+  if (node === null || typeof node !== 'object' || typeof node.type !== 'string') return;
+  ancestors.push(node);
+  cb(node, ancestors);
+  for (const key of Object.keys(node)) {
+    const v = node[key];
+    if (Array.isArray(v)) for (const c of v) visitAll(c, cb, ancestors);
+    else if (v !== null && typeof v === 'object') visitAll(v, cb, ancestors);
+  }
+  ancestors.pop();
+}
+const walk = {
+  full: (node, cb) => visitAll(node, (n) => cb(n)),
+  fullAncestor: (node, cb) => visitAll(node, (n, anc) => cb(n, undefined, anc)),
+};
 
 export const VENDOR = fileURLToPath(new URL('./node-streams/vendor/', import.meta.url));
 const OUT = fileURLToPath(
@@ -185,7 +208,7 @@ function freeNames(node) {
       !parent.shorthand
     )
       return;
-    if (/Labeled|Break|Continue/.test(parent.type)) return;
+    if (/Labeled|Break|Continue|MetaProperty/.test(parent.type)) return;
     used.add(n.name);
   });
   return [...used].filter((u) => !declared.has(u));

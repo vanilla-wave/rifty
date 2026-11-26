@@ -8,12 +8,12 @@
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import * as acorn from 'acorn';
 import { afterAll, describe, expect, it } from 'vitest';
 import {
   PINS,
   PRELUDE,
   VENDOR,
+  acorn,
   buildNodeStreams,
   generate,
 } from '../publishing/generate-node-streams.mjs';

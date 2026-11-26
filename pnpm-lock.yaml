@@ -17,12 +17,6 @@ importers:
       '@types/node':
         specifier: ^22.10.0
         version: 22.19.19
-      acorn:
-        specifier: 8.16.0
-        version: 8.16.0
-      acorn-walk:
-        specifier: 8.3.5
-        version: 8.3.5
       dependency-cruiser:
         specifier: ^17.4.3
         version: 17.4.3
