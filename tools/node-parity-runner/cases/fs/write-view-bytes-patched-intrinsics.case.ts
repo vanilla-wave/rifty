@@ -6,8 +6,10 @@ import type { ParityCase } from '../../src/types.ts';
  * `Uint8Array`/`DataView`/`ArrayBuffer`). In-process and isolate only: on the
  * browser hosts the store transport reads through those intrinsics too
  * (declared: backlog runtime-js/post-guest-paths-use-replaceable-intrinsics).
+ * `patchesSharedRealm`: the patches span async writes in the runner's own realm.
  */
 const c: ParityCase = {
+  patchesSharedRealm: true,
   code: `
     const fs = require('node:fs');
     const U = Uint8Array;

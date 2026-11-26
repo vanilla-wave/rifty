@@ -9,6 +9,8 @@ import type { ParityCase } from '../../src/types.ts';
  * `write-view-bytes-patched-intrinsics`.
  */
 const c: ParityCase = {
+  // The rifty side patches `Uint8Array.prototype.slice` across async writes in the runner's own realm.
+  patchesSharedRealm: true,
   code: `
     const fs = require('node:fs');
     const U = Uint8Array;
