@@ -3,8 +3,7 @@ import type { ParityCase } from '../../src/types.ts';
 // `Readable#setEncoding(name)` resolves names as `new StringDecoder(name)`: every
 // normalizeEncoding spelling, ''/null/undefined → utf8, prototype keys and
 // non-strings → ERR_UNKNOWN_ENCODING; one whole chunk decodes under the name.
-// Isolate guest (not run here): the 4 utf16le/ucs2 rows throw isolate-host.TextDecoder(utf-16le) —
-// declared, compat isolate-host.md, backlog distribution/isolate-guest-textdecoder-legacy-encodings.
+// Isolate guest: the same output, `packages/isolate-host/tests/text-decoder.test.ts` (ADR-0577).
 const c: ParityCase = {
   code: `
     const { Readable, Duplex, Transform } = require('node:stream');

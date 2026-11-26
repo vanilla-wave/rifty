@@ -1,0 +1,33 @@
+{
+  "version": "1.16.0",
+  "esbuild": "0.28.0",
+  "sha256": "35f50135d33d5e46aa0b5a2c06fca9a2fa2a32d68899b5d493c832cbedf41c06",
+  "sources": {
+    "assert.js": "f42df7d8cea8dda4cf0e257374a04392b9727f71d6c8f2798f7601df2d3c9ec8",
+    "base64.js": "2b939072fdace73944ba0a2a0c8614613c23a4fd90747397fbeafb41932277fc",
+    "encoding.js": "ac2d6c023c4ea0155ec564d0268b9a8cc1af95f5518e33f3a98f2a931ca20a4b",
+    "fallback/_utils.js": "b2e8fd666fbc6434dbcbe14867a8c3b7ad9530016c172dcfc25ee7f1f276e10d",
+    "fallback/base64.js": "3904505494baf3293b7ca1515e5fa72a9e18703a67c8682a03660457c8daed85",
+    "fallback/encoding.api.js": "943ff3ad18392ff923c540ed70bc8a327fb0554b373293b38be2299624f09a2f",
+    "fallback/encoding.js": "ae6d790283a7356dfe98c65ffdca070106eeb04ed5137af23f39a4cf53fa6216",
+    "fallback/encoding.labels.js": "1d8da54e0f97f0d8d2f388c9764357e060111d2e9af949ffeb85533ec5227214",
+    "fallback/encoding.util.js": "a103b01f957def56087a2c5d18e069a1c20920f367a288bcb4745aa1e5fd4221",
+    "fallback/latin1.js": "ef425fbb1cf7e38ec47072a73c2e00261998393644068bf08a4a9b4fb6026131",
+    "fallback/multi-byte.encodings.cjs": "e78ba98ae4755b29fe40c6a394e33a92eaf5fdbe51e6ee6dc7932daa95cfc25e",
+    "fallback/multi-byte.encodings.json": "d8588e2933cdd19e407e37c27412ffb01ad141e8dc5e08e0d998c7c36215ab34",
+    "fallback/multi-byte.js": "09c96e8c3db3b1b5e93742d63e29bf18dbbf995f77da3ec3984b62ad1ce8961f",
+    "fallback/multi-byte.table.js": "a8c0f7b204d3199a5c0a865c82de0f90f5826168922217fd85d073af70b8bf0d",
+    "fallback/platform.js": "cea341ed164f41efcd546a4d37ee6f432b2c5266d47882968165768b062193ea",
+    "fallback/platform.native.js": "af44f6ab47599b7cb54607e9fd73bb3f93a229fdbf11fa8909286cbfe66a65de",
+    "fallback/single-byte.encodings.js": "bc05c07256368c3ddf78bb6978f867c76eed27f6d32a89b516428bf9aac1a7bc",
+    "fallback/single-byte.js": "33321ccd56c50ec2ca235608d434f5974f9cb932bbd5dcc9c528d8eed6653a17",
+    "fallback/utf16.js": "23bbca46138fd72f40a07acf0e423c3875d41c863497172e27f5c9b0c9b84e34",
+    "fallback/utf8.auto.js": "94f556cd4146a22704ab12950c2fe0284156a90f397f2f3dc38cb1e82303a2fc",
+    "fallback/utf8.js": "26e8a3cd0d61bbc4532194002eb6b3f8e48400529b371515856fbfccad31bee9",
+    "multi-byte.js": "5216b567b9fbe03a038254dc0bcf2a02dec26bc2b6b72663c257453c2e257ff4",
+    "single-byte.js": "bce4467fd6dd6a2db582bd7c0463a75624afd1ef607ba4f1f0f16f70f7a6be77",
+    "utf16.js": "8a8c85daf9f7b821d0c2796deff03ef3ce6e1e1915d2c9b018a1fa028a0b5999",
+    "utf16.native.js": "641ec9744d4ed4d817ae4e26bf8098303fc07f60d8208e503c7941225ee75e87",
+    "utf8.js": "354c4b3399a68eefacee6fe37d36e9cc68f4e48870eb8ec3e89961f614c596be"
+  }
+}

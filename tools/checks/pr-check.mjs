@@ -188,6 +188,7 @@ export const TASKS = [
   'check:eval-compiler-drift',
   'check:fetch-classes-drift',
   'check:url-legacy-drift',
+  'check:node-encoding-drift',
   'check:node-blob-drift',
   'check:shadow-catalog-drift',
   'check:install-artifact-drift',
