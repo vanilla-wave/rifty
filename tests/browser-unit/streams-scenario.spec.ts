@@ -4,6 +4,7 @@ import {
   BROWSER_SKIPPED_ROWS,
   CARRIER,
   MATRICES,
+  NODE_RACE_ROWS,
   type Program,
   WORKBENCH_SKIPPED,
   entriesOf,
@@ -13,6 +14,7 @@ import {
   sha256Entry,
   skipArgs,
   verdict,
+  withoutRaceRows,
   workspace,
 } from '../../packages/isolate-host/tests/streams-scenario.ts';
 import {
@@ -225,6 +227,7 @@ Stream.prototype.pipe is the legacy pipe => undefined,true
 l.txt sha256 acac86c0e609ca906f632b0e2dacccb2b77d22b0621f20ebece1a4835b93f6f0
 `,
   },
+  // Its «fs.read(fd) loop over 16 MiB» row equals Node since runtime-js/fs-callbacks-io-turn (PR #468).
   'm4-readstream': {
     exitCode: 0,
     stdout: `instanceof Readable; prototype chain; isReadable => false,false,
@@ -243,7 +246,7 @@ encoding option through 'data' (no for await): base64 / utf16le / latin1 / hex, 
 read(3) sized reads => 
 for await break: destroy and close => threw rs is not async iterable,close
 timers run while 16 MiB streams (for await) => threw fs.createReadStream(...) is not a function or its return val
-timers run during an fs.read(fd) loop over 16 MiB (the fd source alone) => bytes=16777216,ticks>0=false
+timers run during an fs.read(fd) loop over 16 MiB (the fd source alone) => bytes=16777216,ticks>0=true
 uncaught 2 => rs.close is not a function
 close(cb) mid-read => 
 destroy(err): error then close, errored => close errored=undefined
@@ -386,6 +389,8 @@ win-5.out sha256 2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a488
 win.txt sha256 0af6d7a00b4c067cea9f902fe29603150d22434d95c503525e2db5bb625e81d2
 `,
   },
+  // Its «fs.read callback vs a timer due now» row is a Node race (`NODE_RACE_ROWS`): main
+  // `timer,read cb,immediate`, `timer,immediate,read cb` since runtime-js/fs-callbacks-io-turn (PR #468).
   'b1-bindings': {
     exitCode: 0,
     stdout: `Buffer.isEncoding per name => utf8:true UTF8:true utf-8:true UTF-8:true Utf8:true ucs2:true UCS2:true ucs-2:true utf16le:true UTF16LE:true utf-16le:true latin1:true LATIN1:true binary:true BINARY:true base64:true BASE64:true base64url:true hex:true HEX:true ascii:true ASCII:true nope:false '':false
@@ -394,7 +399,7 @@ Buffer.from(str, name) per name => utf8:41c3a9 UTF8:41c3a9 utf-8:41c3a9 UTF-8:41
 new StringDecoder(name).write+end per name => utf8:41fd00fdfd UTF8:41fd00fdfd utf-8:41fd00fdfd UTF-8:41fd00fdfd Utf8:41fd00fdfd ucs2:4100 UCS2:4100 ucs-2:4100 utf16le:4100 UTF16LE:4100 utf-16le:4100 latin1:41e900ff80 LATIN1:41e900ff80 binary:41e900ff80 BINARY:41e900ff80 base64:51656b412f34413d BASE64:51656b412f34413d base64url:51656b415f3441 hex:34316539303066663830 HEX:34316539303066663830 ascii:4169007f00 ASCII:4169007f00 nope:threw TypeError ERR_UNKNOWN_ENCODING: Unknown encoding: nope '':41fd00fdfd
 events.addAbortListener => typeof=function,aborted,disposable=function
 fs.writev / fs.fsync / fs.writevSync / fs.fsyncSync types => writev:undefined fsync:undefined writevSync:undefined fsyncSync:undefined fdatasync:undefined
-fs.read callback vs a timer due now => timer,read cb,immediate
+fs.read callback vs a timer due now => timer,immediate,read cb
 fs.write then fs.close in the same tick: bytes land => write cb ok,close cb ok,"data"
 `,
     stderr: '',
@@ -507,9 +512,13 @@ test.describe('node-streams goal scenario vs Node (COI Workbench)', () => {
       const rifty = pinOf(await inWorkbench(page, p, args), browserMasks(root));
       const pin = PINS[p.id];
       expect(pin === undefined, 'a pin exactly when an owner is named').toBe(p.owners.length === 0);
+      expect(pin === undefined && p.id in NODE_RACE_ROWS, 'a Node-race row is pinned').toBe(false);
       if (pin === undefined) return expect(rifty).toEqual(node);
       expect(rifty).toEqual(pin);
-      expect(rifty, 'the pin is a gap against live Node').not.toEqual(node);
+      expect(
+        withoutRaceRows(p.id, rifty),
+        'the pin is a gap against live Node (Node-race rows dropped)',
+      ).not.toEqual(withoutRaceRows(p.id, node, true));
     });
   }
 });

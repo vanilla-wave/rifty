@@ -3,7 +3,7 @@ import type { ParityCase } from '../../src/types.ts';
 /**
  * fs callbacks (and `fs.promises` settlements) complete in a later event-loop turn, as Node's
  * threadpool completions do. Each op is called from inside an fs callback (Node's poll phase;
- * from other contexts rifty's order is declared: `runtime-js/fs-completion-loop-phase-order`), with a tick, a promise, an
+ * from other contexts rifty's order is declared: `runtime-js/loop-phase-of-current-turn`), with a tick, a promise, an
  * immediate and a 0 ms timer queued before and after it, then 3 ms of busy wait (both timers due).
  * Printed per op: which of those ran before the callback and which after, as sets: the
  * callback's place is this case's claim; the immediates' and timers' own order is

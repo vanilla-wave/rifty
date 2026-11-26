@@ -30,7 +30,14 @@ challenge: 2026-11-25 — clear (premise in goal §Challenge)
 ## Acceptance
 
 1. `m4` «timers run during an fs.read(fd) loop over 16 MiB» = Node (`ticks>0=true`) on in-process, isolate, Workbench and SDK. → I10
-2. These guard rows stay = Node: `b1` «fs.read callback vs a timer due now» and «fs.write then fs.close in the same tick: bytes land»; `m5` «timers run while a WriteStream writes 16 MiB» in-process and in the isolate (the only hosts where it equals Node today; Workbench gives 0 ticks, `docs/backlog/epics/node-streams-as-in-node/reference/results/chromium-d/summary.txt`, so it is no guard there and not this unit's promise). → I10
+2. These guard rows stay = Node: `b1` «fs.write then fs.close in the same tick: bytes land»; `m5` «timers run while a WriteStream writes 16 MiB» in-process and in the isolate (the only hosts where it equals Node today; Workbench gives 0 ticks, `docs/backlog/epics/node-streams-as-in-node/reference/results/chromium-d/summary.txt`, so it is no guard there and not this unit's promise). → I10
+   `b1` «fs.read callback vs a timer due now» is no guard: a Node race (the pool read done or not by
+   the poll after the timer). Node v24.16.0, 300 processes each on macOS: `timer,read cb,immediate`
+   284/300 with no own load (other sessions: load 4–25), 276/300 at 16 parallel + 8 CPU burners
+   (load 25–39), else `timer,immediate,read cb`; Linux CI 35/36 (PR #471 run 45788011611). rifty:
+   in-process, Workbench, SDK `timer,immediate,read cb` (30/30, 10/10, 10/10), isolate
+   `timer,read cb,immediate` 10/10. The streams carrier pins the guest's line and drops the row from
+   the comparison with Node (`NODE_RACE_ROWS`). → I10
 3. Every case of `tools/node-parity-runner/cases/fs` (41) stays green. → I10
 4. Regression lanes stay green: no `packages/*/src` code consumes the guest `fs` callback API (shell, kernel, npm-client and the module loader go through `FsSync`/`Vfs`), so the consumers are guest libraries. They are caught by the isolate-host library tests (`packages/isolate-host/tests/library-exceljs.test.ts`, `library-pptxgenjs.test.ts`) and the e2e dev-server specs (`tests/e2e/generic-dev-server-lifecycle.spec.ts`, `react-vite-*.spec.ts`, `vite7-build-preview.spec.ts`, `webpack-dev-server.spec.ts`). → I10
 
@@ -66,7 +73,7 @@ pins `'exit'` after the last callback. ESM and `worker.terminate()` rows: Workbe
 | SAB sync-RPC oversize reply × callback on Workbench | the in-band error reply reaches the callback as an error, in its I/O turn | fault test with a reply over the ring size | → I10 |
 | SAB sync-RPC responder death mid-exchange × callback on Workbench | unchanged by this unit: the ring's loud permanent wedge, the caller blocked until owner teardown (no timeout exists in production, `packages/kernel/src/ipc/sync-client.ts:21`); no callback runs with partial data | fault test killing the responder in `HANDLING`: no callback, the caller blocked until teardown, then the next caller's exchange refused (`previous request is being handled`) | → I10 |
 | SAB sync-RPC responder death × the process end on Workbench | the end runs the submitted op over the ring: the same wedge, blocked until owner teardown, no exit request, no callback (2026-11-26, manager) | fault test: exit in the tick of a submitted `stat`, responder dead in `HANDLING` | → I10 |
-| two callback APIs in flight × one ring | each sync exchange completes before the callback's turn is queued, so two exchanges never overlap on the ring | by construction, not by test: an operation is one synchronous call inside one host turn, so no mutant can overlap two (2026-11-26, external review); the case's interleaved row checks the outcomes only | → I10 |
+| two callback APIs in flight × one ring | an operation is one synchronous exchange inside one host turn, so two never overlap on the ring (a call outside a completion queues its single turn at the call; one inside gets an operation turn, then its completion) | by construction, not by test: an operation is one synchronous call inside one host turn, so no mutant can overlap two (2026-11-26, external review); the case's interleaved row checks the outcomes only | → I10 |
 
 ## Out of scope
 
@@ -97,7 +104,7 @@ pins `'exit'` after the last callback. ESM and `worker.terminate()` rows: Workbe
   it has one — a Node host's `MessagePort` (poll), so an immediate queued in an fs callback runs
   before a due 0 ms timer (Node's guarantee, `fs/callback-phase-order` 240/240); the operation turn
   stays a check-phase immediate, so timers get their phase every loop turn. Isolate and browsers: the
-  immediate queue (browser and isolate order declared: `runtime-js/fs-completion-loop-phase-order`). An immediate's turn
+  immediate queue (browser and isolate order declared: `runtime-js/loop-phase-of-current-turn`). An immediate's turn
   is bound to its id (a cleared one leaves an empty turn).
 - 2026-11-26 (manager, second review): no wrapper hands the caller's arguments to the operation. Each
   async API parses at the call into primitives (`fs-arguments.ts` `at.*`: Node v24.16.0's JS layer,
@@ -112,6 +119,13 @@ pins `'exit'` after the last callback. ESM and `worker.terminate()` rows: Workbe
   `process.nextTick`, operation queue, closed-handle errors). `fs.read(0)` keeps stdin's path:
   declared (`runtime-js/fs-read-stdin-turn`). The process end also runs the submitted operations before
   the `'exit'` listeners (Node's pool has usually finished them: 212/240, not pinned).
+- 2026-11-26 (manager, round 3, decision (b)): always two turns — an operation turn, then its
+  completion — for every call; for a call from a timer, an immediate or the main module that is the
+  schedule "the pool missed the next poll", one Node also runs. Rows where Node races are not
+  pinned. History: (a) one I/O turn where rifty knows the turn is not poll (a flag in `timers.ts`)
+  rested on b1 being a deterministic Node row; it is not (table in Acceptance 2), and the flag leaked
+  one-turn completions into foreign turns, lost the `reject` row and, with a clearing host task, broke
+  the no-COI `exit()`-with-queued-immediate row — dropped. Measurements: `runtime-js/loop-phase-of-current-turn`.
 - Host turn = rifty's `setImmediate`, driven per host: a Node host's own `setImmediate` (a Node
   `MessagePort` drains up to 1000 messages per loop turn: 512 chained messages gave 0–1 timer ticks),
   the isolate bridge's next host turn (`timerStart` 0 ms → host `setImmediate`, was a 1 ms timer),

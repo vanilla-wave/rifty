@@ -4,7 +4,7 @@
  * flight, against live `node` over the same code. ESM rows and `worker.terminate()` are
  * the Workbench/SDK carrier's (`tests/browser-unit/fixtures/fs-io-turn-programs.ts`):
  * this host has no ES module loader and no `worker_threads`. `fs/callback-phase-order` is
- * declared here (`runtime-js/fs-completion-loop-phase-order`): the guest runs on its own thread beside
+ * declared here (`runtime-js/loop-phase-of-current-turn`): the guest runs on its own thread beside
  * the host loop, so its immediates and timers interleave by race.
  */
 import { spawnSync } from 'node:child_process';
@@ -49,7 +49,7 @@ function nodeFile(source: string, arg: string, out: string) {
 describe('fs completions take their own loop turn, as in Node (isolate guest)', () => {
   it('callback-turn-order: order, 256-read interval ticks, the operation moment', async () => {
     // Where a due timer lands against a completion races here: the guest's thread runs beside the
-    // host loop (`runtime-js/fs-completion-loop-phase-order`). The callback's place against ticks,
+    // host loop (`runtime-js/loop-phase-of-current-turn`). The callback's place against ticks,
     // promises and immediates is compared; the timers' is not.
     const untimed = (out: string) => out.replace(/,?timeout[<>]/gu, '').replace(/: ,/gu, ': ');
     const node = nodeEval(callbackTurnOrder.code);
