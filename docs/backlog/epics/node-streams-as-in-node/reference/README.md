@@ -12,7 +12,8 @@ pnpm --filter @riftydev/isolate-host run build    # the sandbox runs the built g
 node --import tsx run.mjs "$(git rev-parse --show-toplevel)"   # writes results/*.txt
 ```
 
-Each program runs four times, plus the route-B runs (§Route B) and the three window runs, nine columns in all:
+The programs are `packages/isolate-host/tests/fixtures/streams-scenario/*.cjs`, the carrier's and
+their one source (`programs/README.md`). Each program runs four times, plus the route-B runs (§Route B) and the three window runs, nine columns in all:
 
 - `node`: real Node, in a temp dir.
 - `rifty-inproc`: rifty's browser-host modules in a Node child (`inproc.mts`). The memory VFS is
