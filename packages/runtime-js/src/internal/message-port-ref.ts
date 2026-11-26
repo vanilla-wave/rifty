@@ -189,7 +189,9 @@ export function installMessagePortReference(): void {
   const portBrand = nativeGetter(Port.prototype, 'onmessage');
   const port1 = nativeGetter(Channel.prototype, 'port1');
   const port2 = nativeGetter(Channel.prototype, 'port2');
-  const isDetached = nativeGetter(ArrayBuffer.prototype, 'detached');
+  // Not `ArrayBuffer.prototype.detached` (Chrome 114; ADR-0469 floor is 108): a
+  // fixed-length 1-byte probe reads `byteLength` 0 exactly when detached.
+  const byteLength = nativeGetter(ArrayBuffer.prototype, 'byteLength');
 
   const recordOf = (port: unknown): PortRecord | undefined => {
     Reflect.apply(portBrand, port, []); // TypeError: Illegal invocation, as in Node
@@ -284,12 +286,12 @@ export function installMessagePortReference(): void {
         setOwn(forwarded, 1, read.forward(read.list));
         return apply(native, receiver, forwarded);
       }
-      const probe = new ArrayBuffer(0);
+      const probe = new ArrayBuffer(1);
       const withProbe = copyList(read.list);
       setOwn(withProbe, withProbe.length, probe);
       setOwn(forwarded, 1, read.forward(withProbe));
       const result = apply(native, receiver, forwarded);
-      if (apply(isDetached, probe, []) === true) {
+      if (apply(byteLength, probe, []) === 0) {
         for (let i = 0; i < moving.length; i++) {
           const record = moving[i] as PortRecord;
           record.moved = true;
