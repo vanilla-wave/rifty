@@ -1,3 +1,4 @@
+import { NotImplementedError } from '@riftydev/io';
 /**
  * The process end runs the fs operations in flight (Node joins its threadpool) and
  * settles nothing: rows a mutant of `completeSubmittedIo` / `ioTurn` turns red.
@@ -8,7 +9,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { activeRefs, resetKeepalive } from '../internal/event-loop-keepalive.ts';
 import { installNodeProcessShim } from '../ipc/install-process.ts';
 import { resetSyncMirror, setSyncMirror } from './fs-sync-mirror.ts';
-import { closeSync, openSync, promises, readFileSync, write } from './fs.ts';
+import { closeSync, fstat, openSync, promises, readFileSync, write } from './fs.ts';
 import { setImmediate } from './timers.ts';
 
 const originalProcess = (globalThis as { process?: unknown }).process;
@@ -105,5 +106,16 @@ describe('process end with fs operations in flight', () => {
     expect(() => process.exit(0)).toThrow(exitSignal(0));
     await turns();
     expect(ran).toEqual([]);
+  });
+
+  it('fs.fstat(fd, { bigint: true }, cb) is the loud gap, not a number Stats', async () => {
+    setup();
+    const fd = openSync('/b.txt', 'w');
+    const err = await new Promise<unknown>((resolve) =>
+      fstat(fd, { bigint: true }, (e: unknown) => resolve(e)),
+    );
+    expect(err).toBeInstanceOf(NotImplementedError);
+    expect((err as Error).message).toContain('fs.fstat.bigint');
+    closeSync(fd);
   });
 });

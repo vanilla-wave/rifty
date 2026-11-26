@@ -11,11 +11,13 @@
 
 import { NotImplementedError, bytesToString } from '@riftydev/io';
 import { VfsError } from '@riftydev/vfs';
-import { invalidArgType } from '../internal/node-received.ts';
+import { invalidArgType, outOfRange } from '../internal/node-received.ts';
 import { Buffer, type Encoding } from './buffer.ts';
-import { type AnyCallback, cbOf, deliver, optional, orOptions } from './fs-callback.ts';
+import { at, getOptions, readTwice, validatedPath } from './fs-arguments.ts';
+import { type AnyCallback, cbOf, deliver, optional } from './fs-callback.ts';
+import { Dir } from './fs-dir.ts';
 import { fsError, withSyscall } from './fs-errors.ts';
-import { inTurn, ioTurn, optionsAtCall } from './fs-io-turn.ts';
+import { inTurn, ioTurn } from './fs-io-turn.ts';
 import { type PathLike, pathToString, resolvePath } from './fs-path.ts';
 import {
   type FdReadOptions,
@@ -30,9 +32,9 @@ import { syncMirror } from './fs-sync-mirror.ts';
 import { setTimes, utimesArgs } from './fs-times.ts';
 import { link, linkSync, statfsSync, symlink, symlinkSync } from './loud-members.ts';
 import { runNodeCallback } from './process-lifecycle-events.ts';
-import { riftyProcess } from './process.ts';
 
 type OpenFlags = string | number;
+type Options = Record<string, unknown>;
 type ReadCallback = (
   err: NodeJS.ErrnoException | null,
   bytesRead?: number,
@@ -175,141 +177,6 @@ function statStrictOrNull(np: string): { isFile: boolean; isDirectory: boolean }
   } catch (err) {
     if (err instanceof VfsError && err.code === 'ENOENT') return null;
     throw err;
-  }
-}
-
-type DirCb = (err: NodeJS.ErrnoException | null, dirent?: Dirent | null) => void;
-
-/**
- * Node's `Dir` (`lib/internal/fs/dir.js`): entries come in batches of `bufferSize`, one
- * I/O request per batch; a read the buffer answers calls back on `process.nextTick`;
- * calls made while a request is in flight wait for it (its operation queue).
- */
-class Dir implements AsyncIterable<Dirent> {
-  readonly path: string;
-  readonly #entries: Dirent[];
-  readonly #bufferSize: number;
-  #index = 0;
-  #buffered: Dirent[] = [];
-  #closed = false;
-  #queue: (() => void)[] | null = null;
-
-  constructor(path: string, entries: Dirent[], bufferSize = 32) {
-    this.path = path;
-    this.#entries = entries;
-    this.#bufferSize = bufferSize;
-  }
-
-  /** The next batch (the directory handle's read); false at the end. */
-  #fill(): boolean {
-    const batch = this.#entries.slice(this.#index, this.#index + this.#bufferSize);
-    this.#index += batch.length;
-    this.#buffered.push(...batch);
-    return batch.length > 0;
-  }
-
-  readSync(): Dirent | null {
-    this.#assertOpen();
-    if (this.#queue !== null) throw fsError('ERR_DIR_CONCURRENT_OPERATION', this.path, 'readdir');
-    if (this.#buffered.length === 0 && !this.#fill()) return null;
-    return this.#buffered.shift() ?? null;
-  }
-
-  read(): Promise<Dirent | null>;
-  read(cb: DirCb): void;
-  read(...args: [] | [unknown]) {
-    if (args.length === 0 || args[0] === undefined) return this.#readPromised();
-    this.#assertOpen();
-    this.#read(true, cbOf(args[0], 'callback') as DirCb);
-  }
-
-  #readPromised(): Promise<Dirent | null> {
-    return new Promise((resolve, reject) => {
-      this.#assertOpen();
-      this.#read(false, (err, dirent) => (err ? reject(err) : resolve(dirent ?? null)));
-    });
-  }
-
-  #read(maybeSync: boolean, cb: DirCb): void {
-    if (this.#queue !== null) {
-      this.#queue.push(() => this.#read(maybeSync, cb));
-      return;
-    }
-    const buffered = this.#buffered.shift();
-    if (buffered !== undefined) {
-      if (maybeSync) riftyProcess.nextTick(() => runNodeCallback(cb, null, buffered));
-      else cb(null, buffered);
-      return;
-    }
-    this.#queue = [];
-    const settled = (): void =>
-      riftyProcess.nextTick(() => {
-        const queue = this.#queue ?? [];
-        this.#queue = null;
-        for (const op of queue) op();
-      });
-    ioTurn(() => this.#fill()).then(
-      (more) => {
-        settled();
-        runNodeCallback(cb, null, more ? (this.#buffered.shift() ?? null) : null);
-      },
-      (err) => {
-        settled();
-        runNodeCallback(cb, err as NodeJS.ErrnoException);
-      },
-    );
-  }
-
-  closeSync(): void {
-    this.#assertOpen();
-    if (this.#queue !== null) throw fsError('ERR_DIR_CONCURRENT_OPERATION', this.path, 'readdir');
-    this.#closed = true;
-  }
-
-  close(): Promise<void>;
-  close(cb: (err: NodeJS.ErrnoException | null) => void): void;
-  close(cb?: unknown) {
-    if (cb === undefined) {
-      if (this.#closed) return Promise.reject(this.#closedError());
-      return new Promise<void>((resolve, reject) =>
-        this.close((err: NodeJS.ErrnoException | null) => (err ? reject(err) : resolve())),
-      );
-    }
-    const done = cbOf(cb, 'callback') as (err: NodeJS.ErrnoException | null) => void;
-    if (this.#closed) {
-      riftyProcess.nextTick(() => runNodeCallback(done, this.#closedError()));
-      return;
-    }
-    if (this.#queue !== null) {
-      this.#queue.push(() => this.close(done));
-      return;
-    }
-    this.#closed = true;
-    deliver(
-      done,
-      ioTurn(() => {}),
-      true,
-    );
-  }
-
-  async *[Symbol.asyncIterator](): AsyncIterator<Dirent> {
-    try {
-      while (true) {
-        const entry = await this.#readPromised();
-        if (entry === null) return;
-        yield entry;
-      }
-    } finally {
-      await this.close();
-    }
-  }
-
-  #closedError(): NodeJS.ErrnoException {
-    return fsError('ERR_DIR_CLOSED', this.path, 'readdir');
-  }
-
-  #assertOpen(): void {
-    if (this.#closed) throw this.#closedError();
   }
 }
 
@@ -1107,15 +974,30 @@ export function mkdtempSync(
   throw fsError('EEXIST', prefixText, 'mkdtemp');
 }
 
-export function opendirSync(p: PathLike, opts?: { encoding?: Encoding; bufferSize?: number }): Dir {
-  const displayPath = pathToString(p);
-  // 'opendir' is PATHLESS in Node's rendering — withSyscall omits the name.
-  const entries = withSyscall(
+// 'opendir' is PATHLESS in Node's rendering — withSyscall omits the name.
+const dirEntries = (p: PathLike): Dirent[] =>
+  withSyscall(
     'opendir',
     p,
     () => readdirSyncImpl(p as string, { withFileTypes: true }) as Dirent[],
   );
-  return new Dir(displayPath, entries.slice(), opts?.bufferSize ?? 32);
+
+/** Node's `Dir` constructor: `{ bufferSize: 32, ...options }`, a positive uint32. */
+function dirBufferSize(options: unknown): number {
+  const { bufferSize } = { bufferSize: 32, ...getOptions(options, { encoding: 'utf8' }) };
+  if (typeof bufferSize !== 'number')
+    throw invalidArgType('"options.bufferSize" property', 'of type number', bufferSize);
+  if (!Number.isInteger(bufferSize))
+    throw outOfRange('options.bufferSize', 'an integer', bufferSize);
+  if (bufferSize < 1 || bufferSize > 4_294_967_295)
+    throw outOfRange('options.bufferSize', '>= 1 && <= 4294967295', bufferSize);
+  return bufferSize;
+}
+
+export function opendirSync(p: PathLike, opts?: { encoding?: Encoding; bufferSize?: number }): Dir {
+  const o = getOptions(opts, { encoding: 'utf8' });
+  const entries = dirEntries(p);
+  return new Dir(pathToString(p), entries, dirBufferSize(o));
 }
 
 export function utimesSync(p: string, atime: number | Date, mtime: number | Date): void {
@@ -1138,9 +1020,18 @@ export function futimesSync(fd: number, atime: number | Date, mtime: number | Da
   withSyscall('futime', record.path, () => setTimes(record.path, times));
 }
 
-export function futimes(fd: number, atime: number | Date, mtime: number | Date, cb: unknown) {
+export function futimes(fd: number, atime: unknown, mtime: unknown, cb: unknown) {
+  const times = utimesArgs(atime as number, mtime as number);
   const done = cbOf(cb);
-  deliver(done, inTurn(futimesSync)(fd, atime, mtime), true);
+  deliver(
+    done,
+    ioTurn(() =>
+      withSyscall('futime', getFd(fd, 'futime').path, () =>
+        setTimes(getFd(fd, 'futime').path, times),
+      ),
+    ),
+    true,
+  );
 }
 
 /**
@@ -1165,48 +1056,141 @@ export async function openAsBlob(p: PathLike, options?: { type?: string }): Prom
   return new globalThis.Blob([new Uint8Array(bytes)], { type: options?.type ?? '' });
 }
 
+/** A promise form: Node's synchronous part (a throw rejects) at the call, its operation in its turn. */
+function promised<A extends unknown[], R>(parse: (...args: A) => () => R) {
+  return (...args: A): Promise<R> => {
+    let operation: () => R;
+    try {
+      operation = parse(...args);
+    } catch (error) {
+      return Promise.reject(error);
+    }
+    return ioTurn(operation);
+  };
+}
+
+/** Each async API's operation over its call-time record (`fs-arguments.ts`). */
+const op = {
+  readFile: (r: ReturnType<typeof at.readFile>) => () =>
+    readFileSync(r.path as string, { flag: r.flag, encoding: r.encoding() as Encoding }),
+  writeFile: (r: ReturnType<typeof at.writeFile>) => () => {
+    writeFileSync(r.path as string, r.bytes, { flag: r.flag, mode: r.mode });
+    r.late();
+  },
+  readdir: (r: ReturnType<typeof at.readdir>) => () => readdirSync(r.path, r),
+  mkdir: (r: ReturnType<typeof at.mkdir>) => () => {
+    mkdirSync(r.path, r);
+  },
+  rm: (r: ReturnType<typeof at.rm>) => () => rmSync(r.path, r),
+  rmdir: (r: ReturnType<typeof at.rmdir>) => () => rmdirSync(r.path, r),
+  stat: (r: ReturnType<typeof at.stat>) => (): Stats => {
+    const stats = r.lstat
+      ? lstatImpl(r.path, r, r.feature)
+      : (statImpl(r.path, r, r.feature) as Stats);
+    r.late();
+    return stats;
+  },
+  realpath: (r: ReturnType<typeof at.realpath>) => () => r.encode(realpathSync(r.path)),
+  cp: (r: ReturnType<typeof at.cp>) => () => cpSync(r.src, r.dest, r.options as CpOptions),
+  utimes: (r: ReturnType<typeof at.utimes>) => () =>
+    withSyscall('utime', r.path, () => setTimes(resolvePath(r.path), r.times)),
+};
+
 export const promises = {
-  readFile: inTurn(readFileSync),
-  writeFile: inTurn(writeFileSync),
-  appendFile: inTurn(appendFileSync),
-  readdir: inTurn(readdirSync),
-  mkdir: inTurn((p: string, opts?: MkdirOptions): void => {
-    mkdirSync(p, opts);
-  }),
-  rm: inTurn(rmSync),
-  rmdir: inTurn(rmdirSync),
-  unlink: inTurn(unlinkSync),
-  stat: inTurn(
-    (p: string, opts?: StatOptions) => statImpl(p, opts, 'fs.promises.stat.bigint') as Stats,
+  readFile: promised((path: unknown, options?: unknown) =>
+    op.readFile(at.readFile(path, options, true)),
   ),
-  lstat: inTurn((p: string, opts?: StatOptions) => lstatImpl(p, opts, 'fs.promises.lstat.bigint')),
+  writeFile: promised((path: unknown, data: unknown, options?: unknown) =>
+    op.writeFile(at.writeFile(path, data, options, true)),
+  ),
+  appendFile: promised((path: unknown, data: unknown, options?: unknown) =>
+    op.writeFile(at.appendFile(path, data, options, true)),
+  ),
+  readdir: promised((path: unknown, options?: unknown) =>
+    op.readdir(at.readdir(path, options, true)),
+  ),
+  mkdir: promised((path: unknown, options?: unknown) => op.mkdir(at.mkdir(path, options, true))),
+  rm: promised((path: unknown, options?: unknown) => op.rm(at.rm(path, options))),
+  rmdir: promised((path: unknown, options?: unknown) => op.rmdir(at.rmdir(path, options, true))),
+  unlink: promised((path: unknown) =>
+    (
+      (p) => () =>
+        unlinkSync(p)
+    )(validatedPath(path)),
+  ),
+  stat: promised((path: unknown, options?: unknown) =>
+    op.stat(at.stat(path, options, true, false)),
+  ),
+  lstat: promised((path: unknown, options?: unknown) =>
+    op.stat(at.stat(path, options, true, true)),
+  ),
   async symlink(...args: unknown[]): Promise<never> {
     return symlink(...args);
   },
   async link(...args: unknown[]): Promise<never> {
     return link(...args);
   },
-  readlink: inTurn(readlinkSync),
-  realpath: inTurn((p: string) => realpathSync(p)),
-  access: inTurn((p: string, _mode?: number): void => {
-    // Strict probe: access through a file is ENOTDIR (Node), never ENOENT.
-    const st = withSyscall('access', p, () => statStrictOrNull(resolvePath(p)));
-    if (st === null) throw fsError('ENOENT', pathToString(p), 'access');
+  readlink: promised((path: unknown, options?: unknown) =>
+    (
+      (r) => () =>
+        readlinkSync(r)
+    )(at.encodingOnly(path, options, 'oldPath')),
+  ),
+  realpath: promised((path: unknown, options?: unknown) =>
+    op.realpath(at.realpath(path, options, true)),
+  ),
+  access: promised((path: unknown, _mode?: unknown) =>
+    ((p) => () => {
+      // Strict probe: access through a file is ENOTDIR (Node), never ENOENT.
+      const st = withSyscall('access', p, () => statStrictOrNull(resolvePath(p)));
+      if (st === null) throw fsError('ENOENT', pathToString(p), 'access');
+    })(validatedPath(path)),
+  ),
+  copyFile: promised((src: unknown, dest: unknown, mode?: unknown) =>
+    (
+      (s, d) => () =>
+        copyFileSync(s, d, (mode ?? 0) as number)
+    )(validatedPath(src, 'src'), validatedPath(dest, 'dest')),
+  ),
+  rename: promised((from: unknown, to: unknown) =>
+    (
+      (s, d) => () =>
+        renameSync(s, d)
+    )(validatedPath(from, 'oldPath'), validatedPath(to, 'newPath')),
+  ),
+  cp: promised((src: unknown, dest: unknown, options?: unknown) =>
+    op.cp(at.cp(src, dest, options)),
+  ),
+  truncate: promised((path: unknown, len?: unknown) =>
+    (
+      (p) => () =>
+        truncateSync(p, (len ?? 0) as number)
+    )(validatedPath(path)),
+  ),
+  mkdtemp: promised((prefix: unknown, options?: unknown) =>
+    (
+      (r) => () =>
+        mkdtempSync(r)
+    )(at.encodingOnly(prefix, options, 'prefix')),
+  ),
+  opendir: promised((path: unknown, options?: unknown) => {
+    const p = validatedPath(path);
+    const o = getOptions(options, { encoding: 'utf8' });
+    // Node builds the Dir once the open settles: its options are read then.
+    return () => new Dir(p, dirEntries(p), dirBufferSize(o));
   }),
-  copyFile: inTurn(copyFileSync, 2),
-  rename: inTurn(renameSync, 2),
-  cp: inTurn(cpSync, 2),
-  truncate: inTurn(truncateSync),
-  mkdtemp: inTurn(mkdtempSync),
-  opendir: inTurn(opendirSync),
-  utimes: inTurn(utimesSync),
-  lutimes: inTurn(lutimesSync),
+  utimes: promised((path: unknown, atime: unknown, mtime: unknown) =>
+    op.utimes(at.utimes(path, atime, mtime)),
+  ),
+  lutimes: promised((path: unknown, atime: unknown, mtime: unknown) =>
+    op.utimes(at.utimes(path, atime, mtime)),
+  ),
   constants,
 };
 
-export function readFile(p: PathLike | number, optsOrCb: unknown, cb?: unknown): void {
-  const [opts, done] = orOptions(optsOrCb, cb);
-  deliver(done, promises.readFile(p as string, opts as ReadFileOptions));
+export function readFile(p: unknown, options: unknown, cb?: unknown): void {
+  const done = cbOf(cb || options);
+  deliver(done, ioTurn(op.readFile(at.readFile(p, options, false))));
 }
 
 export function open(p: PathLike, ...rest: unknown[]): void {
@@ -1317,8 +1301,18 @@ export function write(fd: number, data: Uint8Array | string, ...args: unknown[])
   );
 }
 
-export function fstat(fd: number, optsOrCb: unknown, cb?: unknown): void {
-  deliver(optional(optsOrCb, cb)[1], inTurn(fstatSync)(fd));
+export function fstat(fd: number, options: unknown, cb?: unknown): void {
+  const [o, done] =
+    typeof options === 'function' ? [{}, options] : [(options ?? {}) as Options, cb];
+  const bigint = readTwice(o as Options, 'bigint');
+  cbOf(done);
+  deliver(
+    done as AnyCallback,
+    ioTurn(() => {
+      if (bigint) throw new NotImplementedError('fs.fstat.bigint');
+      return fstatSync(fd);
+    }),
+  );
 }
 
 export function ftruncate(fd: number, lenOrCb?: unknown, cb?: unknown): void {
@@ -1326,50 +1320,59 @@ export function ftruncate(fd: number, lenOrCb?: unknown, cb?: unknown): void {
   deliver(done, inTurn(ftruncateSync)(fd, typeof len === 'number' ? len : 0), true);
 }
 
-export function writeFile(p: string, data: Uint8Array | string, optsOrCb: unknown, cb?: unknown) {
-  const [opts, done] = orOptions(optsOrCb, cb);
-  deliver(done, promises.writeFile(p, data, opts as WriteFileOptions), true);
+export function writeFile(p: unknown, data: unknown, options: unknown, cb?: unknown) {
+  const done = cbOf(cb || options);
+  deliver(done, ioTurn(op.writeFile(at.writeFile(p, data, options, false))), true);
 }
 
-export function appendFile(p: string, data: Uint8Array | string, optsOrCb: unknown, cb?: unknown) {
-  const [opts, done] = orOptions(optsOrCb, cb);
-  deliver(done, promises.appendFile(p, data, opts as WriteFileOptions), true);
+export function appendFile(p: unknown, data: unknown, options: unknown, cb?: unknown) {
+  const done = cbOf(cb || options);
+  deliver(done, ioTurn(op.writeFile(at.appendFile(p, data, options, false))), true);
 }
 
-export function rm(p: string, optsOrCb: unknown, cb?: unknown): void {
-  // Node's rm validates its options at the call, not its callback.
-  const [opts, done] =
-    typeof optsOrCb === 'function' ? [undefined, optsOrCb] : [optionsAtCall(optsOrCb), cb];
-  rmOptionsOf(opts);
-  deliver(done as AnyCallback, promises.rm(p, opts as RmOptions), true);
+export function rm(p: unknown, options: unknown, cb?: unknown): void {
+  // Node's rm checks its path and options at the call, not its callback.
+  const [o, done] = typeof options === 'function' ? [undefined, options] : [options, cb];
+  deliver(done as AnyCallback, ioTurn(op.rm(at.rm(p, o))), true);
 }
 
-export function readdir(p: string, optsOrCb: unknown, cb?: unknown): void {
-  const [opts, done] = optional(optsOrCb, cb);
-  deliver(done, promises.readdir(p, opts as { withFileTypes?: boolean }));
+export function readdir(p: unknown, options: unknown, cb?: unknown): void {
+  const done = cbOf(typeof options === 'function' ? options : cb);
+  deliver(done, ioTurn(op.readdir(at.readdir(p, options, false))));
 }
 
-export function mkdir(p: string, optsOrCb: unknown, cb?: unknown): void {
-  const [opts, done] = optional(optsOrCb, cb);
-  deliver(done, promises.mkdir(p, opts as MkdirOptions), true);
+export function mkdir(p: unknown, options: unknown, cb?: unknown): void {
+  const operation = op.mkdir(
+    at.mkdir(p, typeof options === 'function' ? undefined : options, false),
+  );
+  deliver(cbOf(typeof options === 'function' ? options : cb), ioTurn(operation), true);
 }
 
-export function stat(p: string, optsOrCb: unknown, cb?: unknown): void {
-  const [opts, done] = optional(optsOrCb, cb);
-  deliver(done, promises.stat(p, opts as StatOptions));
+export function stat(p: unknown, options: unknown, cb?: unknown): void {
+  const [o, done] = typeof options === 'function' ? [{}, options] : [options, cb];
+  cbOf(done);
+  deliver(done as AnyCallback, ioTurn(op.stat(at.stat(p, o, false, false))));
 }
 
-export function lstat(p: string, optsOrCb: unknown, cb?: unknown): void {
-  const [opts, done] = optional(optsOrCb, cb);
-  deliver(done, promises.lstat(p, opts as StatOptions));
+export function lstat(p: unknown, options: unknown, cb?: unknown): void {
+  const [o, done] = typeof options === 'function' ? [{}, options] : [options, cb];
+  cbOf(done);
+  deliver(done as AnyCallback, ioTurn(op.stat(at.stat(p, o, false, true))));
 }
 
-export function unlink(p: string, cb: unknown): void {
-  deliver(cbOf(cb), promises.unlink(p), true);
+export function unlink(p: unknown, cb: unknown): void {
+  const done = cbOf(cb);
+  const path = validatedPath(p);
+  deliver(
+    done,
+    ioTurn(() => unlinkSync(path)),
+    true,
+  );
 }
 
-const _realpath = (p: string, optsOrCb: unknown, cb?: unknown): void => {
-  deliver(optional(optsOrCb, cb)[1], promises.realpath(p));
+const _realpath = (p: unknown, options: unknown, cb?: unknown): void => {
+  const done = cbOf(typeof options === 'function' ? options : cb);
+  deliver(done, ioTurn(op.realpath(at.realpath(p, options, false))));
 };
 // `fs.realpath.native` mirrors `realpathSync.native` — chokidar/promisify reach
 // for the callback form; some code reads `.native`.
@@ -1377,36 +1380,86 @@ export const realpath: typeof _realpath & { native: typeof _realpath } = Object.
   native: _realpath,
 });
 
-export function readlink(p: string, optsOrCb: unknown, cb?: unknown): void {
-  deliver(optional(optsOrCb, cb)[1], promises.readlink(p));
+export function readlink(p: unknown, options: unknown, cb?: unknown): void {
+  const done = cbOf(typeof options === 'function' ? options : cb);
+  deliver(
+    done,
+    ioTurn(
+      (
+        (r) => () =>
+          readlinkSync(r)
+      )(at.encodingOnly(p, options)),
+    ),
+  );
 }
 
-export function access(p: string, modeOrCb: unknown, cb?: unknown): void {
-  deliver(optional(modeOrCb, cb)[1], promises.access(p), true);
+export function access(p: unknown, mode: unknown, cb?: unknown): void {
+  const path = validatedPath(p);
+  const done = cbOf(typeof mode === 'function' ? mode : cb);
+  deliver(done, promises.access(path), true);
 }
 
-export function copyFile(src: string, dst: string, modeOrCb: unknown, cb?: unknown): void {
-  const [mode, done] = optional(modeOrCb, cb);
-  deliver(done, promises.copyFile(src, dst, typeof mode === 'number' ? mode : 0), true);
+export function copyFile(src: unknown, dst: unknown, mode: unknown, cb?: unknown): void {
+  const [m, done] = typeof mode === 'function' ? [0, mode] : [mode, cb];
+  const s = validatedPath(src, 'src');
+  const d = validatedPath(dst, 'dest');
+  deliver(
+    cbOf(done),
+    ioTurn(() => copyFileSync(s, d, (m ?? 0) as number)),
+    true,
+  );
 }
 
-export function rename(src: string, dst: string, cb: unknown): void {
-  deliver(cbOf(cb), promises.rename(src, dst), true);
+export function rename(src: unknown, dst: unknown, cb: unknown): void {
+  const done = cbOf(cb);
+  deliver(done, promises.rename(src, dst), true);
 }
 
-export function truncate(p: PathLike, lenOrCb?: unknown, cb?: unknown): void {
-  const [len, done] = optional(lenOrCb, cb);
-  deliver(done, promises.truncate(p, typeof len === 'number' ? len : 0), true);
+export function truncate(p: unknown, lenOrCb?: unknown, cb?: unknown): void {
+  const [len, done] = typeof lenOrCb === 'function' ? [0, lenOrCb] : [lenOrCb ?? 0, cb];
+  cbOf(done);
+  const path = validatedPath(p);
+  deliver(
+    done as AnyCallback,
+    ioTurn(() => truncateSync(path, len as number)),
+    true,
+  );
 }
 
-export function mkdtemp(prefix: PathLike, optsOrCb?: unknown, cb?: unknown): void {
-  const [opts, done] = optional(optsOrCb, cb);
-  deliver(done, promises.mkdtemp(prefix, opts as Encoding));
+export function mkdtemp(prefix: unknown, options?: unknown, cb?: unknown): void {
+  const done = cbOf(typeof options === 'function' ? options : cb);
+  deliver(
+    done,
+    ioTurn(
+      (
+        (r) => () =>
+          mkdtempSync(r)
+      )(at.encodingOnly(prefix, options, 'prefix')),
+    ),
+  );
 }
 
-export function opendir(p: PathLike, optsOrCb?: unknown, cb?: unknown): void {
-  const [opts, done] = optional(optsOrCb, cb, 'callback');
-  deliver(done, promises.opendir(p, opts as { bufferSize?: number }));
+export function opendir(p: unknown, options?: unknown, cb?: unknown): void {
+  const done = cbOf(typeof options === 'function' ? options : cb, 'callback');
+  const path = validatedPath(p);
+  const o = getOptions(options, { encoding: 'utf8' });
+  // Node builds the Dir in the open's completion: an invalid `bufferSize` throws there, uncaught.
+  const callback = done as unknown as (err: unknown, dir?: Dir) => void;
+  ioTurn(() => dirEntries(path)).then(
+    (entries) => {
+      let dir: Dir;
+      try {
+        dir = new Dir(path, entries, dirBufferSize(o));
+      } catch (error) {
+        queueMicrotask(() => {
+          throw error;
+        });
+        return;
+      }
+      runNodeCallback(callback, null, dir);
+    },
+    (e) => runNodeCallback(callback, e),
+  );
 }
 
 export { Stats, Dirent, Dir };
@@ -1419,6 +1472,45 @@ import {
   createWriteStream,
 } from './fs-streams.ts';
 import { FSWatcher, unwatchFile, watch, watchFile } from './fs-watch.ts';
+
+// Node's arities (`Function.length`): rest and optional parameters here count otherwise.
+for (const [target, lengths] of [
+  [{ stat, lstat, fstat, ftruncate, open, close, read, write }, [1, 1, 1, 1, 4, 1, 6, 6]],
+  [
+    promises,
+    {
+      readFile: 2,
+      writeFile: 3,
+      appendFile: 3,
+      readdir: 2,
+      mkdir: 2,
+      rm: 2,
+      rmdir: 2,
+      unlink: 1,
+      stat: 1,
+      lstat: 1,
+      readlink: 2,
+      realpath: 2,
+      access: 1,
+      copyFile: 3,
+      rename: 2,
+      cp: 3,
+      truncate: 1,
+      mkdtemp: 2,
+      opendir: 3,
+      utimes: 3,
+      lutimes: 3,
+    },
+  ],
+] as const) {
+  const entries = Array.isArray(lengths)
+    ? Object.keys(target).map(
+        (name, index) => [name, (lengths as readonly number[])[index]] as const,
+      )
+    : Object.entries(lengths);
+  for (const [name, length] of entries)
+    Object.defineProperty((target as Record<string, unknown>)[name], 'length', { value: length });
+}
 
 const fs = {
   promises,
