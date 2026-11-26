@@ -22,7 +22,7 @@ import { type Observed, type Pin, pinOf } from './zlib-scenario.ts';
 
 const NO_RS =
   'NotImplementedError: Not implemented: isolate-host.ReadableStream (not available in the rifty isolate host, ADR-0557)';
-/** Measured on main c2250727d: the whole stderr, no mask (the isolate's paths are `/workspace/…`). A guard has none. */
+/** Measured on main c2250727d, unchanged on d19d891b9: the whole stderr, no mask (the isolate's paths are `/workspace/…`). A guard has none. */
 const PINS: Readonly<Record<string, Pin>> = {
   'c-xlsx-roundtrip': {
     exitCode: 0,

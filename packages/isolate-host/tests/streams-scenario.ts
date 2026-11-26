@@ -102,8 +102,6 @@ export const MATRICES: readonly Program[] = [
   program(
     'b1-bindings',
     'bindings: string_decoder, Buffer names, addAbortListener, writev/fsync',
-    '1',
-    '3',
     '5',
   ),
 ];
