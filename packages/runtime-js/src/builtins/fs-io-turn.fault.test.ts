@@ -25,22 +25,27 @@ function child(mode: string, sab: SharedArrayBuffer) {
     workerData: { sab, capacity: CAPACITY, mode },
   });
   live = worker;
-  const seen = (want: unknown): Promise<void> =>
-    new Promise((resolve, reject) => {
-      const check = () => {
-        if (messages.some((m) => JSON.stringify(m) === JSON.stringify(want))) resolve();
-      };
-      worker.on('message', (m) => {
-        messages.push(m);
-        check();
-      });
-      worker.on('error', reject);
-      check();
-    });
+  const waiters: (() => void)[] = [];
+  worker.on('message', (m) => {
+    messages.push(m);
+    for (const wake of waiters.splice(0)) wake();
+  });
+  const failed = new Promise<never>((_, reject) => worker.on('error', reject));
+  const seen = async (want: unknown): Promise<void> => {
+    while (!messages.some((m) => JSON.stringify(m) === JSON.stringify(want)))
+      await Promise.race([new Promise<void>((wake) => waiters.push(wake)), failed]);
+  };
   return { worker, messages, seen };
 }
 
 const quiet = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** The ring stays claimed after owner teardown: the next caller's exchange is refused loudly. */
+async function expectWedged(sab: SharedArrayBuffer): Promise<void> {
+  const { messages } = child('probe', sab);
+  for (let i = 0; i < 1000 && messages.length === 0; i++) await quiet(10);
+  expect(messages).toEqual([expect.stringMatching(/previous request is being handled/)]);
+}
 
 describe('fs callbacks over a SAB sync-RPC ring (Workbench transport)', () => {
   it('an oversize reply reaches the callback as an error, in its I/O turn', async () => {
@@ -84,6 +89,7 @@ describe('fs callbacks over a SAB sync-RPC ring (Workbench transport)', () => {
     expect(messages).toEqual(['submitted']);
     // Blocked in `Atomics.wait`: the thread runs nothing until owner teardown.
     expect(await worker.terminate()).toBe(1);
+    await expectWedged(sab);
   }, 30_000);
 
   it('a responder dead at the process end: exit blocks on the submitted op (no exit request, no callback)', async () => {
@@ -101,5 +107,6 @@ describe('fs callbacks over a SAB sync-RPC ring (Workbench transport)', () => {
     await quiet(500);
     expect(messages).toEqual(['exiting']);
     expect(await worker.terminate()).toBe(1);
+    await expectWedged(sab);
   }, 30_000);
 });

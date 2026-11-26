@@ -11,7 +11,7 @@ import { expect, test } from './fixtures/test.ts';
 // Worker, so here each child is one sandbox run and the file is read after it.
 
 const root = process.cwd().replaceAll('\\', '/');
-const MODES = ['exit', 'throw', 'reject', 'exit-listener', 'exit-in-callback'];
+const MODES = ['exit', 'throw', 'reject', 'exit-listener'];
 
 function oracle(mode: string): { exitCode: number | null; stdout: string; file: string | null } {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'fs-io-turn-exit-')));

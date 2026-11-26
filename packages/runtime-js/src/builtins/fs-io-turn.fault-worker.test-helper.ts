@@ -6,7 +6,7 @@ import { parentPort, workerData } from 'node:worker_threads';
 import { SabRing, SyncRpcClient } from '@riftydev/kernel';
 import { installNodeProcessShim } from '../ipc/install-process.ts';
 import { installRemoteSyncFs } from '../ipc/sync-rpc-fs.ts';
-import { readFile, stat } from './fs.ts';
+import { readFile, stat, statSync } from './fs.ts';
 import { setImmediate } from './timers.ts';
 
 const data = workerData as { sab: SharedArrayBuffer; capacity: number; mode: string };
@@ -22,7 +22,7 @@ const log = (message: unknown): void => parentPort?.postMessage(message);
 
 if (data.mode === 'oversize') {
   setImmediate(() => log('immediate queued before the call'));
-  readFile('/data/big.bin', (error, bytes) =>
+  readFile('/data/big.bin', (error: Error | null, bytes?: Uint8Array) =>
     log(error ? `callback error: ${error.message}` : `callback ${String(bytes?.length)} bytes`),
   );
   log('submitted');
@@ -52,5 +52,13 @@ if (data.mode === 'oversize') {
     process.exit(0);
   } catch {
     log('exit returned');
+  }
+} else if (data.mode === 'probe') {
+  // The next exchange on the wedged ring: the loud refusal, never a silent hang or a reply.
+  try {
+    statSync('/data/f.txt');
+    log('probe: a reply');
+  } catch (error) {
+    log(`probe: ${(error as Error).message}`);
   }
 }

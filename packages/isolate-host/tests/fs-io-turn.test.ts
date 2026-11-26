@@ -3,7 +3,9 @@
  * turn (the parity case `fs/callback-turn-order`), the lifecycle around operations in
  * flight, against live `node` over the same code. ESM rows and `worker.terminate()` are
  * the Workbench/SDK carrier's (`tests/browser-unit/fixtures/fs-io-turn-programs.ts`):
- * this host has no ES module loader and no `worker_threads`.
+ * this host has no ES module loader and no `worker_threads`. `fs/callback-phase-order` is
+ * declared here (`runtime-js/browser-loop-phase-order`): the guest runs on its own thread beside
+ * the host loop, so its immediates and timers interleave by race.
  */
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
@@ -14,7 +16,10 @@ import {
   FS_IO_TURN_CHAIN,
   FS_IO_TURN_EXIT_CHILD,
 } from '../../../tests/browser-unit/fixtures/fs-io-turn-programs.ts';
+import appendFileRm from '../../../tools/node-parity-runner/cases/fs/append-file-rm-callbacks.case.ts';
+import argumentsAtCall from '../../../tools/node-parity-runner/cases/fs/async-arguments-at-call.case.ts';
 import callbackTurnOrder from '../../../tools/node-parity-runner/cases/fs/callback-turn-order.case.ts';
+import dirReadTurns from '../../../tools/node-parity-runner/cases/fs/dir-read-turns.case.ts';
 import { createSandbox, runCode } from '../src/index.ts';
 import { inSandbox } from './package-closure.ts';
 import { nodeEval } from './support.ts';
@@ -52,6 +57,23 @@ describe('fs completions take their own loop turn, as in Node (isolate guest)', 
     });
   }, 60_000);
 
+  for (const [name, testCase] of [
+    ['dir-read-turns', dirReadTurns],
+    ['async-arguments-at-call', argumentsAtCall],
+    ['append-file-rm-callbacks', appendFileRm],
+  ] as const) {
+    it(`parity case fs/${name}`, async () => {
+      // A Buffer path throws in this guest whatever the turn: `runtime-js/isolate-fs-buffer-path-throws`.
+      const lines = (out: string) => out.split('\n').filter((l) => !l.includes('Buffer path'));
+      const node = nodeEval(testCase.code);
+      const result = await runCode(testCase.code);
+      expect({ stdout: lines(result.stdout), exitCode: result.exitCode }).toEqual({
+        stdout: lines(node.stdout),
+        exitCode: node.code,
+      });
+    }, 60_000);
+  }
+
   it('a program whose only work is 1000 chained readFile callbacks: exit after the last', async () => {
     const node = nodeEval(FS_IO_TURN_CHAIN);
     const result = await runCode(FS_IO_TURN_CHAIN);
@@ -62,7 +84,7 @@ describe('fs completions take their own loop turn, as in Node (isolate guest)', 
   }, 60_000);
 
   // The process end runs a submitted write without its callback (Node joins its threadpool).
-  for (const mode of ['exit', 'throw', 'reject', 'exit-listener', 'exit-in-callback']) {
+  for (const mode of ['exit', 'throw', 'reject', 'exit-listener']) {
     it(`process end (${mode}) with a write submitted: the file Node leaves, no callback`, async () => {
       const source = FS_IO_TURN_EXIT_CHILD.replace(
         'const mode = process.argv[2];',

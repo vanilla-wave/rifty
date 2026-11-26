@@ -2,9 +2,12 @@ import callbackTurnOrderCase from '../../../tools/node-parity-runner/cases/fs/ca
 
 // Unit runtime-js/fs-callbacks-io-turn: fs completions in their own loop turn, and the
 // process lifecycle around operations in flight. Node v24.16.0: every printed row
-// 20/20 (+80/80 under load). Not printed (Node varies): what a worker's file holds after
+// 20/20 + 240/240 under load (16 parallel). Not printed (Node varies): what a worker's file holds after
 // `terminate()` with a write in flight (79/80 written), an op submitted from an `'exit'`
-// listener of a natural exit (13/20 not written). Declared (`runtime-js/fs-async-op-io-rounds`):
+// listener of a natural exit (13/20 not written), what an `'exit'` listener after an uncaught throw
+// reads of a write in flight (212/240 written), `exit()` in an fs callback with another write to the
+// same position in flight (239/240 the later one). Not printed, so not run: modes
+// `throw-exit-listener`, `exit-in-callback` (kept to reproduce). Declared (`runtime-js/fs-async-op-io-rounds`):
 // `writeFile` + `process.exit()` in the same tick — Node `""` (only its open round trip ran),
 // rifty `"data"`. `'beforeExit'` around the last callbacks (Node: `beforeExit 0`, a `stat` it
 // schedules, `beforeExit 0`, `exit 0`) is never emitted on any rifty host: `runtime-js/process-before-exit-event`.
@@ -38,6 +41,7 @@ if (mode === 'exit') { fs.write(fd(), 'data', () => console.log('cb')); process.
 else if (mode === 'throw') { fs.write(fd(), 'data', () => console.log('cb')); throw new Error('boom'); }
 else if (mode === 'reject') { fs.write(fd(), 'data', () => console.log('cb')); Promise.reject(new Error('r')); }
 else if (mode === 'exit-listener') { const f = fd(); process.on('exit', () => fs.write(f, 'x', () => console.log('cb'))); process.exit(0); }
+else if (mode === 'throw-exit-listener') { const f = fd(); fs.write(f, 'data', () => console.log('cb')); process.on('exit', () => console.log('exit listener sees ' + JSON.stringify(fs.readFileSync('e.txt', 'utf8')))); throw new Error('boom'); }
 else if (mode === 'exit-in-callback') { const f = fd(); fs.stat('.', () => { fs.write(f, 'late', () => console.log('cb')); process.exit(0); }); fs.write(f, 'early', 0, 'utf8', () => {}); }
 `;
 
@@ -55,7 +59,7 @@ const run = (mode) => new Promise((resolve) => {
   });
 });
 (async () => {
-  for (const mode of ['exit', 'throw', 'reject', 'exit-listener', 'exit-in-callback']) console.log(await run(mode));
+  for (const mode of ['exit', 'throw', 'reject', 'exit-listener']) console.log(await run(mode));
 })();
 `;
 
