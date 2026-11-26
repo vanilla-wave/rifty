@@ -25,6 +25,10 @@ contract (then: write it on `Vfs.writeFile`/`readFile` and in the public docs), 
 boundary copy while internal paths keep the no-copy route (then: which entry is the public one)?
 Settled by: the embedder API owner; a probe of an embedder mutating a buffer after `writeFile`.
 
+## Decisions
+
+- 2026-11-26 — manager, by the user's delegation (manager thread cf2ae711; asked «MemoryVfs.writeFile держит память встраивающего: копировать или объявить „VFS забирает владение“. Рекомендую объявить», the user: «не очень понял. Если решение не очень серьезное прими сам»): the declared public contract is «the VFS takes ownership of the bytes it is given and lends the bytes it returns»; no copy at the public boundary (internal paths — npm extraction, snapshot restore, the module loader — rely on it). Reversible. Left to do: the contract sentence on `Vfs.writeFile`/`readFile` and in the public docs, and the embedder probe from §Question as its test.
+
 ## Challenge
 
 challenge: 2026-11-26 — question capture; no premise critic (README §Challenge)

@@ -22,7 +22,7 @@ Probes in `reference/` (each README holds its command, results and «not verifie
 3. `distribution/isolate-guest-textdecoder-legacy-encodings` — **done** (PR #459, ADR-0577, file
    deleted) — `TextDecoder`/`TextEncoder` from Node's `encoding.js` + `single-byte.js`, utf-16le/be,
    gbk, gb18030 from @exodus/bytes 1.16.0; the five ICU-only a named gap
-   (`distribution/isolate-guest-textdecoder-icu-only-encodings`); I2 open (below).
+   (`distribution/isolate-guest-textdecoder-icu-only-encodings`); I2 closed with a declared exception (below).
 
 Delivered elsewhere: `distribution/isolate-stream-core-abort-controller` — goal
 `node-streams-as-in-node` unit 7 (`docs/backlog/epics/node-streams-as-in-node/map.md`, on main since
@@ -42,7 +42,7 @@ pdfkit's font load.
 
 ## Open questions
 
-- I2 (open): the premise «the 33 equal WHATWG» is false for gb18030/gbk/utf-16 after a decoder's error (ADR-0577 inventory, compat ⚠️ `isolate-host.md`); question to the user; the manager's choice (declare, do not emulate ICU's state) is preliminary.
+- I2 (closed, user 2026-11-26 «ок», goal §Decisions): the premise «the 33 equal WHATWG» is false for gb18030/gbk/utf-16 after a decoder's error (ADR-0577 inventory, compat ⚠️ `isolate-host.md`); accepted as a declared exception, ICU's state is not emulated.
 
 - The `TextDecoder` composition's remaining +0.5–0.6 ms warm Δ with no non-utf-8 decoder (the load
   of `encoding.js`/`util.js` and the shims) — owner: agent — within the base's noise; unit 3
