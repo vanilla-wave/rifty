@@ -163,6 +163,7 @@ export const streamConsumers = {
     return JSON.parse(await streamConsumers.text(source));
   },
   async blob(source: ConsumableStream): Promise<Blob> {
-    return new Blob([await consume(source)]);
+    // `globalThis.`: an unbound `Blob` makes esbuild rename the isolate guest's `class Blob` (ADR-0578).
+    return new globalThis.Blob([await consume(source)]);
   },
 };
