@@ -34,6 +34,8 @@ import { EventEmitter } from './events.ts';
 import { fsError, toNodeFsError } from './fs-errors.ts';
 import { pathToString, resolvePath } from './fs-path.ts';
 import { syncMirror } from './fs-sync-mirror.ts';
+import { bytesOf, isView, jsViewBytes } from './view-bytes.ts';
+const { Uint8Array } = globalThis; // as at load: a program replacing the global changes no write
 
 interface ReadStreamOptions {
   flags?: string;
@@ -161,7 +163,7 @@ function receivedText(value: unknown): string {
 }
 
 function assertValidChunk(chunk: unknown): asserts chunk is string | ArrayBufferView {
-  if (typeof chunk !== 'string' && !ArrayBuffer.isView(chunk)) {
+  if (typeof chunk !== 'string' && !isView(chunk)) {
     // Node throws SYNCHRONOUSLY — an invalid chunk is a programming error, and
     // the old array-like overlay of a function chunk minted a NUL byte into
     // the file (review 2026-07-05). Any TypedArray/DataView is VALID (its raw
@@ -175,11 +177,9 @@ function assertValidChunk(chunk: unknown): asserts chunk is string | ArrayBuffer
   }
 }
 
-/** Raw-bytes view over any TypedArray/DataView chunk (no copy). */
+/** A chunk's bytes, no copy: a Buffer as Node's fs.write reads it, another view by its JS members. */
 function chunkBytes(chunk: ArrayBufferView): Uint8Array {
-  return chunk instanceof Uint8Array
-    ? chunk
-    : new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength);
+  return chunk instanceof Buffer ? bytesOf(chunk, 0, chunk.byteLength) : jsViewBytes(chunk);
 }
 
 /**

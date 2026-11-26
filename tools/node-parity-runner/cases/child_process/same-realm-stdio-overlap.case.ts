@@ -1,6 +1,8 @@
 import type { ParityCase } from '../../src/types.ts';
 
 export default {
+  // The rifty side patches `Object.defineProperty`/`defineProperties`, `Reflect.defineProperty` until the child closes in the runner's own realm.
+  patchesSharedRealm: true,
   cwd: '/project',
   stdin: [],
   setup: {

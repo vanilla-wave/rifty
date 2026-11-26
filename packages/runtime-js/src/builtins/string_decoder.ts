@@ -17,6 +17,7 @@ import {
   unknownEncodingError,
 } from '@riftydev/io';
 import { invalidArgType } from '../internal/node-received.ts';
+import { bytesOf, isView } from './view-bytes.ts';
 
 const kIncompleteCharactersStart = 0;
 const kIncompleteCharactersEnd = 4;
@@ -59,48 +60,14 @@ interface DecoderThis extends StringDecoder {
   [kNativeDecoder]: Uint8Array;
 }
 
-// Load-time intrinsics: a view's bytes are read through these (Node: `ArrayBufferViewContents`),
-// never through members the view or a patched prototype overrides.
-const U8 = Uint8Array;
+// Load-time intrinsics (a view's bytes: `bytesOf`, `./view-bytes.ts`), never members a program patches.
 const TypedArrayProto = Object.getPrototypeOf(Uint8Array.prototype) as object;
-const getter = (proto: object, key: PropertyKey) =>
-  Object.getOwnPropertyDescriptor(proto, key)?.get as (this: unknown) => unknown;
-const taBuffer = getter(TypedArrayProto, 'buffer');
-const taByteOffset = getter(TypedArrayProto, 'byteOffset');
-const taByteLength = getter(TypedArrayProto, 'byteLength');
-const taTag = getter(TypedArrayProto, Symbol.toStringTag);
-const dvBuffer = getter(DataView.prototype, 'buffer');
-const dvByteOffset = getter(DataView.prototype, 'byteOffset');
-const dvByteLength = getter(DataView.prototype, 'byteLength');
-const isView = ArrayBuffer.isView;
+const taByteLength = Object.getOwnPropertyDescriptor(TypedArrayProto, 'byteLength')?.get as (
+  this: unknown,
+) => unknown;
 const { apply } = Reflect;
 const read = (get: (this: unknown) => unknown, view: unknown): unknown => apply(get, view, []);
 const taSubarray = (TypedArrayProto as { subarray: (s: number, e: number) => Uint8Array }).subarray;
-
-/**
- * A fresh `Uint8Array` over `view`'s bytes from `start`, `length` long (default: to the end). A detached
- * or out-of-bounds view reads as no bytes, as Node's (`%TypedArray%` getters give 0, `DataView`'s throw).
- */
-function bytesOf(view: ArrayBufferView, start = 0, length?: number): Uint8Array {
-  const typed = read(taTag, view) !== undefined;
-  let size: number;
-  let offset: number;
-  if (typed) {
-    size = read(taByteLength, view) as number;
-    offset = read(taByteOffset, view) as number;
-  } else {
-    try {
-      size = read(dvByteLength, view) as number;
-      offset = read(dvByteOffset, view) as number;
-    } catch {
-      return new U8(0);
-    }
-  }
-  const n = length ?? size - start;
-  if (n === 0) return new U8(0);
-  const buffer = read(typed ? taBuffer : dvBuffer, view) as ArrayBuffer;
-  return new U8(buffer, offset + start, n);
-}
 
 const makeString = (bytes: Uint8Array, enc: number): string =>
   bytesToString(bytes, ENCODINGS[enc] as string);
