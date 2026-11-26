@@ -45,7 +45,7 @@ included, with the durability guard (`results/chromium/durability.jsonl`) kept g
 
 ## Acceptance
 
-1. Lifts the streams carrier's declared skips on Workbench: `c-transform-big` and the `m5` row «timers run while a WriteStream writes 16 MiB in 64 KiB chunks» (`packages/isolate-host/tests/streams-scenario.ts` `WORKBENCH_SKIPPED`, `WORKBENCH_SKIPPED_ROWS`). → I8
+1. Lifts the streams carrier's declared skips: `c-transform-big` on Workbench and the `m5` row «timers run while a WriteStream writes 16 MiB in 64 KiB chunks» on Workbench and SDK (`packages/isolate-host/tests/streams-scenario.ts` `WORKBENCH_SKIPPED`, `BROWSER_SKIPPED_ROWS`). → I8
 
 ## Open findings (review round 4)
 

@@ -51,7 +51,7 @@ challenge: 2026-11-25 — clear (premise in goal §Challenge; this unit changes 
 4. `c-transform-big` is not run on Workbench until 4c lands: today it times out at 180 s there. It is a declared skip naming `runtime-js/fs-fd-write-by-range`; it runs in the isolate and on the SDK. → I8
 5. Cases are independent: each program gets its own sandbox (isolate), its own page and project directory (Workbench) or its own sandbox (SDK); no case reads state another case wrote. → I8
 6. Lanes and time: the isolate cases run in `test:run`, the Workbench cases in `browser-unit-chromium` and the SDK cases in `no-coi-chromium`. Each lane grows by at most 2 min: PR #453's zlib carrier added about 1 min per lane, and the 5 Workbench closure programs take 11–12 s each. The PR records the measured growth per lane; over the limit, the unit splits the cases across shards rather than dropping any. → I8
-7. `m1`–`m10`, `w1` and `b1` run in Chromium on both hosts as pinned rows, under the same pin rule and inside the same time limit, so later units have their Chromium baseline. On Workbench the `m5` row «timers run while a WriteStream writes 16 MiB in 64 KiB chunks» is a declared skip naming `runtime-js/fs-fd-write-by-range`, by the program's own row parameter on both sides (oracle and guest); the other `m5` rows are pinned. → I8
+7. `m1`–`m10`, `w1` and `b1` run in Chromium on both hosts as pinned rows, under the same pin rule and inside the same time limit, so later units have their Chromium baseline. On Workbench and SDK the `m5` row «timers run while a WriteStream writes 16 MiB in 64 KiB chunks» is a declared skip naming `runtime-js/fs-fd-write-by-range`, by the program's own row parameter on both sides (oracle and guest); the other `m5` rows are pinned. → I8
 8. The carrier runs once on the Chromium 108 floor (ADR-0469). The PR records the outcome, and a loading failure is pinned by name. → I8
 
 ## Parity cases
@@ -71,6 +71,9 @@ challenge: 2026-11-25 — clear (premise in goal §Challenge; this unit changes 
   program's `--skip=` on both sides, so the comparison stays symmetric; the other 13 rows are
   pinned for 8c and 9w. Both Workbench skips carry a marker to the 4c item, so removing it reds
   `backlog:check`.
+- 2026-11-26 — the same row skipped on the SDK too, under the manager's rule «a row whose outcome is
+  set by speed is pinned on no host where it behaves so»: CI run 45737744755 printed
+  `no settle in 3s` there, and 12 local runs did not.
 
 - Closure on Workbench: the guest's `/tmp`, through PR #453's helpers. There is no edge to the
   publication-cost unit P.

@@ -1,4 +1,5 @@
 import {
+  BROWSER_SKIPPED_ROWS,
   CARRIER,
   MATRICES,
   type Program,
@@ -8,6 +9,7 @@ import {
   manifest,
   programFile,
   sha256Entry,
+  skipArgs,
   verdict,
   workspace,
 } from '../../packages/isolate-host/tests/streams-scenario.ts';
@@ -304,7 +306,7 @@ event order end(cb): finish/close/cb => open,ready,end cb,finish,close
 close(cb) before end: pending writes land => threw ws.close is not a function
 write after end: callback and error => cb ERR_STREAM_WRITE_AFTER_END:write after end,error ERR_STREAM_WRITE_AFTER_END:write after end
 destroy(err): error, close, errored => close errored=undefined
-timers run while a WriteStream writes 16 MiB in 64 KiB chunks => bytes=16777216,ticks>0=true
+timers run while a WriteStream writes 16 MiB in 64 KiB chunks => skipped
 Readable.pipe(ws) with slow source: bytes and finish => finish,close,"123"
 `,
     stderr: '',
@@ -313,8 +315,7 @@ w1.txt sha256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 w10.txt sha256 6ca7ea2feefc88ecb5ed6356ed963f47dc9137f82526fdd25d618ea626d0803f
 w11.txt sha256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 w12.txt sha256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
-w13.txt sha256 8eb42f7b670ca9b0842a3a7d5c141db2bdc8cb3b98c55b7ffb18e1615fac50ce
-w14.txt sha256 a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3
+w13.txt sha256 a665a45920422f9d417e4867efdc4fb8a04a1f3fff1fa07e998e86f7f7a27ae3
 w2.txt sha256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 w3.txt sha256 ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad
 w6.txt sha256 84cdb981037648c41f06dea25de7dcb2f26c5b965a47e8e2cc44b33e0412ad66
@@ -508,11 +509,11 @@ interface SdkRun {
 }
 
 /** The program's run in a fresh SDK sandbox on `page`, its written files read back by the page. */
-async function inSdk(page: Page, p: Program): Promise<SdkPin> {
+async function inSdk(page: Page, p: Program, args: readonly string[]): Promise<SdkPin> {
   await serveSteps(page, () => new Map([[p.id, { files: workspace(p) }]]));
   await page.goto('/no-coi-harness.html');
   const r = await page.evaluate(
-    async ({ root, url, id, program, unpack, reloaded }): Promise<SdkRun> => {
+    async ({ root, url, id, program, args, unpack, reloaded }): Promise<SdkRun> => {
       interface Outcome {
         stdout: string;
         stderr: string;
@@ -548,7 +549,8 @@ async function inSdk(page: Page, p: Program): Promise<SdkPin> {
           .run(`node zunpack.cjs s${id}.bin s${id}`).completion;
         if (unpacked.exitCode !== 0) throw new Error(`unpack: ${unpacked.stderr}`);
         const dir = `/ss/s${id}`;
-        const done = await sandbox.project({ root: dir }).run(`node ${program}`).completion;
+        const done = await sandbox.project({ root: dir }).run(['node', program, ...args].join(' '))
+          .completion;
         const files: SdkRun['files'] = {};
         const walk = async (rel: string): Promise<void> => {
           for (const e of await sandbox.fs.readdir(rel === '' ? dir : `${dir}/${rel}`)) {
@@ -590,6 +592,7 @@ async function inSdk(page: Page, p: Program): Promise<SdkPin> {
       url: `${STEP_URL}${p.id}`,
       id: p.id,
       program: programFile(p),
+      args,
       unpack: UNPACK,
       reloaded: RELOADED.source,
     },
@@ -618,11 +621,14 @@ async function inSdk(page: Page, p: Program): Promise<SdkPin> {
 
 test.describe('node-streams goal scenario vs Node (no-COI SDK)', () => {
   for (const p of [...CARRIER, ...MATRICES]) {
-    test(`${p.id} ${p.title} — ${verdict(p)}`, async ({ page }) => {
+    const rows = BROWSER_SKIPPED_ROWS[p.id] ?? [];
+    const title = [verdict(p), ...rows.map((r) => `row «${r.row}» skipped ${r.why}`)].join('; ');
+    test(`${p.id} ${p.title} — ${title}`, async ({ page }) => {
       test.setTimeout(300_000);
-      const rifty = await inSdk(page, p);
+      const args = skipArgs(rows);
+      const rifty = await inSdk(page, p, args);
       const node = {
-        ...pinOf(await inNode(p)),
+        ...pinOf(await inNode(p, args)),
         status: 'exited',
         worker: 'retained',
         effects: rifty.effects,

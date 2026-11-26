@@ -1,11 +1,11 @@
 import { type Page, expect, test } from '@playwright/test';
 import {
+  BROWSER_SKIPPED_ROWS,
   CARRIER,
   MATRICES,
   type Program,
   RELOADED,
   WORKBENCH_SKIPPED,
-  WORKBENCH_SKIPPED_ROWS,
   entryOf,
   inNode,
   manifest,
@@ -458,7 +458,7 @@ async function inWorkbench(page: Page, p: Program, args: readonly string[]): Pro
 test.describe('node-streams goal scenario vs Node (COI Workbench)', () => {
   for (const p of [...CARRIER, ...MATRICES]) {
     const skipped = WORKBENCH_SKIPPED[p.id];
-    const rows = WORKBENCH_SKIPPED_ROWS[p.id] ?? [];
+    const rows = BROWSER_SKIPPED_ROWS[p.id] ?? [];
     const title = [verdict(p), ...rows.map((r) => `row «${r.row}» skipped ${r.why}`)].join('; ');
     test(`${p.id} ${p.title} — ${skipped ?? title}`, async ({ page }) => {
       test.skip(skipped !== undefined, skipped);

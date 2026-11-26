@@ -116,17 +116,18 @@ export const WORKBENCH_SKIPPED: Readonly<Record<string, string>> = {
     'skipped until runtime-js/fs-fd-write-by-range (4c): 16 MiB through fs.WriteStream on the quadratic positional fd write path does not finish in 180 s',
 };
 /**
- * …and single rows, skipped by the program's own `--skip=` on both sides (the Node oracle and the
- * guest run the same rows), the other rows pinned.
+ * …and single rows on both browser hosts, skipped by the program's own `--skip=` on both sides (the
+ * Node oracle and the guest run the same rows), the other rows pinned. A row whose outcome is set by
+ * speed is pinned on no host where it behaves so.
  */
-export const WORKBENCH_SKIPPED_ROWS: Readonly<
+export const BROWSER_SKIPPED_ROWS: Readonly<
   Record<string, readonly { readonly row: string; readonly why: string }[]>
 > = {
   'm5-writestream': [
     {
       // TODO(backlog: runtime-js/fs-fd-write-by-range)
       row: 'timers run while a WriteStream writes 16 MiB in 64 KiB chunks',
-      why: 'until runtime-js/fs-fd-write-by-range (4c): 256 positional 64 KiB writes on the quadratic fd write path take about 16 min, and the row prints `no settle in 3s` only because the write outlasts 3 s (an outcome set by speed)',
+      why: 'until runtime-js/fs-fd-write-by-range (4c): the row prints `no settle in 3s` only when the write outlasts 3 s, an outcome set by speed. Workbench: 256 positional 64 KiB writes on the quadratic fd write path take about 16 min; SDK: about 3 s, on either side of the bound (CI run 45737744755 printed it, 12 local runs did not)',
     },
   ],
 };
