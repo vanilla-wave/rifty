@@ -177,6 +177,29 @@ console.log('PORT|clone=' + (clone.port instanceof MessagePort) + ',' + (clone.p
 clone.port.close();
 `,
   },
+  {
+    // The transfer wrapper's detach probe is its own native buffer: a guest-replaced
+    // global ArrayBuffer is never constructed by a port transfer, as in Node.
+    name: 'transfer-ignores-guest-array-buffer',
+    source: `const Native = ArrayBuffer;
+let constructs = 0;
+globalThis.ArrayBuffer = new Proxy(Native, {
+  construct(target, args, newTarget) {
+    constructs++;
+    return new Native(0, { maxByteLength: 8 });
+  },
+});
+const { port1: a, port2: b } = new MessageChannel();
+const { port1: c, port2: d } = new MessageChannel();
+a.postMessage(null, [c]);
+const seen = constructs;
+globalThis.ArrayBuffer = Native;
+console.log('PORT|guest-constructs=' + seen);
+a.close();
+b.close();
+d.close();
+`,
+  },
 ];
 
 /** Fault matrix row 1 (torn-state): one port contributes exactly 0 or 1 hold. */

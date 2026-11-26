@@ -337,6 +337,155 @@ describe('shipped ES2022 floor', () => {
     ).toContain('Object.groupBy');
   });
 
+  it.each([
+    ['nativeGetter(ArrayBuffer.prototype, "detached")', 'ArrayBuffer.prototype.detached'],
+    [
+      'Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, "detached").get.call(b)',
+      'ArrayBuffer.prototype.detached',
+    ],
+    [
+      'const P = ArrayBuffer.prototype; const k = "detached"; read(P, k)',
+      'ArrayBuffer.prototype.detached',
+    ],
+    ['Reflect.get(Object, `groupBy`)(items, key)', 'Object.groupBy'],
+    ['Reflect.get(Array.prototype, "toSorted").call(items)', 'Array.prototype.toSorted'],
+    ['new (Reflect.get(globalThis, "Iterator"))()', 'Iterator'],
+    ['Reflect.get(Atomics, "waitAsync")(words, 0, 0)', 'Atomics.waitAsync'],
+    // A wrapper may throw on absence before any presence check runs.
+    [
+      'const d = nativeGetter(ArrayBuffer.prototype, "detached"); if (d !== void 0) d.call(b)',
+      'ArrayBuffer.prototype.detached',
+    ],
+    [
+      'const t = Reflect.get(ArrayBuffer.prototype, "transfer"); t.call(b)',
+      'ArrayBuffer.prototype.transfer',
+    ],
+    [
+      'var t = Reflect.get(ArrayBuffer.prototype, "transfer"); t = f; if (t !== void 0) t.call(b)',
+      'ArrayBuffer.prototype.transfer',
+    ],
+    [
+      'const t = Reflect.get(ArrayBuffer.prototype, "transfer"); if (t !== null) t.call(b)',
+      'ArrayBuffer.prototype.transfer',
+    ],
+    // %TypedArray%.prototype reached through getPrototypeOf, as node-ipc-advanced.ts does.
+    [
+      'const getPrototypeOf = Object.getPrototypeOf; const TA = getPrototypeOf(Uint8Array.prototype); getter(TA, "toSorted")',
+      'TypedArray.prototype.toSorted',
+    ],
+    [
+      'const TA = Reflect.getPrototypeOf(Float64Array.prototype); Object.getOwnPropertyDescriptor(TA, "toReversed").value',
+      'TypedArray.prototype.toReversed',
+    ],
+    ['Reflect.get(Object.getPrototypeOf(Int8Array), "from")', null],
+    // `.value` on an absent descriptor throws before any presence check.
+    [
+      'const t = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, "transfer").value; if (t !== undefined) t.call(b)',
+      'ArrayBuffer.prototype.transfer',
+    ],
+    // Bundlers emit a top-level const as var: one assignment is still one value.
+    ['var K = "detached"; ng(ArrayBuffer.prototype, K)', 'ArrayBuffer.prototype.detached'],
+    ['let K = `detached`; ng(ArrayBuffer.prototype, K)', 'ArrayBuffer.prototype.detached'],
+  ])('rejects a listed builtin reached by name: %s', (source, builtin) => {
+    if (builtin === null) {
+      expect(violations(source)).toEqual([]);
+      return;
+    }
+    expect(violations(source).join('\n')).toContain(`${builtin} (by name)`);
+  });
+
+  it.each([
+    'nativeGetter(ArrayBuffer.prototype, "byteLength")',
+    'function read(target) { return Object.getOwnPropertyDescriptor(target, "detached"); }',
+    'let k = "detached"; k = "byteLength"; read(ArrayBuffer.prototype, k)',
+    'Reflect.get(Foo.prototype, "union")',
+    'const t = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, "transfer")?.value; if (t !== undefined) t.call(b)',
+    'const t = Reflect.get(ArrayBuffer.prototype, "transfer"); function f(b) { if (t === void 0) return b; return t.call(b); }',
+    'const g = Reflect.get(ArrayBuffer.prototype, "detached"); const f = (b) => typeof g === "function" ? g.call(b) : 0',
+    'if (typeof Atomics.waitAsync === "function") Reflect.get(Atomics, "waitAsync")(words, 0, 0)',
+    // Presence tests and non-reads, like `in`.
+    'Object.hasOwn(ArrayBuffer.prototype, "detached")',
+    'Object.prototype.hasOwnProperty.call(ArrayBuffer.prototype, "detached")',
+    'const has = Object.prototype.hasOwnProperty; has.call(ArrayBuffer.prototype, "transfer")',
+    'Reflect.has(ArrayBuffer.prototype, "detached")',
+    'Object.prototype.propertyIsEnumerable.call(ArrayBuffer.prototype, "detached")',
+    'console.warn(ArrayBuffer.prototype, "transfer")',
+    'var k = "detached"; k = "byteLength"; read(ArrayBuffer.prototype, k)',
+  ])('accepts by-name reads that are pre-floor or presence-checked: %s', (source) => {
+    expect(violations(source)).toEqual([]);
+  });
+
+  it('rejects the real port-ref install when it reads the Chrome 114 detached getter', () => {
+    const bundle = (contents: string) =>
+      buildSync({
+        stdin: {
+          contents,
+          resolveDir: 'packages/runtime-js/src/internal',
+          sourcefile: 'message-port-ref.ts',
+          loader: 'ts',
+        },
+        bundle: true,
+        write: false,
+        format: 'esm',
+        platform: 'browser',
+        target: 'es2022',
+        minify: true,
+      }).outputFiles[0].text;
+    const source = readFileSync('packages/runtime-js/src/internal/message-port-ref.ts', 'utf8');
+    expect(violations(bundle(source))).toEqual([]);
+    const mutant = source.replace(
+      "nativeGetter(NativeArrayBuffer.prototype, 'byteLength')",
+      "nativeGetter(NativeArrayBuffer.prototype, 'detached')",
+    );
+    expect(mutant).not.toBe(source);
+    expect(violations(bundle(mutant)).join('\n')).toContain(
+      'ArrayBuffer.prototype.detached (by name)',
+    );
+  });
+
+  it('admits the real blob store transfer probe only while every use checks presence', () => {
+    const source = readFileSync('packages/isolate-guest/src/guest/node-blob/byte-store.ts', 'utf8');
+    const emitted = transformSync(source, { loader: 'ts', target: 'es2022' }).code;
+    expect(violations(emitted)).toEqual([]);
+    const unchecked = emitted.replace('if (transferBuffer !== void 0) {', 'if (true) {');
+    expect(unchecked).not.toBe(emitted);
+    expect(violations(unchecked).join('\n')).toContain('ArrayBuffer.prototype.transfer (by name)');
+    const asserted = source.replace("'transfer')?.value", "'transfer')!.value");
+    expect(asserted).not.toBe(source);
+    const assertedEmitted = transformSync(asserted, { loader: 'ts', target: 'es2022' }).code;
+    expect(violations(assertedEmitted).join('\n')).toContain(
+      'ArrayBuffer.prototype.transfer (by name)',
+    );
+  });
+
+  it('rejects a by-name post-floor key held in a bundled top-level const', () => {
+    const emitted = buildSync({
+      stdin: {
+        contents:
+          "const KEY = 'detached';\nexport const read = (ng: (o: object, k: string) => unknown) => ng(ArrayBuffer.prototype, KEY);",
+        loader: 'ts',
+      },
+      bundle: true,
+      write: false,
+      format: 'esm',
+      target: 'es2022',
+    }).outputFiles[0].text;
+    expect(emitted).toMatch(/var KEY = "detached"/);
+    expect(violations(emitted).join('\n')).toContain('ArrayBuffer.prototype.detached (by name)');
+  });
+
+  it('checks the real advanced-IPC %TypedArray% getters before and after a post-floor key', () => {
+    const source = readFileSync('packages/runtime-js/src/internal/node-ipc-advanced.ts', 'utf8');
+    const emitted = transformSync(source, { loader: 'ts', target: 'es2022' }).code;
+    expect(violations(emitted)).toEqual([]);
+    const mutant = emitted.replace(
+      'getter(TypedArrayPrototype, "buffer")',
+      'getter(TypedArrayPrototype, "toSorted")',
+    );
+    expect(mutant).not.toBe(emitted);
+    expect(violations(mutant).join('\n')).toContain('TypedArray.prototype.toSorted (by name)');
+  });
+
   it('checks nested package and playground assets, ignoring maps and declarations', () => {
     const directory = mkdtempSync(join(tmpdir(), 'rifty-es-floor-'));
     scratch.push(directory);
