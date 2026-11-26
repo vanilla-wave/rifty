@@ -60,7 +60,12 @@ function agnosticRemove(emitter: Agnostic, name: unknown, listener: Listener, fl
     emitter.removeEventListener(name, listener, flags);
   else throw invalidArgType('"emitter" argument', 'an instance of EventEmitter', emitter);
 }
-function agnosticAdd(emitter: Agnostic, name: unknown, listener: Listener, flags: { once?: boolean }) {
+function agnosticAdd(
+  emitter: Agnostic,
+  name: unknown,
+  listener: Listener,
+  flags: { once?: boolean },
+) {
   if (typeof emitter.on === 'function') {
     const ee = emitter as Required<Pick<Agnostic, 'once'>> & { on: Listener };
     if (flags?.once) ee.once(name, listener);
@@ -93,7 +98,8 @@ export async function once(
       reject(err);
     };
     const resolver = (...args: unknown[]): void => {
-      if (typeof target.removeListener === 'function') target.removeListener('error', errorListener);
+      if (typeof target.removeListener === 'function')
+        target.removeListener('error', errorListener);
       if (signal != null) agnosticRemove(signal as unknown as Agnostic, 'abort', abortListener);
       resolve(args);
     };

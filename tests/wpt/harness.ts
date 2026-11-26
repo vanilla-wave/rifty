@@ -102,6 +102,12 @@ export interface Report {
    */
   readonly harness: string;
   readonly subtests: readonly Subtest[];
+  /** With `{ stderr: true }` only: the run's stderr, the pid of `(node:<pid>)` masked. */
+  readonly stderr?: string;
+}
+/** `stderr: true`: the file writes process warnings Node prints too — stderr is compared, not a fault. */
+export interface ReportOptions {
+  readonly stderr?: boolean;
 }
 export interface Run {
   readonly stdout: string;
@@ -111,9 +117,9 @@ export interface Run {
   readonly termination?: string;
 }
 
-export function parseReport(run: Run): Report {
+export function parseReport(run: Run, options: ReportOptions = {}): Report {
   // The report exits 0 at once: anything after it (a hang, another exit code, stderr) is a fault.
-  if (run.exitCode !== 0 || run.termination !== undefined || run.stderr !== '')
+  if (run.exitCode !== 0 || run.termination !== undefined || (!options.stderr && run.stderr !== ''))
     return {
       harness: `unclean end: exit ${run.exitCode}${run.termination === undefined ? '' : `, ${run.termination}`}${run.stderr === '' ? '' : `, stderr ${JSON.stringify(run.stderr.slice(0, 300))}`}`,
       subtests: [],
@@ -135,11 +141,12 @@ export function parseReport(run: Run): Report {
       status: STATUS[t.status] ?? String(t.status),
       message: t.message,
     })),
+    ...(options.stderr ? { stderr: run.stderr.replace(/^\(node:\d+\) /gm, '(node:<pid>) ') } : {}),
   };
 }
 
 /** The file run by live Node (the oracle); throws on another Node version. */
-export function inNode(file: string, timeoutMs = 120_000): Report {
+export function inNode(file: string, timeoutMs = 120_000, options: ReportOptions = {}): Report {
   if (process.version !== WPT_NODE)
     throw new Error(`wpt oracle is Node ${WPT_NODE}, this is ${process.version}`);
   const dir = mkdtempSync(join(tmpdir(), 'rifty-wpt-'));
@@ -152,12 +159,15 @@ export function inNode(file: string, timeoutMs = 120_000): Report {
       timeout: timeoutMs,
       maxBuffer: 64 * 2 ** 20,
     });
-    return parseReport({
-      stdout: r.stdout,
-      stderr: r.stderr,
-      exitCode: r.status,
-      ...(r.signal === null ? {} : { termination: r.signal }),
-    });
+    return parseReport(
+      {
+        stdout: r.stdout,
+        stderr: r.stderr,
+        exitCode: r.status,
+        ...(r.signal === null ? {} : { termination: r.signal }),
+      },
+      options,
+    );
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -179,6 +189,8 @@ export function differences(
     out.push(`oracle: Node ended ${node.harness} with ${node.subtests.length} subtests`);
   if (guest.harness !== node.harness)
     out.push(`harness: node ${node.harness}, guest ${guest.harness}`);
+  if (guest.stderr !== node.stderr)
+    out.push(`stderr: node ${JSON.stringify(node.stderr)}, guest ${JSON.stringify(guest.stderr)}`);
   const byName = (r: Report) => {
     const m = new Map<string, Subtest>();
     for (const t of r.subtests) {

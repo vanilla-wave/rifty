@@ -6,7 +6,9 @@
  */
 let kResistStopPropagation: symbol | undefined;
 
-export function bindNodeEventTargetSymbols(symbols: { readonly kResistStopPropagation: symbol }): void {
+export function bindNodeEventTargetSymbols(symbols: {
+  readonly kResistStopPropagation: symbol;
+}): void {
   kResistStopPropagation = symbols.kResistStopPropagation;
 }
 

@@ -12,7 +12,8 @@ guest lacks is a difference.
   `self`, `GLOBAL`, `location`, `META_TITLE`) + `resources/testharness.js` + `META: script=`
   dependencies + the test; it runs unchanged as `node t.cjs` and on the host. `inNode(file,
   timeoutMs?)`, `parseReport(run)`: a result only from a clean end — exit 0, no `termination`,
-  empty stderr — else `unclean end: …` with no subtests; `differences(node, guest, excluded)`,
+  empty stderr — else `unclean end: …` with no subtests (`{ stderr: true }`: a file whose process
+  warnings Node prints too — stderr, pid masked, is compared instead of refused); `differences(node, guest, excluded)`,
   which also reports an oracle that did not end `OK`; `coverageProblems(dir, run, notRun)`: every
   vendored `.any.js` under `dir` is run or listed as not run, every run file vendored. `META: variant=`, `global=`, `timeout=` are
   ignored (one run per file, the harness's default timeout).
