@@ -89,6 +89,8 @@ pins `'exit'` after the last callback. ESM and `worker.terminate()` rows: Workbe
   10/10 `""`; one already running completes, idle pool 79/80 `"data"`: not pinned), a sandbox stop
   does not run it (no Node counterpart; compat isolate-host.md).
   Not pinnable (Node varies): an op an `'exit'` listener submits at a natural exit (13/20 not written).
+- 2026-11-26 (manager): cost accepted, two turns stay — the numbers (micro loops, library tests,
+  `react-vite-preset` phases and `ioTurn` counters) are in PR #468; no per-batch operation turn.
 - Host turn = rifty's `setImmediate`, driven per host: a Node host's own `setImmediate` (a Node
   `MessagePort` drains up to 1000 messages per loop turn: 512 chained messages gave 0–1 timer ticks),
   the isolate bridge's next host turn (`timerStart` 0 ms → host `setImmediate`, was a 1 ms timer),
