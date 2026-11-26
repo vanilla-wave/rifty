@@ -2,7 +2,11 @@
  * A view's bytes as Node reads them, through load-time intrinsics: never through
  * members a program patches (`slice`, `subarray`, species, a global
  * `Uint8Array`). Node's C++ reads a view's memory (`ArrayBufferViewContents`);
- * its JS reads whichever members its source names — callers pick per entry.
+ * its JS reads whichever members its source names, so callers pick per entry
+ * (measured vs Node v24.16.0, `fs/write-view-bytes-intrinsics`; do not unify):
+ * `string_decoder` and lib/fs (`writeFileSync`/`appendFileSync`/`writeFile(cb)`/
+ * `writeSync`/`write`) read the memory, lib/fs its length from JS `byteLength`;
+ * fs/promises and stream `write` read JS `buffer`/`byteOffset`/`byteLength`.
  */
 const U8 = Uint8Array;
 const TypedArrayProto = Object.getPrototypeOf(U8.prototype) as object;

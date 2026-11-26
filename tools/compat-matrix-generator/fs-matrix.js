@@ -8,7 +8,7 @@ export const fsMatrix = {
     [
       '`readFileSync` / `writeFileSync`',
       '✅',
-      'utf8 strings; any TypedArray/DataView (incl. offset and SharedArrayBuffer views) writes its raw bytes, copied: the file never shares memory with a program buffer, written or read (`fs/write-read-buffer-ownership`, `fs/write-array-buffer-view-kinds`)',
+      'utf8 strings; any TypedArray/DataView (incl. offset and SharedArrayBuffer views) writes its raw bytes, copied: the file never shares memory with a program buffer, written or read (`fs/write-read-buffer-ownership`, `fs/write-array-buffer-view-kinds`); a view\'s memory and length as Node reads them (`fs/write-view-bytes-intrinsics`). The copy is one memcpy: on the no-COI SDK, whose store copies too, `writeFileSync` of 16 MiB takes 4.8 ms (was 3.3); Workbench, in-process and isolate within noise',
     ],
     [
       'write `data` that is neither a string nor an ArrayBufferView',

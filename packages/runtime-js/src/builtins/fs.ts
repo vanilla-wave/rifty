@@ -1102,8 +1102,8 @@ export function futimes(
 
 /**
  * `fs.openAsBlob(path[, options])` (v19.8) — read the VFS bytes into a resolved
- * `Blob` (default `type` is `''`). Eager read: observably identical to Node's
- * lazy read for an in-memory VFS within one program. `Blob` is a realm global.
+ * `Blob` (default `type` is `''`). Eager read: not Node's lazy file-backed Blob (a later change of the
+ * file leaves it readable; Node: `NotReadableError`) — backlog runtime-js/fs-open-as-blob-eager-read.
  */
 export async function openAsBlob(p: PathLike, options?: { type?: string }): Promise<Blob> {
   let bytes: Uint8Array;
