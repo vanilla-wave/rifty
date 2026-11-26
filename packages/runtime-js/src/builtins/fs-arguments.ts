@@ -10,6 +10,7 @@ import { invalidArgType } from '../internal/node-received.ts';
 import { Buffer } from './buffer.ts';
 import { type PathLike, pathToString } from './fs-path.ts';
 import { utimesArgs } from './fs-times.ts';
+import { isAnyArrayBuffer } from './view-bytes.ts';
 
 type Options = Record<string, unknown>;
 
@@ -102,11 +103,18 @@ export const at = {
     const flag = (o.flag || flagDefault) as string;
     const flush = o.flush ?? false;
     validateBoolean(flush, 'options.flush');
-    // String data is encoded at the call; a view's bytes are read when the write runs.
+    // String data is encoded at the call; a view's bytes are read when the write runs (lib/fs:
+    // its memory; fs/promises: through its JS `buffer`/`byteOffset`/`byteLength`, view-bytes.ts).
+    if (isAnyArrayBuffer(data))
+      throw invalidArgType(
+        '"data" argument',
+        'of type string or an instance of Buffer, TypedArray, or DataView',
+        data,
+      );
     const bytes =
-      data instanceof Uint8Array
-        ? data
-        : Buffer.from(data as string, ((o.encoding as string) || 'utf8') as 'utf8');
+      typeof data === 'string'
+        ? Buffer.from(data, ((o.encoding as string) || 'utf8') as 'utf8')
+        : (data as Uint8Array);
     if (promise) void o.signal;
     void o.signal;
     const mode = o.mode as number | undefined;
@@ -114,7 +122,7 @@ export const at = {
     const late = () => {
       if (promise) void o.encoding;
     };
-    return { path: pathOrFd(path), bytes, flag, mode, late };
+    return { path: pathOrFd(path), bytes, flag, mode, late, promise };
   },
   appendFile(path: unknown, data: unknown, options: unknown, promise: boolean) {
     const o = copyObject(getOptions(options, { encoding: 'utf8', mode: 0o666, flag: 'a' }));

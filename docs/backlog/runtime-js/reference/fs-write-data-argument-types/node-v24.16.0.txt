@@ -1,0 +1,90 @@
+writeFileSync 123 throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received type number (123) size ENOENT
+appendFileSync 123 throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received type number (123) size ENOENT
+writeFileSync r+ 123 throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received type number (123) size 2
+writeSync 123 throws TypeError ERR_INVALID_ARG_TYPE The "buffer" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received type number (123) size 0
+writeFile 123 throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received type number (123) size ENOENT
+appendFile 123 throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received type number (123) size ENOENT
+write 123 throws TypeError ERR_INVALID_ARG_TYPE The "buffer" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received type number (123) size 0
+promises.writeFile 123 cb err TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received type number (123) size ENOENT
+promises.appendFile 123 cb err TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received type number (123) size ENOENT
+writeFileSync null throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received null size ENOENT
+appendFileSync null throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received null size ENOENT
+writeFileSync r+ null throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received null size 2
+writeSync null throws TypeError ERR_INVALID_ARG_TYPE The "buffer" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received null size 0
+writeFile null throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received null size ENOENT
+appendFile null throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received null size ENOENT
+write null throws TypeError ERR_INVALID_ARG_TYPE The "buffer" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received null size 0
+promises.writeFile null cb err TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received null size ENOENT
+promises.appendFile null cb err TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received null size ENOENT
+writeFileSync undefined throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received undefined size ENOENT
+appendFileSync undefined throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received undefined size ENOENT
+writeFileSync r+ undefined throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received undefined size 2
+writeSync undefined throws TypeError ERR_INVALID_ARG_TYPE The "buffer" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received undefined size 0
+writeFile undefined throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received undefined size ENOENT
+appendFile undefined throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received undefined size ENOENT
+write undefined throws TypeError ERR_INVALID_ARG_TYPE The "buffer" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received undefined size 0
+promises.writeFile undefined cb err TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received undefined size ENOENT
+promises.appendFile undefined cb err TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received undefined size ENOENT
+writeFileSync [] throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of Array size ENOENT
+appendFileSync [] throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of Array size ENOENT
+writeFileSync r+ [] throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of Array size 2
+writeSync [] throws TypeError ERR_INVALID_ARG_TYPE The "buffer" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of Array size 0
+writeFile [] throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of Array size ENOENT
+appendFile [] throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of Array size ENOENT
+write [] throws TypeError ERR_INVALID_ARG_TYPE The "buffer" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of Array size 0
+promises.writeFile [] ok size 0
+promises.appendFile [] ok size 0
+writeFileSync [1,2,3] throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of Array size ENOENT
+appendFileSync [1,2,3] throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of Array size ENOENT
+writeFileSync r+ [1,2,3] throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of Array size 2
+writeSync [1,2,3] throws TypeError ERR_INVALID_ARG_TYPE The "buffer" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of Array size 0
+writeFile [1,2,3] throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of Array size ENOENT
+appendFile [1,2,3] throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of Array size ENOENT
+write [1,2,3] throws TypeError ERR_INVALID_ARG_TYPE The "buffer" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of Array size 0
+promises.writeFile [1,2,3] cb err TypeError ERR_INVALID_ARG_TYPE The first argument must be of type string or an instance of Buffer, ArrayBuffer, or Array or an Array-like Object. Received type number (1) size 0
+promises.appendFile [1,2,3] cb err TypeError ERR_INVALID_ARG_TYPE The first argument must be of type string or an instance of Buffer, ArrayBuffer, or Array or an Array-like Object. Received type number (1) size 0
+writeFileSync {} throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of Object size ENOENT
+appendFileSync {} throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of Object size ENOENT
+writeFileSync r+ {} throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of Object size 2
+writeSync {} throws TypeError ERR_INVALID_ARG_TYPE The "buffer" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of Object size 0
+writeFile {} throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of Object size ENOENT
+appendFile {} throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of Object size ENOENT
+write {} throws TypeError ERR_INVALID_ARG_TYPE The "buffer" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of Object size 0
+promises.writeFile {} cb err TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of Object size ENOENT
+promises.appendFile {} cb err TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of Object size ENOENT
+writeFileSync toString obj throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of Object size ENOENT
+appendFileSync toString obj throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of Object size ENOENT
+writeFileSync r+ toString obj throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of Object size 2
+writeSync toString obj throws TypeError ERR_INVALID_ARG_TYPE The "buffer" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of Object size 0
+writeFile toString obj throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of Object size ENOENT
+appendFile toString obj throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of Object size ENOENT
+write toString obj throws TypeError ERR_INVALID_ARG_TYPE The "buffer" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of Object size 0
+promises.writeFile toString obj cb err TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of Object size ENOENT
+promises.appendFile toString obj cb err TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of Object size ENOENT
+writeFileSync ArrayBuffer throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of ArrayBuffer size ENOENT
+appendFileSync ArrayBuffer throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of ArrayBuffer size ENOENT
+writeFileSync r+ ArrayBuffer throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of ArrayBuffer size 2
+writeSync ArrayBuffer throws TypeError ERR_INVALID_ARG_TYPE The "buffer" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of ArrayBuffer size 0
+writeFile ArrayBuffer throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of ArrayBuffer size ENOENT
+appendFile ArrayBuffer throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of ArrayBuffer size ENOENT
+write ArrayBuffer throws TypeError ERR_INVALID_ARG_TYPE The "buffer" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of ArrayBuffer size 0
+promises.writeFile ArrayBuffer cb err TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of ArrayBuffer size ENOENT
+promises.appendFile ArrayBuffer cb err TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of ArrayBuffer size ENOENT
+writeFileSync SharedArrayBuffer throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of SharedArrayBuffer size ENOENT
+appendFileSync SharedArrayBuffer throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of SharedArrayBuffer size ENOENT
+writeFileSync r+ SharedArrayBuffer throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of SharedArrayBuffer size 2
+writeSync SharedArrayBuffer throws TypeError ERR_INVALID_ARG_TYPE The "buffer" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of SharedArrayBuffer size 0
+writeFile SharedArrayBuffer throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of SharedArrayBuffer size ENOENT
+appendFile SharedArrayBuffer throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of SharedArrayBuffer size ENOENT
+write SharedArrayBuffer throws TypeError ERR_INVALID_ARG_TYPE The "buffer" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of SharedArrayBuffer size 0
+promises.writeFile SharedArrayBuffer cb err TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of SharedArrayBuffer size ENOENT
+promises.appendFile SharedArrayBuffer cb err TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of SharedArrayBuffer size ENOENT
+writeFileSync new String throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of String size ENOENT
+appendFileSync new String throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of String size ENOENT
+writeFileSync r+ new String throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of String size 2
+writeSync new String throws TypeError ERR_INVALID_ARG_TYPE The "buffer" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of String size 0
+writeFile new String throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of String size ENOENT
+appendFile new String throws TypeError ERR_INVALID_ARG_TYPE The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of String size ENOENT
+write new String throws TypeError ERR_INVALID_ARG_TYPE The "buffer" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received an instance of String size 0
+promises.writeFile new String ok size 1
+promises.appendFile new String ok size 1

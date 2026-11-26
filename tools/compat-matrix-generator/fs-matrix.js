@@ -8,7 +8,12 @@ export const fsMatrix = {
     [
       '`readFileSync` / `writeFileSync`',
       '✅',
-      'utf8 strings and binary `Uint8Array`/Buffer-like reads',
+      "utf8 strings; any TypedArray/DataView (incl. offset and SharedArrayBuffer views) writes its raw bytes, copied: the file never shares memory with a program buffer, written or read (`fs/write-read-buffer-ownership`, `fs/write-array-buffer-view-kinds`); a view's memory and length as Node reads them (`fs/write-view-bytes-intrinsics`). The copy is one memcpy: on the no-COI SDK, whose store copies too, `writeFileSync` of 16 MiB takes 4.8 ms (was 3.3); Workbench, in-process and isolate within noise",
+    ],
+    [
+      'write `data` that is neither a string nor an ArrayBufferView',
+      '⚠️',
+      "An `ArrayBuffer`/`SharedArrayBuffer` is Node's `ERR_INVALID_ARG_TYPE` on the sync and `fs.promises` entries (`fs/write-array-buffer-refused`; callback `writeFile` hands it to the callback, Node throws). A number writes an empty file; `null`/`undefined` leave a file whose `statSync`/`readFileSync` throw a code-less `TypeError`; an Array or other object writes its elements' bytes; a `Proxy` over a view throws a code-less `TypeError` (Node: `ERR_INVALID_ARG_TYPE`, callback forms synchronously); `writeSync`/`write` refuse them without a code — `backlog/runtime-js/fs-write-data-argument-types`. A program that patched `%TypedArray%.prototype` members or replaced global `Uint8Array`/`DataView`/`ArrayBuffer` writes as Node in-process and in the isolate (`fs/write-view-bytes-patched-intrinsics`); on Workbench and the SDK the store transport fails — `backlog/runtime-js/post-guest-paths-use-replaceable-intrinsics`",
     ],
     ['`mkdirSync({ recursive })`', '✅', 'Creates parent directories'],
     [
@@ -54,6 +59,11 @@ export const fsMatrix = {
       'Async completion turn (callbacks, `fs.promises`)',
       '⚠️',
       "As Node's threadpool round trip: the operation runs in one loop turn (a host immediate), its callback or promise settles in an I/O completion turn, so a chain of fs calls yields to timers and the immediates queued beside a call run first; a callback form fixes its options, path and positions at the call and throws a non-function callback there (`makeCallback`); the process end (`exit()`, a fatal error) runs submitted operations, no callback (Node joins its pool); `Dir` reads one batch of `bufferSize` per request, the rest on `process.nextTick`. Declared: one round trip per call, so a multi-round-trip `writeFile` differs where Node opens first — bytes mutated in a `setImmediate` (Node `9,9,9`, rifty `1,2,3`), `writeFile` + `exit()` in one tick (Node `\"\"`, rifty the data): `backlog/runtime-js/fs-async-op-io-rounds`; `fs.read(0)` (stdin) keeps its own path, its callback outside the turn: `backlog/runtime-js/fs-read-stdin-turn`; the order of a completion against timers and immediates is Node's only for a call made inside an fs callback on the in-process host — outside one (an immediate, a timer, the top level) a call completes a loop turn later on every host, and inside one Workbench/SDK run a due 0 ms timer before the immediate, the isolate either (a `promises.readFile` callback's immediate-before-timer, Node's and main's on Workbench/SDK, is now the timer first): `backlog/runtime-js/fs-completion-loop-phase-order`. Parity `fs/callback-turn-order`, `fs/callback-phase-order`, `fs/async-arguments-at-call`, `fs/dir-read-turns`",
+    ],
+    [
+      'Buffer mutated while an async write is pending',
+      '⚠️',
+      "A mutation after the write completed never reaches the file; one in the caller's synchronous turn or a microtask after `promises.writeFile`/`appendFile`, callback `writeFile`/`appendFile`, or a `WriteStream` write before `open`, lands, as in Node (`fs/async-write-buffer-moment`, `fs/callback-turn-order`). Not Node: an open `WriteStream` takes the bytes at the call — `backlog/runtime-js/fs-write-stream-node-source`; one in a `setImmediate` after a multi-round-trip write — `backlog/runtime-js/fs-async-op-io-rounds`. After `fs.write(fd)` a mutation in the caller's turn, a microtask or a `nextTick` races in Node's threadpool (macOS mostly 9,9,9; Linux CI 1,2,3), not pinned",
     ],
     [
       'Callback `fs.appendFile` / `fs.rm`',

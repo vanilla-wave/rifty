@@ -332,7 +332,12 @@
     "fs-append-file-rm-callbacks": "node",
     "fs-async-arguments-at-call": "node",
     "fs-dir-read-turns": "node",
-    "fs-async-options-at-call": "node"
+    "fs-async-options-at-call": "node",
+    "fs-write-read-buffer-ownership": "node",
+    "fs-read-stream-chunk-ownership": "node",
+    "fs-write-array-buffer-view-kinds": "node",
+    "fs-async-write-buffer-moment": "node",
+    "fs-write-view-bytes-intrinsics": "node"
   },
   "COI": {
     "entry-facts": "node",
@@ -659,7 +664,13 @@
     "fs-append-file-rm-callbacks": "node",
     "fs-async-arguments-at-call": "node",
     "fs-dir-read-turns": "node",
-    "fs-async-options-at-call": "node"
+    "fs-async-options-at-call": "node",
+    "fs-write-read-buffer-ownership": "node",
+    "fs-read-stream-chunk-ownership": "node",
+    "fs-write-array-buffer-view-kinds": "node",
+    "fs-async-write-buffer-moment": "node",
+    "fs-write-view-bytes-intrinsics": "node",
+    "fs-write-shared-array-buffer-ownership": "node"
   },
   "isolate": {
     "first-line-html-close": "node",
