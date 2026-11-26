@@ -90,6 +90,15 @@ const rows = [
     'Array.prototype[Symbol.iterator] throws',
     () => replaced(Array.prototype, [Symbol.iterator], () => boom('@@iterator'), work),
   ],
+  ...['slice', 'includes', 'startsWith', 'endsWith', 'split'].map((m) => [
+    `String.prototype.${m} throws`,
+    () => replaced(String.prototype, [m], boom, work),
+  ]),
+  ...['get', 'set', 'delete'].map((m) => [
+    `Map.prototype.${m} throws`,
+    () => replaced(Map.prototype, [m], boom, work),
+  ]),
+  ['Number.isInteger throws', () => replaced(Number, ['isInteger'], boom, work)],
   ['Promise.prototype.then throws', () => replaced(Promise.prototype, ['then'], boom, work)],
   ['Promise.prototype.finally throws', () => replaced(Promise.prototype, ['finally'], boom, work)],
   // Not `apply`: Node's own uncaught-error path reads it live, so no exit handler runs after it.

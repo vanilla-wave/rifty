@@ -13,6 +13,7 @@
  *   one is run or in `NOT_RUN` with its reason (`coverageProblems`).
  */
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -48,7 +49,8 @@ const NOT_RUN: Readonly<Record<string, string>> = {
 /**
  * Rows where rifty's bindings differ from Node's today (measured on main aa7b332cc): item → row →
  * the owning unit (its backlog item; the marker reds `backlog:check` when the item goes while the
- * pin stays) and today's rifty value. Units 1, 2, 3 and 4b landed: their rows are equal.
+ * pin stays) and today's rifty value. Units 1, 2, 3 and 4b landed: their rows are equal. Measured
+ * with the program on rifty's `process` (the core's), main be99bee9e.
  */
 // TODO(backlog: runtime-js/fs-writev-fsync)
 const WRITEV = 'runtime-js/fs-writev-fsync';
@@ -58,10 +60,18 @@ const IO_TURN = 'runtime-js/fs-callbacks-io-turn';
 const AL = 'runtime-js/stream-core-abort-listeners-host-event-target';
 // TODO(backlog: runtime-js/post-guest-paths-use-replaceable-intrinsics)
 const LIVE = 'runtime-js/post-guest-paths-use-replaceable-intrinsics';
-// TODO(backlog: runtime-js/events-prototype-shape)
-const EE_STORE = 'runtime-js/events-prototype-shape';
-// TODO(backlog: runtime-js/events-once-wrapper-bind)
-const ONCE_BIND = 'runtime-js/events-once-wrapper-bind';
+// Every row where the core shows rifty's EventEmitter, not Node's (its table of dependency points).
+// TODO(backlog: runtime-js/events-static-surface)
+const EVENTS = 'runtime-js/events-static-surface';
+// TODO(backlog: runtime-js/browser-host-realm-uncaught-fatal-report)
+const BROWSER_FATAL = 'runtime-js/browser-host-realm-uncaught-fatal-report';
+// `process.argv0` is `'rifty'`: a warning's `(Use \`rifty --trace-deprecation …\`)` hint.
+// TODO(backlog: runtime-js/process-versions-node-honesty)
+const IDENTITY = 'runtime-js/process-versions-node-honesty';
+// TODO(backlog: runtime-js/file-url-host-error-platform)
+const FILE_URL = 'runtime-js/file-url-host-error-platform';
+// TODO(backlog: runtime-js/inspect-default-format-gaps)
+const INSPECT = 'runtime-js/inspect-default-format-gaps';
 interface Pin {
   readonly owner: string;
   /** Today's rifty value; more than one only where the value is set by speed (declared at the pin). */
@@ -107,16 +117,16 @@ const PINNED: Readonly<Record<string, Readonly<Record<string, Pin>>>> = {
   // rifty's EventEmitter keeps listeners in `_listenersMap`; the core's `eventNames` walks `_events`.
   'p2-emitter-store': {
     'Readable eventNames, _events keys, _eventsCount': pin(
-      EE_STORE,
+      EVENTS,
       '[] close,error,data,end,readable undefined',
     ),
-    'Writable eventNames, error listeners': pin(EE_STORE, '[] 1'),
-    'pipe destination: error listeners, eventNames': pin(EE_STORE, '1 []'),
+    'Writable eventNames, error listeners': pin(EVENTS, '[] 1'),
+    'pipe destination: error listeners, eventNames': pin(EVENTS, '1 []'),
   },
   // io's EventEmitter.emit reads `slice` live: the run dies (exit 1), Node completes.
   'p1-intrinsics-replaced: Array.prototype.slice throws': {
     exit: pin(LIVE, '1'),
-    stderr: pin(LIVE, '\nError: replaced slice called\n\nNode.js v24.16.0\n'),
+    stderr: pin(LIVE, 'Error: replaced slice called\n'),
     'line 1': pin(LIVE, ''),
     'Array.prototype.slice throws': pin(LIVE, '(no row)'),
     'line 2': pin(LIVE, '(no row)'),
@@ -130,8 +140,101 @@ const PINNED: Readonly<Record<string, Readonly<Record<string, Pin>>>> = {
   },
   // Node's events `_onceWrap` reads `bind` live and throws; rifty's `once` does not.
   'p1-intrinsics-replaced: Function.prototype.bind throws': {
-    'Function.prototype.bind throws': pin(ONCE_BIND, 'A.B.C. 12 hello intrinsics finished:ok'),
+    'Function.prototype.bind throws': pin(EVENTS, 'A.B.C. 12 hello intrinsics finished:ok'),
   },
+  'm10-abort-order-leak': {
+    'listeners left on the signal after 10000 completed reduce({signal})': pin(
+      EVENTS,
+      'listeners=n/a',
+    ),
+    'listeners left on the signal after 40000 completed finished(r, {signal})': pin(
+      EVENTS,
+      'listeners=n/a',
+    ),
+  },
+  'e1-unhandled-error': {
+    stderr: pin(EVENTS, 'Error: boom\n'),
+  },
+  'e2-unhandled-non-error': {
+    stderr: pin(EVENTS, "Error: Unhandled 'error' event: str\n"),
+  },
+  'e3-max-listeners': {
+    stderr: pin(
+      EVENTS,
+      'MaxListenersExceededWarning: 11 end listeners added. Use setMaxListeners() to increase the limit.\nMaxListenersExceededWarning: 11 data listeners added. Use setMaxListeners() to increase the limit.\n',
+    ),
+    'setMaxListeners(-1)': pin(EVENTS, 'no throw'),
+    'warning events': pin(EVENTS, 'none'),
+  },
+  'e4-emitter-surface': {
+    store: pin(EVENTS, 'undefined []'),
+    errorMonitor: pin(EVENTS, 'error'),
+    'legacy Stream eventNames': pin(EVENTS, 'threw Reflect.ownKeys called on non-object'),
+    'listenerCount(ev, fn)': pin(EVENTS, '2'),
+    'statics on/getEventListeners': pin(EVENTS, 'undefined undefined'),
+    captureRejections: pin(EVENTS, 'unhandledRejection rejection'),
+  },
+  'f1-file-url': {
+    host: pin(
+      FILE_URL,
+      'TypeError|ERR_INVALID_FILE_URL_HOST|File URL host must be "localhost" or empty on a POSIX platform',
+    ),
+  },
+  'p1-intrinsics-replaced: Array.prototype.shift throws': {
+    stderr: pin(BROWSER_FATAL, 'Error: replaced shift called\n'),
+  },
+  'p1-intrinsics-replaced: Array.prototype.splice throws': {
+    stderr: pin(BROWSER_FATAL, 'Error: replaced splice called\n'),
+  },
+  'p1-intrinsics-replaced: String.prototype.slice throws': {
+    'String.prototype.slice throws': pin(LIVE, 'threw replaced slice called'),
+  },
+  'p1-intrinsics-replaced: String.prototype.includes throws': {
+    'String.prototype.includes throws': pin(LIVE, 'threw replaced includes called'),
+  },
+  'p1-intrinsics-replaced: String.prototype.startsWith throws': {
+    'String.prototype.startsWith throws': pin(LIVE, 'threw replaced startsWith called'),
+  },
+  'p1-intrinsics-replaced: String.prototype.endsWith throws': {
+    'String.prototype.endsWith throws': pin(LIVE, 'threw replaced endsWith called'),
+  },
+  'p1-intrinsics-replaced: String.prototype.split throws': {
+    'String.prototype.split throws': pin(LIVE, 'threw replaced split called'),
+  },
+  'p1-intrinsics-replaced: Map.prototype.get throws': {
+    'Map.prototype.get throws': pin(LIVE, 'threw replaced get called'),
+  },
+  'p1-intrinsics-replaced: Map.prototype.set throws': {
+    'Map.prototype.set throws': pin(LIVE, 'threw replaced set called'),
+  },
+  'p1-intrinsics-replaced: Map.prototype.delete throws': {
+    exit: pin(LIVE, '1'),
+    stderr: pin(LIVE, 'Error: replaced delete called\n'),
+    'Map.prototype.delete throws': pin(LIVE, '(no row)'),
+    'line 2': pin(LIVE, '(no row)'),
+    'line 1': pin(LIVE, ''),
+  },
+  'p1-intrinsics-replaced: Number.isInteger throws': {
+    'Number.isInteger throws': pin(LIVE, 'threw replaced isInteger called'),
+  },
+  // rifty's util.inspect prints a function without its own properties.
+  'p3-function-names': {
+    Readable: pin(INSPECT, '"Readable"/1 [Function: Readable]'),
+    pipeline: pin(INSPECT, '"pipeline"/0 [Function: pipeline]'),
+  },
+  'p4-binding-paths': {
+    stderr: pin(
+      IDENTITY,
+      '(node:<pid>) [DEP0135] DeprecationWarning: ReadStream.prototype.open() is deprecated\n(Use `rifty --trace-deprecation ...` to show where the warning was created)\n',
+    ),
+  },
+};
+/** Exit codes other than 0 the live-Node run of an item must have (its oracle); any other is red. */
+const EXIT: Readonly<Record<string, number>> = {
+  'e1-unhandled-error': 1,
+  'e2-unhandled-non-error': 1,
+  'p1-intrinsics-replaced: Array.prototype.shift throws': 1,
+  'p1-intrinsics-replaced: Array.prototype.splice throws': 1,
 };
 /**
  * Rows whose value a race inside Node sets (timer vs libuv pool, two timers under load): each
@@ -153,11 +256,21 @@ const RACES: Readonly<
     },
   },
 };
-/** Written files whose bytes a race inside Node sets, masked in every column (path → why). */
-const MASKED_OUTPUT: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+/**
+ * Written files whose bytes a race inside Node sets: in every column the file must be one of the
+ * declared outcomes (sha256), which then reads as `<one of …>`; any other bytes stay as they are.
+ */
+const MASKED_OUTPUT: Readonly<
+  Record<string, Readonly<Record<string, { why: string; sha256: readonly string[] }>>>
+> = {
   'w1-fs-windows': {
-    'win-4.out':
-      'ws.destroy(err) on the first data of a pipe: whether the chunk is written before the close is the race of the open/write in the libuv pool (Node alone: empty or 1024 bytes)',
+    'win-4.out': {
+      why: 'ws.destroy(err) on the first data of a pipe: whether the chunk lands before the close is the open/write race in the libuv pool (live Node, review: about half of the runs each)',
+      sha256: [
+        'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', // 0 B
+        'df6f952f2f8794b613eec11e48a3930ca44118919f7b525051a1b4f7b0d63196', // the first 1024 B of win.txt
+      ],
+    },
   },
 };
 
@@ -262,9 +375,14 @@ function coverageProblems(): string[] {
     ...Object.keys(NOT_RUN)
       .filter((k) => !all.has(k))
       .map((k) => `NOT_RUN names no program or case: ${k}`),
-    ...[...Object.keys(PINNED), ...Object.keys(MASKED_OUTPUT), ...Object.keys(RACES)]
+    ...[
+      ...Object.keys(PINNED),
+      ...Object.keys(MASKED_OUTPUT),
+      ...Object.keys(RACES),
+      ...Object.keys(EXIT),
+    ]
       .filter((k) => !ITEMS.some((i) => i.id === k))
-      .map((k) => `PINNED/MASKED_OUTPUT/RACES names an item not run: ${k}`),
+      .map((k) => `PINNED/MASKED_OUTPUT/RACES/EXIT names an item not run: ${k}`),
     ...[...all]
       .filter((k) => !(k in NOT_RUN) && !ITEMS.some((i) => i.id === k))
       .map((k) => `neither run nor listed: ${k}`),
@@ -274,10 +392,11 @@ function coverageProblems(): string[] {
 /**
  * stderr without what the module loader, not the program, decides: stack frames, and the
  * `<file>:<line>` + source line + caret block Node prints above an uncaught error (V8 places the
- * caret by the loader's compile: Node's CJS vs rifty's loader).
+ * caret by the loader's compile: Node's CJS vs rifty's loader); the pid of a `(node:<pid>)` warning.
  */
 const stderrOf = (stderr: string): string =>
   stderr
+    .replace(/^\(node:\d+\) /gm, '(node:<pid>) ')
     .replace(/^\S[^\n]*:\d+\n[^\n]*\n[ \t]*\^+[ \t]*\n/gm, '')
     .split('\n')
     .filter((l) => !/^\s+at /.test(l))
@@ -286,14 +405,17 @@ const stderrOf = (stderr: string): string =>
 /** A whole outcome as rows: `exit`, `stderr` (frames dropped), `output`, each stdout line. */
 async function rowsOf(
   o: Outcome,
-  masked: Readonly<Record<string, string>> = {},
+  masked: Readonly<Record<string, { sha256: readonly string[] }>> = {},
 ): Promise<Map<string, string>> {
   const rows = new Map<string, string>();
   rows.set('exit', String(o.exitCode));
   rows.set('stderr', stderrOf(o.stderr));
   const written = new Map(o.written);
-  for (const path of Object.keys(masked))
-    if (written.has(path)) written.set(path, Buffer.from('<masked: MASKED_OUTPUT>'));
+  for (const [path, { sha256 }] of Object.entries(masked)) {
+    const bytes = written.get(path);
+    if (bytes && sha256.includes(createHash('sha256').update(bytes).digest('hex')))
+      written.set(path, Buffer.from('<one of MASKED_OUTPUT>'));
+  }
   rows.set('output', (await manifestOf(written)) ?? '(none)');
   const seen = new Map<string, number>();
   o.stdout.split('\n').forEach((line, i) => {
@@ -311,6 +433,21 @@ describe('stream core 8a differential: Node v24.16.0 core on Node bindings = on 
     expect(coverageProblems()).toEqual([]);
   });
 
+  it("every binding behaves as Node's own on the same inputs (bindings-vs-node.mts)", () => {
+    const r = spawnSync(
+      process.execPath,
+      [
+        '--expose-internals',
+        '--import',
+        join(repo, 'node_modules/tsx/dist/loader.mjs'),
+        join(here, 'node-streams-differential/bindings-vs-node.mts'),
+      ],
+      { encoding: 'utf8' },
+    );
+    expect(r.status, r.stderr).toBe(0);
+    expect(JSON.parse(r.stdout)).toEqual([]);
+  }, 60_000);
+
   for (const item of ITEMS)
     it.concurrent(
       item.id,
@@ -325,6 +462,9 @@ describe('stream core 8a differential: Node v24.16.0 core on Node bindings = on 
         const oracle: string[] = [];
         const differs: Record<string, { owner: string; rifty: string }> = {};
         const unpinnedEqual: string[] = [];
+        const expectedExit = String(EXIT[item.id] ?? 0);
+        if (node.get('exit') !== expectedExit)
+          oracle.push(`live Node exit ${node.get('exit')}, expected ${expectedExit} (EXIT)`);
         for (const k of keys) {
           const [n, nc, r] = [node.get(k), nodeCore.get(k), rifty.get(k)];
           const race = races[k];

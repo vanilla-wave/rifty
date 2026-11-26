@@ -57,6 +57,14 @@ export function readBuiltinUncached(specifier: string): Record<string, unknown> 
   return factory ? (factory() as Record<string, unknown>) : null;
 }
 
+/**
+ * The registered factory of a bare name, or `undefined`; reads no guest-replaceable intrinsic (the
+ * stream core's `process` binding calls it on every `nextTick`, ADR-0575 §2).
+ */
+export function builtinFactory(name: string): BuiltinFactory | undefined {
+  return factories[name];
+}
+
 export function listBuiltins(): string[] {
   return Object.keys(factories);
 }

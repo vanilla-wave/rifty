@@ -20,7 +20,7 @@
  * Not imported by any product module until unit 8c (`check:arch`
  * `node-stream-core-has-no-production-importer`).
  */
-import { loadBuiltin, readBuiltinUncached } from '../../builtin-registry.ts';
+import { builtinFactory } from '../../builtin-registry.ts';
 import { NotImplementedError } from '../../errors.ts';
 import createNodeStreamCore from './generated/node-streams.js';
 import { ZLIB_CONSTANTS } from './zlib-constants.ts';
@@ -308,16 +308,25 @@ const gapClass = (feature: string) =>
     }
   };
 
+/**
+ * A rifty module by bare id, through its registered factory (`loadBuiltin` runs `startsWith`; the
+ * core requires some lazily, at call time). The tables below cache each one.
+ */
 function rifty(id: string): Mod {
-  const m = loadBuiltin(id);
-  if (m === null) throw new Error(`node-streams: node:${id} is not registered in this realm`);
-  return m;
+  const factory = builtinFactory(id);
+  if (factory === undefined)
+    throw new Error(`node-streams: node:${id} is not registered in this realm`);
+  return factory() as Mod;
 }
-/** The active process at call time (ADR-0458: read through the registry factory, uncached). */
+/**
+ * The active process at call time (ADR-0458: the registry factory, uncached), read through
+ * `builtinFactory`, which calls no live intrinsic (`readBuiltinUncached` runs `startsWith`).
+ */
 function active(): Mod {
-  const p = readBuiltinUncached('process');
-  if (p === null) throw new Error('node-streams: node:process is not registered in this realm');
-  return p;
+  const factory = builtinFactory('process');
+  if (factory === undefined)
+    throw new Error('node-streams: node:process is not registered in this realm');
+  return factory() as Mod;
 }
 /** `process` as the core reads it: `nextTick`, `emitWarning`, `platform`, `noDeprecation`, `stdout`, `stderr`. */
 const processBinding = {
@@ -385,10 +394,9 @@ const MODULES = {
   'internal/process/warning': () => ({ emitWarningSync: gap('process.emitWarningSync') }),
   // Node's public `util.debuglog` is this function; rifty's `util.debuglog`.
   'internal/util/debuglog': () => ({ debuglog: rifty('util').debuglog }),
-  'internal/util/inspect': () => {
-    const u = rifty('util');
-    return { inspect: u.inspect, format: u.format };
-  },
+  // Node's errors read `internal/util/inspect`, not the public `util` object: a guest's later
+  // `util.inspect = …` does not reach an `ERR_*` text. Captured when the core is created.
+  'internal/util/inspect': () => utilAtCreation,
   // Node's internal/util/types.js: `isUint8Array` by the TypedArray tag getter,
   // `isArrayBufferView` = `ArrayBufferIsView`; `isAnyArrayBuffer` (C++) by the byteLength brands.
   'internal/util/types': () => ({
@@ -398,8 +406,8 @@ const MODULES = {
     isArrayBufferView: host.arrayBufferIsView,
     isUint8Array: (value: unknown) => toStringTag(value) === 'Uint8Array',
   }),
-  // rifty never builds a startup snapshot.
-  'internal/v8/startup_snapshot': () => ({ namespace: { isBuildingSnapshot: () => false } }),
+  // rifty never builds a startup snapshot; Node's reads its flag buffer (`0`, not `false`).
+  'internal/v8/startup_snapshot': () => ({ namespace: { isBuildingSnapshot: () => 0 } }),
   'internal/webstreams/queuingstrategies': () => ({
     ByteLengthQueuingStrategy: host.ByteLengthQueuingStrategy,
     CountQueuingStrategy: host.CountQueuingStrategy,
@@ -454,17 +462,36 @@ const cached = (table: Table, kind: string) => {
   };
 };
 
+let bindings:
+  | {
+      readonly internalBinding: (id: string) => unknown;
+      readonly bind: (id: string) => unknown;
+      readonly process: object;
+    }
+  | undefined;
 let load: ((id: string) => unknown) | undefined;
+let utilAtCreation: { readonly inspect: unknown; readonly format: unknown } | undefined;
+/** What the core is created over (also for the bindings-vs-Node test); `util` captured now. */
+export function coreBindings() {
+  if (bindings === undefined) {
+    const u = rifty('util');
+    utilAtCreation = { inspect: u.inspect, format: u.format };
+    bindings = {
+      internalBinding: cached(INTERNAL, 'internalBinding'),
+      bind: cached(MODULES, 'binding'),
+      process: processBinding,
+    };
+  }
+  return bindings;
+}
 /**
  * A module of the generated core by Node's id (`stream`, `stream/promises`, `internal/fs/streams`,
  * …), the core created on first read.
  */
 export function nodeStreamModule(id: string): unknown {
-  load ??= createNodeStreamCore(
-    primordials,
-    cached(INTERNAL, 'internalBinding'),
-    cached(MODULES, 'binding'),
-    processBinding,
-  );
+  if (load === undefined) {
+    const b = coreBindings();
+    load = createNodeStreamCore(primordials, b.internalBinding, b.bind, b.process);
+  }
   return load(id);
 }

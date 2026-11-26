@@ -26,7 +26,7 @@ export interface Outcome {
   readonly exitCode: number | string;
   readonly stdout: string;
   readonly stderr: string;
-  /** Files written under the cwd (outside `node_modules`, the entry excepted), by path. */
+  /** Every file under the cwd at exit (outside `node_modules`; the run's own included, so an overwrite or a delete shows), by path. */
   readonly written: ReadonlyMap<string, Uint8Array>;
 }
 export type Column = 'node' | 'node-core' | 'rifty-core';
@@ -97,8 +97,7 @@ async function inNodeColumn(run: Run, core: boolean): Promise<Outcome> {
       for (const name of readdirSync(abs)) {
         const path = join(abs, name);
         const rel = relative(cwd, path).split('\\').join('/');
-        if (!isWritten(rel) || (run.entryInCwd && rel === run.entry)) continue;
-        if (run.cwdFiles.has(rel) || (run.entryInCwd && run.entryFiles.has(rel))) continue;
+        if (!isWritten(rel)) continue;
         if (statSync(path).isDirectory()) walk(path);
         else written.set(rel, readFileSync(path));
       }
@@ -142,9 +141,7 @@ async function inRiftyColumn(run: Run): Promise<Outcome> {
       })(),
     ) as Record<string, string>;
     const written = new Map<string, Uint8Array>();
-    for (const [rel, b64] of Object.entries(dumped))
-      if (!run.cwdFiles.has(rel) && !(run.entryInCwd && run.entryFiles.has(rel)))
-        written.set(rel, Buffer.from(b64, 'base64'));
+    for (const [rel, b64] of Object.entries(dumped)) written.set(rel, Buffer.from(b64, 'base64'));
     return { ...r, ...masks(r, [entryDir, cwd, '/workspace', tmp]), written };
   } finally {
     rmSync(tmp, { recursive: true, force: true });

@@ -4,7 +4,7 @@
 // `Buffer`. A program's `stream`, `stream/promises` and `fs` (its stream classes) get that core.
 // `process`, timers and console stay Node's (trap parity-runner-in-process).
 // usage: node --import tsx rifty-core.mts SPEC.json   (SPEC: RiftySpec below)
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, writeSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -20,7 +20,7 @@ interface RiftySpec {
   readonly entry: string;
   /** The process cwd. */
   readonly cwd: string;
-  /** At exit, every file under `cwd` but the entry and `node_modules`, base64 JSON, to this host path. */
+  /** At exit, every file under `cwd` but `node_modules`, base64 JSON, to this host path. */
   readonly dump?: string;
   /** The entry's arguments (`process.argv` after the entry). */
   readonly args: readonly string[];
@@ -71,6 +71,9 @@ const INTRINSICS = [
   Array.prototype,
   Function.prototype,
   Promise.prototype,
+  String.prototype,
+  Map.prototype,
+  Number,
   Object,
   Reflect,
   globalThis,
@@ -95,7 +98,7 @@ if (spec.dump !== undefined) {
       for (const { name, isDirectory } of vfs.readdirSync(abs) as VfsDirent[]) {
         const a = `${abs === '/' ? '' : abs}/${name}`;
         const r = rel ? `${rel}/${name}` : name;
-        if (a === spec.entry || r === 'node_modules') continue;
+        if (r === 'node_modules') continue;
         if (isDirectory) walk(a, r);
         else out[r] = Buffer.from(vfs.readFileBytesSync(a)).toString('base64');
       }
@@ -104,6 +107,52 @@ if (spec.dump !== undefined) {
     writeFileSync(dump, JSON.stringify(out));
   });
 }
-// `process` is Node's here: the entry sees `argv` as `node <entry> …args`.
-process.argv.splice(1, process.argv.length - 1, spec.entry, ...spec.args);
+// One `process` for the program and the core: rifty's, installed as the realm global (as a
+// kernel Worker's pre-entry hook does), its `console` writing through it. Node's event loop drives
+// the lifecycle, so the harness hands Node's uncaught errors, rejections, `beforeExit` and exit to
+// rifty's lifecycle (`process-lifecycle-events.ts`) — rifty's listeners, its fatal report, its
+// exit code. What stays Node's: the event loop, timers, microtasks.
+const nodeProcess = process;
+const riftyProcess = loader.require('process', main) as NodeJS.Process & Record<string, unknown>;
+riftyProcess.argv.splice(1, riftyProcess.argv.length - 1, spec.entry, ...spec.args);
+const life = await load('packages/runtime-js/src/builtins/process-lifecycle-events.ts');
+// rifty's stdout/stderr bytes go to this process's fd 1/2 (a Worker's sink is its stdio port).
+const { setDefaultProcessOutputSink } = await load(
+  'packages/runtime-js/src/builtins/process-stdio-writer.ts',
+);
+setDefaultProcessOutputSink((fd: 1 | 2, bytes: Uint8Array) => writeSync(fd, bytes));
+let finished = false;
+const finish = (code: number): void => {
+  finished = true;
+  nodeProcess.exit(code);
+};
+const onFatal = (outcome: { kind: string; signal?: { exitCode: number }; error?: unknown }) => {
+  if (outcome.kind === 'handled') return;
+  if (outcome.kind === 'exited') return finish(outcome.signal?.exitCode ?? 1);
+  finish(life.terminateFatal(outcome.error, riftyProcess)?.exitCode ?? 1);
+};
+nodeProcess.on('uncaughtException', (error) =>
+  life.isRiftyProcessExit(error)
+    ? finish(error.exitCode)
+    : onFatal(life.dispatchUncaughtException(error, 'uncaughtException', riftyProcess)),
+);
+nodeProcess.on('unhandledRejection', (reason, promise) =>
+  life.isRiftyProcessExit(reason)
+    ? finish(reason.exitCode)
+    : onFatal(life.dispatchUnhandledRejection(reason, promise, riftyProcess)),
+);
+nodeProcess.on('beforeExit', () => {
+  riftyProcess.emit('beforeExit', riftyProcess.exitCode ?? 0);
+});
+nodeProcess.on('exit', () => {
+  if (finished) return;
+  try {
+    riftyProcess.exit();
+  } catch (signal) {
+    if (!life.isRiftyProcessExit(signal)) throw signal;
+    nodeProcess.exitCode = signal.exitCode;
+  }
+});
+(globalThis as Record<string, unknown>).process = riftyProcess;
+(globalThis as Record<string, unknown>).console = loader.require('console', main);
 loader.require(spec.entry, main);
