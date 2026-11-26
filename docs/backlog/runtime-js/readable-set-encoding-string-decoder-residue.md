@@ -29,6 +29,13 @@ one is the "documented minor deviation" in ADR-0069 D3. hex is per-byte, so
 correct. Fault: corrupt-input (lossy/misframed decode) at setEncoding.
 Dedup: git grep setEncoding / base64 / StringDecoder over docs/backlog — no item.
 
+2026-11-26 (PR #459 review S3, isolate guest after ADR-0577, `runCode` vs `node -e`, Node v24.16.0):
+the tail is still dropped — `setEncoding('utf16le')`, `push([41 00 3d d8])`, `push(null)`: Node
+`"A"`, `"\ud83d"`, rifty `"A"`; utf8 `push([41 de])`, `push(null)`: Node `"A"`, `"�"`, rifty `"A"`
+(`packages/io/src/streams/readable.ts:443`, every host by source). Also measured there:
+`Readable.from([Buffer.from('ab'), Buffer.from('c')])` with `setEncoding('utf8')` (objectMode)
+yields `Buffer`s `ab`, `c`; Node yields strings `'ab'`, `'c'`.
+
 ## Next
 
 Owner runtime-js; trigger: a claimed consumer reading a stream with

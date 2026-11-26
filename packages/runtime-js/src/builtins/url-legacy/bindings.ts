@@ -6,7 +6,7 @@
  * (`backlog/runtime-js/post-guest-paths-use-replaceable-intrinsics`).
  */
 import { NotImplementedError } from '@riftydev/io';
-import { describeReceived } from '../../internal/node-received.ts';
+import { invalidArgTypeMessage } from '../../internal/node-received.ts';
 import { URLConstructor } from '../../internal/posix-file-url.ts';
 import bufferModule from '../buffer.ts';
 import { publicNodeProcess } from '../process-public.ts';
@@ -80,59 +80,12 @@ function nodeError<A extends unknown[]>(
   };
 }
 
-const KTYPES = [
-  'string',
-  'function',
-  'number',
-  'object',
-  'Function',
-  'Object',
-  'boolean',
-  'bigint',
-  'symbol',
-];
-const formatList = (list: string[]): string =>
-  list.length < 3
-    ? list.join(' or ')
-    : `${list.slice(0, -1).join(', ')}, or ${list[list.length - 1]}`;
-
-/** Node v24.16.0 `internal/errors` `ERR_INVALID_ARG_TYPE` message. */
-function invalidArgTypeMessage(
-  _: Error,
-  name: string,
-  expected: string | string[],
-  actual: unknown,
-): string {
-  let msg = name.endsWith(' argument')
-    ? `The ${name} must be `
-    : `The "${name}" ${name.includes('.') ? 'property' : 'argument'} must be `;
-  const types: string[] = [];
-  const instances: string[] = [];
-  const other: string[] = [];
-  for (const value of Array.isArray(expected) ? expected : [expected]) {
-    if (KTYPES.includes(value)) types.push(value.toLowerCase());
-    else if (/^[A-Z][a-zA-Z0-9]*$/.test(value)) instances.push(value);
-    else other.push(value);
-  }
-  if (instances.length > 0 && types.includes('object')) {
-    types.splice(types.indexOf('object'), 1);
-    instances.push('Object');
-  }
-  if (types.length > 0) {
-    msg += `${types.length > 1 ? 'one of type' : 'of type'} ${formatList(types)}`;
-    if (instances.length > 0 || other.length > 0) msg += ' or ';
-  }
-  if (instances.length > 0) {
-    msg += `an instance of ${formatList(instances)}`;
-    if (other.length > 0) msg += ' or ';
-  }
-  if (other.length > 1) msg += `one of ${formatList(other)}`;
-  else if (other.length === 1)
-    msg += `${(other[0] as string).toLowerCase() !== other[0] ? 'an ' : ''}${other[0]}`;
-  return `${msg}. ${describeReceived(actual)}`;
-}
-
-const ERR_INVALID_ARG_TYPE = nodeError(TypeError, 'ERR_INVALID_ARG_TYPE', invalidArgTypeMessage);
+const ERR_INVALID_ARG_TYPE = nodeError(
+  TypeError,
+  'ERR_INVALID_ARG_TYPE',
+  (_: Error, name: string, expected: string | string[], actual: unknown) =>
+    invalidArgTypeMessage(name, expected, actual),
+);
 const ERR_INVALID_URL = nodeError(
   TypeError,
   'ERR_INVALID_URL',

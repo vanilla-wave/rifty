@@ -61,3 +61,5 @@ challenge: 2026-11-23 — inherits the goal premise check (`goal.md` §Challenge
   in the browser hosts' production bundles".
 
 ## Decisions
+
+2026-11-26 — ADR-0577: the isolate guest's `TextDecoder`/`TextEncoder` keep Node's names (their generated module keeps identifiers; the shim's inject binds the runtime's bare references, `util.ts` exports its globals under other names), so `TextEncoder2` no longer occurs there.

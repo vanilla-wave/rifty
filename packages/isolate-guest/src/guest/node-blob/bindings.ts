@@ -7,7 +7,7 @@ import { setImmediate } from '@riftydev/runtime-js/builtins/timers';
  */
 import { describeReceived, inspect } from '@riftydev/runtime-js/internal';
 import { notImplemented } from '../loud.ts';
-import { TextDecoder, TextEncoder } from '../text-codec.ts';
+import { TextDecoder, TextEncoder } from '../node-encoding.ts';
 import { DOMException, queueMicrotask } from '../web-shim.ts';
 import { blobBinding } from './byte-store.ts';
 import createNodeBlob from './generated/node-blob.js';

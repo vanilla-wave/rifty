@@ -1,12 +1,13 @@
 /**
- * Differential suite (ADR-0557 §5): the guest's UTF-8 TextEncoder/TextDecoder
- * against Node's own on the same inputs.
+ * Differential suite (ADR-0557 §5, ADR-0577): the guest's TextEncoder/TextDecoder (Node's
+ * `encoding.js` over the guest's UTF-8 codec) against Node's own on the same inputs. The corpus
+ * of every encoding runs in the real guest: `isolate-host/tests/text-decoder.test.ts`.
  */
 import { describe, expect, it } from 'vitest';
 import {
   TextDecoder as GuestDecoder,
   TextEncoder as GuestEncoder,
-} from '../src/guest/text-codec.ts';
+} from '../src/guest/node-encoding.ts';
 
 // Deterministic PRNG so a failure reproduces.
 function prng(seed: number): () => number {
@@ -110,6 +111,30 @@ describe('guest UTF-8 codec vs Node', () => {
       const b = new Uint8Array(size);
       expect(new GuestEncoder().encodeInto(s, a)).toEqual(new TextEncoder().encodeInto(s, b));
       expect(Array.from(a)).toEqual(Array.from(b));
+    }
+  });
+
+  it('whole inputs past the codec buffer (pairs at the flush edge, invalid runs) match', () => {
+    const rand = prng(4);
+    const pieces = [
+      [0x61],
+      [0xc3, 0xa9],
+      [0xe2, 0x82, 0xac],
+      [0xf0, 0x9f, 0x98, 0x80],
+      [0xff],
+      [0xed, 0xa0, 0x80],
+    ];
+    for (const size of [0x7fff, 0x8000, 0x8001, 0x10000 + 3, 300_000]) {
+      const bytes: number[] = [];
+      while (bytes.length < size)
+        bytes.push(...(pieces[Math.floor(rand() * pieces.length)] as number[]));
+      const input = Uint8Array.from(bytes);
+      expect(new GuestDecoder().decode(input)).toBe(new TextDecoder().decode(input));
+      const astral = Uint8Array.from(
+        { length: size * 4 },
+        (_, i) => [0xf0, 0x9f, 0x98, 0x80][i % 4] as number,
+      );
+      expect(new GuestDecoder().decode(astral)).toBe(new TextDecoder().decode(astral));
     }
   });
 });

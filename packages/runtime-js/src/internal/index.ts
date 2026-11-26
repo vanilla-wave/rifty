@@ -6,7 +6,7 @@ export { installNoCoiChildFsOwner, NO_COI_CHILD_NAME } from '../ipc/no-coi-child
 export { installNoCoiChildWorker } from '../ipc/no-coi-child-worker.ts';
 export { installConsole } from '../repl/console.ts';
 // Node's error text pieces, for host-side Node-shaped modules (isolate guest, ADR-0557 §6).
-export { describeReceived } from './node-received.ts';
+export { describeReceived, invalidArgTypeMessage } from './node-received.ts';
 // A host without an ES module loader declares its gap (isolate guest).
 export { declareNoEsmLoader } from './esm-loader.ts';
 export { inspect } from '../repl/inspect.ts';

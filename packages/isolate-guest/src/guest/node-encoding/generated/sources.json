@@ -1,0 +1,11 @@
+{
+  "node": "v24.16.0",
+  "esbuild": "0.28.0",
+  "sha256": "1a9d4966df16f7d2e44ff347d93ba202dd2b566579d0aa224daadf0be34385c3",
+  "sources": {
+    "lib/internal/encoding.js": "569b962eccc86b00a2948e452a324f5db1c01a15ef8a9164ec11c1005819ed70",
+    "lib/internal/encoding/single-byte.js": "0823a43fec61145a5f5f96d1e5ec532a1720d6ef7fe147361221ec232905859b",
+    "lib/internal/encoding/util.js": "d2b4b86ac88c150a3cd099419287381f3efffd5650de553ec0e2637eb98b9b07",
+    "LICENSE": "4573185d56580da2b890ba34a85a409257640f1c5632eade4300137266194d18"
+  }
+}

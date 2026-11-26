@@ -7,7 +7,8 @@
 import type { GuestHost } from '../contract.ts';
 import { notImplemented } from './loud.ts';
 import { installNavigator } from './navigator.ts';
-import { TextDecoder, TextEncoder, encodeUtf8 } from './text-codec.ts';
+import { TextDecoder, TextEncoder, bindSharedArrayBuffer } from './node-encoding.ts';
+import { encodeUtf8 } from './text-codec.ts';
 
 const g = globalThis as unknown as Record<string, unknown>;
 export const bridge = g.__riftyIsolateHost as GuestHost;
@@ -35,7 +36,7 @@ if (!allowSharedArrayBuffer) {
   // biome-ignore lint/performance/noDelete: runtime feature detection must see the constructor absent.
   delete g.SharedArrayBuffer;
   if (typeof WebAssembly !== 'undefined') restrictWasmBuffers(WebAssembly.Memory.prototype);
-}
+} else if (typeof SharedArrayBuffer === 'function') bindSharedArrayBuffer(SharedArrayBuffer);
 
 /** Only release native ArrayBuffers. The captured getter tests V8 internal slots
  * without asking the guest for a brand, prototype or property. Applies equally
@@ -194,6 +195,8 @@ define('btoa', function btoa(...args: unknown[]): string {
 
 define('TextEncoder', TextEncoder);
 define('TextDecoder', TextDecoder);
+// The inject rebinds the runtime's bare `TextDecoder`/`TextEncoder` to these (as `DOMException`).
+export { TextDecoder, TextEncoder };
 
 // --- task scheduling ---
 /** The guest's `queueMicrotask`, also Node's `internal/process/task_queues` one for the generated Node sources. */
