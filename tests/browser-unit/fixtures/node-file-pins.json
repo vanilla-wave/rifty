@@ -87,7 +87,7 @@
     },
     "rejection-fs-enoent": {
       "stdout": "",
-      "stderr": "Error: ENOENT: no such file or directory, open 'missing.txt'\n    at fsError (<runtime>/packages/runtime-js/src/builtins/fs-errors.ts)\n    at toNodeFsError (<runtime>/packages/runtime-js/src/builtins/fs-errors.ts)\n    at withSyscall (<runtime>/packages/runtime-js/src/builtins/fs-errors.ts)\n    at readFileSync (<runtime>/packages/runtime-js/src/builtins/fs.ts)\n    at <runtime>/packages/runtime-js/src/builtins/fs-io-turn.ts\n    at Immediate.<anonymous> (<runtime>/packages/runtime-js/src/builtins/fs-io-turn.ts)\n    at runImmediate (<runtime>/packages/runtime-js/src/builtins/timers.ts)\n    at runImmediateTurn (<runtime>/packages/runtime-js/src/builtins/timers.ts)\n    at channel.port1.onmessage (<runtime>/packages/runtime-js/src/builtins/timers.ts)\n",
+      "stderr": "Error: ENOENT: no such file or directory, open 'missing.txt'\n    at fsError (<runtime>/packages/runtime-js/src/builtins/fs-errors.ts)\n    at toNodeFsError (<runtime>/packages/runtime-js/src/builtins/fs-errors.ts)\n    at withSyscall (<runtime>/packages/runtime-js/src/builtins/fs-errors.ts)\n    at readFileSync (<runtime>/packages/runtime-js/src/builtins/fs.ts)\n    at <runtime>/packages/runtime-js/src/builtins/fs.ts\n    at Immediate.<anonymous> (<runtime>/packages/runtime-js/src/builtins/fs-io-turn.ts)\n    at runImmediate (<runtime>/packages/runtime-js/src/builtins/timers.ts)\n    at runImmediateTurn (<runtime>/packages/runtime-js/src/builtins/timers.ts)\n    at channel.port1.onmessage (<runtime>/packages/runtime-js/src/builtins/timers.ts)\n",
       "exitCode": 1
     },
     "rejection-after-stack-read": {
@@ -427,7 +427,7 @@
     },
     "rejection-fs-enoent": {
       "stdout": "",
-      "stderr": "Error: ENOENT: no such file or directory, open 'missing.txt'\n    at fsError (<runtime>/packages/runtime-js/src/builtins/fs-errors.ts)\n    at toNodeFsError (<runtime>/packages/runtime-js/src/builtins/fs-errors.ts)\n    at withSyscall (<runtime>/packages/runtime-js/src/builtins/fs-errors.ts)\n    at readFileSync (<runtime>/packages/runtime-js/src/builtins/fs.ts)\n    at <runtime>/packages/runtime-js/src/builtins/fs-io-turn.ts\n    at Immediate.<anonymous> (<runtime>/packages/runtime-js/src/builtins/fs-io-turn.ts)\n    at runImmediate (<runtime>/packages/runtime-js/src/builtins/timers.ts)\n    at runImmediateTurn (<runtime>/packages/runtime-js/src/builtins/timers.ts)\n    at channel.port1.onmessage (<runtime>/packages/runtime-js/src/builtins/timers.ts)\n",
+      "stderr": "Error: ENOENT: no such file or directory, open 'missing.txt'\n    at fsError (<runtime>/packages/runtime-js/src/builtins/fs-errors.ts)\n    at toNodeFsError (<runtime>/packages/runtime-js/src/builtins/fs-errors.ts)\n    at withSyscall (<runtime>/packages/runtime-js/src/builtins/fs-errors.ts)\n    at readFileSync (<runtime>/packages/runtime-js/src/builtins/fs.ts)\n    at <runtime>/packages/runtime-js/src/builtins/fs.ts\n    at Immediate.<anonymous> (<runtime>/packages/runtime-js/src/builtins/fs-io-turn.ts)\n    at runImmediate (<runtime>/packages/runtime-js/src/builtins/timers.ts)\n    at runImmediateTurn (<runtime>/packages/runtime-js/src/builtins/timers.ts)\n    at channel.port1.onmessage (<runtime>/packages/runtime-js/src/builtins/timers.ts)\n",
       "exitCode": 1
     },
     "rejection-after-stack-read": {
