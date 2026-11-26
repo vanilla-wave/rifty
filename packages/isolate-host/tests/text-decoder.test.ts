@@ -265,6 +265,35 @@ describe('isolate guest TextDecoder labels, errors and identities vs Node v24.16
   });
 });
 
+/** Paths over the guest's utf-16le decoder: `setEncoding` (parity `stream/readable-set-encoding-names`), `StringDecoder`, `Buffer#toString`. */
+describe('utf-16le consumers in the guest vs node', () => {
+  const caseSource = readFileSync(
+    fileURLToPath(
+      new URL(
+        '../../../tools/node-parity-runner/cases/stream/readable-set-encoding-names.case.ts',
+        import.meta.url,
+      ),
+    ),
+    'utf8',
+  );
+  const programs = {
+    'readable-set-encoding-names': caseSource.slice(
+      caseSource.indexOf('code: `') + 7,
+      caseSource.lastIndexOf('`,'),
+    ),
+    'StringDecoder and Buffer#toString': `const { StringDecoder } = require('string_decoder');
+for (const e of ['utf16le', 'ucs2', 'UTF-16LE']) { const d = new StringDecoder(e);
+  console.log(e, JSON.stringify(d.write(Buffer.from([0x41, 0, 0x3d])) + d.write(Buffer.from([0xd8, 0, 0xde])) + d.end(Buffer.from([0x42])))); }
+console.log(JSON.stringify(Buffer.from([0x41, 0, 0x3d, 0xd8, 0, 0xde, 0x42]).toString('utf16le')), JSON.stringify(Buffer.from([0xff, 0xfe, 0x41, 0]).toString('ucs2', 1)));`,
+  };
+  for (const [name, code] of Object.entries(programs))
+    it(`${name}: stdout as node -e`, { timeout: 60_000 }, async () => {
+      const node = execFileSync(process.execPath, ['-e', code], { encoding: 'utf8' });
+      expect(node).toMatch(/utf16le/);
+      expect(await runCode(code)).toEqual({ stdout: node, stderr: '', exitCode: 0 });
+    });
+});
+
 // --- pdfkit 0.17.2 / fontkit 2.0.4 over their closure, `compress: false` (Acceptance 7, 12, 13) ---
 const DEJAVU = readFileSync(fixture('fonts/DejaVuSans.ttf'));
 /** Mac `name` records (nameID 1) in shift_jis, big5, euc-kr, gbk — what Apple's CJK fonts carry. */
