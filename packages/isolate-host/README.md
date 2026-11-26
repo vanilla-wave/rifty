@@ -361,7 +361,9 @@ The guest gets rifty's Node environment, which is not real Node: `require`,
 the cwd, and `/tmp`, rifty's `os.tmpdir()`; a sandbox run: the sandbox's files),
 `Buffer`, `process`, timers, `console`, the builtin modules as globals for
 `runCode` only (`path`, `fs`, …, as `node -e` provides; a file run has none, as
-`node <file>`), `TextEncoder`/`TextDecoder` (UTF-8),
+`node <file>`), `TextEncoder`/`TextDecoder` (Node v24.16.0's `encoding.js`, ADR-0577: utf-8 and
+the 33 encodings where Node equals WHATWG; big5, euc-jp, iso-2022-jp, shift_jis, euc-kr throw
+`NotImplementedError` at construction),
 `atob`/`btoa`, `crypto.getRandomValues`/`randomUUID` and `performance.now`.
 Parity with `node -e` on Node 24 is tested on a corpus of model-style
 snippets (`tests/parity.test.ts`).
@@ -508,6 +510,17 @@ sleep 500 ms. A guest's heap counts on top of this, up to `memoryLimitMb`.
 Legacy `node:url` (ADR-0574, 2026-11-24, same machine): the bundle grew 47 706 B (gzip 11 147)
 to 7 170 976 B (remeasured 2026-11-25, `836e9501a` + review-round-4 nits); a warm `runCode` of 1 000 `url.parse(…, true)` + `url.resolve` p50 19.3 ms
 (31.4 ms before; an empty run 13.9 / 13.5 ms, 40 runs each).
+Node's `TextDecoder`/`TextEncoder` (ADR-0577, 2026-11-26, same machine, on
+main `d19d891b9` with Blob/File and `string_decoder`): `guest.js` 7 229 531 → 7 381 563 B (gzip -9
+1 526 604 → 1 573 817, +47 213); warm `runCode('1')` medians, before the goal (`3d16cb7b8`) / main /
+this, alternating triples, n = 200 each, three runs at load 4–6: 15.22 / 15.78 / 16.44,
+15.53 / 15.99 / 16.66, 15.73 / 16.52 / 17.05 ms (p10–p90 of the first ~14.7–15.8 / 15.2–16.4 /
+15.9–17.2) — this change +0.53 to +0.67, since the goal began +1.13 to +1.32 (main's share includes `string_decoder`, another goal's).
+utf-8 medians of 9 (2026-11-25, base → this, ms): 20 000 × `new TextDecoder().decode(small)`
+8.35 → 5.69, a reused decoder 3.80 → 3.33, 20 000 × small `Buffer#toString()` 6.27 → 5.29,
+20 × 1 MiB `decode` 223 → 114, `toString` 221 → 114. First non-utf-8 decoder in an isolate:
+windows-1252 0.7 ms (`single-byte.js` evaluates), utf-16le 2.0 ms, gb18030 4.3 ms (@exodus/bytes
+and its table); the next ≤ 0.1 ms.
 Node's `Blob`/`File` (ADR-0578, same machine): the bundle grew 41 655 B (`gzip -9` 10 408) to
 7 223 180 B (2026-11-26, on main `c2250727d`); 2026-11-25, load ~13, warm `runCode('1')`, median of 40 with base and change
 alternating, four runs: 15.0–17.3 → 15.3–17.6 ms (+0.27 to +0.72 ms). 200 000 parts `'ab'` →
