@@ -85,24 +85,24 @@ Program `/tmp/fsturn/entries/entries.cjs` (in the PR #468 body): the entry's han
 `setTimeout(T, 0)`, `fs.stat(cb)`, `setImmediate(I)`, 3 ms busy; the message / request was sent
 from the context named. 30 runs per row. Node: every row `I,T,cb` 30/30. A `358cd3612` (one turn
 outside a completion), B `b180494eb` (flag + clearing task), C `e6a69be6a` (flag alone): all
-dropped; head (two turns): in-process port rows `I,T,cb` 30/30 = Node (A and C too), browsers not
-re-measured (two turns everywhere = A's fs-callback rows, `T,I,cb`). Workbench / SDK the same
-unless noted.
+dropped; D head (two turns). In-process port rows `I,T,cb` 30/30 = Node (A, C, D). Workbench /
+SDK the same unless noted.
 
-| entry, sent from | A | B | C |
-|---|---|---|---|
-| port message, timer | `T,cb,I` | `T,I,cb` | `T,cb,I` |
-| port message, fs callback | `T,I,cb` | `T,I,cb` | `T,I,cb` |
-| port message, immediate | `T,cb,I` | `T,cb,I` | `T,cb,I` |
-| worker message, timer (Workbench; SDK no Worker) | `T,cb,I` | `T,I,cb` | `T,cb,I` |
-| worker message, fs callback | `T,I,cb` | `T,I,cb` | `T,I,cb` 28, `T,cb,I` 2 |
-| worker message, immediate | `T,cb,I` | `T,I,cb` | `T,cb,I` |
-| HTTP request, timer | `cb,I,T` 28, `T,cb,I` 2 | same | same |
-| HTTP request, fs callback | `T,I,cb` | `T,I,cb` | `T,I,cb` |
-| HTTP request, immediate | `T,cb,I` | `T,cb,I` | `T,cb,I` |
+| entry, sent from | A | B | C | D |
+|---|---|---|---|---|
+| port message, timer | `T,cb,I` | `T,I,cb` | `T,cb,I` | `T,I,cb` |
+| port message, fs callback | `T,I,cb` | `T,I,cb` | `T,I,cb` | `T,I,cb` |
+| port message, immediate | `T,cb,I` | `T,cb,I` | `T,cb,I` | `T,I,cb` |
+| worker message, timer (Workbench; SDK no Worker) | `T,cb,I` | `T,I,cb` | `T,cb,I` | `T,I,cb` |
+| worker message, fs callback | `T,I,cb` | `T,I,cb` | `T,I,cb` 28, `T,cb,I` 2 | `T,I,cb` |
+| worker message, immediate | `T,cb,I` | `T,I,cb` | `T,cb,I` | `T,I,cb` |
+| HTTP request, timer | `cb,I,T` 28, `T,cb,I` 2 | same | same | `I,cb,T` 28, `T,I,cb` 2 |
+| HTTP request, fs callback | `T,I,cb` | `T,I,cb` | `T,I,cb` | `T,I,cb` |
+| HTTP request, immediate | `T,cb,I` | `T,cb,I` | `T,cb,I` | `T,I,cb` |
 
 Isolate: no `MessageChannel`, Worker or `http` server in the guest. No browser row equals Node: the
-timer runs first (no check phase); `cb` before `I` is a one-turn completion in a foreign turn.
+timer runs first (no check phase); `cb` before `I` (A–C) is a one-turn completion in a foreign
+turn; D's HTTP-from-timer `I,cb,T` (Node never) not analysed.
 
 ## Question
 
