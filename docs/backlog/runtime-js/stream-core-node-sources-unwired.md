@@ -1,39 +1,115 @@
 ---
 area: runtime-js
-status: draft
+status: ready
 title: Node v24.16.0's stream core is vendored, generated and bound in rifty, unwired, with a CI differential against Node's bindings
 created: 2026-11-25
 why: First of the three core units of goal node-streams-as-in-node (8a): the generated core must exist and be proven before anything imports it, as the zlib engine (#452) does
 epic: node-streams-as-in-node
-sources: [docs/adr/runtime-js/0575-stream-core-and-fs-streams-are-node-v24-16-0-s-own-sources.md, docs/backlog/epics/node-streams-as-in-node/reference/results/route-b-product-build-main.txt]
+sources: [docs/adr/runtime-js/0575-stream-core-and-fs-streams-are-node-v24-16-0-s-own-sources.md, docs/backlog/epics/node-streams-as-in-node/reference/results/ownership.txt]
+code: [tools/publishing/generate-node-streams.mjs, packages/io/src/streams/node/bindings.ts, tests/integration/node-streams-differential.test.ts]
 ---
 
 ## Context
 
-Unit 8a (map item 8a, ADR-0575 §1–2, §7). Scope: `tools/publishing/node-streams/` vendored sources with
-sha256 and `LICENSE`, the generator (ADR-0574 pipeline + drift check), the bindings (`route-b/product/`
-probe shape), zlib constants without loading the zlib module (`adapters.js:94`), the third-party
-manifest entry (PR #445's mechanism) before anything is published. `internal/events/abort_listener`
-is Node's file whole (variant A of `runtime-js/stream-core-abort-listeners-host-event-target`); which
-variant ships is that unit's decision, and 8a takes it as it lands.
+Unit 8a (map item 8a, ADR-0575 §1–2, §7). Vendored sources, generator (ADR-0574 pipeline + drift
+check), bindings, zlib constants without the zlib module (`adapters.js:94`), the third-party
+manifest entry before anything is published. `internal/events/abort_listener` is Node's file whole
+(variant A); which variant ships is AL's (`runtime-js/stream-core-abort-listeners-host-event-target`).
+Not wired: nothing imports it (as the zlib engine, PR #452). User scenario: the goal's (8a changes no
+program's outcome: the carrier, `packages/isolate-host/tests/streams-scenario.test.ts`, stays as is).
 
-Not wired:
-- a `check:arch` rule «no product importer», 0 B on every bundle artifact;
-- the third-party manifest entry. Without it `pnpm build:libs`'s `third-party-notices` step fails
-  (`results/chromium-c/route-b/build-libs.log.txt`).
+Baseline on main `aa7b332cc` (after #455, #456, #457, #462, #467, #469), in-process, Node v24.16.0:
+the generated core on Node's own bindings equals live Node on every row of every item run (119); on
+rifty's bindings it equals that on all but the rows pinned below. The probe's `results/` numbers
+predate #455–#469 and are not this unit's base.
 
-Acceptance: a CI test runs the verbatim core on Node's bindings and on rifty's over the rows
-`results/ownership.txt` gives to the core. The rows owned by 1, 2, 4 and 5 stay pinned as expected
-RED with their owner. `zlib-diff` is not here: it is zlib unit 3's entry criterion, after 8c.
+Differential, by `results/ownership.txt` row (owners there are the last unit of a row; here the
+owner is the binding unit, since the differential bypasses the wiring 8c/9r/9w):
 
-Merge order: 8a and 8b merge once 8c's PR is open with its differential green.
+| ownership rows | here |
+|---|---|
+| in-process `m1`, hook matrix, `m2`, `m3`, `m6`, `m7`, `m8`, `m10` (8c, 9r, 9w, guard) | equal |
+| in-process `m4`, `m5`, `w1`, `c-*` (10 programs) | equal but: `m4` «timers … for await», «timers … fs.read(fd) loop», `m5` «timers … WriteStream», pinned, owner 4; `m5` «member types» (`_writev`), owner 5; `w1` `win-4.out` masked (a race inside Node) |
+| `b1` rows of 1, 2, 3 (landed) and its guards | equal |
+| `b1` «fs.writev / fs.fsync …» (5) | pinned, owner 5 |
+| in-process `m9` (AL, 8c, guard) | «promises.pipeline … stopping listener», «finished(r, {signal}) …», «addAbortSignal …» pinned, owner AL; `map`, `reduce` equal |
+| parity `cases/stream` (70) and `cases/fs` stream cases (7) | 74 run, equal; 3 not run (stdin/node-cli-eval kinds) |
+| isolate rows (17) | not run: in-process differential; the isolate gets the core at 8c (and 7) |
+| Workbench `chromium-fd`/`chromium-d` rows (39) | not run: browser-host fd cost, units 4b/4c/P/9r/9w |
+| `zlib-diff` | not here: zlib unit 3's entry criterion, after 8c |
 
-## Open findings (review round 4)
-
-Carried verbatim from the manager's review of PR #450, round 4 (2026-11-25); owner = this unit. They close when the unit is taken into work, by its own contract and review.
-
-- S7 (owner 8a): «приёмки ≠ таблице: 8a «rows owned by 1, 2, 4, 5 stay pinned RED» при том, что 1, 2, 4 уже приземлятся».
+Added here (not in the table): `p1-intrinsics-replaced` — a guest replaces an intrinsic after load.
+18 of 22 rows equal; 4 differ in rifty modules the core binds to (io `EventEmitter.emit`'s live
+`slice`, `fs.open`'s live `Promise`, rifty `once` not reading `bind`), pinned, owner
+`runtime-js/post-guest-paths-use-replaceable-intrinsics`.
 
 ## Challenge
 
-challenge: 2026-11-25 — none (child of a goal; premise in goal §Challenge)
+challenge: 2026-11-25 — none (child of a goal; premise in goal §Challenge). Taken into work
+2026-11-26: S7 closed by Acceptance 4 below (rows of landed owners equal; the rest pinned with owner).
+
+## Acceptance
+
+1. Vendored: the 28 Node v24.16.0 files of ADR-0575 §1 + `LICENSE` under
+   `tools/publishing/node-streams/vendor/`, each sha256-pinned in the generator, equal to
+   `node-v24.16.0.tar.xz` (sha256 `2ff84a6d…f30f`). A changed vendored byte reds the generator
+   (`tools/checks/node-streams-generator.test.ts`). → ADR-0575
+2. Generated unedited: whole modules are the vendored text byte for byte; a selected module is
+   upstream top-level statements unedited, in upstream order, between three generated parts (narrowed
+   `primordials` header, `PRELUDE` of narrowed requires, `module.exports`); each in Node's builtin
+   wrapper. The committed output equals a fresh run (`pnpm check:node-streams-drift`, CI
+   lint-and-typecheck and `pr:check`); a changed generated byte, a new upstream `require`/`internalBinding`
+   id or a new global read is red. → ADR-0575
+3. Bindings repeat Node's: the 79 primordials are Node's own value (43, same object) or Node's
+   construction with Node's name and length; `internalBinding('constants').zlib` is Node's table (key
+   order included) as data, no zlib module; `stream_wrap` indices and `UV_EOF` are Node's; the tables
+   bind exactly the ids the generated core reads (`packages/io/tests/node-stream-bindings.test.ts`, a
+   Node child with `--expose-internals`). Intrinsics and host globals are captured at load:
+   `p1-intrinsics-replaced`'s rows equal Node where only the core and the bindings run. → ADR-0575, I1
+4. Differential (`tests/integration/node-streams-differential.test.ts`, CI `test:run`): every
+   fixture program of the goal (`packages/isolate-host/tests/fixtures/streams-scenario/`), the hook
+   matrix, `p1` (a process per row) and the parity cases above, three ways — live Node, the core on
+   Node's bindings, the core on rifty's — compared whole (exit, every stdout line, stderr without
+   frames and the loader's source excerpt, the files written). The core on Node's bindings equals
+   live Node on every row; on rifty's it equals that on every row but `PINNED`, each pinned on
+   today's rifty value with its owner: 4 (`runtime-js/fs-callbacks-io-turn`), 5
+   (`runtime-js/fs-writev-fsync`), AL, `runtime-js/post-guest-paths-use-replaceable-intrinsics`. Rows
+   of landed owners (1, 2, 3, 4b) are equal, not pinned. A pinned row that turns equal is red until
+   its pin goes; every program and case is run or in `NOT_RUN` with its reason. → I1–I7, I9, I10
+5. Not wired: `check:arch` `node-stream-core-has-no-production-importer` (a product importer is
+   red); every file of every package's `dist/` after `pnpm build:libs` and every client bundle of
+   `pnpm test:client-bundles` is byte-equal to main's; `check:es-floor` and the budgets unchanged.
+   → ADR-0575 §7
+6. License: `tools/publishing/third-party-manifest.json` records `io/src/streams/node/generated` as
+   Node `v24.16.0` (MIT, `node.LICENSE`), marked `unshipped: runtime-js/stream-core-node-sources`
+   (PR #452's mechanism, carried here): unused it is green, a package shipping it is red until 8c
+   drops the mark; `pnpm check:third-party-notices` green. → ADR-0575 §1
+
+## Parity cases
+
+The oracle is live Node v24.16.0 and Node's own bindings, per row (Acceptance 4). RED targets,
+pinned with owner: `b1` writev types and `m5` member types (5); `m4`/`m5` timer rows (4); `m9` three
+stopping-listener rows (AL); `p1` slice / then / Promise / bind (post-guest intrinsics).
+
+## Out of scope
+
+- Wiring (`node:stream`, io's exports, `fs` stream classes), internal consumers, the ES floor
+  (`AbortSignal.any`, `Symbol.dispose`, `Promise.withResolvers`: creating the core without the last
+  throws `node-streams: no primordial PromiseWithResolvers`), the isolate and browser hosts: 8c,
+  9r, 9w, 7.
+- Named gaps the core reaches only through a native handle: `stream_wrap` `WriteWrap`/`ShutdownWrap`,
+  `uv.errname`/`getErrorMap`, `process.emitWarningSync` → `NotImplementedError`; `FileHandle` as an
+  `fd` option (nothing is one; Node accepts it) until rifty has `FileHandle`.
+- `internal/event_target` symbols on a host `EventTarget` (AL); rifty modules reading live intrinsics
+  (`runtime-js/post-guest-paths-use-replaceable-intrinsics`).
+
+## Decisions
+
+- 2026-11-26 — author: output in `packages/io/src/streams/node/` (the probe's wiring place; 8c consumes it), committed minified (whitespace and syntax, identifiers kept, as ADR-0578); the verbatim proof reads the generator's pre-esbuild text.
+- 2026-11-26 — author: the shared generator steps move to `tools/publishing/node-sources.mjs` (third consumer of the ADR-0574 pipeline); url-legacy and node-blob output byte-identical. PR #459's generator would join it.
+- 2026-11-26 — author: primordials built as Node's `per_context/primordials.js` builds each (`uncurryThis = bind.bind(call)`, `makeSafe`, `SafePromise*` assigned, not named), per ADR-0575 §2 (not Node's file whole: ~1 500 entries for 79).
+- 2026-11-26 — author: rifty modules through the builtin registry when the core reads them; one not registered throws by name (no fallback); host globals captured with the primordials at bindings load. Load order per host is 8c's.
+- 2026-11-26 — author: zlib constants are a data module in io (generated from live Node's binding, equal by test); runtime-js keeps its copy until 8c or zlib unit 3 dedups (no product bytes change here).
+- 2026-11-26 — author: `internalBinding('types')` → rifty's `util/types` (C++ `IsPromise`/`IsNativeError` have no exact JS brand check; read only by `promisify`'s DEP0174 test).
+- 2026-11-26 — author: differential columns live Node / Node bindings / rifty bindings in children (rifty in-process, memory VFS); `fs` = the column's `fs` with the core's stream classes, as `lib/fs.js`; `p1` rows that end Node's process outside the core (`pop`, `apply`) are not rows.
+- 2026-11-26 — author: the `unshipped` manifest mark is PR #452's code, carried verbatim; whichever merges second drops the duplicate.

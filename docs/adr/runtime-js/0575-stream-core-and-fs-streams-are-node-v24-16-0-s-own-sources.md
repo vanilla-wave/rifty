@@ -171,6 +171,11 @@ The earlier `b1270101a` record is `results/route-b-product-build.txt`.
    rifty modules (`events`, `buffer`, `string_decoder`, `timers`, `async_hooks`, `fs`) are reached
    through the builtin registry's lazy lookup, as `io` streams do today (`readBuiltinUncached`). No
    new layer edge; `check:arch` unchanged.
+
+   2026-11-26 (8a, PR #471): primordials and the host globals are captured when the bindings module
+   evaluates, each primordial built as `per_context/primordials.js` builds it; a rifty module not
+   registered throws by name (no fallback); the zlib constants are a data module in io. `check:arch`
+   gains `node-stream-core-has-no-production-importer` for 8a's window; 8c removes it.
 3. `fs.ReadStream`/`fs.WriteStream` read and write through fds on every host. This replaces
    ADR-0020's «`createReadStream` rebuilds on `Vfs.openReadable`». The condition: positional fd I/O
    by range (map 4b/4c).
